@@ -1,8 +1,8 @@
 """Tests for AgentAdapter implementations."""
 
 import pytest
-
 import ray
+
 from ray_agents import AgentSession
 from ray_agents.adapters import AgentAdapter
 

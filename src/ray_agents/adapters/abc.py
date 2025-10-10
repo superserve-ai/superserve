@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any
+
 from ray.util.annotations import DeveloperAPI
 
 
@@ -42,8 +43,8 @@ class AgentAdapter(ABC):
 
     @abstractmethod
     async def run(
-        self, message: str, messages: List[Dict], tools: List[Any]
-    ) -> Dict[str, Any]:
+        self, message: str, messages: list[dict], tools: list[Any]
+    ) -> dict[str, Any]:
         """
         Execute agent reasoning loop.
 

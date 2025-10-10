@@ -1,6 +1,7 @@
 """Tests for AgentSession conversation history management."""
 
 import ray
+
 from ray_agents import AgentSession
 from ray_agents.adapters import _MockAdapter as MockAdapter
 

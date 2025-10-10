@@ -90,6 +90,18 @@ module = [
 ]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "tests.*"
+# Disable attr-defined errors for Ray's @ray.remote decorator
+# which dynamically adds .remote() method
+disable_error_code = ["attr-defined"]
+
+[[tool.mypy.overrides]]
+module = "ray_agents.examples.*"
+# Disable attr-defined errors for Ray's @ray.remote decorator
+# which dynamically adds .remote() method
+disable_error_code = ["attr-defined"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

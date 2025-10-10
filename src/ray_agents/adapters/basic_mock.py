@@ -1,7 +1,9 @@
+from typing import Any
+
 import ray
 from ray.util.annotations import DeveloperAPI
+
 from ray_agents.adapters.abc import AgentAdapter
-from typing import Any, Dict, List
 
 
 @DeveloperAPI
@@ -21,8 +23,8 @@ class _MockAdapter(AgentAdapter):
     """
 
     async def run(
-        self, message: str, messages: List[Dict], tools: List[Any]
-    ) -> Dict[str, Any]:
+        self, message: str, messages: list[dict], tools: list[Any]
+    ) -> dict[str, Any]:
         """Execute mock agent logic with tool execution."""
         tool_results = []
         if tools:

@@ -1,9 +1,12 @@
+import functools
 import logging
+from collections.abc import Callable
+from typing import Any
+
 import ray
 from ray.util.annotations import DeveloperAPI
+
 from ray_agents.adapters.abc import AgentAdapter
-from typing import Any, Dict, List, Callable, Optional
-import functools
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +58,7 @@ class LangGraphAdapter(AgentAdapter):
     def __init__(
         self,
         model: str = "gpt-4o-mini",
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         parallel_tool_calls: bool = True,
     ):
         """
@@ -69,7 +72,7 @@ class LangGraphAdapter(AgentAdapter):
         self.model = model
         self.system_prompt = system_prompt or "You are a helpful AI assistant."
         self.parallel_tool_calls = parallel_tool_calls
-        self._llm: Optional[Any] = None
+        self._llm: Any | None = None
 
         logger.info(
             f"Initialized LangGraphAdapter: model={model}, "
@@ -93,8 +96,8 @@ class LangGraphAdapter(AgentAdapter):
             ) from e
 
     async def run(
-        self, message: str, messages: List[Dict], tools: List[Any]
-    ) -> Dict[str, Any]:
+        self, message: str, messages: list[dict], tools: list[Any]
+    ) -> dict[str, Any]:
         """
         Execute LangGraph agent with Ray distributed tools.
 
@@ -132,7 +135,7 @@ class LangGraphAdapter(AgentAdapter):
             logger.error(f"Error in LangGraph adapter: {e}")
             raise
 
-    def _wrap_ray_tools_for_langgraph(self, ray_tools: List[Any]) -> List[Callable]:
+    def _wrap_ray_tools_for_langgraph(self, ray_tools: list[Any]) -> list[Callable]:
         """
         Wrap Ray remote functions as LangGraph-compatible callables.
 
@@ -176,7 +179,7 @@ class LangGraphAdapter(AgentAdapter):
         logger.debug(f"Wrapped {len(wrapped_tools)} Ray tools for LangGraph")
         return wrapped_tools
 
-    async def _simple_execute(self, message: str, tools: List[Callable]) -> str:
+    async def _simple_execute(self, message: str, tools: list[Callable]) -> str:
         """
         Execute LangGraph agent with tool calling.
 
@@ -201,7 +204,7 @@ class LangGraphAdapter(AgentAdapter):
                     HumanMessage(content=message),
                 ]
                 response = await self._llm.ainvoke(llm_messages)
-                return response.content
+                return str(response.content)
 
             # With tools: use LangGraph's ReAct agent for tool calling
             try:
@@ -268,7 +271,7 @@ class LangGraphAdapter(AgentAdapter):
 
                 # Extract final response
                 final_message = result["messages"][-1]
-                return final_message.content
+                return str(final_message.content)
 
             except Exception as e:
                 logger.error(f"Error during agent execution: {e}", exc_info=True)
