@@ -1,0 +1,17 @@
+[project]
+name = "ray-agents"
+version = "0.1.0"
+description = "Experimental API to run LLM Agents (LangGraph, CrewAI, etc.) on Ray"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ray>=2.49.2",
+]
+
+[dependency-groups]
+dev = [
+    "black>=25.9.0",
+    "mypy>=1.18.2",
+    "pre-commit>=4.3.0",
+    "ruff>=0.14.0",
+]
