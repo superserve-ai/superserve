@@ -2,6 +2,10 @@
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "ray-agents"
 version = "0.1.0"
@@ -9,6 +13,8 @@ description = "Experimental API to run LLM Agents (LangGraph, CrewAI, etc.) on R
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "langchain-openai>=0.3.35",
+    "langgraph>=0.6.10",
     "langchain-openai>=0.3.35",
     "langgraph>=0.6.10",
     "ray>=2.49.2",
@@ -20,8 +26,12 @@ dev = [
     "mypy>=1.18.2",
     "pre-commit>=4.3.0",
     "pytest>=8.4.2",
+    "pytest>=8.4.2",
     "ruff>=0.14.0",
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
