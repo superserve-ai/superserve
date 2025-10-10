@@ -10,7 +10,10 @@ Usage:
     python simple_distributed_demo.py
 """
 
+from typing import Any
+
 import ray
+
 from ray_agents import AgentSession
 from ray_agents.adapters import _MockAdapter
 
@@ -48,7 +51,7 @@ def main():
     session = AgentSession.remote(session_id="demo", adapter=adapter)
 
     # Define tools with bound arguments
-    tools = [
+    tools: list[Any] = [
         process_data.bind("sales_q4_2024.csv"),
         analyze_logs.bind("last 24 hours"),
         generate_image.bind("revenue dashboard"),
@@ -57,11 +60,12 @@ def main():
 
     # Execute
     message = "Analyze Q4 data, check logs, generate dashboard, and search customers"
-    result = ray.get(session.run.remote(message, tools=tools))
+    result: dict[str, Any] = ray.get(session.run.remote(message, tools=tools))
 
     print(f"Agent: {result['content']}")
     print("\nTool Results:")
-    for tool_result in result.get("tool_results", []):
+    tool_results: list[Any] = result.get("tool_results", [])
+    for tool_result in tool_results:
         print(f"  - {tool_result}")
 
     ray.shutdown()

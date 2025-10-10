@@ -1,7 +1,7 @@
 """Agent session actor for stateful agent execution."""
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 import ray
 from ray.util.annotations import DeveloperAPI
@@ -54,13 +54,11 @@ class AgentSession:
         """
         self.session_id = session_id
         self.adapter = adapter
-        self.messages: List[Dict[str, Any]] = []
+        self.messages: list[dict[str, Any]] = []
 
         logger.info(f"Initialized AgentSession: {session_id}")
 
-    async def run(
-        self, message: str, tools: Optional[List[Any]] = None
-    ) -> Dict[str, Any]:
+    async def run(self, message: str, tools: list[Any] | None = None) -> dict[str, Any]:
         """
         Execute agent with a message and optional distributed tools.
 
@@ -126,7 +124,7 @@ class AgentSession:
             logger.error(f"Session {self.session_id}: Error during execution: {e}")
             raise
 
-    def get_history(self) -> List[Dict[str, Any]]:
+    def get_history(self) -> list[dict[str, Any]]:
         """
         Get full conversation history.
 

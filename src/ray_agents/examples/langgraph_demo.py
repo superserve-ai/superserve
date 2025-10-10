@@ -14,11 +14,10 @@ Usage:
 
 import os
 import sys
-from typing import List
-
-from pydantic import BaseModel, Field
 
 import ray
+from pydantic import BaseModel, Field
+
 from ray_agents import AgentSession
 from ray_agents.adapters import LangGraphAdapter
 
@@ -39,7 +38,7 @@ class FeedbackAnalysisResult(BaseModel):
     sentiment: str
     total_reviews: int
     avg_score: float
-    key_themes: List[str]
+    key_themes: list[str]
 
 
 class MarketTrendsResult(BaseModel):
@@ -47,7 +46,7 @@ class MarketTrendsResult(BaseModel):
 
     industry: str
     growth_rate: str
-    top_competitors: List[str]
+    top_competitors: list[str]
 
 
 class ForecastResult(BaseModel):
