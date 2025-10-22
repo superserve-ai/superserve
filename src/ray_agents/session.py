@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 @DeveloperAPI
-@ray.remote
+@ray.remote(num_cpus=0.5)
 class AgentSession:
     """
     Stateful Ray actor for a single agent session.

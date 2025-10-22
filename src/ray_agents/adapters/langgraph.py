@@ -60,6 +60,7 @@ class LangGraphAdapter(AgentAdapter):
         model: str = "gpt-4o-mini",
         system_prompt: str | None = None,
         parallel_tool_calls: bool = True,
+        default_tool_params: dict[str, Any] | None = None,
     ):
         """
         Initialize LangGraph adapter.
@@ -68,15 +69,18 @@ class LangGraphAdapter(AgentAdapter):
             model: LLM model name (e.g., "gpt-4o", "gpt-4o-mini")
             system_prompt: Optional system prompt for the agent
             parallel_tool_calls: Whether to allow LLM to request parallel tool execution
+            default_tool_params: Default parameters to inject into all tool calls
         """
         self.model = model
         self.system_prompt = system_prompt or "You are a helpful AI assistant."
         self.parallel_tool_calls = parallel_tool_calls
+        self.default_tool_params = default_tool_params or {}
         self._llm: Any | None = None
 
         logger.info(
             f"Initialized LangGraphAdapter: model={model}, "
-            f"parallel_tool_calls={parallel_tool_calls}"
+            f"parallel_tool_calls={parallel_tool_calls}, "
+            f"default_tool_params={default_tool_params}"
         )
 
     def _init_llm(self):
@@ -164,12 +168,17 @@ class LangGraphAdapter(AgentAdapter):
                 @functools.wraps(original_func)
                 def wrapper(*args, **kwargs):
                     """Execute tool via Ray."""
-                    logger.debug(
+                    # Inject default parameters if not provided
+                    for param_name, param_value in self.default_tool_params.items():
+                        if param_name not in kwargs:
+                            kwargs[param_name] = param_value
+
+                    logger.info(
                         f"Executing {original_func.__name__}: "
                         f"args={args}, kwargs={kwargs}"
                     )
                     result = ray.get(tool.remote(*args, **kwargs))
-                    logger.debug(f"Completed {original_func.__name__}: {result}")
+                    logger.info(f"Completed {original_func.__name__}: {result}")
                     return result
 
                 return wrapper
@@ -247,7 +256,8 @@ class LangGraphAdapter(AgentAdapter):
             agent = create_react_agent(self._llm, lc_tools)
             logger.info("ReAct agent created successfully")
 
-            # Execute agent
+            # Execute agent with increased recursion limit
+            # Include system message at the start
             try:
                 result = await agent.ainvoke(
                     {
@@ -255,7 +265,8 @@ class LangGraphAdapter(AgentAdapter):
                             SystemMessage(content=self.system_prompt),
                             HumanMessage(content=message),
                         ]
-                    }
+                    },
+                    config={"recursion_limit": 50},
                 )
 
                 logger.info(

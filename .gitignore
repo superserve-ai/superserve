@@ -31,3 +31,10 @@ htmlcov/
 
 # OS
 .DS_Store
+
+# Development notes
+notes/
+
+# claude
+devcontainer.json
+.claude/
