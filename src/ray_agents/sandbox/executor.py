@@ -19,6 +19,8 @@ from .config import (
     CPU_QUOTA,
     DEFAULT_IMAGE,
     DEFAULT_TIMEOUT,
+    MCP_SOCKET_DIR,
+    MCP_SOCKET_PATH,
     MEMORY_LIMIT,
     NETWORK_MODE,
     RUNTIME,
@@ -27,8 +29,6 @@ from .config import (
 from .types import (
     ExecutionError,
     ExecutionResult,
-    InstallError,
-    InstallResult,
     SessionStats,
     UploadError,
     UploadResult,
@@ -39,6 +39,8 @@ logger = logging.getLogger(__name__)
 # Constants
 SESSION_STATE_PATH = "/tmp/session_state.pkl"
 CONTAINER_NAME_PREFIX = "ray-code"
+SIDECAR_NAME_PREFIX = "ray-code-sidecar"
+SIDECAR_IMAGE_TAG = "ray-code-sidecar:latest"
 CONTAINER_STOP_TIMEOUT = 2
 
 
@@ -50,6 +52,7 @@ class CodeInterpreterExecutor:
     """
 
     container: "Container | None"
+    sidecar_container: "Container | None"
     client: "DockerClient | None"
 
     def __init__(
@@ -59,9 +62,10 @@ class CodeInterpreterExecutor:
         dockerfile: str | None = None,
         environment: dict[str, str] | None = None,
         volumes: dict[str, dict[str, str]] | None = None,
+        mcp_allowlist: list[str] | None = None,
     ):
         """
-        Initialize code executor with Docker container.
+        Initialize code executor with Docker container and MCP sidecar.
 
         Args:
             session_id: Unique session identifier
@@ -70,13 +74,16 @@ class CodeInterpreterExecutor:
             environment: Environment variables for container
             volumes: Volume mounts for container. Format:
                 {'/host/path': {'bind': '/container/path', 'mode': 'ro'}}
+            mcp_allowlist: List of allowed MCP server URLs for sidecar proxy
         """
         self.session_id = session_id
         self.image = image
         self.dockerfile = dockerfile
         self.environment = environment or {}
         self.volumes = volumes or {}
+        self.mcp_allowlist = mcp_allowlist or []
         self.container = None
+        self.sidecar_container = None
         self.client = None
         self.execution_count = 0
         self.created_at = time.time()
@@ -87,6 +94,8 @@ class CodeInterpreterExecutor:
                 logger.warning(f"Volume mount host path does not exist: {host_path}")
 
         logger.info(f"CodeInterpreterExecutor initialized for session {session_id}")
+        if self.mcp_allowlist:
+            logger.info(f"MCP allowlist: {self.mcp_allowlist}")
 
     def _get_docker_client(self):
         """Lazy initialization of Docker client"""
@@ -409,57 +418,6 @@ with open('{SESSION_STATE_PATH}', 'wb') as f:
                 execution_id=execution_id,
             )
 
-    def install_package(
-        self, package: str, timeout: int = 300
-    ) -> InstallResult | InstallError:
-        """
-        Install pip package in the container.
-
-        Args:
-            package: Package name (e.g., "numpy", "pandas==2.0.0")
-            timeout: Installation timeout in seconds (default: 300)
-
-        Returns:
-            Installation result
-        """
-        logger.info(f"Session {self.session_id}: Installing package {package}")
-
-        try:
-            self._ensure_container()
-            container = self.container
-            if container is None:
-                raise RuntimeError("Container not initialized")
-
-            # Execute pip install directly (timeout handled by Ray task timeout)
-            result = container.exec_run(
-                f"pip install {package}",
-                demux=True,
-            )
-
-            stdout, stderr = self._parse_exec_output(result.output)
-
-            logger.info(
-                f"Session {self.session_id}: Package {package} - {'success' if result.exit_code == 0 else 'error'}"
-            )
-
-            return InstallResult(
-                status="success" if result.exit_code == 0 else "error",
-                stdout=stdout,
-                stderr=stderr,
-                exit_code=result.exit_code,
-            )
-
-        except Exception as e:
-            logger.error(
-                f"Session {self.session_id}: Failed to install {package} - {e}",
-                exc_info=True,
-            )
-            return InstallError(
-                status="error",
-                error=str(e),
-                error_type=type(e).__name__,
-            )
-
     def upload_file(self, path: str, content: bytes) -> UploadResult | UploadError:
         """
         Upload file to container.
@@ -515,6 +473,9 @@ with open('{SESSION_STATE_PATH}', 'wb') as f:
         """Create container if doesn't exist or is stopped"""
         client = self._get_docker_client()
 
+        # Ensure sidecar is running if MCP is configured
+        self._ensure_sidecar()
+
         # Build custom image if Dockerfile provided
         if self.dockerfile and self.image == DEFAULT_IMAGE:
             self.image = self._build_image()
@@ -560,8 +521,25 @@ with open('{SESSION_STATE_PATH}', 'wb') as f:
             # Container doesn't exist, which is fine
             pass
 
+        # Prepare volumes (include socket volume if MCP allowlist is configured)
+        container_volumes = self.volumes.copy() if self.volumes else {}
+        if self.mcp_allowlist:
+            # Mount shared Docker volume for MCP sidecar communication
+            # Using Docker volume (inside Docker VM) for proper Unix socket support
+            container_volumes["mcp-socket"] = {"bind": MCP_SOCKET_DIR, "mode": "rw"}
+
+        # Network mode - keep isolated
+        network_mode = NETWORK_MODE
+
         # Determine runtime to use
         runtime = RUNTIME
+
+        # Log gVisor + MCP configuration
+        if self.mcp_allowlist and runtime == "runsc":
+            logger.info(
+                f"Session {self.session_id}: Using gVisor with MCP. "
+                "Ensure --fsgofer-host-uds is configured in /etc/docker/daemon.json"
+            )
         try:
             self.container = client.containers.run(
                 image=self.image,
@@ -573,9 +551,9 @@ with open('{SESSION_STATE_PATH}', 'wb') as f:
                 mem_limit=MEMORY_LIMIT,
                 cpu_quota=CPU_QUOTA,
                 cpu_period=CPU_PERIOD,
-                network_mode=NETWORK_MODE,
+                network_mode=network_mode,
                 environment=self.environment,
-                volumes=self.volumes if self.volumes else None,
+                volumes=container_volumes if container_volumes else None,
                 remove=False,  # Keep for session persistence
             )
             logger.info(f"Session {self.session_id}: Container created successfully")
@@ -607,9 +585,9 @@ with open('{SESSION_STATE_PATH}', 'wb') as f:
                         mem_limit=MEMORY_LIMIT,
                         cpu_quota=CPU_QUOTA,
                         cpu_period=CPU_PERIOD,
-                        network_mode=NETWORK_MODE,
+                        network_mode=network_mode,
                         environment=self.environment,
-                        volumes=self.volumes if self.volumes else None,
+                        volumes=container_volumes if container_volumes else None,
                         remove=False,
                     )
             else:
@@ -643,10 +621,139 @@ with open('{SESSION_STATE_PATH}', 'wb') as f:
 
             return image_tag
 
+    def _ensure_sidecar(self):
+        """Create and start MCP sidecar container if needed"""
+        if not self.mcp_allowlist:
+            return
+
+        client = self._get_docker_client()
+
+        # Check if sidecar exists and is running
+        sidecar_container = self.sidecar_container
+        if sidecar_container is not None:
+            try:
+                sidecar_container.reload()
+                sidecar_status = sidecar_container.status
+                if sidecar_status == "running":
+                    return
+                if sidecar_status == "exited":
+                    logger.info(f"Session {self.session_id}: Restarting sidecar")
+                    sidecar_container.start()
+                    return
+            except Exception as e:
+                logger.warning(f"Session {self.session_id}: Sidecar check failed - {e}")
+                self.sidecar_container = None
+
+        # Ensure sidecar image exists
+        self._ensure_sidecar_image()
+
+        # Create new sidecar container
+        logger.info(f"Session {self.session_id}: Creating MCP sidecar container")
+
+        sidecar_name = f"{SIDECAR_NAME_PREFIX}-{self.session_id}"
+
+        # Remove existing sidecar with same name if it exists
+        try:
+            old_sidecar = client.containers.get(sidecar_name)
+            logger.warning(f"Session {self.session_id}: Removing existing sidecar")
+            try:
+                old_sidecar.stop(timeout=CONTAINER_STOP_TIMEOUT)
+            except Exception:
+                pass
+            old_sidecar.remove(force=True)
+        except Exception:
+            pass
+
+        # Create sidecar with Docker volume for Unix socket (not host mount)
+        try:
+            self.sidecar_container = client.containers.run(
+                image=SIDECAR_IMAGE_TAG,
+                name=sidecar_name,
+                detach=True,
+                network_mode="host",  # Use host network to access localhost MCP servers
+                environment={
+                    "MCP_SOCKET_PATH": MCP_SOCKET_PATH,
+                    "MCP_ALLOWLIST": ",".join(self.mcp_allowlist),
+                },
+                volumes={"mcp-socket": {"bind": MCP_SOCKET_DIR, "mode": "rw"}},
+                remove=False,
+            )
+            logger.info(
+                f"Session {self.session_id}: Sidecar container created with socket at {MCP_SOCKET_PATH}"
+            )
+        except Exception as e:
+            logger.error(f"Session {self.session_id}: Failed to create sidecar: {e}")
+            raise RuntimeError(f"Failed to create MCP sidecar container: {e}") from e
+
+    def _ensure_sidecar_image(self):
+        """Ensure sidecar Docker image exists, build if needed"""
+        client = self._get_docker_client()
+
+        try:
+            client.images.get(SIDECAR_IMAGE_TAG)
+            logger.debug(f"Sidecar image {SIDECAR_IMAGE_TAG} already exists")
+            return
+        except Exception:
+            pass
+
+        # Build sidecar image
+        logger.info(f"Building sidecar image {SIDECAR_IMAGE_TAG}")
+
+        # Get path to sandbox package directory
+        import ray_agents.sandbox
+
+        sandbox_dir = os.path.dirname(ray_agents.sandbox.__file__)
+        dockerfile_path = os.path.join(sandbox_dir, "Dockerfile.sidecar")
+
+        if not os.path.exists(dockerfile_path):
+            raise RuntimeError(f"Sidecar Dockerfile not found at {dockerfile_path}")
+
+        try:
+            image, logs = client.images.build(
+                path=sandbox_dir,
+                dockerfile="Dockerfile.sidecar",
+                tag=SIDECAR_IMAGE_TAG,
+            )
+
+            for log in logs:
+                if "stream" in log:
+                    logger.debug(log["stream"].strip())
+
+            logger.info(f"Sidecar image {SIDECAR_IMAGE_TAG} built successfully")
+
+        except Exception as e:
+            logger.error(f"Failed to build sidecar image: {e}")
+            raise RuntimeError(f"Failed to build sidecar image: {e}") from e
+
     def cleanup(self):
         """Cleanup container and resources"""
+        self._cleanup_sidecar()
         self._cleanup_container()
         self._cleanup_docker_client()
+
+    def _cleanup_sidecar(self):
+        """Gracefully stop and remove sidecar container"""
+        sidecar_container = self.sidecar_container
+        if sidecar_container is None:
+            return
+
+        logger.info(f"Session {self.session_id}: Cleaning up sidecar")
+
+        try:
+            sidecar_container.stop(timeout=CONTAINER_STOP_TIMEOUT)
+            logger.debug(f"Session {self.session_id}: Sidecar stopped gracefully")
+        except Exception as e:
+            logger.debug(
+                f"Session {self.session_id}: Sidecar graceful stop failed: {e}"
+            )
+
+        try:
+            sidecar_container.remove(force=True)
+            logger.info(f"Session {self.session_id}: Sidecar removed")
+        except Exception as e:
+            logger.warning(f"Session {self.session_id}: Sidecar removal failed: {e}")
+        finally:
+            self.sidecar_container = None
 
     def _cleanup_container(self):
         """Gracefully stop and remove container"""
