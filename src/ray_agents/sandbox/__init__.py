@@ -19,8 +19,8 @@ With sessions:
     # Output: 5 (state persisted)
 
     # Shell and code share the same sandbox
-    ray.get(execute_shell.remote("pip install numpy", session_id="user-123"))
-    ray.get(execute_code.remote("import numpy; print(numpy.__version__)", session_id="user-123"))
+    ray.get(execute_shell.remote("echo 'test' > /tmp/file.txt", session_id="user-123"))
+    ray.get(execute_code.remote("print(open('/tmp/file.txt').read())", session_id="user-123"))
 
 With custom environments:
     dockerfile = '''
@@ -39,7 +39,6 @@ from .tools import (
     execute_code,
     execute_shell,
     get_session_stats,
-    install_package,
     upload_file,
 )
 from .types import (
@@ -47,8 +46,6 @@ from .types import (
     CleanupResult,
     ExecutionError,
     ExecutionResult,
-    InstallError,
-    InstallResult,
     SessionStats,
     UploadError,
     UploadResult,
@@ -58,15 +55,12 @@ __all__ = [
     # Tools
     "execute_code",
     "execute_shell",
-    "install_package",
     "upload_file",
     "get_session_stats",
     "cleanup_session",
     # Types
     "ExecutionResult",
     "ExecutionError",
-    "InstallResult",
-    "InstallError",
     "UploadResult",
     "UploadError",
     "SessionStats",

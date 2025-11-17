@@ -7,7 +7,6 @@ DEFAULT_IMAGE = "python:3.12-slim"
 RUNTIME = "runsc"  # gVisor for security
 
 # Strict mode: Fail if gVisor is unavailable
-# gVisor is required for secure code execution
 STRICT_GVISOR = True
 
 # Default execution timeout in seconds
@@ -22,4 +21,10 @@ CPU_PERIOD = 100000
 SESSION_TIMEOUT = 3600  # 1 hour before auto-cleanup
 
 # Network settings
-NETWORK_MODE = "bridge"  # "bridge" for internet access, "none" for isolation
+NETWORK_MODE = (
+    "none"  # Complete network isolation - external access via MCP sidecar only
+)
+
+# MCP Sidecar settings
+MCP_SOCKET_PATH = "/tmp/mcp.sock"  # Unix socket path for MCP communication
+MCP_SOCKET_DIR = "/tmp"  # Directory for socket file (on host)
