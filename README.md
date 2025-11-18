@@ -1,4 +1,4 @@
-# Ray Agents
+# Agentic-Ray
 Scalable runtime for Agents, MCP Servers, and coding sandboxes, orchestrated with Ray.
 
 ## Features
