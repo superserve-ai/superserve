@@ -15,7 +15,11 @@ dependencies = [
     "openai>=1.0.0",
     "python-dotenv>=1.0.0",
     "fastapi>=0.100.0",
+    "click>=8.0.0",
 ]
+
+[project.scripts]
+rayai = "ray_agents.cli:main"
 
 [project.optional-dependencies]
 code-interpreter = [
