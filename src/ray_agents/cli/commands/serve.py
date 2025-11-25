@@ -10,6 +10,8 @@ from typing import Any
 
 import click
 
+from ray_agents.decorators import get_agent_resources, has_resource_config
+
 
 @click.command()
 @click.argument("project_path", default=".")
@@ -168,6 +170,19 @@ def _create_chat_endpoint(app, agent_class: Any):
             raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+def _get_agent_resources_with_defaults(agent_class: Any) -> dict[str, Any]:
+    """Get agent resources with sensible defaults if no decorator specified."""
+    if has_resource_config(agent_class):
+        resources = get_agent_resources(agent_class)
+        click.echo(f"   Using custom resources: {resources}")
+        return resources
+    else:
+        # Default resources for basic agent deployment
+        defaults = {"num_cpus": 1, "memory": "2GB", "num_replicas": 1, "num_gpus": 0}
+        click.echo(f"   Using default resources: {defaults}")
+        return defaults
+
+
 def _deploy_agents(agents: dict[str, Any], port: int):
     """Deploy agents on Ray Serve with single /chat endpoint."""
     try:
@@ -192,10 +207,24 @@ def _deploy_agents(agents: dict[str, Any], port: int):
                 )
                 continue
 
+            click.echo(f"Configuring agent '{agent_name}':")
+            resources = _get_agent_resources_with_defaults(agent_class)
+
+            ray_actor_options = {
+                "num_cpus": resources["num_cpus"],
+                "memory": resources["memory"],
+            }
+            if resources["num_gpus"] > 0:
+                ray_actor_options["num_gpus"] = resources["num_gpus"]
+
             app = FastAPI(title=f"{agent_name} Agent")
             _create_chat_endpoint(app, agent_class)
 
-            @serve.deployment(name=f"{agent_name}-deployment", num_replicas=1)
+            @serve.deployment(
+                name=f"{agent_name}-deployment",
+                num_replicas=resources["num_replicas"],
+                ray_actor_options=ray_actor_options,
+            )
             @serve.ingress(app)
             class AgentDeployment:
                 def __init__(self, agent_cls=agent_class):
@@ -209,14 +238,21 @@ def _deploy_agents(agents: dict[str, Any], port: int):
             )
 
             endpoint_url = f"http://localhost:{port}/agents/{agent_name}/chat"
-            deployed_endpoints.append((agent_name, endpoint_url))
-            click.echo(f"Deployed agent '{agent_name}' at /chat endpoint")
+            deployed_endpoints.append((agent_name, endpoint_url, resources))
+
+            gpu_info = (
+                f", {resources['num_gpus']} GPUs" if resources["num_gpus"] > 0 else ""
+            )
+            click.echo(
+                f"✓ Deployed '{agent_name}': {resources['num_replicas']} replicas, "
+                f"{resources['num_cpus']} CPUs, {resources['memory']}{gpu_info}"
+            )
 
         if deployed_endpoints:
             click.echo(
                 f"\nSuccessfully deployed {len(deployed_endpoints)} endpoint(s):"
             )
-            for agent_name, endpoint_url in deployed_endpoints:
+            for agent_name, endpoint_url, _resources in deployed_endpoints:
                 click.echo(f"\n{agent_name}:")
                 click.echo(f"  Endpoint: POST {endpoint_url}")
                 click.echo(f"  Test it:  curl -X POST {endpoint_url} \\")
