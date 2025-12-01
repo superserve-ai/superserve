@@ -49,18 +49,27 @@ def _create_agent_files(agent_dir: Path, agent_name: str):
 
     agent_content = f'''"""Agent implementation for {agent_name}."""
 
-from ray_agents import RayAgent
 import ray
+from ray_agents import RayAgent, tool
+
+
+# Optional: Define tools for this agent
+# @tool(desc="Example tool - replace with your own", num_cpus=1)
+# def example_tool(input: str) -> str:
+#     """Process input and return result."""
+#     return f"Processed: {{input}}"
 
 
 # Optional: Configure resource requirements
 # Note: memory argument takes bytes (e.g., 4 * 1024**3 for 4GB)
 # @ray.remote(num_cpus=2, num_gpus=0, memory=4 * 1024**3)
 class {agent_name.title()}(RayAgent):
-
     def __init__(self):
         super().__init__()
         # Initialize your agent here
+
+        # Register tools for this agent
+        # self.register_tools(example_tool)
 
     def run(self, data: dict) -> dict:
         """Main entry point for all agent requests.
@@ -74,6 +83,14 @@ class {agent_name.title()}(RayAgent):
         Returns:
             Dict containing your agent's response
         """
+        # Access registered tools
+        # tools = self.get_tools()
+
+        # Your implementation here:
+        # - Build LLM tool schema from tools
+        # - Call your LLM
+        # - Handle tool calls via ray.get(tool.remote(...))
+
         return {{
             "error": "AGENT_NOT_IMPLEMENTED",
             "message": "This agent is not yet implemented. Please add your logic to the run() method.",
