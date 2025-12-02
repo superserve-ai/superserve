@@ -49,11 +49,13 @@ def _create_agent_files(agent_dir: Path, agent_name: str):
 
     agent_content = f'''"""Agent implementation for {agent_name}."""
 
-from ray_agents import RayAgent, ray_resources
+from ray_agents import RayAgent
+import ray
 
 
-# Optional: Configure resource requirements for this agent
-# @ray_resources(num_cpus=2, memory="4GB", num_replicas=1, num_gpus=0)
+# Optional: Configure resource requirements
+# Note: memory argument takes bytes (e.g., 4 * 1024**3 for 4GB)
+# @ray.remote(num_cpus=2, num_gpus=0, memory=4 * 1024**3)
 class {agent_name.title()}(RayAgent):
 
     def __init__(self):
