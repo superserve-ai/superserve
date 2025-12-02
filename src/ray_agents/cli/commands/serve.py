@@ -227,8 +227,17 @@ def _load_agent_from_file(file_path: Path, module_name: str) -> Any | None:
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
 
-        for _name, obj in inspect.getmembers(module, inspect.isclass):
-            if obj.__module__ == module.__name__ and hasattr(obj, "run"):
+        for _name, obj in inspect.getmembers(module):
+            is_regular_class = (
+                inspect.isclass(obj) and obj.__module__ == module.__name__
+            )
+            is_ray_actor = hasattr(obj, "__ray_metadata__") and hasattr(obj, "remote")
+
+            if (is_regular_class or is_ray_actor) and hasattr(obj, "run"):
+                if is_ray_actor:
+                    unwrapped_class = obj.__ray_metadata__.modified_class
+                    unwrapped_class._ray_remote_options = obj._default_options
+                    return unwrapped_class
                 return obj
 
         if hasattr(module, "Agent"):

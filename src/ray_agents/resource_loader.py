@@ -58,11 +58,14 @@ def get_ray_native_resources(agent_class: Any) -> dict[str, Any]:
         Dict containing resource configuration from Ray decorator.
         Empty dict if no @ray.remote decorator or no resources specified.
     """
-    if not hasattr(agent_class, "_ray_remote_options"):
-        return {}
+    ray_options = None
 
-    ray_options = agent_class._ray_remote_options
-    if not isinstance(ray_options, dict):
+    if hasattr(agent_class, "_default_options"):
+        ray_options = agent_class._default_options
+    elif hasattr(agent_class, "_ray_remote_options"):
+        ray_options = agent_class._ray_remote_options
+
+    if not ray_options or not isinstance(ray_options, dict):
         return {}
 
     resource_keys = ["num_cpus", "num_gpus", "memory"]
