@@ -1,6 +1,8 @@
 """Initialize new projects with templates."""
 
 import shutil
+import subprocess
+import sys
 from importlib import resources
 from pathlib import Path
 
@@ -16,7 +18,12 @@ import click
     type=click.Choice(["agent"]),
     help="Type of project to initialize (default: agent)",
 )
-def init(project_name: str, project_type: str):
+@click.option(
+    "--no-install",
+    is_flag=True,
+    help="Skip automatic dependency installation",
+)
+def init(project_name: str, project_type: str, no_install: bool):
     """Initialize a new project with the specified template."""
 
     target_dir = Path.cwd() / project_name
@@ -45,8 +52,38 @@ def init(project_name: str, project_type: str):
                 shutil.copytree(template_dir, target_dir)
                 click.echo(f"Created new {project_type} project: {project_name}")
                 click.echo(f"Project location: {target_dir}")
+
+                if not no_install:
+                    requirements_file = target_dir / "requirements.txt"
+                    if requirements_file.exists():
+                        click.echo("\nInstalling dependencies...")
+                        try:
+                            subprocess.run(
+                                [
+                                    sys.executable,
+                                    "-m",
+                                    "pip",
+                                    "install",
+                                    "-r",
+                                    str(requirements_file),
+                                ],
+                                check=True,
+                                capture_output=True,
+                                text=True,
+                            )
+                            click.echo("Dependencies installed successfully")
+                        except subprocess.CalledProcessError as e:
+                            click.echo(
+                                f"Warning: Failed to install dependencies: {e.stderr}"
+                            )
+                            click.echo(
+                                f"You can install them manually with: pip install -r {project_name}/requirements.txt"
+                            )
+
                 click.echo("\nNext steps:")
                 click.echo(f"  cd {project_name}")
+                if no_install:
+                    click.echo("  pip install -r requirements.txt")
                 click.echo("  # Edit .env file with your API keys")
                 click.echo("  # Create your first agent: rayai create-agent <name>")
                 click.echo("  # Deploy agents: rayai serve")

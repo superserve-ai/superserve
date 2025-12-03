@@ -10,34 +10,31 @@ A template for building and deploying agents with Ray Serve using the RayAI CLI.
    cd <project_name>
    ```
 
-2. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+   Note: Dependencies are automatically installed. Use `--no-install` flag to skip.
 
-3. **Set up environment (optional):**
+2. **Set up environment (optional):**
    ```bash
    # Create .env file with your API keys and configuration
    ```
 
-4. **Create your first agent:**
+3. **Create your first agent:**
    ```bash
    rayai create-agent <agent_name>
    ```
 
-5. **Implement your agent logic:**
+4. **Implement your agent logic:**
    ```bash
    # Edit agents/<agent_name>/agent.py
    # - Add initialization code in __init__()
    # - Implement your logic in run()
    ```
 
-6. **Deploy your agents:**
+5. **Deploy your agents:**
    ```bash
    rayai serve
    ```
 
-7. **Test your agent:**
+6. **Test your agent:**
    ```bash
    curl -X POST http://localhost:8000/agents/<agent_name>/chat \
      -H "Content-Type: application/json" \
