@@ -78,7 +78,7 @@ my-project/
 
 ## Agent Implementation
 
-Each agent must inherit from `RayAgent` and implement the `run()` method:
+Each agent should inherit from `RayAgent` and implement the `run()` method. RayAgent provides built-in tool management (`register_tools`, `execute_tools`) and ensures a consistent interface across all agents.
 
 ```python
 from ray_agents import RayAgent
