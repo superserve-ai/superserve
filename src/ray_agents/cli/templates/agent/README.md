@@ -50,6 +50,10 @@ A template for building and deploying agents with Ray Serve using the RayAI CLI.
 - **`rayai serve`** - Deploy all agents
 - **`rayai serve --agents agent1,agent2`** - Deploy specific agents
 - **`rayai serve --port=9000`** - Deploy on custom port
+- **`rayai serve --<agent-name>-num-cpus=4`** - Override CPU allocation
+- **`rayai serve --<agent-name>-num-gpus=1`** - Override GPU allocation
+- **`rayai serve --<agent-name>-memory=8GB`** - Override memory allocation
+- **`rayai serve --<agent-name>-num-replicas=2`** - Set number of replicas
 
 ## API Endpoints
 
@@ -97,6 +101,51 @@ class ChatbotAgent(RayAgent):
         # - Return results as a dictionary
         return {"response": "Hello!"}
 ```
+
+## Resource Configuration
+
+Configure CPU, GPU, memory, and replicas for your agents using two methods:
+
+### Method 1: Ray Decorator (Set Defaults in Code)
+
+Use the `@ray.remote` decorator to set default resource requirements for your agent:
+
+```python
+import ray
+from ray_agents import RayAgent
+
+@ray.remote(num_cpus=2, num_gpus=0, memory=4 * 1024**3)
+class MyAgent(RayAgent):
+    def __init__(self):
+        super().__init__()
+
+    def run(self, data: dict) -> dict:
+        return {"response": "Hello!"}
+```
+
+**Note:** The `memory` argument requires bytes (e.g., `4 * 1024**3` for 4GB).
+
+### Method 2: CLI Flags (Runtime Overrides)
+
+Override resource settings at runtime using CLI flags:
+
+```bash
+rayai serve --my-agent-num-cpus=4 --my-agent-memory=8GB --my-agent-num-replicas=2
+```
+
+Available resource flags:
+- `--{agent-name}-num-cpus` - Number of CPUs (integer)
+- `--{agent-name}-num-gpus` - Number of GPUs (integer)
+- `--{agent-name}-memory` - Memory allocation (supports "4GB", "512MB", etc.)
+- `--{agent-name}-num-replicas` - Number of replicas for load balancing (integer)
+
+### Precedence
+
+When resources are configured in multiple places, the following precedence applies:
+
+**CLI flags > @ray.remote decorator > defaults**
+
+Default resources: 1 CPU, 2GB memory, 1 replica, 0 GPUs
 
 ## Development Workflow
 

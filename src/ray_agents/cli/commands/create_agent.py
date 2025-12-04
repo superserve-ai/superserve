@@ -50,18 +50,29 @@ def _create_agent_files(agent_dir: Path, agent_name: str):
     agent_content = f'''"""Agent implementation for {agent_name}."""
 
 from ray_agents import RayAgent
+import ray
 
 
+# Optional: Configure resource requirements
+# Note: memory argument takes bytes (e.g., 4 * 1024**3 for 4GB)
+# @ray.remote(num_cpus=2, num_gpus=0, memory=4 * 1024**3)
 class {agent_name.title()}(RayAgent):
 
     def __init__(self):
         super().__init__()
+        # Initialize your agent here
 
     def run(self, data: dict) -> dict:
         """Main entry point for all agent requests.
 
         Called for every request to /agents/{agent_name}/chat
         Implement your agent logic here or route to other methods.
+
+        Args:
+            data: Input data from the client request
+
+        Returns:
+            Dict containing your agent's response
         """
         return {{
             "error": "AGENT_NOT_IMPLEMENTED",
