@@ -1,10 +1,26 @@
+import logging
+import os
+import sys
 from pathlib import Path
 
+import ray
 from dotenv import load_dotenv
 from pydantic_ai import Agent
 
+# Enable logging to see Ray worker output
+logging.basicConfig(level=logging.INFO)
+
 # Load .env from repo root
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
+
+# Validate required API keys at startup
+REQUIRED_KEYS = ["OPENAI_API_KEY", "API_NINJAS_KEY", "ALPHAVANTAGE_API_KEY"]
+missing = [k for k in REQUIRED_KEYS if not os.environ.get(k)]
+if missing:
+    sys.exit(f"Missing required environment variables: {', '.join(missing)}")
+
+# Initialize Ray at startup
+ray.init(ignore_reinit_error=True)
 
 from tools import get_daily_time_series, get_sp500, run_analysis_code  # noqa: E402
 
@@ -61,17 +77,22 @@ def print_messages(messages):
             print(f"  ← Result: {content}...")
 
 
-if __name__ == "__main__":
-    import sys
+async def main():
+    print("Agent ready. Type 'quit' to exit.", flush=True)
 
     while True:
         user_input = input("You: ")
-        sys.stdout.flush()
         if user_input.lower() in ("quit", "exit"):
             break
         print("Processing...", flush=True)
-        result = agent.run_sync(user_input)
+        result = await agent.run(user_input)
         print("\n--- Steps ---", flush=True)
         print_messages(result.all_messages())
         print("\n--- Summary ---", flush=True)
         print(f"Assistant: {result.output}", flush=True)
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    asyncio.run(main())

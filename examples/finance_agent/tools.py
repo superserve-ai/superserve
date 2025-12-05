@@ -1,9 +1,10 @@
 import os
+import uuid
 
 import ray
 import requests
 
-from ray_agents.sandbox import execute_code, upload_file
+from ray_agents.sandbox import execute_code
 
 
 def get_sp500(limit: int = 10) -> list[dict[str, str]]:
@@ -18,19 +19,18 @@ def get_sp500(limit: int = 10) -> list[dict[str, str]]:
     Returns:
         List of dicts with stock info including ticker symbol and company name.
     """
-    print(f"[DEBUG] get_sp500 called with limit={limit}", flush=True)
+    print(f"[API] Fetching top {limit} S&P 500 stocks...", flush=True)
     response = requests.get(
         f"https://api.api-ninjas.com/v1/sp500?limit={limit}",
         headers={"X-Api-Key": os.environ["API_NINJAS_KEY"]},
         timeout=30,
     )
     response.raise_for_status()
-    print("[DEBUG] get_sp500 got response", flush=True)
     return response.json()
 
 
 def get_daily_time_series(symbol: str) -> dict:
-    """Fetch daily adjusted time series data for a stock symbol from Alpha Vantage.
+    """Fetch daily time series data for a stock symbol from Alpha Vantage.
 
     Use this tool when the user asks about historical stock prices, daily performance,
     price trends, or wants to analyze a specific stock's trading history.
@@ -40,21 +40,26 @@ def get_daily_time_series(symbol: str) -> dict:
 
     Returns:
         Dict containing metadata and daily time series with open, high, low, close,
-        adjusted close, volume, and dividend/split info.
+        volume.
     """
-    print(f"[DEBUG] get_daily_time_series called with symbol={symbol}", flush=True)
+    print(f"[API] Fetching time series for {symbol}...", flush=True)
     response = requests.get(
         "https://www.alphavantage.co/query",
         params={
-            "function": "TIME_SERIES_DAILY_ADJUSTED",
+            "function": "TIME_SERIES_DAILY",
             "symbol": symbol,
             "apikey": os.environ["ALPHAVANTAGE_API_KEY"],
         },
         timeout=30,
     )
     response.raise_for_status()
-    print("[DEBUG] get_daily_time_series got response", flush=True)
     return response.json()
+
+
+SANDBOX_DOCKERFILE = """
+FROM python:3.12-slim
+RUN pip install --no-cache-dir pandas numpy
+"""
 
 
 def run_analysis_code(code: str, time_series_data: str) -> str:
@@ -63,17 +68,15 @@ def run_analysis_code(code: str, time_series_data: str) -> str:
     Use this tool when the user wants to perform custom analysis on stock data,
     calculate metrics, identify trends, or run computations on time series data.
 
-    The sandbox has pandas and numpy pre-installed. The time series data will be
-    available as a JSON string in a file at /tmp/data.json.
+    The sandbox has pandas and numpy pre-installed. The time series data is
+    automatically loaded and available as a `data` variable (already parsed dict).
 
     Args:
-        code: Python code to execute. Should read data from /tmp/data.json and
-              print results to stdout. Example:
+        code: Python code to execute. The `data` variable is pre-loaded with the
+              time series data. Just use it directly and print results. Example:
               ```
-              import json
-              import pandas as pd
-              with open('/tmp/data.json') as f:
-                  data = json.load(f)
+              # data is already available as a dict
+              print(data.keys())
               # analyze data...
               print(result)
               ```
@@ -82,23 +85,45 @@ def run_analysis_code(code: str, time_series_data: str) -> str:
     Returns:
         The stdout output from code execution, or error message if execution failed.
     """
-    ray.init(ignore_reinit_error=True)
+    # Generate unique session ID for each execution
+    session_id = f"finance-agent-{uuid.uuid4()}"
 
-    session_id = "finance-agent-analysis"
+    # Wrap the code to include the data inline (avoid needing upload_file before session exists)
+    # Escape the data for safe embedding in Python code
+    escaped_data = time_series_data.replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
+    wrapped_code = f'''
+import json
 
-    # Upload the time series data
-    upload_result = ray.get(
-        upload_file.remote(
-            "/tmp/data.json", time_series_data.encode(), session_id=session_id
+# Data provided by the agent
+_raw_data = """{escaped_data}"""
+data = json.loads(_raw_data)
+
+# User's analysis code
+{code}
+'''
+
+    # Execute the analysis code with custom dockerfile that has pandas
+    print("[SANDBOX] Executing analysis code...", flush=True)
+    result = ray.get(
+        execute_code.remote(
+            wrapped_code,
+            session_id=session_id,
+            dockerfile=SANDBOX_DOCKERFILE,
+            timeout=120,  # longer timeout for first run (image build)
         )
     )
-    if upload_result["status"] == "error":
-        return f"Error uploading data: {upload_result['error']}"
-
-    # Execute the analysis code
-    result = ray.get(execute_code.remote(code, session_id=session_id, timeout=60))
-
-    if result["status"] == "success":
-        return result["stdout"]
+    print(f"[SANDBOX] Status: {result.get('status')}", flush=True)
+    if result.get("status") == "success":
+        print(f"[SANDBOX] Output:\n{result.get('stdout', '')}", flush=True)
     else:
-        return f"Error: {result['error']}\nStderr: {result.get('stderr', '')}"
+        print(
+            f"[SANDBOX] Error: {result.get('error') or result.get('stderr', '')}",
+            flush=True,
+        )
+
+    if result.get("status") == "success":
+        return result.get("stdout", "")
+    else:
+        error_msg = result.get("error") or result.get("message") or str(result)
+        stderr = result.get("stderr", "")
+        return f"Error: {error_msg}\nStderr: {stderr}"
