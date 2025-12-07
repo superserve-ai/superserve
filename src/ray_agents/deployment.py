@@ -1,5 +1,6 @@
 """Agent deployment utilities for Ray Serve."""
 
+import inspect
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -37,6 +38,11 @@ def create_agent_app(agent_class: Any) -> FastAPI:
         try:
             agent = agent_class()
             result = agent.run(request.data)
+
+            # Support both sync and async run methods
+            if inspect.iscoroutine(result):
+                result = await result
+
             return ChatResponse(result=result, session_id=request.session_id)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e)) from e

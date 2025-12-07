@@ -220,9 +220,16 @@ def _load_agent_from_file(file_path: Path, module_name: str) -> Any | None:
             )
             is_ray_actor = hasattr(obj, "__ray_metadata__") and hasattr(obj, "remote")
 
-            if (is_regular_class or is_ray_actor) and hasattr(obj, "run"):
-                if is_ray_actor:
-                    unwrapped_class = obj.__ray_metadata__.modified_class
+            if is_ray_actor:
+                unwrapped_class = obj.__ray_metadata__.modified_class
+                is_defined_here = unwrapped_class.__module__ == module.__name__
+            else:
+                is_defined_here = True
+
+            if (is_regular_class or (is_ray_actor and is_defined_here)) and hasattr(
+                obj, "run"
+            ):
+                if is_ray_actor and is_defined_here:
                     unwrapped_class._ray_remote_options = obj._default_options
                     return unwrapped_class
                 return obj
