@@ -10,7 +10,7 @@ A template for building and running agents with Ray Serve using the RayAI CLI.
    cd <project_name>
    ```
 
-   Note: Dependencies are automatically installed. Use `--no-install` flag to skip.
+   Note: The project is automatically installed in editable mode (`pip install -e .`).
 
 2. **Set up environment (optional):**
    ```bash
@@ -64,7 +64,7 @@ After running `rayai serve`, each agent gets its own endpoint:
 
 ```
 my-project/
-├── requirements.txt
+├── pyproject.toml          # Project config and dependencies
 ├── .env                    # Optional API keys
 └── agents/                 # All your agents
     ├── agent1/

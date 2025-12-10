@@ -45,12 +45,18 @@ def init(project_name: str, project_type: str):
 
             try:
                 shutil.copytree(template_dir, target_dir)
+
+                pyproject_file = target_dir / "pyproject.toml"
+                if pyproject_file.exists():
+                    content = pyproject_file.read_text()
+                    content = content.replace("{{PROJECT_NAME}}", project_name)
+                    pyproject_file.write_text(content)
+
                 click.echo(f"Created new {project_type} project: {project_name}")
                 click.echo(f"Project location: {target_dir}")
 
-                requirements_file = target_dir / "requirements.txt"
-                if requirements_file.exists():
-                    click.echo("\nInstalling dependencies...")
+                if pyproject_file.exists():
+                    click.echo("\nInstalling project in editable mode...")
                     try:
                         subprocess.run(
                             [
@@ -58,20 +64,18 @@ def init(project_name: str, project_type: str):
                                 "-m",
                                 "pip",
                                 "install",
-                                "-r",
-                                str(requirements_file),
+                                "-e",
+                                str(target_dir),
                             ],
                             check=True,
                             capture_output=True,
                             text=True,
                         )
-                        click.echo("Dependencies installed successfully")
+                        click.echo("Project installed successfully")
                     except subprocess.CalledProcessError as e:
+                        click.echo(f"Warning: Failed to install project: {e.stderr}")
                         click.echo(
-                            f"Warning: Failed to install dependencies: {e.stderr}"
-                        )
-                        click.echo(
-                            f"You can install them manually with: pip install -r {project_name}/requirements.txt"
+                            f"You can install manually with: pip install -e {project_name}/"
                         )
 
                 click.echo("\nNext steps:")

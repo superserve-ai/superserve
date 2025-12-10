@@ -1,0 +1,17 @@
+[project]
+name = "{{PROJECT_NAME}}"
+version = "0.1.0"
+description = "An AI agent project built with agentic-ray"
+requires-python = ">=3.10"
+dependencies = [
+    "python-dotenv",
+    "agentic-ray",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agents*"]
