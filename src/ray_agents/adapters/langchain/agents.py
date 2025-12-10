@@ -1,13 +1,10 @@
 """LangChain agent adapter for Ray distributed tool execution."""
 
-import functools
 import logging
 from collections.abc import Callable
 from typing import Any
 
-import ray
-
-from ray_agents.adapters.abc import AgentAdapter
+from ray_agents.adapters.abc import AgentAdapter, AgentFramework
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +17,8 @@ class LangChainAdapter(AgentAdapter):
     LangChain maintains full control over the agent flow; Ray provides distributed
     execution. Works with any LangChain LLM provider (ChatOpenAI, ChatAnthropic, etc.).
     """
+
+    framework = AgentFramework.LANGCHAIN
 
     def __init__(
         self,
@@ -53,7 +52,7 @@ class LangChainAdapter(AgentAdapter):
             Response dict with 'content' key and metadata
         """
         try:
-            langchain_tools = self._wrap_ray_tools_for_langchain(tools)
+            langchain_tools = self._wrap_ray_tools(tools)
             response_text = await self._execute_agent(
                 message, messages, langchain_tools
             )
@@ -67,67 +66,6 @@ class LangChainAdapter(AgentAdapter):
         except Exception as e:
             logger.error(f"Error in LangChain adapter: {e}")
             raise
-
-    def _wrap_ray_tools_for_langchain(self, ray_tools: list[Any]) -> list[Callable]:
-        """
-        Wrap Ray remote functions as LangChain-compatible callables.
-
-        This is the key integration point: when LangChain calls these tools,
-        they execute as Ray tasks (distributed across cluster).
-
-        Note: create_agent() uses LangGraph under the hood, which supports
-        parallel tool execution when the agent decides to call multiple tools.
-
-        Args:
-            ray_tools: List of Ray remote functions
-
-        Returns:
-            List of callables that LangChain can use as tools
-        """
-        wrapped_tools = []
-
-        for ray_tool in ray_tools:
-            if hasattr(ray_tool, "_remote_func") and hasattr(ray_tool, "args_schema"):
-                wrapped_tools.append(ray_tool)
-                continue
-            elif hasattr(ray_tool, "remote"):
-                remote_func = ray_tool
-            elif hasattr(ray_tool, "_remote_func"):
-                remote_func = ray_tool._remote_func
-            else:
-                logger.warning(
-                    f"Tool {ray_tool} is not a Ray remote function, skipping"
-                )
-                continue
-
-            def make_wrapper(tool, original_tool):
-                """Create wrapper that preserves signature for LangChain."""
-                if hasattr(tool, "_function"):
-                    original_func = tool._function
-                elif hasattr(original_tool, "__name__"):
-                    original_func = original_tool
-                else:
-                    original_func = tool
-
-                @functools.wraps(original_func)
-                def sync_wrapper(*args, **kwargs):
-                    object_ref = tool.remote(*args, **kwargs)
-                    result = ray.get(object_ref)
-
-                    if isinstance(result, dict) and "status" in result:
-                        if result["status"] == "error":
-                            error_msg = result.get("error", "Unknown error")
-                            raise RuntimeError(f"Tool error: {error_msg}")
-                        if "result" in result:
-                            result = result["result"]
-
-                    return result
-
-                return sync_wrapper
-
-            wrapped_tools.append(make_wrapper(remote_func, ray_tool))
-
-        return wrapped_tools
 
     def _get_or_create_agent(self, lc_tools: list[Any]) -> Any:
         """

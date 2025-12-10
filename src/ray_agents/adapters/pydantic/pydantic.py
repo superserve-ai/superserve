@@ -1,12 +1,9 @@
 """Pydantic AI agent adapter for Ray distributed tool execution."""
 
-import functools
 import logging
 from typing import Any
 
-import ray
-
-from ray_agents.adapters.abc import AgentAdapter
+from ray_agents.adapters.abc import AgentAdapter, AgentFramework
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +16,8 @@ class PydanticAIAdapter(AgentAdapter):
     Pydantic AI maintains full control over the agent flow; Ray provides
     distributed execution.
     """
+
+    framework = AgentFramework.PYDANTIC
 
     def __init__(
         self,
@@ -47,7 +46,7 @@ class PydanticAIAdapter(AgentAdapter):
             Response dict with 'content' key and metadata
         """
         try:
-            wrapped_tools = self._wrap_ray_tools_for_pydantic(tools)
+            wrapped_tools = self._wrap_ray_tools(tools)
 
             response_text = await self._execute_agent(message, messages, wrapped_tools)
 
@@ -59,56 +58,6 @@ class PydanticAIAdapter(AgentAdapter):
         except Exception as e:
             logger.error(f"Error in Pydantic AI adapter: {e}")
             raise
-
-    def _wrap_ray_tools_for_pydantic(self, ray_tools: list[Any]) -> list[Any]:
-        """
-        Wrap Ray remote functions as Pydantic AI-compatible callables.
-
-        This is the key integration point: when Pydantic AI calls these tools,
-        they execute as Ray tasks (distributed across cluster).
-
-        Args:
-            ray_tools: List of Ray remote functions
-
-        Returns:
-            List of callables that Pydantic AI can use as tools
-        """
-        wrapped_tools = []
-
-        for ray_tool in ray_tools:
-            if hasattr(ray_tool, "remote"):
-                remote_func = ray_tool
-            elif hasattr(ray_tool, "_remote_func"):
-                remote_func = ray_tool._remote_func
-            else:
-                logger.warning(
-                    f"Tool {ray_tool} is not a Ray remote function, skipping"
-                )
-                continue
-
-            def make_wrapper(tool, original_tool):
-                """Create wrapper that preserves signature for Pydantic AI."""
-                if hasattr(tool, "_function"):
-                    original_func = tool._function
-                elif hasattr(original_tool, "__name__"):
-                    original_func = original_tool
-                else:
-                    original_func = tool
-
-                @functools.wraps(original_func)
-                def sync_wrapper(*args, **kwargs):
-                    object_ref = tool.remote(*args, **kwargs)
-                    result = ray.get(object_ref)
-
-                    if isinstance(result, dict) and result.get("status") == "error":
-                        raise Exception(result.get("error", "Tool execution failed"))
-                    return result
-
-                return sync_wrapper
-
-            wrapped_tools.append(make_wrapper(remote_func, ray_tool))
-
-        return wrapped_tools
 
     async def _execute_agent(
         self, message: str, messages: list[dict], tools: list[Any]
