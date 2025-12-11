@@ -9,13 +9,13 @@ from pathlib import Path
 from typing import Any
 
 import click
+from dotenv import load_dotenv
 
 from ray_agents.deployment import (
     create_agent_deployment,
 )
 from ray_agents.resource_loader import (
     _parse_memory,
-    get_ray_native_resources,
     merge_resource_configs,
 )
 
@@ -33,6 +33,12 @@ DEFAULT_RESOURCES = {"num_cpus": 1, "memory": "2GB", "num_replicas": 1, "num_gpu
 def serve(ctx, project_path: str, port: int, agents: str):
     """Serve agents using Ray Serve."""
     project_dir = Path(project_path).resolve()
+
+    # Load environment variables from .env file
+    env_file = project_dir / ".env"
+    if env_file.exists():
+        load_dotenv(env_file)
+        click.echo(f"Loaded environment from {env_file}")
 
     if not project_dir.exists():
         click.echo(f"Error: Project directory not found: {project_dir}")
@@ -201,7 +207,10 @@ def _discover_agents(project_dir: Path) -> dict[str, Any]:
 
 
 def _load_agent_from_file(file_path: Path, module_name: str) -> Any | None:
-    """Load Agent class from a Python file."""
+    """Load Agent class from a Python file.
+
+    Discovers classes decorated with @agent.
+    """
     try:
         project_dir = file_path.parent.parent
         if str(project_dir) not in sys.path:
@@ -215,22 +224,22 @@ def _load_agent_from_file(file_path: Path, module_name: str) -> Any | None:
         spec.loader.exec_module(module)
 
         for _name, obj in inspect.getmembers(module):
-            is_regular_class = (
-                inspect.isclass(obj) and obj.__module__ == module.__name__
-            )
-            is_ray_actor = hasattr(obj, "__ray_metadata__") and hasattr(obj, "remote")
+            # Check if class is decorated with @agent
+            is_agent = getattr(obj, "_is_rayai_agent", False)
 
-            if (is_regular_class or is_ray_actor) and hasattr(obj, "run"):
-                if is_ray_actor:
-                    unwrapped_class = obj.__ray_metadata__.modified_class
-                    unwrapped_class._ray_remote_options = obj._default_options
-                    return unwrapped_class
-                return obj
+            if is_agent:
+                is_defined_here = (
+                    obj.__module__ == module.__name__ if inspect.isclass(obj) else False
+                )
+                if is_defined_here:
+                    return obj
 
-        if hasattr(module, "Agent"):
-            return module.Agent
-
-        click.echo(f"No agent class found in {file_path}")
+        click.echo(f"No @agent decorated class found in {file_path}")
+        click.echo("  Agent classes must be decorated with @agent:")
+        click.echo("    from ray_agents import agent")
+        click.echo("    @agent()")
+        click.echo("    class MyAgent:")
+        click.echo("        def run(self, data: dict) -> dict: ...")
         return None
 
     except Exception as e:
@@ -259,23 +268,24 @@ def _merge_all_resource_sources(
     cli_resources: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     """
-    Merge resources from all sources with precedence: CLI > Ray native > defaults.
+    Merge resources from all sources with precedence: CLI > @agent decorator > defaults.
 
     Args:
-        agent_class: Agent class (may have @ray.remote decorator)
+        agent_class: Agent class (decorated with @agent)
         agent_name: Name of the agent
         cli_resources: Parsed CLI resource flags
 
     Returns:
         Final merged resource configuration
     """
-    ray_native = get_ray_native_resources(agent_class)
+    # Get resources from @agent decorator metadata
+    agent_metadata = getattr(agent_class, "_agent_metadata", {})
     cli_flags = cli_resources.get(agent_name, {})
-    merged = merge_resource_configs(DEFAULT_RESOURCES, ray_native, cli_flags)
+    merged = merge_resource_configs(DEFAULT_RESOURCES, agent_metadata, cli_flags)
 
     sources = []
-    if ray_native:
-        sources.append("Ray native decorator")
+    if agent_metadata:
+        sources.append("@agent decorator")
     if cli_flags:
         sources.append(f"CLI flags {list(cli_flags.keys())}")
 
@@ -375,7 +385,7 @@ def _print_deployment_summary(
         click.echo(f"  Endpoint: POST {endpoint_url}")
         click.echo(f"  Test it:  curl -X POST {endpoint_url} \\")
         click.echo("                 -H 'Content-Type: application/json' \\")
-        json_data = '{"data": {"message": "hello"}, "session_id": "test"}'
+        json_data = '{"data": {"messages": [{"role": "user", "content": "hello"}]}, "session_id": "test"}'
         click.echo(f"                 -d '{json_data}'")
 
     click.echo("\nRay Dashboard: http://localhost:8265")

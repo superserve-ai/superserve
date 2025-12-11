@@ -60,3 +60,52 @@ def tool(
         return sync_wrapper
 
     return decorator
+
+
+def agent(
+    num_cpus: int = 1,
+    num_gpus: int = 0,
+    memory: str = "2GB",
+    num_replicas: int = 1,
+) -> Callable[[type], type]:
+    """Mark a class as a servable agent with resource configuration.
+
+    The decorated class must have a run(data: dict) -> dict method.
+
+    Args:
+        num_cpus: Number of CPU cores per replica (default: 1)
+        num_gpus: Number of GPUs per replica (default: 0)
+        memory: Memory per replica as string (default: "2GB")
+        num_replicas: Number of replicas for scaling (default: 1)
+
+    Returns:
+        Decorated class marked as an agent with resource configuration
+
+    Example:
+        @agent(num_cpus=2, memory="4GB")
+        class MyAgent:
+            def run(self, data: dict) -> dict:
+                return {"response": "Hello!"}
+    """
+
+    def decorator(cls: type) -> type:
+        # Validate that run() method exists
+        if not callable(getattr(cls, "run", None)):
+            raise TypeError(
+                f"Agent class {cls.__name__} must have a run(data: dict) -> dict method"
+            )
+
+        # Store agent metadata
+        cls._agent_metadata = {  # type: ignore[attr-defined]
+            "num_cpus": num_cpus,
+            "num_gpus": num_gpus,
+            "memory": memory,
+            "num_replicas": num_replicas,
+        }
+
+        # Mark as agent for discovery
+        cls._is_rayai_agent = True  # type: ignore[attr-defined]
+
+        return cls
+
+    return decorator

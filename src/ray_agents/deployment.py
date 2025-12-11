@@ -1,5 +1,6 @@
 """Agent deployment utilities for Ray Serve."""
 
+import inspect
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -21,29 +22,6 @@ class ChatResponse(BaseModel):
     session_id: str
 
 
-def create_agent_app(agent_class: Any) -> FastAPI:
-    """Create a FastAPI app with a /chat endpoint for the agent.
-
-    Args:
-        agent_class: The RayAgent class to deploy
-
-    Returns:
-        FastAPI app with /chat endpoint configured
-    """
-    app = FastAPI()
-
-    @app.post("/chat", response_model=ChatResponse)
-    async def chat_endpoint(request: ChatRequest):
-        try:
-            agent = agent_class()
-            result = agent.run(request.data)
-            return ChatResponse(result=result, session_id=request.session_id)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e)) from e
-
-    return app
-
-
 def create_agent_deployment(
     agent_class: Any,
     agent_name: str,
@@ -63,9 +41,7 @@ def create_agent_deployment(
     Returns:
         Ray Serve deployment handle
     """
-    app = create_agent_app(agent_class)
-    if app_title:
-        app.title = app_title
+    app = FastAPI(title=app_title or f"{agent_name} Agent")
 
     @serve.deployment(
         name=f"{agent_name}-deployment",
@@ -76,5 +52,17 @@ def create_agent_deployment(
     class AgentDeployment:
         def __init__(self, agent_cls=agent_class):
             self.agent = agent_cls()
+
+        @app.post("/chat", response_model=ChatResponse)
+        async def chat_endpoint(self, request: ChatRequest):
+            try:
+                result = self.agent.run(request.data)
+
+                if inspect.iscoroutine(result):
+                    result = await result
+
+                return ChatResponse(result=result, session_id=request.session_id)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e)) from e
 
     return AgentDeployment.bind()  # type: ignore[attr-defined]
