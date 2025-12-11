@@ -1,12 +1,8 @@
-"""Adapters for different agent frameworks to integrate with Ray Agents Experimental API for distributed task execution."""
+"""Adapters for different agent frameworks to integrate with Ray distributed tool execution."""
 
-from ray_agents.adapters.abc import AgentAdapter, AgentFramework
-from ray_agents.adapters.langchain import LangChainAdapter
-from ray_agents.adapters.pydantic import PydanticAIAdapter
+from ray_agents.adapters.abc import AgentFramework, ToolAdapter
 
 __all__ = [
-    "AgentAdapter",
     "AgentFramework",
-    "LangChainAdapter",
-    "PydanticAIAdapter",
+    "ToolAdapter",
 ]
