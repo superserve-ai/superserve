@@ -92,14 +92,15 @@ class TestParallelToolCalls:
         assert results[0] == 6  # 5 + 1
         assert results[1] == 9  # 3 * 3
 
-    def test_execute_tools_parallel_is_faster(self, ray_start):
-        """Test that execute_tools with parallel=True is faster."""
+    def test_execute_tools_parallel_starts_simultaneously(self, ray_start):
+        """Test that execute_tools with parallel=True starts tools simultaneously."""
 
         @tool(desc="Slow tool")
-        def slow_tool(x: int) -> int:
-            """A slow tool."""
+        def slow_tool(x: int) -> dict:
+            """A slow tool that returns its start time."""
+            start_time = time.time()
             time.sleep(0.2)
-            return x * 2
+            return {"result": x * 2, "start_time": start_time}
 
         tool_calls = [
             (slow_tool, {"x": 1}),
@@ -108,13 +109,16 @@ class TestParallelToolCalls:
         ]
 
         # Parallel execution
-        start = time.time()
         parallel_results = execute_tools(tool_calls, parallel=True)
-        parallel_time = time.time() - start
 
-        assert parallel_results == [2, 4, 6]
-        # 3 tools at 0.2s each, parallel should be ~0.2s not ~0.6s
-        assert parallel_time < 0.4, f"Parallel took {parallel_time}s"
+        assert parallel_results[0]["result"] == 2
+        assert parallel_results[1]["result"] == 4
+        assert parallel_results[2]["result"] == 6
+
+        # All 3 tools should start within 0.15s of each other (parallel)
+        start_times = [r["start_time"] for r in parallel_results]
+        max_diff = max(start_times) - min(start_times)
+        assert max_diff < 0.15, f"Tools started {max_diff}s apart, expected < 0.15s"
 
     def test_execute_tools_preserves_order(self, ray_start):
         """Test that execute_tools returns results in same order as input."""
@@ -157,16 +161,32 @@ class TestLangChainAgentParallelToolCalls:
 
         from ray_agents import tool
 
-        # Create slow tools
+        # Track start times via Ray actor for cross-process coordination
+        @ray.remote
+        class TimeTracker:
+            def __init__(self):
+                self.start_times = {}
+
+            def record(self, name: str, t: float):
+                self.start_times[name] = t
+
+            def get_times(self):
+                return self.start_times
+
+        tracker = TimeTracker.remote()
+
+        # Create slow tools that record their start times
         @tool(desc="Slow tool A")
         def slow_tool_a(x: int) -> int:
             """Slow tool A that takes 0.3s."""
+            ray.get(tracker.record.remote("slow_tool_a", time.time()))
             time.sleep(0.3)
             return x * 2
 
         @tool(desc="Slow tool B")
         def slow_tool_b(x: int) -> int:
             """Slow tool B that takes 0.3s."""
+            ray.get(tracker.record.remote("slow_tool_b", time.time()))
             time.sleep(0.3)
             return x * 3
 
@@ -207,19 +227,16 @@ class TestLangChainAgentParallelToolCalls:
         mock_llm = MockChatModel()
         agent = create_react_agent(mock_llm, lc_tools)
 
-        # Run the agent and measure time
-        start = time.time()
+        # Run the agent
         await agent.ainvoke(
             {"messages": [HumanMessage(content="Run both tools with x=5")]}
         )
-        elapsed = time.time() - start
 
         # Verify tools were called
         assert call_count == 2  # LLM called twice (tool calls + final response)
 
-        # If tools ran in parallel: ~0.3s
-        # If tools ran sequentially: ~0.6s
-        # Allow some buffer for overhead
-        assert (
-            elapsed < 0.8
-        ), f"Expected parallel execution (~0.3s), but took {elapsed}s"
+        # Verify tools started at approximately the same time (parallel execution)
+        start_times = ray.get(tracker.get_times.remote())
+        assert len(start_times) == 2, f"Expected 2 tools, got {len(start_times)}"
+        time_diff = abs(start_times["slow_tool_a"] - start_times["slow_tool_b"])
+        assert time_diff < 0.15, f"Tools started {time_diff}s apart, expected < 0.15s"

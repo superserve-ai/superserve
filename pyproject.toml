@@ -35,7 +35,8 @@ dev = [
     "pre-commit>=4.3.0",
     "pytest>=8.4.2",
     "ruff>=0.14.0",
-    "docker>=7.0.0",  # Needed for code interpreter tests
+    "docker>=7.0.0", # Needed for code interpreter tests
+    "pytest-asyncio>=1.3.0",
 ]
 
 [tool.setuptools]
@@ -142,3 +143,4 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+asyncio_mode = "auto"
