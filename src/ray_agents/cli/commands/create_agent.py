@@ -74,14 +74,14 @@ def _get_python_template(agent_name: str) -> str:
 from ray_agents import agent, tool, execute_tools
 
 
-# Define tools with resource requirements
-@tool(desc="Example tool - replace with your own", num_cpus=1)
+# Define tools
+@tool(desc="Example tool - replace with your own")
 def example_tool(query: str) -> str:
     """Process a query and return a result."""
     return f"Processed: {{query}}"
 
 
-@agent(num_cpus=1, memory="2GB")
+@agent
 class {agent_name.title().replace("_", "")}:
     """Agent implementation using pure Python."""
 
@@ -146,14 +146,14 @@ from ray_agents import agent, tool
 from ray_agents.adapters import AgentFramework, ToolAdapter
 
 
-# Define tools with resource requirements
-@tool(desc="Example tool - replace with your own", num_cpus=1)
+# Define tools
+@tool(desc="Example tool - replace with your own")
 def example_tool(query: str) -> str:
     """Process a query and return a result."""
     return f"Processed: {{query}}"
 
 
-@agent(num_cpus=1, memory="2GB")
+@agent
 class {agent_name.title().replace("_", "")}:
     """Agent implementation using LangChain/LangGraph."""
 
@@ -228,14 +228,14 @@ from ray_agents import agent, tool
 from ray_agents.adapters import AgentFramework, ToolAdapter
 
 
-# Define tools with resource requirements
-@tool(desc="Example tool - replace with your own", num_cpus=1)
+# Define tools
+@tool(desc="Example tool - replace with your own")
 def example_tool(query: str) -> str:
     """Process a query and return a result."""
     return f"Processed: {{query}}"
 
 
-@agent(num_cpus=1, memory="2GB")
+@agent
 class {agent_name.title().replace("_", "")}:
     """Agent implementation using Pydantic AI."""
 
