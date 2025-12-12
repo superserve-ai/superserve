@@ -52,6 +52,12 @@ def init(project_name: str, project_type: str):
                     content = content.replace("{{PROJECT_NAME}}", project_name)
                     pyproject_file.write_text(content)
 
+                readme_file = target_dir / "README.md"
+                if readme_file.exists():
+                    content = readme_file.read_text()
+                    content = content.replace("{{PROJECT_NAME}}", project_name)
+                    readme_file.write_text(content)
+
                 click.echo(f"Created new {project_type} project: {project_name}")
                 click.echo(f"Project location: {target_dir}")
 
