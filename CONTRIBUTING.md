@@ -2,66 +2,106 @@
 
 Thank you for your interest in contributing to Agentic-Ray! We welcome contributions from the community.
 
+## Getting Started
+
+### Prerequisites
+
+- Python 3.12+
+- [uv](https://github.com/astral-sh/uv) for dependency management
+
+### Development Setup
+
+1. Fork the repository on GitHub.
+
+2. Clone your fork locally:
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/agentic-ray.git
+   cd agentic-ray
+   ```
+
+3. Create a new branch for your changes:
+   ```bash
+   git checkout -b my-feature-branch
+   ```
+
+4. Install dependencies:
+   ```bash
+   uv sync --dev
+   ```
+
+5. Set up pre-commit hooks:
+   ```bash
+   uv run pre-commit install
+   ```
+
+6. Run tests to verify setup:
+   ```bash
+   uv run pytest
+   ```
+
 ## How to Contribute
 
-1. **Fork the repository** on GitHub
-2. **Create a feature branch** from `main`:
+### Reporting Bugs
+
+- Check existing [issues](https://github.com/rayai-labs/agentic-ray/issues) to avoid duplicates
+- Use a clear, descriptive title
+- Include steps to reproduce the issue
+- Provide relevant environment details (OS, Python version, etc.)
+
+### Suggesting Features
+
+- Open an issue with the `enhancement` label
+- Describe the use case and expected behavior
+- Explain why this would be useful to other users
+
+### Pull Requests
+
+1. Create a branch from `main`:
    ```bash
    git checkout -b feature/your-feature-name
    ```
-3. **Make your changes** and commit them with clear, descriptive messages
-4. **Push to your fork** and submit a Pull Request
 
-## Development Setup
+2. Make your changes and write tests if applicable
 
-```bash
-# Clone your fork
-git clone https://github.com/YOUR_USERNAME/agentic-ray.git
-cd agentic-ray
+3. Ensure all tests pass:
+   ```bash
+   uv run pytest
+   ```
 
-# Create a virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+4. Run linting and formatting:
+   ```bash
+   uv run ruff check .
+   uv run black .
+   ```
 
-# Install in development mode with dev dependencies
-pip install -e ".[dev]"
+5. Commit with a clear message:
+   ```bash
+   git commit -m "feat: add your feature description"
+   ```
 
-# Install pre-commit hooks
-pre-commit install
-```
+6. Push and open a Pull Request
+
+### Commit Message Convention
+
+We follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+- `feat:` - New features
+- `fix:` - Bug fixes
+- `docs:` - Documentation changes
+- `test:` - Adding or updating tests
+- `refactor:` - Code changes that neither fix bugs nor add features
+- `chore:` - Maintenance tasks
 
 ## Code Style
 
-We use automated tools to maintain consistent code style:
-
-- **Ruff** for linting
-- **Black** for code formatting
-
-Run these before committing:
-
-```bash
-# Check for linting issues
-ruff check .
-
-# Format code
-black .
-```
-
-Pre-commit hooks will run these automatically on each commit.
-
-## Running Tests
-
-```bash
-pytest
-```
-
-## Pull Request Guidelines
-
-- Provide a clear description of your changes
-- Include tests for new features
-- Ensure all tests pass
-- Keep PRs focused on a single change
+- We use [Black](https://github.com/psf/black) for formatting
+- We use [Ruff](https://github.com/astral-sh/ruff) for linting
+- Type hints are encouraged
 
 ## Questions?
 
-Feel free to open an issue if you have questions or need help getting started.
+Feel free to open an issue for any questions or reach out to the maintainers.
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the Apache License 2.0.

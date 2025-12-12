@@ -1,13 +1,13 @@
 <div align="center">
-  <img src="assets/rayai-logo-full-color.svg" alt="RayAI Logo" width="280"/>
+  <a href="https://rayai.com/"><img src="assets/rayai-logo-full-color.svg" alt="RayAI Logo" width="280"/></a>
 
   <p><strong>Scalable runtime for Agents, MCP Servers, and coding sandboxes, orchestrated with Ray.</strong></p>
 
-  [![PyPI version](https://img.shields.io/pypi/v/agentic-ray.svg)](https://pypi.org/project/agentic-ray/)
+  <!-- [![PyPI version](https://img.shields.io/pypi/v/agentic-ray.svg)](https://pypi.org/project/agentic-ray/) -->
   [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
   [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://python.org)
-  [![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white)](#)
-  [![Slack](https://img.shields.io/badge/Slack-Join%20Us-4A154B?logo=slack&logoColor=white)](#)
+  <!-- [![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white)](#) -->
+  <!-- [![Slack](https://img.shields.io/badge/Slack-Join%20Us-4A154B?logo=slack&logoColor=white)](#) -->
 
 </div>
 
@@ -26,17 +26,17 @@
 pip install agentic-ray
 
 # Create a new project
-rayai init my-agents
-cd my-agents
+rayai init my_project
+cd my_project
 
 # Create your first agent
-rayai create-agent chatbot
+rayai create-agent my_agent
 
 # Run locally
 rayai serve
 ```
 
-Your agent is now available at `http://localhost:8000/agents/chatbot/chat`
+Your agent is now available at `http://localhost:8000/agents/my_agent/chat`
 
 ## Installation
 
@@ -59,7 +59,7 @@ pip install agentic-ray[code-interpreter]
 #### Initialize a Project
 
 ```bash
-rayai init my-project
+rayai init my_project
 ```
 
 Creates a project structure with configuration files and an `agents/` directory.
@@ -82,17 +82,10 @@ rayai serve --port 9000              # Custom port
 rayai serve --agents agent1,agent2   # Serve specific agents
 ```
 
-### Resource Configuration
-
-Configure resources per agent at runtime:
-
-```bash
-rayai serve --chatbot-num-cpus=4 --chatbot-memory=8GB --chatbot-num-replicas=2
-```
 
 ## Creating Your First Agent
 
-After running `rayai create-agent chatbot`, edit `agents/chatbot/agent.py`:
+After running `rayai create-agent my_agent`, edit `agents/my_agent/agent.py`:
 
 ```python
 from ray_agents import agent, tool
@@ -102,7 +95,7 @@ def search(query: str) -> str:
     return f"Results for: {query}"
 
 @agent(num_cpus=1, memory="2GB")
-class ChatBot:
+class MyAgent:
     def __init__(self):
         self.tools = [search]
 
@@ -117,7 +110,7 @@ class ChatBot:
 Test your agent:
 
 ```bash
-curl -X POST http://localhost:8000/agents/chatbot/chat \
+curl -X POST http://localhost:8000/agents/my_agent/chat \
   -H "Content-Type: application/json" \
   -d '{"data": {"messages": [{"role": "user", "content": "Hello!"}]}, "session_id": "test"}'
 ```
@@ -161,14 +154,23 @@ def my_tool(query: str) -> dict:
 
 ### `execute_tools`
 
-Execute multiple tools in parallel or sequentially.
+Define tools and execute them in parallel on Ray:
 
 ```python
-from ray_agents import execute_tools
+from ray_agents import tool, execute_tools
 
+@tool(desc="Tool 1 description")
+def tool_1(x: str) -> str:
+    return process_1(x)
+
+@tool(desc="Tool 2 description")
+def tool_2(x: str) -> dict:
+    return process_2(x)
+
+# Execute both tools in parallel on Ray
 results = execute_tools([
-    (search, {"query": "Python"}),
-    (analyze, {"text": "Hello"})
+    (tool_1, {"x": "input_1"}),
+    (tool_2, {"x": "input_2"})
 ], parallel=True)
 ```
 
@@ -179,9 +181,6 @@ See the [examples/](examples/) directory for complete implementations:
 - **Token-Efficient Agent** - Autonomous code execution in sandboxed environments
 - **Finance Agent** - Multi-step financial analysis with external APIs
 
-## GitHub Topics
-
-To improve discoverability, add these topics to your fork: `ray`, `agents`, `llm`, `ai`, `distributed-computing`, `mcp`, `langchain`, `python`, `ai-agents`
 
 ## Contributing
 
@@ -190,3 +189,7 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines
 ## License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+---
+
+If you find this project helpful, please consider giving it a ⭐
