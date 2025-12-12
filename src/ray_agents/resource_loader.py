@@ -1,7 +1,5 @@
 """Resource configuration loading for Ray agents."""
 
-from typing import Any
-
 
 def _parse_memory(memory_str: str) -> int:
     """Parse memory string to bytes.
@@ -46,51 +44,3 @@ def _parse_memory(memory_str: str) -> int:
             f"Invalid memory format: {memory_str}. "
             f"Expected format like '4GB', '512MB', or integer bytes"
         ) from None
-
-
-def get_ray_native_resources(agent_class: Any) -> dict[str, Any]:
-    """Extract resource configuration from Ray's @ray.remote decorator.
-
-    Args:
-        agent_class: Agent class that may have @ray.remote decorator
-
-    Returns:
-        Dict containing resource configuration from Ray decorator.
-        Empty dict if no @ray.remote decorator or no resources specified.
-    """
-    ray_options = None
-
-    if hasattr(agent_class, "_default_options"):
-        ray_options = agent_class._default_options
-    elif hasattr(agent_class, "_ray_remote_options"):
-        ray_options = agent_class._ray_remote_options
-
-    if not ray_options or not isinstance(ray_options, dict):
-        return {}
-
-    resource_keys = ["num_cpus", "num_gpus", "memory"]
-    return {key: ray_options[key] for key in resource_keys if key in ray_options}
-
-
-def merge_resource_configs(
-    defaults: dict[str, Any],
-    ray_native: dict[str, Any],
-    cli_flags: dict[str, Any],
-) -> dict[str, Any]:
-    """Merge resource configurations with precedence: CLI > Ray native > defaults.
-
-    Args:
-        defaults: Default resource values
-        ray_native: Resources from @ray.remote decorator
-        cli_flags: Resources from CLI flags
-
-    Returns:
-        Merged resource configuration
-    """
-    merged = defaults.copy()
-
-    for source in [ray_native, cli_flags]:
-        for key, value in source.items():
-            merged[key] = value
-
-    return merged
