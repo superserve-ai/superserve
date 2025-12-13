@@ -70,17 +70,17 @@ def search(query: str) -> str:
     """Search the web for information."""
     return f"Results for: {query}"
 
-def calculate(expression: str) -> float:
-    """Evaluate a math expression."""
-    return eval(expression)
+def add(a: int, b: int) -> int:
+    """Add two numbers together."""
+    return a + b
 
 # Convert to LangChain tools
 wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
-lc_tools = wrapper.wrap_tools([search, calculate], num_cpus=1)
+lc_tools = wrapper.wrap_tools([search, add], num_cpus=1)
 
 # Or convert to Pydantic AI tools
 wrapper = RayToolWrapper(framework=AgentFramework.PYDANTIC)
-pydantic_tools = wrapper.wrap_tools([search, calculate], num_cpus=1)
+pydantic_tools = wrapper.wrap_tools([search, add], num_cpus=1)
 ```
 
 <Tip>

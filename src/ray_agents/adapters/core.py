@@ -4,7 +4,6 @@ This module provides the canonical RayTool intermediate representation
 and converters for N+M extensibility when adding new frameworks.
 """
 
-import functools
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -161,10 +160,17 @@ def to_raytool_from_langchain(
     if not isinstance(tool, BaseTool):
         raise ValueError(f"Expected LangChain BaseTool, got {type(tool).__name__}")
 
-    # Create Ray remote function
-    @ray.remote(num_cpus=num_cpus, memory=memory_bytes, num_gpus=num_gpus)
-    def _execute(tool_input: Any) -> Any:
-        return tool.invoke(tool_input)
+    def _make_executor(name: str) -> Any:
+        def executor(tool_input: Any) -> Any:
+            return tool.invoke(tool_input)
+
+        executor.__name__ = name
+        executor.__qualname__ = name
+        return ray.remote(num_cpus=num_cpus, memory=memory_bytes, num_gpus=num_gpus)(
+            executor
+        )
+
+    _execute = _make_executor(tool.name)
 
     # Extract metadata
     args_schema = getattr(tool, "args_schema", None)
@@ -223,10 +229,17 @@ def to_raytool_from_pydantic(
     tool_name = tool.name or func.__name__
     tool_description = tool.description or func.__doc__ or ""
 
-    # Create Ray remote function
-    @ray.remote(num_cpus=num_cpus, memory=memory_bytes, num_gpus=num_gpus)
-    def _execute(**kwargs: Any) -> Any:
-        return func(**kwargs)
+    def _make_executor(name: str) -> Any:
+        def executor(**kwargs: Any) -> Any:
+            return func(**kwargs)
+
+        executor.__name__ = name
+        executor.__qualname__ = name
+        return ray.remote(num_cpus=num_cpus, memory=memory_bytes, num_gpus=num_gpus)(
+            executor
+        )
+
+    _execute = _make_executor(tool_name)
 
     # Extract signature and annotations
     try:
@@ -260,10 +273,17 @@ def to_raytool_from_callable(
     tool_name = func.__name__
     tool_description = func.__doc__ or f"Calls {tool_name}"
 
-    # Create Ray remote function
-    @ray.remote(num_cpus=num_cpus, memory=memory_bytes, num_gpus=num_gpus)
-    def _execute(*args: Any, **kwargs: Any) -> Any:
-        return func(*args, **kwargs)
+    def _make_executor(name: str) -> Any:
+        def executor(*args: Any, **kwargs: Any) -> Any:
+            return func(*args, **kwargs)
+
+        executor.__name__ = name
+        executor.__qualname__ = name
+        return ray.remote(num_cpus=num_cpus, memory=memory_bytes, num_gpus=num_gpus)(
+            executor
+        )
+
+    _execute = _make_executor(tool_name)
 
     # Extract signature and annotations
     try:
@@ -407,7 +427,6 @@ def from_raytool_to_pydantic(ray_tool: RayTool) -> Callable:
     ray_remote = ray_tool.ray_remote
     tool_input_style = ray_tool.input_style
 
-    @functools.wraps(ray_tool.func)
     def wrapper(**kwargs: Any) -> Any:
         """Execute tool on Ray worker."""
         if tool_input_style == "single_input":
@@ -433,9 +452,17 @@ def from_raytool_to_pydantic(ray_tool: RayTool) -> Callable:
         if ray_tool.return_annotation:
             wrapper.__annotations__["return"] = ray_tool.return_annotation
 
-    # Restore signature
-    if ray_tool.signature:
-        wrapper.__signature__ = ray_tool.signature  # type: ignore[attr-defined]
+    if ray_tool.annotations:
+        params = [
+            inspect.Parameter(name, inspect.Parameter.KEYWORD_ONLY, annotation=ann)
+            for name, ann in ray_tool.annotations.items()
+        ]
+        return_ann = (
+            ray_tool.return_annotation
+            if ray_tool.return_annotation
+            else inspect.Parameter.empty
+        )
+        wrapper.__signature__ = Signature(params, return_annotation=return_ann)  # type: ignore[attr-defined]
 
     return wrapper
 
