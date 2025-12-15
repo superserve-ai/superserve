@@ -1,4 +1,4 @@
-"""Type definitions for code interpreter"""
+"""Type definitions for sandbox"""
 
 from typing import Literal, TypedDict
 

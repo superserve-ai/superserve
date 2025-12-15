@@ -2,7 +2,7 @@
 Ray Sandbox - Execute code and shell commands securely in isolated containers
 
 Basic usage:
-    from ray_agents.sandbox import execute_code, execute_shell
+    from rayai.sandbox import execute_code, execute_shell
 
     # Python code execution
     result = ray.get(execute_code.remote("print('Hello!')"))

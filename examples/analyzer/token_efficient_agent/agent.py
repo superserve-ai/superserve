@@ -6,9 +6,9 @@ The agent writes Python code directly, which is executed in a sandboxed environm
 
 import os
 
-# Import Ray code interpreter from main package
+# Import Ray sandbox from main package
 # This file is in: examples/analyzer/token_efficient_agent/
-# We need to import from: src/ray_agents/
+# We need to import from: src/rayai/
 import sys
 from collections.abc import Generator
 from pathlib import Path
@@ -22,10 +22,10 @@ src_path = project_root / "src"
 if src_path.exists() and str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
-from ray_agents.sandbox import (
+from rayai.sandbox import (
     execute_code as ray_execute_code,
 )
-from ray_agents.sandbox import (
+from rayai.sandbox import (
     execute_shell as ray_execute_shell,
 )
 

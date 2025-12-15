@@ -21,8 +21,8 @@ from .types import (
 
 logger = logging.getLogger(__name__)
 
-# Namespace for all code interpreter actors
-ACTOR_NAMESPACE = "code-interpreter"
+# Namespace for all sandbox actors
+ACTOR_NAMESPACE = "sandbox"
 
 
 def _get_or_create_executor(

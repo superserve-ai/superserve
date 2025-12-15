@@ -22,7 +22,7 @@ Wrap a Pydantic AI `Tool` to execute on Ray workers:
 
 ```python
 from pydantic_ai import Agent, Tool
-from ray_agents.adapters import from_pydantic_tool
+from rayai.adapters import from_pydantic_tool
 
 # Existing Pydantic AI Tool
 my_tool = Tool(some_function, name="my_tool")
@@ -40,8 +40,8 @@ Wrap Ray tools for use with Pydantic AI agents:
 
 ```python
 from pydantic_ai import Agent
-from ray_agents import tool
-from ray_agents.adapters import RayToolWrapper, AgentFramework
+from rayai import tool
+from rayai.adapters import RayToolWrapper, AgentFramework
 
 @tool(desc="Search the web", num_cpus=1)
 def search_web(query: str) -> str:
@@ -54,6 +54,35 @@ pydantic_tools = wrapper.wrap_tools([search_web])
 # Use with Pydantic AI agent
 agent = Agent("openai:gpt-4o-mini", tools=pydantic_tools)
 ```
+
+## Cross-framework tools
+
+Use tools from **any framework** with your Pydantic AI agents. `RayToolWrapper` auto-detects the source framework and converts tools to Pydantic AI-compatible callables:
+
+```python
+from langchain_community.tools import DuckDuckGoSearchRun
+from pydantic_ai import Agent
+from rayai.adapters import RayToolWrapper, AgentFramework
+
+# LangChain tool
+langchain_search = DuckDuckGoSearchRun()
+
+# Plain Python function
+def calculate(a: int, b: int) -> int:
+    """Add two numbers together."""
+    return a + b
+
+# Convert ANY tools to Pydantic AI format
+wrapper = RayToolWrapper(framework=AgentFramework.PYDANTIC)
+tools = wrapper.wrap_tools([langchain_search, calculate], num_cpus=1)
+
+# Use with Pydantic AI agent - all tools execute on Ray
+agent = Agent("openai:gpt-4o-mini", tools=tools)
+```
+
+<Info>
+The wrapper auto-detects: Ray `@tool` functions, LangChain `BaseTool`, Pydantic AI `Tool`, and plain Python callables. Type annotations and docstrings are preserved for schema generation.
+</Info>
 
 ## Next steps
 

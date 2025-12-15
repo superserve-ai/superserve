@@ -71,7 +71,7 @@ def _get_python_template(agent_name: str) -> str:
     """Get pure Python agent template."""
     return f'''"""Pure Python agent implementation for {agent_name}."""
 
-from ray_agents import agent, tool, execute_tools
+from rayai import agent, tool, execute_tools
 
 
 # Define tools with resource requirements
@@ -142,8 +142,8 @@ def _get_langchain_template(agent_name: str) -> str:
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 
-from ray_agents import agent, tool
-from ray_agents.adapters import AgentFramework, ToolAdapter
+from rayai import agent, tool
+from rayai.adapters import AgentFramework, RayToolWrapper
 
 
 # Define tools with resource requirements
@@ -165,8 +165,8 @@ class {agent_name.title().replace("_", "")}:
         self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
         # Wrap Ray tools for LangChain compatibility
-        adapter = ToolAdapter(framework=AgentFramework.LANGCHAIN)
-        lc_tools = adapter.wrap_tools(self.tools)
+        wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
+        lc_tools = wrapper.wrap_tools(self.tools)
 
         # Create LangChain ReAct agent
         self.lc_agent = create_react_agent(self.llm, lc_tools)
@@ -224,8 +224,8 @@ def _get_pydantic_template(agent_name: str) -> str:
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
 
-from ray_agents import agent, tool
-from ray_agents.adapters import AgentFramework, ToolAdapter
+from rayai import agent, tool
+from rayai.adapters import AgentFramework, RayToolWrapper
 
 
 # Define tools with resource requirements
@@ -244,8 +244,8 @@ class {agent_name.title().replace("_", "")}:
         self.tools = [example_tool]
 
         # Wrap Ray tools for Pydantic AI compatibility
-        adapter = ToolAdapter(framework=AgentFramework.PYDANTIC)
-        pydantic_tools = adapter.wrap_tools(self.tools)
+        wrapper = RayToolWrapper(framework=AgentFramework.PYDANTIC)
+        pydantic_tools = wrapper.wrap_tools(self.tools)
 
         # Create Pydantic AI agent (requires OPENAI_API_KEY env var)
         self.pydantic_agent = Agent(

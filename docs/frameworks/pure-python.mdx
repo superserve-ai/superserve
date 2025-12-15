@@ -21,7 +21,7 @@ rayai create-agent my_agent --framework python
 Define tools that automatically execute on Ray workers:
 
 ```python
-from ray_agents import tool
+from rayai import tool
 
 @tool(desc="Search the web", num_cpus=1, memory="512MB")
 def search_web(query: str) -> str:
@@ -36,7 +36,7 @@ result = search_web(query="Python tutorials")
 Mark a class as a deployable agent:
 
 ```python
-from ray_agents import agent
+from rayai import agent
 
 @agent(num_cpus=2, memory="4GB", num_replicas=2)
 class MyAgent:
@@ -49,7 +49,7 @@ class MyAgent:
 Run multiple tools simultaneously:
 
 ```python
-from ray_agents import execute_tools
+from rayai import execute_tools
 
 results = execute_tools([
     (search_web, {"query": "Python tutorials"}),
@@ -57,6 +57,35 @@ results = execute_tools([
     (analyze_text, {"text": "Some content"}),
 ], parallel=True)
 ```
+
+## Use with agent frameworks
+
+Plain Python functions can be used directly with any agent framework. `RayToolWrapper` converts them to framework-compatible tools that execute on Ray:
+
+```python
+from rayai.adapters import RayToolWrapper, AgentFramework
+
+# Plain Python functions - no decorators needed
+def search(query: str) -> str:
+    """Search the web for information."""
+    return f"Results for: {query}"
+
+def add(a: int, b: int) -> int:
+    """Add two numbers together."""
+    return a + b
+
+# Convert to LangChain tools
+wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
+lc_tools = wrapper.wrap_tools([search, add], num_cpus=1)
+
+# Or convert to Pydantic AI tools
+wrapper = RayToolWrapper(framework=AgentFramework.PYDANTIC)
+pydantic_tools = wrapper.wrap_tools([search, add], num_cpus=1)
+```
+
+<Tip>
+Type annotations and docstrings are preserved for LLM schema generation. Always include them for best results.
+</Tip>
 
 ## Next steps
 

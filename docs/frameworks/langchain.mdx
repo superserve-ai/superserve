@@ -22,7 +22,7 @@ Wrap any LangChain tool to execute on Ray workers:
 ```python
 from langchain_community.tools import DuckDuckGoSearchRun
 from langgraph.prebuilt import create_react_agent
-from ray_agents.adapters import from_langchain_tool
+from rayai.adapters import from_langchain_tool
 
 # Wrap for Ray execution (returns a LangChain tool)
 search = from_langchain_tool(DuckDuckGoSearchRun(), num_cpus=1)
@@ -36,8 +36,8 @@ agent = create_react_agent(llm, [search])
 Wrap Ray tools for use with LangChain agents:
 
 ```python
-from ray_agents import tool
-from ray_agents.adapters import RayToolWrapper, AgentFramework
+from rayai import tool
+from rayai.adapters import RayToolWrapper, AgentFramework
 
 @tool(desc="Search the web", num_cpus=1)
 def search_web(query: str) -> str:
@@ -50,6 +50,38 @@ lc_tools = wrapper.wrap_tools([search_web])
 # Use with any LangChain agent
 agent = create_react_agent(llm, lc_tools)
 ```
+
+## Cross-framework tools
+
+Use tools from **any framework** with your LangChain agents. `RayToolWrapper` auto-detects the source framework and converts tools to LangChain-compatible `BaseTool` instances:
+
+```python
+from pydantic_ai import Tool as PydanticTool
+from rayai.adapters import RayToolWrapper, AgentFramework
+
+# Pydantic AI tool
+def multiply(x: int, y: int) -> int:
+    """Multiply two numbers."""
+    return x * y
+
+pydantic_tool = PydanticTool(multiply, name="multiply")
+
+# Plain Python function
+def greet(name: str) -> str:
+    """Greet someone by name."""
+    return f"Hello, {name}!"
+
+# Convert ANY tools to LangChain format
+wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
+lc_tools = wrapper.wrap_tools([pydantic_tool, greet], num_cpus=1)
+
+# Use with LangChain agent - all tools execute on Ray
+agent = create_react_agent(llm, lc_tools)
+```
+
+<Info>
+The wrapper auto-detects: Ray `@tool` functions, LangChain `BaseTool`, Pydantic AI `Tool`, and plain Python callables.
+</Info>
 
 ## Next steps
 

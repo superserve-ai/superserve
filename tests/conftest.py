@@ -1,4 +1,4 @@
-"""Shared fixtures for ray_agents tests."""
+"""Shared fixtures for rayai tests."""
 
 import pytest
 import ray

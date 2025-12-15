@@ -4,7 +4,7 @@ import uuid
 import ray
 import requests
 
-from ray_agents.sandbox import execute_code
+from rayai.sandbox import execute_code
 
 
 def get_sp500(limit: int = 10) -> list[dict[str, str]]:

@@ -108,7 +108,7 @@ class CodeInterpreterExecutor:
             except ImportError as err:
                 raise ImportError(
                     "docker package not installed. "
-                    "Install with: uv pip install -e '.[code-interpreter]'"
+                    "Install with: pip install rayai[sandbox]"
                 ) from err
             except Exception as e:
                 raise RuntimeError(
@@ -700,9 +700,9 @@ with open('{SESSION_STATE_PATH}', 'wb') as f:
         logger.info(f"Building sidecar image {SIDECAR_IMAGE_TAG}")
 
         # Get path to sandbox package directory
-        import ray_agents.sandbox
+        import rayai.sandbox
 
-        sandbox_dir = os.path.dirname(ray_agents.sandbox.__file__)
+        sandbox_dir = os.path.dirname(rayai.sandbox.__file__)
         dockerfile_path = os.path.join(sandbox_dir, "Dockerfile.sidecar")
 
         if not os.path.exists(dockerfile_path):

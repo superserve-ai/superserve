@@ -1,4 +1,4 @@
-"""Tests for code interpreter functionality"""
+"""Tests for sandbox functionality"""
 
 import time
 from typing import cast
@@ -6,13 +6,13 @@ from typing import cast
 import pytest
 import ray
 
-from ray_agents.sandbox import (
+from rayai.sandbox import (
     cleanup_session,
     execute_code,
     get_session_stats,
     upload_file,
 )
-from ray_agents.sandbox.types import ExecutionResult
+from rayai.sandbox.types import ExecutionResult
 
 
 @pytest.fixture(scope="module")

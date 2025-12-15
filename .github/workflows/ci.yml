@@ -34,7 +34,7 @@ jobs:
         run: uv run black --check .
 
       - name: Run mypy
-        run: uv run mypy src/ray_agents
+        run: uv run mypy src/rayai
 
   test:
     name: Unit tests

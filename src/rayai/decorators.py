@@ -5,7 +5,7 @@ from typing import Any
 
 import ray
 
-from ray_agents.resource_loader import _parse_memory
+from rayai.resource_loader import _parse_memory
 
 
 def tool(

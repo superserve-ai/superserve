@@ -14,8 +14,13 @@
             "group": "Getting started",
             "pages": [
               "index",
-              "quickstart",
-              "development"
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Runtime",
+            "pages": [
+              "runtime"
             ]
           },
           {
@@ -27,11 +32,10 @@
             ]
           },
           {
-            "group": "Tools",
+            "group": "Native Tools",
             "pages": [
               "tools/native/batch",
-              "tools/native/execute-code",
-              "tools/third-party"
+              "tools/native/sandbox"
             ]
           },
           {

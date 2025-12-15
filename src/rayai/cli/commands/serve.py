@@ -11,10 +11,10 @@ from typing import Any
 import click
 from dotenv import load_dotenv
 
-from ray_agents.deployment import (
+from rayai.deployment import (
     create_agent_deployment,
 )
-from ray_agents.resource_loader import _parse_memory
+from rayai.resource_loader import _parse_memory
 
 
 @click.command()
@@ -141,7 +141,7 @@ def _load_agent_from_file(file_path: Path, module_name: str) -> Any | None:
 
         click.echo(f"No @agent decorated class found in {file_path}")
         click.echo("  Agent classes must be decorated with @agent:")
-        click.echo("    from ray_agents import agent")
+        click.echo("    from rayai import agent")
         click.echo("    @agent()")
         click.echo("    class MyAgent:")
         click.echo("        def run(self, data: dict) -> dict: ...")

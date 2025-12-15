@@ -23,7 +23,7 @@
 
 ```bash
 # Install
-pip install agentic-ray
+pip install rayai
 
 # Create a new project
 rayai init my_project
@@ -41,13 +41,13 @@ Your agent is now available at `http://localhost:8000/agents/my_agent/chat`
 ## Installation
 
 ```bash
-pip install agentic-ray
+pip install rayai
 ```
 
-With optional code interpreter support:
+With optional sandbox support (for code execution):
 
 ```bash
-pip install agentic-ray[code-interpreter]
+pip install rayai[sandbox]
 ```
 
 **Requirements:** Python 3.12+
@@ -88,7 +88,7 @@ rayai serve --agents agent1,agent2   # Serve specific agents
 After running `rayai create-agent my_agent`, edit `agents/my_agent/agent.py`:
 
 ```python
-from ray_agents import agent, tool
+from rayai import agent, tool
 
 @tool(desc="Search for information", num_cpus=1)
 def search(query: str) -> str:
@@ -157,7 +157,7 @@ def my_tool(query: str) -> dict:
 Define tools and execute them in parallel on Ray:
 
 ```python
-from ray_agents import tool, execute_tools
+from rayai import tool, execute_tools
 
 @tool(desc="Tool 1 description")
 def tool_1(x: str) -> str:

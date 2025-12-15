@@ -24,9 +24,9 @@ def init(project_name: str, project_type: str):
     target_dir = Path.cwd() / project_name
 
     try:
-        import ray_agents.cli.templates
+        import rayai.cli.templates
 
-        templates_path = resources.files(ray_agents.cli.templates)
+        templates_path = resources.files(rayai.cli.templates)
         available_templates = [
             item.name
             for item in templates_path.iterdir()

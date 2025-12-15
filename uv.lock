@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-code-interpreter = [
+sandbox = [
     { name = "docker" },
     { name = "requests" },
 ]
@@ -41,7 +41,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.0.0" },
-    { name = "docker", marker = "extra == 'code-interpreter'", specifier = ">=7.0.0" },
+    { name = "docker", marker = "extra == 'sandbox'", specifier = ">=7.0.0" },
     { name = "fastapi", specifier = ">=0.100.0" },
     { name = "langchain-openai", specifier = ">=0.3.35" },
     { name = "langgraph", specifier = ">=0.6.10" },
@@ -49,9 +49,9 @@ requires-dist = [
     { name = "pydantic-ai-slim", extras = ["openai"], specifier = ">=1.27.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "ray", extras = ["serve"], specifier = ">=2.49.2" },
-    { name = "requests", marker = "extra == 'code-interpreter'", specifier = ">=2.31.0" },
+    { name = "requests", marker = "extra == 'sandbox'", specifier = ">=2.31.0" },
 ]
-provides-extras = ["code-interpreter"]
+provides-extras = ["sandbox"]
 
 [package.metadata.requires-dev]
 dev = [
