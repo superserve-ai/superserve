@@ -29,3 +29,7 @@ Each agent instance runs as a Ray Actor with dedicated resources, enabling:
 | `num_gpus` | int | 0 | GPUs per replica |
 | `memory` | str | "2GB" | Memory per replica |
 | `num_replicas` | int | 1 | Number of replicas for scaling |
+
+<Info>
+If your agent uses async operations, define `async def run()` - RayAI automatically detects and awaits it.
+</Info>

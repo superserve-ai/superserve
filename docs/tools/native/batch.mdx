@@ -42,24 +42,6 @@ result = batch_tool(
 # }
 ```
 
-### Late Binding
-
-Add or remove tools after creation:
-
-```python
-batch_tool = BatchTool()
-
-# Add tools later
-batch_tool.register(new_tool)
-batch_tool.register(another_tool, name="custom_name")
-
-# Remove tools
-batch_tool.unregister("old_tool")
-
-# List available tools
-print(batch_tool.list_tools())
-```
-
 ### With LangChain Agent
 
 ```python
@@ -86,11 +68,7 @@ llm = ChatOpenAI(model="gpt-4o-mini")
 agent = create_react_agent(llm, tools=[lc_batch_tool])
 ```
 
-## Pydantic Models
-
-```python
-from rayai import BatchToolInput, BatchToolOutput
-```
+## Input & Output
 
 **BatchToolInput** (what the LLM sends):
 | Field | Type | Description |
@@ -117,22 +95,6 @@ from rayai import BatchToolInput, BatchToolOutput
 | `description` | `str` | Custom description |
 | `validate_inputs` | `bool` | Validate inputs against schema (default: True) |
 
-### Methods
-
-| Method | Description |
-|--------|-------------|
-| `register(tool, name=None)` | Register a tool (name auto-inferred) |
-| `unregister(name)` | Remove a tool |
-| `list_tools()` | List registered tool names |
-
 <Info>
 BatchTool handles partial failures gracefully. If some inputs fail, others still return results. Check the `errors` list to see which inputs failed.
 </Info>
-
-## Next steps
-
-<CardGroup cols={1}>
-  <Card title="Sandbox" icon="code" href="/tools/native/sandbox">
-    Run Python code in sandboxed containers
-  </Card>
-</CardGroup>

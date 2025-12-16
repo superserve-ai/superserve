@@ -60,6 +60,24 @@ class StreamingAgent:
         yield {"type": "end"}
 ```
 
+To enable streaming, set the `stream` parameter in your request:
+
+**Text streaming request:**
+```json
+{
+  "data": {"messages": [{"role": "user", "content": "Hello!"}]},
+  "stream": "text"
+}
+```
+
+**Event streaming request:**
+```json
+{
+  "data": {"messages": [{"role": "user", "content": "Hello!"}]},
+  "stream": "events"
+}
+```
+
 ## CLI Options
 
 ```bash

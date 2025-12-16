@@ -1,9 +1,9 @@
 ---
-title: "No Framework"
+title: "Build from Scratch"
 description: "Build distributed agents from scratch with full control over execution"
 ---
 
-## When to use no framework
+## When to build from scratch
 
 - You want full control over the agent loop
 - You don't need LLM framework integrations
@@ -57,35 +57,6 @@ results = execute_tools([
     (analyze_text, {"text": "Some content"}),
 ], parallel=True)
 ```
-
-## Use with agent frameworks
-
-Plain Python functions can be used directly with any agent framework. `RayToolWrapper` converts them to framework-compatible tools that execute on Ray:
-
-```python
-from rayai.adapters import RayToolWrapper, AgentFramework
-
-# Plain Python functions - no decorators needed
-def search(query: str) -> str:
-    """Search the web for information."""
-    return f"Results for: {query}"
-
-def add(a: int, b: int) -> int:
-    """Add two numbers together."""
-    return a + b
-
-# Convert to LangChain tools
-wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
-lc_tools = wrapper.wrap_tools([search, add], num_cpus=1)
-
-# Or convert to Pydantic AI tools
-wrapper = RayToolWrapper(framework=AgentFramework.PYDANTIC)
-pydantic_tools = wrapper.wrap_tools([search, add], num_cpus=1)
-```
-
-<Tip>
-Type annotations and docstrings are preserved for LLM schema generation. Always include them for best results.
-</Tip>
 
 ## Next steps
 

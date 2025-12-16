@@ -28,7 +28,7 @@
           {
             "group": "Frameworks",
             "pages": [
-              "frameworks/no-framework",
+              "frameworks/build-from-scratch",
               "frameworks/langchain",
               "frameworks/pydantic"
             ]
@@ -76,7 +76,7 @@
     "primary": {
       "type": "button",
       "label": "Get Started",
-      "href": "https://pypi.org/rayai/rayai/"
+      "href": "https://pypi.org/project/rayai/"
     }
   },
   "contextual": {

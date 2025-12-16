@@ -46,14 +46,7 @@ class BatchTool:
     4. Returns structured output with results and per-item errors
 
     Example:
-        >>> # Create with tools
         >>> batch_tool = BatchTool(tools=[search_tool, fetch_tool])
-        >>>
-        >>> # Late binding
-        >>> batch_tool.register(new_tool)
-        >>> batch_tool.unregister("old_tool")
-        >>>
-        >>> # Call the batch tool
         >>> result = batch_tool(
         ...     tool_name="search",
         ...     tool_inputs=[{"query": "a"}, {"query": "b"}, {"query": "c"}]
@@ -82,7 +75,7 @@ class BatchTool:
 
         if tools:
             for tool in tools:
-                self.register(tool)
+                self._register(tool)
 
         self._setup_tool_metadata()
 
@@ -112,13 +105,8 @@ class BatchTool:
             "is_batch_tool": True,
         }
 
-    def register(self, tool: Callable | RayTool, name: str | None = None) -> None:
-        """Register a tool.
-
-        Args:
-            tool: Tool to register
-            name: Tool name (auto-detected from function if None)
-        """
+    def _register(self, tool: Callable | RayTool, name: str | None = None) -> None:
+        """Register a tool (internal)."""
         if name is None:
             if isinstance(tool, RayTool):
                 name = tool.name
@@ -129,11 +117,7 @@ class BatchTool:
 
         self._tools[name] = tool
 
-    def unregister(self, name: str) -> None:
-        """Remove a tool by name."""
-        self._tools.pop(name, None)
-
-    def list_tools(self) -> list[str]:
+    def _list_tools(self) -> list[str]:
         """List all registered tool names."""
         return list(self._tools.keys())
 
@@ -181,7 +165,7 @@ class BatchTool:
 
         ray_tool = self._resolve(tool_name)
         if ray_tool is None:
-            available = self.list_tools()
+            available = self._list_tools()
             error_msg = f"Tool '{tool_name}' not found. Available: {available}"
             return BatchToolOutput(
                 results=[None] * len(tool_inputs),
