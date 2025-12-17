@@ -260,7 +260,7 @@ class TestRayToolWrapper:
 
         assert isinstance(wrapped, list)
         assert len(wrapped) == 1
-        assert callable(wrapped[0])
+        assert hasattr(wrapped[0], "invoke")
 
     def test_wrapped_tool_executes_on_ray(self, ray_start):
         """Test that wrapped tool dispatches to Ray cluster."""
