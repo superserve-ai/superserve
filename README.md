@@ -4,10 +4,11 @@
   <p><strong>Scalable runtime for Agents, MCP Servers, and coding sandboxes, orchestrated with Ray.</strong></p>
 
   <!-- [![PyPI version](https://img.shields.io/pypi/v/agentic-ray.svg)](https://pypi.org/project/agentic-ray/) -->
+  [![Docs](https://img.shields.io/badge/docs-rayai.com-blue)](https://docs.rayai.com/)
   [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/rayai-labs/agentic-ray/blob/main/LICENSE)
   [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://python.org)
   [![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white)](https://discord.gg/utftfhSK)
-  <!-- [![Slack](https://img.shields.io/badge/Slack-Join%20Us-4A154B?logo=slack&logoColor=white)](#) -->
+  [![Slack](https://img.shields.io/badge/Slack-Join%20Us-4A154B?logo=slack&logoColor=white)](https://rayai.com/join-slack)
 
 </div>
 
