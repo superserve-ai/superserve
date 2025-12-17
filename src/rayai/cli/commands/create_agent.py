@@ -169,7 +169,7 @@ class {agent_name.title().replace("_", "")}:
         wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
         lc_tools = wrapper.wrap_tools(self.tools)
 
-        # Create LangChain agent
+        # Create LangChain agent (requires OPENAI_API_KEY env var)
         self.lc_agent = create_agent(
             model="openai:gpt-4o-mini",
             tools=lc_tools,

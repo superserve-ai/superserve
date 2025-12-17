@@ -27,7 +27,7 @@ from rayai.adapters import from_langchain_tool
 # Wrap for Ray execution (returns a LangChain tool)
 search = from_langchain_tool(DuckDuckGoSearchRun(), num_cpus=1)
 
-# Use directly with LangChain agents
+# Use directly with LangChain agents (requires OPENAI_API_KEY env var)
 agent = create_agent(model="openai:gpt-4o-mini", tools=[search])
 ```
 
@@ -48,7 +48,7 @@ def search_web(query: str) -> str:
 wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
 lc_tools = wrapper.wrap_tools([search_web])
 
-# Use with any LangChain agent
+# Use with any LangChain agent (requires OPENAI_API_KEY env var)
 agent = create_agent(model="openai:gpt-4o-mini", tools=lc_tools)
 ```
 
@@ -77,7 +77,7 @@ def greet(name: str) -> str:
 wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
 lc_tools = wrapper.wrap_tools([pydantic_tool, greet], num_cpus=1)
 
-# Use with LangChain agent - all tools execute on Ray
+# Use with LangChain agent - all tools execute on Ray (requires OPENAI_API_KEY env var)
 agent = create_agent(model="openai:gpt-4o-mini", tools=lc_tools)
 ```
 

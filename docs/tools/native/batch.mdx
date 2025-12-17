@@ -62,7 +62,7 @@ batch_tool = BatchTool(tools=[search_wiki])
 wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
 [lc_batch_tool] = wrapper.wrap_tools([batch_tool])
 
-# Create LangChain agent
+# Create LangChain agent (requires OPENAI_API_KEY env var)
 agent = create_agent(model="openai:gpt-4o-mini", tools=[lc_batch_tool])
 ```
 
