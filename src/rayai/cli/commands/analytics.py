@@ -1,11 +1,8 @@
 """Analytics configuration commands."""
 
-from pathlib import Path
-
 import click
 
-RAYAI_CONFIG_DIR = Path.home() / ".rayai"
-ANALYTICS_DISABLED_FILE = RAYAI_CONFIG_DIR / ".analytics_disabled"
+from ..analytics import ANALYTICS_DISABLED_FILE, RAYAI_CONFIG_DIR
 
 
 @click.group()
