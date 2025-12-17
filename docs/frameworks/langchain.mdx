@@ -20,15 +20,15 @@ rayai create-agent my_agent --framework langchain
 Wrap any LangChain tool to execute on Ray workers:
 
 ```python
+from langchain.agents import create_agent
 from langchain_community.tools import DuckDuckGoSearchRun
-from langgraph.prebuilt import create_react_agent
 from rayai.adapters import from_langchain_tool
 
 # Wrap for Ray execution (returns a LangChain tool)
 search = from_langchain_tool(DuckDuckGoSearchRun(), num_cpus=1)
 
-# Use directly with LangChain agents
-agent = create_react_agent(llm, [search])
+# Use directly with LangChain agents (requires OPENAI_API_KEY env var)
+agent = create_agent(model="openai:gpt-4o-mini", tools=[search])
 ```
 
 ## Use Ray tools with LangChain
@@ -36,6 +36,7 @@ agent = create_react_agent(llm, [search])
 Wrap Ray tools for use with LangChain agents:
 
 ```python
+from langchain.agents import create_agent
 from rayai import tool
 from rayai.adapters import RayToolWrapper, AgentFramework
 
@@ -47,8 +48,8 @@ def search_web(query: str) -> str:
 wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
 lc_tools = wrapper.wrap_tools([search_web])
 
-# Use with any LangChain agent
-agent = create_react_agent(llm, lc_tools)
+# Use with any LangChain agent (requires OPENAI_API_KEY env var)
+agent = create_agent(model="openai:gpt-4o-mini", tools=lc_tools)
 ```
 
 ## Cross-framework tools
@@ -56,6 +57,7 @@ agent = create_react_agent(llm, lc_tools)
 Use tools from **any framework** with your LangChain agents. `RayToolWrapper` auto-detects the source framework and converts tools to LangChain-compatible `BaseTool` instances:
 
 ```python
+from langchain.agents import create_agent
 from pydantic_ai import Tool as PydanticTool
 from rayai.adapters import RayToolWrapper, AgentFramework
 
@@ -75,8 +77,8 @@ def greet(name: str) -> str:
 wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
 lc_tools = wrapper.wrap_tools([pydantic_tool, greet], num_cpus=1)
 
-# Use with LangChain agent - all tools execute on Ray
-agent = create_react_agent(llm, lc_tools)
+# Use with LangChain agent - all tools execute on Ray (requires OPENAI_API_KEY env var)
+agent = create_agent(model="openai:gpt-4o-mini", tools=lc_tools)
 ```
 
 <Info>
