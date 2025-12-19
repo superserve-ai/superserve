@@ -97,5 +97,11 @@
       "github": "https://github.com/rayai-labs",
       "linkedin": "https://www.linkedin.com/company/rayai"
     }
+  },
+  "integrations": {
+    "posthog": {
+      "apiKey": "phc_gjpDKKKQJAnkxkqLrPGrAhoariKsaHNuTpI5rVhkYre",
+      "apiHost": "https://us.i.posthog.com"
+    }
   }
 }
