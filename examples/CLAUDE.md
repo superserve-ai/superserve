@@ -32,6 +32,16 @@ Financial analysis agent that:
 - Uses Pydantic AI framework
 - Demonstrates tool chaining and data processing
 
+### `pr_review_agent/`
+
+GitHub Pull Request review agent that:
+
+- Fetches changed files from a GitHub Pull Request
+- Reviews each file diff independently using an LLM
+- Executes file reviews in parallel using Ray tasks
+- Aggregates structured feedback with severity levels
+- Demonstrates Python-orchestrated agent design with explicit parallelism
+
 ## Key Concepts an AI Should Know
 
 - Examples should be minimal, clear, and runnable
