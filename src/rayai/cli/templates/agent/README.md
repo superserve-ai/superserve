@@ -15,12 +15,18 @@ Built with [Agentic Ray](https://github.com/rayai-labs/agentic-ray).
    cd my_project
    ```
 
-3. **Create an agent:**
+3. **Set up environment:**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your API keys
+   ```
+
+4. **Create an agent:**
    ```bash
    rayai create-agent my_agent
    ```
 
-4. **Run your agent:**
+5. **Run your agent:**
    ```bash
    rayai up
    ```

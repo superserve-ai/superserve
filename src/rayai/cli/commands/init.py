@@ -90,7 +90,7 @@ def init(project_name: str, project_type: str):
 
                 click.echo("\nNext steps:")
                 click.echo(f"  cd {project_name}")
-                click.echo("  # Edit .env file with your API keys")
+                click.echo("  # Copy .env.example to .env and add your API keys")
                 click.echo(
                     "  # Create your first agent: rayai create-agent <name> --framework <agent_framework>"
                 )
