@@ -5,13 +5,16 @@ Usage:
     rayai init <project_name> [--type=agent]
     rayai up [--port=8000] [--agents=<names>]
     rayai create-agent <name> [--framework=pydantic|langchain|python]
+    rayai create-mcp <name>
+    rayai mcp up [--port=8000] [--servers=<names>]
 """
 
 from importlib.metadata import version
 
 import click
 
-from .commands import analytics, create_agent, init, up
+from .commands import analytics, create_agent, create_mcp, init, up
+from .commands.mcp import mcp
 
 
 @click.group()
@@ -21,9 +24,16 @@ def cli():
     pass
 
 
+# Agent commands
 cli.add_command(init.init)
 cli.add_command(up.up)
 cli.add_command(create_agent.create_agent)
+
+# MCP commands
+cli.add_command(create_mcp.create_mcp)
+cli.add_command(mcp)
+
+# Other commands
 cli.add_command(analytics.analytics)
 
 
