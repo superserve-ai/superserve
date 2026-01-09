@@ -1,6 +1,6 @@
 """Tests for rayai.cli.platform module."""
 
-import tarfile
+import zipfile
 from unittest.mock import patch
 
 import pytest
@@ -277,13 +277,15 @@ class TestPackaging:
         (agent_dir / "agent.py").write_text("# Agent code")
         (agent_dir / "__init__.py").write_text("")
 
-        # Create requirements.txt
-        (project_dir / "requirements.txt").write_text("requests>=2.0\n")
+        # Create pyproject.toml (packaging now uses this instead of requirements.txt)
+        (project_dir / "pyproject.toml").write_text(
+            '[project]\nname = "myproject"\ndependencies = ["requests>=2.0"]\n'
+        )
 
         return project_dir
 
     def test_package_deployment(self, temp_project):
-        """Package deployment creates tarball."""
+        """Package deployment creates zip archive."""
         from rayai.cli.platform.packaging import package_deployment
 
         # Create mock agent configs
@@ -303,17 +305,17 @@ class TestPackaging:
 
         try:
             assert package_path.exists()
-            assert package_path.suffix == ".gz"
+            assert package_path.suffix == ".zip"
             assert manifest.name == "test-deployment"
             assert len(manifest.agents) == 1
             assert manifest.agents[0].name == "myagent"
             assert manifest.checksum  # Should have checksum
 
-            # Verify tarball contents
-            with tarfile.open(package_path, "r:gz") as tar:
-                names = tar.getnames()
+            # Verify zip contents
+            with zipfile.ZipFile(package_path, "r") as zf:
+                names = zf.namelist()
                 assert "manifest.json" in names
-                assert "requirements.txt" in names
+                assert "pyproject.toml" in names
                 assert any("agents/myagent" in n for n in names)
         finally:
             package_path.unlink(missing_ok=True)
@@ -340,8 +342,8 @@ class TestPackaging:
         )
 
         try:
-            with tarfile.open(package_path, "r:gz") as tar:
-                names = tar.getnames()
+            with zipfile.ZipFile(package_path, "r") as zf:
+                names = zf.namelist()
                 assert not any("__pycache__" in n for n in names)
                 assert not any(".pyc" in n for n in names)
         finally:

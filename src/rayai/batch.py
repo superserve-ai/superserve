@@ -73,9 +73,12 @@ def batch_tool(
         tool_registry[tool_name] = tool
 
         # Get or create the ray remote function
-        if hasattr(tool, "_remote_func"):
-            # Already a @rayai.tool decorated function
-            remote_funcs[tool_name] = tool._remote_func
+        if hasattr(tool, "_get_remote_func"):
+            # Already a @rayai.tool decorated function (lazy init)
+            remote_funcs[tool_name] = tool._get_remote_func()
+        elif hasattr(tool, "_original_func"):
+            # Decorated tool - use original function
+            remote_funcs[tool_name] = ray.remote(tool._original_func)
         else:
             # Plain callable - wrap with ray.remote
             remote_funcs[tool_name] = ray.remote(tool)

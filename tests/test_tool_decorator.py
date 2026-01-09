@@ -103,8 +103,8 @@ class TestToolDecorator:
         def remote_test(x: int) -> int:
             return x
 
-        assert hasattr(remote_test, "_remote_func")
-        assert remote_test._remote_func is not None
+        assert hasattr(remote_test, "_get_remote_func")
+        assert callable(remote_test._get_remote_func)
 
     def test_has_original_func(self):
         """Decorated function has _original_func attribute."""
