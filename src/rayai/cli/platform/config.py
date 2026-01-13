@@ -4,8 +4,8 @@ import os
 from importlib.metadata import version
 from pathlib import Path
 
-# Production:
-PLATFORM_API_URL = os.environ.get("RAYAI_API_URL", "https://api.rayai.com")
+# Staging:
+PLATFORM_API_URL = os.environ.get("RAYAI_API_URL", "https://api-staging.rayai.com")
 DASHBOARD_URL = os.environ.get("RAYAI_DASHBOARD_URL", "https://app-staging.rayai.com")
 # Local development: uncomment for local testing
 # PLATFORM_API_URL = os.environ.get("RAYAI_API_URL", "http://localhost:8000")
