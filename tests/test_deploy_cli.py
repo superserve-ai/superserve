@@ -308,7 +308,7 @@ class TestDeployCommand:
         (tmp_path / "agents").mkdir()
 
         with patch("rayai.cli.commands.deploy.is_authenticated", return_value=True):
-            with patch("rayai.cli.commands.deploy._discover_agents", return_value=[]):
+            with patch("rayai.cli.commands.up._discover_agents", return_value=[]):
                 result = runner.invoke(cli, ["deploy", str(tmp_path)])
 
                 assert result.exit_code == 1

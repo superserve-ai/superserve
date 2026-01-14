@@ -26,7 +26,7 @@ from rayai.cli.platform.client import PlatformAPIError, PlatformClient
 from rayai.cli.platform.packaging import package_deployment
 
 if TYPE_CHECKING:
-    from rayai.serve import AgentConfig
+    pass
 
 
 @click.command()
@@ -85,7 +85,10 @@ def deploy(
 
     # Discover agents
     click.echo("Discovering agents...")
-    registered = _discover_agents(project_dir, agents_dir, agents)
+    from rayai.cli.commands.up import _discover_agents
+
+    filter_set = {a.strip() for a in agents.split(",")} if agents else None
+    registered = _discover_agents(project_dir, filter_set)
 
     if not registered:
         click.echo("Error: No agents found to deploy.", err=True)
@@ -149,48 +152,6 @@ def deploy(
     click.echo("View status on the dashboard: " + click.style(DASHBOARD_URL, fg="cyan"))
 
     track("cli_deploy", {"agent_count": len(registered)})
-
-
-def _discover_agents(
-    project_dir: Path, agents_dir: Path, agent_filter: str | None
-) -> list["AgentConfig"]:
-    """Discover agents in the project.
-
-    Args:
-        project_dir: Project root directory.
-        agents_dir: Path to agents/ directory.
-        agent_filter: Comma-separated list of agents to include.
-
-    Returns:
-        List of AgentConfig objects.
-    """
-    # Import here to avoid circular imports and Ray initialization
-    # Reuse agent import logic from up.py
-    from rayai.cli.commands.up import _import_agent_modules
-    from rayai.serve import (
-        clear_registered_agents,
-        get_registered_agents,
-        set_rayai_up_mode,
-    )
-
-    set_rayai_up_mode(True)
-    clear_registered_agents()
-
-    # Parse filter
-    filter_set = None
-    if agent_filter:
-        filter_set = {a.strip() for a in agent_filter.split(",")}
-
-    # Add project to path for imports
-    if str(project_dir) not in sys.path:
-        sys.path.insert(0, str(project_dir))
-
-    # Import agent modules
-    imported = _import_agent_modules(agents_dir, filter_set)
-    if imported == 0:
-        return []
-
-    return get_registered_agents()
 
 
 def _wait_for_termination(
