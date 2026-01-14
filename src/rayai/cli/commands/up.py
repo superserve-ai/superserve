@@ -1,34 +1,30 @@
-"""Run all agents in the agents/ directory with Ray Serve.
+"""Run agents and MCP servers with Ray Serve.
 
-The `rayai up` command discovers and serves all agents defined in the
-agents/ directory. Each agent file should call `rayai.serve()` which
-registers the agent for deployment.
+The `rayai up` command discovers and serves all agents and MCP servers
+defined in the agents/ and mcp_servers/ directories.
 
 Usage:
-    rayai up                    # Serve all agents on port 8000
-    rayai up --port 8080        # Serve on custom port
-    rayai up --agents a,b       # Serve specific agents only
-
-Example agent file (agents/myagent/agent.py):
-    import rayai
-    from pydantic_ai import Agent
-
-    @rayai.tool
-    def search(query: str) -> str:
-        return f"Results for {query}"
-
-    agent = Agent("gpt-4", tools=[search])
-    rayai.serve(agent, name="myagent")
+    rayai up                        # Serve all agents and MCP servers
+    rayai up --port 8080            # Serve on custom port
+    rayai up --agents a,b           # Serve specific agents only
+    rayai up --servers weather      # Serve specific MCP servers only
 """
+
+from __future__ import annotations
 
 import importlib.util
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 from dotenv import load_dotenv
 
 from rayai.cli.analytics import track
+
+if TYPE_CHECKING:
+    from rayai.mcp_serve import MCPServerConfig
+    from rayai.serve import AgentConfig
 
 
 @click.command()
@@ -36,76 +32,63 @@ from rayai.cli.analytics import track
 @click.option("--port", default=8000, help="Port to serve on")
 @click.option("--host", default="0.0.0.0", help="Host to bind to")
 @click.option("--agents", help="Serve specific agents only (comma-separated)")
-def up(project_path: str, port: int, host: str, agents: str | None):
-    """Run all agents in the agents/ directory.
+@click.option("--servers", help="Serve specific MCP servers only (comma-separated)")
+def up(
+    project_path: str,
+    port: int,
+    host: str,
+    agents: str | None,
+    servers: str | None,
+) -> None:
+    """Run agents and MCP servers.
 
-    Discovers agent.py files in agents/*/ and serves them with Ray Serve.
-    Each agent file should call rayai.serve() to register the agent.
+    Discovers and serves:
+      - agent.py files in agents/*/
+      - server.py files in mcp_servers/*/
 
     Examples:
-        rayai up                    # Serve all agents
-        rayai up --port 8080        # Custom port
-        rayai up --agents a,b       # Specific agents only
+        rayai up                        # Serve everything
+        rayai up --port 8080            # Custom port
+        rayai up --agents a,b           # Specific agents only
+        rayai up --servers weather      # Specific MCP servers only
     """
     project_dir = Path(project_path).resolve()
 
-    # Load environment variables from .env file
-    env_file = project_dir / ".env"
-    if env_file.exists():
-        load_dotenv(env_file)
-        click.echo(f"Loaded environment from {env_file}")
+    _load_env(project_dir)
+    _validate_project(project_dir)
 
-    if not project_dir.exists():
-        click.echo(f"Error: Project directory not found: {project_dir}")
+    if not _check_dependencies():
         sys.exit(1)
 
-    agents_dir = project_dir / "agents"
-    if not agents_dir.exists():
-        click.echo(f"Error: agents/ directory not found in {project_dir}")
-        click.echo("Create agents/ directory with agent.py files")
+    # Parse filters
+    agent_filter = _parse_filter(agents)
+    server_filter = _parse_filter(servers)
+
+    # Discover and register
+    registered_agents = _discover_agents(project_dir, agent_filter)
+    registered_mcp_servers = _discover_mcp_servers(project_dir, server_filter)
+
+    if not registered_agents and not registered_mcp_servers:
+        click.echo("Error: No agents or MCP servers found")
+        click.echo("Create agents with: rayai create-agent <name>")
+        click.echo("Create MCP servers with: rayai create-mcp <name>")
         sys.exit(1)
 
-    # Ensure dependencies
-    if not _ensure_dependencies():
-        sys.exit(1)
-
-    # Set rayai up mode before importing agents
-    from rayai.serve import (
-        clear_registered_agents,
-        get_registered_agents,
-        run,
-        set_rayai_up_mode,
+    # Analytics
+    track(
+        "cli_up",
+        {
+            "agent_count": len(registered_agents),
+            "mcp_server_count": len(registered_mcp_servers),
+        },
     )
 
-    set_rayai_up_mode(True)
-    clear_registered_agents()
-
-    # Discover and import agent modules
-    agent_filter = {a.strip() for a in agents.split(",")} if agents else None
-    imported_count = _import_agent_modules(agents_dir, agent_filter)
-
-    if imported_count == 0:
-        click.echo("Error: No agent modules found")
-        click.echo("Create agents/<name>/agent.py files that call rayai.serve()")
-        sys.exit(1)
-
-    # Get registered agents
-    registered = get_registered_agents()
-
-    if not registered:
-        click.echo("Error: No agents registered")
-        click.echo("Ensure agent.py files call rayai.serve(agent, name='...')")
-        sys.exit(1)
-
-    track("cli_up", {"agent_count": len(registered)})
-
-    click.echo(f"\nFound {len(registered)} agent(s):")
-    for config in registered:
-        click.echo(f"  • {config.name}")
+    # Print summary
+    _print_discovery_summary(registered_agents, registered_mcp_servers)
 
     # Start serving
     try:
-        run(port=port, host=host)
+        _start_serving(registered_agents, registered_mcp_servers, host, port)
     except KeyboardInterrupt:
         click.echo("\nShutting down...")
     except Exception as e:
@@ -113,8 +96,23 @@ def up(project_path: str, port: int, host: str, agents: str | None):
         sys.exit(1)
 
 
-def _ensure_dependencies() -> bool:
-    """Ensure Ray Serve dependencies are available."""
+def _load_env(project_dir: Path) -> None:
+    """Load environment variables from .env file if present."""
+    env_file = project_dir / ".env"
+    if env_file.exists():
+        load_dotenv(env_file)
+        click.echo(f"Loaded environment from {env_file}")
+
+
+def _validate_project(project_dir: Path) -> None:
+    """Validate project directory exists."""
+    if not project_dir.exists():
+        click.echo(f"Error: Directory not found: {project_dir}")
+        sys.exit(1)
+
+
+def _check_dependencies() -> bool:
+    """Check that required dependencies are installed."""
     try:
         import ray  # noqa: F401
         from fastapi import FastAPI  # noqa: F401
@@ -127,67 +125,245 @@ def _ensure_dependencies() -> bool:
         return False
 
 
-def _import_agent_modules(agents_dir: Path, agent_filter: set[str] | None) -> int:
-    """Import agent.py modules from agents/ subdirectories.
+def _parse_filter(value: str | None) -> set[str] | None:
+    """Parse comma-separated filter string into a set."""
+    if not value:
+        return None
+    return {item.strip() for item in value.split(",")}
 
-    Args:
-        agents_dir: Path to agents/ directory.
-        agent_filter: Set of agent names to include, or None for all.
 
-    Returns:
-        Number of modules successfully imported.
-    """
-    imported = 0
+def _discover_agents(
+    project_dir: Path,
+    filter_set: set[str] | None,
+) -> list[AgentConfig]:
+    """Discover and import agent modules."""
+    from rayai.serve import (
+        clear_registered_agents,
+        get_registered_agents,
+        set_rayai_up_mode,
+    )
 
-    # Add project root to path for imports
-    project_dir = agents_dir.parent
+    agents_dir = project_dir / "agents"
+    if not agents_dir.exists():
+        return []
+
+    # Enable registration mode
+    set_rayai_up_mode(True)
+    clear_registered_agents()
+
+    # Add project to path
     if str(project_dir) not in sys.path:
         sys.path.insert(0, str(project_dir))
 
-    for agent_folder in sorted(agents_dir.iterdir()):
-        if not agent_folder.is_dir():
-            continue
-        if agent_folder.name.startswith("__"):
-            continue
-
-        agent_name = agent_folder.name
-
-        # Filter if specified
-        if agent_filter and agent_name not in agent_filter:
+    # Import agent modules
+    for folder in sorted(agents_dir.iterdir()):
+        if not folder.is_dir() or folder.name.startswith("__"):
             continue
 
-        agent_file = agent_folder / "agent.py"
+        if filter_set and folder.name not in filter_set:
+            continue
+
+        agent_file = folder / "agent.py"
         if not agent_file.exists():
-            click.echo(f"Warning: No agent.py in {agent_name}/, skipping")
             continue
 
-        # Import the module
-        module_name = f"agents.{agent_name}.agent"
         try:
-            click.echo(f"Loading {agent_name}...")
-            _import_module_from_file(agent_file, module_name)
-            imported += 1
+            click.echo(f"Loading agent: {folder.name}")
+            _import_module(agent_file, f"agents.{folder.name}.agent")
         except Exception as e:
-            click.echo(f"Error loading {agent_name}: {e}")
+            click.echo(f"  Error: {e}")
+
+    return get_registered_agents()
+
+
+def _discover_mcp_servers(
+    project_dir: Path,
+    filter_set: set[str] | None,
+) -> list[MCPServerConfig]:
+    """Discover and import MCP server modules."""
+    from rayai.mcp_serve import (
+        clear_registered_mcp_servers,
+        get_registered_mcp_servers,
+        set_rayai_mcp_up_mode,
+    )
+
+    mcp_dir = project_dir / "mcp_servers"
+    if not mcp_dir.exists():
+        return []
+
+    # Enable registration mode
+    set_rayai_mcp_up_mode(True)
+    clear_registered_mcp_servers()
+
+    # Add project to path
+    if str(project_dir) not in sys.path:
+        sys.path.insert(0, str(project_dir))
+
+    # Import server modules
+    for folder in sorted(mcp_dir.iterdir()):
+        if not folder.is_dir() or folder.name.startswith("__"):
             continue
 
-    return imported
+        if filter_set and folder.name not in filter_set:
+            continue
+
+        server_file = folder / "server.py"
+        if not server_file.exists():
+            continue
+
+        try:
+            click.echo(f"Loading MCP server: {folder.name}")
+            _import_module(server_file, f"mcp_servers.{folder.name}.server")
+        except Exception as e:
+            click.echo(f"  Error: {e}")
+
+    return get_registered_mcp_servers()
 
 
-def _import_module_from_file(file_path: Path, module_name: str):
-    """Import a Python module from a file path.
-
-    Args:
-        file_path: Path to the .py file.
-        module_name: Full module name (e.g., agents.myagent.agent).
-
-    Raises:
-        ImportError: If module cannot be imported.
-    """
+def _import_module(file_path: Path, module_name: str) -> None:
+    """Import a Python module from file."""
     spec = importlib.util.spec_from_file_location(module_name, file_path)
     if spec is None or spec.loader is None:
-        raise ImportError(f"Cannot create module spec for {file_path}")
+        raise ImportError(f"Cannot load {file_path}")
 
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
+
+
+def _print_discovery_summary(
+    agents: list[AgentConfig],
+    mcp_servers: list[MCPServerConfig],
+) -> None:
+    """Print summary of discovered agents and MCP servers."""
+    if agents:
+        click.echo(f"\nAgents ({len(agents)}):")
+        for agent_config in agents:
+            click.echo(f"  {agent_config.name}")
+
+    if mcp_servers:
+        click.echo(f"\nMCP Servers ({len(mcp_servers)}):")
+        for mcp_config in mcp_servers:
+            click.echo(f"  {mcp_config.name}")
+
+
+def _start_serving(
+    agents: list[AgentConfig],
+    mcp_servers: list[MCPServerConfig],
+    host: str,
+    port: int,
+) -> None:
+    """Start Ray Serve with all agents and MCP servers."""
+    import ray
+    from ray import serve as ray_serve
+
+    from rayai.resource_loader import _parse_memory
+    from rayai.serve import _create_agent_deployment
+
+    if not ray.is_initialized():
+        ray.init()
+
+    ray_serve.start(http_options={"host": host, "port": port})
+
+    # Deploy agents
+    for agent_config in agents:
+        deployment = _create_agent_deployment(
+            agent=agent_config.agent,
+            name=agent_config.name,
+            replicas=agent_config.replicas,
+            ray_actor_options={
+                "num_cpus": agent_config.num_cpus,
+                "num_gpus": agent_config.num_gpus,
+                "memory": _parse_memory(agent_config.memory),
+            },
+        )
+        ray_serve.run(
+            deployment, route_prefix=agent_config.route_prefix, name=agent_config.name
+        )
+
+    # Deploy MCP servers
+    for mcp_config in mcp_servers:
+        deployment = _create_mcp_deployment(
+            config=mcp_config,
+            ray_serve_module=ray_serve,
+            memory_bytes=_parse_memory(mcp_config.memory),
+        )
+        ray_serve.run(
+            deployment, route_prefix=mcp_config.route_prefix, name=mcp_config.name
+        )
+
+    # Print endpoints
+    display_host = "localhost" if host == "0.0.0.0" else host
+    base_url = f"http://{display_host}:{port}"
+
+    click.echo(f"\nServing at {base_url}\n")
+
+    if agents:
+        click.echo("  Agents:")
+        for agent_config in agents:
+            click.echo(f"    POST {base_url}{agent_config.route_prefix}/")
+        click.echo()
+
+    if mcp_servers:
+        click.echo("  MCP Servers:")
+        for mcp_config in mcp_servers:
+            click.echo(f"    {base_url}{mcp_config.route_prefix}/mcp")
+        click.echo()
+
+    click.echo("  Press Ctrl+C to stop.\n")
+
+    # Block until interrupted
+    _wait_forever()
+
+    click.echo("Shutting down...")
+    ray_serve.shutdown()
+
+
+def _create_mcp_deployment(
+    config: MCPServerConfig,
+    ray_serve_module,
+    memory_bytes: int,
+):
+    """Create a Ray Serve deployment for an MCP server."""
+    from contextlib import asynccontextmanager
+
+    from fastapi import FastAPI
+
+    mcp = config.mcp_server
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI, _mcp=mcp):
+        app.mount("/", _mcp.streamable_http_app())
+        async with _mcp.session_manager.run():
+            yield
+
+    fastapi_app = FastAPI(lifespan=lifespan)
+
+    @ray_serve_module.deployment(
+        name=f"{config.name}-mcp",
+        num_replicas=config.replicas,
+        ray_actor_options={
+            "num_cpus": config.num_cpus,
+            "num_gpus": config.num_gpus,
+            "memory": memory_bytes,
+        },
+    )
+    @ray_serve_module.ingress(fastapi_app)
+    class MCPDeployment:
+        pass
+
+    return MCPDeployment.bind()  # type: ignore[attr-defined]
+
+
+def _wait_forever() -> None:
+    """Block until keyboard interrupt."""
+    import time
+
+    try:
+        import signal
+
+        signal.pause()
+    except AttributeError:
+        # Windows doesn't have signal.pause()
+        while True:
+            time.sleep(1)

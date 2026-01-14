@@ -44,7 +44,7 @@ rayai up
 | `num_gpus` | int/float | 0 | GPUs per replica |
 | `memory` | str | "2GB" | Memory per replica |
 | `replicas` | int | 1 | Number of replicas |
-| `route_prefix` | str | /{name} | URL prefix for this agent |
+| `route_prefix` | str | /agents/{name} | URL prefix for this agent |
 
 ## Endpoints
 
@@ -99,16 +99,27 @@ Streaming support depends on the agent framework. Most frameworks support both t
 
 ## CLI: rayai up
 
-The `rayai up` command discovers and runs all agents in your project:
+The `rayai up` command discovers and runs all agents and MCP servers in your project:
 
 ```bash
 rayai up
 ```
 
+```
+Serving at http://localhost:8000
+
+  Agents:
+    POST http://localhost:8000/agents/myagent/
+
+  MCP Servers:
+    http://localhost:8000/weather/mcp
+```
+
 It automatically:
 1. Imports all `agents/*/agent.py` files
-2. Collects `rayai.serve()` registrations
-3. Starts Ray Serve with all agents
+2. Imports all `mcp_servers/*/server.py` files
+3. Collects `rayai.serve()` and `rayai.serve_mcp()` registrations
+4. Starts Ray Serve with everything on one port
 
 ### CLI Options
 
@@ -119,7 +130,9 @@ rayai up [OPTIONS]
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--port` | 8000 | HTTP server port |
+| `--host` | 0.0.0.0 | Host to bind to |
 | `--agents` | All | Comma-separated list of agents to run |
+| `--servers` | All | Comma-separated list of MCP servers to run |
 
 ## Scaling with Replicas
 
@@ -162,8 +175,8 @@ When planning cluster resources, consider:
 ## Monitoring
 
 When running, you can access:
-- **Agent endpoints**: `http://localhost:8000/{agent_name}/`
-- **Health check**: `http://localhost:8000/{agent_name}/health`
+- **Agent endpoints**: `http://localhost:8000/agents/{agent_name}/`
+- **Health check**: `http://localhost:8000/agents/{agent_name}/health`
 - **Ray Dashboard**: `http://localhost:8265`
 
 The Ray Dashboard provides visibility into:

@@ -30,12 +30,11 @@ import asyncio
 import inspect
 import json
 import sys
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 if TYPE_CHECKING:
     pass
@@ -48,9 +47,10 @@ _registered_agents: list[AgentConfig] = []
 _rayai_up_mode = False
 
 
-@dataclass
-class AgentConfig:
+class AgentConfig(BaseModel):
     """Configuration for a registered agent."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     agent: Any
     name: str
@@ -105,7 +105,7 @@ def serve(
         num_gpus: GPUs per replica (default: 0).
         memory: Memory per replica (default: "2GB").
         replicas: Number of replicas (default: 1).
-        route_prefix: URL prefix for this agent (default: /{name}).
+        route_prefix: URL prefix for this agent (default: /agents/{name}).
 
     Example:
         # Single agent (blocks)
@@ -120,7 +120,7 @@ def serve(
 
     # Default route prefix
     if route_prefix is None:
-        route_prefix = f"/{name}"
+        route_prefix = f"/agents/{name}"
 
     config = AgentConfig(
         agent=agent,
