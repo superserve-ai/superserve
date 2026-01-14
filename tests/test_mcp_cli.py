@@ -56,7 +56,7 @@ class TestMCPServerConfig:
             route_prefix="/test",
         )
         assert config.name == "test"
-        assert config.num_cpus == 0.5
+        assert config.num_cpus == 1
         assert config.memory == "512MB"
         assert config.replicas == 1
 
@@ -132,7 +132,7 @@ class TestServeMCPRegistration:
         serve_mcp(MockMCP(), name="default")
 
         config = get_registered_mcp_servers()[0]
-        assert config.num_cpus == 0.5
+        assert config.num_cpus == 1
         assert config.num_gpus == 0
         assert config.memory == "512MB"
         assert config.replicas == 1
