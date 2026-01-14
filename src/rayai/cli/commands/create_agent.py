@@ -48,7 +48,7 @@ def create_agent(agent_name: str, framework: str):
         click.echo("\nNext steps:")
         click.echo(f"  Edit agents/{agent_name}/agent.py to implement your logic")
         click.echo("  Run with: rayai up")
-        click.echo(f"  Test at: POST http://localhost:8000/{agent_name}")
+        click.echo(f"  Test at: POST http://localhost:8000/agents/{agent_name}/")
 
     except Exception as e:
         click.echo(f"Error: Failed to create agent: {e}")

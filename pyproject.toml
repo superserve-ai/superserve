@@ -19,7 +19,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "fastapi>=0.100.0",
     "click>=8.0.0",
-    "pydantic-ai-slim[openai]>=1.27.0",
+    "pydantic-ai-slim[openai]>=1.42.0",
     "posthog>=3.0.0",
 ]
 

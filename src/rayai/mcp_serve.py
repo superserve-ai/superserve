@@ -15,16 +15,18 @@ API:
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict
 
 _registered_mcp_servers: list[MCPServerConfig] = []
 _rayai_mcp_up_mode = False
 
 
-@dataclass
-class MCPServerConfig:
+class MCPServerConfig(BaseModel):
     """Configuration for a registered MCP server."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     mcp_server: Any  # FastMCP instance
     name: str
@@ -39,7 +41,7 @@ def serve_mcp(
     mcp_server: Any,
     *,
     name: str | None = None,
-    num_cpus: float = 0.5,
+    num_cpus: float = 1,
     num_gpus: float = 0,
     memory: str = "512MB",
     replicas: int = 1,

@@ -44,7 +44,7 @@ rayai up
 | `num_gpus` | int/float | 0 | GPUs per replica |
 | `memory` | str | "2GB" | Memory per replica |
 | `replicas` | int | 1 | Number of replicas |
-| `route_prefix` | str | /{name} | URL prefix for this agent |
+| `route_prefix` | str | /agents/{name} | URL prefix for this agent |
 
 ## Endpoints
 
@@ -109,7 +109,7 @@ rayai up
 Serving at http://localhost:8000
 
   Agents:
-    POST http://localhost:8000/myagent/
+    POST http://localhost:8000/agents/myagent/
 
   MCP Servers:
     http://localhost:8000/weather/mcp
@@ -175,8 +175,8 @@ When planning cluster resources, consider:
 ## Monitoring
 
 When running, you can access:
-- **Agent endpoints**: `http://localhost:8000/{agent_name}/`
-- **Health check**: `http://localhost:8000/{agent_name}/health`
+- **Agent endpoints**: `http://localhost:8000/agents/{agent_name}/`
+- **Health check**: `http://localhost:8000/agents/{agent_name}/health`
 - **Ray Dashboard**: `http://localhost:8265`
 
 The Ray Dashboard provides visibility into:

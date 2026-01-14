@@ -107,7 +107,7 @@ When you run `rayai up`, both the MCP server and agent start on the same port. T
 |--------|------|---------|-------------|
 | `mcp_server` | FastMCP | required | FastMCP instance (must use `stateless_http=True`) |
 | `name` | str | None | Server name (inferred from directory if not set) |
-| `num_cpus` | float | 0.5 | CPU cores per replica |
+| `num_cpus` | float | 1 | CPU cores per replica |
 | `num_gpus` | float | 0 | GPUs per replica |
 | `memory` | str | "512MB" | Memory per replica |
 | `replicas` | int | 1 | Number of replicas |

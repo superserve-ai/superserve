@@ -37,7 +37,7 @@ rayai create-agent my_agent --framework pydantic
 rayai up
 ```
 
-Your agent is now available at `http://localhost:8000/my_agent/`
+Your agent is now available at `http://localhost:8000/agents/my_agent/`
 
 ## Installation
 
@@ -117,7 +117,7 @@ rayai up
 Test your agent:
 
 ```bash
-curl -X POST http://localhost:8000/my_agent/ \
+curl -X POST http://localhost:8000/agents/my_agent/ \
   -H "Content-Type: application/json" \
   -d '{"query": "Hello!"}'
 ```

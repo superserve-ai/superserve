@@ -34,7 +34,7 @@ A stock market analysis agent using Pydantic AI with Ray-distributed tools.
 ## Test
 
 ```bash
-curl -X POST http://localhost:8000/finance/ \
+curl -X POST http://localhost:8000/agents/finance/ \
   -H 'Content-Type: application/json' \
   -d '{"query": "Get the top 5 S&P 500 stocks"}'
 ```

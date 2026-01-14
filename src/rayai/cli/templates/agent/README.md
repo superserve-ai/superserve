@@ -35,12 +35,12 @@ Built with [Agentic Ray](https://github.com/rayai-labs/agentic-ray).
 
 After running `rayai up`, your agents are available at:
 
-- **POST** `/{agent_name}/` - Call your agent
+- **POST** `/agents/{agent_name}/` - Call your agent
 
 ### Example Request
 
 ```bash
-curl -X POST http://localhost:8000/my_agent/ \
+curl -X POST http://localhost:8000/agents/my_agent/ \
   -H "Content-Type: application/json" \
   -d '{"query": "Hello!"}'
 ```
