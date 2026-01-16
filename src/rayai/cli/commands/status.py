@@ -67,6 +67,7 @@ def _output_json(deployments: list[DeploymentResponse]) -> None:
             "status": d.status,
             "url": d.url,
             "agents": [a.name for a in d.agents],
+            "mcp_servers": [m.name for m in d.mcp_servers],
             "created_at": d.created_at,
             "updated_at": d.updated_at,
             "error": d.error,
@@ -99,6 +100,10 @@ def _output_table(deployments: list[DeploymentResponse]) -> None:
         if d.agents:
             agent_names = ", ".join(a.name for a in d.agents)
             click.echo(f"  Agents:  {agent_names}")
+
+        if d.mcp_servers:
+            mcp_names = ", ".join(m.name for m in d.mcp_servers)
+            click.echo(f"  MCP Servers: {mcp_names}")
 
         if d.created_at:
             click.echo(f"  Created: {d.created_at}")

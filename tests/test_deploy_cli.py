@@ -295,24 +295,28 @@ class TestDeployCommand:
             assert "Not logged in" in result.output
 
     def test_deploy_missing_agents_dir(self, runner, tmp_path):
-        """Deploy command requires agents directory."""
+        """Deploy command with no agents or MCP servers directory."""
         with patch("rayai.cli.commands.deploy.is_authenticated", return_value=True):
             result = runner.invoke(cli, ["deploy", str(tmp_path)])
 
             assert result.exit_code == 1
-            assert "agents/ directory not found" in result.output
+            assert "No agents or MCP servers found to deploy" in result.output
 
-    def test_deploy_no_agents_found(self, runner, tmp_path):
-        """Deploy command with no agents."""
-        # Create empty agents directory
+    def test_deploy_no_agents_or_mcp_servers_found(self, runner, tmp_path):
+        """Deploy command with empty agents and mcp_servers directories."""
+        # Create empty directories
         (tmp_path / "agents").mkdir()
+        (tmp_path / "mcp_servers").mkdir()
 
         with patch("rayai.cli.commands.deploy.is_authenticated", return_value=True):
             with patch("rayai.cli.commands.up._discover_agents", return_value=[]):
-                result = runner.invoke(cli, ["deploy", str(tmp_path)])
+                with patch(
+                    "rayai.cli.commands.up._discover_mcp_servers", return_value=[]
+                ):
+                    result = runner.invoke(cli, ["deploy", str(tmp_path)])
 
-                assert result.exit_code == 1
-                assert "No agents found" in result.output
+                    assert result.exit_code == 1
+                    assert "No agents or MCP servers found to deploy" in result.output
 
 
 class TestPlatformClient:

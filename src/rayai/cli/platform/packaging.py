@@ -12,9 +12,10 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .types import AgentManifest, DeploymentManifest
+from .types import AgentManifest, DeploymentManifest, MCPServerManifest
 
 if TYPE_CHECKING:
+    from rayai.mcp_serve import MCPServerConfig
     from rayai.serve import AgentConfig
 
 
@@ -22,11 +23,13 @@ def package_deployment(
     project_path: Path,
     agents: list[AgentConfig],
     deployment_name: str,
+    mcp_servers: list[MCPServerConfig] | None = None,
 ) -> tuple[Path, DeploymentManifest]:
-    """Package agents for cloud deployment.
+    """Package agents and MCP servers for cloud deployment.
 
     Creates a zip archive containing:
     - agents/ directory with agent code
+    - mcp_servers/ directory with MCP server code
     - manifest.json with deployment metadata
     - pyproject.toml (if exists)
 
@@ -34,10 +37,13 @@ def package_deployment(
         project_path: Path to project root.
         agents: List of discovered agent configs.
         deployment_name: Name for the deployment.
+        mcp_servers: List of discovered MCP server configs.
 
     Returns:
         Tuple of (package_path, manifest).
     """
+    if mcp_servers is None:
+        mcp_servers = []
     # Parse user dependencies to include in manifest
     user_deps = _parse_user_dependencies(project_path)
 
@@ -58,6 +64,18 @@ def package_deployment(
             )
             for config in agents
         ],
+        mcp_servers=[
+            MCPServerManifest(
+                name=config.name,
+                route_prefix=config.route_prefix,
+                num_cpus=config.num_cpus,
+                num_gpus=config.num_gpus,
+                memory=config.memory,
+                replicas=config.replicas,
+                pip=user_deps,
+            )
+            for config in mcp_servers
+        ],
     )
 
     fd, package_path_str = tempfile.mkstemp(suffix=".zip")
@@ -77,6 +95,20 @@ def package_deployment(
         for config in agents:
             entry_point = _generate_serve_entry_point(config.name)
             zf.writestr(f"serve_{config.name}.py", entry_point)
+
+        # Add MCP server directories
+        mcp_servers_dir = project_path / "mcp_servers"
+        if mcp_servers_dir.exists():
+            for mcp_folder in mcp_servers_dir.iterdir():
+                if mcp_folder.is_dir() and not mcp_folder.name.startswith("__"):
+                    _add_directory_to_zip(
+                        zf, mcp_folder, f"mcp_servers/{mcp_folder.name}"
+                    )
+
+        # Generate serve entry points for each MCP server
+        for mcp_config in mcp_servers:
+            entry_point = _generate_mcp_serve_entry_point(mcp_config.name)
+            zf.writestr(f"serve_mcp_{mcp_config.name}.py", entry_point)
 
         pyproject_file = project_path / "pyproject.toml"
         if pyproject_file.exists():
@@ -283,6 +315,51 @@ class AgentDeployment:
         return {{"status": "healthy", "agent": "{agent_name}"}}
 
 app = AgentDeployment.bind()
+'''
+
+
+def _generate_mcp_serve_entry_point(mcp_name: str) -> str:
+    """Generate a Ray Serve entry point script for an MCP server.
+
+    Creates a self-contained module for cloud deployment that wraps
+    the MCP server's streamable HTTP app with Ray Serve.
+    """
+    return f'''"""Ray Serve entry point for MCP server {mcp_name}."""
+import sys
+import os
+from contextlib import asynccontextmanager
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from fastapi import FastAPI
+from ray import serve
+
+from mcp_servers.{mcp_name}.server import mcp
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage MCP server lifecycle."""
+    app.mount("/", mcp.streamable_http_app())
+    async with mcp.session_manager.run():
+        yield
+
+
+fastapi_app = FastAPI(title="{mcp_name}-mcp", lifespan=lifespan)
+
+
+@fastapi_app.get("/health")
+async def health():
+    return {{"status": "healthy", "mcp_server": "{mcp_name}"}}
+
+
+@serve.deployment(name="{mcp_name}-mcp")
+@serve.ingress(fastapi_app)
+class MCPServerDeployment:
+    pass
+
+
+app = MCPServerDeployment.bind()
 '''
 
 
