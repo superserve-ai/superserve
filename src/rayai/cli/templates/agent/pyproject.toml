@@ -6,6 +6,7 @@ requires-python = ">=3.10"
 dependencies = [
     "python-dotenv",
     "rayai",
+    "anyio>=4.0",  # Required for pydantic-ai compatibility
 ]
 
 [build-system]
