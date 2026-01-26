@@ -357,3 +357,74 @@ def cleanup_session(session_id: str) -> CleanupResult | CleanupError:
             error=str(e),
             session_id=session_id,
         )
+
+
+# -----------------------------------------------------------------------------
+# LLM-callable tools (rayai.tool)
+# -----------------------------------------------------------------------------
+
+# Import rayai here to avoid circular imports at module level
+def _get_rayai_tool():
+    """Lazy import of rayai.tool to avoid circular imports."""
+    import rayai
+    return rayai.tool
+
+
+def create_execute_python_tool(
+    session_id: str = "default",
+    dockerfile: str | None = None,
+    timeout: int = DEFAULT_TIMEOUT,
+):
+    """Create an execute_python tool with pre-configured session and environment.
+
+    Args:
+        session_id: Session ID for persistence across calls
+        dockerfile: Custom Dockerfile for the sandbox environment
+        timeout: Execution timeout in seconds
+
+    Returns:
+        A rayai.tool that can be passed directly to an agent
+
+    Example:
+        from rayai.sandbox import create_execute_python_tool
+
+        execute_python = create_execute_python_tool(
+            session_id="my-agent",
+            dockerfile="FROM python:3.12-slim\\nRUN pip install pandas numpy",
+        )
+
+        agent = Agent("openai:gpt-4o-mini", tools=[execute_python])
+    """
+    tool_decorator = _get_rayai_tool()
+
+    @tool_decorator(num_cpus=1)
+    def execute_python(code: str) -> str:
+        """Execute Python code in a secure sandbox.
+
+        Variables persist across calls within the session.
+        Save files to /tmp/ for persistence.
+
+        Args:
+            code: Python code to execute
+
+        Returns:
+            Output from the code execution
+        """
+        result = ray.get(
+            execute_code.remote(  # type: ignore[call-arg]
+                code,
+                session_id=session_id,
+                dockerfile=dockerfile,
+                timeout=timeout,
+            )
+        )
+
+        if result["status"] == "success":
+            output = result["stdout"] or "(no output)"
+            if result.get("stderr"):
+                output += f"\n[stderr]: {result['stderr']}"
+            return output
+        else:
+            return f"Error: {result.get('stderr') or result.get('error', 'Unknown error')}"
+
+    return execute_python
