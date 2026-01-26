@@ -7,8 +7,8 @@ from typing import cast
 
 import ray
 
+from .backend import get_backend_type
 from .config import DEFAULT_IMAGE, DEFAULT_TIMEOUT
-from .executor import CodeInterpreterExecutor
 from .types import (
     CleanupError,
     CleanupResult,
@@ -24,6 +24,36 @@ logger = logging.getLogger(__name__)
 # Namespace for all sandbox actors
 ACTOR_NAMESPACE = "sandbox"
 
+# Cache the backend type to avoid repeated detection
+_backend_type: str | None = None
+
+
+def _get_executor_class():
+    """Get the appropriate executor class based on environment."""
+    global _backend_type
+
+    if _backend_type is None:
+        _backend_type = get_backend_type()
+
+    if _backend_type == "kubernetes":
+        from .kubernetes_executor import KubernetesSandboxExecutor
+
+        return KubernetesSandboxExecutor
+    elif _backend_type == "docker":
+        from .executor import CodeInterpreterExecutor
+
+        return CodeInterpreterExecutor
+    elif _backend_type == "subprocess":
+        raise NotImplementedError(
+            "A 'subprocess' backend is not yet implemented. "
+            "Please install Docker or run in a Kubernetes environment."
+        )
+    else:
+        raise ValueError(
+            f"Unknown backend type '{_backend_type}' specified. "
+            "Supported backends are 'kubernetes' and 'docker'."
+        )
+
 
 def _get_or_create_executor(
     session_id: str,
@@ -33,7 +63,12 @@ def _get_or_create_executor(
     volumes: dict[str, dict[str, str]] | None = None,
     mcp_allowlist: list[str] | None = None,
 ) -> ray.actor.ActorHandle:
-    """Get existing executor or create new one for session"""
+    """Get existing executor or create new one for session.
+
+    Automatically selects the appropriate executor backend based on environment:
+    - Kubernetes: Uses agent-sandbox SDK (for Anyscale, GKE, etc.)
+    - Docker: Uses Docker containers (for local development)
+    """
     actor_name = f"code-executor-{session_id}"
 
     try:
@@ -42,9 +77,14 @@ def _get_or_create_executor(
         logger.debug(f"Found existing executor for session {session_id}")
         return cast(ray.actor.ActorHandle, executor)
     except ValueError:
-        # Actor doesn't exist, create new one
-        logger.info(f"Creating new executor for session {session_id}")
-        executor = CodeInterpreterExecutor.options(  # type: ignore[attr-defined]
+        # Actor doesn't exist, create new one with appropriate backend
+        ExecutorClass = _get_executor_class()
+        executor_name = getattr(
+            ExecutorClass, "__ray_actor_class__", ExecutorClass
+        ).__name__
+        logger.info(f"Creating new {executor_name} executor for session {session_id}")
+
+        executor = ExecutorClass.options(
             name=actor_name,
             namespace=ACTOR_NAMESPACE,
             lifetime="detached",
@@ -319,3 +359,78 @@ def cleanup_session(session_id: str) -> CleanupResult | CleanupError:
             error=str(e),
             session_id=session_id,
         )
+
+
+# -----------------------------------------------------------------------------
+# LLM-callable tools (rayai.tool)
+# -----------------------------------------------------------------------------
+
+
+# Import rayai here to avoid circular imports at module level
+def _get_rayai_tool():
+    """Lazy import of rayai.tool to avoid circular imports."""
+    import rayai
+
+    return rayai.tool
+
+
+def create_execute_python_tool(
+    session_id: str = "default",
+    dockerfile: str | None = None,
+    timeout: int = DEFAULT_TIMEOUT,
+):
+    """Create an execute_python tool with pre-configured session and environment.
+
+    Args:
+        session_id: Session ID for persistence across calls
+        dockerfile: Custom Dockerfile for the sandbox environment
+        timeout: Execution timeout in seconds
+
+    Returns:
+        A rayai.tool that can be passed directly to an agent
+
+    Example:
+        from rayai.sandbox import create_execute_python_tool
+
+        execute_python = create_execute_python_tool(
+            session_id="my-agent",
+            dockerfile="FROM python:3.12-slim\\nRUN pip install pandas numpy",
+        )
+
+        agent = Agent("openai:gpt-4o-mini", tools=[execute_python])
+    """
+    tool_decorator = _get_rayai_tool()
+
+    @tool_decorator(num_cpus=1)
+    def execute_python(code: str) -> str:
+        """Execute Python code in a secure sandbox.
+
+        Variables persist across calls within the session.
+        Save files to /tmp/ for persistence.
+
+        Args:
+            code: Python code to execute
+
+        Returns:
+            Output from the code execution
+        """
+        result = ray.get(
+            execute_code.remote(  # type: ignore[call-arg]
+                code,
+                session_id=session_id,
+                dockerfile=dockerfile,
+                timeout=timeout,
+            )
+        )
+
+        if result["status"] == "success":
+            output = result["stdout"] or "(no output)"
+            if result.get("stderr"):
+                output += f"\n[stderr]: {result['stderr']}"
+            return output
+        else:
+            return (
+                f"Error: {result.get('stderr') or result.get('error', 'Unknown error')}"
+            )
+
+    return execute_python
