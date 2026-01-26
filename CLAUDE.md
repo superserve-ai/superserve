@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+This document contains shared guidelines for Claude when working with this repository, covering coding, maintenance, and documentation styles.
+
 ## Purpose of This Repository
 
 This project provides a scalable runtime for agentic workloads, including AI agents, tool execution, MCP servers, and secure coding sandboxes. It uses Ray as the underlying distributed compute engine to schedule, parallelize, and isolate tool executions.
@@ -35,7 +37,7 @@ rayai.serve(agent, name="myagent", num_cpus=1, memory="2GB")
 
 Run with `rayai up` or `python agents/myagent/agent.py`.
 
-## Key Concepts an AI Should Know
+## Key Concepts
 
 - A "tool call" maps to a Ray task/actor, enabling distributed execution
 - `@rayai.tool` works as both decorator and wrapper for framework tools (LangChain, Pydantic AI, Agno)
@@ -44,13 +46,8 @@ Run with `rayai up` or `python agents/myagent/agent.py`.
 - Code execution happens inside controlled Docker sandboxes with gVisor for security isolation
 - The repo is framework-agnostic; avoid coupling to any single agent architecture
 - Sandbox executor manages Docker containers with resource limits, timeouts, and network isolation
-
-## Project Structure Overview
-
-- `src/rayai/` – core runtime, agents, tools, sandbox logic, CLI
-- `examples/` – example uses of agents and tools on Ray (analyzer, finance_agent)
-- `tests/` – unit tests for runtime execution, tools, sandbox behavior
-- `scripts/` – developer or cluster helper scripts (gVisor setup, Docker configuration)
+- Tools decorated with `@tool` have `_rayai_tool`, `_remote_func`, `_tool_metadata`, and `_original_func` attributes
+- Tool execution must remain serializable because Ray will ship tasks to workers
 
 ## Technology Stack
 
@@ -58,13 +55,50 @@ Run with `rayai up` or `python agents/myagent/agent.py`.
 - **Ray Serve**: Model serving and deployment
 - **Docker + gVisor**: Container-based sandboxing with security isolation
 - **FastAPI**: HTTP API layer for agent deployments
+- **Click**: CLI framework for command-line parsing
 - **Pydantic AI**: Supported agent framework
 - **LangChain/LangGraph**: Supported agent framework
 - **Agno**: Supported agent framework
 
-## Do / Don't for AI Modifying This Repo
+## Project Structure
 
-### Do:
+```
+src/rayai/           Core runtime implementation
+├── base.py          Core protocols and interfaces (AgentProtocol)
+├── decorators.py    Unified @tool decorator for Ray-distributed execution
+├── serve.py         rayai.serve() function for serving agents via HTTP
+├── agent_base.py    rayai.Agent base class for custom agents
+├── batch.py         Generic BatchTool for parallel execution
+├── deployment.py    Ray Serve deployment utilities with streaming support
+├── resource_loader.py  Memory parsing utilities
+├── utils.py         execute_tools() for parallel/sequential tool execution
+├── cli/             Command-line interface
+│   ├── cli.py       Main CLI entry point
+│   ├── analytics.py Shared helpers for anonymous CLI usage analytics
+│   ├── commands/    Individual command implementations
+│   │   ├── init.py        Initialize new project from templates
+│   │   ├── create_agent.py Create agent from template
+│   │   ├── up.py          Run all agents with rayai up
+│   │   └── analytics.py   rayai analytics subcommands
+│   └── templates/   Project and agent templates
+└── sandbox/         Secure code execution
+    ├── executor.py  CodeInterpreterExecutor Ray Actor
+    ├── config.py    Sandbox configuration
+    ├── types.py     Type definitions (ExecutionResult, etc.)
+    ├── tools.py     Tool definitions for sandbox operations
+    └── mcp_proxy.py MCP proxy for secure external access
+
+examples/            Example applications
+├── analyzer/        Token-efficient data analysis agent with MCP
+└── finance-agent/   Financial analysis agent with Pydantic AI
+
+tests/               Unit tests for runtime, tools, sandbox behavior
+scripts/             Developer/cluster helper scripts (gVisor setup)
+```
+
+## Guidelines for AI Modifications
+
+### Do
 
 - Improve documentation comments and docstrings
 - Refactor for clarity without breaking public APIs
@@ -72,8 +106,12 @@ Run with `rayai up` or `python agents/myagent/agent.py`.
 - Follow existing patterns for tool decoration and Ray integration
 - Maintain security boundaries in sandbox execution
 - Update examples when adding new features
+- Add missing tests for new runtime features
+- Keep dependencies minimal in core modules
+- Handle errors gracefully with clear messages
+- Validate inputs before processing
 
-### Don't:
+### Don't
 
 - Create tight coupling to a specific agent framework
 - Modify sandbox security boundaries without explicit review
@@ -81,13 +119,66 @@ Run with `rayai up` or `python agents/myagent/agent.py`.
 - Add heavyweight dependencies to core runtime
 - Bypass Ray's serialization requirements for tool execution
 - Allow untrusted code to escape sandbox boundaries
+- Introduce non-serializable objects in tool signatures
+- Hardcode paths or environment-specific values
+- Skip input validation or error handling
+- Rewrite or delete tests unless behavior intentionally changes
 
-## Related Modules
+## Coding Style
 
-See subdirectory `CLAUDE.md` files for detailed directory purposes:
+### Python
 
-- `src/rayai/CLAUDE.md` - Core runtime implementation
-- `src/rayai/cli/CLAUDE.md` - CLI tools
-- `src/rayai/sandbox/CLAUDE.md` - Sandbox execution
-- `examples/CLAUDE.md` - Example applications
-- `tests/CLAUDE.md` - Test suite
+- Use type hints for all function signatures
+- Follow PEP 8 conventions
+- Prefer async/await for I/O operations
+- Keep functions focused and single-purpose
+- Use descriptive variable names over comments
+- Avoid deep nesting; extract helper functions when necessary
+- Use `@rayai.tool` decorator for all tool definitions
+- Ensure tool functions are serializable for Ray
+
+### Error Handling
+
+- Use specific exception types, not bare `except:`
+- Provide context in error messages
+- Log security-relevant events in sandbox code
+- Handle API errors gracefully with retries where appropriate
+- Validate all inputs at system boundaries
+
+### Security
+
+- Never allow host filesystem access from sandboxes
+- Enforce resource limits (CPU, memory, timeout) consistently
+- Use gVisor runtime (`runsc`) for production sandbox execution
+- Network isolation by default (`network_mode: none`)
+- External access only via MCP proxy with allowlist
+- Never execute code without container isolation
+
+## Documentation Style
+
+- Keep README files concise and actionable
+- Include usage examples with runnable code
+- Document required environment variables
+- Explain the "why" not just the "what"
+- Update docs when changing behavior
+- Use code blocks with language hints for syntax highlighting
+
+## Testing Guidelines
+
+- Tests must be deterministic and reproducible
+- Avoid depending on external services (APIs, network)
+- Mock external dependencies when possible
+- Test both success and error paths
+- Keep tests isolated and independent
+- Use pytest fixtures for common setup (see `tests/conftest.py`)
+- Tests should run quickly (<30 seconds per test)
+- Validate security boundaries in sandbox tests
+
+## CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `rayai init <project>` | Initialize new agent project from templates |
+| `rayai create-agent <name> [--framework=...]` | Create agent (python/langchain/pydantic) |
+| `rayai up [--port=...] [--agents=...]` | Run agents with Ray Serve |
+| `rayai analytics [on\|off\|status]` | Manage anonymous usage analytics |
