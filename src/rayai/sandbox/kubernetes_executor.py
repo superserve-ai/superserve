@@ -251,11 +251,19 @@ with open('{SESSION_STATE_PATH}', 'wb') as f:
                     script_content = f.read()
 
                 # Execute in sandbox using the SDK
-                # The SDK's run() method executes commands and returns result
+                # Use base64 to write script to file, then execute
+                import base64
+
+                encoded_script = base64.b64encode(script_content.encode()).decode()
+
+                # Write script to temp file and execute it
+                # Using bash -c to properly handle the pipe
                 loop = asyncio.get_event_loop()
                 result = await loop.run_in_executor(
                     None,
-                    lambda: sandbox.run(f"python3 -c {repr(script_content)}"),
+                    lambda: sandbox.run(
+                        f"bash -c 'echo {encoded_script} | base64 -d > /tmp/script.py && python3 /tmp/script.py'"
+                    ),
                 )
 
                 stdout = result.stdout if hasattr(result, "stdout") else str(result)
