@@ -133,13 +133,27 @@ class KubernetesSandboxExecutor(SandboxBackend):
 
             logger.info(f"Session {self.session_id}: Creating Kubernetes sandbox")
 
+            # Check for router URL at runtime (set by deployment service)
+            # This allows in-cluster connectivity without kubectl port-forwarding
+            router_url = os.environ.get("RAYAI_SANDBOX_ROUTER_URL")
+
             # Create sandbox using template
-            # The SDK handles kubectl port-forwarding in dev mode
-            # or uses gateway in production mode
-            self.sandbox = SandboxClient(
-                template_name=self.template_name,
-                namespace=self.namespace,
-            )
+            # If router_url is set, use it for in-cluster connectivity
+            # Otherwise fall back to kubectl port-forwarding (dev mode)
+            if router_url:
+                logger.info(
+                    f"Session {self.session_id}: Using router URL: {router_url}"
+                )
+                self.sandbox = SandboxClient(
+                    template_name=self.template_name,
+                    namespace=self.namespace,
+                    router_url=router_url,
+                )
+            else:
+                self.sandbox = SandboxClient(
+                    template_name=self.template_name,
+                    namespace=self.namespace,
+                )
             # Enter the context manager to create the sandbox
             self.sandbox.__enter__()
 
