@@ -127,7 +127,9 @@ class PlatformClient:
                     error_data = {}
                 raise PlatformAPIError(
                     response.status_code,
-                    error_data.get("message", response.reason),
+                    error_data.get("detail")
+                    or error_data.get("message")
+                    or response.reason,
                     error_data.get("details"),
                 )
             return response
