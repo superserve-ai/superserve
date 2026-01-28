@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rayai"
 
-version = "0.1.10"
+version = "0.1.11"
 description = "Run agentic workloads on Ray"
 license = { file = "LICENSE" }
 readme = "README.md"
