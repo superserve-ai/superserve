@@ -352,6 +352,7 @@ def _create_agent_deployment(
                         headers={
                             "Cache-Control": "no-cache",
                             "Connection": "keep-alive",
+                            "X-Accel-Buffering": "no",  # Disable nginx buffering
                         },
                     )
 
@@ -370,6 +371,7 @@ def _create_agent_deployment(
                         headers={
                             "Cache-Control": "no-cache",
                             "Connection": "keep-alive",
+                            "X-Accel-Buffering": "no",  # Disable nginx buffering
                         },
                     )
 
