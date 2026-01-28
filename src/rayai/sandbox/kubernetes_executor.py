@@ -147,7 +147,7 @@ class KubernetesSandboxExecutor(SandboxBackend):
                 self.sandbox = SandboxClient(
                     template_name=self.template_name,
                     namespace=self.namespace,
-                    router_url=router_url,
+                    api_url=router_url,
                 )
             else:
                 self.sandbox = SandboxClient(
@@ -446,6 +446,28 @@ with open('{SESSION_STATE_PATH}', 'wb') as f:
             uptime=time.time() - self.created_at,
             container_status=sandbox_status,
         )
+
+    def prewarm(self) -> dict[str, str]:
+        """Pre-initialize the sandbox to reduce cold start latency.
+
+        This method eagerly creates the SandboxClient and claims a Kubernetes
+        sandbox from the warm pool. Call this during service initialization
+        to avoid delays on the first request.
+
+        Returns:
+            Dict with status and session_id
+        """
+        logger.info(f"Session {self.session_id}: Pre-warming Kubernetes sandbox")
+        try:
+            # This will create the SandboxClient and claim a sandbox
+            self._get_sandbox_client()
+            logger.info(f"Session {self.session_id}: Pre-warm complete")
+            return {"status": "ready", "session_id": self.session_id}
+        except Exception as e:
+            logger.error(
+                f"Session {self.session_id}: Pre-warm failed - {e}", exc_info=True
+            )
+            return {"status": "error", "error": str(e), "session_id": self.session_id}
 
     def cleanup(self) -> CleanupResult | CleanupError:
         """Cleanup sandbox resources."""
