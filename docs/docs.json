@@ -1,11 +1,11 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "RayAI Docs",
+  "name": "Superserve Docs",
   "colors": {
-    "primary": "#7c3aed",
-    "light": "#a78bfa",
-    "dark": "#5b21b6"
+    "primary": "#ffadad",
+    "light": "#ffc4c4",
+    "dark": "#e89999"
   },
   "favicon": "/favicon.svg",
   "navigation": {
@@ -52,12 +52,12 @@
       "anchors": [
         {
           "anchor": "GitHub",
-          "href": "https://github.com/rayai-labs/agentic-ray",
+          "href": "https://github.com/superserve-ai/agentic-ray",
           "icon": "code"
         },
         {
           "anchor": "Blog",
-          "href": "https://rayai.com/blog",
+          "href": "https://superserve.com/blog",
           "icon": "newspaper"
         }
       ]
@@ -71,13 +71,13 @@
     "links": [
       {
         "label": "Support",
-        "href": "mailto:hello@rayai.com"
+        "href": "mailto:hello@superserve.com"
       }
     ],
     "primary": {
       "type": "button",
       "label": "Get Started",
-      "href": "https://pypi.org/project/rayai/"
+      "href": "https://pypi.org/project/superserve/"
     }
   },
   "contextual": {

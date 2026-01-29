@@ -3,12 +3,12 @@ title: "Tools"
 description: "Run tools as distributed Ray tasks"
 ---
 
-The `@rayai.tool` decorator converts Python functions into async [Ray tasks](https://docs.ray.io/en/latest/ray-core/tasks.html) that execute across your cluster.
+The `@superserve.tool` decorator converts Python functions into async [Ray tasks](https://docs.ray.io/en/latest/ray-core/tasks.html) that execute across your cluster.
 
 ```python
-import rayai
+import superserve
 
-@rayai.tool(num_cpus=2, memory="4GB")
+@superserve.tool(num_cpus=2, memory="4GB")
 async def analyze_data(dataset: str) -> dict:
     """Analyze data with heavy computation."""
     # This runs as a Ray task with 2 CPUs and 4GB memory
@@ -18,7 +18,7 @@ async def analyze_data(dataset: str) -> dict:
 You can also import the decorator directly:
 
 ```python
-from rayai import tool
+from superserve import tool
 
 @tool(num_cpus=1)
 def search(query: str) -> str:
@@ -26,7 +26,7 @@ def search(query: str) -> str:
     return f"Results for: {query}"
 ```
 
-When you call a tool, RayAI:
+When you call a tool, Superserve:
 1. Submits the function as a Ray remote task
 2. Allocates the specified resources (CPUs, GPUs, memory)
 3. Returns an awaitable that resolves to the result
@@ -57,14 +57,14 @@ results = await asyncio.gather(
 
 ## Wrapping Framework Tools
 
-Use `rayai.tool()` as a wrapper to run framework tools on Ray:
+Use `superserve.tool()` as a wrapper to run framework tools on Ray:
 
 ```python
-import rayai
+import superserve
 from langchain_community.tools import DuckDuckGoSearchRun
 
 # Wrap a LangChain tool for Ray execution
-search = rayai.tool(DuckDuckGoSearchRun(), num_cpus=1)
+search = superserve.tool(DuckDuckGoSearchRun(), num_cpus=1)
 
 # Now it executes on Ray workers
 result = await search("Python tutorials")

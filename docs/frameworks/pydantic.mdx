@@ -12,25 +12,25 @@ description: "Build type-safe agents with Pydantic AI and distributed Ray tools"
 ## Create an agent
 
 ```bash
-rayai create-agent my_agent --framework pydantic
+superserve create-agent my_agent --framework pydantic
 ```
 
-## Define tools with `@rayai.tool`
+## Define tools with `@superserve.tool`
 
-Use `@rayai.tool` to create Ray-distributed tools that work directly with Pydantic AI:
+Use `@superserve.tool` to create Ray-distributed tools that work directly with Pydantic AI:
 
 ```python
-import rayai
+import superserve
 from pydantic_ai import Agent
 
 
-@rayai.tool(num_cpus=1)
+@superserve.tool(num_cpus=1)
 def search_web(query: str) -> str:
     """Search the web for information."""
     return f"Results for: {query}"
 
 
-@rayai.tool(num_cpus=2, memory="4GB")
+@superserve.tool(num_cpus=2, memory="4GB")
 def analyze_data(data: str) -> dict:
     """Analyze data with heavy computation."""
     return {"result": f"Analysis of {data}"}
@@ -44,21 +44,21 @@ def make_agent():
     )
 
 
-rayai.serve(make_agent, name="my-agent", num_cpus=1, memory="2GB")
+superserve.serve(make_agent, name="my-agent", num_cpus=1, memory="2GB")
 ```
 
 ## Wrap existing tools
 
-Use `rayai.tool()` as a wrapper for existing callables or framework tools:
+Use `superserve.tool()` as a wrapper for existing callables or framework tools:
 
 ```python
-import rayai
+import superserve
 from pydantic_ai import Agent
 from langchain_community.tools import DuckDuckGoSearchRun
 
 
 # Wrap a LangChain tool for Ray execution
-lc_search = rayai.tool(DuckDuckGoSearchRun(), num_cpus=1)
+lc_search = superserve.tool(DuckDuckGoSearchRun(), num_cpus=1)
 
 
 # Wrap a plain function
@@ -66,14 +66,14 @@ def calculate(a: int, b: int) -> int:
     """Add two numbers together."""
     return a + b
 
-ray_calculate = rayai.tool(calculate)
+ray_calculate = superserve.tool(calculate)
 
 
 def make_agent():
     return Agent("openai:gpt-4o-mini", tools=[lc_search, ray_calculate])
 
 
-rayai.serve(make_agent, name="calc-agent")
+superserve.serve(make_agent, name="calc-agent")
 ```
 
 ## Next steps

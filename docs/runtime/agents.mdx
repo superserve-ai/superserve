@@ -6,10 +6,10 @@ description: "Build custom agents that run as Ray Actors"
 The `Agent` base class lets you build custom agents without relying on an external framework.
 
 ```python
-import rayai
-from rayai import Agent
+import superserve
+from superserve import Agent
 
-@rayai.tool
+@superserve.tool
 def search(query: str) -> str:
     """Search the web."""
     return f"Results for {query}"
@@ -22,7 +22,7 @@ class MyAgent(Agent):
         return f"Found: {result}"
 
 # Serve with resources
-rayai.serve(MyAgent, name="my-agent", num_cpus=2, memory="4GB", replicas=3)
+superserve.serve(MyAgent, name="my-agent", num_cpus=2, memory="4GB", replicas=3)
 ```
 
 Each agent runs as a [Ray Actor](https://docs.ray.io/en/latest/ray-core/actors.html) with dedicated resources, enabling:
@@ -71,10 +71,10 @@ class MyAgent(Agent):
 
 ## Serving Agents
 
-Configure resources when serving with `rayai.serve()`:
+Configure resources when serving with `superserve.serve()`:
 
 ```python
-rayai.serve(
+superserve.serve(
     MyAgent,
     name="my-agent",
     num_cpus=2,
@@ -86,5 +86,5 @@ rayai.serve(
 See [Serving](/runtime/serving) for full options.
 
 <Info>
-For framework-based agents, pass your agent directly to `rayai.serve()` - no base class needed.
+For framework-based agents, pass your agent directly to `superserve.serve()` - no base class needed.
 </Info>

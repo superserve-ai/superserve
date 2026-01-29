@@ -1,3 +1,3 @@
 include README.md
 include LICENSE
-recursive-include src/rayai/cli/templates *
+recursive-include src/superserve/cli/templates *

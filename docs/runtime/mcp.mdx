@@ -3,21 +3,21 @@ title: "MCP Servers"
 description: "Deploy MCP servers as HTTP endpoints with Ray Serve"
 ---
 
-Use `rayai.serve_mcp()` to deploy [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) servers as scalable HTTP endpoints via Ray Serve.
+Use `superserve.serve_mcp()` to deploy [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) servers as scalable HTTP endpoints via Ray Serve.
 
 ## Quick Start
 
 Create a new MCP server:
 
 ```bash
-rayai create-mcp weather
+superserve create-mcp weather
 ```
 
 This creates `mcp_servers/weather/server.py`:
 
 ```python
 from mcp.server.fastmcp import FastMCP
-import rayai
+import superserve
 
 mcp = FastMCP("weather", stateless_http=True)
 
@@ -32,13 +32,13 @@ async def example_tool(query: str) -> str:
     return f"Processed: {query}"
 
 
-rayai.serve_mcp(mcp, name="weather")
+superserve.serve_mcp(mcp, name="weather")
 ```
 
 Run the server:
 
 ```bash
-rayai up
+superserve up
 ```
 
 Your MCP server is now available at `http://localhost:8000/weather/mcp`.
@@ -49,7 +49,7 @@ Define tools using FastMCP's `@mcp.tool()` decorator:
 
 ```python
 from mcp.server.fastmcp import FastMCP
-import rayai
+import superserve
 
 mcp = FastMCP("myserver", stateless_http=True)
 
@@ -75,7 +75,7 @@ async def add_numbers(a: int, b: int) -> int:
     return a + b
 
 
-rayai.serve_mcp(mcp, name="myserver")
+superserve.serve_mcp(mcp, name="myserver")
 ```
 
 ## Using MCP Servers with Agents
@@ -85,7 +85,7 @@ Here's an example using Pydantic AI:
 ```python
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPServerStreamableHTTP
-import rayai
+import superserve
 
 weather_server = MCPServerStreamableHTTP("http://localhost:8000/weather/mcp")
 
@@ -96,10 +96,10 @@ def make_agent():
         toolsets=[weather_server],
     )
 
-rayai.serve(make_agent, name="my_agent")
+superserve.serve(make_agent, name="my_agent")
 ```
 
-When you run `rayai up`, both the MCP server and agent start on the same port. The agent can then use tools from the MCP server.
+When you run `superserve up`, both the MCP server and agent start on the same port. The agent can then use tools from the MCP server.
 
 ## serve_mcp Options
 

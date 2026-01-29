@@ -12,15 +12,15 @@ description: "Get your first distributed agent running in minutes"
 ## Get started in four steps
 
 <Steps>
-<Step title="Install RayAI">
+<Step title="Install Superserve">
 
 ```bash
-pip install rayai
+pip install superserve
 ```
 
 For sandbox support (code execution):
 ```bash
-pip install rayai[sandbox]
+pip install superserve[sandbox]
 ```
 
 </Step>
@@ -28,7 +28,7 @@ pip install rayai[sandbox]
 <Step title="Create a project">
 
 ```bash
-rayai init my_project
+superserve init my_project
 cd my_project
 ```
 
@@ -42,7 +42,7 @@ This generates a project structure with:
 <Step title="Create an agent">
 
 ```bash
-rayai create-agent my_agent
+superserve create-agent my_agent
 ```
 
 Available frameworks: `python` (default), `langchain`, `pydantic` (more coming soon)
@@ -57,7 +57,7 @@ This creates `agents/my_agent/agent.py` with a template you can customize.
 
 Start the server:
 ```bash
-rayai up
+superserve up
 ```
 
 Test your agent:

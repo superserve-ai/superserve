@@ -3,7 +3,7 @@
 
 set -e
 
-CLUSTER_NAME="${CLUSTER_NAME:-rayai-sandbox}"
+CLUSTER_NAME="${CLUSTER_NAME:-superserve-sandbox}"
 AGENT_SANDBOX_VERSION="${AGENT_SANDBOX_VERSION:-v0.1.0}"
 
 echo "=== Setting up kind cluster for sandbox testing ==="
@@ -139,12 +139,12 @@ echo "  # Install the agent-sandbox Python client"
 echo '  pip install "git+https://github.com/kubernetes-sigs/agent-sandbox.git#subdirectory=clients/python/agentic-sandbox-client"'
 echo ""
 echo "  # Set environment variables"
-echo "  export RAYAI_SANDBOX_BACKEND=kubernetes"
-echo "  export RAYAI_SANDBOX_TEMPLATE=python-runtime-template"
-echo "  export RAYAI_SANDBOX_NAMESPACE=default"
+echo "  export SUPERSERVE_SANDBOX_BACKEND=kubernetes"
+echo "  export SUPERSERVE_SANDBOX_TEMPLATE=python-runtime-template"
+echo "  export SUPERSERVE_SANDBOX_NAMESPACE=default"
 echo ""
 echo "  # Run your agent"
-echo "  python -c 'from rayai.sandbox import execute_code; import ray; ray.init(); print(ray.get(execute_code.remote(\"print(1+1)\"))'"
+echo "  python -c 'from superserve.sandbox import execute_code; import ray; ray.init(); print(ray.get(execute_code.remote(\"print(1+1)\"))'"
 echo ""
 echo "To delete the cluster later:"
 echo "  kind delete cluster --name ${CLUSTER_NAME}"

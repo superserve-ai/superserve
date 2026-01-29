@@ -10,15 +10,15 @@ Instead of calling a tool 50 times (e.g., `web_search`, `grep`, `update_row`), t
 ## Usage
 
 ```python
-import rayai
-from rayai import BatchTool
+import superserve
+from superserve import BatchTool
 
-@rayai.tool
+@superserve.tool
 def lookup_topic(topic: str) -> str:
     """Look up information about a topic."""
     return f"Information about {topic}"
 
-@rayai.tool
+@superserve.tool
 def translate(text: str, target_lang: str) -> str:
     """Translate text to another language."""
     return f"Translated '{text}' to {target_lang}"
@@ -50,11 +50,11 @@ result = batch_tool(
 BatchTool returns a plain callable that works with any agent framework:
 
 ```python
-import rayai
-from rayai import BatchTool
+import superserve
+from superserve import BatchTool
 from pydantic_ai import Agent
 
-@rayai.tool
+@superserve.tool
 def search(query: str) -> str:
     """Search for information."""
     return f"Results for {query}"
@@ -64,7 +64,7 @@ batch_search = BatchTool(tools=[search], name="batch_search")
 def make_agent():
     return Agent("openai:gpt-4o-mini", tools=[batch_search])
 
-rayai.serve(make_agent, name="search-agent")
+superserve.serve(make_agent, name="search-agent")
 ```
 
 ## Input & Output

@@ -11,7 +11,7 @@ The sandbox module provides secure code execution through isolated Docker contai
 
 ```python
 import ray
-from rayai.sandbox import execute_code, execute_shell
+from superserve.sandbox import execute_code, execute_shell
 
 # Initialize Ray
 ray.init()
@@ -92,7 +92,7 @@ result = ray.get(execute_code.remote(
 Upload files directly to a session container:
 
 ```python
-from rayai.sandbox import upload_file
+from superserve.sandbox import upload_file
 
 # First create the session
 ray.get(execute_code.remote("x = 1", session_id="upload-session"))
@@ -111,7 +111,7 @@ result = ray.get(execute_code.remote(
 ## Session Management
 
 ```python
-from rayai.sandbox import get_session_stats, cleanup_session
+from superserve.sandbox import get_session_stats, cleanup_session
 
 # Get session statistics
 stats = ray.get(get_session_stats.remote("my-session"))
@@ -236,7 +236,7 @@ The sandbox requires Docker and the optional `sandbox` dependencies:
 
 ```bash
 # Install dependencies
-pip install rayai[sandbox]
+pip install superserve[sandbox]
 
 # Ensure Docker is running
 docker info

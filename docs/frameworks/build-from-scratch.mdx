@@ -13,17 +13,17 @@ description: "Build distributed agents from scratch with full control over execu
 ## Create an agent
 
 ```bash
-rayai create-agent my_agent
+superserve create-agent my_agent
 ```
 
-## The `@rayai.tool` decorator
+## The `@superserve.tool` decorator
 
 Define tools that execute on Ray workers:
 
 ```python
-import rayai
+import superserve
 
-@rayai.tool(num_cpus=1, memory="512MB")
+@superserve.tool(num_cpus=1, memory="512MB")
 def search_web(query: str) -> str:
     """Search the web for information."""
     return f"Results for: {query}"
@@ -37,10 +37,10 @@ result = await search_web(query="Python tutorials")
 Subclass `Agent` to create a custom agent:
 
 ```python
-import rayai
-from rayai import Agent
+import superserve
+from superserve import Agent
 
-@rayai.tool
+@superserve.tool
 def search(query: str) -> str:
     """Search for information."""
     return f"Results for: {query}"
@@ -53,7 +53,7 @@ class MyAgent(Agent):
         return f"Found: {result}"
 
 # Serve with resources
-rayai.serve(MyAgent, name="my-agent", num_cpus=2, memory="4GB", replicas=2)
+superserve.serve(MyAgent, name="my-agent", num_cpus=2, memory="4GB", replicas=2)
 ```
 
 ## Parallel tool execution

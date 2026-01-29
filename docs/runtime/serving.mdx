@@ -3,14 +3,14 @@ title: "Serving"
 description: "Deploy agents as HTTP endpoints with Ray Serve"
 ---
 
-Use `rayai.serve()` to deploy agents as HTTP endpoints via [Ray Serve](https://docs.ray.io/en/latest/serve/index.html):
+Use `superserve.serve()` to deploy agents as HTTP endpoints via [Ray Serve](https://docs.ray.io/en/latest/serve/index.html):
 
 ```python
-import rayai
-from rayai import Agent
+import superserve
+from superserve import Agent
 
 
-@rayai.tool(num_cpus=1)
+@superserve.tool(num_cpus=1)
 def search(query: str) -> str:
     """Search for information."""
     return f"Results for: {query}"
@@ -24,12 +24,12 @@ class MyAgent(Agent):
         return f"Found: {result}"
 
 
-rayai.serve(MyAgent, name="my-agent", num_cpus=1, memory="2GB")
+superserve.serve(MyAgent, name="my-agent", num_cpus=1, memory="2GB")
 ```
 
 Run with:
 ```bash
-rayai up
+superserve up
 ```
 
 ### Serve Options
@@ -97,12 +97,12 @@ Enable streaming by setting the `stream` parameter in your request.
 Streaming support depends on the agent framework. Most frameworks support both text and event streaming automatically.
 </Info>
 
-## CLI: rayai up
+## CLI: superserve up
 
-The `rayai up` command discovers and runs all agents and MCP servers in your project:
+The `superserve up` command discovers and runs all agents and MCP servers in your project:
 
 ```bash
-rayai up
+superserve up
 ```
 
 ```
@@ -118,13 +118,13 @@ Serving at http://localhost:8000
 It automatically:
 1. Imports all `agents/*/agent.py` files
 2. Imports all `mcp_servers/*/server.py` files
-3. Collects `rayai.serve()` and `rayai.serve_mcp()` registrations
+3. Collects `superserve.serve()` and `superserve.serve_mcp()` registrations
 4. Starts Ray Serve with everything on one port
 
 ### CLI Options
 
 ```bash
-rayai up [OPTIONS]
+superserve up [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -139,7 +139,7 @@ rayai up [OPTIONS]
 Ray Serve automatically load balances requests across replicas:
 
 ```python
-rayai.serve(
+superserve.serve(
     agent,
     name="high-throughput",
     num_cpus=1,
@@ -153,7 +153,7 @@ rayai.serve(
 For ML inference workloads, allocate GPUs per replica:
 
 ```python
-rayai.serve(
+superserve.serve(
     agent,
     name="ml-agent",
     num_gpus=1,
