@@ -525,12 +525,20 @@ class _AgentRunner:
                     if isinstance(args, bytes):
                         try:
                             args = json.loads(args.decode())
-                        except (json.JSONDecodeError, UnicodeDecodeError):
+                        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                            print(
+                                f"Warning: Failed to decode tool call args from bytes: {e}",
+                                file=sys.stderr,
+                            )
                             args = {}
                     elif isinstance(args, str):
                         try:
                             args = json.loads(args)
-                        except json.JSONDecodeError:
+                        except json.JSONDecodeError as e:
+                            print(
+                                f"Warning: Failed to parse tool call args as JSON: {e}",
+                                file=sys.stderr,
+                            )
                             args = {"input": args}
                     yield {
                         "type": "tool_call",
