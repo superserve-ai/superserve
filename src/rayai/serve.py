@@ -446,7 +446,8 @@ class _AgentRunner:
     def supports_event_streaming(self) -> bool:
         """Check if the agent supports event streaming."""
         if self.agent_type == "pydantic_ai":
-            return hasattr(self.agent, "run_stream_events")
+            # pydantic_ai uses run_stream() for both text and event streaming
+            return hasattr(self.agent, "run_stream")
         elif self.agent_type == "langchain":
             return hasattr(self.agent, "astream_events")
         elif self.agent_type == "rayai":
@@ -508,50 +509,48 @@ class _AgentRunner:
             yield chunk
 
     async def _stream_events_pydantic_ai(self, query: str):
-        """Stream events from a Pydantic AI agent using run_stream_events()."""
-        async for event in self.agent.run_stream_events(query):
-            event_name = type(event).__name__
+        """Stream events from a Pydantic AI agent using run_stream().
 
-            if event_name == "FunctionToolCallEvent":
-                part = event.part
-                args = getattr(part, "args", {})
-                if isinstance(args, bytes):
-                    try:
-                        args = json.loads(args.decode())
-                    except (json.JSONDecodeError, UnicodeDecodeError):
-                        args = {}
-                elif isinstance(args, str):
-                    try:
-                        args = json.loads(args)
-                    except json.JSONDecodeError:
-                        args = {"input": args}
-                yield {
-                    "type": "tool_call",
-                    "tool": getattr(part, "tool_name", "unknown"),
-                    "input": args,
-                }
+        pydantic_ai uses run_stream() as a context manager that yields events
+        via the streaming result's methods.
+        """
+        async with self.agent.run_stream(query) as result:
+            # Iterate over all streaming events
+            async for event in result.stream():
+                event_name = type(event).__name__
 
-            elif event_name == "FunctionToolResultEvent":
-                # Tool returned a result
-                result = getattr(event, "result", None)
-                tool_name = (
-                    getattr(result, "tool_name", "unknown") if result else "unknown"
-                )
-                content = getattr(result, "content", "") if result else str(event)
-                yield {
-                    "type": "tool_result",
-                    "tool": tool_name,
-                    "output": str(content),
-                }
+                # Handle tool call parts
+                if event_name == "ToolCallPart":
+                    args = getattr(event, "args", {})
+                    if isinstance(args, bytes):
+                        try:
+                            args = json.loads(args.decode())
+                        except (json.JSONDecodeError, UnicodeDecodeError):
+                            args = {}
+                    elif isinstance(args, str):
+                        try:
+                            args = json.loads(args)
+                        except json.JSONDecodeError:
+                            args = {"input": args}
+                    yield {
+                        "type": "tool_call",
+                        "tool": getattr(event, "tool_name", "unknown"),
+                        "input": args,
+                    }
 
-            elif event_name == "PartDeltaEvent":
-                delta = getattr(event, "delta", None)
-                if delta:
-                    delta_type = type(delta).__name__
-                    if delta_type == "TextPartDelta":
-                        content = getattr(delta, "content_delta", "")
-                        if content:
-                            yield {"type": "text", "content": content}
+                # Handle tool return parts
+                elif event_name == "ToolReturnPart":
+                    yield {
+                        "type": "tool_result",
+                        "tool": getattr(event, "tool_name", "unknown"),
+                        "output": str(getattr(event, "content", "")),
+                    }
+
+                # Handle text parts
+                elif event_name == "TextPart":
+                    content = getattr(event, "content", "")
+                    if content:
+                        yield {"type": "text", "content": content}
 
     async def _stream_events_langchain(self, query: str):
         """Stream events from a LangChain agent."""
