@@ -39,3 +39,4 @@ blog_draft*.md
 # claude
 devcontainer.json
 .claude/
+*.zip
