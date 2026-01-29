@@ -11,7 +11,7 @@ The goal is to make tool-heavy or multi-agent systems easy to scale across CPUs/
 ## Architecture Overview
 
 - **Ray-based Distribution**: Tool calls are executed as Ray tasks/actors, enabling automatic scaling and resource management
-- **Framework Agnostic**: Works with any agent framework (Pydantic AI, LangChain, Agno) via unified `@rayai.tool` decorator
+- **Framework Agnostic**: Works with any agent framework (Pydantic AI, LangChain, Agno) via unified `@superserve.tool` decorator
 - **Sandbox Execution**: Secure code execution using Docker with gVisor runtime for isolation
 - **MCP Integration**: Model Context Protocol support for structured tool communication
 - **CLI Tools**: Command-line interface for agent creation, deployment, and management
@@ -19,11 +19,11 @@ The goal is to make tool-heavy or multi-agent systems easy to scale across CPUs/
 ## Core API
 
 ```python
-import rayai
+import superserve
 from pydantic_ai import Agent
 
 # Unified tool decorator - works with any framework
-@rayai.tool(num_cpus=1)
+@superserve.tool(num_cpus=1)
 def search(query: str) -> str:
     """Search the web."""
     return f"Results for {query}"
@@ -32,21 +32,21 @@ def search(query: str) -> str:
 agent = Agent("openai:gpt-4", tools=[search])
 
 # Serve via HTTP with Ray Serve
-rayai.serve(agent, name="myagent", num_cpus=1, memory="2GB")
+superserve.serve(agent, name="myagent", num_cpus=1, memory="2GB")
 ```
 
-Run with `rayai up` or `python agents/myagent/agent.py`.
+Run with `superserve up` or `python agents/myagent/agent.py`.
 
 ## Key Concepts
 
 - A "tool call" maps to a Ray task/actor, enabling distributed execution
-- `@rayai.tool` works as both decorator and wrapper for framework tools (LangChain, Pydantic AI, Agno)
+- `@superserve.tool` works as both decorator and wrapper for framework tools (LangChain, Pydantic AI, Agno)
 - Resource requirements can be specified via decorator args or docstring `ray:` blocks
-- `rayai.serve()` auto-detects agent framework and creates HTTP endpoints
+- `superserve.serve()` auto-detects agent framework and creates HTTP endpoints
 - Code execution happens inside controlled Docker sandboxes with gVisor for security isolation
 - The repo is framework-agnostic; avoid coupling to any single agent architecture
 - Sandbox executor manages Docker containers with resource limits, timeouts, and network isolation
-- Tools decorated with `@tool` have `_rayai_tool`, `_remote_func`, `_tool_metadata`, and `_original_func` attributes
+- Tools decorated with `@tool` have `_superserve_tool`, `_remote_func`, `_tool_metadata`, and `_original_func` attributes
 - Tool execution must remain serializable because Ray will ship tasks to workers
 
 ## Technology Stack
@@ -63,11 +63,11 @@ Run with `rayai up` or `python agents/myagent/agent.py`.
 ## Project Structure
 
 ```
-src/rayai/           Core runtime implementation
+src/superserve/           Core runtime implementation
 ├── base.py          Core protocols and interfaces (AgentProtocol)
 ├── decorators.py    Unified @tool decorator for Ray-distributed execution
-├── serve.py         rayai.serve() function for serving agents via HTTP
-├── agent_base.py    rayai.Agent base class for custom agents
+├── serve.py         superserve.serve() function for serving agents via HTTP
+├── agent_base.py    superserve.Agent base class for custom agents
 ├── batch.py         Generic BatchTool for parallel execution
 ├── deployment.py    Ray Serve deployment utilities with streaming support
 ├── resource_loader.py  Memory parsing utilities
@@ -78,8 +78,8 @@ src/rayai/           Core runtime implementation
 │   ├── commands/    Individual command implementations
 │   │   ├── init.py        Initialize new project from templates
 │   │   ├── create_agent.py Create agent from template
-│   │   ├── up.py          Run all agents with rayai up
-│   │   └── analytics.py   rayai analytics subcommands
+│   │   ├── up.py          Run all agents with superserve up
+│   │   └── analytics.py   superserve analytics subcommands
 │   └── templates/   Project and agent templates
 └── sandbox/         Secure code execution
     ├── executor.py  CodeInterpreterExecutor Ray Actor
@@ -134,7 +134,7 @@ scripts/             Developer/cluster helper scripts (gVisor setup)
 - Keep functions focused and single-purpose
 - Use descriptive variable names over comments
 - Avoid deep nesting; extract helper functions when necessary
-- Use `@rayai.tool` decorator for all tool definitions
+- Use `@superserve.tool` decorator for all tool definitions
 - Ensure tool functions are serializable for Ray
 
 ### Error Handling
@@ -178,10 +178,10 @@ scripts/             Developer/cluster helper scripts (gVisor setup)
 
 | Command | Description |
 |---------|-------------|
-| `rayai init <project>` | Initialize new agent project from templates |
-| `rayai create-agent <name> [--framework=...]` | Create agent (python/langchain/pydantic) |
-| `rayai up [--port=...] [--agents=...]` | Run agents with Ray Serve |
-| `rayai analytics [on\|off\|status]` | Manage anonymous usage analytics |
+| `superserve init <project>` | Initialize new agent project from templates |
+| `superserve create-agent <name> [--framework=...]` | Create agent (python/langchain/pydantic) |
+| `superserve up [--port=...] [--agents=...]` | Run agents with Ray Serve |
+| `superserve analytics [on\|off\|status]` | Manage anonymous usage analytics |
 
 ## Git Commit Guidelines
 

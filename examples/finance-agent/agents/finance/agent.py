@@ -7,7 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic_ai import Agent
 
-import rayai
+import superserve
 
 # Load .env from example directory
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
@@ -59,4 +59,4 @@ def make_agent():
 
 
 # Serve the agent with Ray Serve
-rayai.serve(make_agent, name="finance", num_cpus=1, memory="1GB")
+superserve.serve(make_agent, name="finance", num_cpus=1, memory="1GB")

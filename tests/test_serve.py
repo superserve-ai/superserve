@@ -1,12 +1,12 @@
-"""Tests for rayai.serve() functionality."""
+"""Tests for superserve.serve() functionality."""
 
 import pytest
 
-from rayai.serve import (
+from superserve.serve import (
     AgentConfig,
     clear_registered_agents,
     get_registered_agents,
-    set_rayai_up_mode,
+    set_superserve_up_mode,
 )
 
 
@@ -14,10 +14,10 @@ from rayai.serve import (
 def reset_serve_state():
     """Reset serve module state before each test."""
     clear_registered_agents()
-    set_rayai_up_mode(False)
+    set_superserve_up_mode(False)
     yield
     clear_registered_agents()
-    set_rayai_up_mode(False)
+    set_superserve_up_mode(False)
 
 
 class TestAgentConfig:
@@ -44,11 +44,11 @@ class TestAgentConfig:
 class TestServeRegistration:
     """Tests for serve() registration behavior."""
 
-    def test_rayai_up_mode_registration(self):
-        """In rayai up mode, serve() registers agents."""
-        from rayai.serve import serve
+    def test_superserve_up_mode_registration(self):
+        """In superserve up mode, serve() registers agents."""
+        from superserve.serve import serve
 
-        set_rayai_up_mode(True)
+        set_superserve_up_mode(True)
 
         class DummyAgent:
             async def run(self, query: str) -> str:
@@ -62,9 +62,9 @@ class TestServeRegistration:
 
     def test_multiple_registrations(self):
         """Multiple agents can be registered."""
-        from rayai.serve import serve
+        from superserve.serve import serve
 
-        set_rayai_up_mode(True)
+        set_superserve_up_mode(True)
 
         serve(lambda x: x, name="agent1")
         serve(lambda x: x, name="agent2")
@@ -79,9 +79,9 @@ class TestServeRegistration:
 
     def test_default_resources(self):
         """Default resource configuration."""
-        from rayai.serve import serve
+        from superserve.serve import serve
 
-        set_rayai_up_mode(True)
+        set_superserve_up_mode(True)
         serve(lambda x: x, name="default")
 
         config = get_registered_agents()[0]
@@ -92,9 +92,9 @@ class TestServeRegistration:
 
     def test_custom_resources(self):
         """Custom resource configuration."""
-        from rayai.serve import serve
+        from superserve.serve import serve
 
-        set_rayai_up_mode(True)
+        set_superserve_up_mode(True)
         serve(
             lambda x: x,
             name="custom",
@@ -112,9 +112,9 @@ class TestServeRegistration:
 
     def test_route_prefix_default(self):
         """Default route prefix uses agent name."""
-        from rayai.serve import serve
+        from superserve.serve import serve
 
-        set_rayai_up_mode(True)
+        set_superserve_up_mode(True)
         serve(lambda x: x, name="myagent")
 
         config = get_registered_agents()[0]
@@ -122,9 +122,9 @@ class TestServeRegistration:
 
     def test_route_prefix_custom(self):
         """Custom route prefix."""
-        from rayai.serve import serve
+        from superserve.serve import serve
 
-        set_rayai_up_mode(True)
+        set_superserve_up_mode(True)
         serve(lambda x: x, name="myagent", route_prefix="/custom/path")
 
         config = get_registered_agents()[0]
@@ -132,9 +132,9 @@ class TestServeRegistration:
 
     def test_clear_registered_agents(self):
         """Clear registered agents."""
-        from rayai.serve import serve
+        from superserve.serve import serve
 
-        set_rayai_up_mode(True)
+        set_superserve_up_mode(True)
         serve(lambda x: x, name="agent1")
         serve(lambda x: x, name="agent2")
 
@@ -149,7 +149,7 @@ class TestAgentTypeDetection:
 
     def test_callable_detection(self):
         """Callable agents are detected."""
-        from rayai.serve import _AgentRunner
+        from superserve.serve import _AgentRunner
 
         def my_func(x):
             return x
@@ -157,14 +157,14 @@ class TestAgentTypeDetection:
         runner = _AgentRunner(my_func)
         assert runner.agent_type == "callable"
 
-    def test_rayai_agent_detection(self):
-        """RayAI Agent base class is detected."""
-        from rayai import Agent
-        from rayai.serve import _AgentRunner
+    def test_superserve_agent_detection(self):
+        """Superserve Agent base class is detected."""
+        from superserve import Agent
+        from superserve.serve import _AgentRunner
 
         class MyAgent(Agent):
             async def run(self, query: str) -> str:
                 return query
 
         runner = _AgentRunner(MyAgent())
-        assert runner.agent_type == "rayai"
+        assert runner.agent_type == "superserve"

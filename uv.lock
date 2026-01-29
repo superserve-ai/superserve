@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -1782,68 +1782,6 @@ serve = [
 ]
 
 [[package]]
-name = "rayai"
-version = "0.1.12"
-source = { editable = "." }
-dependencies = [
-    { name = "anyio" },
-    { name = "click" },
-    { name = "fastapi" },
-    { name = "langchain" },
-    { name = "langchain-openai" },
-    { name = "langgraph" },
-    { name = "openai" },
-    { name = "posthog" },
-    { name = "pydantic-ai-slim", extra = ["openai"] },
-    { name = "python-dotenv" },
-    { name = "ray", extra = ["serve"] },
-]
-
-[package.optional-dependencies]
-sandbox = [
-    { name = "docker" },
-    { name = "requests" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "black" },
-    { name = "docker" },
-    { name = "mypy" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anyio", specifier = ">=4.0" },
-    { name = "click", specifier = ">=8.0.0" },
-    { name = "docker", marker = "extra == 'sandbox'", specifier = ">=7.0.0" },
-    { name = "fastapi", specifier = ">=0.100.0" },
-    { name = "langchain", specifier = ">=1.0.0" },
-    { name = "langchain-openai", specifier = ">=1.0.0" },
-    { name = "langgraph", specifier = ">=0.6.10" },
-    { name = "openai", specifier = ">=1.0.0" },
-    { name = "posthog", specifier = ">=3.0.0" },
-    { name = "pydantic-ai-slim", extras = ["openai"], specifier = ">=1.42.0" },
-    { name = "python-dotenv", specifier = ">=1.0.0" },
-    { name = "ray", extras = ["serve"] },
-    { name = "requests", marker = "extra == 'sandbox'", specifier = ">=2.31.0" },
-]
-provides-extras = ["sandbox"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "black", specifier = ">=25.9.0" },
-    { name = "docker", specifier = ">=7.0.0" },
-    { name = "mypy", specifier = ">=1.18.2" },
-    { name = "pre-commit", specifier = ">=4.3.0" },
-    { name = "pytest", specifier = ">=8.4.2" },
-    { name = "ruff", specifier = ">=0.14.0" },
-]
-
-[[package]]
 name = "referencing"
 version = "0.36.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2122,6 +2060,68 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/de/1a/608df0b10b53b0beb96a37854ee05864d182ddd4b1156a22f1ad3860425a/starlette-0.49.3.tar.gz", hash = "sha256:1c14546f299b5901a1ea0e34410575bc33bbd741377a10484a54445588d00284", size = 2655031, upload-time = "2025-11-01T15:12:26.13Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a3/e0/021c772d6a662f43b63044ab481dc6ac7592447605b5b35a957785363122/starlette-0.49.3-py3-none-any.whl", hash = "sha256:b579b99715fdc2980cf88c8ec96d3bf1ce16f5a8051a7c2b84ef9b1cdecaea2f", size = 74340, upload-time = "2025-11-01T15:12:24.387Z" },
+]
+
+[[package]]
+name = "superserve"
+version = "0.1.11"
+source = { editable = "." }
+dependencies = [
+    { name = "anyio" },
+    { name = "click" },
+    { name = "fastapi" },
+    { name = "langchain" },
+    { name = "langchain-openai" },
+    { name = "langgraph" },
+    { name = "openai" },
+    { name = "posthog" },
+    { name = "pydantic-ai-slim", extra = ["openai"] },
+    { name = "python-dotenv" },
+    { name = "ray", extra = ["serve"] },
+]
+
+[package.optional-dependencies]
+sandbox = [
+    { name = "docker" },
+    { name = "requests" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "black" },
+    { name = "docker" },
+    { name = "mypy" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anyio", specifier = ">=4.0" },
+    { name = "click", specifier = ">=8.0.0" },
+    { name = "docker", marker = "extra == 'sandbox'", specifier = ">=7.0.0" },
+    { name = "fastapi", specifier = ">=0.100.0" },
+    { name = "langchain", specifier = ">=1.0.0" },
+    { name = "langchain-openai", specifier = ">=1.0.0" },
+    { name = "langgraph", specifier = ">=0.6.10" },
+    { name = "openai", specifier = ">=1.0.0" },
+    { name = "posthog", specifier = ">=3.0.0" },
+    { name = "pydantic-ai-slim", extras = ["openai"], specifier = ">=1.42.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "ray", extras = ["serve"] },
+    { name = "requests", marker = "extra == 'sandbox'", specifier = ">=2.31.0" },
+]
+provides-extras = ["sandbox"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "black", specifier = ">=25.9.0" },
+    { name = "docker", specifier = ">=7.0.0" },
+    { name = "mypy", specifier = ">=1.18.2" },
+    { name = "pre-commit", specifier = ">=4.3.0" },
+    { name = "pytest", specifier = ">=8.4.2" },
+    { name = "ruff", specifier = ">=0.14.0" },
 ]
 
 [[package]]

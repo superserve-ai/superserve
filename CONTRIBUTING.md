@@ -43,7 +43,7 @@ Thank you for your interest in contributing to Agentic-Ray! We welcome contribut
 
 ### Reporting Bugs
 
-- Check existing [issues](https://github.com/rayai-labs/agentic-ray/issues) to avoid duplicates
+- Check existing [issues](https://github.com/superserve-ai/agentic-ray/issues) to avoid duplicates
 - Use a clear, descriptive title
 - Include steps to reproduce the issue
 - Provide relevant environment details (OS, Python version, etc.)
@@ -76,7 +76,7 @@ Thank you for your interest in contributing to Agentic-Ray! We welcome contribut
 
 5. Run type checking:
    ```bash
-   uv run mypy src/rayai
+   uv run mypy src/superserve
    ```
 
 6. Commit with a clear message:

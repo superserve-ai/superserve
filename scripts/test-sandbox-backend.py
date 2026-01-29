@@ -6,10 +6,10 @@ Usage:
     python scripts/test-sandbox-backend.py
 
     # Force Docker backend
-    RAYAI_SANDBOX_BACKEND=docker python scripts/test-sandbox-backend.py
+    SUPERSERVE_SANDBOX_BACKEND=docker python scripts/test-sandbox-backend.py
 
     # Force Kubernetes backend (requires kind cluster setup)
-    RAYAI_SANDBOX_BACKEND=kubernetes python scripts/test-sandbox-backend.py
+    SUPERSERVE_SANDBOX_BACKEND=kubernetes python scripts/test-sandbox-backend.py
 """
 
 import os
@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 def main():
     import ray
 
-    from rayai.sandbox import (
+    from superserve.sandbox import (
         cleanup_session,
         execute_code,
         execute_shell,

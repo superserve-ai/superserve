@@ -1,4 +1,4 @@
-"""Tests for rayai deploy CLI commands."""
+"""Tests for superserve deploy CLI commands."""
 
 import json
 from unittest.mock import MagicMock, patch
@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from rayai.cli.cli import cli
-from rayai.cli.platform.types import (
+from superserve.cli.cli import cli
+from superserve.cli.platform.types import (
     Credentials,
     DeviceCodeResponse,
     LogEntry,
@@ -28,16 +28,16 @@ def mock_credentials():
 
 
 class TestLoginCommand:
-    """Tests for rayai login command."""
+    """Tests for superserve login command."""
 
     def test_login_with_api_key(self, runner):
         """Login with API key stores credentials."""
-        with patch("rayai.cli.commands.login.PlatformClient") as mock_client_cls:
+        with patch("superserve.cli.commands.login.PlatformClient") as mock_client_cls:
             mock_client = MagicMock()
             mock_client.validate_token.return_value = True
             mock_client_cls.return_value = mock_client
 
-            with patch("rayai.cli.commands.login.save_credentials") as mock_save:
+            with patch("superserve.cli.commands.login.save_credentials") as mock_save:
                 result = runner.invoke(cli, ["login", "--api-key", "test-key-123"])
 
                 assert result.exit_code == 0
@@ -46,7 +46,7 @@ class TestLoginCommand:
 
     def test_login_with_invalid_api_key(self, runner):
         """Login with invalid API key fails."""
-        with patch("rayai.cli.commands.login.PlatformClient") as mock_client_cls:
+        with patch("superserve.cli.commands.login.PlatformClient") as mock_client_cls:
             mock_client = MagicMock()
             mock_client.validate_token.return_value = False
             mock_client_cls.return_value = mock_client
@@ -58,13 +58,13 @@ class TestLoginCommand:
 
     def test_login_device_flow(self, runner):
         """Login with device flow."""
-        with patch("rayai.cli.commands.login.PlatformClient") as mock_client_cls:
+        with patch("superserve.cli.commands.login.PlatformClient") as mock_client_cls:
             mock_client = MagicMock()
             mock_client.get_device_code.return_value = DeviceCodeResponse(
                 device_code="device-123",
                 user_code="ABCD-1234",
-                verification_uri="https://rayai.com/auth",
-                verification_uri_complete="https://rayai.com/auth?code=ABCD-1234",
+                verification_uri="https://superserve.com/auth",
+                verification_uri_complete="https://superserve.com/auth?code=ABCD-1234",
                 expires_in=900,
                 interval=1,
             )
@@ -73,8 +73,8 @@ class TestLoginCommand:
             )
             mock_client_cls.return_value = mock_client
 
-            with patch("rayai.cli.commands.login.save_credentials"):
-                with patch("rayai.cli.commands.login.webbrowser"):
+            with patch("superserve.cli.commands.login.save_credentials"):
+                with patch("superserve.cli.commands.login.webbrowser"):
                     result = runner.invoke(cli, ["login"])
 
                     assert result.exit_code == 0
@@ -82,11 +82,13 @@ class TestLoginCommand:
 
 
 class TestStatusCommand:
-    """Tests for rayai status command."""
+    """Tests for superserve status command."""
 
     def test_status_not_authenticated(self, runner):
         """Status command requires authentication."""
-        with patch("rayai.cli.commands.status.is_authenticated", return_value=False):
+        with patch(
+            "superserve.cli.commands.status.is_authenticated", return_value=False
+        ):
             result = runner.invoke(cli, ["status"])
 
             assert result.exit_code == 1
@@ -94,15 +96,19 @@ class TestStatusCommand:
 
     def test_status_list_projects(self, runner):
         """Status command lists projects."""
-        with patch("rayai.cli.commands.status.is_authenticated", return_value=True):
-            with patch("rayai.cli.commands.status.PlatformClient") as mock_client_cls:
+        with patch(
+            "superserve.cli.commands.status.is_authenticated", return_value=True
+        ):
+            with patch(
+                "superserve.cli.commands.status.PlatformClient"
+            ) as mock_client_cls:
                 mock_client = MagicMock()
                 mock_client.list_projects.return_value = [
                     ProjectResponse(
                         id="deploy-1",
                         name="myapp",
                         status="running",
-                        url="https://myapp.rayai.com",
+                        url="https://myapp.superserve.com",
                         created_at="2025-01-01T00:00:00Z",
                     ),
                     ProjectResponse(
@@ -123,14 +129,18 @@ class TestStatusCommand:
 
     def test_status_specific_project(self, runner):
         """Status command for specific project."""
-        with patch("rayai.cli.commands.status.is_authenticated", return_value=True):
-            with patch("rayai.cli.commands.status.PlatformClient") as mock_client_cls:
+        with patch(
+            "superserve.cli.commands.status.is_authenticated", return_value=True
+        ):
+            with patch(
+                "superserve.cli.commands.status.PlatformClient"
+            ) as mock_client_cls:
                 mock_client = MagicMock()
                 mock_client.get_project.return_value = ProjectResponse(
                     id="deploy-1",
                     name="myapp",
                     status="running",
-                    url="https://myapp.rayai.com",
+                    url="https://myapp.superserve.com",
                 )
                 mock_client_cls.return_value = mock_client
 
@@ -142,8 +152,12 @@ class TestStatusCommand:
 
     def test_status_json_output(self, runner):
         """Status command with JSON output."""
-        with patch("rayai.cli.commands.status.is_authenticated", return_value=True):
-            with patch("rayai.cli.commands.status.PlatformClient") as mock_client_cls:
+        with patch(
+            "superserve.cli.commands.status.is_authenticated", return_value=True
+        ):
+            with patch(
+                "superserve.cli.commands.status.PlatformClient"
+            ) as mock_client_cls:
                 mock_client = MagicMock()
                 mock_client.get_project.return_value = ProjectResponse(
                     id="deploy-1",
@@ -164,11 +178,11 @@ class TestStatusCommand:
 
 
 class TestLogsCommand:
-    """Tests for rayai logs command."""
+    """Tests for superserve logs command."""
 
     def test_logs_not_authenticated(self, runner):
         """Logs command requires authentication."""
-        with patch("rayai.cli.commands.logs.is_authenticated", return_value=False):
+        with patch("superserve.cli.commands.logs.is_authenticated", return_value=False):
             result = runner.invoke(cli, ["logs", "myapp"])
 
             assert result.exit_code == 1
@@ -176,8 +190,10 @@ class TestLogsCommand:
 
     def test_logs_basic(self, runner):
         """Logs command retrieves logs."""
-        with patch("rayai.cli.commands.logs.is_authenticated", return_value=True):
-            with patch("rayai.cli.commands.logs.PlatformClient") as mock_client_cls:
+        with patch("superserve.cli.commands.logs.is_authenticated", return_value=True):
+            with patch(
+                "superserve.cli.commands.logs.PlatformClient"
+            ) as mock_client_cls:
                 mock_client = MagicMock()
                 mock_client.get_logs.return_value = [
                     LogEntry(
@@ -203,8 +219,10 @@ class TestLogsCommand:
 
     def test_logs_with_tail(self, runner):
         """Logs command with --tail option."""
-        with patch("rayai.cli.commands.logs.is_authenticated", return_value=True):
-            with patch("rayai.cli.commands.logs.PlatformClient") as mock_client_cls:
+        with patch("superserve.cli.commands.logs.is_authenticated", return_value=True):
+            with patch(
+                "superserve.cli.commands.logs.PlatformClient"
+            ) as mock_client_cls:
                 mock_client = MagicMock()
                 mock_client.get_logs.return_value = []
                 mock_client_cls.return_value = mock_client
@@ -217,8 +235,10 @@ class TestLogsCommand:
 
     def test_logs_with_agent_filter(self, runner):
         """Logs command with --agent filter."""
-        with patch("rayai.cli.commands.logs.is_authenticated", return_value=True):
-            with patch("rayai.cli.commands.logs.PlatformClient") as mock_client_cls:
+        with patch("superserve.cli.commands.logs.is_authenticated", return_value=True):
+            with patch(
+                "superserve.cli.commands.logs.PlatformClient"
+            ) as mock_client_cls:
                 mock_client = MagicMock()
                 mock_client.get_logs.return_value = []
                 mock_client_cls.return_value = mock_client
@@ -231,11 +251,13 @@ class TestLogsCommand:
 
 
 class TestDeleteCommand:
-    """Tests for rayai delete command."""
+    """Tests for superserve delete command."""
 
     def test_delete_not_authenticated(self, runner):
         """Delete command requires authentication."""
-        with patch("rayai.cli.commands.delete.is_authenticated", return_value=False):
+        with patch(
+            "superserve.cli.commands.delete.is_authenticated", return_value=False
+        ):
             result = runner.invoke(cli, ["delete", "myapp"])
 
             assert result.exit_code == 1
@@ -243,8 +265,12 @@ class TestDeleteCommand:
 
     def test_delete_with_confirmation(self, runner):
         """Delete command with confirmation."""
-        with patch("rayai.cli.commands.delete.is_authenticated", return_value=True):
-            with patch("rayai.cli.commands.delete.PlatformClient") as mock_client_cls:
+        with patch(
+            "superserve.cli.commands.delete.is_authenticated", return_value=True
+        ):
+            with patch(
+                "superserve.cli.commands.delete.PlatformClient"
+            ) as mock_client_cls:
                 mock_client = MagicMock()
                 mock_client_cls.return_value = mock_client
 
@@ -257,8 +283,12 @@ class TestDeleteCommand:
 
     def test_delete_cancelled(self, runner):
         """Delete command cancelled by user."""
-        with patch("rayai.cli.commands.delete.is_authenticated", return_value=True):
-            with patch("rayai.cli.commands.delete.PlatformClient") as mock_client_cls:
+        with patch(
+            "superserve.cli.commands.delete.is_authenticated", return_value=True
+        ):
+            with patch(
+                "superserve.cli.commands.delete.PlatformClient"
+            ) as mock_client_cls:
                 mock_client = MagicMock()
                 mock_client_cls.return_value = mock_client
 
@@ -272,8 +302,12 @@ class TestDeleteCommand:
 
     def test_delete_with_force(self, runner):
         """Delete command with --force skips confirmation."""
-        with patch("rayai.cli.commands.delete.is_authenticated", return_value=True):
-            with patch("rayai.cli.commands.delete.PlatformClient") as mock_client_cls:
+        with patch(
+            "superserve.cli.commands.delete.is_authenticated", return_value=True
+        ):
+            with patch(
+                "superserve.cli.commands.delete.PlatformClient"
+            ) as mock_client_cls:
                 mock_client = MagicMock()
                 mock_client_cls.return_value = mock_client
 
@@ -284,11 +318,13 @@ class TestDeleteCommand:
 
 
 class TestDeployCommand:
-    """Tests for rayai deploy command."""
+    """Tests for superserve deploy command."""
 
     def test_deploy_not_authenticated(self, runner):
         """Deploy command requires authentication."""
-        with patch("rayai.cli.commands.deploy.is_authenticated", return_value=False):
+        with patch(
+            "superserve.cli.commands.deploy.is_authenticated", return_value=False
+        ):
             result = runner.invoke(cli, ["deploy"])
 
             assert result.exit_code == 1
@@ -296,8 +332,12 @@ class TestDeployCommand:
 
     def test_deploy_missing_agents_dir(self, runner, tmp_path):
         """Deploy command with no agents or MCP servers directory."""
-        with patch("rayai.cli.commands.deploy.is_authenticated", return_value=True):
-            with patch("rayai.cli.commands.deploy.PlatformClient") as mock_client_cls:
+        with patch(
+            "superserve.cli.commands.deploy.is_authenticated", return_value=True
+        ):
+            with patch(
+                "superserve.cli.commands.deploy.PlatformClient"
+            ) as mock_client_cls:
                 mock_client_cls.return_value.validate_token.return_value = True
                 result = runner.invoke(cli, ["deploy", str(tmp_path)])
 
@@ -310,12 +350,19 @@ class TestDeployCommand:
         (tmp_path / "agents").mkdir()
         (tmp_path / "mcp_servers").mkdir()
 
-        with patch("rayai.cli.commands.deploy.is_authenticated", return_value=True):
-            with patch("rayai.cli.commands.deploy.PlatformClient") as mock_client_cls:
+        with patch(
+            "superserve.cli.commands.deploy.is_authenticated", return_value=True
+        ):
+            with patch(
+                "superserve.cli.commands.deploy.PlatformClient"
+            ) as mock_client_cls:
                 mock_client_cls.return_value.validate_token.return_value = True
-                with patch("rayai.cli.commands.up._discover_agents", return_value=[]):
+                with patch(
+                    "superserve.cli.commands.up._discover_agents", return_value=[]
+                ):
                     with patch(
-                        "rayai.cli.commands.up._discover_mcp_servers", return_value=[]
+                        "superserve.cli.commands.up._discover_mcp_servers",
+                        return_value=[],
                     ):
                         result = runner.invoke(cli, ["deploy", str(tmp_path)])
 
@@ -330,27 +377,27 @@ class TestPlatformClient:
 
     def test_client_initialization(self):
         """Client initializes with defaults."""
-        from rayai.cli.platform.client import PlatformClient
+        from superserve.cli.platform.client import PlatformClient
 
         client = PlatformClient()
-        # Default URL is localhost for dev, rayai.com for prod
-        assert "localhost" in client.base_url or "rayai.com" in client.base_url
+        # Default URL is localhost for dev, superserve.com for prod
+        assert "localhost" in client.base_url or "superserve.com" in client.base_url
 
     def test_client_custom_url(self):
         """Client with custom base URL."""
-        from rayai.cli.platform.client import PlatformClient
+        from superserve.cli.platform.client import PlatformClient
 
         client = PlatformClient(base_url="https://custom.api.com")
         assert client.base_url == "https://custom.api.com"
 
     def test_client_headers_authenticated(self):
         """Client includes auth header when authenticated."""
-        from rayai.cli.platform.client import PlatformClient
+        from superserve.cli.platform.client import PlatformClient
 
         client = PlatformClient()
 
         with patch(
-            "rayai.cli.platform.client.get_credentials",
+            "superserve.cli.platform.client.get_credentials",
             return_value=Credentials(token="test-token"),
         ):
             headers = client._get_headers(authenticated=True)
@@ -359,7 +406,7 @@ class TestPlatformClient:
 
     def test_client_headers_unauthenticated(self):
         """Client without auth header for public endpoints."""
-        from rayai.cli.platform.client import PlatformClient
+        from superserve.cli.platform.client import PlatformClient
 
         client = PlatformClient()
         headers = client._get_headers(authenticated=False)
@@ -368,11 +415,11 @@ class TestPlatformClient:
 
     def test_client_not_authenticated_error(self):
         """Client raises error when not authenticated."""
-        from rayai.cli.platform.client import PlatformAPIError, PlatformClient
+        from superserve.cli.platform.client import PlatformAPIError, PlatformClient
 
         client = PlatformClient()
 
-        with patch("rayai.cli.platform.client.get_credentials", return_value=None):
+        with patch("superserve.cli.platform.client.get_credentials", return_value=None):
             with pytest.raises(PlatformAPIError) as exc:
                 client._get_headers(authenticated=True)
             assert exc.value.status_code == 401
@@ -383,7 +430,7 @@ class TestPlatformAPIError:
 
     def test_error_with_message(self):
         """Error with basic message."""
-        from rayai.cli.platform.client import PlatformAPIError
+        from superserve.cli.platform.client import PlatformAPIError
 
         error = PlatformAPIError(404, "Project not found")
         assert error.status_code == 404
@@ -392,7 +439,7 @@ class TestPlatformAPIError:
 
     def test_error_with_details(self):
         """Error with details dict."""
-        from rayai.cli.platform.client import PlatformAPIError
+        from superserve.cli.platform.client import PlatformAPIError
 
         error = PlatformAPIError(
             400, "Validation error", {"field": "name", "issue": "required"}

@@ -19,6 +19,6 @@ repos:
         entry: uv run mypy
         language: system
         types: [python]
-        args: [src/rayai]
+        args: [src/superserve]
         pass_filenames: false
         exclude: ^(examples/|cli/templates/)

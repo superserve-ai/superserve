@@ -1,14 +1,14 @@
 <div align="center">
-  <a href="https://rayai.com/"><img width="1185" height="395" alt="image (3)" src="https://github.com/user-attachments/assets/67d4e157-3de9-4e80-8c3d-5827470078b1" /></a>
+  <a href="https://superserve.com/"><img width="1185" height="395" alt="image (3)" src="https://github.com/user-attachments/assets/67d4e157-3de9-4e80-8c3d-5827470078b1" /></a>
 
   <p><strong>Scalable runtime for Agents, MCP Servers, and coding sandboxes, orchestrated with Ray.</strong></p>
 
   <!-- [![PyPI version](https://img.shields.io/pypi/v/agentic-ray.svg)](https://pypi.org/project/agentic-ray/) -->
-  [![Docs](https://img.shields.io/badge/Docs-latest-blue)](https://docs.rayai.com/)
-  [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/rayai-labs/agentic-ray/blob/main/LICENSE)
+  [![Docs](https://img.shields.io/badge/Docs-latest-blue)](https://docs.superserve.com/)
+  [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/superserve-labs/agentic-ray/blob/main/LICENSE)
   [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://python.org)
   [![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white)](https://discord.gg/utftfhSK)
-  [![Slack](https://img.shields.io/badge/Slack-Join%20Us-4A154B?logo=slack&logoColor=white)](https://rayai.com/join-slack)
+  [![Slack](https://img.shields.io/badge/Slack-Join%20Us-4A154B?logo=slack&logoColor=white)](https://superserve.com/join-slack)
 
 </div>
 
@@ -24,17 +24,17 @@
 
 ```bash
 # Install
-pip install rayai
+pip install superserve
 
 # Create a new project
-rayai init my_project
+superserve init my_project
 cd my_project
 
 # Create your first agent
-rayai create-agent my_agent --framework pydantic
+superserve create-agent my_agent --framework pydantic
 
 # Run locally
-rayai up
+superserve up
 ```
 
 Your agent is now available at `http://localhost:8000/agents/my_agent/`
@@ -42,13 +42,13 @@ Your agent is now available at `http://localhost:8000/agents/my_agent/`
 ## Installation
 
 ```bash
-pip install rayai
+pip install superserve
 ```
 
 With optional sandbox support (for code execution):
 
 ```bash
-pip install rayai[sandbox]
+pip install superserve[sandbox]
 ```
 
 **Requirements:** Python 3.12+
@@ -60,7 +60,7 @@ pip install rayai[sandbox]
 #### Initialize a Project
 
 ```bash
-rayai init my_project
+superserve init my_project
 ```
 
 Creates a project structure with configuration files and an `agents/` directory.
@@ -68,9 +68,9 @@ Creates a project structure with configuration files and an `agents/` directory.
 #### Create an Agent
 
 ```bash
-rayai create-agent my-agent
-rayai create-agent my-agent --framework langchain
-rayai create-agent my-agent --framework pydantic
+superserve create-agent my-agent
+superserve create-agent my-agent --framework langchain
+superserve create-agent my-agent --framework pydantic
 ```
 
 Supported frameworks: `python` (default), `langchain`, `pydantic`
@@ -78,21 +78,21 @@ Supported frameworks: `python` (default), `langchain`, `pydantic`
 #### Run Agents
 
 ```bash
-rayai up                             # Run all agents on port 8000
-rayai up --port 9000                 # Custom port
-rayai up --agents agent1,agent2      # Run specific agents
+superserve up                             # Run all agents on port 8000
+superserve up --port 9000                 # Custom port
+superserve up --agents agent1,agent2      # Run specific agents
 ```
 
 
 ## Creating Your First Agent
 
-After running `rayai create-agent my_agent --framework pydantic`, edit `agents/my_agent/agent.py`:
+After running `superserve create-agent my_agent --framework pydantic`, edit `agents/my_agent/agent.py`:
 
 ```python
-import rayai
+import superserve
 from pydantic_ai import Agent
 
-@rayai.tool(num_cpus=1)
+@superserve.tool(num_cpus=1)
 def search(query: str) -> str:
     """Search for information."""
     return f"Results for: {query}"
@@ -106,12 +106,12 @@ def make_agent():
     )
 
 # Serve the agent
-rayai.serve(make_agent, name="my_agent", num_cpus=1, memory="2GB")
+superserve.serve(make_agent, name="my_agent", num_cpus=1, memory="2GB")
 ```
 
 Run with:
 ```bash
-rayai up
+superserve up
 ```
 
 Test your agent:
@@ -124,27 +124,27 @@ curl -X POST http://localhost:8000/agents/my_agent/ \
 
 ## API Reference
 
-### `@rayai.tool` Decorator
+### `@superserve.tool` Decorator
 
 Creates a Ray-distributed async tool from a function. Works as both a decorator and wrapper for framework tools.
 
 ```python
-import rayai
+import superserve
 
 # As decorator (uses defaults: num_cpus=1, num_gpus=0)
-@rayai.tool
+@superserve.tool
 def search(query: str) -> str:
     """Search for information."""
     return f"Results for: {query}"
 
 # As decorator with explicit resources
-@rayai.tool(num_cpus=2, memory="4GB")
+@superserve.tool(num_cpus=2, memory="4GB")
 def expensive_task(data: str) -> str:
     return process(data)
 
 # As wrapper for framework tools
 from langchain_community.tools import DuckDuckGoSearchRun
-lc_search = rayai.tool(DuckDuckGoSearchRun())
+lc_search = superserve.tool(DuckDuckGoSearchRun())
 ```
 
 | Parameter | Type | Default | Description |
@@ -153,18 +153,18 @@ lc_search = rayai.tool(DuckDuckGoSearchRun())
 | `num_gpus` | int/float | 0 | GPUs per invocation |
 | `memory` | str | None | Memory requirement (e.g., "1GB") |
 
-### `rayai.serve()`
+### `superserve.serve()`
 
 Serve an agent via HTTP with Ray Serve. Auto-detects framework (Pydantic AI, LangChain, custom).
 
 ```python
-import rayai
+import superserve
 from pydantic_ai import Agent
 
 def make_agent():
     return Agent("openai:gpt-4", tools=[search])
 
-rayai.serve(make_agent, name="myagent", num_cpus=1, memory="2GB")
+superserve.serve(make_agent, name="myagent", num_cpus=1, memory="2GB")
 ```
 
 | Parameter | Type | Default | Description |
@@ -177,12 +177,12 @@ rayai.serve(make_agent, name="myagent", num_cpus=1, memory="2GB")
 | `memory` | str | "2GB" | Memory allocation |
 | `replicas` | int | 1 | Number of replicas |
 
-### `rayai.Agent` Base Class
+### `superserve.Agent` Base Class
 
 For custom agents without a framework:
 
 ```python
-from rayai import Agent
+from superserve import Agent
 
 class MyAgent(Agent):
     tools = [search, analyze]
@@ -191,7 +191,7 @@ class MyAgent(Agent):
         result = await self.call_tool("search", query=query)
         return f"Found: {result}"
 
-rayai.serve(MyAgent, name="myagent")
+superserve.serve(MyAgent, name="myagent")
 ```
 
 ### `execute_tools`
@@ -199,15 +199,15 @@ rayai.serve(MyAgent, name="myagent")
 Execute multiple tools in parallel on Ray:
 
 ```python
-import rayai
-from rayai import execute_tools
+import superserve
+from superserve import execute_tools
 
-@rayai.tool(num_cpus=1)
+@superserve.tool(num_cpus=1)
 def tool_1(x: str) -> str:
     """Process input with tool 1."""
     return process_1(x)
 
-@rayai.tool(num_cpus=1)
+@superserve.tool(num_cpus=1)
 def tool_2(x: str) -> dict:
     """Process input with tool 2."""
     return process_2(x)
@@ -221,7 +221,7 @@ results = execute_tools([
 
 ## Examples
 
-See the [examples/](https://github.com/rayai-labs/agentic-ray/tree/main/examples) directory for complete implementations:
+See the [examples/](https://github.com/superserve-labs/agentic-ray/tree/main/examples) directory for complete implementations:
 
 - **Token-Efficient Agent** - Autonomous code execution in sandboxed environments
 - **Finance Agent** - Multi-step financial analysis with external APIs
@@ -229,7 +229,7 @@ See the [examples/](https://github.com/rayai-labs/agentic-ray/tree/main/examples
 
 ## Telemetry
 
-RayAI collects anonymous usage data to help improve the CLI:
+Superserve collects anonymous usage data to help improve the CLI:
 - Commands run (init, create-agent, up)
 - Framework choices (python, langchain, pydantic)
 
@@ -237,16 +237,16 @@ No PII data, project information, or code is collected by telemetry without your
 
 To opt out:
 ```bash
-rayai analytics off
+superserve analytics off
 ```
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](https://github.com/rayai-labs/agentic-ray/blob/main/CONTRIBUTING.md) for guidelines.
+Contributions are welcome! See [CONTRIBUTING.md](https://github.com/superserve-labs/agentic-ray/blob/main/CONTRIBUTING.md) for guidelines.
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](https://github.com/rayai-labs/agentic-ray/blob/main/LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](https://github.com/superserve-labs/agentic-ray/blob/main/LICENSE) file for details.
 
 ---
 

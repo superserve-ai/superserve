@@ -1,4 +1,4 @@
-"""Tests for the unified @rayai.tool decorator."""
+"""Tests for the unified @superserve.tool decorator."""
 
 import asyncio
 
@@ -16,23 +16,23 @@ def init_ray():
 
 
 class TestToolDecorator:
-    """Tests for @rayai.tool decorator."""
+    """Tests for @superserve.tool decorator."""
 
     def test_decorator_without_args(self):
-        """@rayai.tool without arguments."""
-        from rayai import tool
+        """@superserve.tool without arguments."""
+        from superserve import tool
 
         @tool
         def simple_func(x: int) -> int:
             return x * 2
 
         assert asyncio.iscoroutinefunction(simple_func)
-        assert hasattr(simple_func, "_rayai_tool")
-        assert simple_func._rayai_tool is True
+        assert hasattr(simple_func, "_superserve_tool")
+        assert simple_func._superserve_tool is True
 
     def test_decorator_with_args(self):
-        """@rayai.tool with explicit resources."""
-        from rayai import tool
+        """@superserve.tool with explicit resources."""
+        from superserve import tool
 
         @tool(num_cpus=2, memory="1GB")
         def resource_func(x: int) -> int:
@@ -44,7 +44,7 @@ class TestToolDecorator:
 
     def test_preserves_function_metadata(self):
         """Preserves __name__ and __doc__."""
-        from rayai import tool
+        from superserve import tool
 
         @tool
         def my_named_func(x: int) -> int:
@@ -56,7 +56,7 @@ class TestToolDecorator:
 
     def test_async_execution(self):
         """Tool executes asynchronously."""
-        from rayai import tool
+        from superserve import tool
 
         @tool
         def add(a: int, b: int) -> int:
@@ -72,7 +72,7 @@ class TestToolDecorator:
         """Multiple tools can run in parallel."""
         import time
 
-        from rayai import tool
+        from superserve import tool
 
         @tool
         def slow_op(x: int) -> int:
@@ -97,7 +97,7 @@ class TestToolDecorator:
 
     def test_has_remote_func(self):
         """Decorated function has _remote_func attribute."""
-        from rayai import tool
+        from superserve import tool
 
         @tool
         def remote_test(x: int) -> int:
@@ -108,7 +108,7 @@ class TestToolDecorator:
 
     def test_has_original_func(self):
         """Decorated function has _original_func attribute."""
-        from rayai import tool
+        from superserve import tool
 
         @tool
         def original_test(x: int) -> int:
@@ -119,22 +119,22 @@ class TestToolDecorator:
 
 
 class TestToolAsWrapper:
-    """Tests for rayai.tool() as a wrapper for framework tools."""
+    """Tests for superserve.tool() as a wrapper for framework tools."""
 
     def test_wrap_callable(self):
         """Wrap a plain callable."""
-        from rayai import tool
+        from superserve import tool
 
         def my_callable(x: int) -> int:
             return x * 3
 
         wrapped = tool(my_callable)
         assert asyncio.iscoroutinefunction(wrapped)
-        assert wrapped._rayai_tool is True
+        assert wrapped._superserve_tool is True
 
     def test_wrapped_callable_execution(self):
         """Wrapped callable executes correctly."""
-        from rayai import tool
+        from superserve import tool
 
         def multiply(x: int, y: int) -> int:
             return x * y
@@ -153,7 +153,7 @@ class TestToolMetadata:
 
     def test_default_resources(self):
         """Default resources when not specified."""
-        from rayai import tool
+        from superserve import tool
 
         @tool
         def default_func(x: int) -> int:
@@ -166,7 +166,7 @@ class TestToolMetadata:
 
     def test_description_from_docstring(self):
         """Description comes from docstring."""
-        from rayai import tool
+        from superserve import tool
 
         @tool
         def described_func(x: int) -> int:
@@ -177,7 +177,7 @@ class TestToolMetadata:
 
     def test_description_fallback(self):
         """Fallback description when no docstring."""
-        from rayai import tool
+        from superserve import tool
 
         @tool
         def no_doc_func(x: int) -> int:

@@ -2,8 +2,8 @@
 
 from typing import Any
 
-from rayai import BatchTool, BatchToolInput, BatchToolOutput
-from rayai.decorators import tool
+from superserve import BatchTool, BatchToolInput, BatchToolOutput
+from superserve.decorators import tool
 
 
 class TestBatchTool:

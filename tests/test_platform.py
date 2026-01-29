@@ -1,4 +1,4 @@
-"""Tests for rayai.cli.platform module."""
+"""Tests for superserve.cli.platform module."""
 
 import zipfile
 from unittest.mock import patch
@@ -6,13 +6,13 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
-from rayai.cli.platform.auth import (
+from superserve.cli.platform.auth import (
     clear_credentials,
     get_credentials,
     is_authenticated,
     save_credentials,
 )
-from rayai.cli.platform.types import (
+from superserve.cli.platform.types import (
     AgentManifest,
     Credentials,
     DeviceCodeResponse,
@@ -137,11 +137,11 @@ class TestProjectResponse:
             id="project-123",
             name="myproject",
             status="running",
-            url="https://myproject.rayai.com",
+            url="https://myproject.superserve.com",
         )
         assert response.id == "project-123"
         assert response.status == "running"
-        assert response.url == "https://myproject.rayai.com"
+        assert response.url == "https://myproject.superserve.com"
 
     def test_project_response_statuses(self):
         """Test valid project statuses."""
@@ -170,8 +170,8 @@ class TestDeviceCodeResponse:
         response = DeviceCodeResponse(
             device_code="device-123",
             user_code="ABCD-1234",
-            verification_uri="https://rayai.com/auth",
-            verification_uri_complete="https://rayai.com/auth?code=ABCD-1234",
+            verification_uri="https://superserve.com/auth",
+            verification_uri_complete="https://superserve.com/auth?code=ABCD-1234",
             expires_in=900,
             interval=5,
         )
@@ -211,13 +211,15 @@ class TestAuthModule:
     @pytest.fixture
     def temp_credentials_file(self, tmp_path):
         """Provide a temporary credentials file path."""
-        creds_file = tmp_path / ".rayai" / "credentials.json"
-        with patch("rayai.cli.platform.auth.CREDENTIALS_FILE", creds_file):
+        creds_file = tmp_path / ".superserve" / "credentials.json"
+        with patch("superserve.cli.platform.auth.CREDENTIALS_FILE", creds_file):
             yield creds_file
 
     def test_save_and_get_credentials(self, temp_credentials_file):
         """Save and retrieve credentials."""
-        with patch("rayai.cli.platform.auth.CREDENTIALS_FILE", temp_credentials_file):
+        with patch(
+            "superserve.cli.platform.auth.CREDENTIALS_FILE", temp_credentials_file
+        ):
             creds = Credentials(token="save-test-token")
             save_credentials(creds)
 
@@ -227,12 +229,16 @@ class TestAuthModule:
 
     def test_get_credentials_not_exists(self, temp_credentials_file):
         """Get credentials when file doesn't exist."""
-        with patch("rayai.cli.platform.auth.CREDENTIALS_FILE", temp_credentials_file):
+        with patch(
+            "superserve.cli.platform.auth.CREDENTIALS_FILE", temp_credentials_file
+        ):
             assert get_credentials() is None
 
     def test_clear_credentials(self, temp_credentials_file):
         """Clear credentials removes the file."""
-        with patch("rayai.cli.platform.auth.CREDENTIALS_FILE", temp_credentials_file):
+        with patch(
+            "superserve.cli.platform.auth.CREDENTIALS_FILE", temp_credentials_file
+        ):
             creds = Credentials(token="clear-test-token")
             save_credentials(creds)
             assert temp_credentials_file.exists()
@@ -242,7 +248,9 @@ class TestAuthModule:
 
     def test_is_authenticated(self, temp_credentials_file):
         """Check authentication status."""
-        with patch("rayai.cli.platform.auth.CREDENTIALS_FILE", temp_credentials_file):
+        with patch(
+            "superserve.cli.platform.auth.CREDENTIALS_FILE", temp_credentials_file
+        ):
             assert not is_authenticated()
 
             save_credentials(Credentials(token="auth-test"))
@@ -253,7 +261,9 @@ class TestAuthModule:
 
     def test_credentials_file_permissions(self, temp_credentials_file):
         """Credentials file has restricted permissions."""
-        with patch("rayai.cli.platform.auth.CREDENTIALS_FILE", temp_credentials_file):
+        with patch(
+            "superserve.cli.platform.auth.CREDENTIALS_FILE", temp_credentials_file
+        ):
             save_credentials(Credentials(token="perms-test"))
             # Check file mode is 0o600 (owner read/write only)
             mode = temp_credentials_file.stat().st_mode & 0o777
@@ -286,7 +296,7 @@ class TestPackaging:
 
     def test_package_project(self, temp_project):
         """Package project creates zip archive."""
-        from rayai.cli.platform.packaging import package_project
+        from superserve.cli.platform.packaging import package_project
 
         # Create mock agent configs
         class MockAgentConfig:
@@ -320,7 +330,7 @@ class TestPackaging:
 
     def test_package_excludes_pycache(self, temp_project):
         """Package excludes __pycache__ directories."""
-        from rayai.cli.platform.packaging import package_project
+        from superserve.cli.platform.packaging import package_project
 
         # Create __pycache__ directory
         pycache = temp_project / "agents" / "myagent" / "__pycache__"

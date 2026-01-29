@@ -6,13 +6,13 @@ from typing import cast
 import pytest
 import ray
 
-from rayai.sandbox import (
+from superserve.sandbox import (
     cleanup_session,
     execute_code,
     get_session_stats,
     upload_file,
 )
-from rayai.sandbox.types import ExecutionResult
+from superserve.sandbox.types import ExecutionResult
 
 
 @pytest.fixture(scope="module")

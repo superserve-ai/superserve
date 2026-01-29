@@ -6,11 +6,11 @@ import uuid
 import ray
 import requests
 
-import rayai
-from rayai.sandbox import execute_code
+import superserve
+from superserve.sandbox import execute_code
 
 
-@rayai.tool(num_cpus=1)
+@superserve.tool(num_cpus=1)
 def get_sp500(limit: int = 10) -> list[dict[str, str]]:
     """Fetch top S&P 500 stocks from API Ninjas.
 
@@ -33,7 +33,7 @@ def get_sp500(limit: int = 10) -> list[dict[str, str]]:
     return response.json()
 
 
-@rayai.tool(num_cpus=1)
+@superserve.tool(num_cpus=1)
 def get_daily_time_series(symbol: str) -> dict:
     """Fetch daily time series data for a stock symbol from Alpha Vantage.
 
@@ -67,7 +67,7 @@ RUN pip install --no-cache-dir pandas numpy
 """
 
 
-@rayai.tool(num_cpus=1)
+@superserve.tool(num_cpus=1)
 def run_analysis_code(code: str, time_series_data: str) -> str:
     """Execute Python code to analyze stock time series data in a secure sandbox.
 

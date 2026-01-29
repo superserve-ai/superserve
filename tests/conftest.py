@@ -1,4 +1,4 @@
-"""Shared fixtures for rayai tests."""
+"""Shared fixtures for superserve tests."""
 
 import pytest
 import ray

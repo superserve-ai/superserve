@@ -8,11 +8,11 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from rayai.mcp_serve import (
+from superserve.mcp_serve import (
     MCPServerConfig,
     clear_registered_mcp_servers,
     get_registered_mcp_servers,
-    set_rayai_mcp_up_mode,
+    set_superserve_mcp_up_mode,
 )
 
 
@@ -20,10 +20,10 @@ from rayai.mcp_serve import (
 def reset_mcp_serve_state():
     """Reset mcp_serve module state before each test."""
     clear_registered_mcp_servers()
-    set_rayai_mcp_up_mode(False)
+    set_superserve_mcp_up_mode(False)
     yield
     clear_registered_mcp_servers()
-    set_rayai_mcp_up_mode(False)
+    set_superserve_mcp_up_mode(False)
 
 
 @pytest.fixture
@@ -85,11 +85,11 @@ class TestMCPServerConfig:
 class TestServeMCPRegistration:
     """Tests for serve_mcp() registration behavior."""
 
-    def test_rayai_mcp_up_mode_registration(self):
-        """In rayai mcp up mode, serve_mcp() registers servers."""
-        from rayai.mcp_serve import serve_mcp
+    def test_superserve_mcp_up_mode_registration(self):
+        """In superserve mcp up mode, serve_mcp() registers servers."""
+        from superserve.mcp_serve import serve_mcp
 
-        set_rayai_mcp_up_mode(True)
+        set_superserve_mcp_up_mode(True)
 
         class MockMCP:
             pass
@@ -102,9 +102,9 @@ class TestServeMCPRegistration:
 
     def test_multiple_registrations(self):
         """Multiple MCP servers can be registered."""
-        from rayai.mcp_serve import serve_mcp
+        from superserve.mcp_serve import serve_mcp
 
-        set_rayai_mcp_up_mode(True)
+        set_superserve_mcp_up_mode(True)
 
         class MockMCP:
             pass
@@ -122,9 +122,9 @@ class TestServeMCPRegistration:
 
     def test_default_resources(self):
         """Default resource configuration."""
-        from rayai.mcp_serve import serve_mcp
+        from superserve.mcp_serve import serve_mcp
 
-        set_rayai_mcp_up_mode(True)
+        set_superserve_mcp_up_mode(True)
 
         class MockMCP:
             pass
@@ -139,9 +139,9 @@ class TestServeMCPRegistration:
 
     def test_custom_resources(self):
         """Custom resource configuration."""
-        from rayai.mcp_serve import serve_mcp
+        from superserve.mcp_serve import serve_mcp
 
-        set_rayai_mcp_up_mode(True)
+        set_superserve_mcp_up_mode(True)
 
         class MockMCP:
             pass
@@ -163,9 +163,9 @@ class TestServeMCPRegistration:
 
     def test_route_prefix_default(self):
         """Default route prefix uses server name."""
-        from rayai.mcp_serve import serve_mcp
+        from superserve.mcp_serve import serve_mcp
 
-        set_rayai_mcp_up_mode(True)
+        set_superserve_mcp_up_mode(True)
 
         class MockMCP:
             pass
@@ -177,9 +177,9 @@ class TestServeMCPRegistration:
 
     def test_route_prefix_custom(self):
         """Custom route prefix."""
-        from rayai.mcp_serve import serve_mcp
+        from superserve.mcp_serve import serve_mcp
 
-        set_rayai_mcp_up_mode(True)
+        set_superserve_mcp_up_mode(True)
 
         class MockMCP:
             pass
@@ -191,9 +191,9 @@ class TestServeMCPRegistration:
 
     def test_clear_registered_servers(self):
         """Clear registered MCP servers."""
-        from rayai.mcp_serve import serve_mcp
+        from superserve.mcp_serve import serve_mcp
 
-        set_rayai_mcp_up_mode(True)
+        set_superserve_mcp_up_mode(True)
 
         class MockMCP:
             pass
@@ -212,18 +212,18 @@ class TestRunFunction:
 
     def test_run_raises_without_servers(self):
         """run() raises error when no servers registered."""
-        from rayai.mcp_serve import run
+        from superserve.mcp_serve import run
 
         with pytest.raises(RuntimeError, match="No MCP servers registered"):
             run()
 
 
 class TestCreateMCPCommand:
-    """Tests for rayai create-mcp command."""
+    """Tests for superserve create-mcp command."""
 
     def test_create_mcp_basic(self, temp_project):
         """Create a basic MCP server."""
-        from rayai.cli.cli import cli
+        from superserve.cli.cli import cli
 
         runner = CliRunner()
         result = runner.invoke(cli, ["create-mcp", "weather"])
@@ -239,7 +239,7 @@ class TestCreateMCPCommand:
 
     def test_create_mcp_creates_parent_dir(self, temp_project):
         """create-mcp auto-creates mcp_servers/ directory."""
-        from rayai.cli.cli import cli
+        from superserve.cli.cli import cli
 
         runner = CliRunner()
         result = runner.invoke(cli, ["create-mcp", "search"])
@@ -250,7 +250,7 @@ class TestCreateMCPCommand:
 
     def test_create_mcp_invalid_name(self, temp_project):
         """create-mcp rejects invalid Python identifiers."""
-        from rayai.cli.cli import cli
+        from superserve.cli.cli import cli
 
         runner = CliRunner()
         result = runner.invoke(cli, ["create-mcp", "invalid-name"])
@@ -259,7 +259,7 @@ class TestCreateMCPCommand:
 
     def test_create_mcp_duplicate_name(self, temp_project):
         """create-mcp rejects duplicate server names."""
-        from rayai.cli.cli import cli
+        from superserve.cli.cli import cli
 
         runner = CliRunner()
 
@@ -273,7 +273,7 @@ class TestCreateMCPCommand:
 
     def test_create_mcp_template_content(self, temp_project):
         """Verify template content includes required components."""
-        from rayai.cli.cli import cli
+        from superserve.cli.cli import cli
 
         runner = CliRunner()
         result = runner.invoke(cli, ["create-mcp", "datasets"])
@@ -285,7 +285,7 @@ class TestCreateMCPCommand:
 
         # Check for required imports
         assert "from mcp.server.fastmcp import FastMCP" in content
-        assert "import rayai" in content
+        assert "import superserve" in content
 
         # Check for FastMCP creation with stateless_http
         assert 'FastMCP("datasets", stateless_http=True)' in content
@@ -295,15 +295,15 @@ class TestCreateMCPCommand:
         assert "async def example_tool" in content
 
         # Check for serve_mcp call
-        assert 'rayai.serve_mcp(mcp, name="datasets")' in content
+        assert 'superserve.serve_mcp(mcp, name="datasets")' in content
 
 
 class TestMCPUpCommand:
-    """Tests for rayai mcp up command."""
+    """Tests for superserve mcp up command."""
 
     def test_mcp_up_no_mcp_servers_dir(self, temp_project):
         """mcp up fails without mcp_servers/ directory."""
-        from rayai.cli.cli import cli
+        from superserve.cli.cli import cli
 
         runner = CliRunner()
         result = runner.invoke(cli, ["mcp", "up"])
@@ -313,7 +313,7 @@ class TestMCPUpCommand:
 
     def test_mcp_up_empty_directory(self, temp_project):
         """mcp up fails with empty mcp_servers/ directory."""
-        from rayai.cli.cli import cli
+        from superserve.cli.cli import cli
 
         # Create empty mcp_servers directory
         (temp_project / "mcp_servers").mkdir()
@@ -327,7 +327,7 @@ class TestMCPUpCommand:
 
     def test_mcp_up_missing_server_py(self, temp_project):
         """mcp up warns about directories without server.py."""
-        from rayai.cli.cli import cli
+        from superserve.cli.cli import cli
 
         # Create mcp_servers with empty subdirectory
         (temp_project / "mcp_servers").mkdir()
@@ -342,11 +342,11 @@ class TestMCPUpCommand:
 
 
 class TestMCPCommandGroup:
-    """Tests for rayai mcp command group."""
+    """Tests for superserve mcp command group."""
 
     def test_mcp_help(self):
         """mcp --help shows available commands."""
-        from rayai.cli.cli import cli
+        from superserve.cli.cli import cli
 
         runner = CliRunner()
         result = runner.invoke(cli, ["mcp", "--help"])
@@ -357,7 +357,7 @@ class TestMCPCommandGroup:
 
     def test_mcp_up_help(self):
         """mcp up --help shows options."""
-        from rayai.cli.cli import cli
+        from superserve.cli.cli import cli
 
         runner = CliRunner()
         result = runner.invoke(cli, ["mcp", "up", "--help"])
