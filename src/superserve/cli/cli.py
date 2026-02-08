@@ -34,6 +34,7 @@ from .commands import (
 from .commands.agents import agents
 from .commands.mcp import mcp
 from .commands.run import run_agent, runs
+from .commands.secrets import secrets
 
 
 @click.group()
@@ -67,6 +68,7 @@ cli.add_command(delete.delete)
 cli.add_command(agents)
 cli.add_command(run_agent)
 cli.add_command(runs)
+cli.add_command(secrets)
 
 
 def main():

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from typing import cast
 
 import requests
 
@@ -525,3 +526,62 @@ class PlatformClient:
                 except json.JSONDecodeError:
                     continue
                 current_event_type = None
+
+    # ==================== AGENT SECRETS ====================
+
+    def get_agent_secrets(self, name_or_id: str) -> list[str]:
+        """Get secret keys for an agent (values never returned).
+
+        Args:
+            name_or_id: Agent name or ID.
+
+        Returns:
+            List of secret key names.
+        """
+        # Resolve name to ID if needed
+        if not name_or_id.startswith("agt_"):
+            agent = self.get_agent(name_or_id)
+            name_or_id = agent.id
+
+        resp = self._request("GET", f"/agents/{name_or_id}/secrets")
+        return cast(list[str], resp.json().get("keys", []))
+
+    def set_agent_secrets(self, name_or_id: str, secrets: dict[str, str]) -> list[str]:
+        """Set secrets for an agent (merges with existing).
+
+        Args:
+            name_or_id: Agent name or ID.
+            secrets: Dictionary of secret key-value pairs.
+
+        Returns:
+            Updated list of secret key names.
+        """
+        # Resolve name to ID if needed
+        if not name_or_id.startswith("agt_"):
+            agent = self.get_agent(name_or_id)
+            name_or_id = agent.id
+
+        resp = self._request(
+            "PATCH",
+            f"/agents/{name_or_id}/secrets",
+            json_data={"secrets": secrets},
+        )
+        return cast(list[str], resp.json().get("keys", []))
+
+    def delete_agent_secret(self, name_or_id: str, key: str) -> list[str]:
+        """Delete a secret from an agent.
+
+        Args:
+            name_or_id: Agent name or ID.
+            key: Secret key to delete.
+
+        Returns:
+            Updated list of secret key names.
+        """
+        # Resolve name to ID if needed
+        if not name_or_id.startswith("agt_"):
+            agent = self.get_agent(name_or_id)
+            name_or_id = agent.id
+
+        resp = self._request("DELETE", f"/agents/{name_or_id}/secrets/{key}")
+        return cast(list[str], resp.json().get("keys", []))
