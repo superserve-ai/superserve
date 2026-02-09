@@ -158,12 +158,14 @@ All errors follow this format:
 
 ### Error Codes
 
-| HTTP Status | Code | Description |
-|-------------|------|-------------|
-| 400 | `invalid_request` | Malformed request |
-| 401 | `unauthorized` | Invalid or missing token |
-| 404 | `not_found` | Resource not found |
-| 409 | `conflict` | Resource already exists |
-| 422 | `validation_error` | Invalid field values |
-| 429 | `rate_limited` | Too many requests |
-| 500 | `internal_error` | Server error |
+| HTTP Status | Code | Type | Description |
+|-------------|------|------|-------------|
+| 400 | `invalid_request` | `invalid_request_error` | Malformed request |
+| 401 | `unauthorized` | `authentication_error` | Invalid or missing token |
+| 404 | `agent_not_found` | `invalid_request_error` | Agent not found |
+| 404 | `run_not_found` | `invalid_request_error` | Run not found |
+| 404 | `session_not_found` | `invalid_request_error` | Session not found |
+| 409 | `conflict` | `invalid_request_error` | Resource already exists |
+| 422 | `validation_error` | `invalid_request_error` | Invalid field values |
+| 429 | `rate_limited` | `rate_limit_error` | Too many requests |
+| 500 | `internal_error` | `api_error` | Server error |
