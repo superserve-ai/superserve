@@ -9,17 +9,6 @@ from ..platform.client import PlatformAPIError, PlatformClient
 from ..platform.types import AgentConfig
 
 
-def format_duration(ms: int) -> str:
-    """Format milliseconds as human-readable duration."""
-    if ms < 1000:
-        return f"{ms}ms"
-    seconds = ms / 1000
-    if seconds < 60:
-        return f"{seconds:.1f}s"
-    minutes = seconds / 60
-    return f"{minutes:.1f}m"
-
-
 @click.group()
 def agents():
     """Manage hosted agents."""

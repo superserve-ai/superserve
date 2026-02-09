@@ -145,12 +145,6 @@ class AgentResponse(BaseModel):
     updated_at: str
 
 
-class AgentListResponse(BaseModel):
-    """Response containing list of agents."""
-
-    agents: list[AgentResponse]
-
-
 class UsageMetrics(BaseModel):
     """Token usage metrics."""
 
@@ -176,12 +170,6 @@ class RunResponse(BaseModel):
     created_at: str
     started_at: str | None = None
     completed_at: str | None = None
-
-
-class RunListResponse(BaseModel):
-    """Response containing list of runs."""
-
-    runs: list[RunResponse]
 
 
 class RunEvent(BaseModel):

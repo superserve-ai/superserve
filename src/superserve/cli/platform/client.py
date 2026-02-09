@@ -50,6 +50,8 @@ class PlatformClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self._session = requests.Session()
+        # Cache for agent name -> ID resolution to avoid repeated API calls
+        self._agent_name_cache: dict[str, str] = {}
 
     def _get_headers(self, authenticated: bool = True) -> dict[str, str]:
         """Get request headers.
@@ -369,6 +371,37 @@ class PlatformClient:
         data = resp.json()
         return [AgentResponse.model_validate(a) for a in data.get("agents", [])]
 
+    def _resolve_agent_id(self, name_or_id: str) -> str:
+        """Resolve an agent name to its ID, using cache when possible.
+
+        Args:
+            name_or_id: Agent name or ID.
+
+        Returns:
+            Agent ID (with agt_ prefix).
+
+        Raises:
+            PlatformAPIError: If agent not found.
+        """
+        # Already an ID
+        if name_or_id.startswith("agt_"):
+            return name_or_id
+
+        # Check cache first
+        if name_or_id in self._agent_name_cache:
+            return self._agent_name_cache[name_or_id]
+
+        # Fetch agents and populate cache
+        agents = self.list_agents()
+        for agent in agents:
+            self._agent_name_cache[agent.name] = agent.id
+
+        # Return from cache or raise error
+        if name_or_id in self._agent_name_cache:
+            return self._agent_name_cache[name_or_id]
+
+        raise PlatformAPIError(404, f"Agent '{name_or_id}' not found")
+
     def get_agent(self, name_or_id: str) -> AgentResponse:
         """Get a hosted agent by name or ID.
 
@@ -378,15 +411,10 @@ class PlatformClient:
         Returns:
             Agent details.
         """
-        # If it looks like a name (no prefix), try to find by name
-        if not name_or_id.startswith("agt_"):
-            agents = self.list_agents()
-            for agent in agents:
-                if agent.name == name_or_id:
-                    return agent
-            raise PlatformAPIError(404, f"Agent '{name_or_id}' not found")
+        # Resolve name to ID if needed (uses cache)
+        agent_id = self._resolve_agent_id(name_or_id)
 
-        resp = self._request("GET", f"/agents/{name_or_id}")
+        resp = self._request("GET", f"/agents/{agent_id}")
         return AgentResponse.model_validate(resp.json())
 
     def delete_agent(self, name_or_id: str) -> None:
@@ -395,12 +423,16 @@ class PlatformClient:
         Args:
             name_or_id: Agent name or ID.
         """
-        # Resolve name to ID if needed
-        if not name_or_id.startswith("agt_"):
-            agent = self.get_agent(name_or_id)
-            name_or_id = agent.id
+        # Resolve name to ID if needed (uses cache)
+        agent_id = self._resolve_agent_id(name_or_id)
 
-        self._request("DELETE", f"/agents/{name_or_id}")
+        self._request("DELETE", f"/agents/{agent_id}")
+
+        # Invalidate cache entry for the deleted agent
+        for name, cached_id in list(self._agent_name_cache.items()):
+            if cached_id == agent_id:
+                del self._agent_name_cache[name]
+                break
 
     # ==================== RUNS ====================
 
@@ -420,13 +452,11 @@ class PlatformClient:
         Returns:
             Created run.
         """
-        # Resolve name to ID if needed
-        if not agent_id.startswith("agt_"):
-            agent = self.get_agent(agent_id)
-            agent_id = agent.id
+        # Resolve name to ID if needed (uses cache)
+        resolved_id = self._resolve_agent_id(agent_id)
 
         data: dict[str, str] = {
-            "agent_id": agent_id,
+            "agent_id": resolved_id,
             "prompt": prompt,
         }
         if session_id:
@@ -454,10 +484,9 @@ class PlatformClient:
         params: dict[str, int | str] = {"limit": limit}
 
         if agent_id:
-            if not agent_id.startswith("agt_"):
-                agent = self.get_agent(agent_id)
-                agent_id = agent.id
-            params["agent_id"] = agent_id
+            # Resolve name to ID if needed (uses cache)
+            resolved_id = self._resolve_agent_id(agent_id)
+            params["agent_id"] = resolved_id
 
         if status:
             params["status"] = status
@@ -504,28 +533,42 @@ class PlatformClient:
 
         Yields:
             Run events as they arrive.
+
+        Note:
+            This implementation follows the SSE specification which allows
+            event data to be split across multiple 'data:' lines. The full
+            data is the concatenation of all data lines, joined by newlines.
         """
         if not run_id.startswith("run_"):
             run_id = f"run_{run_id}"
 
         resp = self._request("GET", f"/runs/{run_id}/events", stream=True)
 
-        current_event_type = None
-        for line in resp.iter_lines():
-            if not line:
-                continue
+        current_event_type: str | None = None
+        data_lines: list[str] = []
 
+        for line in resp.iter_lines():
             line_str = line.decode("utf-8") if isinstance(line, bytes) else line
+
+            # Empty line signals the end of an event (per SSE spec)
+            if not line_str:
+                if current_event_type and data_lines:
+                    try:
+                        # Join multiple data lines with newlines per SSE spec
+                        full_data = "\n".join(data_lines)
+                        data = json.loads(full_data)
+                        yield RunEvent(type=current_event_type, data=data)
+                    except json.JSONDecodeError:
+                        pass
+                # Reset for next event
+                current_event_type = None
+                data_lines = []
+                continue
 
             if line_str.startswith("event: "):
                 current_event_type = line_str[7:]
-            elif line_str.startswith("data: ") and current_event_type:
-                try:
-                    data = json.loads(line_str[6:])
-                    yield RunEvent(type=current_event_type, data=data)
-                except json.JSONDecodeError:
-                    continue
-                current_event_type = None
+            elif line_str.startswith("data: "):
+                data_lines.append(line_str[6:])
 
     # ==================== AGENT SECRETS ====================
 
@@ -538,12 +581,10 @@ class PlatformClient:
         Returns:
             List of secret key names.
         """
-        # Resolve name to ID if needed
-        if not name_or_id.startswith("agt_"):
-            agent = self.get_agent(name_or_id)
-            name_or_id = agent.id
+        # Resolve name to ID if needed (uses cache)
+        agent_id = self._resolve_agent_id(name_or_id)
 
-        resp = self._request("GET", f"/agents/{name_or_id}/secrets")
+        resp = self._request("GET", f"/agents/{agent_id}/secrets")
         return cast(list[str], resp.json().get("keys", []))
 
     def set_agent_secrets(self, name_or_id: str, secrets: dict[str, str]) -> list[str]:
@@ -556,14 +597,12 @@ class PlatformClient:
         Returns:
             Updated list of secret key names.
         """
-        # Resolve name to ID if needed
-        if not name_or_id.startswith("agt_"):
-            agent = self.get_agent(name_or_id)
-            name_or_id = agent.id
+        # Resolve name to ID if needed (uses cache)
+        agent_id = self._resolve_agent_id(name_or_id)
 
         resp = self._request(
             "PATCH",
-            f"/agents/{name_or_id}/secrets",
+            f"/agents/{agent_id}/secrets",
             json_data={"secrets": secrets},
         )
         return cast(list[str], resp.json().get("keys", []))
@@ -578,10 +617,8 @@ class PlatformClient:
         Returns:
             Updated list of secret key names.
         """
-        # Resolve name to ID if needed
-        if not name_or_id.startswith("agt_"):
-            agent = self.get_agent(name_or_id)
-            name_or_id = agent.id
+        # Resolve name to ID if needed (uses cache)
+        agent_id = self._resolve_agent_id(name_or_id)
 
-        resp = self._request("DELETE", f"/agents/{name_or_id}/secrets/{key}")
+        resp = self._request("DELETE", f"/agents/{agent_id}/secrets/{key}")
         return cast(list[str], resp.json().get("keys", []))

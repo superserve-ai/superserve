@@ -8,17 +8,7 @@ import click
 
 from ..platform.client import PlatformAPIError, PlatformClient
 from ..platform.types import RunResponse
-
-
-def format_duration(ms: int) -> str:
-    """Format milliseconds as human-readable duration."""
-    if ms < 1000:
-        return f"{ms}ms"
-    seconds = ms / 1000
-    if seconds < 60:
-        return f"{seconds:.1f}s"
-    minutes = seconds / 60
-    return f"{minutes:.1f}m"
+from ..utils import echo_truncated, format_duration, sanitize_terminal_output
 
 
 @click.command("run")
@@ -75,14 +65,17 @@ def run_agent(agent: str, prompt: str, session: str | None, as_json: bool):
 
             elif event.type == "message.delta":
                 content = event.data.get("content", "")
-                click.echo(content, nl=False)
+                # Sanitize LLM output to prevent terminal injection via ANSI sequences
+                click.echo(sanitize_terminal_output(content), nl=False)
 
             elif event.type == "tool.start":
                 tool = event.data.get("tool", "unknown")
                 tool_input = event.data.get("input", {})
                 # Show tool usage in dim text
-                input_preview = str(tool_input)[:50]
-                if len(str(tool_input)) > 50:
+                # Sanitize tool input as it may contain LLM-controlled content
+                input_str = sanitize_terminal_output(str(tool_input))
+                input_preview = input_str[:50]
+                if len(input_str) > 50:
                     input_preview += "..."
                 click.echo(f"\n[{tool}] {input_preview}", nl=False, err=True)
 
@@ -212,22 +205,10 @@ def get_run(run_id: str, full: bool, as_json: bool):
     if run.tools_used:
         click.echo(f"Tools:    {', '.join(run.tools_used)}")
 
-    click.echo()
-    click.echo("Prompt:")
-    prompt = run.prompt[:500] if not full and len(run.prompt) > 500 else run.prompt
-    click.echo(f"  {prompt}")
-    if not full and len(run.prompt) > 500:
-        click.echo(f"  ... ({len(run.prompt)} chars, use --full to see all)")
+    echo_truncated(run.prompt, "Prompt", 500, full)
 
     if run.output:
-        click.echo()
-        click.echo("Output:")
-        output = (
-            run.output[:1000] if not full and len(run.output) > 1000 else run.output
-        )
-        click.echo(f"  {output}")
-        if not full and len(run.output) > 1000:
-            click.echo(f"  ... ({len(run.output)} chars, use --full to see all)")
+        echo_truncated(run.output, "Output", 1000, full)
 
     if run.error_message:
         click.echo()
