@@ -123,8 +123,8 @@ class AgentConfig(BaseModel):
     """Agent configuration."""
 
     name: str
-    model: str = "claude-sonnet-4-20250514"
-    system_prompt: str = ""
+    model: str = "claude-sonnet-4-5-20250929"
+    system_prompt: str = "You are a helpful assistant."
     tools: list[str] = ["Bash", "Read", "Write", "Glob", "Grep"]
     max_turns: int = 10
     timeout_seconds: int = 300
@@ -158,6 +158,7 @@ class RunResponse(BaseModel):
 
     id: str
     agent_id: str
+    agent_name: str | None = None
     status: Literal["pending", "running", "completed", "failed", "cancelled"]
     prompt: str
     output: str | None = None

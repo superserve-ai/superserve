@@ -13,10 +13,12 @@ class AgentConfig(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=63, description="Agent name")
     model: str = Field(
-        default="claude-sonnet-4-20250514",
+        default="claude-sonnet-4-5-20250929",
         description="Model to use for the agent",
     )
-    system_prompt: str = Field(default="", description="System prompt for the agent")
+    system_prompt: str = Field(
+        default="You are a helpful assistant.", description="System prompt for the agent"
+    )
     tools: list[str] = Field(
         default_factory=lambda: ["Bash", "Read", "Write", "Glob", "Grep"],
         description="List of tools the agent can use",
@@ -63,6 +65,7 @@ class Run(BaseModel):
 
     id: str = Field(..., description="Run ID with run_ prefix")
     agent_id: str = Field(..., description="Agent ID")
+    agent_name: str | None = Field(None, description="Human-readable agent name")
     status: Literal["pending", "running", "completed", "failed", "cancelled"] = Field(
         ..., description="Run status"
     )

@@ -4,9 +4,9 @@
 
 /** Valid models that can be used with agents. */
 export type AgentModel =
-  | "claude-sonnet-4-20250514"
-  | "claude-opus-4-20250514"
-  | "claude-haiku-3-5-20241022";
+  | "claude-sonnet-4-5-20250929"
+  | "claude-opus-4-6"
+  | "claude-haiku-4-5-20251001";
 
 /** Valid tools that can be assigned to agents. */
 export type AgentTool =
