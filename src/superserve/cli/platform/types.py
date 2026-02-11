@@ -140,7 +140,6 @@ class AgentResponse(BaseModel):
     tools: list[str]
     max_turns: int
     timeout_seconds: int
-    status: str
     created_at: str
     updated_at: str
 

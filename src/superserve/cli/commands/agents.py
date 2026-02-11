@@ -5,15 +5,42 @@ import sys
 
 import click
 import questionary
+from questionary import Style
 
 from ..platform.client import PlatformAPIError, PlatformClient
 from ..platform.types import AgentConfig
+
+# Pastel prompt style
+PROMPT_STYLE = Style(
+    [
+        ("qmark", "fg:#b48ead"),  # soft lavender question mark
+        ("question", "fg:#d8dee9 bold"),  # light grey-white question text
+        ("answer", "fg:#e8915a"),  # warm orange answers
+        ("pointer", "fg:#b48ead bold"),  # lavender pointer
+        ("highlighted", "fg:#88c0d0 bold"),  # pastel cyan for focused item
+        ("selected", "fg:#e8915a"),  # warm orange for checked items
+        ("instruction", "fg:#4c566a"),  # muted grey instructions
+        ("disabled", "fg:#4c566a italic"),  # muted grey disabled
+    ]
+)
 
 AVAILABLE_MODELS = [
     "claude-sonnet-4-5-20250929",
     "claude-opus-4-6",
     "claude-haiku-4-5-20251001",
 ]
+
+MODEL_DISPLAY_NAMES = {
+    "claude-sonnet-4-5-20250929": "Sonnet 4.5",
+    "claude-opus-4-6": "Opus 4.6",
+    "claude-haiku-4-5-20251001": "Haiku 4.5",
+}
+
+
+def display_model(model_id: str) -> str:
+    """Return friendly display name for a model, or the ID if unknown."""
+    return MODEL_DISPLAY_NAMES.get(model_id, model_id)
+
 
 AVAILABLE_TOOLS = ["Bash", "Read", "Write", "Glob", "Grep", "WebSearch", "WebFetch"]
 
@@ -52,15 +79,13 @@ def list_agents(as_json: bool):
         return
 
     # Print table header
-    click.echo(f"{'NAME':<25} {'MODEL':<30} {'STATUS':<10} {'CREATED':<20}")
-    click.echo("-" * 85)
+    click.echo(f"{'NAME':<25} {'MODEL':<30} {'CREATED':<20}")
+    click.echo("-" * 75)
 
     for agent in agent_list:
         created = agent.created_at[:10] if agent.created_at else ""
-        model_short = agent.model.replace("claude-", "")[:25]
-        click.echo(
-            f"{agent.name:<25} {model_short:<30} {agent.status:<10} {created:<20}"
-        )
+        model_short = display_model(agent.model)
+        click.echo(f"{agent.name:<25} {model_short:<30} {created:<20}")
 
 
 @agents.command("create")
@@ -94,7 +119,7 @@ def create_agent(
         if not interactive:
             click.echo("Error: --name is required", err=True)
             sys.exit(1)
-        name = questionary.text("Agent name:").ask()
+        name = questionary.text("Agent name:", style=PROMPT_STYLE).ask()
         if not name:
             click.echo("Cancelled.", err=True)
             sys.exit(1)
@@ -110,12 +135,16 @@ def create_agent(
                 questionary.Choice("Haiku 4.5", value="claude-haiku-4-5-20251001"),
                 questionary.Choice("Enter custom model name or ID", value="_custom"),
             ]
-            model = questionary.select("Select model:", choices=model_choices).ask()
+            model = questionary.select(
+                "Select model:", choices=model_choices, style=PROMPT_STYLE
+            ).ask()
             if model is None:
                 click.echo("Cancelled.", err=True)
                 sys.exit(1)
             if model == "_custom":
-                model = questionary.text("Custom model name or ID:").ask()
+                model = questionary.text(
+                    "Custom model name or ID:", style=PROMPT_STYLE
+                ).ask()
                 if not model:
                     click.echo("Cancelled.", err=True)
                     sys.exit(1)
@@ -125,12 +154,20 @@ def create_agent(
     # --- System prompt ---
     if system_prompt is None:
         if interactive:
+            from prompt_toolkit.formatted_text import HTML
+
             system_prompt = questionary.text(
-                "System prompt:", default="You are a helpful assistant."
+                "System prompt:",
+                style=PROMPT_STYLE,
+                placeholder=HTML(
+                    "<style bg='' fg='ansibrightblack'>You are a helpful assistant.</style>"
+                ),
             ).ask()
             if system_prompt is None:
                 click.echo("Cancelled.", err=True)
                 sys.exit(1)
+            if not system_prompt:
+                system_prompt = "You are a helpful assistant."
         else:
             system_prompt = "You are a helpful assistant."
 
@@ -151,7 +188,9 @@ def create_agent(
         tool_choices = [
             questionary.Choice(t, checked=(t in DEFAULT_TOOLS)) for t in AVAILABLE_TOOLS
         ]
-        tool_list = questionary.checkbox("Select tools:", choices=tool_choices).ask()
+        tool_list = questionary.checkbox(
+            "Select tools:", choices=tool_choices, style=PROMPT_STYLE
+        ).ask()
         if tool_list is None:
             click.echo("Cancelled.", err=True)
             sys.exit(1)
@@ -161,7 +200,9 @@ def create_agent(
     # --- Max turns ---
     if max_turns is None:
         if interactive:
-            answer = questionary.text("Max turns:", default="10").ask()
+            answer = questionary.text(
+                "Max turns:", default="10", style=PROMPT_STYLE
+            ).ask()
             if answer is None:
                 click.echo("Cancelled.", err=True)
                 sys.exit(1)
@@ -172,7 +213,9 @@ def create_agent(
     # --- Timeout ---
     if timeout is None:
         if interactive:
-            answer = questionary.text("Timeout in seconds:", default="300").ask()
+            answer = questionary.text(
+                "Timeout in seconds:", default="300", style=PROMPT_STYLE
+            ).ask()
             if answer is None:
                 click.echo("Cancelled.", err=True)
                 sys.exit(1)
@@ -208,7 +251,7 @@ def create_agent(
         click.echo(json.dumps(agent.model_dump(), indent=2))
     else:
         click.echo(f"\nCreated agent '{agent.name}'")
-        click.echo(f"  Model:   {agent.model}")
+        click.echo(f"  Model:   {display_model(agent.model)}")
         click.echo(f"  Tools:   {', '.join(agent.tools)}")
         click.echo(f"  Timeout: {agent.timeout_seconds}s")
         click.echo()
@@ -237,8 +280,7 @@ def get_agent(name: str, as_json: bool):
 
     click.echo(f"ID:            {agent.id}")
     click.echo(f"Name:          {agent.name}")
-    click.echo(f"Model:         {agent.model}")
-    click.echo(f"Status:        {agent.status}")
+    click.echo(f"Model:         {display_model(agent.model)}")
     click.echo(f"Max Turns:     {agent.max_turns}")
     click.echo(f"Timeout:       {agent.timeout_seconds}s")
     click.echo(f"Tools:         {', '.join(agent.tools)}")

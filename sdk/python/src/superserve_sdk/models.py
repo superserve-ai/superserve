@@ -47,7 +47,6 @@ class Agent(BaseModel):
     tools: list[str] = Field(default_factory=list, description="Available tools")
     max_turns: int = Field(..., description="Maximum conversation turns")
     timeout_seconds: int = Field(..., description="Timeout in seconds")
-    status: str = Field(..., description="Agent status (active, deleted)")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
 
