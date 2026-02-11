@@ -7,13 +7,15 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .constants import DEFAULT_MODEL
+
 
 class AgentConfig(BaseModel):
     """Configuration for creating or updating an agent."""
 
     name: str = Field(..., min_length=1, max_length=63, description="Agent name")
     model: str = Field(
-        default="claude-sonnet-4-5-20250929",
+        default=DEFAULT_MODEL,
         description="Model to use for the agent",
     )
     system_prompt: str = Field(

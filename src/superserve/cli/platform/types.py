@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
+
 
 class Credentials(BaseModel):
     """Stored authentication credentials."""
@@ -123,7 +125,7 @@ class AgentConfig(BaseModel):
     """Agent configuration."""
 
     name: str
-    model: str = "claude-sonnet-4-5-20250929"
+    model: str = DEFAULT_MODEL
     system_prompt: str = "You are a helpful assistant."
     tools: list[str] = ["Bash", "Read", "Write", "Glob", "Grep"]
     max_turns: int = 10

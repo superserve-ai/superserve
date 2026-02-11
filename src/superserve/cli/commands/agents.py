@@ -8,7 +8,7 @@ import questionary
 from questionary import Style
 
 from ..platform.client import PlatformAPIError, PlatformClient
-from ..platform.types import AgentConfig
+from ..platform.types import DEFAULT_MODEL, AgentConfig
 
 # Pastel prompt style
 PROMPT_STYLE = Style(
@@ -40,6 +40,13 @@ MODEL_DISPLAY_NAMES = {
 def display_model(model_id: str) -> str:
     """Return friendly display name for a model, or the ID if unknown."""
     return MODEL_DISPLAY_NAMES.get(model_id, model_id)
+
+
+def _abort_if_cancelled(value: object) -> None:
+    """Exit if the user cancelled the prompt."""
+    if value is None:
+        click.echo("Cancelled.", err=True)
+        sys.exit(1)
 
 
 AVAILABLE_TOOLS = ["Bash", "Read", "Write", "Glob", "Grep", "WebSearch", "WebFetch"]
@@ -120,9 +127,7 @@ def create_agent(
             click.echo("Error: --name is required", err=True)
             sys.exit(1)
         name = questionary.text("Agent name:", style=PROMPT_STYLE).ask()
-        if not name:
-            click.echo("Cancelled.", err=True)
-            sys.exit(1)
+        _abort_if_cancelled(name)
 
     # --- Model ---
     if model is None:
@@ -138,18 +143,14 @@ def create_agent(
             model = questionary.select(
                 "Select model:", choices=model_choices, style=PROMPT_STYLE
             ).ask()
-            if model is None:
-                click.echo("Cancelled.", err=True)
-                sys.exit(1)
+            _abort_if_cancelled(model)
             if model == "_custom":
                 model = questionary.text(
                     "Custom model name or ID:", style=PROMPT_STYLE
                 ).ask()
-                if not model:
-                    click.echo("Cancelled.", err=True)
-                    sys.exit(1)
+                _abort_if_cancelled(model)
         else:
-            model = "claude-sonnet-4-5-20250929"
+            model = DEFAULT_MODEL
 
     # --- System prompt ---
     if system_prompt is None:
@@ -163,9 +164,7 @@ def create_agent(
                     "<style bg='' fg='ansibrightblack'>You are a helpful assistant.</style>"
                 ),
             ).ask()
-            if system_prompt is None:
-                click.echo("Cancelled.", err=True)
-                sys.exit(1)
+            _abort_if_cancelled(system_prompt)
             if not system_prompt:
                 system_prompt = "You are a helpful assistant."
         else:
@@ -191,9 +190,7 @@ def create_agent(
         tool_list = questionary.checkbox(
             "Select tools:", choices=tool_choices, style=PROMPT_STYLE
         ).ask()
-        if tool_list is None:
-            click.echo("Cancelled.", err=True)
-            sys.exit(1)
+        _abort_if_cancelled(tool_list)
     else:
         tool_list = list(DEFAULT_TOOLS)
 
@@ -203,9 +200,7 @@ def create_agent(
             answer = questionary.text(
                 "Max turns:", default="10", style=PROMPT_STYLE
             ).ask()
-            if answer is None:
-                click.echo("Cancelled.", err=True)
-                sys.exit(1)
+            _abort_if_cancelled(answer)
             max_turns = int(answer)
         else:
             max_turns = 10
@@ -216,9 +211,7 @@ def create_agent(
             answer = questionary.text(
                 "Timeout in seconds:", default="300", style=PROMPT_STYLE
             ).ask()
-            if answer is None:
-                click.echo("Cancelled.", err=True)
-                sys.exit(1)
+            _abort_if_cancelled(answer)
             timeout = int(answer)
         else:
             timeout = 300

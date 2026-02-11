@@ -155,8 +155,10 @@ def list_runs(agent: str | None, status: str | None, limit: int, as_json: bool):
 
     for run in run_list:
         run_id_short = run.id[-12:] if len(run.id) > 12 else run.id
-        agent_display = run.agent_name or (
-            run.agent_id[-12:] if len(run.agent_id) > 12 else run.agent_id
+        agent_display = (
+            sanitize_terminal_output(run.agent_name)
+            if run.agent_name
+            else (run.agent_id[-12:] if len(run.agent_id) > 12 else run.agent_id)
         )
         duration = format_duration(run.duration_ms) if run.duration_ms else "-"
         created = run.created_at[:16] if run.created_at else ""
@@ -188,7 +190,9 @@ def get_run(run_id: str, full: bool, as_json: bool):
 
     click.echo(f"ID:       {run.id}")
     if run.agent_name:
-        click.echo(f"Agent:    {run.agent_name} ({run.agent_id})")
+        click.echo(
+            f"Agent:    {sanitize_terminal_output(run.agent_name)} ({run.agent_id})"
+        )
     else:
         click.echo(f"Agent:    {run.agent_id}")
     click.echo(f"Status:   {run.status}")
