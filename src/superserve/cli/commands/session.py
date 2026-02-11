@@ -1,80 +1,20 @@
-"""CLI commands for session management."""
+"""CLI commands for session management.
+
+Sessions are created automatically when using 'superserve run'.
+This group provides management commands for listing, inspecting, and ending sessions.
+"""
 
 import sys
 
 import click
 
 from ..platform.client import PlatformAPIError, PlatformClient
-from ..utils import sanitize_terminal_output
 
 
 @click.group()
 def sessions():
-    """Manage agent sessions (multi-turn conversations)."""
+    """Manage agent sessions (list, inspect, end)."""
     pass
-
-
-@sessions.command("start")
-@click.argument("agent")
-@click.option("--title", "-t", default=None, help="Session title")
-@click.option("--timeout", default=1800, type=int, help="Idle timeout in seconds")
-@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def start_session(agent, title, timeout, as_json):
-    """Start a new session with an agent."""
-    client = PlatformClient()
-    try:
-        session = client.create_session(
-            agent, title=title, idle_timeout_seconds=timeout
-        )
-    except PlatformAPIError as e:
-        if e.status_code == 401:
-            click.echo("Not authenticated. Run 'superserve login' first.", err=True)
-        elif e.status_code == 404:
-            click.echo(f"Agent '{agent}' not found", err=True)
-        else:
-            click.echo(f"Error: {e.message}", err=True)
-        sys.exit(1)
-    if as_json:
-        import json
-
-        click.echo(json.dumps(session, default=str))
-    else:
-        click.echo(f"Session started: {session['id']}")
-        click.echo(f"  Agent: {session['agent_id']}")
-        click.echo(f"  Status: {session['status']}")
-        if session.get("title"):
-            click.echo(f"  Title: {session['title']}")
-
-
-@sessions.command("send")
-@click.argument("session_id")
-@click.argument("prompt")
-def send_message(session_id, prompt):
-    """Send a message to an active session."""
-    client = PlatformClient()
-    try:
-        for event in client.stream_session_message(session_id, prompt):
-            if event.type == "message.delta":
-                content = event.data.get("content", "")
-                click.echo(sanitize_terminal_output(content), nl=False)
-            elif event.type == "run.completed":
-                click.echo()  # Final newline
-            elif event.type == "run.failed":
-                error = event.data.get("error", {})
-                click.echo(
-                    f"\nError: {error.get('message', 'Unknown error')}", err=True
-                )
-                sys.exit(1)
-    except PlatformAPIError as e:
-        if e.status_code == 401:
-            click.echo("Not authenticated. Run 'superserve login' first.", err=True)
-        elif e.status_code == 404:
-            click.echo(f"Session '{session_id}' not found", err=True)
-        elif e.status_code == 409:
-            click.echo(f"Session is not active: {e.message}", err=True)
-        else:
-            click.echo(f"Error: {e.message}", err=True)
-        sys.exit(1)
 
 
 @sessions.command("list")
