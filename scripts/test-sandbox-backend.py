@@ -49,9 +49,9 @@ def main():
         print(f"  Stdout: {result.get('stdout', '').strip()}")
         if result.get("stderr"):
             print(f"  Stderr: {result['stderr'].strip()}")
-        assert (
-            result["status"] == "success"
-        ), f"Expected success, got {result['status']}"
+        assert result["status"] == "success", (
+            f"Expected success, got {result['status']}"
+        )
         print("  ✓ Passed\n")
 
         # Test 2: Session persistence
@@ -72,9 +72,9 @@ def main():
         )
         print(f"  Status: {result['status']}")
         print(f"  Stdout: {result.get('stdout', '').strip()}")
-        assert (
-            result["status"] == "success"
-        ), f"Expected success, got {result['status']}"
+        assert result["status"] == "success", (
+            f"Expected success, got {result['status']}"
+        )
         print("  ✓ Passed\n")
 
         # Test 4: Error handling
