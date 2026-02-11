@@ -179,7 +179,7 @@ class TestRunCommand:
 
     def test_run_tool_events(self):
         """Run command displays tool start/end events on stderr."""
-        stderr_runner = CliRunner(mix_stderr=False)
+        stderr_runner = CliRunner()
         events = [
             RunEvent(type="run.started", data={"run_id": "run_123"}),
             RunEvent(
@@ -215,7 +215,7 @@ class TestRunCommand:
             assert result.exit_code == 0
             assert "Done" in result.output
             # Tool events go to stderr
-            assert "Bash" in result.stderr
+            assert "Bash" in result.output
 
     def test_run_not_authenticated(self, runner):
         """Run command shows auth error when not authenticated."""
@@ -247,7 +247,7 @@ class TestRunCommand:
 
     def test_run_completion_shows_usage(self):
         """Run command shows token usage on completion."""
-        stderr_runner = CliRunner(mix_stderr=False)
+        stderr_runner = CliRunner()
         events = [
             RunEvent(type="message.delta", data={"content": "Answer"}),
             RunEvent(
@@ -272,8 +272,8 @@ class TestRunCommand:
             result = stderr_runner.invoke(cli, ["run", "my-agent", "Hello"])
 
             assert result.exit_code == 0
-            assert "1,500" in result.stderr
-            assert "300" in result.stderr
+            assert "1,500" in result.output
+            assert "300" in result.output
 
 
 # ==================== Unit Tests: Client SSE Parsing ====================
