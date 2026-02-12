@@ -9,6 +9,7 @@ import sys
 import click
 
 from ..platform.client import PlatformAPIError, PlatformClient
+from ..utils import sanitize_terminal_output
 
 
 @click.group()
@@ -30,7 +31,7 @@ def list_sessions(agent, filter_status, as_json):
         if e.status_code == 401:
             click.echo("Not authenticated. Run 'superserve login' first.", err=True)
         else:
-            click.echo(f"Error: {e.message}", err=True)
+            click.echo(f"Error: {sanitize_terminal_output(e.message)}", err=True)
         sys.exit(1)
     if as_json:
         import json
@@ -47,7 +48,9 @@ def list_sessions(agent, filter_status, as_json):
     for s in session_list:
         sid_clean = s["id"].replace("ses_", "").replace("-", "")
         sid_short = sid_clean[:12]
-        agent_display = s.get("agent_name") or s.get("agent_id", "?")
+        agent_display = sanitize_terminal_output(
+            s.get("agent_name") or s.get("agent_id", "?")
+        )
         created = str(s.get("created_at", ""))[:16]
         click.echo(
             f"{sid_short:<14} {agent_display:<20} {s.get('status', '?'):<12} {s.get('message_count', 0):<6} {created:<20}"
@@ -63,7 +66,7 @@ def get_session(session_id, as_json):
     try:
         session = client.get_session(session_id)
     except PlatformAPIError as e:
-        click.echo(f"Error: {e.message}", err=True)
+        click.echo(f"Error: {sanitize_terminal_output(e.message)}", err=True)
         if e.status_code == 404:
             click.echo(
                 "Hint: Run 'superserve sessions list' to see your sessions.",
@@ -78,9 +81,12 @@ def get_session(session_id, as_json):
         click.echo(json.dumps(session, default=str))
     else:
         click.echo(f"Session: {session['id']}")
-        agent_display = session.get("agent_name") or session.get("agent_id", "?")
-        if session.get("agent_name") and session.get("agent_id"):
-            agent_display = f"{session['agent_name']} ({session['agent_id']})"
+        agent_name = session.get("agent_name")
+        agent_id = session.get("agent_id")
+        if agent_name and agent_id:
+            agent_display = f"{sanitize_terminal_output(agent_name)} ({agent_id})"
+        else:
+            agent_display = sanitize_terminal_output(agent_name or agent_id or "?")
         click.echo(f"  Agent:    {agent_display}")
         click.echo(f"  Status:   {session.get('status', '?')}")
         click.echo(f"  Messages: {session.get('message_count', 0)}")
@@ -97,7 +103,7 @@ def end_session(session_id):
     try:
         session = client.end_session(session_id)
     except PlatformAPIError as e:
-        click.echo(f"Error: {e.message}", err=True)
+        click.echo(f"Error: {sanitize_terminal_output(e.message)}", err=True)
         if e.status_code == 404:
             click.echo(
                 "Hint: Run 'superserve sessions list' to see your sessions.",

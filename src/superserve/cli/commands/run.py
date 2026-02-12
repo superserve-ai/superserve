@@ -49,15 +49,15 @@ def _stream_events(client, event_iter, as_json: bool) -> int:
                 err=True,
             )
             if event.data.get("max_turns_reached"):
-                click.echo(
-                    f"\nWarning: {event.data.get('max_turns_message', 'Max turns reached.')}",
-                    err=True,
+                msg = sanitize_terminal_output(
+                    event.data.get("max_turns_message", "Max turns reached.")
                 )
+                click.echo(f"\nWarning: {msg}", err=True)
             return 0
 
         elif event.type == "run.failed":
             error = event.data.get("error", {})
-            message = error.get("message", "Unknown error")
+            message = sanitize_terminal_output(error.get("message", "Unknown error"))
             click.echo(f"\nError: {message}", err=True)
             return 1
 
@@ -235,7 +235,7 @@ def get_run(run_id: str, full: bool, as_json: bool):
     try:
         run = client.get_run(run_id)
     except PlatformAPIError as e:
-        click.echo(f"Error: {e.message}", err=True)
+        click.echo(f"Error: {sanitize_terminal_output(e.message)}", err=True)
         if e.status_code == 404:
             click.echo("Hint: Run 'superserve runs list' to see your runs.", err=True)
         elif e.status_code == 409:
