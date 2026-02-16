@@ -4,12 +4,13 @@ Sessions are created automatically when using 'superserve run'.
 This group provides management commands for listing, inspecting, and ending sessions.
 """
 
+import json
 import sys
 
 import click
 
 from ..platform.client import PlatformAPIError, PlatformClient
-from ..utils import sanitize_terminal_output
+from ..utils import format_timestamp, sanitize_terminal_output
 
 
 @click.group()
@@ -34,8 +35,6 @@ def list_sessions(agent, filter_status, as_json):
             click.echo(f"Error: {sanitize_terminal_output(e.message)}", err=True)
         sys.exit(1)
     if as_json:
-        import json
-
         click.echo(json.dumps(session_list, default=str))
         return
     if not session_list:
@@ -47,12 +46,11 @@ def list_sessions(agent, filter_status, as_json):
 
     for s in session_list:
         sid_clean = s["id"].replace("ses_", "").replace("-", "")
-        # First 12 hex chars of UUID (no dashes) — matches Docker/Git short ID convention
         sid_short = sid_clean[:12]
         agent_display = sanitize_terminal_output(
             s.get("agent_name") or s.get("agent_id", "?")
         )
-        created = str(s.get("created_at", ""))[:16]
+        created = format_timestamp(str(s.get("created_at", "")), short=True)
         click.echo(
             f"{sid_short:<14} {agent_display:<20} {s.get('status', '?'):<12} {s.get('message_count', 0):<6} {created:<20}"
         )
@@ -77,8 +75,6 @@ def get_session(session_id, as_json):
             click.echo("Hint: Use more characters to narrow it down.", err=True)
         sys.exit(1)
     if as_json:
-        import json
-
         click.echo(json.dumps(session, default=str))
     else:
         click.echo(f"Session: {session['id']}")
@@ -91,7 +87,7 @@ def get_session(session_id, as_json):
         click.echo(f"  Agent:    {agent_display}")
         click.echo(f"  Status:   {session.get('status', '?')}")
         click.echo(f"  Messages: {session.get('message_count', 0)}")
-        click.echo(f"  Created:  {session.get('created_at', '?')}")
+        click.echo(f"  Created:  {format_timestamp(session.get('created_at', ''))}")
         if session.get("title"):
             click.echo(f"  Title:    {session['title']}")
 

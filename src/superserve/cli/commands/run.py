@@ -7,24 +7,34 @@ import sys
 import click
 
 from ..platform.client import PlatformAPIError, PlatformClient
-from ..utils import echo_truncated, format_duration, sanitize_terminal_output
+from ..utils import Spinner, format_duration, sanitize_terminal_output
 
 
-def _stream_events(client, event_iter, as_json: bool) -> int:
-    """Stream SSE events to terminal. Returns 0 on success, non-zero exit code on failure."""
+def _stream_events(event_iter, as_json: bool, spinner: Spinner | None = None) -> int:
+    """Stream SSE events to terminal. Returns 0 on success, non-zero on failure."""
     for event in event_iter:
         if as_json:
             click.echo(json.dumps({"type": event.type, "data": event.data}))
+            if event.type == "run.completed":
+                return 0
+            if event.type == "run.failed":
+                return 1
+            if event.type == "run.cancelled":
+                return 130
             continue
 
-        if event.type == "run.started":
-            pass
+        if event.type in ("status", "run.started", "heartbeat"):
+            pass  # Spinner is already running
 
         elif event.type == "message.delta":
+            if spinner:
+                spinner.stop()
             content = event.data.get("content", "")
             click.echo(sanitize_terminal_output(content), nl=False)
 
         elif event.type == "tool.start":
+            if spinner:
+                spinner.stop()
             tool = event.data.get("tool", "unknown")
             tool_input = event.data.get("input", {})
             input_str = sanitize_terminal_output(str(tool_input))
@@ -36,16 +46,16 @@ def _stream_events(client, event_iter, as_json: bool) -> int:
         elif event.type == "tool.end":
             duration = event.data.get("duration_ms", 0)
             click.echo(f" ({format_duration(duration)})", err=True)
+            if spinner:
+                spinner.start()
 
         elif event.type == "run.completed":
-            usage = event.data.get("usage", {})
+            if spinner:
+                spinner.stop()
             duration = event.data.get("duration_ms", 0)
-            input_tokens = usage.get("input_tokens", 0)
-            output_tokens = usage.get("output_tokens", 0)
             click.echo()  # Newline after content
             click.echo(
-                f"\nCompleted in {format_duration(duration)} "
-                f"({input_tokens:,} input / {output_tokens:,} output tokens)",
+                f"\nCompleted in {format_duration(duration)}",
                 err=True,
             )
             if event.data.get("max_turns_reached"):
@@ -56,16 +66,23 @@ def _stream_events(client, event_iter, as_json: bool) -> int:
             return 0
 
         elif event.type == "run.failed":
+            if spinner:
+                spinner.stop()
             error = event.data.get("error", {})
             message = sanitize_terminal_output(error.get("message", "Unknown error"))
             click.echo(f"\nError: {message}", err=True)
             return 1
 
         elif event.type == "run.cancelled":
+            if spinner:
+                spinner.stop()
             click.echo("\nRun was cancelled.", err=True)
             return 130
 
-    return 0
+    if spinner:
+        spinner.stop()
+    click.echo("\nWarning: Stream ended unexpectedly.", err=True)
+    return 1
 
 
 @click.command("run")
@@ -89,24 +106,16 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
         superserve run my-agent "Hello" --single
     """
     client = PlatformClient()
-    cancelled = False
+    spinner: Spinner | None = None
 
     def handle_interrupt(signum, frame):
-        nonlocal cancelled
-        run_id = getattr(client, "_current_stream_run_id", None)
-        if run_id and not cancelled:
-            cancelled = True
-            click.echo("\nCancelling run...", err=True)
-            try:
-                client.cancel_run(run_id)
-                click.echo("Run cancelled.", err=True)
-            except PlatformAPIError:
-                pass
+        if spinner:
+            spinner.stop()
+        click.echo("\nCancelled.", err=True)
         sys.exit(130)
 
     signal.signal(signal.SIGINT, handle_interrupt)
 
-    # If no prompt, ask for input immediately
     if not prompt:
         try:
             prompt = click.prompt("You", prompt_suffix="> ")
@@ -115,29 +124,44 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
         if not prompt.strip():
             return
 
-    # Interactive mode needs a persistent session so the sandbox stays alive
-    # across turns. Single-shot / JSON / piped input use one-shot runs.
     interactive = not single and not as_json and sys.stdin.isatty()
+    use_spinner = not as_json and sys.stderr.isatty()
+
+    # Pre-flight: check required secrets are set
+    try:
+        agent_info = client.get_agent(agent)
+        if agent_info.required_secrets:
+            missing = [
+                s
+                for s in agent_info.required_secrets
+                if s not in agent_info.environment_keys
+            ]
+            if missing:
+                click.echo(
+                    f"Error: Missing required secret(s): {', '.join(missing)}",
+                    err=True,
+                )
+                click.echo(
+                    f"Set them with: superserve secrets set {agent_info.name} "
+                    + " ".join(f"{k}=..." for k in missing),
+                    err=True,
+                )
+                sys.exit(1)
+    except PlatformAPIError:
+        pass  # Let the session creation handle auth/404 errors
 
     try:
-        if interactive:
-            # Create a session with a persistent sandbox for multi-turn
-            click.echo("Creating session...", err=True)
-            session_data = client.create_session(agent)
-            session_id = session_data["id"]
+        if use_spinner:
+            spinner = Spinner(show_elapsed=True)
+            spinner.start()
+        session_data = client.create_session(agent)
+        session_id = session_data["id"]
 
-            exit_code = _stream_events(
-                client,
-                client.stream_session_message(session_id, prompt),
-                as_json,
-            )
-        else:
-            # One-shot run (sandbox destroyed after response)
-            exit_code = _stream_events(
-                client,
-                client.create_and_stream_run(agent, prompt),
-                as_json,
-            )
+        exit_code = _stream_events(
+            client.stream_session_message(session_id, prompt),
+            as_json,
+            spinner,
+        )
         if exit_code:
             sys.exit(exit_code)
 
@@ -151,13 +175,16 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
             except (EOFError, click.Abort):
                 click.echo()
                 break
-            if not next_prompt.strip():
+            if not next_prompt.strip() or next_prompt.strip().lower() == "exit":
                 break
 
+            if spinner:
+                spinner.start()
+
             exit_code = _stream_events(
-                client,
                 client.stream_session_message(session_id, next_prompt),
                 as_json,
+                spinner,
             )
             if exit_code:
                 sys.exit(exit_code)
@@ -170,114 +197,6 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
         else:
             click.echo(f"Error: {e.message}", err=True)
         sys.exit(1)
-
-
-@click.group("runs")
-def runs():
-    """View and manage runs."""
-    pass
-
-
-@runs.command("list")
-@click.option("--agent", help="Filter by agent name or ID")
-@click.option(
-    "--status",
-    type=click.Choice(["pending", "running", "completed", "failed", "cancelled"]),
-)
-@click.option("--limit", default=20, type=int, help="Maximum number of runs to show")
-@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def list_runs(agent: str | None, status: str | None, limit: int, as_json: bool):
-    """List recent runs."""
-    client = PlatformClient()
-
-    try:
-        run_list = client.list_runs(agent_id=agent, status=status, limit=limit)
-    except PlatformAPIError as e:
-        click.echo(f"Error: {e.message}", err=True)
-        sys.exit(1)
-
-    if as_json:
-        click.echo(json.dumps([r.model_dump() for r in run_list], indent=2))
-        return
-
-    if not run_list:
-        click.echo("No runs found.")
-        return
-
-    click.echo(
-        f"{'ID':<20} {'AGENT':<20} {'STATUS':<12} {'DURATION':<10} {'CREATED':<20}"
-    )
-    click.echo("-" * 82)
-
-    for run in run_list:
-        run_id_clean = run.id.replace("run_", "").replace("-", "")
-        # First 12 hex chars of UUID (no dashes) — matches Docker/Git short ID convention
-        run_id_short = run_id_clean[:12]
-        agent_display = (
-            sanitize_terminal_output(run.agent_name)
-            if run.agent_name
-            else (run.agent_id[-12:] if len(run.agent_id) > 12 else run.agent_id)
-        )
-        duration = format_duration(run.duration_ms) if run.duration_ms else "-"
-        created = run.created_at[:16] if run.created_at else ""
-        click.echo(
-            f"{run_id_short:<20} {agent_display:<20} {run.status:<12} {duration:<10} {created:<20}"
-        )
-
-
-@runs.command("get")
-@click.argument("run_id")
-@click.option("--full", is_flag=True, help="Show full output without truncation")
-@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def get_run(run_id: str, full: bool, as_json: bool):
-    """Get details of a run."""
-    client = PlatformClient()
-
-    try:
-        run = client.get_run(run_id)
-    except PlatformAPIError as e:
-        click.echo(f"Error: {sanitize_terminal_output(e.message)}", err=True)
-        if e.status_code == 404:
-            click.echo("Hint: Run 'superserve runs list' to see your runs.", err=True)
-        elif e.status_code == 409:
-            click.echo("Hint: Use more characters to narrow it down.", err=True)
-        sys.exit(1)
-
-    if as_json:
-        click.echo(json.dumps(run.model_dump(), indent=2))
-        return
-
-    click.echo(f"ID:       {run.id}")
-    if run.agent_name:
-        click.echo(
-            f"Agent:    {sanitize_terminal_output(run.agent_name)} ({run.agent_id})"
-        )
-    else:
-        click.echo(f"Agent:    {run.agent_id}")
-    click.echo(f"Status:   {run.status}")
-    click.echo(f"Created:  {run.created_at}")
-
-    if run.started_at:
-        click.echo(f"Started:  {run.started_at}")
-    if run.completed_at:
-        click.echo(f"Completed: {run.completed_at}")
-
-    if run.duration_ms:
-        click.echo(f"Duration: {format_duration(run.duration_ms)}")
-
-    if run.usage:
-        click.echo(
-            f"Tokens:   {run.usage.input_tokens:,} input / {run.usage.output_tokens:,} output"
-        )
-
-    if run.tools_used:
-        click.echo(f"Tools:    {', '.join(run.tools_used)}")
-
-    echo_truncated(run.prompt, "Prompt", 500, full)
-
-    if run.output:
-        echo_truncated(run.output, "Output", 1000, full)
-
-    if run.error_message:
-        click.echo()
-        click.echo(f"Error: {run.error_message}")
+    finally:
+        if spinner:
+            spinner.stop()

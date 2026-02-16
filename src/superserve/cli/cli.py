@@ -4,9 +4,11 @@
 Usage:
     superserve login [--api-key=KEY]
     superserve logout
-    superserve agents create|list|get|delete
+    superserve init
+    superserve deploy
+    superserve agents list|get|delete
     superserve run <agent> <prompt>
-    superserve runs list|get
+    superserve sessions list|get|end
     superserve secrets set|delete|list
 """
 
@@ -18,7 +20,9 @@ import requests
 
 from .commands import login, logout
 from .commands.agents import agents
-from .commands.run import run_agent, runs
+from .commands.deploy import deploy
+from .commands.init import init
+from .commands.run import run_agent
 from .commands.secrets import secrets
 from .commands.session import sessions
 from .platform.client import PlatformAPIError
@@ -35,10 +39,13 @@ def cli():
 cli.add_command(login.login)
 cli.add_command(logout.logout)
 
+# Deploy & init
+cli.add_command(deploy)
+cli.add_command(init)
+
 # Hosted agents commands
 cli.add_command(agents)
 cli.add_command(run_agent)
-cli.add_command(runs)
 cli.add_command(secrets)
 cli.add_command(sessions)
 
@@ -63,6 +70,10 @@ def main():
         if hint:
             click.echo(hint, err=True)
         sys.exit(1)
+    except requests.exceptions.SSLError:
+        click.echo("Error: SSL certificate verification failed.", err=True)
+        click.echo("Hint: Check your network or try again later.", err=True)
+        sys.exit(1)
     except requests.ConnectionError:
         click.echo("Error: Could not connect to Superserve API.", err=True)
         click.echo("Hint: Check your internet connection and try again.", err=True)
@@ -71,10 +82,11 @@ def main():
         click.echo("Error: Request timed out.", err=True)
         click.echo("Hint: The server may be busy. Please try again.", err=True)
         sys.exit(1)
-    except click.Abort:
-        click.echo(err=True)
-        sys.exit(130)
-    except KeyboardInterrupt:
+    except requests.RequestException:
+        click.echo("Error: Network request failed.", err=True)
+        click.echo("Hint: Check your connection and try again.", err=True)
+        sys.exit(1)
+    except (click.Abort, KeyboardInterrupt):
         click.echo(err=True)
         sys.exit(130)
     except Exception as e:
