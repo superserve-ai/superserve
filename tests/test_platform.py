@@ -1,6 +1,5 @@
 """Tests for superserve.cli.platform module."""
 
-import zipfile
 from unittest.mock import patch
 
 import pytest
@@ -13,12 +12,8 @@ from superserve.cli.platform.auth import (
     save_credentials,
 )
 from superserve.cli.platform.types import (
-    AgentManifest,
     Credentials,
     DeviceCodeResponse,
-    LogEntry,
-    ProjectManifest,
-    ProjectResponse,
 )
 
 
@@ -63,105 +58,6 @@ class TestCredentials:
             Credentials()
 
 
-class TestAgentManifest:
-    """Tests for AgentManifest model."""
-
-    def test_create_agent_manifest(self):
-        """Create basic agent manifest."""
-        manifest = AgentManifest(
-            name="myagent",
-            route_prefix="/myagent",
-            num_cpus=1,
-            num_gpus=0,
-            memory="2GB",
-            replicas=1,
-        )
-        assert manifest.name == "myagent"
-        assert manifest.route_prefix == "/myagent"
-        assert manifest.num_cpus == 1
-        assert manifest.replicas == 1
-
-    def test_agent_manifest_float_cpus(self):
-        """Agent manifest supports fractional CPUs."""
-        manifest = AgentManifest(
-            name="test",
-            route_prefix="/test",
-            num_cpus=0.5,
-            num_gpus=0.25,
-            memory="1GB",
-            replicas=1,
-        )
-        assert manifest.num_cpus == 0.5
-        assert manifest.num_gpus == 0.25
-
-
-class TestProjectManifest:
-    """Tests for ProjectManifest model."""
-
-    def test_create_project_manifest(self):
-        """Create project manifest."""
-        manifest = ProjectManifest(
-            name="myproject",
-            python_version="3.11",
-            created_at="2025-01-01T00:00:00Z",
-        )
-        assert manifest.name == "myproject"
-        assert manifest.version == "1.0"
-        assert manifest.agents == []
-
-    def test_project_manifest_with_agents(self):
-        """Project manifest with agents."""
-        agent = AgentManifest(
-            name="agent1",
-            route_prefix="/agent1",
-            num_cpus=2,
-            num_gpus=0,
-            memory="4GB",
-            replicas=2,
-        )
-        manifest = ProjectManifest(
-            name="myproject",
-            python_version="3.11",
-            agents=[agent],
-        )
-        assert len(manifest.agents) == 1
-        assert manifest.agents[0].name == "agent1"
-
-
-class TestProjectResponse:
-    """Tests for ProjectResponse model."""
-
-    def test_create_project_response(self):
-        """Create project response."""
-        response = ProjectResponse(
-            id="project-123",
-            name="myproject",
-            status="running",
-            url="https://myproject.superserve.com",
-        )
-        assert response.id == "project-123"
-        assert response.status == "running"
-        assert response.url == "https://myproject.superserve.com"
-
-    def test_project_response_statuses(self):
-        """Test valid project statuses."""
-        for status in [
-            "pending",
-            "building",
-            "deploying",
-            "running",
-            "failed",
-            "stopped",
-        ]:
-            response = ProjectResponse(id="test", name="test", status=status)
-            assert response.status == status
-
-    def test_project_response_invalid_status(self):
-        """Invalid status raises validation error."""
-        with pytest.raises(ValidationError):
-            ProjectResponse(id="test", name="test", status="invalid")
-
-
 class TestDeviceCodeResponse:
     """Tests for DeviceCodeResponse model."""
 
@@ -178,31 +74,6 @@ class TestDeviceCodeResponse:
         assert response.device_code == "device-123"
         assert response.user_code == "ABCD-1234"
         assert response.expires_in == 900
-
-
-class TestLogEntry:
-    """Tests for LogEntry model."""
-
-    def test_create_log_entry(self):
-        """Create log entry."""
-        entry = LogEntry(
-            timestamp="2025-01-01T00:00:00Z",
-            level="INFO",
-            message="Agent started",
-            agent="myagent",
-        )
-        assert entry.timestamp == "2025-01-01T00:00:00Z"
-        assert entry.level == "INFO"
-        assert entry.agent == "myagent"
-
-    def test_log_entry_no_agent(self):
-        """Log entry without agent field."""
-        entry = LogEntry(
-            timestamp="2025-01-01T00:00:00Z",
-            level="ERROR",
-            message="System error",
-        )
-        assert entry.agent is None
 
 
 class TestAuthModule:
@@ -268,91 +139,3 @@ class TestAuthModule:
             # Check file mode is 0o600 (owner read/write only)
             mode = temp_credentials_file.stat().st_mode & 0o777
             assert mode == 0o600
-
-
-class TestPackaging:
-    """Tests for project packaging."""
-
-    @pytest.fixture
-    def temp_project(self, tmp_path):
-        """Create a temporary project structure."""
-        project_dir = tmp_path / "myproject"
-        project_dir.mkdir()
-
-        # Create agents directory with an agent
-        agents_dir = project_dir / "agents"
-        agents_dir.mkdir()
-        agent_dir = agents_dir / "myagent"
-        agent_dir.mkdir()
-        (agent_dir / "agent.py").write_text("# Agent code")
-        (agent_dir / "__init__.py").write_text("")
-
-        # Create pyproject.toml (packaging now uses this instead of requirements.txt)
-        (project_dir / "pyproject.toml").write_text(
-            '[project]\nname = "myproject"\ndependencies = ["requests>=2.0"]\n'
-        )
-
-        return project_dir
-
-    def test_package_project(self, temp_project):
-        """Package project creates zip archive."""
-        from superserve.cli.platform.packaging import package_project
-
-        # Create mock agent configs
-        class MockAgentConfig:
-            name = "myagent"
-            route_prefix = "/myagent"
-            num_cpus = 1
-            num_gpus = 0
-            memory = "2GB"
-            replicas = 1
-
-        agents = [MockAgentConfig()]
-
-        package_path, manifest = package_project(temp_project, agents, "test-project")
-
-        try:
-            assert package_path.exists()
-            assert package_path.suffix == ".zip"
-            assert manifest.name == "test-project"
-            assert len(manifest.agents) == 1
-            assert manifest.agents[0].name == "myagent"
-            assert manifest.checksum  # Should have checksum
-
-            # Verify zip contents
-            with zipfile.ZipFile(package_path, "r") as zf:
-                names = zf.namelist()
-                assert "manifest.json" in names
-                assert "pyproject.toml" in names
-                assert any("agents/myagent" in n for n in names)
-        finally:
-            package_path.unlink(missing_ok=True)
-
-    def test_package_excludes_pycache(self, temp_project):
-        """Package excludes __pycache__ directories."""
-        from superserve.cli.platform.packaging import package_project
-
-        # Create __pycache__ directory
-        pycache = temp_project / "agents" / "myagent" / "__pycache__"
-        pycache.mkdir()
-        (pycache / "agent.cpython-311.pyc").write_bytes(b"bytecode")
-
-        class MockAgentConfig:
-            name = "myagent"
-            route_prefix = "/myagent"
-            num_cpus = 1
-            num_gpus = 0
-            memory = "2GB"
-            replicas = 1
-
-        package_path, manifest = package_project(
-            temp_project, [MockAgentConfig()], "test"
-        )
-
-        try:
-            with zipfile.ZipFile(package_path, "r") as zf:
-                names = zf.namelist()
-                assert not any("__pycache__" in n for n in names)
-                assert not any(".pyc" in n for n in names)
-        finally:
-            package_path.unlink(missing_ok=True)

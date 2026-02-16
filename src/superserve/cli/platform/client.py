@@ -15,9 +15,6 @@ from .types import (
     AgentResponse,
     Credentials,
     DeviceCodeResponse,
-    LogEntry,
-    ProjectManifest,
-    ProjectResponse,
     RunEvent,
 )
 
@@ -250,110 +247,6 @@ class PlatformClient:
             expires_at=data.get("expires_at"),
             refresh_token=data.get("refresh_token"),
         )
-
-    def create_project(
-        self,
-        name: str,
-        package_path: str,
-        manifest: ProjectManifest,
-        env_vars: dict[str, str] | None = None,
-    ) -> ProjectResponse:
-        """Create a new project.
-
-        Args:
-            name: Project name.
-            package_path: Path to project package (.zip).
-            manifest: Project manifest with agent configurations.
-            env_vars: Environment variables for the project.
-
-        Returns:
-            Project response with status and URL.
-        """
-        with open(package_path, "rb") as f:
-            files = {"package": (f"{name}.zip", f, "application/zip")}
-            form_data: dict[str, str] = {"manifest": manifest.model_dump_json()}
-            if env_vars:
-                form_data["env_vars"] = json.dumps(env_vars)
-
-            resp = self._request("POST", "/projects", files=files, data=form_data)
-
-        return self._safe_validate(ProjectResponse, self._safe_json(resp))
-
-    def get_project(self, name: str) -> ProjectResponse:
-        """Get project by name.
-
-        Args:
-            name: Project name.
-
-        Returns:
-            Project response.
-        """
-        resp = self._request("GET", f"/projects/{name}")
-        return self._safe_validate(ProjectResponse, self._safe_json(resp))
-
-    def list_projects(self) -> list[ProjectResponse]:
-        """List all projects.
-
-        Returns:
-            List of project responses.
-        """
-        resp = self._request("GET", "/projects")
-        data = self._safe_json(resp)
-        return [
-            self._safe_validate(ProjectResponse, d) for d in data.get("projects", [])
-        ]
-
-    def delete_project(self, name: str) -> None:
-        """Delete a project.
-
-        Args:
-            name: Project name.
-        """
-        self._request("DELETE", f"/projects/{name}")
-
-    def get_logs(
-        self, name: str, tail: int = 100, agent: str | None = None
-    ) -> list[LogEntry]:
-        """Get project logs.
-
-        Args:
-            name: Project name.
-            tail: Number of lines to retrieve.
-            agent: Filter by agent name.
-
-        Returns:
-            List of log entries.
-        """
-        query_params: dict[str, int | str] = {"tail": tail}
-        if agent:
-            query_params["agent"] = agent
-
-        resp = self._request("GET", f"/projects/{name}/logs", params=query_params)
-        data = self._safe_json(resp)
-        return [self._safe_validate(LogEntry, log) for log in data.get("logs", [])]
-
-    def stream_logs(self, name: str, agent: str | None = None) -> Iterator[LogEntry]:
-        """Stream project logs via Server-Sent Events.
-
-        Args:
-            name: Project name.
-            agent: Filter by agent name.
-
-        Yields:
-            Log entries as they arrive.
-        """
-        query_params: dict[str, str] | None = {"agent": agent} if agent else None
-        resp = self._request(
-            "GET", f"/projects/{name}/logs/stream", params=query_params, stream=True
-        )
-
-        for line in resp.iter_lines():
-            if line and line.startswith(b"data: "):
-                try:
-                    data = json.loads(line[6:])
-                    yield self._safe_validate(LogEntry, data)
-                except (json.JSONDecodeError, ValueError, PlatformAPIError):
-                    continue
 
     # ==================== AGENTS ====================
 

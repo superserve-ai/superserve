@@ -3,15 +3,7 @@
 from .auth import clear_credentials, get_credentials, is_authenticated, save_credentials
 from .client import PlatformAPIError, PlatformClient
 from .config import CREDENTIALS_FILE, PLATFORM_API_URL
-from .packaging import package_project
-from .types import (
-    AgentManifest,
-    Credentials,
-    DeviceCodeResponse,
-    LogEntry,
-    ProjectManifest,
-    ProjectResponse,
-)
+from .types import Credentials
 
 __all__ = [
     # Auth
@@ -25,13 +17,6 @@ __all__ = [
     # Config
     "PLATFORM_API_URL",
     "CREDENTIALS_FILE",
-    # Packaging
-    "package_project",
     # Types
     "Credentials",
-    "AgentManifest",
-    "ProjectManifest",
-    "ProjectResponse",
-    "DeviceCodeResponse",
-    "LogEntry",
 ]
