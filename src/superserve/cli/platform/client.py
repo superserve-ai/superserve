@@ -478,7 +478,7 @@ class PlatformClient:
         self,
         agent_name_or_id: str,
         title: str | None = None,
-        idle_timeout_seconds: int = 2592000,
+        idle_timeout_seconds: int = 30 * 24 * 60 * 60,  # 30 days
     ) -> dict[str, Any]:
         """Create a new session.
 
