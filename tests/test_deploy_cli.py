@@ -57,13 +57,13 @@ class TestInitCommand:
         assert "name: my-agent" in yaml_content
 
     def test_init_refuses_if_exists(self, runner, tmp_path, monkeypatch):
-        """Init refuses if superserve.yaml already exists."""
+        """Init exits cleanly if superserve.yaml already exists."""
         monkeypatch.chdir(tmp_path)
         (tmp_path / "superserve.yaml").write_text("name: existing\n")
 
         result = runner.invoke(cli, ["init"])
 
-        assert result.exit_code == 1
+        assert result.exit_code == 0
         assert "already exists" in result.output
 
     def test_init_default_name_from_dir(self, runner, tmp_path, monkeypatch):

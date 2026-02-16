@@ -7,11 +7,11 @@ import sys
 import click
 
 from ..platform.client import PlatformAPIError, PlatformClient
-from ..utils import echo_truncated, format_duration, sanitize_terminal_output
+from ..utils import format_duration, sanitize_terminal_output
 
 
 def _stream_events(event_iter, as_json: bool) -> int:
-    """Stream SSE events to terminal. Returns 0 on success, non-zero exit code on failure."""
+    """Stream SSE events to terminal. Returns 0 on success, non-zero on failure."""
     for event in event_iter:
         if as_json:
             click.echo(json.dumps({"type": event.type, "data": event.data}))
@@ -93,7 +93,6 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
 
     signal.signal(signal.SIGINT, handle_interrupt)
 
-    # If no prompt, ask for input immediately
     if not prompt:
         try:
             prompt = click.prompt("You", prompt_suffix="> ")
@@ -145,114 +144,3 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
         else:
             click.echo(f"Error: {e.message}", err=True)
         sys.exit(1)
-
-
-@click.group("runs")
-def runs():
-    """View and manage runs."""
-    pass
-
-
-@runs.command("list")
-@click.option("--agent", help="Filter by agent name or ID")
-@click.option(
-    "--status",
-    type=click.Choice(["pending", "running", "completed", "failed", "cancelled"]),
-)
-@click.option("--limit", default=20, type=int, help="Maximum number of runs to show")
-@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def list_runs(agent: str | None, status: str | None, limit: int, as_json: bool):
-    """List recent runs."""
-    client = PlatformClient()
-
-    try:
-        run_list = client.list_runs(agent_id=agent, status=status, limit=limit)
-    except PlatformAPIError as e:
-        click.echo(f"Error: {e.message}", err=True)
-        sys.exit(1)
-
-    if as_json:
-        click.echo(json.dumps([r.model_dump() for r in run_list], indent=2))
-        return
-
-    if not run_list:
-        click.echo("No runs found.")
-        return
-
-    click.echo(
-        f"{'ID':<20} {'AGENT':<20} {'STATUS':<12} {'DURATION':<10} {'CREATED':<20}"
-    )
-    click.echo("-" * 82)
-
-    for run in run_list:
-        run_id_clean = run.id.replace("run_", "").replace("-", "")
-        # First 12 hex chars of UUID (no dashes) — matches Docker/Git short ID convention
-        run_id_short = run_id_clean[:12]
-        agent_display = (
-            sanitize_terminal_output(run.agent_name)
-            if run.agent_name
-            else (run.agent_id[-12:] if len(run.agent_id) > 12 else run.agent_id)
-        )
-        duration = format_duration(run.duration_ms) if run.duration_ms else "-"
-        created = run.created_at[:16] if run.created_at else ""
-        click.echo(
-            f"{run_id_short:<20} {agent_display:<20} {run.status:<12} {duration:<10} {created:<20}"
-        )
-
-
-@runs.command("get")
-@click.argument("run_id")
-@click.option("--full", is_flag=True, help="Show full output without truncation")
-@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def get_run(run_id: str, full: bool, as_json: bool):
-    """Get details of a run."""
-    client = PlatformClient()
-
-    try:
-        run = client.get_run(run_id)
-    except PlatformAPIError as e:
-        click.echo(f"Error: {sanitize_terminal_output(e.message)}", err=True)
-        if e.status_code == 404:
-            click.echo("Hint: Run 'superserve runs list' to see your runs.", err=True)
-        elif e.status_code == 409:
-            click.echo("Hint: Use more characters to narrow it down.", err=True)
-        sys.exit(1)
-
-    if as_json:
-        click.echo(json.dumps(run.model_dump(), indent=2))
-        return
-
-    click.echo(f"ID:       {run.id}")
-    if run.agent_name:
-        click.echo(
-            f"Agent:    {sanitize_terminal_output(run.agent_name)} ({run.agent_id})"
-        )
-    else:
-        click.echo(f"Agent:    {run.agent_id}")
-    click.echo(f"Status:   {run.status}")
-    click.echo(f"Created:  {run.created_at}")
-
-    if run.started_at:
-        click.echo(f"Started:  {run.started_at}")
-    if run.completed_at:
-        click.echo(f"Completed: {run.completed_at}")
-
-    if run.duration_ms:
-        click.echo(f"Duration: {format_duration(run.duration_ms)}")
-
-    if run.usage:
-        click.echo(
-            f"Tokens:   {run.usage.input_tokens:,} input / {run.usage.output_tokens:,} output"
-        )
-
-    if run.tools_used:
-        click.echo(f"Tools:    {', '.join(run.tools_used)}")
-
-    echo_truncated(run.prompt, "Prompt", 500, full)
-
-    if run.output:
-        echo_truncated(run.output, "Output", 1000, full)
-
-    if run.error_message:
-        click.echo()
-        click.echo(f"Error: {run.error_message}")

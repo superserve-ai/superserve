@@ -1,6 +1,29 @@
 """Shared utility functions for CLI commands."""
 
 import re
+from datetime import datetime
+
+
+def format_timestamp(ts: str, short: bool = False) -> str:
+    """Format ISO timestamp to readable local time.
+
+    Args:
+        ts: ISO 8601 timestamp string.
+        short: If True, omit seconds (for list views).
+
+    Returns:
+        Formatted local time string.
+    """
+    if not ts:
+        return ""
+    try:
+        utc = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        local = utc.astimezone()
+        if short:
+            return local.strftime("%b %d %H:%M")
+        return local.strftime("%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return ts[:16]
 
 
 def format_duration(ms: int) -> str:
@@ -70,23 +93,3 @@ def sanitize_terminal_output(text: str) -> str:
         Text with all ANSI escape sequences removed.
     """
     return _ANSI_ESCAPE_PATTERN.sub("", text)
-
-
-def echo_truncated(text: str, label: str, max_len: int, full: bool) -> None:
-    """Echo text with optional truncation and a label.
-
-    Args:
-        text: The text to display.
-        label: Label to show before the text (e.g., "Prompt", "Output").
-        max_len: Maximum length before truncation.
-        full: If True, show full text without truncation.
-    """
-    import click
-
-    click.echo(f"\n{label}:")
-
-    if not full and len(text) > max_len:
-        click.echo(f"  {text[:max_len]}")
-        click.echo(f"  ... ({len(text)} chars, use --full to see all)")
-    else:
-        click.echo(f"  {text}")

@@ -126,6 +126,8 @@ class AgentResponse(BaseModel):
     name: str
     command: str | None = None
     environment_keys: list[str] = Field(default_factory=list)
+    deps_status: str = "none"
+    deps_error: str | None = None
     created_at: str
     updated_at: str
 

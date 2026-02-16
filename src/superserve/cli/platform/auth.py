@@ -28,7 +28,12 @@ def get_credentials() -> Credentials | None:
         return None
     try:
         return Credentials.model_validate_json(CREDENTIALS_FILE.read_text())
-    except (ValidationError, ValueError):
+    except (ValidationError, ValueError, OSError):
+        # Corrupted or unreadable credentials file — clean it up
+        try:
+            CREDENTIALS_FILE.unlink()
+        except OSError:
+            pass
         return None
 
 

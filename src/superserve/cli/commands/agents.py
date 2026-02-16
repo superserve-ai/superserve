@@ -6,7 +6,19 @@ import sys
 import click
 
 from ..platform.client import PlatformAPIError, PlatformClient
-from ..utils import sanitize_terminal_output
+from ..utils import format_timestamp, sanitize_terminal_output
+
+
+def _handle_agent_error(e: PlatformAPIError, name: str | None = None) -> None:
+    """Print a user-friendly error for agent operations and exit."""
+    if e.status_code == 404 and name:
+        click.echo(f"Agent '{name}' not found", err=True)
+        click.echo("Hint: Run 'superserve agents list' to see your agents.", err=True)
+    elif e.status_code == 401:
+        click.echo("Not authenticated. Run 'superserve login' first.", err=True)
+    else:
+        click.echo(f"Error: {e.message}", err=True)
+    sys.exit(1)
 
 
 @click.group()
@@ -24,11 +36,7 @@ def list_agents(as_json: bool):
     try:
         agent_list = client.list_agents()
     except PlatformAPIError as e:
-        if e.status_code == 401:
-            click.echo("Not authenticated. Run 'superserve login' first.", err=True)
-        else:
-            click.echo(f"Error: {e.message}", err=True)
-        sys.exit(1)
+        _handle_agent_error(e)
 
     if as_json:
         click.echo(json.dumps([a.model_dump() for a in agent_list], indent=2))
@@ -38,17 +46,13 @@ def list_agents(as_json: bool):
         click.echo("No agents found. Deploy one with: superserve deploy")
         return
 
-    # Print table header
-    click.echo(f"{'NAME':<25} {'COMMAND':<35} {'CREATED':<20}")
-    click.echo("-" * 80)
+    click.echo(f"{'NAME':<25} {'ID':<40} {'CREATED':<20}")
+    click.echo("-" * 85)
 
     for agent in agent_list:
-        created = agent.created_at[:10] if agent.created_at else ""
+        created = format_timestamp(agent.created_at, short=True)
         name = sanitize_terminal_output(agent.name)
-        command = sanitize_terminal_output(agent.command or "")
-        if len(command) > 33:
-            command = command[:30] + "..."
-        click.echo(f"{name:<25} {command:<35} {created:<20}")
+        click.echo(f"{name:<25} {agent.id:<40} {created:<20}")
 
 
 @agents.command("get")
@@ -61,11 +65,7 @@ def get_agent(name: str, as_json: bool):
     try:
         agent = client.get_agent(name)
     except PlatformAPIError as e:
-        if e.status_code == 404:
-            click.echo(f"Agent '{name}' not found", err=True)
-        else:
-            click.echo(f"Error: {e.message}", err=True)
-        sys.exit(1)
+        _handle_agent_error(e, name)
 
     if as_json:
         click.echo(json.dumps(agent.model_dump(), indent=2))
@@ -74,10 +74,8 @@ def get_agent(name: str, as_json: bool):
     click.echo(f"ID:       {agent.id}")
     click.echo(f"Name:     {sanitize_terminal_output(agent.name)}")
     click.echo(f"Command:  {sanitize_terminal_output(agent.command or '(none)')}")
-    click.echo(f"Created:  {agent.created_at}")
-    click.echo(f"Updated:  {agent.updated_at}")
-    if agent.environment_keys:
-        click.echo(f"Secrets:  {', '.join(agent.environment_keys)}")
+    click.echo(f"Created:  {format_timestamp(agent.created_at)}")
+    click.echo(f"Updated:  {format_timestamp(agent.updated_at)}")
 
 
 @agents.command("delete")
@@ -95,10 +93,6 @@ def delete_agent(name: str, yes: bool):
     try:
         client.delete_agent(name)
     except PlatformAPIError as e:
-        if e.status_code == 404:
-            click.echo(f"Agent '{name}' not found", err=True)
-        else:
-            click.echo(f"Error: {e.message}", err=True)
-        sys.exit(1)
+        _handle_agent_error(e, name)
 
     click.echo(f"Deleted agent '{name}'")

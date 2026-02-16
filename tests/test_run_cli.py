@@ -10,8 +10,6 @@ from superserve.cli.cli import cli
 from superserve.cli.platform.client import PlatformAPIError, PlatformClient
 from superserve.cli.platform.types import (
     RunEvent,
-    RunResponse,
-    UsageMetrics,
 )
 
 
@@ -19,19 +17,6 @@ from superserve.cli.platform.types import (
 def runner():
     """Provide a CLI runner."""
     return CliRunner()
-
-
-def _make_run_response(**overrides) -> RunResponse:
-    """Helper to create a RunResponse with defaults."""
-    defaults = {
-        "id": "run_test-uuid",
-        "agent_id": "agt_agent-uuid",
-        "status": "pending",
-        "prompt": "Hello",
-        "created_at": "2026-01-01T00:00:00Z",
-    }
-    defaults.update(overrides)
-    return RunResponse(**defaults)
 
 
 def _mock_session_client(mock_client, events):
@@ -337,113 +322,3 @@ class TestClientSSEParsing:
         assert len(events) == 2
         assert "raw" in events[0].data
         assert events[1].data["content"] == "valid"
-
-
-# ==================== Unit Tests: Runs Subcommands ====================
-
-
-class TestRunsListCommand:
-    """Tests for superserve runs list command."""
-
-    def test_runs_list(self, runner):
-        """Runs list shows recent runs."""
-        with patch("superserve.cli.commands.run.PlatformClient") as mock_client_cls:
-            mock_client = MagicMock()
-            mock_client.list_runs.return_value = [
-                _make_run_response(
-                    id="run_abc123",
-                    status="completed",
-                    duration_ms=3000,
-                    created_at="2026-01-01T12:00:00Z",
-                ),
-            ]
-            mock_client_cls.return_value = mock_client
-
-            result = runner.invoke(cli, ["runs", "list"])
-
-            assert result.exit_code == 0
-            assert "abc123" in result.output
-            assert "completed" in result.output
-
-    def test_runs_list_json(self, runner):
-        """Runs list with --json outputs JSON."""
-        with patch("superserve.cli.commands.run.PlatformClient") as mock_client_cls:
-            mock_client = MagicMock()
-            mock_client.list_runs.return_value = [
-                _make_run_response(id="run_abc123", status="completed"),
-            ]
-            mock_client_cls.return_value = mock_client
-
-            result = runner.invoke(cli, ["runs", "list", "--json"])
-
-            assert result.exit_code == 0
-            data = json.loads(result.output)
-            assert isinstance(data, list)
-            assert data[0]["id"] == "run_abc123"
-
-    def test_runs_list_with_filters(self, runner):
-        """Runs list passes agent and status filters."""
-        with patch("superserve.cli.commands.run.PlatformClient") as mock_client_cls:
-            mock_client = MagicMock()
-            mock_client.list_runs.return_value = []
-            mock_client_cls.return_value = mock_client
-
-            result = runner.invoke(
-                cli, ["runs", "list", "--agent", "my-agent", "--status", "failed"]
-            )
-
-            assert result.exit_code == 0
-            mock_client.list_runs.assert_called_once_with(
-                agent_id="my-agent", status="failed", limit=20
-            )
-
-
-class TestRunsGetCommand:
-    """Tests for superserve runs get command."""
-
-    def test_runs_get(self, runner):
-        """Runs get shows run details."""
-        with patch("superserve.cli.commands.run.PlatformClient") as mock_client_cls:
-            mock_client = MagicMock()
-            mock_client.get_run.return_value = _make_run_response(
-                id="run_abc123",
-                status="completed",
-                prompt="What is 2+2?",
-                output="4",
-                duration_ms=1500,
-                usage=UsageMetrics(input_tokens=10, output_tokens=5, total_tokens=15),
-            )
-            mock_client_cls.return_value = mock_client
-
-            result = runner.invoke(cli, ["runs", "get", "run_abc123"])
-
-            assert result.exit_code == 0
-            assert "run_abc123" in result.output
-            assert "completed" in result.output
-
-    def test_runs_get_not_found(self, runner):
-        """Runs get shows error when run not found."""
-        with patch("superserve.cli.commands.run.PlatformClient") as mock_client_cls:
-            mock_client = MagicMock()
-            mock_client.get_run.side_effect = PlatformAPIError(404, "Run not found")
-            mock_client_cls.return_value = mock_client
-
-            result = runner.invoke(cli, ["runs", "get", "run_nonexistent"])
-
-            assert result.exit_code == 1
-            assert "not found" in result.output.lower()
-
-    def test_runs_get_json(self, runner):
-        """Runs get with --json outputs JSON."""
-        with patch("superserve.cli.commands.run.PlatformClient") as mock_client_cls:
-            mock_client = MagicMock()
-            mock_client.get_run.return_value = _make_run_response(
-                id="run_abc123", status="completed"
-            )
-            mock_client_cls.return_value = mock_client
-
-            result = runner.invoke(cli, ["runs", "get", "run_abc123", "--json"])
-
-            assert result.exit_code == 0
-            data = json.loads(result.output)
-            assert data["id"] == "run_abc123"

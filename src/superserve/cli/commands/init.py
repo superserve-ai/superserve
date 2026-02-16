@@ -40,8 +40,8 @@ def init(name: str | None):
     """
     config_path = Path.cwd() / SUPERSERVE_YAML
     if config_path.exists():
-        click.echo(f"{SUPERSERVE_YAML} already exists.", err=True)
-        sys.exit(1)
+        click.echo(f"{SUPERSERVE_YAML} already exists in this directory.")
+        sys.exit(0)
 
     if name is None:
         # Default to the current directory name, lowercased and sanitized
@@ -60,7 +60,9 @@ def init(name: str | None):
         f"  1. Set 'command' in {SUPERSERVE_YAML} to the command that starts your agent"
     )
     click.echo("     (e.g., python main.py, node index.js, ./start.sh)")
-    click.echo("  2. Set your API keys as secrets:")
-    click.echo(f"     superserve secrets set {name} ANTHROPIC_API_KEY=sk-...")
-    click.echo("  3. Deploy your agent:")
+    click.echo("  2. Deploy your agent:")
     click.echo("     superserve deploy")
+    click.echo("  3. Set your API keys as secrets:")
+    click.echo(f"     superserve secrets set {name} ANTHROPIC_API_KEY=sk-...")
+    click.echo("  4. Run your agent:")
+    click.echo(f'     superserve run {name} "your prompt here"')

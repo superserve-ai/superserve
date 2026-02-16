@@ -1,11 +1,13 @@
 """CLI command for deploying agents."""
 
 import io
+import itertools
 import json
-import os
 import sys
 import tarfile
 import tempfile
+import threading
+import time
 from pathlib import Path
 
 import click
@@ -29,6 +31,42 @@ EXCLUDE_DIRS = {
 }
 
 EXCLUDE_FILE_PREFIXES = (".env",)
+
+# Braille spinner frames
+_SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+
+class _Status:
+    """Inline status spinner that overwrites the current line."""
+
+    def __init__(self, message: str):
+        self._message = message
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> "_Status":
+        self._thread = threading.Thread(target=self._spin, daemon=True)
+        self._thread.start()
+        return self
+
+    def _spin(self) -> None:
+        frames = itertools.cycle(_SPINNER)
+        while not self._stop.is_set():
+            frame = next(frames)
+            click.echo(f"\r  {frame} {self._message}", nl=False, err=True)
+            self._stop.wait(0.08)
+
+    def done(self, symbol: str = "\u2713", suffix: str = "") -> None:
+        self._stop.set()
+        if self._thread:
+            self._thread.join()
+        text = f"\r  {symbol} {self._message}"
+        if suffix:
+            text += f" {suffix}"
+        click.echo(text, err=True)
+
+    def fail(self, suffix: str = "") -> None:
+        self.done(symbol="\u2717", suffix=suffix)
 
 
 def _should_exclude(
@@ -81,8 +119,15 @@ def _load_config(project_dir: Path) -> dict:
         )
         sys.exit(1)
 
-    with open(config_path) as f:
-        config = yaml.safe_load(f)
+    try:
+        with open(config_path) as f:
+            config = yaml.safe_load(f)
+    except PermissionError:
+        click.echo(f"Error: Permission denied reading {SUPERSERVE_YAML}.", err=True)
+        sys.exit(1)
+    except yaml.YAMLError as e:
+        click.echo(f"Error: Invalid YAML in {SUPERSERVE_YAML}:\n  {e}", err=True)
+        sys.exit(1)
 
     if not isinstance(config, dict):
         click.echo(f"Error: {SUPERSERVE_YAML} must be a YAML mapping.", err=True)
@@ -97,6 +142,29 @@ def _load_config(project_dir: Path) -> dict:
         sys.exit(1)
 
     return config
+
+
+def _format_size(size_bytes: int) -> str:
+    """Format byte count as human-readable size."""
+    if size_bytes >= 100 * 1024:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+    return f"{size_bytes / 1024:.0f} KB"
+
+
+def _format_elapsed(seconds: float) -> str:
+    """Format elapsed seconds as human-readable duration."""
+    if seconds < 60:
+        return f"{seconds:.0f}s"
+    minutes = int(seconds // 60)
+    secs = int(seconds % 60)
+    return f"{minutes}m {secs}s"
+
+
+def _write_temp_tarball(tarball_bytes: bytes) -> str:
+    """Write tarball bytes to a temporary file and return the path."""
+    with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
+        tmp.write(tarball_bytes)
+        return tmp.name
 
 
 @click.command("deploy")
@@ -126,21 +194,33 @@ def deploy(project_dir: str, as_json: bool):
     command = config["command"]
     user_ignores = set(config.get("ignore") or [])
 
-    if not as_json:
-        click.echo(f"Deploying '{name}'...")
+    if as_json:
+        tarball_bytes = _make_tarball(project_path, user_ignores)
+        tarball_path = _write_temp_tarball(tarball_bytes)
+        try:
+            client = PlatformClient()
+            agent = client.deploy_agent(
+                name=name, command=command, config=config, tarball_path=tarball_path
+            )
+        except PlatformAPIError as e:
+            click.echo(json.dumps({"error": e.message}), err=True)
+            sys.exit(1)
+        finally:
+            Path(tarball_path).unlink(missing_ok=True)
+        click.echo(json.dumps(agent.model_dump(), indent=2))
+        return
 
-    # Package project as tarball
+    click.echo()
+    deploy_start = time.time()
+
+    # ── Package ──
+    status = _Status("Packaging project...").start()
     tarball_bytes = _make_tarball(project_path, user_ignores)
-    size_mb = len(tarball_bytes) / (1024 * 1024)
+    status.done(suffix=f"({_format_size(len(tarball_bytes))})")
 
-    if not as_json:
-        click.echo(f"  Package size: {size_mb:.1f} MB")
-
-    # Write to temp file for upload
-    tarball_path = None
-    with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
-        tmp.write(tarball_bytes)
-        tarball_path = tmp.name
+    # ── Upload ──
+    status = _Status("Uploading to Superserve...").start()
+    tarball_path = _write_temp_tarball(tarball_bytes)
 
     try:
         client = PlatformClient()
@@ -150,7 +230,9 @@ def deploy(project_dir: str, as_json: bool):
             config=config,
             tarball_path=tarball_path,
         )
+        status.done()
     except PlatformAPIError as e:
+        status.fail()
         if e.status_code == 401:
             click.echo("Not authenticated. Run 'superserve login' first.", err=True)
         elif e.status_code == 422:
@@ -159,17 +241,54 @@ def deploy(project_dir: str, as_json: bool):
             click.echo(f"Error: {e.message}", err=True)
         sys.exit(1)
     finally:
-        if tarball_path:
-            os.unlink(tarball_path)
+        Path(tarball_path).unlink(missing_ok=True)
 
-    if as_json:
-        click.echo(json.dumps(agent.model_dump(), indent=2))
-    else:
-        click.echo(f"\nDeployed '{agent.name}' ({agent.id})")
-        if agent.command:
-            click.echo(f"  Command: {agent.command}")
-        click.echo()
-        click.echo(f'Run it with: superserve run {agent.name} "your prompt here"')
-        # TODO: Once the build pipeline is wired (Cloud Build → callback),
-        # stream or poll build status here so the user sees:
-        #   Building... → Deploying... → Ready!
+    # ── Dependencies ──
+    if agent.deps_status == "installing":
+        status = _Status("Installing dependencies...").start()
+        poll_interval = 3
+        max_wait = 300
+        elapsed = 0
+        deps_start = time.time()
+
+        while elapsed < max_wait:
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+
+            try:
+                agent = client.get_agent(name)
+            except PlatformAPIError as e:
+                status.fail()
+                click.echo(f"Error checking status: {e.message}", err=True)
+                click.echo(f"Check manually: superserve agents get {name}", err=True)
+                sys.exit(1)
+
+            if agent.deps_status == "ready":
+                deps_time = _format_elapsed(time.time() - deps_start)
+                status.done(suffix=f"({deps_time})")
+                break
+            elif agent.deps_status == "failed":
+                status.fail()
+                if agent.deps_error:
+                    click.echo(f"  {agent.deps_error}", err=True)
+                click.echo(err=True)
+                click.echo(
+                    "Agent created but dependencies failed to install.", err=True
+                )
+                click.echo("Fix your requirements and run: superserve deploy", err=True)
+                sys.exit(1)
+        else:
+            status.fail(suffix="(timed out)")
+            click.echo(
+                "\nDependency install is still running. Check status with:", err=True
+            )
+            click.echo(f"  superserve agents get {name}", err=True)
+            sys.exit(1)
+
+    # ── Done ──
+    total_time = _format_elapsed(time.time() - deploy_start)
+    click.echo()
+    click.echo(f"  Deployed '{agent.name}' in {total_time}")
+    click.echo()
+    click.echo(f'  superserve run {agent.name} "your prompt here"')
+    click.echo()
