@@ -3,7 +3,7 @@
   <br/>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/superserve-ai/superserve/main/assets/logo-dark.svg">
-    <source srcset="https://raw.githubusercontent.com/superserve-ai/superserve/main/assets/logo-light.svg">
+    <img src="https://raw.githubusercontent.com/superserve-ai/superserve/main/assets/logo-light.svg">
   </picture>
 
   <br/>
