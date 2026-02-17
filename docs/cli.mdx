@@ -5,6 +5,8 @@ description: "Every superserve command"
 
 ## Authentication
 
+Authenticate with your Superserve account. Credentials are stored locally.
+
 <AccordionGroup>
   <Accordion title="superserve login" icon="right-to-bracket">
     ```bash
@@ -26,6 +28,8 @@ description: "Every superserve command"
 ---
 
 ## Project setup
+
+Generate a `superserve.yaml` config in your project. This defines your agent name, start command, and secrets.
 
 <AccordionGroup>
   <Accordion title="superserve init" icon="folder-plus">
@@ -60,6 +64,8 @@ description: "Every superserve command"
 ---
 
 ## Deployment
+
+Your code is uploaded and your dependencies are installed on the platform. Agents run inside gVisor-isolated sandbox containers built on a custom base image with Python pre-installed.
 
 <AccordionGroup>
   <Accordion title="superserve deploy" icon="cloud-arrow-up">
@@ -96,7 +102,7 @@ Set API keys and environment variables for your agent.
     superserve secrets list AGENT
     ```
 
-    Shows key names only — values are never returned.
+    Shows key names only - values are never returned.
   </Accordion>
 
   <Accordion title="superserve secrets delete" icon="trash">
@@ -112,6 +118,8 @@ Set API keys and environment variables for your agent.
 
 ## Running agents
 
+Each run creates a session and provisions a sandbox with your code, secrets, and a persistent filesystem. Responses are streamed back in real time via SSE.
+
 <AccordionGroup>
   <Accordion title="superserve run" icon="play" defaultOpen>
     ```bash
@@ -123,28 +131,34 @@ Set API keys and environment variables for your agent.
     | `--single` | Exit after one response |
     | `--json` | Output raw SSE events as JSON |
 
-    **Interactive mode** — omit the prompt to start a conversation:
-
     ```bash
     superserve run my-agent
-    You> Hello
-    ...
-    You> exit
+    You> What is the capital of France?
+    The capital of France is Paris.
+
+    Completed in 1.2s
+
+    You> And what's its population?
+    Paris has approximately 2.1 million people in the city proper.
+
+    Completed in 0.8s
+
+    You>
     ```
 
-    **Single-turn** — pass a prompt inline:
+    **Single-turn:**
 
     ```bash
     superserve run my-agent "Hello" --single
     ```
-
-    Type `exit` or press `Ctrl+C` to quit interactive mode.
   </Accordion>
 </AccordionGroup>
 
 ---
 
 ## Agent management
+
+List, inspect, and delete your deployed agents.
 
 <AccordionGroup>
   <Accordion title="superserve agents list" icon="list">
@@ -187,7 +201,7 @@ Set API keys and environment variables for your agent.
 
 ## Sessions
 
-Sessions are created automatically by `superserve run`.
+A session tracks a single conversation with your agent. Sessions are created automatically by `superserve run` and persist message history across turns.
 
 <AccordionGroup>
   <Accordion title="superserve sessions list" icon="list">
