@@ -1,6 +1,6 @@
-# Contributing to Agentic-Ray
+# Contributing to Superserve
 
-Thank you for your interest in contributing to Agentic-Ray! We welcome contributions from the community.
+Thank you for your interest in contributing to Superserve! We welcome contributions from the community.
 
 ## Getting Started
 
@@ -15,8 +15,8 @@ Thank you for your interest in contributing to Agentic-Ray! We welcome contribut
 
 2. Clone your fork locally:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/agentic-ray.git
-   cd agentic-ray
+   git clone https://github.com/YOUR_USERNAME/superserve.git
+   cd superserve
    ```
 
 3. Create a new branch for your changes:
@@ -43,7 +43,7 @@ Thank you for your interest in contributing to Agentic-Ray! We welcome contribut
 
 ### Reporting Bugs
 
-- Check existing [issues](https://github.com/superserve-ai/agentic-ray/issues) to avoid duplicates
+- Check existing [issues](https://github.com/superserve-ai/superserve/issues) to avoid duplicates
 - Use a clear, descriptive title
 - Include steps to reproduce the issue
 - Provide relevant environment details (OS, Python version, etc.)
@@ -70,8 +70,8 @@ Thank you for your interest in contributing to Agentic-Ray! We welcome contribut
 
 4. Run linting and formatting:
    ```bash
-   uv run ruff check .
-   uv run black .
+   uv run ruff check . --fix
+   uv run ruff format .
    ```
 
 5. Run type checking:
@@ -99,8 +99,7 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ## Code Style
 
-- We use [Black](https://github.com/psf/black) for formatting
-- We use [Ruff](https://github.com/astral-sh/ruff) for linting
+- We use [Ruff](https://github.com/astral-sh/ruff) for linting and formatting
 - We use [mypy](https://mypy-lang.org/) for static type checking (enforced in CI)
 - Type hints are encouraged
 
