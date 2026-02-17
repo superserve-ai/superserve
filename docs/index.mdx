@@ -1,9 +1,9 @@
 ---
-title: "The agent deployment platform"
+title: "Introduction"
 description: "You build agents locally. Superserve deploys them to the cloud."
 ---
 
-Deploy AI agents with one command. Get managed infrastructure, encrypted secrets, real-time streaming, and multi-turn conversations — without managing servers.
+Superserve packages your agent code and deploys it to a sandboxed cloud container - one CLI command, no infrastructure config.
 
 ```bash
 pip install superserve
@@ -20,58 +20,31 @@ pip install superserve
 
 ---
 
-## How it works
-
-<Steps>
-  <Step title="Write your agent" icon="code">
-    Build your agent locally using the [Claude Agent SDK](https://docs.anthropic.com/en/docs/agents-and-tools/claude-agent-sdk). Any Python script that reads a prompt and writes a response.
-  </Step>
-  <Step title="Deploy" icon="cloud-arrow-up">
-    One command packages your code, uploads it, and installs dependencies.
-    ```bash
-    superserve deploy
-    ```
-  </Step>
-  <Step title="Run from anywhere" icon="play">
-    Interactive conversations or single-turn prompts — from your terminal or any API client.
-    ```bash
-    superserve run my-agent "Summarize this document"
-    ```
-  </Step>
-</Steps>
-
----
-
-## What you get
+## Why Superserve
 
 <CardGroup cols={2}>
-  <Card title="One-command deploys" icon="rocket">
-    `superserve deploy` packages your code, detects dependencies, and makes your agent available in seconds.
+  <Card title="Sandboxed execution" icon="shield">
+    Every agent session runs in a gVisor-isolated container with its own compute, filesystem, and network.
   </Card>
-  <Card title="Multi-turn conversations" icon="messages">
-    `superserve run` gives you an interactive session with full conversation history.
+  <Card title="Persistent workspace" icon="hard-drive">
+    Storage that survives restarts and long inactivity. Agents pick up where they left off.
+  </Card>
+  <Card title="Unlimited sessions" icon="infinity">
+    No session duration caps or CPU-time limits. Agents run as long as they need - hours or days.
+  </Card>
+  <Card title="Sub-second cold starts" icon="gauge-high">
+    Pre-provisioned containers mean your agent starts almost instantly.
   </Card>
   <Card title="Encrypted secrets" icon="lock">
-    API keys stored securely, injected at runtime. Values are never exposed.
+    API keys are encrypted and injected at runtime. Values are never exposed.
   </Card>
   <Card title="Real-time streaming" icon="bolt">
-    See your agent's response as it's generated over SSE.
+    Stream tokens and tool calls as they happen. See what your agent is thinking and doing.
   </Card>
 </CardGroup>
 
 ---
 
-## Built for Claude Agent SDK
+## <img src="/images/claude-agent-sdk.svg" alt="Claude" width="20" style={{display: "inline", verticalAlign: "middle", marginRight: "8px"}} />Built for Claude Agent SDK
 
-Superserve is designed to deploy agents built with the [Claude Agent SDK](https://docs.anthropic.com/en/docs/agents-and-tools/claude-agent-sdk).
-
-Your `superserve.yaml` specifies the name and start command:
-
-```yaml
-name: my-agent
-command: python main.py
-```
-
-<Tip>
-  That's it. No framework boilerplate, no infrastructure config. Just your agent code and a two-line YAML.
-</Tip>
+Write your agent with the [Claude Agent SDK](https://platform.claude.com/docs/en/agent-sdk/overview), run `superserve init` to generate your config, and deploy. Superserve handles sandboxing, persistence, and secrets.

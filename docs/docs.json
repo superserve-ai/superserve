@@ -21,7 +21,7 @@
       "light": "#faf8f5",
       "dark": "#1a1816"
     },
-    "decoration": "grid"
+    "decoration": "gradient"
   },
   "styling": {
     "codeblocks": {
@@ -57,26 +57,8 @@
           "anchor": "GitHub",
           "href": "https://github.com/superserve-ai/superserve",
           "icon": "github"
-        },
-        {
-          "anchor": "Dashboard",
-          "href": "https://console.superserve.ai",
-          "icon": "browser"
         }
       ]
-    }
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "superserve.ai",
-        "href": "https://superserve.ai"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Get Started",
-      "href": "https://console.superserve.ai"
     }
   },
   "footer": {

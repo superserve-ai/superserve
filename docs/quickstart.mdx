@@ -65,30 +65,24 @@ description: "Deploy an agent in 5 minutes"
   </Step>
 
   <Step title="Run it">
-    Single prompt:
-
-    ```bash
-    superserve run my-agent "What is the capital of France?"
-    ```
-
-    ```
-    The capital of France is Paris.
-
-    Completed in 1.2s (150 input / 25 output tokens)
-    ```
-
-    Or start an interactive session:
-
     ```bash
     superserve run my-agent
     ```
 
     ```
-    You> Hello, what can you help me with?
-    I can help you with a variety of tasks...
+    You> What is the capital of France?
+    The capital of France is Paris.
 
-    You> exit
+    Completed in 1.2s
+
+    You> And what's its population?
+    Paris has approximately 2.1 million people in the city proper.
+
+    Completed in 0.8s
+
+    You>
     ```
+
   </Step>
 </Steps>
 
