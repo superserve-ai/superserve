@@ -87,7 +87,7 @@ def get_agent(name: str, as_json: bool):
     click.echo(f"ID:       {agent.id}")
     click.echo(f"Name:     {sanitize_terminal_output(agent.name)}")
     click.echo(f"Command:  {sanitize_terminal_output(agent.command or '(none)')}")
-    click.echo(f"Status:   {_agent_status(agent.deps_status)}")
+    click.echo(f"Status:   {sanitize_terminal_output(_agent_status(agent.deps_status))}")
     click.echo(f"Created:  {format_timestamp(agent.created_at)}")
     click.echo(f"Updated:  {format_timestamp(agent.updated_at)}")
 
