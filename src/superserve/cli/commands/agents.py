@@ -65,7 +65,7 @@ def list_agents(as_json: bool):
         created = format_timestamp(agent.created_at, short=True)
         name = sanitize_terminal_output(agent.name)
         agent_status = _agent_status(agent.deps_status)
-        click.echo(f"{name:<25} {agent.id:<40} {agent_status:<12} {created:<20}")
+        click.echo(f"{name:<25} {sanitize_terminal_output(agent.id):<40} {sanitize_terminal_output(agent_status):<12} {created:<20}")
 
 
 @agents.command("get")
