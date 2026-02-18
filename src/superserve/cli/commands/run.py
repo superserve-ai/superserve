@@ -137,7 +137,7 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
         if agent_info.deps_status == "installing":
             click.echo("Agent is still deploying. Please wait and try again.", err=True)
             sys.exit(1)
-        if agent_info.deps_status == "failed":
+        elif agent_info.deps_status == "failed":
             click.echo(
                 "Agent deployment failed. Run 'superserve deploy' to retry.", err=True
             )
