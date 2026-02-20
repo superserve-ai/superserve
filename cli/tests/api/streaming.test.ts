@@ -134,8 +134,8 @@ describe("parseSSEStream", () => {
       expect(events[0].type).toBe("message.delta")
       expect(events[1].type).toBe("run.completed")
 
-      // Should have logged a warning
-      expect(errors.some((e) => e.includes("unknown.future.event"))).toBe(true)
+      // Should silently skip without logging
+      expect(errors).toHaveLength(0)
     } finally {
       console.error = originalError
     }

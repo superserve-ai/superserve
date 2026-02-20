@@ -98,7 +98,7 @@ export async function makeTarball(
   )
 
   if (proc.exitCode !== 0) {
-    throw new Error(`Failed to create tarball: ${proc.stderr.toString()}`)
+    throw new Error("Failed to package project. Check file permissions and try again.")
   }
 
   const tarball = readFileSync(tarballPath)

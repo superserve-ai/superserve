@@ -25,7 +25,9 @@ export function loadProjectConfig(
     if (e instanceof Error && e.message.includes("EACCES")) {
       throw new Error(`Permission denied reading ${SUPERSERVE_YAML}.`)
     }
-    throw new Error(`Invalid YAML in ${SUPERSERVE_YAML}:\n  ${e}`)
+    throw new Error(
+      `Invalid YAML in ${SUPERSERVE_YAML}. Check your syntax and try again.`,
+    )
   }
 
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {

@@ -64,7 +64,6 @@ export async function* parseSSEStream(
 
 function parseEvent(eventType: string, dataLines: string[]): RunEvent | null {
   if (!KNOWN_EVENT_TYPES.has(eventType)) {
-    console.error(`[superserve] Ignoring unknown event type: "${eventType}"`)
     return null
   }
 

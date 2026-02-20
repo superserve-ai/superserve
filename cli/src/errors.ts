@@ -18,10 +18,11 @@ export function handleError(e: unknown): number {
   }
 
   if (e instanceof Error) {
-    log.error(e.message)
+    log.error("An unexpected error occurred. Please try again.")
     return 1
   }
 
+  log.error("An unexpected error occurred. Please try again.")
   return 1
 }
 

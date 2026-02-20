@@ -57,8 +57,9 @@ async function streamEvents(
       }
       case "run.failed": {
         spinner?.stop()
-        const error = event.data.error ?? {}
-        log.error(sanitizeTerminalOutput(error.message ?? "Unknown error"))
+        log.error(
+          "Something went wrong while running the agent. Please try again later.",
+        )
         return 1
       }
       case "run.cancelled": {

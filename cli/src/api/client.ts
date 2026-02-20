@@ -4,7 +4,7 @@ import {
   PLATFORM_API_URL,
   USER_AGENT,
 } from "../config/constants"
-import { PlatformAPIError } from "./errors"
+import { PlatformAPIError, toUserMessage } from "./errors"
 import { parseSSEStream } from "./streaming"
 import type {
   AgentResponse,
@@ -110,9 +110,10 @@ export function createClient(
           detail = JSON.stringify(detail)
         }
 
+        const rawMessage = (detail as string) ?? response.statusText
         throw new PlatformAPIError(
           response.status,
-          (detail as string) ?? response.statusText,
+          toUserMessage(response.status, rawMessage),
           (errorData.details as Record<string, unknown>) ?? undefined,
         )
       }
@@ -195,7 +196,7 @@ export function createClient(
           oauth_error: "access_denied",
         })
       }
-      throw new PlatformAPIError(400, data.error_description ?? error)
+      throw new PlatformAPIError(400, "Authentication failed. Please try again.")
     }
 
     const token = data.access_token ?? data.token

@@ -121,7 +121,6 @@ export const deploy = new Command("deploy")
             }
             if (agent.deps_status === "failed") {
               status.fail()
-              if (agent.deps_error) console.error(`  ${agent.deps_error}`)
               console.error()
               console.error("Agent created but dependencies failed to install.")
               console.error("Fix your requirements and run:")
