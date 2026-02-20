@@ -1,6 +1,6 @@
 {
   "name": "superserve",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Superserve CLI - Production infrastructure for agentic workloads",
   "type": "module",
   "bin": {
