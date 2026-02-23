@@ -116,7 +116,7 @@ class TestRunCommand:
             result = runner.invoke(cli, ["run", "my-agent", "Hello"])
 
             assert result.exit_code == 1
-            assert "Model overloaded" in result.output
+            assert "Agent run failed" in result.output
 
     def test_run_cancelled_event(self, runner):
         """Run command exits on run.cancelled event."""
