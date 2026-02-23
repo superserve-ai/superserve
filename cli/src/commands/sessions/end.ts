@@ -14,7 +14,7 @@ export const endSession = new Command("end")
       await track("cli_sessions_end")
 
       log.success(
-        `Session ${sessionId} ended (status: ${session.status ?? "?"})`,
+        `Session ${sessionId} ended (status: ${(session.status ?? "?").toUpperCase()})`,
       )
     }),
   )

@@ -3,10 +3,10 @@ import pc from "picocolors"
 const { green, red, yellow } = pc
 
 const STATUS_LABELS: Record<string, string> = {
-  none: "Ready",
-  ready: "Ready",
-  installing: "Deploying",
-  failed: "Failed",
+  none: "READY",
+  ready: "READY",
+  installing: "DEPLOYING",
+  failed: "FAILED",
 }
 
 const STATUS_COLORIZE: Record<string, (text: string) => string> = {
@@ -17,7 +17,7 @@ const STATUS_COLORIZE: Record<string, (text: string) => string> = {
 }
 
 export function agentStatus(depsStatus: string): string {
-  return STATUS_LABELS[depsStatus] ?? depsStatus
+  return STATUS_LABELS[depsStatus] ?? depsStatus.toUpperCase()
 }
 
 export function coloredStatus(depsStatus: string): string {
