@@ -1,10 +1,8 @@
 import { ansi } from "../config/theme"
 
-const useColor = !process.argv.includes("--no-color") && !process.env.NO_COLOR
-
 function colorize(text: string, color: string): string {
-  if (!useColor) return text
-  return `${color}${text}\x1b[0m`
+  if (!color) return text
+  return `${color}${text}${ansi.reset}`
 }
 
 export const log = {

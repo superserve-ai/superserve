@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { basename, join } from "node:path"
 import { Command } from "commander"
 import { SUPERSERVE_YAML } from "../config/constants"
+import { withErrorHandler } from "../errors"
 import { commandBox } from "../utils/command-box"
 
 const TEMPLATE = `\
@@ -43,7 +44,8 @@ function detectEnvKeys(projectDir: string): string[] {
 export const init = new Command("init")
   .description("Initialize a new agent project")
   .option("--name <name>", "Agent name (defaults to directory name)")
-  .action((options: { name?: string }) => {
+  .action(
+    withErrorHandler(async (options: { name?: string }) => {
     const cwd = process.cwd()
     const configPath = join(cwd, SUPERSERVE_YAML)
 
@@ -99,4 +101,5 @@ export const init = new Command("init")
     }
     console.log("  4. Run your agent:")
     console.log(commandBox(`superserve run ${name} "your prompt here"`))
-  })
+    }),
+  )

@@ -20,7 +20,7 @@ export const getSession = new Command("get")
       const session = await client.getSession(sessionId)
 
       if (options.json) {
-        console.log(JSON.stringify(session))
+        console.log(JSON.stringify(session, null, 2))
         return
       }
 

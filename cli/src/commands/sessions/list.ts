@@ -27,7 +27,7 @@ export const listSessions = new Command("list")
         )
 
         if (options.json) {
-          console.log(JSON.stringify(sessionList))
+          console.log(JSON.stringify(sessionList, null, 2))
           return
         }
 

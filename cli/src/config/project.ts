@@ -39,6 +39,11 @@ export function loadProjectConfig(
   if (!config.name || typeof config.name !== "string") {
     throw new Error(`'name' is required in ${SUPERSERVE_YAML}.`)
   }
+  if (!/^[a-z][a-z0-9-]*$/.test(config.name)) {
+    throw new Error(
+      `Invalid agent name '${config.name}' in ${SUPERSERVE_YAML}. Use lowercase letters, numbers, and hyphens only (must start with a letter).`,
+    )
+  }
   if (!config.command || typeof config.command !== "string") {
     throw new Error(`'command' is required in ${SUPERSERVE_YAML}.`)
   }

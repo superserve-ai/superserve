@@ -109,6 +109,6 @@ export const login = new Command("login")
         await loginWithDeviceFlow(client)
       }
 
-      track("cli_login")
+      await track("cli_login")
     }),
   )

@@ -28,7 +28,8 @@ async function streamEvents(
       case "tool.start": {
         spinner?.stop()
         const tool = event.data.tool ?? "unknown"
-        const toolInput = String(event.data.input ?? {})
+        const raw = event.data.input ?? {}
+        const toolInput = typeof raw === "string" ? raw : JSON.stringify(raw)
         const inputStr = sanitizeTerminalOutput(toolInput)
         const inputPreview =
           inputStr.length > 50 ? `${inputStr.slice(0, 50)}...` : inputStr
