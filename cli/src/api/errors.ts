@@ -22,20 +22,20 @@ export const ERROR_HINTS: Record<number, string> = {
   409: "Use a different name or delete the existing resource first.",
   422: "Check your input and try again.",
   429: "Too many requests. Please wait and try again.",
-  500: "This is a server issue. Please try again later.",
-  502: "The server is temporarily unavailable. Please try again later.",
-  503: "The service is temporarily unavailable. Please try again later.",
+  500: "This is a server issue. Please try again later or contact support@superserve.ai",
+  502: "The server is temporarily unavailable. Please try again later or contact support@superserve.ai",
+  503: "The service is temporarily unavailable. Please try again later or contact support@superserve.ai",
 }
 
 const USER_FRIENDLY_MESSAGES: Record<number, string> = {
-  500: "Something went wrong on our end. Please try again later.",
-  502: "We're experiencing some issues. Please try again after some time.",
-  503: "Service is temporarily unavailable. Please try again after some time.",
-  504: "The request timed out. Please try again after some time.",
+  500: "Something went wrong on our end. Please try again later or contact support@superserve.ai",
+  502: "We're experiencing some issues. Please try again after some time or contact support@superserve.ai",
+  503: "Service is temporarily unavailable. Please try again after some time or contact support@superserve.ai",
+  504: "The request timed out. Please try again after some time or contact support@superserve.ai",
 }
 
 const GENERIC_SERVER_ERROR =
-  "We're experiencing some issues. Please try again after some time."
+  "We're experiencing some issues. Please try again after some time or contact support@superserve.ai"
 
 /**
  * Returns a user-friendly message for server errors (5xx).
