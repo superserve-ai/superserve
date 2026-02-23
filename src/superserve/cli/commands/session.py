@@ -57,30 +57,31 @@ def list_sessions(agent, filter_status, as_json):
         return
 
     if agent:
-        # Filtered by agent — omit AGENT column, wider TITLE
-        click.echo(
+        header = (
             f"{'ID':<14} {'TITLE':<32} {'STATUS':<12} {'MSGS':<6} {'LAST ACTIVE':<14}"
         )
-        click.echo("-" * 78)
-        for s in session_list:
-            sid_short = s["id"].replace("ses_", "").replace("-", "")[:12]
-            title = sanitize_terminal_output(s.get("title") or "")
-            if len(title) > 30:
-                title = title[:27] + "..."
-            active = format_relative_time(str(s.get("last_activity_at", "")))
-            click.echo(
-                f"{sid_short:<14} {title:<32} {s.get('status', '?'):<12}"
-                f" {s.get('message_count', 0):<6} {active:<14}"
-            )
     else:
-        # Unfiltered — show AGENT column
-        click.echo(
+        header = (
             f"{'ID':<14} {'AGENT':<18} {'TITLE':<24} {'STATUS':<12}"
             f" {'MSGS':<6} {'LAST ACTIVE':<14}"
         )
-        click.echo("-" * 88)
-        for s in session_list:
-            sid_short = s["id"].replace("ses_", "").replace("-", "")[:12]
+    click.echo(header)
+    click.echo("-" * len(header))
+
+    for s in session_list:
+        sid_short = s["id"].replace("ses_", "").replace("-", "")[:12]
+        active = format_relative_time(str(s.get("last_activity_at", "")))
+        status = s.get("status", "?")
+        msg_count = s.get("message_count", 0)
+
+        if agent:
+            title = sanitize_terminal_output(s.get("title") or "")
+            if len(title) > 30:
+                title = title[:27] + "..."
+            click.echo(
+                f"{sid_short:<14} {title:<32} {status:<12} {msg_count:<6} {active:<14}"
+            )
+        else:
             agent_display = sanitize_terminal_output(
                 s.get("agent_name") or s.get("agent_id", "?")
             )
@@ -89,11 +90,9 @@ def list_sessions(agent, filter_status, as_json):
             title = sanitize_terminal_output(s.get("title") or "")
             if len(title) > 22:
                 title = title[:19] + "..."
-            active = format_relative_time(str(s.get("last_activity_at", "")))
             click.echo(
                 f"{sid_short:<14} {agent_display:<18} {title:<24}"
-                f" {s.get('status', '?'):<12}"
-                f" {s.get('message_count', 0):<6} {active:<14}"
+                f" {status:<12} {msg_count:<6} {active:<14}"
             )
 
 
@@ -226,8 +225,6 @@ def resume_session(session_id):
     except PlatformAPIError as e:
         if e.status_code == 401:
             click.echo("Not authenticated. Run 'superserve login' first.", err=True)
-        elif e.status_code == 409:
-            click.echo(f"Error: {sanitize_terminal_output(e.message)}", err=True)
         elif e.status_code == 404:
             click.echo(f"Session '{session_id}' not found.", err=True)
             click.echo(

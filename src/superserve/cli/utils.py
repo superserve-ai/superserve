@@ -180,9 +180,11 @@ class Spinner:
 
     def stop(self) -> None:
         """Stop the spinner and clear the line. Idempotent."""
+        was_running = self._running
         self._stop_thread()
-        sys.stderr.write("\r\033[K")
-        sys.stderr.flush()
+        if was_running:
+            sys.stderr.write("\r\033[K")
+            sys.stderr.flush()
 
     def done(self, symbol: str = "\u2713", suffix: str = "") -> None:
         """Stop the spinner and persist the line with a symbol."""
