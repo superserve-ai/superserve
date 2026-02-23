@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto"
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs"
 import { arch, platform } from "node:os"
 import { join } from "node:path"
 import type { PostHog } from "posthog-node"
@@ -54,6 +60,59 @@ async function getPostHog(): Promise<PostHog> {
   return posthogInstance
 }
 
+/**
+ * Link the anonymous device ID to the real user after login.
+ * Calls PostHog identify so all past and future events merge under one profile.
+ */
+export async function identify(user: {
+  id: string
+  email: string
+  full_name?: string | null
+}): Promise<void> {
+  if (isDisabled()) return
+
+  try {
+    const posthog = await getPostHog()
+    const anonymousId = getAnonymousId()
+
+    // Set the real user ID as distinct ID going forward
+    posthog.identify({
+      distinctId: user.id,
+      properties: {
+        email: user.email,
+        name: user.full_name ?? undefined,
+        ...DEFAULT_PROPERTIES,
+      },
+    })
+
+    // Merge the anonymous device ID into the real user profile
+    posthog.alias({
+      distinctId: user.id,
+      alias: anonymousId,
+    })
+
+    // Persist user ID so subsequent track() calls use the real ID
+    const userIdFile = join(SUPERSERVE_CONFIG_DIR, "analytics_user_id")
+    writeFileSync(userIdFile, user.id)
+  } catch {
+    // Fail silently
+  }
+}
+
+function getDistinctId(): string {
+  // Prefer real user ID if identified, fall back to anonymous ID
+  const userIdFile = join(SUPERSERVE_CONFIG_DIR, "analytics_user_id")
+  try {
+    if (existsSync(userIdFile)) {
+      const userId = readFileSync(userIdFile, "utf-8").trim()
+      if (userId) return userId
+    }
+  } catch {
+    // Fall through to anonymous ID
+  }
+  return getAnonymousId()
+}
+
 export async function track(
   event: string,
   properties?: Record<string, unknown>,
@@ -63,12 +122,24 @@ export async function track(
   try {
     const posthog = await getPostHog()
     posthog.capture({
-      distinctId: getAnonymousId(),
+      distinctId: getDistinctId(),
       event,
       properties: { ...DEFAULT_PROPERTIES, ...properties },
     })
   } catch {
     // Fail silently — analytics should never break the CLI
+  }
+}
+
+/**
+ * Clear stored user identity on logout, reverting to anonymous tracking.
+ */
+export function resetIdentity(): void {
+  const userIdFile = join(SUPERSERVE_CONFIG_DIR, "analytics_user_id")
+  try {
+    if (existsSync(userIdFile)) unlinkSync(userIdFile)
+  } catch {
+    // Fail silently
   }
 }
 

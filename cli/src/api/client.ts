@@ -13,6 +13,8 @@ import type {
   DeviceTokenPollResponse,
   RunEvent,
   SessionData,
+  TokenValidation,
+  UserInfo,
 } from "./types"
 
 export type SuperserveClient = ReturnType<typeof createClient>
@@ -153,11 +155,16 @@ export function createClient(
   async function validateToken(): Promise<boolean> {
     try {
       const resp = await request("GET", "/auth/validate")
-      const data = await safeJson<{ valid?: boolean }>(resp)
+      const data = await safeJson<TokenValidation>(resp)
       return Boolean(data.valid)
     } catch {
       return false
     }
+  }
+
+  async function getMe(): Promise<UserInfo> {
+    const resp = await request("GET", "/auth/me")
+    return safeJson<UserInfo>(resp)
   }
 
   async function getDeviceCode(): Promise<DeviceCodeResponse> {
@@ -406,6 +413,7 @@ export function createClient(
 
   return {
     validateToken,
+    getMe,
     getDeviceCode,
     pollDeviceToken,
     deployAgent,

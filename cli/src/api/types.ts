@@ -16,8 +16,15 @@ export interface DeviceCodeResponse {
   interval: number
 }
 
+export interface UserInfo {
+  id: string
+  email: string
+  full_name?: string | null
+}
+
 export interface TokenValidation {
   valid?: boolean
+  user?: UserInfo | null
 }
 
 export type DeviceTokenPollResponse =

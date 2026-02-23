@@ -1,7 +1,7 @@
 import { exec } from "node:child_process"
 import { platform } from "node:os"
 import { Command } from "commander"
-import { track } from "../analytics"
+import { identify, track } from "../analytics"
 import type { SuperserveClient } from "../api/client"
 import { createClient } from "../api/client"
 import { PlatformAPIError } from "../api/errors"
@@ -107,6 +107,14 @@ export const login = new Command("login")
         await loginWithApiKey(client, options.apiKey)
       } else {
         await loginWithDeviceFlow(client)
+      }
+
+      // Identify user in analytics so events link to their account
+      try {
+        const user = await client.getMe()
+        await identify(user)
+      } catch {
+        // Non-critical — continue even if identification fails
       }
 
       await track("cli_login", {
