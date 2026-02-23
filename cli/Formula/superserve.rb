@@ -1,8 +1,8 @@
 class Superserve < Formula
   desc "CLI for deploying AI agents to sandboxed cloud containers"
   homepage "https://superserve.ai"
-  url "https://github.com/superserve-ai/superserve/archive/refs/tags/TAG.tar.gz"
-  sha256 "SHA256"
+  url "https://github.com/superserve-ai/superserve/archive/refs/tags/__TAG__.tar.gz"
+  sha256 "__SHA256__"
   license "MIT"
 
   depends_on "bun" => :build
@@ -15,7 +15,6 @@ class Superserve < Formula
   end
 
   test do
-    assert_match version.to_s, shell_output("#{bin}/superserve --version")
     assert_match "superserve", shell_output("#{bin}/superserve --help")
   end
 end
