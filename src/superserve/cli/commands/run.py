@@ -131,7 +131,7 @@ def _stream_events(
                 )
                 return 1
 
-            delay = RECONNECT_DELAY * reconnect_attempts
+            delay = min(RECONNECT_DELAY * (2 ** (reconnect_attempts - 1)), 30.0)
             if spinner:
                 spinner.update(
                     f"Reconnecting ({reconnect_attempts}/{MAX_RECONNECT_ATTEMPTS})..."
@@ -148,6 +148,13 @@ def _stream_events(
                 event_iter = client.stream_session_events(
                     session_id, after=last_sequence
                 )
+            except PlatformAPIError as e:
+                if 400 <= e.status_code < 500:
+                    if spinner:
+                        spinner.stop()
+                    click.echo(f"\nError: Reconnection failed: {e.message}", err=True)
+                    return 1
+                continue
             except Exception:
                 continue  # Will retry in next loop iteration
 
