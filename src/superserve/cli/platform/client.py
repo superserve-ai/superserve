@@ -568,3 +568,30 @@ class PlatformClient:
             stream=True,
         )
         yield from self._parse_sse_stream(resp)
+
+    def stream_session_events(
+        self, session_id: str, after: int = 0
+    ) -> Iterator[RunEvent]:
+        """Reconnect to a session's event stream for resumption.
+
+        Uses GET /sessions/{session_id}/events?after=N to pick up
+        events from where the client left off.
+
+        Args:
+            session_id: Session ID.
+            after: Sequence number to resume from. Only events after this
+                   sequence will be returned.
+
+        Yields:
+            Run events starting from the given sequence number.
+        """
+        params: dict[str, str] = {}
+        if after > 0:
+            params["after"] = str(after)
+        resp = self._request(
+            "GET",
+            f"/sessions/{session_id}/events",
+            params=params,
+            stream=True,
+        )
+        yield from self._parse_sse_stream(resp)
