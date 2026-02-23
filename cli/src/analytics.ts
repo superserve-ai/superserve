@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { arch, platform } from "node:os"
 import { join } from "node:path"
-import { SUPERSERVE_CONFIG_DIR } from "./config/constants"
+import type { PostHog } from "posthog-node"
+import { CLI_VERSION, SUPERSERVE_CONFIG_DIR } from "./config/constants"
 
-const POSTHOG_PUBLIC_API_KEY = "phc_gjpDKKKQJAnkxkqLrPGrAhoariKsaHNuTpI5rVhkYre"
+const POSTHOG_API_KEY = process.env.SUPERSERVE_POSTHOG_KEY
 const POSTHOG_HOST = "https://us.i.posthog.com"
 
 const ANONYMOUS_ID_FILE = join(SUPERSERVE_CONFIG_DIR, "anonymous_id")
@@ -12,7 +14,15 @@ const ANALYTICS_DISABLED_FILE = join(
   ".analytics_disabled",
 )
 
+const DEFAULT_PROPERTIES: Record<string, unknown> = {
+  cli_version: CLI_VERSION,
+  os: platform(),
+  arch: arch(),
+  node_version: process.version,
+}
+
 function isDisabled(): boolean {
+  if (!POSTHOG_API_KEY) return true
   if (existsSync(ANALYTICS_DISABLED_FILE)) return true
   return Boolean(
     process.env.SUPERSERVE_DO_NOT_TRACK || process.env.DO_NOT_TRACK,
@@ -32,16 +42,12 @@ function getAnonymousId(): string {
 }
 
 // Lazy PostHog singleton
-type PostHogClient = {
-  capture: (opts: Record<string, unknown>) => void
-  shutdown: () => Promise<void>
-}
-let posthogInstance: PostHogClient | null = null
+let posthogInstance: PostHog | null = null
 
-async function getPostHog(): Promise<PostHogClient> {
+async function getPostHog(): Promise<PostHog> {
   if (!posthogInstance) {
     const { PostHog } = await import("posthog-node")
-    posthogInstance = new PostHog(POSTHOG_PUBLIC_API_KEY, {
+    posthogInstance = new PostHog(POSTHOG_API_KEY!, {
       host: POSTHOG_HOST,
     })
   }
@@ -59,7 +65,7 @@ export async function track(
     posthog.capture({
       distinctId: getAnonymousId(),
       event,
-      properties: properties ?? {},
+      properties: { ...DEFAULT_PROPERTIES, ...properties },
     })
   } catch {
     // Fail silently — analytics should never break the CLI
@@ -68,8 +74,10 @@ export async function track(
 
 export async function flushAnalytics(): Promise<void> {
   if (!posthogInstance) return
+  const client = posthogInstance
+  posthogInstance = null
   try {
-    await posthogInstance.shutdown()
+    await client.shutdown()
   } catch {
     // Fail silently
   }

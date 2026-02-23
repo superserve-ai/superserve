@@ -1,4 +1,5 @@
 import { Command } from "commander"
+import { track } from "../../analytics"
 import { createClient } from "../../api/client"
 import { withErrorHandler } from "../../errors"
 import { log } from "../../utils/logger"
@@ -20,6 +21,7 @@ export const deleteAgent = new Command("delete")
 
       const client = createClient()
       await client.deleteAgent(name)
+      await track("cli_agents_delete", { agent_name: name })
       log.success(`Deleted agent '${name}'`)
     }),
   )

@@ -1,5 +1,6 @@
 import { Command } from "commander"
 
+import { flushAnalytics, track } from "../analytics"
 import { createClient } from "../api/client"
 import type { RunEvent } from "../api/types"
 import { withErrorHandler } from "../errors"
@@ -148,8 +149,18 @@ export const run = new Command("run")
             spinner.start()
           }
 
+          const runStart = performance.now()
           const sessionData = await client.createSession(agent)
           const sessionId = sessionData.id
+
+          await track("cli_run_started", {
+            agent_name: agent,
+            mode: options.json
+              ? "json"
+              : options.single
+                ? "single"
+                : "interactive",
+          })
 
           // Stream events
           let exitCode: number
@@ -163,11 +174,23 @@ export const run = new Command("run")
               spinner,
             )
           }
-          if (exitCode) process.exit(exitCode)
+          if (exitCode) {
+            await track("cli_run_failed", { agent_name: agent, messages: 1 })
+            await flushAnalytics()
+            process.exit(exitCode)
+          }
 
-          if (!interactive) return
+          if (!interactive) {
+            await track("cli_run_completed", {
+              agent_name: agent,
+              messages: 1,
+              duration_s: Math.round((performance.now() - runStart) / 1000),
+            })
+            return
+          }
 
           // Interactive loop
+          let messageCount = 1
           while (true) {
             const nextPrompt = await promptUser()
             if (
@@ -178,14 +201,28 @@ export const run = new Command("run")
               break
             }
 
+            messageCount++
             spinner?.start()
 
             exitCode = await streamEvents(
               client.streamSessionMessage(sessionId, nextPrompt),
               spinner,
             )
-            if (exitCode) process.exit(exitCode)
+            if (exitCode) {
+              await track("cli_run_failed", {
+                agent_name: agent,
+                messages: messageCount,
+              })
+              await flushAnalytics()
+              process.exit(exitCode)
+            }
           }
+
+          await track("cli_run_completed", {
+            agent_name: agent,
+            messages: messageCount,
+            duration_s: Math.round((performance.now() - runStart) / 1000),
+          })
         } finally {
           spinner?.stop()
         }

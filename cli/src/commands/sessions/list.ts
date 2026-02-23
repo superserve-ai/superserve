@@ -3,6 +3,7 @@ import pc from "picocolors"
 const { bold, dim } = pc
 
 import { Command } from "commander"
+import { track } from "../../analytics"
 import { createClient } from "../../api/client"
 import type { SessionData } from "../../api/types"
 import { withErrorHandler } from "../../errors"
@@ -25,6 +26,7 @@ export const listSessions = new Command("list")
           options.agent,
           options.status,
         )
+        await track("cli_sessions_list", { count: sessionList.length })
 
         if (options.json) {
           console.log(JSON.stringify(sessionList, null, 2))

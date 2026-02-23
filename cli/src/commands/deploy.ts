@@ -3,6 +3,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Command } from "commander"
 
+import { flushAnalytics, track } from "../analytics"
 import { createClient } from "../api/client"
 import { PlatformAPIError } from "../api/errors"
 import { loadProjectConfig } from "../config/project"
@@ -63,6 +64,10 @@ export const deploy = new Command("deploy")
               config,
               tarballPath,
             )
+            await track("cli_deploy_success", {
+              agent_name: name,
+              tarball_bytes: tarballBytes.length,
+            })
             console.log(JSON.stringify(agent, null, 2))
           } finally {
             if (tarballPath) {
@@ -121,6 +126,8 @@ export const deploy = new Command("deploy")
             }
             if (agent.deps_status === "failed") {
               status.fail()
+              await track("cli_deploy_deps_failed", { agent_name: name })
+              await flushAnalytics()
               console.error()
               console.error("Agent created but dependencies failed to install.")
               console.error("Fix your requirements and run:")
@@ -131,6 +138,8 @@ export const deploy = new Command("deploy")
 
           if (agent.deps_status === "installing") {
             status.fail("(timed out)")
+            await track("cli_deploy_deps_timeout", { agent_name: name })
+            await flushAnalytics()
             console.error(
               "\nDependency install is still running. Check status with:",
             )
@@ -140,9 +149,13 @@ export const deploy = new Command("deploy")
         }
 
         // Done
-        const totalTime = formatElapsed(
-          (performance.now() - deployStart) / 1000,
-        )
+        const totalSeconds = (performance.now() - deployStart) / 1000
+        const totalTime = formatElapsed(totalSeconds)
+        await track("cli_deploy_success", {
+          agent_name: name,
+          tarball_bytes: tarballBytes.length,
+          duration_s: Math.round(totalSeconds),
+        })
         console.log()
         console.log(`  Deployed '${agent.name}' in ${totalTime}`)
 

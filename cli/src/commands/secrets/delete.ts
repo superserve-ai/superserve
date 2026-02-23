@@ -1,4 +1,5 @@
 import { Command } from "commander"
+import { track } from "../../analytics"
 import { createClient } from "../../api/client"
 import { withErrorHandler } from "../../errors"
 import { log } from "../../utils/logger"
@@ -24,6 +25,7 @@ export const deleteSecret = new Command("delete")
 
         const client = createClient()
         const keys = await client.deleteAgentSecret(agentName, key)
+        await track("cli_secrets_delete", { agent_name: agentName })
 
         log.success(`Deleted secret '${key}' from agent '${agentName}'`)
         if (keys.length > 0) {

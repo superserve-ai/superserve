@@ -1,4 +1,5 @@
 import { Command } from "commander"
+import { track } from "../../analytics"
 import { createClient } from "../../api/client"
 import { withErrorHandler } from "../../errors"
 import { log } from "../../utils/logger"
@@ -26,6 +27,10 @@ export const setSecrets = new Command("set")
 
       const client = createClient()
       const keys = await client.setAgentSecrets(agentName, envVars)
+      await track("cli_secrets_set", {
+        agent_name: agentName,
+        secret_count: Object.keys(envVars).length,
+      })
 
       log.success(
         `Set ${Object.keys(envVars).length} secret(s) for agent '${agentName}'`,

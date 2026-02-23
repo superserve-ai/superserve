@@ -3,6 +3,7 @@ import pc from "picocolors"
 const { bold, dim } = pc
 
 import { Command } from "commander"
+import { track } from "../../analytics"
 import { createClient } from "../../api/client"
 import { withErrorHandler } from "../../errors"
 import { formatTimestamp } from "../../utils/format"
@@ -18,6 +19,7 @@ export const getAgent = new Command("get")
     withErrorHandler(async (name: string, options: { json?: boolean }) => {
       const client = createClient()
       const agent = await client.getAgent(name)
+      await track("cli_agents_get", { agent_name: name })
 
       if (options.json) {
         console.log(JSON.stringify(agent, null, 2))

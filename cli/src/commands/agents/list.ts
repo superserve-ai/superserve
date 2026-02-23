@@ -3,6 +3,7 @@ import pc from "picocolors"
 const { bold, dim } = pc
 
 import { Command } from "commander"
+import { track } from "../../analytics"
 import { createClient } from "../../api/client"
 import type { AgentResponse } from "../../api/types"
 import { withErrorHandler } from "../../errors"
@@ -30,6 +31,7 @@ export const listAgents = new Command("list")
     withErrorHandler(async (options: { status?: string; json?: boolean }) => {
       const client = createClient()
       let agentList: AgentResponse[] = await client.listAgents()
+      await track("cli_agents_list", { count: agentList.length })
 
       if (options.status) {
         const filterKey = options.status.toLowerCase()

@@ -109,6 +109,8 @@ export const login = new Command("login")
         await loginWithDeviceFlow(client)
       }
 
-      await track("cli_login")
+      await track("cli_login", {
+        method: options.apiKey ? "api_key" : "device_flow",
+      })
     }),
   )

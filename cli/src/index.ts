@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { Command } from "commander"
-import { flushAnalytics, registerExitHook } from "./analytics"
+import { flushAnalytics, registerExitHook, track } from "./analytics"
 import { agents } from "./commands/agents/index"
 import { deploy } from "./commands/deploy"
 import { init } from "./commands/init"
@@ -42,6 +42,13 @@ registerExitHook()
 // Global error handler (safety net)
 async function main() {
   try {
+    // Track which command is being invoked (e.g. "agents list", "deploy")
+    const positional = process.argv.slice(2).filter((a) => !a.startsWith("-"))
+    const SUB_COMMAND_GROUPS = new Set(["agents", "secrets", "sessions"])
+    const depth = SUB_COMMAND_GROUPS.has(positional[0]) ? 2 : 1
+    const command = positional.slice(0, depth).join(" ") || "help"
+    await track("cli_command_invoked", { command })
+
     await program.parseAsync(process.argv)
   } catch (e) {
     const code = handleError(e)

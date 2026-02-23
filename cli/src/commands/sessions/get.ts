@@ -3,6 +3,7 @@ import pc from "picocolors"
 const { bold, dim } = pc
 
 import { Command } from "commander"
+import { track } from "../../analytics"
 import { createClient } from "../../api/client"
 import { withErrorHandler } from "../../errors"
 import { formatTimestamp } from "../../utils/format"
@@ -18,6 +19,7 @@ export const getSession = new Command("get")
     withErrorHandler(async (sessionId: string, options: { json?: boolean }) => {
       const client = createClient()
       const session = await client.getSession(sessionId)
+      await track("cli_sessions_get")
 
       if (options.json) {
         console.log(JSON.stringify(session, null, 2))

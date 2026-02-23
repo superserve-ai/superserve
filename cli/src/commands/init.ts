@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { basename, join } from "node:path"
 import { Command } from "commander"
+import { track } from "../analytics"
 import { SUPERSERVE_YAML } from "../config/constants"
 import { withErrorHandler } from "../errors"
 import { commandBox } from "../utils/command-box"
@@ -78,6 +79,7 @@ export const init = new Command("init")
       secretsBlock,
     )
     writeFileSync(configPath, content)
+    await track("cli_init", { secrets_detected: envKeys.length })
 
     console.log(`Created ${SUPERSERVE_YAML}`)
     console.log()

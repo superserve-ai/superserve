@@ -3,6 +3,7 @@ import pc from "picocolors"
 const { bold } = pc
 
 import { Command } from "commander"
+import { track } from "../../analytics"
 import { createClient } from "../../api/client"
 import { withErrorHandler } from "../../errors"
 import { commandBox } from "../../utils/command-box"
@@ -15,6 +16,10 @@ export const listSecrets = new Command("list")
     withErrorHandler(async (agentName: string) => {
       const client = createClient()
       const keys = await client.getAgentSecrets(agentName)
+      await track("cli_secrets_list", {
+        agent_name: agentName,
+        count: keys.length,
+      })
 
       if (keys.length === 0) {
         console.log(`No secrets configured for agent '${agentName}'`)
