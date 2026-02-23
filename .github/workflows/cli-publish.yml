@@ -1,0 +1,122 @@
+name: Publish CLI
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish-npm:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Set version from tag
+        working-directory: cli
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          npm version "$VERSION" --no-git-tag-version
+
+      - name: Install dependencies
+        working-directory: cli
+        run: bun install --frozen-lockfile
+
+      - name: Publish
+        working-directory: cli
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc
+          npm publish
+          rm .npmrc
+
+  build-binaries:
+    name: Build and upload binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies and build
+        working-directory: cli
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile
+          bun run build
+
+      - name: Generate SHA256SUMS
+        working-directory: cli/dist
+        run: sha256sum superserve-* > SHA256SUMS
+
+      - name: Upload release assets
+        working-directory: cli/dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release upload "$TAG" superserve-* SHA256SUMS --repo "${{ github.repository }}" --clobber
+
+  update-homebrew-tap:
+    name: Update Homebrew formula
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get release info
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          BASE_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}"
+
+          curl -fsSL -o /tmp/SHA256SUMS "${BASE_URL}/SHA256SUMS"
+
+          get_sha() { grep "$1" /tmp/SHA256SUMS | awk '{print $1}'; }
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "sha256_darwin_arm64=$(get_sha superserve-bun-darwin-arm64)" >> "$GITHUB_OUTPUT"
+          echo "sha256_darwin_x64=$(get_sha superserve-bun-darwin-x64)" >> "$GITHUB_OUTPUT"
+          echo "sha256_linux_arm64=$(get_sha superserve-bun-linux-arm64)" >> "$GITHUB_OUTPUT"
+          echo "sha256_linux_x64=$(get_sha superserve-bun-linux-x64)" >> "$GITHUB_OUTPUT"
+
+      - name: Update formula
+        run: |
+          set -euo pipefail
+          sed -e "s|__TAG__|${{ steps.release.outputs.tag }}|g" \
+              -e "s|__VERSION__|${{ steps.release.outputs.version }}|g" \
+              -e "s|__SHA256_DARWIN_ARM64__|${{ steps.release.outputs.sha256_darwin_arm64 }}|g" \
+              -e "s|__SHA256_DARWIN_X64__|${{ steps.release.outputs.sha256_darwin_x64 }}|g" \
+              -e "s|__SHA256_LINUX_ARM64__|${{ steps.release.outputs.sha256_linux_arm64 }}|g" \
+              -e "s|__SHA256_LINUX_X64__|${{ steps.release.outputs.sha256_linux_x64 }}|g" \
+              cli/Formula/superserve.rb > /tmp/superserve.rb
+
+      - name: Push to tap repo
+        env:
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/superserve-ai/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cp /tmp/superserve.rb tap/Formula/superserve.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/superserve.rb
+          git diff --staged --quiet && echo "Formula unchanged, skipping." && exit 0
+          git commit -m "superserve ${{ steps.release.outputs.tag }}"
+          git push
