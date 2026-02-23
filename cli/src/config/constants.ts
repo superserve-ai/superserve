@@ -1,10 +1,6 @@
-import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
-import { join, resolve } from "node:path"
-
-const pkg = JSON.parse(
-  readFileSync(resolve(import.meta.dir, "../../package.json"), "utf-8"),
-)
+import { join } from "node:path"
+import pkg from "../../package.json"
 
 export const PLATFORM_API_URL =
   process.env.SUPERSERVE_API_URL ?? "https://api.superserve.ai"
@@ -15,9 +11,9 @@ export const SUPERSERVE_CONFIG_DIR = join(homedir(), ".superserve")
 
 export const AUTH_FILE = join(SUPERSERVE_CONFIG_DIR, "auth.json")
 
-export const USER_AGENT = `superserve-cli/${pkg.version}`
-
 export const CLI_VERSION: string = pkg.version
+
+export const USER_AGENT = `superserve-cli/${CLI_VERSION}`
 
 export const DEFAULT_TIMEOUT = 30_000 // 30 seconds in ms
 

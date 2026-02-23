@@ -11,7 +11,8 @@ import { join } from "node:path"
 import type { PostHog } from "posthog-node"
 import { CLI_VERSION, SUPERSERVE_CONFIG_DIR } from "./config/constants"
 
-const POSTHOG_API_KEY = process.env.SUPERSERVE_POSTHOG_KEY
+const POSTHOG_API_KEY =
+  process.env.SUPERSERVE_POSTHOG_KEY ?? "phc_gjpDKKKQJAnkxkqLrPGrAhoariKsaHNuTpI5rVhkYre"
 const POSTHOG_HOST = "https://us.i.posthog.com"
 
 const ANONYMOUS_ID_FILE = join(SUPERSERVE_CONFIG_DIR, "anonymous_id")
@@ -28,7 +29,6 @@ const DEFAULT_PROPERTIES: Record<string, unknown> = {
 }
 
 function isDisabled(): boolean {
-  if (!POSTHOG_API_KEY) return true
   if (existsSync(ANALYTICS_DISABLED_FILE)) return true
   return Boolean(
     process.env.SUPERSERVE_DO_NOT_TRACK || process.env.DO_NOT_TRACK,
@@ -53,7 +53,7 @@ let posthogInstance: PostHog | null = null
 async function getPostHog(): Promise<PostHog> {
   if (!posthogInstance) {
     const { PostHog } = await import("posthog-node")
-    posthogInstance = new PostHog(POSTHOG_API_KEY!, {
+    posthogInstance = new PostHog(POSTHOG_API_KEY, {
       host: POSTHOG_HOST,
     })
   }
