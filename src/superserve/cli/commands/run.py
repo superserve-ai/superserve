@@ -3,90 +3,153 @@
 import json
 import signal
 import sys
+import time
 
 import click
+import requests.exceptions
 
 from ..platform.client import PlatformAPIError, PlatformClient
 from ..utils import Spinner, format_duration, sanitize_terminal_output
 
+MAX_RECONNECT_ATTEMPTS = 10
+RECONNECT_DELAY = 2.0  # seconds
 
-def _stream_events(event_iter, as_json: bool, spinner: Spinner | None = None) -> int:
-    """Stream SSE events to terminal. Returns 0 on success, non-zero on failure."""
+
+def _stream_events(
+    client: PlatformClient,
+    session_id: str,
+    event_iter,
+    as_json: bool,
+    spinner: Spinner | None = None,
+) -> int:
+    """Stream SSE events to terminal with automatic reconnection.
+
+    On connection errors, attempts to reconnect using the session events
+    endpoint, resuming from the last successfully received event.
+
+    Returns 0 on success, non-zero on failure.
+    """
+    last_sequence = 0
+    reconnect_attempts = 0
     agent_prefix_shown = False
-    for event in event_iter:
-        if as_json:
-            click.echo(json.dumps({"type": event.type, "data": event.data}))
-            if event.type == "run.completed":
-                return 0
-            if event.type == "run.failed":
-                return 1
-            if event.type == "run.cancelled":
-                return 130
-            continue
 
-        if event.type in ("status", "run.started", "heartbeat"):
-            pass  # Spinner is already running
+    while True:
+        try:
+            for event in event_iter:
+                reconnect_attempts = 0  # Reset on successful event
+                last_sequence += 1
 
-        elif event.type == "message.delta":
+                if as_json:
+                    click.echo(json.dumps({"type": event.type, "data": event.data}))
+                    if event.type == "run.completed":
+                        return 0
+                    if event.type == "run.failed":
+                        return 1
+                    if event.type == "run.cancelled":
+                        return 130
+                    continue
+
+                if event.type in ("status", "run.started", "heartbeat"):
+                    pass  # Spinner is already running
+
+                elif event.type == "message.delta":
+                    if spinner:
+                        spinner.stop()
+                    if not agent_prefix_shown:
+                        click.echo("Agent> ", nl=False)
+                        agent_prefix_shown = True
+                    content = event.data.get("content", "")
+                    click.echo(sanitize_terminal_output(content), nl=False)
+
+                elif event.type == "tool.start":
+                    if spinner:
+                        spinner.stop()
+                    tool = event.data.get("tool", "unknown")
+                    tool_input = event.data.get("input", {})
+                    input_str = sanitize_terminal_output(str(tool_input))
+                    input_preview = input_str[:50]
+                    if len(input_str) > 50:
+                        input_preview += "..."
+                    click.echo(f"\n[{tool}] {input_preview}", nl=False, err=True)
+
+                elif event.type == "tool.end":
+                    duration = event.data.get("duration_ms", 0)
+                    click.echo(f" ({format_duration(duration)})", err=True)
+                    if spinner:
+                        spinner.start()
+
+                elif event.type == "run.completed":
+                    if spinner:
+                        spinner.stop()
+                    duration = event.data.get("duration_ms", 0)
+                    click.echo()  # Newline after content
+                    click.echo(
+                        f"\nCompleted in {format_duration(duration)}",
+                        err=True,
+                    )
+                    if event.data.get("max_turns_reached"):
+                        msg = sanitize_terminal_output(
+                            event.data.get("max_turns_message", "Max turns reached.")
+                        )
+                        click.echo(f"\nWarning: {msg}", err=True)
+                    return 0
+
+                elif event.type == "run.failed":
+                    if spinner:
+                        spinner.stop()
+                    error = event.data.get("error", {})
+                    message = sanitize_terminal_output(
+                        error.get("message", "Unknown error")
+                    )
+                    click.echo(f"\nError: {message}", err=True)
+                    return 1
+
+                elif event.type == "run.cancelled":
+                    if spinner:
+                        spinner.stop()
+                    click.echo("\nRun was cancelled.", err=True)
+                    return 130
+
+            # Iterator exhausted without terminal event
             if spinner:
                 spinner.stop()
-            if not agent_prefix_shown:
-                click.echo("Agent> ", nl=False)
-                agent_prefix_shown = True
-            content = event.data.get("content", "")
-            click.echo(sanitize_terminal_output(content), nl=False)
-
-        elif event.type == "tool.start":
-            if spinner:
-                spinner.stop()
-            tool = event.data.get("tool", "unknown")
-            tool_input = event.data.get("input", {})
-            input_str = sanitize_terminal_output(str(tool_input))
-            input_preview = input_str[:50]
-            if len(input_str) > 50:
-                input_preview += "..."
-            click.echo(f"\n[{tool}] {input_preview}", nl=False, err=True)
-
-        elif event.type == "tool.end":
-            duration = event.data.get("duration_ms", 0)
-            click.echo(f" ({format_duration(duration)})", err=True)
-            if spinner:
-                spinner.start()
-
-        elif event.type == "run.completed":
-            if spinner:
-                spinner.stop()
-            duration = event.data.get("duration_ms", 0)
-            click.echo()  # Newline after content
-            click.echo(
-                f"\nCompleted in {format_duration(duration)}",
-                err=True,
-            )
-            if event.data.get("max_turns_reached"):
-                msg = sanitize_terminal_output(
-                    event.data.get("max_turns_message", "Max turns reached.")
-                )
-                click.echo(f"\nWarning: {msg}", err=True)
-            return 0
-
-        elif event.type == "run.failed":
-            if spinner:
-                spinner.stop()
-            error = event.data.get("error", {})
-            message = sanitize_terminal_output(error.get("message", "Unknown error"))
-            click.echo(f"\nError: {message}", err=True)
+            click.echo("\nWarning: Stream ended unexpectedly.", err=True)
             return 1
 
-        elif event.type == "run.cancelled":
-            if spinner:
-                spinner.stop()
-            click.echo("\nRun was cancelled.", err=True)
-            return 130
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.ChunkedEncodingError,
+        ):
+            # Connection dropped — attempt reconnection
+            reconnect_attempts += 1
+            if reconnect_attempts > MAX_RECONNECT_ATTEMPTS:
+                if spinner:
+                    spinner.stop()
+                click.echo(
+                    "\nError: Lost connection to server after multiple retries.",
+                    err=True,
+                )
+                return 1
 
-    if spinner:
-        spinner.stop()
-    click.echo("\nWarning: Stream ended unexpectedly.", err=True)
-    return 1
+            delay = RECONNECT_DELAY * reconnect_attempts
+            if spinner:
+                spinner.update(
+                    f"Reconnecting ({reconnect_attempts}/{MAX_RECONNECT_ATTEMPTS})..."
+                )
+            else:
+                click.echo(
+                    f"\nReconnecting ({reconnect_attempts}/{MAX_RECONNECT_ATTEMPTS})...",
+                    err=True,
+                )
+
+            time.sleep(delay)
+
+            try:
+                event_iter = client.stream_session_events(
+                    session_id, after=last_sequence
+                )
+            except Exception:
+                continue  # Will retry in next loop iteration
 
 
 @click.command("run")
@@ -170,6 +233,8 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
         session_id = session_data["id"]
 
         exit_code = _stream_events(
+            client,
+            session_id,
             client.stream_session_message(session_id, prompt),
             as_json,
             spinner,
@@ -194,6 +259,8 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
                 spinner.start()
 
             exit_code = _stream_events(
+                client,
+                session_id,
                 client.stream_session_message(session_id, next_prompt),
                 as_json,
                 spinner,
