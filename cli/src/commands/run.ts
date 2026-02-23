@@ -1,6 +1,6 @@
 import { Command } from "commander"
 
-import { flushAnalytics, track } from "../analytics"
+import { track } from "../analytics"
 import { createClient } from "../api/client"
 import type { RunEvent } from "../api/types"
 import { withErrorHandler } from "../errors"
@@ -146,9 +146,8 @@ export const run = new Command("run")
                 `superserve secrets set ${agentInfo.name} ${missing.map((k) => `${k}=...`).join(" ")}`,
               ),
             )
-            throw new Error(
-              `Missing required secret(s): ${missing.join(", ")}`,
-            )
+            process.exitCode = 1
+            return
           }
         }
 
@@ -185,8 +184,8 @@ export const run = new Command("run")
           }
           if (exitCode) {
             await track("cli_run_failed", { agent_name: agent, messages: 1 })
-            await flushAnalytics()
-            process.exit(exitCode)
+            process.exitCode = exitCode
+            return
           }
 
           if (!interactive) {
@@ -222,8 +221,8 @@ export const run = new Command("run")
                 agent_name: agent,
                 messages: messageCount,
               })
-              await flushAnalytics()
-              process.exit(exitCode)
+              process.exitCode = exitCode
+              return
             }
           }
 

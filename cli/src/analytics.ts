@@ -12,7 +12,8 @@ import type { PostHog } from "posthog-node"
 import { CLI_VERSION, SUPERSERVE_CONFIG_DIR } from "./config/constants"
 
 const POSTHOG_API_KEY =
-  process.env.SUPERSERVE_POSTHOG_KEY ?? "phc_gjpDKKKQJAnkxkqLrPGrAhoariKsaHNuTpI5rVhkYre"
+  process.env.SUPERSERVE_POSTHOG_KEY ??
+  "phc_gjpDKKKQJAnkxkqLrPGrAhoariKsaHNuTpI5rVhkYre"
 const POSTHOG_HOST = "https://us.i.posthog.com"
 
 const ANONYMOUS_ID_FILE = join(SUPERSERVE_CONFIG_DIR, "anonymous_id")
@@ -43,7 +44,7 @@ function getAnonymousId(): string {
   }
 
   const anonymousId = randomUUID()
-  writeFileSync(ANONYMOUS_ID_FILE, anonymousId)
+  writeFileSync(ANONYMOUS_ID_FILE, anonymousId, { mode: 0o600 })
   return anonymousId
 }
 
@@ -93,7 +94,7 @@ export async function identify(user: {
 
     // Persist user ID so subsequent track() calls use the real ID
     const userIdFile = join(SUPERSERVE_CONFIG_DIR, "analytics_user_id")
-    writeFileSync(userIdFile, user.id)
+    writeFileSync(userIdFile, user.id, { mode: 0o600 })
   } catch {
     // Fail silently
   }

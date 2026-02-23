@@ -25,40 +25,44 @@ export async function* parseSSEStream(
   let currentEventType: string | null = null
   let dataLines: string[] = []
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
 
-    buffer += decoder.decode(value, { stream: true })
+      buffer += decoder.decode(value, { stream: true })
 
-    while (buffer.includes("\n")) {
-      const newlineIdx = buffer.indexOf("\n")
-      const line = buffer.slice(0, newlineIdx).replace(/\r$/, "")
-      buffer = buffer.slice(newlineIdx + 1)
+      while (buffer.includes("\n")) {
+        const newlineIdx = buffer.indexOf("\n")
+        const line = buffer.slice(0, newlineIdx).replace(/\r$/, "")
+        buffer = buffer.slice(newlineIdx + 1)
 
-      if (!line) {
-        // Empty line = end of SSE event
-        if (currentEventType && dataLines.length > 0) {
-          const event = parseEvent(currentEventType, dataLines)
-          if (event) yield event
+        if (!line) {
+          // Empty line = end of SSE event
+          if (currentEventType && dataLines.length > 0) {
+            const event = parseEvent(currentEventType, dataLines)
+            if (event) yield event
+          }
+          currentEventType = null
+          dataLines = []
+          continue
         }
-        currentEventType = null
-        dataLines = []
-        continue
-      }
 
-      if (line.startsWith("event: ")) {
-        currentEventType = line.slice(7)
-      } else if (line.startsWith("data: ")) {
-        dataLines.push(line.slice(6))
+        if (line.startsWith("event: ")) {
+          currentEventType = line.slice(7)
+        } else if (line.startsWith("data: ")) {
+          dataLines.push(line.slice(6))
+        }
       }
     }
-  }
 
-  // Handle any remaining buffered event
-  if (currentEventType && dataLines.length > 0) {
-    const event = parseEvent(currentEventType, dataLines)
-    if (event) yield event
+    // Handle any remaining buffered event
+    if (currentEventType && dataLines.length > 0) {
+      const event = parseEvent(currentEventType, dataLines)
+      if (event) yield event
+    }
+  } finally {
+    reader.releaseLock()
   }
 }
 

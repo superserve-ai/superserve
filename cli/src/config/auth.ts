@@ -1,8 +1,8 @@
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs"
@@ -13,8 +13,9 @@ import { AUTH_FILE } from "./constants"
 export function saveCredentials(creds: Credentials): void {
   const dir = dirname(AUTH_FILE)
   mkdirSync(dir, { recursive: true })
-  writeFileSync(AUTH_FILE, JSON.stringify(creds, null, 2))
-  chmodSync(AUTH_FILE, 0o600)
+  const tmp = `${AUTH_FILE}.tmp`
+  writeFileSync(tmp, JSON.stringify(creds, null, 2), { mode: 0o600 })
+  renameSync(tmp, AUTH_FILE)
 }
 
 export function getCredentials(): Credentials | null {

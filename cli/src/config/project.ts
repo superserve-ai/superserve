@@ -20,7 +20,7 @@ export function loadProjectConfig(
   let raw: unknown
   try {
     const text = readFileSync(configPath, "utf-8")
-    raw = yaml.load(text)
+    raw = yaml.load(text, { schema: yaml.JSON_SCHEMA })
   } catch (e) {
     if (e instanceof Error && e.message.includes("EACCES")) {
       throw new Error(`Permission denied reading ${SUPERSERVE_YAML}.`)

@@ -1,9 +1,10 @@
+import { randomUUID } from "node:crypto"
 import { unlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Command } from "commander"
 
-import { flushAnalytics, track } from "../analytics"
+import { track } from "../analytics"
 import { createClient } from "../api/client"
 import { PlatformAPIError } from "../api/errors"
 import { loadProjectConfig } from "../config/project"
@@ -15,7 +16,7 @@ import { confirm } from "../utils/prompt"
 import { createSpinner } from "../utils/spinner"
 
 function writeTempTarball(data: Uint8Array): string {
-  const path = join(tmpdir(), `superserve-${Date.now()}.tar.gz`)
+  const path = join(tmpdir(), `superserve-${randomUUID()}.tar.gz`)
   writeFileSync(path, data)
   return path
 }
@@ -127,24 +128,24 @@ export const deploy = new Command("deploy")
             if (agent.deps_status === "failed") {
               status.fail()
               await track("cli_deploy_deps_failed", { agent_name: name })
-              await flushAnalytics()
               console.error()
               console.error("Agent created but dependencies failed to install.")
               console.error("Fix your requirements and run:")
               console.error(commandBox("superserve deploy"))
-              process.exit(1)
+              process.exitCode = 1
+              return
             }
           }
 
           if (agent.deps_status === "installing") {
             status.fail("(timed out)")
             await track("cli_deploy_deps_timeout", { agent_name: name })
-            await flushAnalytics()
             console.error(
               "\nDependency install is still running. Check status with:",
             )
             console.error(commandBox(`superserve agents get ${name}`))
-            process.exit(1)
+            process.exitCode = 1
+            return
           }
         }
 

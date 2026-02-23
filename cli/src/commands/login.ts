@@ -17,6 +17,10 @@ import { commandBox } from "../utils/command-box"
 import { log } from "../utils/logger"
 
 function openBrowser(url: string): void {
+  const parsed = new URL(url)
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error(`Refusing to open non-HTTP URL: ${url}`)
+  }
   const cmd =
     platform() === "darwin"
       ? "open"
@@ -36,7 +40,8 @@ async function loginWithApiKey(
   if (!(await client.validateToken())) {
     clearCredentials()
     log.error("Invalid API key")
-    process.exit(1)
+    process.exitCode = 1
+    return
   }
 
   log.success("Authenticated successfully with API key.")
@@ -83,8 +88,8 @@ async function loginWithDeviceFlow(client: SuperserveClient): Promise<void> {
     }
   }
 
-  log.error("Authentication timed out")
-  process.exit(1)
+  log.error("Authentication timed out. Please try again.")
+  process.exitCode = 1
 }
 
 export const login = new Command("login")
