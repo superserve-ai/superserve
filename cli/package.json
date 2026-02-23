@@ -1,6 +1,6 @@
 {
   "name": "@superserve/cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "CLI for deploying AI agents to sandboxed cloud containers",
   "type": "module",
   "bin": {
