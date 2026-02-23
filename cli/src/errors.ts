@@ -58,8 +58,7 @@ export function withErrorHandler<T extends (...args: any[]) => Promise<void>>(
     } catch (e) {
       await track("cli_error", errorProperties(e))
       await flushAnalytics()
-      const code = handleError(e)
-      process.exit(code)
+      process.exitCode = handleError(e)
     }
   }
   return wrapped as T

@@ -1,4 +1,4 @@
-import { exec } from "node:child_process"
+import { spawn } from "node:child_process"
 import { platform } from "node:os"
 import { Command } from "commander"
 import { identify, track } from "../analytics"
@@ -23,7 +23,7 @@ function openBrowser(url: string): void {
       : platform() === "win32"
         ? "start"
         : "xdg-open"
-  exec(`${cmd} "${url}"`)
+  spawn(cmd, [url], { stdio: "ignore", detached: true }).unref()
 }
 
 async function loginWithApiKey(

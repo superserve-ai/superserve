@@ -51,8 +51,7 @@ async function main() {
 
     await program.parseAsync(process.argv)
   } catch (e) {
-    const code = handleError(e)
-    process.exit(code)
+    process.exitCode = handleError(e)
   } finally {
     await flushAnalytics()
   }

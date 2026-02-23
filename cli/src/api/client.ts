@@ -265,13 +265,13 @@ export function createClient(
 
   async function getAgent(nameOrId: string): Promise<AgentResponse> {
     const agentId = await resolveAgentId(nameOrId)
-    const resp = await request("GET", `/agents/${agentId}`)
+    const resp = await request("GET", `/agents/${encodeURIComponent(agentId)}`)
     return safeJson<AgentResponse>(resp)
   }
 
   async function deleteAgent(nameOrId: string): Promise<void> {
     const agentId = await resolveAgentId(nameOrId)
-    await request("DELETE", `/agents/${agentId}`)
+    await request("DELETE", `/agents/${encodeURIComponent(agentId)}`)
 
     for (const [name, id] of agentNameCache) {
       if (id === agentId) {
@@ -330,7 +330,7 @@ export function createClient(
 
   async function getAgentSecrets(nameOrId: string): Promise<string[]> {
     const agentId = await resolveAgentId(nameOrId)
-    const resp = await request("GET", `/agents/${agentId}/secrets`)
+    const resp = await request("GET", `/agents/${encodeURIComponent(agentId)}/secrets`)
     const data = await safeJson<{ keys?: string[] }>(resp)
     return data.keys ?? []
   }
@@ -340,7 +340,7 @@ export function createClient(
     secrets: Record<string, string>,
   ): Promise<string[]> {
     const agentId = await resolveAgentId(nameOrId)
-    const resp = await request("PATCH", `/agents/${agentId}/secrets`, {
+    const resp = await request("PATCH", `/agents/${encodeURIComponent(agentId)}/secrets`, {
       json: { secrets },
     })
     const data = await safeJson<{ keys?: string[] }>(resp)
@@ -352,7 +352,7 @@ export function createClient(
     key: string,
   ): Promise<string[]> {
     const agentId = await resolveAgentId(nameOrId)
-    const resp = await request("DELETE", `/agents/${agentId}/secrets/${key}`)
+    const resp = await request("DELETE", `/agents/${encodeURIComponent(agentId)}/secrets/${encodeURIComponent(key)}`)
     const data = await safeJson<{ keys?: string[] }>(resp)
     return data.keys ?? []
   }
@@ -390,13 +390,13 @@ export function createClient(
 
   async function getSession(sessionId: string): Promise<SessionData> {
     const resolved = await resolveSessionId(sessionId)
-    const resp = await request("GET", `/sessions/${resolved}`)
+    const resp = await request("GET", `/sessions/${encodeURIComponent(resolved)}`)
     return safeJson<SessionData>(resp)
   }
 
   async function endSession(sessionId: string): Promise<SessionData> {
     const resolved = await resolveSessionId(sessionId)
-    const resp = await request("POST", `/sessions/${resolved}/end`)
+    const resp = await request("POST", `/sessions/${encodeURIComponent(resolved)}/end`)
     return safeJson<SessionData>(resp)
   }
 
@@ -404,7 +404,7 @@ export function createClient(
     sessionId: string,
     prompt: string,
   ): AsyncIterableIterator<RunEvent> {
-    const resp = await request("POST", `/sessions/${sessionId}/messages`, {
+    const resp = await request("POST", `/sessions/${encodeURIComponent(sessionId)}/messages`, {
       json: { prompt },
       stream: true,
     })

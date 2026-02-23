@@ -103,11 +103,17 @@ export const run = new Command("run")
         const client = createClient()
         let spinner: Spinner | null = null
 
-        // Handle Ctrl+C
-        process.on("SIGINT", () => {
+        // Handle Ctrl+C via AbortController so the listener is cleaned up
+        const ac = new AbortController()
+        const onSigint = () => {
           spinner?.stop()
           console.error("\nCancelled.")
-          process.exit(130)
+          ac.abort()
+          process.exitCode = 130
+        }
+        process.on("SIGINT", onSigint)
+        ac.signal.addEventListener("abort", () => {
+          process.off("SIGINT", onSigint)
         })
 
         // If no prompt, ask for one
@@ -122,25 +128,28 @@ export const run = new Command("run")
         const useSpinner = !options.json && process.stderr.isTTY
 
         // Pre-flight: check required secrets
+        let agentInfo: Awaited<ReturnType<typeof client.getAgent>> | null = null
         try {
-          const agentInfo = await client.getAgent(agent)
-          if (agentInfo.required_secrets.length > 0) {
-            const missing = agentInfo.required_secrets.filter(
-              (s) => !agentInfo.environment_keys.includes(s),
-            )
-            if (missing.length > 0) {
-              log.error(`Missing required secret(s): ${missing.join(", ")}`)
-              console.error("Set them with:")
-              console.error(
-                commandBox(
-                  `superserve secrets set ${agentInfo.name} ${missing.map((k) => `${k}=...`).join(" ")}`,
-                ),
-              )
-              process.exit(1)
-            }
-          }
+          agentInfo = await client.getAgent(agent)
         } catch {
           // Let session creation handle auth/404 errors
+        }
+        if (agentInfo && agentInfo.required_secrets.length > 0) {
+          const missing = agentInfo.required_secrets.filter(
+            (s) => !agentInfo.environment_keys.includes(s),
+          )
+          if (missing.length > 0) {
+            log.error(`Missing required secret(s): ${missing.join(", ")}`)
+            console.error("Set them with:")
+            console.error(
+              commandBox(
+                `superserve secrets set ${agentInfo.name} ${missing.map((k) => `${k}=...`).join(" ")}`,
+              ),
+            )
+            throw new Error(
+              `Missing required secret(s): ${missing.join(", ")}`,
+            )
+          }
         }
 
         try {
@@ -225,6 +234,7 @@ export const run = new Command("run")
           })
         } finally {
           spinner?.stop()
+          process.off("SIGINT", onSigint)
         }
       },
     ),

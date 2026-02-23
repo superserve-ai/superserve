@@ -1,5 +1,7 @@
-import { readdirSync, readFileSync } from "node:fs"
+import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join, relative, sep } from "node:path"
+import { createGzip } from "node:zlib"
+import { pack } from "tar-stream"
 
 const EXCLUDE_DIRS = new Set([
   "__pycache__",
@@ -78,34 +80,34 @@ export async function makeTarball(
 ): Promise<Uint8Array> {
   const files = collectFiles(projectDir, projectDir, userIgnores)
 
-  // Use Bun's built-in tar support if available, otherwise use a manual approach
-  // For now, we use the tar command via shell since Bun's native tar API is simpler
-  const { tmpdir } = await import("node:os")
-  const { join: pathJoin } = await import("node:path")
-  const { writeFileSync, mkdtempSync } = await import("node:fs")
+  const tar = pack()
+  const gzip = createGzip()
+  const stream = tar.pipe(gzip)
 
-  const tmpDir = mkdtempSync(pathJoin(tmpdir(), "superserve-"))
-  const fileListPath = pathJoin(tmpDir, "files.txt")
-  const tarballPath = pathJoin(tmpDir, "agent.tar.gz")
+  for (const filePath of files) {
+    const rel = relative(projectDir, filePath).split(sep).join("/")
+    const content = readFileSync(filePath)
+    const stat = statSync(filePath)
+    tar.entry({ name: rel, size: content.length, mode: stat.mode }, content)
+  }
+  tar.finalize()
 
-  // Write file list for tar
-  const relativeFiles = files.map((f) => relative(projectDir, f))
-  writeFileSync(fileListPath, relativeFiles.join("\n"))
-
-  const proc = Bun.spawnSync(
-    ["tar", "czf", tarballPath, "-C", projectDir, "-T", fileListPath],
-    { stderr: "pipe" },
-  )
-
-  if (proc.exitCode !== 0) {
-    throw new Error("Failed to package project. Check file permissions and try again.")
+  // Collect compressed chunks into a single Uint8Array
+  const chunks: Uint8Array[] = []
+  for await (const chunk of stream) {
+    chunks.push(chunk as Uint8Array)
   }
 
-  const tarball = readFileSync(tarballPath)
+  let totalLength = 0
+  for (const chunk of chunks) {
+    totalLength += chunk.length
+  }
+  const result = new Uint8Array(totalLength)
+  let offset = 0
+  for (const chunk of chunks) {
+    result.set(chunk, offset)
+    offset += chunk.length
+  }
 
-  // Cleanup
-  const { rmSync } = await import("node:fs")
-  rmSync(tmpDir, { recursive: true, force: true })
-
-  return new Uint8Array(tarball)
+  return result
 }
