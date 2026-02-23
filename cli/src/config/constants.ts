@@ -6,19 +6,10 @@ const pkg = JSON.parse(
   readFileSync(resolve(import.meta.dir, "../../package.json"), "utf-8"),
 )
 
-// PRODUCTION
-// export const PLATFORM_API_URL =
-//   process.env.SUPERSERVE_API_URL ?? "https://api.superserve.ai"
-// export const DASHBOARD_URL =
-//   process.env.SUPERSERVE_DASHBOARD_URL ?? "https://console.superserve.ai"
-
-// STAGING
 export const PLATFORM_API_URL =
-  process.env.SUPERSERVE_API_URL ?? "https://api-staging.superserve.ai"
-
+  process.env.SUPERSERVE_API_URL ?? "https://api.superserve.ai"
 export const DASHBOARD_URL =
-  process.env.SUPERSERVE_DASHBOARD_URL ??
-  "https://console-staging.superserve.ai"
+  process.env.SUPERSERVE_DASHBOARD_URL ?? "https://console.superserve.ai"
 
 export const SUPERSERVE_CONFIG_DIR = join(homedir(), ".superserve")
 
