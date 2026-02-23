@@ -2,13 +2,17 @@
 import { Command } from "commander"
 import { flushAnalytics, registerExitHook } from "./analytics"
 import { agents } from "./commands/agents/index"
+import { attach } from "./commands/attach"
+import { claude } from "./commands/claude"
 import { deploy } from "./commands/deploy"
 import { init } from "./commands/init"
 import { login } from "./commands/login"
 import { logout } from "./commands/logout"
+import { ps } from "./commands/ps"
 import { run } from "./commands/run"
 import { secrets } from "./commands/secrets/index"
 import { sessions } from "./commands/sessions/index"
+import { stop } from "./commands/stop"
 import { CLI_VERSION } from "./config/constants"
 import { handleError } from "./errors"
 
@@ -31,6 +35,12 @@ program.addCommand(deploy)
 
 // Run
 program.addCommand(run)
+program.addCommand(claude)
+
+// Session management shortcuts
+program.addCommand(attach)
+program.addCommand(ps)
+program.addCommand(stop)
 
 // Resource management
 program.addCommand(agents)

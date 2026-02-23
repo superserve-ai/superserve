@@ -350,6 +350,43 @@ export function createClient(
     return data.keys ?? []
   }
 
+  // ==================== CLAUDE SESSIONS ====================
+
+  async function createClaudeSession(
+    tarballPath: string,
+    options: {
+      prompt?: string
+      title?: string
+      anthropicApiKey?: string
+    } = {},
+  ): Promise<SessionData> {
+    const file = Bun.file(tarballPath)
+    const formData = new FormData()
+    formData.append("file", file, "workspace.tar.gz")
+    if (options.prompt) formData.append("prompt", options.prompt)
+    if (options.title) formData.append("title", options.title)
+    if (options.anthropicApiKey)
+      formData.append("anthropic_api_key", options.anthropicApiKey)
+
+    const resp = await request("POST", "/claude-sessions", { formData })
+    return safeJson<SessionData>(resp)
+  }
+
+  async function* streamClaudeMessage(
+    sessionId: string,
+    prompt: string,
+  ): AsyncIterableIterator<RunEvent> {
+    const resp = await request(
+      "POST",
+      `/claude-sessions/${sessionId}/messages`,
+      {
+        json: { prompt },
+        stream: true,
+      },
+    )
+    yield* parseSSEStream(resp)
+  }
+
   // ==================== SESSIONS ====================
 
   async function createSession(
@@ -415,6 +452,8 @@ export function createClient(
     getAgentSecrets,
     setAgentSecrets,
     deleteAgentSecret,
+    createClaudeSession,
+    streamClaudeMessage,
     createSession,
     listSessions,
     getSession,
