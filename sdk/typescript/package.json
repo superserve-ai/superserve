@@ -59,5 +59,14 @@
     "streaming",
     "sse",
     "react"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/superserve-ai/superserve.git",
+    "directory": "cli"
+  },
+  "homepage": "https://superserve.ai",
+  "bugs": {
+    "url": "https://github.com/superserve-ai/superserve/issues"
+  }
 }
