@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@theme {
+  --font-mono: "SF Mono", "Cascadia Code", "Fira Code", "JetBrains Mono",
+    "Menlo", "Consolas", monospace;
+}
+
+/* Markdown content */
+.markdown-content p {
+  @apply my-2 first:mt-0 last:mb-0;
+}
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  @apply mt-4 mb-2 font-semibold leading-tight;
+}
+.markdown-content h1 {
+  @apply text-lg;
+}
+.markdown-content h2 {
+  @apply text-base;
+}
+.markdown-content h3 {
+  @apply text-sm;
+}
+.markdown-content ul,
+.markdown-content ol {
+  @apply my-2 pl-6;
+}
+.markdown-content li {
+  @apply my-1;
+}
+.markdown-content code {
+  @apply rounded bg-black/5 px-1.5 py-0.5 text-[0.9em];
+}
+.markdown-content pre {
+  @apply my-3 overflow-x-auto rounded bg-neutral-900 px-4 py-3 text-xs leading-relaxed text-neutral-300;
+}
+.markdown-content pre code {
+  @apply bg-transparent p-0 text-inherit;
+}
+.markdown-content blockquote {
+  @apply my-2 border-l-[3px] border-neutral-300 py-0.5 pl-4 text-neutral-500;
+}
+.markdown-content a {
+  @apply underline;
+}
+.markdown-content hr {
+  @apply my-4 border-neutral-200;
+}
+.markdown-content strong {
+  @apply font-semibold;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d4d4d4;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a3a3a3;
+}
