@@ -44,7 +44,7 @@
     "groups": [
       {
         "group": "Getting Started",
-        "pages": ["index", "quickstart"]
+        "pages": ["index", "quickstart", "sessions"]
       },
       {
         "group": "Reference",
