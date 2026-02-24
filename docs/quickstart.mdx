@@ -4,7 +4,7 @@ description: "Deploy an agent in 5 minutes"
 ---
 
 <Info>
-  **Prerequisites:** Python 3.12+ and a [Superserve account](https://console.superserve.ai).
+  **Prerequisites:** Python 3.12+, a [Claude Agent SDK](https://docs.anthropic.com/en/docs/agent-sdk) project, and a [Superserve account](https://console.superserve.ai).
 </Info>
 
 <Steps>
@@ -21,6 +21,10 @@ description: "Deploy an agent in 5 minutes"
     Opens your browser to authenticate. Credentials are saved locally at `~/.superserve/credentials.json`.
   </Step>
 
+  <Step title="Add Superserve to your agent">
+    A few lines connect your agent to Superserve - see [below](#add-superserve-to-your-agent).
+  </Step>
+
   <Step title="Initialize your project">
     <Note>
       Run `superserve init` from the root of your project - where your dependencies (`requirements.txt` or `pyproject.toml`) and agent code live.
@@ -34,7 +38,7 @@ description: "Deploy an agent in 5 minutes"
 
     ```yaml
     name: my-agent
-    command: python main.py
+    command: python agent.py
     ```
 
     Set `command` to whatever starts your agent.
@@ -89,15 +93,101 @@ description: "Deploy an agent in 5 minutes"
   </Step>
 </Steps>
 
+## Add Superserve to your agent
+
+A few lines connect your Claude Agent SDK script to Superserve:
+
+<CodeGroup>
+
+```python Your agent
+from claude_agent_sdk import (
+    AssistantMessage,
+    ClaudeAgentOptions,
+    ClaudeSDKClient,
+    ResultMessage,
+    TextBlock,
+    ToolUseBlock,
+)
+
+options = ClaudeAgentOptions(
+    system_prompt="You are a helpful assistant.",
+    model="haiku",
+    permission_mode="bypassPermissions",
+)
+
+async def run(prompt: str):
+    async with ClaudeSDKClient(options=options) as client:
+        await client.query(prompt=prompt)
+
+        async for msg in client.receive_response():
+            if isinstance(msg, AssistantMessage):
+                for block in msg.content:
+                    if isinstance(block, TextBlock):
+                        print(block.text)
+            elif isinstance(msg, ResultMessage):
+                print(f"Cost: ${msg.total_cost_usd}")
+```
+
+```python With Superserve
+from claude_agent_sdk import (
+    AssistantMessage,
+    ClaudeAgentOptions,
+    ClaudeSDKClient,
+    ResultMessage,
+    TextBlock,
+    ToolUseBlock,
+)
+from superserve import App                        # 1. Import
+
+app = App(name="my-agent")                        # 2. Declare
+
+options = ClaudeAgentOptions(
+    system_prompt="You are a helpful assistant.",
+    model="haiku",
+    permission_mode="bypassPermissions",
+)
+
+@app.session                                      # 3. Decorate
+async def run(session):
+    async with ClaudeSDKClient(options=options) as client:
+        async for message, stream in session.turns():  # 4. Multi-turn loop
+            stream.status("Thinking...")
+            await client.query(prompt=message)
+
+            async for msg in client.receive_response():
+                if isinstance(msg, AssistantMessage):
+                    for block in msg.content:
+                        if isinstance(block, TextBlock):
+                            stream.write(block.text)   # 5. Stream back
+                elif isinstance(msg, ResultMessage):
+                    stream.metadata({"cost_usd": msg.total_cost_usd})
+
+if __name__ == "__main__":
+    app.run()                                     # 6. Start
+```
+
+</CodeGroup>
+
+**What changed:**
+
+| Addition | What it does |
+|----------|-------------|
+| `App(name="my-agent")` | Names your agent for deployment and CLI access |
+| `@app.session` | Marks your function as the entry point Superserve calls on each session |
+| `session.turns()` | Async loop that receives user messages and gives you a `stream` to respond |
+| `stream.write()` | Sends text back to the user in real-time (replaces `print()`) |
+| `stream.status()` | Shows progress to the user while the agent works (e.g. tool calls, thinking) |
+| `app.run()` | Connects your agent to the Superserve runtime |
+
 ---
 
 ## Next steps
 
 <CardGroup cols={2}>
+  <Card title="Sessions" icon="messages" href="/sessions">
+    Persistent conversations with memory and resume
+  </Card>
   <Card title="CLI Reference" icon="terminal" href="/cli">
     All commands, flags, and options
-  </Card>
-  <Card title="GitHub" icon="github" href="https://github.com/superserve-ai/superserve">
-    Source code and examples
   </Card>
 </CardGroup>
