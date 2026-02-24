@@ -2,37 +2,6 @@
 
 Production infrastructure for agentic workloads. Deploy, manage, and interact with AI agents from the terminal.
 
-## Local Development
-
-```bash
-bun install       # Install dependencies
-```
-
-To use the CLI locally during development, link it globally:
-
-```bash
-bun link
-```
-
-This registers the `superserve` binary globally from your local source, so you can run `superserve` commands directly in any terminal and they'll execute against your local code. Changes to the source are reflected immediately — no rebuild needed.
-
-```bash
-bun run dev       # Run CLI directly without linking
-bun test          # Run tests
-bun run lint      # Check linting and formatting
-bun run lint:fix  # Auto-fix linting and formatting
-bun run build     # Build standalone binaries
-```
-
-### Environment Variables
-
-| Variable | Description |
-| --- | --- |
-| `SUPERSERVE_API_URL` | Override the API base URL |
-| `SUPERSERVE_DASHBOARD_URL` | Override the dashboard URL |
-| `SUPERSERVE_DO_NOT_TRACK` | Disable analytics |
-| `NO_COLOR` | Disable colored output |
-
 ## Install
 
 ```bash
