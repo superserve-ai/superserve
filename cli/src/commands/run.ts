@@ -15,6 +15,9 @@ async function streamEvents(
   events: AsyncIterableIterator<RunEvent>,
   spinner: Spinner | null,
 ): Promise<number> {
+  let agentPrefixShown = false
+  let contentOnCurrentLine = false
+
   for await (const event of events) {
     switch (event.type) {
       case "status":
@@ -23,11 +26,21 @@ async function streamEvents(
         break
       case "message.delta": {
         spinner?.stop()
-        process.stdout.write(sanitizeTerminalOutput(event.data.content ?? ""))
+        if (!agentPrefixShown) {
+          process.stdout.write("Agent> ")
+          agentPrefixShown = true
+        }
+        const content = sanitizeTerminalOutput(event.data.content ?? "")
+        process.stdout.write(content)
+        contentOnCurrentLine = !content.endsWith("\n")
         break
       }
       case "tool.start": {
         spinner?.stop()
+        if (contentOnCurrentLine) {
+          process.stdout.write("\n")
+          contentOnCurrentLine = false
+        }
         const tool = event.data.tool ?? "unknown"
         const raw = event.data.input ?? {}
         const toolInput = typeof raw === "string" ? raw : JSON.stringify(raw)
@@ -59,9 +72,17 @@ async function streamEvents(
       }
       case "run.failed": {
         spinner?.stop()
-        log.error(
-          "Something went wrong while running the agent. Please try again later.",
-        )
+        const error = event.data.error
+        const message = error?.message
+          ? sanitizeTerminalOutput(error.message)
+          : null
+        if (message) {
+          log.error(message)
+        } else {
+          log.error(
+            "Something went wrong while running the agent. Please try again later.",
+          )
+        }
         return 1
       }
       case "run.cancelled": {
@@ -134,20 +155,40 @@ export const run = new Command("run")
         } catch {
           // Let session creation handle auth/404 errors
         }
-        if (agentInfo && agentInfo.required_secrets.length > 0) {
-          const missing = agentInfo.required_secrets.filter(
-            (s) => !agentInfo.environment_keys.includes(s),
-          )
-          if (missing.length > 0) {
-            log.error(`Missing required secret(s): ${missing.join(", ")}`)
-            console.error("Set them with:")
-            console.error(
-              commandBox(
-                `superserve secrets set ${agentInfo.name} ${missing.map((k) => `${k}=...`).join(" ")}`,
-              ),
-            )
+        if (agentInfo) {
+          // Check deployment status before proceeding
+          if (agentInfo.deps_status === "installing") {
+            log.error("Agent is still deploying. Please wait and try again.")
             process.exitCode = 1
             return
+          }
+          if (agentInfo.deps_status === "failed") {
+            log.error(
+              "Agent deployment failed. Run 'superserve deploy' to retry.",
+            )
+            if (agentInfo.deps_error) {
+              console.error(`  ${sanitizeTerminalOutput(agentInfo.deps_error)}`)
+            }
+            process.exitCode = 1
+            return
+          }
+
+          // Check required secrets
+          if (agentInfo.required_secrets.length > 0) {
+            const missing = agentInfo.required_secrets.filter(
+              (s) => !agentInfo.environment_keys.includes(s),
+            )
+            if (missing.length > 0) {
+              log.error(`Missing required secret(s): ${missing.join(", ")}`)
+              console.error("Set them with:")
+              console.error(
+                commandBox(
+                  `superserve secrets set ${agentInfo.name} ${missing.map((k) => `${k}=...`).join(" ")}`,
+                ),
+              )
+              process.exitCode = 1
+              return
+            }
           }
         }
 

@@ -419,6 +419,15 @@ export function createClient(
     return safeJson<SessionData>(resp)
   }
 
+  async function resumeSession(sessionId: string): Promise<SessionData> {
+    const resolved = await resolveSessionId(sessionId)
+    const resp = await request(
+      "POST",
+      `/sessions/${encodeURIComponent(resolved)}/resume`,
+    )
+    return safeJson<SessionData>(resp)
+  }
+
   async function* streamSessionMessage(
     sessionId: string,
     prompt: string,
@@ -450,6 +459,7 @@ export function createClient(
     listSessions,
     getSession,
     endSession,
+    resumeSession,
     streamSessionMessage,
   }
 }

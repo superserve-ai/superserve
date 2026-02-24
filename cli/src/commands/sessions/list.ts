@@ -8,7 +8,7 @@ import { createClient } from "../../api/client"
 import type { SessionData } from "../../api/types"
 import { withErrorHandler } from "../../errors"
 import { commandBox } from "../../utils/command-box"
-import { formatTimestamp } from "../../utils/format"
+import { formatRelativeTime } from "../../utils/format"
 import { sanitizeTerminalOutput } from "../../utils/sanitize"
 import { createTable } from "../../utils/table"
 import { coloredSessionStatus } from "./status"
@@ -39,28 +39,60 @@ export const listSessions = new Command("list")
           return
         }
 
-        const table = createTable([
-          bold("ID"),
-          bold("Agent"),
-          bold("Status"),
-          bold("Msgs"),
-          bold("Created"),
-        ])
+        const headers = options.agent
+          ? [
+              bold("ID"),
+              bold("Title"),
+              bold("Status"),
+              bold("Msgs"),
+              bold("Last Active"),
+            ]
+          : [
+              bold("ID"),
+              bold("Agent"),
+              bold("Title"),
+              bold("Status"),
+              bold("Msgs"),
+              bold("Last Active"),
+            ]
+
+        const table = createTable(headers)
 
         for (const s of sessionList) {
           const sidClean = s.id.replace("ses_", "").replace(/-/g, "")
           const sidShort = sidClean.slice(0, 12)
-          const agentDisplay = sanitizeTerminalOutput(
-            s.agent_name ?? s.agent_id ?? "?",
+
+          let title = sanitizeTerminalOutput(s.title ?? "")
+          if (title.length > 24) title = `${title.slice(0, 21)}...`
+
+          const lastActive = dim(
+            formatRelativeTime(s.last_activity_at ?? s.created_at),
           )
 
-          table.push([
-            sidShort,
-            agentDisplay,
-            coloredSessionStatus(s.status ?? "?"),
-            String(s.message_count ?? 0),
-            dim(formatTimestamp(s.created_at, true)),
-          ])
+          if (options.agent) {
+            table.push([
+              sidShort,
+              title,
+              coloredSessionStatus(s.status ?? "?"),
+              String(s.message_count ?? 0),
+              lastActive,
+            ])
+          } else {
+            let agentDisplay = sanitizeTerminalOutput(
+              s.agent_name ?? s.agent_id ?? "?",
+            )
+            if (agentDisplay.length > 16)
+              agentDisplay = `${agentDisplay.slice(0, 13)}...`
+
+            table.push([
+              sidShort,
+              agentDisplay,
+              title,
+              coloredSessionStatus(s.status ?? "?"),
+              String(s.message_count ?? 0),
+              lastActive,
+            ])
+          }
         }
 
         console.log(table.toString())

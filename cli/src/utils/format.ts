@@ -31,6 +31,29 @@ export function formatTimestamp(ts: string, short = false): string {
   }
 }
 
+export function formatRelativeTime(ts: string): string {
+  if (!ts) return ""
+  try {
+    const date = new Date(ts)
+    if (Number.isNaN(date.getTime())) return ""
+    const now = Date.now()
+    const diffMs = now - date.getTime()
+    if (diffMs < 0) return "Just now"
+    const diffSec = Math.floor(diffMs / 1000)
+    if (diffSec < 60) return "Just now"
+    const diffMin = Math.floor(diffSec / 60)
+    if (diffMin < 60) return `${diffMin}m ago`
+    const diffHours = Math.floor(diffMin / 60)
+    if (diffHours < 24) return `${diffHours}h ago`
+    const diffDays = Math.floor(diffHours / 24)
+    if (diffDays === 1) return "Yesterday"
+    if (diffDays < 30) return `${diffDays}d ago`
+    return formatTimestamp(ts, true)
+  } catch {
+    return ""
+  }
+}
+
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`
   const seconds = ms / 1000

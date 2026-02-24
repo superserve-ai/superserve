@@ -6,7 +6,7 @@ import { Command } from "commander"
 import { track } from "../../analytics"
 import { createClient } from "../../api/client"
 import { withErrorHandler } from "../../errors"
-import { formatTimestamp } from "../../utils/format"
+import { formatRelativeTime, formatTimestamp } from "../../utils/format"
 import { sanitizeTerminalOutput } from "../../utils/sanitize"
 import { createTable } from "../../utils/table"
 import { coloredSessionStatus } from "./status"
@@ -45,6 +45,13 @@ export const getSession = new Command("get")
 
       if (session.title) {
         table.push([bold("Title"), sanitizeTerminalOutput(session.title)])
+      }
+
+      const lastActive = session.last_activity_at
+      if (lastActive) {
+        const relative = formatRelativeTime(lastActive)
+        const absolute = formatTimestamp(lastActive)
+        table.push([bold("Last Active"), `${relative} (${dim(absolute)})`])
       }
 
       console.log(table.toString())

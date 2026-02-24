@@ -5,8 +5,11 @@ import { log } from "./utils/logger"
 export function handleError(e: unknown): number {
   if (e instanceof PlatformAPIError) {
     log.error(e.message)
-    const hint = ERROR_HINTS[e.statusCode]
-    if (hint) log.hint(hint)
+    // Skip hint for 409 — the API message is already specific enough
+    if (e.statusCode !== 409) {
+      const hint = ERROR_HINTS[e.statusCode]
+      if (hint) log.hint(hint)
+    }
     return 1
   }
 

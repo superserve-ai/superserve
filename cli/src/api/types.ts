@@ -60,6 +60,7 @@ export interface SessionData {
   title?: string
   message_count: number
   created_at: string
+  last_activity_at?: string
 }
 
 // ==================== SECRETS ====================
