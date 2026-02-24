@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "superserve"
 
-version = "0.1.4"
+version = "0.1.5"
 description = "CLI and SDK for Superserve hosted agent infrastructure"
 license = { file = "LICENSE" }
 readme = "README.md"
