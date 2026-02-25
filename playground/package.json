@@ -1,5 +1,5 @@
 {
-  "name": "superserve-react-example",
+  "name": "@superserve/playground",
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,11 +7,11 @@
     "build": "tsc -b && vite build"
   },
   "dependencies": {
+    "@superserve/sdk": "^0.1.0",
     "@tailwindcss/vite": "^4.2.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
-    "superserve": "file:../../",
     "tailwindcss": "^4.2.1"
   },
   "devDependencies": {

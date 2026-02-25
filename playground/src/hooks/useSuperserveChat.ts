@@ -1,6 +1,6 @@
 import { useRef, useCallback, useMemo } from "react"
-import { Superserve } from "superserve"
-import type { AgentStream } from "superserve"
+import { Superserve } from "@superserve/sdk"
+import type { AgentStream } from "@superserve/sdk"
 import { useLocalStorage } from "./useLocalStorage"
 import { generateId } from "../utils"
 import type { ChatSession, ChatMessage, ChatStatus } from "../types"
