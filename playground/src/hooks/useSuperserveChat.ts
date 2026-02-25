@@ -5,9 +5,6 @@ import { useLocalStorage } from "./useLocalStorage"
 import { generateId } from "../utils"
 import type { ChatSession, ChatMessage, ChatStatus } from "../types"
 
-const SESSIONS_KEY = "superserve-chat-sessions"
-const ACTIVE_KEY = "superserve-chat-active-session"
-
 interface UseSuperserveChatOptions {
   agentName: string
   apiKey: string
@@ -17,12 +14,15 @@ interface UseSuperserveChatOptions {
 export function useSuperserveChat(options: UseSuperserveChatOptions) {
   const { agentName, apiKey, baseUrl } = options
 
+  const sessionsKey = `superserve-chat-sessions-${agentName}`
+  const activeKey = `superserve-chat-active-session-${agentName}`
+
   const [sessions, setSessions] = useLocalStorage<ChatSession[]>(
-    SESSIONS_KEY,
+    sessionsKey,
     [],
   )
   const [activeLocalId, setActiveLocalId] = useLocalStorage<string | null>(
-    ACTIVE_KEY,
+    activeKey,
     null,
   )
 

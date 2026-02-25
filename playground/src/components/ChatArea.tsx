@@ -9,6 +9,7 @@ interface ChatAreaProps {
   onSend: (message: string) => void
   onStop: () => void
   onToggleSidebar: () => void
+  onBack: () => void
 }
 
 export default function ChatArea({
@@ -17,6 +18,7 @@ export default function ChatArea({
   onSend,
   onStop,
   onToggleSidebar,
+  onBack,
 }: ChatAreaProps) {
   const statusLabel =
     status === "streaming"
@@ -64,6 +66,24 @@ export default function ChatArea({
                 <line x1="3" y1="4.5" x2="15" y2="4.5" />
                 <line x1="3" y1="9" x2="15" y2="9" />
                 <line x1="3" y1="13.5" x2="15" y2="13.5" />
+              </svg>
+            </button>
+            <button
+              onClick={onBack}
+              className="hidden cursor-pointer rounded p-1 transition-colors hover:bg-neutral-100 md:block"
+              aria-label="Back to agent picker"
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 18 18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M11 4L6 9l5 5" />
               </svg>
             </button>
             <div className="flex items-center gap-1.5">

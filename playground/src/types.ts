@@ -1,3 +1,15 @@
+export interface Agent {
+  id: string
+  name: string
+  command: string | null
+  depsStatus: string
+  depsError: string | null
+  requiredSecrets: string[]
+  environmentKeys: string[]
+  createdAt: string
+  updatedAt: string
+}
+
 export interface ChatMessage {
   id: string
   role: "user" | "assistant"

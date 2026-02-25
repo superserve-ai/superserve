@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: "https://api-staging.superserve.ai",
+        target: "https://api.superserve.ai",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
       },

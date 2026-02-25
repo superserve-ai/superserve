@@ -1,9 +1,18 @@
 import { useState } from "react"
 import { useSuperserveChat } from "./hooks/useSuperserveChat"
+import AgentPicker from "./components/AgentPicker"
 import Sidebar from "./components/Sidebar"
 import ChatArea from "./components/ChatArea"
 
-function ChatApp({ apiKey }: { apiKey: string }) {
+const BASE_URL = "/api"
+
+interface ChatAppProps {
+  agentName: string
+  apiKey: string
+  onBack: () => void
+}
+
+function ChatApp({ agentName, apiKey, onBack }: ChatAppProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const {
@@ -17,9 +26,9 @@ function ChatApp({ apiKey }: { apiKey: string }) {
     sendMessage,
     stopStream,
   } = useSuperserveChat({
-    agentName: "post-generator-agent",
+    agentName,
     apiKey,
-    baseUrl: "/api",
+    baseUrl: BASE_URL,
   })
 
   const handleNewChat = () => {
@@ -66,6 +75,7 @@ function ChatApp({ apiKey }: { apiKey: string }) {
           onSend={sendMessage}
           onStop={stopStream}
           onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+          onBack={onBack}
         />
       </div>
     </div>
@@ -74,6 +84,7 @@ function ChatApp({ apiKey }: { apiKey: string }) {
 
 export default function App() {
   const apiKey = import.meta.env.VITE_SUPERSERVE_API_KEY as string | undefined
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
 
   if (!apiKey) {
     return (
@@ -99,5 +110,22 @@ export default function App() {
     )
   }
 
-  return <ChatApp apiKey={apiKey} />
+  if (!selectedAgent) {
+    return (
+      <AgentPicker
+        apiKey={apiKey}
+        baseUrl={BASE_URL}
+        onSelectAgent={setSelectedAgent}
+      />
+    )
+  }
+
+  return (
+    <ChatApp
+      key={selectedAgent}
+      agentName={selectedAgent}
+      apiKey={apiKey}
+      onBack={() => setSelectedAgent(null)}
+    />
+  )
 }
