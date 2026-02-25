@@ -3,19 +3,19 @@ import { Superserve } from "@superserve/sdk"
 import type { Agent } from "../types"
 import { relativeTime } from "../utils"
 
-interface AgentPickerProps {
+interface AgentsPageProps {
   apiKey: string
   baseUrl: string
-  onSelectAgent: (agentName: string) => void
+  navigate: (to: string) => void
 }
 
 type LoadingState = "loading" | "error" | "empty" | "loaded"
 
-export default function AgentPicker({
+export default function AgentsPage({
   apiKey,
   baseUrl,
-  onSelectAgent,
-}: AgentPickerProps) {
+  navigate,
+}: AgentsPageProps) {
   const [agents, setAgents] = useState<Agent[]>([])
   const [state, setState] = useState<LoadingState>("loading")
   const [errorMessage, setErrorMessage] = useState("")
@@ -33,7 +33,9 @@ export default function AgentPicker({
         setState("loaded")
       }
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Failed to load agents")
+      setErrorMessage(
+        err instanceof Error ? err.message : "Failed to load agents",
+      )
       setState("error")
     }
   }, [apiKey, baseUrl])
@@ -117,7 +119,7 @@ export default function AgentPicker({
                 {agents.map((agent) => (
                   <button
                     key={agent.id}
-                    onClick={() => onSelectAgent(agent.name)}
+                    onClick={() => navigate(`/agents/${agent.id}`)}
                     className="group flex w-full cursor-pointer items-center justify-between rounded-lg border border-neutral-200 px-4 py-3.5 text-left transition-colors hover:border-neutral-300 hover:bg-neutral-50"
                   >
                     <div className="min-w-0">

@@ -1,90 +1,12 @@
-import { useState } from "react"
-import { useSuperserveChat } from "./hooks/useSuperserveChat"
-import AgentPicker from "./components/AgentPicker"
-import Sidebar from "./components/Sidebar"
-import ChatArea from "./components/ChatArea"
+import { useRoute } from "./hooks/useRoute"
+import AgentsPage from "./pages/AgentsPage"
+import ChatPage from "./pages/ChatPage"
 
 const BASE_URL = "/api"
 
-interface ChatAppProps {
-  agentName: string
-  apiKey: string
-  onBack: () => void
-}
-
-function ChatApp({ agentName, apiKey, onBack }: ChatAppProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-
-  const {
-    sessions,
-    activeSession,
-    activeLocalId,
-    status,
-    createSession,
-    switchSession,
-    deleteSession,
-    sendMessage,
-    stopStream,
-  } = useSuperserveChat({
-    agentName,
-    apiKey,
-    baseUrl: BASE_URL,
-  })
-
-  const handleNewChat = () => {
-    createSession()
-    setSidebarOpen(false)
-  }
-
-  const handleSelectSession = (localId: string) => {
-    switchSession(localId)
-    setSidebarOpen(false)
-  }
-
-  return (
-    <div className="flex h-full">
-      {/* Sidebar — desktop: fixed, mobile: overlay */}
-      <div
-        className={`fixed inset-0 z-30 bg-black/20 transition-opacity md:hidden ${
-          sidebarOpen
-            ? "pointer-events-auto opacity-100"
-            : "pointer-events-none opacity-0"
-        }`}
-        onClick={() => setSidebarOpen(false)}
-      />
-      <div
-        className={`fixed inset-y-0 left-0 z-40 w-64 transform transition-transform md:static md:translate-x-0 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <Sidebar
-          sessions={sessions}
-          activeLocalId={activeLocalId}
-          onNewChat={handleNewChat}
-          onSelectSession={handleSelectSession}
-          onDeleteSession={deleteSession}
-          onClose={() => setSidebarOpen(false)}
-        />
-      </div>
-
-      {/* Chat area */}
-      <div className="flex-1">
-        <ChatArea
-          session={activeSession}
-          status={status}
-          onSend={sendMessage}
-          onStop={stopStream}
-          onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
-          onBack={onBack}
-        />
-      </div>
-    </div>
-  )
-}
-
 export default function App() {
   const apiKey = import.meta.env.VITE_SUPERSERVE_API_KEY as string | undefined
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
+  const { path, navigate } = useRoute()
 
   if (!apiKey) {
     return (
@@ -110,22 +32,19 @@ export default function App() {
     )
   }
 
-  if (!selectedAgent) {
+  // Route: /agents/:agentId
+  const agentMatch = path.match(/^\/agents\/([^/]+)/)
+  if (agentMatch) {
     return (
-      <AgentPicker
+      <ChatPage
+        key={agentMatch[1]}
+        agentId={agentMatch[1]}
         apiKey={apiKey}
-        baseUrl={BASE_URL}
-        onSelectAgent={setSelectedAgent}
+        onBack={() => navigate("/agents")}
       />
     )
   }
 
-  return (
-    <ChatApp
-      key={selectedAgent}
-      agentName={selectedAgent}
-      apiKey={apiKey}
-      onBack={() => setSelectedAgent(null)}
-    />
-  )
+  // Route: / or /agents
+  return <AgentsPage apiKey={apiKey} baseUrl={BASE_URL} navigate={navigate} />
 }

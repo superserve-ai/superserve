@@ -6,16 +6,17 @@ import { generateId } from "../utils"
 import type { ChatSession, ChatMessage, ChatStatus } from "../types"
 
 interface UseSuperserveChatOptions {
+  agentId: string
   agentName: string
   apiKey: string
   baseUrl?: string
 }
 
 export function useSuperserveChat(options: UseSuperserveChatOptions) {
-  const { agentName, apiKey, baseUrl } = options
+  const { agentId, agentName, apiKey, baseUrl } = options
 
-  const sessionsKey = `superserve-chat-sessions-${agentName}`
-  const activeKey = `superserve-chat-active-session-${agentName}`
+  const sessionsKey = `superserve-chat-sessions-${agentId}`
+  const activeKey = `superserve-chat-active-session-${agentId}`
 
   const [sessions, setSessions] = useLocalStorage<ChatSession[]>(
     sessionsKey,
@@ -174,7 +175,7 @@ export function useSuperserveChat(options: UseSuperserveChatOptions) {
           setSessions((prev) => [...prev])
 
           const client = getClient()
-          const serverSession = await client.createSession(agentName, {
+          const serverSession = await client.createSession(agentId, {
             title: content.slice(0, 50),
           })
           serverSessionId = serverSession.id
@@ -193,7 +194,7 @@ export function useSuperserveChat(options: UseSuperserveChatOptions) {
         // Start streaming
         streamingSessionRef.current = targetLocalId
         const client = getClient()
-        const stream = client.stream(agentName, {
+        const stream = client.stream(agentId, {
           sessionId: serverSessionId,
           message: content,
           onText: (chunk) => {
@@ -286,7 +287,7 @@ export function useSuperserveChat(options: UseSuperserveChatOptions) {
         )
       }
     },
-    [activeLocalId, sessions, agentName, getClient, setSessions],
+    [activeLocalId, sessions, agentId, getClient, setSessions],
   )
 
   // Stop the current stream

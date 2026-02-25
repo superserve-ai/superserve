@@ -4,6 +4,7 @@ import MessageList from "./MessageList"
 import MessageInput from "./MessageInput"
 
 interface ChatAreaProps {
+  agentName: string
   session: ChatSession | null
   status: ChatStatus
   onSend: (message: string) => void
@@ -13,6 +14,7 @@ interface ChatAreaProps {
 }
 
 export default function ChatArea({
+  agentName,
   session,
   status,
   onSend,
@@ -89,9 +91,7 @@ export default function ChatArea({
             <div className="flex items-center gap-1.5">
               <span className="font-semibold tracking-tight">superserve</span>
               <span className="text-neutral-300">/</span>
-              <span className="text-neutral-500">
-                {session?.agentName ?? "chat"}
-              </span>
+              <span className="text-neutral-500">{agentName}</span>
             </div>
           </div>
           <div className="flex items-center gap-2.5">
