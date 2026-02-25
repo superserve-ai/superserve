@@ -12,7 +12,7 @@ import type {
   SuperserveOptions,
 } from "./types"
 
-const DEFAULT_BASE_URL = "https://api-staging.superserve.ai"
+const DEFAULT_BASE_URL = "https://api.superserve.ai"
 const DEFAULT_TIMEOUT = 30_000
 const DEFAULT_IDLE_TIMEOUT = 30 * 24 * 60 * 60 // 30 days in seconds
 
