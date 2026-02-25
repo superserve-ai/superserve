@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "SF Mono", "Cascadia Code", "Fira Code", "JetBrains Mono",
     "Menlo", "Consolas", monospace;
 }
@@ -30,29 +31,44 @@
 .markdown-content ol {
   @apply my-2 pl-6;
 }
+.markdown-content ul {
+  list-style-type: disc;
+}
+.markdown-content ol {
+  list-style-type: decimal;
+}
 .markdown-content li {
   @apply my-1;
 }
 .markdown-content code {
-  @apply rounded bg-black/5 px-1.5 py-0.5 text-[0.9em];
+  @apply bg-black/[0.06] px-1.5 py-0.5 font-mono text-[0.85em];
 }
 .markdown-content pre {
-  @apply my-3 overflow-x-auto rounded bg-neutral-900 px-4 py-3 text-xs leading-relaxed text-neutral-300;
+  @apply my-3 overflow-x-auto border border-neutral-800 bg-neutral-900 px-4 py-3 font-mono text-xs leading-relaxed text-neutral-300;
 }
 .markdown-content pre code {
   @apply bg-transparent p-0 text-inherit;
 }
 .markdown-content blockquote {
-  @apply my-2 border-l-[3px] border-neutral-300 py-0.5 pl-4 text-neutral-500;
+  @apply my-2 border-l-2 border-neutral-300 py-0.5 pl-4 text-neutral-500;
 }
 .markdown-content a {
-  @apply underline;
+  @apply underline underline-offset-2;
 }
 .markdown-content hr {
   @apply my-4 border-neutral-200;
 }
 .markdown-content strong {
   @apply font-semibold;
+}
+
+/* Pulse animation for streaming indicator */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.animate-pulse-dot {
+  animation: pulse-dot 1.5s ease-in-out infinite;
 }
 
 /* Custom scrollbar */
@@ -64,7 +80,6 @@
 }
 ::-webkit-scrollbar-thumb {
   background: #d4d4d4;
-  border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #a3a3a3;

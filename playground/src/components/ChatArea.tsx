@@ -22,38 +22,23 @@ export default function ChatArea({
   onToggleSidebar,
   onBack,
 }: ChatAreaProps) {
-  const statusLabel =
-    status === "streaming"
-      ? "STREAMING"
-      : status === "creating-session"
-        ? "CONNECTING"
-        : status === "error"
-          ? "ERROR"
-          : "READY"
+  const isActive = status === "streaming" || status === "creating-session"
 
-  const statusDotColor =
-    status === "streaming" || status === "creating-session"
-      ? "bg-neutral-900"
-      : status === "error"
-        ? "bg-red-600"
-        : "bg-neutral-400"
-
-  const statusTextColor =
-    status === "streaming" || status === "creating-session"
-      ? "text-neutral-900"
-      : status === "error"
-        ? "text-red-600"
-        : "text-neutral-400"
+  const statusLabel = isActive
+    ? "Streaming"
+    : status === "error"
+      ? "Error"
+      : "Ready"
 
   return (
-    <div className="flex h-full flex-col font-mono text-[13px] leading-relaxed text-neutral-900">
+    <div className="flex h-full flex-col bg-neutral-50 text-sm leading-relaxed text-neutral-900">
       {/* Header */}
       <header className="sticky top-0 z-10 border-b border-neutral-200 bg-white">
-        <div className="flex h-13 items-center justify-between px-4 md:px-6">
+        <div className="flex h-14 items-center justify-between px-4 md:px-6">
           <div className="flex items-center gap-3">
             <button
               onClick={onToggleSidebar}
-              className="cursor-pointer rounded p-1 transition-colors hover:bg-neutral-100 md:hidden"
+              className="cursor-pointer p-1.5 text-neutral-500 transition-colors hover:text-neutral-700 md:hidden"
               aria-label="Toggle sidebar"
             >
               <svg
@@ -72,7 +57,7 @@ export default function ChatArea({
             </button>
             <button
               onClick={onBack}
-              className="hidden cursor-pointer rounded p-1 transition-colors hover:bg-neutral-100 md:block"
+              className="hidden cursor-pointer p-1.5 text-neutral-500 transition-colors hover:text-neutral-700 md:block"
               aria-label="Back to agent picker"
             >
               <svg
@@ -88,28 +73,56 @@ export default function ChatArea({
                 <path d="M11 4L6 9l5 5" />
               </svg>
             </button>
-            <div className="flex items-center gap-1.5">
-              <span className="font-semibold tracking-tight">superserve</span>
-              <span className="text-neutral-300">/</span>
-              <span className="text-neutral-500">{agentName}</span>
+            <div className="flex items-center gap-2">
+              <div className="flex size-5 items-center justify-center bg-neutral-900">
+                <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
+                  <path
+                    d="M7 1L12.5 4.5V9.5L7 13L1.5 9.5V4.5L7 1Z"
+                    stroke="white"
+                    strokeWidth="1.5"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
+              <span className="font-medium text-neutral-900">{agentName}</span>
             </div>
           </div>
-          <div className="flex items-center gap-2.5">
-            <span className={`size-1.5 rounded-full ${statusDotColor}`} />
-            <span className={`text-xs ${statusTextColor}`}>{statusLabel}</span>
+          <div className="flex items-center gap-2">
+            <span
+              className={`size-1.5 rounded-full ${
+                isActive
+                  ? "animate-pulse-dot bg-neutral-900"
+                  : status === "error"
+                    ? "bg-neutral-400"
+                    : "bg-neutral-300"
+              }`}
+            />
+            <span
+              className={`text-xs ${
+                isActive
+                  ? "text-neutral-900"
+                  : status === "error"
+                    ? "text-neutral-500"
+                    : "text-neutral-400"
+              }`}
+            >
+              {statusLabel}
+            </span>
           </div>
         </div>
       </header>
 
       {/* Messages */}
       <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-4 py-6 pb-8 md:px-6">
-          {!session || session.messages.length === 0 ? (
+        {!session || session.messages.length === 0 ? (
+          <div className="flex h-full items-center justify-center">
             <EmptyState hasSession={session !== null} />
-          ) : (
+          </div>
+        ) : (
+          <div className="mx-auto max-w-3xl px-4 py-6 pb-8 md:px-6">
             <MessageList messages={session.messages} />
-          )}
-        </div>
+          </div>
+        )}
       </main>
 
       {/* Footer */}

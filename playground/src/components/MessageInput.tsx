@@ -31,13 +31,13 @@ export default function MessageInput({
         onChange={(e) => setInput(e.target.value)}
         placeholder="Send a message..."
         disabled={isStreaming}
-        className="flex-1 rounded-md border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 font-mono text-[13px] text-neutral-900 transition-colors focus:border-neutral-900 focus:outline-none disabled:opacity-50"
+        className="flex-1 border border-neutral-200 bg-white px-4 py-2.5 text-sm text-neutral-900 transition-colors placeholder:text-neutral-400 focus:border-neutral-900 focus:outline-none disabled:opacity-50"
       />
       {isStreaming ? (
         <button
           type="button"
           onClick={onStop}
-          className="cursor-pointer rounded-md border border-neutral-200 bg-white px-4 py-2.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-neutral-900 transition-opacity hover:opacity-70"
+          className="cursor-pointer border border-neutral-200 bg-white px-4 py-2.5 text-[13px] font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
         >
           Stop
         </button>
@@ -45,7 +45,7 @@ export default function MessageInput({
         <button
           type="submit"
           disabled={!input.trim()}
-          className="cursor-pointer rounded-md bg-neutral-900 px-4 py-2.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-white transition-opacity hover:opacity-80 disabled:opacity-30"
+          className="cursor-pointer bg-neutral-900 px-4 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-neutral-800 disabled:opacity-30"
         >
           Send
         </button>
