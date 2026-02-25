@@ -13,6 +13,9 @@ from ..utils import Spinner, format_duration, sanitize_terminal_output
 def _stream_events(event_iter, as_json: bool, spinner: Spinner | None = None) -> int:
     """Stream SSE events to terminal. Returns 0 on success, non-zero on failure."""
     agent_prefix_shown = False
+    content_on_current_line = (
+        False  # True when stdout has unflushed content without a trailing newline
+    )
     for event in event_iter:
         if as_json:
             click.echo(json.dumps({"type": event.type, "data": event.data}))
@@ -35,10 +38,14 @@ def _stream_events(event_iter, as_json: bool, spinner: Spinner | None = None) ->
                 agent_prefix_shown = True
             content = event.data.get("content", "")
             click.echo(sanitize_terminal_output(content), nl=False)
+            content_on_current_line = True
 
         elif event.type == "tool.start":
             if spinner:
                 spinner.stop()
+            if content_on_current_line:
+                click.echo()  # Newline to protect content from \r\033[K
+                content_on_current_line = False
             tool = event.data.get("tool", "unknown")
             tool_input = event.data.get("input", {})
             input_str = sanitize_terminal_output(str(tool_input))
@@ -73,8 +80,15 @@ def _stream_events(event_iter, as_json: bool, spinner: Spinner | None = None) ->
             if spinner:
                 spinner.stop()
             error = event.data.get("error", {})
+            code = error.get("code", "")
             message = sanitize_terminal_output(error.get("message", "Unknown error"))
-            click.echo(f"\nError: {message}", err=True)
+            if code == "internal" or not code:
+                click.echo(
+                    "\nError: Agent run failed. Please try again after some time.",
+                    err=True,
+                )
+            else:
+                click.echo(f"\nError: {message}", err=True)
             return 1
 
         elif event.type == "run.cancelled":
@@ -85,7 +99,7 @@ def _stream_events(event_iter, as_json: bool, spinner: Spinner | None = None) ->
 
     if spinner:
         spinner.stop()
-    click.echo("\nWarning: Stream ended unexpectedly.", err=True)
+    click.echo("\nError: Agent run failed. Please try again after some time.", err=True)
     return 1
 
 
@@ -205,7 +219,13 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
         if e.status_code == 401:
             click.echo("Not authenticated. Run 'superserve login' first.", err=True)
         elif e.status_code == 404:
-            click.echo(f"Agent '{agent}' not found", err=True)
+            click.echo(f"Agent '{agent}' not found.", err=True)
+        elif e.status_code == 0:
+            click.echo(f"Error: {e.message}", err=True)
+        elif e.status_code >= 500:
+            click.echo(
+                "Error: Agent run failed. Please try again after some time.", err=True
+            )
         else:
             click.echo(f"Error: {e.message}", err=True)
         sys.exit(1)

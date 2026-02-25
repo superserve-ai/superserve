@@ -1,0 +1,113 @@
+---
+title: "Sessions"
+description: "Persistent conversations with memory and resume"
+---
+
+## What is a session?
+
+Every time a user runs your agent with [`superserve run`](/cli#superserve-run), Superserve creates a **session**. A session is:
+
+- **A running instance of your agent** - your process, your code, your environment
+- **Persistent** - the session stays alive after the conversation ends
+- **Resumable** - users can come back and continue where they left off
+
+## Conversation memory
+
+The [Claude Agent SDK](https://docs.anthropic.com/en/docs/agent-sdk) preserves conversation history when you pass a [`session_id`](https://platform.claude.com/docs/en/agent-sdk/sessions) to `client.query()`. Combined with Superserve sessions, this means a user can come back hours later and the agent remembers everything.
+
+<CodeGroup>
+
+```python Without memory
+@app.session
+async def run(session):
+    async with ClaudeSDKClient(options=options) as client:
+        async for message, stream in session.turns():
+            await client.query(prompt=message)
+
+            async for msg in client.receive_response():
+                if isinstance(msg, AssistantMessage):
+                    for block in msg.content:
+                        if isinstance(block, TextBlock):
+                            stream.write(block.text)
+```
+
+```python With memory
+@app.session
+async def run(session):
+    async with ClaudeSDKClient(options=options) as client:
+        async for message, stream in session.turns():
+            await client.query(prompt=message, session_id="chat")  # Added
+
+            async for msg in client.receive_response():
+                if isinstance(msg, AssistantMessage):
+                    for block in msg.content:
+                        if isinstance(block, TextBlock):
+                            stream.write(block.text)
+```
+
+</CodeGroup>
+
+That's it - one parameter. The Claude Agent SDK stores conversation history on disk, and Superserve persists your agent's filesystem across sessions - so memory works even when the underlying instance changes.
+
+## Resuming sessions
+
+When a user runs your agent, Superserve creates a session that stays alive after the conversation ends. They can come back and pick up where they left off:
+
+```bash
+# List sessions for an agent
+superserve sessions list my-agent
+```
+
+```
+ID             TITLE                            STATUS       MSGS   LAST ACTIVE
+----------------------------------------------------------------------------------
+a1b2c3d4e5f6   Deployment pipeline discussion    idle         4      2 minutes ago
+f6e5d4c3b2a1   Staging environment setup         idle         12     1 hour ago
+```
+
+```bash
+# Resume a session
+superserve sessions resume ses_a1b2
+```
+
+```
+Resumed session ses_a1b2c3 (my-agent)
+
+You> What were we talking about?
+
+Agent> We were discussing the deployment pipeline for your staging environment.
+
+Completed in 1.4s
+```
+
+## Session statuses
+
+| Status | Meaning | Can resume? |
+|--------|---------|-------------|
+| `active` | Agent is currently processing a message | No - already in use |
+| `idle` | Conversation paused, agent waiting for next message | Yes |
+| `completed` | Session ended by the user via `sessions end` | Yes - starts a fresh instance with previous context |
+| `failed` | Agent crashed or timed out | Yes - starts a fresh instance with previous context |
+
+## Managing sessions
+
+```bash
+# View session details
+superserve sessions get ses_a1b2
+
+# End a session
+superserve sessions end ses_a1b2
+```
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Deploy your first agent
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli">
+    All commands, flags, and options
+  </Card>
+</CardGroup>
