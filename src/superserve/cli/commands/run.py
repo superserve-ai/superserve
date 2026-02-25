@@ -32,6 +32,9 @@ def _stream_events(
     last_sequence = 0
     reconnect_attempts = 0
     agent_prefix_shown = False
+    content_on_current_line = (
+        False  # True when stdout has unflushed content without a trailing newline
+    )
 
     while True:
         try:
@@ -60,10 +63,14 @@ def _stream_events(
                         agent_prefix_shown = True
                     content = event.data.get("content", "")
                     click.echo(sanitize_terminal_output(content), nl=False)
+                    content_on_current_line = True
 
                 elif event.type == "tool.start":
                     if spinner:
                         spinner.stop()
+                    if content_on_current_line:
+                        click.echo()  # Newline to protect content from \r\033[K
+                        content_on_current_line = False
                     tool = event.data.get("tool", "unknown")
                     tool_input = event.data.get("input", {})
                     input_str = sanitize_terminal_output(str(tool_input))
@@ -98,10 +105,17 @@ def _stream_events(
                     if spinner:
                         spinner.stop()
                     error = event.data.get("error", {})
+                    code = error.get("code", "")
                     message = sanitize_terminal_output(
                         error.get("message", "Unknown error")
                     )
-                    click.echo(f"\nError: {message}", err=True)
+                    if code == "internal" or not code:
+                        click.echo(
+                            "\nError: Agent run failed. Please try again after some time.",
+                            err=True,
+                        )
+                    else:
+                        click.echo(f"\nError: {message}", err=True)
                     return 1
 
                 elif event.type == "run.cancelled":
@@ -279,7 +293,13 @@ def run_agent(agent: str, prompt: str | None, single: bool, as_json: bool):
         if e.status_code == 401:
             click.echo("Not authenticated. Run 'superserve login' first.", err=True)
         elif e.status_code == 404:
-            click.echo(f"Agent '{agent}' not found", err=True)
+            click.echo(f"Agent '{agent}' not found.", err=True)
+        elif e.status_code == 0:
+            click.echo(f"Error: {e.message}", err=True)
+        elif e.status_code >= 500:
+            click.echo(
+                "Error: Agent run failed. Please try again after some time.", err=True
+            )
         else:
             click.echo(f"Error: {e.message}", err=True)
         sys.exit(1)

@@ -4,8 +4,134 @@ description: "Deploy an agent in 5 minutes"
 ---
 
 <Info>
-  **Prerequisites:** Python 3.12+ and a [Superserve account](https://console.superserve.ai).
+  **Prerequisites:** Python 3.12+, a [Claude Agent SDK](https://docs.anthropic.com/en/docs/agent-sdk) project, and a [Superserve account](https://console.superserve.ai).
 </Info>
+
+<Accordion title="Using an AI coding assistant? Copy this prompt to convert your agent automatically.">
+
+```text
+Make my Claude Agent SDK script deployable on Superserve.
+
+Superserve hosts Claude Agent SDK agents with managed sandboxes and multi-turn
+sessions. Instead of reading input from stdin and printing to stdout, the agent
+receives messages through session.turns() and responds through stream.write().
+
+Rules:
+
+1. Add imports and app setup at the top:
+
+   from superserve import App
+   app = App(name="<agent-name>")  # lowercase, alphanumeric, hyphens only
+
+2. Wrap all agent logic inside a decorated async function:
+
+   @app.session
+   async def run(session):
+       ...
+
+3. Get user input from session.turns(), which yields (message, stream) pairs:
+
+   async for message, stream in session.turns():
+       # message is the user's text (str)
+       # stream is used to send responses back
+
+   - If the agent has a while/for loop reading input() or stdin, replace it
+     with session.turns()
+   - If the agent takes input from sys.argv, argparse, or click, remove that
+     and use session.turns() instead
+   - If the agent is single-turn (no input loop), still use session.turns()
+     to receive the prompt
+   - Remove any exit/quit handling — session lifecycle is managed by Superserve
+
+4. Replace output that is meant for the user:
+
+   - print(text) that shows results to the user → stream.write(text)
+   - Status/progress messages → stream.status("Thinking...")
+   - Structured data (cost, tokens, etc.) → stream.metadata({"key": value})
+   - Leave debug print() or logging calls as-is — they go to logs, not the user
+
+5. Replace the entrypoint:
+
+   - Remove asyncio.run(), click decorators, or argparse setup
+   - Replace with: if __name__ == "__main__": app.run()
+
+6. Do NOT change:
+
+   - ClaudeAgentOptions (model, system_prompt, tools, permission_mode)
+   - ClaudeSDKClient usage (query, receive_response)
+   - Tool definitions or handling logic
+   - Any business logic inside the agent
+
+Example — before:
+
+   import asyncio
+   from claude_agent_sdk import (
+       AssistantMessage, ClaudeAgentOptions, ClaudeSDKClient,
+       ResultMessage, TextBlock, ToolUseBlock,
+   )
+
+   options = ClaudeAgentOptions(
+       system_prompt="You are a helpful assistant.",
+       model="haiku",
+       permission_mode="bypassPermissions",
+   )
+
+   async def main():
+       async with ClaudeSDKClient(options=options) as client:
+           while True:
+               user_input = input("You: ")
+               if user_input.lower() in ("exit", "quit"):
+                   break
+               await client.query(prompt=user_input, session_id="chat")
+               async for msg in client.receive_response():
+                   if isinstance(msg, AssistantMessage):
+                       for block in msg.content:
+                           if isinstance(block, TextBlock):
+                               print(block.text)
+                           elif isinstance(block, ToolUseBlock):
+                               print(f"[Using {block.name}...]")
+                   elif isinstance(msg, ResultMessage):
+                       print(f"Cost: ${msg.total_cost_usd:.4f}")
+
+   asyncio.run(main())
+
+Example — after:
+
+   from claude_agent_sdk import (
+       AssistantMessage, ClaudeAgentOptions, ClaudeSDKClient,
+       ResultMessage, TextBlock, ToolUseBlock,
+   )
+   from superserve import App
+
+   app = App(name="my-agent")
+
+   options = ClaudeAgentOptions(
+       system_prompt="You are a helpful assistant.",
+       model="haiku",
+       permission_mode="bypassPermissions",
+   )
+
+   @app.session
+   async def run(session):
+       async with ClaudeSDKClient(options=options) as client:
+           async for message, stream in session.turns():
+               stream.status("Thinking...")
+               await client.query(prompt=message, session_id="chat")
+               async for msg in client.receive_response():
+                   if isinstance(msg, AssistantMessage):
+                       for block in msg.content:
+                           if isinstance(block, TextBlock):
+                               stream.write(block.text)
+                           elif isinstance(block, ToolUseBlock):
+                               stream.status(f"Using {block.name}...")
+                   elif isinstance(msg, ResultMessage):
+                       stream.metadata({"cost_usd": msg.total_cost_usd})
+
+   if __name__ == "__main__":
+       app.run()
+```
+
+</Accordion>
 
 <Steps>
   <Step title="Install the CLI">
@@ -21,6 +147,10 @@ description: "Deploy an agent in 5 minutes"
     Opens your browser to authenticate. Credentials are saved locally at `~/.superserve/credentials.json`.
   </Step>
 
+  <Step title="Add Superserve to your agent">
+    A few lines connect your agent to Superserve - see [below](#add-superserve-to-your-agent).
+  </Step>
+
   <Step title="Initialize your project">
     <Note>
       Run `superserve init` from the root of your project - where your dependencies (`requirements.txt` or `pyproject.toml`) and agent code live.
@@ -34,7 +164,7 @@ description: "Deploy an agent in 5 minutes"
 
     ```yaml
     name: my-agent
-    command: python main.py
+    command: python agent.py
     ```
 
     Set `command` to whatever starts your agent.
@@ -89,15 +219,101 @@ description: "Deploy an agent in 5 minutes"
   </Step>
 </Steps>
 
+## Add Superserve to your agent
+
+A few lines connect your Claude Agent SDK script to Superserve:
+
+<CodeGroup>
+
+```python Your agent
+from claude_agent_sdk import (
+    AssistantMessage,
+    ClaudeAgentOptions,
+    ClaudeSDKClient,
+    ResultMessage,
+    TextBlock,
+    ToolUseBlock,
+)
+
+options = ClaudeAgentOptions(
+    system_prompt="You are a helpful assistant.",
+    model="haiku",
+    permission_mode="bypassPermissions",
+)
+
+async def run(prompt: str):
+    async with ClaudeSDKClient(options=options) as client:
+        await client.query(prompt=prompt)
+
+        async for msg in client.receive_response():
+            if isinstance(msg, AssistantMessage):
+                for block in msg.content:
+                    if isinstance(block, TextBlock):
+                        print(block.text)
+            elif isinstance(msg, ResultMessage):
+                print(f"Cost: ${msg.total_cost_usd}")
+```
+
+```python With Superserve
+from claude_agent_sdk import (
+    AssistantMessage,
+    ClaudeAgentOptions,
+    ClaudeSDKClient,
+    ResultMessage,
+    TextBlock,
+    ToolUseBlock,
+)
+from superserve import App                        # 1. Import
+
+app = App(name="my-agent")                        # 2. Declare
+
+options = ClaudeAgentOptions(
+    system_prompt="You are a helpful assistant.",
+    model="haiku",
+    permission_mode="bypassPermissions",
+)
+
+@app.session                                      # 3. Decorate
+async def run(session):
+    async with ClaudeSDKClient(options=options) as client:
+        async for message, stream in session.turns():  # 4. Multi-turn loop
+            stream.status("Thinking...")
+            await client.query(prompt=message)
+
+            async for msg in client.receive_response():
+                if isinstance(msg, AssistantMessage):
+                    for block in msg.content:
+                        if isinstance(block, TextBlock):
+                            stream.write(block.text)   # 5. Stream back
+                elif isinstance(msg, ResultMessage):
+                    stream.metadata({"cost_usd": msg.total_cost_usd})
+
+if __name__ == "__main__":
+    app.run()                                     # 6. Start
+```
+
+</CodeGroup>
+
+**What changed:**
+
+| Addition | What it does |
+|----------|-------------|
+| `App(name="my-agent")` | Names your agent for deployment and CLI access |
+| `@app.session` | Marks your function as the entry point Superserve calls on each session |
+| `session.turns()` | Async loop that receives user messages and gives you a `stream` to respond |
+| `stream.write()` | Sends text back to the user in real-time (replaces `print()`) |
+| `stream.status()` | Shows progress to the user while the agent works (e.g. tool calls, thinking) |
+| `app.run()` | Connects your agent to the Superserve runtime |
+
 ---
 
 ## Next steps
 
 <CardGroup cols={2}>
+  <Card title="Sessions" icon="messages" href="/sessions">
+    Persistent conversations with memory and resume
+  </Card>
   <Card title="CLI Reference" icon="terminal" href="/cli">
     All commands, flags, and options
-  </Card>
-  <Card title="GitHub" icon="github" href="https://github.com/superserve-ai/superserve">
-    Source code and examples
   </Card>
 </CardGroup>

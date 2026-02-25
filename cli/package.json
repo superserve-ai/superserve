@@ -1,0 +1,51 @@
+{
+  "name": "@superserve/cli",
+  "version": "1.0.2",
+  "description": "CLI for deploying AI agents to sandboxed cloud containers",
+  "type": "module",
+  "bin": {
+    "superserve": "src/index.ts"
+  },
+  "files": [
+    "src/"
+  ],
+  "scripts": {
+    "dev": "bun src/index.ts",
+    "build": "bun run scripts/build.ts",
+    "lint": "bunx biome check .",
+    "lint:fix": "bunx biome check --write .",
+    "test": "bun test"
+  },
+  "keywords": [
+    "cli",
+    "ai",
+    "agents",
+    "deploy",
+    "sandbox",
+    "cloud"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/superserve-ai/superserve.git",
+    "directory": "cli"
+  },
+  "homepage": "https://superserve.ai",
+  "bugs": {
+    "url": "https://github.com/superserve-ai/superserve/issues"
+  },
+  "dependencies": {
+    "boxen": "^8.0.1",
+    "cli-table3": "^0.6.5",
+    "commander": "^14.0.3",
+    "js-yaml": "^4.1.0",
+    "picocolors": "^1.1.1",
+    "posthog-node": "^5.25.0",
+    "tar-stream": "^3.1.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.4",
+    "@types/bun": "^1.2.4",
+    "@types/js-yaml": "^4.0.9"
+  },
+  "license": "MIT"
+}
