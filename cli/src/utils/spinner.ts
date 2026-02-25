@@ -43,12 +43,15 @@ export function createSpinner(
   }
 
   function stop(): void {
+    const wasRunning = running
     running = false
     if (timer) {
       clearInterval(timer)
       timer = null
     }
-    process.stderr.write("\r\x1b[K")
+    if (wasRunning) {
+      process.stderr.write("\r\x1b[K")
+    }
   }
 
   function done(symbol = "\u2713", suffix = ""): void {
