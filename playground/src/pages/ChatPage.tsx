@@ -93,7 +93,9 @@ export default function ChatPage({ agentId, apiKey, onBack }: ChatPageProps) {
                 Playground
               </button>
               <span className="text-neutral-300">/</span>
-              <span className="font-medium text-neutral-900">
+              <span
+                className={`font-medium ${agentName ? "text-neutral-900" : "animate-pulse font-mono text-neutral-400"}`}
+              >
                 {agentName ?? agentId}
               </span>
             </div>
