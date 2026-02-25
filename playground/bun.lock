@@ -5,7 +5,7 @@
     "": {
       "name": "superserve-react-example",
       "dependencies": {
-        "@superserve/sdk": "^0.1.0",
+        "@superserve/sdk": "^0.1.1",
         "@tailwindcss/vite": "^4.2.1",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
@@ -174,7 +174,7 @@
 
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.58.0", "", { "os": "win32", "cpu": "x64" }, "sha512-QFsBgQNTnh5K0t/sBsjJLq24YVqEIVkGpfN2VHsnN90soZyhaiA9UUHufcctVNL4ypJY0wrwad0wslx2KJQ1/w=="],
 
-    "@superserve/sdk": ["@superserve/sdk@0.1.0", "", { "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-q7MsHXgrw+A5mf9/dBB7n8nkxEaGxJ6ThnQ8UatSB+hm/jKVC4BdVuxF60BQjtM+qfGm52Wg0jkifkJKYIX19Q=="],
+    "@superserve/sdk": ["@superserve/sdk@0.1.1", "", { "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-PO8j6Pvmt6uEWUKaCegm6266gAwbWgWK4Z53sDEzWrRQr30KgWn50DnQLhjuqv2HoPOl+0sJhzK+ptQeqcwJtA=="],
 
     "@tailwindcss/node": ["@tailwindcss/node@4.2.1", "", { "dependencies": { "@jridgewell/remapping": "^2.3.5", "enhanced-resolve": "^5.19.0", "jiti": "^2.6.1", "lightningcss": "1.31.1", "magic-string": "^0.30.21", "source-map-js": "^1.2.1", "tailwindcss": "4.2.1" } }, "sha512-jlx6sLk4EOwO6hHe1oCGm1Q4AN/s0rSrTTPBGPM0/RQ6Uylwq17FuU8IeJJKEjtc6K6O07zsvP+gDO6MMWo7pg=="],
 
