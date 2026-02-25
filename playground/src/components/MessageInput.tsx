@@ -37,7 +37,7 @@ export default function MessageInput({
         <button
           type="button"
           onClick={onStop}
-          className="cursor-pointer border border-neutral-200 bg-white px-4 py-2.5 text-[13px] font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+          className="cursor-pointer border border-neutral-200 bg-white px-4 py-2.5 font-mono text-[11px] font-medium uppercase tracking-wider text-neutral-700 transition-colors hover:bg-neutral-50"
         >
           Stop
         </button>
@@ -45,7 +45,7 @@ export default function MessageInput({
         <button
           type="submit"
           disabled={!input.trim()}
-          className="cursor-pointer bg-neutral-900 px-4 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-neutral-800 disabled:opacity-30"
+          className="cursor-pointer bg-neutral-900 px-4 py-2.5 font-mono text-[11px] font-medium uppercase tracking-wider text-white transition-colors hover:bg-neutral-800 disabled:opacity-30"
         >
           Send
         </button>

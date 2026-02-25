@@ -2,8 +2,7 @@
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "SF Mono", "Cascadia Code", "Fira Code", "JetBrains Mono",
-    "Menlo", "Consolas", monospace;
+  --font-mono: "Geist Mono", monospace;
 }
 
 /* Markdown content */

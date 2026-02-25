@@ -48,16 +48,10 @@ export default function AgentsPage({
     <div className="flex h-full flex-col bg-neutral-50 text-sm text-neutral-900">
       <header className="border-b border-neutral-200 bg-white">
         <div className="flex h-14 items-center px-5 md:px-8">
-          <div className="flex items-center gap-2">
-            <div className="flex size-6 items-center justify-center bg-neutral-900">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M7 1L12.5 4.5V9.5L7 13L1.5 9.5V4.5L7 1Z" stroke="white" strokeWidth="1.5" strokeLinejoin="round" />
-                <circle cx="7" cy="7" r="2" fill="white" />
-              </svg>
-            </div>
-            <span className="text-[15px] font-semibold tracking-tight">
-              Superserve
-            </span>
+          <div className="flex items-center gap-1.5 text-[13px]">
+            <span className="text-neutral-400">Superserve</span>
+            <span className="text-neutral-300">/</span>
+            <span className="font-medium text-neutral-900">Playground</span>
           </div>
         </div>
       </header>
@@ -71,26 +65,15 @@ export default function AgentsPage({
 
           <div className="mt-8">
             {state === "loading" && (
-              <div className="flex items-center gap-2.5 py-16 text-neutral-400">
-                <svg
-                  className="animate-spin"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                >
-                  <circle
-                    cx="8"
-                    cy="8"
-                    r="6"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeDasharray="28"
-                    strokeDashoffset="8"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span className="text-[13px]">Loading agents...</span>
+              <div className="divide-y divide-neutral-200 border border-neutral-200">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="bg-white px-5 py-4">
+                    <div className="flex-1">
+                      <div className="h-4 w-32 animate-pulse bg-neutral-100" />
+                      <div className="mt-2 h-3 w-24 animate-pulse bg-neutral-100" />
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -107,7 +90,7 @@ export default function AgentsPage({
                 <p className="mt-1 text-[13px] text-neutral-500">{errorMessage}</p>
                 <button
                   onClick={fetchAgents}
-                  className="mt-4 cursor-pointer bg-neutral-900 px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-neutral-800"
+                  className="mt-4 cursor-pointer bg-neutral-900 px-4 py-2 font-mono text-[11px] font-medium uppercase tracking-wider text-white transition-colors hover:bg-neutral-800"
                 >
                   Try again
                 </button>
@@ -143,11 +126,8 @@ export default function AgentsPage({
                     className="group flex w-full cursor-pointer items-center justify-between bg-white px-5 py-4 text-left transition-colors hover:bg-neutral-50"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="size-1.5 rounded-full bg-neutral-900" />
-                        <p className="truncate font-medium">{agent.name}</p>
-                      </div>
-                      <p className="mt-1 pl-3.5 text-[12px] text-neutral-400">
+                      <p className="truncate font-medium">{agent.name}</p>
+                      <p className="mt-1 text-[12px] text-neutral-400">
                         Updated {relativeTime(agent.updatedAt)}
                       </p>
                     </div>

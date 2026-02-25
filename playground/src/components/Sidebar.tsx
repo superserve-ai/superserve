@@ -7,7 +7,6 @@ interface SidebarProps {
   onNewChat: () => void
   onSelectSession: (localId: string) => void
   onDeleteSession: (localId: string) => void
-  onClose: () => void
 }
 
 export default function Sidebar({
@@ -16,7 +15,6 @@ export default function Sidebar({
   onNewChat,
   onSelectSession,
   onDeleteSession,
-  onClose,
 }: SidebarProps) {
   const sorted = [...sessions].sort(
     (a, b) =>
@@ -25,36 +23,11 @@ export default function Sidebar({
 
   return (
     <div className="flex h-full flex-col border-r border-neutral-200 bg-white text-sm">
-      {/* Header */}
-      <div className="flex h-14 items-center justify-between border-b border-neutral-200 px-4">
-        <span className="text-xs font-medium uppercase tracking-wider text-neutral-400">
-          Sessions
-        </span>
-        <button
-          onClick={onClose}
-          className="cursor-pointer p-1 text-neutral-400 transition-colors hover:text-neutral-600 md:hidden"
-          aria-label="Close sidebar"
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          >
-            <line x1="4" y1="4" x2="12" y2="12" />
-            <line x1="12" y1="4" x2="4" y2="12" />
-          </svg>
-        </button>
-      </div>
-
       {/* New Chat button */}
       <div className="p-3">
         <button
           onClick={onNewChat}
-          className="flex w-full cursor-pointer items-center justify-center gap-1.5 bg-neutral-900 px-3 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-neutral-800"
+          className="flex w-full cursor-pointer items-center justify-center gap-1.5 bg-neutral-900 px-3 py-2.5 font-mono text-[11px] font-medium uppercase tracking-wider text-white transition-colors hover:bg-neutral-800"
         >
           <svg
             width="14"
