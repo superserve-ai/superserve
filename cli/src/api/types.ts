@@ -46,6 +46,7 @@ export interface AgentResponse {
   required_secrets: string[]
   deps_status: string
   deps_error: string | null
+  sandbox_status: string
   created_at: string
   updated_at: string
 }

@@ -31,7 +31,7 @@ export const getAgent = new Command("get")
       table.push(
         [bold("ID"), dim(agent.id)],
         [bold("Name"), sanitizeTerminalOutput(agent.name)],
-        [bold("Status"), coloredStatus(agent.deps_status)],
+        [bold("Status"), coloredStatus(agent.sandbox_status)],
         [
           bold("Command"),
           dim(sanitizeTerminalOutput(agent.command ?? "(none)")),

@@ -134,6 +134,21 @@ export const run = new Command("run")
         } catch {
           // Let session creation handle auth/404 errors
         }
+        if (agentInfo) {
+          if (agentInfo.sandbox_status === "building") {
+            log.error("Dependencies are still installing. Please wait and try again.")
+            console.error("Check status with:")
+            console.error(commandBox(`superserve agents get ${agent}`))
+            process.exitCode = 1
+            return
+          }
+          if (agentInfo.sandbox_status === "failed") {
+            log.error("Dependency install failed. Redeploy to try again.")
+            console.error(commandBox("superserve deploy"))
+            process.exitCode = 1
+            return
+          }
+        }
         if (agentInfo && agentInfo.required_secrets.length > 0) {
           const missing = agentInfo.required_secrets.filter(
             (s) => !agentInfo.environment_keys.includes(s),
