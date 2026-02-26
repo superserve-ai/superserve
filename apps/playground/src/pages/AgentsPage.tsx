@@ -6,7 +6,7 @@ import { relativeTime } from "../utils"
 
 interface AgentsPageProps {
   apiKey: string
-  baseUrl: string
+  baseUrl?: string
   navigate: (to: string) => void
 }
 
