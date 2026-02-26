@@ -26,6 +26,7 @@ export const setSecrets = new Command("set")
       }
 
       const client = createClient()
+      const agent = await client.getAgent(agentName)
       const keys = await client.setAgentSecrets(agentName, envVars)
       await track("cli_secrets_set", {
         agent_name: agentName,
@@ -38,5 +39,8 @@ export const setSecrets = new Command("set")
       if (keys.length > 0) {
         console.log(`Current secrets: ${keys.join(", ")}`)
       }
+      console.log(
+        `\nTry your agent in Playground: https://playground.superserve.ai/agents/${agent.id}/`,
+      )
     }),
   )
