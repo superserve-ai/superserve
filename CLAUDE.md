@@ -82,6 +82,14 @@ bun run test               # Run all TS tests
 bunx turbo run dev --filter=@superserve/playground
 bunx turbo run build --filter=@superserve/sdk
 
+# Adding dependencies — always from repo root with --filter
+bun add zod --filter @superserve/cli
+bun add -d @types/node --filter @superserve/sdk
+# Never cd into a package and run bun add (creates a conflicting lockfile)
+
+# Testing the CLI locally (no dev server, run directly)
+bun packages/cli/src/index.ts deploy --help
+
 # Python (legacy, independent)
 uv run ruff check . --fix
 uv run ruff format .
