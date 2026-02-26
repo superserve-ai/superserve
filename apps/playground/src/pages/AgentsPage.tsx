@@ -6,15 +6,15 @@ import { relativeTime } from "../utils"
 
 interface AgentsPageProps {
   apiKey: string
-  baseUrl?: string
   navigate: (to: string) => void
 }
 
 type LoadingState = "loading" | "error" | "empty" | "loaded"
 
+const BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined
+
 export default function AgentsPage({
   apiKey,
-  baseUrl,
   navigate,
 }: AgentsPageProps) {
   const [agents, setAgents] = useState<Agent[]>([])
@@ -25,7 +25,7 @@ export default function AgentsPage({
     setState("loading")
     setErrorMessage("")
     try {
-      const client = new Superserve({ apiKey, baseUrl })
+      const client = new Superserve({ apiKey, baseUrl: BASE_URL })
       const result = await client.agents.list()
       if (result.length === 0) {
         setState("empty")
@@ -39,7 +39,7 @@ export default function AgentsPage({
       )
       setState("error")
     }
-  }, [apiKey, baseUrl])
+  }, [apiKey])
 
   useEffect(() => {
     fetchAgents()
