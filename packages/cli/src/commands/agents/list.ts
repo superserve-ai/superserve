@@ -3,6 +3,7 @@ import pc from "picocolors"
 const { bold, dim } = pc
 
 import { Command } from "commander"
+import terminalLink from "terminal-link"
 import { track } from "../../analytics"
 import { createClient } from "../../api/client"
 import type { AgentResponse } from "../../api/types"
@@ -64,6 +65,7 @@ export const listAgents = new Command("list")
         bold("ID"),
         bold("Status"),
         bold("Created"),
+        bold("Playground"),
       ])
 
       for (const agent of agentList) {
@@ -72,6 +74,7 @@ export const listAgents = new Command("list")
           dim(agent.id),
           coloredStatus(agent.deps_status),
           dim(formatTimestamp(agent.created_at, true)),
+          terminalLink("Playground ↗", `https://playground.superserve.ai/agents/${agent.id}/`),
         ])
       }
 
