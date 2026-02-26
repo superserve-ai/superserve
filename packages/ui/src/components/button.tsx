@@ -4,7 +4,7 @@ import { cn } from "../lib/utils"
 
 const buttonVariants = {
   variant: {
-    default: "bg-primary text-background hover:bg-primary-hover",
+    default: "bg-primary text-white hover:bg-primary-hover",
     destructive:
       "bg-destructive text-white hover:bg-destructive-hover focus-visible:ring-destructive/20",
     outline:

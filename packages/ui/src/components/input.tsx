@@ -6,10 +6,12 @@ interface InputProps extends React.ComponentProps<"input"> {
   error?: string
   description?: string
   suffix?: React.ReactNode
+  wrapperClassName?: string
 }
 
 function Input({
   className,
+  wrapperClassName,
   label,
   error,
   description,
@@ -18,7 +20,7 @@ function Input({
   ...props
 }: InputProps) {
   return (
-    <div className="space-y-1.5">
+    <div className={cn("space-y-1.5", wrapperClassName)}>
       {label && (
         <label
           htmlFor={id}

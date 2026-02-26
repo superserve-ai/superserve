@@ -6,13 +6,13 @@ export default function EmptyState({ hasSession }: EmptyStateProps) {
   if (!hasSession) {
     return (
       <div className="text-center">
-        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-neutral-100">
+        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-surface-hover text-muted">
           <svg
             width="22"
             height="22"
             viewBox="0 0 22 22"
             fill="none"
-            stroke="#a3a3a3"
+            stroke="currentColor"
             strokeWidth="1.5"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -21,10 +21,10 @@ export default function EmptyState({ hasSession }: EmptyStateProps) {
             <path d="M2 8l9 5.5L20 8" />
           </svg>
         </div>
-        <p className="font-medium text-neutral-900">
+        <p className="font-medium text-foreground">
           No conversation selected
         </p>
-        <p className="mt-1 text-[13px] text-neutral-400">
+        <p className="mt-1 text-[13px] text-muted">
           Create a new chat to get started.
         </p>
       </div>
@@ -33,13 +33,13 @@ export default function EmptyState({ hasSession }: EmptyStateProps) {
 
   return (
     <div className="text-center">
-      <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-neutral-100">
+      <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-surface-hover text-ink-muted">
         <svg
           width="22"
           height="22"
           viewBox="0 0 22 22"
           fill="none"
-          stroke="#737373"
+          stroke="currentColor"
           strokeWidth="1.5"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -50,8 +50,8 @@ export default function EmptyState({ hasSession }: EmptyStateProps) {
           <line x1="15" y1="10" x2="15" y2="10.01" />
         </svg>
       </div>
-      <p className="font-medium text-neutral-900">Start a conversation</p>
-      <p className="mt-1 text-[13px] text-neutral-400">
+      <p className="font-medium text-foreground">Start a conversation</p>
+      <p className="mt-1 text-[13px] text-muted">
         Type a message below to chat with this agent.
       </p>
     </div>

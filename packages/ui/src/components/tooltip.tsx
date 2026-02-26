@@ -17,7 +17,7 @@ function TooltipContent({
       <TooltipPrimitive.Content
         sideOffset={sideOffset}
         className={cn(
-          "z-50 bg-foreground text-background px-2 py-1 text-xs",
+          "z-50 bg-foreground text-white px-2 py-1 text-xs",
           "animate-in fade-in-0 zoom-in-95",
           className,
         )}

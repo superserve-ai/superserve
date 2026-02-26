@@ -1,3 +1,4 @@
+import { Button } from "@superserve/ui"
 import type { ChatSession } from "../types"
 import { relativeTime } from "../utils"
 
@@ -22,16 +23,12 @@ export default function Sidebar({
   )
 
   return (
-    <div className="flex h-full flex-col border-r border-neutral-200 bg-white text-sm">
+    <div className="flex h-full flex-col border-r border-border bg-surface text-sm">
       {/* New Chat button */}
       <div className="p-3">
-        <button
-          onClick={onNewChat}
-          className="flex w-full cursor-pointer items-center justify-center gap-1.5 bg-neutral-900 px-3 py-2.5 font-mono text-[11px] font-medium uppercase tracking-wider text-white transition-colors hover:bg-neutral-800"
-        >
+        <Button onClick={onNewChat} className="flex w-full">
           <svg
-            width="14"
-            height="14"
+            className="size-4"
             viewBox="0 0 14 14"
             fill="none"
             stroke="currentColor"
@@ -42,7 +39,7 @@ export default function Sidebar({
             <line x1="3" y1="7" x2="11" y2="7" />
           </svg>
           New Chat
-        </button>
+        </Button>
       </div>
 
       {/* Session list */}
@@ -55,17 +52,17 @@ export default function Sidebar({
               onClick={() => onSelectSession(session.localId)}
               className={`group flex cursor-pointer items-start justify-between border-l-2 px-4 py-2.5 transition-colors ${
                 isActive
-                  ? "border-neutral-900 bg-neutral-50"
-                  : "border-transparent hover:bg-neutral-50"
+                  ? "border-primary bg-surface-hover"
+                  : "border-transparent hover:bg-surface-hover"
               }`}
             >
               <div className="min-w-0 flex-1">
                 <p
-                  className={`truncate text-[13px] ${isActive ? "font-medium text-neutral-900" : "text-neutral-700"}`}
+                  className={`truncate text-[13px] ${isActive ? "font-medium text-foreground" : "text-ink"}`}
                 >
                   {session.title}
                 </p>
-                <p className="mt-0.5 text-[11px] text-neutral-400">
+                <p className="mt-0.5 text-[11px] text-muted">
                   {relativeTime(session.updatedAt)}
                 </p>
               </div>
@@ -74,7 +71,7 @@ export default function Sidebar({
                   e.stopPropagation()
                   onDeleteSession(session.localId)
                 }}
-                className="ml-2 mt-0.5 shrink-0 cursor-pointer p-0.5 text-neutral-300 opacity-0 transition-opacity hover:text-neutral-600 group-hover:opacity-100"
+                className="ml-2 mt-0.5 shrink-0 cursor-pointer p-0.5 text-ink-faint opacity-0 transition-opacity hover:text-ink-light group-hover:opacity-100"
                 aria-label="Delete session"
               >
                 <svg
@@ -94,7 +91,7 @@ export default function Sidebar({
           )
         })}
         {sorted.length === 0 && (
-          <p className="px-4 py-8 text-center text-[12px] text-neutral-400">
+          <p className="px-4 py-8 text-center text-[12px] text-muted">
             No conversations yet
           </p>
         )}

@@ -31,7 +31,7 @@ function Checkbox({ className, label, id, ...props }: CheckboxProps) {
               animate={{ scale: 1 }}
               transition={{ duration: 0.1 }}
             >
-              <Check className="h-3 w-3 text-background" strokeWidth={3} />
+              <Check className="h-3 w-3 text-white" strokeWidth={3} />
             </motion.div>
           </AnimatePresence>
         </CheckboxPrimitive.Indicator>

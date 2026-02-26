@@ -1,4 +1,5 @@
 import Markdown from "react-markdown"
+import { Avatar } from "@superserve/ui"
 import type { ChatMessage } from "../types"
 
 interface MessageBubbleProps {
@@ -14,55 +15,22 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
 
   return (
     <div className="flex gap-3">
-      {/* Avatar */}
-      <div
-        className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full ${
-          isUser ? "bg-neutral-900" : "bg-neutral-200"
-        }`}
-      >
-        {isUser ? (
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 12 12"
-            fill="none"
-            stroke="white"
-            strokeWidth="1.2"
-            strokeLinecap="round"
-          >
-            <circle cx="6" cy="4" r="2.5" />
-            <path d="M1.5 11c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4" />
-          </svg>
-        ) : (
-          <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-            <path
-              d="M7 1L12.5 4.5V9.5L7 13L1.5 9.5V4.5L7 1Z"
-              stroke="#525252"
-              strokeWidth="1.2"
-              strokeLinejoin="round"
-            />
-            <circle cx="7" cy="7" r="1.5" fill="#525252" />
-          </svg>
-        )}
-      </div>
+      <Avatar fallback={isUser ? "Y" : "A"} size="xs" />
 
       {/* Content */}
       <div className="min-w-0 flex-1">
-        <span className="text-xs font-medium text-neutral-500">
-          {isUser ? "You" : "Agent"}
-        </span>
         <div
-          className={`mt-1 break-words px-3.5 py-2.5 leading-relaxed ${
+          className={`wrapp-break-words px-3.5 py-2.5 leading-relaxed ${
             isUser
-              ? "bg-neutral-900 text-white"
-              : "border border-neutral-200 bg-white text-neutral-800"
+              ? "bg-primary text-surface"
+              : "border border-border bg-surface text-foreground"
           }`}
         >
           {isEmpty ? (
             <div className="flex items-center gap-1.5 py-0.5">
-              <span className="size-1.5 animate-pulse rounded-full bg-neutral-400" />
-              <span className="size-1.5 animate-pulse rounded-full bg-neutral-400 [animation-delay:150ms]" />
-              <span className="size-1.5 animate-pulse rounded-full bg-neutral-400 [animation-delay:300ms]" />
+              <span className="size-1.5 animate-pulse rounded-full bg-muted" />
+              <span className="size-1.5 animate-pulse rounded-full bg-muted [animation-delay:150ms]" />
+              <span className="size-1.5 animate-pulse rounded-full bg-muted [animation-delay:300ms]" />
             </div>
           ) : !isUser ? (
             <div className="markdown-content">
@@ -72,11 +40,11 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
             message.content
           )}
           {message.toolCalls && message.toolCalls.length > 0 && (
-            <div className="mt-2 flex flex-col gap-0.5 border-t border-neutral-100 pt-2">
+            <div className="mt-2 flex flex-col gap-0.5 border-t border-border/50 pt-2">
               {message.toolCalls.map((tc, i) => (
                 <div
                   key={i}
-                  className="flex items-center gap-1.5 font-mono text-[11px] text-neutral-400"
+                  className="flex items-center gap-1.5 font-mono text-[11px] text-muted"
                 >
                   <svg
                     width="10"
@@ -91,7 +59,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
                     <path d="M4 4L1 6.5 4 9" />
                   </svg>
                   {tc.name}
-                  <span className="text-neutral-300">
+                  <span className="text-ink-faint">
                     {tc.duration > 0 ? `${tc.duration}ms` : "..."}
                   </span>
                 </div>

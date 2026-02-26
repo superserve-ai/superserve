@@ -1,6 +1,12 @@
 @import "@superserve/ui/styles";
 @source "../../packages/ui/src";
 
+:root {
+  --sans-font: "Inter", system-ui, -apple-system, sans-serif;
+  --mono-font: "Geist Mono", ui-monospace, monospace;
+  --display-font: "Inter", system-ui, -apple-system, sans-serif;
+}
+
 /* Markdown content */
 .markdown-content p {
   @apply my-2 first:mt-0 last:mb-0;
@@ -36,7 +42,7 @@
   @apply my-1;
 }
 .markdown-content code {
-  @apply bg-black/[0.06] px-1.5 py-0.5 font-mono text-[0.85em];
+  @apply bg-foreground/[0.06] px-1.5 py-0.5 font-mono text-[0.85em];
 }
 .markdown-content pre {
   @apply my-3 overflow-x-auto border border-neutral-800 bg-neutral-900 px-4 py-3 font-mono text-xs leading-relaxed text-neutral-300;
@@ -45,13 +51,13 @@
   @apply bg-transparent p-0 text-inherit;
 }
 .markdown-content blockquote {
-  @apply my-2 border-l-2 border-neutral-300 py-0.5 pl-4 text-neutral-500;
+  @apply my-2 border-l-2 border-border py-0.5 pl-4 text-muted;
 }
 .markdown-content a {
   @apply underline underline-offset-2;
 }
 .markdown-content hr {
-  @apply my-4 border-neutral-200;
+  @apply my-4 border-border;
 }
 .markdown-content strong {
   @apply font-semibold;

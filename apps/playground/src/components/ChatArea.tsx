@@ -17,7 +17,7 @@ export default function ChatArea({
   onStop,
 }: ChatAreaProps) {
   return (
-    <div className="flex h-full flex-col bg-neutral-50 text-sm leading-relaxed text-neutral-900">
+    <div className="flex h-full flex-col bg-background text-sm leading-relaxed text-foreground">
       {/* Messages */}
       <main className="flex-1 overflow-y-auto">
         {!session || session.messages.length === 0 ? (
@@ -33,7 +33,7 @@ export default function ChatArea({
 
       {/* Footer */}
       {session && (
-        <footer className="sticky bottom-0 z-10 border-t border-neutral-200 bg-white">
+        <footer className="sticky bottom-0 z-10 border-t border-border bg-surface">
           <div className="mx-auto max-w-3xl px-4 py-3 md:px-6">
             <MessageInput status={status} onSend={onSend} onStop={onStop} />
           </div>

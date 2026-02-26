@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { Superserve } from "@superserve/sdk"
+import { Badge } from "@superserve/ui"
 import { useSuperserveChat } from "../hooks/useSuperserveChat"
 import Sidebar from "../components/Sidebar"
 import ChatArea from "../components/ChatArea"
@@ -58,15 +59,21 @@ export default function ChatPage({ agentId, apiKey, onBack }: ChatPageProps) {
       ? "Error"
       : "Ready"
 
+  const statusVariant = isActive
+    ? "warning"
+    : status === "error"
+      ? "destructive"
+      : ("success" as const)
+
   return (
-    <div className="flex h-full flex-col text-sm text-neutral-900">
+    <div className="flex h-full flex-col text-sm text-foreground">
       {/* Header */}
-      <header className="border-b border-neutral-200 bg-white">
+      <header className="border-b border-border bg-surface">
         <div className="flex h-14 items-center justify-between px-5 md:px-8">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen((prev) => !prev)}
-              className="cursor-pointer p-1.5 text-neutral-500 transition-colors hover:text-neutral-700 md:hidden"
+              className="cursor-pointer p-1.5 text-muted transition-colors hover:text-ink md:hidden"
               aria-label="Toggle sidebar"
             >
               <svg
@@ -84,44 +91,29 @@ export default function ChatPage({ agentId, apiKey, onBack }: ChatPageProps) {
               </svg>
             </button>
             <div className="flex items-center gap-1.5 text-[13px]">
-              <span className="hidden text-neutral-400 md:inline">Superserve</span>
-              <span className="hidden text-neutral-300 md:inline">/</span>
+              <span className="hidden text-muted md:inline">Superserve</span>
+              <span className="hidden text-ink-faint md:inline">/</span>
               <button
                 onClick={onBack}
-                className="cursor-pointer text-neutral-400 transition-colors hover:text-neutral-600"
+                className="cursor-pointer text-muted transition-colors hover:text-ink-light"
               >
                 Playground
               </button>
-              <span className="text-neutral-300">/</span>
+              <span className="text-ink-faint">/</span>
               <span
-                className={`font-medium ${agentName ? "text-neutral-900" : "animate-pulse font-mono text-neutral-400"}`}
+                className={`font-medium ${agentName ? "text-foreground" : "animate-pulse font-mono text-muted"}`}
               >
                 {agentName ?? agentId}
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span
-              className={`size-1.5 rounded-full ${
-                isActive
-                  ? "animate-pulse-dot bg-amber-500"
-                  : status === "error"
-                    ? "bg-red-500"
-                    : "bg-emerald-500"
-              }`}
-            />
-            <span
-              className={`font-mono text-[11px] uppercase tracking-wider ${
-                isActive
-                  ? "text-amber-600"
-                  : status === "error"
-                    ? "text-red-600"
-                    : "text-emerald-600"
-              }`}
-            >
-              {statusLabel}
-            </span>
-          </div>
+          <Badge
+            dot
+            variant={statusVariant}
+            className={`font-mono uppercase tracking-wider ${isActive ? "[&>span:first-child]:animate-pulse-dot" : ""}`}
+          >
+            {statusLabel}
+          </Badge>
         </div>
       </header>
 

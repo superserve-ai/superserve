@@ -1,3 +1,4 @@
+import { Alert } from "@superserve/ui"
 import { useRoute } from "./hooks/useRoute"
 import AgentsPage from "./pages/AgentsPage"
 import ChatPage from "./pages/ChatPage"
@@ -10,16 +11,15 @@ export default function App() {
 
   if (!apiKey) {
     return (
-      <div className="flex h-full items-center justify-center bg-neutral-50 p-8">
-        <div className="max-w-md border border-neutral-200 bg-white p-6 text-sm">
-          <p className="font-semibold">Missing API key</p>
-          <p className="mt-2 leading-relaxed text-neutral-500">
+      <div className="flex h-full items-center justify-center bg-background p-8">
+        <Alert variant="warning" title="Missing API key" className="max-w-md">
+          <p className="mt-1 leading-relaxed">
             Set{" "}
-            <code className="bg-neutral-100 px-1.5 py-0.5 font-mono text-xs">
+            <code className="bg-surface-hover px-1.5 py-0.5 font-mono text-xs">
               VITE_SUPERSERVE_API_KEY
             </code>{" "}
             in your environment or create a{" "}
-            <code className="bg-neutral-100 px-1.5 py-0.5 font-mono text-xs">
+            <code className="bg-surface-hover px-1.5 py-0.5 font-mono text-xs">
               .env
             </code>{" "}
             file:
@@ -27,7 +27,7 @@ export default function App() {
           <pre className="mt-3 overflow-auto border border-neutral-800 bg-neutral-900 px-4 py-3 font-mono text-xs text-neutral-300">
             VITE_SUPERSERVE_API_KEY=ss_...
           </pre>
-        </div>
+        </Alert>
       </div>
     )
   }
