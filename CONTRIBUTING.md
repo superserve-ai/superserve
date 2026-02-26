@@ -6,8 +6,8 @@ Thank you for your interest in contributing to Superserve! We welcome contributi
 
 ### Prerequisites
 
-- Python 3.12+
-- [uv](https://github.com/astral-sh/uv) for dependency management
+- [Bun](https://bun.sh/) for TypeScript projects
+- Python 3.12+ and [uv](https://github.com/astral-sh/uv) for the legacy Python CLI
 
 ### Development Setup
 
@@ -26,18 +26,47 @@ Thank you for your interest in contributing to Superserve! We welcome contributi
 
 4. Install dependencies:
    ```bash
-   uv sync --dev
+   bun install
    ```
 
-5. Set up pre-commit hooks:
+5. Run a build to verify setup:
    ```bash
-   uv run pre-commit install
+   bun run build
    ```
 
-6. Run tests to verify setup:
-   ```bash
-   uv run pytest
-   ```
+## Repo Structure
+
+```
+apps/playground/           # React + Vite playground app
+packages/cli/              # TypeScript CLI (@superserve/cli)
+packages/sdk/              # TypeScript SDK (@superserve/sdk)
+packages/typescript-config/ # Shared tsconfig presets
+packages/biome-config/     # Shared Biome config
+src/superserve/            # Legacy Python CLI (being replaced)
+```
+
+## Common Commands
+
+```bash
+bun run build              # build all packages
+bun run dev                # start all dev servers
+bun run lint               # lint all packages
+bun run typecheck          # type check all packages
+bun run test               # run all tests
+```
+
+For a single package:
+```bash
+bunx turbo run dev --filter=@superserve/playground
+```
+
+For the legacy Python CLI:
+```bash
+uv sync --dev
+uv run pytest
+uv run ruff check . --fix
+uv run mypy src/superserve
+```
 
 ## How to Contribute
 
@@ -46,7 +75,7 @@ Thank you for your interest in contributing to Superserve! We welcome contributi
 - Check existing [issues](https://github.com/superserve-ai/superserve/issues) to avoid duplicates
 - Use a clear, descriptive title
 - Include steps to reproduce the issue
-- Provide relevant environment details (OS, Python version, etc.)
+- Provide relevant environment details (OS, runtime version, etc.)
 
 ### Suggesting Features
 
@@ -56,35 +85,24 @@ Thank you for your interest in contributing to Superserve! We welcome contributi
 
 ### Pull Requests
 
-1. Create a branch from `main`:
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
+1. Create a branch from `main`
 
 2. Make your changes and write tests if applicable
 
-3. Ensure all tests pass:
+3. Ensure all checks pass:
    ```bash
-   uv run pytest
+   bun run lint
+   bun run typecheck
+   bun run test
+   bun run build
    ```
 
-4. Run linting and formatting:
-   ```bash
-   uv run ruff check . --fix
-   uv run ruff format .
-   ```
-
-5. Run type checking:
-   ```bash
-   uv run mypy src/superserve
-   ```
-
-6. Commit with a clear message:
+4. Commit with a clear message:
    ```bash
    git commit -m "feat: add your feature description"
    ```
 
-7. Push and open a Pull Request
+5. Push and open a Pull Request
 
 ### Commit Message Convention
 
@@ -99,9 +117,10 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ## Code Style
 
-- We use [Ruff](https://github.com/astral-sh/ruff) for linting and formatting
-- We use [mypy](https://mypy-lang.org/) for static type checking (enforced in CI)
-- Type hints are encouraged
+- [Biome](https://biomejs.dev/) for TypeScript linting and formatting
+- [Ruff](https://github.com/astral-sh/ruff) for Python linting and formatting
+- [mypy](https://mypy-lang.org/) for Python type checking
+- Type hints are encouraged in both TypeScript and Python
 
 ## Questions?
 
