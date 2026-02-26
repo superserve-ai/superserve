@@ -189,6 +189,9 @@ export const deploy = new Command("deploy")
           commandBox(`superserve run ${agent.name} "your prompt here"`),
         )
         console.log()
+        console.log(`  Or try it in the Playground:`)
+        console.log(`  https://playground.superserve.ai/agents/${agent.id}/`)
+        console.log()
       },
     ),
   )
