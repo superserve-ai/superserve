@@ -3,6 +3,7 @@ import pc from "picocolors"
 const { bold, dim } = pc
 
 import { Command } from "commander"
+import terminalLink from "terminal-link"
 import { track } from "../../analytics"
 import { createClient } from "../../api/client"
 import { withErrorHandler } from "../../errors"
@@ -38,6 +39,7 @@ export const getAgent = new Command("get")
         ],
         [bold("Created"), dim(formatTimestamp(agent.created_at))],
         [bold("Updated"), dim(formatTimestamp(agent.updated_at))],
+        [bold("Playground"), terminalLink("Playground ↗", `https://playground.superserve.ai/agents/${agent.id}/`)],
       )
 
       console.log(table.toString())
