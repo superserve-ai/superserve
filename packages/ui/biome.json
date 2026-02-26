@@ -1,0 +1,8 @@
+{
+  "extends": ["@superserve/biome-config/biome.json"],
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  }
+}

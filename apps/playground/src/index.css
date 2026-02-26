@@ -1,9 +1,5 @@
-@import "tailwindcss";
-
-@theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", monospace;
-}
+@import "@superserve/ui/styles";
+@source "../../packages/ui/src";
 
 /* Markdown content */
 .markdown-content p {
