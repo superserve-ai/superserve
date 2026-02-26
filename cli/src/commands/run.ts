@@ -138,7 +138,7 @@ export const run = new Command("run")
           if (agentInfo.sandbox_status === "building") {
             log.error("Dependencies are still installing. Please wait and try again.")
             console.error("Check status with:")
-            console.error(commandBox(`superserve agents get ${agent}`))
+            console.error(commandBox(`superserve agents get ${sanitizeTerminalOutput(agent)}`))
             process.exitCode = 1
             return
           }

@@ -17,7 +17,7 @@ const STATUS_COLORIZE: Record<string, (text: string) => string> = {
 }
 
 export function agentStatus(status: string): string {
-  return STATUS_LABELS[status] ?? status.toUpperCase()
+  return STATUS_LABELS[status] ?? status.replace(/[^\w\s-]/g, "").toUpperCase()
 }
 
 export function coloredStatus(status: string): string {
