@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "biomejs.biome",
+    "csstools.postcss",
+    "unifiedjs.vscode-mdx",
+    "bradlc.vscode-tailwindcss",
+    "charliermarsh.ruff"
+  ]
+}
