@@ -10,6 +10,7 @@ import { withErrorHandler } from "../../errors"
 import { commandBox } from "../../utils/command-box"
 import { formatRelativeTime } from "../../utils/format"
 import { sanitizeTerminalOutput } from "../../utils/sanitize"
+import { truncate } from "../../utils/stream-events"
 import { createTable } from "../../utils/table"
 import { coloredSessionStatus } from "./status"
 
@@ -62,8 +63,7 @@ export const listSessions = new Command("list")
           const sidClean = s.id.replace("ses_", "").replace(/-/g, "")
           const sidShort = sidClean.slice(0, 12)
 
-          let title = sanitizeTerminalOutput(s.title ?? "")
-          if (title.length > 24) title = `${title.slice(0, 21)}...`
+          const title = truncate(sanitizeTerminalOutput(s.title ?? ""), 24)
 
           const lastActive = dim(
             formatRelativeTime(s.last_activity_at ?? s.created_at),
@@ -78,11 +78,10 @@ export const listSessions = new Command("list")
               lastActive,
             ])
           } else {
-            let agentDisplay = sanitizeTerminalOutput(
-              s.agent_name ?? s.agent_id ?? "?",
+            const agentDisplay = truncate(
+              sanitizeTerminalOutput(s.agent_name ?? s.agent_id ?? "?"),
+              16,
             )
-            if (agentDisplay.length > 16)
-              agentDisplay = `${agentDisplay.slice(0, 13)}...`
 
             table.push([
               sidShort,
