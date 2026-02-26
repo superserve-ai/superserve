@@ -10,7 +10,7 @@
     "src/"
   ],
   "scripts": {
-    "dev": "bun src/index.ts",
+    "dev": "echo 'CLI has no dev server use directly with bun src/index.ts'",
     "build": "bun run scripts/build.ts",
     "lint": "bunx biome check .",
     "lint:fix": "bunx biome check --write .",
