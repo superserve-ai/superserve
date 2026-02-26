@@ -44,6 +44,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",
+    "@superserve/biome-config": "workspace:*",
+    "@superserve/typescript-config": "workspace:*",
     "@types/bun": "^1.2.4",
     "@types/js-yaml": "^4.0.9"
   },
