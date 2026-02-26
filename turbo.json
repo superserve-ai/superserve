@@ -3,6 +3,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": ["DEFAULT_BASE_URL", "VITE_SUPERSERVE_API_KEY"],
       "outputs": ["dist/**", ".next/**"]
     },
     "dev": {
