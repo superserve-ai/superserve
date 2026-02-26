@@ -5,6 +5,7 @@ import { track } from "../analytics"
 import { SUPERSERVE_YAML } from "../config/constants"
 import { withErrorHandler } from "../errors"
 import { commandBox } from "../utils/command-box"
+import { installPythonPackage } from "../utils/python-deps"
 
 const TEMPLATE = `\
 # Superserve agent configuration
@@ -80,6 +81,8 @@ export const init = new Command("init")
       )
       writeFileSync(configPath, content)
       await track("cli_init", { secrets_detected: envKeys.length })
+
+      await installPythonPackage(cwd)
 
       console.log(`Created ${SUPERSERVE_YAML}`)
       console.log()
