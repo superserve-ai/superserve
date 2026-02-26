@@ -1,0 +1,12 @@
+{
+  "extends": "./base.json",
+  "compilerOptions": {
+    "target": "ESNext",
+    "jsx": "react-jsx",
+    "jsxImportSource": "@opentui/react",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "types": ["bun"]
+  }
+}
