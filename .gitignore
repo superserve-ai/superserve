@@ -10,6 +10,8 @@ dist/
 *.egg-info/
 .installed.cfg
 *.egg
+node_modules/
+.turbo/
 
 # Virtual environments
 .env
