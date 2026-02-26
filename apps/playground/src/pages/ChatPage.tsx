@@ -51,7 +51,7 @@ export default function ChatPage({ agentId, apiKey, onBack }: ChatPageProps) {
     setSidebarOpen(false)
   }
 
-  const isActive = status === "streaming" || status === "creating-session"
+  const isActive = status === "streaming"
   const statusLabel = isActive
     ? "Streaming"
     : status === "error"

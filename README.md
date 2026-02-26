@@ -98,8 +98,71 @@ See the full [CLI Reference](https://docs.superserve.ai/cli) for all flags and o
 
 ## Requirements
 
-- Python 3.12+
 - A [Superserve account](https://console.superserve.ai)
+
+Install via npm (recommended):
+```bash
+npm install -g @superserve/cli
+```
+
+Or via Homebrew:
+```bash
+brew install superserve-ai/tap/superserve
+```
+
+Or via pip (legacy Python CLI):
+```bash
+pip install superserve
+```
+
+## Development
+
+This repo is a monorepo managed with [Bun workspaces](https://bun.sh/docs/install/workspaces) and [Turborepo](https://turbo.build/repo).
+
+### Structure
+
+```
+apps/
+  playground/              # React + Vite playground app
+packages/
+  cli/                     # TypeScript CLI (@superserve/cli)
+  sdk/                     # TypeScript SDK (@superserve/sdk)
+  typescript-config/       # Shared tsconfig presets
+  biome-config/            # Shared Biome config
+```
+
+### Setup
+
+```bash
+bun install               # install all dependencies
+```
+
+### Commands
+
+```bash
+bun run build             # build all packages
+bun run dev               # start all dev servers
+bun run lint              # lint all packages
+bun run typecheck         # type check all packages
+bun run test              # run all tests
+```
+
+To run a command for a single package:
+
+```bash
+bunx turbo run dev --filter=@superserve/playground
+bunx turbo run build --filter=@superserve/sdk
+```
+
+### Legacy Python CLI
+
+The Python CLI in `src/superserve/` is being replaced by the TypeScript CLI. To work on it:
+
+```bash
+uv sync --dev             # install Python dependencies
+uv run pytest             # run tests
+uv run ruff check .       # lint
+```
 
 ## Contributing
 

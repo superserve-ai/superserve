@@ -7,6 +7,7 @@ import { Command } from "commander"
 import { track } from "../analytics"
 import { createClient } from "../api/client"
 import { PlatformAPIError } from "../api/errors"
+import type { AgentResponse } from "../api/types"
 import { loadProjectConfig } from "../config/project"
 import { withErrorHandler } from "../errors"
 import { commandBox } from "../utils/command-box"
@@ -94,7 +95,7 @@ export const deploy = new Command("deploy")
         status.start("Uploading to Superserve...")
         const tarballPath = writeTempTarball(tarballBytes)
 
-        let agent
+        let agent: AgentResponse
         try {
           agent = await client.deployAgent(name, command, config, tarballPath)
           status.done()

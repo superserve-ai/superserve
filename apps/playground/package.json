@@ -4,10 +4,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build"
+    "build": "tsc -b && vite build",
+    "lint": "bunx biome check ."
   },
   "dependencies": {
-    "@superserve/sdk": "^0.1.1",
+    "@superserve/sdk": "workspace:*",
     "@tailwindcss/vite": "^4.2.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -15,6 +16,8 @@
     "tailwindcss": "^4.2.1"
   },
   "devDependencies": {
+    "@superserve/biome-config": "workspace:*",
+    "@superserve/typescript-config": "workspace:*",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.1.4",
