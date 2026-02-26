@@ -5,7 +5,7 @@ import { useSuperserveChat } from "../hooks/useSuperserveChat"
 import Sidebar from "../components/Sidebar"
 import ChatArea from "../components/ChatArea"
 
-const BASE_URL = "/api"
+const BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined
 
 interface ChatPageProps {
   agentId: string

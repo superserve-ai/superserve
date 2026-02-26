@@ -37,7 +37,7 @@ export function useSuperserveChat(options: UseSuperserveChatOptions) {
     if (!clientRef.current) {
       clientRef.current = new Superserve({
         apiKey,
-        baseUrl: baseUrl ?? "/api",
+        baseUrl,
       })
     }
     return clientRef.current

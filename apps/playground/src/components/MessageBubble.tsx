@@ -14,13 +14,15 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
     (!message.toolCalls || message.toolCalls.length === 0)
 
   return (
-    <div className="flex gap-3">
-      <Avatar fallback={isUser ? "Y" : "A"} size="xs" />
+    <div className="flex items-start gap-3">
+      <div>
+        <Avatar fallback={isUser ? "Y" : "A"} size="xs" />
+      </div>
 
       {/* Content */}
       <div className="min-w-0 flex-1">
         <div
-          className={`wrapp-break-words px-3.5 py-2.5 leading-relaxed ${
+          className={`wrap-break-word px-3.5 py-2.5 leading-relaxed ${
             isUser
               ? "bg-primary text-surface"
               : "border border-border bg-surface text-foreground"

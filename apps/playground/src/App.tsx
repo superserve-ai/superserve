@@ -3,7 +3,7 @@ import { useRoute } from "./hooks/useRoute"
 import AgentsPage from "./pages/AgentsPage"
 import ChatPage from "./pages/ChatPage"
 
-const BASE_URL = "/api"
+const BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined
 
 export default function App() {
   const apiKey = import.meta.env.VITE_SUPERSERVE_API_KEY as string | undefined
