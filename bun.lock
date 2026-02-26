@@ -60,6 +60,7 @@
       "version": "0.1.1",
       "devDependencies": {
         "@superserve/typescript-config": "workspace:*",
+        "@types/bun": "^1.3.9",
         "@types/react": "^19.0.0",
         "react": "^19.0.0",
         "tsup": "^8.0.0",
