@@ -1,90 +1,107 @@
 # CLAUDE.md
 
-Guidelines for working with the Superserve CLI repository.
+Guidelines for working with the Superserve monorepo.
 
 ## What This Repository Is
 
 Superserve is a CLI and SDK for deploying AI agents to sandboxed cloud containers. Users write an agent (typically using the Claude Agent SDK), point `superserve deploy` at it, and get a hosted agent they can interact with via `superserve run`.
 
-This repo is the open-source CLI (`superserve` on PyPI). The platform API and dashboard live in a separate private repo (`rayai-platform`).
+This repo is a monorepo containing the CLI, TypeScript SDK, and playground app. The platform API and dashboard are being migrated here from a separate repo.
+
+## Monorepo Structure
+
+```
+superserve/
+├── apps/
+│   └── playground/              # React + Vite playground app
+├── packages/
+│   ├── cli/                     # TypeScript CLI (@superserve/cli on npm)
+│   ├── sdk/                     # TypeScript SDK (@superserve/sdk on npm)
+│   ├── typescript-config/       # Shared tsconfig presets
+│   └── biome-config/            # Shared Biome linting/formatting config
+├── src/superserve/              # Legacy Python CLI+SDK (being replaced by TS CLI)
+├── docs/                        # Mintlify documentation
+├── examples/                    # Example projects
+└── tests/                       # Python tests
+```
+
+**Workspace tooling:**
+- **Bun workspaces** for dependency management (single `bun.lock` at root)
+- **Turborepo** for task orchestration (build, lint, typecheck, test)
+- **uv** for Python projects (independent, `pyproject.toml` at root)
 
 ## Architecture
+
+### TypeScript CLI (`packages/cli/`)
+
+Built with Bun + Commander. Entry point: `src/index.ts`.
+
+### TypeScript SDK (`packages/sdk/`)
+
+Published as `@superserve/sdk` with dual CJS/ESM output via tsup. Includes React hooks at `@superserve/sdk/react`.
+
+### Playground (`apps/playground/`)
+
+React + Vite app for interacting with agents. Depends on `@superserve/sdk` via workspace reference.
+
+### Legacy Python CLI (`src/superserve/`)
+
+Click-based CLI being replaced by the TypeScript CLI. Will be removed once feature parity is achieved.
 
 ```
 src/superserve/
 ├── cli/
 │   ├── cli.py              # Main Click group entry point
-│   ├── analytics.py        # Anonymous usage analytics (PostHog)
-│   ├── utils.py             # Shared CLI helpers (formatting, spinners)
 │   ├── commands/            # Click command implementations
-│   │   ├── agents.py        # superserve agents [list|get|delete]
-│   │   ├── deploy.py        # superserve deploy
-│   │   ├── init.py          # superserve init
-│   │   ├── login.py         # superserve login (device auth flow)
-│   │   ├── logout.py        # superserve logout
-│   │   ├── run.py           # superserve run (SSE streaming)
-│   │   ├── secrets.py       # superserve secrets [set|list|delete]
-│   │   └── session.py       # superserve sessions [list|get|end]
 │   ├── platform/            # Platform API client layer
-│   │   ├── auth.py          # Token management and refresh
-│   │   ├── client.py        # PlatformClient (HTTP requests to API)
-│   │   ├── config.py        # API URLs, credentials path, constants
-│   │   └── types.py         # Pydantic models for API responses
 │   └── templates/           # Project scaffolding templates
-└── sandbox/                 # Legacy sandbox code (not actively used)
+└── sdk/                     # Python SDK
 ```
 
 ## Key Patterns
 
-- **Click for CLI**: All commands use Click decorators. The main group is in `cli.py`, subcommands in `commands/`.
-- **PlatformClient**: All API calls go through `PlatformClient` in `platform/client.py`. It handles auth headers, token refresh, and error formatting.
-- **`_resolve_agent_id()`**: Converts agent name → UUID. Results are cached on the client instance.
 - **Agent IDs**: Prefixed with `agt_`, run IDs with `run_`, session IDs with `ses_`.
-- **SSE streaming**: `run.py` streams agent responses via Server-Sent Events. Events include `message`, `status`, `error`, `done`.
-- **Device auth flow**: `login.py` uses device code grant — opens browser, polls for token.
+- **SSE streaming**: Agent responses stream via Server-Sent Events. Events include `message`, `status`, `error`, `done`.
 - **Config file**: `superserve.yaml` defines agent name, start command, secrets, and ignore patterns.
-
-## CLI Commands
-
-| Command | Description |
-|---------|-------------|
-| `superserve login` | Authenticate via browser |
-| `superserve logout` | Clear stored credentials |
-| `superserve init` | Generate `superserve.yaml` |
-| `superserve deploy` | Deploy agent to platform |
-| `superserve run AGENT` | Interactive session with agent |
-| `superserve secrets set AGENT KEY=VALUE` | Set encrypted secrets |
-| `superserve secrets list AGENT` | List secret names |
-| `superserve secrets delete AGENT KEY` | Delete a secret |
-| `superserve agents list` | List deployed agents |
-| `superserve agents get AGENT` | Get agent details |
-| `superserve agents delete AGENT` | Delete an agent |
-| `superserve sessions list` | List sessions |
-| `superserve sessions get ID` | Get session details |
-| `superserve sessions end ID` | End a session |
+- **Shared configs**: TypeScript projects extend from `@superserve/typescript-config` presets. Biome projects extend from `@superserve/biome-config`.
 
 ## Development
 
 ```bash
-# Install in editable mode
-pip install -e ".[dev]"
+# Install all dependencies (from repo root)
+bun install
 
-# Lint and format
+# TypeScript — all projects
+bun run build              # Build everything in dependency order
+bun run dev                # Start all dev servers
+bun run lint               # Lint all TS projects
+bun run typecheck          # Type check all TS projects
+bun run test               # Run all TS tests
+
+# TypeScript — single project
+bunx turbo run dev --filter=@superserve/playground
+bunx turbo run build --filter=@superserve/sdk
+
+# Python (legacy, independent)
 uv run ruff check . --fix
 uv run ruff format .
-
-# Type check
 uv run mypy src/
-
-# Test
 uv run pytest
 ```
 
 ## Coding Style
 
+### TypeScript
+- Biome for linting and formatting (2-space indent, double quotes, semicolons as needed)
+- TypeScript strict mode
+- ESM modules
+
+### Python
 - Python 3.12+, type hints on function signatures
 - Ruff for linting and formatting (line length 88)
 - Click for CLI commands, Pydantic for API types
+
+### General
 - Keep functions focused, avoid deep nesting
 - Use specific exception types, not bare `except:`
 - Validate inputs at system boundaries
