@@ -74,7 +74,10 @@ export const listAgents = new Command("list")
           dim(agent.id),
           coloredStatus(agent.sandbox_status),
           dim(formatTimestamp(agent.created_at, true)),
-          terminalLink("Playground ↗", `https://playground.superserve.ai/agents/${agent.id}/`),
+          terminalLink(
+            "Playground ↗",
+            `https://playground.superserve.ai/agents/${agent.id}/`,
+          ),
         ])
       }
 
