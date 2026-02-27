@@ -1,0 +1,28 @@
+---
+title: "Mastra"
+description: "Deploy a Mastra agent to Superserve"
+icon: /images/mastra.svg
+---
+
+```typescript agent.ts
+import { Agent } from "@mastra/core/agent"
+import { openai } from "@ai-sdk/openai"
+import { createInterface } from "readline"
+
+const agent = new Agent({
+  name: "assistant",
+  instructions: "You are a helpful assistant.",
+  model: openai("gpt-4o"),
+})
+
+const rl = createInterface({ input: process.stdin, output: process.stdout })
+rl.on("line", async (line) => {
+  const result = await agent.generate(line)
+  console.log(result.text)
+})
+```
+
+```bash
+superserve deploy agent.ts
+superserve secrets set my-agent OPENAI_API_KEY=sk-...
+```

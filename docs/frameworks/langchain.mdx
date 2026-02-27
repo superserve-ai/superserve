@@ -1,0 +1,26 @@
+---
+title: "LangChain"
+description: "Deploy a LangChain agent to Superserve"
+icon: /images/langchain.svg
+---
+
+```python agent.py
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage
+
+llm = ChatOpenAI(model="gpt-4o")
+
+while True:
+    user_input = input()
+    response = llm.invoke([HumanMessage(content=user_input)])
+    print(response.content)
+```
+
+```txt requirements.txt
+langchain-openai
+```
+
+```bash
+superserve deploy agent.py
+superserve secrets set my-agent OPENAI_API_KEY=sk-...
+```

@@ -1,36 +1,25 @@
 ---
-title: "Superserve"
+title: "Introduction"
 description: "Agent sandboxes with sessions, streaming, and zero-config deploys"
 ---
 
-## The problem
-
-You built an agent that works on your laptop. Now you need other people to use it.
-
-Scaffolding a server is easy — any coding agent can generate a FastAPI wrapper in 30 seconds. The hard parts are production concerns that take weeks to harden, not minutes to scaffold:
-
-- **Isolation** — your agent executes arbitrary code, writes files, spawns processes. One user's session must never see another's data. Getting this wrong is a security incident, not a bug.
-- **State that persists** — a conversation is multi-turn. The agent creates files, builds up context, modifies its workspace. That state needs to survive across turns, across process restarts, and be there when a user comes back days later. Most sandbox platforms give you ephemeral compute — when the VM dies, everything is gone.
-- **Sessions without glue** — tracking which user is talking to which agent instance, routing messages to the right sandbox, handling concurrent conversations. Boring infrastructure that every agent deployment needs and nobody wants to build.
-
-Sandbox platforms like E2B and Modal give you isolated compute. But you still build the session layer, the streaming protocol, the deploy pipeline, and the state persistence yourself.
-
-## The fix
+Superserve deploys your agent script to an isolated cloud sandbox — no Dockerfile, no server code, no infrastructure config.
 
 ```bash
-pip install superserve
+curl -fsSL https://raw.githubusercontent.com/superserve-ai/superserve/main/cli/install.sh | sh
+```
+
+```bash
 superserve deploy agent.py
 ```
 
-Your agent is now a production API. Each session runs in its own [Firecracker microVM](https://firecracker-microvm.github.io/) with:
+The same script you run with `python agent.py` on your laptop runs in production. Each session gets its own [Firecracker microVM](https://firecracker-microvm.github.io/) with:
 
 - **Hardware-level isolation** — separate kernel, filesystem, and network per session. Agents can execute code and use tools without risk of cross-session data leaks.
-- **Durable workspace** — the agent's `/workspace` filesystem persists across turns and restarts. Resume a conversation days later and every file is exactly where the agent left it. State is the default, not an add-on.
+- **Durable workspace** — the agent's `/workspace` filesystem persists across turns and restarts. Resume a conversation days later and every file is exactly where the agent left it.
 - **Session management** — multi-turn conversation state handled by the platform. No database, no serialization logic, no routing code.
 - **Real-time streaming** — responses stream back via SSE as the agent works.
 - **~400ms cold starts** — pre-built sandbox templates with your dependencies baked in.
-
-The same script that runs with `python agent.py` on your laptop runs in the cloud.
 
 ```bash
 $ superserve run my-agent "Review the error handling in src/auth.ts — are we leaking stack traces?"
@@ -57,24 +46,25 @@ Completed in 3.8s
 Superserve runs your code as-is. No SDK lock-in, no framework requirements.
 
 <CardGroup cols={3}>
-  <Card title="Claude Agent SDK">
-    ```bash
-    superserve deploy agent.py
-    ```
+  <Card title="Claude Agent SDK" href="/frameworks/claude-agent-sdk">
+    Multi-turn agents with tool use and conversation memory
   </Card>
-  <Card title="OpenAI Agents SDK">
-    ```bash
-    superserve deploy agent.py
-    ```
+  <Card title="OpenAI Agents SDK" href="/frameworks/openai-agents-sdk">
+    OpenAI's agent framework with handoffs and guardrails
   </Card>
-  <Card title="Your own HTTP server">
-    ```bash
-    superserve deploy server.py --port 8000
-    ```
+  <Card title="Pydantic AI" href="/frameworks/pydantic-ai">
+    Type-safe agents with structured outputs
+  </Card>
+  <Card title="Mastra" href="/frameworks/mastra">
+    TypeScript-first agent framework
+  </Card>
+  <Card title="LangChain" href="/frameworks/langchain">
+    Chains, agents, and retrieval pipelines
+  </Card>
+  <Card title="Agno" href="/frameworks/agno">
+    Lightweight Python agent framework
   </Card>
 </CardGroup>
-
-Same command. Same infrastructure. Same streaming, sessions, and secrets.
 
 ---
 

@@ -1,0 +1,39 @@
+---
+title: "Claude Agent SDK"
+description: "Deploy a Claude agent to Superserve"
+icon: /images/claude-agent-sdk.svg
+---
+
+```python agent.py
+import asyncio
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, TextBlock
+
+options = ClaudeAgentOptions(
+    model="sonnet",
+    system_prompt="You are a helpful assistant.",
+    permission_mode="bypassPermissions",
+)
+
+async def main():
+    async with ClaudeSDKClient(options=options) as client:
+        while True:
+            user_input = input()
+            await client.query(prompt=user_input, session_id="chat")
+            async for msg in client.receive_response():
+                for block in getattr(msg, "content", []):
+                    if isinstance(block, TextBlock):
+                        print(block.text)
+
+asyncio.run(main())
+```
+
+```txt requirements.txt
+claude-agent-sdk
+```
+
+```bash
+superserve deploy agent.py
+superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-...
+```
+
+The Claude Agent SDK gives you tool use, conversation memory via `session_id`, and streaming out of the box. Combined with Superserve's durable workspace, the agent retains full context across turns and restarts.

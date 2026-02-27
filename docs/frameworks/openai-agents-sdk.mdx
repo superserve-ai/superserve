@@ -1,0 +1,28 @@
+---
+title: "OpenAI Agents SDK"
+description: "Deploy an OpenAI agent to Superserve"
+icon: /images/openai.svg
+---
+
+```python agent.py
+from agents import Agent, Runner
+
+agent = Agent(
+    name="assistant",
+    instructions="You are a helpful assistant.",
+)
+
+while True:
+    user_input = input()
+    result = Runner.run_sync(agent, user_input)
+    print(result.final_output)
+```
+
+```txt requirements.txt
+openai-agents
+```
+
+```bash
+superserve deploy agent.py
+superserve secrets set my-agent OPENAI_API_KEY=sk-...
+```

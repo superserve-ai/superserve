@@ -4,17 +4,17 @@ description: "Deploy an agent in 2 minutes"
 ---
 
 <Info>
-  **You need:** Python 3.12+ and a [Superserve account](https://console.superserve.ai).
+  **You need:** A [Superserve account](https://console.superserve.ai).
 </Info>
 
-## 1. Install
+## Install and log in
 
 ```bash
-pip install superserve
+curl -fsSL https://raw.githubusercontent.com/superserve-ai/superserve/main/cli/install.sh | sh
 superserve login
 ```
 
-## 2. Write an agent (or use one you already have)
+## Write an agent (or use one you already have)
 
 Any script that uses `input()` and `print()` works. Here's one with the Claude Agent SDK:
 
@@ -43,7 +43,7 @@ asyncio.run(main())
 
 This is the same script you'd run locally with `python agent.py`. Nothing has been added to make it deployable.
 
-## 3. Deploy
+## Deploy
 
 ```bash
 superserve deploy agent.py
@@ -59,7 +59,7 @@ Deployed 'my-project' in 15s
 
 Dependencies are detected from `requirements.txt` or `pyproject.toml` automatically.
 
-## 4. Set your API keys
+## Set your API keys
 
 ```bash
 superserve secrets set my-project ANTHROPIC_API_KEY=sk-ant-...
@@ -67,7 +67,7 @@ superserve secrets set my-project ANTHROPIC_API_KEY=sk-ant-...
 
 Secrets are encrypted at rest and injected as environment variables when your agent runs.
 
-## 5. Run it
+## Run it
 
 ```bash
 superserve run my-project
@@ -101,18 +101,6 @@ The agent remembers context between turns. The sandbox persists files across the
 
 ---
 
-## What just happened
-
-1. Superserve packaged your code into a tarball
-2. Built a sandbox image with your dependencies pre-installed
-3. When you ran the agent, it spun up an isolated microVM (~400ms)
-4. Injected a [shim](/zero-config) that translates `input()`/`print()` into the streaming protocol
-5. Streamed the response back to your terminal in real-time via SSE
-
-The same script that works with `python agent.py` on your laptop is now a cloud API. No wrapping, no porting.
-
----
-
 ## Next
 
 <CardGroup cols={2}>
@@ -120,7 +108,7 @@ The same script that works with `python agent.py` on your laptop is now a cloud 
     Resume conversations, manage session lifecycle
   </Card>
   <Card title="Zero-Config Deploy" icon="wand-magic-sparkles" href="/zero-config">
-    Multi-turn vs one-shot detection, HTTP mode, how the shim works
+    Deploy scripts without config files or code changes
   </Card>
   <Card title="SDK" icon="code" href="/sdk">
     Build apps on top of your agents — TypeScript client and React hooks

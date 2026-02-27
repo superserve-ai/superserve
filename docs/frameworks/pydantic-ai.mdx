@@ -1,0 +1,25 @@
+---
+title: "Pydantic AI"
+description: "Deploy a Pydantic AI agent to Superserve"
+icon: /images/pydantic.svg
+---
+
+```python agent.py
+from pydantic_ai import Agent
+
+agent = Agent("openai:gpt-4o", system_prompt="You are a helpful assistant.")
+
+while True:
+    user_input = input()
+    result = agent.run_sync(user_input)
+    print(result.output)
+```
+
+```txt requirements.txt
+pydantic-ai
+```
+
+```bash
+superserve deploy agent.py
+superserve secrets set my-agent OPENAI_API_KEY=sk-...
+```

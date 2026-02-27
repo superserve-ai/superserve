@@ -4,7 +4,7 @@ description: "All commands and flags"
 ---
 
 ```bash
-pip install superserve
+curl -fsSL https://raw.githubusercontent.com/superserve-ai/superserve/main/cli/install.sh | sh
 ```
 
 ---
@@ -26,25 +26,18 @@ superserve logout
 superserve deploy [ENTRYPOINT] [--name NAME] [--port PORT] [--dir PATH] [--json]
 ```
 
-**Zero-config** — provide an entrypoint, no config file needed:
-
 ```bash
 superserve deploy agent.py
 superserve deploy agent.py --name code-reviewer
 superserve deploy server.py --port 8000
-```
-
-**Config mode** — reads `superserve.yaml`:
-
-```bash
-superserve deploy
+superserve deploy              # reads superserve.yaml
 ```
 
 | Flag | Description |
 |------|-------------|
-| `ENTRYPOINT` | Script to run. Enables zero-config mode. |
-| `--name` | Agent name (default: directory name) |
-| `--port` | HTTP proxy mode — forward to this port |
+| `ENTRYPOINT` | Script to run (e.g. `agent.py`, `src/main.ts`). Without this, reads `superserve.yaml`. |
+| `--name`, `-n` | Agent name (default: directory name) |
+| `--port`, `-p` | HTTP proxy mode — forward to this port |
 | `--dir` | Project directory (default: `.`) |
 | `--json` | Output as JSON |
 

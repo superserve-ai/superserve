@@ -1,0 +1,26 @@
+---
+title: "Agno"
+description: "Deploy an Agno agent to Superserve"
+icon: /images/agno.svg
+---
+
+```python agent.py
+from agno.agent import Agent
+from agno.models.openai import OpenAIChat
+
+agent = Agent(model=OpenAIChat(id="gpt-4o"))
+
+while True:
+    user_input = input()
+    response = agent.run(user_input)
+    print(response.content)
+```
+
+```txt requirements.txt
+agno
+```
+
+```bash
+superserve deploy agent.py
+superserve secrets set my-agent OPENAI_API_KEY=sk-...
+```

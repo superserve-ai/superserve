@@ -1,111 +1,32 @@
 ---
 title: "Zero-Config Deploy"
-description: "How superserve deploy works without config files or code changes"
+description: "Deploy scripts to Superserve without config files or code changes"
 ---
 
 ```bash
 superserve deploy agent.py
 ```
 
-Superserve deploys the same script you run locally — no Dockerfile, no server code, no infrastructure config. This page explains what happens under the hood.
+Your script runs as-is in the cloud — no Dockerfile, no server code, no config files. Superserve packages your project, detects dependencies from `requirements.txt` or `pyproject.toml`, and runs your entrypoint inside an isolated sandbox.
 
----
+## Stdio mode (default)
 
-## The shim
+Scripts that use `input()` and `print()` get multi-turn conversation support automatically. Each `input()` call receives the next user message; each `print()` streams the response back.
 
-When you deploy without `--port`, Superserve wraps your script with a lightweight shim that translates between the platform's streaming protocol and Python's `input()`/`print()`.
-
+```bash
+superserve deploy agent.py
 ```
-Superserve API ──► Sandbox ──► Shim ──► Your Script
-                                 │
-                      input() ◄──┘──► print()
-                      (receives       (streams back
-                       messages)       as SSE)
-```
-
-Your script never knows the shim exists. It calls `input()`, gets a string. It calls `print()`, the text streams to the user. Everything else — session management, sandbox lifecycle, streaming — is handled by the platform.
-
----
-
-## Detection: multi-turn vs one-shot
-
-The shim detects which pattern your script uses automatically.
-
-**Multi-turn** — your script calls `input()` in a loop:
-
-```python agent.py
-while True:
-    message = input()          # ← shim intercepts this
-    response = do_something(message)
-    print(response)            # ← shim intercepts this
-```
-
-The process stays alive between turns. Each `input()` blocks until the next user message arrives. State, variables, open connections — everything persists across the conversation.
-
-**One-shot** — your script never calls `input()`:
-
-```python summarize.py
-import os
-from anthropic import Anthropic
-
-prompt = os.environ["SUPERSERVE_PROMPT"]   # ← set by Superserve
-client = Anthropic()
-response = client.messages.create(
-    model="claude-sonnet-4-20250514",
-    max_tokens=1024,
-    messages=[{"role": "user", "content": prompt}],
-)
-print(response.content[0].text)
-```
-
-A fresh process runs for each request. The user's message is passed via the `SUPERSERVE_PROMPT` environment variable. When the process exits with code 0, the turn is complete.
-
----
 
 ## HTTP server mode
 
-If your agent already runs its own HTTP server, skip the shim entirely:
+If your agent runs its own HTTP server, pass `--port` and Superserve proxies requests to it:
 
 ```bash
 superserve deploy server.py --port 8000
 ```
 
-Superserve starts your server inside the sandbox and proxies requests to `localhost:8000/run`. You handle routing, the platform handles infrastructure.
-
-Use this when your agent needs custom endpoints, WebSocket connections, or serves a frontend alongside the API.
+Superserve forwards to `localhost:PORT/run` inside the sandbox. Use this for custom endpoints, WebSocket connections, or when your agent serves a frontend alongside the API.
 
 ---
 
-## CLI flags
-
-```bash
-superserve deploy ENTRYPOINT [--name NAME] [--port PORT] [--dir PATH]
-```
-
-| Flag | What it does |
-|------|-------------|
-| `ENTRYPOINT` | Script to run — `agent.py`, `src/main.ts`, etc. |
-| `--name` | Agent name. Defaults to directory name. |
-| `--port` | HTTP mode — proxy to this port instead of using the shim. |
-| `--dir` | Project root. Default: `.` |
-
-File types: `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`
-
----
-
-## Dependencies
-
-Detected and installed automatically:
-
-| File | What runs |
-|------|-----------|
-| `requirements.txt` | `uv pip install -r requirements.txt` |
-| `pyproject.toml` | `uv pip install -e .` |
-
-If both exist, `requirements.txt` wins.
-
----
-
-## Advanced: SDK integration
-
-Zero-config handles most use cases. If you later need fine-grained streaming control — progress indicators, structured metadata, explicit response framing — Superserve also has a [Python SDK](/quickstart#advanced-sdk-integration) that gives you lower-level access to the streaming protocol.
+See the [CLI reference](/cli#superserve-deploy) for the full list of flags.
