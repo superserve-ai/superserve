@@ -2,6 +2,7 @@
 
 import io
 import json
+import shlex
 import sys
 import tarfile
 import tempfile
@@ -71,16 +72,11 @@ def _make_tarball(project_dir: Path, user_ignores: set[str] | None = None) -> by
     return buf.getvalue()
 
 
-def _load_config(project_dir: Path) -> dict:
-    """Load and validate superserve.yaml."""
+def _load_config(project_dir: Path) -> dict | None:
+    """Load and validate superserve.yaml. Returns None if the file does not exist."""
     config_path = project_dir / SUPERSERVE_YAML
     if not config_path.exists():
-        click.echo(
-            f"Error: {SUPERSERVE_YAML} not found in current directory.\n"
-            "Run 'superserve init' to create one.",
-            err=True,
-        )
-        sys.exit(1)
+        return None
 
     try:
         with open(config_path) as f:
@@ -107,6 +103,22 @@ def _load_config(project_dir: Path) -> dict:
     return config
 
 
+def _detect_command(entrypoint: str) -> str:
+    """Auto-detect the run command from the entrypoint file extension."""
+    ext = Path(entrypoint).suffix
+    quoted = shlex.quote(entrypoint)
+    commands = {
+        ".py": f"python {quoted}",
+        ".ts": f"npx tsx {quoted}",
+        ".tsx": f"npx tsx {quoted}",
+        ".js": f"node {quoted}",
+        ".jsx": f"node {quoted}",
+        ".mjs": f"node {quoted}",
+        ".cjs": f"node {quoted}",
+    }
+    return commands.get(ext, f"python {quoted}")
+
+
 def _format_size(size_bytes: int) -> str:
     """Format byte count as human-readable size."""
     if size_bytes >= 100 * 1024:
@@ -122,6 +134,7 @@ def _write_temp_tarball(tarball_bytes: bytes) -> str:
 
 
 @click.command("deploy")
+@click.argument("entrypoint", required=False, default=None)
 @click.option(
     "--dir",
     "project_dir",
@@ -129,24 +142,67 @@ def _write_temp_tarball(tarball_bytes: bytes) -> str:
     type=click.Path(exists=True, file_okay=False, resolve_path=True),
     help="Project directory (default: current directory)",
 )
+@click.option(
+    "--name",
+    "-n",
+    "agent_name",
+    default=None,
+    help="Agent name (defaults to directory name)",
+)
+@click.option("--port", "-p", default=None, type=int, help="Port for HTTP server mode")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def deploy(project_dir: str, as_json: bool):
+def deploy(
+    entrypoint: str | None,
+    project_dir: str,
+    agent_name: str | None,
+    port: int | None,
+    as_json: bool,
+):
     """Deploy an agent to Superserve.
 
-    Reads superserve.yaml from the project directory, packages the code,
-    and deploys it. If the agent already exists, it is updated.
+    Optionally pass an ENTRYPOINT file to deploy without superserve.yaml.
 
     \b
     Example:
+        superserve deploy agent.py
+        superserve deploy agent.py --name research-agent
+        superserve deploy server.py --port 8000
         superserve deploy
         superserve deploy --dir ./my-agent
     """
     project_path = Path(project_dir)
-    config = _load_config(project_path)
 
-    name = config["name"]
-    command = config["command"]
-    user_ignores = set(config.get("ignore") or [])
+    if entrypoint is not None:
+        # Zero-config deploy: entrypoint provided as positional arg
+        entrypoint_path = project_path / entrypoint
+        if not entrypoint_path.exists():
+            click.echo(
+                f"Error: Entrypoint file '{entrypoint}' not found in {project_path}.",
+                err=True,
+            )
+            sys.exit(1)
+
+        name = agent_name or project_path.name
+        command = _detect_command(entrypoint)
+        mode = "http" if port else "shim"
+        config: dict = {"entrypoint": entrypoint, "mode": mode}
+        if port:
+            config["port"] = port
+        user_ignores: set[str] | None = None
+    else:
+        # Existing flow: load superserve.yaml
+        loaded_config = _load_config(project_path)
+        if loaded_config is None:
+            click.echo(
+                "Usage: superserve deploy <entrypoint> or create a superserve.yaml",
+                err=True,
+            )
+            sys.exit(1)
+
+        name = loaded_config["name"]
+        command = loaded_config["command"]
+        config = loaded_config
+        user_ignores = set(loaded_config.get("ignore") or [])
 
     if as_json:
         tarball_bytes = _make_tarball(project_path, user_ignores)
