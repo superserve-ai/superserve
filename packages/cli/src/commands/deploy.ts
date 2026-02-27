@@ -32,9 +32,39 @@ const EXTENSION_COMMANDS: Record<string, string> = {
   ".cjs": "node",
 }
 
-function detectCommand(entrypoint: string): string {
+const BUN_EXTENSION_COMMANDS: Record<string, string> = {
+  ".py": "python",
+  ".ts": "bun run",
+  ".tsx": "bun run",
+  ".js": "bun run",
+  ".jsx": "bun run",
+  ".mjs": "bun run",
+  ".cjs": "bun run",
+}
+
+function detectPackageManager(
+  projectDir: string,
+): "bun" | "npm" | null {
+  if (
+    existsSync(join(projectDir, "bun.lock")) ||
+    existsSync(join(projectDir, "bun.lockb"))
+  ) {
+    return "bun"
+  }
+  if (existsSync(join(projectDir, "package.json"))) {
+    return "npm"
+  }
+  return null
+}
+
+function detectCommand(
+  entrypoint: string,
+  packageManager?: "bun" | "npm" | null,
+): string {
   const ext = extname(entrypoint)
-  const runtime = EXTENSION_COMMANDS[ext] ?? "python"
+  const commands =
+    packageManager === "bun" ? BUN_EXTENSION_COMMANDS : EXTENSION_COMMANDS
+  const runtime = commands[ext] ?? "python"
   return `${runtime} ${entrypoint}`
 }
 
@@ -76,7 +106,8 @@ export const deploy = new Command("deploy")
           }
 
           name = options.name ?? basename(projectDir)
-          command = detectCommand(entrypoint)
+          const pkgMgr = detectPackageManager(projectDir)
+          command = detectCommand(entrypoint, pkgMgr)
           const mode = options.port ? "http" : "shim"
           config = { name, command, entrypoint, mode }
           if (options.port) {
