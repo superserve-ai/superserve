@@ -84,12 +84,18 @@ export const deploy = new Command("deploy")
           }
           userIgnores = undefined
         } else {
-          // Config mode: load superserve.yaml
-          const loaded = loadProjectConfig(options.dir)
-          name = loaded.name
-          command = loaded.command
-          config = loaded as Record<string, unknown>
-          userIgnores = new Set(loaded.ignore ?? [])
+          // Config mode: try to load superserve.yaml
+          try {
+            const loaded = loadProjectConfig(options.dir)
+            name = loaded.name
+            command = loaded.command
+            config = loaded as Record<string, unknown>
+            userIgnores = new Set(loaded.ignore ?? [])
+          } catch {
+            throw new Error(
+              "Usage: superserve deploy <entrypoint> or create a superserve.yaml",
+            )
+          }
         }
 
         // Check if agent already exists and confirm overwrite
