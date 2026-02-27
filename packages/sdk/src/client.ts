@@ -14,7 +14,7 @@ import type {
 
 const DEFAULT_BASE_URL = "https://api.superserve.ai"
 const DEFAULT_TIMEOUT = 30_000
-const DEFAULT_IDLE_TIMEOUT = 30 * 24 * 60 * 60 // 30 days in seconds
+const DEFAULT_IDLE_TIMEOUT = 29 * 60 // 29 minutes
 
 /**
  * The Superserve client for interacting with deployed agents.
