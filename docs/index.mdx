@@ -7,9 +7,15 @@ description: "Agent sandboxes with sessions, streaming, and zero-config deploys"
 
 You built an agent that works on your laptop. Now you need other people to use it.
 
-With existing tools, that means: write a server, handle streaming, manage sessions, persist state between turns, set up sandboxed execution so the agent can safely run code, build a deploy pipeline, wire up secrets management. Weeks of infrastructure work before anyone can send your agent a message.
+Scaffolding a server is easy — any coding agent can generate a FastAPI wrapper in 30 seconds. The hard part is everything that breaks in production:
 
-Sandbox platforms like E2B and Modal give you isolated compute — but you still build the API layer, session management, streaming, and deploy pipeline yourself. You're assembling infrastructure, not shipping an agent.
+- **Isolation** — your agent executes arbitrary code, writes files, spawns processes. One user's session must never see another's data. Getting this wrong is a security incident, not a bug.
+- **Stateful sessions** — a conversation is multi-turn. The agent needs to keep files, variables, and context between messages — and resume correctly days later, even after the underlying process restarts. Race conditions, stale state, and session leaks are hard to test and harder to debug.
+- **Streaming under real conditions** — SSE that works on localhost breaks when clients disconnect mid-stream, back-pressure builds up, or the agent takes 3 minutes on a tool call. Handling timeouts, heartbeats, and reconnection correctly takes iteration.
+- **Secrets at rest** — not env vars baked into a Docker image. Actually encrypted, actually scoped per agent, actually never logged or returned by the API.
+- **Cold starts** — a 10-second sandbox boot kills the conversational UX. You need sub-second starts, which means pre-built images, not on-demand builds.
+
+Sandbox platforms like E2B and Modal give you isolated compute. But you still build the session layer, the streaming layer, the deploy pipeline, and the API yourself — and you own every production edge case above.
 
 ## The fix
 
@@ -18,16 +24,16 @@ pip install superserve
 superserve deploy agent.py
 ```
 
-That's it. Your agent is now a cloud API with:
+Your agent is now a production API. Each session runs in its own [Firecracker microVM](https://firecracker-microvm.github.io/) with:
 
-- **Isolated sandboxes** — each session runs in its own [Firecracker microVM](https://firecracker-microvm.github.io/). Agents can execute code, write files, use tools — nothing escapes the sandbox.
-- **Persistent workspace** — files survive across turns and restarts. Resume a conversation days later and the agent's workspace is exactly how it left it.
-- **Multi-turn sessions** — built-in conversation state. No session management code, no database, no glue.
-- **Real-time streaming** — responses stream back via SSE as they happen. No polling, no WebSocket plumbing.
-- **Encrypted secrets** — API keys encrypted at rest, injected at runtime, never logged.
-- **Sub-second cold starts** — pre-built sandbox templates start in ~400ms.
+- **Hardware-level isolation** — separate kernel, filesystem, and network per session. Agents can execute code and use tools without risk of cross-session data leaks.
+- **Durable workspace** — the agent's filesystem persists across turns and restarts. Resume a conversation days later and every file is exactly where the agent left it.
+- **Session management** — multi-turn conversation state handled by the platform. No database, no serialization, no race conditions to debug.
+- **Production streaming** — SSE with heartbeats, backpressure handling, and graceful disconnect recovery. Works for responses that take seconds or minutes.
+- **Secrets encrypted at rest** — scoped per agent, injected at runtime, never in images or logs.
+- **~400ms cold starts** — pre-built sandbox templates with dependencies baked in. Fast enough for conversational UX.
 
-The same script that runs with `python agent.py` on your machine runs in the cloud. No Dockerfile, no server code, no infrastructure config.
+The same script that runs with `python agent.py` on your laptop runs in the cloud — the production concerns above are handled for you.
 
 ```bash
 $ superserve run my-agent "Review the error handling in src/auth.ts — are we leaking stack traces?"
