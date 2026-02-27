@@ -8,6 +8,8 @@
     "lint": "bunx biome check ."
   },
   "dependencies": {
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.98.0",
     "@superserve/sdk": "workspace:*",
     "@superserve/ui": "workspace:*",
     "@tailwindcss/vite": "^4.2.1",

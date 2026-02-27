@@ -3,9 +3,9 @@ import { Superserve } from "@superserve/sdk"
 import { Button, Card, Skeleton } from "@superserve/ui"
 import type { Agent } from "../types"
 import { relativeTime } from "../utils"
+import { useAuth } from "../lib/auth-context"
 
 interface AgentsPageProps {
-  apiKey: string
   navigate: (to: string) => void
 }
 
@@ -13,19 +13,18 @@ type LoadingState = "loading" | "error" | "empty" | "loaded"
 
 const BASE_URL = "/api"
 
-export default function AgentsPage({
-  apiKey,
-  navigate,
-}: AgentsPageProps) {
+export default function AgentsPage({ navigate }: AgentsPageProps) {
+  const { accessToken, signOut } = useAuth()
   const [agents, setAgents] = useState<Agent[]>([])
   const [state, setState] = useState<LoadingState>("loading")
   const [errorMessage, setErrorMessage] = useState("")
 
   const fetchAgents = useCallback(async () => {
+    if (!accessToken) return
     setState("loading")
     setErrorMessage("")
     try {
-      const client = new Superserve({ apiKey, baseUrl: BASE_URL })
+      const client = new Superserve({ apiKey: accessToken, baseUrl: BASE_URL })
       const result = await client.agents.list()
       if (result.length === 0) {
         setState("empty")
@@ -34,12 +33,21 @@ export default function AgentsPage({
         setState("loaded")
       }
     } catch (err) {
-      setErrorMessage(
-        err instanceof Error ? err.message : "Failed to load agents",
-      )
+      const message =
+        err instanceof Error ? err.message : "Failed to load agents"
+      if (
+        message.includes("invalid") ||
+        message.includes("expired") ||
+        message.includes("unauthorized") ||
+        message.includes("401")
+      ) {
+        await signOut()
+        return
+      }
+      setErrorMessage(message)
       setState("error")
     }
-  }, [apiKey])
+  }, [accessToken, signOut])
 
   useEffect(() => {
     fetchAgents()

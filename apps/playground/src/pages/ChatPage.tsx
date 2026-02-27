@@ -4,26 +4,40 @@ import { Badge } from "@superserve/ui"
 import { useSuperserveChat } from "../hooks/useSuperserveChat"
 import Sidebar from "../components/Sidebar"
 import ChatArea from "../components/ChatArea"
+import { useAuth } from "../lib/auth-context"
 
 const BASE_URL = "/api"
 
 interface ChatPageProps {
   agentId: string
-  apiKey: string
   onBack: () => void
 }
 
-export default function ChatPage({ agentId, apiKey, onBack }: ChatPageProps) {
+export default function ChatPage({ agentId, onBack }: ChatPageProps) {
+  const { accessToken, signOut } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [agentName, setAgentName] = useState<string | null>(null)
 
   useEffect(() => {
-    const client = new Superserve({ apiKey, baseUrl: BASE_URL })
+    if (!accessToken) return
+    const client = new Superserve({ apiKey: accessToken, baseUrl: BASE_URL })
     client.agents.get(agentId).then(
       (agent) => setAgentName(agent.name),
-      () => setAgentName(null),
+      (err) => {
+        const msg = err instanceof Error ? err.message : ""
+        if (
+          msg.includes("invalid") ||
+          msg.includes("expired") ||
+          msg.includes("unauthorized") ||
+          msg.includes("401")
+        ) {
+          signOut()
+          return
+        }
+        setAgentName(null)
+      },
     )
-  }, [agentId, apiKey])
+  }, [agentId, accessToken, signOut])
 
   const {
     sessions,
@@ -38,7 +52,7 @@ export default function ChatPage({ agentId, apiKey, onBack }: ChatPageProps) {
   } = useSuperserveChat({
     agentId,
     agentName: agentName ?? agentId,
-    apiKey,
+    accessToken: accessToken!,
     baseUrl: BASE_URL,
   })
 
