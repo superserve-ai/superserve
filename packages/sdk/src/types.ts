@@ -3,7 +3,7 @@
 export interface SuperserveOptions {
   /** API key for authentication. This is the same token you get from `superserve login`. */
   apiKey: string
-  /** Base URL for the Superserve API. Defaults to https://api-staging.superserve.ai */
+  /** Base URL for the Superserve API. Defaults to https://api.superserve.ai */
   baseUrl?: string
   /** Request timeout in milliseconds. Defaults to 30000. */
   timeout?: number
