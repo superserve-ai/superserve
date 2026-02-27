@@ -104,13 +104,13 @@ export const deploy = new Command("deploy")
           } catch {}
         }
 
-        // Dependencies
-        if (agent.deps_status === "installing") {
+        // Wait for dependency installation (sandbox template build)
+        if (agent.sandbox_status === "building") {
           status.start("Installing dependencies...")
           const pollInterval = 3000
           const maxWait = 300_000
           let elapsed = 0
-          const depsStart = performance.now()
+          const buildStart = performance.now()
 
           while (elapsed < maxWait) {
             await Bun.sleep(pollInterval)
@@ -118,18 +118,18 @@ export const deploy = new Command("deploy")
 
             agent = await client.getAgent(name)
 
-            if (agent.deps_status === "ready") {
+            if (agent.sandbox_status === "ready") {
               status.done(
                 "\u2713",
-                `(${formatElapsed((performance.now() - depsStart) / 1000)})`,
+                `(${formatElapsed((performance.now() - buildStart) / 1000)})`,
               )
               break
             }
-            if (agent.deps_status === "failed") {
+            if (agent.sandbox_status === "failed") {
               status.fail()
-              await track("cli_deploy_deps_failed", { agent_name: name })
+              await track("cli_deploy_build_failed", { agent_name: name })
               console.error()
-              console.error("Agent created but dependencies failed to install.")
+              console.error("Agent created but dependency install failed.")
               console.error("Fix your requirements and run:")
               console.error(commandBox("superserve deploy"))
               process.exitCode = 1
@@ -137,9 +137,9 @@ export const deploy = new Command("deploy")
             }
           }
 
-          if (agent.deps_status === "installing") {
+          if (agent.sandbox_status === "building") {
             status.fail("(timed out)")
-            await track("cli_deploy_deps_timeout", { agent_name: name })
+            await track("cli_deploy_build_timeout", { agent_name: name })
             console.error(
               "\nDependency install is still running. Check status with:",
             )

@@ -375,7 +375,7 @@ export function createClient(
   async function createSession(
     agentNameOrId: string,
     title?: string,
-    idleTimeoutSeconds = 30 * 24 * 60 * 60, // 30 days
+    idleTimeoutSeconds = 29 * 60, // 29 minutes
   ): Promise<SessionData> {
     const agentId = await resolveAgentId(agentNameOrId)
     const resp = await request("POST", "/sessions", {

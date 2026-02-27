@@ -58,19 +58,16 @@ export const run = new Command("run")
           // Let session creation handle auth/404 errors
         }
         if (agentInfo) {
-          // Check deployment status before proceeding
-          if (agentInfo.deps_status === "installing") {
-            log.error("Agent is still deploying. Please wait and try again.")
+          if (agentInfo.sandbox_status === "building") {
+            log.error("Dependencies are still installing. Please wait and try again.")
+            console.error("Check status with:")
+            console.error(commandBox(`superserve agents get ${sanitizeTerminalOutput(agent)}`))
             process.exitCode = 1
             return
           }
-          if (agentInfo.deps_status === "failed") {
-            log.error(
-              "Agent deployment failed. Run 'superserve deploy' to retry.",
-            )
-            if (agentInfo.deps_error) {
-              console.error(`  ${sanitizeTerminalOutput(agentInfo.deps_error)}`)
-            }
+          if (agentInfo.sandbox_status === "failed") {
+            log.error("Dependency install failed. Redeploy to try again.")
+            console.error(commandBox("superserve deploy"))
             process.exitCode = 1
             return
           }
