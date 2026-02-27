@@ -5,7 +5,7 @@ import { useSuperserveChat } from "../hooks/useSuperserveChat"
 import Sidebar from "../components/Sidebar"
 import ChatArea from "../components/ChatArea"
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined
+const BASE_URL = "/api"
 
 interface ChatPageProps {
   agentId: string
@@ -68,7 +68,7 @@ export default function ChatPage({ agentId, apiKey, onBack }: ChatPageProps) {
   return (
     <div className="flex h-full flex-col text-sm text-foreground">
       {/* Header */}
-      <header className="border-b border-border bg-surface">
+      <header className="border-b border-dashed border-border bg-background">
         <div className="flex h-14 items-center justify-between px-5 md:px-8">
           <div className="flex items-center gap-3">
             <button

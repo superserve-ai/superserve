@@ -11,7 +11,7 @@ interface AgentsPageProps {
 
 type LoadingState = "loading" | "error" | "empty" | "loaded"
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined
+const BASE_URL = "/api"
 
 export default function AgentsPage({
   apiKey,
@@ -47,7 +47,7 @@ export default function AgentsPage({
 
   return (
     <div className="flex h-full flex-col bg-background text-sm text-foreground">
-      <header className="border-b border-border bg-surface">
+      <header className="border-b border-dashed border-border bg-background">
         <div className="flex h-14 items-center px-5 md:px-8">
           <div className="flex items-center gap-1.5 text-[13px]">
             <span className="text-muted">Superserve</span>
@@ -66,7 +66,7 @@ export default function AgentsPage({
 
           <div className="mt-8">
             {state === "loading" && (
-              <Card className="divide-y divide-border">
+              <Card className="divide-y divide-dashed divide-border">
                 {[0, 1, 2].map((i) => (
                   <div key={i} className="px-5 py-4">
                     <Skeleton className="h-4 w-32" />
@@ -135,7 +135,7 @@ export default function AgentsPage({
             )}
 
             {state === "loaded" && (
-              <Card className="divide-y divide-border">
+              <Card className="divide-y divide-dashed divide-border">
                 {agents.map((agent) => (
                   <button
                     key={agent.id}

@@ -25,7 +25,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
           className={`wrap-break-word px-3.5 py-2.5 leading-relaxed ${
             isUser
               ? "bg-primary text-surface"
-              : "border border-border bg-surface text-foreground"
+              : "border border-dashed border-border bg-surface text-foreground"
           }`}
         >
           {isEmpty ? (
@@ -42,7 +42,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
             message.content
           )}
           {message.toolCalls && message.toolCalls.length > 0 && (
-            <div className="mt-2 flex flex-col gap-0.5 border-t border-border/50 pt-2">
+            <div className="mt-2 flex flex-col gap-0.5 border-t border-dashed border-border/50 pt-2">
               {message.toolCalls.map((tc, i) => (
                 <div
                   key={i}
