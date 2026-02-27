@@ -17,28 +17,43 @@ const DEFAULT_TIMEOUT = 30_000
 const DEFAULT_IDLE_TIMEOUT = 29 * 60 // 29 minutes
 
 /**
- * The Superserve client for interacting with deployed agents.
+ * The main Superserve client for interacting with deployed AI agents.
  *
+ * This client provides methods to send messages to agents and manage sessions.
+ * It handles authentication, streaming, and error recovery automatically.
+ *
+ * @class
  * @example
- * ```ts
- * import Superserve from 'superserve'
+ * ```typescript
+ * import Superserve from '@superserve/sdk'
  *
- * const client = new Superserve({ apiKey: 'your-token-from-cli' })
+ * const client = new Superserve({
+ *   apiKey: 'your-api-key-from-cli'
+ * })
  *
- * // One-shot
+ * // One-shot request
  * const result = await client.run('my-agent', {
- *   message: 'Hello!'
+ *   message: 'What is 2 + 2?'
  * })
- * console.log(result.text)
+ * console.log(result.text) // "4"
  *
- * // Streaming
+ * // Streaming response
  * const stream = client.stream('my-agent', {
- *   message: 'Write a report...'
+ *   message: 'Write a short poem',
+ *   onText: (chunk) => process.stdout.write(chunk),
+ *   onFinish: () => console.log('\nDone!')
  * })
- * for await (const chunk of stream.textStream) {
- *   process.stdout.write(chunk)
- * }
+ * await stream.consume()
+ *
+ * // Multi-turn conversation
+ * const session = await client.createSession('my-agent')
+ * const response1 = await session.run('Hello!')
+ * const response2 = await session.run('Tell me more')
+ * await session.end()
  * ```
+ *
+ * @throws {APIError} When API returns an error
+ * @throws {SuperserveError} When network or other errors occur
  */
 export class Superserve {
   private readonly _apiKey: string
@@ -67,8 +82,29 @@ export class Superserve {
   }
 
   /**
-   * Send a message to an agent and wait for the full response.
-   * Creates a session, sends the message, collects the response, and ends the session.
+   * Send a message to an agent and wait for the complete response.
+   *
+   * This method creates a session, sends your message, waits for the agent to finish
+   * processing, collects the full response, and automatically closes the session.
+   * Use this for simple one-shot queries.
+   *
+   * @param {string} agent - The agent name or ID (e.g., 'my-agent' or 'agt_123')
+   * @param {RunOptions} options - Message and session options
+   * @param {string} options.message - The message to send to the agent
+   * @param {string} [options.sessionId] - Optional existing session ID (for resuming)
+   * @param {number} [options.idleTimeout] - Session idle timeout in seconds (default: 1740)
+   * @returns {Promise<RunResult>} The agent's response with text and metadata
+   *
+   * @example
+   * ```typescript
+   * const result = await client.run('my-agent', {
+   *   message: 'Calculate the sum of 5 + 3'
+   * })
+   * console.log(result.text)
+   * ```
+   *
+   * @throws {APIError} If agent not found or API error occurs
+   * @throws {SuperserveError} On network failure or timeout
    */
   async run(agent: string, options: RunOptions): Promise<RunResult> {
     if (options.sessionId) {
@@ -97,8 +133,40 @@ export class Superserve {
   }
 
   /**
-   * Send a message to an agent and get a streaming response.
-   * Creates a session and returns an AgentStream you can iterate over.
+   * Send a message to an agent and receive a streaming response.
+   *
+   * This method returns an AgentStream that you can iterate over to receive
+   * real-time updates as the agent processes your message. This is ideal for
+   * long-running operations where you want to display progress to the user.
+   *
+   * @param {string} agent - The agent name or ID (e.g., 'my-agent' or 'agt_123')
+   * @param {StreamOptions} options - Message and stream options
+   * @param {string} options.message - The message to send
+   * @param {(text: string) => void} [options.onText] - Called when text is streamed
+   * @param {(tool: ToolCall) => void} [options.onToolStart] - Called when tool execution starts
+   * @param {(result: unknown) => void} [options.onToolEnd] - Called when tool execution ends
+   * @param {() => void} [options.onFinish] - Called when streaming completes
+   * @param {(error: Error) => void} [options.onError] - Called on error
+   * @returns {AgentStream} Async iterable stream of events
+   *
+   * @example
+   * ```typescript
+   * const stream = client.stream('my-agent', {
+   *   message: 'Generate a story',
+   *   onText: (chunk) => {
+   *     process.stdout.write(chunk)
+   *   },
+   *   onFinish: () => {
+   *     console.log('\nStory complete!')
+   *   }
+   * })
+   *
+   * // Wait for streaming to complete
+   * await stream.consume()
+   * ```
+   *
+   * @throws {APIError} If agent not found or API error occurs
+   * @throws {SuperserveError} On network failure or timeout
    */
   stream(agent: string, options: StreamOptions): AgentStream {
     const { onText, onToolStart, onToolEnd, onFinish, onError, ...runOpts } =
@@ -137,7 +205,38 @@ export class Superserve {
   }
 
   /**
-   * Create a multi-turn session with an agent.
+   * Create a new multi-turn conversation session with an agent.
+   *
+   * Sessions allow you to have a back-and-forth conversation with an agent,
+   * maintaining context across multiple messages. The session persists on the
+   * server until you explicitly end it or it times out.
+   *
+   * @param {string} agent - The agent name or ID (e.g., 'my-agent' or 'agt_123')
+   * @param {SessionOptions} [options] - Session configuration
+   * @param {string} [options.title] - Optional title for the session
+   * @param {number} [options.idleTimeout] - Idle timeout in seconds (default: 1740 = 29 minutes)
+   * @returns {Promise<Session>} An active session ready for messages
+   *
+   * @example
+   * ```typescript
+   * const session = await client.createSession('my-agent', {
+   *   title: 'Customer Support Chat'
+   * })
+   *
+   * // First turn
+   * const response1 = await session.run('I need help with my account')
+   * console.log(response1.text)
+   *
+   * // Second turn (context preserved)
+   * const response2 = await session.run('My email is user@example.com')
+   * console.log(response2.text)
+   *
+   * // Always clean up when done
+   * await session.end()
+   * ```
+   *
+   * @throws {APIError} If agent not found or API error occurs
+   * @throws {SuperserveError} On network failure or timeout
    */
   async createSession(
     agent: string,
