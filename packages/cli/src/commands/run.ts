@@ -58,7 +58,7 @@ export const run = new Command("run")
           // Let session creation handle auth/404 errors
         }
         if (agentInfo) {
-          if (agentInfo.sandbox_status === "building") {
+          if (agentInfo.deps_status === "building") {
             log.error(
               "Dependencies are still installing. Please wait and try again.",
             )
@@ -71,7 +71,7 @@ export const run = new Command("run")
             process.exitCode = 1
             return
           }
-          if (agentInfo.sandbox_status === "failed") {
+          if (agentInfo.deps_status === "failed") {
             log.error("Dependency install failed. Redeploy to try again.")
             console.error(commandBox("superserve deploy"))
             process.exitCode = 1

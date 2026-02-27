@@ -44,7 +44,8 @@ export interface AgentResponse {
   command: string | null
   environment_keys: string[]
   required_secrets: string[]
-  sandbox_status: string
+  deps_status: string
+  deps_error: string | null
   created_at: string
   updated_at: string
 }

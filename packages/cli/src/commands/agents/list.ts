@@ -14,12 +14,12 @@ import { sanitizeTerminalOutput } from "../../utils/sanitize"
 import { createTable } from "../../utils/table"
 import { coloredStatus } from "./status"
 
-// Maps user-facing status labels to sandbox_status values
+// Maps user-facing status labels to deps_status values
 const STATUS_FILTER_MAP: Record<string, string[]> = {
   ready: ["none", "ready"],
   deploying: ["building"],
   failed: ["failed"],
-  // Also allow raw sandbox_status values
+  // Also allow raw deps_status values
   none: ["none"],
   building: ["building"],
 }
@@ -39,12 +39,12 @@ export const listAgents = new Command("list")
         const matchValues = STATUS_FILTER_MAP[filterKey]
         if (matchValues) {
           agentList = agentList.filter((a) =>
-            matchValues.includes(a.sandbox_status),
+            matchValues.includes(a.deps_status),
           )
         } else {
-          // Fall back to exact match on sandbox_status
+          // Fall back to exact match on deps_status
           agentList = agentList.filter(
-            (a) => a.sandbox_status.toLowerCase() === filterKey,
+            (a) => a.deps_status.toLowerCase() === filterKey,
           )
         }
       }
@@ -72,7 +72,7 @@ export const listAgents = new Command("list")
         table.push([
           sanitizeTerminalOutput(agent.name),
           dim(agent.id),
-          coloredStatus(agent.sandbox_status),
+          coloredStatus(agent.deps_status),
           dim(formatTimestamp(agent.created_at, true)),
           terminalLink(
             "Playground ↗",
