@@ -22,7 +22,7 @@ export function handleError(e: unknown): number {
   }
 
   if (e instanceof Error) {
-    log.error("An unexpected error occurred. Please try again.")
+    log.error(e.message)
     return 1
   }
 
