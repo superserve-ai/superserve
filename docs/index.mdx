@@ -7,15 +7,13 @@ description: "Agent sandboxes with sessions, streaming, and zero-config deploys"
 
 You built an agent that works on your laptop. Now you need other people to use it.
 
-Scaffolding a server is easy — any coding agent can generate a FastAPI wrapper in 30 seconds. The hard part is everything that breaks in production:
+Scaffolding a server is easy — any coding agent can generate a FastAPI wrapper in 30 seconds. The hard parts are production concerns that take weeks to harden, not minutes to scaffold:
 
 - **Isolation** — your agent executes arbitrary code, writes files, spawns processes. One user's session must never see another's data. Getting this wrong is a security incident, not a bug.
-- **Stateful sessions** — a conversation is multi-turn. The agent needs to keep files, variables, and context between messages — and resume correctly days later, even after the underlying process restarts. Race conditions, stale state, and session leaks are hard to test and harder to debug.
-- **Streaming under real conditions** — SSE that works on localhost breaks when clients disconnect mid-stream, back-pressure builds up, or the agent takes 3 minutes on a tool call. Handling timeouts, heartbeats, and reconnection correctly takes iteration.
-- **Secrets at rest** — not env vars baked into a Docker image. Actually encrypted, actually scoped per agent, actually never logged or returned by the API.
-- **Cold starts** — a 10-second sandbox boot kills the conversational UX. You need sub-second starts, which means pre-built images, not on-demand builds.
+- **State that persists** — a conversation is multi-turn. The agent creates files, builds up context, modifies its workspace. That state needs to survive across turns, across process restarts, and be there when a user comes back days later. Most sandbox platforms give you ephemeral compute — when the VM dies, everything is gone.
+- **Sessions without glue** — tracking which user is talking to which agent instance, routing messages to the right sandbox, handling concurrent conversations. Boring infrastructure that every agent deployment needs and nobody wants to build.
 
-Sandbox platforms like E2B and Modal give you isolated compute. But you still build the session layer, the streaming layer, the deploy pipeline, and the API yourself — and you own every production edge case above.
+Sandbox platforms like E2B and Modal give you isolated compute. But you still build the session layer, the streaming protocol, the deploy pipeline, and the state persistence yourself.
 
 ## The fix
 
@@ -27,13 +25,12 @@ superserve deploy agent.py
 Your agent is now a production API. Each session runs in its own [Firecracker microVM](https://firecracker-microvm.github.io/) with:
 
 - **Hardware-level isolation** — separate kernel, filesystem, and network per session. Agents can execute code and use tools without risk of cross-session data leaks.
-- **Durable workspace** — the agent's filesystem persists across turns and restarts. Resume a conversation days later and every file is exactly where the agent left it.
-- **Session management** — multi-turn conversation state handled by the platform. No database, no serialization, no race conditions to debug.
-- **Production streaming** — SSE with heartbeats, backpressure handling, and graceful disconnect recovery. Works for responses that take seconds or minutes.
-- **Secrets encrypted at rest** — scoped per agent, injected at runtime, never in images or logs.
-- **~400ms cold starts** — pre-built sandbox templates with dependencies baked in. Fast enough for conversational UX.
+- **Durable workspace** — the agent's `/workspace` filesystem persists across turns and restarts. Resume a conversation days later and every file is exactly where the agent left it. State is the default, not an add-on.
+- **Session management** — multi-turn conversation state handled by the platform. No database, no serialization logic, no routing code.
+- **Real-time streaming** — responses stream back via SSE as the agent works.
+- **~400ms cold starts** — pre-built sandbox templates with your dependencies baked in.
 
-The same script that runs with `python agent.py` on your laptop runs in the cloud — the production concerns above are handled for you.
+The same script that runs with `python agent.py` on your laptop runs in the cloud.
 
 ```bash
 $ superserve run my-agent "Review the error handling in src/auth.ts — are we leaking stack traces?"
@@ -78,6 +75,27 @@ Superserve runs your code as-is. No SDK lock-in, no framework requirements.
 </CardGroup>
 
 Same command. Same infrastructure. Same streaming, sessions, and secrets.
+
+---
+
+## Roadmap
+
+We're building the production layer for AI agents. Here's what's coming next — [tell us what matters most](mailto:founders@superserve.ai).
+
+<CardGroup cols={2}>
+  <Card title="Credential proxy" icon="shield-halved">
+    HTTP requests from inside the sandbox go through a proxy that injects API keys at the network level. The agent makes authenticated requests without ever seeing the credentials — they never appear in the LLM context, logs, or tool outputs. Configure once, use everywhere.
+  </Card>
+  <Card title="Agent observability" icon="chart-mixed">
+    Every tool call, file write, and HTTP request the agent makes — logged and queryable. Get a full execution timeline for each session, not just the chat transcript. Know exactly what your agent did and why.
+  </Card>
+  <Card title="Spend limits and circuit breakers" icon="brake-warning">
+    Set per-session and per-agent cost caps. If an agent enters a loop making expensive API calls, the sandbox kills it before you get a surprise bill. Configurable: max turns, max duration, max API spend.
+  </Card>
+  <Card title="Shared filesystems across agents" icon="folder-tree">
+    Mount a durable filesystem into multiple sandboxes simultaneously. Agents can share data, artifacts, and context without re-uploading files or wiring object-store plumbing. Live collaboration between agents.
+  </Card>
+</CardGroup>
 
 ---
 
