@@ -4,8 +4,56 @@ description: "Deploy an agent in 5 minutes"
 ---
 
 <Info>
-  **Prerequisites:** Python 3.12+, a [Claude Agent SDK](https://docs.anthropic.com/en/docs/agent-sdk) project, and a [Superserve account](https://console.superserve.ai).
+  **Prerequisites:** Python 3.12+, an agent script, and a [Superserve account](https://console.superserve.ai).
 </Info>
+
+## Option A: Zero-config deploy
+
+The fastest path. No code changes, no config files.
+
+<Steps>
+  <Step title="Install and log in">
+    ```bash
+    pip install superserve
+    superserve login
+    ```
+  </Step>
+
+  <Step title="Deploy your script">
+    ```bash
+    superserve deploy agent.py
+    ```
+
+    Superserve packages your code, detects dependencies from `requirements.txt` or `pyproject.toml`, and builds a sandboxed environment.
+  </Step>
+
+  <Step title="Set your API keys">
+    ```bash
+    superserve secrets set my-project ANTHROPIC_API_KEY=sk-ant-...
+    ```
+  </Step>
+
+  <Step title="Run it">
+    ```bash
+    superserve run my-project
+    ```
+
+    ```
+    You> What is the capital of France?
+    The capital of France is Paris.
+
+    Completed in 1.2s
+    ```
+  </Step>
+</Steps>
+
+That's it. Your agent is deployed with an HTTPS endpoint, sandboxed execution, and persistent sessions. See [Zero-Config Deploy](/zero-config) for details on how it works.
+
+---
+
+## Option B: SDK integration
+
+For agents that need fine-grained streaming control — status messages, structured metadata, and explicit response framing.
 
 <Accordion title="Using an AI coding assistant? Copy this prompt to convert your agent automatically.">
 

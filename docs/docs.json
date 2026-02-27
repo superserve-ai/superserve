@@ -44,11 +44,11 @@
     "groups": [
       {
         "group": "Getting Started",
-        "pages": ["index", "quickstart", "sessions"]
+        "pages": ["index", "zero-config", "quickstart", "sessions"]
       },
       {
         "group": "Reference",
-        "pages": ["cli"]
+        "pages": ["sdk", "cli"]
       }
     ],
     "global": {

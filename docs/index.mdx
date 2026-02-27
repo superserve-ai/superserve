@@ -1,17 +1,24 @@
 ---
 title: "Introduction"
-description: "You build agents locally. Superserve deploys them to the cloud."
+description: "Deploy agents to the cloud in one command. No infrastructure, no code changes."
 ---
 
-Superserve packages your agent code and deploys it to a sandboxed cloud container - one CLI command, no infrastructure config.
+Superserve takes your agent script and gives it a sandboxed cloud endpoint — streaming, sessions, secrets, and persistent storage included.
 
 ```bash
 pip install superserve
+superserve deploy agent.py
 ```
 
 <CardGroup cols={2}>
-  <Card title="Quickstart" icon="bolt" href="/quickstart">
-    Deploy your first agent in 5 minutes
+  <Card title="Zero-Config Deploy" icon="bolt" href="/zero-config">
+    Deploy any Python agent without changing your code
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Full walkthrough — deploy your first agent in 5 minutes
+  </Card>
+  <Card title="SDK Reference" icon="code" href="/sdk">
+    TypeScript SDK for building apps on top of your agents
   </Card>
   <Card title="CLI Reference" icon="terminal" href="/cli">
     Every command, flag, and option
@@ -23,28 +30,42 @@ pip install superserve
 ## Why Superserve
 
 <CardGroup cols={2}>
+  <Card title="Zero config" icon="wand-magic-sparkles">
+    Point at a script, deploy. No decorators, no YAML, no Dockerfiles. Your code runs as-is.
+  </Card>
   <Card title="Sandboxed execution" icon="shield">
-    Every agent session runs in a gVisor-isolated container with its own compute, filesystem, and network.
+    Every session runs in an isolated microVM with its own compute, filesystem, and network.
   </Card>
   <Card title="Persistent workspace" icon="hard-drive">
     Storage that survives restarts and long inactivity. Agents pick up where they left off.
   </Card>
-  <Card title="Unlimited sessions" icon="infinity">
-    No session duration caps or CPU-time limits. Agents run as long as they need - hours or days.
-  </Card>
   <Card title="Sub-second cold starts" icon="gauge-high">
-    Pre-provisioned containers mean your agent starts almost instantly.
+    Pre-built templates mean your agent starts in under a second.
   </Card>
   <Card title="Encrypted secrets" icon="lock">
-    API keys are encrypted and injected at runtime. Values are never exposed.
+    API keys are encrypted at rest and injected at runtime. Values are never exposed.
   </Card>
   <Card title="Real-time streaming" icon="bolt">
-    Stream tokens and tool calls as they happen. See what your agent is thinking and doing.
+    Stream tokens and tool calls as they happen via SSE.
   </Card>
 </CardGroup>
 
 ---
 
-## <img src="/images/claude-agent-sdk.svg" alt="Claude" width="20" style={{display: "inline", verticalAlign: "middle", marginRight: "8px"}} />Built for Claude Agent SDK
+## Two ways to deploy
 
-Write your agent with the [Claude Agent SDK](https://platform.claude.com/docs/en/agent-sdk/overview), run `superserve init` to generate your config, and deploy. Superserve handles sandboxing, persistence, and secrets.
+<CardGroup cols={2}>
+  <Card title="Zero-config" icon="wand-magic-sparkles" href="/zero-config">
+    ```bash
+    superserve deploy agent.py
+    ```
+    No code changes. Works with any framework — Claude Agent SDK, OpenAI Agents SDK, LangGraph, or plain Python. Best for getting started and prototyping.
+  </Card>
+  <Card title="SDK integration" icon="code" href="/quickstart#add-superserve-to-your-agent">
+    ```python
+    from superserve import App
+    app = App(name="my-agent")
+    ```
+    Import the Superserve SDK for fine-grained control — status messages, structured metadata, and custom streaming. Best for production agents.
+  </Card>
+</CardGroup>

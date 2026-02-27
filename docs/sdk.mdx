@@ -1,0 +1,320 @@
+---
+title: "SDK Reference"
+description: "TypeScript SDK for running agents, streaming responses, and managing sessions"
+---
+
+The Superserve SDK gives your application a typed client for interacting with deployed agents. Use it to build chat interfaces, backend integrations, or any application that talks to your agents.
+
+```bash
+npm install superserve
+```
+
+```typescript
+import Superserve from "superserve"
+
+const client = new Superserve({ apiKey: "your-api-key" })
+```
+
+<Info>
+  Get your API key from [console.superserve.ai](https://console.superserve.ai).
+</Info>
+
+---
+
+## One-shot run
+
+Send a message and get the full response. Creates a session, sends the message, and tears down.
+
+```typescript
+const result = await client.run("my-agent", {
+  message: "What is the capital of France?",
+})
+
+console.log(result.text)       // "The capital of France is Paris."
+console.log(result.duration)   // 1.2 (seconds)
+console.log(result.toolCalls)  // [{ name: "search", input: {...}, output: "..." }]
+```
+
+### RunOptions
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `message` | `string` | The prompt to send |
+
+### RunResult
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `text` | `string` | Complete response text |
+| `toolCalls` | `ToolCall[]` | Tools the agent invoked during the run |
+| `duration` | `number` | Wall-clock seconds |
+| `finishReason` | `string` | `"completed"` or `"failed"` |
+
+---
+
+## Streaming
+
+Stream tokens as they arrive. Returns an `AgentStream` — an async iterable with typed events and callbacks.
+
+```typescript
+const stream = client.stream("my-agent", {
+  message: "Write a report on renewable energy",
+})
+
+// Option 1: Iterate text chunks
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk)
+}
+
+// Option 2: Get the final result
+const result = await stream.result
+console.log(result.text)
+```
+
+### Callbacks
+
+```typescript
+const stream = client.stream("my-agent", {
+  message: "Analyze this dataset",
+  onText: (text) => process.stdout.write(text),
+  onToolStart: (tool) => console.log(`Using ${tool.name}...`),
+  onToolEnd: (tool) => console.log(`${tool.name} done`),
+  onFinish: (result) => console.log(`Done in ${result.duration}s`),
+  onError: (error) => console.error(error),
+})
+
+await stream.result // wait for completion
+```
+
+### StreamOptions
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `message` | `string` | The prompt to send |
+| `onText` | `(text: string) => void` | Called on each text chunk |
+| `onToolStart` | `(tool: ToolStartEvent) => void` | Called when agent invokes a tool |
+| `onToolEnd` | `(tool: ToolEndEvent) => void` | Called when tool execution completes |
+| `onFinish` | `(result: RunResult) => void` | Called when the run completes |
+| `onError` | `(error: Error) => void` | Called on errors |
+
+### AgentStream
+
+| Property / Method | Type | Description |
+|-------------------|------|-------------|
+| `textStream` | `AsyncIterable<string>` | Yields text chunks as they arrive |
+| `result` | `Promise<RunResult>` | Resolves when the run completes |
+| `abort()` | `() => void` | Cancel the stream |
+
+---
+
+## Sessions
+
+Sessions maintain conversation state across multiple turns. The agent's workspace and memory persist between messages.
+
+```typescript
+const session = await client.createSession("my-agent")
+
+// Turn 1
+const r1 = await session.run("What files are in the project?")
+console.log(r1.text)
+
+// Turn 2 — agent remembers context
+const r2 = await session.run("Refactor the main module")
+console.log(r2.text)
+
+// Clean up
+await session.end()
+```
+
+### Streaming within sessions
+
+```typescript
+const session = await client.createSession("my-agent")
+
+const stream = session.stream("Explain this codebase")
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk)
+}
+```
+
+### Session
+
+| Property / Method | Type | Description |
+|-------------------|------|-------------|
+| `id` | `string` | Session identifier |
+| `agentId` | `string` | Agent this session belongs to |
+| `info` | `SessionInfo` | Status, message count, timestamps |
+| `run(message)` | `Promise<RunResult>` | Send a message and wait for the response |
+| `stream(message)` | `AgentStream` | Send a message with streaming |
+| `end()` | `Promise<void>` | End the session |
+
+### SessionInfo
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Session ID |
+| `agentId` | `string` | Agent ID |
+| `status` | `string` | `"active"`, `"idle"`, `"completed"`, `"failed"` |
+| `title` | `string \| null` | Auto-generated conversation title |
+| `messageCount` | `number` | Total messages in the session |
+| `createdAt` | `Date` | When the session was created |
+| `lastActiveAt` | `Date` | Last activity timestamp |
+
+---
+
+## Agents
+
+List and inspect deployed agents.
+
+```typescript
+const agents = await client.agents.list()
+// [{ id: "agt_7c9e...", name: "my-agent", createdAt: Date, updatedAt: Date }]
+
+const agent = await client.agents.get("my-agent")
+// { id: "agt_7c9e...", name: "my-agent", command: "python agent.py", ... }
+```
+
+### Agent
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Agent ID |
+| `name` | `string` | Agent name |
+| `command` | `string` | Start command |
+| `createdAt` | `Date` | Creation timestamp |
+| `updatedAt` | `Date` | Last update timestamp |
+
+---
+
+## React
+
+The SDK includes React hooks for building chat interfaces. Import from `superserve/react`.
+
+```bash
+npm install superserve react
+```
+
+### SuperserveProvider
+
+Wrap your app to provide the API client to all hooks:
+
+```tsx
+import { SuperserveProvider } from "superserve/react"
+
+function App() {
+  return (
+    <SuperserveProvider apiKey="your-api-key">
+      <Chat />
+    </SuperserveProvider>
+  )
+}
+```
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `apiKey` | `string` | Your Superserve API key |
+| `baseUrl` | `string?` | Custom API URL (default: `https://api.superserve.ai`) |
+
+### useAgent
+
+Manages messages, streaming state, and session lifecycle for a single agent:
+
+```tsx
+import { useAgent } from "superserve/react"
+
+function Chat() {
+  const {
+    messages,
+    sendMessage,
+    isStreaming,
+    error,
+  } = useAgent({ agent: "my-agent" })
+
+  return (
+    <div>
+      {messages.map((msg) => (
+        <div key={msg.id}>
+          <strong>{msg.role}:</strong> {msg.text}
+        </div>
+      ))}
+
+      {isStreaming && <p>Agent is thinking...</p>}
+
+      <form onSubmit={(e) => {
+        e.preventDefault()
+        const input = e.currentTarget.elements.namedItem("msg") as HTMLInputElement
+        sendMessage(input.value)
+        input.value = ""
+      }}>
+        <input name="msg" placeholder="Type a message..." />
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  )
+}
+```
+
+### UseAgentOptions
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `agent` | `string` | Agent name or ID |
+| `sessionId` | `string?` | Resume an existing session |
+
+### UseAgentReturn
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `messages` | `Message[]` | All messages in the conversation |
+| `sendMessage` | `(text: string) => void` | Send a message to the agent |
+| `isStreaming` | `boolean` | Whether a response is currently streaming |
+| `error` | `Error \| null` | Last error, if any |
+| `sessionId` | `string \| null` | Current session ID |
+
+### Message
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Unique message ID |
+| `role` | `"user" \| "agent"` | Who sent the message |
+| `text` | `string` | Message content |
+| `createdAt` | `Date` | Timestamp |
+
+---
+
+## Configuration
+
+```typescript
+const client = new Superserve({
+  apiKey: "your-api-key",
+  baseUrl: "https://api.superserve.ai",  // default
+  timeout: 30000,                         // ms, default
+})
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `apiKey` | `string` | — | Required. Your API key. |
+| `baseUrl` | `string` | `https://api.superserve.ai` | API endpoint |
+| `timeout` | `number` | `30000` | Request timeout in milliseconds |
+
+---
+
+## Error handling
+
+```typescript
+import { SuperserveError, AuthenticationError, NotFoundError } from "superserve"
+
+try {
+  await client.run("my-agent", { message: "Hello" })
+} catch (e) {
+  if (e instanceof AuthenticationError) {
+    // Invalid or missing API key
+  } else if (e instanceof NotFoundError) {
+    // Agent not found
+  } else if (e instanceof SuperserveError) {
+    // Other API error
+    console.error(e.status, e.message)
+  }
+}
+```

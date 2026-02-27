@@ -70,15 +70,34 @@ Your code is uploaded and your dependencies are installed on the platform. Agent
 <AccordionGroup>
   <Accordion title="superserve deploy" icon="cloud-arrow-up">
     ```bash
-    superserve deploy [--dir PATH] [--json]
+    superserve deploy [ENTRYPOINT] [--name NAME] [--port PORT] [--dir PATH] [--json]
     ```
 
     Deploy your agent. Re-deploying the same name updates the existing agent.
 
+    **Zero-config mode** — provide an entrypoint to deploy without a config file:
+
+    ```bash
+    superserve deploy agent.py
+    superserve deploy agent.py --name my-agent
+    superserve deploy server.py --port 8000
+    ```
+
+    **Config mode** — omit the entrypoint to use `superserve.yaml`:
+
+    ```bash
+    superserve deploy
+    ```
+
     | Flag | Description |
     |------|-------------|
+    | `ENTRYPOINT` | Script to run (e.g. `agent.py`, `src/main.ts`). Enables zero-config mode. |
+    | `--name NAME` | Agent name (defaults to directory name) |
+    | `--port PORT` | HTTP proxy mode — forward traffic to this port instead of using the shim |
     | `--dir PATH` | Project directory (default: `.`) |
     | `--json` | Output agent object as JSON |
+
+    Supported file types: `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`
   </Accordion>
 </AccordionGroup>
 

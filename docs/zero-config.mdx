@@ -1,0 +1,178 @@
+---
+title: "Zero-Config Deploy"
+description: "Deploy any Python agent in one command. No code changes, no config files."
+---
+
+Point `superserve deploy` at your script. Your agent gets a sandboxed HTTPS endpoint with streaming, sessions, and secrets — without importing Superserve or writing config files.
+
+```bash
+superserve deploy agent.py
+```
+
+```
+✓ Packaging project... (4 KB)
+✓ Uploading to Superserve...
+✓ Installing dependencies... (12s)
+
+Deployed 'my-project' in 15s
+
+superserve run my-project "your prompt here"
+```
+
+<Info>
+  Zero-config deploy works with **any Python script** that uses `input()` and `print()` — Claude Agent SDK, OpenAI Agents SDK, LangGraph, or plain Python.
+</Info>
+
+---
+
+## How it works
+
+Superserve injects a lightweight shim between your script and the platform. The shim translates `input()` calls into session messages and `print()` calls into streamed responses. Your code runs unmodified.
+
+```
+User ──► Superserve API ──► Sandbox ──► Shim ──► Your Script
+                                         │
+                              input() ◄──┘──► print()
+                              (receives       (streams
+                               messages)       responses)
+```
+
+The shim detects two patterns automatically:
+
+| Pattern | Detection | Behavior |
+|---------|-----------|----------|
+| **Multi-turn** | Script calls `input()` | Process stays alive across turns. Each `input()` receives the next user message. |
+| **One-shot** | Script never calls `input()` | Fresh process per request. User's message is passed via `SUPERSERVE_PROMPT` env var. |
+
+---
+
+## Examples
+
+### Multi-turn agent (Claude Agent SDK)
+
+A standard Claude Agent SDK script that loops on `input()`:
+
+```python agent.py
+import asyncio
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, TextBlock
+
+options = ClaudeAgentOptions(
+    model="sonnet",
+    system_prompt="You are a helpful assistant.",
+    permission_mode="bypassPermissions",
+)
+
+async def main():
+    async with ClaudeSDKClient(options=options) as client:
+        while True:
+            user_input = input()
+            await client.query(prompt=user_input, session_id="chat")
+            async for msg in client.receive_response():
+                for block in getattr(msg, "content", []):
+                    if isinstance(block, TextBlock):
+                        print(block.text)
+
+asyncio.run(main())
+```
+
+```bash
+superserve deploy agent.py
+superserve secrets set my-project ANTHROPIC_API_KEY=sk-ant-...
+superserve run my-project
+```
+
+No decorators. No imports. No YAML. The same script that works locally works deployed.
+
+### One-shot script
+
+A script that reads from the environment and prints a result:
+
+```python summarize.py
+import os
+from anthropic import Anthropic
+
+client = Anthropic()
+prompt = os.environ.get("SUPERSERVE_PROMPT", "Hello")
+
+response = client.messages.create(
+    model="claude-sonnet-4-20250514",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": prompt}],
+)
+print(response.content[0].text)
+```
+
+```bash
+superserve deploy summarize.py
+superserve run my-project "Summarize the French Revolution in 3 sentences" --single
+```
+
+### HTTP server mode
+
+If your agent already exposes an HTTP endpoint, use `--port` to proxy directly:
+
+```bash
+superserve deploy server.py --port 8000
+```
+
+Superserve forwards requests to your server's `/run` endpoint inside the sandbox. You handle routing, Superserve handles infrastructure.
+
+---
+
+## CLI flags
+
+```bash
+superserve deploy ENTRYPOINT [--name NAME] [--port PORT] [--dir PATH]
+```
+
+| Flag | Description |
+|------|-------------|
+| `ENTRYPOINT` | Path to your script (e.g. `agent.py`, `src/main.ts`) |
+| `--name` | Agent name (defaults to directory name) |
+| `--port` | Activate HTTP proxy mode — forward traffic to this port |
+| `--dir` | Project directory (default: `.`) |
+
+Supported file types: `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`
+
+---
+
+## Dependencies
+
+Dependencies are auto-detected and installed in the sandbox:
+
+| File | Install command |
+|------|----------------|
+| `requirements.txt` | `uv pip install -r requirements.txt` |
+| `pyproject.toml` | `uv pip install -e .` |
+
+<Tip>
+  If your project has both files, `requirements.txt` takes precedence.
+</Tip>
+
+---
+
+## Zero-config vs SDK integration
+
+| | Zero-config | SDK integration |
+|---|---|---|
+| **Code changes** | None | Import `superserve`, add decorators |
+| **Deploy command** | `superserve deploy agent.py` | `superserve deploy` (reads `superserve.yaml`) |
+| **Streaming** | Automatic via `print()` | Explicit via `stream.write()` |
+| **Status messages** | Not available | `stream.status("Thinking...")` |
+| **Structured metadata** | Not available | `stream.metadata({...})` |
+| **Best for** | Getting started, prototypes, any-framework agents | Production agents that need fine-grained streaming control |
+
+Both paths produce the same result: a deployed agent with an HTTPS endpoint, sandboxed execution, persistent sessions, and encrypted secrets.
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Full walkthrough with both deploy paths
+  </Card>
+  <Card title="SDK Reference" icon="code" href="/sdk">
+    Integrate agents into your app with the TypeScript SDK
+  </Card>
+</CardGroup>
