@@ -1,4 +1,4 @@
-import { Button } from "@superserve/ui"
+import { Button, TooltipProvider } from "@superserve/ui"
 import { useRoute } from "./hooks/useRoute"
 import { AuthProvider, useAuth } from "./lib/auth-context"
 import AgentsPage from "./pages/AgentsPage"
@@ -58,7 +58,9 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <TooltipProvider>
+        <AppContent />
+      </TooltipProvider>
     </AuthProvider>
   )
 }
