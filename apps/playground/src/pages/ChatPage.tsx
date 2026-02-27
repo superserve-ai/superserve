@@ -4,26 +4,40 @@ import { Badge } from "@superserve/ui"
 import { useSuperserveChat } from "../hooks/useSuperserveChat"
 import Sidebar from "../components/Sidebar"
 import ChatArea from "../components/ChatArea"
+import { useAuth } from "../lib/auth-context"
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined
+const BASE_URL = "/api"
 
 interface ChatPageProps {
   agentId: string
-  apiKey: string
   onBack: () => void
 }
 
-export default function ChatPage({ agentId, apiKey, onBack }: ChatPageProps) {
+export default function ChatPage({ agentId, onBack }: ChatPageProps) {
+  const { accessToken, signOut } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [agentName, setAgentName] = useState<string | null>(null)
 
   useEffect(() => {
-    const client = new Superserve({ apiKey, baseUrl: BASE_URL })
+    if (!accessToken) return
+    const client = new Superserve({ apiKey: accessToken, baseUrl: BASE_URL })
     client.agents.get(agentId).then(
       (agent) => setAgentName(agent.name),
-      () => setAgentName(null),
+      (err) => {
+        const msg = err instanceof Error ? err.message : ""
+        if (
+          msg.includes("invalid") ||
+          msg.includes("expired") ||
+          msg.includes("unauthorized") ||
+          msg.includes("401")
+        ) {
+          signOut()
+          return
+        }
+        setAgentName(null)
+      },
     )
-  }, [agentId, apiKey])
+  }, [agentId, accessToken, signOut])
 
   const {
     sessions,
@@ -38,7 +52,7 @@ export default function ChatPage({ agentId, apiKey, onBack }: ChatPageProps) {
   } = useSuperserveChat({
     agentId,
     agentName: agentName ?? agentId,
-    apiKey,
+    accessToken: accessToken!,
     baseUrl: BASE_URL,
   })
 
@@ -68,7 +82,7 @@ export default function ChatPage({ agentId, apiKey, onBack }: ChatPageProps) {
   return (
     <div className="flex h-full flex-col text-sm text-foreground">
       {/* Header */}
-      <header className="border-b border-border bg-surface">
+      <header className="border-b border-dashed border-border bg-background">
         <div className="flex h-14 items-center justify-between px-5 md:px-8">
           <div className="flex items-center gap-3">
             <button

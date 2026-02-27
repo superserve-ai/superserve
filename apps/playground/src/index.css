@@ -1,5 +1,5 @@
 @import "@superserve/ui/styles";
-@source "../../packages/ui/src";
+@source "../../../packages/ui/src";
 
 :root {
   --sans-font: "Inter", system-ui, -apple-system, sans-serif;

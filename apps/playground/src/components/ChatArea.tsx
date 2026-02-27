@@ -31,13 +31,13 @@ export default function ChatArea({
         )}
       </main>
 
-      {/* Footer */}
+      {/* Input */}
       {session && (
-        <footer className="sticky bottom-0 z-10 border-t border-border bg-surface">
-          <div className="mx-auto max-w-3xl px-4 py-3 md:px-6">
+        <div className="pointer-events-none sticky bottom-0 z-10 pb-4">
+          <div className="pointer-events-auto mx-auto max-w-3xl px-4 md:px-6">
             <MessageInput status={status} onSend={onSend} onStop={onStop} />
           </div>
-        </footer>
+        </div>
       )}
     </div>
   )

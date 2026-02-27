@@ -23,7 +23,7 @@ export default function Sidebar({
   )
 
   return (
-    <div className="flex h-full flex-col border-r border-border bg-surface text-sm">
+    <div className="flex h-full flex-col border-r border-dashed border-border bg-background text-sm">
       {/* New Chat button */}
       <div className="p-3">
         <Button onClick={onNewChat} className="flex w-full">
@@ -50,10 +50,10 @@ export default function Sidebar({
             <div
               key={session.localId}
               onClick={() => onSelectSession(session.localId)}
-              className={`group flex cursor-pointer items-start justify-between border-l-2 px-4 py-2.5 transition-colors ${
+              className={`group flex cursor-pointer items-start justify-between px-4 py-2.5 transition-colors ${
                 isActive
-                  ? "border-primary bg-surface-hover"
-                  : "border-transparent hover:bg-surface-hover"
+                  ? "bg-surface-hover"
+                  : "hover:bg-surface-hover"
               }`}
             >
               <div className="min-w-0 flex-1">

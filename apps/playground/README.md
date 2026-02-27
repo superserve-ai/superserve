@@ -24,7 +24,7 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 - `useSuperserveChat` lazily creates a `Superserve` client and manages all chat state (sessions, messages, streaming status)
 - Multiple sessions are supported — create, switch, and delete from the sidebar
 - Messages are streamed via `client.stream()` with `onText`, `onToolStart`, and `onToolEnd` callbacks
-- Vite proxies `/api` requests to `api-staging.superserve.ai` to avoid CORS
+- Vite proxies `/api` requests to `api.superserve.ai` to avoid CORS
 
 ## Scripts
 

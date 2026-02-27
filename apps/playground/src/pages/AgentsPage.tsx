@@ -3,29 +3,28 @@ import { Superserve } from "@superserve/sdk"
 import { Button, Card, Skeleton } from "@superserve/ui"
 import type { Agent } from "../types"
 import { relativeTime } from "../utils"
+import { useAuth } from "../lib/auth-context"
 
 interface AgentsPageProps {
-  apiKey: string
   navigate: (to: string) => void
 }
 
 type LoadingState = "loading" | "error" | "empty" | "loaded"
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined
+const BASE_URL = "/api"
 
-export default function AgentsPage({
-  apiKey,
-  navigate,
-}: AgentsPageProps) {
+export default function AgentsPage({ navigate }: AgentsPageProps) {
+  const { accessToken, signOut } = useAuth()
   const [agents, setAgents] = useState<Agent[]>([])
   const [state, setState] = useState<LoadingState>("loading")
   const [errorMessage, setErrorMessage] = useState("")
 
   const fetchAgents = useCallback(async () => {
+    if (!accessToken) return
     setState("loading")
     setErrorMessage("")
     try {
-      const client = new Superserve({ apiKey, baseUrl: BASE_URL })
+      const client = new Superserve({ apiKey: accessToken, baseUrl: BASE_URL })
       const result = await client.agents.list()
       if (result.length === 0) {
         setState("empty")
@@ -34,12 +33,21 @@ export default function AgentsPage({
         setState("loaded")
       }
     } catch (err) {
-      setErrorMessage(
-        err instanceof Error ? err.message : "Failed to load agents",
-      )
+      const message =
+        err instanceof Error ? err.message : "Failed to load agents"
+      if (
+        message.includes("invalid") ||
+        message.includes("expired") ||
+        message.includes("unauthorized") ||
+        message.includes("401")
+      ) {
+        await signOut()
+        return
+      }
+      setErrorMessage(message)
       setState("error")
     }
-  }, [apiKey])
+  }, [accessToken, signOut])
 
   useEffect(() => {
     fetchAgents()
@@ -47,7 +55,7 @@ export default function AgentsPage({
 
   return (
     <div className="flex h-full flex-col bg-background text-sm text-foreground">
-      <header className="border-b border-border bg-surface">
+      <header className="border-b border-dashed border-border bg-background">
         <div className="flex h-14 items-center px-5 md:px-8">
           <div className="flex items-center gap-1.5 text-[13px]">
             <span className="text-muted">Superserve</span>
@@ -66,7 +74,7 @@ export default function AgentsPage({
 
           <div className="mt-8">
             {state === "loading" && (
-              <Card className="divide-y divide-border">
+              <Card className="divide-y divide-dashed divide-border">
                 {[0, 1, 2].map((i) => (
                   <div key={i} className="px-5 py-4">
                     <Skeleton className="h-4 w-32" />
@@ -135,7 +143,7 @@ export default function AgentsPage({
             )}
 
             {state === "loaded" && (
-              <Card className="divide-y divide-border">
+              <Card className="divide-y divide-dashed divide-border">
                 {agents.map((agent) => (
                   <button
                     key={agent.id}

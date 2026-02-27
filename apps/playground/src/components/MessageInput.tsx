@@ -1,5 +1,4 @@
 import { useState } from "react"
-import { Button, Input } from "@superserve/ui"
 import type { ChatStatus } from "../types"
 
 interface MessageInputProps {
@@ -25,23 +24,34 @@ export default function MessageInput({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex items-center gap-2">
-      <Input
+    <form
+      onSubmit={handleSubmit}
+      className="flex items-center border border-dashed border-border bg-surface shadow-sm transition-colors focus-within:border-border-focus"
+    >
+      <input
         type="text"
         value={input}
         onChange={(e) => setInput(e.target.value)}
         placeholder="Send a message..."
         disabled={isStreaming}
-        wrapperClassName="flex-1"
+        className="h-10 flex-1 bg-transparent px-4 text-sm text-foreground placeholder:text-muted focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
       />
       {isStreaming ? (
-        <Button type="button" variant="outline" onClick={onStop}>
+        <button
+          type="button"
+          onClick={onStop}
+          className="cursor-pointer px-4 text-sm text-muted transition-colors hover:text-foreground"
+        >
           Stop
-        </Button>
+        </button>
       ) : (
-        <Button type="submit" disabled={!input.trim()}>
+        <button
+          type="submit"
+          disabled={!input.trim()}
+          className="m-1 cursor-pointer bg-primary-bg px-5 py-1.5 font-mono text-xs uppercase tracking-wider text-primary transition-colors hover:bg-primary-muted disabled:cursor-not-allowed disabled:opacity-50"
+        >
           Send
-        </Button>
+        </button>
       )}
     </form>
   )

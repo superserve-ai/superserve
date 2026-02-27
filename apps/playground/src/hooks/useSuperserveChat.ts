@@ -1,4 +1,4 @@
-import { useRef, useCallback, useMemo } from "react"
+import { useRef, useCallback, useMemo, useEffect } from "react"
 import { Superserve } from "@superserve/sdk"
 import type { AgentStream } from "@superserve/sdk"
 import { useLocalStorage } from "./useLocalStorage"
@@ -8,12 +8,12 @@ import type { ChatSession, ChatMessage, ChatStatus } from "../types"
 interface UseSuperserveChatOptions {
   agentId: string
   agentName: string
-  apiKey: string
+  accessToken: string
   baseUrl?: string
 }
 
 export function useSuperserveChat(options: UseSuperserveChatOptions) {
-  const { agentId, agentName, apiKey, baseUrl } = options
+  const { agentId, agentName, accessToken, baseUrl } = options
 
   const sessionsKey = `superserve-chat-sessions-${agentId}`
   const activeKey = `superserve-chat-active-session-${agentId}`
@@ -36,12 +36,17 @@ export function useSuperserveChat(options: UseSuperserveChatOptions) {
   const getClient = useCallback(() => {
     if (!clientRef.current) {
       clientRef.current = new Superserve({
-        apiKey,
+        apiKey: accessToken,
         baseUrl,
       })
     }
     return clientRef.current
-  }, [apiKey, baseUrl])
+  }, [accessToken, baseUrl])
+
+  // Reset client when token refreshes
+  useEffect(() => {
+    clientRef.current = null
+  }, [accessToken])
 
   // Derive active session
   const activeSession = useMemo(
