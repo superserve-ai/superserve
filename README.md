@@ -98,8 +98,106 @@ See the full [CLI Reference](https://docs.superserve.ai/cli) for all flags and o
 
 ## Requirements
 
-- Python 3.12+
 - A [Superserve account](https://console.superserve.ai)
+
+Install via npm (recommended):
+```bash
+npm install -g @superserve/cli
+```
+
+Or via Homebrew:
+```bash
+brew install superserve-ai/tap/superserve
+```
+
+Or via pip (legacy Python CLI):
+```bash
+pip install superserve
+```
+
+## Development
+
+This repo is a monorepo managed with [Bun workspaces](https://bun.sh/docs/install/workspaces) and [Turborepo](https://turbo.build/repo).
+
+- **Bun workspaces** — single `bun.lock` at the root, shared `node_modules`, workspace packages reference each other with `workspace:*`
+- **Turborepo** — runs tasks across packages in the correct order, caches outputs, and parallelizes where possible
+
+### Structure
+
+```
+apps/
+  playground/              # React + Vite playground app
+packages/
+  cli/                     # TypeScript CLI (@superserve/cli)
+  sdk/                     # TypeScript SDK (@superserve/sdk)
+  typescript-config/       # Shared tsconfig presets
+  biome-config/            # Shared Biome config
+```
+
+### Setup
+
+```bash
+bun install               # install all dependencies
+```
+
+### Running Commands
+
+Run tasks across all packages from the repo root:
+
+```bash
+bun run build             # build all packages
+bun run dev               # start all dev servers
+bun run lint              # lint all packages
+bun run typecheck         # type check all packages
+bun run test              # run all tests
+```
+
+Target a specific package with `--filter`:
+
+```bash
+bunx turbo run dev --filter=@superserve/playground
+bunx turbo run build --filter=@superserve/sdk
+```
+
+### Testing the CLI Locally
+
+The CLI doesn't have a dev server. Run it directly with Bun:
+
+```bash
+bun packages/cli/src/index.ts deploy --help
+bun packages/cli/src/index.ts login
+```
+
+### Adding Dependencies
+
+Always add dependencies from the repo root using `--filter`:
+
+```bash
+bun add zod --filter @superserve/cli
+bun add react --filter @superserve/playground
+bun add -d @types/node --filter @superserve/sdk
+```
+
+> **Note:** Do not `cd` into a package directory and run `bun add` directly — this creates a separate `bun.lock` that conflicts with the monorepo's root lockfile.
+
+### Shared Configs
+
+TypeScript and Biome configs are shared across packages:
+
+- **`@superserve/typescript-config`** — extend in `tsconfig.json` with `"extends": "@superserve/typescript-config/base.json"`
+- **`@superserve/biome-config`** — extend in `biome.json` with `"extends": ["@superserve/biome-config/biome.json"]`
+
+When updating linting rules or compiler options, prefer updating the shared config so all packages stay consistent.
+
+### Legacy Python CLI
+
+The Python CLI in `src/superserve/` is being replaced by the TypeScript CLI. It uses **uv** for dependency management (independent from the Bun workspace):
+
+```bash
+uv sync --dev             # install Python dependencies
+uv run pytest             # run tests
+uv run ruff check .       # lint
+```
 
 ## Contributing
 

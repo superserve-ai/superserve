@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: var(--display-font);
+  --font-sans: var(--sans-font);
+  --font-mono: var(--mono-font);
+
+  --color-background: oklch(0.98 0.005 85);
+  --color-foreground: oklch(0.15 0 0);
+  --color-surface: oklch(1 0 0);
+  --color-surface-hover: oklch(0.96 0.005 85);
+  --color-border: oklch(0.9 0.01 85);
+  --color-border-focus: #158a90;
+  --color-input: oklch(0.9 0.01 85);
+  --color-ring: #105c60;
+  --color-muted: oklch(0.5 0.01 85);
+
+  --color-primary: #0d474a;
+  --color-primary-hover: #0a3638;
+  --color-primary-light: #158a90;
+  --color-primary-muted: #a8d5d7;
+  --color-primary-bg: #e8f4f5;
+  --color-destructive: #9b3b3b;
+  --color-destructive-hover: #7a2e2e;
+  --color-success: oklch(0.55 0.15 155);
+  --color-warning: oklch(0.65 0.15 75);
+
+  --color-cream: #faf8f5;
+  --color-warm-white: #fffefb;
+
+  --color-ink: #3d3d3d;
+  --color-ink-light: #5c5c5c;
+  --color-ink-muted: #8a8a8a;
+  --color-ink-faint: #b5b5b5;
+
+  --color-auth-border: #e8e4df;
+
+  --animate-fade-in: fade-in 0.5s ease-out forwards;
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+}
+
+@custom-variant dark (&:is(.dark *));
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground text-sm;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
+}

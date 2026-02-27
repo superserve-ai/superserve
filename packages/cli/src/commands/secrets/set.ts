@@ -1,0 +1,46 @@
+import { Command } from "commander"
+import { track } from "../../analytics"
+import { createClient } from "../../api/client"
+import { withErrorHandler } from "../../errors"
+import { log } from "../../utils/logger"
+
+export const setSecrets = new Command("set")
+  .description("Set secrets for an agent")
+  .argument("<agent>", "Agent name or ID")
+  .argument("<key-values...>", "KEY=VALUE pairs")
+  .action(
+    withErrorHandler(async (agentName: string, keyValues: string[]) => {
+      const envVars: Record<string, string> = {}
+
+      for (const kv of keyValues) {
+        if (!kv.includes("=")) {
+          throw new Error(`Invalid format '${kv}'. Use KEY=VALUE`)
+        }
+        const eqIdx = kv.indexOf("=")
+        const key = kv.slice(0, eqIdx)
+        const value = kv.slice(eqIdx + 1)
+        if (!key) {
+          throw new Error(`Empty key in '${kv}'`)
+        }
+        envVars[key] = value
+      }
+
+      const client = createClient()
+      const agent = await client.getAgent(agentName)
+      const keys = await client.setAgentSecrets(agentName, envVars)
+      await track("cli_secrets_set", {
+        agent_name: agentName,
+        secret_count: Object.keys(envVars).length,
+      })
+
+      log.success(
+        `Set ${Object.keys(envVars).length} secret(s) for agent '${agentName}'`,
+      )
+      if (keys.length > 0) {
+        console.log(`Current secrets: ${keys.join(", ")}`)
+      }
+      console.log(
+        `\nTry your agent in Playground: https://playground.superserve.ai/agents/${agent.id}/`,
+      )
+    }),
+  )
