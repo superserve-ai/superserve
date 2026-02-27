@@ -181,7 +181,7 @@ export const deploy = new Command("deploy")
             await Bun.sleep(pollInterval)
             elapsed += pollInterval
 
-            agent = await client.getAgent(name)
+            agent = await client.getAgent(agent.id)
 
             if (agent.deps_status === "ready") {
               status.done(
