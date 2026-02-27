@@ -237,9 +237,7 @@ export const deploy = new Command("deploy")
         } else if (agent.environment_keys.length === 0) {
           console.log()
           console.log("  Set your API keys as secrets:")
-          console.log(
-            commandBox(`superserve secrets set ${name} KEY=VALUE`),
-          )
+          console.log(commandBox(`superserve secrets set ${name} KEY=VALUE`))
         }
 
         console.log()
