@@ -1,6 +1,6 @@
 {
   "name": "@superserve/sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "TypeScript SDK for interacting with Superserve agents",
   "license": "MIT",
   "type": "module",
