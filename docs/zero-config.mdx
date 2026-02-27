@@ -7,7 +7,7 @@ description: "How superserve deploy works without config files or code changes"
 superserve deploy agent.py
 ```
 
-Superserve deploys your script as-is. No decorators, no imports, no YAML. This page explains what happens under the hood.
+Superserve deploys the same script you run locally — no Dockerfile, no server code, no infrastructure config. This page explains what happens under the hood.
 
 ---
 
@@ -106,12 +106,6 @@ If both exist, `requirements.txt` wins.
 
 ---
 
-## When to use the SDK instead
+## Advanced: SDK integration
 
-Zero-config is the fastest path from local script to deployed agent. But if you need fine-grained control over streaming — status messages, structured metadata, custom framing — use the [Superserve SDK integration](/quickstart#advanced-sdk-integration).
-
-| | Zero-config | SDK |
-|---|---|---|
-| Code changes | None | Import + decorators |
-| Streaming | `print()` → text | `stream.write()`, `stream.status()`, `stream.metadata()` |
-| Best for | Prototyping, any-framework agents | Production agents with rich streaming UX |
+Zero-config handles most use cases. If you later need fine-grained streaming control — progress indicators, structured metadata, explicit response framing — Superserve also has a [Python SDK](/quickstart#advanced-sdk-integration) that gives you lower-level access to the streaming protocol.

@@ -9,7 +9,7 @@ superserve login
 superserve deploy agent.py
 ```
 
-Your agent is now running in an isolated sandbox with an HTTPS endpoint, streaming responses, persistent storage, and encrypted secrets. You didn't change your code.
+Your agent is now running in an isolated sandbox with an HTTPS endpoint, streaming responses, persistent storage, and encrypted secrets. No Dockerfile, no infrastructure config, no server code — the same script that runs on your laptop runs in the cloud.
 
 ```bash
 $ superserve run my-agent "Analyze the error logs in /var/log and suggest fixes"

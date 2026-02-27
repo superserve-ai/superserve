@@ -41,7 +41,7 @@ async def main():
 asyncio.run(main())
 ```
 
-This is a standard Claude Agent SDK script. No Superserve imports, no decorators, no config files.
+This is the same script you'd run locally with `python agent.py`. Nothing has been added to make it deployable.
 
 ## 3. Deploy
 
@@ -109,7 +109,7 @@ The agent remembers context between turns. The sandbox persists files across the
 4. Injected a [shim](/zero-config) that translates `input()`/`print()` into the streaming protocol
 5. Streamed the response back to your terminal in real-time via SSE
 
-Your code ran unmodified. The shim is invisible to your script.
+The same script that works with `python agent.py` on your laptop is now a cloud API. No wrapping, no porting.
 
 ---
 
