@@ -1,6 +1,57 @@
+import { useState } from "react"
 import Markdown from "react-markdown"
 import { Avatar } from "@superserve/ui"
 import type { ChatMessage } from "../types"
+
+function CodeBlock({
+  className,
+  children,
+  ...props
+}: React.HTMLAttributes<HTMLElement>) {
+  const [copied, setCopied] = useState(false)
+
+  const match = /language-(\w+)/.exec(className || "")
+  const isBlock = match || (typeof children === "string" && children.includes("\n"))
+
+  if (!isBlock) {
+    return (
+      <code className={className} {...props}>
+        {children}
+      </code>
+    )
+  }
+
+  const language = match ? match[1] : ""
+  const code = String(children).replace(/\n$/, "")
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="my-3">
+      <div className="flex items-center justify-between border border-b-0 border-dashed border-neutral-700 bg-neutral-900 px-4 py-1.5">
+        <span className="font-mono text-[11px] text-neutral-500">
+          {language}
+        </span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="font-mono text-[11px] text-neutral-500 hover:text-neutral-300"
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      <pre>
+        <code className={className} {...props}>
+          {children}
+        </code>
+      </pre>
+    </div>
+  )
+}
 
 interface MessageBubbleProps {
   message: ChatMessage
@@ -36,7 +87,9 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
             </div>
           ) : !isUser ? (
             <div className="markdown-content">
-              <Markdown>{message.content}</Markdown>
+              <Markdown components={{ code: CodeBlock }}>
+                {message.content}
+              </Markdown>
             </div>
           ) : (
             message.content
