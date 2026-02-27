@@ -3,6 +3,10 @@
     {
       "source": "/api/:path*",
       "destination": "https://api.superserve.ai/:path*"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
     }
   ]
 }
