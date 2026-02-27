@@ -1,99 +1,55 @@
 ---
 title: "Zero-Config Deploy"
-description: "Deploy any Python agent in one command. No code changes, no config files."
+description: "How superserve deploy works without config files or code changes"
 ---
-
-Point `superserve deploy` at your script. Your agent gets a sandboxed HTTPS endpoint with streaming, sessions, and secrets — without importing Superserve or writing config files.
 
 ```bash
 superserve deploy agent.py
 ```
 
-```
-✓ Packaging project... (4 KB)
-✓ Uploading to Superserve...
-✓ Installing dependencies... (12s)
-
-Deployed 'my-project' in 15s
-
-superserve run my-project "your prompt here"
-```
-
-<Info>
-  Zero-config deploy works with **any Python script** that uses `input()` and `print()` — Claude Agent SDK, OpenAI Agents SDK, LangGraph, or plain Python.
-</Info>
+Superserve deploys your script as-is. No decorators, no imports, no YAML. This page explains what happens under the hood.
 
 ---
 
-## How it works
+## The shim
 
-Superserve injects a lightweight shim between your script and the platform. The shim translates `input()` calls into session messages and `print()` calls into streamed responses. Your code runs unmodified.
+When you deploy without `--port`, Superserve wraps your script with a lightweight shim that translates between the platform's streaming protocol and Python's `input()`/`print()`.
 
 ```
-User ──► Superserve API ──► Sandbox ──► Shim ──► Your Script
-                                         │
-                              input() ◄──┘──► print()
-                              (receives       (streams
-                               messages)       responses)
+Superserve API ──► Sandbox ──► Shim ──► Your Script
+                                 │
+                      input() ◄──┘──► print()
+                      (receives       (streams back
+                       messages)       as SSE)
 ```
 
-The shim detects two patterns automatically:
-
-| Pattern | Detection | Behavior |
-|---------|-----------|----------|
-| **Multi-turn** | Script calls `input()` | Process stays alive across turns. Each `input()` receives the next user message. |
-| **One-shot** | Script never calls `input()` | Fresh process per request. User's message is passed via `SUPERSERVE_PROMPT` env var. |
+Your script never knows the shim exists. It calls `input()`, gets a string. It calls `print()`, the text streams to the user. Everything else — session management, sandbox lifecycle, streaming — is handled by the platform.
 
 ---
 
-## Examples
+## Detection: multi-turn vs one-shot
 
-### Multi-turn agent (Claude Agent SDK)
+The shim detects which pattern your script uses automatically.
 
-A standard Claude Agent SDK script that loops on `input()`:
+**Multi-turn** — your script calls `input()` in a loop:
 
 ```python agent.py
-import asyncio
-from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, TextBlock
-
-options = ClaudeAgentOptions(
-    model="sonnet",
-    system_prompt="You are a helpful assistant.",
-    permission_mode="bypassPermissions",
-)
-
-async def main():
-    async with ClaudeSDKClient(options=options) as client:
-        while True:
-            user_input = input()
-            await client.query(prompt=user_input, session_id="chat")
-            async for msg in client.receive_response():
-                for block in getattr(msg, "content", []):
-                    if isinstance(block, TextBlock):
-                        print(block.text)
-
-asyncio.run(main())
+while True:
+    message = input()          # ← shim intercepts this
+    response = do_something(message)
+    print(response)            # ← shim intercepts this
 ```
 
-```bash
-superserve deploy agent.py
-superserve secrets set my-project ANTHROPIC_API_KEY=sk-ant-...
-superserve run my-project
-```
+The process stays alive between turns. Each `input()` blocks until the next user message arrives. State, variables, open connections — everything persists across the conversation.
 
-No decorators. No imports. No YAML. The same script that works locally works deployed.
-
-### One-shot script
-
-A script that reads from the environment and prints a result:
+**One-shot** — your script never calls `input()`:
 
 ```python summarize.py
 import os
 from anthropic import Anthropic
 
+prompt = os.environ["SUPERSERVE_PROMPT"]   # ← set by Superserve
 client = Anthropic()
-prompt = os.environ.get("SUPERSERVE_PROMPT", "Hello")
-
 response = client.messages.create(
     model="claude-sonnet-4-20250514",
     max_tokens=1024,
@@ -102,20 +58,21 @@ response = client.messages.create(
 print(response.content[0].text)
 ```
 
-```bash
-superserve deploy summarize.py
-superserve run my-project "Summarize the French Revolution in 3 sentences" --single
-```
+A fresh process runs for each request. The user's message is passed via the `SUPERSERVE_PROMPT` environment variable. When the process exits with code 0, the turn is complete.
 
-### HTTP server mode
+---
 
-If your agent already exposes an HTTP endpoint, use `--port` to proxy directly:
+## HTTP server mode
+
+If your agent already runs its own HTTP server, skip the shim entirely:
 
 ```bash
 superserve deploy server.py --port 8000
 ```
 
-Superserve forwards requests to your server's `/run` endpoint inside the sandbox. You handle routing, Superserve handles infrastructure.
+Superserve starts your server inside the sandbox and proxies requests to `localhost:8000/run`. You handle routing, the platform handles infrastructure.
+
+Use this when your agent needs custom endpoints, WebSocket connections, or serves a frontend alongside the API.
 
 ---
 
@@ -125,54 +82,36 @@ Superserve forwards requests to your server's `/run` endpoint inside the sandbox
 superserve deploy ENTRYPOINT [--name NAME] [--port PORT] [--dir PATH]
 ```
 
-| Flag | Description |
+| Flag | What it does |
 |------|-------------|
-| `ENTRYPOINT` | Path to your script (e.g. `agent.py`, `src/main.ts`) |
-| `--name` | Agent name (defaults to directory name) |
-| `--port` | Activate HTTP proxy mode — forward traffic to this port |
-| `--dir` | Project directory (default: `.`) |
+| `ENTRYPOINT` | Script to run — `agent.py`, `src/main.ts`, etc. |
+| `--name` | Agent name. Defaults to directory name. |
+| `--port` | HTTP mode — proxy to this port instead of using the shim. |
+| `--dir` | Project root. Default: `.` |
 
-Supported file types: `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`
+File types: `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`
 
 ---
 
 ## Dependencies
 
-Dependencies are auto-detected and installed in the sandbox:
+Detected and installed automatically:
 
-| File | Install command |
-|------|----------------|
+| File | What runs |
+|------|-----------|
 | `requirements.txt` | `uv pip install -r requirements.txt` |
 | `pyproject.toml` | `uv pip install -e .` |
 
-<Tip>
-  If your project has both files, `requirements.txt` takes precedence.
-</Tip>
+If both exist, `requirements.txt` wins.
 
 ---
 
-## Zero-config vs SDK integration
+## When to use the SDK instead
 
-| | Zero-config | SDK integration |
+Zero-config is the fastest path from local script to deployed agent. But if you need fine-grained control over streaming — status messages, structured metadata, custom framing — use the [Superserve SDK integration](/quickstart#advanced-sdk-integration).
+
+| | Zero-config | SDK |
 |---|---|---|
-| **Code changes** | None | Import `superserve`, add decorators |
-| **Deploy command** | `superserve deploy agent.py` | `superserve deploy` (reads `superserve.yaml`) |
-| **Streaming** | Automatic via `print()` | Explicit via `stream.write()` |
-| **Status messages** | Not available | `stream.status("Thinking...")` |
-| **Structured metadata** | Not available | `stream.metadata({...})` |
-| **Best for** | Getting started, prototypes, any-framework agents | Production agents that need fine-grained streaming control |
-
-Both paths produce the same result: a deployed agent with an HTTPS endpoint, sandboxed execution, persistent sessions, and encrypted secrets.
-
----
-
-## Next steps
-
-<CardGroup cols={2}>
-  <Card title="Quickstart" icon="bolt" href="/quickstart">
-    Full walkthrough with both deploy paths
-  </Card>
-  <Card title="SDK Reference" icon="code" href="/sdk">
-    Integrate agents into your app with the TypeScript SDK
-  </Card>
-</CardGroup>
+| Code changes | None | Import + decorators |
+| Streaming | `print()` → text | `stream.write()`, `stream.status()`, `stream.metadata()` |
+| Best for | Prototyping, any-framework agents | Production agents with rich streaming UX |

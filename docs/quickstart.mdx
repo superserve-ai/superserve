@@ -1,367 +1,131 @@
 ---
 title: "Quickstart"
-description: "Deploy an agent in 5 minutes"
+description: "Deploy an agent in 2 minutes"
 ---
 
 <Info>
-  **Prerequisites:** Python 3.12+, an agent script, and a [Superserve account](https://console.superserve.ai).
+  **You need:** Python 3.12+ and a [Superserve account](https://console.superserve.ai).
 </Info>
 
-## Option A: Zero-config deploy
+## 1. Install
 
-The fastest path. No code changes, no config files.
-
-<Steps>
-  <Step title="Install and log in">
-    ```bash
-    pip install superserve
-    superserve login
-    ```
-  </Step>
-
-  <Step title="Deploy your script">
-    ```bash
-    superserve deploy agent.py
-    ```
-
-    Superserve packages your code, detects dependencies from `requirements.txt` or `pyproject.toml`, and builds a sandboxed environment.
-  </Step>
-
-  <Step title="Set your API keys">
-    ```bash
-    superserve secrets set my-project ANTHROPIC_API_KEY=sk-ant-...
-    ```
-  </Step>
-
-  <Step title="Run it">
-    ```bash
-    superserve run my-project
-    ```
-
-    ```
-    You> What is the capital of France?
-    The capital of France is Paris.
-
-    Completed in 1.2s
-    ```
-  </Step>
-</Steps>
-
-That's it. Your agent is deployed with an HTTPS endpoint, sandboxed execution, and persistent sessions. See [Zero-Config Deploy](/zero-config) for details on how it works.
-
----
-
-## Option B: SDK integration
-
-For agents that need fine-grained streaming control — status messages, structured metadata, and explicit response framing.
-
-<Accordion title="Using an AI coding assistant? Copy this prompt to convert your agent automatically.">
-
-```text
-Make my Claude Agent SDK script deployable on Superserve.
-
-Superserve hosts Claude Agent SDK agents with managed sandboxes and multi-turn
-sessions. Instead of reading input from stdin and printing to stdout, the agent
-receives messages through session.turns() and responds through stream.write().
-
-Rules:
-
-1. Add imports and app setup at the top:
-
-   from superserve import App
-   app = App(name="<agent-name>")  # lowercase, alphanumeric, hyphens only
-
-2. Wrap all agent logic inside a decorated async function:
-
-   @app.session
-   async def run(session):
-       ...
-
-3. Get user input from session.turns(), which yields (message, stream) pairs:
-
-   async for message, stream in session.turns():
-       # message is the user's text (str)
-       # stream is used to send responses back
-
-   - If the agent has a while/for loop reading input() or stdin, replace it
-     with session.turns()
-   - If the agent takes input from sys.argv, argparse, or click, remove that
-     and use session.turns() instead
-   - If the agent is single-turn (no input loop), still use session.turns()
-     to receive the prompt
-   - Remove any exit/quit handling — session lifecycle is managed by Superserve
-
-4. Replace output that is meant for the user:
-
-   - print(text) that shows results to the user → stream.write(text)
-   - Status/progress messages → stream.status("Thinking...")
-   - Structured data (cost, tokens, etc.) → stream.metadata({"key": value})
-   - Leave debug print() or logging calls as-is — they go to logs, not the user
-
-5. Replace the entrypoint:
-
-   - Remove asyncio.run(), click decorators, or argparse setup
-   - Replace with: if __name__ == "__main__": app.run()
-
-6. Do NOT change:
-
-   - ClaudeAgentOptions (model, system_prompt, tools, permission_mode)
-   - ClaudeSDKClient usage (query, receive_response)
-   - Tool definitions or handling logic
-   - Any business logic inside the agent
-
-Example — before:
-
-   import asyncio
-   from claude_agent_sdk import (
-       AssistantMessage, ClaudeAgentOptions, ClaudeSDKClient,
-       ResultMessage, TextBlock, ToolUseBlock,
-   )
-
-   options = ClaudeAgentOptions(
-       system_prompt="You are a helpful assistant.",
-       model="haiku",
-       permission_mode="bypassPermissions",
-   )
-
-   async def main():
-       async with ClaudeSDKClient(options=options) as client:
-           while True:
-               user_input = input("You: ")
-               if user_input.lower() in ("exit", "quit"):
-                   break
-               await client.query(prompt=user_input, session_id="chat")
-               async for msg in client.receive_response():
-                   if isinstance(msg, AssistantMessage):
-                       for block in msg.content:
-                           if isinstance(block, TextBlock):
-                               print(block.text)
-                           elif isinstance(block, ToolUseBlock):
-                               print(f"[Using {block.name}...]")
-                   elif isinstance(msg, ResultMessage):
-                       print(f"Cost: ${msg.total_cost_usd:.4f}")
-
-   asyncio.run(main())
-
-Example — after:
-
-   from claude_agent_sdk import (
-       AssistantMessage, ClaudeAgentOptions, ClaudeSDKClient,
-       ResultMessage, TextBlock, ToolUseBlock,
-   )
-   from superserve import App
-
-   app = App(name="my-agent")
-
-   options = ClaudeAgentOptions(
-       system_prompt="You are a helpful assistant.",
-       model="haiku",
-       permission_mode="bypassPermissions",
-   )
-
-   @app.session
-   async def run(session):
-       async with ClaudeSDKClient(options=options) as client:
-           async for message, stream in session.turns():
-               stream.status("Thinking...")
-               await client.query(prompt=message, session_id="chat")
-               async for msg in client.receive_response():
-                   if isinstance(msg, AssistantMessage):
-                       for block in msg.content:
-                           if isinstance(block, TextBlock):
-                               stream.write(block.text)
-                           elif isinstance(block, ToolUseBlock):
-                               stream.status(f"Using {block.name}...")
-                   elif isinstance(msg, ResultMessage):
-                       stream.metadata({"cost_usd": msg.total_cost_usd})
-
-   if __name__ == "__main__":
-       app.run()
+```bash
+pip install superserve
+superserve login
 ```
 
-</Accordion>
+## 2. Write an agent (or use one you already have)
 
-<Steps>
-  <Step title="Install the CLI">
-    ```bash
-    pip install superserve
-    ```
-  </Step>
+Any script that uses `input()` and `print()` works. Here's one with the Claude Agent SDK:
 
-  <Step title="Log in">
-    ```bash
-    superserve login
-    ```
-    Opens your browser to authenticate. Credentials are saved locally at `~/.superserve/credentials.json`.
-  </Step>
-
-  <Step title="Add Superserve to your agent">
-    A few lines connect your agent to Superserve - see [below](#add-superserve-to-your-agent).
-  </Step>
-
-  <Step title="Initialize your project">
-    <Note>
-      Run `superserve init` from the root of your project - where your dependencies (`requirements.txt` or `pyproject.toml`) and agent code live.
-    </Note>
-
-    ```bash
-    superserve init
-    ```
-
-    This creates `superserve.yaml` in your project directory:
-
-    ```yaml
-    name: my-agent
-    command: python agent.py
-    ```
-
-    Set `command` to whatever starts your agent.
-  </Step>
-
-  <Step title="Deploy">
-    ```bash
-    superserve deploy
-    ```
-
-    ```
-    ✓ Packaging project... (4 KB)
-    ✓ Uploading to Superserve...
-    ✓ Installing dependencies... (12s)
-
-    Deployed 'my-agent' in 15s
-
-    superserve run my-agent "your prompt here"
-    ```
-
-    Dependencies are auto-detected from `requirements.txt` or `pyproject.toml`.
-  </Step>
-
-  <Step title="Set your API keys">
-    ```bash
-    superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-...
-    ```
-    <Tip>
-      Secrets are encrypted and injected as environment variables at runtime. You can set multiple keys at once.
-    </Tip>
-  </Step>
-
-  <Step title="Run it">
-    ```bash
-    superserve run my-agent
-    ```
-
-    ```
-    You> What is the capital of France?
-    The capital of France is Paris.
-
-    Completed in 1.2s
-
-    You> And what's its population?
-    Paris has approximately 2.1 million people in the city proper.
-
-    Completed in 0.8s
-
-    You>
-    ```
-
-  </Step>
-</Steps>
-
-## Add Superserve to your agent
-
-A few lines connect your Claude Agent SDK script to Superserve:
-
-<CodeGroup>
-
-```python Your agent
-from claude_agent_sdk import (
-    AssistantMessage,
-    ClaudeAgentOptions,
-    ClaudeSDKClient,
-    ResultMessage,
-    TextBlock,
-    ToolUseBlock,
-)
+```python agent.py
+import asyncio
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, TextBlock
 
 options = ClaudeAgentOptions(
-    system_prompt="You are a helpful assistant.",
-    model="haiku",
+    model="sonnet",
+    system_prompt="You are a senior software engineer. Be direct and specific.",
     permission_mode="bypassPermissions",
 )
 
-async def run(prompt: str):
+async def main():
     async with ClaudeSDKClient(options=options) as client:
-        await client.query(prompt=prompt)
-
-        async for msg in client.receive_response():
-            if isinstance(msg, AssistantMessage):
-                for block in msg.content:
+        while True:
+            user_input = input()
+            await client.query(prompt=user_input, session_id="chat")
+            async for msg in client.receive_response():
+                for block in getattr(msg, "content", []):
                     if isinstance(block, TextBlock):
                         print(block.text)
-            elif isinstance(msg, ResultMessage):
-                print(f"Cost: ${msg.total_cost_usd}")
+
+asyncio.run(main())
 ```
 
-```python With Superserve
-from claude_agent_sdk import (
-    AssistantMessage,
-    ClaudeAgentOptions,
-    ClaudeSDKClient,
-    ResultMessage,
-    TextBlock,
-    ToolUseBlock,
-)
-from superserve import App                        # 1. Import
+This is a standard Claude Agent SDK script. No Superserve imports, no decorators, no config files.
 
-app = App(name="my-agent")                        # 2. Declare
+## 3. Deploy
 
-options = ClaudeAgentOptions(
-    system_prompt="You are a helpful assistant.",
-    model="haiku",
-    permission_mode="bypassPermissions",
-)
-
-@app.session                                      # 3. Decorate
-async def run(session):
-    async with ClaudeSDKClient(options=options) as client:
-        async for message, stream in session.turns():  # 4. Multi-turn loop
-            stream.status("Thinking...")
-            await client.query(prompt=message)
-
-            async for msg in client.receive_response():
-                if isinstance(msg, AssistantMessage):
-                    for block in msg.content:
-                        if isinstance(block, TextBlock):
-                            stream.write(block.text)   # 5. Stream back
-                elif isinstance(msg, ResultMessage):
-                    stream.metadata({"cost_usd": msg.total_cost_usd})
-
-if __name__ == "__main__":
-    app.run()                                     # 6. Start
+```bash
+superserve deploy agent.py
 ```
 
-</CodeGroup>
+```
+✓ Packaging project... (4 KB)
+✓ Uploading...
+✓ Installing dependencies... (12s)
 
-**What changed:**
+Deployed 'my-project' in 15s
+```
 
-| Addition | What it does |
-|----------|-------------|
-| `App(name="my-agent")` | Names your agent for deployment and CLI access |
-| `@app.session` | Marks your function as the entry point Superserve calls on each session |
-| `session.turns()` | Async loop that receives user messages and gives you a `stream` to respond |
-| `stream.write()` | Sends text back to the user in real-time (replaces `print()`) |
-| `stream.status()` | Shows progress to the user while the agent works (e.g. tool calls, thinking) |
-| `app.run()` | Connects your agent to the Superserve runtime |
+Dependencies are detected from `requirements.txt` or `pyproject.toml` automatically.
+
+## 4. Set your API keys
+
+```bash
+superserve secrets set my-project ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Secrets are encrypted at rest and injected as environment variables when your agent runs.
+
+## 5. Run it
+
+```bash
+superserve run my-project
+```
+
+```
+You> Review the error handling in our auth module. Are we leaking stack traces?
+
+I'll analyze the auth module for error handling issues.
+
+Found 2 problems in `auth/middleware.py`:
+
+1. **Line 47**: `except Exception as e: return {"error": str(e)}`
+   Leaks internal error messages to clients. Replace with a generic 500
+   response and log the full exception server-side.
+
+2. **Line 82**: Bare `except:` clause catches SystemExit and KeyboardInterrupt.
+   Use `except Exception:` instead.
+
+The rest of the error handling looks correct — `login()` and `refresh_token()`
+both use structured error responses without exposing internals.
+
+Completed in 3.8s
+
+You> Fix both issues and show me the diff
+
+...
+```
+
+The agent remembers context between turns. The sandbox persists files across the conversation. Come back tomorrow and [resume where you left off](/sessions).
 
 ---
 
-## Next steps
+## What just happened
+
+1. Superserve packaged your code into a tarball
+2. Built a sandbox image with your dependencies pre-installed
+3. When you ran the agent, it spun up an isolated microVM (~400ms)
+4. Injected a [shim](/zero-config) that translates `input()`/`print()` into the streaming protocol
+5. Streamed the response back to your terminal in real-time via SSE
+
+Your code ran unmodified. The shim is invisible to your script.
+
+---
+
+## Next
 
 <CardGroup cols={2}>
   <Card title="Sessions" icon="messages" href="/sessions">
-    Persistent conversations with memory and resume
+    Resume conversations, manage session lifecycle
   </Card>
-  <Card title="CLI Reference" icon="terminal" href="/cli">
-    All commands, flags, and options
+  <Card title="Zero-Config Deploy" icon="wand-magic-sparkles" href="/zero-config">
+    Multi-turn vs one-shot detection, HTTP mode, how the shim works
+  </Card>
+  <Card title="SDK" icon="code" href="/sdk">
+    Build apps on top of your agents — TypeScript client and React hooks
+  </Card>
+  <Card title="CLI" icon="terminal" href="/cli">
+    All commands and flags
   </Card>
 </CardGroup>

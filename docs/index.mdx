@@ -1,71 +1,81 @@
 ---
-title: "Introduction"
-description: "Deploy agents to the cloud in one command. No infrastructure, no code changes."
+title: "Superserve"
+description: "Deploy AI agents to the cloud. One command."
 ---
-
-Superserve takes your agent script and gives it a sandboxed cloud endpoint — streaming, sessions, secrets, and persistent storage included.
 
 ```bash
 pip install superserve
+superserve login
 superserve deploy agent.py
 ```
 
+Your agent is now running in an isolated sandbox with an HTTPS endpoint, streaming responses, persistent storage, and encrypted secrets. You didn't change your code.
+
+```bash
+$ superserve run my-agent "Analyze the error logs in /var/log and suggest fixes"
+
+Analyzing /var/log/syslog and /var/log/auth.log...
+
+Found 3 issues:
+1. SSH brute-force attempts from 192.168.1.105 (847 failed logins in 24h)
+   → Add to /etc/hosts.deny or configure fail2ban
+2. Disk space warning on /dev/sda1 (94% full)
+   → Clean /var/log/journal — currently using 2.3GB
+3. OOM killer invoked twice for postgres (PID 1834, 2291)
+   → Increase vm.overcommit_ratio or add swap
+
+Completed in 4.7s
+```
+
 <CardGroup cols={2}>
-  <Card title="Zero-Config Deploy" icon="bolt" href="/zero-config">
-    Deploy any Python agent without changing your code
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Deploy an agent in 2 minutes
   </Card>
-  <Card title="Quickstart" icon="rocket" href="/quickstart">
-    Full walkthrough — deploy your first agent in 5 minutes
+  <Card title="Zero-Config Deploy" icon="wand-magic-sparkles" href="/zero-config">
+    How it works under the hood
   </Card>
-  <Card title="SDK Reference" icon="code" href="/sdk">
-    TypeScript SDK for building apps on top of your agents
+  <Card title="SDK" icon="code" href="/sdk">
+    TypeScript client, React hooks
   </Card>
-  <Card title="CLI Reference" icon="terminal" href="/cli">
-    Every command, flag, and option
+  <Card title="CLI" icon="terminal" href="/cli">
+    All commands and flags
   </Card>
 </CardGroup>
 
 ---
 
-## Why Superserve
+## What you get
 
-<CardGroup cols={2}>
-  <Card title="Zero config" icon="wand-magic-sparkles">
-    Point at a script, deploy. No decorators, no YAML, no Dockerfiles. Your code runs as-is.
-  </Card>
-  <Card title="Sandboxed execution" icon="shield">
-    Every session runs in an isolated microVM with its own compute, filesystem, and network.
-  </Card>
-  <Card title="Persistent workspace" icon="hard-drive">
-    Storage that survives restarts and long inactivity. Agents pick up where they left off.
-  </Card>
-  <Card title="Sub-second cold starts" icon="gauge-high">
-    Pre-built templates mean your agent starts in under a second.
-  </Card>
-  <Card title="Encrypted secrets" icon="lock">
-    API keys are encrypted at rest and injected at runtime. Values are never exposed.
-  </Card>
-  <Card title="Real-time streaming" icon="bolt">
-    Stream tokens and tool calls as they happen via SSE.
-  </Card>
-</CardGroup>
+Every deployed agent runs in its own [Firecracker microVM](https://firecracker-microvm.github.io/). Each session gets:
+
+- **Isolated sandbox** — own filesystem, network, and compute. Nothing is shared between sessions.
+- **Persistent workspace** — files survive across turns and restarts. Resume a conversation days later and the agent picks up where it left off.
+- **Encrypted secrets** — API keys are encrypted at rest, injected at runtime, never logged or returned by the API.
+- **Real-time streaming** — tokens and tool calls stream back via SSE as they happen.
+- **Sub-second cold starts** — pre-built templates mean your agent starts in ~400ms.
 
 ---
 
-## Two ways to deploy
+## Works with any agent framework
 
-<CardGroup cols={2}>
-  <Card title="Zero-config" icon="wand-magic-sparkles" href="/zero-config">
+Zero-config deploy works with anything that reads from `input()` and writes to `print()` — or anything that exposes an HTTP endpoint.
+
+<CardGroup cols={3}>
+  <Card title="Claude Agent SDK">
     ```bash
     superserve deploy agent.py
     ```
-    No code changes. Works with any framework — Claude Agent SDK, OpenAI Agents SDK, LangGraph, or plain Python. Best for getting started and prototyping.
   </Card>
-  <Card title="SDK integration" icon="code" href="/quickstart#add-superserve-to-your-agent">
-    ```python
-    from superserve import App
-    app = App(name="my-agent")
+  <Card title="OpenAI Agents SDK">
+    ```bash
+    superserve deploy agent.py
     ```
-    Import the Superserve SDK for fine-grained control — status messages, structured metadata, and custom streaming. Best for production agents.
+  </Card>
+  <Card title="Your own code">
+    ```bash
+    superserve deploy server.py --port 8000
+    ```
   </Card>
 </CardGroup>
+
+Same command. Same infrastructure. The framework doesn't matter — Superserve runs your code as-is.

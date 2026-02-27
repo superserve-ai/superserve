@@ -1,113 +1,65 @@
 ---
 title: "Sessions"
-description: "Persistent conversations with memory and resume"
+description: "Persistent conversations that survive restarts"
 ---
 
-## What is a session?
+Every `superserve run` creates a session — an isolated sandbox running your agent, with its own filesystem and process state. Sessions persist after the conversation ends. Come back hours or days later and resume where you left off.
 
-Every time a user runs your agent with [`superserve run`](/cli#superserve-run), Superserve creates a **session**. A session is:
-
-- **A running instance of your agent** - your process, your code, your environment
-- **Persistent** - the session stays alive after the conversation ends
-- **Resumable** - users can come back and continue where they left off
-
-## Conversation memory
-
-The [Claude Agent SDK](https://docs.anthropic.com/en/docs/agent-sdk) preserves conversation history when you pass a [`session_id`](https://platform.claude.com/docs/en/agent-sdk/sessions) to `client.query()`. Combined with Superserve sessions, this means a user can come back hours later and the agent remembers everything.
-
-<CodeGroup>
-
-```python Without memory
-@app.session
-async def run(session):
-    async with ClaudeSDKClient(options=options) as client:
-        async for message, stream in session.turns():
-            await client.query(prompt=message)
-
-            async for msg in client.receive_response():
-                if isinstance(msg, AssistantMessage):
-                    for block in msg.content:
-                        if isinstance(block, TextBlock):
-                            stream.write(block.text)
-```
-
-```python With memory
-@app.session
-async def run(session):
-    async with ClaudeSDKClient(options=options) as client:
-        async for message, stream in session.turns():
-            await client.query(prompt=message, session_id="chat")  # Added
-
-            async for msg in client.receive_response():
-                if isinstance(msg, AssistantMessage):
-                    for block in msg.content:
-                        if isinstance(block, TextBlock):
-                            stream.write(block.text)
-```
-
-</CodeGroup>
-
-That's it - one parameter. The Claude Agent SDK stores conversation history on disk, and Superserve persists your agent's filesystem across sessions - so memory works even when the underlying instance changes.
-
-## Resuming sessions
-
-When a user runs your agent, Superserve creates a session that stays alive after the conversation ends. They can come back and pick up where they left off:
+## Resume a conversation
 
 ```bash
-# List sessions for an agent
-superserve sessions list my-agent
-```
+$ superserve sessions list my-agent
 
-```
-ID             TITLE                            STATUS       MSGS   LAST ACTIVE
-----------------------------------------------------------------------------------
-a1b2c3d4e5f6   Deployment pipeline discussion    idle         4      2 minutes ago
-f6e5d4c3b2a1   Staging environment setup         idle         12     1 hour ago
+ID             TITLE                              STATUS   MSGS   LAST ACTIVE
+--------------------------------------------------------------------------------
+a1b2c3d4e5f6   Review auth module error handling   idle     4      2 minutes ago
+f6e5d4c3b2a1   Refactor database migrations        idle     12     1 hour ago
 ```
 
 ```bash
-# Resume a session
-superserve sessions resume ses_a1b2
+$ superserve sessions resume a1b2
+
+Resumed: "Review auth module error handling" (my-agent)
+
+You> Did you apply both fixes?
+
+Yes — both issues in auth/middleware.py are fixed. Line 47 now returns
+a generic 500 with the original exception logged via structlog. Line 82
+uses `except Exception:` instead of bare `except:`.
+
+Completed in 2.1s
 ```
 
+The agent remembers the full conversation. Files it created or modified are still in the workspace.
+
+## How persistence works
+
+Sessions use two layers of persistence:
+
+1. **Workspace filesystem** — Superserve persists the sandbox's `/workspace` directory. Files your agent reads, writes, or modifies survive across turns and restarts.
+
+2. **Conversation memory** — If your agent uses the Claude Agent SDK with `session_id`, Claude maintains conversation history on disk. Combined with workspace persistence, the agent has full context even after the sandbox restarts.
+
+```python
+# Pass session_id to enable conversation memory
+await client.query(prompt=user_input, session_id="chat")
 ```
-Resumed session ses_a1b2c3 (my-agent)
 
-You> What were we talking about?
+One parameter. Memory works even when the underlying sandbox instance changes.
 
-Agent> We were discussing the deployment pipeline for your staging environment.
+## Session lifecycle
 
-Completed in 1.4s
-```
-
-## Session statuses
-
-| Status | Meaning | Can resume? |
-|--------|---------|-------------|
-| `active` | Agent is currently processing a message | No - already in use |
-| `idle` | Conversation paused, agent waiting for next message | Yes |
-| `completed` | Session ended by the user via `sessions end` | Yes - starts a fresh instance with previous context |
-| `failed` | Agent crashed or timed out | Yes - starts a fresh instance with previous context |
-
-## Managing sessions
+| Status | Meaning | Resumable? |
+|--------|---------|------------|
+| `active` | Processing a message right now | No |
+| `idle` | Waiting for the next message | Yes |
+| `completed` | Ended by user | Yes — fresh sandbox, same workspace |
+| `failed` | Crashed or timed out | Yes — fresh sandbox, same workspace |
 
 ```bash
-# View session details
-superserve sessions get ses_a1b2
+# View details
+superserve sessions get a1b2
 
-# End a session
-superserve sessions end ses_a1b2
+# End a session (workspace is preserved)
+superserve sessions end a1b2
 ```
-
----
-
-## Next steps
-
-<CardGroup cols={2}>
-  <Card title="Quickstart" icon="rocket" href="/quickstart">
-    Deploy your first agent
-  </Card>
-  <Card title="CLI Reference" icon="terminal" href="/cli">
-    All commands, flags, and options
-  </Card>
-</CardGroup>
