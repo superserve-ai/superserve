@@ -20,7 +20,7 @@ superserve/
 │   ├── typescript-config/       # Shared tsconfig presets
 │   └── biome-config/            # Shared Biome linting/formatting config
 ├── src/superserve/              # Legacy Python CLI+SDK (being replaced by TS CLI)
-├── docs/                        # Mintlify documentation
+├── docs/                        # Mintlify documentation, no specs or planning docs here
 ├── examples/                    # Example projects
 └── tests/                       # Python tests
 ```
