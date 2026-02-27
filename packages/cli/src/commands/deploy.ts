@@ -106,7 +106,7 @@ export const deploy = new Command("deploy")
         }
 
         // Wait for dependency installation (sandbox template build)
-        if (agent.sandbox_status === "building") {
+        if (agent.deps_status === "building") {
           status.start("Installing dependencies...")
           const pollInterval = 3000
           const maxWait = 300_000
@@ -119,14 +119,14 @@ export const deploy = new Command("deploy")
 
             agent = await client.getAgent(name)
 
-            if (agent.sandbox_status === "ready") {
+            if (agent.deps_status === "ready") {
               status.done(
                 "\u2713",
                 `(${formatElapsed((performance.now() - buildStart) / 1000)})`,
               )
               break
             }
-            if (agent.sandbox_status === "failed") {
+            if (agent.deps_status === "failed") {
               status.fail()
               await track("cli_deploy_build_failed", { agent_name: name })
               console.error()
@@ -138,7 +138,7 @@ export const deploy = new Command("deploy")
             }
           }
 
-          if (agent.sandbox_status === "building") {
+          if (agent.deps_status === "building") {
             status.fail("(timed out)")
             await track("cli_deploy_build_timeout", { agent_name: name })
             console.error(
