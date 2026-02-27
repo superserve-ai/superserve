@@ -10,6 +10,7 @@ interface ChatAreaProps {
   agentName?: string
   onSend: (message: string) => void
   onStop: () => void
+  onRetry?: () => void
 }
 
 export default function ChatArea({
@@ -18,6 +19,7 @@ export default function ChatArea({
   agentName,
   onSend,
   onStop,
+  onRetry,
 }: ChatAreaProps) {
   const mainRef = useRef<HTMLDivElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
@@ -57,7 +59,7 @@ export default function ChatArea({
           </div>
         ) : (
           <div className="mx-auto max-w-3xl px-4 py-6 pb-8 md:px-6">
-            <MessageList messages={session.messages} />
+            <MessageList messages={session.messages} onRetry={onRetry} />
             <div ref={endRef} />
           </div>
         )}

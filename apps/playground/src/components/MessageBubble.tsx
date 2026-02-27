@@ -65,9 +65,10 @@ function formatTime(iso: string): string {
 
 interface MessageBubbleProps {
   message: ChatMessage
+  onRetry?: () => void
 }
 
-export default function MessageBubble({ message }: MessageBubbleProps) {
+export default function MessageBubble({ message, onRetry }: MessageBubbleProps) {
   const isUser = message.role === "user"
   const isEmpty =
     !isUser &&
@@ -160,6 +161,15 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
                     </div>
                   ))}
                 </div>
+              )}
+              {!isUser && message.content.startsWith("Error:") && onRetry && (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="mt-2 cursor-pointer border border-dashed border-border px-2.5 py-1 font-mono text-[11px] text-muted transition-colors hover:text-foreground"
+                >
+                  Retry
+                </button>
               )}
             </div>
           </div>
