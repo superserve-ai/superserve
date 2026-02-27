@@ -1,31 +1,79 @@
 ---
 title: "Superserve"
-description: "Deploy AI agents to the cloud. One command."
+description: "Agent sandboxes with sessions, streaming, and zero-config deploys"
 ---
+
+## The problem
+
+You built an agent that works on your laptop. Now you need other people to use it.
+
+With existing tools, that means: write a server, handle streaming, manage sessions, persist state between turns, set up sandboxed execution so the agent can safely run code, build a deploy pipeline, wire up secrets management. Weeks of infrastructure work before anyone can send your agent a message.
+
+Sandbox platforms like E2B and Modal give you isolated compute — but you still build the API layer, session management, streaming, and deploy pipeline yourself. You're assembling infrastructure, not shipping an agent.
+
+## The fix
 
 ```bash
 pip install superserve
-superserve login
 superserve deploy agent.py
 ```
 
-Your agent is now running in an isolated sandbox with an HTTPS endpoint, streaming responses, persistent storage, and encrypted secrets. No Dockerfile, no infrastructure config, no server code — the same script that runs on your laptop runs in the cloud.
+That's it. Your agent is now a cloud API with:
+
+- **Isolated sandboxes** — each session runs in its own [Firecracker microVM](https://firecracker-microvm.github.io/). Agents can execute code, write files, use tools — nothing escapes the sandbox.
+- **Persistent workspace** — files survive across turns and restarts. Resume a conversation days later and the agent's workspace is exactly how it left it.
+- **Multi-turn sessions** — built-in conversation state. No session management code, no database, no glue.
+- **Real-time streaming** — responses stream back via SSE as they happen. No polling, no WebSocket plumbing.
+- **Encrypted secrets** — API keys encrypted at rest, injected at runtime, never logged.
+- **Sub-second cold starts** — pre-built sandbox templates start in ~400ms.
+
+The same script that runs with `python agent.py` on your machine runs in the cloud. No Dockerfile, no server code, no infrastructure config.
 
 ```bash
-$ superserve run my-agent "Analyze the error logs in /var/log and suggest fixes"
+$ superserve run my-agent "Review the error handling in src/auth.ts — are we leaking stack traces?"
 
-Analyzing /var/log/syslog and /var/log/auth.log...
+Analyzing src/auth.ts and src/middleware/auth.ts...
 
-Found 3 issues:
-1. SSH brute-force attempts from 192.168.1.105 (847 failed logins in 24h)
-   → Add to /etc/hosts.deny or configure fail2ban
-2. Disk space warning on /dev/sda1 (94% full)
-   → Clean /var/log/journal — currently using 2.3GB
-3. OOM killer invoked twice for postgres (PID 1834, 2291)
-   → Increase vm.overcommit_ratio or add swap
+Found 2 issues:
+1. Line 47: `catch(e) { res.json({ error: e.message }) }`
+   Leaks internal error details to clients. Return a generic 500 and
+   log the full error server-side.
+2. Line 82: Bare `catch {}` swallows errors silently.
+   At minimum, log the error. Better: re-throw after logging.
 
-Completed in 4.7s
+The rest of the error handling looks correct — login() and refreshToken()
+both use structured error responses.
+
+Completed in 3.8s
 ```
+
+---
+
+## Works with any agent framework
+
+Superserve runs your code as-is. No SDK lock-in, no framework requirements.
+
+<CardGroup cols={3}>
+  <Card title="Claude Agent SDK">
+    ```bash
+    superserve deploy agent.py
+    ```
+  </Card>
+  <Card title="OpenAI Agents SDK">
+    ```bash
+    superserve deploy agent.py
+    ```
+  </Card>
+  <Card title="Your own HTTP server">
+    ```bash
+    superserve deploy server.py --port 8000
+    ```
+  </Card>
+</CardGroup>
+
+Same command. Same infrastructure. Same streaming, sessions, and secrets.
+
+---
 
 <CardGroup cols={2}>
   <Card title="Quickstart" icon="bolt" href="/quickstart">
@@ -41,41 +89,3 @@ Completed in 4.7s
     All commands and flags
   </Card>
 </CardGroup>
-
----
-
-## What you get
-
-Every deployed agent runs in its own [Firecracker microVM](https://firecracker-microvm.github.io/). Each session gets:
-
-- **Isolated sandbox** — own filesystem, network, and compute. Nothing is shared between sessions.
-- **Persistent workspace** — files survive across turns and restarts. Resume a conversation days later and the agent picks up where it left off.
-- **Encrypted secrets** — API keys are encrypted at rest, injected at runtime, never logged or returned by the API.
-- **Real-time streaming** — tokens and tool calls stream back via SSE as they happen.
-- **Sub-second cold starts** — pre-built templates mean your agent starts in ~400ms.
-
----
-
-## Works with any agent framework
-
-Zero-config deploy works with anything that reads from `input()` and writes to `print()` — or anything that exposes an HTTP endpoint.
-
-<CardGroup cols={3}>
-  <Card title="Claude Agent SDK">
-    ```bash
-    superserve deploy agent.py
-    ```
-  </Card>
-  <Card title="OpenAI Agents SDK">
-    ```bash
-    superserve deploy agent.py
-    ```
-  </Card>
-  <Card title="Your own code">
-    ```bash
-    superserve deploy server.py --port 8000
-    ```
-  </Card>
-</CardGroup>
-
-Same command. Same infrastructure. The framework doesn't matter — Superserve runs your code as-is.
