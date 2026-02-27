@@ -1,0 +1,7 @@
+{
+  "extends": "@superserve/typescript-config/react-app.json",
+  "compilerOptions": {
+    "outDir": "dist"
+  },
+  "include": ["src"]
+}

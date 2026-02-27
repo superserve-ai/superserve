@@ -1,41 +1,50 @@
-# Byte-compiled / optimized / DLL files
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.next/
+*.egg-info/
+
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
-
-# Distribution / packaging
 .Python
-build/
-dist/
-*.egg-info/
-.installed.cfg
 *.egg
+.installed.cfg
 
 # Virtual environments
-.env
-.venv
-env/
-venv/
-ENV/
+.venv/
 
-# Unit test / coverage reports
+# Environment files
+.env
+.env.local
+
+# Test / coverage
 .pytest_cache/
 .coverage
 htmlcov/
-*.cover
 
 # IDEs
-.vscode/
 .idea/
 *.swp
 
 # OS
 .DS_Store
 
-# Development notes
+# Turbo
+.turbo/
+
+# Vercel
+.vercel/
+
+# Vite
+.vite/
+
+# Development
 notes/
 blog_draft*.md
 
-# claude
-devcontainer.json
+# Claude
 .claude/
+devcontainer.json
