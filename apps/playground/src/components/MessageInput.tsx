@@ -67,6 +67,7 @@ export default function MessageInput({
             resizeTextarea()
           }}
           onKeyDown={handleKeyDown}
+          autoFocus
           placeholder="Send a message..."
           disabled={isStreaming}
           rows={1}
