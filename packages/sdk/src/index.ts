@@ -108,6 +108,36 @@ export {
   type RunOptionsValidation,
 } from "./validation"
 
+/**
+ * Session management utilities
+ * @see {@link SessionStore}
+ * @see {@link SessionLifecycleManager}
+ */
+export {
+  SessionStore,
+  SessionLifecycleManager,
+  type SessionMetadata,
+  type SessionExport,
+  type SessionSearchOptions,
+} from "./session-manager"
+
+/**
+ * Performance optimization utilities
+ * @see {@link TTLCache}
+ * @see {@link RequestDeduplicator}
+ * @see {@link memoize}
+ * @see {@link BatchProcessor}
+ * @see {@link RateLimiter}
+ */
+export {
+  TTLCache,
+  RequestDeduplicator,
+  memoize,
+  BatchProcessor,
+  RateLimiter,
+  type CacheConfig,
+} from "./performance"
+
 // ===================== Type Exports =====================
 
 /**
