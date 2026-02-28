@@ -1,8 +1,16 @@
 interface EmptyStateProps {
   hasSession: boolean
+  agentName?: string
+  onSend?: (message: string) => void
 }
 
-export default function EmptyState({ hasSession }: EmptyStateProps) {
+const STARTER_PROMPTS = [
+  "What can you do?",
+  "Help me get started",
+  "Show me an example",
+]
+
+export default function EmptyState({ hasSession, agentName, onSend }: EmptyStateProps) {
   if (!hasSession) {
     return (
       <div className="text-center">
@@ -50,10 +58,26 @@ export default function EmptyState({ hasSession }: EmptyStateProps) {
           <line x1="15" y1="10" x2="15" y2="10.01" />
         </svg>
       </div>
-      <p className="font-medium text-foreground">Start a conversation</p>
-      <p className="mt-1 text-[13px] text-muted">
-        Type a message below to chat with this agent.
+      <p className="font-medium text-foreground">
+        {agentName ? `Chat with ${agentName}` : "Start a conversation"}
       </p>
+      <p className="mt-1 text-[13px] text-muted">
+        Type a message below or try a suggestion.
+      </p>
+      {onSend && (
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          {STARTER_PROMPTS.map((prompt) => (
+            <button
+              key={prompt}
+              type="button"
+              onClick={() => onSend(prompt)}
+              className="cursor-pointer border border-dashed border-border px-3 py-1.5 text-[12px] text-muted transition-colors hover:border-border-focus hover:text-foreground"
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

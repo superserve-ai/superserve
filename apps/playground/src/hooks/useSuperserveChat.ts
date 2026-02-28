@@ -306,6 +306,34 @@ export function useSuperserveChat(options: UseSuperserveChatOptions) {
     }
   }, [setSessions])
 
+  // Retry last message — removes the failed assistant + user pair and re-sends
+  const retryLastMessage = useCallback(() => {
+    if (!activeSession || !activeLocalId) return
+    const lastUserMsg = [...activeSession.messages]
+      .reverse()
+      .find((m) => m.role === "user")
+    if (!lastUserMsg) return
+
+    // Remove the last assistant + user message pair
+    setSessions((prev) =>
+      prev.map((s) => {
+        if (s.localId !== activeLocalId) return s
+        const messages = [...s.messages]
+        // Remove last assistant message (the error)
+        if (messages.length > 0 && messages[messages.length - 1].role === "assistant") {
+          messages.pop()
+        }
+        // Remove the user message that triggered it
+        if (messages.length > 0 && messages[messages.length - 1].role === "user") {
+          messages.pop()
+        }
+        return { ...s, messages }
+      }),
+    )
+    // Re-send after state update
+    setTimeout(() => sendMessage(lastUserMsg.content), 0)
+  }, [activeSession, activeLocalId, setSessions, sendMessage])
+
   return {
     sessions,
     activeSession,
@@ -316,5 +344,6 @@ export function useSuperserveChat(options: UseSuperserveChatOptions) {
     deleteSession,
     sendMessage,
     stopStream,
+    retryLastMessage,
   }
 }
