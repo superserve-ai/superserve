@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Superserve } from "@superserve/sdk"
 import { Badge } from "@superserve/ui"
 import { useSuperserveChat } from "../hooks/useSuperserveChat"
@@ -49,6 +49,7 @@ export default function ChatPage({ agentId, onBack }: ChatPageProps) {
     deleteSession,
     sendMessage,
     stopStream,
+    retryLastMessage,
   } = useSuperserveChat({
     agentId,
     agentName: agentName ?? agentId,
@@ -56,10 +57,21 @@ export default function ChatPage({ agentId, onBack }: ChatPageProps) {
     baseUrl: BASE_URL,
   })
 
-  const handleNewChat = () => {
+  const handleNewChat = useCallback(() => {
     createSession()
     setSidebarOpen(false)
-  }
+  }, [createSession])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "n") {
+        e.preventDefault()
+        handleNewChat()
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [handleNewChat])
 
   const handleSelectSession = (localId: string) => {
     switchSession(localId)
@@ -161,8 +173,10 @@ export default function ChatPage({ agentId, onBack }: ChatPageProps) {
           <ChatArea
             session={activeSession}
             status={status}
+            agentName={agentName ?? undefined}
             onSend={sendMessage}
             onStop={stopStream}
+            onRetry={retryLastMessage}
           />
         </div>
       </div>
