@@ -42,9 +42,7 @@ const BUN_EXTENSION_COMMANDS: Record<string, string> = {
   ".cjs": "bun run",
 }
 
-function detectPackageManager(
-  projectDir: string,
-): "bun" | "npm" | null {
+function detectPackageManager(projectDir: string): "bun" | "npm" | null {
   if (
     existsSync(join(projectDir, "bun.lock")) ||
     existsSync(join(projectDir, "bun.lockb"))
