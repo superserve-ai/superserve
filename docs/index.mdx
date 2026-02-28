@@ -1,49 +1,45 @@
 ---
 title: "Introduction"
-description: "Agent sandboxes with sessions, streaming, and zero-config deploys"
+description: "The agent deployment platform"
 ---
 
-Superserve deploys your agent script to an isolated cloud sandbox — no Dockerfile, no server code, no infrastructure config.
+## The problem with running agents
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/superserve-ai/superserve/main/cli/install.sh | sh
-```
+AI agents need freedom to execute code, install packages, read files, make network requests. On your laptop, that freedom can delete files and leak credentials. In production, multiply that across every user session. Either way, you end up building infrastructure instead of building agents.
 
-```bash
+You need real isolation — separate kernel, separate filesystem, separate network — that scales from one developer to a team shipping agents to thousands of users.
+
+## Superserve gives agents their own machine
+
+Every session runs in its own [Firecracker microVM](https://firecracker-microvm.github.io/). The agent gets full root access to its sandbox. It can execute code, install packages, write files, make HTTP requests. Nothing it does can touch your infrastructure or leak into another session.
+
+Deploy with one command. No Dockerfile, no server code, no config files.
+
+<CodeGroup>
+
+```bash Python
 superserve deploy agent.py
 ```
 
-The same script you run with `python agent.py` on your laptop runs in production. Each session gets its own [Firecracker microVM](https://firecracker-microvm.github.io/) with:
-
-- **Hardware-level isolation** — separate kernel, filesystem, and network per session. Agents can execute code and use tools without risk of cross-session data leaks.
-- **Durable workspace** — the agent's `/workspace` filesystem persists across turns and restarts. Resume a conversation days later and every file is exactly where the agent left it.
-- **Session management** — multi-turn conversation state handled by the platform. No database, no serialization logic, no routing code.
-- **Real-time streaming** — responses stream back via SSE as the agent works.
-- **~400ms cold starts** — pre-built sandbox templates with your dependencies baked in.
-
-```bash
-$ superserve run my-agent "Review the error handling in src/auth.ts — are we leaking stack traces?"
-
-Analyzing src/auth.ts and src/middleware/auth.ts...
-
-Found 2 issues:
-1. Line 47: `catch(e) { res.json({ error: e.message }) }`
-   Leaks internal error details to clients. Return a generic 500 and
-   log the full error server-side.
-2. Line 82: Bare `catch {}` swallows errors silently.
-   At minimum, log the error. Better: re-throw after logging.
-
-The rest of the error handling looks correct — login() and refreshToken()
-both use structured error responses.
-
-Completed in 3.8s
+```bash TypeScript
+superserve deploy agent.ts
 ```
+
+</CodeGroup>
+
+The same script you run locally runs in production. Superserve detects your dependencies, builds the sandbox, and serves your agent over a streaming API. Cold starts take ~400ms.
+
+## Nothing disappears between sessions
+
+Most sandboxes are ephemeral. The agent writes a file, the session ends, the file is gone. Every conversation starts from zero. That works for demos, not for production.
+
+Superserve workspaces persist. The `/workspace` filesystem survives across turns, restarts, and days. Resume a session on Thursday that you started on Monday — every file is where the agent left it, and the full conversation history is intact.
 
 ---
 
 ## Works with any agent framework
 
-Superserve runs your code as-is. No SDK lock-in, no framework requirements.
+Superserve runs your code as-is. No SDK lock-in, no framework requirements — if it reads input and prints output, it deploys.
 
 <CardGroup cols={3}>
   <Card title="Claude Agent SDK" href="/frameworks/claude-agent-sdk">
@@ -56,7 +52,7 @@ Superserve runs your code as-is. No SDK lock-in, no framework requirements.
     Type-safe agents with structured outputs
   </Card>
   <Card title="Mastra" href="/frameworks/mastra">
-    TypeScript-first agent framework
+    TypeScript-first agent framework with AI SDK
   </Card>
   <Card title="LangChain" href="/frameworks/langchain">
     Chains, agents, and retrieval pipelines
@@ -70,7 +66,7 @@ Superserve runs your code as-is. No SDK lock-in, no framework requirements.
 
 ## Roadmap
 
-We're building the production layer for AI agents. Here's what's coming next — [tell us what matters most](mailto:founders@superserve.ai).
+Here's what's coming next — [tell us what matters most](mailto:founders@superserve.ai).
 
 <CardGroup cols={2}>
   <Card title="Credential proxy" icon="shield-halved">
@@ -93,8 +89,8 @@ We're building the production layer for AI agents. Here's what's coming next —
   <Card title="Quickstart" icon="bolt" href="/quickstart">
     Deploy an agent in 2 minutes
   </Card>
-  <Card title="Zero-Config Deploy" icon="wand-magic-sparkles" href="/zero-config">
-    How it works under the hood
+  <Card title="Deploy" icon="wand-magic-sparkles" href="/zero-config">
+    Supported languages, dependency detection, configuration
   </Card>
   <Card title="SDK" icon="code" href="/sdk">
     TypeScript client, React hooks

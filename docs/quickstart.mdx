@@ -14,9 +14,11 @@ curl -fsSL https://raw.githubusercontent.com/superserve-ai/superserve/main/cli/i
 superserve login
 ```
 
-## Write an agent (or use one you already have)
+## Write an agent
 
-Any script that uses `input()` and `print()` works. Here's one with the Claude Agent SDK:
+Any script that reads input and prints output works. Pick your language:
+
+<CodeGroup>
 
 ```python agent.py
 import asyncio
@@ -41,12 +43,32 @@ async def main():
 asyncio.run(main())
 ```
 
-This is the same script you'd run locally with `python agent.py`. Nothing has been added to make it deployable.
+```typescript agent.ts
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { createInterface } from "readline";
+
+const agent = new Agent({
+  name: "engineer",
+  instructions: "You are a senior software engineer. Be direct and specific.",
+  model: openai("gpt-4o"),
+});
+
+const rl = createInterface({ input: process.stdin });
+rl.on("line", async (line) => {
+  const result = await agent.generate(line);
+  console.log(result.text);
+});
+```
+
+</CodeGroup>
+
+This is the same script you'd run locally with `python agent.py` or `npx tsx agent.ts`. Nothing has been added to make it deployable.
 
 ## Deploy
 
 ```bash
-superserve deploy agent.py
+superserve deploy agent.py     # or agent.ts
 ```
 
 ```
@@ -57,7 +79,7 @@ superserve deploy agent.py
 Deployed 'my-project' in 15s
 ```
 
-Dependencies are detected from `requirements.txt` or `pyproject.toml` automatically.
+Dependencies are detected automatically from `requirements.txt`, `pyproject.toml`, or `package.json`.
 
 ## Set your API keys
 
@@ -107,8 +129,8 @@ The agent remembers context between turns. The sandbox persists files across the
   <Card title="Sessions" icon="messages" href="/sessions">
     Resume conversations, manage session lifecycle
   </Card>
-  <Card title="Zero-Config Deploy" icon="wand-magic-sparkles" href="/zero-config">
-    Deploy scripts without config files or code changes
+  <Card title="Deployments" icon="wand-magic-sparkles" href="/zero-config">
+    Supported languages, dependency detection, configuration
   </Card>
   <Card title="SDK" icon="code" href="/sdk">
     Build apps on top of your agents — TypeScript client and React hooks

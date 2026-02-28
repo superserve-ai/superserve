@@ -1,8 +1,10 @@
 ---
 title: "Mastra"
-description: "Deploy a Mastra agent to Superserve"
+description: "Deploy a TypeScript-first agent with AI SDK"
 icon: /images/mastra.svg
 ---
+
+[Mastra](https://mastra.ai/) is a TypeScript-first agent framework built on the [Vercel AI SDK](https://sdk.vercel.ai/). It works with any AI SDK-compatible model provider.
 
 ```typescript agent.ts
 import { Agent } from "@mastra/core/agent"
@@ -15,14 +17,28 @@ const agent = new Agent({
   model: openai("gpt-4o"),
 })
 
-const rl = createInterface({ input: process.stdin, output: process.stdout })
+const rl = createInterface({ input: process.stdin })
 rl.on("line", async (line) => {
   const result = await agent.generate(line)
   console.log(result.text)
 })
 ```
 
+```json package.json
+{
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@ai-sdk/openai": "latest"
+  }
+}
+```
+
 ```bash
 superserve deploy agent.ts
 superserve secrets set my-agent OPENAI_API_KEY=sk-...
+superserve run my-agent
 ```
+
+<Tip>
+  TypeScript agents are run with `npx tsx` automatically — no build step needed. Dependencies are installed from `package.json`.
+</Tip>

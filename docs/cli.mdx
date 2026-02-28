@@ -4,7 +4,7 @@ description: "All commands and flags"
 ---
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/superserve-ai/superserve/main/cli/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/superserve-ai/superserve/main/packages/cli/install.sh | sh
 ```
 
 ---
@@ -18,32 +18,48 @@ superserve login
 superserve logout
 ```
 
+You can also authenticate non-interactively with an API key:
+
+```bash
+superserve login --api-key your-api-key
+```
+
 ---
 
 ## `superserve deploy`
+
+Package and deploy your agent to Superserve.
 
 ```bash
 superserve deploy [ENTRYPOINT] [--name NAME] [--port PORT] [--dir PATH] [--json]
 ```
 
 ```bash
-superserve deploy agent.py
-superserve deploy agent.py --name code-reviewer
-superserve deploy server.py --port 8000
-superserve deploy              # reads superserve.yaml
+superserve deploy agent.py                   # Python agent
+superserve deploy agent.ts                   # TypeScript agent
+superserve deploy agent.py --name reviewer   # Custom name
+superserve deploy server.py --port 8000      # HTTP server mode
+superserve deploy                            # Uses superserve.yaml
 ```
 
 | Flag | Description |
 |------|-------------|
 | `ENTRYPOINT` | Script to run (e.g. `agent.py`, `src/main.ts`). Without this, reads `superserve.yaml`. |
 | `--name`, `-n` | Agent name (default: directory name) |
-| `--port`, `-p` | HTTP proxy mode — forward to this port |
+| `--port`, `-p` | HTTP proxy mode — forward to this port instead of using stdio |
 | `--dir` | Project directory (default: `.`) |
+| `--yes`, `-y` | Skip confirmation when redeploying |
 | `--json` | Output as JSON |
 
-Supported: `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`
+**Supported entrypoints:** `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`
 
-Dependencies auto-detected from `requirements.txt` or `pyproject.toml`.
+**Dependency detection:**
+
+| File | Language | Install method |
+|------|----------|---------------|
+| `requirements.txt` | Python | `uv pip install` |
+| `pyproject.toml` | Python | `uv pip install` |
+| `package.json` | TypeScript / JS | `npm install` |
 
 ---
 
@@ -91,6 +107,9 @@ superserve run my-agent
 
 # Single prompt, single response
 superserve run my-agent "Explain this stack trace" --single
+
+# Pipe output as JSON (useful for scripts)
+superserve run my-agent "Summarize this file" --single --json
 ```
 
 ---
@@ -110,13 +129,18 @@ superserve secrets list AGENT
 superserve secrets delete AGENT KEY [--yes]
 ```
 
+```bash
+# Example: set multiple secrets at once
+superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-... DATABASE_URL=postgres://...
+```
+
 ---
 
 ## `superserve agents`
 
 ```bash
 # List all agents
-superserve agents list [--json]
+superserve agents list [--status STATUS] [--json]
 
 # Get agent details
 superserve agents get NAME [--json]
@@ -130,7 +154,7 @@ superserve agents delete NAME [--yes]
 ## `superserve sessions`
 
 ```bash
-# List sessions (optionally filter by agent)
+# List sessions (optionally filter by agent or status)
 superserve sessions list [AGENT] [--status STATUS] [--json]
 
 # Get session details
@@ -144,3 +168,10 @@ superserve sessions end SESSION_ID
 ```
 
 Session IDs accept short prefixes — `a1b2` matches `a1b2c3d4-e5f6-...`.
+
+| Status | Description |
+|--------|-------------|
+| `active` | Processing a message |
+| `idle` | Waiting for next message |
+| `completed` | Ended by user |
+| `failed` | Crashed or timed out |

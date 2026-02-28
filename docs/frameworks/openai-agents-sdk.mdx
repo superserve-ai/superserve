@@ -1,8 +1,10 @@
 ---
 title: "OpenAI Agents SDK"
-description: "Deploy an OpenAI agent to Superserve"
+description: "Deploy an OpenAI agent with handoffs and guardrails"
 icon: /images/openai.svg
 ---
+
+The [OpenAI Agents SDK](https://github.com/openai/openai-agents-python) provides a lightweight framework for building agents with tool use, handoffs between agents, and input/output guardrails.
 
 ```python agent.py
 from agents import Agent, Runner
@@ -25,4 +27,5 @@ openai-agents
 ```bash
 superserve deploy agent.py
 superserve secrets set my-agent OPENAI_API_KEY=sk-...
+superserve run my-agent
 ```

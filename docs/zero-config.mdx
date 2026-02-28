@@ -1,32 +1,181 @@
 ---
-title: "Zero-Config Deploy"
-description: "Deploy scripts to Superserve without config files or code changes"
+title: "Deployment"
+description: "Deploy Python and TypeScript agents without config files or code changes"
 ---
 
 ```bash
-superserve deploy agent.py
+superserve deploy agent.py        # Python
+superserve deploy agent.ts        # TypeScript
 ```
 
-Your script runs as-is in the cloud — no Dockerfile, no server code, no config files. Superserve packages your project, detects dependencies from `requirements.txt` or `pyproject.toml`, and runs your entrypoint inside an isolated sandbox.
+Your script runs as-is in the cloud. No Dockerfile, no server code, no config files. Superserve packages your project, installs dependencies, and runs your entrypoint inside an isolated [Firecracker microVM](https://firecracker-microvm.github.io/).
 
-## Stdio mode (default)
+## Supported languages
 
-Scripts that use `input()` and `print()` get multi-turn conversation support automatically. Each `input()` call receives the next user message; each `print()` streams the response back.
+| Language | Extensions | Runtime |
+|----------|-----------|---------|
+| Python | `.py` | Python 3.12 |
+| TypeScript | `.ts`, `.tsx` | Node.js 20 via `tsx` |
+| JavaScript | `.js`, `.jsx`, `.mjs`, `.cjs` | Node.js 20 |
 
-```bash
-superserve deploy agent.py
+## How your agent talks to users
+
+Your agent needs to do one thing: read input and write output. Superserve handles the rest: sessions, streaming, multi-turn state, and sandbox lifecycle.
+
+### Stdio mode (default)
+
+Scripts that read from stdin and write to stdout get multi-turn conversation support automatically. Each read receives the next user message; each write streams the response back.
+
+<CodeGroup>
+
+```python agent.py
+while True:
+    user_input = input()        # receives user message
+    print(f"You said: {user_input}")  # streams response back
 ```
 
-## HTTP server mode
+```typescript agent.ts
+const readline = require("readline");
+const rl = readline.createInterface({ input: process.stdin });
 
-If your agent runs its own HTTP server, pass `--port` and Superserve proxies requests to it:
+rl.on("line", (line: string) => {
+  console.log(`You said: ${line}`);    // streams response back
+});
+```
+
+</CodeGroup>
+
+That's a complete, deployable agent. The platform translates between plain stdin/stdout and the streaming API. Your code doesn't need to know it's running on Superserve.
+
+<Tip>
+  Python scripts using `input()` / `print()` run in-process for lower latency. TypeScript and JavaScript agents run as subprocesses with the same protocol.
+</Tip>
+
+### HTTP server mode
+
+If your agent runs its own HTTP server (FastAPI, Express, etc.), pass `--port`:
 
 ```bash
 superserve deploy server.py --port 8000
 ```
 
-Superserve forwards to `localhost:PORT/run` inside the sandbox. Use this for custom endpoints, WebSocket connections, or when your agent serves a frontend alongside the API.
+Superserve proxies requests to `localhost:PORT/run` inside the sandbox. Use this for custom endpoints, WebSocket connections, or when your agent serves a frontend alongside the API.
+
+<CodeGroup>
+
+```python server.py
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+app = FastAPI()
+
+class RunRequest(BaseModel):
+    prompt: str
+
+@app.post("/run")
+async def run(req: RunRequest):
+    return {"response": f"You said: {req.prompt}"}
+```
+
+```typescript server.ts
+import express from "express";
+
+const app = express();
+app.use(express.json());
+
+app.post("/run", (req, res) => {
+  res.json({ response: `You said: ${req.body.prompt}` });
+});
+
+app.listen(8000, () => console.log("Ready"));
+```
+
+</CodeGroup>
+
+## Dependency detection
+
+Superserve auto-detects and installs dependencies from your project files. No build step required.
+
+| File | Language | What happens |
+|------|----------|-------------|
+| `requirements.txt` | Python | Installed with `uv pip install` |
+| `pyproject.toml` | Python | Installed with `uv pip install` |
+| `package.json` | TypeScript / JS | Installed with `npm install` |
+
+Dependencies are installed once and cached. Subsequent deploys with the same dependencies skip the install step.
+
+<Info>
+  Only files at the project root are detected. Nested dependency files are ignored.
+</Info>
+
+## Project structure
+
+Superserve packages your entire project directory (minus ignored files) and extracts it into `/workspace` inside the sandbox. Your entrypoint runs from there.
+
+```
+research-agent/
+├── research_agent/
+│   ├── agent.py
+│   ├── prompts/
+│   └── utils/
+├── .env.example
+└── pyproject.toml
+```
+
+All files are available at runtime. Relative imports and file reads work exactly as they do locally.
+
+### Ignoring files
+
+By default, common directories like `.git`, `node_modules`, `.venv`, and `__pycache__` are excluded from the upload. To customize, create a `superserve.yaml`:
+
+```yaml superserve.yaml
+name: my-agent
+ignore:
+  - .venv
+  - __pycache__
+  - "*.pyc"
+  - data/large-file.bin
+```
+
+## Configuration file (optional)
+
+You don't need a config file. But if you want to customize the agent name, declare required secrets, or set ignore patterns, create a `superserve.yaml`:
+
+```yaml superserve.yaml
+name: my-agent
+command: python agent.py
+
+secrets:
+  - ANTHROPIC_API_KEY
+  - DATABASE_URL
+
+ignore:
+  - .venv
+  - __pycache__
+  - node_modules
+```
+
+| Field | Description |
+|-------|-------------|
+| `name` | Agent name (default: directory name). Lowercase, alphanumeric, and hyphens only. |
+| `command` | How to start the agent. Auto-detected from entrypoint if omitted. |
+| `secrets` | Environment variables the agent requires. Shown as a reminder after deploy. |
+| `ignore` | Files/directories to exclude from the upload. |
+
+<Tip>
+  Run `superserve init` to generate a `superserve.yaml` with sensible defaults. If you have a `.env.example`, secrets are auto-detected from it.
+</Tip>
+
+## What happens when you deploy
+
+1. **Sandbox**: Your agent runs in an isolated VM with its own kernel, filesystem, and network. Nothing it does can touch your infrastructure or leak into another session.
+2. **Dependencies**: `requirements.txt`, `pyproject.toml`, or `package.json` are detected and installed automatically. Cached across deploys.
+3. **Network**: Outbound HTTP requests route through a managed proxy that injects API keys into outgoing requests. Your agent makes authenticated calls without ever seeing the credentials. They never appear in the LLM context, logs, or tool outputs.
+4. **Persistent state**: The `/workspace` filesystem survives across turns, restarts, and sessions. Resume a conversation days later with every file and the full history intact.
+5. **Live**: Your agent is ready. Run it with `superserve run` or call it via the [SDK](/sdk).
+
+The first deploy takes 10-30 seconds (mostly dependency installation). Redeployments with unchanged dependencies take under 5 seconds.
 
 ---
 
-See the [CLI reference](/cli#superserve-deploy) for the full list of flags.
+See the [CLI reference](/cli#superserve-deploy) for the full list of deploy flags, or jump to a [framework guide](/frameworks/claude-agent-sdk) for a complete example.

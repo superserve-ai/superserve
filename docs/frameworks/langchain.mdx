@@ -1,8 +1,10 @@
 ---
 title: "LangChain"
-description: "Deploy a LangChain agent to Superserve"
+description: "Deploy a LangChain agent with chains and retrieval"
 icon: /images/langchain.svg
 ---
+
+[LangChain](https://python.langchain.com/) provides chains, agents, and retrieval pipelines for building complex LLM applications. Any LangChain agent that reads input and prints output deploys to Superserve with no changes.
 
 ```python agent.py
 from langchain_openai import ChatOpenAI
@@ -23,4 +25,5 @@ langchain-openai
 ```bash
 superserve deploy agent.py
 superserve secrets set my-agent OPENAI_API_KEY=sk-...
+superserve run my-agent
 ```

@@ -1,8 +1,10 @@
 ---
 title: "Agno"
-description: "Deploy an Agno agent to Superserve"
+description: "Deploy a lightweight Python agent"
 icon: /images/agno.svg
 ---
+
+[Agno](https://docs.agno.com/) is a lightweight, model-agnostic Python framework for building agents. Simple API, minimal boilerplate.
 
 ```python agent.py
 from agno.agent import Agent
@@ -23,4 +25,5 @@ agno
 ```bash
 superserve deploy agent.py
 superserve secrets set my-agent OPENAI_API_KEY=sk-...
+superserve run my-agent
 ```

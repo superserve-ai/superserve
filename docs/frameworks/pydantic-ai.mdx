@@ -1,8 +1,10 @@
 ---
 title: "Pydantic AI"
-description: "Deploy a Pydantic AI agent to Superserve"
+description: "Deploy a type-safe agent with structured outputs"
 icon: /images/pydantic.svg
 ---
+
+[Pydantic AI](https://ai.pydantic.dev/) brings type-safe, structured outputs to agent development. Define response schemas with Pydantic models and get validated, typed results from your LLM calls.
 
 ```python agent.py
 from pydantic_ai import Agent
@@ -22,4 +24,5 @@ pydantic-ai
 ```bash
 superserve deploy agent.py
 superserve secrets set my-agent OPENAI_API_KEY=sk-...
+superserve run my-agent
 ```
