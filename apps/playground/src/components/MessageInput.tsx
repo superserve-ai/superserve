@@ -85,7 +85,7 @@ export default function MessageInput({
           <button
             type="submit"
             disabled={!input.trim()}
-            className="m-1 cursor-pointer bg-primary-bg px-5 py-1.5 font-mono text-xs uppercase tracking-wider text-primary transition-colors hover:bg-primary-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className="m-2 cursor-pointer bg-primary-bg px-5 py-1.5 font-mono text-xs uppercase tracking-wider text-primary transition-colors hover:bg-primary-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
             Send
           </button>
