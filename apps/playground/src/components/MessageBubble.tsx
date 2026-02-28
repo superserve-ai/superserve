@@ -29,10 +29,14 @@ function CodeBlock({
   const language = match ? match[1] : ""
   const code = String(children).replace(/\n$/, "")
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(code)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error("Failed to copy code: ", err)
+    }
   }
 
   return (
@@ -89,9 +93,13 @@ export default function MessageBubble({ message, onRetry }: MessageBubbleProps) 
     })
   }
 
-  const handleCopyMessage = () => {
-    if (message.content) {
-      navigator.clipboard.writeText(message.content)
+  const handleCopyMessage = async () => {
+    try {
+      if (message.content) {
+        await navigator.clipboard.writeText(message.content)
+      }
+    } catch (err) {
+      console.error("Failed to copy message: ", err)
     }
   }
 
