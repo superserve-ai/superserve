@@ -1,17 +1,38 @@
 ---
 title: "Introduction"
-description: "The agent deployment platform"
+description: "Workspaces for agents"
 ---
 
-## The problem with running agents
+## Agents need more than a sandbox
 
-AI agents need freedom to execute code, install packages, read files, make network requests. On your laptop, that freedom can delete files and leak credentials. In production, multiply that across every user session. Either way, you end up building infrastructure instead of building agents.
+Agents execute code, make HTTP requests, create files, and manage credentials. In production, every session needs isolation, persistence, and governance.
 
-You need real isolation — separate kernel, separate filesystem, separate network — that scales from one developer to a team shipping agents to thousands of users.
+Without that:
+- Credentials leak into LLM context and logs
+- Sessions lose state between turns and restarts
+- There's no audit trail of what the agent actually did
+- Agents can access anything on the network
 
-## Superserve gives agents their own machine
+Building this yourself means stitching together containers, proxies, secret managers, and logging - weeks of infrastructure work per agent.
 
-Every session runs in its own [Firecracker microVM](https://firecracker-microvm.github.io/). The agent gets full root access to its sandbox. It can execute code, install packages, write files, make HTTP requests. Nothing it does can touch your infrastructure or leak into another session.
+## Superserve gives every agent a governed workspace
+
+<CardGroup cols={2}>
+  <Card title="Isolated by default" icon="shield-halved">
+    Every session runs in its own Firecracker microVM with a dedicated kernel. The agent gets full root access to execute code, install packages, and make HTTP requests - nothing leaks into another session.
+  </Card>
+  <Card title="Nothing disappears" icon="hard-drive">
+    The `/workspace` filesystem survives across turns, restarts, and days. Pick up a session hours or weeks later - every file and conversation is exactly where the agent left it.
+  </Card>
+  <Card title="Credentials stay hidden" icon="lock">
+    A credential proxy injects API keys at the network level. The agent makes authenticated requests without ever seeing the credentials - they never appear in context, logs, or tool outputs.
+  </Card>
+  <Card title="Full audit trail" icon="chart-mixed">
+    Every tool call, file write, and HTTP request the agent makes is logged and queryable. Get a full execution timeline for each session, not just the chat transcript.
+  </Card>
+</CardGroup>
+
+## Zero-config deployment
 
 Deploy with one command. No Dockerfile, no server code, no config files.
 
@@ -29,57 +50,29 @@ superserve deploy agent.ts
 
 The same script you run locally runs in production. Superserve detects your dependencies, builds the sandbox, and serves your agent over a streaming API. Cold starts take ~400ms.
 
-## Nothing disappears between sessions
+## Any framework
 
-Most sandboxes are ephemeral. The agent writes a file, the session ends, the file is gone. Every conversation starts from zero. That works for demos, not for production.
+Superserve works with any agent framework - or no framework at all.
 
-Superserve workspaces persist. The `/workspace` filesystem survives across turns, restarts, and days. Resume a session on Thursday that you started on Monday — every file is where the agent left it, and the full conversation history is intact.
-
----
-
-## Works with any agent framework
-
-Superserve runs your code as-is. No SDK lock-in, no framework requirements — if it reads input and prints output, it deploys.
-
-<CardGroup cols={3}>
-  <Card title="Claude Agent SDK" href="/frameworks/claude-agent-sdk">
-    Multi-turn agents with tool use and conversation memory
-  </Card>
-  <Card title="OpenAI Agents SDK" href="/frameworks/openai-agents-sdk">
-    OpenAI's agent framework with handoffs and guardrails
-  </Card>
-  <Card title="Pydantic AI" href="/frameworks/pydantic-ai">
-    Type-safe agents with structured outputs
-  </Card>
-  <Card title="Mastra" href="/frameworks/mastra">
-    TypeScript-first agent framework with AI SDK
-  </Card>
-  <Card title="LangChain" href="/frameworks/langchain">
-    Chains, agents, and retrieval pipelines
-  </Card>
-  <Card title="Agno" href="/frameworks/agno">
-    Lightweight Python agent framework
-  </Card>
-</CardGroup>
+- [Claude Agent SDK](https://docs.anthropic.com/en/docs/agents-and-tools/agent-sdk/overview)
+- [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)
+- [LangChain](https://www.langchain.com/) / [LangGraph](https://www.langchain.com/langgraph)
+- [Mastra](https://mastra.ai/)
+- [Pydantic AI](https://ai.pydantic.dev/)
+- Plain stdin/stdout - any script that reads input and writes output
 
 ---
 
-## Roadmap
+## What's coming next
 
-Here's what's coming next — [tell us what matters most](mailto:founders@superserve.ai).
+[Tell us what matters most](mailto:engineering@superserve.ai).
 
 <CardGroup cols={2}>
-  <Card title="Credential proxy" icon="shield-halved">
-    HTTP requests from inside the sandbox go through a proxy that injects API keys at the network level. The agent makes authenticated requests without ever seeing the credentials — they never appear in the LLM context, logs, or tool outputs. Configure once, use everywhere.
-  </Card>
-  <Card title="Agent observability" icon="chart-mixed">
-    Every tool call, file write, and HTTP request the agent makes — logged and queryable. Get a full execution timeline for each session, not just the chat transcript. Know exactly what your agent did and why.
-  </Card>
   <Card title="Spend limits and circuit breakers" icon="brake-warning">
     Set per-session and per-agent cost caps. If an agent enters a loop making expensive API calls, the sandbox kills it before you get a surprise bill. Configurable: max turns, max duration, max API spend.
   </Card>
   <Card title="Shared filesystems across agents" icon="folder-tree">
-    Mount a durable filesystem into multiple sandboxes simultaneously. Agents can share data, artifacts, and context without re-uploading files or wiring object-store plumbing. Live collaboration between agents.
+    Mount a durable filesystem into multiple sandboxes simultaneously. Agents can share data, artifacts, and context without re-uploading files or wiring object-store plumbing.
   </Card>
 </CardGroup>
 

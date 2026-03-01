@@ -9,7 +9,7 @@
   <br/>
   <br/>
 
-  <p><strong>Deploy AI agents to sandboxed cloud containers. One command, no infrastructure config.</strong></p>
+  <p><strong>Workspaces for agents. Isolation, persistence, and governance - one command, no config.</strong></p>
 
   [![Docs](https://img.shields.io/badge/Docs-latest-blue)](https://docs.superserve.ai/)
   [![License](https://img.shields.io/badge/License-OCVSAL_1.0-blue.svg)](https://github.com/superserve-ai/superserve/blob/main/LICENSE)
@@ -18,39 +18,45 @@
 
 </div>
 
+## Why Superserve
+
+Agents execute code, make HTTP requests, and manage credentials. In production, every session needs its own isolated environment with persistent state and governance. Building that yourself means stitching together containers, proxies, secret managers, and logging.
+
+Superserve gives every agent a governed workspace out of the box.
+
 ## Features
 
-- **Sandboxed execution** — Every agent runs in a gVisor-isolated container with its own compute, filesystem, and network
-- **Persistent workspace** — Storage that survives restarts. Agents pick up where they left off
-- **Encrypted secrets** — API keys are encrypted and injected at runtime. Values are never exposed
-- **Real-time streaming** — Stream tokens and tool calls as they happen
-- **Sub-second cold starts** — Pre-provisioned containers mean your agent starts almost instantly
-- **Built for Claude Agent SDK** — Write with the [Claude Agent SDK](https://platform.claude.com/docs/en/agent-sdk/overview), deploy with Superserve
+- **Isolated by default** - Every session runs in its own Firecracker microVM. Nothing leaks between sessions or touches your infrastructure
+- **Nothing disappears** - The `/workspace` filesystem persists across turns, restarts, and days. Resume where you left off
+- **Credentials stay hidden** - A credential proxy injects API keys at the network level. The agent never sees them - they never appear in LLM context, logs, or tool outputs
+- **Any framework** - Claude Agent SDK, OpenAI Agents SDK, LangChain, Mastra, Pydantic AI, or plain stdin/stdout
+- **One command** - `superserve deploy agent.py`. No Dockerfile, no server code, no config files
+- **Real-time streaming** - Stream tokens and tool calls as they happen
+- **Sub-second cold starts** - Pre-provisioned containers mean your agent starts almost instantly
 
 ## Quick Start
 
+Install the CLI:
+
 ```bash
-pip install superserve
+curl -fsSL https://superserve.ai/install | sh
+```
+
+Or via npm:
+```bash
+npm install -g @superserve/cli
+```
+
+Or via Homebrew:
+```bash
+brew install superserve-ai/tap/superserve
+```
+
+Log in and deploy:
+
+```bash
 superserve login
-```
-
-Initialize from the root of your project where your dependencies and agent code live:
-
-```bash
-superserve init
-```
-
-This creates a `superserve.yaml`:
-
-```yaml
-name: my-agent
-command: python main.py  # edit to match your agent's start command
-```
-
-Deploy:
-
-```bash
-superserve deploy
+superserve deploy agent.py
 ```
 
 Set your secrets:
@@ -100,27 +106,12 @@ See the full [CLI Reference](https://docs.superserve.ai/cli) for all flags and o
 
 - A [Superserve account](https://console.superserve.ai)
 
-Install via npm (recommended):
-```bash
-npm install -g @superserve/cli
-```
-
-Or via Homebrew:
-```bash
-brew install superserve-ai/tap/superserve
-```
-
-Or via pip (legacy Python CLI):
-```bash
-pip install superserve
-```
-
 ## Development
 
 This repo is a monorepo managed with [Bun workspaces](https://bun.sh/docs/install/workspaces) and [Turborepo](https://turbo.build/repo).
 
-- **Bun workspaces** — single `bun.lock` at the root, shared `node_modules`, workspace packages reference each other with `workspace:*`
-- **Turborepo** — runs tasks across packages in the correct order, caches outputs, and parallelizes where possible
+- **Bun workspaces** - single `bun.lock` at the root, shared `node_modules`, workspace packages reference each other with `workspace:*`
+- **Turborepo** - runs tasks across packages in the correct order, caches outputs, and parallelizes where possible
 
 ### Structure
 
@@ -178,14 +169,14 @@ bun add react --filter @superserve/playground
 bun add -d @types/node --filter @superserve/sdk
 ```
 
-> **Note:** Do not `cd` into a package directory and run `bun add` directly — this creates a separate `bun.lock` that conflicts with the monorepo's root lockfile.
+> **Note:** Do not `cd` into a package directory and run `bun add` directly - this creates a separate `bun.lock` that conflicts with the monorepo's root lockfile.
 
 ### Shared Configs
 
 TypeScript and Biome configs are shared across packages:
 
-- **`@superserve/typescript-config`** — extend in `tsconfig.json` with `"extends": "@superserve/typescript-config/base.json"`
-- **`@superserve/biome-config`** — extend in `biome.json` with `"extends": ["@superserve/biome-config/biome.json"]`
+- **`@superserve/typescript-config`** - extend in `tsconfig.json` with `"extends": "@superserve/typescript-config/base.json"`
+- **`@superserve/biome-config`** - extend in `biome.json` with `"extends": ["@superserve/biome-config/biome.json"]`
 
 When updating linting rules or compiler options, prefer updating the shared config so all packages stay consistent.
 
