@@ -1,0 +1,33 @@
+---
+title: "Agno"
+description: "Deploy a lightweight Python agent"
+icon: /images/agno.svg
+---
+
+[Agno](https://docs.agno.com/) is a lightweight, model-agnostic Python framework for building agents. Simple API, minimal boilerplate.
+
+```python agent.py
+from agno.agent import Agent
+from agno.models.openai import OpenAIChat
+
+agent = Agent(model=OpenAIChat(id="gpt-4o"))
+
+while True:
+    try:
+        user_input = input()
+    except EOFError:
+        break
+    response = agent.run(user_input)
+    print(response.content)
+```
+
+```txt requirements.txt
+agno
+openai
+```
+
+```bash
+superserve deploy agent.py
+superserve secrets set my-agent OPENAI_API_KEY=sk-...
+superserve run my-agent
+```

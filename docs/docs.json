@@ -44,11 +44,22 @@
     "groups": [
       {
         "group": "Getting Started",
-        "pages": ["index", "quickstart", "sessions"]
+        "pages": ["index", "quickstart", "zero-config", "sessions"]
+      },
+      {
+        "group": "Frameworks",
+        "pages": [
+          "frameworks/claude-agent-sdk",
+          "frameworks/openai-agents-sdk",
+          "frameworks/pydantic-ai",
+          "frameworks/mastra",
+          "frameworks/langchain",
+          "frameworks/agno"
+        ]
       },
       {
         "group": "Reference",
-        "pages": ["cli"]
+        "pages": ["sdk", "cli"]
       }
     ],
     "global": {

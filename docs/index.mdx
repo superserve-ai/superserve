@@ -1,50 +1,101 @@
 ---
 title: "Introduction"
-description: "You build agents locally. Superserve deploys them to the cloud."
+description: "The agent deployment platform"
 ---
 
-Superserve packages your agent code and deploys it to a sandboxed cloud container - one CLI command, no infrastructure config.
+## The problem with running agents
 
-```bash
-pip install superserve
+AI agents need freedom to execute code, install packages, read files, make network requests. On your laptop, that freedom can delete files and leak credentials. In production, multiply that across every user session. Either way, you end up building infrastructure instead of building agents.
+
+You need real isolation — separate kernel, separate filesystem, separate network — that scales from one developer to a team shipping agents to thousands of users.
+
+## Superserve gives agents their own machine
+
+Every session runs in its own [Firecracker microVM](https://firecracker-microvm.github.io/). The agent gets full root access to its sandbox. It can execute code, install packages, write files, make HTTP requests. Nothing it does can touch your infrastructure or leak into another session.
+
+Deploy with one command. No Dockerfile, no server code, no config files.
+
+<CodeGroup>
+
+```bash Python
+superserve deploy agent.py
 ```
+
+```bash TypeScript
+superserve deploy agent.ts
+```
+
+</CodeGroup>
+
+The same script you run locally runs in production. Superserve detects your dependencies, builds the sandbox, and serves your agent over a streaming API. Cold starts take ~400ms.
+
+## Nothing disappears between sessions
+
+Most sandboxes are ephemeral. The agent writes a file, the session ends, the file is gone. Every conversation starts from zero. That works for demos, not for production.
+
+Superserve workspaces persist. The `/workspace` filesystem survives across turns, restarts, and days. Resume a session on Thursday that you started on Monday — every file is where the agent left it, and the full conversation history is intact.
+
+---
+
+## Works with any agent framework
+
+Superserve runs your code as-is. No SDK lock-in, no framework requirements — if it reads input and prints output, it deploys.
+
+<CardGroup cols={3}>
+  <Card title="Claude Agent SDK" href="/frameworks/claude-agent-sdk">
+    Multi-turn agents with tool use and conversation memory
+  </Card>
+  <Card title="OpenAI Agents SDK" href="/frameworks/openai-agents-sdk">
+    OpenAI's agent framework with handoffs and guardrails
+  </Card>
+  <Card title="Pydantic AI" href="/frameworks/pydantic-ai">
+    Type-safe agents with structured outputs
+  </Card>
+  <Card title="Mastra" href="/frameworks/mastra">
+    TypeScript-first agent framework with AI SDK
+  </Card>
+  <Card title="LangChain" href="/frameworks/langchain">
+    Chains, agents, and retrieval pipelines
+  </Card>
+  <Card title="Agno" href="/frameworks/agno">
+    Lightweight Python agent framework
+  </Card>
+</CardGroup>
+
+---
+
+## Roadmap
+
+Here's what's coming next — [tell us what matters most](mailto:founders@superserve.ai).
+
+<CardGroup cols={2}>
+  <Card title="Credential proxy" icon="shield-halved">
+    HTTP requests from inside the sandbox go through a proxy that injects API keys at the network level. The agent makes authenticated requests without ever seeing the credentials — they never appear in the LLM context, logs, or tool outputs. Configure once, use everywhere.
+  </Card>
+  <Card title="Agent observability" icon="chart-mixed">
+    Every tool call, file write, and HTTP request the agent makes — logged and queryable. Get a full execution timeline for each session, not just the chat transcript. Know exactly what your agent did and why.
+  </Card>
+  <Card title="Spend limits and circuit breakers" icon="brake-warning">
+    Set per-session and per-agent cost caps. If an agent enters a loop making expensive API calls, the sandbox kills it before you get a surprise bill. Configurable: max turns, max duration, max API spend.
+  </Card>
+  <Card title="Shared filesystems across agents" icon="folder-tree">
+    Mount a durable filesystem into multiple sandboxes simultaneously. Agents can share data, artifacts, and context without re-uploading files or wiring object-store plumbing. Live collaboration between agents.
+  </Card>
+</CardGroup>
+
+---
 
 <CardGroup cols={2}>
   <Card title="Quickstart" icon="bolt" href="/quickstart">
-    Deploy your first agent in 5 minutes
+    Deploy an agent in 2 minutes
   </Card>
-  <Card title="CLI Reference" icon="terminal" href="/cli">
-    Every command, flag, and option
+  <Card title="Deploy" icon="wand-magic-sparkles" href="/zero-config">
+    Supported languages, dependency detection, configuration
   </Card>
-</CardGroup>
-
----
-
-## Why Superserve
-
-<CardGroup cols={2}>
-  <Card title="Sandboxed execution" icon="shield">
-    Every agent session runs in a gVisor-isolated container with its own compute, filesystem, and network.
+  <Card title="SDK" icon="code" href="/sdk">
+    TypeScript client, React hooks
   </Card>
-  <Card title="Persistent workspace" icon="hard-drive">
-    Storage that survives restarts and long inactivity. Agents pick up where they left off.
-  </Card>
-  <Card title="Unlimited sessions" icon="infinity">
-    No session duration caps or CPU-time limits. Agents run as long as they need - hours or days.
-  </Card>
-  <Card title="Sub-second cold starts" icon="gauge-high">
-    Pre-provisioned containers mean your agent starts almost instantly.
-  </Card>
-  <Card title="Encrypted secrets" icon="lock">
-    API keys are encrypted and injected at runtime. Values are never exposed.
-  </Card>
-  <Card title="Real-time streaming" icon="bolt">
-    Stream tokens and tool calls as they happen. See what your agent is thinking and doing.
+  <Card title="CLI" icon="terminal" href="/cli">
+    All commands and flags
   </Card>
 </CardGroup>
-
----
-
-## <img src="/images/claude-agent-sdk.svg" alt="Claude" width="20" style={{display: "inline", verticalAlign: "middle", marginRight: "8px"}} />Built for Claude Agent SDK
-
-Write your agent with the [Claude Agent SDK](https://platform.claude.com/docs/en/agent-sdk/overview), run `superserve init` to generate your config, and deploy. Superserve handles sandboxing, persistence, and secrets.

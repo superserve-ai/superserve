@@ -244,7 +244,9 @@ export function createClient(
   }
 
   async function listAgents(): Promise<AgentResponse[]> {
-    const resp = await request("GET", "/agents")
+    const resp = await request("GET", "/agents", {
+      params: { limit: "100" },
+    })
     const data = await safeJson<{ agents?: AgentResponse[] }>(resp)
     return data.agents ?? []
   }

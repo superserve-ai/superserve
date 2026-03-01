@@ -1,0 +1,34 @@
+---
+title: "OpenAI Agents SDK"
+description: "Deploy an OpenAI agent with handoffs and guardrails"
+icon: /images/openai.svg
+---
+
+The [OpenAI Agents SDK](https://github.com/openai/openai-agents-python) provides a lightweight framework for building agents with tool use, handoffs between agents, and input/output guardrails.
+
+```python agent.py
+from agents import Agent, Runner
+
+agent = Agent(
+    name="assistant",
+    instructions="You are a helpful assistant.",
+)
+
+while True:
+    try:
+        user_input = input()
+    except EOFError:
+        break
+    result = Runner.run_sync(agent, user_input)
+    print(result.final_output)
+```
+
+```txt requirements.txt
+openai-agents
+```
+
+```bash
+superserve deploy agent.py
+superserve secrets set my-agent OPENAI_API_KEY=sk-...
+superserve run my-agent
+```

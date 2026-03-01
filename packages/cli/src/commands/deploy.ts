@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
-import { unlinkSync, writeFileSync } from "node:fs"
+import { existsSync, unlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { basename, extname, join, resolve } from "node:path"
 import { Command } from "commander"
 
 import { track } from "../analytics"
@@ -22,17 +22,110 @@ function writeTempTarball(data: Uint8Array): string {
   return path
 }
 
+const EXTENSION_COMMANDS: Record<string, string> = {
+  ".py": "python",
+  ".ts": "npx tsx",
+  ".tsx": "npx tsx",
+  ".js": "node",
+  ".jsx": "node",
+  ".mjs": "node",
+  ".cjs": "node",
+}
+
+const BUN_EXTENSION_COMMANDS: Record<string, string> = {
+  ".py": "python",
+  ".ts": "bun run",
+  ".tsx": "bun run",
+  ".js": "bun run",
+  ".jsx": "bun run",
+  ".mjs": "bun run",
+  ".cjs": "bun run",
+}
+
+function detectPackageManager(projectDir: string): "bun" | "npm" | null {
+  if (
+    existsSync(join(projectDir, "bun.lock")) ||
+    existsSync(join(projectDir, "bun.lockb"))
+  ) {
+    return "bun"
+  }
+  if (existsSync(join(projectDir, "package.json"))) {
+    return "npm"
+  }
+  return null
+}
+
+function detectCommand(
+  entrypoint: string,
+  packageManager?: "bun" | "npm" | null,
+): string {
+  const ext = extname(entrypoint)
+  const commands =
+    packageManager === "bun" ? BUN_EXTENSION_COMMANDS : EXTENSION_COMMANDS
+  const runtime = commands[ext] ?? "python"
+  return `${runtime} ${entrypoint}`
+}
+
 export const deploy = new Command("deploy")
   .description("Deploy an agent to Superserve")
+  .argument("[entrypoint]", "Script to run (e.g. agent.py, src/main.ts)")
+  .option("-n, --name <name>", "Agent name (default: directory name)")
+  .option("-p, --port <port>", "HTTP proxy mode — forward to this port", Number)
   .option("--dir <path>", "Project directory (default: current directory)", ".")
   .option("--json", "Output as JSON")
   .option("-y, --yes", "Skip confirmation")
   .action(
     withErrorHandler(
-      async (options: { dir: string; json?: boolean; yes?: boolean }) => {
-        const config = loadProjectConfig(options.dir)
+      async (
+        entrypoint: string | undefined,
+        options: {
+          name?: string
+          port?: number
+          dir: string
+          json?: boolean
+          yes?: boolean
+        },
+      ) => {
         const client = createClient()
-        const { name, command } = config
+        let name: string
+        let command: string
+        let config: Record<string, unknown>
+        let userIgnores: Set<string> | undefined
+
+        if (entrypoint) {
+          // Zero-config deploy
+          const projectDir = resolve(options.dir)
+          const entrypointPath = join(projectDir, entrypoint)
+
+          if (!existsSync(entrypointPath)) {
+            throw new Error(
+              `Entrypoint file '${entrypoint}' not found in ${projectDir}.`,
+            )
+          }
+
+          name = options.name ?? basename(projectDir)
+          const pkgMgr = detectPackageManager(projectDir)
+          command = detectCommand(entrypoint, pkgMgr)
+          const mode = options.port ? "http" : "shim"
+          config = { name, command, entrypoint, mode }
+          if (options.port) {
+            config.port = options.port
+          }
+          userIgnores = undefined
+        } else {
+          // Config mode: try to load superserve.yaml
+          try {
+            const loaded = loadProjectConfig(options.dir)
+            name = loaded.name
+            command = loaded.command
+            config = loaded as Record<string, unknown>
+            userIgnores = new Set(loaded.ignore ?? [])
+          } catch {
+            throw new Error(
+              "Usage: superserve deploy <entrypoint> or create a superserve.yaml",
+            )
+          }
+        }
 
         // Check if agent already exists and confirm overwrite
         if (!options.json && !options.yes) {
@@ -52,13 +145,13 @@ export const deploy = new Command("deploy")
           }
         }
 
-        const userIgnores = new Set(config.ignore ?? [])
+        const ignores = userIgnores ?? new Set<string>()
 
         // JSON mode: simple output, no spinners
         if (options.json) {
           let tarballPath: string | undefined
           try {
-            const tarballBytes = await makeTarball(options.dir, userIgnores)
+            const tarballBytes = await makeTarball(options.dir, ignores)
             tarballPath = writeTempTarball(tarballBytes)
             const agent = await client.deployAgent(
               name,
@@ -88,7 +181,7 @@ export const deploy = new Command("deploy")
 
         // Package
         status.start("Packaging project...")
-        const tarballBytes = await makeTarball(options.dir, userIgnores)
+        const tarballBytes = await makeTarball(options.dir, ignores)
         status.done("\u2713", `(${formatSize(tarballBytes.length)})`)
 
         // Upload
@@ -117,7 +210,7 @@ export const deploy = new Command("deploy")
             await Bun.sleep(pollInterval)
             elapsed += pollInterval
 
-            agent = await client.getAgent(name)
+            agent = await client.getAgent(agent.id)
 
             if (agent.deps_status === "ready") {
               status.done(
@@ -162,7 +255,7 @@ export const deploy = new Command("deploy")
         console.log(`  Deployed '${agent.name}' in ${totalTime}`)
 
         // Secrets
-        const required = config.secrets ?? []
+        const required = (config.secrets as string[] | undefined) ?? []
         if (required.length > 0) {
           const missing = required.filter(
             (s) => !agent.environment_keys.includes(s),
@@ -172,16 +265,14 @@ export const deploy = new Command("deploy")
             console.log("  Set your secrets before running:")
             for (const key of missing) {
               console.log(
-                commandBox(`superserve secrets set ${config.name} ${key}=...`),
+                commandBox(`superserve secrets set ${name} ${key}=...`),
               )
             }
           }
         } else if (agent.environment_keys.length === 0) {
           console.log()
           console.log("  Set your API keys as secrets:")
-          console.log(
-            commandBox(`superserve secrets set ${config.name} KEY=VALUE`),
-          )
+          console.log(commandBox(`superserve secrets set ${name} KEY=VALUE`))
         }
 
         console.log()
