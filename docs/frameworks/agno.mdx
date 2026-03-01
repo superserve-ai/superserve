@@ -13,13 +13,17 @@ from agno.models.openai import OpenAIChat
 agent = Agent(model=OpenAIChat(id="gpt-4o"))
 
 while True:
-    user_input = input()
+    try:
+        user_input = input()
+    except EOFError:
+        break
     response = agent.run(user_input)
     print(response.content)
 ```
 
 ```txt requirements.txt
 agno
+openai
 ```
 
 ```bash

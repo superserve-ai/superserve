@@ -19,7 +19,10 @@ options = ClaudeAgentOptions(
 async def main():
     async with ClaudeSDKClient(options=options) as client:
         while True:
-            user_input = input()
+            try:
+                user_input = input()
+            except EOFError:
+                break
             await client.query(prompt=user_input, session_id="chat")
             async for msg in client.receive_response():
                 for block in getattr(msg, "content", []):

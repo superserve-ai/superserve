@@ -13,7 +13,10 @@ from langchain_core.messages import HumanMessage
 llm = ChatOpenAI(model="gpt-4o")
 
 while True:
-    user_input = input()
+    try:
+        user_input = input()
+    except EOFError:
+        break
     response = llm.invoke([HumanMessage(content=user_input)])
     print(response.content)
 ```

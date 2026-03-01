@@ -15,7 +15,10 @@ agent = Agent(
 )
 
 while True:
-    user_input = input()
+    try:
+        user_input = input()
+    except EOFError:
+        break
     result = Runner.run_sync(agent, user_input)
     print(result.final_output)
 ```
