@@ -1,6 +1,6 @@
 #!/bin/sh
 # Superserve CLI installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/superserve-ai/superserve/main/packages/cli/install.sh | sh
+# Usage: curl -fsSL https://superserve.ai/install | sh
 set -eu
 
 REPO="superserve-ai/superserve"
