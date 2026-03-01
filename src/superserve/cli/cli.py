@@ -1,101 +1,37 @@
 #!/usr/bin/env python3
-"""Superserve CLI - Production infrastructure for agentic workloads
-
-Usage:
-    superserve login [--api-key=KEY]
-    superserve logout
-    superserve init
-    superserve deploy
-    superserve agents list|get|delete
-    superserve run <agent> <prompt>
-    superserve sessions list|get|end
-    superserve secrets set|delete|list
-"""
+"""Superserve CLI - Deprecated. Use the new CLI instead."""
 
 import sys
-from importlib.metadata import version
-
-import click
-import requests
-
-from .commands import login, logout
-from .commands.agents import agents
-from .commands.deploy import deploy
-from .commands.init import init
-from .commands.run import run_agent
-from .commands.secrets import secrets
-from .commands.session import sessions
-from .platform.client import PlatformAPIError
-
-
-@click.group()
-@click.version_option(version=version("superserve"))
-def cli():
-    """Superserve CLI - Production infrastructure for agentic workloads"""
-    pass
-
-
-# Authentication
-cli.add_command(login.login)
-cli.add_command(logout.logout)
-
-# Deploy & init
-cli.add_command(deploy)
-cli.add_command(init)
-
-# Hosted agents commands
-cli.add_command(agents)
-cli.add_command(run_agent)
-cli.add_command(secrets)
-cli.add_command(sessions)
 
 
 def main():
-    """Main entry point for the CLI."""
-    try:
-        cli()
-    except PlatformAPIError as e:
-        click.echo(f"Error: {e.message}", err=True)
-        hint = {
-            401: "Hint: Run 'superserve login' to authenticate.",
-            403: "Hint: You don't have permission for this action.",
-            404: "Hint: Run 'superserve agents list' to see your agents.",
-            409: "Hint: Use a different name or delete the existing resource first.",
-            422: "Hint: Check your input and try again.",
-            429: "Hint: Too many requests. Please wait and try again.",
-            500: "Hint: This is a server issue. Please try again later.",
-            502: "Hint: The server is temporarily unavailable. Please try again later.",
-            503: "Hint: The service is temporarily unavailable. Please try again later.",
-        }.get(e.status_code)
-        if hint:
-            click.echo(hint, err=True)
-        sys.exit(1)
-    except requests.exceptions.SSLError:
-        click.echo("Error: SSL certificate verification failed.", err=True)
-        click.echo("Hint: Check your network or try again later.", err=True)
-        sys.exit(1)
-    except requests.ConnectionError:
-        click.echo("Error: Could not connect to Superserve API.", err=True)
-        click.echo("Hint: Check your internet connection and try again.", err=True)
-        sys.exit(1)
-    except requests.Timeout:
-        click.echo("Error: Request timed out.", err=True)
-        click.echo("Hint: The server may be busy. Please try again.", err=True)
-        sys.exit(1)
-    except requests.RequestException:
-        click.echo("Error: Network request failed.", err=True)
-        click.echo("Hint: Check your connection and try again.", err=True)
-        sys.exit(1)
-    except (click.Abort, KeyboardInterrupt):
-        click.echo(err=True)
-        sys.exit(130)
-    except Exception as e:
-        click.echo(f"Error: {e}", err=True)
-        click.echo(
-            "Hint: If this persists, try updating with 'pip install -U superserve'.",
-            err=True,
-        )
-        sys.exit(1)
+    """Main entry point - shows deprecation notice and exits."""
+    print(
+        "\n"
+        "  ┌─────────────────────────────────────────────────────────┐\n"
+        "  │                                                         │\n"
+        "  │   The Python CLI (pip install superserve) is            │\n"
+        "  │   deprecated and no longer maintained.                  │\n"
+        "  │                                                         │\n"
+        "  │   Install the new CLI:                                  │\n"
+        "  │                                                         │\n"
+        "  │     curl -fsSL https://superserve.ai/install | sh       │\n"
+        "  │                                                         │\n"
+        "  │   Or via npm:                                           │\n"
+        "  │                                                         │\n"
+        "  │     npm install -g @superserve/cli                      │\n"
+        "  │                                                         │\n"
+        "  │   Or via Homebrew:                                      │\n"
+        "  │                                                         │\n"
+        "  │     brew install superserve-ai/tap/superserve           │\n"
+        "  │                                                         │\n"
+        "  │   Then uninstall this package:                          │\n"
+        "  │                                                         │\n"
+        "  │     pip uninstall superserve                            │\n"
+        "  │                                                         │\n"
+        "  └─────────────────────────────────────────────────────────┘\n"
+    )
+    sys.exit(1)
 
 
 if __name__ == "__main__":

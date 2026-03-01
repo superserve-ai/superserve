@@ -5,18 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "superserve"
 
-version = "0.1.5"
-description = "CLI and SDK for Superserve hosted agent infrastructure"
+version = "0.2.0"
+description = "Deprecated - install the new CLI: curl -fsSL https://superserve.ai/install | sh"
 license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.12"
 keywords = ["agents", "ai", "llm", "hosted", "cli", "sdk"]
-dependencies = [
-    "click>=8.0.0",
-    "pyyaml>=6.0",
-    "posthog>=3.0.0",
-    "requests>=2.31.0",
-]
+dependencies = []
 
 [project.urls]
 Homepage = "https://superserve.ai"
