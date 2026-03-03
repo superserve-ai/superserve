@@ -1,4 +1,4 @@
-import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@superserve/ui"
+import { Button, Tooltip, TooltipContent, TooltipTrigger } from "@superserve/ui"
 import type { ComponentMeta } from "../registry/types"
 
 export const tooltipMeta: ComponentMeta = {
@@ -12,6 +12,7 @@ export const tooltipMeta: ComponentMeta = {
       name: "sideOffset",
       type: "number",
       default: "4",
+      component: "TooltipContent",
       description: "Distance from the trigger in pixels.",
     },
   ],
@@ -19,23 +20,19 @@ export const tooltipMeta: ComponentMeta = {
     {
       title: "Default",
       preview: (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline">Hover Me</Button>
-            </TooltipTrigger>
-            <TooltipContent>This is a tooltip</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="outline">Hover Me</Button>
+          </TooltipTrigger>
+          <TooltipContent>This is a tooltip</TooltipContent>
+        </Tooltip>
       ),
-      code: `<TooltipProvider>
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <Button variant="outline">Hover Me</Button>
-    </TooltipTrigger>
-    <TooltipContent>This is a tooltip</TooltipContent>
-  </Tooltip>
-</TooltipProvider>`,
+      code: `<Tooltip>
+  <TooltipTrigger asChild>
+    <Button variant="outline">Hover Me</Button>
+  </TooltipTrigger>
+  <TooltipContent>This is a tooltip</TooltipContent>
+</Tooltip>`,
     },
   ],
 }

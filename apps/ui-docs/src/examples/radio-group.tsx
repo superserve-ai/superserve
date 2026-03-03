@@ -11,6 +11,7 @@ export const radioGroupMeta: ComponentMeta = {
     {
       name: "label",
       type: "string",
+      component: "RadioGroupItem",
       description: "Label displayed next to the radio item.",
     },
   ],

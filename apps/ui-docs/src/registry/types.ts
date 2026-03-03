@@ -6,6 +6,8 @@ export type PropDef = {
   default?: string
   required?: boolean
   description: string
+  /** For compound components, indicates which sub-component this prop belongs to. */
+  component?: string
 }
 
 export type ComponentExample = {

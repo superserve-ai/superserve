@@ -18,6 +18,7 @@ export const selectMeta: ComponentMeta = {
       name: "position",
       type: '"popper" | "item-aligned"',
       default: '"popper"',
+      component: "SelectContent",
       description: "The positioning strategy.",
     },
   ],

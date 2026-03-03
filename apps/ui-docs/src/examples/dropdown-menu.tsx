@@ -19,6 +19,7 @@ export const dropdownMenuMeta: ComponentMeta = {
       name: "sideOffset",
       type: "number",
       default: "4",
+      component: "DropdownMenuContent",
       description: "Distance from the trigger in pixels.",
     },
   ],

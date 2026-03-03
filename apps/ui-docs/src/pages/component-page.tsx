@@ -1,16 +1,20 @@
+import { useEffect } from "react"
 import { useParams, Link } from "react-router"
 import { Separator } from "@superserve/ui"
 import { ExamplePreview } from "../components/example-preview"
 import { PropsTable } from "../components/props-table"
-import type { ComponentMeta } from "../registry/types"
+import { getBySlug } from "../registry"
 
-export function ComponentPage({
-  registry,
-}: {
-  registry: ComponentMeta[]
-}) {
+export function ComponentPage() {
   const { slug } = useParams()
-  const meta = registry.find((c) => c.slug === slug)
+  const meta = slug ? getBySlug(slug) : undefined
+
+  useEffect(() => {
+    document.title = meta ? `${meta.name} - Superserve UI` : "Superserve UI"
+    return () => {
+      document.title = "Superserve UI"
+    }
+  }, [meta])
 
   if (!meta) {
     return (
