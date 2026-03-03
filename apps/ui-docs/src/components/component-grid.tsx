@@ -16,7 +16,7 @@ export function ComponentGrid({
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {components.map((comp) => (
-          <Link key={comp.slug} to={`/components/${comp.slug}`}>
+          <Link key={comp.slug} to={`/components/${comp.slug}`} className="outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
             <Card className="h-full transition-colors hover:border-primary-light cursor-pointer">
               <CardHeader className="pb-5">
                 <CardTitle className="text-sm">{comp.name}</CardTitle>
