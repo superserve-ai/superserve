@@ -58,9 +58,9 @@ export function CodeBlock({ code }: { code: string }) {
   return (
     <div className="relative group">
       <Button
-        variant="ghost"
+        variant="link"
         size="icon-sm"
-        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 text-neutral-200"
         onClick={handleCopy}
       >
         {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
