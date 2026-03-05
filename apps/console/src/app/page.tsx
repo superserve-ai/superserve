@@ -34,12 +34,12 @@ export default function DashboardPage() {
   const [showForm, setShowForm] = useState(false);
 
   const router = useRouter();
-  const supabase = createClient();
   const posthog = usePostHog();
   const { addToast } = useToast();
 
   useEffect(() => {
     const checkUserAndSubmission = async () => {
+      const supabase = createClient();
       const {
         data: { user: authUser },
       } = await supabase.auth.getUser();
@@ -85,7 +85,7 @@ export default function DashboardPage() {
     };
 
     checkUserAndSubmission();
-  }, [router, supabase, posthog]);
+  }, [router, posthog]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,6 +95,7 @@ export default function DashboardPage() {
     setError(null);
 
     try {
+      const supabase = createClient();
       const { error: upsertError } = await supabase
         .from("early_access_requests")
         .upsert(

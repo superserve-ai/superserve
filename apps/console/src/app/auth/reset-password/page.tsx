@@ -17,7 +17,6 @@ function ResetPasswordContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
   const { addToast } = useToast();
 
   const handleResetPassword = async (e: React.FormEvent) => {
@@ -36,6 +35,7 @@ function ResetPasswordContent() {
     }
     setIsLoading(true);
     try {
+      const supabase = createClient();
       const { error } = await supabase.auth.updateUser({ password });
       if (error) {
         addToast(error.message, "error");
