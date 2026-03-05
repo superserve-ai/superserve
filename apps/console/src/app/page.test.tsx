@@ -1,0 +1,205 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// --- Mocks ---
+
+const mockPush = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mockPush }),
+}));
+
+vi.mock("next/link", () => ({
+  default: ({
+    children,
+    href,
+  }: {
+    children: React.ReactNode;
+    href: string;
+  }) => <a href={href}>{children}</a>,
+}));
+
+const mockAddToast = vi.fn();
+vi.mock("@superserve/ui", () => ({
+  useToast: () => ({ addToast: mockAddToast }),
+  Button: (props: React.JSX.IntrinsicElements["button"]) => (
+    <button {...props} />
+  ),
+  Input: (props: React.JSX.IntrinsicElements["input"]) => <input {...props} />,
+  Textarea: (props: React.JSX.IntrinsicElements["textarea"]) => (
+    <textarea {...props} />
+  ),
+  FormField: ({
+    children,
+    label,
+  }: {
+    children: React.ReactNode;
+    label: string;
+    required?: boolean;
+  }) => (
+    <div>
+      <label>{label}</label>
+      {children}
+    </div>
+  ),
+  Alert: ({
+    children,
+  }: {
+    children: React.ReactNode;
+    variant?: string;
+    className?: string;
+  }) => <div role="alert">{children}</div>,
+}));
+
+const mockGetUser = vi.fn();
+const mockGetSession = vi.fn();
+const mockFrom = vi.fn();
+
+vi.mock("@/lib/supabase/client", () => ({
+  createClient: () => ({
+    auth: {
+      getUser: mockGetUser,
+      getSession: mockGetSession,
+    },
+    from: mockFrom,
+  }),
+}));
+
+const mockCapture = vi.fn();
+const mockIdentify = vi.fn();
+vi.mock("posthog-js/react", () => ({
+  usePostHog: () => ({ capture: mockCapture, identify: mockIdentify }),
+}));
+
+const mockSendToSlack = vi.fn();
+vi.mock("./action", () => ({
+  sendEarlyAccessToSlack: (...args: unknown[]) => mockSendToSlack(...args),
+}));
+
+import DashboardPage from "./page";
+
+describe("DashboardPage", () => {
+  const user = userEvent.setup();
+
+  beforeEach(() => {
+    mockPush.mockReset();
+    mockGetUser.mockReset();
+    mockGetSession.mockReset();
+    mockFrom.mockReset();
+    mockCapture.mockReset();
+    mockIdentify.mockReset();
+    mockSendToSlack.mockReset();
+    mockAddToast.mockReset();
+  });
+
+  it("redirects to signin if not authenticated", async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: null },
+    });
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith("/auth/signin");
+    });
+  });
+
+  it("renders CLI instructions and request access link for authenticated user", async () => {
+    mockGetUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-123",
+          email: "test@test.com",
+          user_metadata: { full_name: "Test User" },
+        },
+      },
+    });
+    mockFrom.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: () => Promise.resolve({ data: null }),
+        }),
+      }),
+    });
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/curl/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/superserve\.ai\/install/)).toBeInTheDocument();
+    expect(screen.getByText(/Request dashboard access/)).toBeInTheDocument();
+  });
+
+  it("shows the form when 'Request dashboard access' is clicked", async () => {
+    mockGetUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-123",
+          email: "test@test.com",
+          user_metadata: { full_name: "Test User" },
+        },
+      },
+    });
+    mockFrom.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: () => Promise.resolve({ data: null }),
+        }),
+      }),
+    });
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Request dashboard access/)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText(/Request dashboard access/));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Request Access/ }),
+      ).toBeInTheDocument();
+    });
+
+    // Form should be pre-filled with user data
+    const nameInput = screen.getByPlaceholderText("Jane Doe");
+    const emailInput = screen.getByPlaceholderText("jane@company.com");
+    expect(nameInput).toHaveValue("Test User");
+    expect(emailInput).toHaveValue("test@test.com");
+  });
+
+  it("shows already-submitted message when user has previously submitted", async () => {
+    mockGetUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-123",
+          email: "test@test.com",
+          user_metadata: { full_name: "Test User" },
+        },
+      },
+    });
+    mockFrom.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: () => Promise.resolve({ data: { id: "req-1" } }),
+        }),
+      }),
+    });
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Request dashboard access/)).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText(/Request dashboard access/));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/already received your request/),
+      ).toBeInTheDocument();
+    });
+  });
+});
