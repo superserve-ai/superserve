@@ -1,0 +1,4 @@
+@import "tailwindcss";
+@import "@superserve/ui/styles";
+
+@source "../../../../packages/ui/src";

@@ -1,0 +1,35 @@
+{
+  "name": "@superserve/supabase",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts",
+    "./admin": "./src/admin.ts",
+    "./middleware": "./src/middleware.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "bunx biome check .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.98.0"
+  },
+  "peerDependencies": {
+    "next": ">=15"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@superserve/biome-config": "workspace:*",
+    "@superserve/typescript-config": "workspace:*",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
