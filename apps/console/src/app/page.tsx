@@ -16,7 +16,7 @@ import { createBrowserClient } from "@superserve/supabase"
 
 import { sendEarlyAccessToSlack } from "./action"
 import { useOnboardingState } from "../hooks/use-onboarding-state"
-import { useAgentPolling } from "../hooks/use-agent-polling"
+import { useAgents } from "../hooks/use-agents"
 import { StepIndicator } from "../components/step-indicator"
 import { StepInstall } from "../components/onboarding/step-install"
 import { StepDeploy } from "../components/onboarding/step-deploy"
@@ -49,7 +49,7 @@ export default function DashboardPage() {
   const { addToast } = useToast()
 
   const onboarding = useOnboardingState()
-  const { agents, hasAgents, loading: agentsLoading } = useAgentPolling(
+  const { agents, hasAgents, loading: agentsLoading } = useAgents(
     onboarding.isStepCompleted(1),
   )
 
