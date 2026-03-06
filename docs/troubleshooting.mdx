@@ -1,0 +1,121 @@
+---
+title: "Troubleshooting"
+description: "Common issues and how to fix them"
+---
+
+## Agent doesn't respond
+
+**Cause:** API keys not set. The agent starts but can't reach the model provider.
+
+**Fix:** Set the required secret for your agent:
+
+```bash
+superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-...
+# or
+superserve secrets set my-agent OPENAI_API_KEY=sk-...
+```
+
+Verify secrets are set:
+
+```bash
+superserve secrets list my-agent
+```
+
+<Tip>
+  Secrets are injected as environment variables. If your agent uses a custom env var name, make sure it matches exactly.
+</Tip>
+
+---
+
+## Agent doesn't respond (keys are set)
+
+**Cause:** The agent isn't reading from stdin or writing to stdout correctly.
+
+**Fix:** Make sure your agent follows the stdin/stdout pattern:
+
+```python
+# Python - must use input() and print()
+while True:
+    user_input = input()       # reads from stdin
+    print("response here")     # writes to stdout
+```
+
+```typescript
+// TypeScript - must use process.stdin and console.log()
+import { createInterface } from "readline"
+const rl = createInterface({ input: process.stdin })
+rl.on("line", (line) => {
+  console.log("response here")  // writes to stdout
+})
+```
+
+Common mistakes:
+- Using `sys.stderr` or `console.error()` instead of stdout
+- Forgetting to flush output (Python: `print()` flushes by default, but `sys.stdout.write()` doesn't)
+- Agent exits before reading input
+
+---
+
+## Response arrives all at once instead of streaming
+
+**Cause:** Your agent buffers the entire response before printing.
+
+**Fix:** Print each chunk as it arrives, not after the full response is assembled:
+
+```python
+# Bad - waits for everything, then prints
+full_response = get_full_response()
+print(full_response)
+
+# Good - prints chunks as they stream
+for chunk in stream_response():
+    print(chunk, end="", flush=True)
+```
+
+Superserve streams stdout to the client in real time. If your agent prints incrementally, the user sees tokens as they arrive.
+
+---
+
+## Agent takes too long to respond
+
+Possible causes:
+- **Large model context** - Reduce system prompt size or conversation history
+- **Slow model** - Try a faster model (e.g., `claude-haiku-4-5` instead of `claude-opus-4-6`, or `gpt-4o-mini` instead of `gpt-4o`)
+- **Tool execution** - If the agent runs code or makes HTTP requests, those add latency
+
+**Debug with single-shot mode:**
+
+```bash
+superserve run my-agent "Hello" --single
+```
+
+This sends one message and exits - useful for measuring response time without interactive overhead.
+
+---
+
+## Dependencies fail to install
+
+**Cause:** Large or slow-to-install packages timing out during sandbox setup.
+
+**Fix:**
+- Keep `requirements.txt` or `package.json` minimal - only include direct dependencies
+- Avoid large packages you don't need (e.g., `torch`, `tensorflow` if unused)
+- Pin versions to avoid unexpected resolution delays: `langchain-openai==0.3.0` instead of `langchain-openai`
+
+Check which file Superserve detects:
+
+| File | Language | Install command |
+|------|----------|-----------------|
+| `requirements.txt` | Python | `uv pip install` |
+| `pyproject.toml` | Python | `uv pip install` |
+| `package.json` | TypeScript/JS | `npm install` |
+
+<Tip>
+  Dependencies are cached across deploys. The first deploy is the slowest - subsequent deploys with the same dependencies skip installation.
+</Tip>
+
+---
+
+## Still stuck?
+
+Reach out at [engineering@superserve.ai](mailto:engineering@superserve.ai) or open an issue on [GitHub](https://github.com/superserve-ai/superserve/issues).

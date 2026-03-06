@@ -2,6 +2,22 @@
 
 A minimal chatbot built with [Mastra](https://mastra.ai/) and deployed on [Superserve](https://superserve.ai).
 
+## Install
+
+```bash
+npm install
+# or
+bun install
+```
+
+## Run
+
+```bash
+OPENAI_API_KEY=sk-... npx ts-node agent.ts
+# or
+OPENAI_API_KEY=sk-... bun agent.ts
+```
+
 ## Deploy
 
 ```bash

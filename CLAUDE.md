@@ -124,3 +124,7 @@ uv run pytest
 
 - Single-line commit messages
 - Do not include "Co-Authored-By" or AI attribution in commits
+
+## Planning
+
+- Save all planning and implementation documents to `spec/` (not `docs/plans/`)
