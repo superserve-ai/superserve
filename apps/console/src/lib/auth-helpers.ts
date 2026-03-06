@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { createBrowserClient } from "@superserve/supabase";
 
 export const DEV_AUTH_ENABLED =
   process.env.NEXT_PUBLIC_ENABLE_DEV_AUTH === "true";
@@ -17,7 +17,7 @@ export async function devSignIn(): Promise<{
 }> {
   if (!DEV_AUTH_ENABLED) return { success: false, error: "Dev auth disabled" };
 
-  const supabase = createClient();
+  const supabase = createBrowserClient();
 
   try {
     const { error } = await supabase.auth.signInWithPassword({

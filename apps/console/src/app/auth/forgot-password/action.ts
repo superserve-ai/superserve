@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { sendEmail } from "@/lib/email/send";
 import { PasswordResetEmail } from "@/lib/email/templates/password-reset";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@superserve/supabase/admin";
 
 const resetSchema = z.object({
   email: z.string().email(),

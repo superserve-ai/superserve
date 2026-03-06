@@ -29,8 +29,8 @@ vi.mock("@/components/icons", () => ({
 }));
 
 const mockSignInWithOAuth = vi.fn();
-vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({
+vi.mock("@superserve/supabase", () => ({
+  createBrowserClient: () => ({
     auth: {
       signInWithOAuth: mockSignInWithOAuth,
     },

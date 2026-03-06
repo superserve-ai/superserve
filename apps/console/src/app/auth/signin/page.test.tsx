@@ -59,8 +59,8 @@ vi.mock("@/lib/auth-helpers", () => ({
   devSignIn: vi.fn(),
 }));
 
-vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({
+vi.mock("@superserve/supabase", () => ({
+  createBrowserClient: () => ({
     auth: {
       signInWithPassword: mockSignInWithPassword,
       signInWithOAuth: mockSignInWithOAuth,

@@ -13,8 +13,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@react-email/components": "^1.0.7",
-        "@supabase/ssr": "^0.8.0",
-        "@supabase/supabase-js": "^2.98.0",
+        "@superserve/supabase": "workspace:*",
         "@superserve/ui": "workspace:*",
         "lucide-react": "^0.575.0",
         "next": "^16.1.6",
@@ -134,6 +133,30 @@
         "react",
       ],
     },
+    "packages/supabase": {
+      "name": "@superserve/supabase",
+      "version": "0.0.0",
+      "dependencies": {
+        "@supabase/ssr": "^0.8.0",
+        "@supabase/supabase-js": "^2.98.0",
+      },
+      "devDependencies": {
+        "@superserve/biome-config": "workspace:*",
+        "@superserve/typescript-config": "workspace:*",
+        "typescript": "~5.9.3",
+        "vitest": "^4.0.18",
+      },
+      "peerDependencies": {
+        "next": ">=15",
+      },
+      "optionalPeers": [
+        "next",
+      ],
+    },
+    "packages/tailwind-config": {
+      "name": "@superserve/tailwind-config",
+      "version": "0.0.0",
+    },
     "packages/typescript-config": {
       "name": "@superserve/typescript-config",
       "version": "0.0.0",
@@ -154,6 +177,7 @@
         "@radix-ui/react-switch": "^1.2.6",
         "@radix-ui/react-tabs": "^1.1.12",
         "@radix-ui/react-tooltip": "^1.1.18",
+        "@superserve/tailwind-config": "workspace:*",
         "clsx": "^2.1.1",
         "lucide-react": "^0.575.0",
         "motion": "^12.0.0",
@@ -646,6 +670,10 @@
     "@superserve/playground": ["@superserve/playground@workspace:apps/playground"],
 
     "@superserve/sdk": ["@superserve/sdk@workspace:packages/sdk"],
+
+    "@superserve/supabase": ["@superserve/supabase@workspace:packages/supabase"],
+
+    "@superserve/tailwind-config": ["@superserve/tailwind-config@workspace:packages/tailwind-config"],
 
     "@superserve/typescript-config": ["@superserve/typescript-config@workspace:packages/typescript-config"],
 

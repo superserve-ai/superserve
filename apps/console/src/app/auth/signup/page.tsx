@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { Button, Input, useToast } from "@superserve/ui";
 import { GoogleIcon, Spinner } from "@/components/icons";
-import { createClient } from "@/lib/supabase/client";
+import { createBrowserClient } from "@superserve/supabase";
 
 const AUTH_INPUT_CLASS =
   "h-auto px-4 py-3.5 bg-surface text-foreground border-border focus:ring-0 focus:border-primary";
@@ -67,7 +67,7 @@ function SignUpContent() {
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
     try {
-      const supabase = createClient();
+      const supabase = createBrowserClient();
       const callbackUrl = new URL("/auth/callback", window.location.origin);
       if (nextUrl && nextUrl !== "/") {
         callbackUrl.searchParams.set("next", nextUrl);

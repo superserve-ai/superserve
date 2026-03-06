@@ -2,7 +2,3 @@
 @import "@superserve/ui/styles";
 
 @source "../../../../packages/ui/src";
-
-@theme {
-  --font-display: var(--display-font);
-}

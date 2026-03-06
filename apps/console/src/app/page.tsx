@@ -13,7 +13,7 @@ import {
   Textarea,
   useToast,
 } from "@superserve/ui";
-import { createClient } from "@/lib/supabase/client";
+import { createBrowserClient } from "@superserve/supabase";
 
 import { sendEarlyAccessToSlack } from "./action";
 
@@ -39,7 +39,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const checkUserAndSubmission = async () => {
-      const supabase = createClient();
+      const supabase = createBrowserClient();
       const {
         data: { user: authUser },
       } = await supabase.auth.getUser();
@@ -95,7 +95,7 @@ export default function DashboardPage() {
     setError(null);
 
     try {
-      const supabase = createClient();
+      const supabase = createBrowserClient();
       const { error: upsertError } = await supabase
         .from("early_access_requests")
         .upsert(

@@ -1,12 +1,20 @@
 import type { NextRequest } from "next/server";
 import {
-  PUBLIC_ROUTES,
-  createSupabaseClient,
+  createMiddlewareClient,
   matchesRoute,
-} from "@/lib/supabase/middleware";
+} from "@superserve/supabase/middleware";
+
+const PUBLIC_ROUTES = [
+  "/auth/signin",
+  "/auth/signup",
+  "/auth/forgot-password",
+  "/auth/callback",
+  "/auth/auth-code-error",
+  "/device",
+];
 
 export async function middleware(request: NextRequest) {
-  const { supabase, response } = createSupabaseClient(request);
+  const { supabase, response } = createMiddlewareClient(request);
   if (!supabase) return response;
 
   const {

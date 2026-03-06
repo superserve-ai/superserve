@@ -7,7 +7,7 @@ import { Suspense, useEffect, useState } from "react";
 import { Button, useToast } from "@superserve/ui";
 import { GoogleIcon, Spinner } from "@/components/icons";
 import { DEV_AUTH_ENABLED, devSignIn } from "@/lib/auth-helpers";
-import { createClient } from "@/lib/supabase/client";
+import { createBrowserClient } from "@superserve/supabase";
 
 function Logo() {
   return (
@@ -34,7 +34,7 @@ function DevicePageContent() {
 
   useEffect(() => {
     const checkUser = async () => {
-      const supabase = createClient();
+      const supabase = createBrowserClient();
       try {
         const {
           data: { session },
@@ -74,7 +74,7 @@ function DevicePageContent() {
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
-      const supabase = createClient();
+      const supabase = createBrowserClient();
       const callbackUrl = new URL("/auth/callback", window.location.origin);
       callbackUrl.searchParams.set("next", `/device?code=${userCode}`);
 
@@ -108,7 +108,7 @@ function DevicePageContent() {
         return;
       }
 
-      const supabase = createClient();
+      const supabase = createBrowserClient();
       const {
         data: { user: signedInUser },
       } = await supabase.auth.getUser();
@@ -132,7 +132,7 @@ function DevicePageContent() {
     setIsAuthorizing(true);
 
     try {
-      const supabase = createClient();
+      const supabase = createBrowserClient();
       const {
         data: { session },
       } = await supabase.auth.getSession();

@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockSignInWithPassword = vi.fn();
 const mockSignUp = vi.fn();
 
-vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({
+vi.mock("@superserve/supabase", () => ({
+  createBrowserClient: () => ({
     auth: {
       signInWithPassword: mockSignInWithPassword,
       signUp: mockSignUp,

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Suspense, useState } from "react";
 import { Button, Input, useToast } from "@superserve/ui";
 import { Spinner } from "@/components/icons";
-import { createClient } from "@/lib/supabase/client";
+import { createBrowserClient } from "@superserve/supabase";
 
 const AUTH_INPUT_CLASS =
   "h-auto px-4 py-3.5 bg-surface text-foreground border-border focus:ring-0 focus:border-primary";
@@ -36,7 +36,7 @@ function ResetPasswordContent() {
     }
     setIsLoading(true);
     try {
-      const supabase = createClient();
+      const supabase = createBrowserClient();
       const { error } = await supabase.auth.updateUser({ password });
       if (error) {
         addToast(error.message, "error");

@@ -7,7 +7,7 @@ import { Suspense, useEffect, useState } from "react";
 import { Button, Input, useToast } from "@superserve/ui";
 import { GoogleIcon, Spinner } from "@/components/icons";
 import { DEV_AUTH_ENABLED, devSignIn } from "@/lib/auth-helpers";
-import { createClient } from "@/lib/supabase/client";
+import { createBrowserClient } from "@superserve/supabase";
 
 const AUTH_INPUT_CLASS =
   "h-auto px-4 py-3.5 bg-surface text-foreground border-border focus:ring-0 focus:border-primary";
@@ -29,7 +29,7 @@ function SignInContent() {
 
   useEffect(() => {
     const checkUser = async () => {
-      const supabase = createClient();
+      const supabase = createBrowserClient();
       try {
         const {
           data: { session },
@@ -65,7 +65,7 @@ function SignInContent() {
     }
     setIsEmailLoading(true);
     try {
-      const supabase = createClient();
+      const supabase = createBrowserClient();
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -92,7 +92,7 @@ function SignInContent() {
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
-      const supabase = createClient();
+      const supabase = createBrowserClient();
       const callbackUrl = new URL("/auth/callback", window.location.origin);
       if (nextUrl && nextUrl !== "/") {
         callbackUrl.searchParams.set("next", nextUrl);

@@ -5,7 +5,7 @@ import { sendEmail } from "@/lib/email/send";
 import { ConfirmationEmail } from "@/lib/email/templates/confirmation";
 import { WelcomeEmail } from "@/lib/email/templates/welcome";
 import { notifySlackOfNewUser } from "@/app/auth/signin/action";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@superserve/supabase/admin";
 
 const signUpSchema = z.object({
   email: z.string().email("Invalid email address."),

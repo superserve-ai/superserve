@@ -55,8 +55,8 @@ const mockGetUser = vi.fn();
 const mockGetSession = vi.fn();
 const mockFrom = vi.fn();
 
-vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({
+vi.mock("@superserve/supabase", () => ({
+  createBrowserClient: () => ({
     auth: {
       getUser: mockGetUser,
       getSession: mockGetSession,

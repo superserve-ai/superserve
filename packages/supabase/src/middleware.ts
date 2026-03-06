@@ -1,33 +1,24 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
-export const PUBLIC_ROUTES = [
-  "/auth/signin",
-  "/auth/signup",
-  "/auth/forgot-password",
-  "/auth/callback",
-  "/auth/auth-code-error",
-  "/device",
-];
-
 export function matchesRoute(pathname: string, routes: string[]): boolean {
   return routes.some((route) => pathname.startsWith(route));
 }
 
-export function createSupabaseClient(request: NextRequest) {
+export function createMiddlewareClient(request: NextRequest) {
   let response = NextResponse.next({ request });
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!supabaseUrl || !supabaseAnonKey) {
+  if (!url || !anonKey) {
     return { supabase: null, response };
   }
 
   const cookieDomain = process.env.NEXT_PUBLIC_COOKIE_DOMAIN;
   const domainOpts = cookieDomain ? { domain: cookieDomain } : {};
 
-  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+  const supabase = createServerClient(url, anonKey, {
     cookies: {
       getAll() {
         return request.cookies.getAll();

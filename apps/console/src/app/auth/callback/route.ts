@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { notifySlackOfNewUser } from "@/app/auth/signin/action";
 import { sendWelcomeEmail } from "@/app/auth/signup/action";
 import { trackEvent } from "@/lib/posthog/actions";
-import { createClient } from "@/lib/supabase/server";
+import { createServerClient } from "@superserve/supabase/server";
 
 const TRUSTED_REDIRECT_PATTERN =
   /^https:\/\/([a-z0-9-]+\.)?superserve\.ai(\/.*)?$/;
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
   let next = sanitizeNext(searchParams.get("next"));
 
   if (code || tokenHash) {
-    const supabase = await createClient();
+    const supabase = await createServerClient();
 
     let error = null;
     if (code) {
