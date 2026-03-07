@@ -22,6 +22,8 @@ import { StepInstall } from "../components/onboarding/step-install"
 import { StepDeploy } from "../components/onboarding/step-deploy"
 import { StepPlayground } from "../components/onboarding/step-playground"
 
+const PLAYGROUND_URL = "https://playground.superserve.ai"
+
 const STEP_LABELS = [
   "Install the CLI",
   "Deploy your agent",
@@ -91,6 +93,22 @@ export default function DashboardPage() {
 
       if (posthog) {
         posthog.identify(authUser.id, { email, name })
+      }
+
+      // If user already has agents, redirect to playground
+      try {
+        const { data: existingAgents } = await supabase
+          .from("agents")
+          .select("id")
+          .eq("user_id", authUser.id)
+          .limit(1)
+
+        if (existingAgents && existingAgents.length > 0) {
+          window.location.href = PLAYGROUND_URL
+          return
+        }
+      } catch (err) {
+        console.error("Error checking agents:", err)
       }
 
       try {
