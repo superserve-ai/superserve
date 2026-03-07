@@ -22,6 +22,7 @@ vi.mock("next/link", () => ({
 const mockAddToast = vi.fn();
 vi.mock("@superserve/ui", () => ({
   useToast: () => ({ addToast: mockAddToast }),
+  cn: (...args: unknown[]) => args.filter(Boolean).join(" "),
   Button: (props: React.JSX.IntrinsicElements["button"]) => (
     <button {...props} />
   ),
@@ -49,6 +50,17 @@ vi.mock("@superserve/ui", () => ({
     variant?: string;
     className?: string;
   }) => <div role="alert">{children}</div>,
+  Card: ({
+    children,
+    ...props
+  }: React.JSX.IntrinsicElements["div"]) => <div {...props}>{children}</div>,
+  Badge: ({
+    children,
+  }: {
+    children: React.ReactNode;
+    variant?: string;
+    dot?: boolean;
+  }) => <span>{children}</span>,
 }));
 
 const mockGetUser = vi.fn();

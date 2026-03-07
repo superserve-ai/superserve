@@ -298,7 +298,12 @@ export default function DashboardPage() {
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6 text-muted text-sm">
                 <button
                   type="button"
-                  onClick={() => setShowForm(true)}
+                  onClick={() => {
+                    setShowForm(true)
+                    if (posthog) {
+                      posthog.capture("dashboard_access_form_opened")
+                    }
+                  }}
                   className="hover:text-foreground transition-colors text-left"
                 >
                   Looking to manage agents with your team?{" "}

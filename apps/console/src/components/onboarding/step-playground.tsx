@@ -1,5 +1,6 @@
 "use client"
 
+import { usePostHog } from "posthog-js/react"
 import { Badge, Button, Card } from "@superserve/ui"
 
 interface Agent {
@@ -21,6 +22,7 @@ export function StepPlayground({
   hasAgents,
   loading,
 }: StepPlaygroundProps) {
+  const posthog = usePostHog()
   if (!hasAgents) {
     return (
       <div className="px-4 pb-6 pt-6">
@@ -81,12 +83,18 @@ export function StepPlayground({
             <Button
               variant="outline"
               size="sm"
-              onClick={() =>
+              onClick={() => {
+                if (posthog) {
+                  posthog.capture("playground_agent_opened", {
+                    agent_id: agent.id,
+                    agent_name: agent.name,
+                  })
+                }
                 window.open(
                   `${PLAYGROUND_URL}/agents/${agent.id}/`,
                   "_blank",
                 )
-              }
+              }}
             >
               Open in Playground
             </Button>
