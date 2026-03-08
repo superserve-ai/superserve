@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@superserve/supabase"
 
-interface Agent {
+export interface Agent {
   id: string
   name: string
   created_at: string
@@ -18,17 +18,21 @@ export function useAgents(enabled: boolean) {
 
     const supabase = createBrowserClient()
     let cancelled = false
+    let userId: string | null = null
 
     const fetchAgents = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user || cancelled) return
+      if (!userId) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (!user || cancelled) return
+        userId = user.id
+      }
 
       const { data } = await supabase
         .from("agents")
         .select("id, name, created_at")
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .order("created_at", { ascending: false })
 
       if (!cancelled && data) {
@@ -37,23 +41,36 @@ export function useAgents(enabled: boolean) {
       setLoading(false)
     }
 
-    setLoading(true)
-    fetchAgents()
+    const setupRealtimeAndFetch = async () => {
+      setLoading(true)
+      await fetchAgents()
+      if (cancelled || !userId) return
 
-    const channel = supabase
-      .channel("agents-realtime")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "agents" },
-        () => {
-          fetchAgents()
-        },
-      )
-      .subscribe()
+      const channel = supabase
+        .channel("agents-realtime")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "agents",
+            filter: `user_id=eq.${userId}`,
+          },
+          () => {
+            fetchAgents()
+          },
+        )
+        .subscribe()
+
+      cleanupChannel = () => supabase.removeChannel(channel)
+    }
+
+    let cleanupChannel: (() => void) | null = null
+    setupRealtimeAndFetch()
 
     return () => {
       cancelled = true
-      supabase.removeChannel(channel)
+      cleanupChannel?.()
     }
   }, [enabled])
 

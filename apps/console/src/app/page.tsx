@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   Alert,
   Button,
@@ -21,8 +21,7 @@ import { StepIndicator } from "../components/step-indicator"
 import { StepInstall } from "../components/onboarding/step-install"
 import { StepDeploy } from "../components/onboarding/step-deploy"
 import { StepPlayground } from "../components/onboarding/step-playground"
-
-const PLAYGROUND_URL = "https://playground.superserve.ai"
+import { PLAYGROUND_URL } from "../constants"
 
 const STEP_LABELS = [
   "Install the CLI",
@@ -55,18 +54,23 @@ export default function DashboardPage() {
     onboarding.isStepCompleted(1),
   )
 
+  const onboardingRef = useRef(onboarding)
+  onboardingRef.current = onboarding
+  const posthogRef = useRef(posthog)
+  posthogRef.current = posthog
+
   // Auto-complete step 2 and expand step 3 when agents are detected
   useEffect(() => {
-    if (hasAgents && !onboarding.isStepCompleted(2)) {
-      onboarding.completeStep(2)
-      onboarding.completeStep(3)
-      if (posthog) {
-        posthog.capture("onboarding_agent_detected", {
+    if (hasAgents && !onboardingRef.current.isStepCompleted(2)) {
+      onboardingRef.current.completeStep(2)
+      onboardingRef.current.completeStep(3)
+      if (posthogRef.current) {
+        posthogRef.current.capture("onboarding_agent_detected", {
           agent_count: agents.length,
         })
       }
     }
-  }, [hasAgents]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hasAgents, agents.length])
 
   // Auth check
   useEffect(() => {

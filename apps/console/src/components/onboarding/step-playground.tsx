@@ -2,20 +2,14 @@
 
 import { usePostHog } from "posthog-js/react"
 import { Badge, Button, Card } from "@superserve/ui"
-
-interface Agent {
-  id: string
-  name: string
-  created_at: string
-}
+import type { Agent } from "../../hooks/use-agents"
+import { PLAYGROUND_URL } from "../../constants"
 
 interface StepPlaygroundProps {
   agents: Agent[]
   hasAgents: boolean
   loading: boolean
 }
-
-const PLAYGROUND_URL = "https://playground.superserve.ai"
 
 export function StepPlayground({
   agents,

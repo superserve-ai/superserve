@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from "react"
 import { Superserve } from "@superserve/sdk"
 import { Badge } from "@superserve/ui"
-import { useSuperserveChat } from "../hooks/useSuperserveChat"
-import Sidebar from "../components/Sidebar"
+import { useCallback, useEffect, useState } from "react"
 import ChatArea from "../components/ChatArea"
+import Sidebar from "../components/Sidebar"
+import { useSuperserveChat } from "../hooks/useSuperserveChat"
 import { useAuth } from "../lib/auth-context"
+import type { Agent } from "../types"
+import { agentStatusBadge } from "../utils"
 
 const BASE_URL = "/api"
 
@@ -17,12 +19,16 @@ export default function ChatPage({ agentId, onBack }: ChatPageProps) {
   const { accessToken, signOut } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [agentName, setAgentName] = useState<string | null>(null)
+  const [agentDepsStatus, setAgentDepsStatus] = useState<string | null>(null)
 
   useEffect(() => {
     if (!accessToken) return
     const client = new Superserve({ apiKey: accessToken, baseUrl: BASE_URL })
     client.agents.get(agentId).then(
-      (agent) => setAgentName(agent.name),
+      (agent: Agent) => {
+        setAgentName(agent.name)
+        setAgentDepsStatus(agent.depsStatus)
+      },
       (err) => {
         const msg = err instanceof Error ? err.message : ""
         if (
@@ -77,6 +83,8 @@ export default function ChatPage({ agentId, onBack }: ChatPageProps) {
     switchSession(localId)
     setSidebarOpen(false)
   }
+
+  const agentBadge = agentDepsStatus ? agentStatusBadge(agentDepsStatus) : null
 
   const isActive = status === "streaming"
   const statusLabel = isActive
@@ -133,13 +141,24 @@ export default function ChatPage({ agentId, onBack }: ChatPageProps) {
               </span>
             </div>
           </div>
-          <Badge
-            dot
-            variant={statusVariant}
-            className={`font-mono uppercase tracking-wider ${isActive ? "[&>span:first-child]:animate-pulse-dot" : ""}`}
-          >
-            {statusLabel}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {agentBadge && (
+              <Badge
+                dot
+                variant={agentBadge.variant}
+                className="font-mono text-[10px] uppercase tracking-wider"
+              >
+                {agentBadge.label}
+              </Badge>
+            )}
+            <Badge
+              dot
+              variant={statusVariant}
+              className={`font-mono uppercase tracking-wider ${isActive ? "[&>span:first-child]:animate-pulse-dot" : ""}`}
+            >
+              {statusLabel}
+            </Badge>
+          </div>
         </div>
       </header>
 

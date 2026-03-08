@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from "react"
 import { Superserve } from "@superserve/sdk"
-import { Button, Card, Skeleton } from "@superserve/ui"
-import type { Agent } from "../types"
-import { relativeTime } from "../utils"
+import { Badge, Button, Card, Skeleton } from "@superserve/ui"
+import { useCallback, useEffect, useState } from "react"
 import { useAuth } from "../lib/auth-context"
+import type { Agent } from "../types"
+import { agentStatusBadge, relativeTime } from "../utils"
 
 interface AgentsPageProps {
   navigate: (to: string) => void
@@ -144,35 +144,47 @@ export default function AgentsPage({ navigate }: AgentsPageProps) {
 
             {state === "loaded" && (
               <Card className="divide-y divide-dashed divide-border">
-                {agents.map((agent) => (
-                  <button
-                    key={agent.id}
-                    onClick={() => navigate(`/agents/${agent.id}`)}
-                    className="group flex w-full cursor-pointer items-center justify-between px-5 py-4 text-left transition-colors hover:bg-surface-hover"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-foreground">
-                        {agent.name}
-                      </p>
-                      <p className="mt-1 text-[12px] text-muted">
-                        Updated {relativeTime(agent.updatedAt)}
-                      </p>
-                    </div>
-                    <svg
-                      className="shrink-0 text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-muted"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+                {agents.map((agent) => {
+                  const { variant, label } = agentStatusBadge(agent.depsStatus)
+                  return (
+                    <button
+                      key={agent.id}
+                      onClick={() => navigate(`/agents/${agent.id}`)}
+                      className="group flex w-full cursor-pointer items-center justify-between px-5 py-4 text-left transition-colors hover:bg-surface-hover"
                     >
-                      <path d="M6 4l4 4-4 4" />
-                    </svg>
-                  </button>
-                ))}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate font-medium text-foreground">
+                            {agent.name}
+                          </p>
+                          <Badge
+                            dot
+                            variant={variant}
+                            className="font-mono text-[10px] uppercase tracking-wider"
+                          >
+                            {label}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-[12px] text-muted">
+                          Updated {relativeTime(agent.updatedAt)}
+                        </p>
+                      </div>
+                      <svg
+                        className="shrink-0 text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-muted"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M6 4l4 4-4 4" />
+                      </svg>
+                    </button>
+                  )
+                })}
               </Card>
             )}
           </div>

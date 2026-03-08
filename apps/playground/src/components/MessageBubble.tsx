@@ -1,11 +1,7 @@
-import { useState } from "react"
+import { Avatar, Tooltip, TooltipContent, TooltipTrigger } from "@superserve/ui"
+import { useEffect, useRef, useState } from "react"
 import Markdown from "react-markdown"
-import {
-  Avatar,
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "@superserve/ui"
+import { highlightCode } from "../lib/highlighter"
 import type { ChatMessage } from "../types"
 
 function CodeBlock({
@@ -14,9 +10,28 @@ function CodeBlock({
   ...props
 }: React.HTMLAttributes<HTMLElement>) {
   const [copied, setCopied] = useState(false)
+  const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null)
+  const codeRef = useRef<string>("")
 
   const match = /language-(\w+)/.exec(className || "")
-  const isBlock = match || (typeof children === "string" && children.includes("\n"))
+  const isBlock =
+    match || (typeof children === "string" && children.includes("\n"))
+
+  const language = match ? match[1] : ""
+  const code = String(children).replace(/\n$/, "")
+
+  useEffect(() => {
+    if (!isBlock) return
+    // Debounce during streaming — only highlight when code stabilizes
+    const timer = setTimeout(() => {
+      if (code === codeRef.current) return
+      codeRef.current = code
+      highlightCode(code, language)
+        .then(setHighlightedHtml)
+        .catch(() => {})
+    }, 80)
+    return () => clearTimeout(timer)
+  }, [code, language, isBlock])
 
   if (!isBlock) {
     return (
@@ -25,9 +40,6 @@ function CodeBlock({
       </code>
     )
   }
-
-  const language = match ? match[1] : ""
-  const code = String(children).replace(/\n$/, "")
 
   const handleCopy = async () => {
     try {
@@ -48,23 +60,34 @@ function CodeBlock({
         <button
           type="button"
           onClick={handleCopy}
-          className="font-mono text-[11px] text-neutral-500 hover:text-neutral-300"
+          className="cursor-pointer font-mono text-[11px] text-neutral-500 hover:text-neutral-300"
         >
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
-      <pre>
-        <code className={className} {...props}>
-          {children}
-        </code>
-      </pre>
+      {highlightedHtml ? (
+        <div
+          className="shiki-wrapper [&>pre]:!m-0 [&>pre]:overflow-x-auto [&>pre]:border [&>pre]:border-neutral-800 [&>pre]:!bg-neutral-900 [&>pre]:px-4 [&>pre]:py-3 [&>pre]:font-mono [&>pre]:text-xs [&>pre]:leading-relaxed"
+          dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+        />
+      ) : (
+        <pre>
+          <code className={className} {...props}>
+            {children}
+          </code>
+        </pre>
+      )}
     </div>
   )
 }
 
 function formatTime(iso: string): string {
   const d = new Date(iso)
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
+  return d.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
 }
 
 interface MessageBubbleProps {
@@ -72,7 +95,10 @@ interface MessageBubbleProps {
   onRetry?: () => void
 }
 
-export default function MessageBubble({ message, onRetry }: MessageBubbleProps) {
+export default function MessageBubble({
+  message,
+  onRetry,
+}: MessageBubbleProps) {
   const isUser = message.role === "user"
   const isEmpty =
     !isUser &&

@@ -68,49 +68,57 @@ export function useOnboardingState() {
     setState(loadState())
   }, [])
 
-  const persist = useCallback((next: OnboardingState) => {
-    setState(next)
-    saveState(next)
+  const update = useCallback((updater: (prev: OnboardingState) => OnboardingState) => {
+    setState((prev) => {
+      const next = updater(prev)
+      saveState(next)
+      return next
+    })
   }, [])
 
   const completeStep = useCallback(
     (step: OnboardingStep) => {
-      const next = { ...state }
-      next.completedSteps = new Set(state.completedSteps)
-      next.completedSteps.add(step)
-      if (step < 3) {
-        next.currentStep = (step + 1) as OnboardingStep
-        next.expandedStep = (step + 1) as OnboardingStep
-      } else {
-        next.expandedStep = step
-      }
-      persist(next)
+      update((prev) => {
+        const next = { ...prev, completedSteps: new Set(prev.completedSteps) }
+        next.completedSteps.add(step)
+        if (step < 3) {
+          next.currentStep = (step + 1) as OnboardingStep
+          next.expandedStep = (step + 1) as OnboardingStep
+        } else {
+          next.expandedStep = step
+        }
+        return next
+      })
     },
-    [state, persist],
+    [update],
   )
 
   const toggleStep = useCallback(
     (step: OnboardingStep) => {
-      persist({
-        ...state,
-        expandedStep: state.expandedStep === step ? null : step,
-      })
+      update((prev) => ({
+        ...prev,
+        expandedStep: prev.expandedStep === step ? null : step,
+      }))
     },
-    [state, persist],
+    [update],
   )
 
   const setAgentPath = useCallback(
     (path: AgentPath) => {
-      persist({ ...state, agentPath: path, framework: path === null ? null : state.framework })
+      update((prev) => ({
+        ...prev,
+        agentPath: path,
+        framework: path === null ? null : prev.framework,
+      }))
     },
-    [state, persist],
+    [update],
   )
 
   const setFramework = useCallback(
     (fw: Framework) => {
-      persist({ ...state, framework: fw })
+      update((prev) => ({ ...prev, framework: fw }))
     },
-    [state, persist],
+    [update],
   )
 
   return {

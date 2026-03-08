@@ -14,12 +14,16 @@ export function CodeBlock({ command, eventName }: CodeBlockProps) {
   const posthog = usePostHog()
 
   const copy = async () => {
-    await navigator.clipboard.writeText(command)
-    setCopied(true)
-    if (posthog && eventName) {
-      posthog.capture(eventName, { command })
+    try {
+      await navigator.clipboard.writeText(command)
+      setCopied(true)
+      if (posthog && eventName) {
+        posthog.capture(eventName, { command })
+      }
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.warn("Failed to copy:", err)
     }
-    setTimeout(() => setCopied(false), 2000)
   }
 
   return (
