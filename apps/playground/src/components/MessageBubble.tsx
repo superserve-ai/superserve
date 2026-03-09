@@ -68,6 +68,7 @@ function CodeBlock({
       {highlightedHtml ? (
         <div
           className="shiki-wrapper [&>pre]:!m-0 [&>pre]:overflow-x-auto [&>pre]:border [&>pre]:border-neutral-800 [&>pre]:!bg-neutral-900 [&>pre]:px-4 [&>pre]:py-3 [&>pre]:font-mono [&>pre]:text-xs [&>pre]:leading-relaxed"
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized markdown content
           dangerouslySetInnerHTML={{ __html: highlightedHtml }}
         />
       ) : (
@@ -171,6 +172,7 @@ export default function MessageBubble({
                         className="flex items-center gap-1.5 font-mono text-[11px] text-muted"
                       >
                         <svg
+                          aria-hidden="true"
                           width="10"
                           height="10"
                           viewBox="0 0 10 10"
@@ -216,6 +218,7 @@ export default function MessageBubble({
               className="mt-2.5 shrink-0 cursor-pointer p-1 text-muted opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
             >
               <svg
+                aria-hidden="true"
                 width="14"
                 height="14"
                 viewBox="0 0 16 16"

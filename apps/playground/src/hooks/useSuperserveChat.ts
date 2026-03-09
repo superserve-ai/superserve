@@ -1,9 +1,9 @@
-import { useRef, useCallback, useMemo, useEffect } from "react"
-import { Superserve } from "@superserve/sdk"
 import type { AgentStream } from "@superserve/sdk"
-import { useLocalStorage } from "./useLocalStorage"
+import { Superserve } from "@superserve/sdk"
+import { useCallback, useEffect, useMemo, useRef } from "react"
+import type { ChatMessage, ChatSession, ChatStatus } from "../types"
 import { generateId } from "../utils"
-import type { ChatSession, ChatMessage, ChatStatus } from "../types"
+import { useLocalStorage } from "./useLocalStorage"
 
 interface UseSuperserveChatOptions {
   agentId: string
@@ -44,6 +44,7 @@ export function useSuperserveChat(options: UseSuperserveChatOptions) {
   }, [accessToken, baseUrl])
 
   // Reset client when token refreshes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: accessToken change must invalidate cached client
   useEffect(() => {
     clientRef.current = null
   }, [accessToken])
@@ -55,12 +56,13 @@ export function useSuperserveChat(options: UseSuperserveChatOptions) {
   )
 
   // Derive status for the active session
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sessions dependency forces re-derive after state updates
   const status: ChatStatus = useMemo(() => {
     if (!activeLocalId) return "ready"
     if (streamingSessionRef.current === activeLocalId) return "streaming"
     if (errorSessionRef.current === activeLocalId) return "error"
     return "ready"
-  }, [activeLocalId, sessions]) // sessions dependency forces re-derive after state updates
+  }, [activeLocalId, sessions])
 
   // Create a new local session
   const createSession = useCallback(() => {
@@ -225,7 +227,10 @@ export function useSuperserveChat(options: UseSuperserveChatOptions) {
                   ...s,
                   messages: s.messages.map((m) => {
                     if (m.id !== assistantMsgId) return m
-                    const toolCalls = [...(m.toolCalls ?? []), { name: event.name, input: event.input, duration: 0 }]
+                    const toolCalls = [
+                      ...(m.toolCalls ?? []),
+                      { name: event.name, input: event.input, duration: 0 },
+                    ]
                     return { ...m, toolCalls }
                   }),
                 }
@@ -243,7 +248,10 @@ export function useSuperserveChat(options: UseSuperserveChatOptions) {
                     const toolCalls = [...(m.toolCalls ?? [])]
                     const lastTool = toolCalls[toolCalls.length - 1]
                     if (lastTool) {
-                      toolCalls[toolCalls.length - 1] = { ...lastTool, duration: event.duration }
+                      toolCalls[toolCalls.length - 1] = {
+                        ...lastTool,
+                        duration: event.duration,
+                      }
                     }
                     return { ...m, toolCalls }
                   }),
@@ -320,11 +328,17 @@ export function useSuperserveChat(options: UseSuperserveChatOptions) {
         if (s.localId !== activeLocalId) return s
         const messages = [...s.messages]
         // Remove last assistant message (the error)
-        if (messages.length > 0 && messages[messages.length - 1].role === "assistant") {
+        if (
+          messages.length > 0 &&
+          messages[messages.length - 1].role === "assistant"
+        ) {
           messages.pop()
         }
         // Remove the user message that triggered it
-        if (messages.length > 0 && messages[messages.length - 1].role === "user") {
+        if (
+          messages.length > 0 &&
+          messages[messages.length - 1].role === "user"
+        ) {
           messages.pop()
         }
         return { ...s, messages }

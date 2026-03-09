@@ -1,5 +1,5 @@
-import { useState } from "react"
 import { Button, TooltipProvider } from "@superserve/ui"
+import { useState } from "react"
 import { useRoute } from "./hooks/useRoute"
 import { AuthProvider, useAuth } from "./lib/auth-context"
 import AgentsPage from "./pages/AgentsPage"
@@ -32,7 +32,10 @@ function LoginScreen() {
         </p>
         <Button onClick={handleConsoleRedirect}>Sign in via console</Button>
         {isDev && (
-          <form onSubmit={handleDevLogin} className="mt-6 border-t border-dashed border-border pt-6">
+          <form
+            onSubmit={handleDevLogin}
+            className="mt-6 border-t border-dashed border-border pt-6"
+          >
             <p className="mb-3 font-mono text-[11px] uppercase tracking-wider text-muted">
               Dev: paste access token
             </p>

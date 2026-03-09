@@ -59,6 +59,7 @@ export default function ChatPage({ agentId, onBack }: ChatPageProps) {
   } = useSuperserveChat({
     agentId,
     agentName: agentName ?? agentId,
+    // biome-ignore lint/style/noNonNullAssertion: accessToken is checked before this component renders
     accessToken: accessToken!,
     baseUrl: BASE_URL,
   })
@@ -106,11 +107,13 @@ export default function ChatPage({ agentId, onBack }: ChatPageProps) {
         <div className="flex h-14 items-center justify-between px-5 md:px-8">
           <div className="flex items-center gap-3">
             <button
+              type="button"
               onClick={() => setSidebarOpen((prev) => !prev)}
               className="cursor-pointer p-1.5 text-muted transition-colors hover:text-ink md:hidden"
               aria-label="Toggle sidebar"
             >
               <svg
+                aria-hidden="true"
                 width="18"
                 height="18"
                 viewBox="0 0 18 18"
@@ -128,6 +131,7 @@ export default function ChatPage({ agentId, onBack }: ChatPageProps) {
               <span className="hidden text-muted md:inline">Superserve</span>
               <span className="hidden text-ink-faint md:inline">/</span>
               <button
+                type="button"
                 onClick={onBack}
                 className="cursor-pointer text-muted transition-colors hover:text-ink-light"
               >
@@ -165,13 +169,16 @@ export default function ChatPage({ agentId, onBack }: ChatPageProps) {
       {/* Content — sidebar + chat */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar — desktop: fixed, mobile: overlay */}
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: overlay backdrop */}
         <div
           className={`fixed inset-0 z-30 bg-black/20 transition-opacity md:hidden ${
             sidebarOpen
               ? "pointer-events-auto opacity-100"
               : "pointer-events-none opacity-0"
           }`}
+          role="presentation"
           onClick={() => setSidebarOpen(false)}
+          onKeyDown={() => {}}
         />
         <div
           className={`fixed inset-y-0 left-0 z-40 w-64 transform transition-transform md:static md:translate-x-0 ${

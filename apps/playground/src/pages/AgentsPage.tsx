@@ -88,6 +88,7 @@ export default function AgentsPage({ navigate }: AgentsPageProps) {
               <Card className="px-6 py-10 text-center">
                 <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
                   <svg
+                    aria-hidden="true"
                     width="18"
                     height="18"
                     viewBox="0 0 18 18"
@@ -115,6 +116,7 @@ export default function AgentsPage({ navigate }: AgentsPageProps) {
               <Card className="px-6 py-10 text-center">
                 <div className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-surface-hover text-muted">
                   <svg
+                    aria-hidden="true"
                     width="18"
                     height="18"
                     viewBox="0 0 18 18"
@@ -148,6 +150,7 @@ export default function AgentsPage({ navigate }: AgentsPageProps) {
                   const { variant, label } = agentStatusBadge(agent.depsStatus)
                   return (
                     <button
+                      type="button"
                       key={agent.id}
                       onClick={() => navigate(`/agents/${agent.id}`)}
                       className="group flex w-full cursor-pointer items-center justify-between px-5 py-4 text-left transition-colors hover:bg-surface-hover"
@@ -170,6 +173,7 @@ export default function AgentsPage({ navigate }: AgentsPageProps) {
                         </p>
                       </div>
                       <svg
+                        aria-hidden="true"
                         className="shrink-0 text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-muted"
                         width="16"
                         height="16"

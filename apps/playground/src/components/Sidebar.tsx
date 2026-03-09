@@ -1,5 +1,5 @@
-import { useState } from "react"
 import { Button } from "@superserve/ui"
+import { useState } from "react"
 import type { ChatSession } from "../types"
 import { groupByTime, relativeTime } from "../utils"
 
@@ -22,8 +22,7 @@ export default function Sidebar({
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
 
   const sorted = [...sessions].sort(
-    (a, b) =>
-      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
   )
 
   const filtered = sorted.filter((s) =>
@@ -37,6 +36,7 @@ export default function Sidebar({
       <div className="p-3">
         <Button onClick={onNewChat} className="flex w-full">
           <svg
+            aria-hidden="true"
             className="size-4"
             viewBox="0 0 14 14"
             fill="none"
@@ -74,11 +74,18 @@ export default function Sidebar({
               return (
                 <div
                   key={session.localId}
+                  role="option"
+                  aria-selected={isActive}
+                  tabIndex={0}
                   onClick={() => onSelectSession(session.localId)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      onSelectSession(session.localId)
+                    }
+                  }}
                   className={`group flex cursor-pointer items-start justify-between px-4 py-2.5 transition-colors ${
-                    isActive
-                      ? "bg-surface-hover"
-                      : "hover:bg-surface-hover"
+                    isActive ? "bg-surface-hover" : "hover:bg-surface-hover"
                   }`}
                 >
                   <div className="min-w-0 flex-1">
@@ -93,6 +100,7 @@ export default function Sidebar({
                     </p>
                   </div>
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation()
                       if (pendingDelete === session.localId) {
@@ -117,6 +125,7 @@ export default function Sidebar({
                     aria-label="Delete session"
                   >
                     <svg
+                      aria-hidden="true"
                       width="14"
                       height="14"
                       viewBox="0 0 14 14"

@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, useCallback } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { ChatSession, ChatStatus } from "../types"
 import EmptyState from "./EmptyState"
-import MessageList from "./MessageList"
 import MessageInput from "./MessageInput"
+import MessageList from "./MessageList"
 
 interface ChatAreaProps {
   session: ChatSession | null
@@ -39,16 +39,21 @@ export default function ChatArea({
     setShowScrollBtn(!isNearBottom())
   }, [isNearBottom])
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: session changes should trigger auto-scroll
   useEffect(() => {
     if (isNearBottom()) {
       endRef.current?.scrollIntoView({ behavior: "smooth" })
     }
-  }, [session?.messages, isNearBottom])
+  }, [session, isNearBottom])
 
   return (
     <div className="flex h-full flex-col bg-background text-sm leading-relaxed text-foreground">
       {/* Messages */}
-      <main ref={mainRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
+      <main
+        ref={mainRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto"
+      >
         {!session || session.messages.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <EmptyState
@@ -74,6 +79,7 @@ export default function ChatArea({
             className="mx-auto flex cursor-pointer items-center gap-1 border border-dashed border-border bg-surface px-3 py-1.5 text-[11px] text-muted shadow-sm transition-colors hover:text-foreground"
           >
             <svg
+              aria-hidden="true"
               width="12"
               height="12"
               viewBox="0 0 12 12"

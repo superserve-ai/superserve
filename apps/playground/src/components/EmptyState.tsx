@@ -10,12 +10,17 @@ const STARTER_PROMPTS = [
   "Show me an example",
 ]
 
-export default function EmptyState({ hasSession, agentName, onSend }: EmptyStateProps) {
+export default function EmptyState({
+  hasSession,
+  agentName,
+  onSend,
+}: EmptyStateProps) {
   if (!hasSession) {
     return (
       <div className="text-center">
         <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-surface-hover text-muted">
           <svg
+            aria-hidden="true"
             width="22"
             height="22"
             viewBox="0 0 22 22"
@@ -29,9 +34,7 @@ export default function EmptyState({ hasSession, agentName, onSend }: EmptyState
             <path d="M2 8l9 5.5L20 8" />
           </svg>
         </div>
-        <p className="font-medium text-foreground">
-          No conversation selected
-        </p>
+        <p className="font-medium text-foreground">No conversation selected</p>
         <p className="mt-1 text-[13px] text-muted">
           Create a new chat to get started.
         </p>
@@ -43,6 +46,7 @@ export default function EmptyState({ hasSession, agentName, onSend }: EmptyState
     <div className="text-center">
       <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-surface-hover text-ink-muted">
         <svg
+          aria-hidden="true"
           width="22"
           height="22"
           viewBox="0 0 22 22"
