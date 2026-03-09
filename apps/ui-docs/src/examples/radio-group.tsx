@@ -22,11 +22,7 @@ export const radioGroupMeta: ComponentMeta = {
         <RadioGroup defaultValue="option-1">
           <RadioGroupItem value="option-1" id="option-1" label="Option One" />
           <RadioGroupItem value="option-2" id="option-2" label="Option Two" />
-          <RadioGroupItem
-            value="option-3"
-            id="option-3"
-            label="Option Three"
-          />
+          <RadioGroupItem value="option-3" id="option-3" label="Option Three" />
         </RadioGroup>
       ),
       code: `<RadioGroup defaultValue="option-1">

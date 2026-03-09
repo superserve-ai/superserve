@@ -1,7 +1,7 @@
-import { useState } from "react"
-import { Link, useParams } from "react-router"
 import { Button } from "@superserve/ui"
 import { Menu, X } from "lucide-react"
+import { useState } from "react"
+import { Link, useParams } from "react-router"
 import { categories, getByCategory } from "../../registry"
 
 function Logo() {
@@ -13,6 +13,7 @@ function Logo() {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className="shrink-0"
+      aria-hidden="true"
     >
       <rect width="18" height="18" fill="currentColor" />
       <text
@@ -87,6 +88,7 @@ export function Sidebar() {
 
       {/* Mobile overlay */}
       {open && (
+        // biome-ignore lint/a11y/noStaticElementInteractions: overlay backdrop
         <div
           className="md:hidden fixed inset-0 z-40 bg-black/30"
           onClick={() => setOpen(false)}

@@ -1,5 +1,5 @@
-import { Outlet } from "react-router"
 import { ToastProvider, TooltipProvider } from "@superserve/ui"
+import { Outlet } from "react-router"
 import { Sidebar } from "./components/layout/sidebar"
 
 export default function App() {

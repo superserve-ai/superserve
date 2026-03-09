@@ -16,7 +16,12 @@ export type ComponentExample = {
   code: string
 }
 
-export type Category = "Inputs" | "Feedback" | "Data Display" | "Overlays" | "Layout"
+export type Category =
+  | "Inputs"
+  | "Feedback"
+  | "Data Display"
+  | "Overlays"
+  | "Layout"
 
 export type ComponentMeta = {
   slug: string

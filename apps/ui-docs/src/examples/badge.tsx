@@ -43,11 +43,21 @@ export const badgeMeta: ComponentMeta = {
       title: "With Dot",
       preview: (
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="default" dot>Default</Badge>
-          <Badge variant="success" dot>Success</Badge>
-          <Badge variant="warning" dot>Warning</Badge>
-          <Badge variant="destructive" dot>Destructive</Badge>
-          <Badge variant="muted" dot>Muted</Badge>
+          <Badge variant="default" dot>
+            Default
+          </Badge>
+          <Badge variant="success" dot>
+            Success
+          </Badge>
+          <Badge variant="warning" dot>
+            Warning
+          </Badge>
+          <Badge variant="destructive" dot>
+            Destructive
+          </Badge>
+          <Badge variant="muted" dot>
+            Muted
+          </Badge>
         </div>
       ),
       code: `<Badge variant="default" dot>Default</Badge>

@@ -5,11 +5,40 @@ function ToastDemo() {
   const { addToast } = useToast()
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button variant="outline" onClick={() => addToast("Info toast", "info")}>Info</Button>
-      <Button variant="outline" onClick={() => addToast("Success toast", "success")}>Success</Button>
-      <Button variant="outline" onClick={() => addToast("Warning toast", "warning")}>Warning</Button>
-      <Button variant="outline" onClick={() => addToast("Error toast", "error")}>Error</Button>
-      <Button variant="outline" onClick={() => addToast({ title: "With description", description: "This toast has a description and an action.", variant: "info", actions: [{ label: "Undo", onClick: () => {} }] })}>With Action</Button>
+      <Button variant="outline" onClick={() => addToast("Info toast", "info")}>
+        Info
+      </Button>
+      <Button
+        variant="outline"
+        onClick={() => addToast("Success toast", "success")}
+      >
+        Success
+      </Button>
+      <Button
+        variant="outline"
+        onClick={() => addToast("Warning toast", "warning")}
+      >
+        Warning
+      </Button>
+      <Button
+        variant="outline"
+        onClick={() => addToast("Error toast", "error")}
+      >
+        Error
+      </Button>
+      <Button
+        variant="outline"
+        onClick={() =>
+          addToast({
+            title: "With description",
+            description: "This toast has a description and an action.",
+            variant: "info",
+            actions: [{ label: "Undo", onClick: () => {} }],
+          })
+        }
+      >
+        With Action
+      </Button>
     </div>
   )
 }

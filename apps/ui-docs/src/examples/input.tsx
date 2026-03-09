@@ -4,7 +4,8 @@ import type { ComponentMeta } from "../registry/types"
 export const inputMeta: ComponentMeta = {
   slug: "input",
   name: "Input",
-  description: "A text input field with optional label, error, and description.",
+  description:
+    "A text input field with optional label, error, and description.",
   category: "Inputs",
   source: "components/input.tsx",
   props: [

@@ -56,9 +56,7 @@ export const alertMeta: ComponentMeta = {
       title: "Without Title",
       preview: (
         <div className="space-y-3 max-w-lg">
-          <Alert variant="default">
-            This is an alert without a title.
-          </Alert>
+          <Alert variant="default">This is an alert without a title.</Alert>
         </div>
       ),
       code: `<Alert variant="default">
