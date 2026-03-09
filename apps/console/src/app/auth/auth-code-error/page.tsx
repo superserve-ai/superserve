@@ -1,5 +1,5 @@
-import Link from "next/link";
-import { Button, Card, CardContent } from "@superserve/ui";
+import { Button, Card, CardContent } from "@superserve/ui"
+import Link from "next/link"
 
 export default function AuthCodeErrorPage() {
   return (
@@ -16,5 +16,5 @@ export default function AuthCodeErrorPage() {
         </CardContent>
       </Card>
     </div>
-  );
+  )
 }

@@ -24,11 +24,14 @@ export const cardMeta: ComponentMeta = {
           <Card>
             <CardHeader>
               <CardTitle>Card Title</CardTitle>
-              <CardDescription>Card description with supporting text.</CardDescription>
+              <CardDescription>
+                Card description with supporting text.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted">
-                This is the main content area of the card. You can place any content here.
+                This is the main content area of the card. You can place any
+                content here.
               </p>
             </CardContent>
             <CardFooter>

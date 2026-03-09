@@ -1,5 +1,5 @@
-import { useRef, useState } from "react"
 import { Kbd } from "@superserve/ui"
+import { useRef, useState } from "react"
 import type { ChatStatus } from "../types"
 
 interface MessageInputProps {
@@ -67,6 +67,7 @@ export default function MessageInput({
             resizeTextarea()
           }}
           onKeyDown={handleKeyDown}
+          // biome-ignore lint/a11y/noAutofocus: chat input should auto-focus for UX
           autoFocus
           placeholder="Send a message..."
           disabled={isStreaming}

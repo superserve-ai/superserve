@@ -32,17 +32,23 @@ export const tableMeta: ComponentMeta = {
             <TableBody>
               <TableRow>
                 <TableCell>Alice</TableCell>
-                <TableCell><Badge variant="success">Active</Badge></TableCell>
+                <TableCell>
+                  <Badge variant="success">Active</Badge>
+                </TableCell>
                 <TableCell>Admin</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell>Bob</TableCell>
-                <TableCell><Badge variant="warning">Pending</Badge></TableCell>
+                <TableCell>
+                  <Badge variant="warning">Pending</Badge>
+                </TableCell>
                 <TableCell>Editor</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell>Charlie</TableCell>
-                <TableCell><Badge variant="muted">Inactive</Badge></TableCell>
+                <TableCell>
+                  <Badge variant="muted">Inactive</Badge>
+                </TableCell>
                 <TableCell>Viewer</TableCell>
               </TableRow>
             </TableBody>

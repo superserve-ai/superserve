@@ -35,7 +35,9 @@ export function PropsTable({ props }: { props: PropDef[] }) {
                     {prop.component}.
                   </span>
                 )}
-                <code className="font-mono text-xs text-foreground">{prop.name}</code>
+                <code className="font-mono text-xs text-foreground">
+                  {prop.name}
+                </code>
                 {prop.required && (
                   <span className="text-destructive ml-1">*</span>
                 )}
@@ -47,7 +49,9 @@ export function PropsTable({ props }: { props: PropDef[] }) {
               </TableCell>
               <TableCell>
                 {prop.default ? (
-                  <code className="font-mono text-xs text-muted">{prop.default}</code>
+                  <code className="font-mono text-xs text-muted">
+                    {prop.default}
+                  </code>
                 ) : (
                   <span className="text-muted">—</span>
                 )}

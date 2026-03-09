@@ -1,6 +1,6 @@
-import { useState } from "react"
 import { Button } from "@superserve/ui"
 import { Code, X } from "lucide-react"
+import { useState } from "react"
 import type { ComponentExample } from "../registry/types"
 import { CodeBlock } from "./code-block"
 
@@ -16,7 +16,11 @@ export function ExamplePreview({ example }: { example: ComponentExample }) {
           size="icon-sm"
           onClick={() => setShowCode(!showCode)}
         >
-          {showCode ? <X className="size-3.5" /> : <Code className="size-3.5" />}
+          {showCode ? (
+            <X className="size-3.5" />
+          ) : (
+            <Code className="size-3.5" />
+          )}
         </Button>
       </div>
       <div className="border border-dashed border-border p-6">

@@ -1,12 +1,14 @@
-import { useState } from "react"
 import { Button, ConfirmDialog } from "@superserve/ui"
+import { useState } from "react"
 import type { ComponentMeta } from "../registry/types"
 
 function ConfirmDialogDemo() {
   const [open, setOpen] = useState(false)
   return (
     <>
-      <Button variant="destructive" onClick={() => setOpen(true)}>Delete Item</Button>
+      <Button variant="destructive" onClick={() => setOpen(true)}>
+        Delete Item
+      </Button>
       {open && (
         <ConfirmDialog
           open={open}

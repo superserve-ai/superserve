@@ -1,6 +1,6 @@
-"use server";
+"use server"
 
-import sendToSlackHook from "@/lib/slack/send-to-webhook";
+import sendToSlackHook from "@/lib/slack/send-to-webhook"
 
 export const notifySlackOfNewUser = async (
   email: string,
@@ -8,7 +8,7 @@ export const notifySlackOfNewUser = async (
   provider: string | null,
 ) => {
   try {
-    if (!email) return;
+    if (!email) return
     await sendToSlackHook({
       text: "New User Sign Up",
       blocks: [
@@ -35,10 +35,10 @@ export const notifySlackOfNewUser = async (
           ],
         },
       ],
-    });
+    })
   } catch (error) {
-    console.error("Error sending Slack message:", error);
+    console.error("Error sending Slack message:", error)
   }
-};
+}
 
-export default notifySlackOfNewUser;
+export default notifySlackOfNewUser

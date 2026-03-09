@@ -1,4 +1,3 @@
-import { useState } from "react"
 import {
   Button,
   Dialog,
@@ -8,22 +7,29 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@superserve/ui"
+import { useState } from "react"
 import type { ComponentMeta } from "../registry/types"
 
 function DialogDemo() {
   const [open, setOpen] = useState(false)
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)}>Open Dialog</Button>
+      <Button variant="outline" onClick={() => setOpen(true)}>
+        Open Dialog
+      </Button>
       {open && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Dialog Title</DialogTitle>
-              <DialogDescription>This is a dialog description.</DialogDescription>
+              <DialogDescription>
+                This is a dialog description.
+              </DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
               <Button onClick={() => setOpen(false)}>Confirm</Button>
             </DialogFooter>
           </DialogContent>

@@ -19,13 +19,19 @@ export const tabsMeta: ComponentMeta = {
             <TabsTrigger value="tab-3">Logs</TabsTrigger>
           </TabsList>
           <TabsContent value="tab-1">
-            <p className="text-sm text-muted p-4">This is the overview tab content.</p>
+            <p className="text-sm text-muted p-4">
+              This is the overview tab content.
+            </p>
           </TabsContent>
           <TabsContent value="tab-2">
-            <p className="text-sm text-muted p-4">This is the settings tab content.</p>
+            <p className="text-sm text-muted p-4">
+              This is the settings tab content.
+            </p>
           </TabsContent>
           <TabsContent value="tab-3">
-            <p className="text-sm text-muted p-4">This is the logs tab content.</p>
+            <p className="text-sm text-muted p-4">
+              This is the logs tab content.
+            </p>
           </TabsContent>
         </Tabs>
       ),

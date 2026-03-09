@@ -18,11 +18,37 @@ export function relativeTime(isoString: string): string {
   return `${months}mo ago`
 }
 
+export function agentStatusBadge(depsStatus: string): {
+  label: string
+  variant: "success" | "warning" | "destructive" | "muted"
+} {
+  switch (depsStatus) {
+    case "ready":
+      return { label: "Ready", variant: "success" }
+    case "building":
+    case "pending":
+    case "installing":
+      return {
+        label: depsStatus.charAt(0).toUpperCase() + depsStatus.slice(1),
+        variant: "warning",
+      }
+    case "failed":
+    case "error":
+      return { label: "Failed", variant: "destructive" }
+    default:
+      return { label: depsStatus || "Unknown", variant: "muted" }
+  }
+}
+
 export function groupByTime<T extends { updatedAt: string }>(
   items: T[],
 ): { label: string; items: T[] }[] {
   const now = new Date()
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  )
   const startOfYesterday = new Date(startOfToday.getTime() - 86400000)
   const startOfWeek = new Date(startOfToday.getTime() - 7 * 86400000)
 
@@ -35,10 +61,10 @@ export function groupByTime<T extends { updatedAt: string }>(
 
   for (const item of items) {
     const date = new Date(item.updatedAt)
-    if (date >= startOfToday) groups["Today"].push(item)
-    else if (date >= startOfYesterday) groups["Yesterday"].push(item)
+    if (date >= startOfToday) groups.Today.push(item)
+    else if (date >= startOfYesterday) groups.Yesterday.push(item)
     else if (date >= startOfWeek) groups["Previous 7 days"].push(item)
-    else groups["Older"].push(item)
+    else groups.Older.push(item)
   }
 
   return Object.entries(groups)

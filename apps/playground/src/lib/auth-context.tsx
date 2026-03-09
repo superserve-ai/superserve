@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState } from "react"
 import type { Session, User } from "@supabase/supabase-js"
+import { createContext, useContext, useEffect, useState } from "react"
 import { supabase } from "./supabase"
 
 const DEV_TOKEN_KEY = "superserve-dev-token"
@@ -23,7 +23,9 @@ const AuthContext = createContext<AuthContextType>({
 })
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<Omit<AuthContextType, "signOut" | "setDevToken">>({
+  const [state, setState] = useState<
+    Omit<AuthContextType, "signOut" | "setDevToken">
+  >({
     user: null,
     session: null,
     accessToken: null,
@@ -45,7 +47,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check for dev token first
     const devToken = localStorage.getItem(DEV_TOKEN_KEY)
     if (devToken) {
-      setState({ user: null, session: null, accessToken: devToken, loading: false })
+      setState({
+        user: null,
+        session: null,
+        accessToken: devToken,
+        loading: false,
+      })
       return
     }
 

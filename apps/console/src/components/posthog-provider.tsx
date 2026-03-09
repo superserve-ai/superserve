@@ -1,13 +1,13 @@
-"use client";
+"use client"
 
-import posthog from "posthog-js";
-import { PostHogProvider as PHProvider } from "posthog-js/react";
-import type React from "react";
+import posthog from "posthog-js"
+import { PostHogProvider as PHProvider } from "posthog-js/react"
+import type React from "react"
 
 if (typeof window !== "undefined") {
-  const apiKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+  const apiKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
   const host =
-    process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com";
+    process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com"
 
   if (apiKey) {
     try {
@@ -20,16 +20,16 @@ if (typeof window !== "undefined") {
           maskAllInputs: true,
           maskTextSelector: "[data-mask]",
         },
-      });
+      })
     } catch (error) {
-      console.warn("PostHog failed to initialize:", error);
+      console.warn("PostHog failed to initialize:", error)
     }
   }
 }
 
 export function PostHogProvider({ children }: { children: React.ReactNode }) {
   if (!process.env.NEXT_PUBLIC_POSTHOG_KEY) {
-    return <>{children}</>;
+    return <>{children}</>
   }
-  return <PHProvider client={posthog}>{children}</PHProvider>;
+  return <PHProvider client={posthog}>{children}</PHProvider>
 }

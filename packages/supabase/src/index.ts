@@ -1,1 +1,1 @@
-export { createBrowserClient } from "./client";
+export { createBrowserClient } from "./client"
