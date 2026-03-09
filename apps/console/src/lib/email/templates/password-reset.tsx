@@ -1,9 +1,9 @@
-import { Button, Heading, Text } from "@react-email/components";
-import { EmailLayout } from "./components/email-layout";
+import { Button, Heading, Text } from "@react-email/components"
+import { EmailLayout } from "./components/email-layout"
 
 interface PasswordResetEmailProps {
-  email: string;
-  resetUrl: string;
+  email: string
+  resetUrl: string
 }
 
 export const PasswordResetEmail = ({
@@ -28,7 +28,7 @@ export const PasswordResetEmail = ({
       email. Your password will remain unchanged.
     </Text>
   </EmailLayout>
-);
+)
 
 const heading = {
   fontFamily: "Inter, Helvetica, Arial, sans-serif",
@@ -38,14 +38,14 @@ const heading = {
   letterSpacing: "-0.02em",
   textAlign: "center" as const,
   margin: "0 0 24px 0",
-};
+}
 
 const paragraph = {
   color: "#5c5c5c",
   fontSize: "14px",
   lineHeight: "24px",
   margin: "0 0 16px 0",
-};
+}
 
 const button = {
   backgroundColor: "#105C60",
@@ -57,13 +57,13 @@ const button = {
   display: "block",
   padding: "14px 24px",
   margin: "24px 0 0 0",
-};
+}
 
 const disclaimer = {
   color: "#8a8a8a",
   fontSize: "12px",
   lineHeight: "20px",
   margin: "24px 0 0 0",
-};
+}
 
-export default PasswordResetEmail;
+export default PasswordResetEmail

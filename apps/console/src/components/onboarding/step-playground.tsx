@@ -1,9 +1,9 @@
 "use client"
 
-import { usePostHog } from "posthog-js/react"
 import { Badge, Button, Card } from "@superserve/ui"
-import type { Agent } from "../../hooks/use-agents"
+import { usePostHog } from "posthog-js/react"
 import { PLAYGROUND_URL } from "../../constants"
+import type { Agent } from "../../hooks/use-agents"
 
 interface StepPlaygroundProps {
   agents: Agent[]
@@ -35,7 +35,7 @@ export function StepPlayground({
               <div>
                 <p className="mb-1.5">Waiting for your first deploy&hellip;</p>
                 <p className="text-xs">
-                 Once you run{" "}
+                  Once you run{" "}
                   <code className="font-mono text-xs bg-black/5 px-1 py-0.5">
                     superserve deploy
                   </code>
@@ -51,9 +51,7 @@ export function StepPlayground({
 
   return (
     <div className="px-4 pb-6 pt-2 space-y-4 animate-fade-in">
-      <p className="text-sm font-medium text-foreground">
-        Your agent is live!
-      </p>
+      <p className="text-sm font-medium text-foreground">Your agent is live!</p>
 
       <div className="space-y-3">
         {agents.map((agent) => (
@@ -84,10 +82,7 @@ export function StepPlayground({
                     agent_name: agent.name,
                   })
                 }
-                window.open(
-                  `${PLAYGROUND_URL}/agents/${agent.id}/`,
-                  "_blank",
-                )
+                window.open(`${PLAYGROUND_URL}/agents/${agent.id}/`, "_blank")
               }}
             >
               Open in Playground

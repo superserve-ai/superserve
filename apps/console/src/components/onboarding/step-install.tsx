@@ -23,10 +23,7 @@ export function StepInstall({ onComplete }: StepInstallProps) {
         Then log in to connect your account:
       </p>
 
-      <CodeBlock
-        command="superserve login"
-        eventName="login_command_copied"
-      />
+      <CodeBlock command="superserve login" eventName="login_command_copied" />
 
       <div className="mt-8">
         <Button onClick={onComplete} size="sm">

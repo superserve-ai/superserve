@@ -1,7 +1,7 @@
 "use client"
 
-import type { Framework } from "../hooks/use-onboarding-state"
 import { cn } from "@superserve/ui"
+import type { Framework } from "../hooks/use-onboarding-state"
 
 interface FrameworkInfo {
   id: Framework & string

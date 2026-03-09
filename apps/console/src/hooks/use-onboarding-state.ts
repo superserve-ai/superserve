@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState, useEffect } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 export type OnboardingStep = 1 | 2 | 3
 export type AgentPath = "own" | "example" | null
@@ -68,13 +68,16 @@ export function useOnboardingState() {
     setState(loadState())
   }, [])
 
-  const update = useCallback((updater: (prev: OnboardingState) => OnboardingState) => {
-    setState((prev) => {
-      const next = updater(prev)
-      saveState(next)
-      return next
-    })
-  }, [])
+  const update = useCallback(
+    (updater: (prev: OnboardingState) => OnboardingState) => {
+      setState((prev) => {
+        const next = updater(prev)
+        saveState(next)
+        return next
+      })
+    },
+    [],
+  )
 
   const completeStep = useCallback(
     (step: OnboardingStep) => {

@@ -3,7 +3,7 @@
 import { Alert, Button, Card } from "@superserve/ui"
 import type { AgentPath, Framework } from "../../hooks/use-onboarding-state"
 import { CodeBlock } from "../code-block"
-import { FrameworkPicker, FRAMEWORKS } from "../framework-picker"
+import { FRAMEWORKS, FrameworkPicker } from "../framework-picker"
 
 interface StepDeployProps {
   agentPath: AgentPath
@@ -31,15 +31,23 @@ export function StepDeploy({
             className="flex-1 px-4 py-3 cursor-pointer hover:bg-surface-hover transition-colors"
             onClick={() => onSelectPath("own")}
           >
-            <p className="text-sm font-medium text-foreground">I have an agent</p>
-            <p className="text-xs text-muted mt-0.5">Deploy your own agent code</p>
+            <p className="text-sm font-medium text-foreground">
+              I have an agent
+            </p>
+            <p className="text-xs text-muted mt-0.5">
+              Deploy your own agent code
+            </p>
           </Card>
           <Card
             className="flex-1 px-4 py-3 cursor-pointer hover:bg-surface-hover transition-colors"
             onClick={() => onSelectPath("example")}
           >
-            <p className="text-sm font-medium text-foreground">Use an example</p>
-            <p className="text-xs text-muted mt-0.5">Start with a sample agent</p>
+            <p className="text-sm font-medium text-foreground">
+              Use an example
+            </p>
+            <p className="text-xs text-muted mt-0.5">
+              Start with a sample agent
+            </p>
           </Card>
         </div>
       )}
@@ -57,11 +65,18 @@ export function StepDeploy({
           />
 
           <Alert variant="default" title="Agent contract">
-            Your agent must read from <code className="font-mono text-xs bg-black/5 px-1 py-0.5">stdin</code> and
-            write to <code className="font-mono text-xs bg-black/5 px-1 py-0.5">stdout</code>.
-            Superserve sends user messages via stdin and reads agent responses
+            Your agent must read from{" "}
+            <code className="font-mono text-xs bg-black/5 px-1 py-0.5">
+              stdin
+            </code>{" "}
+            and write to{" "}
+            <code className="font-mono text-xs bg-black/5 px-1 py-0.5">
+              stdout
+            </code>
+            . Superserve sends user messages via stdin and reads agent responses
             from stdout.
-            <br /><br />
+            <br />
+            <br />
             If your agent needs API keys or secrets:
             <br />
             <code className="font-mono text-xs">
@@ -124,11 +139,7 @@ export function StepDeploy({
           >
             Mark as done
           </Button>
-          <Button
-            variant="link"
-            size="sm"
-            onClick={() => onSelectPath(null)}
-          >
+          <Button variant="link" size="sm" onClick={() => onSelectPath(null)}>
             Change selection
           </Button>
         </div>

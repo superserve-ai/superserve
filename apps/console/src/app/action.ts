@@ -1,7 +1,7 @@
-"use server";
+"use server"
 
-import { z } from "zod";
-import sendToSlackHook from "@/lib/slack/send-to-webhook";
+import { z } from "zod"
+import sendToSlackHook from "@/lib/slack/send-to-webhook"
 
 const earlyAccessSchema = z.object({
   name: z.string().min(1).max(200),
@@ -9,7 +9,7 @@ const earlyAccessSchema = z.object({
   company: z.string().max(200).optional().default(""),
   role: z.string().max(200).optional().default(""),
   useCase: z.string().max(2000).optional().default(""),
-});
+})
 
 export const sendEarlyAccessToSlack = async (
   name: string,
@@ -19,8 +19,14 @@ export const sendEarlyAccessToSlack = async (
   useCase: string,
 ) => {
   try {
-    const input = earlyAccessSchema.safeParse({ name, email, company, role, useCase });
-    if (!input.success) return;
+    const input = earlyAccessSchema.safeParse({
+      name,
+      email,
+      company,
+      role,
+      useCase,
+    })
+    if (!input.success) return
     await sendToSlackHook({
       text: "New Early Access Request",
       blocks: [
@@ -59,8 +65,8 @@ export const sendEarlyAccessToSlack = async (
           ],
         },
       ],
-    });
+    })
   } catch (error) {
-    console.error("Error sending Slack message:", error);
+    console.error("Error sending Slack message:", error)
   }
-};
+}

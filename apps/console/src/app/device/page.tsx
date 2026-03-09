@@ -1,13 +1,13 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { usePostHog } from "posthog-js/react";
-import { Suspense, useEffect, useState } from "react";
-import { Button, useToast } from "@superserve/ui";
-import { GoogleIcon, Spinner } from "@/components/icons";
-import { DEV_AUTH_ENABLED, devSignIn } from "@/lib/auth-helpers";
-import { createBrowserClient } from "@superserve/supabase";
+import { createBrowserClient } from "@superserve/supabase"
+import { Button, useToast } from "@superserve/ui"
+import Link from "next/link"
+import { useSearchParams } from "next/navigation"
+import { usePostHog } from "posthog-js/react"
+import { Suspense, useEffect, useState } from "react"
+import { GoogleIcon, Spinner } from "@/components/icons"
+import { DEV_AUTH_ENABLED, devSignIn } from "@/lib/auth-helpers"
 
 function Logo() {
   return (
@@ -16,128 +16,131 @@ function Logo() {
         <img src="/logo.svg" alt="Superserve" className="h-10 mb-2" />
       </Link>
     </div>
-  );
+  )
 }
 
 function DevicePageContent() {
-  const [isCheckingSession, setIsCheckingSession] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isDevLoading, setIsDevLoading] = useState(false);
-  const [isAuthorizing, setIsAuthorizing] = useState(false);
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
-  const { addToast } = useToast();
+  const [isCheckingSession, setIsCheckingSession] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isDevLoading, setIsDevLoading] = useState(false)
+  const [isAuthorizing, setIsAuthorizing] = useState(false)
+  const [isAuthorized, setIsAuthorized] = useState(false)
+  const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
+  const { addToast } = useToast()
 
-  const searchParams = useSearchParams();
-  const posthog = usePostHog();
-  const userCode = searchParams.get("code");
+  const searchParams = useSearchParams()
+  const posthog = usePostHog()
+  const userCode = searchParams.get("code")
 
   useEffect(() => {
     const checkUser = async () => {
-      const supabase = createBrowserClient();
+      const supabase = createBrowserClient()
       try {
         const {
           data: { session },
           error,
-        } = await supabase.auth.getSession();
+        } = await supabase.auth.getSession()
 
         if (error) {
-          await supabase.auth.signOut();
-          return;
+          await supabase.auth.signOut()
+          return
         }
 
         if (session?.user) {
           const {
             data: { user: authUser },
             error: userError,
-          } = await supabase.auth.getUser();
+          } = await supabase.auth.getUser()
           if (userError?.code === "user_not_found") {
-            await supabase.auth.signOut();
-            return;
+            await supabase.auth.signOut()
+            return
           }
           if (authUser) {
-            setUser({ id: authUser.id, email: authUser.email });
+            setUser({ id: authUser.id, email: authUser.email })
             if (posthog) {
-              posthog.identify(authUser.id, { email: authUser.email });
+              posthog.identify(authUser.id, { email: authUser.email })
             }
           }
         }
       } catch (_error) {
-        await supabase.auth.signOut();
+        await supabase.auth.signOut()
       } finally {
-        setIsCheckingSession(false);
+        setIsCheckingSession(false)
       }
-    };
-    checkUser();
-  }, [posthog]);
+    }
+    checkUser()
+  }, [posthog])
 
   const handleGoogleSignIn = async () => {
-    setIsLoading(true);
+    setIsLoading(true)
     try {
-      const supabase = createBrowserClient();
-      const callbackUrl = new URL("/auth/callback", window.location.origin);
-      callbackUrl.searchParams.set("next", `/device?code=${encodeURIComponent(userCode ?? "")}`);
+      const supabase = createBrowserClient()
+      const callbackUrl = new URL("/auth/callback", window.location.origin)
+      callbackUrl.searchParams.set(
+        "next",
+        `/device?code=${encodeURIComponent(userCode ?? "")}`,
+      )
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: callbackUrl.toString(),
         },
-      });
+      })
 
       if (error) {
-        console.error("Error signing in:", error);
-        addToast("Error signing in. Please try again.", "error");
+        console.error("Error signing in:", error)
+        addToast("Error signing in. Please try again.", "error")
       }
     } catch (err) {
-      console.error("Sign in error:", err);
-      addToast("Error signing in. Please try again.", "error");
+      console.error("Sign in error:", err)
+      addToast("Error signing in. Please try again.", "error")
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   const handleDevSignIn = async () => {
-    if (!DEV_AUTH_ENABLED) return;
+    if (!DEV_AUTH_ENABLED) return
 
-    setIsDevLoading(true);
+    setIsDevLoading(true)
     try {
-      const result = await devSignIn();
+      const result = await devSignIn()
       if (!result.success) {
-        addToast(result.error || "Dev auth failed.", "error");
-        return;
+        addToast(result.error || "Dev auth failed.", "error")
+        return
       }
 
-      const supabase = createBrowserClient();
+      const supabase = createBrowserClient()
       const {
         data: { user: signedInUser },
-      } = await supabase.auth.getUser();
+      } = await supabase.auth.getUser()
       if (signedInUser) {
-        setUser({ id: signedInUser.id, email: signedInUser.email });
+        setUser({ id: signedInUser.id, email: signedInUser.email })
         if (posthog) {
-          posthog.identify(signedInUser.id, { email: signedInUser.email });
+          posthog.identify(signedInUser.id, { email: signedInUser.email })
         }
       }
     } catch (err) {
-      console.error("Dev auth error:", err);
-      addToast("Dev auth failed. Check console.", "error");
+      console.error("Dev auth error:", err)
+      addToast("Dev auth failed. Check console.", "error")
     } finally {
-      setIsDevLoading(false);
+      setIsDevLoading(false)
     }
-  };
+  }
 
   const handleAuthorize = async () => {
-    if (!userCode || !user) return;
+    if (!userCode || !user) return
 
-    setIsAuthorizing(true);
+    setIsAuthorizing(true)
 
     try {
-      const supabase = createBrowserClient();
+      const supabase = createBrowserClient()
       const {
         data: { session },
-      } = await supabase.auth.getSession();
+      } = await supabase.auth.getSession()
       if (!session?.access_token) {
-        throw new Error("Session expired. Please sign in again.");
+        throw new Error("Session expired. Please sign in again.")
       }
 
       const response = await fetch(
@@ -152,28 +155,28 @@ function DevicePageContent() {
             user_code: userCode,
           }),
         },
-      );
+      )
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || "Failed to authorize device");
+        const data = await response.json()
+        throw new Error(data.detail || "Failed to authorize device")
       }
 
-      setIsAuthorized(true);
+      setIsAuthorized(true)
       if (posthog) {
         posthog.capture("cli_device_authorized", {
           user_email: user.email,
-        });
+        })
       }
     } catch (err) {
-      console.error("Authorization error:", err);
+      console.error("Authorization error:", err)
       const message =
-        err instanceof Error ? err.message : "Failed to authorize device";
-      addToast(message, "error");
+        err instanceof Error ? err.message : "Failed to authorize device"
+      addToast(message, "error")
     } finally {
-      setIsAuthorizing(false);
+      setIsAuthorizing(false)
     }
-  };
+  }
 
   // No code provided
   if (!userCode) {
@@ -197,7 +200,7 @@ function DevicePageContent() {
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   // Successfully authorized
@@ -213,6 +216,7 @@ function DevicePageContent() {
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -231,7 +235,7 @@ function DevicePageContent() {
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   // Checking session
@@ -247,7 +251,7 @@ function DevicePageContent() {
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   // Not signed in - show sign-in options
@@ -307,6 +311,7 @@ function DevicePageContent() {
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
+                        aria-hidden="true"
                       >
                         <path
                           strokeLinecap="round"
@@ -324,7 +329,7 @@ function DevicePageContent() {
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   // Signed in - show authorize button
@@ -360,7 +365,7 @@ function DevicePageContent() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 export default function DevicePage() {
@@ -381,5 +386,5 @@ export default function DevicePage() {
     >
       <DevicePageContent />
     </Suspense>
-  );
+  )
 }

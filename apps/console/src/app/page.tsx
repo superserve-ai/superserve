@@ -1,9 +1,6 @@
 "use client"
 
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { usePostHog } from "posthog-js/react"
-import { useEffect, useRef, useState } from "react"
+import { createBrowserClient } from "@superserve/supabase"
 import {
   Alert,
   Button,
@@ -12,16 +9,18 @@ import {
   Textarea,
   useToast,
 } from "@superserve/ui"
-import { createBrowserClient } from "@superserve/supabase"
-
-import { sendEarlyAccessToSlack } from "./action"
-import { useOnboardingState } from "../hooks/use-onboarding-state"
-import { useAgents } from "../hooks/use-agents"
-import { StepIndicator } from "../components/step-indicator"
-import { StepInstall } from "../components/onboarding/step-install"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { usePostHog } from "posthog-js/react"
+import { useEffect, useRef, useState } from "react"
 import { StepDeploy } from "../components/onboarding/step-deploy"
+import { StepInstall } from "../components/onboarding/step-install"
 import { StepPlayground } from "../components/onboarding/step-playground"
+import { StepIndicator } from "../components/step-indicator"
 import { PLAYGROUND_URL } from "../constants"
+import { useAgents } from "../hooks/use-agents"
+import { useOnboardingState } from "../hooks/use-onboarding-state"
+import { sendEarlyAccessToSlack } from "./action"
 
 const STEP_LABELS = [
   "Install the CLI",
@@ -50,9 +49,11 @@ export default function DashboardPage() {
   const { addToast } = useToast()
 
   const onboarding = useOnboardingState()
-  const { agents, hasAgents, loading: agentsLoading } = useAgents(
-    onboarding.isStepCompleted(1),
-  )
+  const {
+    agents,
+    hasAgents,
+    loading: agentsLoading,
+  } = useAgents(onboarding.isStepCompleted(1))
 
   const onboardingRef = useRef(onboarding)
   onboardingRef.current = onboarding
@@ -86,9 +87,7 @@ export default function DashboardPage() {
       }
 
       const name =
-        authUser.user_metadata?.full_name ||
-        authUser.user_metadata?.name ||
-        ""
+        authUser.user_metadata?.full_name || authUser.user_metadata?.name || ""
       const email = authUser.email || ""
 
       setUserId(authUser.id)
@@ -227,9 +226,7 @@ export default function DashboardPage() {
             <h1 className="font-display text-3xl lg:text-4xl tracking-tight font-semibold mb-2 text-foreground">
               Welcome, {userName}
             </h1>
-            <p className="text-muted">
-              Deploy your first agent to Superserve.
-            </p>
+            <p className="text-muted">Deploy your first agent to Superserve.</p>
           </div>
 
           {/* Onboarding Steps */}
@@ -449,6 +446,7 @@ export default function DashboardPage() {
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
+                            aria-hidden="true"
                           >
                             <path
                               strokeLinecap="round"
@@ -471,11 +469,7 @@ export default function DashboardPage() {
                     </a>
                   </div>
 
-                  {error && (
-                    <Alert variant="destructive">
-                      {error}
-                    </Alert>
-                  )}
+                  {error && <Alert variant="destructive">{error}</Alert>}
                 </form>
               </div>
             )}

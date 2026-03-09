@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { createBrowserClient } from "@superserve/supabase"
+import { useEffect, useState } from "react"
 
 export interface Agent {
   id: string

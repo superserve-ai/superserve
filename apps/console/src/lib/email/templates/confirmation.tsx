@@ -1,8 +1,8 @@
-import { Button, Heading, Text } from "@react-email/components";
-import { EmailLayout } from "./components/email-layout";
+import { Button, Heading, Text } from "@react-email/components"
+import { EmailLayout } from "./components/email-layout"
 
 interface ConfirmationEmailProps {
-  confirmationUrl: string;
+  confirmationUrl: string
 }
 
 export const ConfirmationEmail = ({
@@ -21,7 +21,7 @@ export const ConfirmationEmail = ({
       You can ignore this email if you did not create a Superserve account
     </Text>
   </EmailLayout>
-);
+)
 
 const heading = {
   fontFamily: "Inter, Helvetica, Arial, sans-serif",
@@ -31,14 +31,14 @@ const heading = {
   letterSpacing: "-0.02em",
   textAlign: "center" as const,
   margin: "0 0 24px 0",
-};
+}
 
 const paragraph = {
   color: "#5c5c5c",
   fontSize: "14px",
   lineHeight: "24px",
   margin: "0 0 16px 0",
-};
+}
 
 const button = {
   backgroundColor: "#105C60",
@@ -50,13 +50,13 @@ const button = {
   display: "block",
   padding: "14px 24px",
   margin: "24px 0 0 0",
-};
+}
 
 const disclaimer = {
   color: "#8a8a8a",
   fontSize: "12px",
   lineHeight: "20px",
   margin: "24px 0 0 0",
-};
+}
 
-export default ConfirmationEmail;
+export default ConfirmationEmail

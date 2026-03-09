@@ -1,5 +1,5 @@
-import { Check } from "lucide-react"
 import { cn } from "@superserve/ui"
+import { Check } from "lucide-react"
 
 interface StepIndicatorProps {
   step: number
