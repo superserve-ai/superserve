@@ -7,7 +7,6 @@ interface FrameworkInfo {
   id: Framework & string
   name: string
   file: string
-  secret: string
   secretEnvName: string
 }
 
@@ -16,42 +15,36 @@ export const FRAMEWORKS: FrameworkInfo[] = [
     id: "agno",
     name: "Agno",
     file: "agent.py",
-    secret: "OPENAI_API_KEY",
     secretEnvName: "OPENAI_API_KEY",
   },
   {
     id: "claude-agent-sdk",
     name: "Claude Agent SDK",
     file: "agent.py",
-    secret: "ANTHROPIC_API_KEY",
     secretEnvName: "ANTHROPIC_API_KEY",
   },
   {
     id: "langchain",
     name: "LangChain",
     file: "agent.py",
-    secret: "OPENAI_API_KEY",
     secretEnvName: "OPENAI_API_KEY",
   },
   {
     id: "mastra",
     name: "Mastra",
     file: "agent.ts",
-    secret: "OPENAI_API_KEY",
     secretEnvName: "OPENAI_API_KEY",
   },
   {
     id: "openai-agents-sdk",
     name: "OpenAI Agents SDK",
     file: "agent.py",
-    secret: "OPENAI_API_KEY",
     secretEnvName: "OPENAI_API_KEY",
   },
   {
     id: "pydantic-ai",
     name: "Pydantic AI",
     file: "agent.py",
-    secret: "OPENAI_API_KEY",
     secretEnvName: "OPENAI_API_KEY",
   },
 ]
