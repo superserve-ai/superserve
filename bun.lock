@@ -25,6 +25,7 @@
         "zod": "^3.25.67",
       },
       "devDependencies": {
+        "@biomejs/biome": "^2.4.4",
         "@superserve/biome-config": "workspace:*",
         "@superserve/typescript-config": "workspace:*",
         "@tailwindcss/postcss": "^4.1.18",
@@ -57,6 +58,7 @@
         "tailwindcss": "^4.2.1",
       },
       "devDependencies": {
+        "@biomejs/biome": "^2.4.4",
         "@superserve/biome-config": "workspace:*",
         "@superserve/typescript-config": "workspace:*",
         "@types/react": "^19.0.0",
@@ -79,6 +81,7 @@
         "tailwindcss": "^4.2.1",
       },
       "devDependencies": {
+        "@biomejs/biome": "^2.4.4",
         "@superserve/biome-config": "workspace:*",
         "@superserve/typescript-config": "workspace:*",
         "@types/react": "^19.0.0",
@@ -142,6 +145,7 @@
         "@supabase/supabase-js": "^2.98.0",
       },
       "devDependencies": {
+        "@biomejs/biome": "^2.4.4",
         "@superserve/biome-config": "workspace:*",
         "@superserve/typescript-config": "workspace:*",
         "typescript": "~5.9.3",
