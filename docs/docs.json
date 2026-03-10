@@ -32,7 +32,7 @@
     }
   },
   "css": "/style.css",
-  "favicon": "/images/Subtract.svg",
+  "favicon": "/favicon.svg",
   "logo": {
     "light": "/logo/light.svg",
     "dark": "/logo/dark.svg",
@@ -41,37 +41,97 @@
   "appearance": {
     "default": "light"
   },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/superserve-ai/superserve"
+    }
+  },
   "navigation": {
-    "groups": [
+    "tabs": [
       {
-        "group": "Getting Started",
-        "pages": ["index", "quickstart", "zero-config", "sessions", "authentication", "troubleshooting"]
-      },
-      {
-        "group": "Frameworks",
-        "pages": [
-          "frameworks/claude-agent-sdk",
-          "frameworks/openai-agents-sdk",
-          "frameworks/pydantic-ai",
-          "frameworks/mastra",
-          "frameworks/langchain",
-          "frameworks/agno"
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "zero-config"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/isolation",
+              "concepts/persistence",
+              "concepts/credentials",
+              "concepts/sessions"
+            ]
+          },
+          {
+            "group": "CLI Reference",
+            "pages": [
+              "cli/installation",
+              "cli/authentication",
+              "cli/deploy",
+              "cli/run",
+              "cli/agents",
+              "cli/secrets",
+              "cli/sessions"
+            ]
+          },
+          {
+            "group": "Frameworks",
+            "pages": [
+              "frameworks/overview",
+              "frameworks/claude-agent-sdk",
+              "frameworks/openai-agents-sdk",
+              "frameworks/langchain",
+              "frameworks/mastra",
+              "frameworks/pydantic-ai",
+              "frameworks/agno"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/configuration",
+              "guides/secrets-management",
+              "guides/session-management",
+              "guides/monitoring",
+              "guides/troubleshooting"
+            ]
+          }
         ]
       },
       {
-        "group": "Reference",
-        "pages": ["sdk", "cli"]
+        "tab": "SDK Reference",
+        "groups": [
+          {
+            "group": "TypeScript SDK",
+            "pages": [
+              "sdk/overview",
+              "sdk/installation",
+              "sdk/client",
+              "sdk/sessions",
+              "sdk/streaming",
+              "sdk/react-hooks"
+            ]
+          },
+          {
+            "group": "API Reference",
+            "pages": [
+              "api/authentication",
+              "api/agents",
+              "api/sessions",
+              "api/runs",
+              "api/secrets"
+            ]
+          }
+        ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "GitHub",
-          "href": "https://github.com/superserve-ai/superserve",
-          "icon": "github"
-        }
-      ]
-    }
+    ]
   },
   "footer": {
     "socials": {

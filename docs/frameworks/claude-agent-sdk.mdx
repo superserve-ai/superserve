@@ -1,20 +1,148 @@
 ---
-title: "Claude Agent SDK"
-description: "Deploy a Claude agent with tool use and conversation memory"
+title: Claude Agent SDK
+description: Deploy Claude Agent SDK chatbots to Superserve
 icon: /images/claude-agent-sdk.svg
 ---
 
-The [Claude Agent SDK](https://platform.claude.com/docs/en/agent-sdk/overview) gives you tool use, conversation memory, and streaming out of the box. Combined with Superserve's durable workspace, the agent retains full context across turns - files it creates persist, and conversation history survives sandbox restarts.
+The [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk) is Anthropic's official Python SDK for building agents powered by Claude. Superserve provides a production-ready deployment platform with isolation, persistence, and governance.
 
-<CodeGroup>
+## Quick Start
+
+<Steps>
+  <Step title="Install the CLI">
+    <CodeGroup>
+    ```bash curl
+    curl -fsSL https://superserve.ai/install | sh
+    ```
+    
+    ```bash npm
+    npm install -g @superserve/cli
+    ```
+    
+    ```bash Homebrew
+    brew install superserve-ai/tap/superserve
+    ```
+    </CodeGroup>
+  </Step>
+  
+  <Step title="Create your agent">
+    Create a file called `agent.py` with your Claude Agent:
+    
+    ```python agent.py
+    """
+    Minimal chatbot built with Claude Agent SDK deployed on Superserve.
+    """
+    
+    import asyncio
+    
+    from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, TextBlock
+    
+    options = ClaudeAgentOptions(
+        model="sonnet",
+        system_prompt="You are a helpful assistant.",
+        permission_mode="bypassPermissions",
+        continue_conversation=True,
+    )
+    
+    
+    async def main():
+        async with ClaudeSDKClient(options=options) as client:
+            while True:
+                try:
+                    user_input = input()
+                except EOFError:
+                    break
+                await client.query(prompt=user_input)
+                async for msg in client.receive_response():
+                    for block in getattr(msg, "content", []):
+                        if isinstance(block, TextBlock):
+                            print(block.text)
+    
+    
+    asyncio.run(main())
+    ```
+  </Step>
+  
+  <Step title="Deploy your agent">
+    Log in and deploy your agent:
+    
+    ```bash
+    superserve login
+    superserve deploy agent.py --name chatbot
+    ```
+  </Step>
+  
+  <Step title="Set your API key">
+    Configure your Anthropic API key as a secret:
+    
+    ```bash
+    superserve secrets set chatbot ANTHROPIC_API_KEY=sk-ant-...
+    ```
+    
+    <Info>
+    Secrets are encrypted at rest and injected at the network level. The agent never sees them in logs or LLM context.
+    </Info>
+  </Step>
+  
+  <Step title="Run your agent">
+    Start an interactive session:
+    
+    ```bash
+    superserve run chatbot
+    ```
+    
+    ```
+    You > What is the capital of France?
+    
+    Agent > The capital of France is Paris.
+    
+    Completed in 1.2s
+    ```
+  </Step>
+</Steps>
+
+## Configuration Options
+
+The Claude Agent SDK supports various configuration options via `ClaudeAgentOptions`:
+
+```python
+options = ClaudeAgentOptions(
+    model="sonnet",                      # Use sonnet, opus, or haiku
+    system_prompt="You are a helpful assistant.",
+    permission_mode="bypassPermissions", # Or "requestPermissions" for tool confirmation
+    continue_conversation=True,          # Maintain conversation history
+    max_tokens=4096,                     # Maximum tokens per response
+)
+```
+
+### Model Selection
+
+- `sonnet` - Claude 3.5 Sonnet (recommended)
+- `opus` - Claude 3 Opus (most capable)
+- `haiku` - Claude 3 Haiku (fastest)
+
+### Permission Modes
+
+- `bypassPermissions` - Tools execute automatically without confirmation
+- `requestPermissions` - Prompt user before executing tools
+
+## Adding Tools
+
+The Claude Agent SDK supports function calling for tools. Here's an example with a custom tool:
 
 ```python agent.py
 import asyncio
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, TextBlock
 
+def get_weather(location: str) -> str:
+    """Get the current weather for a location."""
+    # Your weather API logic here
+    return f"The weather in {location} is sunny."
+
 options = ClaudeAgentOptions(
     model="sonnet",
-    system_prompt="You are a helpful assistant.",
+    system_prompt="You are a helpful weather assistant.",
+    tools=[get_weather],  # Register your tools
     permission_mode="bypassPermissions",
     continue_conversation=True,
 )
@@ -35,57 +163,147 @@ async def main():
 asyncio.run(main())
 ```
 
-```typescript agent.ts
-import { query } from "@anthropic-ai/claude-agent-sdk"
-import { createInterface } from "readline"
+## Deployment Configuration
 
-const rl = createInterface({ input: process.stdin })
-rl.on("line", async (line) => {
-  for await (const message of query({
-    prompt: line,
-    options: {
-      model: "claude-sonnet-4-5",
-      systemPrompt: "You are a helpful assistant.",
-      continue: true,
-    },
-  })) {
-    if ("result" in message) {
-      console.log(message.result)
-    }
-  }
-})
+Create a `superserve.yaml` file for advanced deployment options:
+
+```yaml superserve.yaml
+name: chatbot
+command: python agent.py
+secrets:
+  - ANTHROPIC_API_KEY
+ignore:
+  - "*.pyc"
+  - __pycache__
+  - .git
 ```
 
-</CodeGroup>
+Then deploy with:
 
-<CodeGroup>
+```bash
+superserve deploy
+```
+
+## Dependencies
+
+If your agent uses additional Python packages, create a `requirements.txt`:
 
 ```txt requirements.txt
 claude-agent-sdk
+requests
+python-dotenv
 ```
 
-```json package.json
-{
-  "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "latest"
-  }
-}
+Or use `pyproject.toml` for more complex projects:
+
+```toml pyproject.toml
+[project]
+name = "my-chatbot"
+version = "0.1.0"
+dependencies = [
+    "claude-agent-sdk",
+    "requests",
+    "python-dotenv",
+]
 ```
 
-</CodeGroup>
+Superserve automatically installs dependencies during deployment.
 
-```bash
-superserve deploy agent.py     # or agent.ts
-superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-...
-superserve run my-agent
+## Session Persistence
+
+The `/workspace` directory persists across turns and restarts:
+
+```python agent.py
+import asyncio
+import json
+from pathlib import Path
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, TextBlock
+
+# Persistent storage
+WORKSPACE = Path("/workspace")
+HISTORY_FILE = WORKSPACE / "conversation_history.json"
+
+def save_message(role: str, content: str):
+    """Save message to persistent storage."""
+    history = []
+    if HISTORY_FILE.exists():
+        history = json.loads(HISTORY_FILE.read_text())
+    history.append({"role": role, "content": content})
+    HISTORY_FILE.write_text(json.dumps(history, indent=2))
+
+options = ClaudeAgentOptions(
+    model="sonnet",
+    system_prompt="You are a helpful assistant with memory.",
+    permission_mode="bypassPermissions",
+    continue_conversation=True,
+)
+
+async def main():
+    async with ClaudeSDKClient(options=options) as client:
+        # Load conversation history
+        if HISTORY_FILE.exists():
+            print("Resuming previous conversation...")
+        
+        while True:
+            try:
+                user_input = input()
+            except EOFError:
+                break
+            
+            save_message("user", user_input)
+            
+            await client.query(prompt=user_input)
+            async for msg in client.receive_response():
+                for block in getattr(msg, "content", []):
+                    if isinstance(block, TextBlock):
+                        print(block.text)
+                        save_message("assistant", block.text)
+
+asyncio.run(main())
 ```
 
-<Tip>
-  The `continue_conversation` option enables conversation memory across turns. Combined with Superserve's workspace persistence, the agent has full context even after the sandbox restarts.
-</Tip>
+## Troubleshooting
 
----
+<AccordionGroup>
+  <Accordion title="Import error: No module named 'claude_agent_sdk'">
+    Make sure you have a `requirements.txt` or `pyproject.toml` with `claude-agent-sdk` listed. Redeploy your agent:
+    
+    ```bash
+    superserve deploy agent.py --name chatbot
+    ```
+  </Accordion>
+  
+  <Accordion title="API key not found">
+    Set your Anthropic API key as a secret:
+    
+    ```bash
+    superserve secrets set chatbot ANTHROPIC_API_KEY=sk-ant-...
+    ```
+  </Accordion>
+  
+  <Accordion title="Agent not responding">
+    Check the agent logs:
+    
+    ```bash
+    superserve sessions list
+    superserve sessions logs <session-id>
+    ```
+  </Accordion>
+</AccordionGroup>
 
-See the full example in [Python](https://github.com/superserve-ai/superserve/tree/main/examples/python/claude-agent-sdk/chatbot) or [TypeScript](https://github.com/superserve-ai/superserve/tree/main/examples/typescript/claude-agent-sdk/chatbot).
+## Next Steps
 
-Integrate deployed agents into your apps using the [Superserve SDK](/sdk).
+<CardGroup cols={2}>
+  <Card title="Core Concepts" icon="book" href="/concepts/isolation">
+    Learn about isolation, persistence, and credentials
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/deploy">
+    Explore deployment options and CLI commands
+  </Card>
+  <Card title="Secrets Management" icon="key" href="/guides/secrets-management">
+    Manage API keys and environment variables
+  </Card>
+  <Card title="Session Management" icon="clock" href="/guides/session-management">
+    Work with persistent sessions
+  </Card>
+</CardGroup>

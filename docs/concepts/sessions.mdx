@@ -1,0 +1,443 @@
+---
+title: "Sessions"
+description: "Multi-turn conversations with persistent state and resumable context"
+---
+
+## What is a session?
+
+A session is a **multi-turn conversation** between a user and an agent. Each session:
+
+- Runs in its own isolated Firecracker microVM (see [Isolation](/concepts/isolation))
+- Has a persistent `/workspace` filesystem (see [Persistence](/concepts/persistence))
+- Maintains conversation history (if your framework supports it)
+- Can be resumed hours or days later with full context
+
+```bash
+# Start a session
+$ superserve run my-agent
+
+You > Clone the repo at https://github.com/example/app
+Agent > Cloned successfully. Found 42 files.
+
+You > What tests are failing?
+Agent > 3 tests in tests/auth.py are failing due to missing fixtures.
+
+# Session ends
+```
+
+```bash
+# Resume the same session days later
+$ superserve sessions resume ses_abc123
+
+You > Did you fix those tests?
+Agent > Yes, I added the missing fixtures in conftest.py. All tests pass now.
+
+# The agent remembers the conversation AND the repo is still in /workspace
+```
+
+## Session lifecycle
+
+<Steps>
+  <Step title="Creation">
+    A session is created when:
+    - You run `superserve run my-agent`
+    - You call `client.createSession()` in the SDK
+    - You send a message without a `sessionId` (auto-creates one)
+
+    ```typescript
+    import Superserve from "@superserve/sdk"
+
+    const client = new Superserve({ apiKey: "your-api-key" })
+    const session = await client.createSession("my-agent")
+    // Session is now active, microVM is running
+    ```
+  </Step>
+
+  <Step title="Active state">
+    While the session is processing a message, it's in the `active` state. The microVM is running, the agent is executing tools, and you can't send another message until it finishes.
+
+    ```bash
+    $ superserve sessions list my-agent
+    
+    ID          STATUS   MSGS   LAST ACTIVE
+    ses_abc123  active   2      now
+    ```
+  </Step>
+
+  <Step title="Idle state">
+    After the agent finishes responding, the session goes `idle`. The microVM stays alive for a short period (default: a few minutes) to avoid cold starts if you send another message soon.
+
+    ```bash
+    $ superserve sessions list my-agent
+    
+    ID          STATUS   MSGS   LAST ACTIVE
+    ses_abc123  idle     2      30 seconds ago
+    ```
+
+    If you don't send another message within the idle timeout, the microVM is destroyed to save resources. The `/workspace` filesystem is persisted, so you can resume later.
+  </Step>
+
+  <Step title="Resuming">
+    When you resume an idle session:
+    - A fresh microVM is spawned (see [Isolation](/concepts/isolation))
+    - The `/workspace` filesystem is mounted from persistent storage
+    - Conversation history is restored (if your framework persists it)
+
+    ```bash
+    $ superserve sessions resume ses_abc123
+    Resumed: "Fix failing tests" (my-agent)
+    
+    You > What's the status?
+    Agent > All tests are passing. The repo is ready to merge.
+    ```
+  </Step>
+
+  <Step title="Completion or failure">
+    A session ends when:
+    - You explicitly call `session.end()` or run `superserve sessions end <id>`
+    - The agent crashes or times out (status becomes `failed`)
+    - The session hits a configured limit (max turns, max duration)
+
+    ```bash
+    # End a session manually
+    $ superserve sessions end ses_abc123
+    Session ended. Workspace is preserved.
+    
+    # You can still resume it
+    $ superserve sessions resume ses_abc123
+    ```
+
+    Even `completed` or `failed` sessions are resumable. You get a fresh microVM with the same `/workspace`.
+  </Step>
+</Steps>
+
+## Session status reference
+
+| Status | Meaning | Can send messages? | Can resume? |
+|--------|---------|-------------------|-------------|
+| `active` | Processing a message right now | No | N/A |
+| `idle` | Waiting for the next message | Yes | Yes |
+| `completed` | Ended by user or agent | No | Yes (fresh VM, same workspace) |
+| `failed` | Crashed, timed out, or hit a limit | No | Yes (fresh VM, same workspace) |
+
+## Managing sessions
+
+### CLI
+
+```bash
+# List all sessions for an agent
+superserve sessions list my-agent
+
+# Get details about a specific session
+superserve sessions get ses_abc123
+
+# Resume a session
+superserve sessions resume ses_abc123
+
+# End a session (workspace is preserved)
+superserve sessions end ses_abc123
+
+# Delete a session (workspace is destroyed)
+superserve sessions delete ses_abc123
+```
+
+<Warning>
+  `delete` permanently destroys the `/workspace` filesystem. Use `end` if you want to preserve files.
+</Warning>
+
+### SDK
+
+```typescript
+import Superserve from "@superserve/sdk"
+
+const client = new Superserve({ apiKey: "your-api-key" })
+
+// Create a session
+const session = await client.createSession("my-agent", {
+  title: "Debug authentication module",
+  idleTimeout: 3600, // 1 hour
+})
+
+// Send messages
+const r1 = await session.run("What files handle auth?")
+const r2 = await session.run("Add rate limiting to the login endpoint")
+
+// Stream a response
+const stream = session.stream("Run the tests")
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk)
+}
+
+// End the session
+await session.end()
+```
+
+## Idle timeout configuration
+
+By default, sessions stay alive for **30 days** after the last message. You can configure this per-session or per-run:
+
+```typescript
+// Set idle timeout when creating a session
+const session = await client.createSession("my-agent", {
+  idleTimeout: 3600, // 1 hour in seconds
+})
+
+// Or when sending a message
+const result = await client.run("my-agent", {
+  message: "Hello",
+  idleTimeout: 7200, // 2 hours
+})
+```
+
+```bash
+# CLI: Sessions inherit the default timeout
+# Use SDK for custom timeouts
+```
+
+After the timeout, the microVM is destroyed but the workspace persists. Resume the session to continue.
+
+## Conversation memory
+
+Superserve preserves the `/workspace` filesystem across turns and VM restarts. But **conversation history** (the messages exchanged between user and agent) depends on your framework:
+
+<AccordionGroup>
+  <Accordion title="Claude Agent SDK">
+    Enable `continue_conversation` to maintain memory across turns:
+
+    ```python
+    from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+
+    options = ClaudeAgentOptions(
+        model="sonnet",
+        continue_conversation=True,  # Remembers context
+    )
+
+    async with ClaudeSDKClient(options=options) as client:
+        # Turn 1
+        await client.query(prompt="My name is Alice", session_id="chat")
+        
+        # Turn 2 - agent remembers "Alice"
+        await client.query(prompt="What's my name?", session_id="chat")
+    ```
+
+    The SDK stores conversation history in memory. If the microVM restarts (e.g., after idle timeout), the history is lost unless you persist it to `/workspace`.
+  </Accordion>
+
+  <Accordion title="OpenAI Agents SDK">
+    The SDK maintains conversation state in the `Runner` object. Persist it to `/workspace` if you need it to survive restarts:
+
+    ```typescript
+    import { Agent } from "@openai/agents-sdk"
+    import fs from "fs"
+
+    const HISTORY_FILE = "/workspace/conversation.json"
+
+    function loadHistory() {
+      if (fs.existsSync(HISTORY_FILE)) {
+        return JSON.parse(fs.readFileSync(HISTORY_FILE, "utf-8"))
+      }
+      return []
+    }
+
+    function saveHistory(messages) {
+      fs.writeFileSync(HISTORY_FILE, JSON.stringify(messages))
+    }
+
+    const agent = new Agent({ name: "assistant", model: "gpt-4o" })
+    let messages = loadHistory()
+
+    // Add user message
+    messages.push({ role: "user", content: userInput })
+    const result = await agent.generate(messages)
+    messages.push({ role: "assistant", content: result.text })
+    
+    saveHistory(messages)
+    ```
+  </Accordion>
+
+  <Accordion title="LangChain / LangGraph">
+    Use LangChain's memory components and persist to `/workspace`:
+
+    ```python
+    from langchain.memory import FileChatMessageHistory
+    from langchain.chains import ConversationChain
+
+    # Persist to /workspace
+    history = FileChatMessageHistory("/workspace/chat_history.json")
+
+    chain = ConversationChain(
+        llm=llm,
+        memory=ConversationBufferMemory(chat_memory=history),
+    )
+
+    # Turn 1
+    chain.run("My favorite color is blue")
+
+    # Turn 2 (even after VM restart)
+    chain.run("What's my favorite color?")  # Remembers "blue"
+    ```
+  </Accordion>
+
+  <Accordion title="Custom / No framework">
+    Persist conversation state yourself:
+
+    ```python
+    import json
+    import os
+
+    HISTORY_FILE = "/workspace/conversation.json"
+
+    def load_conversation():
+        if os.path.exists(HISTORY_FILE):
+            with open(HISTORY_FILE) as f:
+                return json.load(f)
+        return []
+
+    def save_conversation(messages):
+        with open(HISTORY_FILE, "w") as f:
+            json.dump(messages, f)
+
+    # Load history
+    conversation = load_conversation()
+
+    # Add user message
+    user_msg = input()
+    conversation.append({"role": "user", "content": user_msg})
+
+    # Get agent response (however you call your LLM)
+    agent_response = call_llm(conversation)
+    conversation.append({"role": "assistant", "content": agent_response})
+
+    # Persist for next turn
+    save_conversation(conversation)
+    print(agent_response)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+  **Best practice:** Always persist conversation history to `/workspace` if you want it to survive microVM restarts.
+</Tip>
+
+## Session reuse patterns
+
+### Pattern 1: Single-turn sessions (stateless)
+
+If you don't need multi-turn context, create a new session for each message:
+
+```typescript
+const client = new Superserve({ apiKey: "your-api-key" })
+
+// Each run creates a new session
+await client.run("my-agent", { message: "What's 2 + 2?" })
+await client.run("my-agent", { message: "What's 5 * 3?" })
+
+// These are independent - no shared context
+```
+
+Use this for:
+- Stateless tasks (math, translation, single-shot code generation)
+- Load testing (each request is isolated)
+
+### Pattern 2: Multi-turn sessions (stateful)
+
+Reuse the same session for a conversation:
+
+```typescript
+const session = await client.createSession("my-agent")
+
+await session.run("Clone https://github.com/example/app")
+await session.run("Run the tests")
+await session.run("Fix any failures")
+
+await session.end()
+```
+
+Use this for:
+- Code review workflows
+- Research tasks that build on previous findings
+- Debugging sessions
+
+### Pattern 3: Long-running sessions
+
+Create a session and keep it alive for days or weeks:
+
+```typescript
+const session = await client.createSession("my-agent", {
+  title: "Q1 product planning",
+  idleTimeout: 60 * 60 * 24 * 30, // 30 days
+})
+
+// Day 1: Initial research
+await session.run("Gather competitor analysis")
+
+// Day 5: Review findings
+await session.run("Summarize the top 3 insights")
+
+// Day 12: Draft proposal
+await session.run("Write a one-pager for the exec team")
+```
+
+Use this for:
+- Long-term projects
+- Agents that accumulate knowledge over time
+- Collaborative workflows where the agent is a persistent teammate
+
+## Performance and resource usage
+
+<AccordionGroup>
+  <Accordion title="Cold starts vs. warm sessions">
+    - **Cold start**: Session was idle for longer than the timeout. A new microVM is spawned. Takes ~500ms-1s.
+    - **Warm session**: Session is still active or recently idle. The existing microVM handles the request. Takes ~10-50ms.
+
+    To minimize cold starts, set a longer `idleTimeout` or send messages more frequently.
+  </Accordion>
+
+  <Accordion title="Concurrent sessions">
+    Each session runs in its own microVM. You can have thousands of concurrent sessions for the same agent - they're fully isolated.
+
+    ```typescript
+    // Run 100 sessions in parallel
+    const sessions = await Promise.all(
+      Array.from({ length: 100 }, () => 
+        client.createSession("my-agent")
+      )
+    )
+
+    // Each has its own microVM and /workspace
+    await Promise.all(
+      sessions.map(s => s.run("Process data"))
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Session cleanup">
+    Sessions that haven't been used in `idleTimeout` seconds have their microVMs destroyed automatically. The workspace persists until you delete the session.
+
+    Periodically clean up old sessions to free storage:
+
+    ```bash
+    # Delete sessions older than 30 days
+    superserve sessions list my-agent --json | \
+      jq -r '.[] | select(.last_activity_at < "2025-02-01") | .id' | \
+      xargs -I {} superserve sessions delete {}
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+<CardGroup cols={2}>
+  <Card title="Isolation" icon="shield-halved" href="/concepts/isolation">
+    How each session gets its own microVM
+  </Card>
+  <Card title="Persistence" icon="hard-drive" href="/concepts/persistence">
+    How /workspace survives across sessions
+  </Card>
+  <Card title="SDK Reference" icon="code" href="/sdk/overview">
+    TypeScript client for managing sessions
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/installation">
+    All `superserve sessions` commands
+  </Card>
+</CardGroup>

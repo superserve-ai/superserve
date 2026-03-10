@@ -1,0 +1,297 @@
+---
+title: Agents
+description: Manage deployed agents
+---
+
+The `superserve agents` commands manage your deployed agents.
+
+## List Agents
+
+View all deployed agents:
+
+```bash
+superserve agents list
+```
+
+### Example Output
+
+```
+Name           ID               Status     Created        Playground
+my-agent       agt_abc123       READY      2 hours ago    Playground ↗
+test-agent     agt_def456       DEPLOYING  5 minutes ago  Playground ↗
+old-agent      agt_ghi789       FAILED     3 days ago     Playground ↗
+```
+
+### Filter by Status
+
+```bash
+superserve agents list --status ready
+```
+
+Supported status filters:
+
+| Filter | Matches |
+|--------|----------|
+| `ready` | Agents ready to run |
+| `deploying` | Dependencies currently installing |
+| `failed` | Dependency installation failed |
+
+### JSON Output
+
+```bash
+superserve agents list --json
+```
+
+```json
+[
+  {
+    "id": "agt_abc123def456",
+    "name": "my-agent",
+    "command": "python agent.py",
+    "deps_status": "ready",
+    "created_at": "2026-03-09T08:30:00Z",
+    "updated_at": "2026-03-09T08:30:00Z",
+    "environment_keys": ["ANTHROPIC_API_KEY"],
+    "required_secrets": ["ANTHROPIC_API_KEY"]
+  }
+]
+```
+
+## Get Agent Details
+
+View detailed information about a specific agent:
+
+```bash
+superserve agents get my-agent
+```
+
+### Example Output
+
+```
+Field       Value
+ID          agt_abc123def456
+Name        my-agent
+Status      READY
+Command     python agent.py
+Created     2026-03-09 08:30:00 UTC
+Updated     2026-03-09 08:30:00 UTC
+Playground  Playground ↗
+```
+
+### JSON Output
+
+```bash
+superserve agents get my-agent --json
+```
+
+```json
+{
+  "id": "agt_abc123def456",
+  "name": "my-agent",
+  "command": "python agent.py",
+  "deps_status": "ready",
+  "created_at": "2026-03-09T08:30:00Z",
+  "updated_at": "2026-03-09T08:30:00Z",
+  "environment_keys": ["ANTHROPIC_API_KEY"],
+  "required_secrets": ["ANTHROPIC_API_KEY"]
+}
+```
+
+## Delete Agent
+
+Delete a deployed agent:
+
+```bash
+superserve agents delete my-agent
+```
+
+The CLI prompts for confirmation:
+
+```
+Delete agent 'my-agent'? (y/N)
+```
+
+Type `y` to confirm.
+
+### Skip Confirmation
+
+```bash
+superserve agents delete my-agent --yes
+```
+
+### Example Output
+
+```
+✓ Deleted agent 'my-agent'
+```
+
+<Warning>
+  Deleting an agent is permanent and cannot be undone. All associated sessions and data will be lost.
+</Warning>
+
+## Command Reference
+
+### `superserve agents list`
+
+List all deployed agents.
+
+<ParamField path="--status" type="string">
+  Filter agents by status (e.g., `ready`, `deploying`, `failed`)
+</ParamField>
+
+<ParamField path="--json" type="flag" default="false">
+  Output as JSON
+</ParamField>
+
+### `superserve agents get`
+
+Get details of a specific agent.
+
+<ParamField path="name" type="string" required>
+  Agent name or ID (e.g., `my-agent` or `agt_abc123def456`)
+</ParamField>
+
+<ParamField path="--json" type="flag" default="false">
+  Output as JSON
+</ParamField>
+
+### `superserve agents delete`
+
+Delete a deployed agent.
+
+<ParamField path="name" type="string" required>
+  Agent name or ID (e.g., `my-agent` or `agt_abc123def456`)
+</ParamField>
+
+<ParamField path="-y, --yes" type="flag" default="false">
+  Skip confirmation prompt
+</ParamField>
+
+## Agent Status
+
+Agents have one of these statuses:
+
+| Status | Description |
+|--------|-------------|
+| `READY` | Agent is deployed and ready to run |
+| `DEPLOYING` | Dependencies are currently installing |
+| `FAILED` | Dependency installation failed |
+
+### Check Status
+
+After deploying, check when dependencies finish installing:
+
+```bash
+superserve agents get my-agent
+```
+
+Once the status is `READY`, you can run the agent:
+
+```bash
+superserve run my-agent
+```
+
+### Failed Status
+
+If the status is `FAILED`, dependency installation encountered an error:
+
+1. Review your `requirements.txt` or `package.json`
+2. Ensure all dependencies are compatible with Linux x86_64
+3. Redeploy:
+
+```bash
+superserve deploy
+```
+
+## Agent IDs vs Names
+
+All commands accept either:
+- **Agent name**: Human-readable name (e.g., `my-agent`)
+- **Agent ID**: Unique identifier (e.g., `agt_abc123def456`)
+
+### Using Names
+
+```bash
+superserve agents get my-agent
+```
+
+### Using IDs
+
+```bash
+superserve agents get agt_abc123def456
+```
+
+Agent IDs are prefixed with `agt_` and are globally unique.
+
+## Playground Links
+
+Each agent has a Playground URL where you can interact with it in the browser:
+
+```
+https://playground.superserve.ai/agents/agt_abc123def456/
+```
+
+The CLI displays clickable Playground links in the terminal (if your terminal supports hyperlinks).
+
+## Examples
+
+### List Only Ready Agents
+
+```bash
+superserve agents list --status ready
+```
+
+### Get Agent Info as JSON
+
+```bash
+superserve agents get my-agent --json | jq '.command'
+```
+
+```
+"python agent.py"
+```
+
+### Delete Multiple Agents
+
+```bash
+for agent in old-agent test-agent demo-agent; do
+  superserve agents delete $agent --yes
+done
+```
+
+### Check if Agent Exists
+
+```bash
+if superserve agents get my-agent --json &>/dev/null; then
+  echo "Agent exists"
+else
+  echo "Agent not found"
+fi
+```
+
+## Troubleshooting
+
+### "Agent not found"
+
+Verify the agent name is correct:
+
+```bash
+superserve agents list
+```
+
+Agent names are case-sensitive.
+
+### "No agents found"
+
+You haven't deployed any agents yet. Deploy one:
+
+```bash
+superserve deploy agent.py
+```
+
+## Best Practices
+
+- **Use descriptive names** - Name agents after their purpose (e.g., `customer-support`, `data-analyst`)
+- **Clean up old agents** - Delete unused agents to keep your list organized
+- **Use IDs for automation** - Agent IDs never change, making them safer for scripts
+- **Check status after deploy** - Ensure `READY` status before running the agent

@@ -1,10 +1,166 @@
 ---
-title: "Mastra"
-description: "Deploy a TypeScript-first agent with AI SDK"
+title: Mastra
+description: Deploy Mastra agents to Superserve
 icon: /images/mastra.svg
 ---
 
-[Mastra](https://mastra.ai/) is a TypeScript-first agent framework built on the [Vercel AI SDK](https://sdk.vercel.ai/). It works with any AI SDK-compatible model provider.
+[Mastra](https://mastra.ai/) is a TypeScript framework for building AI agents. Superserve provides a production-ready deployment platform with isolation, persistence, and governance.
+
+## Quick Start
+
+<Steps>
+  <Step title="Install the CLI">
+    <CodeGroup>
+    ```bash curl
+    curl -fsSL https://superserve.ai/install | sh
+    ```
+    
+    ```bash npm
+    npm install -g @superserve/cli
+    ```
+    
+    ```bash Homebrew
+    brew install superserve-ai/tap/superserve
+    ```
+    </CodeGroup>
+  </Step>
+  
+  <Step title="Create your agent">
+    Create a file called `agent.ts` with your Mastra agent:
+    
+    ```typescript agent.ts
+    /**
+     * Minimal chatbot built with Mastra deployed on Superserve.
+     */
+    
+    import { Agent } from "@mastra/core/agent"
+    import { createInterface } from "readline"
+    
+    const agent = new Agent({
+      name: "assistant",
+      instructions: "You are a helpful assistant.",
+      model: "openai/gpt-4o",
+    })
+    
+    const rl = createInterface({ input: process.stdin })
+    rl.on("line", async (line) => {
+      const result = await agent.generate(line)
+      console.log(result.text)
+    })
+    ```
+    
+    Create a `package.json` with dependencies:
+    
+    ```json package.json
+    {
+      "dependencies": {
+        "@mastra/core": "latest"
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Deploy your agent">
+    Log in and deploy your agent:
+    
+    ```bash
+    superserve login
+    superserve deploy agent.ts --name chatbot
+    ```
+  </Step>
+  
+  <Step title="Set your API key">
+    Configure your OpenAI API key as a secret:
+    
+    ```bash
+    superserve secrets set chatbot OPENAI_API_KEY=sk-...
+    ```
+    
+    <Info>
+    Secrets are encrypted at rest and injected at the network level. The agent never sees them in logs or LLM context.
+    </Info>
+  </Step>
+  
+  <Step title="Run your agent">
+    Start an interactive session:
+    
+    ```bash
+    superserve run chatbot
+    ```
+    
+    ```
+    You > What is the capital of France?
+    
+    Agent > The capital of France is Paris.
+    
+    Completed in 1.2s
+    ```
+  </Step>
+</Steps>
+
+## Configuration Options
+
+Mastra supports various configuration options when creating an `Agent`:
+
+```typescript agent.ts
+import { Agent } from "@mastra/core/agent"
+
+const agent = new Agent({
+  name: "assistant",
+  instructions: "You are a helpful assistant.",
+  model: "openai/gpt-4o",        // Model to use
+  temperature: 0.7,               // Sampling temperature
+  maxTokens: 4096,                // Maximum tokens per response
+})
+```
+
+### Model Selection
+
+Mastra supports multiple LLM providers:
+
+- `openai/gpt-4o` - GPT-4 Omni (recommended)
+- `openai/gpt-4-turbo` - GPT-4 Turbo
+- `anthropic/claude-3-5-sonnet-20241022` - Claude 3.5 Sonnet
+- `google/gemini-pro` - Google Gemini Pro
+
+## Adding Tools
+
+Mastra supports tools for extending agent capabilities:
+
+```typescript agent.ts
+import { Agent, createTool } from "@mastra/core"
+import { createInterface } from "readline"
+import { z } from "zod"
+
+const getWeather = createTool({
+  id: "getWeather",
+  description: "Get the current weather for a location",
+  inputSchema: z.object({
+    location: z.string().describe("The city name"),
+  }),
+  execute: async ({ location }) => {
+    // Your weather API logic here
+    return { weather: `The weather in ${location} is sunny.` }
+  },
+})
+
+const agent = new Agent({
+  name: "weather-assistant",
+  instructions: "You are a helpful weather assistant.",
+  model: "openai/gpt-4o",
+  tools: [getWeather],
+})
+
+const rl = createInterface({ input: process.stdin })
+rl.on("line", async (line) => {
+  const result = await agent.generate(line)
+  console.log(result.text)
+})
+```
+
+## Streaming Responses
+
+Stream responses token by token for better UX:
 
 ```typescript agent.ts
 import { Agent } from "@mastra/core/agent"
@@ -18,31 +174,206 @@ const agent = new Agent({
 
 const rl = createInterface({ input: process.stdin })
 rl.on("line", async (line) => {
-  const result = await agent.generate(line)
-  console.log(result.text)
+  const stream = await agent.stream(line)
+  
+  for await (const chunk of stream) {
+    process.stdout.write(chunk.text)
+  }
+  
+  console.log() // New line after streaming completes
 })
 ```
 
+## Deployment Configuration
+
+Create a `superserve.yaml` file for advanced deployment options:
+
+```yaml superserve.yaml
+name: chatbot
+command: bun run agent.ts
+secrets:
+  - OPENAI_API_KEY
+ignore:
+  - node_modules
+  - "*.log"
+  - .git
+```
+
+Then deploy with:
+
+```bash
+superserve deploy
+```
+
+## Dependencies
+
+Manage dependencies in your `package.json`:
+
 ```json package.json
 {
+  "name": "my-chatbot",
+  "version": "0.1.0",
   "dependencies": {
-    "@mastra/core": "latest"
+    "@mastra/core": "latest",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
   }
 }
 ```
 
-```bash
-superserve deploy agent.ts
-superserve secrets set my-agent OPENAI_API_KEY=sk-...
-superserve run my-agent
+Superserve automatically runs `npm install` or `bun install` during deployment.
+
+## Session Persistence
+
+The `/workspace` directory persists across turns and restarts. Here's an example that saves conversation history:
+
+```typescript agent.ts
+import { Agent } from "@mastra/core/agent"
+import { createInterface } from "readline"
+import { readFileSync, writeFileSync, existsSync } from "fs"
+import { join } from "path"
+
+const WORKSPACE = "/workspace"
+const HISTORY_FILE = join(WORKSPACE, "conversation_history.json")
+
+interface Message {
+  role: string
+  content: string
+}
+
+function saveMessage(role: string, content: string) {
+  let history: Message[] = []
+  if (existsSync(HISTORY_FILE)) {
+    history = JSON.parse(readFileSync(HISTORY_FILE, "utf-8"))
+  }
+  history.push({ role, content })
+  writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2))
+}
+
+const agent = new Agent({
+  name: "assistant",
+  instructions: "You are a helpful assistant with memory.",
+  model: "openai/gpt-4o",
+})
+
+// Load conversation history
+if (existsSync(HISTORY_FILE)) {
+  console.log("Resuming previous conversation...")
+}
+
+const rl = createInterface({ input: process.stdin })
+rl.on("line", async (line) => {
+  saveMessage("user", line)
+  
+  const result = await agent.generate(line)
+  console.log(result.text)
+  
+  saveMessage("assistant", result.text)
+})
 ```
 
-<Tip>
-  TypeScript agents are run with `npx tsx` automatically - no build step needed. Dependencies are installed from `package.json`.
-</Tip>
+## Multi-Agent Workflows
 
----
+Build multi-agent systems with Mastra:
 
-See the full [TypeScript example](https://github.com/superserve-ai/superserve/tree/main/examples/typescript/mastra/chatbot).
+```typescript agent.ts
+import { Agent } from "@mastra/core/agent"
+import { createInterface } from "readline"
 
-Integrate deployed agents into your apps using the [Superserve SDK](/sdk).
+const researcher = new Agent({
+  name: "researcher",
+  instructions: "You research topics and provide detailed information.",
+  model: "openai/gpt-4o",
+})
+
+const writer = new Agent({
+  name: "writer",
+  instructions: "You write clear, engaging content based on research.",
+  model: "openai/gpt-4o",
+})
+
+const rl = createInterface({ input: process.stdin })
+rl.on("line", async (line) => {
+  // Research phase
+  const researchResult = await researcher.generate(line)
+  
+  // Writing phase
+  const writePrompt = `Based on this research: ${researchResult.text}\n\nWrite a summary.`
+  const writeResult = await writer.generate(writePrompt)
+  
+  console.log(writeResult.text)
+})
+```
+
+## Using Bun vs Node.js
+
+Mastra works with both Bun and Node.js. Superserve automatically detects which runtime to use:
+
+<CodeGroup>
+
+```yaml Bun
+name: chatbot
+command: bun run agent.ts
+```
+
+```yaml Node.js
+name: chatbot
+command: node --loader ts-node/esm agent.ts
+```
+
+</CodeGroup>
+
+Bun is recommended for faster startup times and better performance.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Import error: Cannot find module '@mastra/core'">
+    Make sure you have a `package.json` with `@mastra/core` listed in dependencies. Redeploy your agent:
+    
+    ```bash
+    superserve deploy agent.ts --name chatbot
+    ```
+  </Accordion>
+  
+  <Accordion title="API key not found">
+    Set your API key as a secret:
+    
+    ```bash
+    superserve secrets set chatbot OPENAI_API_KEY=sk-...
+    ```
+  </Accordion>
+  
+  <Accordion title="TypeScript compilation errors">
+    Make sure you have TypeScript as a dev dependency:
+    
+    ```json
+    {
+      "devDependencies": {
+        "typescript": "^5.0.0",
+        "@types/node": "^20.0.0"
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Core Concepts" icon="book" href="/concepts/isolation">
+    Learn about isolation, persistence, and credentials
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/deploy">
+    Explore deployment options and CLI commands
+  </Card>
+  <Card title="Secrets Management" icon="key" href="/guides/secrets-management">
+    Manage API keys and environment variables
+  </Card>
+  <Card title="Session Management" icon="clock" href="/guides/session-management">
+    Work with persistent sessions
+  </Card>
+</CardGroup>

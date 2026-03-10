@@ -1,0 +1,368 @@
+---
+title: Sessions
+description: Build multi-turn conversations with agents
+---
+
+Sessions enable multi-turn conversations with agents. Messages sent within a session share context and history, allowing the agent to reference previous messages and maintain state across interactions.
+
+## Creating a Session
+
+Use `client.createSession()` to create a new session:
+
+```typescript
+import Superserve from '@superserve/sdk'
+
+const client = new Superserve({ apiKey: 'ss_...' })
+
+const session = await client.createSession('my-agent', {
+  title: 'Debug Session',
+  idleTimeout: 1800 // 30 minutes
+})
+
+console.log('Session ID:', session.id)
+```
+
+### Options
+
+<ParamField path="agent" type="string" required>
+  Agent name or ID to create the session with
+</ParamField>
+
+<ParamField path="options.title" type="string">
+  Optional title for the session. Useful for organizing conversations in logs or UIs.
+</ParamField>
+
+<ParamField path="options.idleTimeout" type="number">
+  Idle timeout in seconds. Defaults to 1740 (29 minutes). The session will automatically end after this period of inactivity.
+</ParamField>
+
+## Session Properties
+
+Once created, a `Session` instance provides access to metadata:
+
+```typescript
+const session = await client.createSession('my-agent')
+
+console.log(session.id)        // Session ID (ses_...)
+console.log(session.agentId)   // Agent ID (agt_...)
+console.log(session.info)      // Full session metadata
+```
+
+<ResponseField name="id" type="string">
+  Session ID (format: `ses_...`)
+</ResponseField>
+
+<ResponseField name="agentId" type="string">
+  ID of the agent this session is connected to
+</ResponseField>
+
+<ResponseField name="info" type="SessionInfo">
+  Complete session metadata
+
+  <Expandable title="SessionInfo properties">
+    <ResponseField name="id" type="string">
+      Session ID
+    </ResponseField>
+
+    <ResponseField name="agentId" type="string">
+      Agent ID
+    </ResponseField>
+
+    <ResponseField name="agentName" type="string | undefined">
+      Human-readable agent name
+    </ResponseField>
+
+    <ResponseField name="status" type="string">
+      Session status: `active` or `ended`
+    </ResponseField>
+
+    <ResponseField name="title" type="string | undefined">
+      Optional session title
+    </ResponseField>
+
+    <ResponseField name="messageCount" type="number">
+      Number of messages sent in this session
+    </ResponseField>
+
+    <ResponseField name="createdAt" type="string">
+      ISO timestamp of session creation
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Sending Messages
+
+### run()
+
+Send a message and wait for the full response:
+
+```typescript
+const result = await session.run('What files are in the project?')
+
+console.log(result.text)
+console.log('Tools used:', result.toolCalls.length)
+console.log('Duration:', result.duration, 'ms')
+```
+
+#### Parameters
+
+<ParamField path="message" type="string" required>
+  The message to send to the agent
+</ParamField>
+
+#### Returns
+
+<ResponseField name="result" type="RunResult">
+  The complete response from the agent
+
+  <Expandable title="RunResult properties">
+    <ResponseField name="text" type="string">
+      Full text response
+    </ResponseField>
+
+    <ResponseField name="toolCalls" type="ToolCall[]">
+      Array of tool invocations
+    </ResponseField>
+
+    <ResponseField name="finishReason" type="'completed' | 'failed' | 'cancelled'">
+      Why the run finished
+    </ResponseField>
+
+    <ResponseField name="duration" type="number">
+      Total duration in milliseconds
+    </ResponseField>
+
+    <ResponseField name="maxTurnsReached" type="boolean">
+      Whether the agent hit its maximum turn limit
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### stream()
+
+Send a message and get a streaming response:
+
+```typescript
+const stream = session.stream('Refactor the main module', {
+  onText: (text) => process.stdout.write(text),
+  onFinish: (result) => console.log('\nDone!')
+})
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk)
+}
+```
+
+#### Parameters
+
+<ParamField path="message" type="string" required>
+  The message to send to the agent
+</ParamField>
+
+<ParamField path="options" type="StreamOptions">
+  Stream configuration and callbacks
+</ParamField>
+
+<ParamField path="options.onText" type="(text: string) => void">
+  Callback for each text chunk
+</ParamField>
+
+<ParamField path="options.onToolStart" type="(event: ToolStartEvent) => void">
+  Callback when a tool starts
+</ParamField>
+
+<ParamField path="options.onToolEnd" type="(event: ToolEndEvent) => void">
+  Callback when a tool completes
+</ParamField>
+
+<ParamField path="options.onFinish" type="(result: RunResult) => void">
+  Callback when the run completes
+</ParamField>
+
+<ParamField path="options.onError" type="(error: Error) => void">
+  Callback on errors
+</ParamField>
+
+#### Returns
+
+<ResponseField name="stream" type="AgentStream">
+  An async iterable stream. See [Streaming](/sdk/streaming) for details.
+</ResponseField>
+
+## Ending a Session
+
+Explicitly end a session when you're done:
+
+```typescript
+await session.end()
+```
+
+This frees up resources on the server. If you don't call `end()`, the session will automatically timeout after the configured `idleTimeout` period (default: 29 minutes).
+
+## Multi-Turn Example
+
+Here's a complete example of a multi-turn conversation:
+
+```typescript
+import Superserve from '@superserve/sdk'
+
+const client = new Superserve({
+  apiKey: process.env.SUPERSERVE_API_KEY!
+})
+
+const session = await client.createSession('my-agent', {
+  title: 'Code Review'
+})
+
+try {
+  // First turn: analyze the code
+  const r1 = await session.run('What files are in the project?')
+  console.log('Agent:', r1.text)
+
+  // Second turn: ask about a specific file
+  const r2 = await session.run('What does src/index.ts do?')
+  console.log('Agent:', r2.text)
+
+  // Third turn: request changes
+  const r3 = await session.run('Add error handling to that file')
+  console.log('Agent:', r3.text)
+
+  console.log(`\nTotal messages: ${session.info.messageCount * 2}`) // User + agent messages
+} finally {
+  await session.end()
+}
+```
+
+## Streaming Multi-Turn Conversations
+
+Combine sessions with streaming for real-time multi-turn chats:
+
+```typescript
+const session = await client.createSession('my-agent')
+
+const questions = [
+  'What files are here?',
+  'Explain the main function',
+  'Add documentation to it'
+]
+
+for (const question of questions) {
+  console.log(`\nUser: ${question}`)
+  console.log('Agent: ')
+
+  const stream = session.stream(question)
+  
+  for await (const chunk of stream.textStream) {
+    process.stdout.write(chunk)
+  }
+  
+  console.log() // Newline after response
+}
+
+await session.end()
+```
+
+## Reusing Sessions
+
+You can reuse an existing session ID with `client.run()` or `client.stream()` instead of creating a new session:
+
+```typescript
+// Create a session
+const session = await client.createSession('my-agent')
+const sessionId = session.id
+
+// Later, reuse the session ID without the Session object
+const result = await client.run('my-agent', {
+  message: 'Continue our conversation',
+  sessionId: sessionId
+})
+```
+
+This is useful when you need to store the session ID and resume later (e.g., across HTTP requests in a web server).
+
+## Session Lifecycle
+
+1. **Created** — `createSession()` returns a new `Session` instance
+2. **Active** — Messages can be sent via `run()` or `stream()`
+3. **Ended** — Either explicitly via `end()` or automatically after `idleTimeout`
+
+Once a session is ended, you cannot send more messages to it. Create a new session to continue the conversation.
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always end sessions when done">
+    Call `session.end()` to clean up resources immediately. Use a `try/finally` block to ensure cleanup happens even if errors occur:
+
+    ```typescript
+    const session = await client.createSession('my-agent')
+    try {
+      await session.run('Hello')
+    } finally {
+      await session.end()
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use appropriate timeouts">
+    Set `idleTimeout` based on your use case:
+    - **Chat interfaces**: 30-60 minutes
+    - **API integrations**: 5-10 minutes
+    - **Long-running tasks**: 60+ minutes
+
+    ```typescript
+    const session = await client.createSession('my-agent', {
+      idleTimeout: 3600 // 1 hour
+    })
+    ```
+  </Accordion>
+
+  <Accordion title="Store session IDs for resumption">
+    For web applications, store the session ID in user state (e.g., cookies, database) to resume conversations across page loads:
+
+    ```typescript
+    // On first load
+    const session = await client.createSession('my-agent')
+    saveToDatabase(userId, session.id)
+
+    // On subsequent loads
+    const sessionId = loadFromDatabase(userId)
+    const result = await client.run('my-agent', {
+      message: userInput,
+      sessionId
+    })
+    ```
+  </Accordion>
+
+  <Accordion title="Handle session expiration gracefully">
+    If a session expires, the API will return an error. Catch this and create a new session:
+
+    ```typescript
+    import { APIError } from '@superserve/sdk'
+
+    try {
+      await client.run('my-agent', {
+        message: 'Hello',
+        sessionId: oldSessionId
+      })
+    } catch (error) {
+      if (error instanceof APIError && error.status === 404) {
+        // Session expired, create a new one
+        const session = await client.createSession('my-agent')
+        const result = await session.run('Hello')
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Streaming" icon="signal-stream" href="/sdk/streaming">
+    Learn about streaming responses
+  </Card>
+  <Card title="React Hooks" icon="react" href="/sdk/react-hooks">
+    Build chat UIs with sessions
+  </Card>
+</CardGroup>

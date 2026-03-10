@@ -1,0 +1,285 @@
+---
+title: Run
+description: Run agents interactively from the command line
+---
+
+The `superserve run` command starts an interactive session with a deployed agent.
+
+## Basic Usage
+
+Run an agent with an initial prompt:
+
+```bash
+superserve run my-agent "What is the capital of France?"
+```
+
+### Example Session
+
+```
+You > What is the capital of France?
+
+Agent > The capital of France is Paris.
+
+Completed in 1.2s
+
+You > And what's its population?
+
+Agent > Paris has approximately 2.1 million people in the city proper.
+
+Completed in 0.8s
+
+You > exit
+```
+
+## Interactive Mode
+
+If you don't provide a prompt, the CLI prompts you:
+
+```bash
+superserve run my-agent
+```
+
+```
+You > Tell me a joke
+
+Agent > Why did the developer quit their job?
+        Because they didn't get arrays!
+
+Completed in 0.9s
+
+You > 
+```
+
+Type your message and press Enter. Type `exit` or press Ctrl+D to quit.
+
+## Command Arguments
+
+<ParamField path="agent" type="string" required>
+  Agent name or ID (e.g., `my-agent` or `agt_abc123def456`)
+</ParamField>
+
+<ParamField path="prompt" type="string">
+  Initial prompt to send to the agent. If omitted, the CLI prompts you interactively
+</ParamField>
+
+## Command Options
+
+<ParamField path="--single" type="flag" default="false">
+  Exit after a single response instead of starting an interactive loop
+</ParamField>
+
+<ParamField path="--json" type="flag" default="false">
+  Output raw JSON events from the agent (useful for debugging or integration)
+</ParamField>
+
+## Examples
+
+### Single-Shot Mode
+
+Get one response and exit:
+
+```bash
+superserve run my-agent "Summarize the latest news" --single
+```
+
+### JSON Output
+
+Stream raw events in JSON format:
+
+```bash
+superserve run my-agent "Hello" --json
+```
+
+```json
+{"event":"message","data":{"type":"text","content":"Hello! How can I help you today?"}}
+{"event":"done","data":{}}
+```
+
+Each line is a separate JSON object representing an event.
+
+### Run by Agent ID
+
+```bash
+superserve run agt_abc123def456 "What can you do?"
+```
+
+## How It Works
+
+1. **Pre-flight checks** - Verifies agent exists and dependencies are ready
+2. **Create session** - Starts a new isolated session for this conversation
+3. **Stream response** - Sends your prompt and streams the agent's response in real-time
+4. **Interactive loop** - Prompts for additional messages (unless `--single` is used)
+
+## Session Lifecycle
+
+Each `superserve run` command creates a new session:
+
+- **Isolated workspace**: `/workspace` filesystem starts empty
+- **Persistent state**: Any files created persist across messages in the same session
+- **Automatic cleanup**: Sessions expire after 24 hours of inactivity
+
+To resume a previous session, use `superserve sessions resume`.
+
+## Pre-flight Validation
+
+Before starting, the CLI checks:
+
+### Agent Status
+
+If dependencies are still installing:
+
+```
+✗ Dependencies are still installing. Please wait and try again.
+
+Check status with:
+
+  superserve agents get my-agent
+```
+
+If dependency installation failed:
+
+```
+✗ Dependency install failed. Redeploy to try again.
+
+  superserve deploy
+```
+
+### Required Secrets
+
+If the agent requires secrets that aren't set:
+
+```
+✗ Missing required secret(s): ANTHROPIC_API_KEY
+
+Set them with:
+
+  superserve secrets set my-agent ANTHROPIC_API_KEY=...
+```
+
+## Streaming Behavior
+
+The CLI streams agent responses in real-time:
+
+- **Text output**: Prints incrementally as the agent generates it
+- **Tool calls**: Shows which tools the agent is using
+- **Errors**: Displays errors inline
+
+Example with tool use:
+
+```
+You > What's the weather in Paris?
+
+[Using tool: get_weather]
+
+Agent > The current weather in Paris is 18°C and partly cloudy.
+
+Completed in 2.1s
+```
+
+## Canceling
+
+Press Ctrl+C to cancel the current response:
+
+```
+You > Write a 10,000 word essay
+
+Agent > Let me start by...
+
+^C
+Cancelled.
+```
+
+The session remains active and you can send another message.
+
+## Exit Commands
+
+To end the interactive loop:
+
+- Type `exit`
+- Press Ctrl+D
+- Press Ctrl+C (cancels and exits)
+
+## JSON Event Format
+
+When using `--json`, the CLI outputs Server-Sent Events as JSON:
+
+### Message Event
+
+```json
+{
+  "event": "message",
+  "data": {
+    "type": "text",
+    "content": "Hello there!"
+  }
+}
+```
+
+### Status Event
+
+```json
+{
+  "event": "status",
+  "data": {
+    "status": "running"
+  }
+}
+```
+
+### Error Event
+
+```json
+{
+  "event": "error",
+  "data": {
+    "error": "Agent execution failed",
+    "details": {}
+  }
+}
+```
+
+### Done Event
+
+```json
+{
+  "event": "done",
+  "data": {}
+}
+```
+
+## Error Handling
+
+### Agent Not Found
+
+```
+Agent 'my-agent' not found.
+```
+
+Verify the agent name:
+
+```bash
+superserve agents list
+```
+
+### Agent Execution Failed
+
+```
+✗ Agent execution failed: [error details]
+```
+
+Check the agent logs in the [Superserve Console](https://console.superserve.ai) for details.
+
+### Connection Timeout
+
+If the connection to Superserve Cloud times out:
+
+1. Check your internet connection
+2. Verify Superserve Cloud status at [status.superserve.ai](https://status.superserve.ai)
+3. Try again in a few moments
+
+## Best Practices
+
+- **Use `--single` for scripting** - Prevents hanging on interactive prompts
+- **Use `--json` for integration** - Parse structured events in your scripts
+- **Resume long sessions** - Use `superserve sessions resume` to continue previous conversations
+- **Check agent status first** - Run `superserve agents get` before debugging failed runs

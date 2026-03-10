@@ -1,0 +1,255 @@
+---
+title: Configuration
+description: Configure your agent with superserve.yaml
+---
+
+The `superserve.yaml` file defines how your agent runs in Superserve. It specifies the agent name, start command, required secrets, and files to exclude from deployment.
+
+## Creating a Configuration File
+
+Generate a starter configuration with:
+
+```bash
+superserve init
+```
+
+This creates a `superserve.yaml` file in your current directory. If a `.env.example` file exists, `init` will auto-detect environment variable names and add them to the `secrets` list.
+
+## Configuration Structure
+
+Here's a complete example:
+
+```yaml superserve.yaml
+# Agent name (lowercase, alphanumeric, hyphens only)
+name: my-agent
+
+# Command to start your agent (runs inside the sandbox)
+command: python main.py
+
+# Environment variables your agent needs to run
+secrets:
+  - ANTHROPIC_API_KEY
+  - DATABASE_URL
+
+# Files and directories to exclude from upload
+ignore:
+  - .venv
+  - __pycache__
+  - .git
+  - node_modules
+  - dist
+  - build
+```
+
+## Required Fields
+
+### name
+
+The unique identifier for your agent.
+
+**Rules:**
+- Must start with a lowercase letter
+- Can contain lowercase letters, numbers, and hyphens
+- No special characters or spaces
+
+**Example:**
+```yaml
+name: customer-support-bot
+```
+
+<Warning>
+Agent names must be unique within your account. If you deploy an agent with an existing name, it will be replaced.
+</Warning>
+
+### command
+
+The command that starts your agent inside the sandbox.
+
+**Common patterns:**
+
+```yaml
+# Python
+command: python agent.py
+
+# Python with module
+command: python -m my_agent.main
+
+# Node.js
+command: node index.js
+
+# TypeScript with tsx
+command: npx tsx src/agent.ts
+
+# Bun
+command: bun run agent.ts
+
+# Shell script
+command: ./start.sh
+```
+
+<Tip>
+The command runs in the `/workspace` directory where your project files are extracted.
+</Tip>
+
+## Optional Fields
+
+### secrets
+
+List of environment variable keys your agent requires. These must be set before your agent can run.
+
+```yaml
+secrets:
+  - ANTHROPIC_API_KEY
+  - OPENAI_API_KEY
+  - DATABASE_URL
+  - STRIPE_SECRET_KEY
+```
+
+After deploying, set these values with:
+
+```bash
+superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-...
+```
+
+See the [Secrets Management](/guides/secrets-management) guide for details.
+
+### ignore
+
+Files and directories to exclude from the deployment package.
+
+```yaml
+ignore:
+  - .venv
+  - __pycache__
+  - .git
+  - node_modules
+  - tests
+  - docs
+```
+
+**Built-in exclusions** (always ignored):
+- `__pycache__`
+- `.git`
+- `.venv`, `venv`
+- `node_modules`
+- `.mypy_cache`, `.pytest_cache`, `.ruff_cache`
+- `dist`, `build`
+- Files starting with `.env` (`.env`, `.env.local`, etc.)
+- `*.egg-info` directories
+
+<Warning>
+Files matching `.env*` are automatically excluded to prevent accidentally uploading secrets. Use the `secrets` command to provide environment variables instead.
+</Warning>
+
+## Zero-Config Deployment
+
+You can skip `superserve.yaml` entirely by providing an entrypoint directly:
+
+```bash
+superserve deploy agent.py
+```
+
+The CLI will:
+- Use the directory name as the agent name
+- Auto-detect the runtime (Python, Node.js, Bun, TypeScript)
+- Generate an appropriate start command
+
+**Example:**
+
+```bash
+# Detects Python and uses: python agent.py
+superserve deploy agent.py
+
+# Detects TypeScript and uses: npx tsx src/main.ts
+superserve deploy src/main.ts
+
+# Detects Bun (if bun.lock exists) and uses: bun run index.ts
+superserve deploy index.ts
+```
+
+For production deployments, we recommend using `superserve.yaml` for explicit control over configuration.
+
+## Validation
+
+The CLI validates your configuration when you run `superserve deploy`:
+
+**Common errors:**
+
+```bash
+# Missing 'name' field
+Error: 'name' is required in superserve.yaml.
+
+# Invalid agent name
+Error: Invalid agent name '123-agent' in superserve.yaml. 
+Use lowercase letters, numbers, and hyphens only (must start with a letter).
+
+# Missing 'command' field
+Error: 'command' is required in superserve.yaml.
+
+# Invalid YAML syntax
+Error: Invalid YAML in superserve.yaml. Check your syntax and try again.
+```
+
+## Custom Fields
+
+You can add custom fields to `superserve.yaml` for your own tooling. Superserve ignores unknown fields:
+
+```yaml
+name: my-agent
+command: python agent.py
+
+# Custom fields
+version: 1.2.3
+team: platform
+environment: production
+```
+
+## Example Configurations
+
+### Python Agent with Requirements
+
+```yaml
+name: research-assistant
+command: python agent.py
+secrets:
+  - ANTHROPIC_API_KEY
+ignore:
+  - .venv
+  - tests
+```
+
+### TypeScript Agent
+
+```yaml
+name: code-reviewer
+command: npx tsx src/agent.ts
+secrets:
+  - ANTHROPIC_API_KEY
+  - GITHUB_TOKEN
+ignore:
+  - node_modules
+  - dist
+  - .turbo
+```
+
+### Multi-Framework Agent
+
+```yaml
+name: data-pipeline
+command: ./start.sh
+secrets:
+  - ANTHROPIC_API_KEY
+  - DATABASE_URL
+  - AWS_ACCESS_KEY_ID
+  - AWS_SECRET_ACCESS_KEY
+ignore:
+  - .venv
+  - node_modules
+  - data/cache
+```
+
+## Next Steps
+
+- [Deploy your agent](/cli/deploy)
+- [Manage secrets](/guides/secrets-management)
+- [Run your agent](/cli/run)

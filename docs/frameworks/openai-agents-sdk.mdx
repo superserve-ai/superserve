@@ -1,19 +1,139 @@
 ---
-title: "OpenAI Agents SDK"
-description: "Deploy an OpenAI agent with handoffs and guardrails"
+title: OpenAI Agents SDK
+description: Deploy OpenAI Agents SDK chatbots to Superserve
 icon: /images/openai.svg
 ---
 
-The [OpenAI Agents SDK](https://developers.openai.com/api/docs/guides/agents-sdk) provides a lightweight framework for building agents with tool use, handoffs between agents, and input/output guardrails.
+The [OpenAI Agents SDK](https://github.com/openai/openai-agents-python) is OpenAI's official Python SDK for building agentic applications. Superserve provides a production-ready deployment platform with isolation, persistence, and governance.
 
-<CodeGroup>
+## Quick Start
 
-```python agent.py
-from agents import Agent, Runner
+<Steps>
+  <Step title="Install the CLI">
+    <CodeGroup>
+    ```bash curl
+    curl -fsSL https://superserve.ai/install | sh
+    ```
+    
+    ```bash npm
+    npm install -g @superserve/cli
+    ```
+    
+    ```bash Homebrew
+    brew install superserve-ai/tap/superserve
+    ```
+    </CodeGroup>
+  </Step>
+  
+  <Step title="Create your agent">
+    Create a file called `agent.py` with your OpenAI Agent:
+    
+    ```python agent.py
+    """
+    Minimal chatbot built with OpenAI Agents SDK deployed on Superserve.
+    """
+    
+    from agents import Agent, Runner
+    
+    agent = Agent(
+        name="assistant",
+        instructions="You are a helpful assistant.",
+    )
+    
+    while True:
+        try:
+            user_input = input()
+        except EOFError:
+            break
+        result = Runner.run_sync(agent, user_input)
+        print(result.final_output)
+    ```
+  </Step>
+  
+  <Step title="Deploy your agent">
+    Log in and deploy your agent:
+    
+    ```bash
+    superserve login
+    superserve deploy agent.py --name chatbot
+    ```
+  </Step>
+  
+  <Step title="Set your API key">
+    Configure your OpenAI API key as a secret:
+    
+    ```bash
+    superserve secrets set chatbot OPENAI_API_KEY=sk-...
+    ```
+    
+    <Info>
+    Secrets are encrypted at rest and injected at the network level. The agent never sees them in logs or LLM context.
+    </Info>
+  </Step>
+  
+  <Step title="Run your agent">
+    Start an interactive session:
+    
+    ```bash
+    superserve run chatbot
+    ```
+    
+    ```
+    You > What is the capital of France?
+    
+    Agent > The capital of France is Paris.
+    
+    Completed in 1.2s
+    ```
+  </Step>
+</Steps>
+
+## Configuration Options
+
+The OpenAI Agents SDK supports various configuration options when creating an `Agent`:
+
+```python
+from agents import Agent
 
 agent = Agent(
     name="assistant",
     instructions="You are a helpful assistant.",
+    model="gpt-4o",              # Model to use
+    temperature=0.7,              # Sampling temperature
+    max_tokens=4096,              # Maximum tokens per response
+)
+```
+
+### Model Selection
+
+- `gpt-4o` - GPT-4 Omni (recommended)
+- `gpt-4-turbo` - GPT-4 Turbo
+- `gpt-3.5-turbo` - GPT-3.5 Turbo (faster, cheaper)
+
+## Adding Tools
+
+The OpenAI Agents SDK supports function calling for tools. Here's an example with a custom tool:
+
+```python agent.py
+from agents import Agent, Runner, tool
+
+@tool
+def get_weather(location: str) -> str:
+    """Get the current weather for a location.
+    
+    Args:
+        location: The city name
+    
+    Returns:
+        Weather description
+    """
+    # Your weather API logic here
+    return f"The weather in {location} is sunny."
+
+agent = Agent(
+    name="weather-assistant",
+    instructions="You are a helpful weather assistant.",
+    tools=[get_weather],
 )
 
 while True:
@@ -25,52 +145,194 @@ while True:
     print(result.final_output)
 ```
 
-```typescript agent.ts
-import { Agent, run } from "@openai/agents"
-import { createInterface } from "readline"
+## Async Support
 
-const agent = new Agent({
-  name: "assistant",
-  instructions: "You are a helpful assistant.",
-})
+For better performance with I/O operations, use the async runner:
 
-const rl = createInterface({ input: process.stdin })
-rl.on("line", async (line) => {
-  const result = await run(agent, line)
-  console.log(result.finalOutput)
-})
+```python agent.py
+import asyncio
+from agents import Agent, Runner
+
+agent = Agent(
+    name="assistant",
+    instructions="You are a helpful assistant.",
+)
+
+async def main():
+    while True:
+        try:
+            user_input = input()
+        except EOFError:
+            break
+        result = await Runner.run(agent, user_input)
+        print(result.final_output)
+
+asyncio.run(main())
 ```
 
-</CodeGroup>
+## Deployment Configuration
 
-<CodeGroup>
+Create a `superserve.yaml` file for advanced deployment options:
+
+```yaml superserve.yaml
+name: chatbot
+command: python agent.py
+secrets:
+  - OPENAI_API_KEY
+ignore:
+  - "*.pyc"
+  - __pycache__
+  - .git
+```
+
+Then deploy with:
+
+```bash
+superserve deploy
+```
+
+## Dependencies
+
+Create a `requirements.txt` with your dependencies:
 
 ```txt requirements.txt
 openai-agents
+requests
+python-dotenv
 ```
 
-```json package.json
-{
-  "dependencies": {
-    "@openai/agents": "latest"
-  }
-}
+Or use `pyproject.toml`:
+
+```toml pyproject.toml
+[project]
+name = "my-chatbot"
+version = "0.1.0"
+dependencies = [
+    "openai-agents",
+    "requests",
+    "python-dotenv",
+]
 ```
 
-</CodeGroup>
+Superserve automatically installs dependencies during deployment.
 
-```bash
-superserve deploy agent.py     # or agent.ts
-superserve secrets set my-agent OPENAI_API_KEY=sk-...
-superserve run my-agent
+## Session Persistence
+
+The `/workspace` directory persists across turns and restarts. Here's an example that saves conversation history:
+
+```python agent.py
+import json
+from pathlib import Path
+from agents import Agent, Runner
+
+# Persistent storage
+WORKSPACE = Path("/workspace")
+HISTORY_FILE = WORKSPACE / "conversation_history.json"
+
+def save_message(role: str, content: str):
+    """Save message to persistent storage."""
+    history = []
+    if HISTORY_FILE.exists():
+        history = json.loads(HISTORY_FILE.read_text())
+    history.append({"role": role, "content": content})
+    HISTORY_FILE.write_text(json.dumps(history, indent=2))
+
+agent = Agent(
+    name="assistant",
+    instructions="You are a helpful assistant with memory.",
+)
+
+# Load conversation history
+if HISTORY_FILE.exists():
+    print("Resuming previous conversation...")
+
+while True:
+    try:
+        user_input = input()
+    except EOFError:
+        break
+    
+    save_message("user", user_input)
+    result = Runner.run_sync(agent, user_input)
+    print(result.final_output)
+    save_message("assistant", result.final_output)
 ```
 
-<Tip>
-  `Runner.run_sync` blocks until the full response is ready. For token-by-token streaming, use `Runner.run_streamed` instead - see the [OpenAI Agents SDK streaming docs](https://openai.github.io/openai-agents-js/).
-</Tip>
+## Multi-Agent Systems
 
----
+Build multi-agent systems with the OpenAI Agents SDK:
 
-See the full example in [Python](https://github.com/superserve-ai/superserve/tree/main/examples/python/openai-agents-sdk/chatbot) or [TypeScript](https://github.com/superserve-ai/superserve/tree/main/examples/typescript/openai-agents-sdk/chatbot).
+```python agent.py
+from agents import Agent, Runner
 
-Integrate deployed agents into your apps using the [Superserve SDK](/sdk).
+researcher = Agent(
+    name="researcher",
+    instructions="You research topics and provide detailed information.",
+)
+
+writer = Agent(
+    name="writer",
+    instructions="You write clear, engaging content based on research.",
+)
+
+while True:
+    try:
+        user_input = input()
+    except EOFError:
+        break
+    
+    # Research phase
+    research_result = Runner.run_sync(researcher, user_input)
+    
+    # Writing phase
+    write_prompt = f"Based on this research: {research_result.final_output}\n\nWrite a summary."
+    write_result = Runner.run_sync(writer, write_prompt)
+    
+    print(write_result.final_output)
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Import error: No module named 'agents'">
+    Make sure you have a `requirements.txt` or `pyproject.toml` with `openai-agents` listed. Redeploy your agent:
+    
+    ```bash
+    superserve deploy agent.py --name chatbot
+    ```
+  </Accordion>
+  
+  <Accordion title="API key not found">
+    Set your OpenAI API key as a secret:
+    
+    ```bash
+    superserve secrets set chatbot OPENAI_API_KEY=sk-...
+    ```
+  </Accordion>
+  
+  <Accordion title="Agent not responding">
+    Check the agent logs:
+    
+    ```bash
+    superserve sessions list
+    superserve sessions logs <session-id>
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Core Concepts" icon="book" href="/concepts/isolation">
+    Learn about isolation, persistence, and credentials
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/deploy">
+    Explore deployment options and CLI commands
+  </Card>
+  <Card title="Secrets Management" icon="key" href="/guides/secrets-management">
+    Manage API keys and environment variables
+  </Card>
+  <Card title="Session Management" icon="clock" href="/guides/session-management">
+    Work with persistent sessions
+  </Card>
+</CardGroup>

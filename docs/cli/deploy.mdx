@@ -1,0 +1,298 @@
+---
+title: Deploy
+description: Deploy AI agents to Superserve Cloud
+---
+
+The `superserve deploy` command packages your agent code and deploys it to Superserve Cloud.
+
+## Quick Deploy (Zero-Config)
+
+Deploy an agent by specifying the entrypoint file:
+
+```bash
+superserve deploy agent.py
+```
+
+The CLI automatically detects:
+- **Package manager**: Bun or npm (based on lockfiles)
+- **Runtime**: Python, Node, Bun, or TypeScript
+- **Agent name**: Current directory name
+- **Command**: Appropriate runtime command for your file
+
+### Supported File Types
+
+| Extension | Default Command | With Bun |
+|-----------|----------------|----------|
+| `.py` | `python` | `python` |
+| `.ts`, `.tsx` | `npx tsx` | `bun run` |
+| `.js`, `.jsx` | `node` | `bun run` |
+| `.mjs`, `.cjs` | `node` | `bun run` |
+
+### Examples
+
+<CodeGroup>
+```bash Python
+superserve deploy agent.py
+```
+
+```bash TypeScript
+superserve deploy src/agent.ts
+```
+
+```bash JavaScript
+superserve deploy index.js
+```
+</CodeGroup>
+
+## Config-Based Deploy
+
+For more control, create a `superserve.yaml` file:
+
+```bash
+superserve init
+```
+
+Then deploy without arguments:
+
+```bash
+superserve deploy
+```
+
+The CLI reads configuration from `superserve.yaml`.
+
+### Example superserve.yaml
+
+```yaml
+name: my-agent
+command: python main.py
+
+secrets:
+  - ANTHROPIC_API_KEY
+  - OPENAI_API_KEY
+
+ignore:
+  - .venv
+  - __pycache__
+  - .git
+  - node_modules
+```
+
+## Command Options
+
+<ParamField path="entrypoint" type="string">
+  Script to run (e.g., `agent.py`, `src/main.ts`). If omitted, the CLI reads from `superserve.yaml`
+</ParamField>
+
+<ParamField path="--name" type="string">
+  Agent name (lowercase, alphanumeric, hyphens only). Defaults to directory name
+</ParamField>
+
+<ParamField path="--port" type="number">
+  Enable HTTP proxy mode and forward requests to this port. Use this for agents that expose HTTP endpoints
+</ParamField>
+
+<ParamField path="--dir" type="string" default=".">
+  Project directory to deploy. Defaults to current directory
+</ParamField>
+
+<ParamField path="--json" type="flag" default="false">
+  Output deployment result as JSON instead of interactive progress
+</ParamField>
+
+<ParamField path="-y, --yes" type="flag" default="false">
+  Skip confirmation when redeploying an existing agent
+</ParamField>
+
+## Examples
+
+### Deploy with Custom Name
+
+```bash
+superserve deploy agent.py --name my-production-agent
+```
+
+### Deploy from Different Directory
+
+```bash
+superserve deploy --dir ./projects/my-agent
+```
+
+### HTTP Proxy Mode
+
+Deploy an agent that listens on port 8000:
+
+```bash
+superserve deploy server.py --port 8000
+```
+
+### Redeploy Without Confirmation
+
+```bash
+superserve deploy agent.py -y
+```
+
+### JSON Output (for CI/CD)
+
+```bash
+superserve deploy agent.py --json
+```
+
+```json
+{
+  "id": "agt_abc123def456",
+  "name": "my-agent",
+  "command": "python agent.py",
+  "deps_status": "ready",
+  "created_at": "2026-03-09T10:30:00Z",
+  "updated_at": "2026-03-09T10:30:00Z"
+}
+```
+
+## Deploy Workflow
+
+1. **Package** - Creates a tarball of your project directory
+2. **Upload** - Sends the tarball to Superserve Cloud
+3. **Build** - Installs dependencies in the sandbox
+4. **Ready** - Agent is deployed and ready to run
+
+### Example Output
+
+```bash
+superserve deploy agent.py
+```
+
+```
+  ✓ Packaging project... (1.2 MB)
+  ✓ Uploading to Superserve...
+  ✓ Installing dependencies... (8.3s)
+
+  Deployed 'my-agent' in 9.8s
+
+  Set your secrets before running:
+
+    superserve secrets set my-agent ANTHROPIC_API_KEY=...
+
+  Run your agent:
+
+    superserve run my-agent "your prompt here"
+
+  Or try it in the Playground:
+  https://playground.superserve.ai/agents/agt_abc123def456/
+```
+
+## Redeploying
+
+If an agent with the same name exists, the CLI prompts for confirmation:
+
+```
+Agent 'my-agent' already exists. Redeploy? (y/N)
+```
+
+Type `y` to redeploy, or use `--yes` to skip the prompt:
+
+```bash
+superserve deploy agent.py --yes
+```
+
+## File Ignoring
+
+By default, the CLI includes all files in your project directory. Use the `ignore` field in `superserve.yaml` to exclude files:
+
+```yaml
+ignore:
+  - .venv
+  - __pycache__
+  - .git
+  - node_modules
+  - .env
+  - "*.pyc"
+  - .DS_Store
+```
+
+Patterns follow `.gitignore` syntax.
+
+<Warning>
+  Never deploy `.env` files with secrets. Use `superserve secrets set` instead.
+</Warning>
+
+## Dependency Installation
+
+Superserve automatically installs dependencies based on files in your project:
+
+| File | Action |
+|------|--------|
+| `requirements.txt` | `pip install -r requirements.txt` |
+| `pyproject.toml` | `pip install -e .` |
+| `package.json` | `npm install` or `bun install` |
+
+Dependency installation happens in the cloud and may take 5-60 seconds.
+
+### Build Status
+
+While dependencies install, the agent status is `DEPLOYING`. Once complete, it changes to `READY`.
+
+Check status with:
+
+```bash
+superserve agents get my-agent
+```
+
+### Build Failures
+
+If dependency installation fails:
+
+```
+Agent created but dependency install failed.
+Fix your requirements and run:
+
+  superserve deploy
+```
+
+1. Check your `requirements.txt` or `package.json` for errors
+2. Ensure all dependencies are compatible with Linux x86_64
+3. Redeploy with `superserve deploy`
+
+## Deployment Limits
+
+- **Max tarball size**: 100 MB (uncompressed)
+- **Max files**: 10,000
+- **Build timeout**: 5 minutes
+
+If you hit these limits, use the `ignore` field to exclude large directories.
+
+## Troubleshooting
+
+### "Entrypoint file not found"
+
+Verify the file exists:
+
+```bash
+ls agent.py
+```
+
+If deploying from a different directory, use `--dir`:
+
+```bash
+superserve deploy agent.py --dir ./my-project
+```
+
+### "Usage: superserve deploy \<entrypoint\> or create a superserve.yaml"
+
+You must either:
+- Provide an entrypoint: `superserve deploy agent.py`
+- Create a config: `superserve init` then `superserve deploy`
+
+### Build Timeout
+
+If dependency installation takes longer than 5 minutes:
+
+```
+Dependency install is still running. Check status with:
+
+  superserve agents get my-agent
+```
+
+This usually means a dependency is compiling from source. Consider:
+- Using pre-built wheels
+- Splitting complex dependencies into separate agents
+- Contacting support if the issue persists

@@ -1,0 +1,540 @@
+---
+title: Streaming
+description: Handle real-time agent responses with Server-Sent Events
+---
+
+Superserve agents can stream responses in real-time using Server-Sent Events (SSE). The SDK provides the `AgentStream` class to consume these events as async iterables.
+
+## Basic Streaming
+
+Use `client.stream()` or `session.stream()` to get an `AgentStream`:
+
+```typescript
+import Superserve from '@superserve/sdk'
+
+const client = new Superserve({ apiKey: 'ss_...' })
+
+const stream = client.stream('my-agent', {
+  message: 'Write a report about TypeScript'
+})
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk)
+}
+
+console.log('\nDone!')
+```
+
+## AgentStream API
+
+The `AgentStream` class provides multiple ways to consume events:
+
+### textStream
+
+An async iterable that yields only text chunks:
+
+```typescript
+const stream = client.stream('my-agent', {
+  message: 'Hello'
+})
+
+for await (const text of stream.textStream) {
+  process.stdout.write(text)
+}
+```
+
+### Iterating All Events
+
+Iterate over all event types:
+
+```typescript
+for await (const event of stream) {
+  switch (event.type) {
+    case 'text':
+      process.stdout.write(event.content)
+      break
+    case 'tool-start':
+      console.log(`\n[Using ${event.name}]`)
+      break
+    case 'tool-end':
+      console.log(`[Completed in ${event.duration}ms]`)
+      break
+    case 'run-completed':
+      console.log('\nRun completed!')
+      break
+    case 'run-failed':
+      console.error('Run failed:', event.error)
+      break
+  }
+}
+```
+
+### result
+
+A promise that resolves with the final `RunResult` once the stream completes:
+
+```typescript
+const stream = client.stream('my-agent', {
+  message: 'Analyze this code'
+})
+
+// Consume the stream
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk)
+}
+
+// Get the final result
+const result = await stream.result
+console.log('\nTotal duration:', result.duration, 'ms')
+console.log('Tools used:', result.toolCalls.length)
+```
+
+If you access `result` without iterating the stream, it will automatically consume the stream in the background:
+
+```typescript
+const stream = client.stream('my-agent', { message: 'Hello' })
+
+// Auto-consumes the stream
+const result = await stream.result
+console.log(result.text)
+```
+
+### abort()
+
+Cancel a stream in progress:
+
+```typescript
+const stream = client.stream('my-agent', {
+  message: 'Write a very long document'
+})
+
+setTimeout(() => {
+  stream.abort()
+  console.log('\nStream aborted!')
+}, 5000)
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk)
+}
+```
+
+## Event Types
+
+The SDK emits the following event types:
+
+### TextEvent
+
+```typescript
+interface TextEvent {
+  type: 'text'
+  content: string
+}
+```
+
+Emitted for each chunk of text from the agent.
+
+### ToolStartEvent
+
+```typescript
+interface ToolStartEvent {
+  type: 'tool-start'
+  name: string
+  input: unknown
+}
+```
+
+Emitted when the agent starts using a tool.
+
+### ToolEndEvent
+
+```typescript
+interface ToolEndEvent {
+  type: 'tool-end'
+  duration: number
+}
+```
+
+Emitted when a tool invocation completes. `duration` is in milliseconds.
+
+### RunCompletedEvent
+
+```typescript
+interface RunCompletedEvent {
+  type: 'run-completed'
+  duration: number
+  maxTurnsReached: boolean
+}
+```
+
+Emitted when the agent finishes successfully.
+
+### RunFailedEvent
+
+```typescript
+interface RunFailedEvent {
+  type: 'run-failed'
+  error: string
+}
+```
+
+Emitted when the run fails.
+
+## Callbacks
+
+You can provide callbacks instead of manually iterating:
+
+```typescript
+const stream = client.stream('my-agent', {
+  message: 'Write a poem',
+  
+  onText: (text) => {
+    process.stdout.write(text)
+  },
+  
+  onToolStart: (event) => {
+    console.log(`\n[Tool: ${event.name}]`)
+    console.log('Input:', JSON.stringify(event.input, null, 2))
+  },
+  
+  onToolEnd: (event) => {
+    console.log(`[Completed in ${event.duration}ms]`)
+  },
+  
+  onFinish: (result) => {
+    console.log('\n\nFinal result:')
+    console.log('Text length:', result.text.length)
+    console.log('Tools used:', result.toolCalls.length)
+    console.log('Duration:', result.duration, 'ms')
+  },
+  
+  onError: (error) => {
+    console.error('Stream error:', error)
+  }
+})
+
+// Wait for completion
+await stream.result
+```
+
+### Callback Options
+
+<ParamField path="onText" type="(text: string) => void">
+  Called for each text chunk
+</ParamField>
+
+<ParamField path="onToolStart" type="(event: ToolStartEvent) => void">
+  Called when a tool starts executing
+</ParamField>
+
+<ParamField path="onToolEnd" type="(event: ToolEndEvent) => void">
+  Called when a tool completes
+</ParamField>
+
+<ParamField path="onFinish" type="(result: RunResult) => void">
+  Called when the run completes successfully
+</ParamField>
+
+<ParamField path="onError" type="(error: Error) => void">
+  Called on errors
+</ParamField>
+
+## Examples
+
+### Console Progress Indicator
+
+```typescript
+let dotCount = 0
+
+const stream = client.stream('my-agent', {
+  message: 'Analyze this codebase',
+  
+  onText: (text) => {
+    process.stdout.write(text)
+  },
+  
+  onToolStart: (event) => {
+    console.log(`\n⏳ Using ${event.name}...`)
+    const interval = setInterval(() => {
+      process.stdout.write('.')
+      dotCount++
+    }, 500)
+    
+    // Store interval to clear later
+    event.input.__interval = interval
+  },
+  
+  onToolEnd: (event) => {
+    clearInterval(event.input?.__interval)
+    console.log(`✓ Done (${event.duration}ms)`)
+  }
+})
+
+await stream.result
+```
+
+### Building a Progress Bar
+
+```typescript
+import { SingleBar } from 'cli-progress'
+
+const bar = new SingleBar({})
+bar.start(100, 0)
+
+let progress = 0
+const stream = client.stream('my-agent', {
+  message: 'Generate a report',
+  
+  onText: () => {
+    progress += 1
+    bar.update(Math.min(progress, 90))
+  },
+  
+  onFinish: () => {
+    bar.update(100)
+    bar.stop()
+    console.log('Complete!')
+  }
+})
+
+await stream.result
+```
+
+### Web Server Integration
+
+Stream agent responses to HTTP clients:
+
+```typescript
+import express from 'express'
+import Superserve from '@superserve/sdk'
+
+const app = express()
+const client = new Superserve({ apiKey: 'ss_...' })
+
+app.get('/chat', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  
+  const stream = client.stream('my-agent', {
+    message: req.query.message as string,
+    
+    onText: (text) => {
+      res.write(`data: ${JSON.stringify({ type: 'text', content: text })}\n\n`)
+    },
+    
+    onToolStart: (event) => {
+      res.write(`data: ${JSON.stringify(event)}\n\n`)
+    },
+    
+    onFinish: (result) => {
+      res.write(`data: ${JSON.stringify({ type: 'done', result })}\n\n`)
+      res.end()
+    },
+    
+    onError: (error) => {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`)
+      res.end()
+    }
+  })
+  
+  // Cleanup on client disconnect
+  req.on('close', () => {
+    stream.abort()
+  })
+})
+
+app.listen(3000)
+```
+
+### Collecting All Events
+
+```typescript
+const events: StreamEvent[] = []
+
+for await (const event of stream) {
+  events.push(event)
+  
+  if (event.type === 'text') {
+    process.stdout.write(event.content)
+  }
+}
+
+console.log('\nTotal events received:', events.length)
+console.log('Text events:', events.filter(e => e.type === 'text').length)
+console.log('Tool events:', events.filter(e => e.type === 'tool-start').length)
+```
+
+## Streaming vs. Promise-Based
+
+Choose the right pattern for your use case:
+
+<Tabs>
+  <Tab title="Streaming">
+    Use streaming when you want:
+    - Real-time feedback in the UI
+    - Progress indicators
+    - Lower perceived latency
+    - Ability to cancel mid-execution
+
+    ```typescript
+    const stream = client.stream('my-agent', {
+      message: 'Write a long document',
+      onText: (text) => updateUI(text)
+    })
+
+    for await (const chunk of stream.textStream) {
+      process.stdout.write(chunk)
+    }
+    ```
+  </Tab>
+
+  <Tab title="Promise-Based">
+    Use promise-based when you:
+    - Only need the final result
+    - Don't need real-time updates
+    - Want simpler code
+
+    ```typescript
+    const result = await client.run('my-agent', {
+      message: 'Analyze this code'
+    })
+
+    console.log(result.text)
+    ```
+  </Tab>
+</Tabs>
+
+## Error Handling
+
+Handle errors during streaming:
+
+```typescript
+import { APIError } from '@superserve/sdk'
+
+try {
+  const stream = client.stream('my-agent', {
+    message: 'Hello'
+  })
+  
+  for await (const chunk of stream.textStream) {
+    process.stdout.write(chunk)
+  }
+  
+  const result = await stream.result
+  console.log('\nSuccess!')
+} catch (error) {
+  if (error instanceof APIError) {
+    console.error('API error:', error.status, error.message)
+  } else {
+    console.error('Unexpected error:', error)
+  }
+}
+```
+
+Or use the `onError` callback:
+
+```typescript
+const stream = client.stream('my-agent', {
+  message: 'Hello',
+  onError: (error) => {
+    console.error('Stream failed:', error.message)
+  }
+})
+
+await stream.result
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always handle errors">
+    Wrap stream iteration in try/catch or use the `onError` callback:
+
+    ```typescript
+    const stream = client.stream('my-agent', {
+      message: 'Hello',
+      onError: (error) => {
+        console.error('Failed:', error)
+        // Update UI, log to monitoring, etc.
+      }
+    })
+    ```
+  </Accordion>
+
+  <Accordion title="Only iterate once">
+    An `AgentStream` can only be iterated once. Attempting to iterate multiple times will throw an error:
+
+    ```typescript
+    const stream = client.stream('my-agent', { message: 'Hi' })
+    
+    for await (const chunk of stream.textStream) {
+      // First iteration works
+    }
+    
+    for await (const chunk of stream.textStream) {
+      // Throws: "AgentStream can only be iterated once"
+    }
+    ```
+
+    If you need to process events multiple times, collect them into an array:
+
+    ```typescript
+    const chunks: string[] = []
+    for await (const chunk of stream.textStream) {
+      chunks.push(chunk)
+    }
+    
+    // Now process chunks multiple times
+    console.log('First word:', chunks[0])
+    console.log('Full text:', chunks.join(''))
+    ```
+  </Accordion>
+
+  <Accordion title="Clean up on abort">
+    When aborting a stream, handle cleanup properly:
+
+    ```typescript
+    const stream = client.stream('my-agent', { message: 'Hi' })
+    
+    setTimeout(() => {
+      stream.abort()
+    }, 5000)
+    
+    try {
+      for await (const chunk of stream.textStream) {
+        process.stdout.write(chunk)
+      }
+    } catch (error) {
+      if (error.message.includes('abort')) {
+        console.log('\nStream was aborted')
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use callbacks for side effects">
+    Use callbacks for UI updates, logging, and other side effects:
+
+    ```typescript
+    const stream = client.stream('my-agent', {
+      message: 'Hello',
+      onText: (text) => updateUI(text),
+      onToolStart: (event) => logToolUsage(event),
+      onFinish: (result) => saveToDatabase(result)
+    })
+    
+    await stream.result
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Sessions" icon="messages" href="/sdk/sessions">
+    Build multi-turn streaming conversations
+  </Card>
+  <Card title="React Hooks" icon="react" href="/sdk/react-hooks">
+    Use streaming in React applications
+  </Card>
+</CardGroup>

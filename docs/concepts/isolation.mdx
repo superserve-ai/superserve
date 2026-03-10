@@ -1,0 +1,194 @@
+---
+title: "Isolation"
+description: "Every session gets its own Firecracker microVM with dedicated resources"
+---
+
+## Why isolation matters
+
+Agents execute arbitrary code, install packages, read files, and make HTTP requests. Without proper isolation, one session can:
+
+- Access credentials or data from another user's session
+- Consume resources that starve other agents
+- Leave behind state that affects the next session
+- Compromise the host system or other workloads
+
+Traditional containers share a kernel. If an agent finds a kernel exploit, it can escape and access other containers on the same host. For production AI agents handling sensitive data and credentials, that's not acceptable.
+
+## Firecracker microVMs
+
+Superserve runs every session in its own [Firecracker microVM](https://firecracker-microvm.github.io/) - the same technology AWS Lambda uses for isolation.
+
+<CardGroup cols={2}>
+  <Card title="Dedicated kernel" icon="server">
+    Each session gets its own Linux kernel. Kernel exploits are contained to that single VM.
+  </Card>
+  <Card title="Full root access" icon="user-crown">
+    The agent can install packages, modify system files, and execute any code. Nothing it does can touch other sessions.
+  </Card>
+  <Card title="Resource limits" icon="gauge-high">
+    CPU, memory, and disk are allocated per-session. One agent can't starve another.
+  </Card>
+  <Card title="Sub-second starts" icon="bolt">
+    Pre-provisioned VMs mean your agent starts almost instantly, not in minutes.
+  </Card>
+</CardGroup>
+
+### How it works
+
+```mermaid
+graph TD
+    A[User starts session] --> B[Firecracker spawns microVM]
+    B --> C[Dedicated kernel boots]
+    C --> D[/workspace mounted]
+    D --> E[Agent process starts]
+    E --> F[Session runs isolated]
+    F --> G[Session ends]
+    G --> H[VM destroyed]
+    H --> I[/workspace persists]
+```
+
+When you run `superserve run my-agent`, Superserve:
+
+1. Spawns a new Firecracker microVM with a fresh kernel
+2. Mounts the persistent `/workspace` filesystem specific to that session
+3. Injects environment variables and credentials (via the credential proxy)
+4. Starts your agent process inside the VM
+5. Routes all I/O through the streaming API
+
+When the session ends, the VM is destroyed. The next session gets a completely fresh environment.
+
+## What's isolated
+
+<AccordionGroup>
+  <Accordion title="Filesystem">
+    Each session starts with a clean root filesystem. Your agent can create files, install packages, modify `/etc/hosts`, or rewrite system configs - none of it affects other sessions.
+
+    The `/workspace` directory is the only state that persists. Everything else is ephemeral.
+
+    ```bash
+    # Inside one session
+    $ echo "malicious" > /etc/passwd
+    $ cat /etc/passwd
+    malicious
+
+    # Inside another session (even for the same agent)
+    $ cat /etc/passwd
+    root:x:0:0:root:/root:/bin/bash
+    ...
+    ```
+  </Accordion>
+
+  <Accordion title="Network">
+    Each microVM has its own network namespace. The agent can bind to any port, make outbound requests, or run servers - none of it is visible to other sessions.
+
+    All outbound HTTP requests route through Superserve's managed proxy, which:
+    - Injects API keys from secrets (see [Credentials](/concepts/credentials))
+    - Logs every request for the audit trail
+
+    ```python
+    # This works - every session has its own network stack
+    import http.server
+    server = http.server.HTTPServer(('0.0.0.0', 8080), handler)
+    server.serve_forever()
+    ```
+  </Accordion>
+
+  <Accordion title="Process tree">
+    Your agent runs as PID 1 inside the microVM. It can spawn child processes, fork, exec, or use multiprocessing without interfering with other sessions.
+
+    ```python
+    import subprocess
+    # This installs a package inside this session only
+    subprocess.run(["pip", "install", "requests"])
+    ```
+
+    The next session won't have `requests` installed unless it's in your `requirements.txt`.
+  </Accordion>
+
+  <Accordion title="Memory and CPU">
+    Each session gets allocated CPU and memory limits. One agent can't consume resources and starve others.
+
+    If your agent hits a memory limit or runs an infinite loop, it only affects that session. Other sessions continue running normally.
+  </Accordion>
+</AccordionGroup>
+
+## Isolation vs. persistence
+
+Superserve combines two seemingly contradictory goals:
+
+1. **Isolation** - Every session starts with a clean slate
+2. **Persistence** - Sessions remember context and files across turns
+
+The solution: the `/workspace` filesystem is the **only** state that persists between sessions.
+
+- When you resume a session, you get a **fresh microVM** with a **clean kernel and filesystem**
+- The platform mounts the **same `/workspace` directory** from the previous session
+- Your agent's conversation history is preserved (if your framework supports it)
+
+This gives you the security benefits of ephemeral environments with the UX of persistent state. See [Persistence](/concepts/persistence) for details.
+
+## Security model
+
+<Note>
+  Superserve's isolation is designed for multi-tenant production environments where sessions from different users run on shared infrastructure.
+</Note>
+
+### What Firecracker prevents
+
+- **Cross-session access**: One session cannot read files, memory, or network traffic from another session
+- **Host access**: The agent cannot escape the microVM and access the host OS or other workloads
+- **Resource exhaustion**: CPU and memory limits prevent one session from affecting others
+
+### What you still need to handle
+
+- **Input validation**: Your agent should validate and sanitize user input before executing code or making API calls
+- **Prompt injection**: The isolation doesn't protect against prompt attacks - use a robust system prompt and framework best practices
+- **External API security**: If your agent calls external APIs, ensure those APIs have proper authentication and authorization
+
+## Isolation in the SDK
+
+Every `run()` or `stream()` call creates a new isolated session unless you explicitly pass a `sessionId`:
+
+```typescript
+import Superserve from "@superserve/sdk"
+
+const client = new Superserve({ apiKey: "your-api-key" })
+
+// Each of these runs in its own isolated microVM
+const r1 = await client.run("my-agent", { message: "Hello" })
+const r2 = await client.run("my-agent", { message: "Hello" })
+
+// These run in the SAME microVM (same session)
+const session = await client.createSession("my-agent")
+const s1 = await session.run("Hello")
+const s2 = await session.run("What did I just say?") // Agent remembers
+```
+
+See [Sessions](/concepts/sessions) for session lifecycle details.
+
+## Performance
+
+Firecracker microVMs are designed for high-density, multi-tenant workloads:
+
+- **Sub-second cold starts**: Pre-provisioned VMs mean your agent starts in milliseconds, not minutes
+- **Low overhead**: Firecracker adds ~5MB of memory overhead per VM
+- **Efficient snapshotting**: The platform can snapshot and restore VMs for even faster starts
+
+For most agents, the isolation overhead is imperceptible compared to LLM inference time.
+
+---
+
+<CardGroup cols={2}>
+  <Card title="Persistence" icon="hard-drive" href="/concepts/persistence">
+    How /workspace survives across sessions
+  </Card>
+  <Card title="Credentials" icon="lock" href="/concepts/credentials">
+    How secrets are injected without exposing them
+  </Card>
+  <Card title="Sessions" icon="messages" href="/concepts/sessions">
+    Multi-turn conversations and session lifecycle
+  </Card>
+  <Card title="Deploy" icon="wand-magic-sparkles" href="/cli/deploy">
+    How your code runs inside the microVM
+  </Card>
+</CardGroup>

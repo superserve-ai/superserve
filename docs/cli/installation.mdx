@@ -1,0 +1,167 @@
+---
+title: Installation
+description: Install the Superserve CLI on macOS, Linux, or Windows
+---
+
+The Superserve CLI is the primary interface for deploying and managing AI agents on Superserve Cloud.
+
+## Install via Shell Script (Recommended)
+
+The fastest way to install the CLI on macOS or Linux:
+
+<CodeGroup>
+```bash macOS/Linux
+curl -fsSL https://superserve.ai/install | sh
+```
+
+```bash Windows (WSL)
+curl -fsSL https://superserve.ai/install | sh
+```
+</CodeGroup>
+
+This script downloads the latest binary and adds it to your PATH.
+
+## Install via npm
+
+If you have Node.js installed, you can install the CLI globally via npm:
+
+<CodeGroup>
+```bash npm
+npm install -g @superserve/cli
+```
+
+```bash yarn
+yarn global add @superserve/cli
+```
+
+```bash pnpm
+pnpm add -g @superserve/cli
+```
+
+```bash bun
+bun add -g @superserve/cli
+```
+</CodeGroup>
+
+## Install via Homebrew
+
+For macOS users with Homebrew:
+
+```bash
+brew install superserve-ai/tap/superserve
+```
+
+## Verify Installation
+
+Confirm the CLI is installed correctly:
+
+```bash
+superserve --version
+```
+
+You should see output like:
+
+```
+1.1.0
+```
+
+## Next Steps
+
+Once installed, authenticate with Superserve Cloud:
+
+```bash
+superserve login
+```
+
+See the [Authentication](/cli/authentication) page for details.
+
+## System Requirements
+
+- **macOS**: 10.15 or later
+- **Linux**: Any modern distribution with glibc 2.31+
+- **Windows**: WSL 2 required
+- **Node.js** (for npm install): 18.0.0 or later
+
+## Updating
+
+### Shell Install
+
+Re-run the install script:
+
+```bash
+curl -fsSL https://superserve.ai/install | sh
+```
+
+### npm
+
+```bash
+npm update -g @superserve/cli
+```
+
+### Homebrew
+
+```bash
+brew upgrade superserve
+```
+
+## Uninstalling
+
+### Shell Install
+
+Remove the binary from your PATH:
+
+```bash
+rm $(which superserve)
+```
+
+### npm
+
+```bash
+npm uninstall -g @superserve/cli
+```
+
+### Homebrew
+
+```bash
+brew uninstall superserve
+```
+
+## Global Options
+
+The CLI supports these global options on all commands:
+
+<ParamField path="--version" type="flag" default="false">
+  Display the CLI version number
+</ParamField>
+
+<ParamField path="--no-color" type="flag" default="false">
+  Disable colored output in the terminal
+</ParamField>
+
+<ParamField path="--json" type="flag" default="false">
+  Output results as JSON (supported on most commands)
+</ParamField>
+
+## Troubleshooting
+
+### Command Not Found
+
+If `superserve` is not found after installation:
+
+1. Close and reopen your terminal
+2. Check your PATH includes the installation directory
+3. For npm installs, verify npm global bin is in your PATH:
+
+```bash
+echo $PATH | grep $(npm config get prefix)/bin
+```
+
+### Permission Denied
+
+If you see permission errors with npm:
+
+```bash
+sudo npm install -g @superserve/cli
+```
+
+Or configure npm to use a user-owned directory for global packages.

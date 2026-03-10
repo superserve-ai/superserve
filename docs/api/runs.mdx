@@ -1,0 +1,336 @@
+---
+title: Runs
+description: Send messages to agents and stream real-time responses
+---
+
+Runs represent individual message exchanges with an agent. Each run streams events via Server-Sent Events (SSE) to provide real-time updates on the agent's progress.
+
+## Send Message (Streaming)
+
+Send a message to an agent session and receive a streaming response.
+
+```http
+POST /v1/sessions/{session_id}/messages
+Authorization: Bearer YOUR_API_TOKEN
+Content-Type: application/json
+Accept: text/event-stream
+```
+
+**Path Parameters:**
+
+<ParamField path="session_id" type="string" required>
+  Session ID (e.g., `ses_xyz789`)
+</ParamField>
+
+**Request Body:**
+
+<ParamField body="prompt" type="string" required>
+  Message to send to the agent
+</ParamField>
+
+**Example Request:**
+
+```json
+{
+  "prompt": "What's the weather like in San Francisco?"
+}
+```
+
+## Server-Sent Events (SSE)
+
+The response is a stream of Server-Sent Events. Each event has a `type` and `data` field.
+
+### Event Format
+
+```
+event: message.delta
+data: {"content":"Hello"}
+
+event: tool.start
+data: {"tool":"get_weather","input":{"city":"San Francisco"}}
+
+event: run.completed
+data: {"duration_ms":1234}
+```
+
+## Run Event Types
+
+### message.delta
+
+Streamed text chunk from the agent's response.
+
+<ResponseField name="type" type="string" required>
+  Always `"message.delta"`
+</ResponseField>
+
+<ResponseField name="data.content" type="string">
+  Text content to append to the response
+</ResponseField>
+
+**Example:**
+
+```json
+{
+  "type": "message.delta",
+  "data": {
+    "content": "The weather in San Francisco is "
+  }
+}
+```
+
+### tool.start
+
+Agent started using a tool.
+
+<ResponseField name="type" type="string" required>
+  Always `"tool.start"`
+</ResponseField>
+
+<ResponseField name="data.tool" type="string">
+  Name of the tool being invoked
+</ResponseField>
+
+<ResponseField name="data.input" type="unknown">
+  Input parameters passed to the tool
+</ResponseField>
+
+**Example:**
+
+```json
+{
+  "type": "tool.start",
+  "data": {
+    "tool": "get_weather",
+    "input": {
+      "city": "San Francisco",
+      "units": "celsius"
+    }
+  }
+}
+```
+
+### tool.end
+
+Tool invocation completed.
+
+<ResponseField name="type" type="string" required>
+  Always `"tool.end"`
+</ResponseField>
+
+<ResponseField name="data.duration_ms" type="number">
+  Tool execution time in milliseconds
+</ResponseField>
+
+**Example:**
+
+```json
+{
+  "type": "tool.end",
+  "data": {
+    "duration_ms": 342
+  }
+}
+```
+
+### run.started
+
+Run has started processing.
+
+<ResponseField name="type" type="string" required>
+  Always `"run.started"`
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  Empty object or metadata
+</ResponseField>
+
+**Example:**
+
+```json
+{
+  "type": "run.started",
+  "data": {}
+}
+```
+
+### run.completed
+
+Run finished successfully.
+
+<ResponseField name="type" type="string" required>
+  Always `"run.completed"`
+</ResponseField>
+
+<ResponseField name="data.duration_ms" type="number">
+  Total run duration in milliseconds
+</ResponseField>
+
+<ResponseField name="data.max_turns_reached" type="boolean">
+  Whether the agent hit its maximum turn limit
+</ResponseField>
+
+<ResponseField name="data.max_turns_message" type="string">
+  Message explaining the turn limit if reached
+</ResponseField>
+
+**Example:**
+
+```json
+{
+  "type": "run.completed",
+  "data": {
+    "duration_ms": 5432,
+    "max_turns_reached": false
+  }
+}
+```
+
+### run.failed
+
+Run encountered an error.
+
+<ResponseField name="type" type="string" required>
+  Always `"run.failed"`
+</ResponseField>
+
+<ResponseField name="data.error.message" type="string">
+  Error message describing what went wrong
+</ResponseField>
+
+**Example:**
+
+```json
+{
+  "type": "run.failed",
+  "data": {
+    "error": {
+      "message": "Agent exceeded memory limit"
+    }
+  }
+}
+```
+
+### run.cancelled
+
+Run was cancelled by the user or system.
+
+<ResponseField name="type" type="string" required>
+  Always `"run.cancelled"`
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  Empty object or cancellation metadata
+</ResponseField>
+
+**Example:**
+
+```json
+{
+  "type": "run.cancelled",
+  "data": {}
+}
+```
+
+### status
+
+General status update from the agent.
+
+<ResponseField name="type" type="string" required>
+  Always `"status"`
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  Status information (structure varies)
+</ResponseField>
+
+### heartbeat
+
+Keep-alive event to prevent connection timeout.
+
+<ResponseField name="type" type="string" required>
+  Always `"heartbeat"`
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  Empty object
+</ResponseField>
+
+## TypeScript Example
+
+```typescript
+import { parseSSEStream } from './streaming'
+
+const response = await fetch(
+  'https://api.superserve.ai/v1/sessions/ses_xyz789/messages',
+  {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_TOKEN',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ prompt: 'Hello!' })
+  }
+)
+
+for await (const event of parseSSEStream(response)) {
+  if (event.type === 'message.delta') {
+    process.stdout.write(event.data.content ?? '')
+  } else if (event.type === 'tool.start') {
+    console.log(`\nUsing tool: ${event.data.tool}`)
+  } else if (event.type === 'run.completed') {
+    console.log(`\nCompleted in ${event.data.duration_ms}ms`)
+  }
+}
+```
+
+## Using the SDK
+
+The Superserve SDK handles SSE parsing automatically:
+
+```typescript
+import Superserve from '@superserve/sdk'
+
+const client = new Superserve({ apiKey: 'YOUR_API_TOKEN' })
+
+// Streaming
+const stream = client.stream('my-agent', {
+  message: 'Hello!'
+})
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk)
+}
+
+// One-shot (waits for full response)
+const result = await client.run('my-agent', {
+  message: 'Hello!'
+})
+console.log(result.text)
+```
+
+## Error Responses
+
+If the request fails before streaming starts, you'll receive a standard HTTP error response:
+
+<ResponseField name="status" type="number">
+  HTTP status code
+</ResponseField>
+
+<ResponseField name="detail" type="string">
+  Error message
+</ResponseField>
+
+<ResponseField name="details" type="object">
+  Additional error context
+</ResponseField>
+
+**Common Errors:**
+
+| Status | Message |
+|--------|----------|
+| 401 | Not authenticated |
+| 404 | Session not found |
+| 422 | Invalid message format |
+| 429 | Rate limit exceeded |
+
+If streaming has already started, errors are communicated via `run.failed` events.

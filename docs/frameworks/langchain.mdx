@@ -1,75 +1,380 @@
 ---
-title: "LangChain"
-description: "Deploy a LangChain agent with chains and retrieval"
+title: LangChain
+description: Deploy LangChain agents to Superserve
 icon: /images/langchain.svg
 ---
 
-LangChain ([Python](https://python.langchain.com/), [TypeScript](https://js.langchain.com/)) provides chains, agents, and retrieval pipelines for building complex LLM applications. Any LangChain agent that reads input and prints output deploys to Superserve with no changes.
+[LangChain](https://python.langchain.com/) is a popular framework for building applications with large language models. Superserve provides a production-ready deployment platform with isolation, persistence, and governance.
+
+## Quick Start
+
+<Steps>
+  <Step title="Install the CLI">
+    <CodeGroup>
+    ```bash curl
+    curl -fsSL https://superserve.ai/install | sh
+    ```
+    
+    ```bash npm
+    npm install -g @superserve/cli
+    ```
+    
+    ```bash Homebrew
+    brew install superserve-ai/tap/superserve
+    ```
+    </CodeGroup>
+  </Step>
+  
+  <Step title="Create your agent">
+    Create a file called `agent.py` with your LangChain application:
+    
+    ```python agent.py
+    """
+    Minimal chatbot built with LangChain deployed on Superserve.
+    """
+    
+    from langchain_core.messages import HumanMessage, SystemMessage
+    from langchain_openai import ChatOpenAI
+    
+    llm = ChatOpenAI(model="gpt-4o")
+    system = SystemMessage(content="You are a helpful assistant.")
+    
+    while True:
+        try:
+            user_input = input()
+        except EOFError:
+            break
+        response = llm.invoke([system, HumanMessage(content=user_input)])
+        print(response.content)
+    ```
+  </Step>
+  
+  <Step title="Deploy your agent">
+    Log in and deploy your agent:
+    
+    ```bash
+    superserve login
+    superserve deploy agent.py --name chatbot
+    ```
+  </Step>
+  
+  <Step title="Set your API key">
+    Configure your OpenAI API key as a secret:
+    
+    ```bash
+    superserve secrets set chatbot OPENAI_API_KEY=sk-...
+    ```
+    
+    <Info>
+    Secrets are encrypted at rest and injected at the network level. The agent never sees them in logs or LLM context.
+    </Info>
+  </Step>
+  
+  <Step title="Run your agent">
+    Start an interactive session:
+    
+    ```bash
+    superserve run chatbot
+    ```
+    
+    ```
+    You > What is the capital of France?
+    
+    Agent > The capital of France is Paris.
+    
+    Completed in 1.2s
+    ```
+  </Step>
+</Steps>
+
+## Using Different LLM Providers
+
+LangChain supports multiple LLM providers. Here are some examples:
 
 <CodeGroup>
+
+```python OpenAI
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(model="gpt-4o")
+```
+
+```python Anthropic
+from langchain_anthropic import ChatAnthropic
+
+llm = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+```
+
+```python Google
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+llm = ChatGoogleGenerativeAI(model="gemini-pro")
+```
+
+```python Cohere
+from langchain_cohere import ChatCohere
+
+llm = ChatCohere(model="command-r-plus")
+```
+
+</CodeGroup>
+
+Make sure to set the appropriate API key:
+
+```bash
+# For OpenAI
+superserve secrets set chatbot OPENAI_API_KEY=sk-...
+
+# For Anthropic
+superserve secrets set chatbot ANTHROPIC_API_KEY=sk-ant-...
+
+# For Google
+superserve secrets set chatbot GOOGLE_API_KEY=...
+
+# For Cohere
+superserve secrets set chatbot COHERE_API_KEY=...
+```
+
+## Conversation Memory
+
+Add conversation memory to maintain context across turns:
 
 ```python agent.py
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from langchain.memory import ConversationBufferMemory
+from langchain.chains import ConversationChain
 
 llm = ChatOpenAI(model="gpt-4o")
-system = SystemMessage(content="You are a helpful assistant.")
+memory = ConversationBufferMemory()
+conversation = ConversationChain(
+    llm=llm,
+    memory=memory,
+    verbose=False
+)
 
 while True:
     try:
         user_input = input()
     except EOFError:
         break
-    response = llm.invoke([system, HumanMessage(content=user_input)])
-    print(response.content)
+    response = conversation.predict(input=user_input)
+    print(response)
 ```
 
-```typescript agent.ts
-import { HumanMessage, SystemMessage } from "@langchain/core/messages"
-import { ChatOpenAI } from "@langchain/openai"
-import { createInterface } from "readline"
+## Adding Tools
 
-const llm = new ChatOpenAI({ model: "gpt-4o" })
-const system = new SystemMessage("You are a helpful assistant.")
+LangChain supports tools for extending agent capabilities:
 
-const rl = createInterface({ input: process.stdin })
-rl.on("line", async (line) => {
-  const response = await llm.invoke([system, new HumanMessage(line)])
-  console.log(response.content)
-})
+```python agent.py
+from langchain_openai import ChatOpenAI
+from langchain.agents import AgentExecutor, create_tool_calling_agent, tool
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage
+
+@tool
+def get_weather(location: str) -> str:
+    """Get the current weather for a location.
+    
+    Args:
+        location: The city name
+    """
+    # Your weather API logic here
+    return f"The weather in {location} is sunny."
+
+llm = ChatOpenAI(model="gpt-4o")
+tools = [get_weather]
+
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are a helpful weather assistant."),
+    ("human", "{input}"),
+    ("placeholder", "{agent_scratchpad}"),
+])
+
+agent = create_tool_calling_agent(llm, tools, prompt)
+agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=False)
+
+while True:
+    try:
+        user_input = input()
+    except EOFError:
+        break
+    result = agent_executor.invoke({"input": user_input})
+    print(result["output"])
 ```
 
-</CodeGroup>
+## RAG (Retrieval-Augmented Generation)
 
-<CodeGroup>
+Build a RAG system with LangChain and persist the vector store:
 
-```txt requirements.txt
-langchain-openai
+```python agent.py
+from pathlib import Path
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain.chains import RetrievalQA
+from langchain_core.documents import Document
+
+# Persistent storage
+WORKSPACE = Path("/workspace")
+VECTOR_STORE_PATH = WORKSPACE / "vector_store"
+
+llm = ChatOpenAI(model="gpt-4o")
+embeddings = OpenAIEmbeddings()
+
+# Load or create vector store
+if VECTOR_STORE_PATH.exists():
+    vectorstore = FAISS.load_local(
+        str(VECTOR_STORE_PATH),
+        embeddings,
+        allow_dangerous_deserialization=True
+    )
+    print("Loaded existing vector store")
+else:
+    # Initialize with sample documents
+    documents = [
+        Document(page_content="Paris is the capital of France."),
+        Document(page_content="London is the capital of the UK."),
+    ]
+    vectorstore = FAISS.from_documents(documents, embeddings)
+    vectorstore.save_local(str(VECTOR_STORE_PATH))
+    print("Created new vector store")
+
+qa_chain = RetrievalQA.from_chain_type(
+    llm=llm,
+    retriever=vectorstore.as_retriever(),
+)
+
+while True:
+    try:
+        user_input = input()
+    except EOFError:
+        break
+    result = qa_chain.invoke({"query": user_input})
+    print(result["result"])
 ```
 
-```json package.json
-{
-  "dependencies": {
-    "@langchain/core": "latest",
-    "@langchain/openai": "latest"
-  }
-}
+## Deployment Configuration
+
+Create a `superserve.yaml` file for advanced deployment options:
+
+```yaml superserve.yaml
+name: chatbot
+command: python agent.py
+secrets:
+  - OPENAI_API_KEY
+ignore:
+  - "*.pyc"
+  - __pycache__
+  - .git
+  - vector_store/
 ```
 
-</CodeGroup>
+Then deploy with:
 
 ```bash
-superserve deploy agent.py     # or agent.ts
-superserve secrets set my-agent OPENAI_API_KEY=sk-...
-superserve run my-agent
+superserve deploy
 ```
 
-<Tip>
-  This example is stateless - each message is independent. For multi-turn memory, add `ChatMessageHistory` to maintain conversation context across turns. See the [LangChain memory docs](https://python.langchain.com/docs/concepts/memory/).
-</Tip>
+## Dependencies
 
----
+Create a `requirements.txt` with your dependencies:
 
-See the full example in [Python](https://github.com/superserve-ai/superserve/tree/main/examples/python/langchain/chatbot) or [TypeScript](https://github.com/superserve-ai/superserve/tree/main/examples/typescript/langchain/chatbot).
+```txt requirements.txt
+langchain
+langchain-openai
+langchain-anthropic
+langchain-community
+faiss-cpu
+python-dotenv
+```
 
-Integrate deployed agents into your apps using the [Superserve SDK](/sdk).
+Or use `pyproject.toml`:
+
+```toml pyproject.toml
+[project]
+name = "my-chatbot"
+version = "0.1.0"
+dependencies = [
+    "langchain",
+    "langchain-openai",
+    "langchain-anthropic",
+    "langchain-community",
+    "faiss-cpu",
+    "python-dotenv",
+]
+```
+
+Superserve automatically installs dependencies during deployment.
+
+## LangChain Expression Language (LCEL)
+
+Use LCEL for composable chains:
+
+```python agent.py
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+
+llm = ChatOpenAI(model="gpt-4o")
+
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are a helpful assistant."),
+    ("human", "{input}"),
+])
+
+chain = prompt | llm | StrOutputParser()
+
+while True:
+    try:
+        user_input = input()
+    except EOFError:
+        break
+    response = chain.invoke({"input": user_input})
+    print(response)
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Import error: No module named 'langchain'">
+    Make sure you have a `requirements.txt` or `pyproject.toml` with `langchain` and related packages listed. Redeploy your agent:
+    
+    ```bash
+    superserve deploy agent.py --name chatbot
+    ```
+  </Accordion>
+  
+  <Accordion title="API key not found">
+    Set your API key as a secret:
+    
+    ```bash
+    superserve secrets set chatbot OPENAI_API_KEY=sk-...
+    ```
+  </Accordion>
+  
+  <Accordion title="Vector store not persisting">
+    Make sure you're saving to `/workspace` and not excluding it in your `.gitignore` or `superserve.yaml`:
+    
+    ```python
+    VECTOR_STORE_PATH = Path("/workspace") / "vector_store"
+    vectorstore.save_local(str(VECTOR_STORE_PATH))
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Core Concepts" icon="book" href="/concepts/isolation">
+    Learn about isolation, persistence, and credentials
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/deploy">
+    Explore deployment options and CLI commands
+  </Card>
+  <Card title="Secrets Management" icon="key" href="/guides/secrets-management">
+    Manage API keys and environment variables
+  </Card>
+  <Card title="Session Management" icon="clock" href="/guides/session-management">
+    Work with persistent sessions
+  </Card>
+</CardGroup>

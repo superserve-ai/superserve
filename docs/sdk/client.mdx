@@ -1,0 +1,406 @@
+---
+title: Superserve Client
+description: Core client class for interacting with agents
+---
+
+The `Superserve` class is the main entry point for the SDK. It provides methods for running agents, creating sessions, and querying agent metadata.
+
+## Constructor
+
+```typescript
+import Superserve from '@superserve/sdk'
+
+const client = new Superserve(options)
+```
+
+### Options
+
+<ParamField path="apiKey" type="string" required>
+  Your API key from `superserve login`. Format: `ss_...`
+</ParamField>
+
+<ParamField path="baseUrl" type="string">
+  Base URL for the Superserve API. Defaults to `https://api.superserve.ai`
+</ParamField>
+
+<ParamField path="timeout" type="number">
+  Request timeout in milliseconds. Defaults to `30000` (30 seconds). Only applies to non-streaming requests.
+</ParamField>
+
+## Methods
+
+### run()
+
+Send a message to an agent and wait for the full response. This creates a session, sends the message, collects the response, and ends the session automatically.
+
+```typescript
+const result = await client.run('my-agent', {
+  message: 'Hello!'
+})
+
+console.log(result.text)
+console.log('Tool calls:', result.toolCalls)
+console.log('Duration:', result.duration, 'ms')
+```
+
+#### Parameters
+
+<ParamField path="agent" type="string" required>
+  Agent name or ID. Can be a human-readable name like `my-agent` or an ID like `agt_...`
+</ParamField>
+
+<ParamField path="options" type="RunOptions" required>
+  Configuration for the run
+</ParamField>
+
+<ParamField path="options.message" type="string" required>
+  The message to send to the agent
+</ParamField>
+
+<ParamField path="options.sessionId" type="string">
+  Reuse an existing session ID instead of creating a new one. Use this to continue a conversation.
+</ParamField>
+
+<ParamField path="options.idleTimeout" type="number">
+  Session idle timeout in seconds. Defaults to 1740 (29 minutes).
+</ParamField>
+
+#### Returns
+
+<ResponseField name="result" type="RunResult">
+  The complete response from the agent
+
+  <Expandable title="properties">
+    <ResponseField name="text" type="string">
+      The full text response from the agent
+    </ResponseField>
+
+    <ResponseField name="toolCalls" type="ToolCall[]">
+      Array of tool invocations made during the run
+    </ResponseField>
+
+    <ResponseField name="finishReason" type="'completed' | 'failed' | 'cancelled'">
+      Why the run finished
+    </ResponseField>
+
+    <ResponseField name="duration" type="number">
+      Total run duration in milliseconds
+    </ResponseField>
+
+    <ResponseField name="maxTurnsReached" type="boolean">
+      Whether the agent hit its maximum turn limit
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+#### ToolCall Type
+
+```typescript
+interface ToolCall {
+  name: string        // Tool name
+  input: unknown      // Input passed to the tool
+  duration: number    // Execution time in milliseconds
+}
+```
+
+### stream()
+
+Send a message to an agent and get a streaming response. Returns an `AgentStream` you can iterate over to receive events in real-time.
+
+```typescript
+const stream = client.stream('my-agent', {
+  message: 'Write a report about TypeScript',
+  onText: (text) => process.stdout.write(text),
+  onFinish: (result) => console.log('\nDone!', result)
+})
+
+// Iterate over text chunks
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk)
+}
+```
+
+#### Parameters
+
+<ParamField path="agent" type="string" required>
+  Agent name or ID
+</ParamField>
+
+<ParamField path="options" type="StreamOptions" required>
+  Configuration for the stream
+</ParamField>
+
+<ParamField path="options.message" type="string" required>
+  The message to send to the agent
+</ParamField>
+
+<ParamField path="options.sessionId" type="string">
+  Reuse an existing session ID
+</ParamField>
+
+<ParamField path="options.idleTimeout" type="number">
+  Session idle timeout in seconds
+</ParamField>
+
+<ParamField path="options.onText" type="(text: string) => void">
+  Callback invoked for each text chunk
+</ParamField>
+
+<ParamField path="options.onToolStart" type="(event: ToolStartEvent) => void">
+  Callback invoked when a tool starts executing
+</ParamField>
+
+<ParamField path="options.onToolEnd" type="(event: ToolEndEvent) => void">
+  Callback invoked when a tool completes
+</ParamField>
+
+<ParamField path="options.onFinish" type="(result: RunResult) => void">
+  Callback invoked when the run completes successfully
+</ParamField>
+
+<ParamField path="options.onError" type="(error: Error) => void">
+  Callback invoked on errors
+</ParamField>
+
+#### Returns
+
+<ResponseField name="stream" type="AgentStream">
+  An async iterable stream of events. See [Streaming](/sdk/streaming) for details.
+</ResponseField>
+
+### createSession()
+
+Create a multi-turn conversation session with an agent. Sessions maintain context across multiple messages.
+
+```typescript
+const session = await client.createSession('my-agent', {
+  title: 'Debug Session',
+  idleTimeout: 1800 // 30 minutes
+})
+
+console.log('Session ID:', session.id)
+```
+
+#### Parameters
+
+<ParamField path="agent" type="string" required>
+  Agent name or ID
+</ParamField>
+
+<ParamField path="options" type="SessionOptions">
+  Configuration for the session
+</ParamField>
+
+<ParamField path="options.title" type="string">
+  Optional title for the session
+</ParamField>
+
+<ParamField path="options.idleTimeout" type="number">
+  Idle timeout in seconds. Defaults to 1740 (29 minutes). Sessions are automatically ended after this period of inactivity.
+</ParamField>
+
+#### Returns
+
+<ResponseField name="session" type="Session">
+  A Session instance. See [Sessions](/sdk/sessions) for details.
+</ResponseField>
+
+### agents.list()
+
+List all deployed agents in your account.
+
+```typescript
+const agents = await client.agents.list()
+
+for (const agent of agents) {
+  console.log(agent.name, '—', agent.id)
+  console.log('  Status:', agent.depsStatus)
+  console.log('  Secrets:', agent.requiredSecrets)
+}
+```
+
+#### Returns
+
+<ResponseField name="agents" type="Agent[]">
+  Array of agent metadata objects
+
+  <Expandable title="Agent properties">
+    <ResponseField name="id" type="string">
+      Agent ID (format: `agt_...`)
+    </ResponseField>
+
+    <ResponseField name="name" type="string">
+      Human-readable agent name
+    </ResponseField>
+
+    <ResponseField name="command" type="string | null">
+      Start command for the agent
+    </ResponseField>
+
+    <ResponseField name="depsStatus" type="string">
+      Dependency installation status: `ready`, `installing`, or `failed`
+    </ResponseField>
+
+    <ResponseField name="depsError" type="string | null">
+      Error message if dependency installation failed
+    </ResponseField>
+
+    <ResponseField name="requiredSecrets" type="string[]">
+      List of required secret names
+    </ResponseField>
+
+    <ResponseField name="environmentKeys" type="string[]">
+      List of environment variable keys
+    </ResponseField>
+
+    <ResponseField name="createdAt" type="string">
+      ISO timestamp of when the agent was created
+    </ResponseField>
+
+    <ResponseField name="updatedAt" type="string">
+      ISO timestamp of the last update
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### agents.get()
+
+Get metadata for a specific agent by name or ID.
+
+```typescript
+const agent = await client.agents.get('my-agent')
+console.log('Agent ID:', agent.id)
+console.log('Status:', agent.depsStatus)
+```
+
+#### Parameters
+
+<ParamField path="nameOrId" type="string" required>
+  Agent name or ID
+</ParamField>
+
+#### Returns
+
+<ResponseField name="agent" type="Agent">
+  Agent metadata (same structure as `agents.list()` items)
+</ResponseField>
+
+## Error Handling
+
+The SDK throws typed errors for different failure scenarios:
+
+```typescript
+import { SuperserveError, APIError } from '@superserve/sdk'
+
+try {
+  const result = await client.run('my-agent', {
+    message: 'Hello'
+  })
+} catch (error) {
+  if (error instanceof APIError) {
+    console.error('API error:', error.status, error.message)
+    console.error('Details:', error.details)
+  } else if (error instanceof SuperserveError) {
+    console.error('SDK error:', error.message)
+  } else {
+    console.error('Unexpected error:', error)
+  }
+}
+```
+
+### APIError
+
+Thrown for HTTP errors from the Superserve API.
+
+<ResponseField name="status" type="number">
+  HTTP status code (e.g., 404, 500)
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Error message
+</ResponseField>
+
+<ResponseField name="details" type="Record<string, unknown>">
+  Additional error details from the API
+</ResponseField>
+
+### SuperserveError
+
+Base error class for all SDK errors.
+
+## Examples
+
+### One-shot with Error Handling
+
+```typescript
+import Superserve, { APIError } from '@superserve/sdk'
+
+const client = new Superserve({
+  apiKey: process.env.SUPERSERVE_API_KEY!
+})
+
+try {
+  const result = await client.run('my-agent', {
+    message: 'Analyze this codebase'
+  })
+
+  console.log(result.text)
+  
+  if (result.toolCalls.length > 0) {
+    console.log('\nTools used:')
+    for (const tool of result.toolCalls) {
+      console.log(`  - ${tool.name} (${tool.duration}ms)`)
+    }
+  }
+} catch (error) {
+  if (error instanceof APIError && error.status === 404) {
+    console.error('Agent not found. Did you deploy it?')
+  } else {
+    console.error('Failed to run agent:', error)
+  }
+}
+```
+
+### Streaming with Callbacks
+
+```typescript
+const stream = client.stream('my-agent', {
+  message: 'Write a poem',
+  onText: (text) => {
+    process.stdout.write(text)
+  },
+  onToolStart: (event) => {
+    console.log(`\n[Tool: ${event.name}]`)
+  },
+  onFinish: (result) => {
+    console.log(`\n\nCompleted in ${result.duration}ms`)
+  },
+  onError: (error) => {
+    console.error('Stream error:', error)
+  }
+})
+
+// Wait for completion
+await stream.result
+```
+
+### Custom Base URL
+
+```typescript
+// Point to a local development server
+const client = new Superserve({
+  apiKey: 'ss_dev',
+  baseUrl: 'http://localhost:8000'
+})
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Sessions" icon="messages" href="/sdk/sessions">
+    Build multi-turn conversations
+  </Card>
+  <Card title="Streaming" icon="signal-stream" href="/sdk/streaming">
+    Handle real-time agent responses
+  </Card>
+</CardGroup>

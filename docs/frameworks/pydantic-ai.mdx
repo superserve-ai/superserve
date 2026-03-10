@@ -1,15 +1,173 @@
 ---
-title: "Pydantic AI"
-description: "Deploy a type-safe agent with structured outputs"
+title: Pydantic AI
+description: Deploy Pydantic AI agents to Superserve
 icon: /images/pydantic.svg
 ---
 
-[Pydantic AI](https://ai.pydantic.dev/) brings type-safe, structured outputs to agent development. Define response schemas with Pydantic models and get validated, typed results from your LLM calls.
+[Pydantic AI](https://ai.pydantic.dev/) is a type-safe agent framework built on Pydantic. Superserve provides a production-ready deployment platform with isolation, persistence, and governance.
 
-```python agent.py
+## Quick Start
+
+<Steps>
+  <Step title="Install the CLI">
+    <CodeGroup>
+    ```bash curl
+    curl -fsSL https://superserve.ai/install | sh
+    ```
+    
+    ```bash npm
+    npm install -g @superserve/cli
+    ```
+    
+    ```bash Homebrew
+    brew install superserve-ai/tap/superserve
+    ```
+    </CodeGroup>
+  </Step>
+  
+  <Step title="Create your agent">
+    Create a file called `agent.py` with your Pydantic AI agent:
+    
+    ```python agent.py
+    """
+    Minimal chatbot built with Pydantic AI deployed on Superserve.
+    """
+    
+    from pydantic_ai import Agent
+    
+    agent = Agent("openai:gpt-4o", system_prompt="You are a helpful assistant.")
+    
+    while True:
+        try:
+            user_input = input()
+        except EOFError:
+            break
+        result = agent.run_sync(user_input)
+        print(result.output)
+    ```
+  </Step>
+  
+  <Step title="Deploy your agent">
+    Log in and deploy your agent:
+    
+    ```bash
+    superserve login
+    superserve deploy agent.py --name chatbot
+    ```
+  </Step>
+  
+  <Step title="Set your API key">
+    Configure your OpenAI API key as a secret:
+    
+    ```bash
+    superserve secrets set chatbot OPENAI_API_KEY=sk-...
+    ```
+    
+    <Info>
+    Secrets are encrypted at rest and injected at the network level. The agent never sees them in logs or LLM context.
+    </Info>
+  </Step>
+  
+  <Step title="Run your agent">
+    Start an interactive session:
+    
+    ```bash
+    superserve run chatbot
+    ```
+    
+    ```
+    You > What is the capital of France?
+    
+    Agent > The capital of France is Paris.
+    
+    Completed in 1.2s
+    ```
+  </Step>
+</Steps>
+
+## Configuration Options
+
+Pydantic AI supports various configuration options when creating an `Agent`:
+
+```python
 from pydantic_ai import Agent
 
-agent = Agent("openai:gpt-4o", system_prompt="You are a helpful assistant.")
+agent = Agent(
+    "openai:gpt-4o",                    # Model to use
+    system_prompt="You are a helpful assistant.",
+    temperature=0.7,                     # Sampling temperature
+    max_tokens=4096,                     # Maximum tokens per response
+)
+```
+
+### Model Selection
+
+Pydantic AI supports multiple LLM providers:
+
+- `openai:gpt-4o` - GPT-4 Omni (recommended)
+- `openai:gpt-4-turbo` - GPT-4 Turbo
+- `anthropic:claude-3-5-sonnet-20241022` - Claude 3.5 Sonnet
+- `google:gemini-pro` - Google Gemini Pro
+
+## Type-Safe Responses
+
+Pydantic AI uses Pydantic models for type-safe structured outputs:
+
+```python agent.py
+from pydantic import BaseModel
+from pydantic_ai import Agent
+
+class WeatherResponse(BaseModel):
+    """Structured weather response."""
+    location: str
+    temperature: float
+    conditions: str
+    humidity: int
+
+agent = Agent(
+    "openai:gpt-4o",
+    system_prompt="You are a weather assistant. Always respond with structured weather data.",
+    result_type=WeatherResponse,
+)
+
+while True:
+    try:
+        user_input = input()
+    except EOFError:
+        break
+    result = agent.run_sync(user_input)
+    weather = result.output
+    print(f"Location: {weather.location}")
+    print(f"Temperature: {weather.temperature}°F")
+    print(f"Conditions: {weather.conditions}")
+    print(f"Humidity: {weather.humidity}%")
+```
+
+## Adding Tools
+
+Pydantic AI supports tools with type-safe parameters:
+
+```python agent.py
+from pydantic_ai import Agent, RunContext, tool
+
+agent = Agent(
+    "openai:gpt-4o",
+    system_prompt="You are a helpful weather assistant.",
+)
+
+@agent.tool
+def get_weather(ctx: RunContext, location: str) -> str:
+    """Get the current weather for a location.
+    
+    Args:
+        ctx: The run context
+        location: The city name
+    
+    Returns:
+        Weather description
+    """
+    # Your weather API logic here
+    return f"The weather in {location} is sunny."
 
 while True:
     try:
@@ -20,22 +178,244 @@ while True:
     print(result.output)
 ```
 
-```txt requirements.txt
-pydantic-ai
+## Async Support
+
+For better performance with I/O operations, use async:
+
+```python agent.py
+import asyncio
+from pydantic_ai import Agent
+
+agent = Agent("openai:gpt-4o", system_prompt="You are a helpful assistant.")
+
+async def main():
+    while True:
+        try:
+            user_input = input()
+        except EOFError:
+            break
+        result = await agent.run(user_input)
+        print(result.output)
+
+asyncio.run(main())
 ```
+
+## Dependency Injection
+
+Pydantic AI supports dependency injection for sharing state across tools:
+
+```python agent.py
+from dataclasses import dataclass
+from pydantic_ai import Agent, RunContext
+
+@dataclass
+class AppDependencies:
+    """Application dependencies."""
+    api_key: str
+    base_url: str
+
+agent = Agent(
+    "openai:gpt-4o",
+    system_prompt="You are a helpful assistant.",
+    deps_type=AppDependencies,
+)
+
+@agent.tool
+def fetch_data(ctx: RunContext[AppDependencies], query: str) -> str:
+    """Fetch data from API."""
+    # Access dependencies via ctx.deps
+    api_key = ctx.deps.api_key
+    base_url = ctx.deps.base_url
+    # Your API logic here
+    return f"Fetched data for {query}"
+
+deps = AppDependencies(
+    api_key="your-api-key",
+    base_url="https://api.example.com",
+)
+
+while True:
+    try:
+        user_input = input()
+    except EOFError:
+        break
+    result = agent.run_sync(user_input, deps=deps)
+    print(result.output)
+```
+
+## Deployment Configuration
+
+Create a `superserve.yaml` file for advanced deployment options:
+
+```yaml superserve.yaml
+name: chatbot
+command: python agent.py
+secrets:
+  - OPENAI_API_KEY
+ignore:
+  - "*.pyc"
+  - __pycache__
+  - .git
+```
+
+Then deploy with:
 
 ```bash
-superserve deploy agent.py
-superserve secrets set my-agent OPENAI_API_KEY=sk-...
-superserve run my-agent
+superserve deploy
 ```
 
-<Tip>
-  Pydantic AI's `result_type` parameter lets you get structured, validated JSON instead of plain text - useful for agents that return data. See the [Pydantic AI results docs](https://ai.pydantic.dev/results/).
-</Tip>
+## Dependencies
 
----
+Create a `requirements.txt` with your dependencies:
 
-See the full [Python example](https://github.com/superserve-ai/superserve/tree/main/examples/python/pydantic-ai/chatbot).
+```txt requirements.txt
+pydantic-ai
+pydantic
+requests
+python-dotenv
+```
 
-Integrate deployed agents into your apps using the [Superserve SDK](/sdk).
+Or use `pyproject.toml`:
+
+```toml pyproject.toml
+[project]
+name = "my-chatbot"
+version = "0.1.0"
+dependencies = [
+    "pydantic-ai",
+    "pydantic",
+    "requests",
+    "python-dotenv",
+]
+```
+
+Superserve automatically installs dependencies during deployment.
+
+## Session Persistence
+
+The `/workspace` directory persists across turns and restarts. Here's an example that saves conversation history:
+
+```python agent.py
+import json
+from pathlib import Path
+from pydantic_ai import Agent
+
+# Persistent storage
+WORKSPACE = Path("/workspace")
+HISTORY_FILE = WORKSPACE / "conversation_history.json"
+
+def save_message(role: str, content: str):
+    """Save message to persistent storage."""
+    history = []
+    if HISTORY_FILE.exists():
+        history = json.loads(HISTORY_FILE.read_text())
+    history.append({"role": role, "content": content})
+    HISTORY_FILE.write_text(json.dumps(history, indent=2))
+
+agent = Agent("openai:gpt-4o", system_prompt="You are a helpful assistant with memory.")
+
+# Load conversation history
+if HISTORY_FILE.exists():
+    print("Resuming previous conversation...")
+
+while True:
+    try:
+        user_input = input()
+    except EOFError:
+        break
+    
+    save_message("user", user_input)
+    result = agent.run_sync(user_input)
+    print(result.output)
+    save_message("assistant", result.output)
+```
+
+## Validation and Error Handling
+
+Pydantic AI provides built-in validation for structured outputs:
+
+```python agent.py
+from pydantic import BaseModel, Field, field_validator
+from pydantic_ai import Agent
+
+class TaskPriority(BaseModel):
+    """Task with priority validation."""
+    title: str = Field(..., min_length=1, max_length=100)
+    priority: int = Field(..., ge=1, le=5)
+    description: str
+    
+    @field_validator("priority")
+    def validate_priority(cls, v):
+        if v < 1 or v > 5:
+            raise ValueError("Priority must be between 1 and 5")
+        return v
+
+agent = Agent(
+    "openai:gpt-4o",
+    system_prompt="You extract task information from user input.",
+    result_type=TaskPriority,
+)
+
+while True:
+    try:
+        user_input = input()
+    except EOFError:
+        break
+    try:
+        result = agent.run_sync(user_input)
+        task = result.output
+        print(f"Task: {task.title}")
+        print(f"Priority: {task.priority}/5")
+        print(f"Description: {task.description}")
+    except Exception as e:
+        print(f"Error: {e}")
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Import error: No module named 'pydantic_ai'">
+    Make sure you have a `requirements.txt` or `pyproject.toml` with `pydantic-ai` listed. Redeploy your agent:
+    
+    ```bash
+    superserve deploy agent.py --name chatbot
+    ```
+  </Accordion>
+  
+  <Accordion title="API key not found">
+    Set your API key as a secret:
+    
+    ```bash
+    superserve secrets set chatbot OPENAI_API_KEY=sk-...
+    ```
+  </Accordion>
+  
+  <Accordion title="Validation errors with structured outputs">
+    Check your Pydantic model definitions and ensure the system prompt guides the LLM to produce valid data:
+    
+    ```python
+    agent = Agent(
+        "openai:gpt-4o",
+        system_prompt="Always respond with valid JSON matching the WeatherResponse schema.",
+        result_type=WeatherResponse,
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Core Concepts" icon="book" href="/concepts/isolation">
+    Learn about isolation, persistence, and credentials
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/deploy">
+    Explore deployment options and CLI commands
+  </Card>
+  <Card title="Secrets Management" icon="key" href="/guides/secrets-management">
+    Manage API keys and environment variables
+  </Card>
+  <Card title="Session Management" icon="clock" href="/guides/session-management">
+    Work with persistent sessions
+  </Card>
+</CardGroup>

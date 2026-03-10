@@ -1,0 +1,112 @@
+---
+title: Framework Support
+description: Deploy agents built with any framework to Superserve
+---
+
+Superserve works with any agent framework. Whether you're using Claude Agent SDK, OpenAI Agents SDK, LangChain, Mastra, Pydantic AI, or a custom implementation, you can deploy to Superserve with one command.
+
+## Supported Frameworks
+
+<CardGroup cols={2}>
+  <Card title="Claude Agent SDK" icon="message" href="/frameworks/claude-agent-sdk">
+    Anthropic's official SDK for building agents with Claude
+  </Card>
+  <Card title="OpenAI Agents SDK" icon="robot" href="/frameworks/openai-agents-sdk">
+    OpenAI's Python SDK for building agentic applications
+  </Card>
+  <Card title="LangChain" icon="link" href="/frameworks/langchain">
+    The popular framework for building LLM applications
+  </Card>
+  <Card title="Mastra" icon="wand-magic-sparkles" href="/frameworks/mastra">
+    TypeScript framework for building AI agents
+  </Card>
+  <Card title="Pydantic AI" icon="circle-check" href="/frameworks/pydantic-ai">
+    Type-safe agent framework built on Pydantic
+  </Card>
+  <Card title="Custom Framework" icon="code" href="/frameworks/overview#custom-frameworks">
+    Use stdin/stdout for any custom implementation
+  </Card>
+</CardGroup>
+
+## How It Works
+
+Superserve detects your framework automatically by analyzing your code and dependencies. The deployment process is the same regardless of framework:
+
+<Steps>
+  <Step title="Write your agent">
+    Build your agent using your preferred framework. Follow the framework's own conventions and best practices.
+  </Step>
+  <Step title="Deploy to Superserve">
+    Run `superserve deploy agent.py` (or `agent.ts` for TypeScript frameworks). Superserve analyzes dependencies and builds a container image.
+  </Step>
+  <Step title="Set secrets">
+    Configure API keys with `superserve secrets set my-agent API_KEY=...`. Secrets are encrypted and injected securely at runtime.
+  </Step>
+  <Step title="Run your agent">
+    Start an interactive session with `superserve run my-agent`. Your agent runs in an isolated Firecracker microVM with persistent storage.
+  </Step>
+</Steps>
+
+## Framework Requirements
+
+All frameworks work with Superserve as long as they:
+
+- Accept input from stdin or expose a simple run loop
+- Output responses to stdout
+- Can be packaged as a Python or Node.js application
+
+Superserve automatically handles:
+
+- Dependency installation (pip, npm, bun, etc.)
+- Environment variable injection
+- Session persistence
+- Isolation and security
+
+## Custom Frameworks
+
+If you're using a custom framework or building your own agent from scratch, you can still deploy to Superserve. The only requirement is a simple stdin/stdout interface:
+
+```python agent.py
+import sys
+
+while True:
+    try:
+        user_input = input()
+    except EOFError:
+        break
+    
+    # Process input with your custom logic
+    response = your_agent_function(user_input)
+    print(response)
+```
+
+Deploy it like any other agent:
+
+```bash
+superserve deploy agent.py --name my-custom-agent
+superserve run my-custom-agent
+```
+
+## Language Support
+
+Superserve supports agents written in:
+
+- **Python** - Detected via `.py` extension or `pyproject.toml`/`requirements.txt`
+- **TypeScript/JavaScript** - Detected via `.ts`/`.js` extension or `package.json`
+
+Dependencies are installed automatically:
+
+- Python: `pip install` from `requirements.txt` or `pyproject.toml`
+- Node.js: `npm install` or `bun install` from `package.json`
+
+## Next Steps
+
+Explore the framework-specific guides to see complete working examples:
+
+<CardGroup cols={3}>
+  <Card title="Claude Agent SDK" href="/frameworks/claude-agent-sdk" />
+  <Card title="OpenAI Agents SDK" href="/frameworks/openai-agents-sdk" />
+  <Card title="LangChain" href="/frameworks/langchain" />
+  <Card title="Mastra" href="/frameworks/mastra" />
+  <Card title="Pydantic AI" href="/frameworks/pydantic-ai" />
+</CardGroup>

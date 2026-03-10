@@ -1,0 +1,229 @@
+---
+title: Agents
+description: Manage and deploy AI agents to Superserve
+---
+
+Agents are deployed AI assistants that run in sandboxed containers. Each agent has a unique ID (prefixed with `agt_`) and can be referenced by name or ID.
+
+## Base URL
+
+All agent endpoints are under:
+
+```
+https://api.superserve.ai/v1/agents
+```
+
+## Deploy Agent
+
+Deploy a new agent to Superserve.
+
+```http
+POST /v1/agents
+Authorization: Bearer YOUR_API_TOKEN
+Content-Type: multipart/form-data
+```
+
+**Request (multipart/form-data):**
+
+<ParamField body="file" type="file" required>
+  Tarball (.tar.gz) containing the agent code and dependencies
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Agent name (must be unique within your account)
+</ParamField>
+
+<ParamField body="command" type="string" required>
+  Command to start the agent (e.g., `bun run index.ts`)
+</ParamField>
+
+<ParamField body="config" type="string" required>
+  JSON-encoded configuration object from `superserve.yaml`
+</ParamField>
+
+**Response:**
+
+<ResponseField name="id" type="string" required>
+  Agent ID (prefixed with `agt_`)
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Agent name
+</ResponseField>
+
+<ResponseField name="command" type="string | null" required>
+  Start command for the agent
+</ResponseField>
+
+<ResponseField name="environment_keys" type="string[]" required>
+  Environment variable names available to the agent
+</ResponseField>
+
+<ResponseField name="required_secrets" type="string[]" required>
+  Secret keys that must be set before the agent can run
+</ResponseField>
+
+<ResponseField name="deps_status" type="string" required>
+  Dependency installation status: `pending`, `installing`, `ready`, or `failed`
+</ResponseField>
+
+<ResponseField name="deps_error" type="string | null" required>
+  Error message if dependency installation failed
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  ISO 8601 timestamp when the agent was created
+</ResponseField>
+
+<ResponseField name="updated_at" type="string" required>
+  ISO 8601 timestamp when the agent was last updated
+</ResponseField>
+
+**Example Response:**
+
+```json
+{
+  "id": "agt_abc123def456",
+  "name": "my-agent",
+  "command": "bun run index.ts",
+  "environment_keys": ["ANTHROPIC_API_KEY"],
+  "required_secrets": ["ANTHROPIC_API_KEY"],
+  "deps_status": "ready",
+  "deps_error": null,
+  "created_at": "2026-03-09T10:00:00Z",
+  "updated_at": "2026-03-09T10:00:00Z"
+}
+```
+
+## List Agents
+
+Retrieve all agents in your account.
+
+```http
+GET /v1/agents?limit=100
+Authorization: Bearer YOUR_API_TOKEN
+```
+
+**Query Parameters:**
+
+<ParamField query="limit" type="string" default="100">
+  Maximum number of agents to return
+</ParamField>
+
+**Response:**
+
+<ResponseField name="agents" type="array" required>
+  Array of agent objects (same schema as deploy response)
+</ResponseField>
+
+**Example Response:**
+
+```json
+{
+  "agents": [
+    {
+      "id": "agt_abc123",
+      "name": "my-agent",
+      "command": "bun run index.ts",
+      "environment_keys": ["ANTHROPIC_API_KEY"],
+      "required_secrets": ["ANTHROPIC_API_KEY"],
+      "deps_status": "ready",
+      "deps_error": null,
+      "created_at": "2026-03-09T10:00:00Z",
+      "updated_at": "2026-03-09T10:00:00Z"
+    }
+  ]
+}
+```
+
+## Get Agent
+
+Retrieve details for a specific agent.
+
+```http
+GET /v1/agents/{agent_id}
+Authorization: Bearer YOUR_API_TOKEN
+```
+
+**Path Parameters:**
+
+<ParamField path="agent_id" type="string" required>
+  Agent ID (e.g., `agt_abc123`)
+</ParamField>
+
+**Response:**
+
+Same schema as deploy response.
+
+**Example:**
+
+```json
+{
+  "id": "agt_abc123",
+  "name": "my-agent",
+  "command": "bun run index.ts",
+  "environment_keys": ["ANTHROPIC_API_KEY"],
+  "required_secrets": ["ANTHROPIC_API_KEY"],
+  "deps_status": "ready",
+  "deps_error": null,
+  "created_at": "2026-03-09T10:00:00Z",
+  "updated_at": "2026-03-09T10:00:00Z"
+}
+```
+
+## Delete Agent
+
+Delete an agent and all its sessions.
+
+```http
+DELETE /v1/agents/{agent_id}
+Authorization: Bearer YOUR_API_TOKEN
+```
+
+**Path Parameters:**
+
+<ParamField path="agent_id" type="string" required>
+  Agent ID (e.g., `agt_abc123`)
+</ParamField>
+
+**Response:**
+
+204 No Content on success.
+
+## Deployment Status
+
+The `deps_status` field indicates the current state of the agent's dependency installation:
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Dependencies queued for installation |
+| `installing` | Dependencies currently being installed |
+| `ready` | Agent is ready to receive requests |
+| `failed` | Dependency installation failed (see `deps_error`) |
+
+<Warning>
+You cannot create sessions or runs with an agent until `deps_status` is `ready`.
+</Warning>
+
+## Error Responses
+
+<ResponseField name="status" type="number">
+  HTTP status code
+</ResponseField>
+
+<ResponseField name="detail" type="string">
+  Error message
+</ResponseField>
+
+<ResponseField name="details" type="object">
+  Additional error context
+</ResponseField>
+
+**Common Errors:**
+
+| Status | Message | Hint |
+|--------|---------|------|
+| 401 | Not authenticated | Run `superserve login` to authenticate |
+| 404 | Agent not found | Run `superserve agents list` to see your agents |
+| 409 | Agent already exists | Use a different name or delete the existing agent |
+| 422 | Invalid input | Check your request parameters |

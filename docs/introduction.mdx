@@ -1,0 +1,146 @@
+---
+title: Introduction
+description: Deploy AI agents to isolated, persistent sandboxes
+---
+
+Superserve is the deployment platform for AI agents. Deploy Python and TypeScript agents to isolated, persistent sandboxes with one command.
+
+## Why Superserve
+
+Agents execute code, make HTTP requests, and manage credentials. In production, every session needs its own isolated environment with persistent state and governance. Building that yourself means stitching together containers, proxies, secret managers, and logging.
+
+**Superserve gives every agent a governed workspace out of the box.**
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Isolated by Default" icon="shield-halved">
+    Every session runs in its own Firecracker microVM. Nothing leaks between sessions or touches your infrastructure.
+  </Card>
+  <Card title="Nothing Disappears" icon="database">
+    The `/workspace` filesystem persists across turns, restarts, and days. Resume where you left off.
+  </Card>
+  <Card title="Credentials Stay Hidden" icon="lock">
+    A credential proxy injects API keys at the network level. The agent never sees them — they never appear in LLM context, logs, or tool outputs.
+  </Card>
+  <Card title="Any Framework" icon="puzzle-piece">
+    Claude Agent SDK, OpenAI Agents SDK, LangChain, Mastra, Pydantic AI, or plain stdin/stdout.
+  </Card>
+  <Card title="One Command" icon="terminal">
+    `superserve deploy agent.py`. No Dockerfile, no server code, no config files.
+  </Card>
+  <Card title="Real-time Streaming" icon="broadcast-tower">
+    Stream tokens and tool calls as they happen with Server-Sent Events.
+  </Card>
+  <Card title="Sub-second Cold Starts" icon="bolt">
+    Pre-provisioned containers mean your agent starts almost instantly.
+  </Card>
+  <Card title="Encrypted Secrets" icon="key">
+    Set environment variables with `superserve secrets set` — they're encrypted at rest and injected securely.
+  </Card>
+</CardGroup>
+
+## Quick Example
+
+Install the CLI:
+
+<CodeGroup>
+
+```bash curl
+curl -fsSL https://superserve.ai/install | sh
+```
+
+```bash npm
+npm install -g @superserve/cli
+```
+
+```bash Homebrew
+brew install superserve-ai/tap/superserve
+```
+
+</CodeGroup>
+
+Deploy your agent:
+
+```bash
+superserve login
+superserve deploy agent.py
+```
+
+Set secrets and run:
+
+```bash
+superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-...
+superserve run my-agent
+```
+
+```
+You > What is the capital of France?
+
+Agent > The capital of France is Paris.
+
+Completed in 1.2s
+
+You > And what's its population?
+
+Agent > Paris has approximately 2.1 million people in the city proper.
+
+Completed in 0.8s
+```
+
+## How It Works
+
+<Steps>
+  <Step title="Deploy your agent">
+    Run `superserve deploy agent.py` to package and upload your agent code. Superserve analyzes dependencies and builds a container image.
+  </Step>
+  <Step title="Start a session">
+    When you run `superserve run my-agent`, Superserve spins up a new Firecracker microVM with a persistent `/workspace` filesystem.
+  </Step>
+  <Step title="Send messages">
+    Your messages are sent to the agent running in the isolated environment. The agent can execute code, make HTTP requests, and use tools.
+  </Step>
+  <Step title="Stream responses">
+    Agent responses stream back in real-time via Server-Sent Events. You see tokens and tool calls as they happen.
+  </Step>
+  <Step title="Resume anytime">
+    Session state persists across turns. Close the CLI and reconnect later — your workspace and conversation history are still there.
+  </Step>
+</Steps>
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Production-Ready Agent Deployment">
+    Deploy agents to production without managing infrastructure. Superserve handles isolation, scaling, and monitoring.
+  </Accordion>
+  <Accordion title="Multi-Tenant Agent Applications">
+    Each user gets their own isolated session with persistent state. Perfect for SaaS products with agent-powered features.
+  </Accordion>
+  <Accordion title="Secure Code Execution">
+    Run untrusted code safely in Firecracker microVMs. The agent can't access your infrastructure or other sessions.
+  </Accordion>
+  <Accordion title="Long-Running Agent Workflows">
+    Agents can work on tasks across multiple turns and days. The persistent workspace means nothing gets lost.
+  </Accordion>
+  <Accordion title="Framework-Agnostic Integration">
+    Use any agent framework or write your own. Superserve works with Claude Agent SDK, OpenAI Agents SDK, LangChain, Mastra, Pydantic AI, and custom implementations.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get up and running in 5 minutes
+  </Card>
+  <Card title="Core Concepts" icon="book" href="/concepts/isolation">
+    Learn about isolation, persistence, and credentials
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/installation">
+    Explore all CLI commands
+  </Card>
+  <Card title="TypeScript SDK" icon="code" href="/sdk/overview">
+    Integrate agents into your application
+  </Card>
+</CardGroup>
