@@ -1,0 +1,184 @@
+---
+title: Authentication
+description: Log in and out of Superserve Cloud
+---
+
+The Superserve CLI uses OAuth device flow or API keys to authenticate with Superserve Cloud.
+
+## Login
+
+Authenticate with Superserve Cloud using the device flow:
+
+```bash
+superserve login
+```
+
+### How It Works
+
+1. The CLI opens your browser to the Superserve authentication page
+2. You approve the device authorization request
+3. The CLI receives an access token and stores it locally
+4. All subsequent commands use this token automatically
+
+### Example Output
+
+```
+To authenticate, visit: https://console.superserve.ai/device
+Enter code: ABCD-EFGH
+
+Browser opened automatically.
+
+Waiting for authentication...
+
+✓ Authenticated successfully!
+```
+
+### Login with API Key
+
+You can also authenticate using an API key (useful for CI/CD):
+
+```bash
+superserve login --api-key sk-...
+```
+
+<ParamField path="--api-key" type="string">
+  API key for authentication. Get one from [console.superserve.ai/settings/api-keys](https://console.superserve.ai/settings/api-keys)
+</ParamField>
+
+### Already Logged In
+
+If you're already authenticated, `superserve login` will detect this:
+
+```bash
+superserve login
+```
+
+```
+Already logged in. To sign out, run:
+
+  superserve logout
+```
+
+## Logout
+
+Log out and remove your stored credentials:
+
+```bash
+superserve logout
+```
+
+### Example Output
+
+```
+✓ Logged out successfully.
+```
+
+If you're not logged in:
+
+```
+Not logged in.
+```
+
+## Credential Storage
+
+Credentials are stored locally in:
+
+- **macOS/Linux**: `~/.config/superserve/auth.json`
+- **Windows**: `%APPDATA%\superserve\auth.json`
+
+The file contains your access token in JSON format:
+
+```json
+{
+  "token": "your-access-token"
+}
+```
+
+<Warning>
+  Never commit your `auth.json` file to version control. It grants full access to your Superserve account.
+</Warning>
+
+## Authentication for CI/CD
+
+For automated deployments, use an API key:
+
+1. Create an API key at [console.superserve.ai/settings/api-keys](https://console.superserve.ai/settings/api-keys)
+2. Store it as a secret in your CI environment (e.g., `SUPERSERVE_API_KEY`)
+3. Authenticate in your CI script:
+
+<CodeGroup>
+```yaml GitHub Actions
+name: Deploy Agent
+on: [push]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install -g @superserve/cli
+      - run: superserve login --api-key ${{ secrets.SUPERSERVE_API_KEY }}
+      - run: superserve deploy agent.py
+```
+
+```yaml GitLab CI
+deploy:
+  script:
+    - npm install -g @superserve/cli
+    - superserve login --api-key $SUPERSERVE_API_KEY
+    - superserve deploy agent.py
+  only:
+    - main
+```
+
+```yaml CircleCI
+version: 2.1
+jobs:
+  deploy:
+    docker:
+      - image: cimg/node:18.0
+    steps:
+      - checkout
+      - run: npm install -g @superserve/cli
+      - run: superserve login --api-key $SUPERSERVE_API_KEY
+      - run: superserve deploy agent.py
+```
+</CodeGroup>
+
+## Troubleshooting
+
+### Authentication Timeout
+
+The device flow times out after 5 minutes. If you see:
+
+```
+Authentication timed out. Please try again.
+```
+
+Run `superserve login` again and approve the request more quickly.
+
+### Invalid API Key
+
+If your API key is invalid:
+
+```
+✗ Invalid API key
+```
+
+1. Verify the key is correct
+2. Check it hasn't been revoked at [console.superserve.ai/settings/api-keys](https://console.superserve.ai/settings/api-keys)
+3. Create a new key if needed
+
+### Browser Doesn't Open
+
+If the browser doesn't open automatically:
+
+1. Copy the URL shown in the terminal
+2. Open it manually in your browser
+3. Enter the displayed code
+
+## Security Best Practices
+
+- **Use API keys for CI/CD** instead of sharing user credentials
+- **Rotate API keys regularly** (every 90 days recommended)
+- **Revoke unused keys** at [console.superserve.ai/settings/api-keys](https://console.superserve.ai/settings/api-keys)
+- **Never hardcode API keys** in your source code

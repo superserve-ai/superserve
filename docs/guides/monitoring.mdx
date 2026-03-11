@@ -1,0 +1,395 @@
+---
+title: Monitoring
+description: Track agent status, view logs, and monitor sessions
+---
+
+Superserve provides multiple ways to monitor your agents and sessions. Use the CLI commands to check deployment status, view running sessions, and track agent health.
+
+## Monitoring Agents
+
+### List All Agents
+
+View all deployed agents:
+
+```bash
+superserve agents list
+```
+
+**Output:**
+
+```
+Name              ID                   Status     Created           Playground
+────────────────────────────────────────────────────────────────────────────────
+my-agent          agt_1234567890ab     READY      Mar 9, 14:23      Playground ↗
+code-reviewer     agt_abcdef123456     READY      Mar 8, 09:15      Playground ↗
+data-pipeline     agt_fedcba654321     DEPLOYING  Mar 9, 16:45      Playground ↗
+```
+
+**Status meanings:**
+- `READY` - Agent is deployed and ready to run
+- `DEPLOYING` - Dependencies are still installing
+- `FAILED` - Dependency installation failed
+
+### Filter by Status
+
+View agents in a specific state:
+
+```bash
+# Show only ready agents
+superserve agents list --status ready
+
+# Show agents that are deploying
+superserve agents list --status deploying
+
+# Show failed deployments
+superserve agents list --status failed
+```
+
+### Get Agent Details
+
+View detailed information about a specific agent:
+
+```bash
+superserve agents get my-agent
+```
+
+**Output:**
+
+```
+Name:             my-agent
+ID:               agt_1234567890abcdef
+Status:           READY
+Command:          python agent.py
+Created:          2026-03-09 14:23:15 UTC
+Updated:          2026-03-09 14:25:42 UTC
+
+Required Secrets:
+  ANTHROPIC_API_KEY
+  DATABASE_URL
+
+Configured Secrets:
+  ANTHROPIC_API_KEY
+  DATABASE_URL
+```
+
+<Tip>
+The `agents get` command shows whether required secrets are configured. Missing secrets will be highlighted.
+</Tip>
+
+### Check Deployment Status
+
+After deploying, check if the agent is ready:
+
+```bash
+superserve deploy
+
+# Check status
+superserve agents get my-agent
+```
+
+If status is `DEPLOYING`, dependencies are still installing. Wait a few moments and check again.
+
+If status is `FAILED`, check the error message:
+
+```bash
+superserve agents get my-agent
+```
+
+**Example failure output:**
+
+```
+Status:           FAILED
+Deps Error:       Could not install package 'nonexistent-package'
+```
+
+## Monitoring Sessions
+
+### List Active Sessions
+
+View all sessions:
+
+```bash
+superserve sessions list
+```
+
+**Output:**
+
+```
+ID            Agent          Title                    Status  Msgs  Last Active
+────────────────────────────────────────────────────────────────────────────────
+a1b2c3d4e5f6  my-agent      What is the capital...   ACTIVE  4     2 minutes ago
+f6e5d4c3b2a1  code-agent    Review PR #123           IDLE    12    1 hour ago
+9z8y7x6w5v4u  data-agent    Process dataset          ACTIVE  3     just now
+```
+
+**Session statuses:**
+- `ACTIVE` - Currently processing a message
+- `IDLE` - Waiting for user input
+- `ENDED` - Ended by user
+- `TIMEOUT` - Ended due to inactivity
+
+### Filter Sessions by Agent
+
+View sessions for a specific agent:
+
+```bash
+superserve sessions list --agent my-agent
+```
+
+### Filter Sessions by Status
+
+View sessions in a particular state:
+
+```bash
+# Show only active sessions
+superserve sessions list --status active
+
+# Show idle sessions
+superserve sessions list --status idle
+
+# Show ended sessions
+superserve sessions list --status ended
+```
+
+### Get Session Details
+
+View detailed information about a session:
+
+```bash
+superserve sessions get a1b2c3d4e5f6
+```
+
+**Output:**
+
+```
+Agent:        my-agent (agt_1234567890abcdef)
+ID:           ses_a1b2c3d4-e5f6-7890-abcd-ef1234567890
+Status:       IDLE
+Messages:     8
+Created:      2026-03-09 14:23:15 UTC
+Title:        What is the capital of France?
+Last Active:  2026-03-09 14:45:32 UTC (2 minutes ago)
+```
+
+## Real-Time Monitoring
+
+Watch agent responses in real-time with the `run` command:
+
+```bash
+superserve run my-agent "Analyze this data"
+```
+
+The CLI streams:
+- Partial responses as the agent generates them
+- Tool calls (function invocations)
+- Completion time
+
+**Example output:**
+
+```
+You > Calculate the fibonacci sequence up to 10
+
+Agent > I'll calculate the Fibonacci sequence up to 10 terms:
+
+1, 1, 2, 3, 5, 8, 13, 21, 34, 55
+
+Completed in 1.2s
+```
+
+### JSON Output Mode
+
+For programmatic monitoring, use `--json`:
+
+```bash
+superserve run my-agent "Hello" --json
+```
+
+**Output** (streaming JSON events):
+
+```json
+{"type":"run.started","data":{}}
+{"type":"message.delta","data":{"content":"Hello"}}
+{"type":"message.delta","data":{"content":"! How"}}
+{"type":"message.delta","data":{"content":" can I"}}
+{"type":"message.delta","data":{"content":" help you?"}}
+{"type":"run.completed","data":{"duration_ms":1234}}
+```
+
+## Playground Monitoring
+
+The Superserve Playground provides a web-based interface for monitoring:
+
+```
+https://playground.superserve.ai/agents/<agent-id>/
+```
+
+**Features:**
+- Live session viewer
+- Conversation history
+- Tool call inspection
+- Performance metrics
+
+<Tip>
+The Playground link is displayed after deploying an agent and in the `agents list` output.
+</Tip>
+
+## Performance Metrics
+
+### Response Time
+
+The CLI displays completion time after each message:
+
+```
+Completed in 1.2s
+```
+
+For detailed timing, use JSON mode:
+
+```bash
+superserve run my-agent "test" --json | grep duration_ms
+```
+
+### Session Activity
+
+Track session activity with the `last_activity_at` field:
+
+```bash
+superserve sessions list
+```
+
+Sessions showing "just now" are actively processing. Sessions showing longer times (e.g., "1 hour ago") may be idle.
+
+### Message Count
+
+The `sessions list` command shows message count:
+
+```
+ID            Agent          Title                    Status  Msgs  Last Active
+────────────────────────────────────────────────────────────────────────────────
+a1b2c3d4e5f6  my-agent      What is the capital...   IDLE    4     2 minutes ago
+```
+
+High message counts may indicate long-running conversations or stuck sessions.
+
+## Common Monitoring Tasks
+
+### Check if Agent is Ready
+
+```bash
+superserve agents get my-agent | grep Status
+```
+
+**Expected:** `Status: READY`
+
+If not ready, wait for dependencies to install or check for errors.
+
+### Find Stuck Sessions
+
+Look for sessions with high message counts and old activity:
+
+```bash
+superserve sessions list --status active
+```
+
+Sessions that are `ACTIVE` for extended periods may need investigation.
+
+### Monitor Deployment Progress
+
+After deploying, poll until ready:
+
+```bash
+while true; do
+  superserve agents get my-agent | grep Status
+  sleep 5
+done
+```
+
+Press Ctrl+C when status shows `READY`.
+
+### Track Session Usage
+
+Count sessions per agent:
+
+```bash
+superserve sessions list --agent my-agent | wc -l
+```
+
+### Export Session Data
+
+Get session details in JSON for logging:
+
+```bash
+superserve sessions get a1b2c3d4e5f6 --json > session-a1b2.json
+```
+
+## Monitoring Best Practices
+
+<Tip>
+**Set up monitoring alerts** by periodically checking agent status and session health:
+
+```bash
+# Check for failed deployments
+if superserve agents list --status failed | grep -q .; then
+  echo "Alert: Failed agent deployment detected"
+fi
+```
+</Tip>
+
+**Recommended monitoring checks:**
+
+1. **Agent health** - Check `agents list` for FAILED status
+2. **Session timeouts** - Monitor for sessions timing out frequently
+3. **Response times** - Track completion times for performance regression
+4. **Secret configuration** - Verify required secrets are set
+5. **Deployment status** - Ensure new deployments reach READY state
+
+## Troubleshooting with Monitoring
+
+### Agent Not Responding
+
+**Check:**
+1. Agent status: `superserve agents get my-agent`
+2. Required secrets: Look for missing secrets in output
+3. Session status: `superserve sessions get <session-id>`
+
+### Slow Response Times
+
+**Monitor:**
+1. Completion times in CLI output
+2. Message count in active sessions (high count may indicate complex context)
+3. Agent dependency status (DEPLOYING agents are slower)
+
+### Sessions Timing Out
+
+If sessions frequently show `TIMEOUT` status:
+
+1. Check last activity times: `superserve sessions list`
+2. Default timeout is 29 minutes of inactivity
+3. Resume sessions more frequently or start new ones
+
+### Deployment Failures
+
+**Diagnose:**
+
+```bash
+superserve agents get my-agent
+```
+
+Look for `Deps Error` field showing dependency installation errors.
+
+**Common causes:**
+- Invalid package names in `requirements.txt`
+- Incompatible package versions
+- Network issues during installation
+
+**Solution:** Fix the dependency issue and redeploy:
+
+```bash
+superserve deploy
+```
+
+## Next Steps
+
+- [Troubleshooting guide](/guides/troubleshooting)
+- [Session management](/guides/session-management)
+- [Agent commands reference](/cli/agents)

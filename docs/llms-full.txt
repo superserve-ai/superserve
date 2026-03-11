@@ -16,8 +16,8 @@ Without that:
 
 Superserve gives every agent a governed workspace:
 
-- Isolated by default: Every session runs in its own Firecracker microVM with a dedicated kernel. The agent gets full root access to execute code, install packages, and make HTTP requests - nothing leaks into another session.
-- Nothing disappears: The /workspace filesystem survives across turns, restarts, and days. Pick up a session hours or weeks later - every file and conversation is exactly where the agent left it.
+- Isolated by default: Every session runs in its own isolated sandbox with a dedicated kernel. The agent gets full root access to execute code, install packages, and make HTTP requests - nothing leaks into another session.
+- Nothing disappears: Full sandbox snapshots preserve the entire environment across turns, restarts, and days. Pick up a session hours or weeks later with every file, package, and process exactly where the agent left it.
 - Credentials stay hidden: A credential proxy injects API keys at the network level. The agent makes authenticated requests without ever seeing the credentials - they never appear in context, logs, or tool outputs.
 - Full audit trail: Every tool call, file write, and HTTP request the agent makes is logged and queryable. Get a full execution timeline for each session, not just the chat transcript.
 
@@ -129,7 +129,7 @@ superserve deploy agent.py        # Python
 superserve deploy agent.ts        # TypeScript
 ```
 
-Your script runs as-is in the cloud. No Dockerfile, no server code, no config files. Superserve packages your project, installs dependencies, and runs your entrypoint inside an isolated Firecracker microVM.
+Your script runs as-is in the cloud. No Dockerfile, no server code, no config files. Superserve packages your project, installs dependencies, and runs your entrypoint inside an isolated sandbox.
 
 ## Supported languages
 
@@ -236,7 +236,7 @@ Run `superserve init` to generate a superserve.yaml with sensible defaults.
 1. Sandbox: Your agent runs in an isolated VM with its own kernel, filesystem, and network.
 2. Dependencies: requirements.txt, pyproject.toml, or package.json are detected and installed automatically. Cached across deploys.
 3. Network: Outbound HTTP requests route through a managed proxy that injects API keys. Your agent makes authenticated calls without ever seeing the credentials.
-4. Persistent state: The /workspace filesystem survives across turns, restarts, and sessions.
+4. Persistent state: The entire sandbox is snapshotted and survives across turns, restarts, and sessions.
 5. Live: Your agent is ready. Run it with `superserve run` or call it via the SDK.
 
 ---
@@ -272,10 +272,10 @@ options = ClaudeAgentOptions(..., continue_conversation=True)
 |--------|---------|------------|
 | active | Processing a message right now | No |
 | idle | Waiting for the next message | Yes |
-| completed | Ended by user | Yes - fresh sandbox, same workspace |
-| failed | Crashed or timed out | Yes - fresh sandbox, same workspace |
+| completed | Ended by user | Yes - restored from snapshot |
+| failed | Crashed or timed out | Yes - restored from snapshot |
 
-When you resume a completed or failed session, Superserve creates a fresh sandbox but restores the /workspace filesystem. The agent process restarts, but all files are intact.
+When you resume a completed or failed session, Superserve restores the full sandbox snapshot. Files, packages, processes, and environment variables are all intact.
 
 ```bash
 superserve sessions get a1b2

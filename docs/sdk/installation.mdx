@@ -1,0 +1,165 @@
+---
+title: Installation
+description: Install and configure the Superserve TypeScript SDK
+---
+
+## Install the SDK
+
+The SDK is available on npm as `@superserve/sdk`:
+
+<CodeGroup>
+```bash npm
+npm install @superserve/sdk
+```
+
+```bash pnpm
+pnpm add @superserve/sdk
+```
+
+```bash yarn
+yarn add @superserve/sdk
+```
+
+```bash bun
+bun add @superserve/sdk
+```
+</CodeGroup>
+
+## Requirements
+
+- **Node.js** 18 or later (uses native fetch API)
+- **TypeScript** 5.0+ (optional but recommended)
+- **React** 18+ (only required for React hooks)
+
+## Get an API Key
+
+To use the SDK, you need an API key. Generate one using the CLI:
+
+```bash
+superserve login
+```
+
+This authenticates with the Superserve platform and creates a token. The token is saved locally at `~/.config/superserve/token`.
+
+You can retrieve your token at any time:
+
+```bash
+cat ~/.config/superserve/token
+```
+
+The token will look like:
+
+```
+ss_1234567890abcdef...
+```
+
+## Initialize the Client
+
+Import and create a `Superserve` client instance:
+
+```typescript
+import Superserve from '@superserve/sdk'
+
+const client = new Superserve({
+  apiKey: 'ss_...'
+})
+```
+
+<ParamField path="apiKey" type="string" required>
+  Your Superserve API token from `superserve login`
+</ParamField>
+
+<ParamField path="baseUrl" type="string">
+  Base URL for the Superserve API. Defaults to `https://api.superserve.ai`
+</ParamField>
+
+<ParamField path="timeout" type="number">
+  Request timeout in milliseconds. Defaults to `30000` (30 seconds). Only applies to non-streaming requests.
+</ParamField>
+
+## Environment Variables
+
+For production applications, store your API key in an environment variable:
+
+```typescript
+const client = new Superserve({
+  apiKey: process.env.SUPERSERVE_API_KEY!
+})
+```
+
+Then set it in your deployment environment:
+
+```bash
+export SUPERSERVE_API_KEY=ss_...
+```
+
+## Using React Hooks
+
+If you're using React, import hooks from the `/react` subpath:
+
+```tsx
+import { useAgent, SuperserveProvider } from '@superserve/sdk/react'
+```
+
+The React integration has a peer dependency on React 18+. If you only use the core SDK (not React hooks), you don't need React installed.
+
+## TypeScript Configuration
+
+The SDK is written in TypeScript and includes type definitions. For the best experience, enable strict mode in your `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "target": "ES2022"
+  }
+}
+```
+
+## Module Formats
+
+The SDK supports both ESM and CommonJS:
+
+<CodeGroup>
+```typescript ESM
+import Superserve from '@superserve/sdk'
+
+const client = new Superserve({ apiKey: 'ss_...' })
+```
+
+```javascript CommonJS
+const { Superserve } = require('@superserve/sdk')
+
+const client = new Superserve({ apiKey: 'ss_...' })
+```
+</CodeGroup>
+
+## Verify Installation
+
+Test your setup by listing available agents:
+
+```typescript
+import Superserve from '@superserve/sdk'
+
+const client = new Superserve({
+  apiKey: process.env.SUPERSERVE_API_KEY!
+})
+
+const agents = await client.agents.list()
+console.log('Available agents:', agents.map(a => a.name))
+```
+
+If you see your deployed agents, you're ready to start building!
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Client Reference" icon="code" href="/sdk/client">
+    Learn about the Superserve client methods
+  </Card>
+  <Card title="Streaming" icon="signal-stream" href="/sdk/streaming">
+    Stream agent responses in real-time
+  </Card>
+</CardGroup>

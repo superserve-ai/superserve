@@ -1,0 +1,330 @@
+---
+title: Session Management
+description: Create, resume, and manage persistent agent sessions
+---
+
+Sessions provide persistent, stateful conversations with your agents. Each session maintains its own isolated workspace and conversation history.
+
+## Creating Sessions
+
+Sessions are automatically created when you run an agent:
+
+```bash
+superserve run my-agent
+```
+
+This creates a new session and starts an interactive conversation. The session persists until you explicitly end it or it times out.
+
+### Interactive Mode
+
+By default, `run` starts an interactive session:
+
+```bash
+superserve run my-agent
+```
+
+**Example:**
+
+```
+You > What is the capital of France?
+
+Agent > The capital of France is Paris.
+
+Completed in 1.2s
+
+You > And what's its population?
+
+Agent > Paris has approximately 2.1 million people in the city proper.
+
+Completed in 0.8s
+
+You > exit
+```
+
+Type `exit` or press Ctrl+C to end the session.
+
+### Single-Shot Mode
+
+For one-off queries, use `--single`:
+
+```bash
+superserve run my-agent "What is 2+2?" --single
+```
+
+The agent responds once and exits. The session remains active and can be resumed later.
+
+### Initial Prompt
+
+Provide an initial prompt as an argument:
+
+```bash
+superserve run my-agent "Analyze this dataset: data.csv"
+```
+
+After the agent responds, you can continue the conversation interactively.
+
+## Resuming Sessions
+
+Resume a previous session to continue where you left off:
+
+```bash
+superserve sessions resume <session-id>
+```
+
+**Example:**
+
+```bash
+# List your sessions
+superserve sessions list
+
+# Resume a specific session
+superserve sessions resume a1b2c3d4e5f6
+```
+
+The agent has access to:
+- All previous conversation history
+- Files created in `/workspace` during the session
+- Any state stored by the agent
+
+<Tip>
+You only need to provide enough of the session ID to uniquely identify it. For example, `a1b2` instead of `ses_a1b2c3d4-e5f6-7890-abcd-ef1234567890`.
+</Tip>
+
+## Listing Sessions
+
+View all your sessions:
+
+```bash
+superserve sessions list
+```
+
+**Output:**
+
+```
+ID            Agent          Title                    Status  Msgs  Last Active
+────────────────────────────────────────────────────────────────────────────────
+a1b2c3d4e5f6  my-agent      What is the capital...   ACTIVE  4     2 minutes ago
+f6e5d4c3b2a1  code-agent    Review PR #123           IDLE    12    1 hour ago
+```
+
+### Filter by Agent
+
+View sessions for a specific agent:
+
+```bash
+superserve sessions list --agent my-agent
+```
+
+### Filter by Status
+
+View sessions in a specific state:
+
+```bash
+superserve sessions list --status active
+```
+
+**Available statuses:**
+- `active` - Currently processing a message
+- `idle` - Waiting for user input
+- `ended` - Explicitly ended by the user
+- `timeout` - Ended due to idle timeout
+
+## Session Details
+
+Get detailed information about a session:
+
+```bash
+superserve sessions get <session-id>
+```
+
+**Output:**
+
+```
+Agent:        my-agent (agt_1234567890abcdef)
+ID:           ses_a1b2c3d4-e5f6-7890-abcd-ef1234567890
+Status:       IDLE
+Messages:     8
+Created:      2026-03-09 14:23:15 UTC
+Title:        What is the capital of France?
+Last Active:  2026-03-09 14:45:32 UTC (2 minutes ago)
+```
+
+## Ending Sessions
+
+Explicitly end a session to free resources:
+
+```bash
+superserve sessions end <session-id>
+```
+
+**Example:**
+
+```bash
+superserve sessions end a1b2c3d4e5f6
+```
+
+**Output:**
+
+```
+✓ Session a1b2c3d4e5f6 ended (status: ENDED)
+```
+
+<Warning>
+Ending a session destroys the workspace and conversation history. This action cannot be undone.
+</Warning>
+
+## Idle Timeouts
+
+Sessions automatically timeout after **29 minutes** of inactivity. This prevents abandoned sessions from consuming resources.
+
+**What counts as activity:**
+- User sends a message
+- Agent responds
+- Session is resumed
+
+**What happens on timeout:**
+- Session status changes to `timeout`
+- Workspace filesystem is destroyed
+- Conversation history is archived (read-only)
+
+<Tip>
+You can still view timed-out sessions with `superserve sessions get`, but you cannot resume them.
+</Tip>
+
+## Workspace Persistence
+
+Each session has its own isolated `/workspace` directory. Files created during a session persist across messages:
+
+**Example conversation:**
+
+```
+You > Create a file called data.txt with the number 42
+
+Agent > I've created data.txt with the content "42".
+
+You > Read the file and add 10 to the number
+
+Agent > The file contains 42. Adding 10 gives us 52. I've updated data.txt.
+```
+
+The workspace persists:
+- Across messages in the same session
+- When you resume a session
+- Until the session ends or times out
+
+<Warning>
+Workspace files are destroyed when a session ends or times out. Download any important files before ending the session.
+</Warning>
+
+## Session Isolation
+
+Each session runs in a completely isolated environment:
+
+- **Separate filesystems** - No file sharing between sessions
+- **Separate processes** - One session can't affect another
+- **Separate network** - Isolated network stack per session
+
+This ensures:
+- No data leaks between sessions
+- Multiple sessions can run concurrently
+- Session failures don't affect other sessions
+
+## Common Patterns
+
+### Long-Running Tasks
+
+For tasks that take multiple steps:
+
+```bash
+# Start the task
+superserve run data-agent "Begin data migration"
+
+# Later, check progress
+superserve sessions list --agent data-agent
+
+# Resume and continue
+superserve sessions resume <session-id>
+You > What's the migration status?
+```
+
+### Collaborative Sessions
+
+Share session IDs with team members:
+
+```bash
+# Alice starts a session
+alice$ superserve run research-agent "Research quantum computing"
+# Session ID: a1b2c3d4e5f6
+
+# Bob resumes the same session
+bob$ superserve sessions resume a1b2c3d4e5f6
+You > Expand on the quantum entanglement section
+```
+
+### Multi-Session Workflows
+
+Run multiple concurrent sessions:
+
+```bash
+# Session 1: Data analysis
+superserve run analyst "Analyze sales data" &
+
+# Session 2: Report generation
+superserve run writer "Generate monthly report" &
+
+# Session 3: Code review
+superserve run reviewer "Review PR #456" &
+```
+
+## Troubleshooting
+
+### Session Not Found
+
+```
+Error: No session found matching 'abc123'
+```
+
+**Solutions:**
+- Check the session ID with `superserve sessions list`
+- The session may have timed out or been deleted
+- Ensure you're using the correct session prefix
+
+### Ambiguous Session ID
+
+```
+Error: Ambiguous ID 'a1' — matches: a1b2c3d4e5f6, a1f9e8d7c6b5
+```
+
+**Solution:** Provide more characters to uniquely identify the session:
+
+```bash
+superserve sessions resume a1b2
+```
+
+### Session Ended Unexpectedly
+
+If a session shows status `timeout`:
+
+1. The session was idle for 29+ minutes
+2. Start a new session and recreate any needed context
+3. Consider using `--single` for quick queries that don't need persistence
+
+### Cannot Resume Session
+
+```
+Error: Session 'a1b2c3d4e5f6' has status 'ended' and cannot be resumed
+```
+
+**Cause:** The session was explicitly ended or timed out.
+
+**Solution:** Start a new session:
+
+```bash
+superserve run my-agent
+```
+
+## Next Steps
+
+- [Monitor your agents](/guides/monitoring)
+- [Run command reference](/cli/run)
+- [Session commands reference](/cli/sessions)

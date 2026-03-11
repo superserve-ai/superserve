@@ -1,141 +1,428 @@
 ---
-title: "Quickstart"
-description: "Deploy your first agent"
+title: 'Quickstart'
+description: 'Deploy your first AI agent in under 5 minutes'
 ---
 
-<Info>
-  **You need:** A [Superserve account](https://console.superserve.ai).
-</Info>
+Get your first agent running on Superserve in minutes. This guide walks you through installation, authentication, creating a simple agent, and deploying it to production.
 
-## Install and log in
+## Prerequisites
 
-```bash
-curl -fsSL https://superserve.ai/install | sh
-superserve login
-```
+- A [Superserve account](https://console.superserve.ai)
+- Python 3.12+ or Node.js 18+ installed
 
-## Write an agent
-
-Any script that reads input and prints output works. Pick your language, or start from one of our examples in [Python](https://github.com/superserve-ai/superserve/tree/main/examples/python) or [TypeScript](https://github.com/superserve-ai/superserve/tree/main/examples/typescript).
+## Install the CLI
 
 <CodeGroup>
 
-```python agent.py
+```bash cURL
+curl -fsSL https://superserve.ai/install | sh
+```
+
+```bash npm
+npm install -g @superserve/cli
+```
+
+```bash Homebrew
+brew install superserve-ai/tap/superserve
+```
+
+</CodeGroup>
+
+Verify the installation:
+
+```bash
+superserve --version
+```
+
+## Authenticate
+
+Log in to your Superserve account:
+
+```bash
+superserve login
+```
+
+This opens your browser and displays a verification code:
+
+```
+To authenticate, visit: https://console.superserve.ai/device
+Enter code: ABCD-1234
+
+Browser opened automatically.
+
+Waiting for authentication...
+✓ Authenticated successfully!
+```
+
+<Note>
+You can also authenticate with an API key using `superserve login --api-key YOUR_KEY`. Generate API keys in the [console](https://console.superserve.ai/settings/api-keys).
+</Note>
+
+## Create Your First Agent
+
+<Steps>
+
+<Step title="Create a project directory">
+
+```bash
+mkdir my-agent
+cd my-agent
+```
+
+</Step>
+
+<Step title="Create your agent file">
+
+Create a file called `agent.py` with a simple chatbot:
+
+<CodeGroup>
+
+```python Claude Agent SDK
+"""
+Minimal chatbot built with Claude Agent SDK deployed on Superserve.
+"""
+
 import asyncio
+
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, TextBlock
 
 options = ClaudeAgentOptions(
     model="sonnet",
-    system_prompt="You are a senior software engineer. Be direct and specific.",
+    system_prompt="You are a helpful assistant.",
     permission_mode="bypassPermissions",
     continue_conversation=True,
 )
 
+
 async def main():
     async with ClaudeSDKClient(options=options) as client:
         while True:
-            user_input = input()
+            try:
+                user_input = input()
+            except EOFError:
+                break
             await client.query(prompt=user_input)
             async for msg in client.receive_response():
                 for block in getattr(msg, "content", []):
                     if isinstance(block, TextBlock):
                         print(block.text)
 
+
 asyncio.run(main())
 ```
 
-```typescript agent.ts
+```python OpenAI Agents SDK
+"""
+Minimal chatbot built with OpenAI Agents SDK deployed on Superserve.
+"""
+
+from agents import Agent, Runner
+
+agent = Agent(
+    name="assistant",
+    instructions="You are a helpful assistant.",
+)
+
+while True:
+    try:
+        user_input = input()
+    except EOFError:
+        break
+    result = Runner.run_sync(agent, user_input)
+    print(result.final_output)
+```
+
+```python Pydantic AI
+"""
+Minimal chatbot built with Pydantic AI deployed on Superserve.
+"""
+
+from pydantic_ai import Agent
+
+agent = Agent("openai:gpt-4o", system_prompt="You are a helpful assistant.")
+
+while True:
+    try:
+        user_input = input()
+    except EOFError:
+        break
+    result = agent.run_sync(user_input)
+    print(result.output)
+```
+
+```typescript Mastra
+/**
+ * Minimal chatbot built with Mastra deployed on Superserve.
+ */
+
 import { Agent } from "@mastra/core/agent"
 import { createInterface } from "readline"
 
 const agent = new Agent({
-  name: "engineer",
-  instructions: "You are a senior software engineer. Be direct and specific.",
+  name: "assistant",
+  instructions: "You are a helpful assistant.",
   model: "openai/gpt-4o",
 })
 
-const rl = createInterface({ input: process.stdin });
+const rl = createInterface({ input: process.stdin })
 rl.on("line", async (line) => {
-  const result = await agent.generate(line);
-  console.log(result.text);
-});
+  const result = await agent.generate(line)
+  console.log(result.text)
+})
 ```
 
 </CodeGroup>
 
-This is the same script you'd run locally with `python agent.py` or `npx tsx agent.ts`. No changes needed for deployment.
+</Step>
 
-## Deploy
+<Step title="Add dependencies">
+
+For Python agents, create a `requirements.txt`:
+
+<CodeGroup>
+
+```txt Claude Agent SDK
+claude-agent-sdk
+```
+
+```txt OpenAI Agents SDK
+agents-sdk
+```
+
+```txt Pydantic AI
+pydantic-ai
+```
+
+</CodeGroup>
+
+For TypeScript/JavaScript agents, create a `package.json`:
+
+```json Mastra
+{
+  "name": "my-agent",
+  "type": "module",
+  "dependencies": {
+    "@mastra/core": "^0.1.0"
+  }
+}
+```
+
+</Step>
+
+</Steps>
+
+## Deploy Your Agent
+
+Deploy your agent with a single command:
 
 ```bash
-superserve deploy agent.py     # or agent.ts
+superserve deploy agent.py --name my-agent
 ```
 
+<Note>
+For TypeScript agents, use `superserve deploy agent.ts --name my-agent`
+</Note>
+
+You'll see real-time progress as your agent is packaged, uploaded, and dependencies are installed:
+
 ```
-✓ Packaging project... (4 KB)
-✓ Uploading...
-✓ Installing dependencies... (12s)
+  Packaging project... ✓ (2.4 KB)
+  Uploading to Superserve... ✓
+  Installing dependencies... ✓ (12.3s)
 
-Deployed 'my-project' in 15s
+  Deployed 'my-agent' in 14.8s
+
+  Set your API keys as secrets:
+  ┌─────────────────────────────────────────────────────┐
+  │ superserve secrets set my-agent KEY=VALUE           │
+  └─────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────┐
+  │ superserve run my-agent "your prompt here"          │
+  └─────────────────────────────────────────────────────┘
+
+  Or try it in the Playground:
+  https://playground.superserve.ai/agents/agt_abc123/
 ```
 
-Dependencies are detected automatically from `requirements.txt`, `pyproject.toml`, or `package.json`.
+<Warning>
+If you redeploy an existing agent, you'll be prompted to confirm. Use `--yes` to skip confirmation.
+</Warning>
 
-## Set your API keys
+## Set Your Secrets
+
+Your agent needs API keys to call AI providers. Set them as encrypted secrets:
+
+<CodeGroup>
+
+```bash Claude/Anthropic
+superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-...
+```
+
+```bash OpenAI
+superserve secrets set my-agent OPENAI_API_KEY=sk-...
+```
+
+```bash Multiple Keys
+superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-... OPENAI_API_KEY=sk-...
+```
+
+</CodeGroup>
+
+You'll see confirmation:
+
+```
+✓ Set 1 secret(s) for agent 'my-agent'
+Current secrets: ANTHROPIC_API_KEY
+
+Try your agent in Playground: https://playground.superserve.ai/agents/agt_abc123/
+```
+
+<Note>
+Secrets are encrypted at rest and injected via a credential proxy. They never appear in logs or LLM context. Learn more in [Secret Management](/guides/secrets-management).
+</Note>
+
+## Run Your Agent
+
+Start an interactive session with your agent:
 
 ```bash
-superserve secrets set my-project ANTHROPIC_API_KEY=sk-ant-...
+superserve run my-agent
 ```
 
-Secrets are encrypted at rest and injected as environment variables when your agent runs.
+The CLI starts a live session where you can chat with your agent:
 
-## Run it
+```
+You > What is the capital of France?
+
+Agent > The capital of France is Paris.
+
+Completed in 1.2s
+
+You > And what's its population?
+
+Agent > Paris has approximately 2.1 million people in the city proper.
+
+Completed in 0.8s
+
+You >
+```
+
+Type `exit` or press `Ctrl+C` to end the session.
+
+### Single-shot mode
+
+For one-off queries, pass your prompt directly:
 
 ```bash
-superserve run my-project
+superserve run my-agent "What is the capital of France?"
 ```
 
+The agent responds and exits:
+
 ```
-You> Review the error handling in our auth module. Are we leaking stack traces?
-
-I'll analyze the auth module for error handling issues.
-
-Found 2 problems in `auth/middleware.py`:
-
-1. **Line 47**: `except Exception as e: return {"error": str(e)}`
-   Leaks internal error messages to clients. Replace with a generic 500
-   response and log the full exception server-side.
-
-2. **Line 82**: Bare `except:` clause catches SystemExit and KeyboardInterrupt.
-   Use `except Exception:` instead.
-
-The rest of the error handling looks correct — `login()` and `refresh_token()`
-both use structured error responses without exposing internals.
-
-Completed in 3.8s
-
-You> Fix both issues and show me the diff
-
-...
+The capital of France is Paris.
 ```
 
-The agent remembers context between turns. The sandbox persists files across the conversation. Come back tomorrow and [resume where you left off](/sessions).
+Add `--single` to exit after the first response without entering interactive mode.
 
----
+### JSON output
 
-## Next
+For programmatic use, output raw JSON events:
+
+```bash
+superserve run my-agent --json "Hello!"
+```
+
+```json
+{"type":"status","status":"running"}
+{"type":"message","content":"Hello! How can I help you today?"}
+{"type":"done"}
+```
+
+## What's Happening Under the Hood
+
+When you run your agent, Superserve:
+
+1. **Spins up an isolated sandbox** - Your agent runs in a dedicated sandbox, completely isolated from other agents
+2. **Snapshots the full environment** - Files, packages, processes, and environment variables all persist across sessions
+3. **Injects secrets via proxy** - API keys are injected at the network level and never appear in your agent's environment or logs
+4. **Streams responses** - Output streams in real-time via Server-Sent Events
+
+All of this happens automatically with zero configuration.
+
+## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Sessions" icon="messages" href="/sessions">
-    Resume conversations, manage session lifecycle
-  </Card>
-  <Card title="Deployments" icon="wand-magic-sparkles" href="/zero-config">
-    Supported languages, dependency detection, configuration
-  </Card>
-  <Card title="SDK" icon="code" href="/sdk">
-    Build apps on top of your agents — TypeScript client and React hooks
-  </Card>
-  <Card title="CLI" icon="terminal" href="/cli">
-    All commands and flags
-  </Card>
+
+<Card title="Deploy a Complex Agent" icon="rocket" href="/cli/deploy">
+Learn how to deploy agents with custom dependencies, file uploads, and advanced configuration
+</Card>
+
+<Card title="Manage Secrets" icon="key" href="/guides/secrets-management">
+Set required secrets, rotate keys, and manage environment variables
+</Card>
+
+<Card title="Use the SDK" icon="code" href="/sdk/overview">
+Integrate Superserve into your applications with the TypeScript SDK
+</Card>
+
+<Card title="CLI Reference" icon="terminal" href="/cli/installation">
+Explore all available commands and options
+</Card>
+
 </CardGroup>
+
+## Common Issues
+
+### Dependencies failing to install
+
+If your deployment succeeds but dependencies fail to build, check the logs:
+
+```bash
+superserve agents get my-agent
+```
+
+Look for the `deps_status` field. If it's `failed`, fix your `requirements.txt` or `package.json` and redeploy.
+
+### Missing secrets
+
+If you try to run an agent without setting required secrets:
+
+```
+✗ Missing required secret(s): ANTHROPIC_API_KEY
+Set them with:
+┌─────────────────────────────────────────────────────┐
+│ superserve secrets set my-agent ANTHROPIC_API_KEY=... │
+└─────────────────────────────────────────────────────┘
+```
+
+Set the secrets as shown in the error message.
+
+### Agent not responding
+
+If your agent starts but doesn't respond:
+
+1. Check your agent reads from `stdin` and writes to `stdout`
+2. Verify your agent code doesn't buffer output (use `flush=True` in Python or disable buffering)
+3. Test locally first: `python agent.py` or `node agent.js`
+
+## Try the Examples
+
+Explore fully-working examples in the [Superserve repository](https://github.com/superserve-ai/superserve/tree/main/examples):
+
+- **Claude Agent SDK** - Conversational agents with tool use
+- **OpenAI Agents SDK** - Multi-turn agents with function calling
+- **Pydantic AI** - Type-safe agents with structured outputs
+- **Mastra** - TypeScript agents with workflow orchestration
+- **LangChain** - Agents with memory and custom tools
+
+Clone the repo and deploy any example:
+
+```bash
+git clone https://github.com/superserve-ai/superserve.git
+cd superserve/examples/claude-agent-sdk/chatbot
+superserve deploy agent.py --name chatbot
+superserve secrets set chatbot ANTHROPIC_API_KEY=sk-ant-...
+superserve run chatbot
+```

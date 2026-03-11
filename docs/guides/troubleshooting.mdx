@@ -1,0 +1,571 @@
+---
+title: Troubleshooting
+description: Common issues and solutions for Superserve
+---
+
+This guide covers common issues you may encounter when using Superserve and how to resolve them.
+
+## Authentication Issues
+
+<Accordion title="Error: Not authenticated. Run `superserve login` first.">
+
+**Cause:** You haven't logged in or your session expired.
+
+**Solution:**
+
+```bash
+superserve login
+```
+
+Follow the prompts to authenticate via the browser.
+
+</Accordion>
+
+<Accordion title="Login fails or hangs">
+
+**Symptoms:**
+- Browser doesn't open
+- Device code doesn't work
+- "Authorization pending" never completes
+
+**Solutions:**
+
+1. **Check your internet connection**
+
+2. **Try logging in again:**
+   ```bash
+   superserve logout
+   superserve login
+   ```
+
+3. **Manually open the verification URL** if the browser doesn't open automatically:
+   ```
+   Visit: https://console.superserve.ai/device?code=ABCD-EFGH
+   ```
+
+4. **Check for firewall/proxy issues** that may block access to `api.superserve.ai`
+
+</Accordion>
+
+## Deployment Issues
+
+<Accordion title="Error: 'name' is required in superserve.yaml">
+
+**Cause:** Missing `name` field in `superserve.yaml`.
+
+**Solution:**
+
+Add the `name` field:
+
+```yaml superserve.yaml
+name: my-agent
+command: python agent.py
+```
+
+</Accordion>
+
+<Accordion title="Error: Invalid agent name">
+
+**Cause:** Agent name doesn't follow naming rules.
+
+**Rules:**
+- Must start with a lowercase letter
+- Can only contain lowercase letters, numbers, and hyphens
+- No special characters or spaces
+
+**Solution:**
+
+```yaml
+# ❌ Invalid
+name: My-Agent
+name: 123-agent
+name: agent_name
+
+# ✅ Valid
+name: my-agent
+name: agent-123
+name: customer-support
+```
+
+</Accordion>
+
+<Accordion title="Deployment stuck on 'Installing dependencies...'">
+
+**Cause:** Dependency installation is taking longer than expected or has failed.
+
+**Solutions:**
+
+1. **Wait up to 5 minutes** for complex dependency installations
+
+2. **Check agent status:**
+   ```bash
+   superserve agents get my-agent
+   ```
+
+3. **If status is FAILED**, check the error message and fix your dependencies:
+   ```bash
+   # Fix requirements.txt or package.json
+   # Then redeploy
+   superserve deploy
+   ```
+
+</Accordion>
+
+<Accordion title="Error: Dependency install failed">
+
+**Common causes:**
+- Invalid package names in `requirements.txt` or `package.json`
+- Incompatible package versions
+- Package not available in PyPI or npm
+
+**Solutions:**
+
+1. **Check the error message:**
+   ```bash
+   superserve agents get my-agent
+   ```
+   Look for the `Deps Error` field.
+
+2. **Verify package names and versions** in your dependency file:
+   ```txt requirements.txt
+   # ❌ Wrong
+   antrhopic
+
+   # ✅ Correct
+   anthropic
+   ```
+
+3. **Test locally** before deploying:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Redeploy** after fixing:
+   ```bash
+   superserve deploy
+   ```
+
+</Accordion>
+
+<Accordion title="Error: Entrypoint file not found">
+
+**Cause:** The file specified in zero-config deploy doesn't exist.
+
+**Solution:**
+
+Verify the file exists:
+
+```bash
+# ❌ Wrong
+superserve deploy aget.py  # typo
+
+# ✅ Correct
+superserve deploy agent.py
+```
+
+Or use the full path:
+
+```bash
+superserve deploy src/agent.py
+```
+
+</Accordion>
+
+## Secret Management Issues
+
+<Accordion title="Error: Missing required secret(s)">
+
+**Cause:** Agent requires secrets that haven't been set.
+
+**Solution:**
+
+Set the required secrets:
+
+```bash
+superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Check which secrets are required:
+
+```bash
+superserve agents get my-agent
+```
+
+Look for the "Required Secrets" section.
+
+</Accordion>
+
+<Accordion title="Secret not available in agent runtime">
+
+**Symptoms:**
+- `KeyError: 'ANTHROPIC_API_KEY'` in Python
+- `undefined` in JavaScript/TypeScript
+
+**Solutions:**
+
+1. **Verify the secret is set:**
+   ```bash
+   superserve secrets list my-agent
+   ```
+
+2. **Check the key name matches exactly** (case-sensitive):
+   ```python
+   # ❌ Wrong
+   api_key = os.environ["anthropic_api_key"]
+
+   # ✅ Correct
+   api_key = os.environ["ANTHROPIC_API_KEY"]
+   ```
+
+3. **Set the secret if missing:**
+   ```bash
+   superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-...
+   ```
+
+</Accordion>
+
+<Accordion title="Error: Invalid format. Use KEY=VALUE">
+
+**Cause:** Secret command is missing the `=` separator.
+
+**Solution:**
+
+```bash
+# ❌ Wrong
+superserve secrets set my-agent ANTHROPIC_API_KEY sk-ant-...
+
+# ✅ Correct
+superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-...
+```
+
+</Accordion>
+
+## Session Issues
+
+<Accordion title="Error: No session found matching 'abc123'">
+
+**Cause:** Session doesn't exist or has been deleted.
+
+**Solutions:**
+
+1. **List available sessions:**
+   ```bash
+   superserve sessions list
+   ```
+
+2. **Check if the session timed out** (shows as status `TIMEOUT`)
+
+3. **Start a new session:**
+   ```bash
+   superserve run my-agent
+   ```
+
+</Accordion>
+
+<Accordion title="Error: Ambiguous ID">
+
+**Cause:** The session ID prefix matches multiple sessions.
+
+**Example:**
+```
+Error: Ambiguous ID 'a1' — matches: a1b2c3d4e5f6, a1f9e8d7c6b5
+```
+
+**Solution:**
+
+Provide more characters:
+
+```bash
+# ❌ Ambiguous
+superserve sessions resume a1
+
+# ✅ Unique
+superserve sessions resume a1b2
+```
+
+</Accordion>
+
+<Accordion title="Session ended unexpectedly (TIMEOUT status)">
+
+**Cause:** Session was idle for more than 29 minutes.
+
+**What happens:**
+- Session status changes to `TIMEOUT`
+- Workspace files are destroyed
+- Cannot resume the session
+
+**Solution:**
+
+Start a new session:
+
+```bash
+superserve run my-agent
+```
+
+**Prevention:**
+
+For long-running tasks, send periodic messages to keep the session active.
+
+</Accordion>
+
+<Accordion title="Cannot resume session (status 'ended')">
+
+**Cause:** The session was explicitly ended or timed out.
+
+**Solution:**
+
+You cannot resume ended sessions. Start a new one:
+
+```bash
+superserve run my-agent
+```
+
+</Accordion>
+
+## Runtime Issues
+
+<Accordion title="Agent not responding">
+
+**Diagnostic steps:**
+
+1. **Check agent status:**
+   ```bash
+   superserve agents get my-agent
+   ```
+   Ensure status is `READY`.
+
+2. **Check required secrets are set:**
+   ```bash
+   superserve agents get my-agent
+   ```
+   Look for "Required Secrets" vs "Configured Secrets".
+
+3. **Try a simple test:**
+   ```bash
+   superserve run my-agent "Hello" --single
+   ```
+
+4. **Check session status:**
+   ```bash
+   superserve sessions list --agent my-agent
+   ```
+
+</Accordion>
+
+<Accordion title="Agent responds slowly">
+
+**Common causes:**
+- Large dependencies still loading
+- Complex prompt or long conversation history
+- Network latency
+
+**Solutions:**
+
+1. **Check deployment status:**
+   ```bash
+   superserve agents get my-agent
+   ```
+   If status is `DEPLOYING`, wait for it to become `READY`.
+
+2. **Start a fresh session** to reduce context size:
+   ```bash
+   superserve run my-agent
+   ```
+
+3. **Use simpler prompts** for testing.
+
+</Accordion>
+
+<Accordion title="Import errors in agent code">
+
+**Symptoms:**
+```
+ModuleNotFoundError: No module named 'anthropic'
+```
+
+**Causes:**
+- Missing dependency in `requirements.txt` or `package.json`
+- Dependency install failed
+
+**Solutions:**
+
+1. **Add the missing package:**
+   ```txt requirements.txt
+   anthropic
+   ```
+
+2. **Redeploy:**
+   ```bash
+   superserve deploy
+   ```
+
+3. **Verify dependency installation:**
+   ```bash
+   superserve agents get my-agent
+   ```
+
+</Accordion>
+
+## Configuration Issues
+
+<Accordion title="Error: Invalid YAML in superserve.yaml">
+
+**Cause:** Syntax error in YAML file.
+
+**Common mistakes:**
+
+```yaml
+# ❌ Wrong (missing space after colon)
+name:my-agent
+
+# ✅ Correct
+name: my-agent
+
+# ❌ Wrong (inconsistent indentation)
+secrets:
+  - ANTHROPIC_API_KEY
+   - DATABASE_URL
+
+# ✅ Correct (consistent indentation)
+secrets:
+  - ANTHROPIC_API_KEY
+  - DATABASE_URL
+```
+
+**Solution:**
+
+Validate your YAML with an online validator or:
+
+```bash
+python -c "import yaml; yaml.safe_load(open('superserve.yaml'))"
+```
+
+</Accordion>
+
+<Accordion title="Ignore patterns not working">
+
+**Cause:** Ignore pattern doesn't match the file structure.
+
+**How ignore works:**
+
+Patterns match against relative paths from project root:
+
+```yaml
+ignore:
+  - .venv              # Matches .venv/ directory
+  - tests              # Matches tests/ directory
+  - data/cache         # Matches data/cache/ directory
+```
+
+**Note:** These are always ignored automatically:
+- `__pycache__`, `.git`, `node_modules`, `.venv`, `venv`
+- Files starting with `.env`
+
+</Accordion>
+
+## Network and Connection Issues
+
+<Accordion title="Error: Cannot connect to Superserve API">
+
+**Cause:** Network connection issue or API is down.
+
+**Solutions:**
+
+1. **Check your internet connection**
+
+2. **Verify API access:**
+   ```bash
+   curl https://api.superserve.ai/health
+   ```
+
+3. **Check firewall/proxy settings** that may block:
+   - `api.superserve.ai`
+   - `console.superserve.ai`
+
+4. **Try again** - may be a temporary network issue
+
+</Accordion>
+
+<Accordion title="Error: Request timed out">
+
+**Cause:** Request took longer than 30 seconds.
+
+**Common scenarios:**
+- Large file upload during deploy
+- Slow network connection
+- API temporarily overloaded
+
+**Solutions:**
+
+1. **Reduce deployment size** with ignore patterns:
+   ```yaml
+   ignore:
+     - tests
+     - docs
+     - data
+   ```
+
+2. **Try again** - may succeed on retry
+
+3. **Check network connection speed**
+
+</Accordion>
+
+## Best Practices to Avoid Issues
+
+<Warning>
+**Before deploying:**
+
+1. Test your agent locally
+2. Verify all dependencies install correctly
+3. Check `superserve.yaml` syntax
+4. Use `.env.example` to document required secrets
+5. Test with a simple prompt first
+</Warning>
+
+<Tip>
+**Regular maintenance:**
+
+1. Clean up old sessions: `superserve sessions list --status timeout`
+2. Monitor deployment status after updates
+3. Rotate secrets periodically
+4. Keep dependencies up to date
+5. Remove unused agents to reduce clutter
+</Tip>
+
+## Getting Help
+
+If you're still experiencing issues:
+
+1. **Check the documentation:**
+   - [Configuration guide](/guides/configuration)
+   - [Secrets management](/guides/secrets-management)
+   - [Session management](/guides/session-management)
+
+2. **Search existing issues:**
+   Visit the [GitHub repository](https://github.com/superserve-ai/superserve/issues)
+
+3. **Join the Discord community:**
+   Get help from other users at [discord.gg/utftfhSK](https://discord.gg/utftfhSK)
+
+4. **Report a bug:**
+   If you've found a bug, [open an issue](https://github.com/superserve-ai/superserve/issues/new)
+
+## Common Error Messages Reference
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| Not authenticated | No auth token | `superserve login` |
+| Agent not found | Invalid agent name/ID | Check with `agents list` |
+| Missing required secret | Secret not set | `secrets set AGENT KEY=VALUE` |
+| Dependency install failed | Invalid package | Fix `requirements.txt` |
+| Session not found | Invalid session ID | Check with `sessions list` |
+| Invalid YAML | Syntax error | Validate YAML syntax |
+| Ambiguous ID | ID prefix matches multiple | Use longer prefix |
+| Request timed out | Network/size issue | Retry or reduce size |
+
+## Next Steps
+
+- [Monitoring guide](/guides/monitoring)
+- [CLI reference](/cli/overview)
+- [Join the Discord](https://discord.gg/utftfhSK)

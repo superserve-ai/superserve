@@ -1,0 +1,509 @@
+---
+title: React Hooks
+description: Build chat interfaces with the useAgent hook
+---
+
+The SDK includes React hooks for building chat interfaces. The `useAgent` hook manages message state, streaming, and session lifecycle automatically.
+
+## Installation
+
+The React integration is available at the `/react` subpath:
+
+```bash
+npm install @superserve/sdk
+```
+
+React 18+ is required as a peer dependency.
+
+## useAgent Hook
+
+The `useAgent` hook provides a complete chat interface state manager:
+
+```tsx
+import { useAgent } from '@superserve/sdk/react'
+
+function Chat() {
+  const { messages, sendMessage, status, isStreaming, stop, reset } = useAgent({
+    agent: 'my-agent',
+    apiKey: 'ss_...'
+  })
+
+  return (
+    <div>
+      <div className="messages">
+        {messages.map(msg => (
+          <div key={msg.id} className={msg.role}>
+            <strong>{msg.role}:</strong> {msg.content}
+          </div>
+        ))}
+      </div>
+      
+      {isStreaming && <button onClick={stop}>Stop</button>}
+      
+      <button onClick={() => sendMessage('Hello!')}>Send</button>
+      <button onClick={reset}>Clear</button>
+    </div>
+  )
+}
+```
+
+## Options
+
+<ParamField path="agent" type="string" required>
+  Agent name or ID to interact with
+</ParamField>
+
+<ParamField path="apiKey" type="string">
+  API key for authentication. Can also be provided via `SuperserveProvider`.
+</ParamField>
+
+<ParamField path="baseUrl" type="string">
+  Base URL for the Superserve API. Defaults to `https://api.superserve.ai`
+</ParamField>
+
+<ParamField path="initialMessages" type="Message[]">
+  Initial messages to populate the chat. Useful for resuming conversations.
+</ParamField>
+
+<ParamField path="onFinish" type="(message: Message) => void">
+  Callback invoked when the agent finishes responding
+</ParamField>
+
+<ParamField path="onError" type="(error: Error) => void">
+  Callback invoked on errors
+</ParamField>
+
+## Return Value
+
+The hook returns an object with the following properties:
+
+<ResponseField name="messages" type="Message[]">
+  Array of messages in the conversation
+
+  <Expandable title="Message type">
+    ```typescript
+    interface Message {
+      id: string
+      role: 'user' | 'assistant'
+      content: string
+      toolCalls?: ToolCall[]
+      createdAt: Date
+    }
+    ```
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="sendMessage" type="(content: string) => void">
+  Send a message to the agent. Does nothing if already streaming.
+</ResponseField>
+
+<ResponseField name="status" type="'ready' | 'streaming' | 'error'">
+  Current status of the agent interaction
+</ResponseField>
+
+<ResponseField name="isStreaming" type="boolean">
+  Whether the agent is currently streaming a response. Equivalent to `status === 'streaming'`.
+</ResponseField>
+
+<ResponseField name="error" type="Error | null">
+  The current error, if any
+</ResponseField>
+
+<ResponseField name="stop" type="() => void">
+  Abort the current streaming response
+</ResponseField>
+
+<ResponseField name="reset" type="() => void">
+  Clear all messages and end the session. Resets to `initialMessages` if provided.
+</ResponseField>
+
+## SuperserveProvider
+
+Use `SuperserveProvider` to share configuration across multiple `useAgent` hooks:
+
+```tsx
+import { SuperserveProvider } from '@superserve/sdk/react'
+
+function App() {
+  return (
+    <SuperserveProvider apiKey={process.env.REACT_APP_SUPERSERVE_API_KEY}>
+      <Chat />
+      <AnotherChat />
+    </SuperserveProvider>
+  )
+}
+
+function Chat() {
+  // apiKey is inherited from SuperserveProvider
+  const { messages, sendMessage } = useAgent({
+    agent: 'my-agent'
+  })
+  
+  // ...
+}
+```
+
+### Provider Props
+
+<ParamField path="apiKey" type="string">
+  API key to share with all child hooks
+</ParamField>
+
+<ParamField path="baseUrl" type="string">
+  Base URL to share with all child hooks
+</ParamField>
+
+<ParamField path="children" type="ReactNode" required>
+  React children
+</ParamField>
+
+## Examples
+
+### Basic Chat Interface
+
+```tsx
+import { useAgent } from '@superserve/sdk/react'
+import { useState } from 'react'
+
+function Chat() {
+  const [input, setInput] = useState('')
+  const { messages, sendMessage, isStreaming } = useAgent({
+    agent: 'my-agent',
+    apiKey: process.env.REACT_APP_SUPERSERVE_API_KEY
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (input.trim() && !isStreaming) {
+      sendMessage(input)
+      setInput('')
+    }
+  }
+
+  return (
+    <div className="chat">
+      <div className="messages">
+        {messages.map(msg => (
+          <div key={msg.id} className={`message ${msg.role}`}>
+            <div className="content">{msg.content}</div>
+            {msg.toolCalls && msg.toolCalls.length > 0 && (
+              <div className="tools">
+                {msg.toolCalls.map((tool, i) => (
+                  <span key={i} className="tool">
+                    {tool.name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      
+      <form onSubmit={handleSubmit}>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Type a message..."
+          disabled={isStreaming}
+        />
+        <button type="submit" disabled={isStreaming || !input.trim()}>
+          {isStreaming ? 'Sending...' : 'Send'}
+        </button>
+      </form>
+    </div>
+  )
+}
+```
+
+### With Error Handling
+
+```tsx
+function Chat() {
+  const { messages, sendMessage, status, error, isStreaming, reset } = useAgent({
+    agent: 'my-agent',
+    apiKey: 'ss_...',
+    onError: (error) => {
+      console.error('Chat error:', error)
+    }
+  })
+
+  return (
+    <div>
+      {status === 'error' && (
+        <div className="error">
+          <p>Error: {error?.message}</p>
+          <button onClick={reset}>Try Again</button>
+        </div>
+      )}
+      
+      <div className="messages">
+        {messages.map(msg => (
+          <div key={msg.id}>{msg.content}</div>
+        ))}
+      </div>
+      
+      {isStreaming && <div className="loading">Agent is typing...</div>}
+      
+      <button onClick={() => sendMessage('Hello')}>Send</button>
+    </div>
+  )
+}
+```
+
+### Resuming Conversations
+
+```tsx
+function Chat({ userId }: { userId: string }) {
+  // Load previous messages from localStorage
+  const initialMessages = useMemo(() => {
+    const saved = localStorage.getItem(`chat-${userId}`)
+    return saved ? JSON.parse(saved) : []
+  }, [userId])
+
+  const { messages, sendMessage } = useAgent({
+    agent: 'my-agent',
+    apiKey: 'ss_...',
+    initialMessages,
+    onFinish: (message) => {
+      // Save to localStorage after each response
+      localStorage.setItem(`chat-${userId}`, JSON.stringify(messages))
+    }
+  })
+
+  return (
+    <div>
+      {messages.map(msg => (
+        <div key={msg.id}>{msg.content}</div>
+      ))}
+    </div>
+  )
+}
+```
+
+### Progress Indicators
+
+```tsx
+import { useAgent } from '@superserve/sdk/react'
+
+function Chat() {
+  const { messages, sendMessage, isStreaming, stop } = useAgent({
+    agent: 'my-agent',
+    apiKey: 'ss_...'
+  })
+
+  return (
+    <div>
+      <div className="messages">
+        {messages.map(msg => (
+          <div key={msg.id} className={msg.role}>
+            {msg.content}
+            {msg.toolCalls && (
+              <div className="tools">
+                <strong>Tools used:</strong>
+                {msg.toolCalls.map((tool, i) => (
+                  <span key={i}>
+                    {tool.name} ({tool.duration}ms)
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+        
+        {isStreaming && (
+          <div className="streaming">
+            <span className="spinner">⏳</span>
+            <span>Agent is working...</span>
+            <button onClick={stop}>Stop</button>
+          </div>
+        )}
+      </div>
+      
+      <button onClick={() => sendMessage('Analyze this code')}>Send</button>
+    </div>
+  )
+}
+```
+
+### Multiple Agents
+
+```tsx
+import { SuperserveProvider, useAgent } from '@superserve/sdk/react'
+
+function App() {
+  return (
+    <SuperserveProvider apiKey="ss_...">
+      <div className="agents">
+        <AgentChat agent="code-reviewer" title="Code Reviewer" />
+        <AgentChat agent="documentation" title="Documentation" />
+      </div>
+    </SuperserveProvider>
+  )
+}
+
+function AgentChat({ agent, title }: { agent: string; title: string }) {
+  const { messages, sendMessage, isStreaming } = useAgent({ agent })
+
+  return (
+    <div className="agent-chat">
+      <h2>{title}</h2>
+      <div className="messages">
+        {messages.map(msg => (
+          <div key={msg.id}>{msg.content}</div>
+        ))}
+      </div>
+      <button 
+        onClick={() => sendMessage('Hello')}
+        disabled={isStreaming}
+      >
+        Send
+      </button>
+    </div>
+  )
+}
+```
+
+### Streaming with Markdown
+
+```tsx
+import { useAgent } from '@superserve/sdk/react'
+import ReactMarkdown from 'react-markdown'
+
+function Chat() {
+  const { messages, sendMessage } = useAgent({
+    agent: 'my-agent',
+    apiKey: 'ss_...'
+  })
+
+  return (
+    <div className="messages">
+      {messages.map(msg => (
+        <div key={msg.id} className={msg.role}>
+          {msg.role === 'assistant' ? (
+            <ReactMarkdown>{msg.content}</ReactMarkdown>
+          ) : (
+            <p>{msg.content}</p>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+## TypeScript Types
+
+All types are exported for use in your application:
+
+```typescript
+import type {
+  Message,
+  AgentStatus,
+  UseAgentOptions,
+  UseAgentReturn
+} from '@superserve/sdk/react'
+
+const messages: Message[] = [
+  {
+    id: 'msg_1',
+    role: 'user',
+    content: 'Hello',
+    createdAt: new Date()
+  }
+]
+
+const status: AgentStatus = 'ready'
+```
+
+### Message Type
+
+```typescript
+interface Message {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  toolCalls?: ToolCall[]
+  createdAt: Date
+}
+```
+
+### AgentStatus Type
+
+```typescript
+type AgentStatus = 'ready' | 'streaming' | 'error'
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use SuperserveProvider for multiple hooks">
+    If you have multiple `useAgent` hooks in your app, use `SuperserveProvider` to share the API key:
+
+    ```tsx
+    <SuperserveProvider apiKey={apiKey}>
+      <ChatA />
+      <ChatB />
+    </SuperserveProvider>
+    ```
+  </Accordion>
+
+  <Accordion title="Disable input during streaming">
+    Prevent duplicate messages by disabling the input while streaming:
+
+    ```tsx
+    <input disabled={isStreaming} />
+    <button disabled={isStreaming}>Send</button>
+    ```
+  </Accordion>
+
+  <Accordion title="Handle errors gracefully">
+    Always show error messages to users and provide a way to recover:
+
+    ```tsx
+    {status === 'error' && (
+      <div className="error">
+        {error?.message}
+        <button onClick={reset}>Try Again</button>
+      </div>
+    )}
+    ```
+  </Accordion>
+
+  <Accordion title="Persist conversations">
+    Save messages to localStorage or a database to resume conversations:
+
+    ```tsx
+    const { messages } = useAgent({
+      agent: 'my-agent',
+      apiKey: 'ss_...',
+      onFinish: () => {
+        localStorage.setItem('messages', JSON.stringify(messages))
+      }
+    })
+    ```
+  </Accordion>
+
+  <Accordion title="Provide visual feedback">
+    Show loading indicators, typing animations, or tool usage during streaming:
+
+    ```tsx
+    {isStreaming && (
+      <div className="typing">
+        <span>Agent is typing</span>
+        <span className="dots">...</span>
+      </div>
+    )}
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Client Reference" icon="code" href="/sdk/client">
+    Learn about the core SDK client
+  </Card>
+  <Card title="Streaming" icon="signal-stream" href="/sdk/streaming">
+    Understand streaming events and callbacks
+  </Card>
+</CardGroup>

@@ -1,0 +1,170 @@
+---
+title: TypeScript SDK Overview
+description: Build applications with Superserve agents using the TypeScript SDK
+---
+
+The Superserve TypeScript SDK provides a simple, type-safe interface for interacting with deployed agents. It supports both promise-based and streaming responses, multi-turn sessions, and React hooks for building chat interfaces.
+
+## Features
+
+- **Type-safe client** — Full TypeScript support with accurate type inference
+- **Multiple usage patterns** — One-shot runs, streaming responses, and multi-turn sessions
+- **React hooks** — Pre-built `useAgent` hook for chat interfaces
+- **Streaming support** — Real-time text streaming and tool call events via Server-Sent Events
+- **Error handling** — Structured error types with status codes and details
+- **Automatic session management** — Sessions auto-cleanup after 29 minutes of inactivity
+
+## Quick Start
+
+Install the SDK:
+
+```bash
+npm install @superserve/sdk
+```
+
+Get your API key:
+
+```bash
+superserve login
+```
+
+This generates a token you can use with the SDK.
+
+## Basic Usage
+
+<Tabs>
+  <Tab title="One-shot">
+    ```typescript
+    import Superserve from '@superserve/sdk'
+
+    const client = new Superserve({ apiKey: 'ss_...' })
+
+    const result = await client.run('my-agent', {
+      message: 'Hello!'
+    })
+
+    console.log(result.text)
+    // => "Hello! How can I help you?"
+    ```
+  </Tab>
+
+  <Tab title="Streaming">
+    ```typescript
+    import Superserve from '@superserve/sdk'
+
+    const client = new Superserve({ apiKey: 'ss_...' })
+
+    const stream = client.stream('my-agent', {
+      message: 'Write a report about TypeScript'
+    })
+
+    for await (const chunk of stream.textStream) {
+      process.stdout.write(chunk)
+    }
+
+    const result = await stream.result
+    console.log(`\nCompleted in ${result.duration}ms`)
+    ```
+  </Tab>
+
+  <Tab title="Multi-turn Session">
+    ```typescript
+    import Superserve from '@superserve/sdk'
+
+    const client = new Superserve({ apiKey: 'ss_...' })
+
+    const session = await client.createSession('my-agent')
+
+    const r1 = await session.run('What files are in the project?')
+    console.log(r1.text)
+
+    const r2 = await session.run('Refactor the main module')
+    console.log(r2.text)
+
+    await session.end()
+    ```
+  </Tab>
+
+  <Tab title="React">
+    ```tsx
+    import { useAgent } from '@superserve/sdk/react'
+
+    function Chat() {
+      const { messages, sendMessage, status } = useAgent({
+        agent: 'my-agent',
+        apiKey: 'ss_...'
+      })
+
+      return (
+        <div>
+          {messages.map(msg => (
+            <div key={msg.id}>
+              <strong>{msg.role}:</strong> {msg.content}
+            </div>
+          ))}
+          <button 
+            onClick={() => sendMessage('Hello!')}
+            disabled={status === 'streaming'}
+          >
+            Send
+          </button>
+        </div>
+      )
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Package Structure
+
+The SDK is published as a single package with multiple entry points:
+
+- **`@superserve/sdk`** — Core client, session, and streaming functionality
+- **`@superserve/sdk/react`** — React hooks and components
+
+```typescript
+// Main exports
+import Superserve from '@superserve/sdk'
+import { Session, AgentStream, SuperserveError } from '@superserve/sdk'
+
+// React exports
+import { useAgent, SuperserveProvider } from '@superserve/sdk/react'
+```
+
+## Core Concepts
+
+### Client
+
+The `Superserve` class is the main entry point. Initialize it with your API key and use it to run agents or create sessions.
+
+### Sessions
+
+Sessions enable multi-turn conversations with an agent. Messages sent within a session share context and history. Sessions automatically timeout after 29 minutes of inactivity.
+
+### Streaming
+
+Agent responses can be streamed in real-time using Server-Sent Events. The `AgentStream` class provides async iterators for consuming events as they arrive.
+
+### Tool Calls
+
+When agents use tools, the SDK tracks each invocation including name, input, and execution duration. These are included in the final `RunResult`.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/sdk/installation">
+    Install the SDK and configure authentication
+  </Card>
+  <Card title="Client Reference" icon="code" href="/sdk/client">
+    Learn about the Superserve client class
+  </Card>
+  <Card title="Sessions" icon="messages" href="/sdk/sessions">
+    Build multi-turn conversations
+  </Card>
+  <Card title="Streaming" icon="signal-stream" href="/sdk/streaming">
+    Handle real-time agent responses
+  </Card>
+  <Card title="React Hooks" icon="react" href="/sdk/react-hooks">
+    Build chat interfaces with React
+  </Card>
+</CardGroup>

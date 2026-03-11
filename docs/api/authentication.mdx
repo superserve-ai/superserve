@@ -1,0 +1,245 @@
+---
+title: Authentication
+description: Authenticate with the Superserve API using device code flow or API tokens
+---
+
+The Superserve API uses Bearer token authentication. All authenticated requests must include an `Authorization` header with your API token.
+
+## Authentication Header
+
+```http
+Authorization: Bearer YOUR_API_TOKEN
+```
+
+## Get API Token
+
+You can obtain an API token by running the CLI login command:
+
+```bash
+superserve login
+```
+
+The token is stored locally at `~/.superserve/auth.json` and used automatically by the CLI and SDK.
+
+## Device Code Flow
+
+The device code flow allows users to authenticate via a web browser. This is the method used by `superserve login`.
+
+### Initiate Device Code Flow
+
+```http
+POST /v1/auth/device-code
+Content-Type: application/json
+```
+
+**Response:**
+
+<ResponseField name="device_code" type="string" required>
+  Device code to poll for authentication status
+</ResponseField>
+
+<ResponseField name="user_code" type="string" required>
+  Human-readable code to display to the user
+</ResponseField>
+
+<ResponseField name="verification_uri" type="string" required>
+  URL where the user should authenticate
+</ResponseField>
+
+<ResponseField name="verification_uri_complete" type="string" required>
+  Full URL with user code pre-filled
+</ResponseField>
+
+<ResponseField name="expires_in" type="number" required>
+  Number of seconds until the device code expires
+</ResponseField>
+
+<ResponseField name="interval" type="number" required>
+  Minimum number of seconds to wait between polling requests
+</ResponseField>
+
+**Example Response:**
+
+```json
+{
+  "device_code": "DEVICE_CODE_HERE",
+  "user_code": "ABCD-1234",
+  "verification_uri": "https://console.superserve.ai/device",
+  "verification_uri_complete": "https://console.superserve.ai/device?code=ABCD-1234",
+  "expires_in": 900,
+  "interval": 5
+}
+```
+
+### Poll for Token
+
+After initiating the device code flow, poll this endpoint to check if the user has completed authentication.
+
+```http
+POST /v1/auth/device-token
+Content-Type: application/json
+```
+
+**Request Body:**
+
+<ParamField body="device_code" type="string" required>
+  Device code from the initial response
+</ParamField>
+
+**Success Response:**
+
+<ResponseField name="access_token" type="string">
+  Access token (may be named `token` instead)
+</ResponseField>
+
+<ResponseField name="token" type="string">
+  Access token (alternative field name)
+</ResponseField>
+
+<ResponseField name="expires_at" type="string | null">
+  ISO 8601 timestamp when the token expires
+</ResponseField>
+
+<ResponseField name="refresh_token" type="string | null">
+  Refresh token for obtaining new access tokens
+</ResponseField>
+
+**Pending/Error Response:**
+
+<ResponseField name="error" type="string">
+  Error code: `authorization_pending`, `slow_down`, `expired_token`, or `access_denied`
+</ResponseField>
+
+<ResponseField name="error_description" type="string">
+  Human-readable error description
+</ResponseField>
+
+**Example Success:**
+
+```json
+{
+  "access_token": "your-api-token",
+  "expires_at": "2026-04-09T12:00:00Z",
+  "refresh_token": null
+}
+```
+
+**Example Pending:**
+
+```json
+{
+  "error": "authorization_pending",
+  "error_description": "User has not completed authorization"
+}
+```
+
+### Error Codes
+
+| Code | Status | Description |
+|------|--------|-------------|
+| `authorization_pending` | 428 | User hasn't completed authentication yet |
+| `slow_down` | 400 | Polling too frequently, wait longer |
+| `expired_token` | 410 | Device code has expired |
+| `access_denied` | 403 | User denied the authentication request |
+
+## Validate Token
+
+Check if your current token is valid.
+
+```http
+GET /v1/auth/validate
+Authorization: Bearer YOUR_API_TOKEN
+```
+
+**Response:**
+
+<ResponseField name="valid" type="boolean">
+  Whether the token is valid
+</ResponseField>
+
+<ResponseField name="user" type="object | null">
+  User information if token is valid
+  
+  <Expandable title="user object">
+    <ResponseField name="id" type="string">
+      User ID
+    </ResponseField>
+    <ResponseField name="email" type="string">
+      User email address
+    </ResponseField>
+    <ResponseField name="full_name" type="string | null">
+      User's full name
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+**Example:**
+
+```json
+{
+  "valid": true,
+  "user": {
+    "id": "usr_abc123",
+    "email": "user@example.com",
+    "full_name": "Jane Doe"
+  }
+}
+```
+
+## Get Current User
+
+Retrieve information about the authenticated user.
+
+```http
+GET /v1/auth/me
+Authorization: Bearer YOUR_API_TOKEN
+```
+
+**Response:**
+
+<ResponseField name="id" type="string" required>
+  User ID
+</ResponseField>
+
+<ResponseField name="email" type="string" required>
+  User email address
+</ResponseField>
+
+<ResponseField name="full_name" type="string | null">
+  User's full name
+</ResponseField>
+
+**Example:**
+
+```json
+{
+  "id": "usr_abc123",
+  "email": "user@example.com",
+  "full_name": "Jane Doe"
+}
+```
+
+## Error Responses
+
+All authentication endpoints may return these errors:
+
+<ResponseField name="status" type="number">
+  HTTP status code
+</ResponseField>
+
+<ResponseField name="detail" type="string">
+  Error message
+</ResponseField>
+
+<ResponseField name="details" type="object">
+  Additional error context
+</ResponseField>
+
+**Common Errors:**
+
+| Status | Message |
+|--------|----------|
+| 401 | Not authenticated. Run `superserve login` first. |
+| 403 | Access denied by user |
+| 410 | Device code expired |
+| 428 | Authorization pending |
