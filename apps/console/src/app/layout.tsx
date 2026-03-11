@@ -31,6 +31,23 @@ export const metadata: Metadata = {
   icons: {
     icon: { url: "/favicon.svg", type: "image/svg+xml" },
   },
+  metadataBase: new URL("https://console.superserve.ai"),
+  openGraph: {
+    type: "website",
+    title: "Superserve Console",
+    description: "Deploy and manage your AI agents with Superserve",
+    siteName: "Superserve",
+    images: [{ url: "/og-image.png", width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Superserve Console",
+    description: "Deploy and manage your AI agents with Superserve",
+    images: ["/og-image.png"],
+  },
+  other: {
+    "theme-color": "#105C60",
+  },
 }
 
 export default function RootLayout({
