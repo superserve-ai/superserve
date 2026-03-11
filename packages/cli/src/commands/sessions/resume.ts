@@ -69,6 +69,25 @@ export const resumeSession = new Command("resume")
           }
         }
 
+        // Pause sandbox on exit to release resources (filesystem preserved)
+        {
+          const saveSpinner = createSpinner()
+          saveSpinner.start("Saving session...")
+          try {
+            await client.disconnectSession(fullSessionId)
+            const shortId = fullSessionId
+              .replace("ses_", "")
+              .replace(/-/g, "")
+              .slice(0, 12)
+            saveSpinner.done("\u2713", "Session saved.")
+            console.error(
+              `  Resume with: superserve sessions resume ${shortId}`,
+            )
+          } catch {
+            saveSpinner.done("\u2713", "Session saved.")
+          }
+        }
+
         await track("cli_sessions_resume_completed", {
           agent_name: agentName,
           messages: messageCount,
