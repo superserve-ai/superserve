@@ -160,18 +160,18 @@ export default function AgentsPage({ navigate }: AgentsPageProps) {
                           <p className="truncate font-medium text-foreground">
                             {agent.name}
                           </p>
-                          <Badge
-                            dot
-                            variant={variant}
-                            className="font-mono text-[10px] uppercase tracking-wider"
-                          >
-                            {label}
-                          </Badge>
                         </div>
                         <p className="mt-1 text-[12px] text-muted">
                           Updated {relativeTime(agent.updatedAt)}
                         </p>
                       </div>
+                      <Badge
+                        dot
+                        variant={variant}
+                        className="font-mono text-[10px] uppercase tracking-wider mr-2"
+                      >
+                        {label}
+                      </Badge>
                       <svg
                         aria-hidden="true"
                         className="shrink-0 text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-muted"

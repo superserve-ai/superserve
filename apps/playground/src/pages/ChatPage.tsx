@@ -146,7 +146,7 @@ export default function ChatPage({ agentId, onBack }: ChatPageProps) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {agentBadge && (
+            {agentBadge && agentDepsStatus !== "ready" && (
               <Badge
                 dot
                 variant={agentBadge.variant}
