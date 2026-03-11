@@ -172,6 +172,25 @@ export const run = new Command("run")
             }
           }
 
+          // Pause sandbox on exit to release resources (filesystem preserved)
+          {
+            const saveSpinner = createSpinner()
+            saveSpinner.start("Saving session...")
+            try {
+              await client.disconnectSession(sessionId)
+              const shortId = sessionId
+                .replace("ses_", "")
+                .replace(/-/g, "")
+                .slice(0, 12)
+              saveSpinner.done("\u2713", "Session saved.")
+              console.error(
+                `  Resume with: superserve sessions resume ${shortId}`,
+              )
+            } catch {
+              saveSpinner.done("\u2713", "Session saved.")
+            }
+          }
+
           await track("cli_run_completed", {
             agent_name: agent,
             messages: messageCount,
