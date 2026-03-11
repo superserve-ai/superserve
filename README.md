@@ -20,19 +20,24 @@
 
 ## Why Superserve
 
-Agents execute code, make HTTP requests, and manage credentials. In production, every session needs its own isolated environment with persistent state and governance. Building that yourself means stitching together containers, proxies, secret managers, and logging.
+Agents get real work done when they have access to a computer: running code, using a browser, managing filesystems. But giving agents that access in the cloud raises hard operational questions:
 
-Superserve gives every agent a governed workspace out of the box.
+- Session and hardware isolation
+- State persistence across turns and restarts
+- Stateful scale-to-zero without losing state
+- Network controls and credentials management
+
+Superserve handles all of this so teams can focus on building agents.
 
 ## Features
 
-- **Isolated by default** - Every session runs in its own Firecracker microVM. Nothing leaks between sessions or touches your infrastructure
-- **Nothing disappears** - The `/workspace` filesystem persists across turns, restarts, and days. Resume where you left off
-- **Credentials stay hidden** - A credential proxy injects API keys at the network level. The agent never sees them - they never appear in LLM context, logs, or tool outputs
+- **Isolated by default** - Every session runs in its own isolated sandbox. Nothing leaks between sessions or touches your infrastructure
+- **Stateful scale-to-zero** - Idle sandboxes are snapshotted and suspended, consuming zero compute. Resume in milliseconds with full state intact
+- **Nothing disappears** - Full sandbox snapshots preserve the entire environment (files, packages, processes) across turns, restarts, and days
+- **Credentials stay hidden** - A credential proxy injects API keys at the network level. The agent never sees them, they never appear in LLM context, logs, or tool outputs
 - **Any framework** - Claude Agent SDK, OpenAI Agents SDK, LangChain, Mastra, Pydantic AI, or plain stdin/stdout
 - **One command** - `superserve deploy agent.py`. No Dockerfile, no server code, no config files
 - **Real-time streaming** - Stream tokens and tool calls as they happen
-- **Sub-second cold starts** - Pre-provisioned containers mean your agent starts almost instantly
 
 ## Quick Start
 

@@ -1,42 +1,42 @@
 ---
 title: Introduction
-description: Deploy AI agents to isolated, persistent sandboxes
+description: Runtime platform for cloud agents
 ---
 
-Superserve is the deployment platform for AI agents. Deploy Python and TypeScript agents to isolated, persistent sandboxes with one command.
+Superserve is a platform purpose-built to run agents in the cloud. It gives your agent a persistent, isolated workspace with full access to a computing environment - without you having to manage infrastructure.
+
+With a single CLI command, your agent is deployed as a service with best-in-class performance, security, and scalability. Think of it as a container, but with hardware isolation, millisecond cold starts, and stateful scale-to-zero.
 
 ## Why Superserve
 
-Agents execute code, make HTTP requests, and manage credentials. In production, every session needs its own isolated environment with persistent state and governance. Building that yourself means stitching together containers, proxies, secret managers, and logging.
+Agents get real work done when they have access to a computer for running code, using a browser, managing filesystems. But giving agents that access in the cloud raises hard operational questions:
 
-**Superserve gives every agent a governed workspace out of the box.**
+- **Session and hardware isolation**: each agent should run in its own secure environment reducing the vulnerability surface area
+- **Stateful scale-to-zero**: scaling down without losing state, and resuming instantly
+- **Network controls and credentials management**: egress controls, credential injection, and keeping secrets out of agent context
+
+Superserve handles all of this so teams can focus on building agents.
 
 ## Key Features
 
 <CardGroup cols={2}>
   <Card title="Isolated by Default" icon="shield-halved">
-    Every session runs in its own Firecracker microVM. Nothing leaks between sessions or touches your infrastructure.
+    Every agent session runs in an isolated environment with zero risk to your infrastructure.
   </Card>
-  <Card title="Nothing Disappears" icon="database">
-    The `/workspace` filesystem persists across turns, restarts, and days. Resume where you left off.
+  <Card title="Stateful Scale-to-Zero" icon="bolt">
+    Idle environments suspend automatically. When resumed, the full environment is restored in milliseconds. You pay nothing while agents are idle, and lose nothing when they wake up.
   </Card>
-  <Card title="Credentials Stay Hidden" icon="lock">
-    A credential proxy injects API keys at the network level. The agent never sees them — they never appear in LLM context, logs, or tool outputs.
+  <Card title="Network Controls" icon="lock">
+    Egress policies control which domains your agent can reach. A credential proxy injects API keys at the network level so they never appear in LLM context, logs, or tool outputs.
   </Card>
-  <Card title="Any Framework" icon="puzzle-piece">
-    Claude Agent SDK, OpenAI Agents SDK, LangChain, Mastra, Pydantic AI, or plain stdin/stdout.
+  <Card title="Framework agnostic" icon="puzzle-piece">
+    Works with your custom agent or Claude Agent SDK, OpenAI Agents SDK, LangChain, Mastra, Pydantic AI.
   </Card>
   <Card title="One Command" icon="terminal">
-    `superserve deploy agent.py`. No Dockerfile, no server code, no config files.
+    `superserve deploy agent.py` deploys your agent to the cloud, handling isolation, security and scalability
   </Card>
-  <Card title="Real-time Streaming" icon="broadcast-tower">
-    Stream tokens and tool calls as they happen with Server-Sent Events.
-  </Card>
-  <Card title="Sub-second Cold Starts" icon="bolt">
-    Pre-provisioned containers mean your agent starts almost instantly.
-  </Card>
-  <Card title="Encrypted Secrets" icon="key">
-    Set environment variables with `superserve secrets set` — they're encrypted at rest and injected securely.
+  <Card title="Integration SDK" icon="broadcast-tower">
+    Superserve SDK lets you integrate your apps with deployed agents
   </Card>
 </CardGroup>
 
@@ -95,7 +95,7 @@ Completed in 0.8s
     Run `superserve deploy agent.py` to package and upload your agent code. Superserve analyzes dependencies and builds a container image.
   </Step>
   <Step title="Start a session">
-    When you run `superserve run my-agent`, Superserve spins up a new Firecracker microVM with a persistent `/workspace` filesystem.
+    When you run `superserve run my-agent`, Superserve spins up an isolated sandbox with a fully persistent environment.
   </Step>
   <Step title="Send messages">
     Your messages are sent to the agent running in the isolated environment. The agent can execute code, make HTTP requests, and use tools.
@@ -118,7 +118,7 @@ Completed in 0.8s
     Each user gets their own isolated session with persistent state. Perfect for SaaS products with agent-powered features.
   </Accordion>
   <Accordion title="Secure Code Execution">
-    Run untrusted code safely in Firecracker microVMs. The agent can't access your infrastructure or other sessions.
+    Run untrusted code safely in isolated sandboxes. The agent can't access your infrastructure or other sessions.
   </Accordion>
   <Accordion title="Long-Running Agent Workflows">
     Agents can work on tasks across multiple turns and days. The persistent workspace means nothing gets lost.

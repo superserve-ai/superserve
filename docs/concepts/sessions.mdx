@@ -7,8 +7,8 @@ description: "Multi-turn conversations with persistent state and resumable conte
 
 A session is a **multi-turn conversation** between a user and an agent. Each session:
 
-- Runs in its own isolated Firecracker microVM (see [Isolation](/concepts/isolation))
-- Has a persistent `/workspace` filesystem (see [Persistence](/concepts/persistence))
+- Runs in its own isolated sandbox (see [Isolation](/concepts/isolation))
+- Has a fully persistent environment: files, packages, and processes are preserved (see [Persistence](/concepts/persistence))
 - Maintains conversation history (if your framework supports it)
 - Can be resumed hours or days later with full context
 
@@ -49,12 +49,12 @@ Agent > Yes, I added the missing fixtures in conftest.py. All tests pass now.
 
     const client = new Superserve({ apiKey: "your-api-key" })
     const session = await client.createSession("my-agent")
-    // Session is now active, microVM is running
+    // Session is now active, sandbox is running
     ```
   </Step>
 
   <Step title="Active state">
-    While the session is processing a message, it's in the `active` state. The microVM is running, the agent is executing tools, and you can't send another message until it finishes.
+    While the session is processing a message, it's in the `active` state. The sandbox is running, the agent is executing tools, and you can't send another message until it finishes.
 
     ```bash
     $ superserve sessions list my-agent
@@ -65,7 +65,7 @@ Agent > Yes, I added the missing fixtures in conftest.py. All tests pass now.
   </Step>
 
   <Step title="Idle state">
-    After the agent finishes responding, the session goes `idle`. The microVM stays alive for a short period (default: a few minutes) to avoid cold starts if you send another message soon.
+    After the agent finishes responding, the session goes `idle`. The sandbox stays alive for a short period (default: a few minutes) to avoid cold starts if you send another message soon.
 
     ```bash
     $ superserve sessions list my-agent
@@ -74,14 +74,14 @@ Agent > Yes, I added the missing fixtures in conftest.py. All tests pass now.
     ses_abc123  idle     2      30 seconds ago
     ```
 
-    If you don't send another message within the idle timeout, the microVM is destroyed to save resources. The `/workspace` filesystem is persisted, so you can resume later.
+    If you don't send another message within the idle timeout, the sandbox scales to zero: it is snapshotted and suspended, consuming no compute. Resume later to restore the full environment in milliseconds.
   </Step>
 
   <Step title="Resuming">
-    When you resume an idle session:
-    - A fresh microVM is spawned (see [Isolation](/concepts/isolation))
-    - The `/workspace` filesystem is mounted from persistent storage
-    - Conversation history is restored (if your framework persists it)
+    When you resume a session, the full sandbox snapshot is restored:
+    - Files, installed packages, environment variables, and running processes are all intact
+    - Conversation history is preserved (if your framework keeps it in memory or on disk)
+    - You pick up exactly where you left off
 
     ```bash
     $ superserve sessions resume ses_abc123
@@ -107,7 +107,7 @@ Agent > Yes, I added the missing fixtures in conftest.py. All tests pass now.
     $ superserve sessions resume ses_abc123
     ```
 
-    Even `completed` or `failed` sessions are resumable. You get a fresh microVM with the same `/workspace`.
+    Even `completed` or `failed` sessions are resumable. The sandbox is restored from its last snapshot.
   </Step>
 </Steps>
 
@@ -117,8 +117,8 @@ Agent > Yes, I added the missing fixtures in conftest.py. All tests pass now.
 |--------|---------|-------------------|-------------|
 | `active` | Processing a message right now | No | N/A |
 | `idle` | Waiting for the next message | Yes | Yes |
-| `completed` | Ended by user or agent | No | Yes (fresh VM, same workspace) |
-| `failed` | Crashed, timed out, or hit a limit | No | Yes (fresh VM, same workspace) |
+| `completed` | Ended by user or agent | No | Yes (restored from snapshot) |
+| `failed` | Crashed, timed out, or hit a limit | No | Yes (restored from snapshot) |
 
 ## Managing sessions
 
@@ -134,15 +134,15 @@ superserve sessions get ses_abc123
 # Resume a session
 superserve sessions resume ses_abc123
 
-# End a session (workspace is preserved)
+# End a session (sandbox is preserved)
 superserve sessions end ses_abc123
 
-# Delete a session (workspace is destroyed)
+# Delete a session (sandbox is destroyed)
 superserve sessions delete ses_abc123
 ```
 
 <Warning>
-  `delete` permanently destroys the `/workspace` filesystem. Use `end` if you want to preserve files.
+  `delete` permanently destroys the sandbox and all its state. Use `end` if you want to preserve the environment for later.
 </Warning>
 
 ### SDK
@@ -194,11 +194,11 @@ const result = await client.run("my-agent", {
 # Use SDK for custom timeouts
 ```
 
-After the timeout, the microVM is destroyed but the workspace persists. Resume the session to continue.
+After the timeout, the sandbox is snapshotted and suspended. Resume the session to restore the full environment and continue.
 
 ## Conversation memory
 
-Superserve preserves the `/workspace` filesystem across turns and VM restarts. But **conversation history** (the messages exchanged between user and agent) depends on your framework:
+Superserve preserves the entire sandbox state across turns and restarts, including in-memory state. **Conversation history** (the messages exchanged between user and agent) depends on your framework:
 
 <AccordionGroup>
   <Accordion title="Claude Agent SDK">
@@ -220,11 +220,11 @@ Superserve preserves the `/workspace` filesystem across turns and VM restarts. B
         await client.query(prompt="What's my name?", session_id="chat")
     ```
 
-    The SDK stores conversation history in memory. If the microVM restarts (e.g., after idle timeout), the history is lost unless you persist it to `/workspace`.
+    The SDK stores conversation history in memory. Since Superserve snapshots the full sandbox state, in-memory history is preserved across turns and session resumptions.
   </Accordion>
 
   <Accordion title="OpenAI Agents SDK">
-    The SDK maintains conversation state in the `Runner` object. Persist it to `/workspace` if you need it to survive restarts:
+    The SDK maintains conversation state in the `Runner` object. Since the full sandbox state is snapshotted, in-memory state is preserved. You can also persist to disk for extra durability:
 
     ```typescript
     import { Agent } from "@openai/agents-sdk"
@@ -256,7 +256,7 @@ Superserve preserves the `/workspace` filesystem across turns and VM restarts. B
   </Accordion>
 
   <Accordion title="LangChain / LangGraph">
-    Use LangChain's memory components and persist to `/workspace`:
+    Use LangChain's memory components. In-memory state is preserved via snapshots, or persist to disk for extra durability:
 
     ```python
     from langchain.memory import FileChatMessageHistory
@@ -273,7 +273,7 @@ Superserve preserves the `/workspace` filesystem across turns and VM restarts. B
     # Turn 1
     chain.run("My favorite color is blue")
 
-    # Turn 2 (even after VM restart)
+    # Turn 2 (even after session resume)
     chain.run("What's my favorite color?")  # Remembers "blue"
     ```
   </Accordion>
@@ -316,7 +316,7 @@ Superserve preserves the `/workspace` filesystem across turns and VM restarts. B
 </AccordionGroup>
 
 <Tip>
-  **Best practice:** Always persist conversation history to `/workspace` if you want it to survive microVM restarts.
+  **Best practice:** While in-memory state is preserved via snapshots, persisting conversation history to disk provides an extra layer of durability.
 </Tip>
 
 ## Session reuse patterns
@@ -387,14 +387,14 @@ Use this for:
 
 <AccordionGroup>
   <Accordion title="Cold starts vs. warm sessions">
-    - **Cold start**: Session was idle for longer than the timeout. A new microVM is spawned. Takes ~500ms-1s.
-    - **Warm session**: Session is still active or recently idle. The existing microVM handles the request. Takes ~10-50ms.
+    - **Cold start (scale from zero)**: Session was idle for longer than the timeout. The sandbox is restored from a snapshot with full state intact. Takes ~500ms-1s.
+    - **Warm session**: Session is still active or recently idle. The existing sandbox handles the request. Takes ~10-50ms.
 
     To minimize cold starts, set a longer `idleTimeout` or send messages more frequently.
   </Accordion>
 
   <Accordion title="Concurrent sessions">
-    Each session runs in its own microVM. You can have thousands of concurrent sessions for the same agent - they're fully isolated.
+    Each session runs in its own sandbox. You can have thousands of concurrent sessions for the same agent, fully isolated from each other.
 
     ```typescript
     // Run 100 sessions in parallel
@@ -404,7 +404,7 @@ Use this for:
       )
     )
 
-    // Each has its own microVM and /workspace
+    // Each has its own isolated sandbox
     await Promise.all(
       sessions.map(s => s.run("Process data"))
     )
@@ -412,7 +412,7 @@ Use this for:
   </Accordion>
 
   <Accordion title="Session cleanup">
-    Sessions that haven't been used in `idleTimeout` seconds have their microVMs destroyed automatically. The workspace persists until you delete the session.
+    Sessions that haven't been used in `idleTimeout` seconds are snapshotted and suspended automatically. The snapshot persists until you delete the session.
 
     Periodically clean up old sessions to free storage:
 
@@ -429,10 +429,10 @@ Use this for:
 
 <CardGroup cols={2}>
   <Card title="Isolation" icon="shield-halved" href="/concepts/isolation">
-    How each session gets its own microVM
+    How each session gets its own sandbox
   </Card>
   <Card title="Persistence" icon="hard-drive" href="/concepts/persistence">
-    How /workspace survives across sessions
+    How sandbox state persists across sessions
   </Card>
   <Card title="SDK Reference" icon="code" href="/sdk/overview">
     TypeScript client for managing sessions

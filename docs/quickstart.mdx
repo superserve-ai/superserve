@@ -344,8 +344,8 @@ superserve run my-agent --json "Hello!"
 
 When you run your agent, Superserve:
 
-1. **Spins up an isolated microVM** - Your agent runs in a dedicated Firecracker sandbox, completely isolated from other agents
-2. **Mounts persistent storage** - The `/workspace` directory persists across sessions so your agent can save and resume state
+1. **Spins up an isolated sandbox** - Your agent runs in a dedicated sandbox, completely isolated from other agents
+2. **Snapshots the full environment** - Files, packages, processes, and environment variables all persist across sessions
 3. **Injects secrets via proxy** - API keys are injected at the network level and never appear in your agent's environment or logs
 4. **Streams responses** - Output streams in real-time via Server-Sent Events
 

@@ -1,6 +1,6 @@
 ---
 title: "Persistence"
-description: "The /workspace filesystem survives across turns, restarts, and days"
+description: "Full sandbox snapshots preserve your entire environment across turns, restarts, and sessions"
 ---
 
 ## Why persistence matters
@@ -9,20 +9,24 @@ Agents need to remember context across conversations:
 
 - A code review agent writes notes to `findings.md` and references them in later turns
 - A research agent saves scraped data to CSV files and analyzes it over multiple messages
-- A dev agent clones a repo, makes changes, tests them, and iterates based on results
+- A dev agent clones a repo, installs dependencies, makes changes, and iterates based on results
 
 Without persistence, every turn starts from scratch. The agent forgets what it did, loses files it created, and can't build on previous work.
 
-## The `/workspace` filesystem
+## Full sandbox snapshots
 
-Superserve persists the `/workspace` directory across:
+Superserve snapshots and restores the **entire sandbox state** when resuming sessions. This includes:
 
-- **Turns**: Each message in a conversation
-- **Restarts**: If the agent crashes or times out
-- **Sessions**: Resume a conversation days later with every file intact
+- **The full filesystem**, not just `/workspace`
+- **Installed packages** (pip, npm, apt, etc.)
+- **Environment variables** set at runtime
+- **Running processes**, background jobs, and servers
+- **System-level changes** (modified `/etc/hosts`, custom configs, etc.)
+
+When you resume a session, you pick up exactly where you left off. The sandbox is restored to the precise state it was in when the session was last active.
 
 <Info>
-  Only `/workspace` persists. Everything else - system files, installed packages, process state - is ephemeral and resets when the session ends.
+  The `/workspace` directory is where your agent code is deployed and where agents typically read and write files. But persistence is not limited to `/workspace`. The entire sandbox is snapshotted and restored.
 </Info>
 
 ### How it works
@@ -31,39 +35,35 @@ Superserve persists the `/workspace` directory across:
 sequenceDiagram
     participant User
     participant Platform
-    participant VM as MicroVM
-    participant Storage as Persistent Storage
+    participant Sandbox as Sandbox
+    participant Storage as Snapshot Storage
 
     User->>Platform: Start session
-    Platform->>Storage: Load /workspace for session
-    Platform->>VM: Spawn fresh microVM
-    Storage->>VM: Mount /workspace
-    VM->>VM: Agent creates file.txt
-    User->>VM: Send message
-    VM->>VM: Agent modifies file.txt
+    Platform->>Sandbox: Create sandbox
+    Sandbox->>Sandbox: Agent installs packages, creates files
+    User->>Sandbox: Send messages
+    Sandbox->>Sandbox: Agent runs code, starts servers
     User->>Platform: End session
-    VM->>Storage: Sync /workspace changes
-    Platform->>VM: Destroy microVM
-    
+    Sandbox->>Storage: Snapshot entire sandbox state
+    Platform->>Sandbox: Suspend sandbox
+
     User->>Platform: Resume session (hours later)
-    Platform->>Storage: Load /workspace for session
-    Platform->>VM: Spawn fresh microVM
-    Storage->>VM: Mount /workspace
-    Note over VM: file.txt is still there
+    Storage->>Sandbox: Restore full snapshot
+    Note over Sandbox: Files, packages, processes, env vars all intact
 ```
 
 When you start or resume a session:
 
-1. Superserve spawns a fresh Firecracker microVM (see [Isolation](/concepts/isolation))
-2. The platform mounts the `/workspace` filesystem specific to that session
-3. Your agent sees all files from previous turns exactly as it left them
-4. When the session ends, changes are synced back to persistent storage
+1. Superserve creates an isolated sandbox (see [Isolation](/concepts/isolation))
+2. If resuming, the platform restores the full snapshot from the previous session
+3. Your agent sees everything exactly as it left it: files, packages, running processes, environment variables
+4. When the session ends, the entire sandbox state is snapshotted for later resumption
 
 ## What persists
 
 <AccordionGroup>
-  <Accordion title="Files created by the agent">
-    Any file the agent writes to `/workspace` is saved:
+  <Accordion title="Files and the full filesystem">
+    Any file the agent writes, anywhere in the filesystem, is preserved:
 
     ```python
     # Turn 1
@@ -79,7 +79,66 @@ When you start or resume a session:
     - Text files, CSVs, JSON, databases
     - Git repositories cloned or modified by the agent
     - Build artifacts, test results, logs
-    - Any output from tools the agent runs
+    - Files written outside `/workspace` (e.g. `/tmp`, `/home`, `/etc`)
+  </Accordion>
+
+  <Accordion title="Installed packages">
+    Packages installed at runtime are preserved across turns and session resumptions:
+
+    ```python
+    # Turn 1
+    import subprocess
+    subprocess.run(["pip", "install", "requests"])
+    import requests  # Works
+
+    # Turn 2 (resumed later)
+    import requests  # Still works
+    ```
+
+    The same applies to system packages, Node modules, and anything else installed during the session. You can still declare dependencies in `requirements.txt` or `pyproject.toml` for initial deployment, but runtime installations are not lost.
+  </Accordion>
+
+  <Accordion title="Environment variables">
+    Environment variables set by your agent persist across turns:
+
+    ```python
+    # Turn 1
+    os.environ["MY_VAR"] = "value"
+
+    # Turn 2
+    os.environ.get("MY_VAR")  # "value"
+    ```
+
+    For secrets that should be set before the agent starts, use `superserve secrets set` (see [Credentials](/concepts/credentials)).
+  </Accordion>
+
+  <Accordion title="Process state and background jobs">
+    Running processes, background jobs, and servers survive across turns:
+
+    ```python
+    # Turn 1: Start a background server
+    import subprocess
+    subprocess.Popen(["python", "-m", "http.server", "8000"])
+
+    # Turn 2: The server is still running
+    import requests
+    requests.get("http://localhost:8000")  # Works
+    ```
+
+    The sandbox snapshot captures the full process state, so background jobs continue running when the session resumes.
+  </Accordion>
+
+  <Accordion title="System-level changes">
+    Modifications to system files are preserved:
+
+    ```bash
+    # During a session
+    echo "127.0.0.1 myapp.local" >> /etc/hosts
+
+    # Resumed later: /etc/hosts still has your changes
+    ```
+
+    This includes changes to system configs, custom scripts in `/usr/local/bin`, and any other system-level modifications.
   </Accordion>
 
   <Accordion title="Project files from deployment">
@@ -93,7 +152,7 @@ When you start or resume a session:
     └── pyproject.toml
     ```
 
-    Inside the microVM:
+    Inside the sandbox:
 
     ```bash
     /workspace/
@@ -114,7 +173,7 @@ When you start or resume a session:
   </Accordion>
 
   <Accordion title="Conversation history (framework-dependent)">
-    Most agent frameworks store conversation history in memory or on disk. If your framework supports persistent conversations, combine it with `/workspace` for full context retention.
+    Most agent frameworks store conversation history in memory or on disk. Since process state persists, in-memory conversation history is retained across turns.
 
     **Claude Agent SDK:**
     ```python
@@ -125,9 +184,7 @@ When you start or resume a session:
     )
     ```
 
-    The SDK keeps the conversation in memory during the session. When you resume later, the framework might not have the full history unless you explicitly persist it to `/workspace`.
-
-    **Best practice:** Store conversation state in `/workspace` if you need it to survive VM restarts:
+    For long-term persistence, you can also write conversation state to disk:
 
     ```python
     import json
@@ -147,90 +204,9 @@ When you start or resume a session:
   </Accordion>
 </AccordionGroup>
 
-## What doesn't persist
+## Session-specific sandboxes
 
-<Warning>
-  Everything outside `/workspace` is ephemeral and resets when the session ends.
-</Warning>
-
-<AccordionGroup>
-  <Accordion title="Installed packages">
-    If your agent installs a package at runtime, it won't be available in the next session:
-
-    ```python
-    # Inside a session
-    import subprocess
-    subprocess.run(["pip", "install", "requests"])
-    import requests  # Works
-
-    # Next session or turn (after VM restart)
-    import requests  # ModuleNotFoundError
-    ```
-
-    **Solution:** Add dependencies to `requirements.txt` or `pyproject.toml` so they're installed during deployment.
-
-    ```txt requirements.txt
-    requests
-    beautifulsoup4
-    ```
-  </Accordion>
-
-  <Accordion title="Environment variables set at runtime">
-    Environment variables your agent sets don't persist:
-
-    ```python
-    # Turn 1
-    os.environ["MY_VAR"] = "value"
-
-    # Turn 2 (after VM restart)
-    os.environ.get("MY_VAR")  # None
-    ```
-
-    **Solution:** Set secrets via `superserve secrets set` (see [Credentials](/concepts/credentials)) or write to a file in `/workspace`:
-
-    ```python
-    # Write to workspace
-    with open("/workspace/.env", "w") as f:
-        f.write("MY_VAR=value\n")
-
-    # Read on next turn
-    from dotenv import load_dotenv
-    load_dotenv("/workspace/.env")
-    ```
-  </Accordion>
-
-  <Accordion title="Process state">
-    Running processes, background jobs, and in-memory state don't survive:
-
-    ```python
-    # Turn 1: Start a background server
-    import subprocess
-    subprocess.Popen(["python", "-m", "http.server", "8000"])
-
-    # Turn 2: The server is gone
-    # The microVM was destroyed and recreated
-    ```
-
-    **Solution:** If you need a persistent background process, start it in your agent's main loop or use a process manager that restarts on boot.
-  </Accordion>
-
-  <Accordion title="System-level changes">
-    Modifications to system files outside `/workspace` don't persist:
-
-    ```bash
-    # Inside a session
-    echo "127.0.0.1 myapp.local" >> /etc/hosts
-
-    # Next session: /etc/hosts is back to default
-    ```
-
-    Each session gets a fresh root filesystem. Only `/workspace` survives.
-  </Accordion>
-</AccordionGroup>
-
-## Session-specific workspaces
-
-Each session has its own `/workspace` directory. If you start two different sessions for the same agent, they get separate workspaces:
+Each session has its own sandbox. If you start two different sessions for the same agent, they get separate environments:
 
 ```typescript
 import Superserve from "@superserve/sdk"
@@ -240,16 +216,16 @@ const client = new Superserve({ apiKey: "your-api-key" })
 const session1 = await client.createSession("my-agent")
 const session2 = await client.createSession("my-agent")
 
-// These write to DIFFERENT /workspace directories
+// These run in DIFFERENT sandboxes with separate state
 await session1.run("Create a file called data.txt")
 await session2.run("Create a file called data.txt")
 ```
 
-Each session has its own isolated `/workspace` directory. Sessions don't share state.
+Each session has its own isolated sandbox. Sessions don't share state.
 
-## Managing workspace size
+## Managing storage size
 
-The `/workspace` directory has a storage limit per session. If your agent generates large files, clean them up when no longer needed:
+The sandbox has a storage limit per session. If your agent generates large files, clean them up when no longer needed:
 
 ```python
 import os
@@ -341,13 +317,13 @@ if state["stage"] == "analyzing":
             f.write(f"- {finding}\n")
 ```
 
-The agent builds up state over multiple turns, knowing that `/workspace` will retain everything.
+The agent builds up state over multiple turns, knowing that the full sandbox environment is preserved.
 
 ---
 
 <CardGroup cols={2}>
   <Card title="Isolation" icon="shield-halved" href="/concepts/isolation">
-    Why sessions get fresh microVMs each time
+    How sessions run in isolated sandboxes
   </Card>
   <Card title="Sessions" icon="messages" href="/concepts/sessions">
     Multi-turn conversations and resuming
