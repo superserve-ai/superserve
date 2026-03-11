@@ -120,10 +120,14 @@ export const run = new Command("run")
           let exitCode: number
           if (options.json) {
             exitCode = await streamEventsJson(
+              client,
+              sessionId,
               client.streamSessionMessage(sessionId, prompt),
             )
           } else {
             exitCode = await streamEvents(
+              client,
+              sessionId,
               client.streamSessionMessage(sessionId, prompt),
               spinner,
             )
@@ -159,6 +163,8 @@ export const run = new Command("run")
             spinner?.start()
 
             exitCode = await streamEvents(
+              client,
+              sessionId,
               client.streamSessionMessage(sessionId, nextPrompt),
               spinner,
             )
