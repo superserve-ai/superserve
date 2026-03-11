@@ -15,9 +15,9 @@ Preview at `http://localhost:3000`.
 ```
 docs/
 ├── docs.json              # Mintlify config and navigation
-├── index.mdx              # Introduction
+├── introduction.mdx       # Introduction
 ├── quickstart.mdx         # Getting started guide
-├── zero-config.mdx        # Deployment guide
+├── deploy.mdx             # Deployment guide
 ├── sessions.mdx           # Sessions and persistence
 ├── authentication.mdx     # Auth flow docs
 ├── troubleshooting.mdx    # Common issues

@@ -45,7 +45,7 @@
     "groups": [
       {
         "group": "Getting Started",
-        "pages": ["index", "quickstart", "zero-config", "sessions", "authentication", "troubleshooting"]
+        "pages": ["introduction", "quickstart", "deploy", "sessions", "authentication", "troubleshooting"]
       },
       {
         "group": "Frameworks",
