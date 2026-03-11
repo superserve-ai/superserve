@@ -191,6 +191,12 @@ export default function DashboardPage() {
     }
   }
 
+  const handleLogout = async () => {
+    const supabase = createBrowserClient()
+    await supabase.auth.signOut()
+    router.push("/auth/signin")
+  }
+
   const handleChange = (
     e: React.ChangeEvent<
       HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
@@ -214,11 +220,18 @@ export default function DashboardPage() {
     <div className="min-h-screen relative bg-background flex flex-col">
       <div className="relative z-10 container mx-auto px-6 lg:px-8 py-12 lg:py-20 flex-1">
         <div className="max-w-2xl mx-auto">
-          {/* Logo */}
-          <div className="mb-12">
+          {/* Header */}
+          <div className="mb-12 flex items-center justify-between">
             <Link href="/">
               <img src="/logo.svg" alt="Superserve" className="h-8 w-auto" />
             </Link>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="text-sm text-muted hover:text-foreground transition-colors cursor-pointer"
+            >
+              Log out
+            </button>
           </div>
 
           {/* Welcome */}
