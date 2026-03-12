@@ -1,4 +1,5 @@
 import type { Session, User } from "@supabase/supabase-js"
+import posthog from "posthog-js"
 import { createContext, useContext, useEffect, useState } from "react"
 import { supabase } from "./supabase"
 
@@ -57,6 +58,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user && posthog.__loaded) {
+        posthog.identify(session.user.id, { email: session.user.email })
+      }
       setState({
         user: session?.user ?? null,
         session,
@@ -68,6 +72,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user && posthog.__loaded) {
+        posthog.identify(session.user.id, { email: session.user.email })
+      } else if (!session && posthog.__loaded) {
+        posthog.reset()
+      }
       setState({
         user: session?.user ?? null,
         session,

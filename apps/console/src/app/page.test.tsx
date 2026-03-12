@@ -5,8 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 // --- Mocks ---
 
 const mockPush = vi.fn()
+const mockSearchParams = new URLSearchParams()
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
+  useSearchParams: () => mockSearchParams,
 }))
 
 vi.mock("next/link", () => ({

@@ -16,6 +16,7 @@ if (typeof window !== "undefined") {
         person_profiles: "always",
         capture_pageview: false,
         capture_pageleave: true,
+        cross_subdomain_cookie: true,
         session_recording: {
           maskAllInputs: true,
           maskTextSelector: "[data-mask]",

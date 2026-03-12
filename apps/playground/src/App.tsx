@@ -1,5 +1,7 @@
 import { Button, TooltipProvider } from "@superserve/ui"
 import { useState } from "react"
+import { PostHogPageView } from "./components/posthog-pageview"
+import { PostHogProvider } from "./components/posthog-provider"
 import { useRoute } from "./hooks/useRoute"
 import { AuthProvider, useAuth } from "./lib/auth-context"
 import AgentsPage from "./pages/AgentsPage"
@@ -88,10 +90,13 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <TooltipProvider>
-        <AppContent />
-      </TooltipProvider>
-    </AuthProvider>
+    <PostHogProvider>
+      <AuthProvider>
+        <TooltipProvider>
+          <PostHogPageView />
+          <AppContent />
+        </TooltipProvider>
+      </AuthProvider>
+    </PostHogProvider>
   )
 }

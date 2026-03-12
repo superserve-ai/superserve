@@ -51,6 +51,7 @@
         "@superserve/sdk": "workspace:*",
         "@superserve/ui": "workspace:*",
         "@tailwindcss/vite": "^4.2.1",
+        "posthog-js": "^1.353.0",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
         "react-markdown": "^10.1.0",
