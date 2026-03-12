@@ -60,6 +60,40 @@ function DashboardContent() {
   onboardingRef.current = onboarding
   const posthogRef = useRef(posthog)
   posthogRef.current = posthog
+  const pageLoadTime = useRef(Date.now())
+  const stepExpandedAt = useRef<number | null>(Date.now())
+
+  // Fire onboarding_started once when the page becomes visible
+  useEffect(() => {
+    if (!loading && posthog) {
+      posthog.capture("onboarding_started", {
+        is_new_user: searchParams.get("new_user") === "1",
+        completed_steps: Array.from(onboardingRef.current.completedSteps),
+        current_step: onboardingRef.current.expandedStep,
+      })
+    }
+  }, [loading, posthog, searchParams])
+
+  // Track progress on page leave
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (posthogRef.current) {
+        posthogRef.current.capture("onboarding_progress", {
+          completed_steps: Array.from(onboardingRef.current.completedSteps),
+          furthest_step: Math.max(
+            ...Array.from(onboardingRef.current.completedSteps),
+            onboardingRef.current.expandedStep ?? 0,
+          ),
+          current_step: onboardingRef.current.expandedStep,
+          agent_path: onboardingRef.current.agentPath,
+          framework: onboardingRef.current.framework,
+          time_on_page_ms: Date.now() - pageLoadTime.current,
+        })
+      }
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload)
+  }, [])
 
   // Auto-complete step 2 and expand step 3 when agents are detected
   useEffect(() => {
@@ -266,6 +300,7 @@ function DashboardContent() {
                     active={active}
                     onClick={() => {
                       onboarding.toggleStep(step)
+                      stepExpandedAt.current = Date.now()
                       if (posthog) {
                         posthog.capture("onboarding_step_toggled", {
                           step,
@@ -282,8 +317,13 @@ function DashboardContent() {
                         if (posthog) {
                           posthog.capture("onboarding_step_completed", {
                             step: 1,
+                            label: "Install the CLI",
+                            time_on_step_ms: stepExpandedAt.current
+                              ? Date.now() - stepExpandedAt.current
+                              : null,
                           })
                         }
+                        stepExpandedAt.current = Date.now()
                       }}
                     />
                   )}
@@ -311,8 +351,17 @@ function DashboardContent() {
                       onSkip={() => {
                         onboarding.completeStep(2)
                         if (posthog) {
-                          posthog.capture("onboarding_deploy_skipped")
+                          posthog.capture("onboarding_step_completed", {
+                            step: 2,
+                            label: "Deploy your agent",
+                            agent_path: onboarding.agentPath,
+                            framework: onboarding.framework,
+                            time_on_step_ms: stepExpandedAt.current
+                              ? Date.now() - stepExpandedAt.current
+                              : null,
+                          })
                         }
+                        stepExpandedAt.current = Date.now()
                       }}
                     />
                   )}
