@@ -445,6 +445,22 @@ export function createClient(
     yield* parseSSEStream(resp)
   }
 
+  async function* streamSessionEvents(
+    sessionId: string,
+    after = 0,
+  ): AsyncIterableIterator<RunEvent> {
+    const params: Record<string, string> = {}
+    if (after > 0) {
+      params.after = String(after)
+    }
+    const resp = await request(
+      "GET",
+      `/sessions/${encodeURIComponent(sessionId)}/events`,
+      { params, stream: true },
+    )
+    yield* parseSSEStream(resp)
+  }
+
   return {
     validateToken,
     getMe,
@@ -463,5 +479,6 @@ export function createClient(
     endSession,
     resumeSession,
     streamSessionMessage,
+    streamSessionEvents,
   }
 }
