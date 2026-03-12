@@ -10,9 +10,9 @@ import {
   useToast,
 } from "@superserve/ui"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
-import { useEffect, useRef, useState } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
 import { StepDeploy } from "../components/onboarding/step-deploy"
 import { StepInstall } from "../components/onboarding/step-install"
 import { StepPlayground } from "../components/onboarding/step-playground"
@@ -28,7 +28,7 @@ const STEP_LABELS = [
   "Try it on the Playground",
 ] as const
 
-export default function DashboardPage() {
+function DashboardContent() {
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
   const [userName, setUserName] = useState("")
@@ -45,6 +45,7 @@ export default function DashboardPage() {
   const [showForm, setShowForm] = useState(false)
 
   const router = useRouter()
+  const searchParams = useSearchParams()
   const posthog = usePostHog()
   const { addToast } = useToast()
 
@@ -96,6 +97,13 @@ export default function DashboardPage() {
 
       if (posthog) {
         posthog.identify(authUser.id, { email, name })
+
+        if (searchParams.get("new_user") === "1") {
+          posthog.capture("signup_completed", {
+            provider: searchParams.get("provider") || "unknown",
+            email,
+          })
+        }
       }
 
       // If user already has agents, redirect to playground
@@ -132,7 +140,7 @@ export default function DashboardPage() {
     }
 
     checkUserAndSubmission()
-  }, [router, posthog])
+  }, [router, posthog, searchParams])
 
   // Early access form handlers
   const handleSubmit = async (e: React.FormEvent) => {
@@ -490,5 +498,19 @@ export default function DashboardPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        </div>
+      }
+    >
+      <DashboardContent />
+    </Suspense>
   )
 }
