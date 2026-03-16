@@ -60,6 +60,8 @@ export const resumeSession = new Command("resume")
           }
 
           const exitCode = await streamEvents(
+            client,
+            fullSessionId,
             client.streamSessionMessage(fullSessionId, prompt),
             spinner,
           )
