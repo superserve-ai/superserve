@@ -1,13 +1,23 @@
-import type { Session, User } from "@supabase/supabase-js"
+// TODO(better-auth): Replace Supabase auth with Better Auth
+
 import posthog from "posthog-js"
 import { createContext, useContext, useEffect, useState } from "react"
-import { supabase } from "./supabase"
 
 const DEV_TOKEN_KEY = "superserve-dev-token"
 
+interface AuthUser {
+  id: string
+  email?: string
+}
+
+interface AuthSession {
+  user: AuthUser
+  access_token: string
+}
+
 interface AuthContextType {
-  user: User | null
-  session: Session | null
+  user: AuthUser | null
+  session: AuthSession | null
   accessToken: string | null
   loading: boolean
   signOut: () => Promise<void>
@@ -35,7 +45,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     localStorage.removeItem(DEV_TOKEN_KEY)
-    await supabase.auth.signOut()
+    // TODO(better-auth): call Better Auth sign out
+    if (posthog.__loaded) {
+      posthog.reset()
+    }
     setState({ user: null, session: null, accessToken: null, loading: false })
   }
 
@@ -57,35 +70,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user && posthog.__loaded) {
-        posthog.identify(session.user.id, { email: session.user.email })
-      }
-      setState({
-        user: session?.user ?? null,
-        session,
-        accessToken: session?.access_token ?? null,
-        loading: false,
-      })
+    // TODO(better-auth): Get session from Better Auth here.
+    // For now, no session is available — user will see the login screen
+    // and can sign in via console redirect or dev token.
+    setState({
+      user: null,
+      session: null,
+      accessToken: null,
+      loading: false,
     })
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user && posthog.__loaded) {
-        posthog.identify(session.user.id, { email: session.user.email })
-      } else if (!session && posthog.__loaded) {
-        posthog.reset()
-      }
-      setState({
-        user: session?.user ?? null,
-        session,
-        accessToken: session?.access_token ?? null,
-        loading: false,
-      })
-    })
-
-    return () => subscription.unsubscribe()
   }, [])
 
   return (
