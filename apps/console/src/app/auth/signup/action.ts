@@ -1,6 +1,6 @@
 "use server"
 
-import { createAdminClient } from "@superserve/supabase/admin"
+import { generateSignupLink } from "@/lib/auth"
 import { z } from "zod"
 import { notifySlackOfNewUser } from "@/app/auth/signin/action"
 import { sendEmail } from "@/lib/email/send"
@@ -24,35 +24,25 @@ export const signUpWithEmail = async (
   }
 
   try {
-    const supabase = createAdminClient()
-
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai"
     const redirectTo = `${appUrl}/auth/callback`
 
-    const { data, error } = await supabase.auth.admin.generateLink({
-      type: "signup",
-      email: parsed.data.email,
-      password: parsed.data.password,
-      options: {
-        data: { full_name: parsed.data.fullName },
-        redirectTo,
-      },
-    })
+    const { tokenHash, error: linkError } = await generateSignupLink(
+      parsed.data.email,
+      parsed.data.password,
+      parsed.data.fullName,
+      redirectTo,
+    )
 
-    if (error) {
-      if (error.message.includes("already registered")) {
+    if (linkError || !tokenHash) {
+      if (linkError?.includes("already registered")) {
         return {
           success: false,
           error: "An account with this email already exists.",
         }
       }
-      return { success: false, error: error.message }
-    }
-
-    const tokenHash = data?.properties?.hashed_token
-    if (!tokenHash) {
-      return { success: false, error: "Failed to generate confirmation link." }
+      return { success: false, error: linkError || "Failed to generate confirmation link." }
     }
 
     const confirmationUrl = `${redirectTo}?token_hash=${tokenHash}&type=signup`

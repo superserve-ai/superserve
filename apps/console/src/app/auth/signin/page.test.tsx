@@ -54,21 +54,14 @@ vi.mock("@/components/icons", () => ({
   ),
 }))
 
-vi.mock("@/lib/auth-helpers", () => ({
+vi.mock("@/lib/auth", () => ({
   DEV_AUTH_ENABLED: false,
   devSignIn: vi.fn(),
-}))
-
-vi.mock("@superserve/supabase", () => ({
-  createBrowserClient: () => ({
-    auth: {
-      signInWithPassword: mockSignInWithPassword,
-      signInWithOAuth: mockSignInWithOAuth,
-      getSession: mockGetSession,
-      getUser: mockGetUser,
-      signOut: mockSignOut,
-    },
-  }),
+  signInWithPassword: (...args: unknown[]) => mockSignInWithPassword(...args),
+  signInWithOAuth: (...args: unknown[]) => mockSignInWithOAuth(...args),
+  getSession: (...args: unknown[]) => mockGetSession(...args),
+  getUser: (...args: unknown[]) => mockGetUser(...args),
+  signOut: (...args: unknown[]) => mockSignOut(...args),
 }))
 
 import SignInPage from "./page"
@@ -84,14 +77,8 @@ describe("SignInPage", () => {
     mockSignOut.mockReset()
     searchParamsMap = {}
     // Default: no existing session
-    mockGetSession.mockResolvedValue({
-      data: { session: null },
-      error: null,
-    })
-    mockGetUser.mockResolvedValue({
-      data: { user: null },
-      error: null,
-    })
+    mockGetSession.mockResolvedValue(null)
+    mockGetUser.mockResolvedValue(null)
   })
 
   it("renders the signin form", () => {
@@ -127,10 +114,10 @@ describe("SignInPage", () => {
     await user.click(screen.getByRole("button", { name: "Sign In" }))
 
     await waitFor(() => {
-      expect(mockSignInWithPassword).toHaveBeenCalledWith({
-        email: "test@test.com",
-        password: "password123",
-      })
+      expect(mockSignInWithPassword).toHaveBeenCalledWith(
+        "test@test.com",
+        "password123",
+      )
       expect(mockPush).toHaveBeenCalledWith("/")
     })
   })
@@ -151,7 +138,7 @@ describe("SignInPage", () => {
 
   it("shows invalid credentials toast on wrong password", async () => {
     mockSignInWithPassword.mockResolvedValue({
-      error: { message: "Invalid login credentials" },
+      error: "Invalid login credentials",
     })
     render(<SignInPage />)
 
@@ -169,7 +156,7 @@ describe("SignInPage", () => {
 
   it("shows email not confirmed toast", async () => {
     mockSignInWithPassword.mockResolvedValue({
-      error: { message: "Email not confirmed" },
+      error: "Email not confirmed",
     })
     render(<SignInPage />)
 
@@ -210,10 +197,10 @@ describe("SignInPage", () => {
     )
 
     await waitFor(() => {
-      expect(mockSignInWithOAuth).toHaveBeenCalledWith({
-        provider: "google",
-        options: { redirectTo: expect.stringContaining("/auth/callback") },
-      })
+      expect(mockSignInWithOAuth).toHaveBeenCalledWith(
+        "google",
+        expect.stringContaining("/auth/callback"),
+      )
     })
   })
 
@@ -230,14 +217,8 @@ describe("SignInPage", () => {
   })
 
   it("redirects if user already has a valid session", async () => {
-    mockGetSession.mockResolvedValue({
-      data: { session: { access_token: "token" } },
-      error: null,
-    })
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: "123" } },
-      error: null,
-    })
+    mockGetSession.mockResolvedValue({ user: { id: "123" }, access_token: "token" })
+    mockGetUser.mockResolvedValue({ id: "123", created_at: new Date().toISOString() })
 
     render(<SignInPage />)
 

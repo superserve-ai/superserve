@@ -29,12 +29,8 @@ vi.mock("@/components/icons", () => ({
 }))
 
 const mockSignInWithOAuth = vi.fn()
-vi.mock("@superserve/supabase", () => ({
-  createBrowserClient: () => ({
-    auth: {
-      signInWithOAuth: mockSignInWithOAuth,
-    },
-  }),
+vi.mock("@/lib/auth", () => ({
+  signInWithOAuth: (...args: unknown[]) => mockSignInWithOAuth(...args),
 }))
 
 const mockSignUpWithEmail = vi.fn()
@@ -204,10 +200,10 @@ describe("SignUpPage", () => {
     )
 
     await waitFor(() => {
-      expect(mockSignInWithOAuth).toHaveBeenCalledWith({
-        provider: "google",
-        options: { redirectTo: expect.stringContaining("/auth/callback") },
-      })
+      expect(mockSignInWithOAuth).toHaveBeenCalledWith(
+        "google",
+        expect.stringContaining("/auth/callback"),
+      )
     })
   })
 

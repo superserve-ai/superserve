@@ -1,15 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mock dependencies before importing the action
-const mockGenerateLink = vi.fn()
-vi.mock("@superserve/supabase/admin", () => ({
-  createAdminClient: () => ({
-    auth: {
-      admin: {
-        generateLink: mockGenerateLink,
-      },
-    },
-  }),
+const mockGenerateSignupLink = vi.fn()
+vi.mock("@/lib/auth", () => ({
+  generateSignupLink: (...args: unknown[]) => mockGenerateSignupLink(...args),
 }))
 
 const mockSendEmail = vi.fn()
@@ -36,7 +30,7 @@ import { signUpWithEmail } from "./action"
 
 describe("signUpWithEmail", () => {
   beforeEach(() => {
-    mockGenerateLink.mockReset()
+    mockGenerateSignupLink.mockReset()
     mockSendEmail.mockReset()
     mockSlack.mockReset().mockResolvedValue(undefined)
   })
@@ -51,7 +45,7 @@ describe("signUpWithEmail", () => {
       success: false,
       error: "Invalid email address.",
     })
-    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockGenerateSignupLink).not.toHaveBeenCalled()
   })
 
   it("returns error for short password", async () => {
@@ -60,7 +54,7 @@ describe("signUpWithEmail", () => {
       success: false,
       error: "Password must be at least 8 characters.",
     })
-    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockGenerateSignupLink).not.toHaveBeenCalled()
   })
 
   it("returns error for empty name", async () => {
@@ -69,13 +63,12 @@ describe("signUpWithEmail", () => {
       success: false,
       error: "Name is required.",
     })
-    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockGenerateSignupLink).not.toHaveBeenCalled()
   })
 
   it("returns success and sends confirmation email on valid signup", async () => {
-    mockGenerateLink.mockResolvedValue({
-      data: { properties: { hashed_token: "abc123" } },
-      error: null,
+    mockGenerateSignupLink.mockResolvedValue({
+      tokenHash: "abc123",
     })
     mockSendEmail.mockResolvedValue({ success: true })
 
@@ -86,15 +79,12 @@ describe("signUpWithEmail", () => {
     )
 
     expect(result).toEqual({ success: true })
-    expect(mockGenerateLink).toHaveBeenCalledWith({
-      type: "signup",
-      email: "user@test.com",
-      password: "password123",
-      options: {
-        data: { full_name: "Test User" },
-        redirectTo: expect.stringContaining("/auth/callback"),
-      },
-    })
+    expect(mockGenerateSignupLink).toHaveBeenCalledWith(
+      "user@test.com",
+      "password123",
+      "Test User",
+      expect.stringContaining("/auth/callback"),
+    )
     expect(mockSendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "user@test.com",
@@ -104,9 +94,8 @@ describe("signUpWithEmail", () => {
   })
 
   it("returns error when email is already registered", async () => {
-    mockGenerateLink.mockResolvedValue({
-      data: null,
-      error: { message: "User already registered" },
+    mockGenerateSignupLink.mockResolvedValue({
+      error: "already registered",
     })
 
     const result = await signUpWithEmail(
@@ -122,10 +111,9 @@ describe("signUpWithEmail", () => {
     expect(mockSendEmail).not.toHaveBeenCalled()
   })
 
-  it("returns error message from supabase on other errors", async () => {
-    mockGenerateLink.mockResolvedValue({
-      data: null,
-      error: { message: "Rate limit exceeded" },
+  it("returns error message on other errors", async () => {
+    mockGenerateSignupLink.mockResolvedValue({
+      error: "Rate limit exceeded",
     })
 
     const result = await signUpWithEmail(
@@ -141,10 +129,7 @@ describe("signUpWithEmail", () => {
   })
 
   it("returns error when token hash is missing", async () => {
-    mockGenerateLink.mockResolvedValue({
-      data: { properties: {} },
-      error: null,
-    })
+    mockGenerateSignupLink.mockResolvedValue({})
 
     const result = await signUpWithEmail(
       "user@test.com",
@@ -159,7 +144,7 @@ describe("signUpWithEmail", () => {
   })
 
   it("returns generic error on unexpected exception", async () => {
-    mockGenerateLink.mockRejectedValue(new Error("network error"))
+    mockGenerateSignupLink.mockRejectedValue(new Error("network error"))
 
     const result = await signUpWithEmail(
       "user@test.com",
@@ -174,9 +159,8 @@ describe("signUpWithEmail", () => {
   })
 
   it("notifies slack after successful signup (fire and forget)", async () => {
-    mockGenerateLink.mockResolvedValue({
-      data: { properties: { hashed_token: "abc123" } },
-      error: null,
+    mockGenerateSignupLink.mockResolvedValue({
+      tokenHash: "abc123",
     })
     mockSendEmail.mockResolvedValue({ success: true })
     mockSlack.mockResolvedValue({ success: true })

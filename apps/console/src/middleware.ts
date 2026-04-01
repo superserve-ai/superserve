@@ -1,8 +1,7 @@
-import {
-  createMiddlewareClient,
-  matchesRoute,
-} from "@superserve/supabase/middleware"
 import type { NextRequest } from "next/server"
+import { NextResponse } from "next/server"
+
+// TODO(better-auth): Replace with Better Auth middleware session check
 
 const PUBLIC_ROUTES = [
   "/auth/signin",
@@ -13,16 +12,27 @@ const PUBLIC_ROUTES = [
   "/device",
 ]
 
+function matchesRoute(pathname: string, routes: string[]): boolean {
+  const normalizedPathname = pathname.endsWith("/")
+    ? pathname.slice(0, -1)
+    : pathname
+  return routes.some((route) => {
+    const normalizedRoute = route.endsWith("/") ? route.slice(0, -1) : route
+    return (
+      normalizedPathname === normalizedRoute ||
+      normalizedPathname.startsWith(`${normalizedRoute}/`)
+    )
+  })
+}
+
 export async function middleware(request: NextRequest) {
-  const client = createMiddlewareClient(request)
-  if (!client.supabase) return client.response
-
-  const {
-    data: { user },
-  } = await client.supabase.auth.getUser()
-
   const pathname = request.nextUrl.pathname
   const isPublicRoute = matchesRoute(pathname, PUBLIC_ROUTES)
+
+  // TODO(better-auth): Check session from Better Auth here.
+  // For now, allow all requests through. Auth is enforced nowhere
+  // until Better Auth is wired in.
+  const user = null // TODO(better-auth): get user from session
 
   if (!user && !isPublicRoute) {
     const signinUrl = request.nextUrl.clone()
@@ -31,7 +41,7 @@ export async function middleware(request: NextRequest) {
     return Response.redirect(signinUrl)
   }
 
-  return client.response
+  return NextResponse.next()
 }
 
 export const config = {

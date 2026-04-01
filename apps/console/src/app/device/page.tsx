@@ -1,13 +1,19 @@
 "use client"
 
-import { createBrowserClient } from "@superserve/supabase"
 import { Button, useToast } from "@superserve/ui"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useState } from "react"
 import { GoogleIcon, Spinner } from "@/components/icons"
-import { DEV_AUTH_ENABLED, devSignIn } from "@/lib/auth-helpers"
+import {
+  DEV_AUTH_ENABLED,
+  devSignIn,
+  getSession,
+  getUser,
+  signInWithOAuth,
+  signOut,
+} from "@/lib/auth"
 
 function Logo() {
   return (
@@ -34,36 +40,24 @@ function DevicePageContent() {
 
   useEffect(() => {
     const checkUser = async () => {
-      const supabase = createBrowserClient()
       try {
-        const {
-          data: { session },
-          error,
-        } = await supabase.auth.getSession()
-
-        if (error) {
-          await supabase.auth.signOut()
+        const session = await getSession()
+        if (!session) {
+          setIsCheckingSession(false)
           return
         }
-
-        if (session?.user) {
-          const {
-            data: { user: authUser },
-            error: userError,
-          } = await supabase.auth.getUser()
-          if (userError?.code === "user_not_found") {
-            await supabase.auth.signOut()
-            return
-          }
-          if (authUser) {
-            setUser({ id: authUser.id, email: authUser.email })
-            if (posthog) {
-              posthog.identify(authUser.id, { email: authUser.email })
-            }
-          }
+        const authUser = await getUser()
+        if (!authUser) {
+          await signOut()
+          setIsCheckingSession(false)
+          return
+        }
+        setUser({ id: authUser.id, email: authUser.email })
+        if (posthog) {
+          posthog.identify(authUser.id, { email: authUser.email })
         }
       } catch (_error) {
-        await supabase.auth.signOut()
+        await signOut().catch(() => {})
       } finally {
         setIsCheckingSession(false)
       }
@@ -74,20 +68,12 @@ function DevicePageContent() {
   const handleGoogleSignIn = async () => {
     setIsLoading(true)
     try {
-      const supabase = createBrowserClient()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
       callbackUrl.searchParams.set(
         "next",
         `/device?code=${encodeURIComponent(userCode ?? "")}`,
       )
-
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: callbackUrl.toString(),
-        },
-      })
-
+      const { error } = await signInWithOAuth("google", callbackUrl.toString())
       if (error) {
         console.error("Error signing in:", error)
         addToast("Error signing in. Please try again.", "error")
@@ -102,7 +88,6 @@ function DevicePageContent() {
 
   const handleDevSignIn = async () => {
     if (!DEV_AUTH_ENABLED) return
-
     setIsDevLoading(true)
     try {
       const result = await devSignIn()
@@ -110,11 +95,7 @@ function DevicePageContent() {
         addToast(result.error || "Dev auth failed.", "error")
         return
       }
-
-      const supabase = createBrowserClient()
-      const {
-        data: { user: signedInUser },
-      } = await supabase.auth.getUser()
+      const signedInUser = await getUser()
       if (signedInUser) {
         setUser({ id: signedInUser.id, email: signedInUser.email })
         if (posthog) {
@@ -131,18 +112,12 @@ function DevicePageContent() {
 
   const handleAuthorize = async () => {
     if (!userCode || !user) return
-
     setIsAuthorizing(true)
-
     try {
-      const supabase = createBrowserClient()
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+      const session = await getSession()
       if (!session?.access_token) {
         throw new Error("Session expired. Please sign in again.")
       }
-
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/v1/auth/device-authorize`,
         {
@@ -151,27 +126,20 @@ function DevicePageContent() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({
-            user_code: userCode,
-          }),
+          body: JSON.stringify({ user_code: userCode }),
         },
       )
-
       if (!response.ok) {
         const data = await response.json()
         throw new Error(data.detail || "Failed to authorize device")
       }
-
       setIsAuthorized(true)
       if (posthog) {
-        posthog.capture("cli_device_authorized", {
-          user_email: user.email,
-        })
+        posthog.capture("cli_device_authorized", { user_email: user.email })
       }
     } catch (err) {
       console.error("Authorization error:", err)
-      const message =
-        err instanceof Error ? err.message : "Failed to authorize device"
+      const message = err instanceof Error ? err.message : "Failed to authorize device"
       addToast(message, "error")
     } finally {
       setIsAuthorizing(false)

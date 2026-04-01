@@ -1,13 +1,10 @@
 "use client"
 
-import { createBrowserClient } from "@superserve/supabase"
 import { useEffect, useState } from "react"
+import { getUser } from "@/lib/auth"
+import { type Agent, getAgentsByUser, subscribeToAgentInserts } from "@/lib/db"
 
-export interface Agent {
-  id: string
-  name: string
-  created_at: string
-}
+export type { Agent }
 
 export function useAgents(enabled: boolean) {
   const [agents, setAgents] = useState<Agent[]>([])
@@ -16,61 +13,41 @@ export function useAgents(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return
 
-    const supabase = createBrowserClient()
     let cancelled = false
     let userId: string | null = null
 
     const fetchAgents = async () => {
       if (!userId) {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
+        const user = await getUser()
         if (!user || cancelled) return
         userId = user.id
       }
 
-      const { data } = await supabase
-        .from("agents")
-        .select("id, name, created_at")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-
-      if (!cancelled && data) {
+      const data = await getAgentsByUser(userId)
+      if (!cancelled) {
         setAgents(data)
       }
       setLoading(false)
     }
 
-    const setupRealtimeAndFetch = async () => {
+    const setupAndFetch = async () => {
       setLoading(true)
       await fetchAgents()
       if (cancelled || !userId) return
 
-      const channel = supabase
-        .channel("agents-realtime")
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "agents",
-            filter: `user_id=eq.${userId}`,
-          },
-          () => {
-            fetchAgents()
-          },
-        )
-        .subscribe()
-
-      cleanupChannel = () => supabase.removeChannel(channel)
+      // TODO(drizzle): subscribeToAgentInserts is a noop until
+      // a realtime alternative is implemented
+      cleanupSubscription = subscribeToAgentInserts(userId, () => {
+        fetchAgents()
+      })
     }
 
-    let cleanupChannel: (() => void) | null = null
-    setupRealtimeAndFetch()
+    let cleanupSubscription: (() => void) | null = null
+    setupAndFetch()
 
     return () => {
       cancelled = true
-      cleanupChannel?.()
+      cleanupSubscription?.()
     }
   }, [enabled])
 

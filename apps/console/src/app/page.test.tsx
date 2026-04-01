@@ -66,17 +66,19 @@ vi.mock("@superserve/ui", () => ({
 }))
 
 const mockGetUser = vi.fn()
-const mockGetSession = vi.fn()
-const mockFrom = vi.fn()
 
-vi.mock("@superserve/supabase", () => ({
-  createBrowserClient: () => ({
-    auth: {
-      getUser: mockGetUser,
-      getSession: mockGetSession,
-    },
-    from: mockFrom,
-  }),
+vi.mock("@/lib/auth", () => ({
+  getUser: (...args: unknown[]) => mockGetUser(...args),
+  signOut: vi.fn(),
+}))
+
+const mockGetAgentsByUser = vi.fn()
+const mockGetEarlyAccessRequest = vi.fn()
+const mockUpsertEarlyAccessRequest = vi.fn()
+vi.mock("@/lib/db", () => ({
+  getAgentsByUser: (...args: unknown[]) => mockGetAgentsByUser(...args),
+  getEarlyAccessRequest: (...args: unknown[]) => mockGetEarlyAccessRequest(...args),
+  upsertEarlyAccessRequest: (...args: unknown[]) => mockUpsertEarlyAccessRequest(...args),
 }))
 
 const mockCapture = vi.fn()
@@ -98,8 +100,9 @@ describe("DashboardPage", () => {
   beforeEach(() => {
     mockPush.mockReset()
     mockGetUser.mockReset()
-    mockGetSession.mockReset()
-    mockFrom.mockReset()
+    mockGetAgentsByUser.mockReset()
+    mockGetEarlyAccessRequest.mockReset()
+    mockUpsertEarlyAccessRequest.mockReset()
     mockCapture.mockReset()
     mockIdentify.mockReset()
     mockSendToSlack.mockReset()
@@ -107,9 +110,7 @@ describe("DashboardPage", () => {
   })
 
   it("redirects to signin if not authenticated", async () => {
-    mockGetUser.mockResolvedValue({
-      data: { user: null },
-    })
+    mockGetUser.mockResolvedValue(null)
 
     render(<DashboardPage />)
 
@@ -118,25 +119,9 @@ describe("DashboardPage", () => {
     })
   })
 
-  function mockFromWithNoAgents(earlyAccessData: { id: string } | null = null) {
-    mockFrom.mockImplementation((table: string) => {
-      if (table === "agents") {
-        return {
-          select: () => ({
-            eq: () => ({
-              limit: () => Promise.resolve({ data: [] }),
-            }),
-          }),
-        }
-      }
-      return {
-        select: () => ({
-          eq: () => ({
-            maybeSingle: () => Promise.resolve({ data: earlyAccessData }),
-          }),
-        }),
-      }
-    })
+  function mockWithNoAgents(earlyAccessData: { id: string } | null = null) {
+    mockGetAgentsByUser.mockResolvedValue([])
+    mockGetEarlyAccessRequest.mockResolvedValue(earlyAccessData)
   }
 
   it("redirects to playground when user has agents", async () => {
@@ -153,32 +138,12 @@ describe("DashboardPage", () => {
     })
 
     mockGetUser.mockResolvedValue({
-      data: {
-        user: {
-          id: "user-123",
-          email: "test@test.com",
-          user_metadata: { full_name: "Test User" },
-        },
-      },
+      id: "user-123",
+      email: "test@test.com",
+      user_metadata: { full_name: "Test User" },
+      created_at: new Date().toISOString(),
     })
-    mockFrom.mockImplementation((table: string) => {
-      if (table === "agents") {
-        return {
-          select: () => ({
-            eq: () => ({
-              limit: () => Promise.resolve({ data: [{ id: "agt_abc123" }] }),
-            }),
-          }),
-        }
-      }
-      return {
-        select: () => ({
-          eq: () => ({
-            maybeSingle: () => Promise.resolve({ data: null }),
-          }),
-        }),
-      }
-    })
+    mockGetAgentsByUser.mockResolvedValue([{ id: "agt_abc123" }])
 
     render(<DashboardPage />)
 
@@ -197,15 +162,12 @@ describe("DashboardPage", () => {
 
   it("renders CLI instructions and request access link for authenticated user", async () => {
     mockGetUser.mockResolvedValue({
-      data: {
-        user: {
-          id: "user-123",
-          email: "test@test.com",
-          user_metadata: { full_name: "Test User" },
-        },
-      },
+      id: "user-123",
+      email: "test@test.com",
+      user_metadata: { full_name: "Test User" },
+      created_at: new Date().toISOString(),
     })
-    mockFromWithNoAgents()
+    mockWithNoAgents()
 
     render(<DashboardPage />)
 
@@ -218,15 +180,12 @@ describe("DashboardPage", () => {
 
   it("shows the form when 'Request dashboard access' is clicked", async () => {
     mockGetUser.mockResolvedValue({
-      data: {
-        user: {
-          id: "user-123",
-          email: "test@test.com",
-          user_metadata: { full_name: "Test User" },
-        },
-      },
+      id: "user-123",
+      email: "test@test.com",
+      user_metadata: { full_name: "Test User" },
+      created_at: new Date().toISOString(),
     })
-    mockFromWithNoAgents()
+    mockWithNoAgents()
 
     render(<DashboardPage />)
 
@@ -251,15 +210,12 @@ describe("DashboardPage", () => {
 
   it("shows already-submitted message when user has previously submitted", async () => {
     mockGetUser.mockResolvedValue({
-      data: {
-        user: {
-          id: "user-123",
-          email: "test@test.com",
-          user_metadata: { full_name: "Test User" },
-        },
-      },
+      id: "user-123",
+      email: "test@test.com",
+      user_metadata: { full_name: "Test User" },
+      created_at: new Date().toISOString(),
     })
-    mockFromWithNoAgents({ id: "req-1" })
+    mockWithNoAgents({ id: "req-1" })
 
     render(<DashboardPage />)
 

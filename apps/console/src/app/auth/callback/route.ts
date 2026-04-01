@@ -1,4 +1,4 @@
-import { createServerClient } from "@superserve/supabase/server"
+import { exchangeCodeForSession, getUser, verifyOtp } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { notifySlackOfNewUser } from "@/app/auth/signin/action"
 import { sendWelcomeEmail } from "@/app/auth/signup/action"
@@ -32,22 +32,18 @@ export async function GET(request: Request) {
   let next = sanitizeNext(searchParams.get("next"))
 
   if (code || tokenHash) {
-    const supabase = await createServerClient()
+    let error: string | undefined
 
-    let error = null
     if (code) {
-      const result = await supabase.auth.exchangeCodeForSession(code)
+      const result = await exchangeCodeForSession(code)
       error = result.error
     } else if (tokenHash && type) {
-      const result = await supabase.auth.verifyOtp({
-        token_hash: tokenHash,
-        type,
-      })
+      const result = await verifyOtp(tokenHash, type)
       error = result.error
     }
 
     if (error) {
-      console.error("Auth callback error:", error.message, {
+      console.error("Auth callback error:", error, {
         code: !!code,
         tokenHash: !!tokenHash,
         type,
@@ -61,9 +57,7 @@ export async function GET(request: Request) {
         )
       }
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      const user = await getUser()
 
       if (user) {
         const createdAt = new Date(user.created_at)
@@ -71,18 +65,18 @@ export async function GET(request: Request) {
         const isNewUser = now.getTime() - createdAt.getTime() < 30000
 
         const provider = code
-          ? user.app_metadata?.provider || "google"
+          ? (user.app_metadata?.provider as string) || "google"
           : "email"
 
         if (isNewUser) {
           await notifySlackOfNewUser(
             user.email || "",
-            user.user_metadata?.full_name || null,
-            user.app_metadata?.provider || null,
+            (user.user_metadata?.full_name as string) || null,
+            (user.app_metadata?.provider as string) || null,
           )
           sendWelcomeEmail(
             user.email || "",
-            user.user_metadata?.full_name || "there",
+            (user.user_metadata?.full_name as string) || "there",
           ).catch(() => {})
         }
 

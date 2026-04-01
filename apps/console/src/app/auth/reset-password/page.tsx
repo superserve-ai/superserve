@@ -1,6 +1,6 @@
 "use client"
 
-import { createBrowserClient } from "@superserve/supabase"
+import { updateUser } from "@/lib/auth"
 import { Button, Input, useToast } from "@superserve/ui"
 import { Eye, EyeOff } from "lucide-react"
 import Link from "next/link"
@@ -36,10 +36,9 @@ function ResetPasswordContent() {
     }
     setIsLoading(true)
     try {
-      const supabase = createBrowserClient()
-      const { error } = await supabase.auth.updateUser({ password })
+      const { error } = await updateUser({ password })
       if (error) {
-        console.error("Reset password error:", error.message)
+        console.error("Reset password error:", error)
         addToast("Failed to update password. Please try again.", "error")
         return
       }

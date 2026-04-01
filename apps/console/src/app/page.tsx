@@ -1,6 +1,11 @@
 "use client"
 
-import { createBrowserClient } from "@superserve/supabase"
+import { getUser, signOut } from "@/lib/auth"
+import {
+  getAgentsByUser,
+  getEarlyAccessRequest,
+  upsertEarlyAccessRequest,
+} from "@/lib/db"
 import {
   Alert,
   Button,
@@ -111,10 +116,7 @@ function DashboardContent() {
   // Auth check
   useEffect(() => {
     const checkUserAndSubmission = async () => {
-      const supabase = createBrowserClient()
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser()
+      const authUser = await getUser()
 
       if (!authUser) {
         router.push("/auth/signin")
@@ -122,7 +124,9 @@ function DashboardContent() {
       }
 
       const name =
-        authUser.user_metadata?.full_name || authUser.user_metadata?.name || ""
+        (authUser.user_metadata?.full_name as string) ||
+        (authUser.user_metadata?.name as string) ||
+        ""
       const email = authUser.email || ""
 
       setUserId(authUser.id)
@@ -142,13 +146,8 @@ function DashboardContent() {
 
       // If user already has agents, redirect to playground
       try {
-        const { data: existingAgents } = await supabase
-          .from("agents")
-          .select("id")
-          .eq("user_id", authUser.id)
-          .limit(1)
-
-        if (existingAgents && existingAgents.length > 0) {
+        const existingAgents = await getAgentsByUser(authUser.id)
+        if (existingAgents.length > 0) {
           window.location.href = PLAYGROUND_URL
           return
         }
@@ -157,13 +156,8 @@ function DashboardContent() {
       }
 
       try {
-        const { data } = await supabase
-          .from("early_access_requests")
-          .select("id")
-          .eq("user_id", authUser.id)
-          .maybeSingle()
-
-        if (data) {
+        const request = await getEarlyAccessRequest(authUser.id)
+        if (request) {
           setIsSubmitted(true)
         }
       } catch (err) {
@@ -185,23 +179,17 @@ function DashboardContent() {
     setError(null)
 
     try {
-      const supabase = createBrowserClient()
-      const { error: upsertError } = await supabase
-        .from("early_access_requests")
-        .upsert(
-          {
-            user_id: userId,
-            name: formData.name,
-            email: formData.email,
-            company: formData.company,
-            role: formData.role,
-            use_case: formData.useCase,
-          },
-          { onConflict: "user_id" },
-        )
+      const { error: upsertError } = await upsertEarlyAccessRequest({
+        user_id: userId,
+        name: formData.name,
+        email: formData.email,
+        company: formData.company,
+        role: formData.role,
+        use_case: formData.useCase,
+      })
 
       if (upsertError) {
-        throw new Error(upsertError.message)
+        throw new Error(upsertError)
       }
 
       sendEarlyAccessToSlack(
@@ -234,8 +222,7 @@ function DashboardContent() {
   }
 
   const handleLogout = async () => {
-    const supabase = createBrowserClient()
-    await supabase.auth.signOut()
+    await signOut()
     router.push("/auth/signin")
   }
 

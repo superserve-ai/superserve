@@ -13,7 +13,6 @@
       "version": "0.0.0",
       "dependencies": {
         "@react-email/components": "^1.0.7",
-        "@superserve/supabase": "workspace:*",
         "@superserve/ui": "workspace:*",
         "lucide-react": "^0.575.0",
         "next": "^16.1.6",
@@ -136,27 +135,6 @@
       },
       "optionalPeers": [
         "react",
-      ],
-    },
-    "packages/supabase": {
-      "name": "@superserve/supabase",
-      "version": "0.0.0",
-      "dependencies": {
-        "@supabase/ssr": "^0.8.0",
-        "@supabase/supabase-js": "^2.98.0",
-      },
-      "devDependencies": {
-        "@biomejs/biome": "^2.4.4",
-        "@superserve/biome-config": "workspace:*",
-        "@superserve/typescript-config": "workspace:*",
-        "typescript": "~5.9.3",
-        "vitest": "^4.0.18",
-      },
-      "peerDependencies": {
-        "next": ">=15",
-      },
-      "optionalPeers": [
-        "next",
       ],
     },
     "packages/tailwind-config": {
@@ -678,8 +656,6 @@
     "@superserve/playground": ["@superserve/playground@workspace:apps/playground"],
 
     "@superserve/sdk": ["@superserve/sdk@workspace:packages/sdk"],
-
-    "@superserve/supabase": ["@superserve/supabase@workspace:packages/supabase"],
 
     "@superserve/tailwind-config": ["@superserve/tailwind-config@workspace:packages/tailwind-config"],
 

@@ -12,7 +12,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@superserve/supabase": "workspace:*",
     "@superserve/ui": "workspace:*",
     "@react-email/components": "^1.0.7",
     "lucide-react": "^0.575.0",

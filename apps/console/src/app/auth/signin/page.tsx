@@ -1,13 +1,20 @@
 "use client"
 
-import { createBrowserClient } from "@superserve/supabase"
 import { Button, Input, useToast } from "@superserve/ui"
 import { Eye, EyeOff } from "lucide-react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Suspense, useEffect, useState } from "react"
 import { GoogleIcon, Spinner } from "@/components/icons"
-import { DEV_AUTH_ENABLED, devSignIn } from "@/lib/auth-helpers"
+import {
+  DEV_AUTH_ENABLED,
+  devSignIn,
+  getSession,
+  getUser,
+  signInWithOAuth,
+  signInWithPassword,
+  signOut,
+} from "@/lib/auth"
 
 const AUTH_INPUT_CLASS =
   "h-auto px-4 py-3.5 bg-surface text-foreground border-border focus:ring-0 focus:border-primary"
@@ -29,29 +36,17 @@ function SignInContent() {
 
   useEffect(() => {
     const checkUser = async () => {
-      const supabase = createBrowserClient()
       try {
-        const {
-          data: { session },
-          error,
-        } = await supabase.auth.getSession()
-        if (error) {
-          await supabase.auth.signOut()
+        const session = await getSession()
+        if (!session) return
+        const user = await getUser()
+        if (!user) {
+          await signOut()
           return
         }
-        if (session) {
-          const {
-            data: { user },
-            error: userError,
-          } = await supabase.auth.getUser()
-          if (userError || !user) {
-            await supabase.auth.signOut()
-            return
-          }
-          router.push(nextUrl && nextUrl !== "/" ? nextUrl : "/")
-        }
+        router.push(nextUrl && nextUrl !== "/" ? nextUrl : "/")
       } catch (_error) {
-        await supabase.auth.signOut()
+        await signOut().catch(() => {})
       }
     }
     checkUser()
@@ -65,15 +60,11 @@ function SignInContent() {
     }
     setIsEmailLoading(true)
     try {
-      const supabase = createBrowserClient()
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+      const { error } = await signInWithPassword(email, password)
       if (error) {
-        if (error.message.includes("Invalid login credentials")) {
+        if (error.includes("Invalid login credentials")) {
           addToast("Invalid email or password.", "error")
-        } else if (error.message.includes("Email not confirmed")) {
+        } else if (error.includes("Email not confirmed")) {
           addToast("Please verify your email before signing in.", "error")
         } else {
           addToast("Error signing in. Please try again.", "error")
@@ -92,15 +83,11 @@ function SignInContent() {
   const handleGoogleSignIn = async () => {
     setIsLoading(true)
     try {
-      const supabase = createBrowserClient()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
       if (nextUrl && nextUrl !== "/") {
         callbackUrl.searchParams.set("next", nextUrl)
       }
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: callbackUrl.toString() },
-      })
+      const { error } = await signInWithOAuth("google", callbackUrl.toString())
       if (error) {
         console.error("Error signing in:", error)
         addToast("Error signing in. Please try again.", "error")

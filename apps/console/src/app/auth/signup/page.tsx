@@ -1,6 +1,6 @@
 "use client"
 
-import { createBrowserClient } from "@superserve/supabase"
+import { signInWithOAuth } from "@/lib/auth"
 import { Button, Input, useToast } from "@superserve/ui"
 import { Eye, EyeOff } from "lucide-react"
 import Link from "next/link"
@@ -68,15 +68,11 @@ function SignUpContent() {
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true)
     try {
-      const supabase = createBrowserClient()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
       if (nextUrl && nextUrl !== "/") {
         callbackUrl.searchParams.set("next", nextUrl)
       }
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: callbackUrl.toString() },
-      })
+      const { error } = await signInWithOAuth("google", callbackUrl.toString())
       if (error) {
         console.error("Error signing in:", error)
         addToast("Error signing in. Please try again.", "error")
