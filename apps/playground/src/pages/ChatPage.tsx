@@ -109,7 +109,7 @@ export default function ChatPage({ agentId, onBack }: ChatPageProps) {
             <button
               type="button"
               onClick={() => setSidebarOpen((prev) => !prev)}
-              className="cursor-pointer p-1.5 text-muted transition-colors hover:text-ink md:hidden"
+              className="cursor-pointer p-1.5 text-muted transition-colors hover:text-foreground md:hidden"
               aria-label="Toggle sidebar"
             >
               <svg
@@ -129,15 +129,15 @@ export default function ChatPage({ agentId, onBack }: ChatPageProps) {
             </button>
             <div className="flex items-center gap-1.5 text-[13px]">
               <span className="hidden text-muted md:inline">Superserve</span>
-              <span className="hidden text-ink-faint md:inline">/</span>
+              <span className="hidden text-muted md:inline">/</span>
               <button
                 type="button"
                 onClick={onBack}
-                className="cursor-pointer text-muted transition-colors hover:text-ink-light"
+                className="cursor-pointer text-muted transition-colors hover:text-foreground"
               >
                 Playground
               </button>
-              <span className="text-ink-faint">/</span>
+              <span className="text-muted">/</span>
               <span
                 className={`font-medium ${agentName ? "text-foreground" : "animate-pulse font-mono text-muted"}`}
               >

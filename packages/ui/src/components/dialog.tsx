@@ -1,7 +1,7 @@
 "use client"
 
+import { X } from "@phosphor-icons/react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
-import { X } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
 import { cn } from "../lib/utils"
 
@@ -40,7 +40,7 @@ function DialogContent({
           >
             {children}
             <DialogPrimitive.Close className="absolute right-4 top-4 p-1 text-muted hover:text-foreground hover:bg-surface-hover transition-colors">
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" weight="light" />
               <span className="sr-only">Close</span>
             </DialogPrimitive.Close>
           </motion.div>

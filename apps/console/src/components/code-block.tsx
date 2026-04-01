@@ -1,6 +1,6 @@
 "use client"
 
-import { Check, Copy } from "lucide-react"
+import { Check, Copy } from "@phosphor-icons/react"
 import { usePostHog } from "posthog-js/react"
 import { useState } from "react"
 
@@ -28,19 +28,19 @@ export function CodeBlock({ command, eventName }: CodeBlockProps) {
 
   return (
     <div className="flex items-center bg-[#09090b] border border-border px-4 py-3.5">
-      <code className="flex-1 text-sm font-mono text-white/80 overflow-x-auto">
-        <span className="text-white/70 mr-2 select-none">$</span>
+      <code className="flex-1 text-sm font-mono text-foreground/80 overflow-x-auto">
+        <span className="text-foreground/70 mr-2 select-none">$</span>
         {command}
       </code>
       <button
         type="button"
         onClick={copy}
-        className="ml-3 text-white/40 hover:text-white/80 transition-colors shrink-0"
+        className="ml-3 text-muted hover:text-foreground transition-colors shrink-0"
       >
         {copied ? (
-          <Check className="h-4 w-4 text-emerald-400" />
+          <Check className="h-4 w-4 text-emerald-400" weight="light" />
         ) : (
-          <Copy className="h-4 w-4" />
+          <Copy className="h-4 w-4" weight="light" />
         )}
       </button>
     </div>

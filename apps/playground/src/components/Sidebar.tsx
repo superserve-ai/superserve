@@ -66,7 +66,7 @@ export default function Sidebar({
       <div className="flex-1 overflow-y-auto">
         {groups.map((group) => (
           <div key={group.label}>
-            <p className="px-4 pt-4 pb-1 font-mono text-[10px] uppercase tracking-widest text-ink-faint">
+            <p className="px-4 pt-4 pb-1 font-mono text-[10px] uppercase tracking-widest text-muted">
               {group.label}
             </p>
             {group.items.map((session) => {
@@ -91,7 +91,7 @@ export default function Sidebar({
                   <div className="min-w-0 flex-1">
                     <p
                       title={session.title}
-                      className={`truncate text-[13px] ${isActive ? "font-medium text-foreground" : "text-ink"}`}
+                      className={`truncate text-[13px] ${isActive ? "font-medium text-foreground" : "text-muted"}`}
                     >
                       {session.title}
                     </p>
@@ -120,7 +120,7 @@ export default function Sidebar({
                     className={`ml-2 mt-0.5 shrink-0 cursor-pointer p-0.5 transition-opacity ${
                       pendingDelete === session.localId
                         ? "text-destructive opacity-100"
-                        : "text-ink-faint opacity-0 hover:text-ink-light group-hover:opacity-100"
+                        : "text-muted opacity-0 hover:text-foreground group-hover:opacity-100"
                     }`}
                     aria-label="Delete session"
                   >

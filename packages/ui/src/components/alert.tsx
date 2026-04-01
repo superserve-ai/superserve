@@ -1,4 +1,6 @@
-import { AlertTriangle, Check, Info } from "lucide-react"
+"use client"
+
+import { Check, Info, Warning } from "@phosphor-icons/react"
 import { cn } from "../lib/utils"
 
 type AlertVariant = "default" | "success" | "warning" | "destructive"
@@ -18,12 +20,12 @@ const variantConfig: Record<
     iconClass: "text-success",
   },
   warning: {
-    icon: AlertTriangle,
+    icon: Warning,
     containerClass: "border-warning/20 bg-warning/5",
     iconClass: "text-warning",
   },
   destructive: {
-    icon: AlertTriangle,
+    icon: Warning,
     containerClass: "border-destructive/20 bg-destructive/5",
     iconClass: "text-destructive",
   },
@@ -54,7 +56,10 @@ function Alert({
       )}
       {...props}
     >
-      <Icon className={cn("h-4 w-4 shrink-0 mt-0.5", config.iconClass)} />
+      <Icon
+        className={cn("h-4 w-4 shrink-0 mt-0.5", config.iconClass)}
+        weight="light"
+      />
       <div className="flex-1 min-w-0">
         {title && (
           <p className="text-sm font-medium text-foreground">{title}</p>

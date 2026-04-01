@@ -278,7 +278,7 @@ function DashboardContent() {
 
           {/* Welcome */}
           <div className="mb-10 animate-fade-in">
-            <h1 className="font-display text-3xl lg:text-4xl tracking-tight font-semibold mb-2 text-foreground">
+            <h1 className="text-3xl lg:text-4xl tracking-tight font-semibold mb-2 text-foreground">
               Welcome, {userName}
             </h1>
             <p className="text-muted">Deploy your first agent to Superserve.</p>
@@ -428,7 +428,7 @@ function DashboardContent() {
               </div>
             ) : (
               <div className="animate-fade-in">
-                <h2 className="font-display text-2xl tracking-tight font-semibold mb-2 text-foreground">
+                <h2 className="text-2xl tracking-tight font-semibold mb-2 text-foreground">
                   Request dashboard access
                 </h2>
                 <p className="text-muted text-sm mb-8">

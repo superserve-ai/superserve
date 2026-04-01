@@ -9,11 +9,11 @@
   },
   "fonts": {
     "heading": {
-      "family": "Funnel Display",
+      "family": "Instrument Sans",
       "weight": 600
     },
     "body": {
-      "family": "Inter"
+      "family": "Instrument Sans"
     }
   },
   "background": {

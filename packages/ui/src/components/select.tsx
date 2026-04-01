@@ -1,7 +1,7 @@
 "use client"
 
+import { CaretUpDown } from "@phosphor-icons/react"
 import * as SelectPrimitive from "@radix-ui/react-select"
-import { ChevronsUpDown } from "lucide-react"
 import { cn } from "../lib/utils"
 
 const Select = SelectPrimitive.Root
@@ -25,7 +25,7 @@ function SelectTrigger({
     >
       {children}
       <SelectPrimitive.Icon asChild>
-        <ChevronsUpDown className="h-4 w-4 text-muted" />
+        <CaretUpDown className="h-4 w-4 text-muted" weight="light" />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   )

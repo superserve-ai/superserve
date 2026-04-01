@@ -1,5 +1,5 @@
+import { Code, X } from "@phosphor-icons/react"
 import { Button } from "@superserve/ui"
-import { Code, X } from "lucide-react"
 import { useState } from "react"
 import type { ComponentExample } from "../registry/types"
 import { CodeBlock } from "./code-block"
@@ -17,9 +17,9 @@ export function ExamplePreview({ example }: { example: ComponentExample }) {
           onClick={() => setShowCode(!showCode)}
         >
           {showCode ? (
-            <X className="size-3.5" />
+            <X className="size-3.5" weight="light" />
           ) : (
-            <Code className="size-3.5" />
+            <Code className="size-3.5" weight="light" />
           )}
         </Button>
       </div>

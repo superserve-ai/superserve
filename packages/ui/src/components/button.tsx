@@ -4,9 +4,9 @@ import { cn } from "../lib/utils"
 
 const buttonVariants = {
   variant: {
-    default: "bg-primary text-white hover:bg-primary-hover",
+    default: "bg-primary text-background hover:bg-primary-hover",
     destructive:
-      "bg-destructive text-white hover:bg-destructive-hover focus-visible:ring-destructive/20",
+      "bg-destructive text-foreground hover:bg-destructive-hover focus-visible:ring-destructive/20",
     outline:
       "border border-dashed border-border bg-background hover:bg-surface-hover hover:text-foreground",
     ghost: "hover:bg-surface-hover hover:text-foreground",
@@ -41,7 +41,7 @@ function Button({
   const Comp = asChild ? Slot : "button"
 
   const baseClasses =
-    "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-mono font-medium uppercase transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-border-focus aria-invalid:ring-destructive/20 aria-invalid:border-destructive cursor-pointer"
+    "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-mono font-medium uppercase transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-border-focus aria-invalid:ring-destructive/20 aria-invalid:border-destructive cursor-pointer"
 
   const variantClasses = buttonVariants.variant[variant]
   const sizeClasses = buttonVariants.size[size]

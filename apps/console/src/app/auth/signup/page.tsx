@@ -1,8 +1,8 @@
 "use client"
 
+import { Eye, EyeSlash } from "@phosphor-icons/react"
 import { createBrowserClient } from "@superserve/supabase"
 import { Button, Input, useToast } from "@superserve/ui"
-import { Eye, EyeOff } from "lucide-react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Suspense, useEffect, useState } from "react"
@@ -101,7 +101,7 @@ function SignUpContent() {
         <div className="p-8 border border-dashed border-border bg-surface">
           {emailSent ? (
             <>
-              <h1 className="font-display text-2xl font-semibold tracking-tight text-center mb-2 text-foreground">
+              <h1 className="text-2xl font-semibold tracking-tight text-center mb-2 text-foreground">
                 Check Your Email
               </h1>
               <p className="text-center mb-6 text-sm leading-relaxed text-muted">
@@ -121,7 +121,7 @@ function SignUpContent() {
             </>
           ) : (
             <>
-              <h1 className="font-display text-2xl font-semibold tracking-tight text-center mb-2 text-foreground">
+              <h1 className="text-2xl font-semibold tracking-tight text-center mb-2 text-foreground">
                 Create Account
               </h1>
               <p className="text-center mb-8 text-sm text-muted">
@@ -155,7 +155,11 @@ function SignUpContent() {
                       onClick={() => setShowPassword(!showPassword)}
                       className="p-0.5 transition-colors text-muted"
                     >
-                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      {showPassword ? (
+                        <EyeSlash className="size-4.5" weight="light" />
+                      ) : (
+                        <Eye className="size-4.5" weight="light" />
+                      )}
                     </button>
                   }
                 />
@@ -174,9 +178,9 @@ function SignUpContent() {
                       className="p-0.5 transition-colors text-muted"
                     >
                       {showConfirmPassword ? (
-                        <EyeOff size={18} />
+                        <EyeSlash className="size-4.5" weight="light" />
                       ) : (
-                        <Eye size={18} />
+                        <Eye className="size-4.5" weight="light" />
                       )}
                     </button>
                   }
@@ -184,7 +188,7 @@ function SignUpContent() {
                 <Button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full h-auto py-3.5 bg-primary text-white hover:bg-primary-hover duration-300"
+                  className="w-full h-auto py-3.5 bg-primary text-background hover:bg-primary-hover duration-300"
                 >
                   {isLoading ? <Spinner /> : null}
                   {isLoading ? "Creating account..." : "Sign Up"}

@@ -1,5 +1,5 @@
+import { Check } from "@phosphor-icons/react"
 import { cn } from "@superserve/ui"
-import { Check } from "lucide-react"
 
 interface StepIndicatorProps {
   step: number
@@ -31,13 +31,13 @@ export function StepIndicator({
         className={cn(
           "flex items-center justify-center h-7 w-7 rounded-full border text-xs font-mono shrink-0",
           completed
-            ? "bg-primary border-primary text-white"
+            ? "bg-primary border-primary text-background"
             : active
               ? "border-primary text-primary"
               : "border-border text-muted",
         )}
       >
-        {completed ? <Check className="h-3.5 w-3.5" /> : step}
+        {completed ? <Check className="h-3.5 w-3.5" weight="bold" /> : step}
       </div>
       <span
         className={cn(

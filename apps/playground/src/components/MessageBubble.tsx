@@ -185,7 +185,7 @@ export default function MessageBubble({
                           <path d="M3 1.5L7 5L3 8.5" />
                         </svg>
                         {tc.name}
-                        <span className="text-ink-faint">
+                        <span className="text-muted">
                           {tc.duration > 0 ? `${tc.duration}ms` : "..."}
                         </span>
                       </button>

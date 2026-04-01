@@ -45,7 +45,7 @@ function ForgotPasswordContent() {
         <div className="p-8 border border-dashed border-border bg-surface">
           {emailSent ? (
             <>
-              <h1 className="font-display text-2xl font-semibold tracking-tight text-center mb-2 text-foreground">
+              <h1 className="text-2xl font-semibold tracking-tight text-center mb-2 text-foreground">
                 Check Your Email
               </h1>
               <p className="text-center mb-6 text-sm leading-relaxed text-muted">
@@ -64,7 +64,7 @@ function ForgotPasswordContent() {
             </>
           ) : (
             <>
-              <h1 className="font-display text-2xl font-semibold tracking-tight text-center mb-2 text-foreground">
+              <h1 className="text-2xl font-semibold tracking-tight text-center mb-2 text-foreground">
                 Forgot Password
               </h1>
               <p className="text-center mb-8 text-sm text-muted">
@@ -82,7 +82,7 @@ function ForgotPasswordContent() {
                 <Button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full h-auto py-3.5 bg-primary text-white hover:bg-primary-hover duration-300"
+                  className="w-full h-auto py-3.5 bg-primary text-background hover:bg-primary-hover duration-300"
                 >
                   {isLoading ? <Spinner /> : null}
                   {isLoading ? "Sending..." : "Send Reset Link"}

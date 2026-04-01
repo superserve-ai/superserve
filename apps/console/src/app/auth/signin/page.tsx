@@ -1,8 +1,8 @@
 "use client"
 
+import { Eye, EyeSlash } from "@phosphor-icons/react"
 import { createBrowserClient } from "@superserve/supabase"
 import { Button, Input, useToast } from "@superserve/ui"
-import { Eye, EyeOff } from "lucide-react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Suspense, useEffect, useState } from "react"
@@ -141,7 +141,7 @@ function SignInContent() {
 
       <div className="w-full max-w-sm">
         <div className="p-8 border border-dashed border-border bg-surface">
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-center mb-2 text-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight text-center mb-2 text-foreground">
             Welcome Back
           </h1>
           <p className="text-center mb-8 text-sm text-muted">
@@ -169,7 +169,11 @@ function SignInContent() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="p-0.5 transition-colors text-muted"
                 >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showPassword ? (
+                    <EyeSlash className="size-4.5" weight="light" />
+                  ) : (
+                    <Eye className="size-4.5" weight="light" />
+                  )}
                 </button>
               }
             />
@@ -184,7 +188,7 @@ function SignInContent() {
             <Button
               type="submit"
               disabled={isEmailLoading}
-              className="w-full h-auto py-3.5 bg-primary text-white hover:bg-primary-hover duration-300"
+              className="w-full h-auto py-3.5 bg-primary text-background hover:bg-primary-hover duration-300"
             >
               {isEmailLoading ? <Spinner /> : null}
               {isEmailLoading ? "Signing in..." : "Sign In"}
@@ -235,7 +239,7 @@ function SignInContent() {
                 type="button"
                 onClick={handleDevSignIn}
                 disabled={isDevLoading}
-                className="w-full h-auto py-3.5 bg-primary text-white hover:bg-primary-hover duration-300"
+                className="w-full h-auto py-3.5 bg-primary text-background hover:bg-primary-hover duration-300"
               >
                 {isDevLoading ? (
                   <Spinner />

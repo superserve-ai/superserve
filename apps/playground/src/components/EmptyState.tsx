@@ -44,7 +44,7 @@ export default function EmptyState({
 
   return (
     <div className="text-center">
-      <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-surface-hover text-ink-muted">
+      <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-surface-hover text-muted">
         <svg
           aria-hidden="true"
           width="22"

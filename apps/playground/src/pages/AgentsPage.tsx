@@ -59,7 +59,7 @@ export default function AgentsPage({ navigate }: AgentsPageProps) {
         <div className="flex h-14 items-center px-5 md:px-8">
           <div className="flex items-center gap-1.5 text-[13px]">
             <span className="text-muted">Superserve</span>
-            <span className="text-ink-faint">/</span>
+            <span className="text-muted">/</span>
             <span className="font-medium text-foreground">Playground</span>
           </div>
         </div>
@@ -174,7 +174,7 @@ export default function AgentsPage({ navigate }: AgentsPageProps) {
                       </Badge>
                       <svg
                         aria-hidden="true"
-                        className="shrink-0 text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-muted"
+                        className="shrink-0 text-neutral-600 transition-transform group-hover:translate-x-0.5 group-hover:text-muted"
                         width="16"
                         height="16"
                         viewBox="0 0 16 16"
