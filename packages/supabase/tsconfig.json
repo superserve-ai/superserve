@@ -1,4 +1,0 @@
-{
-  "extends": "@superserve/typescript-config/library.json",
-  "include": ["src"]
-}
