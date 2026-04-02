@@ -106,7 +106,7 @@ function ResetPasswordContent() {
                   {showConfirmPassword ? (
                     <EyeSlashIcon className="size-4.5" weight="light" />
                   ) : (
-                    <Eye className="size-4.5" weight="light" />
+                    <EyeIcon className="size-4.5" weight="light" />
                   )}
                 </button>
               }

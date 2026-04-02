@@ -178,9 +178,9 @@ function SignUpContent() {
                       className="p-0.5 transition-colors text-muted"
                     >
                       {showConfirmPassword ? (
-                        <EyeSlash className="size-4.5" weight="light" />
+                        <EyeSlashIcon className="size-4.5" weight="light" />
                       ) : (
-                        <Eye className="size-4.5" weight="light" />
+                        <EyeIcon className="size-4.5" weight="light" />
                       )}
                     </button>
                   }
