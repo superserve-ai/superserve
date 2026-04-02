@@ -16,8 +16,8 @@
 
 </div>
 
-> [!WARNING]
-> This repo is a work in progress. Things may break, change significantly, or not work at all.
+> [!Note]
+> **Beta Release**: This project is in beta and under active development. We welcome feedback but cannot guarantee backwards compatibility at this time.
 
 ## Getting Started
 
