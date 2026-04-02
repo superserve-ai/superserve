@@ -7,10 +7,7 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Suspense, useEffect, useState } from "react"
 import { GoogleIcon, Spinner } from "@/components/icons"
-
-const AUTH_INPUT_CLASS =
-  "h-auto px-4 py-3.5 bg-surface text-foreground border-border focus:ring-0 focus:border-primary"
-
+import { AUTH_INPUT_CLASS } from "../styles"
 import { signUpWithEmail } from "./action"
 
 function SignUpContent() {

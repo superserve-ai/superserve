@@ -4,10 +4,8 @@ import { Button, Input, useToast } from "@superserve/ui"
 import Link from "next/link"
 import { Suspense, useState } from "react"
 import { Spinner } from "@/components/icons"
+import { AUTH_INPUT_CLASS } from "../styles"
 import { sendPasswordResetEmail } from "./action"
-
-const AUTH_INPUT_CLASS =
-  "h-auto px-4 py-3.5 bg-surface text-foreground border-border focus:ring-0 focus:border-primary"
 
 function ForgotPasswordContent() {
   const [isLoading, setIsLoading] = useState(false)

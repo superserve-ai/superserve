@@ -26,9 +26,11 @@ import {
 } from "@superserve/ui"
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
+import { PageHeader } from "@/components/page-header"
 import { CreateSandboxDialog } from "@/components/sandboxes/create-sandbox-dialog"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableToolbar } from "@/components/table-toolbar"
+import { useSelection } from "@/hooks/use-selection"
 
 type SandboxStatus = "Ready" | "Stopped" | "Paused"
 
@@ -43,7 +45,7 @@ interface Sandbox {
 const STATUS_COLORS: Record<SandboxStatus, string> = {
   Ready: "bg-success",
   Stopped: "bg-destructive",
-  Paused: "bg-sky-500",
+  Paused: "bg-muted",
 }
 
 const MOCK_SANDBOXES: Sandbox[] = [
@@ -78,8 +80,7 @@ const STATUS_TABS = [
 ]
 
 export default function SandboxesPage() {
-  const [sandboxes] = useState<Sandbox[]>(MOCK_SANDBOXES)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [sandboxes, setSandboxes] = useState<Sandbox[]>(MOCK_SANDBOXES)
   const [statusFilter, setStatusFilter] = useState("all")
   const [search, setSearch] = useState("")
   const [createOpen, setCreateOpen] = useState(false)
@@ -101,50 +102,41 @@ export default function SandboxesPage() {
         : sandboxes.filter((s) => s.status === tab.value).length,
   }))
 
-  const allSelected = filtered.length > 0 && selected.size === filtered.length
-  const someSelected = selected.size > 0 && !allSelected
+  const {
+    selected,
+    allSelected,
+    someSelected,
+    toggleAll,
+    toggleOne,
+    clearSelection,
+  } = useSelection(filtered)
 
-  const toggleAll = () => {
-    if (allSelected) {
-      setSelected(new Set())
-    } else {
-      setSelected(new Set(filtered.map((s) => s.id)))
-    }
-  }
-
-  const toggleOne = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
+  const deleteSelected = () => {
+    setSandboxes((prev) => prev.filter((s) => !selected.has(s.id)))
+    clearSelection()
   }
 
   const isEmpty = sandboxes.length === 0
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between h-14 border-b border-border px-6">
-        <h1 className="text-lg font-medium tracking-tight text-foreground">
-          Sandboxes
-        </h1>
+      <PageHeader title="Sandboxes">
         {!isEmpty && (
           <CreateSandboxDialog open={createOpen} onOpenChange={setCreateOpen} />
         )}
-      </div>
+      </PageHeader>
 
       {isEmpty ? (
-        <EmptyState
-          icon={CubeIcon}
-          title="No Sandboxes"
-          description="Create your first sandbox to start deploying agents."
-          actionLabel="Create Sandbox"
-          onAction={() => setCreateOpen(true)}
-        />
+        <>
+          <EmptyState
+            icon={CubeIcon}
+            title="No Sandboxes"
+            description="Create your first sandbox to start deploying agents."
+            actionLabel="Create Sandbox"
+            onAction={() => setCreateOpen(true)}
+          />
+          <CreateSandboxDialog open={createOpen} onOpenChange={setCreateOpen} />
+        </>
       ) : (
         <>
           <TableToolbar
@@ -155,8 +147,8 @@ export default function SandboxesPage() {
             searchValue={search}
             onSearchChange={setSearch}
             selectedCount={selected.size}
-            onClearSelection={() => setSelected(new Set())}
-            onDeleteSelected={() => setSelected(new Set())}
+            onClearSelection={clearSelection}
+            onDeleteSelected={deleteSelected}
           />
 
           <div className="flex-1">
@@ -167,6 +159,7 @@ export default function SandboxesPage() {
                     <Checkbox
                       checked={someSelected ? "indeterminate" : allSelected}
                       onCheckedChange={toggleAll}
+                      aria-label="Select all sandboxes"
                     />
                   </TableHead>
                   <TableHead className="w-[30%]">Name</TableHead>
@@ -183,6 +176,7 @@ export default function SandboxesPage() {
                       <Checkbox
                         checked={selected.has(sandbox.id)}
                         onCheckedChange={() => toggleOne(sandbox.id)}
+                        aria-label={`Select ${sandbox.name}`}
                       />
                     </TableCell>
                     <TableCell className="font-mono text-foreground/80">
@@ -225,6 +219,7 @@ export default function SandboxesPage() {
                           <DropdownMenuTrigger asChild>
                             <button
                               type="button"
+                              aria-label="Sandbox actions"
                               className="p-1.5 text-muted hover:text-foreground transition-colors cursor-pointer"
                             >
                               <DotsThreeVerticalIcon
@@ -243,7 +238,10 @@ export default function SandboxesPage() {
                               Create SSH Access
                             </DropdownMenuItem>
                             <DropdownMenuItem>
-                              <KeyReturnIcon className="size-4" weight="light" />
+                              <KeyReturnIcon
+                                className="size-4"
+                                weight="light"
+                              />
                               Remove SSH Access
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
@@ -261,11 +259,6 @@ export default function SandboxesPage() {
             </Table>
           </div>
         </>
-      )}
-
-      {/* Dialog rendered outside conditional so it works from empty state */}
-      {isEmpty && (
-        <CreateSandboxDialog open={createOpen} onOpenChange={setCreateOpen} />
       )}
     </div>
   )

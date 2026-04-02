@@ -5,6 +5,7 @@ import { motion } from "motion/react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
+import { CornerBrackets } from "@/components/corner-brackets"
 import type { NavItem } from "./nav-config"
 import { useSidebar } from "./sidebar-context"
 
@@ -32,7 +33,7 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
           <>
             {isHovered && (
               <motion.span
-                className="absolute inset-0 bg-white/4"
+                className="absolute inset-0 bg-foreground/4"
                 layoutId={`sidebar-hover-${groupId}`}
                 transition={{
                   type: "spring",
@@ -42,7 +43,7 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
               />
             )}
             {isActive && !hoveredHref && (
-              <span className="absolute inset-0 bg-white/4" />
+              <span className="absolute inset-0 bg-foreground/4" />
             )}
             {isActive && (
               <motion.span
@@ -54,10 +55,7 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
                   duration: 0.5,
                 }}
               >
-                <span className="absolute top-0 left-0 h-1.5 w-1.5 border-t border-l border-foreground/50" />
-                <span className="absolute top-0 right-0 h-1.5 w-1.5 border-t border-r border-foreground/50" />
-                <span className="absolute bottom-0 left-0 h-1.5 w-1.5 border-b border-l border-foreground/50" />
-                <span className="absolute bottom-0 right-0 h-1.5 w-1.5 border-b border-r border-foreground/50" />
+                <CornerBrackets size="sm" />
               </motion.span>
             )}
             <Icon className="relative size-4 shrink-0" weight="light" />
@@ -93,6 +91,7 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
             key={item.href}
             href={item.href}
             className={className}
+            aria-current={isActive ? "page" : undefined}
             onMouseEnter={() => setHoveredHref(item.href)}
           >
             {inner}

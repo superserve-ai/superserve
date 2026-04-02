@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useCallback, useContext, useState } from "react"
 
 const STORAGE_KEY = "superserve-sidebar-collapsed"
 
@@ -13,19 +13,20 @@ interface SidebarContextValue {
 const SidebarContext = createContext<SidebarContextValue | null>(null)
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
-  const [isCollapsed, setIsCollapsed] = useState(false)
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false
+    return localStorage.getItem(STORAGE_KEY) === "true"
+  })
 
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored === "true") setIsCollapsed(true)
-  }, [])
-
-  const setCollapsed = (value: boolean) => {
+  const setCollapsed = useCallback((value: boolean) => {
     setIsCollapsed(value)
     localStorage.setItem(STORAGE_KEY, String(value))
-  }
+  }, [])
 
-  const toggle = () => setCollapsed(!isCollapsed)
+  const toggle = useCallback(
+    () => setCollapsed(!isCollapsed),
+    [isCollapsed, setCollapsed],
+  )
 
   return (
     <SidebarContext value={{ isCollapsed, toggle, setCollapsed }}>

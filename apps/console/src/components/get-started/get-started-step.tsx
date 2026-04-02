@@ -2,6 +2,7 @@
 
 import { CheckCircleIcon } from "@phosphor-icons/react"
 import { CodeBlock } from "@/components/code-block"
+import { CornerBrackets } from "@/components/corner-brackets"
 
 interface GetStartedStepProps {
   stepNumber: number
@@ -24,11 +25,7 @@ export function GetStartedStep({
     <div className="space-y-4">
       {/* Step header bar */}
       <div className="relative flex items-center gap-2.5 bg-surface-hover px-3.5 py-4">
-        {/* Corner brackets */}
-        <span className="absolute top-0 left-0 h-2 w-2 border-t border-l border-foreground/50" />
-        <span className="absolute top-0 right-0 h-2 w-2 border-t border-r border-foreground/50" />
-        <span className="absolute bottom-0 left-0 h-2 w-2 border-b border-l border-foreground/50" />
-        <span className="absolute bottom-0 right-0 h-2 w-2 border-b border-r border-foreground/50" />
+        <CornerBrackets size="md" />
 
         <span className="font-mono text-sm leading-none tracking-tight text-muted">
           {formattedNumber}.

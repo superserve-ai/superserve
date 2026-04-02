@@ -2,13 +2,7 @@
 
 import { cn } from "@superserve/ui"
 import { motion } from "motion/react"
-import {
-  Children,
-  cloneElement,
-  isValidElement,
-  useRef,
-  useState,
-} from "react"
+import { Children, cloneElement, isValidElement, useRef, useState } from "react"
 
 interface StickyHoverTableBodyProps {
   children: React.ReactNode
@@ -57,7 +51,7 @@ export function StickyHoverTableBody({
         >
           <td style={{ padding: 0, border: 0 }}>
             <motion.div
-              className="absolute left-0 right-0 bg-white/4"
+              className="absolute left-0 right-0 bg-foreground/4"
               animate={{
                 y: hoverStyle.top,
                 height: hoverStyle.height,

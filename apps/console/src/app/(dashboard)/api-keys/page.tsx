@@ -35,24 +35,18 @@ import {
 } from "@superserve/ui"
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
+import { PageHeader } from "@/components/page-header"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableToolbar } from "@/components/table-toolbar"
+import { useSelection } from "@/hooks/use-selection"
+import { formatDate } from "@/lib/format"
 
 interface ApiKey {
   id: string
   name: string
-  key: string
   prefix: string
   createdAt: Date
   lastUsedAt: Date | null
-}
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  })
 }
 
 function maskKey(prefix: string): string {
@@ -74,7 +68,6 @@ const INITIAL_KEYS: ApiKey[] = [
   {
     id: "1",
     name: "Production",
-    key: "ss_live_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6",
     prefix: "ss_live_a1b2c3d4...",
     createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
     lastUsedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
@@ -82,7 +75,6 @@ const INITIAL_KEYS: ApiKey[] = [
   {
     id: "2",
     name: "Development",
-    key: "ss_live_q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2",
     prefix: "ss_live_q7r8s9t0...",
     createdAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
     lastUsedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
@@ -90,7 +82,6 @@ const INITIAL_KEYS: ApiKey[] = [
   {
     id: "3",
     name: "CI/CD Pipeline",
-    key: "ss_live_g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8",
     prefix: "ss_live_g3h4i5j6...",
     createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
     lastUsedAt: null,
@@ -123,7 +114,6 @@ function CreateKeyDialog({
     const apiKey: ApiKey = {
       id: crypto.randomUUID(),
       name: name.trim(),
-      key: full,
       prefix,
       createdAt: new Date(),
       lastUsedAt: null,
@@ -150,7 +140,10 @@ function CreateKeyDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => (v ? setOpen(true) : handleClose())}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => (v ? setOpen(true) : handleClose())}
+    >
       <DialogTrigger asChild>
         <Button>
           <PlusIcon className="size-3.5" weight="light" />
@@ -186,6 +179,7 @@ function CreateKeyDialog({
                     variant="outline"
                     size="icon-sm"
                     onClick={handleCopy}
+                    aria-label={copied ? "Copied" : "Copy API key"}
                   >
                     <CopyIcon
                       className="size-3.5"
@@ -230,7 +224,6 @@ function CreateKeyDialog({
 
 export default function ApiKeysPage() {
   const [keys, setKeys] = useState<ApiKey[]>(INITIAL_KEYS)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState("")
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set())
   const [createOpen, setCreateOpen] = useState(false)
@@ -244,28 +237,14 @@ export default function ApiKeysPage() {
     )
   }, [keys, search])
 
-  const allSelected = filtered.length > 0 && selected.size === filtered.length
-  const someSelected = selected.size > 0 && !allSelected
-
-  const toggleAll = () => {
-    if (allSelected) {
-      setSelected(new Set())
-    } else {
-      setSelected(new Set(filtered.map((k) => k.id)))
-    }
-  }
-
-  const toggleOne = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
+  const {
+    selected,
+    allSelected,
+    someSelected,
+    toggleAll,
+    toggleOne,
+    clearSelection,
+  } = useSelection(filtered)
 
   const toggleReveal = (id: string) => {
     setRevealedKeys((prev) => {
@@ -281,32 +260,25 @@ export default function ApiKeysPage() {
 
   const deleteKey = (id: string) => {
     setKeys((prev) => prev.filter((k) => k.id !== id))
-    setSelected((prev) => {
-      const next = new Set(prev)
-      next.delete(id)
-      return next
-    })
+    clearSelection()
   }
 
   const deleteSelected = () => {
     setKeys((prev) => prev.filter((k) => !selected.has(k.id)))
-    setSelected(new Set())
+    clearSelection()
   }
 
   const isEmpty = keys.length === 0
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between h-14 border-b border-border px-6">
-        <h1 className="text-lg font-medium tracking-tight text-foreground">
-          API Keys
-        </h1>
+      <PageHeader title="API Keys">
         {!isEmpty && (
           <CreateKeyDialog
             onCreated={(key) => setKeys((prev) => [key, ...prev])}
           />
         )}
-      </div>
+      </PageHeader>
 
       {isEmpty ? (
         <>
@@ -324,107 +296,118 @@ export default function ApiKeysPage() {
           />
         </>
       ) : (
-      <>
-      <TableToolbar
-        searchPlaceholder="Search keys..."
-        searchValue={search}
-        onSearchChange={setSearch}
-        selectedCount={selected.size}
-        onClearSelection={() => setSelected(new Set())}
-        onDeleteSelected={deleteSelected}
-      />
+        <>
+          <TableToolbar
+            searchPlaceholder="Search keys..."
+            searchValue={search}
+            onSearchChange={setSearch}
+            selectedCount={selected.size}
+            onClearSelection={clearSelection}
+            onDeleteSelected={deleteSelected}
+          />
 
-      <div className="flex-1">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-10 pr-0">
-                <Checkbox
-                  checked={someSelected ? "indeterminate" : allSelected}
-                  onCheckedChange={toggleAll}
-                />
-              </TableHead>
-              <TableHead className="w-[20%]">Name</TableHead>
-              <TableHead className="w-[35%]">Key</TableHead>
-              <TableHead className="w-[15%]">Created</TableHead>
-              <TableHead className="w-[15%]">Last Used</TableHead>
-              <TableHead className="w-12" />
-            </TableRow>
-          </TableHeader>
-          <StickyHoverTableBody>
-            {filtered.map((apiKey) => (
-              <TableRow key={apiKey.id}>
-                <TableCell className="pr-0">
-                  <Checkbox
-                    checked={selected.has(apiKey.id)}
-                    onCheckedChange={() => toggleOne(apiKey.id)}
-                  />
-                </TableCell>
-                <TableCell className="font-medium">
-                  {apiKey.name}
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <code className="font-mono text-xs text-muted">
-                      {revealedKeys.has(apiKey.id)
-                        ? apiKey.key
-                        : maskKey(apiKey.prefix.replace("...", ""))}
-                    </code>
-                    <button
-                      type="button"
-                      onClick={() => toggleReveal(apiKey.id)}
-                      className="p-1 text-muted hover:text-foreground transition-colors cursor-pointer"
-                    >
-                      {revealedKeys.has(apiKey.id) ? (
-                        <EyeSlashIcon className="size-3.5" weight="light" />
-                      ) : (
-                        <EyeIcon className="size-3.5" weight="light" />
-                      )}
-                    </button>
-                  </div>
-                </TableCell>
-                <TableCell className="text-muted">
-                  {formatDate(apiKey.createdAt)}
-                </TableCell>
-                <TableCell className="text-muted">
-                  {apiKey.lastUsedAt ? formatDate(apiKey.lastUsedAt) : "Never"}
-                </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="p-1.5 text-muted hover:text-foreground transition-colors cursor-pointer"
-                      >
-                        <DotsThreeVerticalIcon className="size-4" weight="bold" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={async () => {
-                          await navigator.clipboard.writeText(apiKey.key)
-                        }}
-                      >
-                        <CopyIcon className="size-4" weight="light" />
-                        Copy Key
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => deleteKey(apiKey.id)}
-                      >
-                        <TrashIcon className="size-4" weight="light" />
-                        Revoke Key
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
-          </StickyHoverTableBody>
-        </Table>
-      </div>
-      </>
+          <div className="flex-1">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10 pr-0">
+                    <Checkbox
+                      checked={someSelected ? "indeterminate" : allSelected}
+                      onCheckedChange={toggleAll}
+                      aria-label="Select all keys"
+                    />
+                  </TableHead>
+                  <TableHead className="w-[20%]">Name</TableHead>
+                  <TableHead className="w-[35%]">Key</TableHead>
+                  <TableHead className="w-[15%]">Created</TableHead>
+                  <TableHead className="w-[15%]">Last Used</TableHead>
+                  <TableHead className="w-12" />
+                </TableRow>
+              </TableHeader>
+              <StickyHoverTableBody>
+                {filtered.map((apiKey) => (
+                  <TableRow key={apiKey.id}>
+                    <TableCell className="pr-0">
+                      <Checkbox
+                        checked={selected.has(apiKey.id)}
+                        onCheckedChange={() => toggleOne(apiKey.id)}
+                        aria-label={`Select ${apiKey.name}`}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium">{apiKey.name}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <code className="font-mono text-xs text-muted">
+                          {revealedKeys.has(apiKey.id)
+                            ? apiKey.prefix
+                            : maskKey(apiKey.prefix.replace("...", ""))}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => toggleReveal(apiKey.id)}
+                          aria-label={
+                            revealedKeys.has(apiKey.id)
+                              ? "Hide key"
+                              : "Reveal key"
+                          }
+                          className="p-1 text-muted hover:text-foreground transition-colors cursor-pointer"
+                        >
+                          {revealedKeys.has(apiKey.id) ? (
+                            <EyeSlashIcon className="size-3.5" weight="light" />
+                          ) : (
+                            <EyeIcon className="size-3.5" weight="light" />
+                          )}
+                        </button>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted">
+                      {formatDate(apiKey.createdAt)}
+                    </TableCell>
+                    <TableCell className="text-muted">
+                      {apiKey.lastUsedAt
+                        ? formatDate(apiKey.lastUsedAt)
+                        : "Never"}
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Key actions"
+                            className="p-1.5 text-muted hover:text-foreground transition-colors cursor-pointer"
+                          >
+                            <DotsThreeVerticalIcon
+                              className="size-4"
+                              weight="bold"
+                            />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              await navigator.clipboard.writeText(apiKey.prefix)
+                            }}
+                          >
+                            <CopyIcon className="size-4" weight="light" />
+                            Copy Key
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => deleteKey(apiKey.id)}
+                          >
+                            <TrashIcon className="size-4" weight="light" />
+                            Revoke Key
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </StickyHoverTableBody>
+            </Table>
+          </div>
+        </>
       )}
     </div>
   )

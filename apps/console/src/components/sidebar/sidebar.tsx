@@ -1,6 +1,10 @@
 "use client"
 
-import { CaretLeftIcon, CaretRightIcon, MagnifyingGlassIcon } from "@phosphor-icons/react"
+import {
+  CaretLeftIcon,
+  CaretRightIcon,
+  MagnifyingGlassIcon,
+} from "@phosphor-icons/react"
 import {
   cn,
   Kbd,
@@ -58,6 +62,7 @@ export function Sidebar() {
         <button
           type="button"
           onClick={toggle}
+          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           className="text-foreground/50 hover:text-foreground transition-colors cursor-pointer"
         >
           {isCollapsed ? (
@@ -76,6 +81,7 @@ export function Sidebar() {
               <button
                 type="button"
                 onClick={handleSearchClick}
+                aria-label="Search"
                 className="flex w-full items-center justify-center border border-dashed border-border px-2.5 py-2.5 text-foreground/70 transition-colors hover:text-foreground hover:bg-surface-hover cursor-pointer"
               >
                 <MagnifyingGlassIcon className="size-4" weight="light" />
@@ -90,11 +96,16 @@ export function Sidebar() {
               ref={searchInputRef}
               type="text"
               placeholder="Search"
+              aria-label="Search"
               className="flex-1 bg-transparent text-sm leading-none tracking-tight text-foreground placeholder:text-foreground/70 outline-none w-20"
             />
             <div className="flex items-center gap-0.5">
-              <Kbd className="transition-colors group-hover:bg-neutral-900">&#8984;</Kbd>
-              <Kbd className="transition-colors group-hover:bg-neutral-900">K</Kbd>
+              <Kbd className="transition-colors group-hover:bg-neutral-900">
+                &#8984;
+              </Kbd>
+              <Kbd className="transition-colors group-hover:bg-neutral-900">
+                K
+              </Kbd>
             </div>
           </label>
         )}

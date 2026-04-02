@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { GetStartedStep } from "@/components/get-started/get-started-step"
+import { PageHeader } from "@/components/page-header"
 
 export const metadata: Metadata = {
   title: "Get Started",
@@ -32,11 +33,7 @@ const STEPS = [
 export default function GetStartedPage() {
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center h-14 border-b border-border px-6">
-        <h1 className="text-lg font-medium tracking-tight text-foreground">
-          Get Started
-        </h1>
-      </div>
+      <PageHeader title="Get Started" />
 
       <div className="flex-1 overflow-y-auto px-6 py-8">
         <div className="mx-auto max-w-2xl">

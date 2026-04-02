@@ -13,7 +13,8 @@ import {
   Separator,
   useToast,
 } from "@superserve/ui"
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { PageHeader } from "@/components/page-header"
 import { useUser } from "@/hooks/use-user"
 
 export default function SettingsPage() {
@@ -33,12 +34,12 @@ export default function SettingsPage() {
   const [deleteConfirmText, setDeleteConfirmText] = useState("")
   const [deleting, setDeleting] = useState(false)
 
-  if (user && !nameLoaded) {
-    setName(
-      user.user_metadata?.full_name || user.user_metadata?.name || "",
-    )
-    setNameLoaded(true)
-  }
+  useEffect(() => {
+    if (user && !nameLoaded) {
+      setName(user.user_metadata?.full_name || user.user_metadata?.name || "")
+      setNameLoaded(true)
+    }
+  }, [user, nameLoaded])
 
   const email = user?.email || ""
   const isOAuth = user?.app_metadata?.provider === "google"
@@ -117,11 +118,7 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="flex h-full flex-col">
-        <div className="flex items-center h-14 border-b border-border px-6">
-          <h1 className="text-lg font-medium tracking-tight text-foreground">
-            Settings
-          </h1>
-        </div>
+        <PageHeader title="Settings" />
         <div className="flex flex-1 items-center justify-center">
           <div className="h-5 w-5 animate-spin border-2 border-foreground/20 border-t-foreground" />
         </div>
@@ -131,11 +128,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center h-14 border-b border-border px-6">
-        <h1 className="text-lg font-medium tracking-tight text-foreground">
-          Settings
-        </h1>
-      </div>
+      <PageHeader title="Settings" />
 
       <div className="flex-1 overflow-y-auto">
         {/* Profile */}
@@ -235,15 +228,12 @@ export default function SettingsPage() {
             <h2 className="text-base font-medium text-destructive">
               Danger Zone
             </h2>
-            <p className="mt-1 text-xs text-muted">
-              Irreversible actions.
-            </p>
+            <p className="mt-1 text-xs text-muted">Irreversible actions.</p>
           </div>
           <div className="max-w-md space-y-5">
             <p className="text-xs text-muted">
-              Permanently delete your account and all associated data
-              including sandboxes, snapshots, and API keys. This action
-              cannot be undone.
+              Permanently delete your account and all associated data including
+              sandboxes, snapshots, and API keys. This action cannot be undone.
             </p>
             <div>
               <Button
@@ -271,12 +261,16 @@ export default function SettingsPage() {
                       keys. This action cannot be undone.
                     </p>
                     <div className="space-y-1.5">
-                      <label className="block text-sm font-medium text-foreground">
+                      <label
+                        htmlFor="delete-confirm"
+                        className="block text-sm font-medium text-foreground"
+                      >
                         Type{" "}
-                        <span className="font-mono mx-1">delete account</span> to
-                        confirm
+                        <span className="font-mono mx-1">delete account</span>{" "}
+                        to confirm
                       </label>
                       <Input
+                        id="delete-confirm"
                         value={deleteConfirmText}
                         onChange={(e) => setDeleteConfirmText(e.target.value)}
                         placeholder="delete account"

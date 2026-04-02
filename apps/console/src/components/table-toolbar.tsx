@@ -4,6 +4,7 @@ import { MagnifyingGlassIcon, TrashIcon } from "@phosphor-icons/react"
 import { Button, cn } from "@superserve/ui"
 import { motion } from "motion/react"
 import { useState } from "react"
+import { CornerBrackets } from "./corner-brackets"
 
 interface FilterTab {
   label: string
@@ -12,6 +13,7 @@ interface FilterTab {
 }
 
 interface TableToolbarProps {
+  id?: string
   tabs?: FilterTab[]
   activeTab?: string
   onTabChange?: (value: string) => void
@@ -24,6 +26,7 @@ interface TableToolbarProps {
 }
 
 export function TableToolbar({
+  id = "toolbar",
   tabs,
   activeTab,
   onTabChange,
@@ -39,7 +42,7 @@ export function TableToolbar({
   return (
     <div className="flex items-center justify-between border-b border-border px-4 py-2">
       {/* Left side: selection actions or filter tabs */}
-      <div
+      <nav
         className="flex items-center gap-1"
         onMouseLeave={() => setHoveredTab(null)}
       >
@@ -87,8 +90,8 @@ export function TableToolbar({
               >
                 {isHovered && (
                   <motion.span
-                    className="absolute inset-0 bg-white/4"
-                    layoutId="toolbar-hover"
+                    className="absolute inset-0 bg-foreground/4"
+                    layoutId={`${id}-hover`}
                     transition={{
                       type: "spring",
                       bounce: 0.15,
@@ -97,22 +100,19 @@ export function TableToolbar({
                   />
                 )}
                 {isActive && !hoveredTab && (
-                  <span className="absolute inset-0 bg-white/4" />
+                  <span className="absolute inset-0 bg-foreground/4" />
                 )}
                 {isActive && (
                   <motion.span
                     className="absolute inset-0 pointer-events-none"
-                    layoutId="toolbar-active"
+                    layoutId={`${id}-active`}
                     transition={{
                       type: "spring",
                       bounce: 0.15,
                       duration: 0.5,
                     }}
                   >
-                    <span className="absolute top-0 left-0 h-1.5 w-1.5 border-t border-l border-foreground/50" />
-                    <span className="absolute top-0 right-0 h-1.5 w-1.5 border-t border-r border-foreground/50" />
-                    <span className="absolute bottom-0 left-0 h-1.5 w-1.5 border-b border-l border-foreground/50" />
-                    <span className="absolute bottom-0 right-0 h-1.5 w-1.5 border-b border-r border-foreground/50" />
+                    <CornerBrackets size="sm" />
                   </motion.span>
                 )}
                 <span className="relative">{tab.label}</span>
@@ -130,7 +130,7 @@ export function TableToolbar({
             )
           })
         )}
-      </div>
+      </nav>
 
       {/* Search */}
       <div className="flex items-center gap-2 border border-border px-2.5 py-1.5 text-muted focus-within:border-border-focus">
@@ -138,6 +138,7 @@ export function TableToolbar({
         <input
           type="text"
           placeholder={searchPlaceholder}
+          aria-label={searchPlaceholder}
           value={searchValue}
           onChange={(e) => onSearchChange?.(e.target.value)}
           className="w-40 bg-transparent text-xs text-foreground placeholder:text-muted outline-none"

@@ -8,9 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Suspense, useEffect, useState } from "react"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { DEV_AUTH_ENABLED, devSignIn } from "@/lib/auth-helpers"
-
-const AUTH_INPUT_CLASS =
-  "h-auto px-4 py-3.5 bg-surface text-foreground border-border focus:ring-0 focus:border-primary"
+import { AUTH_INPUT_CLASS } from "../styles"
 
 function SignInContent() {
   const [isLoading, setIsLoading] = useState(false)

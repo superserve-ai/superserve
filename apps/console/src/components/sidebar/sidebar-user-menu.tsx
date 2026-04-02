@@ -34,8 +34,12 @@ export function SidebarUserMenu() {
   const email = user?.email || ""
 
   const handleLogout = async () => {
-    const supabase = createBrowserClient()
-    await supabase.auth.signOut()
+    try {
+      const supabase = createBrowserClient()
+      await supabase.auth.signOut()
+    } catch {
+      // Sign out failed, but redirect to sign-in anyway
+    }
     router.push("/auth/signin")
   }
 

@@ -1,5 +1,6 @@
 import type { Icon } from "@phosphor-icons/react"
 import { Button } from "@superserve/ui"
+import { CornerBrackets } from "./corner-brackets"
 
 interface EmptyStateProps {
   icon: Icon
@@ -19,16 +20,9 @@ export function EmptyState({
   return (
     <div className="flex flex-1 items-center justify-center">
       <div className="relative flex w-80 flex-col items-center px-10 py-14 text-center">
-        {/* Corner brackets */}
-        <span className="absolute top-0 left-0 h-3 w-3 border-t border-l border-foreground/60" />
-        <span className="absolute top-0 right-0 h-3 w-3 border-t border-r border-foreground/60" />
-        <span className="absolute bottom-0 left-0 h-3 w-3 border-b border-l border-foreground/60" />
-        <span className="absolute bottom-0 right-0 h-3 w-3 border-b border-r border-foreground/60" />
+        <CornerBrackets size="lg" />
 
-        <IconComponent
-          className="size-10 text-foreground/60"
-          weight="light"
-        />
+        <IconComponent className="size-10 text-foreground/60" weight="light" />
         <p className="mt-4 text-sm font-medium text-foreground">{title}</p>
         <p className="mt-2 text-xs leading-relaxed text-muted">{description}</p>
         {actionLabel && onAction && (

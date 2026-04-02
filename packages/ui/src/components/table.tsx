@@ -36,10 +36,7 @@ function TableRow({
 }: React.HTMLAttributes<HTMLTableRowElement>) {
   return (
     <tr
-      className={cn(
-        "border-b border-border transition-colors",
-        className,
-      )}
+      className={cn("border-b border-border transition-colors", className)}
       {...props}
     />
   )

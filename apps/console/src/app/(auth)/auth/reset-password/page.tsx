@@ -7,9 +7,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Suspense, useState } from "react"
 import { Spinner } from "@/components/icons"
-
-const AUTH_INPUT_CLASS =
-  "h-auto px-4 py-3.5 bg-surface text-foreground border-border focus:ring-0 focus:border-primary"
+import { AUTH_INPUT_CLASS } from "../styles"
 
 function ResetPasswordContent() {
   const [isLoading, setIsLoading] = useState(false)

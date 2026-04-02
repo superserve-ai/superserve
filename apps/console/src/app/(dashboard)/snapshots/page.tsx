@@ -11,46 +11,48 @@ import {
 } from "@superserve/ui"
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
+import { PageHeader } from "@/components/page-header"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableToolbar } from "@/components/table-toolbar"
+import { useSelection } from "@/hooks/use-selection"
+import { formatDate } from "@/lib/format"
 
 interface Snapshot {
   id: string
   name: string
-  created: string
-  lastUsed: string
+  created: Date | null
+  lastUsed: Date | null
 }
 
 const MOCK_SNAPSHOTS: Snapshot[] = [
   {
     id: "1",
     name: "superserve-agent-sandbox",
-    created: "-",
-    lastUsed: "-",
+    created: null,
+    lastUsed: null,
   },
   {
     id: "2",
     name: "dc703f84-a11e-43bf-90db-af2f8a46cf1c",
-    created: "-",
-    lastUsed: "-",
+    created: null,
+    lastUsed: null,
   },
   {
     id: "3",
     name: "dc703f84-a11e-43bf-90db-af2f8a46cf1c",
-    created: "-",
-    lastUsed: "-",
+    created: null,
+    lastUsed: null,
   },
   {
     id: "4",
     name: "dc703f84-a11e-43bf-90db-af2f8a46cf1c",
-    created: "-",
-    lastUsed: "-",
+    created: null,
+    lastUsed: null,
   },
 ]
 
 export default function SnapshotsPage() {
   const [snapshots] = useState<Snapshot[]>(MOCK_SNAPSHOTS)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState("")
 
   const filtered = useMemo(() => {
@@ -60,38 +62,14 @@ export default function SnapshotsPage() {
     )
   }, [snapshots, search])
 
-  const allSelected = filtered.length > 0 && selected.size === filtered.length
-  const someSelected = selected.size > 0 && !allSelected
-
-  const toggleAll = () => {
-    if (allSelected) {
-      setSelected(new Set())
-    } else {
-      setSelected(new Set(filtered.map((s) => s.id)))
-    }
-  }
-
-  const toggleOne = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
+  const { selected, allSelected, someSelected, toggleAll, toggleOne } =
+    useSelection(filtered)
 
   const isEmpty = snapshots.length === 0
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between h-14 border-b border-border px-6">
-        <h1 className="text-lg font-medium tracking-tight text-foreground">
-          Snapshots
-        </h1>
-      </div>
+      <PageHeader title="Snapshots" />
 
       {isEmpty ? (
         <EmptyState
@@ -115,6 +93,7 @@ export default function SnapshotsPage() {
                     <Checkbox
                       checked={someSelected ? "indeterminate" : allSelected}
                       onCheckedChange={toggleAll}
+                      aria-label="Select all snapshots"
                     />
                   </TableHead>
                   <TableHead className="w-[40%]">Name</TableHead>
@@ -130,20 +109,22 @@ export default function SnapshotsPage() {
                       <Checkbox
                         checked={selected.has(snapshot.id)}
                         onCheckedChange={() => toggleOne(snapshot.id)}
+                        aria-label={`Select ${snapshot.name}`}
                       />
                     </TableCell>
                     <TableCell className="font-mono text-foreground/80">
                       {snapshot.name}
                     </TableCell>
                     <TableCell className="text-muted">
-                      {snapshot.created}
+                      {snapshot.created ? formatDate(snapshot.created) : "-"}
                     </TableCell>
                     <TableCell className="text-muted">
-                      {snapshot.lastUsed}
+                      {snapshot.lastUsed ? formatDate(snapshot.lastUsed) : "-"}
                     </TableCell>
                     <TableCell>
                       <button
                         type="button"
+                        aria-label="Snapshot actions"
                         className="p-1.5 text-muted hover:text-foreground transition-colors cursor-pointer"
                       >
                         <DotsThreeVerticalIcon

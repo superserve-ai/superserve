@@ -10,8 +10,10 @@ import {
 } from "@superserve/ui"
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
+import { PageHeader } from "@/components/page-header"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableToolbar } from "@/components/table-toolbar"
+import { formatTime } from "@/lib/format"
 
 type AuditAction = "Create" | "Start" | "Update"
 type AuditOutcome = "Success" | "Failure"
@@ -30,41 +32,11 @@ const OUTCOME_COLORS: Record<AuditOutcome, string> = {
   Failure: "bg-destructive",
 }
 
-function formatTime(date: Date): { relative: string; absolute: string } {
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMin = Math.floor(diffMs / 60000)
-  const diffHr = Math.floor(diffMin / 60)
-  const diffDays = Math.floor(diffHr / 24)
-
-  let relative: string
-  if (diffMin < 1) relative = "Just now"
-  else if (diffMin < 60) relative = `${diffMin}m ago`
-  else if (diffHr < 24) relative = `${diffHr}h ago`
-  else if (diffDays < 7) relative = `${diffDays}d ago`
-  else
-    relative = date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    })
-
-  const absolute = date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  })
-
-  return { relative, absolute }
-}
-
 const MOCK_AUDIT_LOGS: AuditLog[] = [
   {
     id: "1",
     time: new Date(Date.now() - 1 * 60 * 60 * 1000),
-    user: "jeetninejak@gmail.com",
+    user: "user@example.com",
     action: "Create",
     target: "sandbox / dc703f84-a11e-43bf-90c...",
     outcome: "Success",
@@ -72,7 +44,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   {
     id: "2",
     time: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    user: "jeetninejak@gmail.com",
+    user: "user@example.com",
     action: "Start",
     target: "dc703f84-a11e-43bf-90db-af2f8a4...",
     outcome: "Success",
@@ -80,7 +52,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   {
     id: "3",
     time: new Date(Date.now() - 5 * 60 * 60 * 1000),
-    user: "jeetninejak@gmail.com",
+    user: "user@example.com",
     action: "Update",
     target: "api_key / first-project",
     outcome: "Success",
@@ -88,7 +60,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   {
     id: "4",
     time: new Date(Date.now() - 24 * 60 * 60 * 1000),
-    user: "jeetninejak@gmail.com",
+    user: "user@example.com",
     action: "Create",
     target: "organization / 5dec2f6f-7e57-4668...",
     outcome: "Success",
@@ -96,7 +68,7 @@ const MOCK_AUDIT_LOGS: AuditLog[] = [
   {
     id: "5",
     time: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-    user: "jeetninejak@gmail.com",
+    user: "user@example.com",
     action: "Start",
     target: "sandbox / dc703f84-a11e-43bf-90c...",
     outcome: "Failure",
@@ -109,6 +81,16 @@ const ACTION_TABS = [
   { label: "Start", value: "Start" },
   { label: "Update", value: "Update" },
 ]
+
+function TimeCell({ date }: { date: Date }) {
+  const { relative, absolute } = formatTime(date)
+  return (
+    <div>
+      <span className="text-foreground/80">{relative}</span>
+      <span className="ml-2 text-xs text-muted">{absolute}</span>
+    </div>
+  )
+}
 
 export default function AuditLogsPage() {
   const [logs] = useState<AuditLog[]>(MOCK_AUDIT_LOGS)
@@ -140,11 +122,7 @@ export default function AuditLogsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between h-14 border-b border-border px-6">
-        <h1 className="text-lg font-medium tracking-tight text-foreground">
-          Audit Logs
-        </h1>
-      </div>
+      <PageHeader title="Audit Logs" />
 
       {isEmpty ? (
         <EmptyState
@@ -178,19 +156,7 @@ export default function AuditLogsPage() {
                 {filtered.map((log) => (
                   <TableRow key={log.id}>
                     <TableCell className="whitespace-nowrap">
-                      {(() => {
-                        const { relative, absolute } = formatTime(log.time)
-                        return (
-                          <div>
-                            <span className="text-foreground/80">
-                              {relative}
-                            </span>
-                            <span className="ml-2 text-xs text-muted">
-                              {absolute}
-                            </span>
-                          </div>
-                        )
-                      })()}
+                      <TimeCell date={log.time} />
                     </TableCell>
                     <TableCell className="text-foreground/80">
                       {log.user}

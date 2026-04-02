@@ -27,7 +27,7 @@ export function CodeBlock({ command, eventName }: CodeBlockProps) {
   }
 
   return (
-    <div className="flex items-center bg-[#09090b] border border-border px-4 py-3.5">
+    <div className="flex items-center bg-background border border-border px-4 py-3.5">
       <code className="flex-1 text-sm font-mono text-foreground/80 overflow-x-auto">
         <span className="text-foreground/70 mr-2 select-none">$</span>
         {command}
@@ -35,10 +35,11 @@ export function CodeBlock({ command, eventName }: CodeBlockProps) {
       <button
         type="button"
         onClick={copy}
+        aria-label={copied ? "Copied" : "Copy command"}
         className="ml-3 text-muted hover:text-foreground transition-colors shrink-0"
       >
         {copied ? (
-          <CheckIcon className="h-4 w-4 text-emerald-400" weight="light" />
+          <CheckIcon className="h-4 w-4 text-success" weight="light" />
         ) : (
           <CopyIcon className="h-4 w-4" weight="light" />
         )}

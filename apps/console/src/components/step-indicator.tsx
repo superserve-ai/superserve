@@ -20,6 +20,7 @@ export function StepIndicator({
     <button
       type="button"
       onClick={onClick}
+      aria-current={active ? "step" : undefined}
       className={cn(
         "w-full flex items-center gap-4 px-4 py-4 text-left transition-colors",
         active

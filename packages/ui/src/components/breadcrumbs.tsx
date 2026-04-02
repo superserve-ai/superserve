@@ -45,7 +45,10 @@ function Breadcrumbs({
         return (
           <div key={item.label} className="flex items-center gap-1.5">
             {index > 0 && (
-              <CaretRightIcon className="h-3.5 w-3.5 text-muted" weight="light" />
+              <CaretRightIcon
+                className="h-3.5 w-3.5 text-muted"
+                weight="light"
+              />
             )}
             {isLast || !item.href ? (
               <span
