@@ -31,24 +31,31 @@ const STEPS = [
 
 export default function GetStartedPage() {
   return (
-    <div className="max-w-2xl mx-auto">
-      <h1 className="text-[28px] font-medium leading-none tracking-tight text-foreground mt-12">
-        Get Started
-      </h1>
-      <p className="mt-3 text-sm leading-none tracking-tight text-muted">
-        Install CLI and create your first sandbox
-      </p>
+    <div className="flex h-full flex-col">
+      <div className="flex items-center h-14 border-b border-border px-6">
+        <h1 className="text-lg font-medium tracking-tight text-foreground">
+          Get Started
+        </h1>
+      </div>
 
-      <div className="mt-10 space-y-10">
-        {STEPS.map((step, i) => (
-          <GetStartedStep
-            key={step.title}
-            stepNumber={i + 1}
-            title={step.title}
-            description={step.description}
-            command={step.command}
-          />
-        ))}
+      <div className="flex-1 overflow-y-auto px-6 py-8">
+        <div className="mx-auto max-w-2xl">
+          <p className="text-sm leading-none tracking-tight text-muted">
+            Install CLI and create your first sandbox
+          </p>
+
+          <div className="mt-10 space-y-10">
+            {STEPS.map((step, i) => (
+              <GetStartedStep
+                key={step.title}
+                stepNumber={i + 1}
+                title={step.title}
+                description={step.description}
+                command={step.command}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )
