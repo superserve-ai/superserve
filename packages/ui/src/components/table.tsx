@@ -7,7 +7,7 @@ function Table({
   return (
     <div className="w-full overflow-auto">
       <table
-        className={cn("w-full table-fixed caption-bottom text-sm", className)}
+        className={cn("w-full caption-bottom text-sm", className)}
         {...props}
       />
     </div>

@@ -34,7 +34,7 @@ function DropdownMenuItem({
       className={cn(
         "relative flex cursor-pointer select-none items-center gap-2 px-2 py-1.5 text-sm text-foreground outline-none",
         "hover:bg-surface-hover focus:bg-surface-hover",
-        "data-disabled:pointer-events-none data-disabled:opacity-50",
+        "data-disabled:pointer-events-none data-disabled:opacity-30",
         className,
       )}
       {...props}

@@ -18,7 +18,7 @@ function SelectTrigger({
         "flex h-9 w-full items-center justify-between border border-input bg-background px-3 text-sm text-foreground",
         "placeholder:text-muted",
         "focus:outline-none focus:ring-2 focus:ring-border-focus",
-        "disabled:cursor-not-allowed disabled:opacity-50",
+        "disabled:cursor-not-allowed disabled:opacity-30",
         className,
       )}
       {...props}
