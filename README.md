@@ -2,7 +2,7 @@
   <br/>
   <br/>
   <picture>
-    <img width="1500" height="500" alt="Twitter Header - Personal" src="https://github.com/user-attachments/assets/565a469e-bc80-4e0a-af70-4e6ed07975c2" />
+    <img width="1500" height="auto" alt="Twitter Header - Personal" src="https://github.com/user-attachments/assets/565a469e-bc80-4e0a-af70-4e6ed07975c2" />
   </picture>
 
   <br/>
