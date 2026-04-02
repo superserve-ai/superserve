@@ -1,6 +1,6 @@
 "use client"
 
-import { CaretDown } from "@phosphor-icons/react"
+import { CaretDownIcon } from "@phosphor-icons/react"
 import * as AccordionPrimitive from "@radix-ui/react-accordion"
 import { cn } from "../lib/utils"
 
@@ -34,7 +34,7 @@ function AccordionTrigger({
         {...props}
       >
         {children}
-        <CaretDown
+        <CaretDownIcon
           className="h-4 w-4 text-muted shrink-0 transition-transform duration-200"
           weight="light"
         />

@@ -1,6 +1,6 @@
 "use client"
 
-import { Check, Info, Warning, X } from "@phosphor-icons/react"
+import { CheckIcon, InfoIcon, WarningIcon, XIcon } from "@phosphor-icons/react"
 import { AnimatePresence, motion } from "motion/react"
 import {
   createContext,
@@ -112,19 +112,19 @@ function ToastContainer({
 
 const variantConfig = {
   success: {
-    icon: Check,
+    icon: CheckIcon,
     iconColor: "text-success",
   },
   info: {
-    icon: Info,
+    icon: InfoIcon,
     iconColor: "text-primary",
   },
   warning: {
-    icon: Warning,
+    icon: WarningIcon,
     iconColor: "text-warning",
   },
   error: {
-    icon: X,
+    icon: XIcon,
     iconColor: "text-destructive",
   },
 }
@@ -186,7 +186,7 @@ function ToastItem({
             className="shrink-0 p-1 text-muted hover:text-foreground transition-colors"
             aria-label="Dismiss notification"
           >
-            <X className="w-4 h-4" weight="light" />
+            <XIcon className="w-4 h-4" weight="light" />
           </button>
         </div>
       </div>

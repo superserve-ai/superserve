@@ -1,6 +1,6 @@
 "use client"
 
-import { X } from "@phosphor-icons/react"
+import { XIcon } from "@phosphor-icons/react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { cn } from "../lib/utils"
 
@@ -26,7 +26,7 @@ function DialogContent({
       >
         {children}
         <DialogPrimitive.Close className="absolute right-4 top-4 p-1 text-muted hover:text-foreground hover:bg-surface-hover transition-colors">
-          <X className="h-4 w-4" weight="light" />
+          <XIcon className="h-4 w-4" weight="light" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>
       </DialogPrimitive.Content>

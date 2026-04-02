@@ -1,6 +1,6 @@
 "use client"
 
-import { Warning } from "@phosphor-icons/react"
+import { WarningIcon } from "@phosphor-icons/react"
 import * as React from "react"
 import { cn } from "../lib/utils"
 import { Button } from "./button"
@@ -60,7 +60,7 @@ export function ConfirmDialog({
                 variant === "danger" ? "bg-destructive/10" : "bg-warning/10",
               )}
             >
-              <Warning
+              <WarningIcon
                 className={cn(
                   "h-5 w-5",
                   variant === "danger" ? "text-destructive" : "text-warning",

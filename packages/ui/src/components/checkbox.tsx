@@ -1,6 +1,6 @@
 "use client"
 
-import { Check } from "@phosphor-icons/react"
+import { CheckIcon } from "@phosphor-icons/react"
 import * as CheckboxPrimitive from "@radix-ui/react-checkbox"
 import { AnimatePresence, motion } from "motion/react"
 import { cn } from "../lib/utils"
@@ -31,7 +31,7 @@ function Checkbox({ className, label, id, ...props }: CheckboxProps) {
               animate={{ scale: 1 }}
               transition={{ duration: 0.1 }}
             >
-              <Check className="h-3 w-3 text-background" weight="bold" />
+              <CheckIcon className="h-3 w-3 text-background" weight="bold" />
             </motion.div>
           </AnimatePresence>
         </CheckboxPrimitive.Indicator>

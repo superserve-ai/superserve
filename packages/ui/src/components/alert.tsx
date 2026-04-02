@@ -1,31 +1,31 @@
 "use client"
 
-import { Check, Info, Warning } from "@phosphor-icons/react"
+import { CheckIcon, InfoIcon, WarningIcon } from "@phosphor-icons/react"
 import { cn } from "../lib/utils"
 
 type AlertVariant = "default" | "success" | "warning" | "destructive"
 
 const variantConfig: Record<
   AlertVariant,
-  { icon: typeof Info; containerClass: string; iconClass: string }
+  { icon: typeof InfoIcon; containerClass: string; iconClass: string }
 > = {
   default: {
-    icon: Info,
+    icon: InfoIcon,
     containerClass: "border-border bg-surface",
     iconClass: "text-primary",
   },
   success: {
-    icon: Check,
+    icon: CheckIcon,
     containerClass: "border-success/20 bg-success/5",
     iconClass: "text-success",
   },
   warning: {
-    icon: Warning,
+    icon: WarningIcon,
     containerClass: "border-warning/20 bg-warning/5",
     iconClass: "text-warning",
   },
   destructive: {
-    icon: Warning,
+    icon: WarningIcon,
     containerClass: "border-destructive/20 bg-destructive/5",
     iconClass: "text-destructive",
   },
