@@ -1,6 +1,7 @@
 "use client"
 
 import { createBrowserClient } from "@superserve/supabase"
+import { Spinner } from "@/components/icons"
 import {
   Button,
   Dialog,
@@ -120,7 +121,7 @@ export default function SettingsPage() {
       <div className="flex h-full flex-col">
         <PageHeader title="Settings" />
         <div className="flex flex-1 items-center justify-center">
-          <div className="h-5 w-5 animate-spin border-2 border-foreground/20 border-t-foreground" />
+          <Spinner className="border-foreground/20 border-t-foreground" />
         </div>
       </div>
     )
