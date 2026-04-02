@@ -1,3 +1,7 @@
+"use client"
+
+import { motion } from "motion/react"
+
 export function GoogleIcon() {
   return (
     <svg className="size-5" viewBox="0 0 24 24" aria-hidden="true">
@@ -27,8 +31,10 @@ export function Spinner({
   className?: string
 }) {
   return (
-    <div
-      className={`h-5 w-5 animate-spin border-2 border-t-transparent rounded-full ${className}`}
+    <motion.div
+      className={`h-5 w-5 border-2 border-t-transparent rounded-full ${className}`}
+      animate={{ rotate: 360 }}
+      transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
     />
   )
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { AlertTriangle, Check, Info, X } from "lucide-react"
+import { CheckIcon, InfoIcon, WarningIcon, XIcon } from "@phosphor-icons/react"
 import { AnimatePresence, motion } from "motion/react"
 import {
   createContext,
@@ -112,19 +112,19 @@ function ToastContainer({
 
 const variantConfig = {
   success: {
-    icon: Check,
+    icon: CheckIcon,
     iconColor: "text-success",
   },
   info: {
-    icon: Info,
+    icon: InfoIcon,
     iconColor: "text-primary",
   },
   warning: {
-    icon: AlertTriangle,
+    icon: WarningIcon,
     iconColor: "text-warning",
   },
   error: {
-    icon: X,
+    icon: XIcon,
     iconColor: "text-destructive",
   },
 }
@@ -150,7 +150,10 @@ function ToastItem({
     >
       <div className="p-4">
         <div className="flex items-start gap-3">
-          <Icon className={`w-5 h-5 flex-shrink-0 ${config.iconColor}`} />
+          <Icon
+            className={`w-5 h-5 flex-shrink-0 ${config.iconColor}`}
+            weight="light"
+          />
 
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-foreground">{toast.title}</p>
@@ -183,7 +186,7 @@ function ToastItem({
             className="shrink-0 p-1 text-muted hover:text-foreground transition-colors"
             aria-label="Dismiss notification"
           >
-            <X className="w-4 h-4" />
+            <XIcon className="w-4 h-4" weight="light" />
           </button>
         </div>
       </div>

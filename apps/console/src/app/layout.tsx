@@ -1,19 +1,13 @@
 import { cn, ToastProvider } from "@superserve/ui"
 import type { Metadata } from "next"
-import { Funnel_Display, Geist_Mono, Inter } from "next/font/google"
+import { Geist_Mono, Instrument_Sans } from "next/font/google"
 import { Suspense } from "react"
 import { PostHogPageView } from "@/components/posthog-pageview"
 import { PostHogProvider } from "@/components/posthog-provider"
 
 import "./globals.css"
 
-const displayFont = Funnel_Display({
-  subsets: ["latin"],
-  variable: "--display-font",
-  display: "swap",
-})
-
-const sansFont = Inter({
+const sansFont = Instrument_Sans({
   subsets: ["latin"],
   variable: "--sans-font",
   display: "swap",
@@ -26,7 +20,10 @@ const monoFont = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Superserve Console",
+  title: {
+    default: "Superserve Console",
+    template: "%s | Superserve Console",
+  },
   description: "Deploy and manage your AI agents with Superserve",
   icons: {
     icon: { url: "/favicon.svg", type: "image/svg+xml" },
@@ -46,7 +43,7 @@ export const metadata: Metadata = {
     images: ["/og-image.png"],
   },
   other: {
-    "theme-color": "#105C60",
+    "theme-color": "#0a0a0a",
   },
 }
 
@@ -57,14 +54,7 @@ export default function RootLayout({
 }) {
   return (
     <PostHogProvider>
-      <html
-        lang="en"
-        className={cn(
-          displayFont.variable,
-          sansFont.variable,
-          monoFont.variable,
-        )}
-      >
+      <html lang="en" className={cn(sansFont.variable, monoFont.variable)}>
         <body className="font-sans antialiased" suppressHydrationWarning>
           <Suspense fallback={null}>
             <PostHogPageView />

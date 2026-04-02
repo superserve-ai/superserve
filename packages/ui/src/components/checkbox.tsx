@@ -1,7 +1,7 @@
 "use client"
 
+import { CheckIcon } from "@phosphor-icons/react"
 import * as CheckboxPrimitive from "@radix-ui/react-checkbox"
-import { Check } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
 import { cn } from "../lib/utils"
 
@@ -16,9 +16,9 @@ function Checkbox({ className, label, id, ...props }: CheckboxProps) {
       <CheckboxPrimitive.Root
         id={id}
         className={cn(
-          "peer h-4 w-4 shrink-0 border border-input transition-colors",
+          "peer h-4 w-4 shrink-0 border border-foreground/25 transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus",
-          "disabled:cursor-not-allowed disabled:opacity-50",
+          "disabled:cursor-not-allowed disabled:opacity-30",
           "data-[state=checked]:bg-primary data-[state=checked]:border-primary",
           className,
         )}
@@ -29,9 +29,10 @@ function Checkbox({ className, label, id, ...props }: CheckboxProps) {
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
+              exit={{ scale: 0 }}
               transition={{ duration: 0.1 }}
             >
-              <Check className="h-3 w-3 text-white" strokeWidth={3} />
+              <CheckIcon className="h-3 w-3 text-background" weight="bold" />
             </motion.div>
           </AnimatePresence>
         </CheckboxPrimitive.Indicator>

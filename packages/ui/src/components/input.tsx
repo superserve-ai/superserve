@@ -35,7 +35,7 @@ function Input({
           className={cn(
             "h-9 w-full border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted transition-colors",
             "focus:outline-none focus:ring-2 focus:ring-border-focus focus:border-border-focus",
-            "disabled:cursor-not-allowed disabled:opacity-50",
+            "disabled:cursor-not-allowed disabled:opacity-30",
             error && "border-destructive focus:ring-destructive/20",
             suffix && "pr-10",
             className,

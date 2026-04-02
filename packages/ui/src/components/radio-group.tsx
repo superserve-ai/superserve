@@ -34,7 +34,7 @@ function RadioGroupItem({
         className={cn(
           "h-4 w-4 shrink-0 border border-input transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus",
-          "disabled:cursor-not-allowed disabled:opacity-50",
+          "disabled:cursor-not-allowed disabled:opacity-30",
           "data-[state=checked]:border-primary",
           className,
         )}

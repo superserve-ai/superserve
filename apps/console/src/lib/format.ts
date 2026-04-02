@@ -1,0 +1,37 @@
+export function formatDate(date: Date): string {
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
+}
+
+export function formatTime(date: Date): { relative: string; absolute: string } {
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  const diffHr = Math.floor(diffMin / 60)
+  const diffDays = Math.floor(diffHr / 24)
+
+  let relative: string
+  if (diffMin < 1) relative = "Just now"
+  else if (diffMin < 60) relative = `${diffMin}m ago`
+  else if (diffHr < 24) relative = `${diffHr}h ago`
+  else if (diffDays < 7) relative = `${diffDays}d ago`
+  else
+    relative = date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    })
+
+  const absolute = date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+
+  return { relative, absolute }
+}

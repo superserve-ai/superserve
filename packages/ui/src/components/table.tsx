@@ -36,10 +36,7 @@ function TableRow({
 }: React.HTMLAttributes<HTMLTableRowElement>) {
   return (
     <tr
-      className={cn(
-        "border-b border-border transition-colors hover:bg-surface-hover",
-        className,
-      )}
+      className={cn("border-b border-border transition-colors", className)}
       {...props}
     />
   )
@@ -52,7 +49,7 @@ function TableHead({
   return (
     <th
       className={cn(
-        "h-10 px-4 text-left align-middle text-xs font-mono uppercase tracking-wider text-muted",
+        "h-10 px-4 text-left align-middle text-xs font-mono font-medium uppercase tracking-wider text-muted",
         className,
       )}
       {...props}

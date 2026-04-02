@@ -28,7 +28,6 @@ Visit our website to get started: [superserve.ai](https://www.superserve.ai/)
 ```
 apps/
   console/                 # Sandbox Dashboard
-  playground/              # React + Vite playground app
   ui-docs/                 # UI component docs
 packages/
   cli/                     # TypeScript CLI (@superserve/cli)
@@ -67,7 +66,7 @@ bun run test              # run all tests
 Target a specific package with `--filter`:
 
 ```bash
-bunx turbo run dev --filter=@superserve/playground
+bunx turbo run dev --filter=@superserve/console
 bunx turbo run build --filter=@superserve/sdk
 ```
 
@@ -77,7 +76,7 @@ Always add dependencies from the repo root using `--filter`:
 
 ```bash
 bun add zod --filter @superserve/cli
-bun add react --filter @superserve/playground
+bun add react --filter @superserve/console
 bun add -d @types/node --filter @superserve/sdk
 ```
 
