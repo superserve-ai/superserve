@@ -1,4 +1,4 @@
-import { Check, Copy } from "@phosphor-icons/react"
+import { CheckIcon, CopyIcon } from "@phosphor-icons/react"
 import { Button } from "@superserve/ui"
 import { useEffect, useState } from "react"
 import { createHighlighter, type Highlighter } from "shiki"
@@ -64,9 +64,9 @@ export function CodeBlock({ code }: { code: string }) {
         onClick={handleCopy}
       >
         {copied ? (
-          <Check className="size-3.5" weight="light" />
+          <CheckIcon className="size-3.5" weight="light" />
         ) : (
-          <Copy className="size-3.5" weight="light" />
+          <CopyIcon className="size-3.5" weight="light" />
         )}
       </Button>
       <div className="overflow-x-auto border border-border bg-[#0d1117] px-4 py-3 font-mono text-xs leading-relaxed [&_pre]:!bg-transparent [&_code]:!bg-transparent">

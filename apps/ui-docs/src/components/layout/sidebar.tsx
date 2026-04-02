@@ -1,4 +1,4 @@
-import { List, X } from "@phosphor-icons/react"
+import { ListIcon, XIcon } from "@phosphor-icons/react"
 import { Button } from "@superserve/ui"
 import { useState } from "react"
 import { Link, useParams } from "react-router"
@@ -83,9 +83,9 @@ export function Sidebar() {
       <div className="md:hidden fixed top-3 left-3 z-50">
         <Button variant="outline" size="icon-sm" onClick={() => setOpen(!open)}>
           {open ? (
-            <X className="size-4" weight="light" />
+            <XIcon className="size-4" weight="light" />
           ) : (
-            <List className="size-4" weight="light" />
+            <ListIcon className="size-4" weight="light" />
           )}
         </Button>
       </div>

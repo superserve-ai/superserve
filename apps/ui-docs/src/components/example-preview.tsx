@@ -1,4 +1,4 @@
-import { Code, X } from "@phosphor-icons/react"
+import { CodeIcon, XIcon } from "@phosphor-icons/react"
 import { Button } from "@superserve/ui"
 import { useState } from "react"
 import type { ComponentExample } from "../registry/types"
@@ -17,9 +17,9 @@ export function ExamplePreview({ example }: { example: ComponentExample }) {
           onClick={() => setShowCode(!showCode)}
         >
           {showCode ? (
-            <X className="size-3.5" weight="light" />
+            <XIcon className="size-3.5" weight="light" />
           ) : (
-            <Code className="size-3.5" weight="light" />
+            <CodeIcon className="size-3.5" weight="light" />
           )}
         </Button>
       </div>
