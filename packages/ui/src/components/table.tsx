@@ -7,7 +7,7 @@ function Table({
   return (
     <div className="w-full overflow-auto">
       <table
-        className={cn("w-full caption-bottom text-sm", className)}
+        className={cn("w-full table-fixed caption-bottom text-sm", className)}
         {...props}
       />
     </div>
@@ -37,7 +37,7 @@ function TableRow({
   return (
     <tr
       className={cn(
-        "border-b border-border transition-colors hover:bg-surface-hover",
+        "border-b border-border transition-colors hover:bg-white/[0.03]",
         className,
       )}
       {...props}
