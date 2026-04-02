@@ -120,6 +120,10 @@
         "@types/js-yaml": "^4.0.9",
       },
     },
+    "packages/python-sdk": {
+      "name": "@superserve/python-sdk",
+      "version": "0.3.0",
+    },
     "packages/sdk": {
       "name": "@superserve/sdk",
       "version": "0.1.2",
@@ -676,6 +680,8 @@
     "@superserve/console": ["@superserve/console@workspace:apps/console"],
 
     "@superserve/playground": ["@superserve/playground@workspace:apps/playground"],
+
+    "@superserve/python-sdk": ["@superserve/python-sdk@workspace:packages/python-sdk"],
 
     "@superserve/sdk": ["@superserve/sdk@workspace:packages/sdk"],
 

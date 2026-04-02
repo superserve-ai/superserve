@@ -6,7 +6,6 @@ import sys
 from unittest.mock import patch
 
 import pytest
-
 from superserve.sdk.app import App
 from superserve.sdk.session import Session
 from superserve.sdk.stream import Stream

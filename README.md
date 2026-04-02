@@ -102,6 +102,62 @@ Completed in 0.8s
 
 See the full [CLI Reference](https://docs.superserve.ai/cli) for all flags and options.
 
+## Python SDK
+
+The Python SDK lets you build agents with a simple turn-based loop. Install it with pip or uv:
+
+```bash
+pip install superserve
+```
+
+Or with uv:
+
+```bash
+uv add superserve
+```
+
+### Basic Usage
+
+```python
+from superserve.sdk import App
+
+app = App("my-agent")
+
+@app.session
+async def run(session):
+    async for message, stream in session.turns():
+        stream.write(f"You said: {message}")
+
+app.run()
+```
+
+### How It Works
+
+- **`App`** — entry point. Give it a name and register a session handler with the `@app.session` decorator
+- **`Session`** — manages the turn loop. Call `session.turns()` to async-iterate over `(message, stream)` pairs
+- **`Stream`** — output channel for each turn:
+  - `stream.write(text)` — send text or structured content to the user
+  - `stream.status("Thinking...")` — send a transient status message
+  - `stream.metadata({"cost": 0.01})` — send metadata (not shown to user)
+
+### Modes
+
+The SDK auto-detects its environment:
+
+- **Terminal mode** (default) — interactive stdin/stdout, reads from `input()` and prints responses
+- **Platform mode** (`SUPERSERVE=1`) — JSON protocol on stdin/stdout, used when deployed to Superserve
+
+### Deploy
+
+Write your agent, then deploy with the CLI:
+
+```bash
+superserve deploy agent.py
+superserve run my-agent
+```
+
+The SDK works with any framework — Claude Agent SDK, LangChain, Pydantic AI, or plain Python. See the [examples](examples/python/) directory for framework-specific agents.
+
 ## Requirements
 
 - A [Superserve account](https://console.superserve.ai)
@@ -120,6 +176,7 @@ apps/
   playground/              # React + Vite playground app
 packages/
   cli/                     # TypeScript CLI (@superserve/cli)
+  python-sdk/              # Python SDK (superserve on PyPI)
   sdk/                     # TypeScript SDK (@superserve/sdk)
   typescript-config/       # Shared tsconfig presets
   biome-config/            # Shared Biome config
@@ -180,14 +237,15 @@ TypeScript and Biome configs are shared across packages:
 
 When updating linting rules or compiler options, prefer updating the shared config so all packages stay consistent.
 
-### Legacy Python CLI
+### Python SDK
 
-The Python CLI in `src/superserve/` is being replaced by the TypeScript CLI. It uses **uv** for dependency management (independent from the Bun workspace):
+The Python SDK lives in `packages/python-sdk/` and is managed with **uv workspaces** (workspace root at `pyproject.toml`):
 
 ```bash
-uv sync --dev             # install Python dependencies
-uv run pytest             # run tests
-uv run ruff check .       # lint
+uv sync                                              # install Python dependencies
+uv run pytest packages/python-sdk/tests/              # run tests
+uv run ruff check packages/python-sdk/                # lint
+uv run mypy packages/python-sdk/src/superserve/       # type check
 ```
 
 ## Contributing
