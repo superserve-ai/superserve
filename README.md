@@ -12,7 +12,7 @@
   <p><strong>Sandbox infrastructure to run AI Agents in the cloud. Powered by Firecracker MicroVMs.</strong></p>
 
   [![Docs](https://img.shields.io/badge/Docs-latest-blue)](https://docs.superserve.ai/)
-  [![License](https://img.shields.io/badge/License-OCVSAL_1.0-blue.svg)](https://github.com/superserve-ai/superserve/blob/main/LICENSE)
+  [![License](https://img.shields.io/badge/license-Apache%20License%202.0-blue)](https://github.com/superserve-ai/superserve/blob/main/LICENSE)
 
 </div>
 
