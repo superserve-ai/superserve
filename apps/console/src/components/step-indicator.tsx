@@ -1,4 +1,4 @@
-import { Check } from "@phosphor-icons/react"
+import { CheckIcon } from "@phosphor-icons/react"
 import { cn } from "@superserve/ui"
 
 interface StepIndicatorProps {
@@ -37,7 +37,7 @@ export function StepIndicator({
               : "border-border text-muted",
         )}
       >
-        {completed ? <Check className="h-3.5 w-3.5" weight="bold" /> : step}
+        {completed ? <CheckIcon className="h-3.5 w-3.5" weight="bold" /> : step}
       </div>
       <span
         className={cn(
