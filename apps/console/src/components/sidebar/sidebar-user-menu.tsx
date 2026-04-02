@@ -47,7 +47,7 @@ export function SidebarUserMenu() {
             type="button"
             title={isCollapsed ? name : undefined}
             className={cn(
-              "flex w-full items-center gap-2.5 rounded-sm px-2.5 py-2.5 text-foreground/70 transition-colors hover:text-foreground hover:bg-surface-hover cursor-pointer",
+              "flex w-full items-center gap-2.5 px-2.5 py-2.5 text-foreground/70 transition-colors hover:text-foreground hover:bg-surface-hover cursor-pointer",
               isCollapsed && "justify-center",
             )}
           >

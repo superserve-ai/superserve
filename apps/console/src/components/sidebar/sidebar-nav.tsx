@@ -32,7 +32,7 @@ export function SidebarNav({ items }: SidebarNavProps) {
         )
 
         const linkClassName = cn(
-          "flex items-center gap-2.5 rounded-sm px-2.5 py-2.5 transition-colors",
+          "flex items-center gap-2.5 px-2.5 py-2.5 transition-colors",
           isCollapsed && "justify-center",
           isActive
             ? "bg-surface-hover text-foreground"

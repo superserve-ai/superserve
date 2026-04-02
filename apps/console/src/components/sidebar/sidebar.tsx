@@ -76,7 +76,7 @@ export function Sidebar() {
               <button
                 type="button"
                 onClick={handleSearchClick}
-                className="flex w-full items-center justify-center rounded-sm border border-dashed border-border px-2.5 py-2.5 text-foreground/70 transition-colors hover:text-foreground hover:bg-surface-hover cursor-pointer"
+                className="flex w-full items-center justify-center border border-dashed border-border px-2.5 py-2.5 text-foreground/70 transition-colors hover:text-foreground hover:bg-surface-hover cursor-pointer"
               >
                 <MagnifyingGlassIcon className="size-4" weight="light" />
               </button>
@@ -84,7 +84,7 @@ export function Sidebar() {
             <TooltipContent side="right">Search</TooltipContent>
           </Tooltip>
         ) : (
-          <label className="flex w-full group items-center gap-2.5 rounded-sm border border-dashed border-border px-2.5 py-2.5 text-foreground/70 transition-colors hover:text-foreground hover:bg-surface-hover cursor-text focus-within:border-border-focus">
+          <label className="flex w-full group items-center gap-2.5 border border-dashed border-border px-2.5 py-2.5 text-foreground/70 transition-colors hover:text-foreground hover:bg-surface-hover cursor-text focus-within:border-border-focus">
             <MagnifyingGlassIcon className="size-4 shrink-0" weight="light" />
             <input
               ref={searchInputRef}
