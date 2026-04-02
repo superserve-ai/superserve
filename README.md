@@ -2,8 +2,7 @@
   <br/>
   <br/>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/superserve-ai/superserve/main/assets/logo-dark.svg">
-    <img src="https://raw.githubusercontent.com/superserve-ai/superserve/main/assets/logo-light.svg">
+    <img width="1500" height="500" alt="Twitter Header - Personal" src="https://github.com/user-attachments/assets/565a469e-bc80-4e0a-af70-4e6ed07975c2" />
   </picture>
 
   <br/>
