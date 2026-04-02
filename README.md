@@ -117,7 +117,8 @@ This repo is a monorepo managed with [Bun workspaces](https://bun.sh/docs/instal
 
 ```
 apps/
-  playground/              # React + Vite playground app
+  console/                 # React + Vite console app
+  ui-docs/                 # UI component documentation
 packages/
   cli/                     # TypeScript CLI (@superserve/cli)
   sdk/                     # TypeScript SDK (@superserve/sdk)
@@ -146,7 +147,7 @@ bun run test              # run all tests
 Target a specific package with `--filter`:
 
 ```bash
-bunx turbo run dev --filter=@superserve/playground
+bunx turbo run dev --filter=@superserve/console
 bunx turbo run build --filter=@superserve/sdk
 ```
 
@@ -165,7 +166,7 @@ Always add dependencies from the repo root using `--filter`:
 
 ```bash
 bun add zod --filter @superserve/cli
-bun add react --filter @superserve/playground
+bun add react --filter @superserve/console
 bun add -d @types/node --filter @superserve/sdk
 ```
 

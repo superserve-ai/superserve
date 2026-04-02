@@ -6,14 +6,15 @@ Guidelines for working with the Superserve monorepo.
 
 Superserve is a CLI and SDK for deploying AI agents to sandboxed cloud containers. Users write an agent (typically using the Claude Agent SDK), point `superserve deploy` at it, and get a hosted agent they can interact with via `superserve run`.
 
-This repo is a monorepo containing the CLI, TypeScript SDK, and playground app. The platform API and dashboard are being migrated here from a separate repo.
+This repo is a monorepo containing the CLI, TypeScript SDK, console, and UI library. The platform API and dashboard are being migrated here from a separate repo.
 
 ## Monorepo Structure
 
 ```
 superserve/
 ├── apps/
-│   └── playground/              # React + Vite playground app
+│   ├── console/                 # React + Vite console app
+│   └── ui-docs/                 # UI component documentation
 ├── packages/
 │   ├── cli/                     # TypeScript CLI (@superserve/cli on npm)
 │   ├── sdk/                     # TypeScript SDK (@superserve/sdk on npm)
@@ -39,10 +40,6 @@ Built with Bun + Commander. Entry point: `src/index.ts`.
 ### TypeScript SDK (`packages/sdk/`)
 
 Published as `@superserve/sdk` with dual CJS/ESM output via tsup. Includes React hooks at `@superserve/sdk/react`.
-
-### Playground (`apps/playground/`)
-
-React + Vite app for interacting with agents. Depends on `@superserve/sdk` via workspace reference.
 
 ### Legacy Python CLI (`src/superserve/`)
 
@@ -79,7 +76,7 @@ bun run typecheck          # Type check all TS projects
 bun run test               # Run all TS tests
 
 # TypeScript — single project
-bunx turbo run dev --filter=@superserve/playground
+bunx turbo run dev --filter=@superserve/console
 bunx turbo run build --filter=@superserve/sdk
 
 # Adding dependencies — always from repo root with --filter

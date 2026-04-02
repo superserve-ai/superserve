@@ -37,7 +37,8 @@ Thank you for your interest in contributing to Superserve! We welcome contributi
 ## Repo Structure
 
 ```
-apps/playground/           # React + Vite playground app
+apps/console/              # React + Vite console app
+apps/ui-docs/              # UI component documentation
 packages/cli/              # TypeScript CLI (@superserve/cli)
 packages/sdk/              # TypeScript SDK (@superserve/sdk)
 packages/typescript-config/ # Shared tsconfig presets
@@ -57,7 +58,7 @@ bun run test               # run all tests
 
 For a single package:
 ```bash
-bunx turbo run dev --filter=@superserve/playground
+bunx turbo run dev --filter=@superserve/console
 ```
 
 For the legacy Python CLI:
