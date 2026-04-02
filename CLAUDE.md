@@ -17,19 +17,18 @@ superserve/
 │   └── ui-docs/                 # UI component documentation
 ├── packages/
 │   ├── cli/                     # TypeScript CLI (@superserve/cli on npm)
+│   ├── python-sdk/              # Python SDK (superserve on PyPI)
 │   ├── sdk/                     # TypeScript SDK (@superserve/sdk on npm)
 │   ├── typescript-config/       # Shared tsconfig presets
 │   └── biome-config/            # Shared Biome linting/formatting config
-├── src/superserve/              # Legacy Python CLI+SDK (being replaced by TS CLI)
 ├── docs/                        # Mintlify documentation, no specs or planning docs here
-├── examples/                    # Example projects
-└── tests/                       # Python tests
+└── examples/                    # Example projects
 ```
 
 **Workspace tooling:**
 - **Bun workspaces** for dependency management (single `bun.lock` at root)
 - **Turborepo** for task orchestration (build, lint, typecheck, test)
-- **uv** for Python projects (independent, `pyproject.toml` at root)
+- **uv workspaces** for Python packages (`pyproject.toml` at root as workspace root)
 
 ## Architecture
 
@@ -41,19 +40,13 @@ Built with Bun + Commander. Entry point: `src/index.ts`.
 
 Published as `@superserve/sdk` with dual CJS/ESM output via tsup. Includes React hooks at `@superserve/sdk/react`.
 
-### Legacy Python CLI (`src/superserve/`)
+### Playground (`apps/playground/`)
 
-Click-based CLI being replaced by the TypeScript CLI. Will be removed once feature parity is achieved.
+React + Vite app for interacting with agents. Depends on `@superserve/sdk` via workspace reference.
 
-```
-src/superserve/
-├── cli/
-│   ├── cli.py              # Main Click group entry point
-│   ├── commands/            # Click command implementations
-│   ├── platform/            # Platform API client layer
-│   └── templates/           # Project scaffolding templates
-└── sdk/                     # Python SDK
-```
+### Python SDK (`packages/python-sdk/`)
+
+Published as `superserve` on PyPI. Provides the `App`, `Session`, and `Stream` classes for building agents in Python. Zero runtime dependencies.
 
 ## Key Patterns
 
@@ -87,11 +80,14 @@ bun add -d @types/node --filter @superserve/sdk
 # Testing the CLI locally (no dev server, run directly)
 bun packages/cli/src/index.ts deploy --help
 
-# Python (legacy, independent)
-uv run ruff check . --fix
-uv run ruff format .
-uv run mypy src/
-uv run pytest
+# Python SDK
+uv run pytest packages/python-sdk/tests/           # Run SDK tests
+uv run ruff check packages/python-sdk/ --fix        # Lint
+uv run mypy packages/python-sdk/src/superserve/     # Type check
+
+# Python via Turborepo
+bunx turbo run test --filter=@superserve/python-sdk
+bunx turbo run lint --filter=@superserve/python-sdk
 ```
 
 ## Coding Style
@@ -104,7 +100,6 @@ uv run pytest
 ### Python
 - Python 3.12+, type hints on function signatures
 - Ruff for linting and formatting (line length 88)
-- Click for CLI commands, Pydantic for API types
 
 ### General
 - Keep functions focused, avoid deep nesting

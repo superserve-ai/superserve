@@ -31,8 +31,7 @@
       }
     }
   },
-  "css": "/style.css",
-  "favicon": "/images/Subtract.svg",
+  "favicon": "/favicon.svg",
   "logo": {
     "light": "/logo/light.svg",
     "dark": "/logo/dark.svg",
@@ -45,22 +44,7 @@
     "groups": [
       {
         "group": "Getting Started",
-        "pages": ["introduction", "quickstart", "deploy", "sessions", "authentication", "troubleshooting"]
-      },
-      {
-        "group": "Frameworks",
-        "pages": [
-          "frameworks/claude-agent-sdk",
-          "frameworks/openai-agents-sdk",
-          "frameworks/pydantic-ai",
-          "frameworks/mastra",
-          "frameworks/langchain",
-          "frameworks/agno"
-        ]
-      },
-      {
-        "group": "Reference",
-        "pages": ["sdk", "cli"]
+        "pages": ["introduction"]
       }
     ],
     "global": {

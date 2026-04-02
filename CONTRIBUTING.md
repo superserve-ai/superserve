@@ -7,7 +7,7 @@ Thank you for your interest in contributing to Superserve! We welcome contributi
 ### Prerequisites
 
 - [Bun](https://bun.sh/) for TypeScript projects
-- Python 3.12+ and [uv](https://github.com/astral-sh/uv) for the legacy Python CLI
+- Python 3.12+ and [uv](https://github.com/astral-sh/uv) for the Python SDK
 
 ### Development Setup
 
@@ -40,10 +40,10 @@ Thank you for your interest in contributing to Superserve! We welcome contributi
 apps/console/              # React + Vite console app
 apps/ui-docs/              # UI component documentation
 packages/cli/              # TypeScript CLI (@superserve/cli)
+packages/python-sdk/       # Python SDK (superserve on PyPI)
 packages/sdk/              # TypeScript SDK (@superserve/sdk)
 packages/typescript-config/ # Shared tsconfig presets
 packages/biome-config/     # Shared Biome config
-src/superserve/            # Legacy Python CLI (being replaced)
 ```
 
 ## Common Commands
@@ -61,12 +61,12 @@ For a single package:
 bunx turbo run dev --filter=@superserve/console
 ```
 
-For the legacy Python CLI:
+For the Python SDK:
 ```bash
-uv sync --dev
-uv run pytest
-uv run ruff check . --fix
-uv run mypy src/superserve
+uv sync
+uv run pytest packages/python-sdk/tests/
+uv run ruff check packages/python-sdk/ --fix
+uv run mypy packages/python-sdk/src/superserve
 ```
 
 ## How to Contribute
