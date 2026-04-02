@@ -1,9 +1,8 @@
 "use client"
 
 import {
-  CaretLeftIcon,
-  CaretRightIcon,
   MagnifyingGlassIcon,
+  SidebarSimpleIcon,
 } from "@phosphor-icons/react"
 import {
   Button,
@@ -53,25 +52,13 @@ export function Sidebar() {
         isCollapsed ? "w-16" : "w-64",
       )}
     >
-      {/* Logo + Toggle */}
-      <div className="flex items-center justify-between p-5">
+      {/* Logo */}
+      <div className="flex items-center justify-center p-5">
         {isCollapsed ? (
           <img src="/logo-mark.svg" alt="Superserve" className="size-5" />
         ) : (
           <img src="/logo.svg" alt="Superserve" className="h-5 w-auto" />
         )}
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={toggle}
-          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {isCollapsed ? (
-            <CaretRightIcon className="size-4" weight="light" />
-          ) : (
-            <CaretLeftIcon className="size-4" weight="light" />
-          )}
-        </Button>
       </div>
 
       {/* Search */}
@@ -118,6 +105,33 @@ export function Sidebar() {
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Collapse Toggle */}
+      <nav className="px-2.5 mb-0.5">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={toggle}
+              aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className={cn(
+                "flex w-full items-center gap-2.5 px-2.5 py-2.5 text-foreground/70 hover:text-foreground hover:bg-foreground/4 transition-colors cursor-pointer",
+                isCollapsed && "justify-center",
+              )}
+            >
+              <SidebarSimpleIcon className="size-4 shrink-0" weight="light" />
+              {!isCollapsed && (
+                <span className="text-sm leading-none tracking-tight">
+                  Collapse
+                </span>
+              )}
+            </button>
+          </TooltipTrigger>
+          {isCollapsed && (
+            <TooltipContent side="right">Expand</TooltipContent>
+          )}
+        </Tooltip>
+      </nav>
 
       {/* Bottom Nav */}
       <SidebarNav items={bottomNavItems} groupId="bottom" />
