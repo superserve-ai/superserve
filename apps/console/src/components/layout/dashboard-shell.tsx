@@ -15,7 +15,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <main
         className={cn(
-          "flex-1 overflow-y-auto px-12 py-10 transition-all duration-200",
+          "flex-1 overflow-y-auto transition-all duration-200",
           isCollapsed ? "ml-16" : "ml-64",
         )}
       >

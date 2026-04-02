@@ -1,6 +1,6 @@
 "use client"
 
-import { CaretUpDown, SignOut, User } from "@phosphor-icons/react"
+import { CaretUpDownIcon, SignOutIcon, UserIcon } from "@phosphor-icons/react"
 import { createBrowserClient } from "@superserve/supabase"
 import {
   Avatar,
@@ -51,13 +51,13 @@ export function SidebarUserMenu() {
               isCollapsed && "justify-center",
             )}
           >
-            <User className="size-4 shrink-0" weight="light" />
+            <UserIcon className="size-4 shrink-0" weight="light" />
             {!isCollapsed && (
               <>
                 <span className="flex-1 truncate text-left text-sm leading-none tracking-tight">
                   {name}
                 </span>
-                <CaretUpDown className="size-4 shrink-0" weight="light" />
+                <CaretUpDownIcon className="size-4 shrink-0" weight="light" />
               </>
             )}
           </button>
@@ -81,7 +81,7 @@ export function SidebarUserMenu() {
           </div>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleLogout}>
-            <SignOut className="size-4" weight="light" />
+            <SignOutIcon className="size-4" weight="light" />
             Log out
           </DropdownMenuItem>
         </DropdownMenuContent>

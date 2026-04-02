@@ -1,6 +1,6 @@
 "use client"
 
-import { MagnifyingGlass, Trash } from "@phosphor-icons/react"
+import { MagnifyingGlassIcon, TrashIcon } from "@phosphor-icons/react"
 import { Button, cn } from "@superserve/ui"
 
 interface FilterTab {
@@ -55,7 +55,7 @@ export function TableToolbar({
                 className="h-7 text-xs"
                 onClick={onDeleteSelected}
               >
-                <Trash className="size-3" weight="light" />
+                <TrashIcon className="size-3" weight="light" />
                 Delete
               </Button>
             )}
@@ -91,7 +91,7 @@ export function TableToolbar({
 
       {/* Search */}
       <div className="flex items-center gap-2 border border-border px-2.5 py-1.5 text-muted focus-within:border-border-focus">
-        <MagnifyingGlass className="size-3.5 shrink-0" weight="light" />
+        <MagnifyingGlassIcon className="size-3.5 shrink-0" weight="light" />
         <input
           type="text"
           placeholder={searchPlaceholder}

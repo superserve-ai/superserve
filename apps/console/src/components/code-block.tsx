@@ -1,6 +1,6 @@
 "use client"
 
-import { Check, Copy } from "@phosphor-icons/react"
+import { CheckIcon, CopyIcon } from "@phosphor-icons/react"
 import { usePostHog } from "posthog-js/react"
 import { useState } from "react"
 
@@ -38,9 +38,9 @@ export function CodeBlock({ command, eventName }: CodeBlockProps) {
         className="ml-3 text-muted hover:text-foreground transition-colors shrink-0"
       >
         {copied ? (
-          <Check className="h-4 w-4 text-emerald-400" weight="light" />
+          <CheckIcon className="h-4 w-4 text-emerald-400" weight="light" />
         ) : (
-          <Copy className="h-4 w-4" weight="light" />
+          <CopyIcon className="h-4 w-4" weight="light" />
         )}
       </button>
     </div>
