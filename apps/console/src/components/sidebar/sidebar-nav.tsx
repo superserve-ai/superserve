@@ -34,7 +34,7 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
             {isHovered && (
               <motion.span
                 className="absolute inset-0 bg-foreground/4"
-                layoutId={`sidebar-hover-${groupId}`}
+                layoutId={`sidebar-hover-${groupId}-${isCollapsed}`}
                 transition={{
                   type: "spring",
                   bounce: 0.15,
@@ -48,7 +48,7 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
             {isActive && (
               <motion.span
                 className="absolute inset-0 pointer-events-none"
-                layoutId={`sidebar-active-${groupId}`}
+                layoutId={`sidebar-active-${groupId}-${isCollapsed}`}
                 transition={{
                   type: "spring",
                   bounce: 0.15,
