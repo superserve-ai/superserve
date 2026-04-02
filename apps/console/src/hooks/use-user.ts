@@ -1,11 +1,14 @@
 "use client"
 
-import type { User } from "@supabase/supabase-js"
 import { createBrowserClient } from "@superserve/supabase"
 import { useEffect, useState } from "react"
 
+type User = Awaited<
+  ReturnType<ReturnType<typeof createBrowserClient>["auth"]["getUser"]>
+>["data"]["user"]
+
 export function useUser() {
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<User>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
