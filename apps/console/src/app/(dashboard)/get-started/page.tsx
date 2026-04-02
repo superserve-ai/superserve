@@ -69,7 +69,7 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
     <button
       type="button"
       onClick={copy}
-      aria-label={copied ? "Copied" : label ?? "Copy"}
+      aria-label={copied ? "Copied" : (label ?? "Copy")}
       className="text-muted hover:text-foreground transition-colors shrink-0 cursor-pointer"
     >
       {copied ? (
@@ -190,10 +190,7 @@ export default function GetStartedPage() {
                 Add the Superserve SDK to your project
               </p>
               <div className="pl-6">
-                <CodeBlock
-                  code={INSTALL_COMMANDS[language]}
-                  prefix="$"
-                />
+                <CodeBlock code={INSTALL_COMMANDS[language]} prefix="$" />
               </div>
             </div>
 

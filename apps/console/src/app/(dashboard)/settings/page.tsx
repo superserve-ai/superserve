@@ -1,7 +1,6 @@
 "use client"
 
 import { createBrowserClient } from "@superserve/supabase"
-import { Spinner } from "@/components/icons"
 import {
   Button,
   Dialog,
@@ -15,6 +14,7 @@ import {
   useToast,
 } from "@superserve/ui"
 import { useEffect, useState } from "react"
+import { Spinner } from "@/components/icons"
 import { PageHeader } from "@/components/page-header"
 import { useUser } from "@/hooks/use-user"
 

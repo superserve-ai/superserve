@@ -1,7 +1,7 @@
 "use client"
 
 import { MagnifyingGlassIcon, TrashIcon } from "@phosphor-icons/react"
-import { Button, Input, cn } from "@superserve/ui"
+import { Button, cn, Input } from "@superserve/ui"
 import { motion } from "motion/react"
 import { useState } from "react"
 import { CornerBrackets } from "./corner-brackets"
@@ -48,9 +48,7 @@ export function TableToolbar({
       >
         {selectedCount > 0 ? (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted">
-              {selectedCount} selected
-            </span>
+            <span className="text-xs text-muted">{selectedCount} selected</span>
             <Button
               variant="ghost"
               size="sm"

@@ -94,7 +94,11 @@ export function ConfirmDialog({
                 <motion.div
                   className="h-4 w-4 rounded-full border-2 border-current border-t-transparent"
                   animate={{ rotate: 360 }}
-                  transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+                  transition={{
+                    duration: 0.8,
+                    repeat: Infinity,
+                    ease: "linear",
+                  }}
                 />
               ) : null}
               {confirmLabel}

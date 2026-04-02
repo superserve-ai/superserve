@@ -110,11 +110,11 @@ export function StepDeploy({
 
           {selectedFramework && (
             <motion.div
-          className="space-y-4"
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: "easeOut" }}
-        >
+              className="space-y-4"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+            >
               <p className="text-muted text-sm">
                 Clone the example and deploy:
               </p>

@@ -37,7 +37,11 @@ export function StepPlayground({
                 <motion.div
                   className="absolute inset-0 h-3 w-3 rounded-full bg-muted/30"
                   animate={{ scale: [1, 2], opacity: [0.75, 0] }}
-                  transition={{ duration: 1.5, repeat: Infinity, ease: "easeOut" }}
+                  transition={{
+                    duration: 1.5,
+                    repeat: Infinity,
+                    ease: "easeOut",
+                  }}
                 />
                 <div className="absolute inset-0 h-3 w-3 rounded-full bg-muted/30" />
               </div>

@@ -1,9 +1,6 @@
 "use client"
 
-import {
-  MagnifyingGlassIcon,
-  SidebarSimpleIcon,
-} from "@phosphor-icons/react"
+import { MagnifyingGlassIcon, SidebarSimpleIcon } from "@phosphor-icons/react"
 import {
   Button,
   cn,
@@ -127,9 +124,7 @@ export function Sidebar() {
               )}
             </button>
           </TooltipTrigger>
-          {isCollapsed && (
-            <TooltipContent side="right">Expand</TooltipContent>
-          )}
+          {isCollapsed && <TooltipContent side="right">Expand</TooltipContent>}
         </Tooltip>
       </nav>
 
