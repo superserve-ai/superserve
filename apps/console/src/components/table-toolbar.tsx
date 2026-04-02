@@ -2,6 +2,8 @@
 
 import { MagnifyingGlassIcon, TrashIcon } from "@phosphor-icons/react"
 import { Button, cn } from "@superserve/ui"
+import { motion } from "motion/react"
+import { useState } from "react"
 
 interface FilterTab {
   label: string
@@ -32,10 +34,15 @@ export function TableToolbar({
   onClearSelection,
   onDeleteSelected,
 }: TableToolbarProps) {
+  const [hoveredTab, setHoveredTab] = useState<string | null>(null)
+
   return (
     <div className="flex items-center justify-between border-b border-border px-4 py-2">
       {/* Left side: selection actions or filter tabs */}
-      <div className="flex items-center gap-1">
+      <div
+        className="flex items-center gap-1"
+        onMouseLeave={() => setHoveredTab(null)}
+      >
         {selectedCount > 0 ? (
           <div className="flex items-center gap-2">
             <span className="text-xs text-foreground">
@@ -61,31 +68,67 @@ export function TableToolbar({
             )}
           </div>
         ) : (
-          tabs?.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => onTabChange?.(tab.value)}
-              className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs transition-colors cursor-pointer",
-                activeTab === tab.value
-                  ? "bg-surface-hover text-foreground"
-                  : "text-muted hover:text-foreground",
-              )}
-            >
-              {tab.label}
-              {tab.count !== undefined && (
-                <span
-                  className={cn(
-                    "min-w-4 text-center font-mono text-[10px]",
-                    activeTab === tab.value ? "text-foreground" : "text-muted",
-                  )}
-                >
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          ))
+          tabs?.map((tab) => {
+            const isActive = activeTab === tab.value
+            const isHovered = hoveredTab === tab.value
+
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => onTabChange?.(tab.value)}
+                onMouseEnter={() => setHoveredTab(tab.value)}
+                className={cn(
+                  "relative inline-flex items-center gap-1.5 px-2.5 py-1 text-xs transition-colors cursor-pointer",
+                  isActive
+                    ? "text-foreground"
+                    : "text-muted hover:text-foreground",
+                )}
+              >
+                {isHovered && (
+                  <motion.span
+                    className="absolute inset-0 bg-white/4"
+                    layoutId="toolbar-hover"
+                    transition={{
+                      type: "spring",
+                      bounce: 0.15,
+                      duration: 0.4,
+                    }}
+                  />
+                )}
+                {isActive && !hoveredTab && (
+                  <span className="absolute inset-0 bg-white/4" />
+                )}
+                {isActive && (
+                  <motion.span
+                    className="absolute inset-0 pointer-events-none"
+                    layoutId="toolbar-active"
+                    transition={{
+                      type: "spring",
+                      bounce: 0.15,
+                      duration: 0.5,
+                    }}
+                  >
+                    <span className="absolute top-0 left-0 h-1.5 w-1.5 border-t border-l border-foreground/50" />
+                    <span className="absolute top-0 right-0 h-1.5 w-1.5 border-t border-r border-foreground/50" />
+                    <span className="absolute bottom-0 left-0 h-1.5 w-1.5 border-b border-l border-foreground/50" />
+                    <span className="absolute bottom-0 right-0 h-1.5 w-1.5 border-b border-r border-foreground/50" />
+                  </motion.span>
+                )}
+                <span className="relative">{tab.label}</span>
+                {tab.count !== undefined && (
+                  <span
+                    className={cn(
+                      "relative min-w-4 text-center font-mono text-[10px]",
+                      isActive ? "text-foreground" : "text-muted",
+                    )}
+                  >
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            )
+          })
         )}
       </div>
 
