@@ -12,7 +12,7 @@ const variantClasses: Record<BadgeVariant, string> = {
   success: "bg-success/10 text-success",
   warning: "bg-warning/10 text-warning",
   destructive: "bg-destructive/10 text-destructive",
-  muted: "bg-surface-hover text-muted",
+  muted: "bg-muted/10 text-muted",
 }
 
 const dotColorClasses: Record<BadgeVariant, string> = {
@@ -33,7 +33,7 @@ function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium",
+        "inline-flex items-center gap-1.5 px-2 py-0.5 text-xs uppercase font-mono",
         variantClasses[variant],
         className,
       )}

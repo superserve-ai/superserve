@@ -2,7 +2,7 @@
 
 import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react"
 import { createBrowserClient } from "@superserve/supabase"
-import { Button, Input, useToast } from "@superserve/ui"
+import { Badge, Button, Input, useToast } from "@superserve/ui"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Suspense, useEffect, useState } from "react"
@@ -227,9 +227,7 @@ function SignInContent() {
                   <div className="w-full border-t border-dashed border-border" />
                 </div>
                 <div className="relative flex justify-center text-xs">
-                  <span className="px-3 py-1 bg-primary/10 text-primary">
-                    Dev Only
-                  </span>
+                  <Badge>Dev Only</Badge>
                 </div>
               </div>
 

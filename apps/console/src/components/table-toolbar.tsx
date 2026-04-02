@@ -1,7 +1,7 @@
 "use client"
 
 import { MagnifyingGlassIcon, TrashIcon } from "@phosphor-icons/react"
-import { Button, cn } from "@superserve/ui"
+import { Button, Input, cn } from "@superserve/ui"
 import { motion } from "motion/react"
 import { useState } from "react"
 import { CornerBrackets } from "./corner-brackets"
@@ -48,16 +48,17 @@ export function TableToolbar({
       >
         {selectedCount > 0 ? (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-foreground">
+            <span className="text-xs text-muted">
               {selectedCount} selected
             </span>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs"
               onClick={onClearSelection}
-              className="text-xs text-muted hover:text-foreground transition-colors cursor-pointer"
             >
               Clear
-            </button>
+            </Button>
             {onDeleteSelected && (
               <Button
                 variant="destructive"
@@ -133,17 +134,15 @@ export function TableToolbar({
       </nav>
 
       {/* Search */}
-      <div className="flex items-center gap-2 border border-border px-2.5 py-1.5 text-muted focus-within:border-border-focus">
-        <MagnifyingGlassIcon className="size-3.5 shrink-0" weight="light" />
-        <input
-          type="text"
-          placeholder={searchPlaceholder}
-          aria-label={searchPlaceholder}
-          value={searchValue}
-          onChange={(e) => onSearchChange?.(e.target.value)}
-          className="w-40 bg-transparent text-xs text-foreground placeholder:text-muted outline-none"
-        />
-      </div>
+      <Input
+        type="text"
+        placeholder={searchPlaceholder}
+        aria-label={searchPlaceholder}
+        value={searchValue}
+        onChange={(e) => onSearchChange?.(e.target.value)}
+        suffix={<MagnifyingGlassIcon className="size-3.5" weight="light" />}
+        className="w-48 text-xs"
+      />
     </div>
   )
 }

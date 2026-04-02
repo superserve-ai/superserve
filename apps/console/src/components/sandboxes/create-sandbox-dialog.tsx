@@ -144,14 +144,15 @@ export function CreateSandboxDialog({
                   className="hidden"
                   onChange={handleImportEnv}
                 />
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs"
                   onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex items-center gap-1.5 px-2 py-1 text-xs text-muted hover:text-foreground transition-colors cursor-pointer"
                 >
                   <UploadSimpleIcon className="size-3.5" weight="light" />
                   Import .env
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -172,27 +173,29 @@ export function CreateSandboxDialog({
                     }
                     className="flex-1 font-mono text-xs"
                   />
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
                     onClick={() => removeEnvVar(index)}
                     disabled={envVars.length === 1}
                     aria-label="Remove variable"
-                    className="p-1.5 text-muted hover:text-destructive transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="text-muted hover:text-destructive"
                   >
                     <TrashIcon className="size-3.5" weight="light" />
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>
 
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs"
               onClick={addEnvVar}
-              className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-foreground transition-colors cursor-pointer"
             >
               <PlusIcon className="size-3.5" weight="light" />
               Add variable
-            </button>
+            </Button>
           </div>
         </div>
 

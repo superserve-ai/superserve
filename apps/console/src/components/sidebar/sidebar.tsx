@@ -6,6 +6,7 @@ import {
   MagnifyingGlassIcon,
 } from "@phosphor-icons/react"
 import {
+  Button,
   cn,
   Kbd,
   Separator,
@@ -59,18 +60,18 @@ export function Sidebar() {
         ) : (
           <img src="/logo.svg" alt="Superserve" className="h-5 w-auto" />
         )}
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon-sm"
           onClick={toggle}
           aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="text-foreground/50 hover:text-foreground transition-colors cursor-pointer"
         >
           {isCollapsed ? (
             <CaretRightIcon className="size-4" weight="light" />
           ) : (
             <CaretLeftIcon className="size-4" weight="light" />
           )}
-        </button>
+        </Button>
       </div>
 
       {/* Search */}
@@ -78,19 +79,20 @@ export function Sidebar() {
         {isCollapsed ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="icon-sm"
                 onClick={handleSearchClick}
                 aria-label="Search"
-                className="flex w-full items-center justify-center border border-dashed border-border px-2.5 py-2.5 text-foreground/70 transition-colors hover:text-foreground hover:bg-surface-hover cursor-pointer"
+                className="w-full border-dashed"
               >
                 <MagnifyingGlassIcon className="size-4" weight="light" />
-              </button>
+              </Button>
             </TooltipTrigger>
             <TooltipContent side="right">Search</TooltipContent>
           </Tooltip>
         ) : (
-          <label className="flex w-full group items-center gap-2.5 border border-dashed border-border px-2.5 py-2.5 text-foreground/70 transition-colors hover:text-foreground hover:bg-surface-hover cursor-text focus-within:border-border-focus">
+          <label className="flex w-full group items-center gap-2.5 border border-dashed border-border px-2.5 py-2.5 text-foreground/70 transition-colors hover:text-foreground hover:bg-foreground/5 cursor-text focus-within:border-border-focus">
             <MagnifyingGlassIcon className="size-4 shrink-0" weight="light" />
             <input
               ref={searchInputRef}

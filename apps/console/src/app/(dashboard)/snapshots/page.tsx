@@ -2,6 +2,7 @@
 
 import { CameraIcon, DotsThreeVerticalIcon } from "@phosphor-icons/react"
 import {
+  Button,
   Checkbox,
   Table,
   TableCell,
@@ -122,16 +123,16 @@ export default function SnapshotsPage() {
                       {snapshot.lastUsed ? formatDate(snapshot.lastUsed) : "-"}
                     </TableCell>
                     <TableCell>
-                      <button
-                        type="button"
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
                         aria-label="Snapshot actions"
-                        className="p-1.5 text-muted hover:text-foreground transition-colors cursor-pointer"
                       >
                         <DotsThreeVerticalIcon
                           className="size-4"
                           weight="bold"
                         />
-                      </button>
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}

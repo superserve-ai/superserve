@@ -2,6 +2,7 @@
 
 import { ClipboardTextIcon } from "@phosphor-icons/react"
 import {
+  Badge,
   Table,
   TableCell,
   TableHead,
@@ -27,9 +28,9 @@ interface AuditLog {
   outcome: AuditOutcome
 }
 
-const OUTCOME_COLORS: Record<AuditOutcome, string> = {
-  Success: "bg-success",
-  Failure: "bg-destructive",
+const OUTCOME_BADGE_VARIANT: Record<AuditOutcome, "success" | "destructive"> = {
+  Success: "success",
+  Failure: "destructive",
 }
 
 const MOCK_AUDIT_LOGS: AuditLog[] = [
@@ -166,12 +167,9 @@ export default function AuditLogsPage() {
                       {log.target}
                     </TableCell>
                     <TableCell>
-                      <span className="flex items-center gap-2">
-                        <span
-                          className={`size-2.5 ${OUTCOME_COLORS[log.outcome]}`}
-                        />
+                      <Badge variant={OUTCOME_BADGE_VARIANT[log.outcome]} dot>
                         {log.outcome}
-                      </span>
+                      </Badge>
                     </TableCell>
                   </TableRow>
                 ))}

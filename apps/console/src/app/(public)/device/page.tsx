@@ -1,7 +1,7 @@
 "use client"
 
 import { createBrowserClient } from "@superserve/supabase"
-import { Button, useToast } from "@superserve/ui"
+import { Badge, Button, useToast } from "@superserve/ui"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
@@ -291,9 +291,7 @@ function DevicePageContent() {
                       <div className="w-full border-t border-dashed border-border" />
                     </div>
                     <div className="relative flex justify-center text-xs">
-                      <span className="px-3 py-1 bg-primary/10 text-primary">
-                        Dev Only
-                      </span>
+                      <Badge>Dev Only</Badge>
                     </div>
                   </div>
 

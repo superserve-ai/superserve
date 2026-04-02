@@ -8,9 +8,9 @@ import {
   KeyIcon,
   PlusIcon,
   TrashIcon,
-  WarningIcon,
 } from "@phosphor-icons/react"
 import {
+  Alert,
   Button,
   Checkbox,
   Dialog,
@@ -160,15 +160,9 @@ function CreateKeyDialog({
         <div className="p-6 pt-2">
           {createdKey ? (
             <div className="space-y-4">
-              <div className="flex items-start gap-3 border border-dashed border-warning/40 bg-warning/5 px-4 py-3">
-                <WarningIcon
-                  className="mt-0.5 size-4 shrink-0 text-warning"
-                  weight="fill"
-                />
-                <p className="text-xs text-foreground/80">
-                  Copy this key now. You won&apos;t be able to see it again.
-                </p>
-              </div>
+              <Alert variant="warning">
+                Copy this key now. You won&apos;t be able to see it again.
+              </Alert>
 
               <FormField label="Your API Key">
                 <div className="flex items-center gap-2">
@@ -342,22 +336,22 @@ export default function ApiKeysPage() {
                             ? apiKey.prefix
                             : maskKey(apiKey.prefix.replace("...", ""))}
                         </code>
-                        <button
-                          type="button"
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
                           onClick={() => toggleReveal(apiKey.id)}
                           aria-label={
                             revealedKeys.has(apiKey.id)
                               ? "Hide key"
                               : "Reveal key"
                           }
-                          className="p-1 text-muted hover:text-foreground transition-colors cursor-pointer"
                         >
                           {revealedKeys.has(apiKey.id) ? (
                             <EyeSlashIcon className="size-3.5" weight="light" />
                           ) : (
                             <EyeIcon className="size-3.5" weight="light" />
                           )}
-                        </button>
+                        </Button>
                       </div>
                     </TableCell>
                     <TableCell className="text-muted">
@@ -371,16 +365,16 @@ export default function ApiKeysPage() {
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <button
-                            type="button"
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
                             aria-label="Key actions"
-                            className="p-1.5 text-muted hover:text-foreground transition-colors cursor-pointer"
                           >
                             <DotsThreeVerticalIcon
                               className="size-4"
                               weight="bold"
                             />
-                          </button>
+                          </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem

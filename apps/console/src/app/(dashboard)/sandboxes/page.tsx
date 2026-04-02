@@ -11,6 +11,8 @@ import {
   TrashIcon,
 } from "@phosphor-icons/react"
 import {
+  Badge,
+  type BadgeVariant,
   Button,
   Checkbox,
   DropdownMenu,
@@ -42,10 +44,10 @@ interface Sandbox {
   resources: string
 }
 
-const STATUS_COLORS: Record<SandboxStatus, string> = {
-  Ready: "bg-success",
-  Stopped: "bg-destructive",
-  Paused: "bg-muted",
+const STATUS_BADGE_VARIANT: Record<SandboxStatus, BadgeVariant> = {
+  Ready: "success",
+  Stopped: "destructive",
+  Paused: "muted",
 }
 
 const MOCK_SANDBOXES: Sandbox[] = [
@@ -183,12 +185,9 @@ export default function SandboxesPage() {
                       {sandbox.name}
                     </TableCell>
                     <TableCell>
-                      <span className="flex items-center gap-2">
-                        <span
-                          className={`size-2.5 ${STATUS_COLORS[sandbox.status]}`}
-                        />
+                      <Badge variant={STATUS_BADGE_VARIANT[sandbox.status]} dot>
                         {sandbox.status}
-                      </span>
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-foreground/80">
                       {sandbox.snapshot}
@@ -217,16 +216,16 @@ export default function SandboxesPage() {
                         </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <button
-                              type="button"
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
                               aria-label="Sandbox actions"
-                              className="p-1.5 text-muted hover:text-foreground transition-colors cursor-pointer"
                             >
                               <DotsThreeVerticalIcon
                                 className="size-4"
                                 weight="bold"
                               />
-                            </button>
+                            </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem>
