@@ -1,42 +1,80 @@
 "use client"
 
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@superserve/ui"
+import { motion } from "motion/react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useState } from "react"
 import type { NavItem } from "./nav-config"
 import { useSidebar } from "./sidebar-context"
 
 interface SidebarNavProps {
   items: NavItem[]
+  groupId: string
 }
 
-export function SidebarNav({ items }: SidebarNavProps) {
+export function SidebarNav({ items, groupId }: SidebarNavProps) {
   const pathname = usePathname()
   const { isCollapsed } = useSidebar()
+  const [hoveredHref, setHoveredHref] = useState<string | null>(null)
 
   return (
-    <nav className="flex flex-col gap-0.5 px-2.5">
+    <nav
+      className="flex flex-col gap-0.5 px-2.5"
+      onMouseLeave={() => setHoveredHref(null)}
+    >
       {items.map((item) => {
         const isActive = !item.external && pathname.startsWith(item.href)
+        const isHovered = hoveredHref === item.href
         const Icon = item.icon
 
-        const linkContent = (
+        const inner = (
           <>
-            <Icon className="size-4 shrink-0" weight="light" />
+            {isHovered && (
+              <motion.span
+                className="absolute inset-0 bg-white/4"
+                layoutId={`sidebar-hover-${groupId}`}
+                transition={{
+                  type: "spring",
+                  bounce: 0.15,
+                  duration: 0.4,
+                }}
+              />
+            )}
+            {isActive && !hoveredHref && (
+              <span className="absolute inset-0 bg-white/4" />
+            )}
+            {isActive && (
+              <motion.span
+                className="absolute inset-0 pointer-events-none"
+                layoutId={`sidebar-active-${groupId}`}
+                transition={{
+                  type: "spring",
+                  bounce: 0.15,
+                  duration: 0.5,
+                }}
+              >
+                <span className="absolute top-0 left-0 h-1.5 w-1.5 border-t border-l border-foreground/50" />
+                <span className="absolute top-0 right-0 h-1.5 w-1.5 border-t border-r border-foreground/50" />
+                <span className="absolute bottom-0 left-0 h-1.5 w-1.5 border-b border-l border-foreground/50" />
+                <span className="absolute bottom-0 right-0 h-1.5 w-1.5 border-b border-r border-foreground/50" />
+              </motion.span>
+            )}
+            <Icon className="relative size-4 shrink-0" weight="light" />
             {!isCollapsed && (
-              <span className="text-sm leading-none tracking-tight">
+              <span className="relative text-sm leading-none tracking-tight">
                 {item.label}
               </span>
             )}
           </>
         )
 
-        const linkClassName = cn(
-          "flex items-center gap-2.5 px-2.5 py-2.5 transition-colors",
+        const className = cn(
+          "relative flex items-center gap-2.5 px-2.5 py-2.5 transition-colors",
           isCollapsed && "justify-center",
           isActive
-            ? "bg-surface-hover text-foreground"
-            : "text-foreground/70 hover:text-foreground hover:bg-surface-hover",
+            ? "text-foreground"
+            : "text-foreground/70 hover:text-foreground",
         )
 
         const link = item.external ? (
@@ -45,13 +83,19 @@ export function SidebarNav({ items }: SidebarNavProps) {
             href={item.href}
             target="_blank"
             rel="noopener noreferrer"
-            className={linkClassName}
+            className={className}
+            onMouseEnter={() => setHoveredHref(item.href)}
           >
-            {linkContent}
+            {inner}
           </a>
         ) : (
-          <Link key={item.href} href={item.href} className={linkClassName}>
-            {linkContent}
+          <Link
+            key={item.href}
+            href={item.href}
+            className={className}
+            onMouseEnter={() => setHoveredHref(item.href)}
+          >
+            {inner}
           </Link>
         )
 

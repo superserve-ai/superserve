@@ -101,13 +101,13 @@ export function Sidebar() {
       </div>
 
       {/* Main Nav */}
-      <SidebarNav items={mainNavItems} />
+      <SidebarNav items={mainNavItems} groupId="main" />
 
       {/* Spacer */}
       <div className="flex-1" />
 
       {/* Bottom Nav */}
-      <SidebarNav items={bottomNavItems} />
+      <SidebarNav items={bottomNavItems} groupId="bottom" />
 
       <div className="px-2.5 py-1">
         <Separator />
