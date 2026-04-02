@@ -1,4 +1,4 @@
-import { getCredentials } from "../config/auth"
+import { getApiKey } from "../config/auth"
 import {
   DEFAULT_TIMEOUT,
   PLATFORM_API_URL,
@@ -7,14 +7,17 @@ import {
 import { PlatformAPIError, toUserMessage } from "./errors"
 import { parseSSEStream } from "./streaming"
 import type {
-  AgentResponse,
-  Credentials,
-  DeviceCodeResponse,
-  DeviceTokenPollResponse,
-  RunEvent,
-  SessionData,
-  TokenValidation,
-  UserInfo,
+  Checkpoint,
+  CreateCheckpointRequest,
+  CreateVmRequest,
+  ExecRequest,
+  ExecResponse,
+  ExecStreamEvent,
+  ForkRequest,
+  ForkResponse,
+  ForkTree,
+  RollbackRequest,
+  Vm,
 } from "./types"
 
 export type SuperserveClient = ReturnType<typeof createClient>
@@ -24,8 +27,7 @@ export function createClient(
   timeout = DEFAULT_TIMEOUT,
 ) {
   const normalizedUrl = baseUrl.replace(/\/+$/, "")
-  const agentNameCache = new Map<string, string>()
-  let cachedToken: string | null = null
+  let cachedApiKey: string | null = null
 
   function getHeaders(authenticated = true): Record<string, string> {
     const headers: Record<string, string> = {
@@ -33,17 +35,17 @@ export function createClient(
       "Content-Type": "application/json",
     }
     if (authenticated) {
-      if (!cachedToken) {
-        const creds = getCredentials()
-        if (!creds) {
+      if (!cachedApiKey) {
+        const apiKey = getApiKey()
+        if (!apiKey) {
           throw new PlatformAPIError(
             401,
             "Not authenticated. Run `superserve login` first.",
           )
         }
-        cachedToken = creds.token
+        cachedApiKey = apiKey
       }
-      headers.Authorization = `Bearer ${cachedToken}`
+      headers["X-API-Key"] = cachedApiKey
     }
     return headers
   }
@@ -53,18 +55,20 @@ export function createClient(
     endpoint: string,
     options: {
       json?: unknown
-      formData?: FormData
+      body?: BodyInit
       params?: Record<string, string>
       stream?: boolean
       authenticated?: boolean
+      contentType?: string
     } = {},
   ): Promise<Response> {
     const {
       json,
-      formData,
+      body,
       params,
       stream = false,
       authenticated = true,
+      contentType,
     } = options
 
     let url = `${normalizedUrl}/v1${endpoint}`
@@ -75,9 +79,8 @@ export function createClient(
 
     const headers = getHeaders(authenticated)
 
-    // Remove Content-Type for FormData (browser sets it with boundary)
-    if (formData) {
-      delete headers["Content-Type"]
+    if (contentType) {
+      headers["Content-Type"] = contentType
     }
 
     const controller = new AbortController()
@@ -90,16 +93,15 @@ export function createClient(
       const response = await fetch(url, {
         method,
         headers,
-        body: formData ?? (json ? JSON.stringify(json) : undefined),
+        body: body ?? (json ? JSON.stringify(json) : undefined),
         signal: controller.signal,
       })
 
       if (timeoutId) clearTimeout(timeoutId)
 
       if (response.status >= 400) {
-        // Invalidate cached token on auth failure
         if (response.status === 401) {
-          cachedToken = null
+          cachedApiKey = null
         }
 
         let errorData: Record<string, unknown> = {}
@@ -107,16 +109,18 @@ export function createClient(
           errorData = (await response.json()) as Record<string, unknown>
         } catch {}
 
-        let detail = (errorData.detail ?? errorData.message) as unknown
-        if (detail && typeof detail !== "string") {
-          detail = JSON.stringify(detail)
-        }
-
-        const rawMessage = (detail as string) ?? response.statusText
+        // Handle new {error: {code, message}} format
+        const errorObj = errorData.error as
+          | { code?: string; message?: string }
+          | undefined
+        const rawMessage =
+          errorObj?.message ??
+          ((errorData.detail ?? errorData.message) as string | undefined) ??
+          response.statusText
         throw new PlatformAPIError(
           response.status,
           toUserMessage(response.status, rawMessage),
-          (errorData.details as Record<string, unknown>) ?? undefined,
+          errorObj as Record<string, unknown> | undefined,
         )
       }
 
@@ -150,318 +154,213 @@ export function createClient(
     }
   }
 
-  // ==================== AUTH ====================
+  // ==================== VMs ====================
 
-  async function validateToken(): Promise<boolean> {
-    try {
-      const resp = await request("GET", "/auth/validate")
-      const data = await safeJson<TokenValidation>(resp)
-      return Boolean(data.valid)
-    } catch {
-      return false
-    }
+  async function createVm(req: CreateVmRequest): Promise<Vm> {
+    const resp = await request("POST", "/vms", { json: req })
+    return safeJson<Vm>(resp)
   }
 
-  async function getMe(): Promise<UserInfo> {
-    const resp = await request("GET", "/auth/me")
-    return safeJson<UserInfo>(resp)
-  }
-
-  async function getDeviceCode(): Promise<DeviceCodeResponse> {
-    const resp = await request("POST", "/auth/device-code", {
-      authenticated: false,
-    })
-    return safeJson<DeviceCodeResponse>(resp)
-  }
-
-  async function pollDeviceToken(deviceCode: string): Promise<Credentials> {
-    const resp = await request("POST", "/auth/device-token", {
-      json: { device_code: deviceCode },
-      authenticated: false,
-    })
-    const data = await safeJson<DeviceTokenPollResponse>(resp)
-
-    if ("error" in data) {
-      const error = data.error
-      if (error === "authorization_pending") {
-        throw new PlatformAPIError(428, "Authorization pending", {
-          oauth_error: "authorization_pending",
-        })
-      }
-      if (error === "slow_down") {
-        throw new PlatformAPIError(400, "Slow down", {
-          oauth_error: "slow_down",
-        })
-      }
-      if (error === "expired_token") {
-        throw new PlatformAPIError(410, "Device code expired", {
-          oauth_error: "expired_token",
-        })
-      }
-      if (error === "access_denied") {
-        throw new PlatformAPIError(403, "Access denied by user", {
-          oauth_error: "access_denied",
-        })
-      }
-      throw new PlatformAPIError(
-        400,
-        "Authentication failed. Please try again.",
-      )
-    }
-
-    const token = data.access_token ?? data.token
-    if (!token) {
-      throw new PlatformAPIError(
-        500,
-        "Invalid response from auth server: missing token.",
-      )
-    }
-
-    return {
-      token,
-      expires_at: data.expires_at,
-      refresh_token: data.refresh_token,
-    }
-  }
-
-  // ==================== AGENTS ====================
-
-  async function deployAgent(
-    name: string,
-    command: string,
-    config: Record<string, unknown>,
-    tarballPath: string,
-  ): Promise<AgentResponse> {
-    const file = Bun.file(tarballPath)
-    const formData = new FormData()
-    formData.append("file", file, "agent.tar.gz")
-    formData.append("name", name)
-    formData.append("command", command)
-    formData.append("config", JSON.stringify(config))
-
-    const resp = await request("POST", "/agents", { formData })
-    return safeJson<AgentResponse>(resp)
-  }
-
-  async function listAgents(): Promise<AgentResponse[]> {
-    const resp = await request("GET", "/agents", {
-      params: { limit: "100" },
-    })
-    const data = await safeJson<{ agents?: AgentResponse[] }>(resp)
-    return data.agents ?? []
-  }
-
-  async function resolveAgentId(nameOrId: string): Promise<string> {
-    if (nameOrId.startsWith("agt_")) return nameOrId
-
-    const cached = agentNameCache.get(nameOrId)
-    if (cached) return cached
-
-    const agents = await listAgents()
-    for (const agent of agents) {
-      agentNameCache.set(agent.name, agent.id)
-    }
-
-    const resolved = agentNameCache.get(nameOrId)
-    if (resolved) return resolved
-
-    throw new PlatformAPIError(404, `Agent '${nameOrId}' not found`)
-  }
-
-  async function getAgent(nameOrId: string): Promise<AgentResponse> {
-    const agentId = await resolveAgentId(nameOrId)
-    const resp = await request("GET", `/agents/${encodeURIComponent(agentId)}`)
-    return safeJson<AgentResponse>(resp)
-  }
-
-  async function deleteAgent(nameOrId: string): Promise<void> {
-    const agentId = await resolveAgentId(nameOrId)
-    await request("DELETE", `/agents/${encodeURIComponent(agentId)}`)
-
-    for (const [name, id] of agentNameCache) {
-      if (id === agentId) {
-        agentNameCache.delete(name)
-        break
-      }
-    }
-  }
-
-  // ==================== ID RESOLUTION ====================
-
-  async function resolveId(
-    entityId: string,
-    prefix: string,
-    endpoint: string,
-    entityName: string,
-  ): Promise<string> {
-    const clean = entityId.replace(`${prefix}_`, "").replace(/-/g, "")
-
-    if (clean.length >= 32) {
-      if (!entityId.startsWith(`${prefix}_`)) {
-        return `${prefix}_${entityId}`
-      }
-      return entityId
-    }
-
-    const resp = await request("GET", endpoint, {
-      params: { id_prefix: clean },
-    })
-    const data = await safeJson<{ ids?: string[] }>(resp)
-    const ids = data.ids ?? []
-
-    if (ids.length === 0) {
-      throw new PlatformAPIError(
-        404,
-        `No ${entityName} found matching '${entityId}'`,
-      )
-    }
-    if (ids.length > 1) {
-      const shortIds = ids.map((i) =>
-        i.replace(`${prefix}_`, "").replace(/-/g, "").slice(0, 12),
-      )
-      throw new PlatformAPIError(
-        409,
-        `Ambiguous ID '${entityId}' \u2014 matches: ${shortIds.join(", ")}`,
-      )
-    }
-    return ids[0]
-  }
-
-  async function resolveSessionId(sessionId: string): Promise<string> {
-    return resolveId(sessionId, "ses", "/sessions/resolve", "session")
-  }
-
-  // ==================== SECRETS ====================
-
-  async function getAgentSecrets(nameOrId: string): Promise<string[]> {
-    const agentId = await resolveAgentId(nameOrId)
-    const resp = await request(
-      "GET",
-      `/agents/${encodeURIComponent(agentId)}/secrets`,
-    )
-    const data = await safeJson<{ keys?: string[] }>(resp)
-    return data.keys ?? []
-  }
-
-  async function setAgentSecrets(
-    nameOrId: string,
-    secrets: Record<string, string>,
-  ): Promise<string[]> {
-    const agentId = await resolveAgentId(nameOrId)
-    const resp = await request(
-      "PATCH",
-      `/agents/${encodeURIComponent(agentId)}/secrets`,
-      {
-        json: { secrets },
-      },
-    )
-    const data = await safeJson<{ keys?: string[] }>(resp)
-    return data.keys ?? []
-  }
-
-  async function deleteAgentSecret(
-    nameOrId: string,
-    key: string,
-  ): Promise<string[]> {
-    const agentId = await resolveAgentId(nameOrId)
-    const resp = await request(
-      "DELETE",
-      `/agents/${encodeURIComponent(agentId)}/secrets/${encodeURIComponent(key)}`,
-    )
-    const data = await safeJson<{ keys?: string[] }>(resp)
-    return data.keys ?? []
-  }
-
-  // ==================== SESSIONS ====================
-
-  async function createSession(
-    agentNameOrId: string,
-    title?: string,
-    idleTimeoutSeconds = 29 * 60, // 29 minutes
-  ): Promise<SessionData> {
-    const agentId = await resolveAgentId(agentNameOrId)
-    const resp = await request("POST", "/sessions", {
-      json: {
-        agent_id: agentId,
-        title,
-        idle_timeout_seconds: idleTimeoutSeconds,
-      },
-    })
-    return safeJson<SessionData>(resp)
-  }
-
-  async function listSessions(
-    agentId?: string,
-    status?: string,
-    limit = 20,
-  ): Promise<SessionData[]> {
-    const params: Record<string, string> = { limit: String(limit) }
-    if (agentId) params.agent_id = await resolveAgentId(agentId)
+  async function listVms(status?: string): Promise<Vm[]> {
+    const params: Record<string, string> = {}
     if (status) params.status = status
-    const resp = await request("GET", "/sessions", { params })
-    const data = await safeJson<{ sessions?: SessionData[] }>(resp)
-    return data.sessions ?? []
+    const resp = await request("GET", "/vms", { params })
+    const data = await safeJson<{ vms: Vm[] }>(resp)
+    return data.vms ?? []
   }
 
-  async function getSession(sessionId: string): Promise<SessionData> {
-    const resolved = await resolveSessionId(sessionId)
-    const resp = await request(
-      "GET",
-      `/sessions/${encodeURIComponent(resolved)}`,
-    )
-    return safeJson<SessionData>(resp)
+  async function getVm(vmId: string): Promise<Vm> {
+    const resp = await request("GET", `/vms/${encodeURIComponent(vmId)}`)
+    return safeJson<Vm>(resp)
   }
 
-  async function endSession(sessionId: string): Promise<SessionData> {
-    const resolved = await resolveSessionId(sessionId)
+  async function deleteVm(vmId: string): Promise<void> {
+    await request("DELETE", `/vms/${encodeURIComponent(vmId)}`)
+  }
+
+  async function stopVm(vmId: string): Promise<Vm> {
+    const resp = await request("POST", `/vms/${encodeURIComponent(vmId)}/stop`)
+    return safeJson<Vm>(resp)
+  }
+
+  async function startVm(vmId: string): Promise<Vm> {
+    const resp = await request("POST", `/vms/${encodeURIComponent(vmId)}/start`)
+    return safeJson<Vm>(resp)
+  }
+
+  async function sleepVm(vmId: string): Promise<Vm> {
+    const resp = await request("POST", `/vms/${encodeURIComponent(vmId)}/sleep`)
+    return safeJson<Vm>(resp)
+  }
+
+  async function wakeVm(vmId: string): Promise<Vm> {
+    const resp = await request("POST", `/vms/${encodeURIComponent(vmId)}/wake`)
+    return safeJson<Vm>(resp)
+  }
+
+  // ==================== EXEC ====================
+
+  async function exec(vmId: string, req: ExecRequest): Promise<ExecResponse> {
     const resp = await request(
       "POST",
-      `/sessions/${encodeURIComponent(resolved)}/end`,
+      `/vms/${encodeURIComponent(vmId)}/exec`,
+      { json: req },
     )
-    return safeJson<SessionData>(resp)
+    return safeJson<ExecResponse>(resp)
   }
 
-  async function resumeSession(sessionId: string): Promise<SessionData> {
-    const resolved = await resolveSessionId(sessionId)
+  async function* execStream(
+    vmId: string,
+    req: ExecRequest,
+  ): AsyncIterableIterator<ExecStreamEvent> {
     const resp = await request(
       "POST",
-      `/sessions/${encodeURIComponent(resolved)}/resume`,
-    )
-    return safeJson<SessionData>(resp)
-  }
-
-  async function* streamSessionMessage(
-    sessionId: string,
-    prompt: string,
-  ): AsyncIterableIterator<RunEvent> {
-    const resp = await request(
-      "POST",
-      `/sessions/${encodeURIComponent(sessionId)}/messages`,
-      {
-        json: { prompt },
-        stream: true,
-      },
+      `/vms/${encodeURIComponent(vmId)}/exec/stream`,
+      { json: req, stream: true },
     )
     yield* parseSSEStream(resp)
   }
 
+  // ==================== FILES ====================
+
+  async function uploadFile(
+    vmId: string,
+    remotePath: string,
+    data: Uint8Array | Buffer,
+    mode?: string,
+  ): Promise<void> {
+    const headers: Record<string, string> = {}
+    if (mode) headers["X-File-Mode"] = mode
+
+    // Strip leading slash from path for the URL
+    const cleanPath = remotePath.replace(/^\//, "")
+    await request(
+      "PUT",
+      `/vms/${encodeURIComponent(vmId)}/files/${cleanPath}`,
+      {
+        body: data,
+        contentType: "application/octet-stream",
+      },
+    )
+  }
+
+  async function downloadFile(
+    vmId: string,
+    remotePath: string,
+  ): Promise<Buffer> {
+    const cleanPath = remotePath.replace(/^\//, "")
+    const resp = await request(
+      "GET",
+      `/vms/${encodeURIComponent(vmId)}/files/${cleanPath}`,
+    )
+    const arrayBuf = await resp.arrayBuffer()
+    return Buffer.from(arrayBuf)
+  }
+
+  // ==================== CHECKPOINTS ====================
+
+  async function listCheckpoints(vmId: string): Promise<Checkpoint[]> {
+    const resp = await request(
+      "GET",
+      `/vms/${encodeURIComponent(vmId)}/checkpoints`,
+    )
+    const data = await safeJson<{ checkpoints: Checkpoint[] }>(resp)
+    return data.checkpoints ?? []
+  }
+
+  async function createCheckpoint(
+    vmId: string,
+    req: CreateCheckpointRequest,
+  ): Promise<Checkpoint> {
+    const resp = await request(
+      "POST",
+      `/vms/${encodeURIComponent(vmId)}/checkpoint`,
+      { json: req },
+    )
+    return safeJson<Checkpoint>(resp)
+  }
+
+  async function deleteCheckpoint(
+    vmId: string,
+    checkpointId: string,
+    force = false,
+  ): Promise<void> {
+    const params: Record<string, string> = {}
+    if (force) params.force = "true"
+    await request(
+      "DELETE",
+      `/vms/${encodeURIComponent(vmId)}/checkpoints/${encodeURIComponent(checkpointId)}`,
+      { params },
+    )
+  }
+
+  // ==================== ROLLBACK ====================
+
+  async function rollback(vmId: string, req: RollbackRequest): Promise<Vm> {
+    const resp = await request(
+      "POST",
+      `/vms/${encodeURIComponent(vmId)}/rollback`,
+      { json: req },
+    )
+    return safeJson<Vm>(resp)
+  }
+
+  // ==================== FORK ====================
+
+  async function fork(vmId: string, req: ForkRequest): Promise<ForkResponse> {
+    const resp = await request(
+      "POST",
+      `/vms/${encodeURIComponent(vmId)}/fork`,
+      { json: req },
+    )
+    return safeJson<ForkResponse>(resp)
+  }
+
+  async function getForkTree(vmId: string): Promise<ForkTree> {
+    const resp = await request("GET", `/vms/${encodeURIComponent(vmId)}/tree`)
+    return safeJson<ForkTree>(resp)
+  }
+
+  // ==================== AUTH VALIDATION ====================
+
+  async function validateApiKey(): Promise<boolean> {
+    try {
+      await listVms()
+      return true
+    } catch (e) {
+      if (e instanceof PlatformAPIError && e.statusCode === 401) {
+        return false
+      }
+      throw e
+    }
+  }
+
   return {
-    validateToken,
-    getMe,
-    getDeviceCode,
-    pollDeviceToken,
-    deployAgent,
-    listAgents,
-    getAgent,
-    deleteAgent,
-    getAgentSecrets,
-    setAgentSecrets,
-    deleteAgentSecret,
-    createSession,
-    listSessions,
-    getSession,
-    endSession,
-    resumeSession,
-    streamSessionMessage,
+    // VMs
+    createVm,
+    listVms,
+    getVm,
+    deleteVm,
+    stopVm,
+    startVm,
+    sleepVm,
+    wakeVm,
+    // Exec
+    exec,
+    execStream,
+    // Files
+    uploadFile,
+    downloadFile,
+    // Checkpoints
+    listCheckpoints,
+    createCheckpoint,
+    deleteCheckpoint,
+    // Rollback
+    rollback,
+    // Fork
+    fork,
+    getForkTree,
+    // Auth
+    validateApiKey,
   }
 }

@@ -1,146 +1,99 @@
 ---
 title: Introduction
-description: Runtime platform for cloud agents
+description: Secure cloud sandboxes powered by Firecracker micro-VMs
 ---
 
-Superserve is a platform purpose-built to run agents in the cloud. It gives your agent a persistent, isolated workspace with full access to a computing environment - without you having to manage infrastructure.
-
-With a single CLI command, your agent is deployed as a service with best-in-class performance, security, and scalability. Think of it as a container, but with hardware isolation, millisecond cold starts, and stateful scale-to-zero.
+Superserve is a sandbox and VM provider for AI agents and developer tools. It gives you on-demand Firecracker micro-VMs with sub-200ms boot times, full Linux environments, and primitives for checkpoint, rollback, and fork.
 
 ## Why Superserve
 
-Agents get real work done when they have access to a computer for running code, using a browser, managing filesystems. But giving agents that access in the cloud raises hard operational questions:
+AI agents and automated workflows need isolated compute environments that boot fast, persist state, and branch execution. Traditional VMs are too slow. Containers lack real isolation. Superserve gives you the best of both: hardware-isolated micro-VMs that feel as fast as containers.
 
-- **Session and hardware isolation**: each agent should run in its own secure environment reducing the vulnerability surface area
-- **Stateful scale-to-zero**: scaling down without losing state, and resuming instantly
-- **Network controls and credentials management**: egress controls, credential injection, and keeping secrets out of agent context
-
-Superserve handles all of this so teams can focus on building agents.
+- **Sub-200ms boot**: Firecracker micro-VMs start in under 200 milliseconds. Spin up sandboxes on demand without cold-start delays.
+- **Checkpoint and rollback**: Snapshot a VM at any point. Roll back to a previous state in milliseconds. Undo destructive changes instantly.
+- **Fork**: Clone a running VM into multiple independent copies. Run parallel experiments from the same starting point.
+- **File upload and download**: Push files into and pull files out of VMs programmatically.
+- **Command execution**: Run arbitrary commands inside VMs via the API, CLI, or SSH.
 
 ## Key Features
 
 <CardGroup cols={2}>
-  <Card title="Isolated by Default" icon="shield-halved">
-    Every agent session runs in an isolated environment with zero risk to your infrastructure.
+  <Card title="Firecracker Micro-VMs" icon="server">
+    Each VM runs in its own Firecracker micro-VM with a dedicated kernel. Hardware-level isolation with container-like speed.
   </Card>
-  <Card title="Stateful Scale-to-Zero" icon="bolt">
-    Idle environments suspend automatically. When resumed, the full environment is restored in milliseconds. You pay nothing while agents are idle, and lose nothing when they wake up.
+  <Card title="Sub-200ms Boot" icon="bolt">
+    VMs boot in under 200 milliseconds. No pre-warming, no cold-start penalties.
   </Card>
-  <Card title="Network Controls" icon="lock">
-    Egress policies control which domains your agent can reach. A credential proxy injects API keys at the network level so they never appear in LLM context, logs, or tool outputs.
+  <Card title="Checkpoint, Rollback, Fork" icon="code-branch">
+    Snapshot VM state, roll back to any checkpoint, or fork a VM into multiple independent copies for parallel execution.
   </Card>
-  <Card title="Framework agnostic" icon="puzzle-piece">
-    Works with your custom agent or Claude Agent SDK, OpenAI Agents SDK, LangChain, Mastra, Pydantic AI.
+  <Card title="File Operations" icon="file-arrow-up">
+    Upload files into VMs and download files out. Transfer code, data, and artifacts programmatically.
   </Card>
-  <Card title="One Command" icon="terminal">
-    `superserve deploy agent.py` deploys your agent to the cloud, handling isolation, security and scalability
+  <Card title="Command Execution" icon="terminal">
+    Run commands inside VMs via the API, CLI, or SSH. Stream output in real time.
   </Card>
-  <Card title="Integration SDK" icon="broadcast-tower">
-    Superserve SDK lets you integrate your apps with deployed agents
+  <Card title="SDKs and CLI" icon="code">
+    TypeScript SDK, Python SDK, and CLI. Integrate VMs into your application or workflow.
   </Card>
 </CardGroup>
 
+## VM State Machine
+
+VMs follow a lifecycle with these states:
+
+```
+CREATING --> RUNNING --> STOPPED
+               |            |
+               v            v
+           SLEEPING       DEAD
+               |
+               v
+            RUNNING (wake)
+```
+
+| State | Description |
+|-------|-------------|
+| `CREATING` | VM is being provisioned |
+| `RUNNING` | VM is active and accepting commands |
+| `STOPPED` | VM is stopped. Can be started again or deleted. |
+| `SLEEPING` | VM is suspended to disk. Wake to resume instantly. |
+| `DEAD` | VM has been deleted. Terminal state. |
+
 ## Quick Example
 
-Install the CLI:
-
-<CodeGroup>
-
-```bash curl
-curl -fsSL https://superserve.ai/install | sh
-```
-
-```bash npm
-npm install -g @superserve/cli
-```
-
-```bash Homebrew
-brew install superserve-ai/tap/superserve
-```
-
-</CodeGroup>
-
-Deploy your agent:
-
 ```bash
+# Install and authenticate
+bun add -g @superserve/cli
 superserve login
-superserve deploy agent.py
+
+# Create a VM
+superserve vm create --name my-sandbox --image ubuntu-22.04
+
+# Run a command
+superserve exec vm_abc123 "echo hello world"
+
+# Upload a file
+superserve files upload vm_abc123 ./script.py /app/script.py
+
+# Checkpoint and fork
+superserve checkpoint create vm_abc123 --name baseline
+superserve fork vm_abc123 --count 3
 ```
-
-Set secrets and run:
-
-```bash
-superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-...
-superserve run my-agent
-```
-
-```
-You > What is the capital of France?
-
-Agent > The capital of France is Paris.
-
-Completed in 1.2s
-
-You > And what's its population?
-
-Agent > Paris has approximately 2.1 million people in the city proper.
-
-Completed in 0.8s
-```
-
-## How It Works
-
-<Steps>
-  <Step title="Deploy your agent">
-    Run `superserve deploy agent.py` to package and upload your agent code. Superserve analyzes dependencies and builds a container image.
-  </Step>
-  <Step title="Start a session">
-    When you run `superserve run my-agent`, Superserve spins up an isolated sandbox with a fully persistent environment.
-  </Step>
-  <Step title="Send messages">
-    Your messages are sent to the agent running in the isolated environment. The agent can execute code, make HTTP requests, and use tools.
-  </Step>
-  <Step title="Stream responses">
-    Agent responses stream back in real-time via Server-Sent Events. You see tokens and tool calls as they happen.
-  </Step>
-  <Step title="Resume anytime">
-    Session state persists across turns. Exit the session and reconnect later - your workspace and conversation history are still there.
-  </Step>
-</Steps>
-
-## Use Cases
-
-<AccordionGroup>
-  <Accordion title="Production-Ready Agent Deployment">
-    Deploy agents to production without managing infrastructure. Superserve handles isolation, scaling, and monitoring.
-  </Accordion>
-  <Accordion title="Multi-Tenant Agent Applications">
-    Each user gets their own isolated session with persistent state. Perfect for SaaS products with agent-powered features.
-  </Accordion>
-  <Accordion title="Secure Code Execution">
-    Run untrusted code safely in isolated sandboxes. The agent can't access your infrastructure or other sessions.
-  </Accordion>
-  <Accordion title="Long-Running Agent Workflows">
-    Agents can work on tasks across multiple turns and days. The persistent workspace means nothing gets lost.
-  </Accordion>
-  <Accordion title="Framework-Agnostic Integration">
-    Use any agent framework or write your own. Superserve works with Claude Agent SDK, OpenAI Agents SDK, LangChain, Mastra, Pydantic AI, and custom implementations.
-  </Accordion>
-</AccordionGroup>
 
 ## Next Steps
 
 <CardGroup cols={2}>
   <Card title="Quickstart" icon="rocket" href="/quickstart">
-    Get up and running in 5 minutes
+    Create your first VM in 2 minutes
   </Card>
-  <Card title="Deployment" icon="wand-magic-sparkles" href="/deploy">
-    Supported languages, dependency detection, configuration
+  <Card title="VM Lifecycle" icon="server" href="/vms">
+    States, transitions, and configuration
+  </Card>
+  <Card title="Checkpoints" icon="code-branch" href="/checkpoints">
+    Checkpoint, rollback, and fork concepts
   </Card>
   <Card title="CLI Reference" icon="terminal" href="/cli">
-    Explore all CLI commands
-  </Card>
-  <Card title="TypeScript SDK" icon="code" href="/sdk">
-    Integrate agents into your application
+    All commands and flags
   </Card>
 </CardGroup>

@@ -1,25 +1,15 @@
 # Superserve
 
-> Superserve is the deployment platform for AI agents. Deploy Python and TypeScript agents to isolated, persistent sandboxes with one command.
+> Superserve is a sandbox and VM provider powered by Firecracker micro-VMs. Create on-demand VMs with sub-200ms boot, checkpoint/rollback/fork primitives, file operations, and command execution.
 
 ## Docs
 
-- [Introduction](https://docs.superserve.ai/introduction): What Superserve is - isolated Firecracker microVMs, persistent /workspace filesystem, credential proxy, audit trail, zero-config deployment, and supported frameworks.
-- [Quickstart](https://docs.superserve.ai/quickstart): Deploy your first agent - install the CLI, write a Python or TypeScript agent, deploy, set API keys, and run a conversation.
-- [Deployment](https://docs.superserve.ai/deploy): How deployment works - supported languages (Python, TypeScript), stdio and HTTP server modes, automatic dependency detection, project structure, and optional configuration.
-- [Sessions](https://docs.superserve.ai/sessions): How sessions work - multi-turn conversations, resuming previous sessions, idle timeout, session titles, session lifecycle, and programmatic session management.
-- [Authentication](https://docs.superserve.ai/authentication): How to log in - OAuth 2.0 device flow, API key authentication for CI/CD, credential storage, and logout.
-- [Troubleshooting](https://docs.superserve.ai/troubleshooting): Common issues - agent not responding, missing API keys, response not streaming, slow responses, and dependency installation failures.
-- [SDK](https://docs.superserve.ai/sdk): TypeScript client and React hooks - run(), stream(), session management, agent listing, useAgent hook, configuration, and error handling.
-- [CLI](https://docs.superserve.ai/cli): All commands and flags - login, deploy, init, run, secrets, agents, and sessions.
-
-## Frameworks
-
-Superserve works with any agent framework. Your agent reads from stdin and writes to stdout - no SDK or wrapper required.
-
-- [Claude Agent SDK](https://docs.superserve.ai/frameworks/claude-agent-sdk): Deploy a Claude agent with tool use and conversation memory. Python and TypeScript examples.
-- [OpenAI Agents SDK](https://docs.superserve.ai/frameworks/openai-agents-sdk): Deploy an OpenAI agent with handoffs and guardrails. Python and TypeScript examples.
-- [LangChain](https://docs.superserve.ai/frameworks/langchain): Deploy a LangChain agent with chains and retrieval. Python and TypeScript examples.
-- [Pydantic AI](https://docs.superserve.ai/frameworks/pydantic-ai): Deploy a type-safe agent with structured outputs. Python example.
-- [Agno](https://docs.superserve.ai/frameworks/agno): Deploy a lightweight Python agent.
-- [Mastra](https://docs.superserve.ai/frameworks/mastra): Deploy a TypeScript-first agent with AI SDK. TypeScript example.
+- [Introduction](https://docs.superserve.ai/introduction): What Superserve is - Firecracker micro-VMs, sub-200ms boot, checkpoint/rollback/fork, file upload/download, command execution, VM state machine.
+- [Quickstart](https://docs.superserve.ai/quickstart): Create your first VM - install the CLI, authenticate, create a VM, exec commands, upload files, checkpoint, fork, rollback.
+- [Authentication](https://docs.superserve.ai/authentication): API key auth - get a key from the dashboard, SUPERSERVE_API_KEY env var, X-API-Key header, CLI login.
+- [Troubleshooting](https://docs.superserve.ai/troubleshooting): Common issues - VM stuck in CREATING, command timeouts, file upload failures, rollback issues, auth failures, SSH problems.
+- [VMs](https://docs.superserve.ai/vms): VM lifecycle - state machine (CREATING, RUNNING, STOPPED, SLEEPING, DEAD), stop vs sleep, command execution, file operations, SSH.
+- [Checkpoints](https://docs.superserve.ai/checkpoints): Checkpoint, rollback, and fork - snapshotting VM state, rolling back to checkpoints, forking VMs into parallel copies, fork trees.
+- [CLI](https://docs.superserve.ai/cli): CLI reference - vm create/list/get/delete/stop/start/sleep/wake, exec, ssh, files upload/download, checkpoint create/list/delete, rollback, fork.
+- [TypeScript SDK](https://docs.superserve.ai/sdk): TypeScript client - vms, exec, files, checkpoints, rollback, fork, configuration, error handling.
+- [Python SDK](https://docs.superserve.ai/python-sdk): Python client - vms, exec, files, checkpoints, rollback, fork, configuration, error handling.

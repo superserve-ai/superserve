@@ -1,335 +1,229 @@
 ---
-title: "SDK"
-description: "TypeScript client and React hooks for deployed agents"
+title: "TypeScript SDK"
+description: "TypeScript client for managing VMs, executing commands, and working with checkpoints"
 ---
 
-Build applications on top of your deployed agents. The SDK handles streaming, sessions, and error handling.
+Manage Superserve VMs programmatically from TypeScript and JavaScript.
 
 ```bash
-npm install @superserve/sdk
+bun add @superserve/sdk
 ```
 
 ```typescript
-import Superserve from "@superserve/sdk"
+import { Superserve } from "@superserve/sdk"
 
-const client = new Superserve({ apiKey: "your-api-key" })
+const client = new Superserve({ apiKey: "ss_your_api_key" })
 ```
 
 <Info>
-  Get an API key from the [Superserve dashboard](https://console.superserve.ai) or via `superserve login`.
+  Get an API key from the [Superserve Console](https://console.superserve.ai) or set the `SUPERSERVE_API_KEY` environment variable.
 </Info>
 
 ### Platform support
 
-- **Node.js** 18+ (uses native `fetch` and `ReadableStream`)
-- **React** 18+ (optional - only needed for `@superserve/sdk/react`)
-- Ships as both **ESM** and **CJS** - works with `import` and `require`
+- **Node.js** 18+
+- Ships as both **ESM** and **CJS**
 
 ---
 
-## Run
+## VMs
 
-Send a message, get a response. Creates a session, sends the message, tears down.
-
-```typescript
-const result = await client.run("code-reviewer", {
-  message: "Review the error handling in src/auth.ts",
-})
-
-console.log(result.text)
-console.log(result.duration)    // 3800
-console.log(result.toolCalls)   // [{ name: "read_file", input: {...}, duration: 120 }]
-```
-
-You can reuse an existing session instead of creating a new one:
+Create, list, and manage VMs.
 
 ```typescript
-const result = await client.run("code-reviewer", {
-  message: "Now fix the issues you found",
-  sessionId: "ses_abc123",
+// Create a VM
+const vm = await client.vms.create({
+  name: "my-sandbox",
+  image: "ubuntu-22.04",
+  vcpu: 2,
+  memory: 512,
 })
+
+console.log(vm.id)     // "vm_a1b2c3d4"
+console.log(vm.status) // "RUNNING"
+
+// List VMs
+const vms = await client.vms.list()
+const running = await client.vms.list({ status: "RUNNING" })
+
+// Get a specific VM
+const vm = await client.vms.get("vm_a1b2c3d4")
+
+// Stop, start, sleep, wake
+await client.vms.stop("vm_a1b2c3d4")
+await client.vms.start("vm_a1b2c3d4")
+await client.vms.sleep("vm_a1b2c3d4")
+await client.vms.wake("vm_a1b2c3d4")
+
+// Delete
+await client.vms.delete("vm_a1b2c3d4")
 ```
 
-**RunResult:**
+**CreateVMOptions:**
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `text` | `string` | Full response |
-| `toolCalls` | `ToolCall[]` | Tools invoked during the run |
-| `duration` | `number` | Milliseconds |
-| `finishReason` | `string` | `"completed"`, `"failed"`, or `"cancelled"` |
-| `maxTurnsReached` | `boolean` | Whether the agent hit its maximum turn limit |
+| `name` | `string` | VM name (required) |
+| `image` | `string` | Base image (required, e.g. `"ubuntu-22.04"`) |
+| `vcpu` | `number?` | Number of vCPUs (default: 2) |
+| `memory` | `number?` | Memory in MB (default: 512) |
 
-**RunOptions:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `message` | `string` | The message to send (required) |
-| `sessionId` | `string?` | Reuse an existing session instead of creating a new one |
-| `idleTimeout` | `number?` | Session idle timeout in seconds |
-
----
-
-## Stream
-
-Stream tokens as they arrive.
-
-```typescript
-const stream = client.stream("code-reviewer", {
-  message: "Refactor the database connection pool",
-  onText: (text) => process.stdout.write(text),
-  onToolStart: (tool) => console.log(`-> ${tool.name}`),
-  onToolEnd: (tool) => console.log(`done in ${tool.duration}ms`),
-  onFinish: (result) => console.log(`\nDone in ${result.duration}ms`),
-})
-
-await stream.result
-```
-
-Or iterate over text chunks:
-
-```typescript
-const stream = client.stream("code-reviewer", {
-  message: "Write tests for the auth module",
-})
-
-for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk)
-}
-```
-
-### Raw event iteration
-
-The stream is an `AsyncIterable<StreamEvent>`. You can iterate over all events directly for full control:
-
-```typescript
-const stream = client.stream("code-reviewer", {
-  message: "Analyze this codebase",
-})
-
-for await (const event of stream) {
-  switch (event.type) {
-    case "text":
-      process.stdout.write(event.content)
-      break
-    case "tool-start":
-      console.log(`Using tool: ${event.name}`)
-      break
-    case "tool-end":
-      console.log(`Tool finished in ${event.duration}ms`)
-      break
-    case "run-completed":
-      console.log(`Run completed in ${event.duration}ms`)
-      break
-    case "run-failed":
-      console.error(`Run failed: ${event.error}`)
-      break
-  }
-}
-```
-
-**StreamEvent types:**
-
-| Type | Fields | Description |
-|------|--------|-------------|
-| `TextEvent` | `content: string` | A chunk of text from the agent |
-| `ToolStartEvent` | `name: string`, `input: unknown` | Agent started using a tool |
-| `ToolEndEvent` | `duration: number` | Tool execution completed |
-| `RunCompletedEvent` | `duration: number`, `maxTurnsReached: boolean` | Run finished successfully |
-| `RunFailedEvent` | `error: string` | Run failed |
-
-**AgentStream:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `textStream` | `AsyncIterable<string>` | Text chunks as they arrive |
-| `result` | `Promise<RunResult>` | Resolves on completion |
-| `abort()` | `() => void` | Cancel the stream |
-
-<Note>
-  `AgentStream` can only be iterated once. If you access `stream.result` without iterating first, the stream is consumed automatically in the background.
-</Note>
-
----
-
-## Sessions
-
-Multi-turn conversations. The agent's workspace and memory persist between messages.
-
-```typescript
-const session = await client.createSession("code-reviewer", {
-  title: "Auth module review",
-  idleTimeout: 3600, // 1 hour, in seconds
-})
-
-const r1 = await session.run("What files handle authentication?")
-// "Authentication is handled in src/auth.ts and src/middleware/auth.ts..."
-
-const r2 = await session.run("Add rate limiting to the login endpoint")
-// Agent remembers context from r1
-
-const r3 = session.stream("Now write tests for the rate limiter")
-for await (const chunk of r3.textStream) {
-  process.stdout.write(chunk)
-}
-
-await session.end()
-```
-
-Session streaming also supports callbacks:
-
-```typescript
-const stream = session.stream("Refactor the auth module", {
-  onText: (text) => process.stdout.write(text),
-  onToolStart: (tool) => console.log(`-> ${tool.name}`),
-  onToolEnd: (tool) => console.log(`done in ${tool.duration}ms`),
-  onFinish: (result) => console.log(`\nDone in ${result.duration}ms`),
-  onError: (err) => console.error(err),
-})
-
-await stream.result
-```
-
-**SessionOptions:**
+**VM:**
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `title` | `string?` | A label for the session (shown in `superserve sessions list`) |
-| `idleTimeout` | `number?` | Idle timeout in seconds before the session is cleaned up |
-
-**Session:**
-
-| Property / Method | Type | Description |
-|-------------------|------|-------------|
-| `id` | `string` | Session ID |
-| `agentId` | `string` | The agent's ID |
-| `info` | `SessionInfo` | Full session metadata |
-| `run(message)` | `Promise<RunResult>` | Send and wait |
-| `stream(message, options?)` | `AgentStream` | Send and stream (accepts callback options) |
-| `end()` | `Promise<void>` | End the session |
-
-**SessionInfo:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | `string` | Session ID |
-| `agentId` | `string` | Agent ID |
-| `agentName` | `string?` | Agent name |
-| `status` | `string` | `"active"`, `"idle"`, `"completed"`, or `"failed"` |
-| `title` | `string?` | Session title |
-| `messageCount` | `number` | Number of messages in the session |
+| `id` | `string` | VM ID (e.g. `"vm_a1b2c3d4"`) |
+| `name` | `string` | VM name |
+| `image` | `string` | Base image |
+| `status` | `string` | `"CREATING"`, `"RUNNING"`, `"STOPPED"`, `"SLEEPING"`, or `"DEAD"` |
+| `vcpu` | `number` | Number of vCPUs |
+| `memory` | `number` | Memory in MB |
 | `createdAt` | `string` | ISO 8601 timestamp |
 
 ---
 
-## Agents
+## Exec
+
+Run commands inside a VM.
 
 ```typescript
-const agents = await client.agents.list()
-const agent = await client.agents.get("code-reviewer")
+const result = await client.exec("vm_a1b2c3d4", {
+  command: "echo hello world",
+})
+
+console.log(result.stdout)   // "hello world\n"
+console.log(result.exitCode) // 0
 ```
 
-**Agent:**
+With timeout and streaming:
+
+```typescript
+const result = await client.exec("vm_a1b2c3d4", {
+  command: "python3 /app/train.py",
+  timeout: 300,
+  stream: true,
+  onStdout: (chunk) => process.stdout.write(chunk),
+  onStderr: (chunk) => process.stderr.write(chunk),
+})
+```
+
+**ExecOptions:**
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | `string` | Agent ID (e.g. `agt_7c9e...`) |
-| `name` | `string` | Agent name |
-| `command` | `string \| null` | Start command (e.g. `python agent.py`) |
-| `depsStatus` | `string` | Dependency installation status |
-| `depsError` | `string \| null` | Dependency error message, if any |
-| `requiredSecrets` | `string[]` | Secrets the agent needs |
-| `environmentKeys` | `string[]` | Environment variables configured |
-| `createdAt` | `string` | ISO 8601 timestamp |
-| `updatedAt` | `string` | ISO 8601 timestamp |
+| `command` | `string` | Command to execute (required) |
+| `timeout` | `number?` | Timeout in seconds |
+| `stream` | `boolean?` | Stream output in real time |
+| `onStdout` | `(chunk: string) => void` | Callback for stdout chunks (when streaming) |
+| `onStderr` | `(chunk: string) => void` | Callback for stderr chunks (when streaming) |
+
+**ExecResult:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `stdout` | `string` | Standard output |
+| `stderr` | `string` | Standard error |
+| `exitCode` | `number` | Process exit code |
 
 ---
 
-## React
+## Files
 
-Build chat interfaces with `useAgent`. Manages messages, streaming, and sessions automatically.
+Upload files to and download files from a VM.
 
-```bash
-npm install @superserve/sdk react
+```typescript
+// Upload a file
+const data = Buffer.from("print('hello')")
+await client.files.upload("vm_a1b2c3d4", "/app/script.py", data)
+
+// Upload from a file path
+import { readFileSync } from "fs"
+const buffer = readFileSync("./model.bin")
+await client.files.upload("vm_a1b2c3d4", "/app/model.bin", buffer)
+
+// Download a file
+const content = await client.files.download("vm_a1b2c3d4", "/app/results.json")
 ```
 
-```tsx
-import { SuperserveProvider, useAgent } from "@superserve/sdk/react"
+---
 
-function App() {
-  return (
-    <SuperserveProvider apiKey="your-api-key">
-      <Chat />
-    </SuperserveProvider>
-  )
-}
+## Checkpoints
 
-function Chat() {
-  const { messages, sendMessage, isStreaming, stop } = useAgent({
-    agent: "code-reviewer",
-    onFinish: (msg) => console.log("Agent responded:", msg.content),
-    onError: (err) => console.error("Error:", err),
-  })
+Snapshot VM state for rollback or forking.
 
-  return (
-    <div>
-      {messages.map((msg) => (
-        <div key={msg.id}>
-          <strong>{msg.role}:</strong> {msg.content}
-        </div>
-      ))}
+```typescript
+// Create a checkpoint
+const cp = await client.checkpoints.create("vm_a1b2c3d4", {
+  name: "baseline",
+})
 
-      {isStreaming && <button onClick={stop}>Stop</button>}
+console.log(cp.id) // "cp_x7y8z9"
 
-      <form onSubmit={(e) => {
-        e.preventDefault()
-        const input = e.currentTarget.elements.namedItem("msg") as HTMLInputElement
-        sendMessage(input.value)
-        input.value = ""
-      }}>
-        <input name="msg" placeholder="Send a message..." />
-      </form>
-    </div>
-  )
-}
+// List checkpoints
+const checkpoints = await client.checkpoints.list("vm_a1b2c3d4")
+
+// Delete a checkpoint
+await client.checkpoints.delete("vm_a1b2c3d4", "cp_x7y8z9")
 ```
 
-**useAgent options:**
-
-| Option | Type | Description |
-|--------|------|-------------|
-| `agent` | `string` | Agent name or ID |
-| `apiKey` | `string?` | API key (can also be provided via `SuperserveProvider`) |
-| `baseUrl` | `string?` | Base URL for the Superserve API |
-| `initialMessages` | `Message[]?` | Initial messages to populate the chat |
-| `onFinish` | `(message: Message) => void` | Called when the agent finishes responding |
-| `onError` | `(error: Error) => void` | Called on errors |
-
-**useAgent return:**
+**Checkpoint:**
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `messages` | `Message[]` | All messages |
-| `sendMessage` | `(text: string) => void` | Send a message |
-| `status` | `AgentStatus` | `"ready"`, `"streaming"`, or `"error"` |
-| `isStreaming` | `boolean` | Response in progress |
-| `error` | `Error \| null` | Last error |
-| `stop` | `() => void` | Stop the current stream |
-| `reset` | `() => void` | Clear all messages and end the session |
+| `id` | `string` | Checkpoint ID |
+| `name` | `string` | Checkpoint name |
+| `vmId` | `string` | Parent VM ID |
+| `createdAt` | `string` | ISO 8601 timestamp |
 
-**Message:**
+---
+
+## Rollback
+
+Restore a VM to a previous checkpoint.
+
+```typescript
+await client.rollback("vm_a1b2c3d4", {
+  checkpointId: "cp_x7y8z9",
+})
+```
+
+**RollbackOptions:**
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | `string` | Unique message ID |
-| `role` | `"user" \| "assistant"` | Who sent the message |
-| `content` | `string` | Message text |
-| `toolCalls` | `ToolCall[]?` | Tools the agent used (assistant messages only) |
-| `createdAt` | `Date` | When the message was created |
+| `checkpointId` | `string?` | Checkpoint ID to roll back to |
+| `name` | `string?` | Checkpoint name to roll back to |
+| `minutesAgo` | `number?` | Roll back to nearest checkpoint from N minutes ago |
 
-<Note>
-  The hook creates the client and session lazily on the first `sendMessage` call. Calling `sendMessage` while a response is streaming is a no-op - the message is silently ignored. Calling `reset()` ends the underlying session and clears all messages.
-</Note>
+Provide exactly one of `checkpointId`, `name`, or `minutesAgo`.
+
+---
+
+## Fork
+
+Clone a VM into independent copies.
+
+```typescript
+const forks = await client.fork("vm_a1b2c3d4", { count: 3 })
+
+console.log(forks) // [{ id: "vm_fork_001", ... }, { id: "vm_fork_002", ... }, { id: "vm_fork_003", ... }]
+```
+
+Fork from a specific checkpoint:
+
+```typescript
+const forks = await client.fork("vm_a1b2c3d4", {
+  count: 2,
+  fromCheckpoint: "cp_x7y8z9",
+})
+```
+
+**ForkOptions:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `count` | `number?` | Number of forks (default: 1) |
+| `fromCheckpoint` | `string?` | Fork from a specific checkpoint instead of current state |
 
 ---
 
@@ -337,9 +231,9 @@ function Chat() {
 
 ```typescript
 const client = new Superserve({
-  apiKey: "your-api-key",     // required
-  baseUrl: "https://...",     // default: https://api.superserve.ai
-  timeout: 30000,             // ms, default: 30000
+  apiKey: "ss_your_api_key",   // or set SUPERSERVE_API_KEY env var
+  baseUrl: "https://...",       // default: https://api.agentbox.dev/v1
+  timeout: 30000,               // ms, default: 30000
 })
 ```
 
@@ -347,76 +241,41 @@ const client = new Superserve({
 
 ## Errors
 
-All errors extend `SuperserveError`. Network failures and API errors throw `APIError` with a status code.
+All errors extend `SuperserveError`. API errors throw `APIError` with a status code.
 
 ```typescript
 import { APIError, SuperserveError } from "@superserve/sdk"
 
 try {
-  await client.run("my-agent", { message: "Hello" })
+  await client.vms.get("vm_nonexistent")
 } catch (e) {
   if (e instanceof APIError) {
-    console.error(e.status)   // HTTP status code (401, 404, 500, etc.)
-    console.error(e.message)  // Error message from the API
-    console.error(e.details)  // Field-level error details, if any
-  }
-
-  if (e instanceof SuperserveError) {
-    // Covers APIError and other SDK errors (e.g. aborted requests)
-    console.error(e.message)
+    console.error(e.status)   // 404
+    console.error(e.message)  // "VM not found"
   }
 }
 ```
 
-**Error classes:**
-
-| Class | Description |
-|-------|-------------|
-| `SuperserveError` | Base error class for all SDK errors |
-| `APIError` | HTTP error from the API. Has `status`, `message`, and `details` properties |
-
-Common `APIError` status codes:
-
 | Status | Meaning |
 |--------|---------|
 | `401` | Invalid or missing API key |
-| `404` | Agent or session not found |
-| `422` | Invalid request (check `details` for field-level info) |
-| `0` | Network failure or request timeout |
+| `404` | VM or checkpoint not found |
+| `409` | VM is in an incompatible state for the requested operation |
+| `422` | Invalid request parameters |
 
 ---
 
 ## TypeScript types
 
-All public types are exported from `@superserve/sdk`:
-
 ```typescript
 import type {
   SuperserveOptions,
-  RunOptions,
-  StreamOptions,
-  SessionOptions,
-  RunResult,
-  ToolCall,
-  StreamEvent,
-  TextEvent,
-  ToolStartEvent,
-  ToolEndEvent,
-  RunCompletedEvent,
-  RunFailedEvent,
-  Agent,
-  SessionInfo,
+  VM,
+  CreateVMOptions,
+  ExecOptions,
+  ExecResult,
+  Checkpoint,
+  RollbackOptions,
+  ForkOptions,
 } from "@superserve/sdk"
-```
-
-React types are exported from `@superserve/sdk/react`:
-
-```typescript
-import type {
-  Message,
-  AgentStatus,
-  UseAgentOptions,
-  UseAgentReturn,
-  SuperserveProviderProps,
-} from "@superserve/sdk/react"
 ```

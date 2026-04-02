@@ -1,129 +1,51 @@
-import { spawn } from "node:child_process"
-import { platform } from "node:os"
 import { Command } from "commander"
-import { identify, track } from "../analytics"
-import type { SuperserveClient } from "../api/client"
+import { track } from "../analytics"
 import { createClient } from "../api/client"
-import { PlatformAPIError } from "../api/errors"
-import type { Credentials } from "../api/types"
-import {
-  clearCredentials,
-  getCredentials,
-  saveCredentials,
-} from "../config/auth"
-import { DEVICE_POLL_INTERVAL } from "../config/constants"
+import { clearCredentials, getApiKey, saveApiKey } from "../config/auth"
 import { withErrorHandler } from "../errors"
 import { commandBox } from "../utils/command-box"
 import { log } from "../utils/logger"
-
-function openBrowser(url: string): void {
-  const parsed = new URL(url)
-  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw new Error(`Refusing to open non-HTTP URL: ${url}`)
-  }
-  const cmd =
-    platform() === "darwin"
-      ? "open"
-      : platform() === "win32"
-        ? "start"
-        : "xdg-open"
-  spawn(cmd, [url], { stdio: "ignore", detached: true }).unref()
-}
-
-async function loginWithApiKey(
-  client: SuperserveClient,
-  apiKey: string,
-): Promise<void> {
-  const creds: Credentials = { token: apiKey }
-  saveCredentials(creds)
-
-  if (!(await client.validateToken())) {
-    clearCredentials()
-    log.error("Invalid API key")
-    process.exitCode = 1
-    return
-  }
-
-  log.success("Authenticated successfully with API key.")
-}
-
-async function loginWithDeviceFlow(client: SuperserveClient): Promise<void> {
-  const device = await client.getDeviceCode()
-
-  console.log(`\nTo authenticate, visit: ${device.verification_uri}`)
-  console.log(`Enter code: \x1b[1m${device.user_code}\x1b[0m\n`)
-
-  try {
-    openBrowser(device.verification_uri_complete)
-    console.log("Browser opened automatically.")
-  } catch {
-    console.log("Please open the URL above in your browser.")
-  }
-
-  console.log("\nWaiting for authentication...")
-
-  const start = Date.now()
-  let pollInterval = Math.max(device.interval * 1000, DEVICE_POLL_INTERVAL)
-
-  while (Date.now() - start < device.expires_in * 1000) {
-    try {
-      const creds = await client.pollDeviceToken(device.device_code)
-      saveCredentials(creds)
-      log.success("Authenticated successfully!")
-      return
-    } catch (e) {
-      if (e instanceof PlatformAPIError) {
-        const oauthError = e.details.oauth_error as string | undefined
-        if (oauthError === "authorization_pending") {
-          await Bun.sleep(pollInterval)
-        } else if (oauthError === "slow_down") {
-          pollInterval += 1000
-          await Bun.sleep(pollInterval)
-        } else {
-          throw e
-        }
-      } else {
-        throw e
-      }
-    }
-  }
-
-  log.error("Authentication timed out. Please try again.")
-  process.exitCode = 1
-}
+import { promptUser } from "../utils/prompt"
 
 export const login = new Command("login")
-  .description("Authenticate with Superserve Cloud")
+  .description("Authenticate with Superserve")
   .option("--api-key <key>", "API key for authentication")
   .action(
     withErrorHandler(async (options: { apiKey?: string }) => {
-      const client = createClient()
-
-      const existing = getCredentials()
+      const existing = getApiKey()
       if (existing && !options.apiKey) {
-        if (await client.validateToken()) {
+        const client = createClient()
+        if (await client.validateApiKey()) {
           console.log("Already logged in. To sign out, run:")
           console.log(commandBox("superserve logout"))
           return
         }
       }
 
-      if (options.apiKey) {
-        await loginWithApiKey(client, options.apiKey)
-      } else {
-        await loginWithDeviceFlow(client)
+      let apiKey = options.apiKey
+      if (!apiKey) {
+        apiKey = await promptUser(
+          "Enter your API key (from https://console.superserve.ai): ",
+        )
+        if (!apiKey?.trim()) {
+          log.error("No API key provided.")
+          process.exitCode = 1
+          return
+        }
+        apiKey = apiKey.trim()
       }
 
-      // Identify user in analytics so events link to their account
-      try {
-        const user = await client.getMe()
-        await identify(user)
-      } catch {
-        // Non-critical — continue even if identification fails
+      saveApiKey(apiKey)
+
+      const client = createClient()
+      if (!(await client.validateApiKey())) {
+        clearCredentials()
+        log.error("Invalid API key.")
+        process.exitCode = 1
+        return
       }
 
-      await track("cli_login", {
-        method: options.apiKey ? "api_key" : "device_flow",
-      })
+      log.success("Authenticated successfully!")
+      await track("cli_login", { method: "api_key" })
     }),
   )

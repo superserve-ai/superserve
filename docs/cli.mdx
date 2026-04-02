@@ -4,184 +4,286 @@ description: "All commands and flags"
 ---
 
 ```bash
-curl -fsSL https://superserve.ai/install | sh
+bun add -g @superserve/cli
 ```
 
 ---
 
 ## `superserve login`
 
-Authenticate via browser. Credentials stored at `~/.superserve/credentials.json`.
+Authenticate the CLI. Stores credentials at `~/.superserve/auth.json`.
 
 ```bash
 superserve login
+superserve login --api-key ss_your_api_key
+```
+
+| Flag | Description |
+|------|-------------|
+| `--api-key <key>` | Authenticate with an API key directly |
+
+---
+
+## `superserve logout`
+
+Remove stored credentials.
+
+```bash
 superserve logout
 ```
 
-You can also authenticate non-interactively with an API key:
-
-```bash
-superserve login --api-key your-api-key
-```
-
 ---
 
-## `superserve deploy`
+## `superserve vm create`
 
-Package and deploy your agent to Superserve.
-
-```bash
-superserve deploy [ENTRYPOINT] [--name NAME] [--port PORT] [--dir PATH] [--json]
-```
+Create a new VM.
 
 ```bash
-superserve deploy agent.py                   # Python agent
-superserve deploy agent.ts                   # TypeScript agent
-superserve deploy agent.py --name reviewer   # Custom name
-superserve deploy server.py --port 8000      # HTTP server mode
-superserve deploy                            # Uses superserve.yaml
+superserve vm create --name <name> --image <image> [--vcpu <n>] [--memory <mb>]
 ```
 
 | Flag | Description |
 |------|-------------|
-| `ENTRYPOINT` | Script to run (e.g. `agent.py`, `src/main.ts`). Without this, reads `superserve.yaml`. |
-| `--name`, `-n` | Agent name (default: directory name) |
-| `--port`, `-p` | HTTP proxy mode - forward to this port instead of using stdio |
-| `--dir` | Project directory (default: `.`) |
-| `--yes`, `-y` | Skip confirmation when redeploying |
-| `--json` | Output as JSON |
+| `--name <name>` | VM name (required) |
+| `--image <image>` | Base image (required, e.g. `ubuntu-22.04`) |
+| `--vcpu <n>` | Number of vCPUs (default: 2) |
+| `--memory <mb>` | Memory in MB (default: 512) |
 
-**Supported entrypoints:** `.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`
-
-**Dependency detection:**
-
-| File | Language | Install method |
-|------|----------|---------------|
-| `requirements.txt` | Python | `uv pip install` |
-| `pyproject.toml` | Python | `uv pip install` |
-| `package.json` | TypeScript / JS | `npm install` |
+```bash
+superserve vm create --name my-sandbox --image ubuntu-22.04
+superserve vm create --name heavy-compute --image ubuntu-22.04 --vcpu 4 --memory 2048
+```
 
 ---
 
-## `superserve init`
+## `superserve vm list`
 
-Generate a `superserve.yaml` config file. Only needed if you want to customize the defaults.
-
-```bash
-superserve init [--name NAME]
-```
-
-```yaml superserve.yaml
-name: my-agent
-command: python main.py
-
-# secrets:
-#   - ANTHROPIC_API_KEY
-
-# ignore:
-#   - .venv
-#   - __pycache__
-```
-
-<Tip>
-  If `.env.example` exists, secrets are auto-detected.
-</Tip>
-
----
-
-## `superserve run`
-
-Start a conversation with a deployed agent. Creates a session automatically.
+List all VMs.
 
 ```bash
-superserve run AGENT [PROMPT] [--single] [--json]
+superserve vm list [--status <status>]
 ```
 
 | Flag | Description |
 |------|-------------|
-| `PROMPT` | Initial message. Omit for interactive mode. |
-| `--single` | Exit after one response |
-| `--json` | Raw SSE events as JSON |
+| `--status <status>` | Filter by status (`RUNNING`, `STOPPED`, `SLEEPING`, `CREATING`) |
+
+---
+
+## `superserve vm get`
+
+Get details for a specific VM.
 
 ```bash
-# Interactive multi-turn
-superserve run my-agent
-
-# Single prompt, single response
-superserve run my-agent "Explain this stack trace" --single
-
-# Pipe output as JSON (useful for scripts)
-superserve run my-agent "Summarize this file" --single --json
+superserve vm get <vm_id>
 ```
 
 ---
 
-## `superserve secrets`
+## `superserve vm delete`
 
-Encrypted environment variables. Values are never returned by the API.
+Delete a VM permanently.
 
 ```bash
-# Set one or more secrets
-superserve secrets set AGENT KEY=VALUE [KEY=VALUE ...]
-
-# List key names (values are never shown)
-superserve secrets list AGENT
-
-# Delete a secret
-superserve secrets delete AGENT KEY [--yes]
+superserve vm delete <vm_id> [--force]
 ```
 
+| Flag | Description |
+|------|-------------|
+| `--force` | Skip confirmation prompt |
+
+---
+
+## `superserve vm stop`
+
+Stop a running VM.
+
 ```bash
-# Example: set multiple secrets at once
-superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-... DATABASE_URL=postgres://...
+superserve vm stop <vm_id>
 ```
 
 ---
 
-## `superserve agents`
+## `superserve vm start`
+
+Start a stopped VM.
 
 ```bash
-# List all agents
-superserve agents list [--status STATUS] [--json]
-
-# Get agent details
-superserve agents get NAME [--json]
-
-# Delete agent and all data
-superserve agents delete NAME [--yes]
+superserve vm start <vm_id>
 ```
-
-| Status | Description |
-|--------|-------------|
-| `Ready` | Deployed and available |
-| `Deploying` | Installing dependencies |
-| `Failed` | Dependency install failed |
 
 ---
 
-## `superserve sessions`
+## `superserve vm sleep`
+
+Suspend a VM to disk. The VM can be woken later with its full state restored.
 
 ```bash
-# List sessions (optionally filter by agent or status)
-superserve sessions list [AGENT] [--status STATUS] [--json]
-
-# Get session details
-superserve sessions get SESSION_ID [--json]
-
-# Resume a previous session
-superserve sessions resume SESSION_ID
-
-# End a session (workspace preserved)
-superserve sessions end SESSION_ID
+superserve vm sleep <vm_id>
 ```
 
-<Tip>
-  Session IDs accept short prefixes - `a1b2` matches `a1b2c3d4-e5f6-...`.
-</Tip>
+---
 
-| Status | Description |
-|--------|-------------|
-| `active` | Processing a message |
-| `idle` | Waiting for next message |
-| `completed` | Ended by user |
-| `failed` | Crashed or timed out |
+## `superserve vm wake`
+
+Wake a sleeping VM. Restores the full VM state from disk.
+
+```bash
+superserve vm wake <vm_id>
+```
+
+---
+
+## `superserve exec`
+
+Execute a command inside a VM.
+
+```bash
+superserve exec <vm_id> <command> [--timeout <seconds>] [--stream]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--timeout <seconds>` | Command timeout in seconds |
+| `--stream` | Stream stdout/stderr in real time |
+
+```bash
+superserve exec vm_abc123 "echo hello"
+superserve exec vm_abc123 "python3 /app/train.py" --stream --timeout 300
+```
+
+---
+
+## `superserve ssh`
+
+Open an interactive SSH session to a VM.
+
+```bash
+superserve ssh <vm_id>
+```
+
+---
+
+## `superserve files upload`
+
+Upload a local file to a VM.
+
+```bash
+superserve files upload <vm_id> <local_path> <remote_path>
+```
+
+```bash
+superserve files upload vm_abc123 ./script.py /app/script.py
+superserve files upload vm_abc123 ./data.csv /tmp/data.csv
+```
+
+---
+
+## `superserve files download`
+
+Download a file from a VM.
+
+```bash
+superserve files download <vm_id> <remote_path> [local_path]
+```
+
+If `local_path` is omitted, the file is written to the current directory with its remote filename.
+
+```bash
+superserve files download vm_abc123 /app/results.json
+superserve files download vm_abc123 /app/results.json ./output.json
+```
+
+---
+
+## `superserve checkpoint create`
+
+Create a checkpoint of a VM's current state.
+
+```bash
+superserve checkpoint create <vm_id> --name <name>
+```
+
+| Flag | Description |
+|------|-------------|
+| `--name <name>` | Checkpoint name (required) |
+
+```bash
+superserve checkpoint create vm_abc123 --name baseline
+```
+
+---
+
+## `superserve checkpoint list`
+
+List all checkpoints for a VM.
+
+```bash
+superserve checkpoint list <vm_id>
+```
+
+---
+
+## `superserve checkpoint delete`
+
+Delete a checkpoint.
+
+```bash
+superserve checkpoint delete <vm_id> <checkpoint_id> [--force]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--force` | Skip confirmation prompt |
+
+---
+
+## `superserve rollback`
+
+Restore a VM to a previous checkpoint.
+
+```bash
+superserve rollback <vm_id> [--checkpoint <checkpoint_id>] [--name <name>] [--minutes-ago <n>]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--checkpoint <id>` | Roll back to a specific checkpoint ID |
+| `--name <name>` | Roll back to a checkpoint by name |
+| `--minutes-ago <n>` | Roll back to the nearest checkpoint from N minutes ago |
+
+```bash
+superserve rollback vm_abc123 --name baseline
+superserve rollback vm_abc123 --checkpoint cp_x7y8z9
+superserve rollback vm_abc123 --minutes-ago 30
+```
+
+---
+
+## `superserve fork`
+
+Fork a VM into one or more independent copies.
+
+```bash
+superserve fork <vm_id> [--count <n>] [--from-checkpoint <checkpoint_id>]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--count <n>` | Number of forks to create (default: 1) |
+| `--from-checkpoint <id>` | Fork from a specific checkpoint instead of the current state |
+
+```bash
+superserve fork vm_abc123 --count 3
+superserve fork vm_abc123 --from-checkpoint cp_x7y8z9
+```
+
+---
+
+## `superserve fork tree`
+
+Display the fork tree for a VM, showing parent-child relationships.
+
+```bash
+superserve fork tree <vm_id>
+```

@@ -1,106 +1,114 @@
 // ==================== AUTH ====================
 
 export interface Credentials {
-  token: string
-  token_type?: string
-  expires_at?: string | null
-  refresh_token?: string | null
+  api_key: string
 }
 
-export interface DeviceCodeResponse {
-  device_code: string
-  user_code: string
-  verification_uri: string
-  verification_uri_complete: string
-  expires_in: number
-  interval: number
-}
+// ==================== VMs ====================
 
-export interface UserInfo {
-  id: string
-  email: string
-  full_name?: string | null
-}
+export type VmStatus = "CREATING" | "RUNNING" | "STOPPED" | "SLEEPING" | "DEAD"
 
-export interface TokenValidation {
-  valid?: boolean
-  user?: UserInfo | null
-}
-
-export type DeviceTokenPollResponse =
-  | { error: string; error_description?: string }
-  | {
-      access_token?: string
-      token?: string
-      expires_at?: string
-      refresh_token?: string
-    }
-
-// ==================== AGENTS ====================
-
-export interface AgentResponse {
+export interface Vm {
   id: string
   name: string
-  command: string | null
-  environment_keys: string[]
-  required_secrets: string[]
-  deps_status: string
-  deps_error: string | null
+  status: VmStatus
+  vcpu_count: number
+  mem_size_mib: number
+  ip_address: string | null
   created_at: string
-  updated_at: string
+  uptime_seconds: number
+  last_checkpoint_at: string | null
+  parent_vm_id: string | null
+  forked_from_checkpoint_id: string | null
 }
 
-// ==================== SESSIONS ====================
-
-export interface SessionData {
-  id: string
-  agent_id: string
-  agent_name?: string
-  status: string
-  title?: string
-  message_count: number
-  created_at: string
-  last_activity_at?: string
-}
-
-// ==================== SECRETS ====================
-
-export interface SecretKeysResponse {
-  keys?: string[]
-}
-
-// ==================== ID RESOLUTION ====================
-
-export interface ResolveIdsResponse {
-  ids?: string[]
-}
-
-// ==================== RUN EVENTS (discriminated union) ====================
-
-export type RunEvent =
-  | { type: "message.delta"; data: { content?: string } }
-  | { type: "tool.start"; data: { tool?: string; input?: unknown } }
-  | { type: "tool.end"; data: { duration_ms?: number } }
-  | {
-      type: "run.completed"
-      data: {
-        duration_ms?: number
-        max_turns_reached?: boolean
-        max_turns_message?: string
-      }
-    }
-  | { type: "run.failed"; data: { error?: { message?: string } } }
-  | { type: "run.cancelled"; data: Record<string, unknown> }
-  | { type: "status"; data: Record<string, unknown> }
-  | { type: "run.started"; data: Record<string, unknown> }
-  | { type: "heartbeat"; data: Record<string, unknown> }
-
-// ==================== PROJECT CONFIG ====================
-
-export interface ProjectConfig {
+export interface CreateVmRequest {
   name: string
+  image: string
+  vcpu_count?: number
+  mem_size_mib?: number
+}
+
+// ==================== EXEC ====================
+
+export interface ExecRequest {
   command: string
-  secrets?: string[]
-  ignore?: string[]
-  [key: string]: unknown
+  timeout_s?: number
+}
+
+export interface ExecResponse {
+  stdout: string
+  stderr: string
+  exit_code: number
+}
+
+export interface ExecStreamEvent {
+  stdout?: string
+  stderr?: string
+  timestamp?: string
+  exit_code?: number
+  finished?: boolean
+}
+
+// ==================== FILES ====================
+
+// Files use raw binary request/response bodies, no specific types needed.
+
+// ==================== CHECKPOINTS ====================
+
+export type CheckpointType = "auto" | "manual" | "named"
+
+export interface Checkpoint {
+  id: string
+  vm_id: string
+  name: string | null
+  type: CheckpointType
+  size_bytes: number
+  delta_size_bytes: number
+  created_at: string
+  pinned: boolean
+}
+
+export interface CreateCheckpointRequest {
+  name: string
+}
+
+// ==================== ROLLBACK ====================
+
+export interface RollbackRequest {
+  checkpoint_id?: string
+  name?: string
+  minutes_ago?: number
+  preserve_newer?: boolean
+}
+
+// ==================== FORK ====================
+
+export interface ForkRequest {
+  count: number
+  from_checkpoint_id?: string
+}
+
+export interface ForkResponse {
+  source_vm_id: string
+  checkpoint_id: string
+  vms: Vm[]
+}
+
+export interface ForkTree {
+  vm_id: string
+  name: string
+  status: VmStatus
+  forked_from_checkpoint_id: string | null
+  children: ForkTree[]
+}
+
+// ==================== ERROR ====================
+
+export interface ApiErrorResponse {
+  error: {
+    code: string
+    message: string
+    details?: Record<string, unknown>
+  }
 }

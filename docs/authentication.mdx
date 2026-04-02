@@ -1,32 +1,29 @@
 ---
 title: "Authentication"
-description: "Log in to Superserve from the CLI"
+description: "API key authentication for Superserve"
 ---
 
-Superserve uses the [OAuth 2.0 Device Authorization Grant](https://datatracker.ietf.org/doc/html/rfc8628) for CLI authentication. No passwords are entered in the terminal - you authorize in your browser.
+All Superserve API requests require an API key passed in the `X-API-Key` header. The base URL is `https://api.agentbox.dev/v1`.
 
-## Log in via browser
+## Get an API key
+
+Generate an API key from the [Superserve Console](https://console.superserve.ai). Keys are prefixed with `ss_`.
+
+## CLI authentication
+
+Log in with the CLI to store your API key locally:
 
 ```bash
 superserve login
 ```
 
-The CLI will:
-1. Display a short confirmation code
-2. Open `console.superserve.ai/device` in your browser
-3. Wait for you to authorize
-
-Once you approve in the browser, the CLI is authenticated. Credentials are stored locally at `~/.superserve/auth.json` with owner-only permissions (`0600`).
-
-## Log in with an API key
-
-For CI/CD pipelines or environments without a browser, use an API key directly:
+Or pass the key directly (useful for CI/CD):
 
 ```bash
-superserve login --api-key your-api-key
+superserve login --api-key ss_your_api_key
 ```
 
-API keys can be generated from the [Superserve Console](https://console.superserve.ai).
+Credentials are stored at `~/.superserve/auth.json` with owner-only permissions (`0600`).
 
 ## Log out
 
@@ -36,25 +33,49 @@ superserve logout
 
 This removes `~/.superserve/auth.json`.
 
-## How it works
+## Environment variable
 
-<Steps>
-  <Step title="CLI requests a device code">
-    The CLI calls the Superserve API and receives a short user code and a verification URL.
-  </Step>
-  <Step title="Browser opens">
-    The CLI opens `console.superserve.ai/device` in your browser with the code pre-filled.
-  </Step>
-  <Step title="You authorize">
-    Log in (if needed) and click **Authorize Device** to approve the CLI.
-  </Step>
-  <Step title="CLI receives a token">
-    The CLI polls the API until you authorize, then saves the access token to `~/.superserve/auth.json`.
-  </Step>
-</Steps>
+Set the `SUPERSERVE_API_KEY` environment variable to authenticate without logging in. The CLI and SDKs both check this variable automatically.
 
-The device code expires after 15 minutes. If you don't authorize in time, run `superserve login` again.
+```bash
+export SUPERSERVE_API_KEY=ss_your_api_key
+```
 
-<Tip>
-  Already logged in? The CLI checks your existing credentials before starting the device flow. If your token is still valid, you won't be prompted again.
-</Tip>
+This is the recommended approach for CI/CD pipelines and server-side applications.
+
+## SDK authentication
+
+Pass the API key when creating a client:
+
+<CodeGroup>
+
+```typescript TypeScript
+import { Superserve } from "@superserve/sdk"
+
+const client = new Superserve({ apiKey: "ss_your_api_key" })
+```
+
+```python Python
+from superserve import Superserve
+
+client = Superserve(api_key="ss_your_api_key")
+```
+
+</CodeGroup>
+
+If no `apiKey` is provided, both SDKs fall back to the `SUPERSERVE_API_KEY` environment variable.
+
+## Direct API usage
+
+Include the `X-API-Key` header in requests to the API:
+
+```bash
+curl https://api.agentbox.dev/v1/vms \
+  -H "X-API-Key: ss_your_api_key"
+```
+
+## Key precedence
+
+1. Explicit `apiKey` parameter (SDK) or `--api-key` flag (CLI)
+2. `SUPERSERVE_API_KEY` environment variable
+3. Stored credentials at `~/.superserve/auth.json`

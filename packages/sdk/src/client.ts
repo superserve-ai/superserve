@@ -1,57 +1,62 @@
 import { APIError, SuperserveError } from "./errors"
-import { Session } from "./session"
-import { AgentStream } from "./stream"
+import { ExecStream } from "./exec-stream"
 import type {
-  Agent,
-  APIAgentResponse,
-  APISessionResponse,
-  RunOptions,
-  RunResult,
-  SessionOptions,
-  StreamOptions,
+  ApiCheckpoint,
+  ApiExecResponse,
+  ApiForkResponse,
+  ApiForkTree,
+  ApiVm,
+  Checkpoint,
+  CreateVmOptions,
+  ExecOptions,
+  ExecResult,
+  ForkOptions,
+  ForkResult,
+  ForkTree,
+  RollbackOptions,
   SuperserveOptions,
+  Vm,
 } from "./types"
 
-const DEFAULT_BASE_URL = "https://api.superserve.ai"
+const DEFAULT_BASE_URL = "https://api.agentbox.dev"
 const DEFAULT_TIMEOUT = 30_000
-const DEFAULT_IDLE_TIMEOUT = 29 * 60 // 29 minutes
 
-/**
- * The Superserve client for interacting with deployed agents.
- *
- * @example
- * ```ts
- * import Superserve from 'superserve'
- *
- * const client = new Superserve({ apiKey: 'your-token-from-cli' })
- *
- * // One-shot
- * const result = await client.run('my-agent', {
- *   message: 'Hello!'
- * })
- * console.log(result.text)
- *
- * // Streaming
- * const stream = client.stream('my-agent', {
- *   message: 'Write a report...'
- * })
- * for await (const chunk of stream.textStream) {
- *   process.stdout.write(chunk)
- * }
- * ```
- */
 export class Superserve {
   private readonly _apiKey: string
   private readonly _baseUrl: string
   private readonly _timeout: number
-  private readonly _agentNameCache = new Map<string, string>()
 
-  /** Methods for querying agent information. */
-  readonly agents: {
-    /** List all agents. */
-    list: () => Promise<Agent[]>
-    /** Get an agent by name or ID. */
-    get: (nameOrId: string) => Promise<Agent>
+  readonly vms: {
+    create: (options: CreateVmOptions) => Promise<Vm>
+    list: (options?: { status?: string }) => Promise<Vm[]>
+    get: (vmId: string) => Promise<Vm>
+    delete: (vmId: string) => Promise<void>
+    stop: (vmId: string) => Promise<Vm>
+    start: (vmId: string) => Promise<Vm>
+    sleep: (vmId: string) => Promise<Vm>
+    wake: (vmId: string) => Promise<Vm>
+  }
+
+  readonly files: {
+    upload: (
+      vmId: string,
+      remotePath: string,
+      data: Buffer | Uint8Array | string,
+    ) => Promise<void>
+    download: (vmId: string, remotePath: string) => Promise<Buffer>
+  }
+
+  readonly checkpoints: {
+    list: (vmId: string) => Promise<Checkpoint[]>
+    create: (
+      vmId: string,
+      options?: { name?: string },
+    ) => Promise<Checkpoint>
+    delete: (
+      vmId: string,
+      checkpointId: string,
+      options?: { force?: boolean },
+    ) => Promise<void>
   }
 
   constructor(options: SuperserveOptions) {
@@ -59,102 +64,191 @@ export class Superserve {
     this._baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "")
     this._timeout = options.timeout ?? DEFAULT_TIMEOUT
 
-    // Bind agent methods
-    this.agents = {
-      list: () => this._listAgents(),
-      get: (nameOrId: string) => this._getAgent(nameOrId),
+    this.vms = {
+      create: (opts) => this._createVm(opts),
+      list: (opts) => this._listVms(opts),
+      get: (vmId) => this._getVm(vmId),
+      delete: (vmId) => this._deleteVm(vmId),
+      stop: (vmId) => this._vmAction(vmId, "stop"),
+      start: (vmId) => this._vmAction(vmId, "start"),
+      sleep: (vmId) => this._vmAction(vmId, "sleep"),
+      wake: (vmId) => this._vmAction(vmId, "wake"),
+    }
+
+    this.files = {
+      upload: (vmId, remotePath, data) =>
+        this._uploadFile(vmId, remotePath, data),
+      download: (vmId, remotePath) => this._downloadFile(vmId, remotePath),
+    }
+
+    this.checkpoints = {
+      list: (vmId) => this._listCheckpoints(vmId),
+      create: (vmId, opts) => this._createCheckpoint(vmId, opts),
+      delete: (vmId, cpId, opts) =>
+        this._deleteCheckpoint(vmId, cpId, opts),
     }
   }
 
-  /**
-   * Send a message to an agent and wait for the full response.
-   * Creates a session, sends the message, collects the response, and ends the session.
-   */
-  async run(agent: string, options: RunOptions): Promise<RunResult> {
-    if (options.sessionId) {
-      const session = new Session(
-        { id: options.sessionId, agentId: "", agentName: undefined, status: "active", messageCount: 0, createdAt: "" },
-        this._request.bind(this),
-        this._safeJson.bind(this),
-      )
-      return session.run(options.message)
-    }
+  // ==================== Exec ====================
 
-    const session = await this.createSession(agent, {
-      idleTimeout: options.idleTimeout,
+  async exec(vmId: string, options: ExecOptions): Promise<ExecResult> {
+    const resp = await this._request("POST", `/vms/${vmId}/exec`, {
+      json: {
+        command: options.command,
+        timeout_s: options.timeoutS,
+      },
     })
-
-    try {
-      const result = await session.run(options.message)
-      return result
-    } finally {
-      try {
-        await session.end()
-      } catch {
-        // Best-effort cleanup
-      }
-    }
+    const raw = await this._safeJson<ApiExecResponse>(resp)
+    return { stdout: raw.stdout, stderr: raw.stderr, exitCode: raw.exit_code }
   }
 
-  /**
-   * Send a message to an agent and get a streaming response.
-   * Creates a session and returns an AgentStream you can iterate over.
-   */
-  stream(agent: string, options: StreamOptions): AgentStream {
-    const { onText, onToolStart, onToolEnd, onFinish, onError, ...runOpts } =
-      options
-    const callbacks = { onText, onToolStart, onToolEnd, onFinish, onError }
-
-    if (runOpts.sessionId) {
-      const controller = new AbortController()
-      const responsePromise = this._request(
-        "POST",
-        `/sessions/${runOpts.sessionId}/messages`,
-        {
-          json: { prompt: runOpts.message },
-          stream: true,
-          signal: controller.signal,
-        },
-      )
-      return new AgentStream(responsePromise, controller, callbacks)
-    }
-
-    // Create session then stream — wrap in a single promise chain
+  execStream(vmId: string, options: ExecOptions): ExecStream {
     const controller = new AbortController()
-    const responsePromise = this._resolveAgentId(agent)
-      .then((agentId) =>
-        this._createSessionRaw(agentId, undefined, runOpts.idleTimeout),
-      )
-      .then((sessionData) =>
-        this._request("POST", `/sessions/${sessionData.id}/messages`, {
-          json: { prompt: runOpts.message },
-          stream: true,
-          signal: controller.signal,
-        }),
-      )
-
-    return new AgentStream(responsePromise, controller, callbacks)
+    const responsePromise = this._request("POST", `/vms/${vmId}/exec/stream`, {
+      json: {
+        command: options.command,
+        timeout_s: options.timeoutS,
+      },
+      stream: true,
+      signal: controller.signal,
+    })
+    return new ExecStream(responsePromise, controller)
   }
 
-  /**
-   * Create a multi-turn session with an agent.
-   */
-  async createSession(
-    agent: string,
-    options: SessionOptions = {},
-  ): Promise<Session> {
-    const agentId = await this._resolveAgentId(agent)
-    const data = await this._createSessionRaw(
-      agentId,
-      options.title,
-      options.idleTimeout,
+  // ==================== Rollback ====================
+
+  async rollback(vmId: string, options: RollbackOptions): Promise<Vm> {
+    const resp = await this._request("POST", `/vms/${vmId}/rollback`, {
+      json: {
+        checkpoint_id: options.checkpointId,
+        name: options.name,
+        minutes_ago: options.minutesAgo,
+        preserve_newer: options.preserveNewer,
+      },
+    })
+    return mapVm(await this._safeJson<ApiVm>(resp))
+  }
+
+  // ==================== Fork ====================
+
+  async fork(vmId: string, options: ForkOptions): Promise<ForkResult> {
+    const resp = await this._request("POST", `/vms/${vmId}/fork`, {
+      json: {
+        count: options.count,
+        from_checkpoint_id: options.fromCheckpointId,
+      },
+    })
+    const raw = await this._safeJson<ApiForkResponse>(resp)
+    return {
+      sourceVmId: raw.source_vm_id,
+      checkpointId: raw.checkpoint_id,
+      vms: raw.vms.map(mapVm),
+    }
+  }
+
+  async forkTree(vmId: string): Promise<ForkTree> {
+    const resp = await this._request("GET", `/vms/${vmId}/tree`)
+    return mapForkTree(await this._safeJson<ApiForkTree>(resp))
+  }
+
+  // ==================== Internal: VM Methods ====================
+
+  private async _createVm(options: CreateVmOptions): Promise<Vm> {
+    const resp = await this._request("POST", "/vms", {
+      json: {
+        name: options.name,
+        image: options.image,
+        vcpu_count: options.vcpuCount,
+        mem_size_mib: options.memSizeMib,
+      },
+    })
+    return mapVm(await this._safeJson<ApiVm>(resp))
+  }
+
+  private async _listVms(options?: { status?: string }): Promise<Vm[]> {
+    const params: Record<string, string> = {}
+    if (options?.status) params.status = options.status
+    const resp = await this._request("GET", "/vms", { params })
+    const data = await this._safeJson<{ vms: ApiVm[] }>(resp)
+    return (data.vms ?? []).map(mapVm)
+  }
+
+  private async _getVm(vmId: string): Promise<Vm> {
+    const resp = await this._request("GET", `/vms/${vmId}`)
+    return mapVm(await this._safeJson<ApiVm>(resp))
+  }
+
+  private async _deleteVm(vmId: string): Promise<void> {
+    await this._request("DELETE", `/vms/${vmId}`)
+  }
+
+  private async _vmAction(
+    vmId: string,
+    action: "stop" | "start" | "sleep" | "wake",
+  ): Promise<Vm> {
+    const resp = await this._request("POST", `/vms/${vmId}/${action}`)
+    return mapVm(await this._safeJson<ApiVm>(resp))
+  }
+
+  // ==================== Internal: Files ====================
+
+  private async _uploadFile(
+    vmId: string,
+    remotePath: string,
+    data: Buffer | Uint8Array | string,
+  ): Promise<void> {
+    const cleanPath = remotePath.replace(/^\//, "")
+    const bytes =
+      typeof data === "string" ? new TextEncoder().encode(data) : new Uint8Array(data)
+    await this._request("PUT", `/vms/${vmId}/files/${cleanPath}`, {
+      body: bytes,
+      contentType: "application/octet-stream",
+    })
+  }
+
+  private async _downloadFile(
+    vmId: string,
+    remotePath: string,
+  ): Promise<Buffer> {
+    const cleanPath = remotePath.replace(/^\//, "")
+    const resp = await this._request("GET", `/vms/${vmId}/files/${cleanPath}`)
+    const arrayBuf = await resp.arrayBuffer()
+    return Buffer.from(arrayBuf)
+  }
+
+  // ==================== Internal: Checkpoints ====================
+
+  private async _listCheckpoints(vmId: string): Promise<Checkpoint[]> {
+    const resp = await this._request("GET", `/vms/${vmId}/checkpoints`)
+    const data = await this._safeJson<{ checkpoints: ApiCheckpoint[] }>(resp)
+    return (data.checkpoints ?? []).map(mapCheckpoint)
+  }
+
+  private async _createCheckpoint(
+    vmId: string,
+    options?: { name?: string },
+  ): Promise<Checkpoint> {
+    const resp = await this._request("POST", `/vms/${vmId}/checkpoint`, {
+      json: { name: options?.name },
+    })
+    return mapCheckpoint(await this._safeJson<ApiCheckpoint>(resp))
+  }
+
+  private async _deleteCheckpoint(
+    vmId: string,
+    checkpointId: string,
+    options?: { force?: boolean },
+  ): Promise<void> {
+    const params: Record<string, string> = {}
+    if (options?.force) params.force = "true"
+    await this._request(
+      "DELETE",
+      `/vms/${vmId}/checkpoints/${checkpointId}`,
+      { params },
     )
-
-    const info = mapSession(data)
-    return new Session(info, this._request.bind(this), this._safeJson.bind(this))
   }
 
-  // ==================== Internal Methods ====================
+  // ==================== HTTP Helpers ====================
 
   /** @internal */
   async _request(
@@ -162,12 +256,14 @@ export class Superserve {
     endpoint: string,
     options: {
       json?: unknown
+      body?: BodyInit
+      contentType?: string
       params?: Record<string, string>
       stream?: boolean
       signal?: AbortSignal
     } = {},
   ): Promise<Response> {
-    const { json, params, stream = false, signal } = options
+    const { json, body, contentType, params, stream = false, signal } = options
 
     let url = `${this._baseUrl}/v1${endpoint}`
     if (params) {
@@ -175,8 +271,8 @@ export class Superserve {
     }
 
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${this._apiKey}`,
-      "Content-Type": "application/json",
+      "X-API-Key": this._apiKey,
+      "Content-Type": contentType ?? "application/json",
     }
 
     const controller = new AbortController()
@@ -186,7 +282,6 @@ export class Superserve {
       timeoutId = setTimeout(() => controller.abort(), this._timeout)
     }
 
-    // Combine external signal with timeout
     const combinedSignal = signal
       ? anySignal([signal, controller.signal])
       : controller.signal
@@ -195,7 +290,7 @@ export class Superserve {
       const response = await fetch(url, {
         method,
         headers,
-        body: json ? JSON.stringify(json) : undefined,
+        body: body ?? (json ? JSON.stringify(json) : undefined),
         signal: combinedSignal,
       })
 
@@ -209,11 +304,16 @@ export class Superserve {
           // ignore parse errors
         }
 
-        const detail = (errorData.detail ?? errorData.message) as string | undefined
+        const errorObj = errorData.error as
+          | { code?: string; message?: string }
+          | undefined
+        const detail =
+          errorObj?.message ??
+          ((errorData.detail ?? errorData.message) as string | undefined)
         throw new APIError(
           response.status,
           detail ?? response.statusText,
-          (errorData.details as Record<string, unknown>) ?? undefined,
+          errorObj as Record<string, unknown> | undefined,
         )
       }
 
@@ -236,101 +336,52 @@ export class Superserve {
     try {
       return (await response.json()) as T
     } catch {
-      throw new APIError(
-        response.status,
-        "Unexpected response from server",
-      )
+      throw new APIError(response.status, "Unexpected response from server")
     }
-  }
-
-  private async _resolveAgentId(nameOrId: string): Promise<string> {
-    if (nameOrId.startsWith("agt_")) return nameOrId
-
-    const cached = this._agentNameCache.get(nameOrId)
-    if (cached) return cached
-
-    const resp = await this._request("GET", "/agents")
-    const data = await this._safeJson<{ agents?: APIAgentResponse[] }>(resp)
-    const agents = data.agents ?? []
-
-    for (const agent of agents) {
-      this._agentNameCache.set(agent.name, agent.id)
-    }
-
-    const resolved = this._agentNameCache.get(nameOrId)
-    if (resolved) return resolved
-
-    throw new APIError(404, `Agent '${nameOrId}' not found`)
-  }
-
-  private async _createSessionRaw(
-    agentId: string,
-    title?: string,
-    idleTimeout?: number,
-  ): Promise<APISessionResponse> {
-    const resp = await this._request("POST", "/sessions", {
-      json: {
-        agent_id: agentId,
-        title,
-        idle_timeout_seconds: idleTimeout ?? DEFAULT_IDLE_TIMEOUT,
-      },
-    })
-    return this._safeJson<APISessionResponse>(resp)
-  }
-
-  private async _listAgents(): Promise<Agent[]> {
-    const resp = await this._request("GET", "/agents")
-    const data = await this._safeJson<{ agents?: APIAgentResponse[] }>(resp)
-    return (data.agents ?? []).map(mapAgent)
-  }
-
-  private async _getAgent(nameOrId: string): Promise<Agent> {
-    const agentId = await this._resolveAgentId(nameOrId)
-    const resp = await this._request("GET", `/agents/${agentId}`)
-    const data = await this._safeJson<APIAgentResponse>(resp)
-    return mapAgent(data)
   }
 }
 
-// ==================== Helpers ====================
+// ==================== Mappers ====================
 
-function mapAgent(raw: APIAgentResponse): Agent {
+function mapVm(raw: ApiVm): Vm {
   return {
     id: raw.id,
     name: raw.name,
-    command: raw.command,
-    depsStatus: raw.deps_status,
-    depsError: raw.deps_error,
-    requiredSecrets: raw.required_secrets,
-    environmentKeys: raw.environment_keys,
+    status: raw.status,
+    vcpuCount: raw.vcpu_count,
+    memSizeMib: raw.mem_size_mib,
+    ipAddress: raw.ip_address,
     createdAt: raw.created_at,
-    updatedAt: raw.updated_at,
+    uptimeSeconds: raw.uptime_seconds,
+    lastCheckpointAt: raw.last_checkpoint_at,
+    parentVmId: raw.parent_vm_id,
+    forkedFromCheckpointId: raw.forked_from_checkpoint_id,
   }
 }
 
-function mapSession(raw: APISessionResponse): {
-  id: string
-  agentId: string
-  agentName?: string
-  status: string
-  title?: string
-  messageCount: number
-  createdAt: string
-} {
+function mapCheckpoint(raw: ApiCheckpoint): Checkpoint {
   return {
     id: raw.id,
-    agentId: raw.agent_id,
-    agentName: raw.agent_name,
-    status: raw.status,
-    title: raw.title,
-    messageCount: raw.message_count,
+    vmId: raw.vm_id,
+    name: raw.name,
+    type: raw.type,
+    sizeBytes: raw.size_bytes,
+    deltaSizeBytes: raw.delta_size_bytes,
     createdAt: raw.created_at,
+    pinned: raw.pinned,
   }
 }
 
-/**
- * Combines multiple AbortSignals into one that aborts when any of them does.
- */
+function mapForkTree(raw: ApiForkTree): ForkTree {
+  return {
+    vmId: raw.vm_id,
+    name: raw.name,
+    status: raw.status,
+    forkedFromCheckpointId: raw.forked_from_checkpoint_id,
+    children: raw.children.map(mapForkTree),
+  }
+}
+
 function anySignal(signals: AbortSignal[]): AbortSignal {
   const controller = new AbortController()
   for (const signal of signals) {

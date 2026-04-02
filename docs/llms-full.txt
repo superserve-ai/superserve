@@ -1,993 +1,566 @@
 # Superserve
 
-> Superserve is the deployment platform for AI agents. Deploy Python and TypeScript agents to isolated, persistent sandboxes with one command.
+> Superserve is a sandbox and VM provider powered by Firecracker micro-VMs. Create on-demand VMs with sub-200ms boot, checkpoint/rollback/fork primitives, file operations, and command execution.
 
 ---
 
 # Introduction
 
-Agents execute code, make HTTP requests, create files, and manage credentials. In production, every session needs isolation, persistence, and governance.
+Superserve is a sandbox and VM provider for AI agents and developer tools. It gives you on-demand Firecracker micro-VMs with sub-200ms boot times, full Linux environments, and primitives for checkpoint, rollback, and fork.
 
-Without that:
-- Credentials leak into LLM context and logs
-- Sessions lose state between turns and restarts
-- There's no audit trail of what the agent actually did
-- Agents can access anything on the network
+AI agents and automated workflows need isolated compute environments that boot fast, persist state, and branch execution. Traditional VMs are too slow. Containers lack real isolation. Superserve gives you the best of both: hardware-isolated micro-VMs that feel as fast as containers.
 
-Superserve gives every agent a governed workspace:
+Key capabilities:
+- Sub-200ms boot: Firecracker micro-VMs start in under 200 milliseconds
+- Checkpoint and rollback: Snapshot a VM at any point, roll back in milliseconds
+- Fork: Clone a running VM into multiple independent copies
+- File upload and download: Push files into and pull files out of VMs
+- Command execution: Run arbitrary commands inside VMs via API, CLI, or SSH
 
-- Isolated by default: Every session runs in its own Firecracker microVM with a dedicated kernel. The agent gets full root access to execute code, install packages, and make HTTP requests - nothing leaks into another session.
-- Nothing disappears: The /workspace filesystem survives across turns, restarts, and days. Pick up a session hours or weeks later - every file and conversation is exactly where the agent left it.
-- Credentials stay hidden: A credential proxy injects API keys at the network level. The agent makes authenticated requests without ever seeing the credentials - they never appear in context, logs, or tool outputs.
-- Full audit trail: Every tool call, file write, and HTTP request the agent makes is logged and queryable. Get a full execution timeline for each session, not just the chat transcript.
+VM state machine: CREATING -> RUNNING -> STOPPED/SLEEPING -> DEAD
 
-Deploy in one command. No Dockerfile, no server code, no config files.
-
-```bash
-superserve deploy agent.py     # Python
-superserve deploy agent.ts     # TypeScript
-```
-
-The same script you run locally runs in production. Superserve detects your dependencies, builds the sandbox, and serves your agent over a streaming API.
-
-Superserve works with any agent framework - or no framework at all: Claude Agent SDK, OpenAI Agents SDK, LangChain, LangGraph, Mastra, Pydantic AI, Agno, or plain stdin/stdout.
+| State | Description |
+|-------|-------------|
+| CREATING | VM is being provisioned |
+| RUNNING | VM is active and accepting commands |
+| STOPPED | VM is stopped, can be started again or deleted |
+| SLEEPING | VM is suspended to disk, wake to resume instantly |
+| DEAD | VM has been deleted, terminal state |
 
 ---
 
 # Quickstart
 
-You need: A Superserve account at https://console.superserve.ai
-
-## Install and log in
+## Install the CLI
 
 ```bash
-curl -fsSL https://superserve.ai/install | sh
+bun add -g @superserve/cli
+```
+
+## Authenticate
+
+```bash
 superserve login
+superserve login --api-key ss_your_api_key
 ```
 
-## Write an agent
-
-Any script that reads input and prints output works. Pick your language, or start from one of our examples in Python (https://github.com/superserve-ai/superserve/tree/main/examples/python) or TypeScript (https://github.com/superserve-ai/superserve/tree/main/examples/typescript).
-
-Python example using Claude Agent SDK:
-
-```python
-import asyncio
-from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, TextBlock
-
-options = ClaudeAgentOptions(
-    model="sonnet",
-    system_prompt="You are a senior software engineer. Be direct and specific.",
-    permission_mode="bypassPermissions",
-    continue_conversation=True,
-)
-
-async def main():
-    async with ClaudeSDKClient(options=options) as client:
-        while True:
-            user_input = input()
-            await client.query(prompt=user_input)
-            async for msg in client.receive_response():
-                for block in getattr(msg, "content", []):
-                    if isinstance(block, TextBlock):
-                        print(block.text)
-
-asyncio.run(main())
-```
-
-TypeScript example using Mastra:
-
-```typescript
-import { Agent } from "@mastra/core/agent"
-import { createInterface } from "readline"
-
-const agent = new Agent({
-  name: "engineer",
-  instructions: "You are a senior software engineer. Be direct and specific.",
-  model: "openai/gpt-4o",
-})
-
-const rl = createInterface({ input: process.stdin })
-rl.on("line", async (line) => {
-  const result = await agent.generate(line)
-  console.log(result.text)
-})
-```
-
-This is the same script you'd run locally. No changes needed for deployment.
-
-## Deploy
+## Create a VM
 
 ```bash
-superserve deploy agent.py     # or agent.ts
+superserve vm create --name my-sandbox --image ubuntu-22.04
 ```
 
-Dependencies are detected automatically from requirements.txt, pyproject.toml, or package.json.
+The VM boots in under 200ms and is ready immediately.
 
-## Set your API keys
+## Run a command
 
 ```bash
-superserve secrets set my-project ANTHROPIC_API_KEY=sk-ant-...
+superserve exec vm_a1b2c3d4 "echo hello world"
 ```
 
-Secrets are encrypted at rest and injected as environment variables when your agent runs.
-
-## Run it
+## Upload a file
 
 ```bash
-superserve run my-project
+superserve files upload vm_a1b2c3d4 ./script.py /app/script.py
+superserve exec vm_a1b2c3d4 "python3 /app/script.py"
 ```
 
-The agent remembers context between turns. The sandbox persists files across the conversation. Come back tomorrow and resume where you left off.
-
----
-
-# Deployment
+## Checkpoint
 
 ```bash
-superserve deploy agent.py        # Python
-superserve deploy agent.ts        # TypeScript
+superserve checkpoint create vm_a1b2c3d4 --name baseline
 ```
 
-Your script runs as-is in the cloud. No Dockerfile, no server code, no config files. Superserve packages your project, installs dependencies, and runs your entrypoint inside an isolated Firecracker microVM.
-
-## Supported languages
-
-| Language | Extensions | Runtime |
-|----------|-----------|---------|
-| Python | .py | Python 3.12 |
-| TypeScript | .ts, .tsx | Node.js 20 via tsx |
-| JavaScript | .js, .jsx, .mjs, .cjs | Node.js 20 |
-
-## How it works
-
-Your agent reads input and writes output. Superserve handles sessions, streaming, and sandbox lifecycle.
-
-### Stdio mode (default)
-
-Scripts that read from stdin and write to stdout get multi-turn conversation support automatically. Each read receives the next user message; each write streams the response back.
-
-```python
-while True:
-    user_input = input()        # receives user message
-    print(f"You said: {user_input}")  # streams response back
-```
-
-```typescript
-const readline = require("readline")
-const rl = readline.createInterface({ input: process.stdin })
-
-rl.on("line", (line: string) => {
-  console.log(`You said: ${line}`)    // streams response back
-})
-```
-
-That's a complete, deployable agent. The platform translates between plain stdin/stdout and the streaming API. Your code doesn't need to know it's running on Superserve.
-
-### HTTP server mode
-
-If your agent runs its own HTTP server (FastAPI, Express, etc.), pass --port:
+## Fork
 
 ```bash
-superserve deploy server.py --port 8000
+superserve fork vm_a1b2c3d4 --count 2
 ```
 
-Superserve proxies requests to localhost:PORT/run inside the sandbox.
-
-```python
-from fastapi import FastAPI
-from pydantic import BaseModel
-
-app = FastAPI()
-
-class RunRequest(BaseModel):
-    prompt: str
-
-@app.post("/run")
-async def run(req: RunRequest):
-    return {"response": f"You said: {req.prompt}"}
-```
-
-## Dependency detection
-
-| File | Language | What happens |
-|------|----------|-------------|
-| requirements.txt | Python | Installed with uv pip install |
-| pyproject.toml | Python | Installed with uv pip install |
-| package.json | TypeScript / JS | Installed with npm install |
-
-Dependencies are installed once and cached. Subsequent deploys with the same dependencies skip the install step.
-
-## Project structure
-
-Superserve packages your entire project directory and extracts it into /workspace inside the sandbox. Your entrypoint runs from there. All files are available at runtime. Relative imports and file reads work exactly as they do locally.
-
-### Ignoring files
-
-By default, common directories like .git, node_modules, .venv, and __pycache__ are excluded. Customize with superserve.yaml.
-
-## Configuration file (optional)
-
-```yaml
-name: my-agent
-command: python agent.py
-
-secrets:
-  - ANTHROPIC_API_KEY
-  - DATABASE_URL
-
-ignore:
-  - .venv
-  - __pycache__
-  - node_modules
-```
-
-| Field | Description |
-|-------|-------------|
-| name | Agent name (default: directory name) |
-| command | How to start the agent |
-| secrets | Environment variables the agent requires |
-| ignore | Files/directories to exclude from upload |
-
-Run `superserve init` to generate a superserve.yaml with sensible defaults.
-
-## What happens when you deploy
-
-1. Sandbox: Your agent runs in an isolated VM with its own kernel, filesystem, and network.
-2. Dependencies: requirements.txt, pyproject.toml, or package.json are detected and installed automatically. Cached across deploys.
-3. Network: Outbound HTTP requests route through a managed proxy that injects API keys. Your agent makes authenticated calls without ever seeing the credentials.
-4. Persistent state: The /workspace filesystem survives across turns, restarts, and sessions.
-5. Live: Your agent is ready. Run it with `superserve run` or call it via the SDK.
-
----
-
-# Sessions
-
-Every `superserve run` creates a session - an isolated sandbox running your agent, with its own filesystem and process state. Sessions persist after the conversation ends. Come back hours or days later and resume where you left off.
-
-## Resume a conversation
+## Rollback
 
 ```bash
-superserve sessions list my-agent
-superserve sessions resume a1b2
+superserve rollback vm_a1b2c3d4 --name baseline
 ```
 
-The agent remembers the full conversation. Files it created or modified are still in the workspace.
-
-## How persistence works
-
-Sessions use two layers of persistence:
-
-1. Workspace filesystem - Superserve persists the sandbox's /workspace directory. Files your agent reads, writes, or modifies survive across turns and restarts.
-2. Conversation memory - Make sure your agent supports multi-turn conversations so it remembers context across messages. Most frameworks handle this automatically when configured correctly.
-
-```python
-# Claude Agent SDK - continue_conversation enables conversation memory
-options = ClaudeAgentOptions(..., continue_conversation=True)
-```
-
-## Session lifecycle
-
-| Status | Meaning | Resumable? |
-|--------|---------|------------|
-| active | Processing a message right now | No |
-| idle | Waiting for the next message | Yes |
-| completed | Ended by user | Yes - fresh sandbox, same workspace |
-| failed | Crashed or timed out | Yes - fresh sandbox, same workspace |
-
-When you resume a completed or failed session, Superserve creates a fresh sandbox but restores the /workspace filesystem. The agent process restarts, but all files are intact.
+## Clean up
 
 ```bash
-superserve sessions get a1b2
-superserve sessions end a1b2
+superserve vm delete vm_a1b2c3d4
 ```
-
-## Idle timeout
-
-Sessions expire after 30 days of inactivity by default. The timeout resets each time a message is sent.
-
-You can configure the timeout when creating a session via the SDK:
-
-```typescript
-const session = await client.createSession("my-agent", {
-  idleTimeout: 3600, // 1 hour, in seconds
-})
-```
-
-## Session titles
-
-Give sessions a title to find them later:
-
-```typescript
-const session = await client.createSession("my-agent", {
-  title: "Review auth module",
-})
-```
-
-Titles appear in `superserve sessions list` output.
-
-## Short ID prefixes
-
-Session IDs are long UUIDs, but you can use any unique prefix:
-
-```bash
-superserve sessions resume a1b2    # matches ses_a1b2c3d4-e5f6-...
-```
-
-If the prefix matches multiple sessions, you'll get an error asking you to be more specific.
-
-## Sessions in the SDK
-
-```typescript
-import Superserve from "superserve"
-
-const client = new Superserve({ apiKey: "your-api-key" })
-const session = await client.createSession("my-agent")
-
-const r1 = await session.run("What files handle authentication?")
-const r2 = await session.run("Add rate limiting to the login endpoint")
-
-await session.end()
-```
-
-The session maintains context between run() and stream() calls.
 
 ---
 
 # Authentication
 
-Superserve uses the OAuth 2.0 Device Authorization Grant (RFC 8628) for CLI authentication. No passwords are entered in the terminal - you authorize in your browser.
+All API requests require an API key passed in the X-API-Key header. Base URL: https://api.agentbox.dev/v1
 
-## Log in via browser
+## Get an API key
+
+Generate from the Superserve Console (https://console.superserve.ai). Keys are prefixed with ss_.
+
+## CLI authentication
 
 ```bash
 superserve login
-```
-
-The CLI will:
-1. Display a short confirmation code
-2. Open console.superserve.ai/device in your browser
-3. Wait for you to authorize
-
-Once you approve in the browser, the CLI is authenticated. Credentials are stored locally at ~/.superserve/auth.json with owner-only permissions (0600).
-
-## Log in with an API key
-
-For CI/CD pipelines or environments without a browser, use an API key directly:
-
-```bash
-superserve login --api-key your-api-key
-```
-
-API keys can be generated from the Superserve Console (https://console.superserve.ai).
-
-## Log out
-
-```bash
+superserve login --api-key ss_your_api_key
 superserve logout
 ```
 
-This removes ~/.superserve/auth.json.
+Credentials stored at ~/.superserve/auth.json (0600 permissions).
 
-## How it works
+## Environment variable
 
-1. CLI requests a device code from the Superserve API
-2. CLI opens your browser to console.superserve.ai/device with the code
-3. You log in and approve the CLI
-4. CLI polls until authorized, then saves the token locally
+```bash
+export SUPERSERVE_API_KEY=ss_your_api_key
+```
 
-The device code expires after 15 minutes. If you don't authorize in time, run `superserve login` again.
+The CLI and SDKs check this variable automatically.
+
+## SDK authentication
+
+TypeScript:
+```typescript
+import { Superserve } from "@superserve/sdk"
+const client = new Superserve({ apiKey: "ss_your_api_key" })
+```
+
+Python:
+```python
+from superserve import Superserve
+client = Superserve(api_key="ss_your_api_key")
+```
+
+Both SDKs fall back to SUPERSERVE_API_KEY if no apiKey/api_key is provided.
+
+## Direct API usage
+
+```bash
+curl https://api.agentbox.dev/v1/vms -H "X-API-Key: ss_your_api_key"
+```
+
+## Key precedence
+
+1. Explicit apiKey parameter or --api-key flag
+2. SUPERSERVE_API_KEY environment variable
+3. Stored credentials at ~/.superserve/auth.json
+
+---
+
+# VMs
+
+Superserve VMs are Firecracker micro-VMs with hardware-level isolation and sub-200ms boot times. Each VM gets its own kernel, filesystem, and network stack.
+
+## Creating a VM
+
+```bash
+superserve vm create --name my-sandbox --image ubuntu-22.04 --vcpu 2 --memory 512
+```
+
+```typescript
+const vm = await client.vms.create({ name: "my-sandbox", image: "ubuntu-22.04", vcpu: 2, memory: 512 })
+```
+
+```python
+vm = client.vms.create(name="my-sandbox", image="ubuntu-22.04", vcpu=2, memory=512)
+```
+
+## State machine
+
+CREATING -> RUNNING -> STOPPED -> DEAD
+RUNNING -> SLEEPING -> RUNNING (wake)
+STOPPED -> DEAD
+
+### Stopping vs sleeping
+
+- Stop: shuts down VM process, filesystem preserved, in-memory state lost
+- Sleep: suspends entire VM to disk including memory, wake restores exact state
+
+## Managing VMs
+
+```bash
+superserve vm list [--status RUNNING]
+superserve vm get <vm_id>
+superserve vm stop <vm_id>
+superserve vm start <vm_id>
+superserve vm sleep <vm_id>
+superserve vm wake <vm_id>
+superserve vm delete <vm_id> [--force]
+```
+
+## Command execution
+
+```bash
+superserve exec <vm_id> "command" [--stream] [--timeout 60]
+```
+
+```typescript
+const result = await client.exec("vm_id", { command: "echo hello" })
+```
+
+```python
+result = client.exec("vm_id", command="echo hello")
+```
+
+## File operations
+
+```bash
+superserve files upload <vm_id> <local> <remote>
+superserve files download <vm_id> <remote> [local]
+```
+
+```typescript
+await client.files.upload("vm_id", "/remote/path", buffer)
+const content = await client.files.download("vm_id", "/remote/path")
+```
+
+```python
+client.files.upload("vm_id", "/remote/path", data)
+content = client.files.download("vm_id", "/remote/path")
+```
+
+## SSH access
+
+```bash
+superserve ssh <vm_id>
+```
+
+---
+
+# Checkpoints
+
+Checkpoints capture the full state of a VM - filesystem, memory, and running processes.
+
+## Creating a checkpoint
+
+```bash
+superserve checkpoint create <vm_id> --name baseline
+```
+
+```typescript
+const cp = await client.checkpoints.create("vm_id", { name: "baseline" })
+```
+
+```python
+cp = client.checkpoints.create("vm_id", name="baseline")
+```
+
+## Listing checkpoints
+
+```bash
+superserve checkpoint list <vm_id>
+```
+
+## Rollback
+
+Restore a VM to a previous checkpoint. Everything after the checkpoint is discarded.
+
+```bash
+superserve rollback <vm_id> --name baseline
+superserve rollback <vm_id> --checkpoint <cp_id>
+superserve rollback <vm_id> --minutes-ago 30
+```
+
+```typescript
+await client.rollback("vm_id", { checkpointId: "cp_id" })
+await client.rollback("vm_id", { name: "baseline" })
+await client.rollback("vm_id", { minutesAgo: 30 })
+```
+
+```python
+client.rollback("vm_id", checkpoint_id="cp_id")
+client.rollback("vm_id", name="baseline")
+client.rollback("vm_id", minutes_ago=30)
+```
+
+Warning: Rollback is destructive. All changes after the checkpoint are lost.
+
+## Fork
+
+Create independent copies of a VM.
+
+```bash
+superserve fork <vm_id> --count 3
+superserve fork <vm_id> --from-checkpoint <cp_id> --count 5
+```
+
+```typescript
+const forks = await client.fork("vm_id", { count: 3 })
+const forks = await client.fork("vm_id", { count: 5, fromCheckpoint: "cp_id" })
+```
+
+```python
+forks = client.fork("vm_id", count=3)
+forks = client.fork("vm_id", count=5, from_checkpoint="cp_id")
+```
+
+### Fork tree
+
+```bash
+superserve fork tree <vm_id>
+```
+
+## Deleting checkpoints
+
+```bash
+superserve checkpoint delete <vm_id> <cp_id> [--force]
+```
+
+Deleting a checkpoint does not affect the VM or forks created from it.
+
+## Patterns
+
+### Checkpoint before risky operations
+```python
+cp = client.checkpoints.create(vm.id, name="pre-experiment")
+result = client.exec(vm.id, command="python3 /app/untrusted.py")
+if result.exit_code != 0:
+    client.rollback(vm.id, checkpoint_id=cp.id)
+```
+
+### Parallel experiments with fork
+```python
+vm = client.vms.create(name="base", image="ubuntu-22.04")
+client.exec(vm.id, command="apt-get update && apt-get install -y python3")
+forks = client.fork(vm.id, count=3)
+for fork, config in zip(forks, configs):
+    client.files.upload(fork.id, "/app/config.json", config)
+    client.exec(fork.id, command="python3 /app/train.py")
+```
 
 ---
 
 # Troubleshooting
 
-## Agent doesn't respond
-
-Cause: API keys not set. The agent starts but can't reach the model provider.
-
-Fix: Set the required secret for your agent:
-
+## VM stuck in CREATING
+Check status and delete if needed:
 ```bash
-superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-...
-# or
-superserve secrets set my-agent OPENAI_API_KEY=sk-...
+superserve vm get <vm_id>
+superserve vm delete <vm_id> --force
 ```
 
-Verify secrets are set:
+## Command execution times out
+1. Check VM is RUNNING
+2. Start/wake if needed
+3. Increase timeout: `superserve exec <vm_id> "cmd" --timeout 600`
 
-```bash
-superserve secrets list my-agent
-```
+## File upload fails
+1. Ensure VM is RUNNING
+2. Create parent directory: `superserve exec <vm_id> "mkdir -p /app"`
 
-## Agent doesn't respond (keys are set)
+## Rollback doesn't restore expected state
+List checkpoints to verify: `superserve checkpoint list <vm_id>`
 
-Cause: The agent isn't reading from stdin or writing to stdout correctly.
+## Authentication fails
+1. Check SUPERSERVE_API_KEY is set
+2. Re-authenticate: `superserve login --api-key ss_your_key`
+3. Generate new key from console
 
-Fix: Make sure your agent follows the stdin/stdout pattern:
+## SSH connection refused
+Check VM is RUNNING. If just started, wait a moment for SSH daemon.
 
-```python
-while True:
-    user_input = input()       # reads from stdin
-    print("response here")     # writes to stdout
-```
-
-```typescript
-import { createInterface } from "readline"
-const rl = createInterface({ input: process.stdin })
-rl.on("line", (line) => {
-  console.log("response here")
-})
-```
-
-Common mistakes:
-- Using sys.stderr or console.error() instead of stdout
-- Forgetting to flush output (Python: print() flushes by default, but sys.stdout.write() doesn't)
-- Agent exits before reading input
-
-## Response arrives all at once instead of streaming
-
-Cause: Your agent buffers the entire response before printing.
-
-Fix: Print each chunk as it arrives, not after the full response is assembled:
-
-```python
-# Good - prints chunks as they stream
-for chunk in stream_response():
-    print(chunk, end="", flush=True)
-```
-
-Superserve streams stdout to the client in real time.
-
-## Agent takes too long to respond
-
-Possible causes:
-- Large model context - reduce system prompt size or conversation history
-- Slow model - try a faster model (e.g., claude-haiku-4-5 or gpt-4o-mini)
-- Tool execution - code execution and HTTP requests add latency
-
-Debug with single-shot mode:
-
-```bash
-superserve run my-agent "Hello" --single
-```
-
-## Dependencies fail to install
-
-Cause: Large or slow-to-install packages timing out during sandbox setup.
-
-Fix:
-- Keep requirements.txt or package.json minimal
-- Avoid large unused packages (torch, tensorflow)
-- Pin versions to avoid resolution delays
-
-Dependencies are cached across deploys. The first deploy is the slowest.
-
-## Still stuck?
-
-Reach out at engineering@superserve.ai or open an issue on GitHub (https://github.com/superserve-ai/superserve/issues).
+Contact: engineering@superserve.ai or GitHub issues (https://github.com/superserve-ai/superserve/issues)
 
 ---
 
-# SDK
+# CLI Reference
 
-TypeScript client and React hooks for deployed agents.
+Install: `bun add -g @superserve/cli`
+
+## Authentication
+```bash
+superserve login [--api-key <key>]
+superserve logout
+```
+
+## VM Management
+```bash
+superserve vm create --name <n> --image <img> [--vcpu <n>] [--memory <mb>]
+superserve vm list [--status <status>]
+superserve vm get <vm_id>
+superserve vm delete <vm_id> [--force]
+superserve vm stop <vm_id>
+superserve vm start <vm_id>
+superserve vm sleep <vm_id>
+superserve vm wake <vm_id>
+```
+
+## Command Execution
+```bash
+superserve exec <vm_id> <command> [--timeout <seconds>] [--stream]
+superserve ssh <vm_id>
+```
+
+## File Operations
+```bash
+superserve files upload <vm_id> <local_path> <remote_path>
+superserve files download <vm_id> <remote_path> [local_path]
+```
+
+## Checkpoints
+```bash
+superserve checkpoint create <vm_id> --name <name>
+superserve checkpoint list <vm_id>
+superserve checkpoint delete <vm_id> <cp_id> [--force]
+```
+
+## Rollback and Fork
+```bash
+superserve rollback <vm_id> [--checkpoint <id>] [--name <name>] [--minutes-ago <n>]
+superserve fork <vm_id> [--count <n>] [--from-checkpoint <id>]
+superserve fork tree <vm_id>
+```
+
+---
+
+# TypeScript SDK
 
 ```bash
-npm install @superserve/sdk
+bun add @superserve/sdk
 ```
 
 ```typescript
-import Superserve from "@superserve/sdk"
-const client = new Superserve({ apiKey: "your-api-key" })
+import { Superserve } from "@superserve/sdk"
+const client = new Superserve({ apiKey: "ss_your_api_key" })
 ```
 
-## Run
-
-Send a message, get a response. Creates a session, sends the message, tears down.
-
+## VMs
 ```typescript
-const result = await client.run("code-reviewer", {
-  message: "Review the error handling in src/auth.ts",
-})
-
-console.log(result.text)
-console.log(result.duration)
-console.log(result.toolCalls)
+const vm = await client.vms.create({ name: "test", image: "ubuntu-22.04" })
+const vms = await client.vms.list()
+const vm = await client.vms.get("vm_id")
+await client.vms.stop("vm_id")
+await client.vms.start("vm_id")
+await client.vms.sleep("vm_id")
+await client.vms.wake("vm_id")
+await client.vms.delete("vm_id")
 ```
 
-RunResult fields: text (string), toolCalls (ToolCall[]), duration (number), finishReason (string), maxTurnsReached (boolean).
+VM fields: id (string), name (string), image (string), status (string), vcpu (number), memory (number), createdAt (string).
 
-## Stream
-
-Stream tokens as they arrive.
-
+## Exec
 ```typescript
-const stream = client.stream("code-reviewer", {
-  message: "Refactor the database connection pool",
-  onText: (text) => process.stdout.write(text),
-  onToolStart: (tool) => console.log(`→ ${tool.name}`),
-  onToolEnd: (tool) => console.log(`✓ done in ${tool.duration}ms`),
-  onFinish: (result) => console.log(`\nDone in ${result.duration}ms`),
-})
-
-await stream.result
+const result = await client.exec("vm_id", { command: "echo hello" })
+// result: { stdout, stderr, exitCode }
 ```
 
-Or iterate directly:
+ExecOptions: command (string), timeout (number?), stream (boolean?), onStdout ((chunk) => void), onStderr ((chunk) => void).
 
+## Files
 ```typescript
-const stream = client.stream("code-reviewer", {
-  message: "Write tests for the auth module",
-})
-
-for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk)
-}
+await client.files.upload("vm_id", "/remote/path", buffer)
+const content = await client.files.download("vm_id", "/remote/path")
 ```
 
-AgentStream: textStream (AsyncIterable<string>), result (Promise<RunResult>), abort (() => void).
-
-## Sessions
-
-Multi-turn conversations. The agent's workspace and memory persist between messages.
-
+## Checkpoints
 ```typescript
-const session = await client.createSession("code-reviewer")
-const r1 = await session.run("What files handle authentication?")
-const r2 = await session.run("Add rate limiting to the login endpoint")
-const r3 = session.stream("Now write tests for the rate limiter")
-for await (const chunk of r3.textStream) {
-  process.stdout.write(chunk)
-}
-await session.end()
+const cp = await client.checkpoints.create("vm_id", { name: "baseline" })
+const checkpoints = await client.checkpoints.list("vm_id")
+await client.checkpoints.delete("vm_id", "cp_id")
 ```
 
-Session methods: id (string), run(message) (Promise<RunResult>), stream(message) (AgentStream), end() (Promise<void>).
-
-## Agents
-
+## Rollback
 ```typescript
-const agents = await client.agents.list()
-const agent = await client.agents.get("code-reviewer")
+await client.rollback("vm_id", { checkpointId: "cp_id" })
+await client.rollback("vm_id", { name: "baseline" })
+await client.rollback("vm_id", { minutesAgo: 30 })
 ```
 
-## React
-
-Build chat interfaces with useAgent. Manages messages, streaming, and sessions automatically.
-
-```bash
-npm install @superserve/sdk react
+## Fork
+```typescript
+const forks = await client.fork("vm_id", { count: 3 })
+const forks = await client.fork("vm_id", { count: 2, fromCheckpoint: "cp_id" })
 ```
-
-```tsx
-import { SuperserveProvider, useAgent } from "@superserve/sdk/react"
-
-function App() {
-  return (
-    <SuperserveProvider apiKey="your-api-key">
-      <Chat />
-    </SuperserveProvider>
-  )
-}
-
-function Chat() {
-  const { messages, sendMessage, isStreaming } = useAgent({
-    agent: "code-reviewer",
-  })
-
-  return (
-    <div>
-      {messages.map((msg) => (
-        <div key={msg.id}>
-          <strong>{msg.role}:</strong> {msg.content}
-        </div>
-      ))}
-      {isStreaming && <p>Thinking...</p>}
-      <form onSubmit={(e) => {
-        e.preventDefault()
-        const input = e.currentTarget.elements.namedItem("msg") as HTMLInputElement
-        sendMessage(input.value)
-        input.value = ""
-      }}>
-        <input name="msg" placeholder="Send a message..." />
-      </form>
-    </div>
-  )
-}
-```
-
-useAgent options: agent (string), apiKey (string?), baseUrl (string?), initialMessages (Message[]?), onFinish ((message) => void), onError ((error) => void).
-
-useAgent return: messages (Message[]), sendMessage ((text: string) => void), status (AgentStatus), isStreaming (boolean), error (Error | null), stop (() => void), reset (() => void).
 
 ## Configuration
-
 ```typescript
 const client = new Superserve({
-  apiKey: "your-api-key",
-  baseUrl: "https://...",
+  apiKey: "ss_your_api_key",
+  baseUrl: "https://api.agentbox.dev/v1",
   timeout: 30000,
 })
 ```
 
 ## Errors
-
 ```typescript
 import { APIError, SuperserveError } from "@superserve/sdk"
-
-try {
-  await client.run("my-agent", { message: "Hello" })
-} catch (e) {
-  if (e instanceof AuthenticationError) { /* bad API key */ }
-  if (e instanceof NotFoundError) { /* agent doesn't exist */ }
-  if (e instanceof SuperserveError) { console.error(e.status, e.message) }
-}
 ```
+APIError status codes: 401 (invalid key), 404 (not found), 409 (incompatible state), 422 (invalid params).
+
+Types: SuperserveOptions, VM, CreateVMOptions, ExecOptions, ExecResult, Checkpoint, RollbackOptions, ForkOptions.
 
 ---
 
-# CLI
+# Python SDK
 
 ```bash
-curl -fsSL https://superserve.ai/install | sh
+pip install superserve
 ```
-
-## superserve login
-
-Authenticate via browser. Credentials stored at ~/.superserve/auth.json.
-
-```bash
-superserve login
-superserve logout
-superserve login --api-key your-api-key
-```
-
-## superserve deploy
-
-Package and deploy your agent.
-
-```bash
-superserve deploy [ENTRYPOINT] [--name NAME] [--port PORT] [--dir PATH] [--json]
-```
-
-Flags: ENTRYPOINT (script to run), --name/-n (agent name), --port/-p (HTTP proxy mode), --dir (project directory), --yes/-y (skip confirmation), --json (output as JSON).
-
-Supported entrypoints: .py, .ts, .tsx, .js, .jsx, .mjs, .cjs
-
-## superserve init
-
-Generate a superserve.yaml config file.
-
-```bash
-superserve init [--name NAME]
-```
-
-## superserve run
-
-Start a conversation with a deployed agent.
-
-```bash
-superserve run AGENT [PROMPT] [--single] [--json]
-```
-
-Flags: PROMPT (initial message), --single (exit after one response), --json (raw SSE events).
-
-```bash
-superserve run my-agent                                    # Interactive
-superserve run my-agent "Explain this stack trace" --single  # One-shot
-superserve run my-agent "Summarize this file" --single --json  # Pipe output
-```
-
-## superserve secrets
-
-Encrypted environment variables. Values are never returned by the API.
-
-```bash
-superserve secrets set AGENT KEY=VALUE [KEY=VALUE ...]
-superserve secrets list AGENT
-superserve secrets delete AGENT KEY [--yes]
-```
-
-## superserve agents
-
-```bash
-superserve agents list [--status STATUS] [--json]
-superserve agents get NAME [--json]
-superserve agents delete NAME [--yes]
-```
-
-## superserve sessions
-
-```bash
-superserve sessions list [AGENT] [--status STATUS] [--json]
-superserve sessions get SESSION_ID [--json]
-superserve sessions resume SESSION_ID
-superserve sessions end SESSION_ID
-```
-
-Session IDs accept short prefixes - a1b2 matches a1b2c3d4-e5f6-...
-
----
-
-# Framework: Claude Agent SDK
-
-Deploy a Claude agent with tool use and conversation memory.
-
-The Claude Agent SDK gives you tool use, conversation memory, and streaming out of the box.
-
-Python:
 
 ```python
-import asyncio
-from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, TextBlock
+from superserve import Superserve
+client = Superserve(api_key="ss_your_api_key")
+```
 
-options = ClaudeAgentOptions(
-    model="sonnet",
-    system_prompt="You are a helpful assistant.",
-    permission_mode="bypassPermissions",
-    continue_conversation=True,
+Requirements: Python 3.12+, zero runtime dependencies.
+
+## VMs
+```python
+vm = client.vms.create(name="test", image="ubuntu-22.04")
+vms = client.vms.list()
+vm = client.vms.get("vm_id")
+client.vms.stop("vm_id")
+client.vms.start("vm_id")
+client.vms.sleep("vm_id")
+client.vms.wake("vm_id")
+client.vms.delete("vm_id")
+```
+
+VM fields: id (str), name (str), image (str), status (str), vcpu (int), memory (int), created_at (str).
+
+## Exec
+```python
+result = client.exec("vm_id", command="echo hello")
+# result: stdout, stderr, exit_code
+```
+
+## Files
+```python
+client.files.upload("vm_id", "/remote/path", data)
+content = client.files.download("vm_id", "/remote/path")
+```
+
+## Checkpoints
+```python
+cp = client.checkpoints.create("vm_id", name="baseline")
+checkpoints = client.checkpoints.list("vm_id")
+client.checkpoints.delete("vm_id", "cp_id")
+```
+
+## Rollback
+```python
+client.rollback("vm_id", checkpoint_id="cp_id")
+client.rollback("vm_id", name="baseline")
+client.rollback("vm_id", minutes_ago=30)
+```
+
+## Fork
+```python
+forks = client.fork("vm_id", count=3)
+forks = client.fork("vm_id", count=2, from_checkpoint="cp_id")
+```
+
+## Configuration
+```python
+client = Superserve(
+    api_key="ss_your_api_key",
+    base_url="https://api.agentbox.dev/v1",
+    timeout=30,
 )
-
-async def main():
-    async with ClaudeSDKClient(options=options) as client:
-        while True:
-            try:
-                user_input = input()
-            except EOFError:
-                break
-            await client.query(prompt=user_input)
-            async for msg in client.receive_response():
-                for block in getattr(msg, "content", []):
-                    if isinstance(block, TextBlock):
-                        print(block.text)
-
-asyncio.run(main())
 ```
 
-TypeScript:
-
-```typescript
-import { query } from "@anthropic-ai/claude-agent-sdk"
-import { createInterface } from "readline"
-
-const rl = createInterface({ input: process.stdin })
-rl.on("line", async (line) => {
-  for await (const message of query({
-    prompt: line,
-    options: {
-      model: "claude-sonnet-4-5",
-      systemPrompt: "You are a helpful assistant.",
-      continue: true,
-    },
-  })) {
-    if ("result" in message) {
-      console.log(message.result)
-    }
-  }
-})
-```
-
-requirements.txt: claude-agent-sdk
-package.json: { "dependencies": { "@anthropic-ai/claude-agent-sdk": "latest" } }
-
-```bash
-superserve deploy agent.py     # or agent.ts
-superserve secrets set my-agent ANTHROPIC_API_KEY=sk-ant-...
-superserve run my-agent
-```
-
-The `continue_conversation` option (Python) or `continue` option (TypeScript) enables conversation memory across turns.
-
----
-
-# Framework: OpenAI Agents SDK
-
-Deploy an OpenAI agent with handoffs and guardrails.
-
-The OpenAI Agents SDK provides a lightweight framework for building agents with tool use, handoffs between agents, and input/output guardrails.
-
-Python:
-
+## Errors
 ```python
-from agents import Agent, Runner
-
-agent = Agent(
-    name="assistant",
-    instructions="You are a helpful assistant.",
-)
-
-while True:
-    try:
-        user_input = input()
-    except EOFError:
-        break
-    result = Runner.run_sync(agent, user_input)
-    print(result.final_output)
+from superserve import APIError, SuperserveError
 ```
-
-TypeScript:
-
-```typescript
-import { Agent, run } from "@openai/agents"
-import { createInterface } from "readline"
-
-const agent = new Agent({
-  name: "assistant",
-  instructions: "You are a helpful assistant.",
-})
-
-const rl = createInterface({ input: process.stdin })
-rl.on("line", async (line) => {
-  const result = await run(agent, line)
-  console.log(result.finalOutput)
-})
-```
-
-requirements.txt: openai-agents
-package.json: { "dependencies": { "@openai/agents": "latest" } }
-
-```bash
-superserve deploy agent.py     # or agent.ts
-superserve secrets set my-agent OPENAI_API_KEY=sk-...
-superserve run my-agent
-```
-
-Runner.run_sync blocks until the full response is ready. For streaming, use Runner.run_streamed.
-
----
-
-# Framework: LangChain
-
-Deploy a LangChain agent with chains and retrieval.
-
-LangChain (Python and TypeScript) provides chains, agents, and retrieval pipelines for building complex LLM applications.
-
-Python:
-
-```python
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
-
-llm = ChatOpenAI(model="gpt-4o")
-system = SystemMessage(content="You are a helpful assistant.")
-
-while True:
-    try:
-        user_input = input()
-    except EOFError:
-        break
-    response = llm.invoke([system, HumanMessage(content=user_input)])
-    print(response.content)
-```
-
-TypeScript:
-
-```typescript
-import { HumanMessage, SystemMessage } from "@langchain/core/messages"
-import { ChatOpenAI } from "@langchain/openai"
-import { createInterface } from "readline"
-
-const llm = new ChatOpenAI({ model: "gpt-4o" })
-const system = new SystemMessage("You are a helpful assistant.")
-
-const rl = createInterface({ input: process.stdin })
-rl.on("line", async (line) => {
-  const response = await llm.invoke([system, new HumanMessage(line)])
-  console.log(response.content)
-})
-```
-
-requirements.txt: langchain-openai
-package.json: { "dependencies": { "@langchain/core": "latest", "@langchain/openai": "latest" } }
-
-```bash
-superserve deploy agent.py     # or agent.ts
-superserve secrets set my-agent OPENAI_API_KEY=sk-...
-superserve run my-agent
-```
-
-This example is stateless. For multi-turn memory, add ChatMessageHistory.
-
----
-
-# Framework: Pydantic AI
-
-Deploy a type-safe agent with structured outputs.
-
-Pydantic AI brings type-safe, structured outputs to agent development.
-
-```python
-from pydantic_ai import Agent
-
-agent = Agent("openai:gpt-4o", system_prompt="You are a helpful assistant.")
-
-while True:
-    try:
-        user_input = input()
-    except EOFError:
-        break
-    result = agent.run_sync(user_input)
-    print(result.output)
-```
-
-requirements.txt: pydantic-ai
-
-```bash
-superserve deploy agent.py
-superserve secrets set my-agent OPENAI_API_KEY=sk-...
-superserve run my-agent
-```
-
-Pydantic AI's result_type parameter lets you get structured, validated JSON instead of plain text.
-
----
-
-# Framework: Agno
-
-Deploy a lightweight Python agent.
-
-Agno is a lightweight, model-agnostic Python framework for building agents.
-
-```python
-from agno.agent import Agent
-from agno.models.openai import OpenAIChat
-
-agent = Agent(
-    model=OpenAIChat(id="gpt-4o"),
-    instructions="You are a helpful assistant.",
-)
-
-while True:
-    try:
-        user_input = input()
-    except EOFError:
-        break
-    response = agent.run(user_input)
-    print(response.content)
-```
-
-requirements.txt: agno, openai
-
-```bash
-superserve deploy agent.py
-superserve secrets set my-agent OPENAI_API_KEY=sk-...
-superserve run my-agent
-```
-
-Agno is model-agnostic - swap OpenAIChat for AnthropicChat, GroqChat, or other providers without changing your agent logic.
-
----
-
-# Framework: Mastra
-
-Deploy a TypeScript-first agent with AI SDK.
-
-Mastra is a TypeScript-first agent framework built on the Vercel AI SDK.
-
-```typescript
-import { Agent } from "@mastra/core/agent"
-import { createInterface } from "readline"
-
-const agent = new Agent({
-  name: "assistant",
-  instructions: "You are a helpful assistant.",
-  model: "openai/gpt-4o",
-})
-
-const rl = createInterface({ input: process.stdin })
-rl.on("line", async (line) => {
-  const result = await agent.generate(line)
-  console.log(result.text)
-})
-```
-
-package.json: { "dependencies": { "@mastra/core": "latest" } }
-
-```bash
-superserve deploy agent.ts
-superserve secrets set my-agent OPENAI_API_KEY=sk-...
-superserve run my-agent
-```
-
-TypeScript agents are run with npx tsx automatically - no build step needed.
+APIError status codes: 401 (invalid key), 404 (not found), 409 (incompatible state), 422 (invalid params).

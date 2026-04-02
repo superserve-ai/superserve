@@ -18,8 +18,8 @@ export class PlatformAPIError extends Error {
 export const ERROR_HINTS: Record<number, string> = {
   401: "Run `superserve login` to authenticate.",
   403: "You don't have permission for this action.",
-  404: "Run `superserve agents list` to see your agents.",
-  409: "Use a different name or delete the existing resource first.",
+  404: "Run `superserve vm list` to see your VMs.",
+  409: "The resource is in a state that conflicts with this operation.",
   422: "Check your input and try again.",
   429: "Too many requests. Please wait and try again.",
   500: "This is a server issue. Please try again later or contact support@superserve.ai",

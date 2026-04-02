@@ -1,33 +1,17 @@
-import type { APIRunEvent } from "./types"
-
-const KNOWN_EVENT_TYPES = new Set([
-  "message.delta",
-  "tool.start",
-  "tool.end",
-  "run.completed",
-  "run.failed",
-  "run.cancelled",
-  "status",
-  "run.started",
-  "heartbeat",
-])
-
 /**
- * Parses an SSE response stream into typed run events.
+ * Generic SSE parser. Yields raw {data} objects parsed from SSE `data:` lines.
  * Works in all JS runtimes (Node, Browser, Edge workers).
  * @internal
  */
-export async function* parseSSEStream(
+export async function* parseSSEStream<T = unknown>(
   response: Response,
-): AsyncGenerator<APIRunEvent> {
+): AsyncGenerator<T> {
   if (!response.body) return
 
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
 
   let buffer = ""
-  let currentEventType: string | null = null
-  let dataLines: string[] = []
 
   try {
     while (true) {
@@ -41,48 +25,27 @@ export async function* parseSSEStream(
         const line = buffer.slice(0, newlineIdx).replace(/\r$/, "")
         buffer = buffer.slice(newlineIdx + 1)
 
-        if (!line) {
-          // Empty line = end of SSE event
-          if (currentEventType && dataLines.length > 0) {
-            const event = parseEvent(currentEventType, dataLines)
-            if (event) yield event
-          }
-          currentEventType = null
-          dataLines = []
+        if (!line || !line.startsWith("data: ")) {
           continue
         }
 
-        if (line.startsWith("event: ")) {
-          currentEventType = line.slice(7)
-        } else if (line.startsWith("data: ")) {
-          dataLines.push(line.slice(6))
+        try {
+          yield JSON.parse(line.slice(6)) as T
+        } catch {
+          // Skip malformed events
         }
       }
     }
 
-    // Handle any remaining buffered event
-    if (currentEventType && dataLines.length > 0) {
-      const event = parseEvent(currentEventType, dataLines)
-      if (event) yield event
+    // Handle remaining buffer
+    if (buffer.startsWith("data: ")) {
+      try {
+        yield JSON.parse(buffer.slice(6)) as T
+      } catch {
+        // Skip malformed
+      }
     }
   } finally {
     reader.releaseLock()
   }
-}
-
-function parseEvent(
-  eventType: string,
-  dataLines: string[],
-): APIRunEvent | null {
-  if (!KNOWN_EVENT_TYPES.has(eventType)) return null
-
-  const fullData = dataLines.join("\n")
-  let parsed: Record<string, unknown>
-  try {
-    parsed = JSON.parse(fullData)
-  } catch {
-    parsed = { raw: fullData }
-  }
-
-  return { type: eventType, data: parsed } as APIRunEvent
 }

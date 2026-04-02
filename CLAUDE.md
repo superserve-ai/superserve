@@ -4,16 +4,14 @@ Guidelines for working with the Superserve monorepo.
 
 ## What This Repository Is
 
-Superserve is a CLI and SDK for deploying AI agents to sandboxed cloud containers. Users write an agent (typically using the Claude Agent SDK), point `superserve deploy` at it, and get a hosted agent they can interact with via `superserve run`.
+Superserve is a sandbox and VM platform built on Firecracker micro-VMs. It provides a CLI, TypeScript SDK, and Python SDK for creating isolated cloud VMs with checkpoint, rollback, and fork primitives. The API is at `api.agentbox.dev/v1`.
 
-This repo is a monorepo containing the CLI, TypeScript SDK, and playground app. The platform API and dashboard are being migrated here from a separate repo.
+This repo is a monorepo containing the CLI, TypeScript SDK, Python SDK, and documentation.
 
 ## Monorepo Structure
 
 ```
 superserve/
-├── apps/
-│   └── playground/              # React + Vite playground app
 ├── packages/
 │   ├── cli/                     # TypeScript CLI (@superserve/cli on npm)
 │   ├── python-sdk/              # Python SDK (superserve on PyPI)
@@ -33,25 +31,20 @@ superserve/
 
 ### TypeScript CLI (`packages/cli/`)
 
-Built with Bun + Commander. Entry point: `src/index.ts`.
+Built with Bun + Commander. Entry point: `src/index.ts`. Provides commands for VM lifecycle management (`vm create`, `vm exec`, `vm checkpoint`, `vm fork`), file operations, and authentication.
 
 ### TypeScript SDK (`packages/sdk/`)
 
-Published as `@superserve/sdk` with dual CJS/ESM output via tsup. Includes React hooks at `@superserve/sdk/react`.
-
-### Playground (`apps/playground/`)
-
-React + Vite app for interacting with agents. Depends on `@superserve/sdk` via workspace reference.
+Published as `@superserve/sdk` with dual CJS/ESM output via tsup. Exposes the `Superserve` client with namespaced APIs: `vms`, `files`, and `checkpoints`.
 
 ### Python SDK (`packages/python-sdk/`)
 
-Published as `superserve` on PyPI. Provides the `App`, `Session`, and `Stream` classes for building agents in Python. Zero runtime dependencies.
+Published as `superserve` on PyPI. httpx-based client SDK providing the `Superserve` client with `vms`, `files`, and `checkpoints` namespaces.
 
 ## Key Patterns
 
-- **Agent IDs**: Prefixed with `agt_`, run IDs with `run_`, session IDs with `ses_`.
-- **SSE streaming**: Agent responses stream via Server-Sent Events. Events include `message`, `status`, `error`, `done`.
-- **Config file**: `superserve.yaml` defines agent name, start command, secrets, and ignore patterns.
+- **VM IDs**: Prefixed with `vm_`, checkpoint IDs with `cp_`.
+- **SSE streaming**: Command execution streams output via Server-Sent Events. Events include `stdout`, `stderr`, `exit`, `error`.
 - **Shared configs**: TypeScript projects extend from `@superserve/typescript-config` presets. Biome projects extend from `@superserve/biome-config`.
 
 ## Development
@@ -77,7 +70,7 @@ bun add -d @types/node --filter @superserve/sdk
 # Never cd into a package and run bun add (creates a conflicting lockfile)
 
 # Testing the CLI locally (no dev server, run directly)
-bun packages/cli/src/index.ts deploy --help
+bun packages/cli/src/index.ts vm --help
 
 # Python SDK
 uv run pytest packages/python-sdk/tests/           # Run SDK tests
@@ -108,7 +101,6 @@ bunx turbo run lint --filter=@superserve/python-sdk
 ## Branding
 
 - CLI tool is `superserve`, platform is `Superserve`
-- Never use "Claude" standalone — use "Claude Agent" or "Claude Agent SDK"
 - Internal infra names (e.g. `claude-runtime-template`) are fine but should migrate over time
 
 ## Git

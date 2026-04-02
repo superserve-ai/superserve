@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "superserve"
-version = "0.3.0"
-description = "Python SDK for building agents on Superserve"
+version = "0.4.0"
+description = "Python SDK for Superserve cloud micro-VMs"
 license = { file = "../../LICENSE" }
 readme = "../../README.md"
-requires-python = ">=3.12"
-keywords = ["agents", "ai", "llm", "sdk", "superserve"]
-dependencies = []
+requires-python = ">=3.10"
+keywords = ["vm", "sandbox", "sdk", "superserve", "cloud"]
+dependencies = ["httpx>=0.27"]
 
 [project.urls]
 Homepage = "https://superserve.ai"

@@ -45,22 +45,15 @@
     "groups": [
       {
         "group": "Getting Started",
-        "pages": ["introduction", "quickstart", "deploy", "sessions", "authentication", "troubleshooting"]
+        "pages": ["introduction", "quickstart", "authentication", "troubleshooting"]
       },
       {
-        "group": "Frameworks",
-        "pages": [
-          "frameworks/claude-agent-sdk",
-          "frameworks/openai-agents-sdk",
-          "frameworks/pydantic-ai",
-          "frameworks/mastra",
-          "frameworks/langchain",
-          "frameworks/agno"
-        ]
+        "group": "Concepts",
+        "pages": ["vms", "checkpoints"]
       },
       {
         "group": "Reference",
-        "pages": ["sdk", "cli"]
+        "pages": ["cli", "sdk", "python-sdk"]
       }
     ],
     "global": {
@@ -85,7 +78,7 @@
   },
   "integrations": {
     "posthog": {
-      "apiKey": "phc_gjpDKKKQJAnkxkqLrPGrAhoariKsaHNuTpI5rVhkYre",
+      "apiKey": "phc_gjpDKKQJAnkxkqLrPGrAhoariKsaHNuTpI5rVhkYre",
       "apiHost": "https://us.i.posthog.com"
     }
   }

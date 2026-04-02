@@ -1,14 +1,14 @@
 import { Command } from "commander"
 import { resetIdentity, track } from "../analytics"
-import { clearCredentials, getCredentials } from "../config/auth"
+import { clearCredentials, getApiKey } from "../config/auth"
 import { withErrorHandler } from "../errors"
 import { log } from "../utils/logger"
 
 export const logout = new Command("logout")
-  .description("Log out from Superserve Cloud")
+  .description("Log out from Superserve")
   .action(
     withErrorHandler(async () => {
-      if (!getCredentials()) {
+      if (!getApiKey()) {
         console.log("Not logged in.")
         return
       }

@@ -1,0 +1,245 @@
+---
+title: "Python SDK"
+description: "Python client for managing VMs, executing commands, and working with checkpoints"
+---
+
+Manage Superserve VMs programmatically from Python.
+
+```bash
+pip install superserve
+```
+
+```python
+from superserve import Superserve
+
+client = Superserve(api_key="ss_your_api_key")
+```
+
+<Info>
+  Get an API key from the [Superserve Console](https://console.superserve.ai) or set the `SUPERSERVE_API_KEY` environment variable.
+</Info>
+
+### Requirements
+
+- **Python** 3.12+
+- Zero runtime dependencies
+
+---
+
+## VMs
+
+Create, list, and manage VMs.
+
+```python
+# Create a VM
+vm = client.vms.create(name="my-sandbox", image="ubuntu-22.04")
+
+print(vm.id)      # "vm_a1b2c3d4"
+print(vm.status)  # "RUNNING"
+
+# Create with custom resources
+vm = client.vms.create(
+    name="heavy-compute",
+    image="ubuntu-22.04",
+    vcpu=4,
+    memory=2048,
+)
+
+# List VMs
+vms = client.vms.list()
+running = client.vms.list(status="RUNNING")
+
+# Get a specific VM
+vm = client.vms.get("vm_a1b2c3d4")
+
+# Stop, start, sleep, wake
+client.vms.stop("vm_a1b2c3d4")
+client.vms.start("vm_a1b2c3d4")
+client.vms.sleep("vm_a1b2c3d4")
+client.vms.wake("vm_a1b2c3d4")
+
+# Delete
+client.vms.delete("vm_a1b2c3d4")
+```
+
+**VM fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `str` | VM ID (e.g. `"vm_a1b2c3d4"`) |
+| `name` | `str` | VM name |
+| `image` | `str` | Base image |
+| `status` | `str` | `"CREATING"`, `"RUNNING"`, `"STOPPED"`, `"SLEEPING"`, or `"DEAD"` |
+| `vcpu` | `int` | Number of vCPUs |
+| `memory` | `int` | Memory in MB |
+| `created_at` | `str` | ISO 8601 timestamp |
+
+---
+
+## Exec
+
+Run commands inside a VM.
+
+```python
+result = client.exec("vm_a1b2c3d4", command="echo hello world")
+
+print(result.stdout)     # "hello world\n"
+print(result.exit_code)  # 0
+```
+
+With timeout:
+
+```python
+result = client.exec(
+    "vm_a1b2c3d4",
+    command="python3 /app/train.py",
+    timeout=300,
+)
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `vm_id` | `str` | VM ID (required) |
+| `command` | `str` | Command to execute (required) |
+| `timeout` | `int?` | Timeout in seconds |
+
+**ExecResult fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `stdout` | `str` | Standard output |
+| `stderr` | `str` | Standard error |
+| `exit_code` | `int` | Process exit code |
+
+---
+
+## Files
+
+Upload files to and download files from a VM.
+
+```python
+# Upload a file
+client.files.upload("vm_a1b2c3d4", "/app/script.py", b"print('hello')")
+
+# Upload from a file
+with open("./model.bin", "rb") as f:
+    client.files.upload("vm_a1b2c3d4", "/app/model.bin", f.read())
+
+# Download a file
+content = client.files.download("vm_a1b2c3d4", "/app/results.json")
+```
+
+---
+
+## Checkpoints
+
+Snapshot VM state for rollback or forking.
+
+```python
+# Create a checkpoint
+cp = client.checkpoints.create("vm_a1b2c3d4", name="baseline")
+
+print(cp.id)  # "cp_x7y8z9"
+
+# List checkpoints
+checkpoints = client.checkpoints.list("vm_a1b2c3d4")
+
+# Delete a checkpoint
+client.checkpoints.delete("vm_a1b2c3d4", "cp_x7y8z9")
+```
+
+**Checkpoint fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `str` | Checkpoint ID |
+| `name` | `str` | Checkpoint name |
+| `vm_id` | `str` | Parent VM ID |
+| `created_at` | `str` | ISO 8601 timestamp |
+
+---
+
+## Rollback
+
+Restore a VM to a previous checkpoint.
+
+```python
+client.rollback("vm_a1b2c3d4", checkpoint_id="cp_x7y8z9")
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `vm_id` | `str` | VM ID (required) |
+| `checkpoint_id` | `str?` | Checkpoint ID to roll back to |
+| `name` | `str?` | Checkpoint name to roll back to |
+| `minutes_ago` | `int?` | Roll back to nearest checkpoint from N minutes ago |
+
+Provide exactly one of `checkpoint_id`, `name`, or `minutes_ago`.
+
+---
+
+## Fork
+
+Clone a VM into independent copies.
+
+```python
+forks = client.fork("vm_a1b2c3d4", count=3)
+
+for vm in forks:
+    print(vm.id)  # "vm_fork_001", "vm_fork_002", "vm_fork_003"
+```
+
+Fork from a specific checkpoint:
+
+```python
+forks = client.fork("vm_a1b2c3d4", count=2, from_checkpoint="cp_x7y8z9")
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `vm_id` | `str` | VM ID (required) |
+| `count` | `int?` | Number of forks (default: 1) |
+| `from_checkpoint` | `str?` | Fork from a specific checkpoint instead of current state |
+
+---
+
+## Configuration
+
+```python
+client = Superserve(
+    api_key="ss_your_api_key",          # or set SUPERSERVE_API_KEY env var
+    base_url="https://...",              # default: https://api.agentbox.dev/v1
+    timeout=30,                          # seconds, default: 30
+)
+```
+
+---
+
+## Errors
+
+All errors extend `SuperserveError`. API errors raise `APIError` with a status code.
+
+```python
+from superserve import APIError, SuperserveError
+
+try:
+    client.vms.get("vm_nonexistent")
+except APIError as e:
+    print(e.status)   # 404
+    print(e.message)  # "VM not found"
+except SuperserveError as e:
+    print(e.message)
+```
+
+| Status | Meaning |
+|--------|---------|
+| `401` | Invalid or missing API key |
+| `404` | VM or checkpoint not found |
+| `409` | VM is in an incompatible state for the requested operation |
+| `422` | Invalid request parameters |

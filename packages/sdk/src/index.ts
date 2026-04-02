@@ -1,22 +1,20 @@
 export { Superserve } from "./client"
 export { Superserve as default } from "./client"
-export { Session } from "./session"
-export { AgentStream } from "./stream"
+export { ExecStream } from "./exec-stream"
 export { SuperserveError, APIError } from "./errors"
 
 export type {
   SuperserveOptions,
-  RunOptions,
-  StreamOptions,
-  SessionOptions,
-  RunResult,
-  ToolCall,
-  StreamEvent,
-  TextEvent,
-  ToolStartEvent,
-  ToolEndEvent,
-  RunCompletedEvent,
-  RunFailedEvent,
-  Agent,
-  SessionInfo,
+  Vm,
+  VmStatus,
+  CreateVmOptions,
+  ExecOptions,
+  ExecResult,
+  ExecStreamEvent,
+  Checkpoint,
+  CheckpointType,
+  RollbackOptions,
+  ForkOptions,
+  ForkResult,
+  ForkTree,
 } from "./types"
