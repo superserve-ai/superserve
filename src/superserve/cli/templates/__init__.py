@@ -1,1 +1,0 @@
-"""CLI templates for superserve."""

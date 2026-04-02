@@ -13,6 +13,5 @@ repos:
         entry: uv run mypy
         language: system
         types: [python]
-        args: [src/superserve]
+        args: [packages/python-sdk/src/superserve]
         pass_filenames: false
-        exclude: ^(cli/templates/)

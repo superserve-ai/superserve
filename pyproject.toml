@@ -1,44 +1,13 @@
-[build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "superserve"
-
-version = "0.2.0"
-description = "Deprecated - install the new CLI: curl -fsSL https://superserve.ai/install | sh"
-license = { file = "LICENSE" }
-readme = "README.md"
-requires-python = ">=3.12"
-keywords = ["agents", "ai", "llm", "hosted", "cli", "sdk"]
-dependencies = []
-
-[project.urls]
-Homepage = "https://superserve.ai"
-Repository = "https://github.com/superserve-ai/superserve"
-
-[project.scripts]
-superserve = "superserve.cli:main"
+[tool.uv.workspace]
+members = ["packages/python-sdk"]
 
 [dependency-groups]
 dev = [
     "mypy>=1.18.2",
-    "pydantic>=2.0.0",
-    "pre-commit>=4.3.0",
     "pytest>=8.4.2",
     "pytest-asyncio>=1.0.0",
     "ruff>=0.14.0",
-    "types-PyYAML>=6.0",
 ]
-
-[tool.setuptools]
-include-package-data = true
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-"superserve.cli" = ["templates/**/*"]
 
 [tool.ruff]
 line-length = 88
@@ -65,7 +34,6 @@ ignore = [
 
 [tool.mypy]
 python_version = "3.12"
-plugins = ["pydantic.mypy"]
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
@@ -79,17 +47,10 @@ warn_unreachable = true
 strict_equality = true
 
 [[tool.mypy.overrides]]
-module = [
-    "requests.*",
-]
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
 module = "tests.*"
 warn_unused_ignores = false
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

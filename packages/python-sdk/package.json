@@ -1,0 +1,10 @@
+{
+  "name": "@superserve/python-sdk",
+  "version": "0.3.0",
+  "private": true,
+  "scripts": {
+    "lint": "cd ../.. && uv run ruff check packages/python-sdk/src/ packages/python-sdk/tests/",
+    "typecheck": "cd ../.. && uv run mypy packages/python-sdk/src/superserve",
+    "test": "cd ../.. && uv run pytest packages/python-sdk/tests/"
+  }
+}
