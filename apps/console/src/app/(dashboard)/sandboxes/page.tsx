@@ -19,7 +19,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   Table,
-  TableBody,
   TableCell,
   TableHead,
   TableHeader,
@@ -28,6 +27,7 @@ import {
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
 import { CreateSandboxDialog } from "@/components/sandboxes/create-sandbox-dialog"
+import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableToolbar } from "@/components/table-toolbar"
 
 type SandboxStatus = "Ready" | "Stopped" | "Paused"
@@ -176,7 +176,7 @@ export default function SandboxesPage() {
                   <TableHead className="w-28" />
                 </TableRow>
               </TableHeader>
-              <TableBody>
+              <StickyHoverTableBody>
                 {filtered.map((sandbox) => (
                   <TableRow key={sandbox.id}>
                     <TableCell className="pr-0">
@@ -257,7 +257,7 @@ export default function SandboxesPage() {
                     </TableCell>
                   </TableRow>
                 ))}
-              </TableBody>
+              </StickyHoverTableBody>
             </Table>
           </div>
         </>

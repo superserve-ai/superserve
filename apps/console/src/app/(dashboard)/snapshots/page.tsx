@@ -4,7 +4,6 @@ import { CameraIcon, DotsThreeVerticalIcon } from "@phosphor-icons/react"
 import {
   Checkbox,
   Table,
-  TableBody,
   TableCell,
   TableHead,
   TableHeader,
@@ -12,6 +11,7 @@ import {
 } from "@superserve/ui"
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
+import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableToolbar } from "@/components/table-toolbar"
 
 interface Snapshot {
@@ -123,7 +123,7 @@ export default function SnapshotsPage() {
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
-              <TableBody>
+              <StickyHoverTableBody>
                 {filtered.map((snapshot) => (
                   <TableRow key={snapshot.id}>
                     <TableCell className="pr-0">
@@ -154,7 +154,7 @@ export default function SnapshotsPage() {
                     </TableCell>
                   </TableRow>
                 ))}
-              </TableBody>
+              </StickyHoverTableBody>
             </Table>
           </div>
         </>

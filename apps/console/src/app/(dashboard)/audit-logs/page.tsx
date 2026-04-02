@@ -3,7 +3,6 @@
 import { ClipboardTextIcon } from "@phosphor-icons/react"
 import {
   Table,
-  TableBody,
   TableCell,
   TableHead,
   TableHeader,
@@ -11,6 +10,7 @@ import {
 } from "@superserve/ui"
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
+import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableToolbar } from "@/components/table-toolbar"
 
 type AuditAction = "Create" | "Start" | "Update"
@@ -174,7 +174,7 @@ export default function AuditLogsPage() {
                   <TableHead className="w-[14%]">Outcome</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
+              <StickyHoverTableBody>
                 {filtered.map((log) => (
                   <TableRow key={log.id}>
                     <TableCell className="whitespace-nowrap">
@@ -209,7 +209,7 @@ export default function AuditLogsPage() {
                     </TableCell>
                   </TableRow>
                 ))}
-              </TableBody>
+              </StickyHoverTableBody>
             </Table>
           </div>
         </>

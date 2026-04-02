@@ -27,7 +27,6 @@ import {
   FormField,
   Input,
   Table,
-  TableBody,
   TableCell,
   TableHead,
   TableHeader,
@@ -36,6 +35,7 @@ import {
 } from "@superserve/ui"
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
+import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableToolbar } from "@/components/table-toolbar"
 
 interface ApiKey {
@@ -351,7 +351,7 @@ export default function ApiKeysPage() {
               <TableHead className="w-12" />
             </TableRow>
           </TableHeader>
-          <TableBody>
+          <StickyHoverTableBody>
             {filtered.map((apiKey) => (
               <TableRow key={apiKey.id}>
                 <TableCell className="pr-0">
@@ -421,7 +421,7 @@ export default function ApiKeysPage() {
                 </TableCell>
               </TableRow>
             ))}
-          </TableBody>
+          </StickyHoverTableBody>
         </Table>
       </div>
       </>
