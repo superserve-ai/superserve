@@ -1,4 +1,4 @@
-name: TypeScript CI
+name: CI
 
 on:
   push:
@@ -27,6 +27,9 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
