@@ -40,10 +40,6 @@ Built with Bun + Commander. Entry point: `src/index.ts`.
 
 Published as `@superserve/sdk` with dual CJS/ESM output via tsup. Includes React hooks at `@superserve/sdk/react`.
 
-### Playground (`apps/playground/`)
-
-React + Vite app for interacting with agents. Depends on `@superserve/sdk` via workspace reference.
-
 ### Python SDK (`packages/python-sdk/`)
 
 Published as `superserve` on PyPI. Provides the `App`, `Session`, and `Stream` classes for building agents in Python. Zero runtime dependencies.

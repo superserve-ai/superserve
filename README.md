@@ -28,7 +28,6 @@ Visit our website to get started: [superserve.ai](https://www.superserve.ai/)
 ```
 apps/
   console/                 # Sandbox Dashboard
-  playground/              # React + Vite playground app
   ui-docs/                 # UI component docs
 packages/
   cli/                     # TypeScript CLI (@superserve/cli)
