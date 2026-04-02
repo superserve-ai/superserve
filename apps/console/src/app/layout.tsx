@@ -20,7 +20,10 @@ const monoFont = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Superserve Console",
+  title: {
+    default: "Superserve Console",
+    template: "%s | Superserve Console",
+  },
   description: "Deploy and manage your AI agents with Superserve",
   icons: {
     icon: { url: "/favicon.svg", type: "image/svg+xml" },

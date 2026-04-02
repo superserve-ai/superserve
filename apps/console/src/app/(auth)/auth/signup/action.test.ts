@@ -28,7 +28,7 @@ vi.mock("@/lib/email/templates/welcome", () => ({
 }))
 
 const mockSlack = vi.fn().mockResolvedValue(undefined)
-vi.mock("@/app/auth/signin/action", () => ({
+vi.mock("@/app/(auth)/auth/signin/action", () => ({
   notifySlackOfNewUser: (...args: unknown[]) => mockSlack(...args),
 }))
 

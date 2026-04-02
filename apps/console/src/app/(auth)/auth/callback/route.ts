@@ -1,7 +1,7 @@
 import { createServerClient } from "@superserve/supabase/server"
 import { NextResponse } from "next/server"
-import { notifySlackOfNewUser } from "@/app/auth/signin/action"
-import { sendWelcomeEmail } from "@/app/auth/signup/action"
+import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
+import { sendWelcomeEmail } from "@/app/(auth)/auth/signup/action"
 
 const TRUSTED_REDIRECT_PATTERN =
   /^https:\/\/([a-z0-9-]+\.)?superserve\.ai(\/.*)?$/
@@ -94,7 +94,9 @@ export async function GET(request: Request) {
             params.set("new_user", "1")
             params.set("provider", provider)
           }
-          next = params.toString() ? `/?${params.toString()}` : "/"
+          next = params.toString()
+            ? `/get-started?${params.toString()}`
+            : "/get-started"
         }
       }
 

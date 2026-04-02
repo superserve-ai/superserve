@@ -2,7 +2,7 @@
 
 import { createAdminClient } from "@superserve/supabase/admin"
 import { z } from "zod"
-import { notifySlackOfNewUser } from "@/app/auth/signin/action"
+import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { sendEmail } from "@/lib/email/send"
 import { ConfirmationEmail } from "@/lib/email/templates/confirmation"
 import { WelcomeEmail } from "@/lib/email/templates/welcome"
