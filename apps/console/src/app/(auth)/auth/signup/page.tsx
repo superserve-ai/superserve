@@ -1,6 +1,6 @@
 "use client"
 
-import { Eye, EyeSlash } from "@phosphor-icons/react"
+import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react"
 import { createBrowserClient } from "@superserve/supabase"
 import { Button, Input, useToast } from "@superserve/ui"
 import Link from "next/link"
@@ -156,9 +156,9 @@ function SignUpContent() {
                       className="p-0.5 transition-colors text-muted"
                     >
                       {showPassword ? (
-                        <EyeSlash className="size-4.5" weight="light" />
+                        <EyeSlashIcon className="size-4.5" weight="light" />
                       ) : (
-                        <Eye className="size-4.5" weight="light" />
+                        <EyeIcon className="size-4.5" weight="light" />
                       )}
                     </button>
                   }
