@@ -1,6 +1,7 @@
 "use client"
 
 import { Alert, Button, Card } from "@superserve/ui"
+import { motion } from "motion/react"
 import type { AgentPath, Framework } from "../../hooks/use-onboarding-state"
 import { CodeBlock } from "../code-block"
 import { FRAMEWORKS, FrameworkPicker } from "../framework-picker"
@@ -54,7 +55,12 @@ export function StepDeploy({
 
       {/* Path A: Own agent */}
       {agentPath === "own" && (
-        <div className="space-y-4 animate-fade-in">
+        <motion.div
+          className="space-y-4"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+        >
           <p className="text-muted text-sm mt-2">
             Deploy your agent with a single command:
           </p>
@@ -83,12 +89,17 @@ export function StepDeploy({
               superserve secrets set &lt;agent&gt; KEY=value
             </code>
           </Alert>
-        </div>
+        </motion.div>
       )}
 
       {/* Path B: Example agent */}
       {agentPath === "example" && (
-        <div className="space-y-6 animate-fade-in">
+        <motion.div
+          className="space-y-6"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+        >
           <div className="space-y-3">
             <p className="text-muted text-sm mt-3">Pick a framework:</p>
             <FrameworkPicker
@@ -98,7 +109,12 @@ export function StepDeploy({
           </div>
 
           {selectedFramework && (
-            <div className="space-y-4 animate-fade-in">
+            <motion.div
+              className="space-y-4"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+            >
               <p className="text-muted text-sm">
                 Clone the example and deploy:
               </p>
@@ -124,9 +140,9 @@ export function StepDeploy({
                 command={`superserve secrets set chatbot ${selectedFramework.secretEnvName}=your-key-here`}
                 eventName="secrets_command_copied"
               />
-            </div>
+            </motion.div>
           )}
-        </div>
+        </motion.div>
       )}
 
       {/* Mark as done / change path */}

@@ -1,6 +1,7 @@
 "use client"
 
-import { AlertTriangle } from "lucide-react"
+import { WarningIcon } from "@phosphor-icons/react"
+import { motion } from "motion/react"
 import * as React from "react"
 import { cn } from "../lib/utils"
 import { Button } from "./button"
@@ -60,11 +61,12 @@ export function ConfirmDialog({
                 variant === "danger" ? "bg-destructive/10" : "bg-warning/10",
               )}
             >
-              <AlertTriangle
+              <WarningIcon
                 className={cn(
                   "h-5 w-5",
                   variant === "danger" ? "text-destructive" : "text-warning",
                 )}
+                weight="light"
               />
             </div>
             <div className="flex-1">
@@ -89,7 +91,15 @@ export function ConfirmDialog({
               disabled={loading}
             >
               {loading ? (
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                <motion.div
+                  className="h-4 w-4 rounded-full border-2 border-current border-t-transparent"
+                  animate={{ rotate: 360 }}
+                  transition={{
+                    duration: 0.8,
+                    repeat: Infinity,
+                    ease: "linear",
+                  }}
+                />
               ) : null}
               {confirmLabel}
             </Button>

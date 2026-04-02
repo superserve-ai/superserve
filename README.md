@@ -2,144 +2,101 @@
   <br/>
   <br/>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/superserve-ai/superserve/main/assets/logo-dark.svg">
-    <img src="https://raw.githubusercontent.com/superserve-ai/superserve/main/assets/logo-light.svg">
+    <img width="1500" height="auto" alt="Twitter Header - Personal" src="https://github.com/user-attachments/assets/565a469e-bc80-4e0a-af70-4e6ed07975c2" />
   </picture>
 
   <br/>
   <br/>
 
-  <p><strong>Cloud micro-VMs with checkpoint, rollback, and fork.</strong></p>
+  <p><strong>Sandbox infrastructure to run AI Agents in the cloud. Powered by Firecracker MicroVMs.</strong></p>
 
   [![Docs](https://img.shields.io/badge/Docs-latest-blue)](https://docs.superserve.ai/)
-  [![License](https://img.shields.io/badge/License-OCVSAL_1.0-blue.svg)](https://github.com/superserve-ai/superserve/blob/main/LICENSE)
-  [![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white)](https://discord.gg/utftfhSK)
+  [![License](https://img.shields.io/badge/license-Apache%20License%202.0-blue)](https://github.com/superserve-ai/superserve/blob/main/LICENSE)
 
 </div>
 
-## What is Superserve
+> [!Note]
+> **Beta Release**: This project is in beta and under active development. We welcome feedback but cannot guarantee backwards compatibility at this time.
 
-Superserve is a sandbox and VM platform built on Firecracker micro-VMs. Create isolated cloud VMs in milliseconds, execute commands, transfer files, and snapshot VM state with checkpoint, rollback, and fork primitives. Designed for AI agents, CI pipelines, and any workload that needs fast, disposable compute.
+## Getting Started
 
-## Install
+Visit our website to get started: [superserve.ai](https://www.superserve.ai/)
 
-CLI:
-
-```bash
-bun add -g @superserve/cli
-```
-
-TypeScript SDK:
-
-```bash
-bun add @superserve/sdk
-```
-
-Python SDK:
-
-```bash
-pip install superserve
-```
-
-## Quick Start
-
-### CLI
-
-```bash
-# Authenticate
-superserve login
-
-# Create a VM
-superserve vm create --name my-sandbox
-
-# Run a command
-superserve vm exec my-sandbox -- echo "Hello from the VM"
-
-# Upload a file
-superserve vm upload my-sandbox ./script.py /home/user/script.py
-
-# Checkpoint the VM
-superserve vm checkpoint create my-sandbox --name clean-state
-
-# Fork the VM from a checkpoint
-superserve vm fork my-sandbox --checkpoint clean-state --name forked-sandbox
-```
-
-### TypeScript SDK
-
-```typescript
-import { Superserve } from "@superserve/sdk";
-
-const client = new Superserve({ apiKey: process.env.SUPERSERVE_API_KEY });
-
-// Create a VM
-const vm = await client.vms.create({ name: "my-sandbox" });
-
-// Execute a command
-const result = await client.vms.exec(vm.id, { command: "echo Hello" });
-console.log(result.stdout);
-
-// Upload a file
-await client.files.upload(vm.id, "./script.py", "/home/user/script.py");
-
-// Checkpoint
-const cp = await client.checkpoints.create(vm.id, { name: "clean-state" });
-
-// Fork from checkpoint
-const forked = await client.vms.fork(vm.id, { checkpointId: cp.id, name: "forked-sandbox" });
-```
-
-### Python SDK
-
-```python
-from superserve import Superserve
-
-client = Superserve(api_key=os.environ["SUPERSERVE_API_KEY"])
-
-# Create a VM
-vm = client.vms.create(name="my-sandbox")
-
-# Execute a command
-result = client.vms.exec(vm.id, command="echo Hello")
-print(result.stdout)
-
-# Upload a file
-client.files.upload(vm.id, local_path="./script.py", remote_path="/home/user/script.py")
-
-# Checkpoint
-cp = client.checkpoints.create(vm.id, name="clean-state")
-
-# Fork from checkpoint
-forked = client.vms.fork(vm.id, checkpoint_id=cp.id, name="forked-sandbox")
-```
-
-## Monorepo Structure
+## Structure
 
 ```
+apps/
+  console/                 # Sandbox Dashboard
+  ui-docs/                 # UI component docs
 packages/
   cli/                     # TypeScript CLI (@superserve/cli)
-  sdk/                     # TypeScript SDK (@superserve/sdk)
   python-sdk/              # Python SDK (superserve on PyPI)
+  sdk/                     # TypeScript SDK (@superserve/sdk)
+  ui/                      # Shared UI components
+  supabase/                # Supabase config and migrations
+  typescript-config/       # Shared tsconfig presets
+  tailwind-config/         # Shared Tailwind config
+  biome-config/            # Shared Biome config
 docs/                      # Mintlify documentation
-examples/                  # Example projects
 ```
-
-## Documentation
-
-Full documentation is available at [docs.superserve.ai](https://docs.superserve.ai/).
 
 ## Development
 
 This repo is a monorepo managed with [Bun workspaces](https://bun.sh/docs/install/workspaces) and [Turborepo](https://turbo.build/repo).
 
+### Setup
+
 ```bash
 bun install               # install all dependencies
+```
+
+### Running Commands
+
+Run tasks across all packages from the repo root:
+
+```bash
 bun run build             # build all packages
 bun run dev               # start all dev servers
 bun run lint              # lint all packages
 bun run typecheck         # type check all packages
 bun run test              # run all tests
 ```
+
+Target a specific package with `--filter`:
+
+```bash
+bunx turbo run dev --filter=@superserve/console
+bunx turbo run build --filter=@superserve/sdk
+```
+
+### Adding Dependencies
+
+Always add dependencies from the repo root using `--filter`:
+
+```bash
+bun add zod --filter @superserve/cli
+bun add react --filter @superserve/console
+bun add -d @types/node --filter @superserve/sdk
+```
+
+> **Note:** Do not `cd` into a package directory and run `bun add` directly - this creates a separate `bun.lock` that conflicts with the monorepo's root lockfile.
+
+### Python SDK
+
+The Python SDK lives in `packages/python-sdk/` and is managed with **uv workspaces**:
+
+```bash
+uv sync                                              # install Python dependencies
+uv run pytest packages/python-sdk/tests/              # run tests
+uv run ruff check packages/python-sdk/                # lint
+uv run mypy packages/python-sdk/src/superserve/       # type check
+```
+
+## Where to find us
+
+- [Email us](mailto:engineering@superserve.ai)
+- [Twitter/X](https://x.com/superserve_ai)
+- [LinkedIn](https://www.linkedin.com/company/super-serve-ai)
 
 ## Contributing
 

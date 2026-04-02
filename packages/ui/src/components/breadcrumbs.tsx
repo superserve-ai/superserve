@@ -1,4 +1,6 @@
-import { ChevronRight } from "lucide-react"
+"use client"
+
+import { CaretRightIcon } from "@phosphor-icons/react"
 import { cn } from "../lib/utils"
 
 interface BreadcrumbItem {
@@ -42,7 +44,12 @@ function Breadcrumbs({
         const isLast = index === items.length - 1
         return (
           <div key={item.label} className="flex items-center gap-1.5">
-            {index > 0 && <ChevronRight className="h-3.5 w-3.5 text-muted" />}
+            {index > 0 && (
+              <CaretRightIcon
+                className="h-3.5 w-3.5 text-muted"
+                weight="light"
+              />
+            )}
             {isLast || !item.href ? (
               <span
                 className={cn(

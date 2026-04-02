@@ -1,5 +1,5 @@
+import { ListIcon, XIcon } from "@phosphor-icons/react"
 import { Button } from "@superserve/ui"
-import { Menu, X } from "lucide-react"
 import { useState } from "react"
 import { Link, useParams } from "react-router"
 import { categories, getByCategory } from "../../registry"
@@ -82,7 +82,11 @@ export function Sidebar() {
       {/* Mobile toggle */}
       <div className="md:hidden fixed top-3 left-3 z-50">
         <Button variant="outline" size="icon-sm" onClick={() => setOpen(!open)}>
-          {open ? <X className="size-4" /> : <Menu className="size-4" />}
+          {open ? (
+            <XIcon className="size-4" weight="light" />
+          ) : (
+            <ListIcon className="size-4" weight="light" />
+          )}
         </Button>
       </div>
 

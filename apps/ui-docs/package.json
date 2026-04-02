@@ -11,7 +11,7 @@
   "dependencies": {
     "@superserve/ui": "workspace:*",
     "@tailwindcss/vite": "^4.2.1",
-    "lucide-react": "^0.575.0",
+    "@phosphor-icons/react": "^2.1.7",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router": "^7",

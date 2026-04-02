@@ -1,6 +1,6 @@
 # Superserve Docs
 
-Documentation for [Superserve](https://superserve.ai), the deployment platform for AI agents. Published at [docs.superserve.ai](https://docs.superserve.ai).
+Documentation for [Superserve](https://superserve.ai). Published at [docs.superserve.ai](https://docs.superserve.ai).
 
 ## Local development
 
@@ -16,16 +16,8 @@ Preview at `http://localhost:3000`.
 docs/
 ├── docs.json              # Mintlify config and navigation
 ├── introduction.mdx       # Introduction
-├── quickstart.mdx         # Getting started guide
-├── deploy.mdx             # Deployment guide
-├── sessions.mdx           # Sessions and persistence
-├── authentication.mdx     # Auth flow docs
-├── troubleshooting.mdx    # Common issues
-├── sdk.mdx                # TypeScript SDK reference
-├── cli.mdx                # CLI reference
-├── frameworks/            # Framework-specific guides
-├── llms.txt               # LLM-friendly docs index
-└── llms-full.txt          # Full docs for LLM consumption
+├── logo/                  # Logos
+└── favicon.svg            # Favicon
 ```
 
 ## Publishing

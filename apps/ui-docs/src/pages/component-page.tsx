@@ -22,10 +22,7 @@ export function ComponentPage() {
         <h1 className="text-2xl font-semibold text-foreground">Not Found</h1>
         <p className="text-muted mt-2">
           Component "{slug}" does not exist.{" "}
-          <Link
-            to="/"
-            className="text-primary-light underline underline-offset-2"
-          >
+          <Link to="/" className="text-primary underline underline-offset-2">
             Go home
           </Link>
         </p>
@@ -39,7 +36,7 @@ export function ComponentPage() {
         <h1 className="text-2xl font-semibold text-foreground">{meta.name}</h1>
         <p className="text-muted mt-1">{meta.description}</p>
         <p className="text-xs font-mono text-muted mt-2">
-          Source: <code className="text-primary-light">{meta.source}</code>
+          Source: <code className="text-primary">{meta.source}</code>
         </p>
       </div>
 

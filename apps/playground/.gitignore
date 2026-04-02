@@ -1,5 +1,0 @@
-.vercel
-node_modules
-.DS
-dist/
-.vite

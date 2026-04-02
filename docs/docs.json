@@ -9,11 +9,11 @@
   },
   "fonts": {
     "heading": {
-      "family": "Funnel Display",
+      "family": "Instrument Sans",
       "weight": 600
     },
     "body": {
-      "family": "Inter"
+      "family": "Instrument Sans"
     }
   },
   "background": {
@@ -31,8 +31,7 @@
       }
     }
   },
-  "css": "/style.css",
-  "favicon": "/images/Subtract.svg",
+  "favicon": "/favicon.svg",
   "logo": {
     "light": "/logo/light.svg",
     "dark": "/logo/dark.svg",
@@ -45,15 +44,7 @@
     "groups": [
       {
         "group": "Getting Started",
-        "pages": ["introduction", "quickstart", "authentication", "troubleshooting"]
-      },
-      {
-        "group": "Concepts",
-        "pages": ["vms", "checkpoints"]
-      },
-      {
-        "group": "Reference",
-        "pages": ["cli", "sdk", "python-sdk"]
+        "pages": ["introduction"]
       }
     ],
     "global": {
@@ -78,7 +69,7 @@
   },
   "integrations": {
     "posthog": {
-      "apiKey": "phc_gjpDKKQJAnkxkqLrPGrAhoariKsaHNuTpI5rVhkYre",
+      "apiKey": "phc_gjpDKKKQJAnkxkqLrPGrAhoariKsaHNuTpI5rVhkYre",
       "apiHost": "https://us.i.posthog.com"
     }
   }
