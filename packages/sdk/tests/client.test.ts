@@ -261,7 +261,7 @@ describe("files.upload", () => {
 })
 
 describe("files.download", () => {
-  test("sends GET and returns Buffer", async () => {
+  test("sends GET and returns Uint8Array", async () => {
     const content = new TextEncoder().encode("file contents")
     setupMockFetch(() => new Response(content))
     const client = makeClient()
@@ -269,8 +269,8 @@ describe("files.download", () => {
     const result = await client.files.download("vm_abc123", "/app/test.txt")
     expect(lastFetchUrl).toBe(`${BASE_URL}/v1/vms/vm_abc123/files/app/test.txt`)
     expect(lastFetchInit?.method).toBe("GET")
-    expect(Buffer.isBuffer(result)).toBe(true)
-    expect(result.toString()).toBe("file contents")
+    expect(result).toBeInstanceOf(Uint8Array)
+    expect(new TextDecoder().decode(result)).toBe("file contents")
   })
 })
 

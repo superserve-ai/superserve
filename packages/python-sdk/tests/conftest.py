@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import httpx
 import pytest
-
 from superserve import Superserve
 from superserve._http import HttpClient
-
 
 VM_DATA: dict[str, Any] = {
     "id": "vm_abc123",

@@ -37,13 +37,13 @@
     "cli-table3": "^0.6.5",
     "commander": "^14.0.3",
     "picocolors": "^1.1.1",
-    "posthog-node": "^5.25.0"
+    "posthog-node": "^5.28.11"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.4",
+    "@biomejs/biome": "^2.4.10",
     "@superserve/biome-config": "workspace:*",
     "@superserve/typescript-config": "workspace:*",
-    "@types/bun": "^1.2.4"
+    "@types/bun": "^1.3.11"
   },
   "license": "MIT"
 }

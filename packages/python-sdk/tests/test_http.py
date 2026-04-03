@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import json
-
 import httpx
 import pytest
-
 from superserve._http import HttpClient
 from superserve.errors import APIError
 

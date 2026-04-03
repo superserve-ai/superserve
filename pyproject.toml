@@ -3,10 +3,10 @@ members = ["packages/python-sdk"]
 
 [dependency-groups]
 dev = [
-    "mypy>=1.18.2",
-    "pytest>=8.4.2",
+    "mypy>=1.20.0",
+    "pytest>=9.0.2",
     "pytest-asyncio>=1.0.0",
-    "ruff>=0.14.0",
+    "ruff>=0.15.9",
 ]
 
 [tool.ruff]

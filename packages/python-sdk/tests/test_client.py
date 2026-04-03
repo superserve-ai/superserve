@@ -3,17 +3,13 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import Any
 
 import httpx
 import pytest
-
 from superserve import Checkpoint, ExecResult, ForkResult, ForkTree, Superserve, Vm
-from superserve.errors import APIError
 
 from .conftest import CHECKPOINT_DATA, VM_DATA, make_client
-
 
 # ---------------------------------------------------------------------------
 # Helpers

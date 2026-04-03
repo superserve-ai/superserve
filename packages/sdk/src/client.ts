@@ -43,9 +43,9 @@ export class Superserve {
     upload: (
       vmId: string,
       remotePath: string,
-      data: Buffer | Uint8Array | string,
+      data: Uint8Array | string,
     ) => Promise<void>
-    download: (vmId: string, remotePath: string) => Promise<Buffer>
+    download: (vmId: string, remotePath: string) => Promise<Uint8Array>
   }
 
   readonly checkpoints: {
@@ -197,7 +197,7 @@ export class Superserve {
   private async _uploadFile(
     vmId: string,
     remotePath: string,
-    data: Buffer | Uint8Array | string,
+    data: Uint8Array | string,
   ): Promise<void> {
     const cleanPath = remotePath.replace(/^\//, "")
     const bytes =
@@ -211,11 +211,11 @@ export class Superserve {
   private async _downloadFile(
     vmId: string,
     remotePath: string,
-  ): Promise<Buffer> {
+  ): Promise<Uint8Array> {
     const cleanPath = remotePath.replace(/^\//, "")
     const resp = await this._request("GET", `/vms/${e(vmId)}/files/${cleanPath}`)
     const arrayBuf = await resp.arrayBuffer()
-    return Buffer.from(arrayBuf)
+    return new Uint8Array(arrayBuf)
   }
 
   // ==================== Internal: Checkpoints ====================

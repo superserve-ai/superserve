@@ -7,10 +7,10 @@ import {
   spyOn,
   test,
 } from "bun:test"
-import * as auth from "../../src/config/auth"
-import { PlatformAPIError } from "../../src/api/errors"
-import { createClient } from "../../src/api/client"
 import type { SuperserveClient } from "../../src/api/client"
+import { createClient } from "../../src/api/client"
+import { PlatformAPIError } from "../../src/api/errors"
+import * as auth from "../../src/config/auth"
 
 const BASE_URL = "https://test.superserve.ai"
 let client: SuperserveClient
@@ -191,7 +191,9 @@ describe("exec operations", () => {
     const stream = new ReadableStream({
       start(controller) {
         controller.enqueue(
-          encoder.encode('data: {"stdout":"hi"}\n\ndata: {"finished":true}\n\n'),
+          encoder.encode(
+            'data: {"stdout":"hi"}\n\ndata: {"finished":true}\n\n',
+          ),
         )
         controller.close()
       },
@@ -368,7 +370,10 @@ describe("error handling", () => {
       const err = e as PlatformAPIError
       expect(err.statusCode).toBe(404)
       expect(err.message).toBe("VM not found")
-      expect(err.details).toEqual({ code: "not_found", message: "VM not found" })
+      expect(err.details).toEqual({
+        code: "not_found",
+        message: "VM not found",
+      })
     }
   })
 
@@ -403,7 +408,9 @@ describe("error handling", () => {
     await client.listVms()
 
     // getApiKey should have been called more than once (initially + after cache clear)
-    expect((auth.getApiKey as ReturnType<typeof spyOn>).mock.calls.length).toBeGreaterThan(1)
+    expect(
+      (auth.getApiKey as ReturnType<typeof spyOn>).mock.calls.length,
+    ).toBeGreaterThan(1)
   })
 
   test("network error throws PlatformAPIError", async () => {
