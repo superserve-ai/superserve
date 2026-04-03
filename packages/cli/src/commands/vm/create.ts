@@ -27,15 +27,22 @@ export const createVmCommand = new Command("create")
         const spinner = createSpinner()
         spinner.start("Creating VM...")
 
+        const start = performance.now()
         const vm = await client.createVm({
           name: options.name,
           image: options.image,
           vcpu_count: options.vcpu,
           mem_size_mib: options.memory,
         })
+        const durationMs = Math.round(performance.now() - start)
 
         spinner.done()
-        await track("cli_vm_create", { image: options.image })
+        await track("cli_vm_create", {
+          image: options.image,
+          vcpu: options.vcpu,
+          memory_mib: options.memory,
+          duration_ms: durationMs,
+        })
 
         if (options.json) {
           console.log(JSON.stringify(vm, null, 2))

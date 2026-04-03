@@ -8,6 +8,7 @@ from typing import Any
 
 from superserve._http import DEFAULT_BASE_URL, DEFAULT_TIMEOUT, HttpClient
 from superserve._sse import parse_sse_stream
+from superserve._telemetry import track_event
 from superserve.types import Checkpoint, ExecResult, ForkResult, ForkTree, Vm
 
 
@@ -29,7 +30,9 @@ class _VmsNamespace:
         if mem_size_mib is not None:
             body["mem_size_mib"] = mem_size_mib
         resp = self._http.request("POST", "/vms", json=body)
-        return _parse_vm(resp.json())
+        vm = _parse_vm(resp.json())
+        track_event("sdk.vm.create")
+        return vm
 
     def list(self, *, status: str | None = None) -> list[Vm]:
         params: dict[str, str] = {}
@@ -44,6 +47,7 @@ class _VmsNamespace:
 
     def delete(self, vm_id: str) -> None:
         self._http.request("DELETE", f"/vms/{vm_id}")
+        track_event("sdk.vm.delete")
 
     def stop(self, vm_id: str) -> Vm:
         resp = self._http.request("POST", f"/vms/{vm_id}/stop")
@@ -154,6 +158,7 @@ class Superserve:
         self.vms = _VmsNamespace(self._http)
         self.files = _FilesNamespace(self._http)
         self.checkpoints = _CheckpointsNamespace(self._http)
+        track_event("sdk.init")
 
     # ==================== Exec ====================
 
@@ -169,6 +174,7 @@ class Superserve:
             body["timeout_s"] = timeout_s
         resp = self._http.request("POST", f"/vms/{vm_id}/exec", json=body)
         data = resp.json()
+        track_event("sdk.exec")
         return ExecResult(
             stdout=data["stdout"],
             stderr=data["stderr"],
@@ -227,6 +233,7 @@ class Superserve:
             body["from_checkpoint_id"] = from_checkpoint_id
         resp = self._http.request("POST", f"/vms/{vm_id}/fork", json=body)
         data = resp.json()
+        track_event("sdk.fork", {"count": count})
         return ForkResult(
             source_vm_id=data["source_vm_id"],
             checkpoint_id=data["checkpoint_id"],

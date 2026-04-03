@@ -27,10 +27,15 @@ export const uploadFileCommand = new Command("upload")
         spinner.start(`Uploading ${pc.bold(localPath)}...`)
 
         const client = createClient()
+        const start = performance.now()
         await client.uploadFile(vmId, remotePath, data, options.mode)
+        const durationMs = Math.round(performance.now() - start)
 
         spinner.done()
-        await track("cli_files_upload", { size: data.length })
+        await track("cli_files_upload", {
+          size: data.length,
+          duration_ms: durationMs,
+        })
         log.success(
           `Uploaded ${formatSize(data.length)} to ${pc.bold(remotePath)}`,
         )

@@ -22,11 +22,16 @@ export const downloadFileCommand = new Command("download")
         spinner.start(`Downloading ${pc.bold(remotePath)}...`)
 
         const client = createClient()
+        const start = performance.now()
         const data = await client.downloadFile(vmId, remotePath)
+        const durationMs = Math.round(performance.now() - start)
 
         writeFileSync(dest, data)
         spinner.done()
-        await track("cli_files_download", { size: data.length })
+        await track("cli_files_download", {
+          size: data.length,
+          duration_ms: durationMs,
+        })
         log.success(`Downloaded ${formatSize(data.length)} to ${pc.bold(dest)}`)
       },
     ),

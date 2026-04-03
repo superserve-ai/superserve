@@ -6,6 +6,7 @@ from typing import Any
 
 import httpx
 
+from superserve._telemetry import track_event
 from superserve.errors import APIError
 
 DEFAULT_BASE_URL = "https://api.superserve.ai"
@@ -84,4 +85,5 @@ def _raise_api_error(resp: httpx.Response) -> None:
     except Exception:
         code = "unknown"
         message = resp.reason_phrase or "Unknown error"
+    track_event("sdk.error", {"status": resp.status_code, "code": code})
     raise APIError(resp.status_code, code, message)

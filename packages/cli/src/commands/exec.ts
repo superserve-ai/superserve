@@ -22,7 +22,7 @@ export const exec = new Command("exec")
         options: { timeout?: number; stream?: boolean; json?: boolean },
       ) => {
         const client = createClient()
-        await track("cli_exec", { stream: !!options.stream })
+        const start = performance.now()
 
         if (options.stream) {
           let exitCode = 0
@@ -34,6 +34,8 @@ export const exec = new Command("exec")
             if (event.stderr) process.stderr.write(event.stderr)
             if (event.exit_code !== undefined) exitCode = event.exit_code
           }
+          const durationMs = Math.round(performance.now() - start)
+          await track("cli_exec", { stream: true, duration_ms: durationMs })
           process.exitCode = exitCode
           return
         }
@@ -42,6 +44,8 @@ export const exec = new Command("exec")
           command,
           timeout_s: options.timeout,
         })
+        const durationMs = Math.round(performance.now() - start)
+        await track("cli_exec", { stream: false, duration_ms: durationMs })
 
         if (options.json) {
           console.log(JSON.stringify(result, null, 2))

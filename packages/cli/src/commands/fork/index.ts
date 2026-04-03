@@ -24,12 +24,17 @@ const forkCommand = new Command("fork")
         },
       ) => {
         const client = createClient()
+        const start = performance.now()
         const result = await client.fork(vmId, {
           count: options.count,
           from_checkpoint_id: options.fromCheckpoint,
         })
+        const durationMs = Math.round(performance.now() - start)
 
-        await track("cli_fork", { count: options.count })
+        await track("cli_fork", {
+          count: options.count,
+          duration_ms: durationMs,
+        })
 
         if (options.json) {
           console.log(JSON.stringify(result, null, 2))

@@ -70,6 +70,10 @@ let lastFetchInit: RequestInit | undefined
 
 function setupMockFetch(handler: (url: string, init?: RequestInit) => Response | Promise<Response>) {
   mockFetch = mock((url: string, init?: RequestInit) => {
+    // Ignore telemetry calls to PostHog
+    if (url.includes("posthog.com")) {
+      return Promise.resolve(new Response("", { status: 200 }))
+    }
     lastFetchUrl = url
     lastFetchInit = init
     return Promise.resolve(handler(url, init))

@@ -19,12 +19,18 @@ export const createCheckpointCommand = new Command("create")
         const spinner = createSpinner()
         spinner.start("Creating checkpoint...")
 
+        const start = performance.now()
         const cp = await client.createCheckpoint(vmId, {
           name: options.name,
         })
+        const durationMs = Math.round(performance.now() - start)
 
         spinner.done()
-        await track("cli_checkpoint_create")
+        await track("cli_checkpoint_create", {
+          size_bytes: cp.size_bytes,
+          delta_size_bytes: cp.delta_size_bytes,
+          duration_ms: durationMs,
+        })
 
         if (options.json) {
           console.log(JSON.stringify(cp, null, 2))

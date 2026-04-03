@@ -44,14 +44,16 @@ export const rollback = new Command("rollback")
         }
 
         const client = createClient()
+        const start = performance.now()
         const vm = await client.rollback(vmId, {
           checkpoint_id: options.checkpoint,
           name: options.name,
           minutes_ago: options.minutesAgo,
           preserve_newer: options.preserveNewer,
         })
+        const durationMs = Math.round(performance.now() - start)
 
-        await track("cli_rollback")
+        await track("cli_rollback", { duration_ms: durationMs })
 
         if (options.json) {
           console.log(JSON.stringify(vm, null, 2))

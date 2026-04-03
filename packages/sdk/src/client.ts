@@ -1,5 +1,6 @@
 import { APIError, SuperserveError } from "./errors"
 import { ExecStream } from "./exec-stream"
+import { trackEvent } from "./telemetry"
 import type {
   ApiCheckpoint,
   ApiExecResponse,
@@ -89,6 +90,8 @@ export class Superserve {
       delete: (vmId, cpId, opts) =>
         this._deleteCheckpoint(vmId, cpId, opts),
     }
+
+    trackEvent("sdk.init")
   }
 
   // ==================== Exec ====================
@@ -101,6 +104,7 @@ export class Superserve {
       },
     })
     const raw = await this._safeJson<ApiExecResponse>(resp)
+    trackEvent("sdk.exec")
     return { stdout: raw.stdout, stderr: raw.stderr, exitCode: raw.exit_code }
   }
 
@@ -141,6 +145,7 @@ export class Superserve {
       },
     })
     const raw = await this._safeJson<ApiForkResponse>(resp)
+    trackEvent("sdk.fork", { count: options.count })
     return {
       sourceVmId: raw.source_vm_id,
       checkpointId: raw.checkpoint_id,
@@ -164,7 +169,9 @@ export class Superserve {
         mem_size_mib: options.memSizeMib,
       },
     })
-    return mapVm(await this._safeJson<ApiVm>(resp))
+    const vm = mapVm(await this._safeJson<ApiVm>(resp))
+    trackEvent("sdk.vm.create")
+    return vm
   }
 
   private async _listVms(options?: { status?: string }): Promise<Vm[]> {
@@ -182,6 +189,7 @@ export class Superserve {
 
   private async _deleteVm(vmId: string): Promise<void> {
     await this._request("DELETE", `/vms/${e(vmId)}`)
+    trackEvent("sdk.vm.delete")
   }
 
   private async _vmAction(
@@ -312,6 +320,10 @@ export class Superserve {
         const detail =
           errorObj?.message ??
           ((errorData.detail ?? errorData.message) as string | undefined)
+        trackEvent("sdk.error", {
+          status: response.status,
+          code: errorObj?.code,
+        })
         throw new APIError(
           response.status,
           detail ?? response.statusText,
