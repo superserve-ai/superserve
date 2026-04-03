@@ -26,6 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from "@superserve/ui"
+import { usePostHog } from "posthog-js/react"
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
@@ -33,6 +34,7 @@ import { CreateSandboxDialog } from "@/components/sandboxes/create-sandbox-dialo
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableToolbar } from "@/components/table-toolbar"
 import { useSelection } from "@/hooks/use-selection"
+import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 
 type SandboxStatus = "Ready" | "Stopped" | "Paused"
 
@@ -82,6 +84,7 @@ const STATUS_TABS = [
 ]
 
 export default function SandboxesPage() {
+  const posthog = usePostHog()
   const [sandboxes, setSandboxes] = useState<Sandbox[]>(MOCK_SANDBOXES)
   const [statusFilter, setStatusFilter] = useState("all")
   const [search, setSearch] = useState("")
@@ -114,6 +117,7 @@ export default function SandboxesPage() {
   } = useSelection(filtered)
 
   const deleteSelected = () => {
+    posthog.capture(SANDBOX_EVENTS.BULK_DELETED, { count: selected.size })
     setSandboxes((prev) => prev.filter((s) => !selected.has(s.id)))
     clearSelection()
   }

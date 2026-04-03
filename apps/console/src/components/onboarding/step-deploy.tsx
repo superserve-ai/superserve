@@ -2,6 +2,8 @@
 
 import { Alert, Button, Card } from "@superserve/ui"
 import { motion } from "motion/react"
+import { usePostHog } from "posthog-js/react"
+import { ONBOARDING_EVENTS } from "@/lib/posthog/events"
 import type { AgentPath, Framework } from "../../hooks/use-onboarding-state"
 import { CodeBlock } from "../code-block"
 import { FRAMEWORKS, FrameworkPicker } from "../framework-picker"
@@ -21,6 +23,7 @@ export function StepDeploy({
   onSelectFramework,
   onSkip,
 }: StepDeployProps) {
+  const posthog = usePostHog()
   const selectedFramework = FRAMEWORKS.find((fw) => fw.id === framework)
 
   return (
@@ -30,7 +33,12 @@ export function StepDeploy({
         <div className="flex flex-col sm:flex-row gap-3">
           <Card
             className="flex-1 px-4 py-3 cursor-pointer hover:bg-surface-hover transition-colors"
-            onClick={() => onSelectPath("own")}
+            onClick={() => {
+              posthog.capture(ONBOARDING_EVENTS.AGENT_PATH_SELECTED, {
+                path: "own",
+              })
+              onSelectPath("own")
+            }}
           >
             <p className="text-sm font-medium text-foreground">
               I have an agent
@@ -41,7 +49,12 @@ export function StepDeploy({
           </Card>
           <Card
             className="flex-1 px-4 py-3 cursor-pointer hover:bg-surface-hover transition-colors"
-            onClick={() => onSelectPath("example")}
+            onClick={() => {
+              posthog.capture(ONBOARDING_EVENTS.AGENT_PATH_SELECTED, {
+                path: "example",
+              })
+              onSelectPath("example")
+            }}
           >
             <p className="text-sm font-medium text-foreground">
               Use an example
@@ -150,7 +163,14 @@ export function StepDeploy({
         <div className="flex items-center gap-4 pt-2">
           <Button
             size="sm"
-            onClick={onSkip}
+            onClick={() => {
+              posthog.capture(ONBOARDING_EVENTS.STEP_COMPLETED, {
+                step: 2,
+                agent_path: agentPath,
+                framework,
+              })
+              onSkip()
+            }}
             disabled={agentPath === "example" && !framework}
           >
             Mark as done

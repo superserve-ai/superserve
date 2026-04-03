@@ -3,6 +3,7 @@
 import { Badge, Button, Card } from "@superserve/ui"
 import { motion } from "motion/react"
 import { usePostHog } from "posthog-js/react"
+import { ONBOARDING_EVENTS } from "@/lib/posthog/events"
 import { PLAYGROUND_URL } from "../../constants"
 import type { Agent } from "../../hooks/use-agents"
 
@@ -95,7 +96,7 @@ export function StepPlayground({
               size="sm"
               onClick={() => {
                 if (posthog) {
-                  posthog.capture("playground_agent_opened", {
+                  posthog.capture(ONBOARDING_EVENTS.PLAYGROUND_OPENED, {
                     agent_id: agent.id,
                     agent_name: agent.name,
                   })

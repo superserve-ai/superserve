@@ -13,13 +13,16 @@ import {
   Separator,
   useToast,
 } from "@superserve/ui"
+import { usePostHog } from "posthog-js/react"
 import { useEffect, useState } from "react"
 import { Spinner } from "@/components/icons"
 import { PageHeader } from "@/components/page-header"
 import { useUser } from "@/hooks/use-user"
+import { SETTINGS_EVENTS } from "@/lib/posthog/events"
 
 export default function SettingsPage() {
   const { user, loading } = useUser()
+  const posthog = usePostHog()
   const { addToast } = useToast()
 
   const [name, setName] = useState("")
@@ -53,6 +56,7 @@ export default function SettingsPage() {
         data: { full_name: name },
       })
       if (error) throw error
+      posthog.capture(SETTINGS_EVENTS.PROFILE_UPDATED)
       addToast("Profile updated", "success")
     } catch {
       addToast("Failed to update profile", "error")
@@ -93,6 +97,7 @@ export default function SettingsPage() {
       setCurrentPassword("")
       setNewPassword("")
       setConfirmPassword("")
+      posthog.capture(SETTINGS_EVENTS.PASSWORD_CHANGED)
       addToast("Password updated", "success")
     } catch {
       addToast("Failed to update password", "error")
@@ -104,6 +109,7 @@ export default function SettingsPage() {
   const handleDeleteAccount = async () => {
     setDeleting(true)
     try {
+      posthog.capture(SETTINGS_EVENTS.ACCOUNT_DELETION_REQUESTED)
       // TODO: call server action to delete account via admin API
       addToast(
         "Account deletion requested. Contact support@superserve.ai",

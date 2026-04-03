@@ -6,9 +6,11 @@ import {
   SidebarProvider,
   useSidebar,
 } from "@/components/sidebar/sidebar-context"
+import { usePostHogIdentify } from "@/hooks/use-posthog-identify"
 
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const { isCollapsed } = useSidebar()
+  usePostHogIdentify()
 
   return (
     <div className="flex min-h-screen">

@@ -5,9 +5,11 @@ import { createBrowserClient } from "@superserve/supabase"
 import { Badge, Button, Input, useToast } from "@superserve/ui"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
+import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useState } from "react"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { DEV_AUTH_ENABLED, devSignIn } from "@/lib/auth-helpers"
+import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { AUTH_INPUT_CLASS } from "../styles"
 
 function SignInContent() {
@@ -19,6 +21,7 @@ function SignInContent() {
   const [showPassword, setShowPassword] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
+  const posthog = usePostHog()
   const { addToast } = useToast()
 
   const rawNext = searchParams.get("next") || "/"
@@ -69,6 +72,10 @@ function SignInContent() {
         password,
       })
       if (error) {
+        posthog.capture(AUTH_EVENTS.SIGN_IN_FAILED, {
+          method: "email",
+          reason: error.message,
+        })
         if (error.message.includes("Invalid login credentials")) {
           addToast("Invalid email or password.", "error")
         } else if (error.message.includes("Email not confirmed")) {
@@ -78,6 +85,7 @@ function SignInContent() {
         }
         return
       }
+      posthog.capture(AUTH_EVENTS.SIGN_IN_COMPLETED, { method: "email" })
       router.push(nextUrl && nextUrl !== "/" ? nextUrl : "/")
     } catch (err) {
       console.error("Email sign in error:", err)

@@ -8,6 +8,7 @@ import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useState } from "react"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { DEV_AUTH_ENABLED, devSignIn } from "@/lib/auth-helpers"
+import { AUTH_EVENTS } from "@/lib/posthog/events"
 
 function Logo() {
   return (
@@ -164,7 +165,7 @@ function DevicePageContent() {
 
       setIsAuthorized(true)
       if (posthog) {
-        posthog.capture("cli_device_authorized", {
+        posthog.capture(AUTH_EVENTS.DEVICE_AUTHORIZED, {
           user_email: user.email,
         })
       }

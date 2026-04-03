@@ -33,6 +33,7 @@ import {
   TableRow,
   useToast,
 } from "@superserve/ui"
+import { usePostHog } from "posthog-js/react"
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
@@ -40,6 +41,7 @@ import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableToolbar } from "@/components/table-toolbar"
 import { useSelection } from "@/hooks/use-selection"
 import { formatDate } from "@/lib/format"
+import { API_KEY_EVENTS } from "@/lib/posthog/events"
 
 interface ApiKey {
   id: string
@@ -107,6 +109,7 @@ function CreateKeyDialog({
   } | null>(null)
   const [copied, setCopied] = useState(false)
   const { addToast } = useToast()
+  const posthog = usePostHog()
 
   const handleCreate = () => {
     if (!name.trim()) return
@@ -118,12 +121,14 @@ function CreateKeyDialog({
       createdAt: new Date(),
       lastUsedAt: null,
     }
+    posthog.capture(API_KEY_EVENTS.CREATED, { name: name.trim() })
     setCreatedKey({ full, apiKey })
   }
 
   const handleCopy = async () => {
     if (!createdKey) return
     await navigator.clipboard.writeText(createdKey.full)
+    posthog.capture(API_KEY_EVENTS.COPIED)
     setCopied(true)
     addToast("API key copied to clipboard", "success")
     setTimeout(() => setCopied(false), 2000)
@@ -217,6 +222,7 @@ function CreateKeyDialog({
 }
 
 export default function ApiKeysPage() {
+  const posthog = usePostHog()
   const [keys, setKeys] = useState<ApiKey[]>(INITIAL_KEYS)
   const [search, setSearch] = useState("")
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set())
@@ -253,11 +259,13 @@ export default function ApiKeysPage() {
   }
 
   const deleteKey = (id: string) => {
+    posthog.capture(API_KEY_EVENTS.REVOKED)
     setKeys((prev) => prev.filter((k) => k.id !== id))
     clearSelection()
   }
 
   const deleteSelected = () => {
+    posthog.capture(API_KEY_EVENTS.BULK_REVOKED, { count: selected.size })
     setKeys((prev) => prev.filter((k) => !selected.has(k.id)))
     clearSelection()
   }

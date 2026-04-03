@@ -1,6 +1,8 @@
 "use client"
 
 import { Button } from "@superserve/ui"
+import { usePostHog } from "posthog-js/react"
+import { ONBOARDING_EVENTS } from "@/lib/posthog/events"
 import { CodeBlock } from "../code-block"
 
 interface StepInstallProps {
@@ -8,6 +10,7 @@ interface StepInstallProps {
 }
 
 export function StepInstall({ onComplete }: StepInstallProps) {
+  const posthog = usePostHog()
   return (
     <div className="px-4 pb-6 pt-6 space-y-2">
       <p className="text-muted text-sm">
@@ -26,7 +29,13 @@ export function StepInstall({ onComplete }: StepInstallProps) {
       <CodeBlock command="superserve login" eventName="login_command_copied" />
 
       <div className="mt-8">
-        <Button onClick={onComplete} size="sm">
+        <Button
+          onClick={() => {
+            posthog.capture(ONBOARDING_EVENTS.STEP_COMPLETED, { step: 1 })
+            onComplete()
+          }}
+          size="sm"
+        >
           Mark as done
         </Button>
       </div>

@@ -5,8 +5,10 @@ import { createBrowserClient } from "@superserve/supabase"
 import { Button, Input, useToast } from "@superserve/ui"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
+import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useState } from "react"
 import { GoogleIcon, Spinner } from "@/components/icons"
+import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { AUTH_INPUT_CLASS } from "../styles"
 import { signUpWithEmail } from "./action"
 
@@ -20,6 +22,7 @@ function SignUpContent() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
+  const posthog = usePostHog()
   const { addToast } = useToast()
   const searchParams = useSearchParams()
   const rawNext = searchParams.get("next") || "/"
@@ -50,9 +53,14 @@ function SignUpContent() {
     try {
       const result = await signUpWithEmail(email, password, fullName)
       if (!result.success) {
+        posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
+          method: "email",
+          reason: result.error,
+        })
         addToast(result.error || "Error creating account.", "error")
         return
       }
+      posthog.capture(AUTH_EVENTS.SIGN_UP_COMPLETED, { method: "email" })
       setEmailSent(true)
     } catch (err) {
       console.error("Sign up error:", err)
