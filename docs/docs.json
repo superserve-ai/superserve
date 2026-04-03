@@ -44,7 +44,19 @@
     "groups": [
       {
         "group": "Getting Started",
-        "pages": ["introduction"]
+        "pages": ["introduction", "quickstart", "authentication"]
+      },
+      {
+        "group": "Core Concepts",
+        "pages": ["vms", "checkpoints-and-rollback"]
+      },
+      {
+        "group": "Guides",
+        "pages": ["execution", "files"]
+      },
+      {
+        "group": "Reference",
+        "pages": ["cli"]
       }
     ],
     "global": {

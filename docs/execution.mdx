@@ -1,0 +1,120 @@
+---
+title: Command Execution
+description: Run commands inside VMs with batch or streaming output
+---
+
+## Batch execution
+
+Use `exec` to run a command and wait for the full result.
+
+<CodeGroup>
+```typescript TypeScript
+import Superserve from "@superserve/sdk"
+
+const client = new Superserve({ apiKey: process.env.SUPERSERVE_API_KEY! })
+
+const result = await client.exec("vm_abc123", { command: "cat /etc/os-release" })
+console.log(result.stdout)
+console.log("Exit code:", result.exitCode)
+```
+```python Python
+from superserve import Superserve
+
+client = Superserve()
+
+result = client.exec("vm_abc123", command="cat /etc/os-release")
+print(result.stdout)
+print("Exit code:", result.exit_code)
+```
+</CodeGroup>
+
+### ExecResult fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `stdout` | `string` | Standard output |
+| `stderr` | `string` | Standard error |
+| `exitCode` / `exit_code` | `number` / `int` | Process exit code (137 = killed by timeout) |
+
+## Streaming execution
+
+Use `execStream` (TypeScript) or `exec_stream` (Python) to receive output as it is produced. This is useful for long-running commands like package installs or build scripts.
+
+<CodeGroup>
+```typescript TypeScript
+const stream = client.execStream("vm_abc123", { command: "apt-get update" })
+
+for await (const event of stream) {
+  if (event.type === "stdout") process.stdout.write(event.data)
+  if (event.type === "stderr") process.stderr.write(event.data)
+}
+
+const result = await stream.result
+console.log(`Exit code: ${result.exitCode}`)
+```
+```python Python
+import sys
+
+for event in client.exec_stream("vm_abc123", command="apt-get update"):
+    if "stdout" in event:
+        print(event["stdout"], end="")
+    if "stderr" in event:
+        print(event["stderr"], end="", file=sys.stderr)
+```
+</CodeGroup>
+
+## Filtered streams (TypeScript)
+
+The `ExecStream` object exposes `.stdout` and `.stderr` convenience iterables that yield only the relevant chunks, so you can skip the type-checking boilerplate.
+
+```typescript
+const stream = client.execStream("vm_abc123", { command: "make build" })
+
+for await (const chunk of stream.stdout) {
+  process.stdout.write(chunk)
+}
+```
+
+You can also abort a running stream:
+
+```typescript
+stream.abort()
+```
+
+## ExecStreamEvent types (TypeScript)
+
+| Type | Fields | Description |
+| --- | --- | --- |
+| `stdout` | `data: string` | Chunk of standard output |
+| `stderr` | `data: string` | Chunk of standard error |
+| `exit` | `exitCode: number` | Process finished |
+
+## Timeout
+
+Both `exec` and `execStream` accept a timeout parameter. The default is 30 seconds. If the command exceeds the timeout it is killed and the exit code is `137`.
+
+<CodeGroup>
+```typescript TypeScript
+const result = await client.exec("vm_abc123", {
+  command: "sleep 120",
+  timeoutS: 60,
+})
+// result.exitCode === 137 if killed by timeout
+```
+```python Python
+result = client.exec("vm_abc123", command="sleep 120", timeout_s=60)
+# result.exit_code == 137 if killed by timeout
+```
+</CodeGroup>
+
+## SSH (CLI only)
+
+Open an interactive terminal session to a running VM:
+
+```bash
+superserve ssh vm_abc123
+```
+
+Press `Ctrl+]` to disconnect.
+
+<Note>SSH is only available via the CLI. The SDKs provide `exec` and `execStream` for programmatic access.</Note>

@@ -1,0 +1,96 @@
+---
+title: Quickstart
+description: Create a VM, run a command, and checkpoint it in under 2 minutes
+---
+
+## Install
+
+<CodeGroup>
+```bash TypeScript
+npm install @superserve/sdk
+```
+```bash Python
+pip install superserve
+```
+</CodeGroup>
+
+## Set your API key
+
+Get a key from [console.superserve.ai](https://console.superserve.ai), then export it:
+
+```bash
+export SUPERSERVE_API_KEY=your-key
+```
+
+## Create a VM and run a command
+
+<CodeGroup>
+```typescript TypeScript
+import Superserve from "@superserve/sdk"
+
+const client = new Superserve({ apiKey: process.env.SUPERSERVE_API_KEY! })
+
+const vm = await client.vms.create({ name: "my-vm", image: "ubuntu-22.04" })
+console.log("VM created:", vm.id)
+
+const result = await client.exec(vm.id, { command: "echo hello" })
+console.log(result.stdout) // "hello"
+```
+```python Python
+from superserve import Superserve
+
+client = Superserve()
+
+vm = client.vms.create(name="my-vm", image="ubuntu-22.04")
+print("VM created:", vm.id)
+
+result = client.exec(vm.id, command="echo hello")
+print(result.stdout)  # "hello"
+```
+</CodeGroup>
+
+## Checkpoint and fork
+
+<CodeGroup>
+```typescript TypeScript
+const checkpoint = await client.checkpoints.create(vm.id, { name: "baseline" })
+console.log("Checkpoint:", checkpoint.id)
+
+const forkResult = await client.fork(vm.id, { count: 1 })
+const forkedVm = forkResult.vms[0]
+console.log("Forked VM:", forkedVm.id)
+
+const forkedResult = await client.exec(forkedVm.id, { command: "echo forked" })
+console.log(forkedResult.stdout) // "forked"
+```
+```python Python
+checkpoint = client.checkpoints.create(vm.id, name="baseline")
+print("Checkpoint:", checkpoint.id)
+
+fork_result = client.fork(vm.id, count=1)
+forked_vm = fork_result.vms[0]
+print("Forked VM:", forked_vm.id)
+
+forked_result = client.exec(forked_vm.id, command="echo forked")
+print(forked_result.stdout)  # "forked"
+```
+</CodeGroup>
+
+## Clean up
+
+<CodeGroup>
+```typescript TypeScript
+await client.vms.delete(forkedVm.id)
+await client.vms.delete(vm.id)
+```
+```python Python
+client.vms.delete(forked_vm.id)
+client.vms.delete(vm.id)
+```
+</CodeGroup>
+
+## Next steps
+
+- [VMs](/vms) -- lifecycle, images, and configuration
+- [Checkpoints and Rollback](/checkpoints-and-rollback) -- snapshots, rollback, and forking
+- [CLI Reference](/cli) -- manage everything from the terminal

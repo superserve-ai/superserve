@@ -1,0 +1,93 @@
+---
+title: File Transfer
+description: Upload and download files to and from VMs
+---
+
+## Upload a file
+
+<CodeGroup>
+```typescript TypeScript
+import Superserve from "@superserve/sdk"
+
+const client = new Superserve({ apiKey: process.env.SUPERSERVE_API_KEY! })
+
+// From a string
+await client.files.upload("vm_abc123", "/home/user/hello.txt", "Hello, world!")
+
+// From bytes
+const data = new TextEncoder().encode("binary content")
+await client.files.upload("vm_abc123", "/home/user/data.bin", data)
+```
+```python Python
+from superserve import Superserve
+
+client = Superserve()
+
+# From bytes
+client.files.upload("vm_abc123", "/home/user/hello.txt", b"Hello, world!")
+
+# From a file
+with open("local_file.txt", "rb") as f:
+    client.files.upload("vm_abc123", "/home/user/file.txt", f.read())
+```
+</CodeGroup>
+
+### Upload parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `vmId` / `vm_id` | `string` | Yes | VM identifier |
+| `remotePath` / `remote_path` | `string` | Yes | Destination path in the VM |
+| `data` | `Uint8Array \| string` (TS) or `bytes` (Python) | Yes | File content |
+| `mode` | `string` | No | Unix file mode in octal, e.g. `"0755"` (Python only) |
+
+<Note>Parent directories are created automatically. The leading `/` in the remote path is optional.</Note>
+
+## Download a file
+
+<CodeGroup>
+```typescript TypeScript
+const data = await client.files.download("vm_abc123", "/home/user/output.txt")
+const text = new TextDecoder().decode(data)
+```
+```python Python
+data = client.files.download("vm_abc123", "/home/user/output.txt")
+text = data.decode("utf-8")
+```
+</CodeGroup>
+
+## CLI
+
+Upload and download files from the terminal:
+
+```bash
+superserve files upload vm_abc123 ./script.py /home/user/script.py --mode 0755
+superserve files download vm_abc123 /home/user/output.txt ./output.txt
+```
+
+## Example: upload and run a script
+
+Upload a Python script to the VM, execute it, and read the output.
+
+<CodeGroup>
+```typescript TypeScript
+const script = `
+import json
+print(json.dumps({"status": "ok", "count": 42}))
+`
+
+await client.files.upload("vm_abc123", "/tmp/analyze.py", script)
+const result = await client.exec("vm_abc123", { command: "python3 /tmp/analyze.py" })
+console.log(result.stdout)
+```
+```python Python
+script = '''
+import json
+print(json.dumps({"status": "ok", "count": 42}))
+'''
+
+client.files.upload("vm_abc123", "/tmp/analyze.py", script.encode())
+result = client.exec("vm_abc123", command="python3 /tmp/analyze.py")
+print(result.stdout)
+```
+</CodeGroup>

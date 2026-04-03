@@ -1,0 +1,157 @@
+---
+title: Checkpoints, Rollback & Fork
+description: Snapshot VMs, rewind state, and clone from any point in time
+---
+
+## Checkpoints
+
+Checkpoints are point-in-time snapshots of full VM state, including memory and disk. They are pinned by default, protecting them from automatic expiry.
+
+<CodeGroup>
+```typescript TypeScript
+import Superserve from "@superserve/sdk"
+
+const client = new Superserve({ apiKey: process.env.SUPERSERVE_API_KEY! })
+
+const checkpoint = await client.checkpoints.create("vm_abc123", {
+  name: "before-migration",
+})
+```
+```python Python
+from superserve import Superserve
+
+client = Superserve()
+
+checkpoint = client.checkpoints.create(
+    "vm_abc123",
+    name="before-migration",
+)
+```
+</CodeGroup>
+
+## List checkpoints
+
+Retrieve all checkpoints for a given VM.
+
+<CodeGroup>
+```typescript TypeScript
+const checkpoints = await client.checkpoints.list("vm_abc123")
+```
+```python Python
+checkpoints = client.checkpoints.list("vm_abc123")
+```
+</CodeGroup>
+
+## Checkpoint object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | Checkpoint ID (prefixed `cp_`) |
+| vmId / vm_id | string | Parent VM |
+| name | string or null | Human-readable label |
+| type | string | auto, manual, or named |
+| sizeBytes / size_bytes | number | Total snapshot size |
+| deltaSizeBytes / delta_size_bytes | number | Incremental size |
+| createdAt / created_at | string | ISO 8601 |
+| pinned | boolean | Protected from expiry |
+
+## Rollback
+
+Rollback rewinds a VM to a prior checkpoint, restoring both memory and disk to that exact state. There are three ways to specify the target checkpoint.
+
+<CodeGroup>
+```typescript TypeScript
+// Rollback by checkpoint ID
+await client.rollback("vm_abc123", {
+  checkpointId: "cp_xyz789",
+})
+
+// Rollback by name (uses most recent match)
+await client.rollback("vm_abc123", {
+  name: "before-migration",
+})
+
+// Rollback by time offset
+await client.rollback("vm_abc123", {
+  minutesAgo: 30,
+})
+```
+```python Python
+# Rollback by checkpoint ID
+client.rollback("vm_abc123", checkpoint_id="cp_xyz789")
+
+# Rollback by name (uses most recent match)
+client.rollback("vm_abc123", name="before-migration")
+
+# Rollback by time offset
+client.rollback("vm_abc123", minutes_ago=30)
+```
+</CodeGroup>
+
+<Warning>
+Exactly one of `checkpointId`, `name`, or `minutesAgo` must be provided. Checkpoints newer than the target are deleted unless `preserveNewer` is set.
+</Warning>
+
+## Rollback parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| checkpointId / checkpoint_id | string | No | Target by ID |
+| name | string | No | Target by name (most recent match) |
+| minutesAgo / minutes_ago | number | No | Target by time offset |
+| preserveNewer / preserve_newer | boolean | No | Keep newer checkpoints (default: false) |
+
+## Fork
+
+Fork creates independent clones of a VM from a checkpoint. If no checkpoint is specified, the current state is automatically snapshotted first.
+
+<CodeGroup>
+```typescript TypeScript
+// Fork a single clone from current state
+const result = await client.fork("vm_abc123", { count: 1 })
+
+// Fork 3 clones from a specific checkpoint
+const result = await client.fork("vm_abc123", {
+  count: 3,
+  fromCheckpointId: "cp_xyz789",
+})
+
+console.log(result.vms) // Array of newly created Vm objects
+```
+```python Python
+# Fork a single clone from current state
+result = client.fork("vm_abc123", count=1)
+
+# Fork 3 clones from a specific checkpoint
+result = client.fork("vm_abc123", count=3, from_checkpoint_id="cp_xyz789")
+
+print(result.vms)  # List of newly created Vm objects
+```
+</CodeGroup>
+
+## Fork tree
+
+Inspect the full hierarchy of forks originating from a VM. The returned structure is recursive, with each node containing its own children.
+
+<CodeGroup>
+```typescript TypeScript
+const tree = await client.forkTree("vm_abc123")
+
+// tree.vm       — the root VM
+// tree.children — array of { vm, children } nodes
+```
+```python Python
+tree = client.fork_tree("vm_abc123")
+
+# tree.vm       — the root VM
+# tree.children — list of { vm, children } nodes
+```
+</CodeGroup>
+
+## ForkResult object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| sourceVmId / source_vm_id | string | VM that was forked |
+| checkpointId / checkpoint_id | string | Checkpoint used |
+| vms | Vm[] | Newly created VMs |

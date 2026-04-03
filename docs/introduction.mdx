@@ -1,21 +1,45 @@
 ---
 title: Introduction
-description: Sandbox infrastructure to run AI Agents in the cloud
+description: Cloud micro-VMs with checkpoint, rollback, and fork
 ---
 
-Superserve provides sandbox infrastructure to run AI Agents in the cloud. Powered by Firecracker MicroVMs.
+Superserve gives you on-demand Firecracker micro-VMs that boot in under 200ms. Run code, transfer files, and snapshot VM state — then rollback or fork from any point in time.
 
-## Getting Started
+Built for AI agent sandboxes, CI runners, and isolated dev environments.
 
-Visit our website to get started: [superserve.ai](https://www.superserve.ai/)
+## What you can do
 
-## Repositories
+<CardGroup cols={3}>
+  <Card title="Run commands" icon="terminal">
+    Execute shell commands with batch or streaming output
+  </Card>
+  <Card title="Transfer files" icon="file-arrow-up">
+    Upload and download files to/from running VMs
+  </Card>
+  <Card title="Checkpoint" icon="camera">
+    Snapshot full VM state (memory + disk) at any point
+  </Card>
+  <Card title="Rollback" icon="clock-rotate-left">
+    Rewind a VM to any previous checkpoint
+  </Card>
+  <Card title="Fork" icon="code-fork">
+    Clone running VMs into independent copies
+  </Card>
+  <Card title="SSH" icon="plug">
+    Interactive terminal sessions via the CLI
+  </Card>
+</CardGroup>
 
-- [Superserve](https://github.com/superserve-ai/superserve) - CLI, Python/TypeScript SDK, Sandbox Dashboard and Docs
-- [Sandbox](https://github.com/superserve-ai/sandbox) - Sandbox infrastructure
+## SDKs and CLI
 
-## Where to find us
-
-- [Email us](mailto:engineering@superserve.ai)
-- [Twitter/X](https://x.com/superserve_ai)
-- [LinkedIn](https://www.linkedin.com/company/super-serve-ai)
+<CardGroup cols={3}>
+  <Card title="TypeScript SDK" icon="js" href="/quickstart">
+    `npm install @superserve/sdk`
+  </Card>
+  <Card title="Python SDK" icon="python" href="/quickstart">
+    `pip install superserve`
+  </Card>
+  <Card title="CLI" icon="rectangle-terminal" href="/cli">
+    `curl -fsSL https://get.superserve.ai | sh`
+  </Card>
+</CardGroup>

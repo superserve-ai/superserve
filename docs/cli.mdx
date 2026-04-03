@@ -1,0 +1,253 @@
+---
+title: CLI Reference
+description: Complete command reference for the superserve CLI
+---
+
+## Install
+
+```bash
+curl -fsSL https://get.superserve.ai | sh
+```
+
+## Authentication
+
+### `superserve login`
+
+Authenticate with Superserve.
+
+| Flag | Type | Required | Description |
+| --- | --- | --- | --- |
+| `--api-key` | string | No | API key (omit for interactive login) |
+
+### `superserve logout`
+
+Remove stored credentials.
+
+## VMs
+
+### `superserve vm create`
+
+Create a VM from a base image.
+
+| Flag | Type | Required | Description |
+| --- | --- | --- | --- |
+| `--name` | string | Yes | Name for the VM |
+| `--image` | string | Yes | Base image (e.g. `ubuntu-22.04`) |
+| `--vcpu` | number | No | Number of vCPUs |
+| `--memory` | number | No | Memory in MiB |
+| `--json` | boolean | No | Output as JSON |
+
+### `superserve vm list`
+
+List VMs.
+
+| Flag | Type | Required | Description |
+| --- | --- | --- | --- |
+| `--status` | string | No | Filter by status |
+| `--json` | boolean | No | Output as JSON |
+
+### `superserve vm get`
+
+Get details for a VM.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `vm_id` | string | Yes | The VM ID |
+
+| Flag | Type | Required | Description |
+| --- | --- | --- | --- |
+| `--json` | boolean | No | Output as JSON |
+
+### `superserve vm delete`
+
+Delete a VM.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `vm_id` | string | Yes | The VM ID |
+
+| Flag | Type | Required | Description |
+| --- | --- | --- | --- |
+| `-f, --force` | boolean | No | Skip confirmation prompt |
+
+### `superserve vm stop`
+
+Stop a running VM.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `vm_id` | string | Yes | The VM ID |
+
+### `superserve vm start`
+
+Start a stopped VM.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `vm_id` | string | Yes | The VM ID |
+
+### `superserve vm sleep`
+
+Put a VM to sleep.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `vm_id` | string | Yes | The VM ID |
+
+### `superserve vm wake`
+
+Wake a sleeping VM.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `vm_id` | string | Yes | The VM ID |
+
+## Execution
+
+### `superserve exec`
+
+Run a command inside a VM.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `vm_id` | string | Yes | The VM ID |
+| `command` | string | Yes | The command to execute |
+
+| Flag | Type | Required | Description |
+| --- | --- | --- | --- |
+| `--timeout` | number | No | Timeout in seconds |
+| `--stream` | boolean | No | Stream stdout/stderr via SSE |
+| `--json` | boolean | No | Output as JSON |
+
+## SSH
+
+### `superserve ssh`
+
+Open an interactive SSH session to a VM.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `vm_id` | string | Yes | The VM ID |
+
+## Files
+
+### `superserve files upload`
+
+Upload a local file to a VM.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `vm_id` | string | Yes | The VM ID |
+| `local_path` | string | Yes | Path to the local file |
+| `remote_path` | string | Yes | Destination path on the VM |
+
+| Flag | Type | Required | Description |
+| --- | --- | --- | --- |
+| `--mode` | string | No | File permissions in octal (e.g. `0755`) |
+
+### `superserve files download`
+
+Download a file from a VM.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `vm_id` | string | Yes | The VM ID |
+| `remote_path` | string | Yes | Path on the VM |
+| `local_path` | string | No | Local destination (defaults to current directory) |
+
+## Checkpoints
+
+### `superserve checkpoint create`
+
+Create a checkpoint of a VM's current state.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `vm_id` | string | Yes | The VM ID |
+
+| Flag | Type | Required | Description |
+| --- | --- | --- | --- |
+| `--name` | string | Yes | Name for the checkpoint |
+| `--json` | boolean | No | Output as JSON |
+
+### `superserve checkpoint list`
+
+List checkpoints for a VM.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `vm_id` | string | Yes | The VM ID |
+
+| Flag | Type | Required | Description |
+| --- | --- | --- | --- |
+| `--json` | boolean | No | Output as JSON |
+
+### `superserve checkpoint delete`
+
+Delete a checkpoint.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `vm_id` | string | Yes | The VM ID |
+| `checkpoint_id` | string | Yes | The checkpoint ID |
+
+| Flag | Type | Required | Description |
+| --- | --- | --- | --- |
+| `-f, --force` | boolean | No | Skip confirmation prompt |
+
+## Rollback
+
+### `superserve rollback`
+
+Roll a VM back to a previous state. Exactly one of `--checkpoint`, `--name`, or `--minutes-ago` is required.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `vm_id` | string | Yes | The VM ID |
+
+| Flag | Type | Required | Description |
+| --- | --- | --- | --- |
+| `--checkpoint` | string | No | Checkpoint ID to rollback to |
+| `--name` | string | No | Checkpoint name to rollback to |
+| `--minutes-ago` | number | No | Roll back to state N minutes ago |
+| `--preserve-newer` | boolean | No | Keep checkpoints newer than the target |
+| `--json` | boolean | No | Output as JSON |
+
+## Fork
+
+### `superserve fork`
+
+Create independent copies of a VM.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `vm_id` | string | Yes | The VM ID |
+
+| Flag | Type | Required | Description |
+| --- | --- | --- | --- |
+| `--count` | number | No | Number of forks to create |
+| `--from-checkpoint` | string | No | Fork from a specific checkpoint ID |
+| `--json` | boolean | No | Output as JSON |
+
+### `superserve fork tree`
+
+Display the fork tree for a VM.
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `vm_id` | string | Yes | The VM ID |
+
+| Flag | Type | Required | Description |
+| --- | --- | --- | --- |
+| `--json` | boolean | No | Output as JSON |
+
+## Global options
+
+These flags work with any command.
+
+| Flag | Description |
+| --- | --- |
+| `--json` | Output as JSON (where supported) |
+| `--force` | Skip confirmation prompts |
+| `--no-color` | Disable colored output |
+| `--version` | Print version and exit |

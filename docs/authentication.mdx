@@ -1,0 +1,58 @@
+---
+title: Authentication
+description: API keys and authentication methods
+---
+
+## Get an API key
+
+Create an API key from [console.superserve.ai](https://console.superserve.ai). Keys are scoped to your account and have full access to all resources.
+
+## Environment variable
+
+Set the `SUPERSERVE_API_KEY` environment variable. The Python SDK auto-detects it. The TypeScript SDK requires you to pass it explicitly.
+
+```bash
+export SUPERSERVE_API_KEY=your-key
+```
+
+## SDK
+
+<CodeGroup>
+```typescript TypeScript
+import Superserve from "@superserve/sdk"
+
+const client = new Superserve({ apiKey: process.env.SUPERSERVE_API_KEY! })
+```
+```python Python
+from superserve import Superserve
+
+# Auto-reads SUPERSERVE_API_KEY from environment
+client = Superserve()
+
+# Or pass explicitly
+client = Superserve(api_key="your-key")
+
+# Context manager support
+with Superserve() as client:
+    vm = client.vms.create(name="my-vm", image="ubuntu-22.04")
+```
+</CodeGroup>
+
+## CLI
+
+```bash
+# Interactive login
+superserve login
+
+# Or pass the key directly
+superserve login --api-key your-key
+```
+
+## HTTP API
+
+All API requests require the `X-API-Key` header. The base URL is `https://api.superserve.ai/v1`.
+
+```bash
+curl https://api.superserve.ai/v1/vms \
+  -H "X-API-Key: your-key"
+```

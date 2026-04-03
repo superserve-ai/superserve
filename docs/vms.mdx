@@ -1,0 +1,158 @@
+---
+title: Virtual Machines
+description: Create, manage, and control VM lifecycle
+---
+
+## Create a VM
+
+Spin up a new micro-VM by specifying a name and base image.
+
+<CodeGroup>
+```typescript TypeScript
+import Superserve from "@superserve/sdk"
+
+const client = new Superserve({ apiKey: process.env.SUPERSERVE_API_KEY! })
+
+const vm = await client.vms.create({
+  name: "my-sandbox",
+  image: "ubuntu-22.04",
+  vcpuCount: 2,
+  memSizeMib: 512,
+})
+```
+```python Python
+from superserve import Superserve
+
+client = Superserve()
+
+vm = client.vms.create(
+    name="my-sandbox",
+    image="ubuntu-22.04",
+    vcpu_count=2,
+    mem_size_mib=512,
+)
+```
+</CodeGroup>
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| name | string | Yes | — | VM name |
+| image | string | Yes | — | Base image (e.g. `ubuntu-22.04`) |
+| vcpuCount / vcpu_count | number | No | 1 | Virtual CPUs |
+| memSizeMib / mem_size_mib | number | No | 256 | Memory in MiB |
+
+## VM lifecycle
+
+Every VM moves through a defined set of states:
+
+```
+  create()         stop()           sleep()
+     │               │                │
+     ▼               ▼                ▼
+ CREATING ──► RUNNING ──► STOPPED   SLEEPING
+                 ▲  │       │          │
+                 │  │   start()    wake()
+                 │  │       │          │
+                 │  └───────┘──────────┘
+                 │
+                 └──── (auto on create)
+                          │
+                       DEAD (on failure or delete)
+```
+
+- **CREATING** — VM is being provisioned. Transitions to RUNNING automatically.
+- **RUNNING** — VM is live and accepting commands.
+- **STOPPED** — Gracefully shut down. Disk persists, memory is lost. Restart with `start`.
+- **SLEEPING** — Full snapshot (memory + disk) taken before suspending. Resume with `wake`.
+- **DEAD** — Terminal state after deletion or unrecoverable failure.
+
+<Note>
+**Stop vs Sleep**: `stop` shuts down the VM gracefully — in-memory state is lost, only disk persists. `sleep` takes a full snapshot (memory + disk) before suspending, so `wake` restores the VM exactly where it left off.
+</Note>
+
+## Lifecycle operations
+
+<CodeGroup>
+```typescript TypeScript
+// Stop a running VM (disk persists, memory lost)
+await client.vms.stop(vm.id)
+
+// Start a stopped VM
+await client.vms.start(vm.id)
+
+// Sleep a running VM (full snapshot, then suspend)
+await client.vms.sleep(vm.id)
+
+// Wake a sleeping VM (restores exact state)
+await client.vms.wake(vm.id)
+```
+```python Python
+# Stop a running VM (disk persists, memory lost)
+client.vms.stop(vm.id)
+
+# Start a stopped VM
+client.vms.start(vm.id)
+
+# Sleep a running VM (full snapshot, then suspend)
+client.vms.sleep(vm.id)
+
+# Wake a sleeping VM (restores exact state)
+client.vms.wake(vm.id)
+```
+</CodeGroup>
+
+## List and filter
+
+Retrieve all VMs, or filter by status.
+
+<CodeGroup>
+```typescript TypeScript
+// List all VMs
+const allVms = await client.vms.list()
+
+// List only running VMs
+const running = await client.vms.list({ status: "RUNNING" })
+```
+```python Python
+# List all VMs
+all_vms = client.vms.list()
+
+# List only running VMs
+running = client.vms.list(status="RUNNING")
+```
+</CodeGroup>
+
+## Get and delete
+
+<CodeGroup>
+```typescript TypeScript
+// Get a single VM by ID
+const vm = await client.vms.get("vm_abc123")
+
+// Delete a VM permanently
+await client.vms.delete("vm_abc123")
+```
+```python Python
+# Get a single VM by ID
+vm = client.vms.get("vm_abc123")
+
+# Delete a VM permanently
+client.vms.delete("vm_abc123")
+```
+</CodeGroup>
+
+## VM object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | VM identifier (prefixed `vm_`) |
+| name | string | Human-readable name |
+| status | string | CREATING, RUNNING, STOPPED, SLEEPING, or DEAD |
+| vcpuCount / vcpu_count | number | Virtual CPUs |
+| memSizeMib / mem_size_mib | number | Memory in MiB |
+| ipAddress / ip_address | string or null | Private IP (null while CREATING or DEAD) |
+| createdAt / created_at | string | ISO 8601 timestamp |
+| uptimeSeconds / uptime_seconds | number | Cumulative seconds RUNNING |
+| lastCheckpointAt / last_checkpoint_at | string or null | Most recent checkpoint time |
+| parentVmId / parent_vm_id | string or null | Source VM if this is a fork |
+| forkedFromCheckpointId / forked_from_checkpoint_id | string or null | Checkpoint this was forked from |
