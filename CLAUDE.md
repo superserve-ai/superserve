@@ -4,7 +4,7 @@ Guidelines for working with the Superserve monorepo.
 
 ## What This Repository Is
 
-Superserve is a sandbox and VM platform built on Firecracker micro-VMs. It provides a CLI, TypeScript SDK, and Python SDK for creating isolated cloud VMs with checkpoint, rollback, and fork primitives. The API is at `api.agentbox.dev/v1`.
+Superserve is a sandbox and VM platform built on Firecracker micro-VMs. It provides a CLI, TypeScript SDK, and Python SDK for creating isolated cloud VMs with checkpoint, rollback, and fork primitives. The API is at `api.superserve.ai/v1`.
 
 This repo is a monorepo containing the CLI, TypeScript SDK, Python SDK, and documentation.
 

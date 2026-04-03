@@ -60,6 +60,7 @@ export function createClient(
       stream?: boolean
       authenticated?: boolean
       contentType?: string
+      extraHeaders?: Record<string, string>
     } = {},
   ): Promise<Response> {
     const {
@@ -69,6 +70,7 @@ export function createClient(
       stream = false,
       authenticated = true,
       contentType,
+      extraHeaders,
     } = options
 
     let url = `${normalizedUrl}/v1${endpoint}`
@@ -81,6 +83,10 @@ export function createClient(
 
     if (contentType) {
       headers["Content-Type"] = contentType
+    }
+
+    if (extraHeaders) {
+      Object.assign(headers, extraHeaders)
     }
 
     const controller = new AbortController()
@@ -229,8 +235,8 @@ export function createClient(
     data: Uint8Array | Buffer,
     mode?: string,
   ): Promise<void> {
-    const headers: Record<string, string> = {}
-    if (mode) headers["X-File-Mode"] = mode
+    const extraHeaders: Record<string, string> = {}
+    if (mode) extraHeaders["X-File-Mode"] = mode
 
     // Strip leading slash from path for the URL
     const cleanPath = remotePath.replace(/^\//, "")
@@ -240,6 +246,8 @@ export function createClient(
       {
         body: data,
         contentType: "application/octet-stream",
+        extraHeaders:
+          Object.keys(extraHeaders).length > 0 ? extraHeaders : undefined,
       },
     )
   }

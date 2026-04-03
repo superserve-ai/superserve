@@ -13,13 +13,15 @@ export async function confirm(message: string): Promise<boolean> {
   })
 }
 
-export async function promptUser(): Promise<string | null> {
+export async function promptUser(
+  message = "Enter value: ",
+): Promise<string | null> {
   const rl = createInterface({
     input: process.stdin,
     output: process.stderr,
   })
   return new Promise((resolve) => {
-    rl.question("\nYou> ", (answer) => {
+    rl.question(message, (answer) => {
       resolve(answer)
       rl.close()
     })

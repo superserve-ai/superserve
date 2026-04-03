@@ -8,7 +8,7 @@ import httpx
 
 from superserve.errors import APIError
 
-DEFAULT_BASE_URL = "https://api.agentbox.dev"
+DEFAULT_BASE_URL = "https://api.superserve.ai"
 DEFAULT_TIMEOUT = 30.0
 
 

@@ -31,9 +31,7 @@ export const ssh = new Command("ssh")
         )
       }
 
-      const baseUrl = (
-        process.env.SUPERSERVE_API_URL ?? PLATFORM_API_URL
-      ).replace(/\/+$/, "")
+      const baseUrl = PLATFORM_API_URL.replace(/\/+$/, "")
       const wsUrl = baseUrl.replace(/^https:/, "wss:").replace(/^http:/, "ws:")
 
       const url = `${wsUrl}/v1/vms/${encodeURIComponent(vmId)}/logs/stream`

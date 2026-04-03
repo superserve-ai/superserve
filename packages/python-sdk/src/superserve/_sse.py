@@ -3,18 +3,24 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Generator
 from typing import Any
 
 import httpx
 
 
-def parse_sse_stream(response: httpx.Response) -> Iterator[dict[str, Any]]:
-    """Parse an SSE response into dicts, yielding each `data:` payload."""
-    for line in response.iter_lines():
-        if not line.startswith("data: "):
-            continue
-        try:
-            yield json.loads(line[6:])
-        except json.JSONDecodeError:
-            continue
+def parse_sse_stream(response: httpx.Response) -> Generator[dict[str, Any], None, None]:
+    """Parse an SSE response into dicts, yielding each `data:` payload.
+
+    Closes the response when iteration completes or is interrupted.
+    """
+    try:
+        for line in response.iter_lines():
+            if not line.startswith("data: "):
+                continue
+            try:
+                yield json.loads(line[6:])
+            except json.JSONDecodeError:
+                continue
+    finally:
+        response.close()

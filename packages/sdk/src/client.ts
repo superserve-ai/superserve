@@ -18,8 +18,10 @@ import type {
   Vm,
 } from "./types"
 
-const DEFAULT_BASE_URL = "https://api.agentbox.dev"
+const DEFAULT_BASE_URL = "https://api.superserve.ai"
 const DEFAULT_TIMEOUT = 30_000
+
+const e = encodeURIComponent
 
 export class Superserve {
   private readonly _apiKey: string
@@ -92,7 +94,7 @@ export class Superserve {
   // ==================== Exec ====================
 
   async exec(vmId: string, options: ExecOptions): Promise<ExecResult> {
-    const resp = await this._request("POST", `/vms/${vmId}/exec`, {
+    const resp = await this._request("POST", `/vms/${e(vmId)}/exec`, {
       json: {
         command: options.command,
         timeout_s: options.timeoutS,
@@ -104,7 +106,7 @@ export class Superserve {
 
   execStream(vmId: string, options: ExecOptions): ExecStream {
     const controller = new AbortController()
-    const responsePromise = this._request("POST", `/vms/${vmId}/exec/stream`, {
+    const responsePromise = this._request("POST", `/vms/${e(vmId)}/exec/stream`, {
       json: {
         command: options.command,
         timeout_s: options.timeoutS,
@@ -118,7 +120,7 @@ export class Superserve {
   // ==================== Rollback ====================
 
   async rollback(vmId: string, options: RollbackOptions): Promise<Vm> {
-    const resp = await this._request("POST", `/vms/${vmId}/rollback`, {
+    const resp = await this._request("POST", `/vms/${e(vmId)}/rollback`, {
       json: {
         checkpoint_id: options.checkpointId,
         name: options.name,
@@ -132,7 +134,7 @@ export class Superserve {
   // ==================== Fork ====================
 
   async fork(vmId: string, options: ForkOptions): Promise<ForkResult> {
-    const resp = await this._request("POST", `/vms/${vmId}/fork`, {
+    const resp = await this._request("POST", `/vms/${e(vmId)}/fork`, {
       json: {
         count: options.count,
         from_checkpoint_id: options.fromCheckpointId,
@@ -147,7 +149,7 @@ export class Superserve {
   }
 
   async forkTree(vmId: string): Promise<ForkTree> {
-    const resp = await this._request("GET", `/vms/${vmId}/tree`)
+    const resp = await this._request("GET", `/vms/${e(vmId)}/tree`)
     return mapForkTree(await this._safeJson<ApiForkTree>(resp))
   }
 
@@ -174,19 +176,19 @@ export class Superserve {
   }
 
   private async _getVm(vmId: string): Promise<Vm> {
-    const resp = await this._request("GET", `/vms/${vmId}`)
+    const resp = await this._request("GET", `/vms/${e(vmId)}`)
     return mapVm(await this._safeJson<ApiVm>(resp))
   }
 
   private async _deleteVm(vmId: string): Promise<void> {
-    await this._request("DELETE", `/vms/${vmId}`)
+    await this._request("DELETE", `/vms/${e(vmId)}`)
   }
 
   private async _vmAction(
     vmId: string,
     action: "stop" | "start" | "sleep" | "wake",
   ): Promise<Vm> {
-    const resp = await this._request("POST", `/vms/${vmId}/${action}`)
+    const resp = await this._request("POST", `/vms/${e(vmId)}/${action}`)
     return mapVm(await this._safeJson<ApiVm>(resp))
   }
 
@@ -200,7 +202,7 @@ export class Superserve {
     const cleanPath = remotePath.replace(/^\//, "")
     const bytes =
       typeof data === "string" ? new TextEncoder().encode(data) : new Uint8Array(data)
-    await this._request("PUT", `/vms/${vmId}/files/${cleanPath}`, {
+    await this._request("PUT", `/vms/${e(vmId)}/files/${cleanPath}`, {
       body: bytes,
       contentType: "application/octet-stream",
     })
@@ -211,7 +213,7 @@ export class Superserve {
     remotePath: string,
   ): Promise<Buffer> {
     const cleanPath = remotePath.replace(/^\//, "")
-    const resp = await this._request("GET", `/vms/${vmId}/files/${cleanPath}`)
+    const resp = await this._request("GET", `/vms/${e(vmId)}/files/${cleanPath}`)
     const arrayBuf = await resp.arrayBuffer()
     return Buffer.from(arrayBuf)
   }
@@ -219,7 +221,7 @@ export class Superserve {
   // ==================== Internal: Checkpoints ====================
 
   private async _listCheckpoints(vmId: string): Promise<Checkpoint[]> {
-    const resp = await this._request("GET", `/vms/${vmId}/checkpoints`)
+    const resp = await this._request("GET", `/vms/${e(vmId)}/checkpoints`)
     const data = await this._safeJson<{ checkpoints: ApiCheckpoint[] }>(resp)
     return (data.checkpoints ?? []).map(mapCheckpoint)
   }
@@ -228,7 +230,7 @@ export class Superserve {
     vmId: string,
     options?: { name?: string },
   ): Promise<Checkpoint> {
-    const resp = await this._request("POST", `/vms/${vmId}/checkpoint`, {
+    const resp = await this._request("POST", `/vms/${e(vmId)}/checkpoint`, {
       json: { name: options?.name },
     })
     return mapCheckpoint(await this._safeJson<ApiCheckpoint>(resp))
@@ -243,7 +245,7 @@ export class Superserve {
     if (options?.force) params.force = "true"
     await this._request(
       "DELETE",
-      `/vms/${vmId}/checkpoints/${checkpointId}`,
+      `/vms/${e(vmId)}/checkpoints/${e(checkpointId)}`,
       { params },
     )
   }

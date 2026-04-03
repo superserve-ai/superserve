@@ -3,7 +3,7 @@ import { join } from "node:path"
 import pkg from "../../package.json"
 
 export const PLATFORM_API_URL =
-  process.env.SUPERSERVE_API_URL ?? "https://api.agentbox.dev"
+  process.env.SUPERSERVE_API_URL ?? "https://api.superserve.ai"
 export const DASHBOARD_URL =
   process.env.SUPERSERVE_DASHBOARD_URL ?? "https://console.superserve.ai"
 

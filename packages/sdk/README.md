@@ -1,83 +1,50 @@
 # Superserve SDK
 
-TypeScript SDK for interacting with Superserve agents. Supports one-shot runs, streaming responses, multi-turn sessions, and React integration.
+TypeScript SDK for creating and managing cloud micro-VMs with checkpoint, rollback, and fork primitives.
 
 ## Install
 
 ```bash
-bun add superserve
+bun add @superserve/sdk
 ```
 
 ## Usage
 
 ```typescript
-import Superserve from "@superserve/sdk"
+import { Superserve } from "@superserve/sdk"
 
-const client = new Superserve({ apiKey: "your-api-key" })
-```
+const client = new Superserve({ apiKey: process.env.SUPERSERVE_API_KEY })
 
-### Run
+// Create a VM
+const vm = await client.vms.create({ name: "my-sandbox", image: "ubuntu-22.04" })
 
-```typescript
-const result = await client.run("my-agent", { message: "Hello!" })
-console.log(result.text)
-```
+// Execute a command
+const result = await client.exec(vm.id, { command: "echo hello" })
+console.log(result.stdout)
 
-### Stream
-
-```typescript
-const stream = client.stream("my-agent", { message: "Write a report" })
-
-for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk)
-}
-```
-
-### Sessions
-
-```typescript
-const session = await client.createSession("my-agent")
-
-const r1 = await session.run("What files are in the project?")
-const r2 = await session.run("Refactor the main module")
-
-await session.end()
-```
-
-### React
-
-```tsx
-import { SuperserveProvider, useAgent } from "@superserve/sdk/react"
-
-function App() {
-  return (
-    <SuperserveProvider apiKey="your-api-key">
-      <Chat />
-    </SuperserveProvider>
-  )
+// Stream command output
+const stream = client.execStream(vm.id, { command: "apt-get update" })
+for await (const event of stream.stdout) {
+  process.stdout.write(event)
 }
 
-function Chat() {
-  const { messages, sendMessage, isStreaming } = useAgent({ agent: "my-agent" })
+// Upload / download files
+await client.files.upload(vm.id, "/app/script.py", "print('hello')")
+const data = await client.files.download(vm.id, "/app/script.py")
 
-  return (
-    <div>
-      {messages.map((msg) => (
-        <p key={msg.id}>{msg.content}</p>
-      ))}
-      <button onClick={() => sendMessage("Hello!")}>Send</button>
-    </div>
-  )
-}
+// Checkpoint, rollback, fork
+const cp = await client.checkpoints.create(vm.id, { name: "baseline" })
+await client.rollback(vm.id, { checkpointId: cp.id })
+const forks = await client.fork(vm.id, { count: 2 })
+
+// VM lifecycle
+await client.vms.stop(vm.id)
+await client.vms.start(vm.id)
+await client.vms.sleep(vm.id)
+await client.vms.wake(vm.id)
+await client.vms.delete(vm.id)
 ```
 
-### List Agents
+## Documentation
 
-```typescript
-const agents = await client.agents.list()
-const agent = await client.agents.get("my-agent")
-```
-
-## License
-
-MIT
+See [docs.superserve.ai](https://docs.superserve.ai) for full documentation.

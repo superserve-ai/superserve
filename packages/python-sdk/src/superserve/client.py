@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
+from collections.abc import Generator
 from typing import Any
 
 from superserve._http import DEFAULT_BASE_URL, DEFAULT_TIMEOUT, HttpClient
@@ -181,7 +181,7 @@ class Superserve:
         command: str,
         *,
         timeout_s: int | None = None,
-    ) -> Iterator[dict[str, Any]]:
+    ) -> Generator[dict[str, Any], None, None]:
         body: dict[str, Any] = {"command": command}
         if timeout_s is not None:
             body["timeout_s"] = timeout_s

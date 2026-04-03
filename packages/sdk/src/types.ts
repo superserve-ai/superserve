@@ -3,7 +3,7 @@
 export interface SuperserveOptions {
   /** API key for authentication. */
   apiKey: string
-  /** Base URL for the API. Defaults to https://api.agentbox.dev */
+  /** Base URL for the API. Defaults to https://api.superserve.ai */
   baseUrl?: string
   /** Request timeout in milliseconds. Defaults to 30000. */
   timeout?: number

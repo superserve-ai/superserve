@@ -6,6 +6,7 @@ export class ExecStream implements AsyncIterable<ExecStreamEvent> {
   private readonly _controller: AbortController
   private _resultResolve!: (result: ExecResult) => void
   private _resultReject!: (error: Error) => void
+  private _consumed = false
   readonly result: Promise<ExecResult>
 
   constructor(
@@ -41,6 +42,11 @@ export class ExecStream implements AsyncIterable<ExecStreamEvent> {
   }
 
   async *[Symbol.asyncIterator](): AsyncIterator<ExecStreamEvent> {
+    if (this._consumed) {
+      throw new Error("ExecStream can only be iterated once")
+    }
+    this._consumed = true
+
     let stdout = ""
     let stderr = ""
     let exitCode = 0
