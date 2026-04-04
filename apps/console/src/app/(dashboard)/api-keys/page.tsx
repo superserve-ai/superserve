@@ -36,66 +36,29 @@ import {
 import { usePostHog } from "posthog-js/react"
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
+import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
+import { TableSkeleton } from "@/components/table-skeleton"
 import { TableToolbar } from "@/components/table-toolbar"
+import {
+  useApiKeys,
+  useBulkRevokeApiKeys,
+  useCreateApiKey,
+  useRevokeApiKey,
+} from "@/hooks/use-api-keys"
 import { useSelection } from "@/hooks/use-selection"
 import { formatDate } from "@/lib/format"
 import { API_KEY_EVENTS } from "@/lib/posthog/events"
-
-interface ApiKey {
-  id: string
-  name: string
-  prefix: string
-  createdAt: Date
-  lastUsedAt: Date | null
-}
 
 function maskKey(prefix: string): string {
   return `${prefix}${"•".repeat(20)}`
 }
 
-function generateMockKey(): { full: string; prefix: string } {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-  let key = ""
-  for (let i = 0; i < 32; i++) {
-    key += chars[Math.floor(Math.random() * chars.length)]
-  }
-  const full = `ss_live_${key}`
-  const prefix = `ss_live_${key.slice(0, 8)}...`
-  return { full, prefix }
-}
-
-const INITIAL_KEYS: ApiKey[] = [
-  {
-    id: "1",
-    name: "Production",
-    prefix: "ss_live_a1b2c3d4...",
-    createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-    lastUsedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-  },
-  {
-    id: "2",
-    name: "Development",
-    prefix: "ss_live_q7r8s9t0...",
-    createdAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
-    lastUsedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
-  },
-  {
-    id: "3",
-    name: "CI/CD Pipeline",
-    prefix: "ss_live_g3h4i5j6...",
-    createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-    lastUsedAt: null,
-  },
-]
-
 function CreateKeyDialog({
-  onCreated,
   open: controlledOpen,
   onOpenChange,
 }: {
-  onCreated: (key: ApiKey) => void
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }) {
@@ -103,26 +66,20 @@ function CreateKeyDialog({
   const open = controlledOpen ?? internalOpen
   const setOpen = onOpenChange ?? setInternalOpen
   const [name, setName] = useState("")
-  const [createdKey, setCreatedKey] = useState<{
-    full: string
-    apiKey: ApiKey
-  } | null>(null)
+  const [createdKey, setCreatedKey] = useState<{ full: string } | null>(null)
   const [copied, setCopied] = useState(false)
   const { addToast } = useToast()
   const posthog = usePostHog()
+  const createMutation = useCreateApiKey()
 
   const handleCreate = () => {
     if (!name.trim()) return
-    const { full, prefix } = generateMockKey()
-    const apiKey: ApiKey = {
-      id: crypto.randomUUID(),
-      name: name.trim(),
-      prefix,
-      createdAt: new Date(),
-      lastUsedAt: null,
-    }
     posthog.capture(API_KEY_EVENTS.CREATED, { name: name.trim() })
-    setCreatedKey({ full, apiKey })
+    createMutation.mutate(name.trim(), {
+      onSuccess: (data) => {
+        setCreatedKey({ full: data.key })
+      },
+    })
   }
 
   const handleCopy = async () => {
@@ -135,9 +92,6 @@ function CreateKeyDialog({
   }
 
   const handleClose = () => {
-    if (createdKey) {
-      onCreated(createdKey.apiKey)
-    }
     setOpen(false)
     setName("")
     setCreatedKey(null)
@@ -210,8 +164,11 @@ function CreateKeyDialog({
               <Button variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleCreate} disabled={!name.trim()}>
-                Create Key
+              <Button
+                onClick={handleCreate}
+                disabled={!name.trim() || createMutation.isPending}
+              >
+                {createMutation.isPending ? "Creating..." : "Create Key"}
               </Button>
             </>
           )}
@@ -223,12 +180,15 @@ function CreateKeyDialog({
 
 export default function ApiKeysPage() {
   const posthog = usePostHog()
-  const [keys, setKeys] = useState<ApiKey[]>(INITIAL_KEYS)
+  const { data: keys, isPending, error, refetch } = useApiKeys()
+  const revokeMutation = useRevokeApiKey()
+  const bulkRevoke = useBulkRevokeApiKeys()
   const [search, setSearch] = useState("")
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set())
   const [createOpen, setCreateOpen] = useState(false)
 
   const filtered = useMemo(() => {
+    if (!keys) return []
     if (!search) return keys
     return keys.filter(
       (k) =>
@@ -260,26 +220,40 @@ export default function ApiKeysPage() {
 
   const deleteKey = (id: string) => {
     posthog.capture(API_KEY_EVENTS.REVOKED)
-    setKeys((prev) => prev.filter((k) => k.id !== id))
+    revokeMutation.mutate(id)
     clearSelection()
   }
 
   const deleteSelected = () => {
     posthog.capture(API_KEY_EVENTS.BULK_REVOKED, { count: selected.size })
-    setKeys((prev) => prev.filter((k) => !selected.has(k.id)))
+    bulkRevoke.mutate(Array.from(selected))
     clearSelection()
   }
 
-  const isEmpty = keys.length === 0
+  if (isPending) {
+    return (
+      <div className="flex h-full flex-col">
+        <PageHeader title="API Keys" />
+        <TableSkeleton columns={6} />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-full flex-col">
+        <PageHeader title="API Keys" />
+        <ErrorState message={error.message} onRetry={() => refetch()} />
+      </div>
+    )
+  }
+
+  const isEmpty = !keys || keys.length === 0
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="API Keys">
-        {!isEmpty && (
-          <CreateKeyDialog
-            onCreated={(key) => setKeys((prev) => [key, ...prev])}
-          />
-        )}
+        {!isEmpty && <CreateKeyDialog />}
       </PageHeader>
 
       {isEmpty ? (
@@ -291,11 +265,7 @@ export default function ApiKeysPage() {
             actionLabel="Create Key"
             onAction={() => setCreateOpen(true)}
           />
-          <CreateKeyDialog
-            open={createOpen}
-            onOpenChange={setCreateOpen}
-            onCreated={(key) => setKeys((prev) => [key, ...prev])}
-          />
+          <CreateKeyDialog open={createOpen} onOpenChange={setCreateOpen} />
         </>
       ) : (
         <>
@@ -363,11 +333,11 @@ export default function ApiKeysPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-muted">
-                      {formatDate(apiKey.createdAt)}
+                      {formatDate(new Date(apiKey.created_at))}
                     </TableCell>
                     <TableCell className="text-muted">
-                      {apiKey.lastUsedAt
-                        ? formatDate(apiKey.lastUsedAt)
+                      {apiKey.last_used_at
+                        ? formatDate(new Date(apiKey.last_used_at))
                         : "Never"}
                     </TableCell>
                     <TableCell>

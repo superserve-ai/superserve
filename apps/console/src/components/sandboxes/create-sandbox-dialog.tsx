@@ -17,7 +17,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@superserve/ui"
+import { usePostHog } from "posthog-js/react"
 import { useRef, useState } from "react"
+import { useCreateSandbox } from "@/hooks/use-sandboxes"
+import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 
 interface EnvVar {
   id: string
@@ -38,12 +41,15 @@ export function CreateSandboxDialog({
   open: controlledOpen,
   onOpenChange,
 }: CreateSandboxDialogProps = {}) {
+  const posthog = usePostHog()
   const [internalOpen, setInternalOpen] = useState(false)
   const open = controlledOpen ?? internalOpen
   const setOpen = onOpenChange ?? setInternalOpen
   const [name, setName] = useState("")
   const [envVars, setEnvVars] = useState<EnvVar[]>([createEnvVar()])
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const createMutation = useCreateSandbox()
 
   const addEnvVar = () => {
     setEnvVars([...envVars, createEnvVar()])
@@ -94,6 +100,19 @@ export function CreateSandboxDialog({
   const handleReset = () => {
     setName("")
     setEnvVars([createEnvVar()])
+  }
+
+  const handleCreate = () => {
+    posthog.capture(SANDBOX_EVENTS.CREATED)
+    createMutation.mutate(
+      { name: name.trim(), vcpu_count: 1, memory_mib: 1024 },
+      {
+        onSuccess: () => {
+          setOpen(false)
+          handleReset()
+        },
+      },
+    )
   }
 
   return (
@@ -203,7 +222,12 @@ export function CreateSandboxDialog({
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button disabled={!name.trim()}>Create Sandbox</Button>
+          <Button
+            disabled={!name.trim() || createMutation.isPending}
+            onClick={handleCreate}
+          >
+            {createMutation.isPending ? "Creating..." : "Create Sandbox"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

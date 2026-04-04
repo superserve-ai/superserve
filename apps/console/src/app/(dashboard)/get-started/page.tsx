@@ -5,6 +5,7 @@ import { Button, cn, useToast } from "@superserve/ui"
 import { useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { PageHeader } from "@/components/page-header"
+import { useCreateApiKey } from "@/hooks/use-api-keys"
 
 type Language = "typescript" | "python"
 
@@ -43,17 +44,6 @@ result = sandbox.exec("echo 'Hello from Superserve!'")
 print(result.stdout)
 
 sandbox.stop()`
-}
-
-function generateMockKey(): { full: string; prefix: string } {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-  let key = ""
-  for (let i = 0; i < 32; i++) {
-    key += chars[Math.floor(Math.random() * chars.length)]
-  }
-  const full = `ss_live_${key}`
-  const prefix = `ss_live_${key.slice(0, 8)}...`
-  return { full, prefix }
 }
 
 function CopyButton({ text, label }: { text: string; label?: string }) {
@@ -122,16 +112,18 @@ function CodeBlock({ code, prefix }: { code: string; prefix?: string }) {
 
 export default function GetStartedPage() {
   const [language, setLanguage] = useState<Language>("typescript")
-  const [createdKey, setCreatedKey] = useState<{
-    full: string
-    prefix: string
-  } | null>(null)
+  const createKeyMutation = useCreateApiKey()
+  const createdKey = createKeyMutation.data
+    ? {
+        full: createKeyMutation.data.key,
+        prefix: createKeyMutation.data.prefix,
+      }
+    : null
   const [copied, setCopied] = useState(false)
   const { addToast } = useToast()
 
   const handleCreateKey = () => {
-    const key = generateMockKey()
-    setCreatedKey(key)
+    createKeyMutation.mutate("Get Started Key")
   }
 
   const handleCopyKey = async () => {
@@ -231,9 +223,13 @@ export default function GetStartedPage() {
                     </button>
                   </div>
                 ) : (
-                  <Button onClick={handleCreateKey} size="sm">
+                  <Button
+                    onClick={handleCreateKey}
+                    size="sm"
+                    disabled={createKeyMutation.isPending}
+                  >
                     <PlusIcon className="size-3.5" weight="light" />
-                    Create Key
+                    {createKeyMutation.isPending ? "Creating..." : "Create Key"}
                   </Button>
                 )}
               </div>

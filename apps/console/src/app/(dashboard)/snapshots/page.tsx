@@ -10,53 +10,41 @@ import {
   TableHeader,
   TableRow,
 } from "@superserve/ui"
+import { useQuery } from "@tanstack/react-query"
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
+import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
+import { TableSkeleton } from "@/components/table-skeleton"
 import { TableToolbar } from "@/components/table-toolbar"
 import { useSelection } from "@/hooks/use-selection"
+import { apiClient } from "@/lib/api/client"
+import { snapshotKeys } from "@/lib/api/query-keys"
 import { formatDate } from "@/lib/format"
 
 interface Snapshot {
   id: string
   name: string
-  created: Date | null
-  lastUsed: Date | null
+  created_at: string
+  last_used_at: string | null
 }
 
-const MOCK_SNAPSHOTS: Snapshot[] = [
-  {
-    id: "1",
-    name: "superserve-agent-sandbox",
-    created: null,
-    lastUsed: null,
-  },
-  {
-    id: "2",
-    name: "dc703f84-a11e-43bf-90db-af2f8a46cf1c",
-    created: null,
-    lastUsed: null,
-  },
-  {
-    id: "3",
-    name: "dc703f84-a11e-43bf-90db-af2f8a46cf1c",
-    created: null,
-    lastUsed: null,
-  },
-  {
-    id: "4",
-    name: "dc703f84-a11e-43bf-90db-af2f8a46cf1c",
-    created: null,
-    lastUsed: null,
-  },
-]
-
 export default function SnapshotsPage() {
-  const [snapshots] = useState<Snapshot[]>(MOCK_SNAPSHOTS)
+  const {
+    data: snapshots,
+    isPending,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: snapshotKeys.all,
+    queryFn: () => apiClient<Snapshot[]>("/v1/snapshots"),
+  })
+
   const [search, setSearch] = useState("")
 
   const filtered = useMemo(() => {
+    if (!snapshots) return []
     if (!search) return snapshots
     return snapshots.filter((s) =>
       s.name.toLowerCase().includes(search.toLowerCase()),
@@ -65,6 +53,24 @@ export default function SnapshotsPage() {
 
   const { selected, allSelected, someSelected, toggleAll, toggleOne } =
     useSelection(filtered)
+
+  if (isPending) {
+    return (
+      <div className="flex h-full flex-col">
+        <PageHeader title="Snapshots" />
+        <TableSkeleton columns={5} />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-full flex-col">
+        <PageHeader title="Snapshots" />
+        <ErrorState message={error.message} onRetry={() => refetch()} />
+      </div>
+    )
+  }
 
   const isEmpty = snapshots.length === 0
 
@@ -117,10 +123,14 @@ export default function SnapshotsPage() {
                       {snapshot.name}
                     </TableCell>
                     <TableCell className="text-muted">
-                      {snapshot.created ? formatDate(snapshot.created) : "-"}
+                      {snapshot.created_at
+                        ? formatDate(new Date(snapshot.created_at))
+                        : "-"}
                     </TableCell>
                     <TableCell className="text-muted">
-                      {snapshot.lastUsed ? formatDate(snapshot.lastUsed) : "-"}
+                      {snapshot.last_used_at
+                        ? formatDate(new Date(snapshot.last_used_at))
+                        : "-"}
                     </TableCell>
                     <TableCell>
                       <Button

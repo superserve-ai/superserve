@@ -9,19 +9,24 @@ import {
   TableHeader,
   TableRow,
 } from "@superserve/ui"
+import { useQuery } from "@tanstack/react-query"
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
+import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
+import { TableSkeleton } from "@/components/table-skeleton"
 import { TableToolbar } from "@/components/table-toolbar"
+import { apiClient } from "@/lib/api/client"
+import { auditLogKeys } from "@/lib/api/query-keys"
 import { formatTime } from "@/lib/format"
 
-type AuditAction = "Create" | "Start" | "Update"
+type AuditAction = "Create" | "Start" | "Update" | "Pause"
 type AuditOutcome = "Success" | "Failure"
 
 interface AuditLog {
   id: string
-  time: Date
+  time: string
   user: string
   action: AuditAction
   target: string
@@ -33,54 +38,12 @@ const OUTCOME_BADGE_VARIANT: Record<AuditOutcome, "success" | "destructive"> = {
   Failure: "destructive",
 }
 
-const MOCK_AUDIT_LOGS: AuditLog[] = [
-  {
-    id: "1",
-    time: new Date(Date.now() - 1 * 60 * 60 * 1000),
-    user: "user@example.com",
-    action: "Create",
-    target: "sandbox / dc703f84-a11e-43bf-90c...",
-    outcome: "Success",
-  },
-  {
-    id: "2",
-    time: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    user: "user@example.com",
-    action: "Start",
-    target: "dc703f84-a11e-43bf-90db-af2f8a4...",
-    outcome: "Success",
-  },
-  {
-    id: "3",
-    time: new Date(Date.now() - 5 * 60 * 60 * 1000),
-    user: "user@example.com",
-    action: "Update",
-    target: "api_key / first-project",
-    outcome: "Success",
-  },
-  {
-    id: "4",
-    time: new Date(Date.now() - 24 * 60 * 60 * 1000),
-    user: "user@example.com",
-    action: "Create",
-    target: "organization / 5dec2f6f-7e57-4668...",
-    outcome: "Success",
-  },
-  {
-    id: "5",
-    time: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-    user: "user@example.com",
-    action: "Start",
-    target: "sandbox / dc703f84-a11e-43bf-90c...",
-    outcome: "Failure",
-  },
-]
-
 const ACTION_TABS = [
   { label: "All", value: "all" },
   { label: "Create", value: "Create" },
   { label: "Start", value: "Start" },
   { label: "Update", value: "Update" },
+  { label: "Pause", value: "Pause" },
 ]
 
 function TimeCell({ date }: { date: Date }) {
@@ -94,12 +57,21 @@ function TimeCell({ date }: { date: Date }) {
 }
 
 export default function AuditLogsPage() {
-  const [logs] = useState<AuditLog[]>(MOCK_AUDIT_LOGS)
   const [actionFilter, setActionFilter] = useState("all")
   const [search, setSearch] = useState("")
 
+  const {
+    data: logs,
+    isPending,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: auditLogKeys.all,
+    queryFn: () => apiClient<AuditLog[]>("/v1/audit-logs"),
+  })
+
   const filtered = useMemo(() => {
-    return logs.filter((log) => {
+    return (logs ?? []).filter((log) => {
       if (actionFilter !== "all" && log.action !== actionFilter) return false
       if (
         search &&
@@ -115,11 +87,29 @@ export default function AuditLogsPage() {
     ...tab,
     count:
       tab.value === "all"
-        ? logs.length
-        : logs.filter((l) => l.action === tab.value).length,
+        ? (logs?.length ?? 0)
+        : (logs?.filter((l) => l.action === tab.value).length ?? 0),
   }))
 
-  const isEmpty = logs.length === 0
+  const isEmpty = (logs?.length ?? 0) === 0
+
+  if (isPending) {
+    return (
+      <div className="flex h-full flex-col">
+        <PageHeader title="Audit Logs" />
+        <TableSkeleton columns={5} />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-full flex-col">
+        <PageHeader title="Audit Logs" />
+        <ErrorState message={error.message} onRetry={() => refetch()} />
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -157,7 +147,7 @@ export default function AuditLogsPage() {
                 {filtered.map((log) => (
                   <TableRow key={log.id}>
                     <TableCell className="whitespace-nowrap">
-                      <TimeCell date={log.time} />
+                      <TimeCell date={new Date(log.time)} />
                     </TableCell>
                     <TableCell className="text-foreground/80">
                       {log.user}

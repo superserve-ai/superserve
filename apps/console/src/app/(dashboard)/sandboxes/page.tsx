@@ -29,66 +29,57 @@ import {
 import { usePostHog } from "posthog-js/react"
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
+import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
 import { CreateSandboxDialog } from "@/components/sandboxes/create-sandbox-dialog"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
+import { TableSkeleton } from "@/components/table-skeleton"
 import { TableToolbar } from "@/components/table-toolbar"
+import {
+  useBulkDeleteSandboxes,
+  useDeleteSandbox,
+  usePauseSandbox,
+  useResumeSandbox,
+  useSandboxes,
+} from "@/hooks/use-sandboxes"
 import { useSelection } from "@/hooks/use-selection"
+import type { SandboxStatus } from "@/lib/api/types"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 
-type SandboxStatus = "Ready" | "Stopped" | "Paused"
-
-interface Sandbox {
-  id: string
-  name: string
-  status: SandboxStatus
-  snapshot: string
-  resources: string
-}
-
 const STATUS_BADGE_VARIANT: Record<SandboxStatus, BadgeVariant> = {
-  Ready: "success",
-  Stopped: "destructive",
-  Paused: "muted",
+  active: "success",
+  starting: "warning",
+  pausing: "warning",
+  idle: "muted",
+  deleted: "destructive",
 }
 
-const MOCK_SANDBOXES: Sandbox[] = [
-  {
-    id: "1",
-    name: "dc703f84-a11e-43bf-90db-af2f8a46cf1c",
-    status: "Ready",
-    snapshot: "superserve/snap-43",
-    resources: "1CPU | 2GB | 3GB",
-  },
-  {
-    id: "2",
-    name: "dc703f84-a11e-43bf-90db-af2f8a46cf1c",
-    status: "Stopped",
-    snapshot: "superserve/snap-32",
-    resources: "1CPU | 2GB | 3GB",
-  },
-  {
-    id: "3",
-    name: "dc703f84-a11e-43bf-90db-af2f8a46cf1c",
-    status: "Paused",
-    snapshot: "superserve/snap-12",
-    resources: "1CPU | 2GB | 3GB",
-  },
-]
+const STATUS_LABEL: Record<SandboxStatus, string> = {
+  active: "Active",
+  starting: "Starting",
+  pausing: "Pausing",
+  idle: "Idle",
+  deleted: "Deleted",
+}
 
 const STATUS_TABS = [
   { label: "All", value: "all" },
-  { label: "Ready", value: "Ready" },
-  { label: "Stopped", value: "Stopped" },
-  { label: "Paused", value: "Paused" },
+  { label: "Active", value: "active" },
+  { label: "Idle", value: "idle" },
+  { label: "Starting", value: "starting" },
 ]
 
 export default function SandboxesPage() {
   const posthog = usePostHog()
-  const [sandboxes, setSandboxes] = useState<Sandbox[]>(MOCK_SANDBOXES)
   const [statusFilter, setStatusFilter] = useState("all")
   const [search, setSearch] = useState("")
   const [createOpen, setCreateOpen] = useState(false)
+
+  const { data: sandboxes = [], isPending, error, refetch } = useSandboxes()
+  const deleteSandbox = useDeleteSandbox()
+  const bulkDelete = useBulkDeleteSandboxes()
+  const pauseMutation = usePauseSandbox()
+  const resumeMutation = useResumeSandbox()
 
   const filtered = useMemo(() => {
     return sandboxes.filter((s) => {
@@ -118,11 +109,10 @@ export default function SandboxesPage() {
 
   const deleteSelected = () => {
     posthog.capture(SANDBOX_EVENTS.BULK_DELETED, { count: selected.size })
-    setSandboxes((prev) => prev.filter((s) => !selected.has(s.id)))
-    clearSelection()
+    bulkDelete.mutate([...selected], { onSuccess: clearSelection })
   }
 
-  const isEmpty = sandboxes.length === 0
+  const isEmpty = !isPending && !error && sandboxes.length === 0
 
   return (
     <div className="flex h-full flex-col">
@@ -132,7 +122,11 @@ export default function SandboxesPage() {
         )}
       </PageHeader>
 
-      {isEmpty ? (
+      {isPending ? (
+        <TableSkeleton columns={6} />
+      ) : error ? (
+        <ErrorState message={error.message} onRetry={() => refetch()} />
+      ) : isEmpty ? (
         <>
           <EmptyState
             icon={CubeIcon}
@@ -190,14 +184,16 @@ export default function SandboxesPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant={STATUS_BADGE_VARIANT[sandbox.status]} dot>
-                        {sandbox.status}
+                        {STATUS_LABEL[sandbox.status]}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-foreground/80">
-                      {sandbox.snapshot}
+                      {sandbox.snapshot_id
+                        ? `${sandbox.snapshot_id.slice(0, 8)}...`
+                        : "-"}
                     </TableCell>
                     <TableCell className="font-mono text-xs text-muted">
-                      {sandbox.resources}
+                      {sandbox.vcpu_count}CPU | {sandbox.memory_mib}MB
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-1">
@@ -205,8 +201,20 @@ export default function SandboxesPage() {
                           variant="outline"
                           size="sm"
                           className="w-20 text-xs"
+                          disabled={
+                            sandbox.status === "starting" ||
+                            sandbox.status === "pausing"
+                          }
+                          onClick={() => {
+                            if (sandbox.status === "active") {
+                              pauseMutation.mutate(sandbox.id)
+                            } else if (sandbox.status === "idle") {
+                              resumeMutation.mutate(sandbox.id)
+                            }
+                          }}
                         >
-                          {sandbox.status === "Ready" ? (
+                          {sandbox.status === "active" ||
+                          sandbox.status === "pausing" ? (
                             <>
                               <StopIcon className="size-3" weight="light" />
                               Stop
@@ -248,7 +256,15 @@ export default function SandboxesPage() {
                               Remove SSH Access
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive hover:text-destructive">
+                            <DropdownMenuItem
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => {
+                                posthog.capture(SANDBOX_EVENTS.DELETED, {
+                                  id: sandbox.id,
+                                })
+                                deleteSandbox.mutate(sandbox.id)
+                              }}
+                            >
                               <TrashIcon className="size-4" weight="light" />
                               Delete
                             </DropdownMenuItem>

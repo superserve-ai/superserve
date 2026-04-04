@@ -1,0 +1,79 @@
+export type SandboxStatus =
+  | "starting"
+  | "active"
+  | "pausing"
+  | "idle"
+  | "deleted"
+
+export interface SandboxResponse {
+  id: string
+  name: string
+  status: SandboxStatus
+  vcpu_count: number
+  memory_mib: number
+  ip_address?: string
+  snapshot_id?: string
+  created_at: string
+}
+
+export interface CreateSandboxRequest {
+  name: string
+  vcpu_count: number
+  memory_mib: number
+  from_snapshot?: string
+}
+
+export interface ExecRequest {
+  command: string
+  args?: string[]
+  env?: Record<string, string>
+  working_dir?: string
+  timeout_s?: number
+}
+
+export interface ExecResult {
+  stdout: string
+  stderr: string
+  exit_code: number
+}
+
+export interface ExecStreamEvent {
+  timestamp: string
+  stdout?: string
+  stderr?: string
+  exit_code?: number
+  finished?: boolean
+  error?: string
+}
+
+export interface ApiKeyResponse {
+  id: string
+  name: string
+  prefix: string
+  created_at: string
+  last_used_at: string | null
+}
+
+export interface CreateApiKeyRequest {
+  name: string
+}
+
+export interface CreateApiKeyResponse {
+  id: string
+  name: string
+  key: string
+  prefix: string
+  created_at: string
+}
+
+export interface ApiError {
+  error: {
+    code: string
+    message: string
+  }
+}
+
+export interface HealthResponse {
+  status: string
+  version: string
+}
