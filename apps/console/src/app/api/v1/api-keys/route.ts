@@ -2,13 +2,11 @@ import { NextResponse } from "next/server"
 import { apiKeys } from "../_mock/store"
 
 export async function GET(_request: Request) {
-
   const keys = apiKeys.map(({ full_key: _, ...rest }) => rest)
   return NextResponse.json(keys)
 }
 
 export async function POST(request: Request) {
-
   const body = await request.json()
   const { name } = body
 

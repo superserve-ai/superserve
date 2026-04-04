@@ -5,7 +5,6 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ key_id: string }> },
 ) {
-
   const { key_id } = await params
   const index = apiKeys.findIndex((k) => k.id === key_id)
 

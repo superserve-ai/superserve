@@ -4,7 +4,6 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ sandbox_id: string }> },
 ) {
-
   const { sandbox_id } = await params
   const sandbox = sandboxes.find(
     (s) => s.id === sandbox_id && s.status !== "deleted",
