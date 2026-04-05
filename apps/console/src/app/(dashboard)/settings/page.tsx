@@ -1,18 +1,7 @@
 "use client"
 
 import { createBrowserClient } from "@superserve/supabase"
-import {
-  Button,
-  Dialog,
-  DialogFooter,
-  DialogHeader,
-  DialogPopup,
-  DialogTitle,
-  Field,
-  Input,
-  Separator,
-  useToast,
-} from "@superserve/ui"
+import { Button, Field, Input, Separator, useToast } from "@superserve/ui"
 import { usePostHog } from "posthog-js/react"
 import { useEffect, useState } from "react"
 import { Spinner } from "@/components/icons"
@@ -33,10 +22,6 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [savingPassword, setSavingPassword] = useState(false)
-
-  const [deleteOpen, setDeleteOpen] = useState(false)
-  const [deleteConfirmText, setDeleteConfirmText] = useState("")
-  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (user && !nameLoaded) {
@@ -103,22 +88,6 @@ export default function SettingsPage() {
       addToast("Failed to update password", "error")
     } finally {
       setSavingPassword(false)
-    }
-  }
-
-  const handleDeleteAccount = async () => {
-    setDeleting(true)
-    try {
-      posthog.capture(SETTINGS_EVENTS.ACCOUNT_DELETION_REQUESTED)
-      // TODO: call server action to delete account via admin API
-      addToast(
-        "Account deletion requested. Contact support@superserve.ai",
-        "success",
-      )
-      setDeleteOpen(false)
-      setDeleteConfirmText("")
-    } finally {
-      setDeleting(false)
     }
   }
 
@@ -237,76 +206,17 @@ export default function SettingsPage() {
             </h2>
             <p className="mt-1 text-xs text-muted">Irreversible actions.</p>
           </div>
-          <div className="max-w-md space-y-5">
-            <p className="text-xs text-muted">
-              Permanently delete your account and all associated data including
-              sandboxes, snapshots, and API keys. This action cannot be undone.
+          <div className="max-w-md">
+            <p className="text-xs text-muted leading-loose">
+              To delete your account and all associated data, please contact us
+              at{" "}
+              <a
+                href="mailto:support@superserve.ai"
+                className="text-foreground underline underline-offset-4 hover:text-primary"
+              >
+                support@superserve.ai
+              </a>
             </p>
-            <div>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setDeleteOpen(true)}
-              >
-                Delete Account
-              </Button>
-              <Dialog
-                open={deleteOpen}
-                onOpenChange={(v) => {
-                  setDeleteOpen(v)
-                  if (!v) setDeleteConfirmText("")
-                }}
-              >
-                <DialogPopup className="max-w-sm">
-                  <DialogHeader>
-                    <DialogTitle>Delete Account</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 p-6 pt-2">
-                    <p className="text-sm text-muted">
-                      This will permanently delete your account and all
-                      associated data including sandboxes, snapshots, and API
-                      keys. This action cannot be undone.
-                    </p>
-                    <div className="space-y-1.5">
-                      <label
-                        htmlFor="delete-confirm"
-                        className="block text-sm font-medium text-foreground"
-                      >
-                        Type{" "}
-                        <span className="font-mono mx-1">delete account</span>{" "}
-                        to confirm
-                      </label>
-                      <Input
-                        id="delete-confirm"
-                        value={deleteConfirmText}
-                        onChange={(e) => setDeleteConfirmText(e.target.value)}
-                        placeholder="delete account"
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setDeleteOpen(false)
-                        setDeleteConfirmText("")
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      disabled={
-                        deleteConfirmText !== "delete account" || deleting
-                      }
-                      onClick={handleDeleteAccount}
-                    >
-                      {deleting ? "Deleting..." : "Delete Account"}
-                    </Button>
-                  </DialogFooter>
-                </DialogPopup>
-              </Dialog>
-            </div>
           </div>
         </div>
       </div>
