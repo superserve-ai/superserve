@@ -3,8 +3,6 @@
 import {
   CopyIcon,
   DotsThreeVerticalIcon,
-  EyeIcon,
-  EyeSlashIcon,
   KeyIcon,
   PlusIcon,
   TrashIcon,
@@ -24,7 +22,6 @@ import {
   Menu,
   MenuItem,
   MenuPopup,
-  MenuSeparator,
   MenuTrigger,
   Table,
   TableCell,
@@ -50,10 +47,6 @@ import {
 import { useSelection } from "@/hooks/use-selection"
 import { formatDate } from "@/lib/format"
 import { API_KEY_EVENTS } from "@/lib/posthog/events"
-
-function maskKey(prefix: string): string {
-  return `${prefix}${"•".repeat(20)}`
-}
 
 function CreateKeyDialog({
   open: controlledOpen,
@@ -182,7 +175,6 @@ export default function ApiKeysPage() {
   const revokeMutation = useRevokeApiKey()
   const bulkRevoke = useBulkRevokeApiKeys()
   const [search, setSearch] = useState("")
-  const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set())
   const [createOpen, setCreateOpen] = useState(false)
 
   const filtered = useMemo(() => {
@@ -204,18 +196,6 @@ export default function ApiKeysPage() {
     clearSelection,
   } = useSelection(filtered)
 
-  const toggleReveal = (id: string) => {
-    setRevealedKeys((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
-
   const deleteKey = (id: string) => {
     posthog.capture(API_KEY_EVENTS.REVOKED)
     revokeMutation.mutate(id)
@@ -232,7 +212,7 @@ export default function ApiKeysPage() {
     return (
       <div className="flex h-full flex-col">
         <PageHeader title="API Keys" />
-        <TableSkeleton columns={6} />
+        <TableSkeleton columns={5} />
       </div>
     )
   }
@@ -288,10 +268,9 @@ export default function ApiKeysPage() {
                       aria-label="Select all keys"
                     />
                   </TableHead>
-                  <TableHead className="w-[20%]">Name</TableHead>
-                  <TableHead className="w-[35%]">Key</TableHead>
-                  <TableHead className="w-[15%]">Created</TableHead>
-                  <TableHead className="w-[15%]">Last Used</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead>Last Used</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
@@ -306,31 +285,6 @@ export default function ApiKeysPage() {
                       />
                     </TableCell>
                     <TableCell className="font-medium">{apiKey.name}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <code className="font-mono text-xs text-muted">
-                          {revealedKeys.has(apiKey.id)
-                            ? apiKey.prefix
-                            : maskKey(apiKey.prefix.replace("...", ""))}
-                        </code>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => toggleReveal(apiKey.id)}
-                          aria-label={
-                            revealedKeys.has(apiKey.id)
-                              ? "Hide key"
-                              : "Reveal key"
-                          }
-                        >
-                          {revealedKeys.has(apiKey.id) ? (
-                            <EyeSlashIcon className="size-3.5" weight="light" />
-                          ) : (
-                            <EyeIcon className="size-3.5" weight="light" />
-                          )}
-                        </Button>
-                      </div>
-                    </TableCell>
                     <TableCell className="text-muted">
                       {formatDate(new Date(apiKey.created_at))}
                     </TableCell>
@@ -356,15 +310,6 @@ export default function ApiKeysPage() {
                           />
                         </MenuTrigger>
                         <MenuPopup>
-                          <MenuItem
-                            onClick={async () => {
-                              await navigator.clipboard.writeText(apiKey.prefix)
-                            }}
-                          >
-                            <CopyIcon className="size-4" weight="light" />
-                            Copy Key
-                          </MenuItem>
-                          <MenuSeparator />
                           <MenuItem
                             className="text-destructive hover:text-destructive"
                             onClick={() => deleteKey(apiKey.id)}
