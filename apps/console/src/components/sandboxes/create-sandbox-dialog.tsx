@@ -4,16 +4,16 @@ import { PlusIcon, TrashIcon, UploadSimpleIcon } from "@phosphor-icons/react"
 import {
   Button,
   Dialog,
-  DialogContent,
   DialogFooter,
   DialogHeader,
+  DialogPopup,
   DialogTitle,
   DialogTrigger,
-  FormField,
+  Field,
   Input,
   Select,
-  SelectContent,
   SelectItem,
+  SelectPopup,
   SelectTrigger,
   SelectValue,
 } from "@superserve/ui"
@@ -123,33 +123,31 @@ export function CreateSandboxDialog({
         if (!v) handleReset()
       }}
     >
-      <DialogTrigger asChild>
-        <Button>Create Sandbox</Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-lg">
+      <DialogTrigger render={<Button />}>Create Sandbox</DialogTrigger>
+      <DialogPopup className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Create Sandbox</DialogTitle>
         </DialogHeader>
 
         <div className="max-h-[60vh] space-y-5 overflow-y-auto p-6 pt-2">
-          <FormField label="Sandbox Name" required>
+          <Field label="Sandbox Name" required>
             <Input
               placeholder="my-sandbox"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
-          </FormField>
+          </Field>
 
-          <FormField label="Snapshot" description="More snapshots coming soon">
+          <Field label="Snapshot" description="More snapshots coming soon">
             <Select defaultValue="base">
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectPopup>
                 <SelectItem value="base">superserve/base</SelectItem>
-              </SelectContent>
+              </SelectPopup>
             </Select>
-          </FormField>
+          </Field>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -229,7 +227,7 @@ export function CreateSandboxDialog({
             {createMutation.isPending ? "Creating..." : "Create Sandbox"}
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </DialogPopup>
     </Dialog>
   )
 }

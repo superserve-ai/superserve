@@ -1,6 +1,7 @@
 "use client"
 
-import * as TabsPrimitive from "@radix-ui/react-tabs"
+import { Tabs as TabsPrimitive } from "@base-ui/react/tabs"
+
 import { cn } from "../lib/utils"
 
 const Tabs = TabsPrimitive.Root
@@ -17,18 +18,18 @@ function TabsList({
   )
 }
 
-function TabsTrigger({
+function TabsTab({
   className,
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
+}: React.ComponentProps<typeof TabsPrimitive.Tab>) {
   return (
-    <TabsPrimitive.Trigger
+    <TabsPrimitive.Tab
       className={cn(
         "px-4 py-2 text-sm font-medium text-muted transition-colors",
         "border-b-2 border-transparent -mb-px",
         "hover:text-foreground",
-        "data-[state=active]:border-primary data-[state=active]:text-foreground",
-        "outline-none focus-visible:ring-2 focus-visible:ring-border-focus",
+        "data-[selected]:border-primary data-[selected]:text-foreground",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus",
         className,
       )}
       {...props}
@@ -36,16 +37,16 @@ function TabsTrigger({
   )
 }
 
-function TabsContent({
+function TabsPanel({
   className,
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.Content>) {
+}: React.ComponentProps<typeof TabsPrimitive.Panel>) {
   return (
-    <TabsPrimitive.Content
+    <TabsPrimitive.Panel
       className={cn("mt-4 outline-none", className)}
       {...props}
     />
   )
 }
 
-export { Tabs, TabsList, TabsTrigger, TabsContent }
+export { Tabs, TabsList, TabsTab, TabsPanel }

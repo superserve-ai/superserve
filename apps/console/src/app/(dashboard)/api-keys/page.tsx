@@ -14,18 +14,18 @@ import {
   Button,
   Checkbox,
   Dialog,
-  DialogContent,
   DialogFooter,
   DialogHeader,
+  DialogPopup,
   DialogTitle,
   DialogTrigger,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-  FormField,
+  Field,
   Input,
+  Menu,
+  MenuItem,
+  MenuPopup,
+  MenuSeparator,
+  MenuTrigger,
   Table,
   TableCell,
   TableHead,
@@ -103,13 +103,11 @@ function CreateKeyDialog({
       open={open}
       onOpenChange={(v) => (v ? setOpen(true) : handleClose())}
     >
-      <DialogTrigger asChild>
-        <Button>
-          <PlusIcon className="size-3.5" weight="light" />
-          Create Key
-        </Button>
+      <DialogTrigger render={<Button />}>
+        <PlusIcon className="size-3.5" weight="light" />
+        Create Key
       </DialogTrigger>
-      <DialogContent className="max-w-lg">
+      <DialogPopup className="max-w-lg">
         <DialogHeader>
           <DialogTitle>
             {createdKey ? "API Key Created" : "Create API Key"}
@@ -123,7 +121,7 @@ function CreateKeyDialog({
                 Copy this key now. You won&apos;t be able to see it again.
               </Alert>
 
-              <FormField label="Your API Key">
+              <Field label="Your API Key">
                 <div className="flex items-center gap-2">
                   <code className="flex-1 border border-border bg-background px-3 py-2 font-mono text-xs text-foreground break-all">
                     {createdKey.full}
@@ -140,10 +138,10 @@ function CreateKeyDialog({
                     />
                   </Button>
                 </div>
-              </FormField>
+              </Field>
             </div>
           ) : (
-            <FormField label="Key Name" required>
+            <Field label="Key Name" required>
               <Input
                 placeholder="e.g. Production, CI/CD, Development"
                 value={name}
@@ -152,7 +150,7 @@ function CreateKeyDialog({
                   if (e.key === "Enter") handleCreate()
                 }}
               />
-            </FormField>
+            </Field>
           )}
         </div>
 
@@ -173,7 +171,7 @@ function CreateKeyDialog({
             </>
           )}
         </DialogFooter>
-      </DialogContent>
+      </DialogPopup>
     </Dialog>
   )
 }
@@ -284,7 +282,8 @@ export default function ApiKeysPage() {
                 <TableRow>
                   <TableHead className="w-10 pr-0">
                     <Checkbox
-                      checked={someSelected ? "indeterminate" : allSelected}
+                      checked={allSelected}
+                      indeterminate={someSelected && !allSelected}
                       onCheckedChange={toggleAll}
                       aria-label="Select all keys"
                     />
@@ -341,38 +340,40 @@ export default function ApiKeysPage() {
                         : "Never"}
                     </TableCell>
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label="Key actions"
-                          >
-                            <DotsThreeVerticalIcon
-                              className="size-4"
-                              weight="bold"
+                      <Menu>
+                        <MenuTrigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label="Key actions"
                             />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
+                          }
+                        >
+                          <DotsThreeVerticalIcon
+                            className="size-4"
+                            weight="bold"
+                          />
+                        </MenuTrigger>
+                        <MenuPopup>
+                          <MenuItem
                             onClick={async () => {
                               await navigator.clipboard.writeText(apiKey.prefix)
                             }}
                           >
                             <CopyIcon className="size-4" weight="light" />
                             Copy Key
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
+                          </MenuItem>
+                          <MenuSeparator />
+                          <MenuItem
                             className="text-destructive hover:text-destructive"
                             onClick={() => deleteKey(apiKey.id)}
                           >
                             <TrashIcon className="size-4" weight="light" />
                             Revoke Key
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                          </MenuItem>
+                        </MenuPopup>
+                      </Menu>
                     </TableCell>
                   </TableRow>
                 ))}

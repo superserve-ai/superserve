@@ -98,7 +98,8 @@ export default function SnapshotsPage() {
                 <TableRow>
                   <TableHead className="w-10 pr-0">
                     <Checkbox
-                      checked={someSelected ? "indeterminate" : allSelected}
+                      checked={allSelected}
+                      indeterminate={someSelected && !allSelected}
                       onCheckedChange={toggleAll}
                       aria-label="Select all snapshots"
                     />

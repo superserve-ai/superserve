@@ -1,19 +1,31 @@
-// Components
+// Accordion
 export {
   Accordion,
-  AccordionContent,
   AccordionItem,
+  AccordionPanel,
   AccordionTrigger,
 } from "./components/accordion"
+
+// Alert
 export type { AlertVariant } from "./components/alert"
 export { Alert } from "./components/alert"
+
+// Avatar
 export type { AvatarSize } from "./components/avatar"
 export { Avatar } from "./components/avatar"
+
+// Badge
 export type { BadgeVariant } from "./components/badge"
 export { Badge } from "./components/badge"
+
+// Breadcrumbs
 export type { BreadcrumbItem, BreadcrumbsProps } from "./components/breadcrumbs"
 export { Breadcrumbs } from "./components/breadcrumbs"
+
+// Button
 export { Button, buttonVariants } from "./components/button"
+
+// Card
 export {
   Card,
   CardContent,
@@ -22,46 +34,72 @@ export {
   CardHeader,
   CardTitle,
 } from "./components/card"
+
+// Checkbox
 export { Checkbox } from "./components/checkbox"
+
+// Confirm Dialog
 export { ConfirmDialog } from "./components/confirm-dialog"
+
+// Dialog
 export {
   Dialog,
   DialogClose,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogPopup,
   DialogTitle,
   DialogTrigger,
 } from "./components/dialog"
-export {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "./components/dropdown-menu"
-export { FormField } from "./components/form-field"
+
+// Field (formerly FormField)
+export { Field } from "./components/field"
+
+// Input
 export { Input } from "./components/input"
+
+// Kbd
 export { Kbd } from "./components/kbd"
+
+// Menu (formerly DropdownMenu)
 export {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "./components/popover"
+  Menu,
+  MenuItem,
+  MenuPopup,
+  MenuSeparator,
+  MenuTrigger,
+} from "./components/menu"
+
+// Popover
+export { Popover, PopoverPopup, PopoverTrigger } from "./components/popover"
+
+// Progress
 export type { ProgressVariant } from "./components/progress"
 export { Progress } from "./components/progress"
-export { RadioGroup, RadioGroupItem } from "./components/radio-group"
+
+// Radio
+export { RadioGroup, RadioGroupItem } from "./components/radio"
+
+// Select
 export {
   Select,
-  SelectContent,
   SelectItem,
+  SelectPopup,
   SelectTrigger,
   SelectValue,
 } from "./components/select"
+
+// Separator
 export { Separator } from "./components/separator"
+
+// Skeleton
 export { Skeleton } from "./components/skeleton"
+
+// Switch
 export { Switch } from "./components/switch"
+
+// Table
 export {
   Table,
   TableBody,
@@ -70,13 +108,21 @@ export {
   TableHeader,
   TableRow,
 } from "./components/table"
-export { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/tabs"
+
+// Tabs
+export { Tabs, TabsList, TabsPanel, TabsTab } from "./components/tabs"
+
+// Textarea
 export { Textarea } from "./components/textarea"
+
+// Toast
 export type { Toast, ToastAction, ToastVariant } from "./components/toast"
 export { ToastProvider, useToast } from "./components/toast"
+
+// Tooltip
 export {
   Tooltip,
-  TooltipContent,
+  TooltipPopup,
   TooltipProvider,
   TooltipTrigger,
 } from "./components/tooltip"

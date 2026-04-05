@@ -1,7 +1,8 @@
 "use client"
 
+import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { CaretUpDownIcon } from "@phosphor-icons/react"
-import * as SelectPrimitive from "@radix-ui/react-select"
+
 import { cn } from "../lib/utils"
 
 const Select = SelectPrimitive.Root
@@ -16,49 +17,38 @@ function SelectTrigger({
     <SelectPrimitive.Trigger
       className={cn(
         "flex h-9 w-full items-center justify-between border border-input bg-background px-3 text-sm text-foreground",
-        "placeholder:text-muted",
-        "focus:outline-none focus:ring-2 focus:ring-border-focus",
+        "focus:outline-none focus:ring-2 focus:ring-border-focus focus:border-border-focus",
         "disabled:cursor-not-allowed disabled:opacity-30",
         className,
       )}
       {...props}
     >
       {children}
-      <SelectPrimitive.Icon asChild>
-        <CaretUpDownIcon className="h-4 w-4 text-muted" weight="light" />
+      <SelectPrimitive.Icon>
+        <CaretUpDownIcon weight="light" className="h-4 w-4 text-muted" />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   )
 }
 
-function SelectContent({
+function SelectPopup({
   className,
   children,
-  position = "popper",
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Content>) {
+}: React.ComponentProps<typeof SelectPrimitive.Popup>) {
   return (
     <SelectPrimitive.Portal>
-      <SelectPrimitive.Content
-        className={cn(
-          "relative z-50 max-h-72 min-w-[8rem] overflow-hidden border border-dashed border-border bg-surface",
-          position === "popper" &&
-            "data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1",
-          className,
-        )}
-        position={position}
-        {...props}
-      >
-        <SelectPrimitive.Viewport
+      <SelectPrimitive.Positioner>
+        <SelectPrimitive.Popup
           className={cn(
-            "p-1",
-            position === "popper" &&
-              "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]",
+            "ss-select-popup z-50 max-h-72 min-w-[8rem] overflow-auto border border-dashed border-border bg-surface p-1",
+            className,
           )}
+          {...props}
         >
           {children}
-        </SelectPrimitive.Viewport>
-      </SelectPrimitive.Content>
+        </SelectPrimitive.Popup>
+      </SelectPrimitive.Positioner>
     </SelectPrimitive.Portal>
   )
 }
@@ -71,7 +61,7 @@ function SelectItem({
   return (
     <SelectPrimitive.Item
       className={cn(
-        "relative flex w-full cursor-pointer select-none items-center px-2 py-1.5 text-sm text-foreground outline-none",
+        "flex w-full cursor-pointer select-none items-center px-2 py-1.5 text-sm text-foreground outline-none",
         "focus:bg-surface-hover",
         "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         className,
@@ -83,4 +73,4 @@ function SelectItem({
   )
 }
 
-export { Select, SelectTrigger, SelectContent, SelectItem, SelectValue }
+export { Select, SelectValue, SelectTrigger, SelectPopup, SelectItem }

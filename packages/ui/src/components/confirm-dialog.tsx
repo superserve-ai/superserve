@@ -7,9 +7,9 @@ import { cn } from "../lib/utils"
 import { Button } from "./button"
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogPopup,
   DialogTitle,
 } from "./dialog"
 
@@ -52,7 +52,7 @@ export function ConfirmDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogPopup>
         <div className="p-6">
           <div className="flex items-start gap-4">
             <div
@@ -105,7 +105,7 @@ export function ConfirmDialog({
             </Button>
           </DialogFooter>
         </div>
-      </DialogContent>
+      </DialogPopup>
     </Dialog>
   )
 }

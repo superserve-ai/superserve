@@ -4,11 +4,11 @@ import { createBrowserClient } from "@superserve/supabase"
 import {
   Button,
   Dialog,
-  DialogContent,
   DialogFooter,
   DialogHeader,
+  DialogPopup,
   DialogTitle,
-  FormField,
+  Field,
   Input,
   Separator,
   useToast,
@@ -147,16 +147,16 @@ export default function SettingsPage() {
             </p>
           </div>
           <div className="max-w-md space-y-5">
-            <FormField label="Full Name">
+            <Field label="Full Name">
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Jane Doe"
               />
-            </FormField>
-            <FormField label="Email">
+            </Field>
+            <Field label="Email">
               <Input value={email} disabled />
-            </FormField>
+            </Field>
             <div>
               <Button
                 onClick={handleSaveProfile}
@@ -184,30 +184,30 @@ export default function SettingsPage() {
                 </p>
               </div>
               <div className="max-w-md space-y-5">
-                <FormField label="Current Password">
+                <Field label="Current Password">
                   <Input
                     type="password"
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
                     placeholder="••••••••"
                   />
-                </FormField>
-                <FormField label="New Password">
+                </Field>
+                <Field label="New Password">
                   <Input
                     type="password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="••••••••"
                   />
-                </FormField>
-                <FormField label="Confirm New Password">
+                </Field>
+                <Field label="Confirm New Password">
                   <Input
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="••••••••"
                   />
-                </FormField>
+                </Field>
                 <div>
                   <Button
                     onClick={handleChangePassword}
@@ -257,7 +257,7 @@ export default function SettingsPage() {
                   if (!v) setDeleteConfirmText("")
                 }}
               >
-                <DialogContent className="max-w-sm">
+                <DialogPopup className="max-w-sm">
                   <DialogHeader>
                     <DialogTitle>Delete Account</DialogTitle>
                   </DialogHeader>
@@ -304,7 +304,7 @@ export default function SettingsPage() {
                       {deleting ? "Deleting..." : "Delete Account"}
                     </Button>
                   </DialogFooter>
-                </DialogContent>
+                </DialogPopup>
               </Dialog>
             </div>
           </div>

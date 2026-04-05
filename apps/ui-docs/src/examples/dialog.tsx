@@ -1,10 +1,10 @@
 import {
   Button,
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogPopup,
   DialogTitle,
 } from "@superserve/ui"
 import { useState } from "react"
@@ -19,7 +19,7 @@ function DialogDemo() {
       </Button>
       {open && (
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent>
+          <DialogPopup>
             <DialogHeader>
               <DialogTitle>Dialog Title</DialogTitle>
               <DialogDescription>
@@ -32,7 +32,7 @@ function DialogDemo() {
               </Button>
               <Button onClick={() => setOpen(false)}>Confirm</Button>
             </DialogFooter>
-          </DialogContent>
+          </DialogPopup>
         </Dialog>
       )}
     </>
@@ -51,7 +51,7 @@ export const dialogMeta: ComponentMeta = {
       title: "Default",
       preview: <DialogDemo />,
       code: `<Dialog open={open} onOpenChange={setOpen}>
-  <DialogContent>
+  <DialogPopup>
     <DialogHeader>
       <DialogTitle>Dialog Title</DialogTitle>
       <DialogDescription>This is a dialog description.</DialogDescription>
@@ -60,7 +60,7 @@ export const dialogMeta: ComponentMeta = {
       <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
       <Button onClick={() => setOpen(false)}>Confirm</Button>
     </DialogFooter>
-  </DialogContent>
+  </DialogPopup>
 </Dialog>`,
     },
   ],

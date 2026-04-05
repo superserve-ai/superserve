@@ -5,11 +5,11 @@ import { createBrowserClient } from "@superserve/supabase"
 import {
   Avatar,
   cn,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  Menu,
+  MenuItem,
+  MenuPopup,
+  MenuSeparator,
+  MenuTrigger,
 } from "@superserve/ui"
 import { useRouter } from "next/navigation"
 import { useUser } from "@/hooks/use-user"
@@ -45,32 +45,30 @@ export function SidebarUserMenu() {
 
   return (
     <div className="px-2.5">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            title={isCollapsed ? name : undefined}
-            className={cn(
-              "flex w-full items-center gap-2.5 px-2.5 py-2.5 text-foreground/70 transition-colors hover:text-foreground hover:bg-surface-hover cursor-pointer",
-              isCollapsed && "justify-center",
-            )}
-          >
-            <UserIcon className="size-4 shrink-0" weight="light" />
-            {!isCollapsed && (
-              <>
-                <span className="flex-1 truncate text-left text-sm leading-none tracking-tight">
-                  {name}
-                </span>
-                <CaretUpDownIcon className="size-4 shrink-0" weight="light" />
-              </>
-            )}
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          side={isCollapsed ? "right" : "top"}
-          align="start"
-          className="w-56"
+      <Menu>
+        <MenuTrigger
+          render={
+            <button
+              type="button"
+              title={isCollapsed ? name : undefined}
+              className={cn(
+                "flex w-full items-center gap-2.5 px-2.5 py-2.5 text-foreground/70 transition-colors hover:text-foreground hover:bg-surface-hover cursor-pointer",
+                isCollapsed && "justify-center",
+              )}
+            />
+          }
         >
+          <UserIcon className="size-4 shrink-0" weight="light" />
+          {!isCollapsed && (
+            <>
+              <span className="flex-1 truncate text-left text-sm leading-none tracking-tight">
+                {name}
+              </span>
+              <CaretUpDownIcon className="size-4 shrink-0" weight="light" />
+            </>
+          )}
+        </MenuTrigger>
+        <MenuPopup className="w-56">
           {/* User info header */}
           <div className="flex items-center gap-2.5 px-2 py-2 select-none">
             <Avatar fallback={getInitials(name)} size="sm" />
@@ -83,13 +81,13 @@ export function SidebarUserMenu() {
               )}
             </div>
           </div>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleLogout}>
+          <MenuSeparator />
+          <MenuItem onClick={handleLogout}>
             <SignOutIcon className="size-4" weight="light" />
             Log out
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+          </MenuItem>
+        </MenuPopup>
+      </Menu>
     </div>
   )
 }

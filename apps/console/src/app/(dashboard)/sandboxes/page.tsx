@@ -15,11 +15,11 @@ import {
   type BadgeVariant,
   Button,
   Checkbox,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  Menu,
+  MenuItem,
+  MenuPopup,
+  MenuSeparator,
+  MenuTrigger,
   Table,
   TableCell,
   TableHead,
@@ -157,7 +157,8 @@ export default function SandboxesPage() {
                 <TableRow>
                   <TableHead className="w-10 pr-0">
                     <Checkbox
-                      checked={someSelected ? "indeterminate" : allSelected}
+                      checked={allSelected}
+                      indeterminate={someSelected && !allSelected}
                       onCheckedChange={toggleAll}
                       aria-label="Select all sandboxes"
                     />
@@ -226,37 +227,39 @@ export default function SandboxesPage() {
                             </>
                           )}
                         </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label="Sandbox actions"
-                            >
-                              <DotsThreeVerticalIcon
-                                className="size-4"
-                                weight="bold"
+                        <Menu>
+                          <MenuTrigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label="Sandbox actions"
                               />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem>
+                            }
+                          >
+                            <DotsThreeVerticalIcon
+                              className="size-4"
+                              weight="bold"
+                            />
+                          </MenuTrigger>
+                          <MenuPopup>
+                            <MenuItem>
                               <TerminalIcon className="size-4" weight="light" />
                               Open Terminal
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            </MenuItem>
+                            <MenuItem>
                               <KeyIcon className="size-4" weight="light" />
                               Create SSH Access
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            </MenuItem>
+                            <MenuItem>
                               <KeyReturnIcon
                                 className="size-4"
                                 weight="light"
                               />
                               Remove SSH Access
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
+                            </MenuItem>
+                            <MenuSeparator />
+                            <MenuItem
                               className="text-destructive hover:text-destructive"
                               onClick={() => {
                                 posthog.capture(SANDBOX_EVENTS.DELETED, {
@@ -267,9 +270,9 @@ export default function SandboxesPage() {
                             >
                               <TrashIcon className="size-4" weight="light" />
                               Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                            </MenuItem>
+                          </MenuPopup>
+                        </Menu>
                       </div>
                     </TableCell>
                   </TableRow>

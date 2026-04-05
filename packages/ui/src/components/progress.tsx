@@ -1,6 +1,7 @@
 "use client"
 
-import { motion } from "motion/react"
+import { Progress as ProgressPrimitive } from "@base-ui/react/progress"
+
 import { cn } from "../lib/utils"
 
 type ProgressVariant = "default" | "success" | "warning" | "destructive"
@@ -12,39 +13,39 @@ const barClasses: Record<ProgressVariant, string> = {
   destructive: "bg-destructive",
 }
 
-interface ProgressProps extends React.HTMLAttributes<HTMLDivElement> {
+interface ProgressProps {
   value: number
   max?: number
   variant?: ProgressVariant
+  className?: string
 }
 
 function Progress({
-  className,
   value,
   max = 100,
   variant = "default",
-  ...props
+  className,
 }: ProgressProps) {
-  const percentage = Math.min(Math.max((value / max) * 100, 0), 100)
+  const percentage = Math.min(100, Math.max(0, (value / max) * 100))
 
   return (
-    <div
-      role="progressbar"
-      aria-valuenow={value}
-      aria-valuemin={0}
-      aria-valuemax={max}
-      className={cn("h-1.5 w-full overflow-hidden bg-surface-hover", className)}
-      {...props}
+    <ProgressPrimitive.Root
+      value={value}
+      max={max}
+      className={cn("w-full", className)}
     >
-      <motion.div
-        className={cn("h-full", barClasses[variant])}
-        initial={{ width: 0 }}
-        animate={{ width: `${percentage}%` }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-      />
-    </div>
+      <ProgressPrimitive.Track className="h-1.5 w-full overflow-hidden bg-surface-hover">
+        <ProgressPrimitive.Indicator
+          className={cn(
+            "h-full transition-all duration-500 ease-out",
+            barClasses[variant],
+          )}
+          style={{ width: `${percentage}%` }}
+        />
+      </ProgressPrimitive.Track>
+    </ProgressPrimitive.Root>
   )
 }
 
 export { Progress }
-export type { ProgressVariant }
+export type { ProgressProps, ProgressVariant }

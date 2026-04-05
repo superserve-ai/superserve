@@ -1,13 +1,13 @@
-import { FormField, Input, Textarea } from "@superserve/ui"
+import { Field, Input, Textarea } from "@superserve/ui"
 import type { ComponentMeta } from "../registry/types"
 
 export const formFieldMeta: ComponentMeta = {
-  slug: "form-field",
-  name: "Form Field",
+  slug: "field",
+  name: "Field",
   description:
     "A wrapper for form elements with label, error, and description.",
   category: "Inputs",
-  source: "components/form-field.tsx",
+  source: "components/field.tsx",
   props: [
     {
       name: "label",
@@ -41,56 +41,56 @@ export const formFieldMeta: ComponentMeta = {
       title: "Required",
       preview: (
         <div className="max-w-sm space-y-4">
-          <FormField label="Email" htmlFor="email" required>
+          <Field label="Email" htmlFor="email" required>
             <Input id="email" placeholder="you@example.com" />
-          </FormField>
+          </Field>
         </div>
       ),
-      code: `<FormField label="Email" htmlFor="email" required>
+      code: `<Field label="Email" htmlFor="email" required>
   <Input id="email" placeholder="you@example.com" />
-</FormField>`,
+</Field>`,
     },
     {
       title: "With Description",
       preview: (
         <div className="max-w-sm space-y-4">
-          <FormField
+          <Field
             label="Username"
             htmlFor="username"
             description="This will be your public display name."
           >
             <Input id="username" placeholder="superserve" />
-          </FormField>
+          </Field>
         </div>
       ),
-      code: `<FormField
+      code: `<Field
   label="Username"
   htmlFor="username"
   description="This will be your public display name."
 >
   <Input id="username" placeholder="superserve" />
-</FormField>`,
+</Field>`,
     },
     {
       title: "With Error",
       preview: (
         <div className="max-w-sm space-y-4">
-          <FormField
+          <Field
             label="Bio"
             htmlFor="bio"
             error="Bio must be at least 10 characters."
           >
             <Textarea id="bio" placeholder="Tell us about yourself" />
-          </FormField>
+          </Field>
         </div>
       ),
-      code: `<FormField
+      code: `<Field
   label="Bio"
   htmlFor="bio"
   error="Bio must be at least 10 characters."
 >
   <Textarea id="bio" placeholder="Tell us about yourself" />
-</FormField>`,
+</Field>`,
     },
   ],
 }

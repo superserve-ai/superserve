@@ -10,9 +10,7 @@ export default function AuthCodeErrorPage() {
           <p className="text-muted mb-6">
             Something went wrong during sign in. Please try again.
           </p>
-          <Button asChild>
-            <Link href="/auth/signin">Try Again</Link>
-          </Button>
+          <Button render={<Link href="/auth/signin" />}>Try Again</Button>
         </CardContent>
       </Card>
     </div>
