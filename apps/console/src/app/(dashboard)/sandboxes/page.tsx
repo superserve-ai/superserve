@@ -210,6 +210,16 @@ export default function SandboxesPage() {
                       <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="outline"
+                          size="icon-sm"
+                          aria-label="Open Terminal"
+                          onClick={() =>
+                            router.push(`/sandboxes/${sandbox.id}/terminal/`)
+                          }
+                        >
+                          <TerminalIcon className="size-3.5" weight="light" />
+                        </Button>
+                        <Button
+                          variant="outline"
                           size="sm"
                           className="w-20 text-xs"
                           disabled={

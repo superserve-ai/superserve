@@ -3,7 +3,7 @@
 import { ArrowLeftIcon, PlayIcon, StopIcon, TrashIcon } from "@phosphor-icons/react"
 import { Badge, type BadgeVariant, Button } from "@superserve/ui"
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { useRef } from "react"
 import { ErrorState } from "@/components/error-state"
 import { CommandRunner, type CommandRunnerHandle } from "@/components/sandboxes/command-runner"
@@ -49,6 +49,7 @@ export default function TerminalPage() {
   const params = useParams<{ sandbox_id: string }>()
   const sandboxId = params.sandbox_id
 
+  const router = useRouter()
   const { data: sandbox, isPending, error, refetch } = useSandbox(sandboxId)
   const pauseMutation = usePauseSandbox()
   const resumeMutation = useResumeSandbox()
@@ -82,11 +83,24 @@ export default function TerminalPage() {
     <div className="flex h-full flex-col">
       <div className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-background px-6">
         <div className="flex items-center gap-3">
-          <Link
-            href={`/sandboxes/${sandboxId}/`}
-            className="flex items-center gap-1.5 text-sm text-muted hover:text-foreground"
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="flex items-center gap-1.5 text-sm text-muted hover:text-foreground cursor-pointer"
           >
             <ArrowLeftIcon className="size-3.5" weight="light" />
+          </button>
+          <Link
+            href="/sandboxes/"
+            className="text-sm text-muted hover:text-foreground"
+          >
+            Sandboxes
+          </Link>
+          <span className="text-muted">/</span>
+          <Link
+            href={`/sandboxes/${sandboxId}/`}
+            className="font-mono text-sm text-muted hover:text-foreground"
+          >
             {sandbox.name}
           </Link>
           <span className="text-muted">/</span>
@@ -98,11 +112,12 @@ export default function TerminalPage() {
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            size="icon-sm"
+            size="sm"
             onClick={() => runnerRef.current?.clear()}
             aria-label="Clear terminal"
           >
             <TrashIcon className="size-3.5" weight="light" />
+            Clear
           </Button>
           <Button
             variant="outline"

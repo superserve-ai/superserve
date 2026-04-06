@@ -24,6 +24,11 @@ export const SANDBOX_EVENTS = {
   BULK_DELETED: "sandbox_bulk_deleted",
 } as const
 
+export const TERMINAL_EVENTS = {
+  COMMAND_EXECUTED: "terminal_command_executed",
+  COMMAND_ABORTED: "terminal_command_aborted",
+} as const
+
 export const API_KEY_EVENTS = {
   CREATED: "api_key_created",
   COPIED: "api_key_copied",
