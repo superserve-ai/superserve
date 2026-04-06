@@ -95,7 +95,7 @@ export default function AuditLogsPage() {
     return (
       <div className="flex h-full flex-col">
         <PageHeader title="Audit Logs" />
-        <TableSkeleton columns={6} />
+        <TableSkeleton columns={6} tabs={4} />
       </div>
     )
   }

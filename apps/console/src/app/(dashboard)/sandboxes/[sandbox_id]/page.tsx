@@ -81,9 +81,9 @@ function DetailSkeleton() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-14 items-center gap-3 border-b border-border px-6">
-        <div className="h-4 w-24 animate-pulse rounded bg-muted/20" />
+        <div className="h-4 w-24 animate-pulse bg-muted/20" />
         <span className="text-muted">/</span>
-        <div className="h-4 w-32 animate-pulse rounded bg-muted/20" />
+        <div className="h-4 w-32 animate-pulse bg-muted/20" />
       </div>
       <div className="grid grid-cols-4 border-b border-border">
         {Array.from({ length: 4 }).map((_, i) => (
@@ -91,23 +91,23 @@ function DetailSkeleton() {
             key={i}
             className={`px-4 py-4 ${i < 3 ? "border-r border-border" : ""}`}
           >
-            <div className="mb-2 h-3 w-16 animate-pulse rounded bg-muted/20" />
-            <div className="h-4 w-28 animate-pulse rounded bg-muted/20" />
+            <div className="mb-2 h-3 w-16 animate-pulse bg-muted/20" />
+            <div className="h-4 w-28 animate-pulse bg-muted/20" />
           </div>
         ))}
       </div>
       <div className="flex h-10 items-center border-b border-border px-4">
-        <div className="h-3 w-16 animate-pulse rounded bg-muted/20" />
+        <div className="h-3 w-16 animate-pulse bg-muted/20" />
       </div>
       {Array.from({ length: 3 }).map((_, i) => (
         <div
           key={i}
           className="flex items-center gap-6 border-b border-border px-4 py-3"
         >
-          <div className="h-3 w-24 animate-pulse rounded bg-muted/20" />
-          <div className="h-3 w-16 animate-pulse rounded bg-muted/20" />
-          <div className="h-3 w-20 animate-pulse rounded bg-muted/20" />
-          <div className="h-3 w-12 animate-pulse rounded bg-muted/20" />
+          <div className="h-3 w-24 animate-pulse bg-muted/20" />
+          <div className="h-3 w-16 animate-pulse bg-muted/20" />
+          <div className="h-3 w-20 animate-pulse bg-muted/20" />
+          <div className="h-3 w-12 animate-pulse bg-muted/20" />
         </div>
       ))}
     </div>
@@ -288,10 +288,10 @@ export default function SandboxDetailPage() {
                 key={i}
                 className="flex items-center gap-6 border-b border-border px-4 py-3 last:border-b-0"
               >
-                <div className="h-3 w-24 animate-pulse rounded bg-muted/20" />
-                <div className="h-3 w-16 animate-pulse rounded bg-muted/20" />
-                <div className="h-3 w-20 animate-pulse rounded bg-muted/20" />
-                <div className="h-3 w-12 animate-pulse rounded bg-muted/20" />
+                <div className="h-3 w-24 animate-pulse bg-muted/20" />
+                <div className="h-3 w-16 animate-pulse bg-muted/20" />
+                <div className="h-3 w-20 animate-pulse bg-muted/20" />
+                <div className="h-3 w-12 animate-pulse bg-muted/20" />
               </div>
             ))}
           </div>
@@ -394,10 +394,10 @@ export default function SandboxDetailPage() {
                 key={i}
                 className="flex items-center gap-6 border-b border-border px-4 py-3 last:border-b-0"
               >
-                <div className="h-3 w-32 animate-pulse rounded bg-muted/20" />
-                <div className="h-3 w-16 animate-pulse rounded bg-muted/20" />
-                <div className="h-3 w-16 animate-pulse rounded bg-muted/20" />
-                <div className="h-3 w-20 animate-pulse rounded bg-muted/20" />
+                <div className="h-3 w-32 animate-pulse bg-muted/20" />
+                <div className="h-3 w-16 animate-pulse bg-muted/20" />
+                <div className="h-3 w-16 animate-pulse bg-muted/20" />
+                <div className="h-3 w-20 animate-pulse bg-muted/20" />
               </div>
             ))}
           </div>
