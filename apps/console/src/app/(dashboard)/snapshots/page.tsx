@@ -2,6 +2,7 @@
 
 import { CameraIcon, DotsThreeVerticalIcon } from "@phosphor-icons/react"
 import {
+  Badge,
   Button,
   Checkbox,
   Table,
@@ -10,7 +11,6 @@ import {
   TableHeader,
   TableRow,
 } from "@superserve/ui"
-import { useQuery } from "@tanstack/react-query"
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
@@ -18,36 +18,34 @@ import { PageHeader } from "@/components/page-header"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableSkeleton } from "@/components/table-skeleton"
 import { TableToolbar } from "@/components/table-toolbar"
+import { useSnapshots } from "@/hooks/use-snapshots"
 import { useSelection } from "@/hooks/use-selection"
-import { apiClient } from "@/lib/api/client"
-import { snapshotKeys } from "@/lib/api/query-keys"
 import { formatDate } from "@/lib/format"
 
-interface Snapshot {
-  id: string
-  name: string
-  created_at: string
-  last_used_at: string | null
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B"
+  const units = ["B", "KB", "MB", "GB"]
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  return `${(bytes / 1024 ** i).toFixed(i > 0 ? 1 : 0)} ${units[i]}`
+}
+
+const TRIGGER_LABEL: Record<string, string> = {
+  pause: "Pause",
+  manual: "Manual",
 }
 
 export default function SnapshotsPage() {
-  const {
-    data: snapshots,
-    isPending,
-    error,
-    refetch,
-  } = useQuery({
-    queryKey: snapshotKeys.all,
-    queryFn: () => apiClient<Snapshot[]>("/snapshots"),
-  })
-
+  const { data: snapshots, isPending, error, refetch } = useSnapshots()
   const [search, setSearch] = useState("")
 
   const filtered = useMemo(() => {
     if (!snapshots) return []
     if (!search) return snapshots
-    return snapshots.filter((s) =>
-      s.name.toLowerCase().includes(search.toLowerCase()),
+    const q = search.toLowerCase()
+    return snapshots.filter(
+      (s) =>
+        s.name?.toLowerCase().includes(q) ||
+        s.sandbox_id.toLowerCase().includes(q),
     )
   }, [snapshots, search])
 
@@ -58,7 +56,7 @@ export default function SnapshotsPage() {
     return (
       <div className="flex h-full flex-col">
         <PageHeader title="Snapshots" />
-        <TableSkeleton columns={5} />
+        <TableSkeleton columns={6} />
       </div>
     )
   }
@@ -82,7 +80,7 @@ export default function SnapshotsPage() {
         <EmptyState
           icon={CameraIcon}
           title="No Snapshots"
-          description="Snapshots are created automatically when you deploy a sandbox."
+          description="Snapshots are created automatically when you pause a sandbox."
         />
       ) : (
         <>
@@ -104,9 +102,11 @@ export default function SnapshotsPage() {
                       aria-label="Select all snapshots"
                     />
                   </TableHead>
-                  <TableHead className="w-[40%]">Name</TableHead>
-                  <TableHead className="w-[20%]">Created</TableHead>
-                  <TableHead className="w-[20%]">Last Used</TableHead>
+                  <TableHead className="w-[30%]">Name</TableHead>
+                  <TableHead className="w-[15%]">Size</TableHead>
+                  <TableHead className="w-[15%]">Trigger</TableHead>
+                  <TableHead className="w-[10%]">Saved</TableHead>
+                  <TableHead className="w-[18%]">Created</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
@@ -117,21 +117,25 @@ export default function SnapshotsPage() {
                       <Checkbox
                         checked={selected.has(snapshot.id)}
                         onCheckedChange={() => toggleOne(snapshot.id)}
-                        aria-label={`Select ${snapshot.name}`}
+                        aria-label={`Select ${snapshot.name ?? snapshot.id}`}
                       />
                     </TableCell>
                     <TableCell className="font-mono text-foreground/80">
-                      {snapshot.name}
+                      {snapshot.name ?? `${snapshot.sandbox_id.slice(0, 8)}...`}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted">
+                      {formatBytes(snapshot.size_bytes)}
+                    </TableCell>
+                    <TableCell className="text-foreground/80">
+                      {TRIGGER_LABEL[snapshot.trigger] ?? snapshot.trigger}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={snapshot.saved ? "success" : "muted"} dot>
+                        {snapshot.saved ? "Yes" : "No"}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-muted">
-                      {snapshot.created_at
-                        ? formatDate(new Date(snapshot.created_at))
-                        : "-"}
-                    </TableCell>
-                    <TableCell className="text-muted">
-                      {snapshot.last_used_at
-                        ? formatDate(new Date(snapshot.last_used_at))
-                        : "-"}
+                      {formatDate(new Date(snapshot.created_at))}
                     </TableCell>
                     <TableCell>
                       <Button
