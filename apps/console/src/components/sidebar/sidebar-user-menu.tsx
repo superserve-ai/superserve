@@ -47,16 +47,11 @@ export function SidebarUserMenu() {
     <div className="px-2.5">
       <Menu>
         <MenuTrigger
-          render={
-            <button
-              type="button"
-              title={isCollapsed ? name : undefined}
-              className={cn(
-                "flex w-full items-center gap-2.5 px-2.5 py-2.5 text-foreground/70 transition-colors hover:text-foreground hover:bg-surface-hover cursor-pointer",
-                isCollapsed && "justify-center",
-              )}
-            />
-          }
+          render={<div role="button" tabIndex={0} />}
+          className={cn(
+            "flex w-full items-center gap-2.5 px-2.5 py-2.5 text-foreground/70 transition-colors hover:text-foreground hover:bg-surface-hover cursor-pointer",
+            isCollapsed && "justify-center",
+          )}
         >
           <UserIcon className="size-4 shrink-0" weight="light" />
           {!isCollapsed && (
@@ -68,8 +63,11 @@ export function SidebarUserMenu() {
             </>
           )}
         </MenuTrigger>
-        <MenuPopup className="w-56">
-          {/* User info header */}
+        <MenuPopup
+          className="w-56"
+          side={isCollapsed ? "right" : "top"}
+          align="start"
+        >
           <div className="flex items-center gap-2.5 px-2 py-2 select-none">
             <Avatar fallback={getInitials(name)} size="sm" />
             <div className="flex flex-col gap-0.5 overflow-hidden">

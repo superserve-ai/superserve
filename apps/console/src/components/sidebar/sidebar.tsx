@@ -5,7 +5,6 @@ import {
   Button,
   cn,
   Kbd,
-  Separator,
   Tooltip,
   TooltipPopup,
   TooltipTrigger,
@@ -135,9 +134,7 @@ export function Sidebar() {
       {/* Bottom Nav */}
       <SidebarNav items={bottomNavItems} groupId="bottom" />
 
-      <div className="px-2.5 py-1">
-        <Separator />
-      </div>
+      <div className="m-2.5 border-t border-dashed border-border" />
 
       {/* User Menu */}
       <div className="pb-2.5">

@@ -10,13 +10,21 @@ const MenuTrigger = MenuPrimitive.Trigger
 function MenuPopup({
   className,
   sideOffset = 4,
+  side,
+  align,
   ...props
 }: React.ComponentProps<typeof MenuPrimitive.Popup> & {
   sideOffset?: number
+  side?: "top" | "bottom" | "left" | "right"
+  align?: "start" | "center" | "end"
 }) {
   return (
     <MenuPrimitive.Portal>
-      <MenuPrimitive.Positioner sideOffset={sideOffset}>
+      <MenuPrimitive.Positioner
+        sideOffset={sideOffset}
+        side={side}
+        align={align}
+      >
         <MenuPrimitive.Popup
           className={cn(
             "ss-menu-popup z-50 min-w-32 border border-dashed border-border bg-surface p-1",
