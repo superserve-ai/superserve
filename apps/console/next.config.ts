@@ -15,8 +15,6 @@ const securityHeaders = [
   },
 ]
 
-const SANDBOX_API_URL = process.env.SANDBOX_API_URL ?? "https://api.superserve.ai"
-
 const nextConfig: NextConfig = {
   reactCompiler: true,
   trailingSlash: true,
@@ -26,26 +24,6 @@ const nextConfig: NextConfig = {
       {
         source: "/(.*)",
         headers: securityHeaders,
-      },
-    ]
-  },
-  async rewrites() {
-    return [
-      {
-        source: "/api/sandboxes/:path*",
-        destination: `${SANDBOX_API_URL}/sandboxes/:path*`,
-      },
-      {
-        source: "/api/sandboxes",
-        destination: `${SANDBOX_API_URL}/sandboxes`,
-      },
-      {
-        source: "/api/health",
-        destination: `${SANDBOX_API_URL}/health`,
-      },
-      {
-        source: "/api/v1/:path*",
-        destination: `${SANDBOX_API_URL}/v1/:path*`,
       },
     ]
   },
