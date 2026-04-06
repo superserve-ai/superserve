@@ -2,36 +2,36 @@ import { apiClient } from "./client"
 import type { CreateSandboxRequest, SandboxResponse } from "./types"
 
 export async function listSandboxes(): Promise<SandboxResponse[]> {
-  return apiClient<SandboxResponse[]>("/v1/sandboxes")
+  return apiClient<SandboxResponse[]>("/sandboxes")
 }
 
 export async function getSandbox(id: string): Promise<SandboxResponse> {
-  return apiClient<SandboxResponse>(`/v1/sandboxes/${id}`)
+  return apiClient<SandboxResponse>(`/sandboxes/${id}`)
 }
 
 export async function createSandbox(
   data: CreateSandboxRequest,
 ): Promise<SandboxResponse> {
-  return apiClient<SandboxResponse>("/v1/sandboxes", {
+  return apiClient<SandboxResponse>("/sandboxes", {
     method: "POST",
     body: JSON.stringify(data),
   })
 }
 
 export async function deleteSandbox(id: string): Promise<void> {
-  return apiClient<void>(`/v1/sandboxes/${id}`, {
+  return apiClient<void>(`/sandboxes/${id}`, {
     method: "DELETE",
   })
 }
 
 export async function pauseSandbox(id: string): Promise<SandboxResponse> {
-  return apiClient<SandboxResponse>(`/v1/sandboxes/${id}/pause`, {
+  return apiClient<SandboxResponse>(`/sandboxes/${id}/pause`, {
     method: "POST",
   })
 }
 
 export async function resumeSandbox(id: string): Promise<SandboxResponse> {
-  return apiClient<SandboxResponse>(`/v1/sandboxes/${id}/resume`, {
+  return apiClient<SandboxResponse>(`/sandboxes/${id}/resume`, {
     method: "POST",
   })
 }

@@ -38,7 +38,7 @@ export default function SnapshotsPage() {
     refetch,
   } = useQuery({
     queryKey: snapshotKeys.all,
-    queryFn: () => apiClient<Snapshot[]>("/v1/snapshots"),
+    queryFn: () => apiClient<Snapshot[]>("/snapshots"),
   })
 
   const [search, setSearch] = useState("")

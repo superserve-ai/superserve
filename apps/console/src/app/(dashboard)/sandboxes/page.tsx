@@ -117,9 +117,11 @@ export default function SandboxesPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="Sandboxes">
-        {!isEmpty && (
-          <CreateSandboxDialog open={createOpen} onOpenChange={setCreateOpen} />
-        )}
+        <CreateSandboxDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          hideTrigger={isEmpty || isPending}
+        />
       </PageHeader>
 
       {isPending ? (
@@ -127,16 +129,13 @@ export default function SandboxesPage() {
       ) : error ? (
         <ErrorState message={error.message} onRetry={() => refetch()} />
       ) : isEmpty ? (
-        <>
-          <EmptyState
-            icon={CubeIcon}
-            title="No Sandboxes"
-            description="Create your first sandbox to start deploying agents."
-            actionLabel="Create Sandbox"
-            onAction={() => setCreateOpen(true)}
-          />
-          <CreateSandboxDialog open={createOpen} onOpenChange={setCreateOpen} />
-        </>
+        <EmptyState
+          icon={CubeIcon}
+          title="No Sandboxes"
+          description="Create your first sandbox to start deploying agents."
+          actionLabel="Create Sandbox"
+          onAction={() => setCreateOpen(true)}
+        />
       ) : (
         <>
           <TableToolbar

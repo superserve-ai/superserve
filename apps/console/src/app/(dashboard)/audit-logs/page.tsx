@@ -67,7 +67,7 @@ export default function AuditLogsPage() {
     refetch,
   } = useQuery({
     queryKey: auditLogKeys.all,
-    queryFn: () => apiClient<AuditLog[]>("/v1/audit-logs"),
+    queryFn: () => apiClient<AuditLog[]>("/audit-logs"),
   })
 
   const filtered = useMemo(() => {

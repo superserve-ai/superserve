@@ -10,7 +10,7 @@ export async function uploadFile(
   const baseUrl = process.env.NEXT_PUBLIC_API_URL
 
   const response = await fetch(
-    `${baseUrl}/v1/sandboxes/${sandboxId}/files/${path}`,
+    `${baseUrl}/sandboxes/${sandboxId}/files/${path}`,
     {
       method: "PUT",
       headers: {
@@ -40,7 +40,7 @@ export async function downloadFile(
   const baseUrl = process.env.NEXT_PUBLIC_API_URL
 
   const response = await fetch(
-    `${baseUrl}/v1/sandboxes/${sandboxId}/files/${path}`,
+    `${baseUrl}/sandboxes/${sandboxId}/files/${path}`,
     {
       headers: {
         ...(apiKey ? { "X-API-Key": apiKey } : {}),

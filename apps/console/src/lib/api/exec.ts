@@ -5,7 +5,7 @@ export async function execCommand(
   sandboxId: string,
   data: ExecRequest,
 ): Promise<ExecResult> {
-  return apiClient<ExecResult>(`/v1/sandboxes/${sandboxId}/exec`, {
+  return apiClient<ExecResult>(`/sandboxes/${sandboxId}/exec`, {
     method: "POST",
     body: JSON.stringify(data),
   })
@@ -23,7 +23,7 @@ export function execCommandStream(
 
   const controller = new AbortController()
 
-  const response = fetch(`${baseUrl}/v1/sandboxes/${sandboxId}/exec/stream`, {
+  const response = fetch(`${baseUrl}/sandboxes/${sandboxId}/exec/stream`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

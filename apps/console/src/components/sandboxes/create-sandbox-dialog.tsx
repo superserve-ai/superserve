@@ -35,11 +35,13 @@ function createEnvVar(key = "", value = ""): EnvVar {
 interface CreateSandboxDialogProps {
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  hideTrigger?: boolean
 }
 
 export function CreateSandboxDialog({
   open: controlledOpen,
   onOpenChange,
+  hideTrigger,
 }: CreateSandboxDialogProps = {}) {
   const posthog = usePostHog()
   const [internalOpen, setInternalOpen] = useState(false)
@@ -123,7 +125,9 @@ export function CreateSandboxDialog({
         if (!v) handleReset()
       }}
     >
-      <DialogTrigger render={<Button />}>Create Sandbox</DialogTrigger>
+      {!hideTrigger && (
+        <DialogTrigger render={<Button />}>Create Sandbox</DialogTrigger>
+      )}
       <DialogPopup className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Create Sandbox</DialogTitle>
