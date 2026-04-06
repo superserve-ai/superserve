@@ -28,7 +28,7 @@ export function useSandbox(id: string | null) {
     enabled: !!id,
     refetchInterval: (query) => {
       const status = query.state.data?.status
-      return status === "starting" || status === "pausing" ? 2000 : false
+      return status === "pausing" ? 2000 : false
     },
   })
 }
@@ -43,7 +43,7 @@ export function useCreateSandbox() {
       queryClient.setQueryData<SandboxResponse[]>(sandboxKeys.all, (old) =>
         old ? [newSandbox, ...old] : [newSandbox],
       )
-      addToast(`Sandbox "${newSandbox.name}" is starting`, "success")
+      addToast(`Sandbox "${newSandbox.name}" created`, "success")
     },
     onError: (error) => {
       const message =

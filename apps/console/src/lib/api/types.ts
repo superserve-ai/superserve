@@ -1,9 +1,4 @@
-export type SandboxStatus =
-  | "starting"
-  | "active"
-  | "pausing"
-  | "idle"
-  | "deleted"
+export type SandboxStatus = "active" | "pausing" | "idle" | "deleted"
 
 export interface SandboxResponse {
   id: string
