@@ -51,9 +51,11 @@ import { API_KEY_EVENTS } from "@/lib/posthog/events"
 function CreateKeyDialog({
   open: controlledOpen,
   onOpenChange,
+  hideTrigger,
 }: {
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  hideTrigger?: boolean
 }) {
   const [internalOpen, setInternalOpen] = useState(false)
   const open = controlledOpen ?? internalOpen
@@ -96,10 +98,12 @@ function CreateKeyDialog({
       open={open}
       onOpenChange={(v) => (v ? setOpen(true) : handleClose())}
     >
-      <DialogTrigger render={<Button />}>
-        <PlusIcon className="size-3.5" weight="light" />
-        Create Key
-      </DialogTrigger>
+      {!hideTrigger && (
+        <DialogTrigger render={<Button />}>
+          <PlusIcon className="size-3.5" weight="light" />
+          Create Key
+        </DialogTrigger>
+      )}
       <DialogPopup className="max-w-lg">
         <DialogHeader>
           <DialogTitle>
@@ -231,20 +235,21 @@ export default function ApiKeysPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="API Keys">
-        {!isEmpty && <CreateKeyDialog />}
+        <CreateKeyDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          hideTrigger={isEmpty}
+        />
       </PageHeader>
 
       {isEmpty ? (
-        <>
-          <EmptyState
-            icon={KeyIcon}
-            title="No API Keys"
-            description="Create an API key to authenticate with the Superserve SDK."
-            actionLabel="Create Key"
-            onAction={() => setCreateOpen(true)}
-          />
-          <CreateKeyDialog open={createOpen} onOpenChange={setCreateOpen} />
-        </>
+        <EmptyState
+          icon={KeyIcon}
+          title="No API Keys"
+          description="Create an API key to authenticate with the Superserve SDK."
+          actionLabel="Create Key"
+          onAction={() => setCreateOpen(true)}
+        />
       ) : (
         <>
           <TableToolbar

@@ -1,3 +1,4 @@
+import { ApiKeyProvider } from "@/components/api-key-provider"
 import { DashboardShell } from "@/components/layout/dashboard-shell"
 import { QueryProvider } from "@/components/query-provider"
 
@@ -8,7 +9,9 @@ export default function DashboardLayout({
 }) {
   return (
     <QueryProvider>
-      <DashboardShell>{children}</DashboardShell>
+      <ApiKeyProvider>
+        <DashboardShell>{children}</DashboardShell>
+      </ApiKeyProvider>
     </QueryProvider>
   )
 }

@@ -1,25 +1,20 @@
-import { apiClient } from "./client"
-import type {
-  ApiKeyResponse,
-  CreateApiKeyRequest,
-  CreateApiKeyResponse,
-} from "./types"
+import {
+  createApiKeyAction,
+  listApiKeysAction,
+  revokeApiKeyAction,
+} from "./api-keys-actions"
+import type { ApiKeyResponse, CreateApiKeyResponse } from "./types"
 
 export async function listApiKeys(): Promise<ApiKeyResponse[]> {
-  return apiClient<ApiKeyResponse[]>("/v1/api-keys")
+  return listApiKeysAction()
 }
 
-export async function createApiKey(
-  data: CreateApiKeyRequest,
-): Promise<CreateApiKeyResponse> {
-  return apiClient<CreateApiKeyResponse>("/v1/api-keys", {
-    method: "POST",
-    body: JSON.stringify(data),
-  })
+export async function createApiKey(data: {
+  name: string
+}): Promise<CreateApiKeyResponse> {
+  return createApiKeyAction(data.name)
 }
 
 export async function revokeApiKey(id: string): Promise<void> {
-  return apiClient<void>(`/v1/api-keys/${id}`, {
-    method: "DELETE",
-  })
+  return revokeApiKeyAction(id)
 }
