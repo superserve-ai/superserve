@@ -145,7 +145,7 @@ function DevicePageContent() {
       }
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/v1/auth/device-authorize`,
+        `/api/v1/auth/device-authorize`,
         {
           method: "POST",
           headers: {

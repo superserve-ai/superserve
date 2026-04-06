@@ -19,11 +19,9 @@ export function execCommandStream(
     typeof window !== "undefined"
       ? localStorage.getItem("superserve-api-key")
       : null
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL
-
   const controller = new AbortController()
 
-  const response = fetch(`${baseUrl}/sandboxes/${sandboxId}/exec/stream`, {
+  const response = fetch(`/api/sandboxes/${sandboxId}/exec/stream`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

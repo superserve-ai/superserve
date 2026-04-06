@@ -7,10 +7,8 @@ export async function uploadFile(
     typeof window !== "undefined"
       ? localStorage.getItem("superserve-api-key")
       : null
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL
-
   const response = await fetch(
-    `${baseUrl}/sandboxes/${sandboxId}/files/${path}`,
+    `/api/sandboxes/${sandboxId}/files/${path}`,
     {
       method: "PUT",
       headers: {
@@ -37,10 +35,8 @@ export async function downloadFile(
     typeof window !== "undefined"
       ? localStorage.getItem("superserve-api-key")
       : null
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL
-
   const response = await fetch(
-    `${baseUrl}/sandboxes/${sandboxId}/files/${path}`,
+    `/api/sandboxes/${sandboxId}/files/${path}`,
     {
       headers: {
         ...(apiKey ? { "X-API-Key": apiKey } : {}),
