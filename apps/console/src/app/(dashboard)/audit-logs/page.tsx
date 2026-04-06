@@ -3,13 +3,16 @@
 import { ClipboardTextIcon } from "@phosphor-icons/react"
 import {
   Badge,
+  type BadgeVariant,
   Table,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
+  Tooltip,
+  TooltipPopup,
+  TooltipTrigger,
 } from "@superserve/ui"
-import { useQuery } from "@tanstack/react-query"
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
@@ -17,34 +20,26 @@ import { PageHeader } from "@/components/page-header"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableSkeleton } from "@/components/table-skeleton"
 import { TableToolbar } from "@/components/table-toolbar"
-import { apiClient } from "@/lib/api/client"
-import { auditLogKeys } from "@/lib/api/query-keys"
+import { useActivity } from "@/hooks/use-activity"
 import { formatTime } from "@/lib/format"
 
-type AuditAction = "Create" | "Start" | "Update" | "Pause"
-type AuditOutcome = "Success" | "Failure"
-
-interface AuditLog {
-  id: string
-  time: string
-  user: string
-  action: AuditAction
-  target: string
-  outcome: AuditOutcome
+const STATUS_VARIANT: Record<string, BadgeVariant> = {
+  success: "success",
+  error: "destructive",
 }
 
-const OUTCOME_BADGE_VARIANT: Record<AuditOutcome, "success" | "destructive"> = {
-  Success: "success",
-  Failure: "destructive",
-}
-
-const ACTION_TABS = [
+const CATEGORY_TABS = [
   { label: "All", value: "all" },
-  { label: "Create", value: "Create" },
-  { label: "Start", value: "Start" },
-  { label: "Update", value: "Update" },
-  { label: "Pause", value: "Pause" },
+  { label: "Sandbox", value: "sandbox" },
+  { label: "Exec", value: "exec" },
+  { label: "Errors", value: "_errors" },
 ]
+
+function formatDuration(ms: number | null): string {
+  if (ms === null) return "-"
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(1)}s`
+}
 
 function TimeCell({ date }: { date: Date }) {
   const { relative, absolute } = formatTime(date)
@@ -57,47 +52,50 @@ function TimeCell({ date }: { date: Date }) {
 }
 
 export default function AuditLogsPage() {
-  const [actionFilter, setActionFilter] = useState("all")
+  const [categoryFilter, setCategoryFilter] = useState("all")
   const [search, setSearch] = useState("")
 
-  const {
-    data: logs,
-    isPending,
-    error,
-    refetch,
-  } = useQuery({
-    queryKey: auditLogKeys.all,
-    queryFn: () => apiClient<AuditLog[]>("/audit-logs"),
-  })
+  const { data: activity, isPending, error, refetch } = useActivity()
 
   const filtered = useMemo(() => {
-    return (logs ?? []).filter((log) => {
-      if (actionFilter !== "all" && log.action !== actionFilter) return false
+    return (activity ?? []).filter((a) => {
+      if (categoryFilter === "_errors" && a.status !== "error") return false
       if (
-        search &&
-        !log.user.toLowerCase().includes(search.toLowerCase()) &&
-        !log.target.toLowerCase().includes(search.toLowerCase())
+        categoryFilter !== "all" &&
+        categoryFilter !== "_errors" &&
+        a.category !== categoryFilter
       )
         return false
+      if (search) {
+        const q = search.toLowerCase()
+        if (
+          !a.sandbox_name?.toLowerCase().includes(q) &&
+          !a.action.toLowerCase().includes(q) &&
+          !a.category.toLowerCase().includes(q)
+        )
+          return false
+      }
       return true
     })
-  }, [logs, actionFilter, search])
+  }, [activity, categoryFilter, search])
 
-  const tabs = ACTION_TABS.map((tab) => ({
+  const tabs = CATEGORY_TABS.map((tab) => ({
     ...tab,
     count:
       tab.value === "all"
-        ? (logs?.length ?? 0)
-        : (logs?.filter((l) => l.action === tab.value).length ?? 0),
+        ? (activity?.length ?? 0)
+        : tab.value === "_errors"
+          ? (activity?.filter((a) => a.status === "error").length ?? 0)
+          : (activity?.filter((a) => a.category === tab.value).length ?? 0),
   }))
 
-  const isEmpty = (logs?.length ?? 0) === 0
+  const isEmpty = (activity?.length ?? 0) === 0
 
   if (isPending) {
     return (
       <div className="flex h-full flex-col">
         <PageHeader title="Audit Logs" />
-        <TableSkeleton columns={5} />
+        <TableSkeleton columns={6} />
       </div>
     )
   }
@@ -125,9 +123,9 @@ export default function AuditLogsPage() {
         <>
           <TableToolbar
             tabs={tabs}
-            activeTab={actionFilter}
-            onTabChange={setActionFilter}
-            searchPlaceholder="Search by user or target..."
+            activeTab={categoryFilter}
+            onTabChange={setCategoryFilter}
+            searchPlaceholder="Search by sandbox or action..."
             searchValue={search}
             onSearchChange={setSearch}
           />
@@ -136,30 +134,64 @@ export default function AuditLogsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[22%]">Time</TableHead>
-                  <TableHead className="w-[22%]">User</TableHead>
-                  <TableHead className="w-[12%]">Action</TableHead>
-                  <TableHead className="w-[30%]">Target</TableHead>
-                  <TableHead className="w-[14%]">Outcome</TableHead>
+                  <TableHead className="w-[20%]">Time</TableHead>
+                  <TableHead className="w-[20%]">Sandbox</TableHead>
+                  <TableHead className="w-[12%]">Category</TableHead>
+                  <TableHead className="w-[15%]">Action</TableHead>
+                  <TableHead className="w-[10%]">Duration</TableHead>
+                  <TableHead className="w-[12%]">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <StickyHoverTableBody>
                 {filtered.map((log) => (
                   <TableRow key={log.id}>
                     <TableCell className="whitespace-nowrap">
-                      <TimeCell date={new Date(log.time)} />
+                      <TimeCell date={new Date(log.created_at)} />
+                    </TableCell>
+                    <TableCell className="font-mono text-foreground/80">
+                      {log.sandbox_name ?? "-"}
+                    </TableCell>
+                    <TableCell className="text-muted capitalize">
+                      {log.category}
                     </TableCell>
                     <TableCell className="text-foreground/80">
-                      {log.user}
+                      {log.action}
                     </TableCell>
-                    <TableCell>{log.action}</TableCell>
-                    <TableCell className="max-w-48 truncate text-foreground/80">
-                      {log.target}
+                    <TableCell className="font-mono text-xs text-muted">
+                      {formatDuration(log.duration_ms)}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={OUTCOME_BADGE_VARIANT[log.outcome]} dot>
-                        {log.outcome}
-                      </Badge>
+                      {log.status ? (
+                        log.error ? (
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <Badge
+                                  variant={
+                                    STATUS_VARIANT[log.status] ?? "muted"
+                                  }
+                                  dot
+                                  className="cursor-default"
+                                />
+                              }
+                            >
+                              {log.status}
+                            </TooltipTrigger>
+                            <TooltipPopup className="max-w-xs text-xs">
+                              {log.error}
+                            </TooltipPopup>
+                          </Tooltip>
+                        ) : (
+                          <Badge
+                            variant={STATUS_VARIANT[log.status] ?? "muted"}
+                            dot
+                          >
+                            {log.status}
+                          </Badge>
+                        )
+                      ) : (
+                        <span className="text-muted">-</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

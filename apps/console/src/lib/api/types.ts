@@ -66,6 +66,29 @@ export interface CreateApiKeyResponse {
   created_at: string
 }
 
+export interface SnapshotResponse {
+  id: string
+  sandbox_id: string
+  name: string | null
+  size_bytes: number
+  saved: boolean
+  trigger: string
+  created_at: string
+}
+
+export interface ActivityResponse {
+  id: string
+  sandbox_id: string
+  category: string
+  action: string
+  status: string | null
+  sandbox_name: string | null
+  duration_ms: number | null
+  error: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+}
+
 export interface ApiError {
   error: {
     code: string
