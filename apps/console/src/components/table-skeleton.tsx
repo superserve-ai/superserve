@@ -16,7 +16,7 @@ export function TableSkeleton({
   return (
     <div className="flex-1">
       {/* Toolbar skeleton */}
-      <div className="flex items-center justify-between border-b border-border px-4 py-2">
+      <div className="flex h-12 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-1">
           {tabs > 0
             ? Array.from({ length: tabs }).map((_, i) => (

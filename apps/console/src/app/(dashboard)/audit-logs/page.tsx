@@ -130,9 +130,9 @@ export default function AuditLogsPage() {
             onSearchChange={setSearch}
           />
 
-          <div className="flex-1">
+          <div className="flex-1 overflow-y-auto">
             <Table>
-              <TableHeader>
+              <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead className="w-[20%]">Time</TableHead>
                   <TableHead className="w-[20%]">Sandbox</TableHead>

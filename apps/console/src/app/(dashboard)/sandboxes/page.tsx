@@ -152,9 +152,9 @@ export default function SandboxesPage() {
             onDeleteSelected={deleteSelected}
           />
 
-          <div className="flex-1">
+          <div className="flex-1 overflow-y-auto">
             <Table>
-              <TableHeader>
+              <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead className="w-10 pr-0">
                     <Checkbox
@@ -253,7 +253,13 @@ export default function SandboxesPage() {
                             />
                           </MenuTrigger>
                           <MenuPopup>
-                            <MenuItem>
+                            <MenuItem
+                              onClick={() =>
+                                router.push(
+                                  `/sandboxes/${sandbox.id}/terminal/`,
+                                )
+                              }
+                            >
                               <TerminalIcon className="size-4" weight="light" />
                               Open Terminal
                             </MenuItem>

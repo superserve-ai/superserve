@@ -7,6 +7,7 @@ import {
   CopyIcon,
   PlayIcon,
   StopIcon,
+  TerminalIcon,
   TrashIcon,
 } from "@phosphor-icons/react"
 import {
@@ -194,6 +195,18 @@ export default function SandboxDetailPage() {
           </Badge>
         </div>
         <div className="flex items-center gap-2">
+          {(sandbox.status === "active" || sandbox.status === "idle") && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                router.push(`/sandboxes/${sandboxId}/terminal/`)
+              }
+            >
+              <TerminalIcon className="size-3.5" weight="light" />
+              Terminal
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -304,7 +317,7 @@ export default function SandboxDetailPage() {
             />
           </div>
         ) : (
-          <div className="border-b border-border">
+          <div className="max-h-96 overflow-y-auto border-b border-border">
             <Table>
               <TableHeader>
                 <TableRow>

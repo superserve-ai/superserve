@@ -40,7 +40,7 @@ export function TableToolbar({
   const [hoveredTab, setHoveredTab] = useState<string | null>(null)
 
   return (
-    <div className="flex items-center justify-between border-b border-border px-4 py-2">
+    <div className="flex shrink-0 h-12 items-center justify-between border-b border-border bg-background px-4">
       {/* Left side: selection actions or filter tabs */}
       <nav
         className="flex items-center gap-1"
@@ -81,7 +81,7 @@ export function TableToolbar({
                 onClick={() => onTabChange?.(tab.value)}
                 onMouseEnter={() => setHoveredTab(tab.value)}
                 className={cn(
-                  "relative inline-flex items-center gap-1.5 px-2.5 py-1 text-xs transition-colors cursor-pointer",
+                  "relative inline-flex items-center gap-1.5 px-3 py-1.5 text-xs transition-colors cursor-pointer",
                   isActive
                     ? "text-foreground"
                     : "text-muted hover:text-foreground",
@@ -139,7 +139,7 @@ export function TableToolbar({
         value={searchValue}
         onChange={(e) => onSearchChange?.(e.target.value)}
         suffix={<MagnifyingGlassIcon className="size-3.5" weight="light" />}
-        className="w-48 text-xs"
+        className="h-8 w-48 text-xs"
       />
     </div>
   )

@@ -261,9 +261,9 @@ export default function ApiKeysPage() {
             onDeleteSelected={deleteSelected}
           />
 
-          <div className="flex-1">
+          <div className="flex-1 overflow-y-auto">
             <Table>
-              <TableHeader>
+              <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead className="w-10 pr-0">
                     <Checkbox
