@@ -80,7 +80,7 @@ export default function SnapshotsPage() {
         <EmptyState
           icon={CameraIcon}
           title="No Snapshots"
-          description="Snapshots are created automatically when you pause a sandbox."
+          description="Snapshots are created when you pause a sandbox to preserve its state."
         />
       ) : (
         <>

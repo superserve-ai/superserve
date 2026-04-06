@@ -26,6 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from "@superserve/ui"
+import { useRouter } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
@@ -70,6 +71,7 @@ const STATUS_TABS = [
 ]
 
 export default function SandboxesPage() {
+  const router = useRouter()
   const posthog = usePostHog()
   const [statusFilter, setStatusFilter] = useState("all")
   const [search, setSearch] = useState("")
@@ -171,8 +173,17 @@ export default function SandboxesPage() {
               </TableHeader>
               <StickyHoverTableBody>
                 {filtered.map((sandbox) => (
-                  <TableRow key={sandbox.id}>
-                    <TableCell className="pr-0">
+                  <TableRow
+                    key={sandbox.id}
+                    className="cursor-pointer"
+                    onClick={() =>
+                      router.push(`/sandboxes/${sandbox.id}/`)
+                    }
+                  >
+                    <TableCell
+                      className="pr-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <Checkbox
                         checked={selected.has(sandbox.id)}
                         onCheckedChange={() => toggleOne(sandbox.id)}
@@ -195,7 +206,7 @@ export default function SandboxesPage() {
                     <TableCell className="font-mono text-xs text-muted">
                       {sandbox.vcpu_count}CPU | {sandbox.memory_mib}MB
                     </TableCell>
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="outline"

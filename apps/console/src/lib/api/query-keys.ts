@@ -19,6 +19,8 @@ export const snapshotKeys = {
   lists: () => [...snapshotKeys.all, "list"] as const,
   list: (filters?: { search?: string }) =>
     [...snapshotKeys.lists(), filters] as const,
+  bySandbox: (sandboxId: string) =>
+    [...snapshotKeys.all, "sandbox", sandboxId] as const,
 }
 
 export const auditLogKeys = {
@@ -26,4 +28,6 @@ export const auditLogKeys = {
   lists: () => [...auditLogKeys.all, "list"] as const,
   list: (filters?: { action?: string; search?: string }) =>
     [...auditLogKeys.lists(), filters] as const,
+  bySandbox: (sandboxId: string) =>
+    [...auditLogKeys.all, "sandbox", sandboxId] as const,
 }
