@@ -45,18 +45,28 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   (
-    { className, variant = "default", size = "default", render, children, ...props },
+    {
+      className,
+      variant = "default",
+      size = "default",
+      render,
+      children,
+      ...props
+    },
     ref,
   ) => {
     const classes = cn(buttonVariants({ variant, size }), className)
 
     if (render) {
       const renderProps = render.props as Record<string, unknown>
-      return cloneElement(render as React.ReactElement<Record<string, unknown>>, {
-        ...props,
-        className: cn(classes, renderProps.className as string | undefined),
-        children,
-      })
+      return cloneElement(
+        render as React.ReactElement<Record<string, unknown>>,
+        {
+          ...props,
+          className: cn(classes, renderProps.className as string | undefined),
+          children,
+        },
+      )
     }
 
     return (
@@ -68,5 +78,5 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 )
 Button.displayName = "Button"
 
-export { Button, buttonVariants }
 export type { ButtonProps }
+export { Button, buttonVariants }

@@ -18,17 +18,19 @@ export function TableSkeleton({
       {/* Toolbar skeleton */}
       <div className="flex h-12 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-1">
-          {tabs > 0
-            ? Array.from({ length: tabs }).map((_, i) => (
-                <div
-                  key={`tab-${i}`}
-                  className={cn(
-                    "h-6 animate-pulse bg-surface-hover",
-                    i === 0 ? "w-12" : "w-14",
-                  )}
-                />
-              ))
-            : <div className="h-6 w-20" />}
+          {tabs > 0 ? (
+            Array.from({ length: tabs }).map((_, i) => (
+              <div
+                key={`tab-${i}`}
+                className={cn(
+                  "h-6 animate-pulse bg-surface-hover",
+                  i === 0 ? "w-12" : "w-14",
+                )}
+              />
+            ))
+          ) : (
+            <div className="h-6 w-20" />
+          )}
         </div>
         <div className="h-8 w-48 animate-pulse bg-surface-hover" />
       </div>

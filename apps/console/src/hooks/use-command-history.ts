@@ -21,9 +21,7 @@ function saveHistory(sandboxId: string, history: string[]) {
 }
 
 export function useCommandHistory(sandboxId: string) {
-  const [history, setHistory] = useState<string[]>(() =>
-    loadHistory(sandboxId),
-  )
+  const [history, setHistory] = useState<string[]>(() => loadHistory(sandboxId))
   const indexRef = useRef(-1)
   const draftRef = useRef("")
 

@@ -3,6 +3,7 @@
 import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react"
 import { createBrowserClient } from "@superserve/supabase"
 import { Badge, Button, Input, useToast } from "@superserve/ui"
+import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
@@ -142,7 +143,13 @@ function SignInContent() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6">
       <div className="mb-8">
         <Link href="/">
-          <img src="/logo.svg" alt="Superserve" className="h-10 w-auto" />
+          <Image
+            src="/logo.svg"
+            alt="Superserve"
+            width={200}
+            height={40}
+            className="h-10 w-auto"
+          />
         </Link>
       </div>
 

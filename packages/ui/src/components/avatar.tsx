@@ -50,5 +50,5 @@ function Avatar({
   )
 }
 
-export { Avatar }
 export type { AvatarProps, AvatarSize }
+export { Avatar }

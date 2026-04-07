@@ -74,4 +74,4 @@ function AccordionPanel({
   )
 }
 
-export { Accordion, AccordionItem, AccordionTrigger, AccordionPanel }
+export { Accordion, AccordionItem, AccordionPanel, AccordionTrigger }

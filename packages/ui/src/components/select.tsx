@@ -73,4 +73,4 @@ function SelectItem({
   )
 }
 
-export { Select, SelectValue, SelectTrigger, SelectPopup, SelectItem }
+export { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue }

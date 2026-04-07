@@ -25,7 +25,10 @@ const dotColorClasses: Record<BadgeVariant, string> = {
 }
 
 const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
-  ({ className, variant = "default", dot = false, children, ...props }, ref) => {
+  (
+    { className, variant = "default", dot = false, children, ...props },
+    ref,
+  ) => {
     return (
       <span
         ref={ref}
@@ -46,5 +49,5 @@ const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
 )
 Badge.displayName = "Badge"
 
-export { Badge }
 export type { BadgeVariant }
+export { Badge }

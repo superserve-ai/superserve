@@ -51,9 +51,9 @@ export function HighlightedCode({ code, lang }: HighlightedCodeProps) {
 
   if (html) {
     return (
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki-generated HTML
       <div
         className="overflow-x-auto font-mono text-sm leading-relaxed [&_pre]:!bg-transparent [&_code]:!bg-transparent [&_pre]:!m-0 [&_pre]:!p-0"
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki-generated HTML
         dangerouslySetInnerHTML={{ __html: html }}
       />
     )

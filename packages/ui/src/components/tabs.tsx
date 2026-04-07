@@ -49,4 +49,4 @@ function TabsPanel({
   )
 }
 
-export { Tabs, TabsList, TabsTab, TabsPanel }
+export { Tabs, TabsList, TabsPanel, TabsTab }

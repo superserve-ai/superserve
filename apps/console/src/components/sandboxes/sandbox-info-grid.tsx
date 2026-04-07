@@ -1,7 +1,7 @@
 import { CopyIcon } from "@phosphor-icons/react"
 import { useToast } from "@superserve/ui"
-import { formatDate } from "@/lib/format"
 import type { SandboxResponse } from "@/lib/api/types"
+import { formatDate } from "@/lib/format"
 
 interface SandboxInfoGridProps {
   sandbox: SandboxResponse

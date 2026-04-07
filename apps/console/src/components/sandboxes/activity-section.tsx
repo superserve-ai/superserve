@@ -12,12 +12,9 @@ import {
 } from "@superserve/ui"
 import { EmptyState } from "@/components/empty-state"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
-import { formatTime } from "@/lib/format"
 import type { ActivityResponse } from "@/lib/api/types"
-import {
-  ACTIVITY_STATUS_VARIANT,
-  formatDuration,
-} from "@/lib/sandbox-utils"
+import { formatTime } from "@/lib/format"
+import { ACTIVITY_STATUS_VARIANT, formatDuration } from "@/lib/sandbox-utils"
 
 interface ActivitySectionProps {
   activity: ActivityResponse[] | undefined

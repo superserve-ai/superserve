@@ -66,4 +66,4 @@ function MenuSeparator({
   )
 }
 
-export { Menu, MenuTrigger, MenuPopup, MenuItem, MenuSeparator }
+export { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger }

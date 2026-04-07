@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
-import { listSnapshotsAction } from "@/lib/api/snapshots-actions"
 import { snapshotKeys } from "@/lib/api/query-keys"
+import { listSnapshotsAction } from "@/lib/api/snapshots-actions"
 
 export function useSnapshots() {
   return useQuery({

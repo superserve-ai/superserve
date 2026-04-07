@@ -96,13 +96,11 @@ export {
 
 // Separator
 export { Separator } from "./components/separator"
-
+// Skeleton
+export { Skeleton } from "./components/skeleton"
 // Spinner
 export type { SpinnerSize } from "./components/spinner"
 export { Spinner } from "./components/spinner"
-
-// Skeleton
-export { Skeleton } from "./components/skeleton"
 
 // Switch
 export { Switch } from "./components/switch"

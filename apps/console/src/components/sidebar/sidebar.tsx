@@ -9,6 +9,7 @@ import {
   TooltipPopup,
   TooltipTrigger,
 } from "@superserve/ui"
+import Image from "next/image"
 import { bottomNavItems, mainNavItems } from "./nav-config"
 import { useSidebar } from "./sidebar-context"
 import { SidebarNav } from "./sidebar-nav"
@@ -33,9 +34,21 @@ export function Sidebar() {
       {/* Logo */}
       <div className="flex items-center justify-center p-5">
         {isCollapsed ? (
-          <img src="/logo-mark.svg" alt="Superserve" className="size-5" />
+          <Image
+            src="/logo-mark.svg"
+            alt="Superserve"
+            width={20}
+            height={20}
+            className="size-5"
+          />
         ) : (
-          <img src="/logo.svg" alt="Superserve" className="h-5 w-auto" />
+          <Image
+            src="/logo.svg"
+            alt="Superserve"
+            width={100}
+            height={20}
+            className="h-5 w-auto"
+          />
         )}
       </div>
 

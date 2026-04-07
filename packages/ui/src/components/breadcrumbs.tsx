@@ -68,5 +68,5 @@ function Breadcrumbs({
   )
 }
 
-export { Breadcrumbs }
 export type { BreadcrumbItem, BreadcrumbsProps }
+export { Breadcrumbs }

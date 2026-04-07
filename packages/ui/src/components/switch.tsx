@@ -50,5 +50,5 @@ function Switch({ className, label, id, ...props }: SwitchProps) {
   )
 }
 
-export { Switch }
 export type { SwitchProps }
+export { Switch }

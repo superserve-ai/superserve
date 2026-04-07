@@ -67,4 +67,4 @@ function TableCell({
   )
 }
 
-export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell }
+export { Table, TableBody, TableCell, TableHead, TableHeader, TableRow }

@@ -123,11 +123,11 @@ const DialogClose = DialogPrimitive.Close
 
 export {
   Dialog,
-  DialogTrigger,
-  DialogPopup,
-  DialogHeader,
-  DialogTitle,
+  DialogClose,
   DialogDescription,
   DialogFooter,
-  DialogClose,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+  DialogTrigger,
 }

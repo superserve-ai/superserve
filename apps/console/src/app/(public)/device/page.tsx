@@ -2,6 +2,7 @@
 
 import { createBrowserClient } from "@superserve/supabase"
 import { Badge, Button, useToast } from "@superserve/ui"
+import Image from "next/image"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
@@ -14,7 +15,13 @@ function Logo() {
   return (
     <div className="mb-8">
       <Link href="/" className="flex items-center gap-2">
-        <img src="/logo.svg" alt="Superserve" className="h-10 mb-2" />
+        <Image
+          src="/logo.svg"
+          alt="Superserve"
+          width={200}
+          height={40}
+          className="h-10 mb-2"
+        />
       </Link>
     </div>
   )
@@ -144,19 +151,16 @@ function DevicePageContent() {
         throw new Error("Session expired. Please sign in again.")
       }
 
-      const response = await fetch(
-        `/api/v1/auth/device-authorize`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            user_code: userCode,
-          }),
+      const response = await fetch(`/api/v1/auth/device-authorize`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
         },
-      )
+        body: JSON.stringify({
+          user_code: userCode,
+        }),
+      })
 
       if (!response.ok) {
         const data = await response.json()

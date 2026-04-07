@@ -18,8 +18,8 @@ import { PageHeader } from "@/components/page-header"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableSkeleton } from "@/components/table-skeleton"
 import { TableToolbar } from "@/components/table-toolbar"
-import { useSnapshots } from "@/hooks/use-snapshots"
 import { useSelection } from "@/hooks/use-selection"
+import { useSnapshots } from "@/hooks/use-snapshots"
 import { formatDate } from "@/lib/format"
 
 function formatBytes(bytes: number): string {

@@ -49,5 +49,5 @@ function Field({
   )
 }
 
-export { Field }
 export type { FieldProps }
+export { Field }

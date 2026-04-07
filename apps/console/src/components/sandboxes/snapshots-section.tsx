@@ -9,8 +9,8 @@ import {
 } from "@superserve/ui"
 import { EmptyState } from "@/components/empty-state"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
-import { formatDate } from "@/lib/format"
 import type { SnapshotResponse } from "@/lib/api/types"
+import { formatDate } from "@/lib/format"
 import { formatBytes } from "@/lib/sandbox-utils"
 
 interface SnapshotsSectionProps {

@@ -54,4 +54,4 @@ function CardFooter({
   )
 }
 
-export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
+export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
