@@ -35,11 +35,7 @@ async function proxyRequest(
 
   const headers = new Headers()
   for (const [key, value] of request.headers.entries()) {
-    if (
-      key === "host" ||
-      key === "connection" ||
-      key === "transfer-encoding"
-    ) {
+    if (key === "host" || key === "connection" || key === "transfer-encoding") {
       continue
     }
     headers.set(key, value)

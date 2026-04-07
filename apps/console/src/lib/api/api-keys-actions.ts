@@ -165,4 +165,3 @@ export async function revokeApiKeyAction(id: string) {
 
   if (error) throw new Error(error.message)
 }
-

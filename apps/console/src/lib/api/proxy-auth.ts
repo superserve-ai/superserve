@@ -22,10 +22,7 @@ function hashKey(key: string): string {
   return crypto.createHash("sha256").update(key).digest("hex")
 }
 
-async function ensureProfile(
-  userId: string,
-  email: string,
-): Promise<void> {
+async function ensureProfile(userId: string, email: string): Promise<void> {
   const admin = createAdminClient()
   const { data: existing } = await admin
     .from("profile")

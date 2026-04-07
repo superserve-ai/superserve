@@ -3,14 +3,11 @@ export async function uploadFile(
   path: string,
   content: Blob | ArrayBuffer,
 ): Promise<{ path: string; size: number }> {
-  const response = await fetch(
-    `/api/sandboxes/${sandboxId}/files/${path}`,
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/octet-stream" },
-      body: content,
-    },
-  )
+  const response = await fetch(`/api/sandboxes/${sandboxId}/files/${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: content,
+  })
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({}))
@@ -24,9 +21,7 @@ export async function downloadFile(
   sandboxId: string,
   path: string,
 ): Promise<Blob> {
-  const response = await fetch(
-    `/api/sandboxes/${sandboxId}/files/${path}`,
-  )
+  const response = await fetch(`/api/sandboxes/${sandboxId}/files/${path}`)
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({}))

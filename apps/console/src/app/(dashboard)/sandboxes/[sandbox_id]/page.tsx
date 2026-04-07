@@ -208,7 +208,9 @@ export default function SandboxDetailPage() {
           <Button
             variant="outline"
             size="sm"
-            disabled={sandbox.status === "pausing" || sandbox.status === "failed"}
+            disabled={
+              sandbox.status === "pausing" || sandbox.status === "failed"
+            }
             onClick={() => {
               if (sandbox.status === "active") {
                 pauseMutation.mutate(sandbox.id)

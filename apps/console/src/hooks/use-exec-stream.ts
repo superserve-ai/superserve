@@ -31,7 +31,11 @@ export function useExecStream(sandboxId: string) {
         status: "running",
         output: [
           ...s.output,
-          { type: "command", text: `$ ${command}`, timestamp: new Date().toISOString() },
+          {
+            type: "command",
+            text: `$ ${command}`,
+            timestamp: new Date().toISOString(),
+          },
         ],
         exitCode: null,
       }))
@@ -55,7 +59,11 @@ export function useExecStream(sandboxId: string) {
             status: "error",
             output: [
               ...s.output,
-              { type: "error", text: message, timestamp: new Date().toISOString() },
+              {
+                type: "error",
+                text: message,
+                timestamp: new Date().toISOString(),
+              },
             ],
           }))
           return
@@ -85,13 +93,25 @@ export function useExecStream(sandboxId: string) {
               setState((s) => {
                 const newOutput = [...s.output]
                 if (event.stdout) {
-                  newOutput.push({ type: "stdout", text: event.stdout, timestamp: event.timestamp })
+                  newOutput.push({
+                    type: "stdout",
+                    text: event.stdout,
+                    timestamp: event.timestamp,
+                  })
                 }
                 if (event.stderr) {
-                  newOutput.push({ type: "stderr", text: event.stderr, timestamp: event.timestamp })
+                  newOutput.push({
+                    type: "stderr",
+                    text: event.stderr,
+                    timestamp: event.timestamp,
+                  })
                 }
                 if (event.error) {
-                  newOutput.push({ type: "error", text: event.error, timestamp: event.timestamp })
+                  newOutput.push({
+                    type: "error",
+                    text: event.error,
+                    timestamp: event.timestamp,
+                  })
                 }
                 if (event.finished) {
                   newOutput.push({
@@ -104,7 +124,9 @@ export function useExecStream(sandboxId: string) {
                   output: newOutput,
                   exitCode: event.exit_code ?? s.exitCode,
                   status: event.finished
-                    ? event.exit_code === 0 ? "done" : "error"
+                    ? event.exit_code === 0
+                      ? "done"
+                      : "error"
                     : "running",
                 }
               })

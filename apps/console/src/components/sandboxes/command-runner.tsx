@@ -3,10 +3,10 @@
 
 import { StopIcon } from "@phosphor-icons/react"
 import { Button, cn } from "@superserve/ui"
-import { useEffect, useRef } from "react"
 import { usePostHog } from "posthog-js/react"
+import { useEffect, useRef } from "react"
 import { useCommandHistory } from "@/hooks/use-command-history"
-import { useExecStream, type OutputLine } from "@/hooks/use-exec-stream"
+import { type OutputLine, useExecStream } from "@/hooks/use-exec-stream"
 import { TERMINAL_EVENTS } from "@/lib/posthog/events"
 
 export interface CommandRunnerHandle {
@@ -49,6 +49,7 @@ export function CommandRunner({ sandboxId, handleRef }: CommandRunnerProps) {
   }, [handleRef, clear])
 
   // Auto-scroll to bottom
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on output/status changes
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -110,8 +111,10 @@ export function CommandRunner({ sandboxId, handleRef }: CommandRunnerProps) {
   return (
     <div
       ref={scrollRef}
+      role="log"
       className="flex-1 overflow-y-auto bg-background px-4 py-3 cursor-text"
       onClick={focusInput}
+      onKeyDown={() => inputRef.current?.focus()}
     >
       {/* Output */}
       {output.map((line, i) => (
