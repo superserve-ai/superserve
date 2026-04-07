@@ -117,7 +117,13 @@ function StepHeader({
   )
 }
 
-function CodeBlock({ code, lang }: { code: string; lang: string }) {
+function CodeBlock({
+  code,
+  lang,
+}: {
+  code: string
+  lang: "typescript" | "python" | "go" | "bash"
+}) {
   return (
     <div className="flex items-start bg-background border border-dashed border-border px-4 py-3.5">
       <div className="flex-1 min-w-0">
