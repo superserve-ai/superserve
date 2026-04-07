@@ -183,8 +183,9 @@ export default function ApiKeysPage() {
 
   const filtered = useMemo(() => {
     if (!keys) return []
-    if (!search) return keys
-    return keys.filter(
+    const visible = keys.filter((k) => k.name !== "__console_dashboard__")
+    if (!search) return visible
+    return visible.filter(
       (k) =>
         k.name.toLowerCase().includes(search.toLowerCase()) ||
         k.prefix.toLowerCase().includes(search.toLowerCase()),
