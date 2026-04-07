@@ -1,7 +1,7 @@
 "use client"
 
 import { CheckIcon, CopyIcon, KeyIcon, PlusIcon } from "@phosphor-icons/react"
-import { Button, cn, useToast } from "@superserve/ui"
+import { Button, cn, HighlightedCode, useToast } from "@superserve/ui"
 import { useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { PageHeader } from "@/components/page-header"
@@ -96,15 +96,12 @@ function StepHeader({
   )
 }
 
-function CodeBlock({ code, prefix }: { code: string; prefix?: string }) {
+function CodeBlock({ code, lang }: { code: string; lang: string }) {
   return (
-    <div className="flex items-start bg-background border border-border px-4 py-3.5">
-      <code className="flex-1 text-sm font-mono text-foreground/80 overflow-x-auto whitespace-pre">
-        {prefix && (
-          <span className="text-foreground/70 mr-2 select-none">{prefix}</span>
-        )}
-        {code}
-      </code>
+    <div className="flex items-start bg-background border border-dashed border-border px-4 py-3.5">
+      <div className="flex-1 min-w-0">
+        <HighlightedCode code={code} lang={lang} />
+      </div>
       <CopyButton text={code} />
     </div>
   )
@@ -182,7 +179,7 @@ export default function GetStartedPage() {
                 Add the Superserve SDK to your project
               </p>
               <div className="pl-6">
-                <CodeBlock code={INSTALL_COMMANDS[language]} prefix="$" />
+                <CodeBlock code={INSTALL_COMMANDS[language]} lang="bash" />
               </div>
             </div>
 
@@ -244,6 +241,7 @@ export default function GetStartedPage() {
               <div className="pl-6">
                 <CodeBlock
                   code={getSnippet(language, createdKey?.full ?? "")}
+                  lang={language}
                 />
               </div>
             </div>
