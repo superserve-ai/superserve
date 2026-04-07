@@ -36,11 +36,10 @@ function OutputBlock({ line }: { line: OutputLine }) {
 }
 
 export function CommandRunner({ sandboxId, handleRef }: CommandRunnerProps) {
-  const { status, output, execute, abort, clear } =
-    useExecStream(sandboxId)
+  const { status, output, execute, abort, clear } = useExecStream(sandboxId)
   const { push, navigate, reset } = useCommandHistory(sandboxId)
   const inputRef = useRef<HTMLInputElement>(null)
-  const outputRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const isRunning = status === "running"
   const posthog = usePostHog()
 
@@ -49,12 +48,12 @@ export function CommandRunner({ sandboxId, handleRef }: CommandRunnerProps) {
     if (handleRef) handleRef.current = { clear }
   }, [handleRef, clear])
 
-  // Auto-scroll output
+  // Auto-scroll to bottom
   useEffect(() => {
-    if (outputRef.current) {
-      outputRef.current.scrollTop = outputRef.current.scrollHeight
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [output])
+  }, [output, isRunning])
 
   // Focus input on mount and when command finishes
   useEffect(() => {
@@ -65,7 +64,9 @@ export function CommandRunner({ sandboxId, handleRef }: CommandRunnerProps) {
     const trimmed = value.trim()
     if (!trimmed || isRunning) return
     push(trimmed)
-    posthog.capture(TERMINAL_EVENTS.COMMAND_EXECUTED, { sandbox_id: sandboxId })
+    posthog.capture(TERMINAL_EVENTS.COMMAND_EXECUTED, {
+      sandbox_id: sandboxId,
+    })
     reset()
     execute(trimmed)
     if (inputRef.current) inputRef.current.value = ""
@@ -102,59 +103,66 @@ export function CommandRunner({ sandboxId, handleRef }: CommandRunnerProps) {
     }
   }
 
-  return (
-    <div className="flex flex-1 flex-col min-h-0">
-      {/* Output area */}
-      <div
-        ref={outputRef}
-        className={cn(
-          "flex-1 overflow-y-auto bg-background px-4 py-3",
-          output.length === 0 && !isRunning && "hidden",
-        )}
-      >
-        {output.map((line, i) => (
-          <OutputBlock key={i} line={line} />
-        ))}
-        {isRunning && (
-          <span className="inline-block size-2 animate-pulse bg-foreground/60" />
-        )}
-      </div>
+  const focusInput = () => {
+    if (!isRunning) inputRef.current?.focus()
+  }
 
-      {/* Input bar */}
-      <div className="flex h-10 shrink-0 items-center gap-2 border-t border-border px-4">
-        <span
-          className={cn(
-            "size-1.5 rounded-full",
-            status === "idle" && "bg-muted",
-            status === "running" && "bg-yellow-400 animate-pulse",
-            status === "done" && "bg-emerald-400",
-            status === "error" && "bg-destructive",
-          )}
-        />
-        <span className="font-mono text-xs text-muted select-none">$</span>
-        <input
-          ref={inputRef}
-          type="text"
-          placeholder={isRunning ? "Running..." : "Enter a command"}
-          disabled={isRunning}
-          onKeyDown={handleKeyDown}
-          className="flex-1 bg-transparent font-mono text-xs text-foreground placeholder:text-muted outline-none disabled:opacity-50"
-          aria-label="Command input"
-        />
-        {isRunning && (
+  return (
+    <div
+      ref={scrollRef}
+      className="flex-1 overflow-y-auto bg-background px-4 py-3 cursor-text"
+      onClick={focusInput}
+    >
+      {/* Output */}
+      {output.map((line, i) => (
+        <OutputBlock key={i} line={line} />
+      ))}
+      {isRunning && (
+        <span className="inline-block size-2 animate-pulse bg-foreground/60" />
+      )}
+
+      {/* Inline input */}
+      {!isRunning && (
+        <div className="flex items-center gap-2 mt-2 first:mt-0">
+          <span
+            className={cn(
+              "size-1.5 shrink-0 rounded-full",
+              status === "idle" && "bg-muted",
+              status === "done" && "bg-emerald-400",
+              status === "error" && "bg-destructive",
+            )}
+          />
+          <span className="font-mono text-xs text-muted select-none">$</span>
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder="Enter a command"
+            onKeyDown={handleKeyDown}
+            className="flex-1 bg-transparent font-mono text-xs text-foreground placeholder:text-muted outline-none"
+            aria-label="Command input"
+          />
+        </div>
+      )}
+      {isRunning && (
+        <div className="flex items-center gap-2 mt-1">
+          <span className="size-1.5 shrink-0 rounded-full bg-yellow-400 animate-pulse" />
+          <span className="font-mono text-xs text-muted">Running...</span>
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={() => {
-              posthog.capture(TERMINAL_EVENTS.COMMAND_ABORTED, { sandbox_id: sandboxId })
+            onClick={(e) => {
+              e.stopPropagation()
+              posthog.capture(TERMINAL_EVENTS.COMMAND_ABORTED, {
+                sandbox_id: sandboxId,
+              })
               abort()
             }}
             aria-label="Stop command"
           >
             <StopIcon className="size-3.5" weight="light" />
           </Button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
