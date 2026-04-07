@@ -11,6 +11,7 @@ export default function SandboxesPage() {
   )
 }
 
+import { CubeIcon } from "@phosphor-icons/react"
 import {
   Checkbox,
   Table,
@@ -21,12 +22,12 @@ import {
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { useMemo, useState } from "react"
+import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
 import { ConnectSandboxDialog } from "@/components/sandboxes/connect-sandbox-dialog"
 import { CreateSandboxDialog } from "@/components/sandboxes/create-sandbox-dialog"
 import { DeleteSandboxDialog } from "@/components/sandboxes/delete-sandbox-dialog"
-import { OnboardingEmptyState } from "@/components/sandboxes/onboarding-empty-state"
 import { SandboxTableRow } from "@/components/sandboxes/sandbox-table-row"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableToolbar } from "@/components/table-toolbar"
@@ -124,7 +125,13 @@ function SandboxesPageContent() {
       ) : error ? (
         <ErrorState message={error.message} onRetry={() => refetch()} />
       ) : isEmpty ? (
-        <OnboardingEmptyState onCreateClick={() => setCreateOpen(true)} />
+        <EmptyState
+          icon={CubeIcon}
+          title="No Sandboxes"
+          description="Create a sandbox to run code in an isolated cloud environment."
+          actionLabel="Create Sandbox"
+          onAction={() => setCreateOpen(true)}
+        />
       ) : (
         <>
           <TableToolbar
