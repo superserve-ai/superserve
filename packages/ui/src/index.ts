@@ -56,6 +56,9 @@ export {
 // Field (formerly FormField)
 export { Field } from "./components/field"
 
+// Highlighted Code
+export { HighlightedCode } from "./components/highlighted-code"
+
 // Input
 export { Input } from "./components/input"
 

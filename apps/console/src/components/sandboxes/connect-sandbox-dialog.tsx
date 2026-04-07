@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogPopup,
   DialogTitle,
+  HighlightedCode,
 } from "@superserve/ui"
 import { motion } from "motion/react"
 import { useRouter } from "next/navigation"
@@ -258,10 +259,12 @@ export function ConnectSandboxDialog({
               Install SDK
             </span>
             <div className="flex items-start bg-background border border-dashed border-border px-4 py-3">
-              <code className="flex-1 text-sm font-mono text-foreground/80 overflow-x-auto whitespace-pre">
-                <span className="text-foreground/70 mr-2 select-none">$</span>
-                {INSTALL_COMMANDS[language]}
-              </code>
+              <div className="flex-1 min-w-0">
+                <HighlightedCode
+                  code={INSTALL_COMMANDS[language]}
+                  lang="bash"
+                />
+              </div>
               <CopyButton text={INSTALL_COMMANDS[language]} />
             </div>
           </div>
@@ -271,10 +274,13 @@ export function ConnectSandboxDialog({
             <span className="block text-sm font-medium text-foreground">
               Connect and Run
             </span>
-            <div className="flex items-start bg-background border border-dashed border-border px-4 py-3 h-[220px] overflow-y-auto">
-              <code className="flex-1 text-sm font-mono text-foreground/80 overflow-x-auto whitespace-pre">
-                {getConnectSnippet(language, snippetKey, sandboxId)}
-              </code>
+            <div className="flex items-start bg-background border border-dashed border-border px-4 py-3 max-h-[180px] overflow-y-auto">
+              <div className="flex-1 min-w-0">
+                <HighlightedCode
+                  code={getConnectSnippet(language, snippetKey, sandboxId)}
+                  lang={language}
+                />
+              </div>
               <CopyButton
                 text={getConnectSnippet(language, snippetKey, sandboxId)}
               />
