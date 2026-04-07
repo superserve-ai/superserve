@@ -114,7 +114,8 @@ function ApiKeysPageContent() {
     )
   }
 
-  const isEmpty = !keys || keys.length === 0
+  const userKeys = keys?.filter((k) => !k.name.startsWith("__console_")) ?? []
+  const isEmpty = userKeys.length === 0
 
   return (
     <div className="flex h-full flex-col">
