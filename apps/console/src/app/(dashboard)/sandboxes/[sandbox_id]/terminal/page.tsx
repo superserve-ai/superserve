@@ -27,6 +27,7 @@ const STATUS_BADGE_VARIANT: Record<SandboxStatus, BadgeVariant> = {
   pausing: "warning",
   idle: "muted",
   deleted: "destructive",
+  failed: "destructive",
 }
 
 const STATUS_LABEL: Record<SandboxStatus, string> = {
@@ -34,6 +35,7 @@ const STATUS_LABEL: Record<SandboxStatus, string> = {
   pausing: "Pausing",
   idle: "Idle",
   deleted: "Deleted",
+  failed: "Failed",
 }
 
 function TerminalSkeleton() {
@@ -46,10 +48,11 @@ function TerminalSkeleton() {
         <span className="text-muted">/</span>
         <div className="h-4 w-20 animate-pulse bg-muted/20" />
       </div>
-      <div className="flex-1" />
-      <div className="flex items-center gap-2 border-t border-border px-4 py-2">
-        <span className="font-mono text-xs text-muted">$</span>
-        <div className="h-3 w-48 animate-pulse bg-muted/20" />
+      <div className="flex-1 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs text-muted">$</span>
+          <div className="h-3 w-48 animate-pulse bg-muted/20" />
+        </div>
       </div>
     </div>
   )
@@ -132,7 +135,7 @@ export default function TerminalPage() {
           <Button
             variant="outline"
             size="sm"
-            disabled={sandbox.status === "pausing"}
+            disabled={sandbox.status === "pausing" || sandbox.status === "failed"}
             onClick={() => {
               if (sandbox.status === "active") pauseMutation.mutate(sandbox.id)
               else if (sandbox.status === "idle")

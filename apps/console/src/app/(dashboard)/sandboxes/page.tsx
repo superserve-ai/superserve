@@ -55,6 +55,7 @@ const STATUS_BADGE_VARIANT: Record<SandboxStatus, BadgeVariant> = {
   pausing: "warning",
   idle: "muted",
   deleted: "destructive",
+  failed: "destructive",
 }
 
 const STATUS_LABEL: Record<SandboxStatus, string> = {
@@ -62,6 +63,7 @@ const STATUS_LABEL: Record<SandboxStatus, string> = {
   pausing: "Pausing",
   idle: "Idle",
   deleted: "Deleted",
+  failed: "Failed",
 }
 
 const STATUS_TABS = [
@@ -221,7 +223,10 @@ export default function SandboxesPage() {
                           variant="outline"
                           size="sm"
                           className="w-20 text-xs"
-                          disabled={sandbox.status === "pausing"}
+                          disabled={
+                            sandbox.status === "pausing" ||
+                            sandbox.status === "failed"
+                          }
                           onClick={() => {
                             if (sandbox.status === "active") {
                               pauseMutation.mutate(sandbox.id)
