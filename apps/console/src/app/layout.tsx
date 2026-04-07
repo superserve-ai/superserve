@@ -22,9 +22,10 @@ const monoFont = Geist_Mono({
 export const metadata: Metadata = {
   title: {
     default: "Superserve Console",
-    template: "%s | Superserve Console",
+    template: "%s | Superserve",
   },
-  description: "Deploy and manage your AI agents with Superserve",
+  description:
+    "Deploy and manage cloud sandboxes with Superserve. Run code in isolated, secure environments.",
   icons: {
     icon: { url: "/favicon.svg", type: "image/svg+xml" },
   },
@@ -32,14 +33,16 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     title: "Superserve Console",
-    description: "Deploy and manage your AI agents with Superserve",
+    description:
+      "Deploy and manage cloud sandboxes with Superserve. Run code in isolated, secure environments.",
     siteName: "Superserve",
     images: [{ url: "/og-image.png", width: 1200, height: 630 }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Superserve Console",
-    description: "Deploy and manage your AI agents with Superserve",
+    description:
+      "Deploy and manage cloud sandboxes with Superserve. Run code in isolated, secure environments.",
     images: ["/og-image.png"],
   },
   other: {
