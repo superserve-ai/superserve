@@ -13,7 +13,7 @@ const PUBLIC_ROUTES = [
   "/device",
 ]
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const client = createMiddlewareClient(request)
   if (!client.supabase) return client.response
 
