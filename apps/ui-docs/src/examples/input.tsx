@@ -69,12 +69,12 @@ export const inputMeta: ComponentMeta = {
       preview: (
         <div className="max-w-sm space-y-4">
           <Field label="Email" error="Please enter a valid email address.">
-            <Input placeholder="you@example.com" error />
+            <Input placeholder="you@example.com" error="Please enter a valid email address." />
           </Field>
         </div>
       ),
       code: `<Field label="Email" error="Please enter a valid email address.">
-  <Input placeholder="you@example.com" error />
+  <Input placeholder="you@example.com" error="Please enter a valid email address." />
 </Field>`,
     },
     {
