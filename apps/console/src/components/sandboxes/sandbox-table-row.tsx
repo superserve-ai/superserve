@@ -12,6 +12,7 @@ import {
   Badge,
   Button,
   Checkbox,
+  cn,
   Menu,
   MenuItem,
   MenuPopup,
@@ -25,7 +26,8 @@ import { useRouter } from "next/navigation"
 import type { SandboxResponse } from "@/lib/api/types"
 import { STATUS_BADGE_VARIANT, STATUS_LABEL } from "@/lib/sandbox-utils"
 
-interface SandboxTableRowProps {
+interface SandboxTableRowProps
+  extends React.HTMLAttributes<HTMLTableRowElement> {
   sandbox: SandboxResponse
   selected: boolean
   onToggle: () => void
@@ -43,13 +45,16 @@ export function SandboxTableRow({
   onDelete,
   onPause,
   onResume,
+  className,
+  ...rest
 }: SandboxTableRowProps) {
   const router = useRouter()
 
   return (
     <TableRow
-      className="cursor-pointer"
+      className={cn("cursor-pointer", className)}
       onClick={() => router.push(`/sandboxes/${sandbox.id}/`)}
+      {...rest}
     >
       <TableCell className="pr-0" onClick={(e) => e.stopPropagation()}>
         <Checkbox
