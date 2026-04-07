@@ -1,5 +1,9 @@
 import { apiClient } from "./client"
-import type { CreateSandboxRequest, SandboxResponse } from "./types"
+import type {
+  CreateSandboxRequest,
+  SandboxPatch,
+  SandboxResponse,
+} from "./types"
 
 export async function listSandboxes(): Promise<SandboxResponse[]> {
   return apiClient<SandboxResponse[]>("/sandboxes")
@@ -21,6 +25,16 @@ export async function createSandbox(
 export async function deleteSandbox(id: string): Promise<void> {
   return apiClient<void>(`/sandboxes/${id}`, {
     method: "DELETE",
+  })
+}
+
+export async function patchSandbox(
+  id: string,
+  data: SandboxPatch,
+): Promise<void> {
+  return apiClient<void>(`/sandboxes/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
   })
 }
 

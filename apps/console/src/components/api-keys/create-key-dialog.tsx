@@ -86,7 +86,7 @@ export function CreateKeyDialog({
           {createdKey ? (
             <div className="space-y-4">
               <Alert variant="warning">
-                Copy this key now. You won&apos;t be able to see it again.
+                Make sure to copy your API key — it won&apos;t be shown again.
               </Alert>
 
               <Field label="Your API Key">

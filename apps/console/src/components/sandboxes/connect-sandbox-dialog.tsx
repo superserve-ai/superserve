@@ -8,6 +8,7 @@ import {
   TerminalIcon,
 } from "@phosphor-icons/react"
 import {
+  Alert,
   Button,
   cn,
   Dialog,
@@ -225,7 +226,7 @@ export function ConnectSandboxDialog({
           )}
 
           {newlyCreatedKey && (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <span className="block text-sm font-medium text-foreground">
                 API Key
               </span>
@@ -250,6 +251,9 @@ export function ConnectSandboxDialog({
                   )}
                 </button>
               </div>
+              <Alert variant="warning">
+                Make sure to copy your API key — it won&apos;t be shown again.
+              </Alert>
             </div>
           )}
 

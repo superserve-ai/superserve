@@ -1,5 +1,10 @@
 export type SandboxStatus = "active" | "pausing" | "idle" | "deleted" | "failed"
 
+export interface NetworkConfig {
+  allow_out?: string[]
+  deny_out?: string[]
+}
+
 export interface SandboxResponse {
   id: string
   name: string
@@ -13,9 +18,12 @@ export interface SandboxResponse {
 
 export interface CreateSandboxRequest {
   name: string
-  vcpu_count: number
-  memory_mib: number
   from_snapshot?: string
+  network?: NetworkConfig
+}
+
+export interface SandboxPatch {
+  network?: NetworkConfig
 }
 
 export interface ExecRequest {
