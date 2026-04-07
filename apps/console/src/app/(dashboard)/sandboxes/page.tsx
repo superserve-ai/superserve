@@ -6,6 +6,7 @@ import {
   KeyIcon,
   KeyReturnIcon,
   PlayIcon,
+  PlugIcon,
   StopIcon,
   TerminalIcon,
   TrashIcon,
@@ -32,7 +33,9 @@ import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
+import { ConnectSandboxDialog } from "@/components/sandboxes/connect-sandbox-dialog"
 import { CreateSandboxDialog } from "@/components/sandboxes/create-sandbox-dialog"
+import { DeleteSandboxDialog } from "@/components/sandboxes/delete-sandbox-dialog"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableSkeleton } from "@/components/table-skeleton"
 import { TableToolbar } from "@/components/table-toolbar"
@@ -49,7 +52,6 @@ import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 
 const STATUS_BADGE_VARIANT: Record<SandboxStatus, BadgeVariant> = {
   active: "success",
-  starting: "warning",
   pausing: "warning",
   idle: "muted",
   deleted: "destructive",
@@ -57,7 +59,6 @@ const STATUS_BADGE_VARIANT: Record<SandboxStatus, BadgeVariant> = {
 
 const STATUS_LABEL: Record<SandboxStatus, string> = {
   active: "Active",
-  starting: "Starting",
   pausing: "Pausing",
   idle: "Idle",
   deleted: "Deleted",
@@ -67,7 +68,6 @@ const STATUS_TABS = [
   { label: "All", value: "all" },
   { label: "Active", value: "active" },
   { label: "Idle", value: "idle" },
-  { label: "Starting", value: "starting" },
 ]
 
 export default function SandboxesPage() {
@@ -76,6 +76,12 @@ export default function SandboxesPage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [search, setSearch] = useState("")
   const [createOpen, setCreateOpen] = useState(false)
+  const [connectSandboxId, setConnectSandboxId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string
+    name: string
+  } | null>(null)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
 
   const { data: sandboxes = [], isPending, error, refetch } = useSandboxes()
   const deleteSandbox = useDeleteSandbox()
@@ -109,11 +115,6 @@ export default function SandboxesPage() {
     clearSelection,
   } = useSelection(filtered)
 
-  const deleteSelected = () => {
-    posthog.capture(SANDBOX_EVENTS.BULK_DELETED, { count: selected.size })
-    bulkDelete.mutate([...selected], { onSuccess: clearSelection })
-  }
-
   const isEmpty = !isPending && !error && sandboxes.length === 0
 
   return (
@@ -123,6 +124,7 @@ export default function SandboxesPage() {
           open={createOpen}
           onOpenChange={setCreateOpen}
           hideTrigger={isEmpty || isPending}
+          onCreated={(id) => setConnectSandboxId(id)}
         />
       </PageHeader>
 
@@ -149,7 +151,7 @@ export default function SandboxesPage() {
             onSearchChange={setSearch}
             selectedCount={selected.size}
             onClearSelection={clearSelection}
-            onDeleteSelected={deleteSelected}
+            onDeleteSelected={() => setBulkDeleteOpen(true)}
           />
 
           <div className="flex-1 overflow-y-auto">
@@ -176,9 +178,7 @@ export default function SandboxesPage() {
                   <TableRow
                     key={sandbox.id}
                     className="cursor-pointer"
-                    onClick={() =>
-                      router.push(`/sandboxes/${sandbox.id}/`)
-                    }
+                    onClick={() => router.push(`/sandboxes/${sandbox.id}/`)}
                   >
                     <TableCell
                       className="pr-0"
@@ -210,22 +210,18 @@ export default function SandboxesPage() {
                       <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="outline"
-                          size="icon-sm"
-                          aria-label="Open Terminal"
-                          onClick={() =>
-                            router.push(`/sandboxes/${sandbox.id}/terminal/`)
-                          }
+                          size="sm"
+                          className="text-xs"
+                          onClick={() => setConnectSandboxId(sandbox.id)}
                         >
-                          <TerminalIcon className="size-3.5" weight="light" />
+                          <PlugIcon className="size-3.5" weight="light" />
+                          Connect
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
                           className="w-20 text-xs"
-                          disabled={
-                            sandbox.status === "starting" ||
-                            sandbox.status === "pausing"
-                          }
+                          disabled={sandbox.status === "pausing"}
                           onClick={() => {
                             if (sandbox.status === "active") {
                               pauseMutation.mutate(sandbox.id)
@@ -264,6 +260,12 @@ export default function SandboxesPage() {
                           </MenuTrigger>
                           <MenuPopup>
                             <MenuItem
+                              onClick={() => setConnectSandboxId(sandbox.id)}
+                            >
+                              <PlugIcon className="size-4" weight="light" />
+                              Connect
+                            </MenuItem>
+                            <MenuItem
                               onClick={() =>
                                 router.push(
                                   `/sandboxes/${sandbox.id}/terminal/`,
@@ -287,12 +289,12 @@ export default function SandboxesPage() {
                             <MenuSeparator />
                             <MenuItem
                               className="text-destructive hover:text-destructive"
-                              onClick={() => {
-                                posthog.capture(SANDBOX_EVENTS.DELETED, {
+                              onClick={() =>
+                                setDeleteTarget({
                                   id: sandbox.id,
+                                  name: sandbox.name,
                                 })
-                                deleteSandbox.mutate(sandbox.id)
-                              }}
+                              }
                             >
                               <TrashIcon className="size-4" weight="light" />
                               Delete
@@ -308,6 +310,59 @@ export default function SandboxesPage() {
           </div>
         </>
       )}
+
+      {connectSandboxId && (
+        <ConnectSandboxDialog
+          sandboxId={connectSandboxId}
+          open={!!connectSandboxId}
+          onOpenChange={(v) => {
+            if (!v) setConnectSandboxId(null)
+          }}
+        />
+      )}
+
+      {deleteTarget && (
+        <DeleteSandboxDialog
+          open={!!deleteTarget}
+          onOpenChange={(v) => {
+            if (!v) setDeleteTarget(null)
+          }}
+          sandboxName={deleteTarget.name}
+          onConfirm={() => {
+            posthog.capture(SANDBOX_EVENTS.DELETED, { id: deleteTarget.id })
+            return new Promise<void>((resolve, reject) => {
+              deleteSandbox.mutate(deleteTarget.id, {
+                onSuccess: () => {
+                  setDeleteTarget(null)
+                  resolve()
+                },
+                onError: reject,
+              })
+            })
+          }}
+        />
+      )}
+
+      <DeleteSandboxDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        bulkCount={selected.size}
+        onConfirm={() => {
+          posthog.capture(SANDBOX_EVENTS.BULK_DELETED, {
+            count: selected.size,
+          })
+          return new Promise<void>((resolve, reject) => {
+            bulkDelete.mutate([...selected], {
+              onSuccess: () => {
+                clearSelection()
+                setBulkDeleteOpen(false)
+                resolve()
+              },
+              onError: reject,
+            })
+          })
+        }}
+      />
     </div>
   )
 }

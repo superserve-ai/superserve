@@ -46,7 +46,6 @@ import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 
 const STATUS_BADGE_VARIANT: Record<SandboxStatus, BadgeVariant> = {
   active: "success",
-  starting: "warning",
   pausing: "warning",
   idle: "muted",
   deleted: "destructive",
@@ -54,7 +53,6 @@ const STATUS_BADGE_VARIANT: Record<SandboxStatus, BadgeVariant> = {
 
 const STATUS_LABEL: Record<SandboxStatus, string> = {
   active: "Active",
-  starting: "Starting",
   pausing: "Pausing",
   idle: "Idle",
   deleted: "Deleted",
@@ -199,9 +197,7 @@ export default function SandboxDetailPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() =>
-                router.push(`/sandboxes/${sandboxId}/terminal/`)
-              }
+              onClick={() => router.push(`/sandboxes/${sandboxId}/terminal/`)}
             >
               <TerminalIcon className="size-3.5" weight="light" />
               Terminal
@@ -210,9 +206,7 @@ export default function SandboxDetailPage() {
           <Button
             variant="outline"
             size="sm"
-            disabled={
-              sandbox.status === "starting" || sandbox.status === "pausing"
-            }
+            disabled={sandbox.status === "pausing"}
             onClick={() => {
               if (sandbox.status === "active") {
                 pauseMutation.mutate(sandbox.id)
@@ -290,9 +284,7 @@ export default function SandboxDetailPage() {
 
         {/* Activity Section */}
         <div className="flex h-10 items-center border-b border-border px-4">
-          <h2 className="text-sm font-medium text-foreground">
-            Activity
-          </h2>
+          <h2 className="text-sm font-medium text-foreground">Activity</h2>
         </div>
         {activityPending ? (
           <div className="border-b border-border">
@@ -396,9 +388,7 @@ export default function SandboxDetailPage() {
 
         {/* Snapshots Section */}
         <div className="flex h-10 items-center border-b border-border px-4">
-          <h2 className="text-sm font-medium text-foreground">
-            Snapshots
-          </h2>
+          <h2 className="text-sm font-medium text-foreground">Snapshots</h2>
         </div>
         {snapshotsPending ? (
           <div>
@@ -444,10 +434,7 @@ export default function SandboxDetailPage() {
                     {snapshot.trigger}
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant={snapshot.saved ? "success" : "muted"}
-                      dot
-                    >
+                    <Badge variant={snapshot.saved ? "success" : "muted"} dot>
                       {snapshot.saved ? "Yes" : "No"}
                     </Badge>
                   </TableCell>

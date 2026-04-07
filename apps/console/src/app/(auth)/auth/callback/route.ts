@@ -99,14 +99,7 @@ export async function GET(request: Request) {
         if (next.startsWith("/device") || next.startsWith("https://")) {
           // keep redirect as-is
         } else {
-          const params = new URLSearchParams()
-          if (isNewUser) {
-            params.set("new_user", "1")
-            params.set("provider", provider)
-          }
-          next = params.toString()
-            ? `/get-started?${params.toString()}`
-            : "/get-started"
+          next = "/sandboxes"
         }
       }
 

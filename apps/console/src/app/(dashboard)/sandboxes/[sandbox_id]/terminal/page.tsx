@@ -1,18 +1,29 @@
 "use client"
 
-import { ArrowLeftIcon, PlayIcon, StopIcon, TrashIcon } from "@phosphor-icons/react"
+import {
+  ArrowLeftIcon,
+  PlayIcon,
+  StopIcon,
+  TrashIcon,
+} from "@phosphor-icons/react"
 import { Badge, type BadgeVariant, Button } from "@superserve/ui"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { useRef } from "react"
 import { ErrorState } from "@/components/error-state"
-import { CommandRunner, type CommandRunnerHandle } from "@/components/sandboxes/command-runner"
-import { usePauseSandbox, useResumeSandbox, useSandbox } from "@/hooks/use-sandboxes"
+import {
+  CommandRunner,
+  type CommandRunnerHandle,
+} from "@/components/sandboxes/command-runner"
+import {
+  usePauseSandbox,
+  useResumeSandbox,
+  useSandbox,
+} from "@/hooks/use-sandboxes"
 import type { SandboxStatus } from "@/lib/api/types"
 
 const STATUS_BADGE_VARIANT: Record<SandboxStatus, BadgeVariant> = {
   active: "success",
-  starting: "warning",
   pausing: "warning",
   idle: "muted",
   deleted: "destructive",
@@ -20,7 +31,6 @@ const STATUS_BADGE_VARIANT: Record<SandboxStatus, BadgeVariant> = {
 
 const STATUS_LABEL: Record<SandboxStatus, string> = {
   active: "Active",
-  starting: "Starting",
   pausing: "Pausing",
   idle: "Idle",
   deleted: "Deleted",
@@ -122,10 +132,11 @@ export default function TerminalPage() {
           <Button
             variant="outline"
             size="sm"
-            disabled={sandbox.status === "starting" || sandbox.status === "pausing"}
+            disabled={sandbox.status === "pausing"}
             onClick={() => {
               if (sandbox.status === "active") pauseMutation.mutate(sandbox.id)
-              else if (sandbox.status === "idle") resumeMutation.mutate(sandbox.id)
+              else if (sandbox.status === "idle")
+                resumeMutation.mutate(sandbox.id)
             }}
           >
             {sandbox.status === "active" || sandbox.status === "pausing" ? (

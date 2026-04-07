@@ -36,12 +36,14 @@ interface CreateSandboxDialogProps {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   hideTrigger?: boolean
+  onCreated?: (sandboxId: string) => void
 }
 
 export function CreateSandboxDialog({
   open: controlledOpen,
   onOpenChange,
   hideTrigger,
+  onCreated,
 }: CreateSandboxDialogProps = {}) {
   const posthog = usePostHog()
   const [internalOpen, setInternalOpen] = useState(false)
@@ -109,9 +111,10 @@ export function CreateSandboxDialog({
     createMutation.mutate(
       { name: name.trim(), vcpu_count: 1, memory_mib: 1024 },
       {
-        onSuccess: () => {
+        onSuccess: (sandbox) => {
           setOpen(false)
           handleReset()
+          onCreated?.(sandbox.id)
         },
       },
     )
