@@ -2,16 +2,18 @@
 
 import { CheckIcon, CopyIcon, KeyIcon, PlusIcon } from "@phosphor-icons/react"
 import { Button, cn, HighlightedCode, useToast } from "@superserve/ui"
+import { motion } from "motion/react"
 import { useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { PageHeader } from "@/components/page-header"
 import { useCreateApiKey } from "@/hooks/use-api-keys"
 
-type Language = "typescript" | "python"
+type Language = "typescript" | "python" | "go"
 
 const INSTALL_COMMANDS: Record<Language, string> = {
   typescript: "npm install @superserve/sdk",
   python: "pip install superserve",
+  go: "go get github.com/superserve/superserve-go",
 }
 
 function getSnippet(language: Language, apiKey: string): string {
@@ -32,7 +34,8 @@ console.log(result.stdout)
 await sandbox.stop()`
   }
 
-  return `from superserve import Superserve
+  if (language === "python") {
+    return `from superserve import Superserve
 
 client = Superserve(api_key="${key}")
 
@@ -44,6 +47,24 @@ result = sandbox.exec("echo 'Hello from Superserve!'")
 print(result.stdout)
 
 sandbox.stop()`
+  }
+
+  return `package main
+
+import (
+	"fmt"
+	ss "github.com/superserve/superserve-go"
+)
+
+func main() {
+	client := ss.NewClient("${key}")
+
+	sandbox, _ := client.Sandboxes.Create("superserve/base")
+	result, _ := sandbox.Exec("echo 'Hello from Superserve!'")
+	fmt.Println(result.Stdout)
+
+	sandbox.Stop()
+}`
 }
 
 function CopyButton({ text, label }: { text: string; label?: string }) {
@@ -107,8 +128,15 @@ function CodeBlock({ code, lang }: { code: string; lang: string }) {
   )
 }
 
+const LANGUAGES: { label: string; value: Language }[] = [
+  { label: "TypeScript", value: "typescript" },
+  { label: "Python", value: "python" },
+  { label: "Go", value: "go" },
+]
+
 export default function GetStartedPage() {
   const [language, setLanguage] = useState<Language>("typescript")
+  const [hoveredTab, setHoveredTab] = useState<string | null>(null)
   const createKeyMutation = useCreateApiKey()
   const createdKey = createKeyMutation.data
     ? {
@@ -143,32 +171,59 @@ export default function GetStartedPage() {
             </p>
 
             {/* Language Toggle */}
-            <div className="flex items-center border border-border">
-              <button
-                type="button"
-                onClick={() => setLanguage("typescript")}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-mono transition-colors cursor-pointer",
-                  language === "typescript"
-                    ? "bg-surface-hover text-foreground"
-                    : "text-muted hover:text-foreground",
-                )}
-              >
-                TypeScript
-              </button>
-              <button
-                type="button"
-                onClick={() => setLanguage("python")}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-mono transition-colors cursor-pointer",
-                  language === "python"
-                    ? "bg-surface-hover text-foreground"
-                    : "text-muted hover:text-foreground",
-                )}
-              >
-                Python
-              </button>
-            </div>
+            <nav
+              className="flex items-center gap-1 py-2"
+              onMouseLeave={() => setHoveredTab(null)}
+            >
+              {LANGUAGES.map((lang) => {
+                const isActive = language === lang.value
+                const isHovered = hoveredTab === lang.value
+
+                return (
+                  <button
+                    key={lang.value}
+                    type="button"
+                    onClick={() => setLanguage(lang.value)}
+                    onMouseEnter={() => setHoveredTab(lang.value)}
+                    className={cn(
+                      "relative inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono transition-colors cursor-pointer",
+                      isActive
+                        ? "text-foreground"
+                        : "text-muted hover:text-foreground",
+                    )}
+                  >
+                    {isHovered && (
+                      <motion.span
+                        className="absolute inset-0 bg-foreground/4"
+                        layoutId="get-started-lang-hover"
+                        transition={{
+                          type: "spring",
+                          bounce: 0.15,
+                          duration: 0.4,
+                        }}
+                      />
+                    )}
+                    {isActive && !hoveredTab && (
+                      <span className="absolute inset-0 bg-foreground/4" />
+                    )}
+                    {isActive && (
+                      <motion.span
+                        className="absolute inset-0 pointer-events-none"
+                        layoutId="get-started-lang-active"
+                        transition={{
+                          type: "spring",
+                          bounce: 0.15,
+                          duration: 0.5,
+                        }}
+                      >
+                        <CornerBrackets size="sm" />
+                      </motion.span>
+                    )}
+                    <span className="relative">{lang.label}</span>
+                  </button>
+                )
+              })}
+            </nav>
           </div>
 
           <div className="mt-10 space-y-10">
