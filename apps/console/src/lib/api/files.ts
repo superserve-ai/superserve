@@ -3,18 +3,11 @@ export async function uploadFile(
   path: string,
   content: Blob | ArrayBuffer,
 ): Promise<{ path: string; size: number }> {
-  const apiKey =
-    typeof window !== "undefined"
-      ? localStorage.getItem("superserve-api-key")
-      : null
   const response = await fetch(
     `/api/sandboxes/${sandboxId}/files/${path}`,
     {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/octet-stream",
-        ...(apiKey ? { "X-API-Key": apiKey } : {}),
-      },
+      headers: { "Content-Type": "application/octet-stream" },
       body: content,
     },
   )
@@ -31,17 +24,8 @@ export async function downloadFile(
   sandboxId: string,
   path: string,
 ): Promise<Blob> {
-  const apiKey =
-    typeof window !== "undefined"
-      ? localStorage.getItem("superserve-api-key")
-      : null
   const response = await fetch(
     `/api/sandboxes/${sandboxId}/files/${path}`,
-    {
-      headers: {
-        ...(apiKey ? { "X-API-Key": apiKey } : {}),
-      },
-    },
   )
 
   if (!response.ok) {

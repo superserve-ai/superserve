@@ -36,20 +36,12 @@ export function useExecStream(sandboxId: string) {
         exitCode: null,
       }))
 
-      const apiKey =
-        typeof window !== "undefined"
-          ? localStorage.getItem("superserve-api-key")
-          : null
-
       try {
         const response = await fetch(
           `/api/sandboxes/${sandboxId}/exec/stream`,
           {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(apiKey ? { "X-API-Key": apiKey } : {}),
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ command }),
             signal: controller.signal,
           },

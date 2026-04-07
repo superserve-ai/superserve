@@ -1,19 +1,27 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { getAuthApiKey } from "@/lib/api/proxy-auth"
 
 const SANDBOX_API_URL =
   process.env.SANDBOX_API_URL ?? "https://api.superserve.ai"
 
 const ALLOWED_PREFIXES = ["sandboxes", "health", "v1"]
 
+/** Paths that carry their own auth (e.g. Bearer token). */
+const SKIP_KEY_INJECTION = ["v1/auth/"]
+
 function isAllowedPath(path: string): boolean {
   return ALLOWED_PREFIXES.some(
-    (prefix) => path === prefix || path.startsWith(`${prefix}/`)
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
   )
+}
+
+function shouldSkipKeyInjection(path: string): boolean {
+  return SKIP_KEY_INJECTION.some((prefix) => path.startsWith(prefix))
 }
 
 async function proxyRequest(
   request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
+  { params }: { params: Promise<{ path: string[] }> },
 ): Promise<NextResponse> {
   const { path } = await params
   const joinedPath = path.join("/")
@@ -35,6 +43,18 @@ async function proxyRequest(
       continue
     }
     headers.set(key, value)
+  }
+
+  // Inject server-side API key for authenticated requests
+  if (!shouldSkipKeyInjection(joinedPath)) {
+    const apiKey = await getAuthApiKey()
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: { code: "unauthorized", message: "Not authenticated" } },
+        { status: 401 },
+      )
+    }
+    headers.set("X-API-Key", apiKey)
   }
 
   const body =

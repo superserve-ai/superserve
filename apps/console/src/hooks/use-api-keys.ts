@@ -3,7 +3,7 @@
 import { useToast } from "@superserve/ui"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createApiKey, listApiKeys, revokeApiKey } from "@/lib/api/api-keys"
-import { ApiError, setApiKey } from "@/lib/api/client"
+import { ApiError } from "@/lib/api/client"
 import { apiKeyKeys } from "@/lib/api/query-keys"
 import type { ApiKeyResponse, CreateApiKeyResponse } from "@/lib/api/types"
 
@@ -21,8 +21,6 @@ export function useCreateApiKey() {
   return useMutation({
     mutationFn: (name: string) => createApiKey({ name }),
     onSuccess: (created: CreateApiKeyResponse) => {
-      setApiKey(created.key)
-
       const listEntry: ApiKeyResponse = {
         id: created.id,
         name: created.name,

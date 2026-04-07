@@ -124,7 +124,7 @@ export function ConnectSandboxDialog({
   const [copiedKey, setCopiedKey] = useState(false)
 
   // Check if user has a non-dashboard API key
-  const userKey = existingKeys?.find((k) => k.name !== "__console_dashboard__")
+  const userKey = existingKeys?.find((k) => !k.name.startsWith("__console_"))
   const newlyCreatedKey = createKeyMutation.data?.key ?? ""
   const snippetKey = newlyCreatedKey || (userKey ? "YOUR_API_KEY" : "")
   const hasKey = !!userKey || !!newlyCreatedKey

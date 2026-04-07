@@ -1,5 +1,3 @@
-const API_KEY_STORAGE_KEY = "superserve-api-key"
-
 export class ApiError extends Error {
   status: number
   code: string
@@ -16,30 +14,13 @@ function getBaseUrl(): string {
   return "/api"
 }
 
-function getApiKey(): string | null {
-  if (typeof window === "undefined") return null
-  return localStorage.getItem(API_KEY_STORAGE_KEY)
-}
-
-export function setApiKey(key: string): void {
-  localStorage.setItem(API_KEY_STORAGE_KEY, key)
-}
-
-export function clearApiKey(): void {
-  localStorage.removeItem(API_KEY_STORAGE_KEY)
-}
-
 export async function apiClient<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
   const url = `${getBaseUrl()}${path}`
-  const apiKey = getApiKey()
 
   const headers = new Headers(options.headers)
-  if (apiKey) {
-    headers.set("X-API-Key", apiKey)
-  }
   if (
     !headers.has("Content-Type") &&
     options.body &&

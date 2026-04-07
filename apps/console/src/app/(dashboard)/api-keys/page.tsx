@@ -183,7 +183,7 @@ export default function ApiKeysPage() {
 
   const filtered = useMemo(() => {
     if (!keys) return []
-    const visible = keys.filter((k) => k.name !== "__console_dashboard__")
+    const visible = keys.filter((k) => !k.name.startsWith("__console_"))
     if (!search) return visible
     return visible.filter(
       (k) =>
