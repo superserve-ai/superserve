@@ -4,7 +4,7 @@ import { createBrowserClient } from "@superserve/supabase"
 import { Button, Field, Input, Separator, useToast } from "@superserve/ui"
 import { usePostHog } from "posthog-js/react"
 import { useEffect, useState } from "react"
-import { Spinner } from "@/components/icons"
+import { GoogleIcon, Spinner } from "@/components/icons"
 import { PageHeader } from "@/components/page-header"
 import { useUser } from "@/hooks/use-user"
 import { SETTINGS_EVENTS } from "@/lib/posthog/events"
@@ -140,19 +140,28 @@ export default function SettingsPage() {
 
         <Separator />
 
-        {/* Password */}
-        {!isOAuth && (
-          <>
-            <div className="grid grid-cols-[240px_1fr] gap-12 px-8 py-8">
-              <div>
-                <h2 className="text-base font-medium text-foreground">
-                  Password
-                </h2>
-                <p className="mt-1 text-xs text-muted">
-                  Update your account password.
-                </p>
+        {/* Password / Auth */}
+        <div className="grid grid-cols-[240px_1fr] gap-12 px-8 py-8">
+          <div>
+            <h2 className="text-base font-medium text-foreground">
+              {isOAuth ? "Authentication" : "Password"}
+            </h2>
+            <p className="mt-1 text-xs text-muted">
+              {isOAuth
+                ? "Your authentication method."
+                : "Update your account password."}
+            </p>
+          </div>
+          <div className="max-w-md space-y-5">
+            {isOAuth ? (
+              <div className="flex items-center gap-3 border border-border px-4 py-3">
+                <GoogleIcon />
+                <span className="text-sm text-foreground">
+                  Signed in with Google
+                </span>
               </div>
-              <div className="max-w-md space-y-5">
+            ) : (
+              <>
                 <Field label="Current Password">
                   <Input
                     type="password"
@@ -191,12 +200,12 @@ export default function SettingsPage() {
                     {savingPassword ? "Updating..." : "Update Password"}
                   </Button>
                 </div>
-              </div>
-            </div>
+              </>
+            )}
+          </div>
+        </div>
 
-            <Separator />
-          </>
-        )}
+        <Separator />
 
         {/* Danger Zone */}
         <div className="grid grid-cols-[240px_1fr] gap-12 px-8 py-8">
