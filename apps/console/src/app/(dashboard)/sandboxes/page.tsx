@@ -12,26 +12,8 @@ export default function SandboxesPage() {
 }
 
 import {
-  DotsThreeVerticalIcon,
-  KeyIcon,
-  KeyReturnIcon,
-  PlayIcon,
-  PlugIcon,
-  StopIcon,
-  TerminalIcon,
-  TrashIcon,
-} from "@phosphor-icons/react"
-import {
-  Badge,
-  Button,
   Checkbox,
-  Menu,
-  MenuItem,
-  MenuPopup,
-  MenuSeparator,
-  MenuTrigger,
   Table,
-  TableCell,
   TableHead,
   TableHeader,
   TableRow,
@@ -45,6 +27,7 @@ import { ConnectSandboxDialog } from "@/components/sandboxes/connect-sandbox-dia
 import { CreateSandboxDialog } from "@/components/sandboxes/create-sandbox-dialog"
 import { DeleteSandboxDialog } from "@/components/sandboxes/delete-sandbox-dialog"
 import { OnboardingEmptyState } from "@/components/sandboxes/onboarding-empty-state"
+import { SandboxTableRow } from "@/components/sandboxes/sandbox-table-row"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableToolbar } from "@/components/table-toolbar"
 import {
@@ -56,7 +39,6 @@ import {
 } from "@/hooks/use-sandboxes"
 import { useSelection } from "@/hooks/use-selection"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
-import { STATUS_BADGE_VARIANT, STATUS_LABEL } from "@/lib/sandbox-utils"
 
 const STATUS_TABS = [
   { label: "All", value: "all" },
@@ -178,138 +160,21 @@ function SandboxesPageContent() {
               </TableHeader>
               <StickyHoverTableBody>
                 {filtered.map((sandbox) => (
-                  <TableRow
+                  <SandboxTableRow
                     key={sandbox.id}
-                    className="cursor-pointer"
-                    onClick={() => router.push(`/sandboxes/${sandbox.id}/`)}
-                  >
-                    <TableCell
-                      className="pr-0"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Checkbox
-                        checked={selected.has(sandbox.id)}
-                        onCheckedChange={() => toggleOne(sandbox.id)}
-                        aria-label={`Select ${sandbox.name}`}
-                      />
-                    </TableCell>
-                    <TableCell className="font-mono text-foreground/80">
-                      {sandbox.name}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={STATUS_BADGE_VARIANT[sandbox.status]} dot>
-                        {STATUS_LABEL[sandbox.status]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-foreground/80">
-                      {sandbox.snapshot_id
-                        ? `${sandbox.snapshot_id.slice(0, 8)}...`
-                        : "-"}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-muted tabular-nums">
-                      {sandbox.vcpu_count}CPU | {sandbox.memory_mib}MB
-                    </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-xs"
-                          onClick={() => setConnectSandboxId(sandbox.id)}
-                        >
-                          <PlugIcon className="size-3.5" weight="light" />
-                          Connect
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-20 text-xs"
-                          disabled={
-                            sandbox.status === "pausing" ||
-                            sandbox.status === "failed"
-                          }
-                          onClick={() => {
-                            if (sandbox.status === "active") {
-                              pauseMutation.mutate(sandbox.id)
-                            } else if (sandbox.status === "idle") {
-                              resumeMutation.mutate(sandbox.id)
-                            }
-                          }}
-                        >
-                          {sandbox.status === "active" ||
-                          sandbox.status === "pausing" ? (
-                            <>
-                              <StopIcon className="size-3" weight="light" />
-                              Stop
-                            </>
-                          ) : (
-                            <>
-                              <PlayIcon className="size-3" weight="light" />
-                              Start
-                            </>
-                          )}
-                        </Button>
-                        <Menu>
-                          <MenuTrigger
-                            render={
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label="Sandbox actions"
-                              />
-                            }
-                          >
-                            <DotsThreeVerticalIcon
-                              className="size-4"
-                              weight="bold"
-                            />
-                          </MenuTrigger>
-                          <MenuPopup>
-                            <MenuItem
-                              onClick={() => setConnectSandboxId(sandbox.id)}
-                            >
-                              <PlugIcon className="size-4" weight="light" />
-                              Connect
-                            </MenuItem>
-                            <MenuItem
-                              onClick={() =>
-                                router.push(
-                                  `/sandboxes/${sandbox.id}/terminal/`,
-                                )
-                              }
-                            >
-                              <TerminalIcon className="size-4" weight="light" />
-                              Open Terminal
-                            </MenuItem>
-                            <MenuItem>
-                              <KeyIcon className="size-4" weight="light" />
-                              Create SSH Access
-                            </MenuItem>
-                            <MenuItem>
-                              <KeyReturnIcon
-                                className="size-4"
-                                weight="light"
-                              />
-                              Remove SSH Access
-                            </MenuItem>
-                            <MenuSeparator />
-                            <MenuItem
-                              className="text-destructive hover:text-destructive"
-                              onClick={() =>
-                                setDeleteTarget({
-                                  id: sandbox.id,
-                                  name: sandbox.name,
-                                })
-                              }
-                            >
-                              <TrashIcon className="size-4" weight="light" />
-                              Delete
-                            </MenuItem>
-                          </MenuPopup>
-                        </Menu>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                    sandbox={sandbox}
+                    selected={selected.has(sandbox.id)}
+                    onToggle={() => toggleOne(sandbox.id)}
+                    onConnect={() => setConnectSandboxId(sandbox.id)}
+                    onDelete={() =>
+                      setDeleteTarget({
+                        id: sandbox.id,
+                        name: sandbox.name,
+                      })
+                    }
+                    onPause={() => pauseMutation.mutate(sandbox.id)}
+                    onResume={() => resumeMutation.mutate(sandbox.id)}
+                  />
                 ))}
               </StickyHoverTableBody>
             </Table>

@@ -2,34 +2,20 @@
 
 import {
   ArrowLeftIcon,
-  CameraIcon,
-  ClipboardTextIcon,
-  CopyIcon,
   PlayIcon,
   StopIcon,
   TerminalIcon,
   TrashIcon,
 } from "@phosphor-icons/react"
-import {
-  Badge,
-  Button,
-  Table,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-  Tooltip,
-  TooltipPopup,
-  TooltipTrigger,
-  useToast,
-} from "@superserve/ui"
+import { Badge, Button } from "@superserve/ui"
 import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
-import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
-import { StickyHoverTableBody } from "@/components/sticky-hover-table"
+import { ActivitySection } from "@/components/sandboxes/activity-section"
+import { SandboxInfoGrid } from "@/components/sandboxes/sandbox-info-grid"
+import { SnapshotsSection } from "@/components/sandboxes/snapshots-section"
 import {
   useDeleteSandbox,
   usePauseSandbox,
@@ -39,15 +25,8 @@ import {
 import { listActivityBySandboxAction } from "@/lib/api/activity-actions"
 import { auditLogKeys, snapshotKeys } from "@/lib/api/query-keys"
 import { listSnapshotsBySandboxAction } from "@/lib/api/snapshots-actions"
-import { formatDate, formatTime } from "@/lib/format"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
-import {
-  ACTIVITY_STATUS_VARIANT,
-  formatBytes,
-  formatDuration,
-  STATUS_BADGE_VARIANT,
-  STATUS_LABEL,
-} from "@/lib/sandbox-utils"
+import { STATUS_BADGE_VARIANT, STATUS_LABEL } from "@/lib/sandbox-utils"
 
 function DetailSkeleton() {
   return (
@@ -90,7 +69,6 @@ export default function SandboxDetailPage() {
   const params = useParams<{ sandbox_id: string }>()
   const router = useRouter()
   const posthog = usePostHog()
-  const { addToast } = useToast()
   const sandboxId = params.sandbox_id
 
   const { data: sandbox, isPending, error, refetch } = useSandbox(sandboxId)
@@ -130,12 +108,6 @@ export default function SandboxDetailPage() {
         />
       </div>
     )
-  }
-
-  const handleCopyIp = async () => {
-    if (!sandbox.ip_address) return
-    await navigator.clipboard.writeText(sandbox.ip_address)
-    addToast("Copied to clipboard", "success")
   }
 
   const handleDelete = () => {
@@ -215,212 +187,9 @@ export default function SandboxDetailPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {/* Info Grid — flat blocks with borders between them */}
-        <div className="grid grid-cols-4 border-b border-border">
-          <div className="border-r border-border px-4 py-4">
-            <p className="text-xs text-muted">Resources</p>
-            <p className="mt-2 text-sm text-foreground/80 tabular-nums">
-              {sandbox.vcpu_count} vCPU &middot; {sandbox.memory_mib} MB
-            </p>
-          </div>
-          <div className="border-r border-border px-4 py-4">
-            <p className="text-xs text-muted">IP Address</p>
-            <div className="mt-2 flex items-center gap-1.5">
-              <p className="font-mono text-sm text-foreground/80">
-                {sandbox.ip_address ?? "Not assigned"}
-              </p>
-              {sandbox.ip_address && (
-                <button
-                  type="button"
-                  onClick={handleCopyIp}
-                  className="text-muted hover:text-foreground"
-                  aria-label="Copy IP address"
-                >
-                  <CopyIcon className="size-3.5" weight="light" />
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="border-r border-border px-4 py-4">
-            <p className="text-xs text-muted">Snapshot</p>
-            <p className="mt-2 font-mono text-sm text-foreground/80">
-              {sandbox.snapshot_id
-                ? `${sandbox.snapshot_id.slice(0, 12)}...`
-                : "None"}
-            </p>
-          </div>
-          <div className="px-4 py-4">
-            <p className="text-xs text-muted">Created</p>
-            <p className="mt-2 text-sm text-foreground/80 tabular-nums">
-              {formatDate(new Date(sandbox.created_at))}
-            </p>
-          </div>
-        </div>
-
-        {/* Activity Section */}
-        <div className="flex h-10 items-center border-b border-border px-4">
-          <h2 className="text-sm font-medium text-foreground">Activity</h2>
-        </div>
-        {activityPending ? (
-          <div className="border-b border-border">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-6 border-b border-border px-4 py-3 last:border-b-0"
-              >
-                <div className="h-3 w-24 animate-pulse bg-muted/20" />
-                <div className="h-3 w-16 animate-pulse bg-muted/20" />
-                <div className="h-3 w-20 animate-pulse bg-muted/20" />
-                <div className="h-3 w-12 animate-pulse bg-muted/20" />
-              </div>
-            ))}
-          </div>
-        ) : !activity || activity.length === 0 ? (
-          <div className="border-b border-border">
-            <EmptyState
-              icon={ClipboardTextIcon}
-              title="No Activity"
-              description="Activity will appear here when you run commands or change sandbox state."
-            />
-          </div>
-        ) : (
-          <div className="max-h-96 overflow-y-auto border-b border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[22%]">Time</TableHead>
-                  <TableHead className="w-[15%]">Category</TableHead>
-                  <TableHead className="w-[20%]">Action</TableHead>
-                  <TableHead className="w-[12%]">Duration</TableHead>
-                  <TableHead className="w-[12%]">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <StickyHoverTableBody>
-                {activity.map((entry) => {
-                  const { relative, absolute } = formatTime(
-                    new Date(entry.created_at),
-                  )
-                  return (
-                    <TableRow key={entry.id}>
-                      <TableCell className="whitespace-nowrap tabular-nums">
-                        <span className="text-foreground/80">{relative}</span>
-                        <span className="ml-2 text-xs text-muted">
-                          {absolute}
-                        </span>
-                      </TableCell>
-                      <TableCell className="capitalize text-muted">
-                        {entry.category}
-                      </TableCell>
-                      <TableCell className="text-foreground/80">
-                        {entry.action}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-muted tabular-nums">
-                        {formatDuration(entry.duration_ms)}
-                      </TableCell>
-                      <TableCell>
-                        {entry.status ? (
-                          entry.error ? (
-                            <Tooltip>
-                              <TooltipTrigger
-                                render={
-                                  <Badge
-                                    variant={
-                                      ACTIVITY_STATUS_VARIANT[entry.status] ??
-                                      "muted"
-                                    }
-                                    dot
-                                    className="cursor-default"
-                                  />
-                                }
-                              >
-                                {entry.status}
-                              </TooltipTrigger>
-                              <TooltipPopup className="max-w-xs text-xs">
-                                {entry.error}
-                              </TooltipPopup>
-                            </Tooltip>
-                          ) : (
-                            <Badge
-                              variant={
-                                ACTIVITY_STATUS_VARIANT[entry.status] ?? "muted"
-                              }
-                              dot
-                            >
-                              {entry.status}
-                            </Badge>
-                          )
-                        ) : (
-                          <span className="text-muted">-</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </StickyHoverTableBody>
-            </Table>
-          </div>
-        )}
-
-        {/* Snapshots Section */}
-        <div className="flex h-10 items-center border-b border-border px-4">
-          <h2 className="text-sm font-medium text-foreground">Snapshots</h2>
-        </div>
-        {snapshotsPending ? (
-          <div>
-            {Array.from({ length: 2 }).map((_, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-6 border-b border-border px-4 py-3 last:border-b-0"
-              >
-                <div className="h-3 w-32 animate-pulse bg-muted/20" />
-                <div className="h-3 w-16 animate-pulse bg-muted/20" />
-                <div className="h-3 w-16 animate-pulse bg-muted/20" />
-                <div className="h-3 w-20 animate-pulse bg-muted/20" />
-              </div>
-            ))}
-          </div>
-        ) : !snapshots || snapshots.length === 0 ? (
-          <EmptyState
-            icon={CameraIcon}
-            title="No Snapshots"
-            description="Snapshots are created when you pause this sandbox to preserve its state."
-          />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[35%]">Name</TableHead>
-                <TableHead className="w-[15%]">Size</TableHead>
-                <TableHead className="w-[15%]">Trigger</TableHead>
-                <TableHead className="w-[10%]">Saved</TableHead>
-                <TableHead className="w-[25%]">Created</TableHead>
-              </TableRow>
-            </TableHeader>
-            <StickyHoverTableBody>
-              {snapshots.map((snapshot) => (
-                <TableRow key={snapshot.id}>
-                  <TableCell className="font-mono text-foreground/80">
-                    {snapshot.name ?? `${snapshot.id.slice(0, 12)}...`}
-                  </TableCell>
-                  <TableCell className="font-mono text-xs text-muted tabular-nums">
-                    {formatBytes(snapshot.size_bytes)}
-                  </TableCell>
-                  <TableCell className="capitalize text-foreground/80">
-                    {snapshot.trigger}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={snapshot.saved ? "success" : "muted"} dot>
-                      {snapshot.saved ? "Yes" : "No"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted tabular-nums">
-                    {formatDate(new Date(snapshot.created_at))}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </StickyHoverTableBody>
-          </Table>
-        )}
+        <SandboxInfoGrid sandbox={sandbox} />
+        <ActivitySection activity={activity} isPending={activityPending} />
+        <SnapshotsSection snapshots={snapshots} isPending={snapshotsPending} />
       </div>
     </div>
   )
