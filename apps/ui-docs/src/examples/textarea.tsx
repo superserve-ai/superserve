@@ -11,7 +11,8 @@ export const textareaMeta: ComponentMeta = {
     {
       name: "error",
       type: "string",
-      description: "Error message string. When set, renders the textarea in an error state.",
+      description:
+        "Error message string. When set, renders the textarea in an error state.",
     },
   ],
   examples: [
