@@ -3,7 +3,7 @@ import { createAdminClient } from "@superserve/supabase/admin"
 import { createServerClient } from "@superserve/supabase/server"
 
 const PROXY_KEY_NAME = "__console_proxy__"
-const CACHE_TTL_MS = 60_000
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
 
 interface CacheEntry {
   key: string
@@ -80,23 +80,13 @@ async function resolveApiKey(userId: string, email: string): Promise<string> {
   const teamId = await getTeamForUser(userId, email)
   const admin = createAdminClient()
 
-  // Revoke any existing proxy key and create a fresh one.
-  // We can't recover the plaintext of an existing key, so always rotate.
-  const { data: existing } = await admin
+  // Delete any existing proxy keys instead of revoking them,
+  // so they don't accumulate in the database.
+  await admin
     .from("api_key")
-    .select("id")
+    .delete()
     .eq("team_id", teamId)
     .eq("name", PROXY_KEY_NAME)
-    .is("revoked_at", null)
-    .limit(1)
-    .single()
-
-  if (existing) {
-    await admin
-      .from("api_key")
-      .update({ revoked_at: new Date().toISOString() })
-      .eq("id", existing.id)
-  }
 
   const rawKey = generateRawKey()
   const keyHash = hashKey(rawKey)
