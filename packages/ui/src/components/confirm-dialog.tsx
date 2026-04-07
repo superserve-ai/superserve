@@ -1,7 +1,6 @@
 "use client"
 
 import { WarningIcon } from "@phosphor-icons/react"
-import { motion } from "motion/react"
 import * as React from "react"
 import { cn } from "../lib/utils"
 import { Button } from "./button"
@@ -91,15 +90,7 @@ export function ConfirmDialog({
               disabled={loading}
             >
               {loading ? (
-                <motion.div
-                  className="h-4 w-4 rounded-full border-2 border-current border-t-transparent"
-                  animate={{ rotate: 360 }}
-                  transition={{
-                    duration: 0.8,
-                    repeat: Infinity,
-                    ease: "linear",
-                  }}
-                />
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
               ) : null}
               {confirmLabel}
             </Button>

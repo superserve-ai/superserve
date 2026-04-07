@@ -12,7 +12,6 @@ import {
 } from "@phosphor-icons/react"
 import {
   Badge,
-  type BadgeVariant,
   Button,
   Table,
   TableCell,
@@ -40,43 +39,15 @@ import {
 import { listActivityBySandboxAction } from "@/lib/api/activity-actions"
 import { auditLogKeys, snapshotKeys } from "@/lib/api/query-keys"
 import { listSnapshotsBySandboxAction } from "@/lib/api/snapshots-actions"
-import type { SandboxStatus } from "@/lib/api/types"
 import { formatDate, formatTime } from "@/lib/format"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
-
-const STATUS_BADGE_VARIANT: Record<SandboxStatus, BadgeVariant> = {
-  active: "success",
-  pausing: "warning",
-  idle: "muted",
-  deleted: "destructive",
-  failed: "destructive",
-}
-
-const STATUS_LABEL: Record<SandboxStatus, string> = {
-  active: "Active",
-  pausing: "Pausing",
-  idle: "Idle",
-  deleted: "Deleted",
-  failed: "Failed",
-}
-
-const ACTIVITY_STATUS_VARIANT: Record<string, BadgeVariant> = {
-  success: "success",
-  error: "destructive",
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B"
-  const units = ["B", "KB", "MB", "GB"]
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  return `${(bytes / 1024 ** i).toFixed(i > 0 ? 1 : 0)} ${units[i]}`
-}
-
-function formatDuration(ms: number | null): string {
-  if (ms === null) return "-"
-  if (ms < 1000) return `${ms}ms`
-  return `${(ms / 1000).toFixed(1)}s`
-}
+import {
+  ACTIVITY_STATUS_VARIANT,
+  formatBytes,
+  formatDuration,
+  STATUS_BADGE_VARIANT,
+  STATUS_LABEL,
+} from "@/lib/sandbox-utils"
 
 function DetailSkeleton() {
   return (
@@ -248,7 +219,7 @@ export default function SandboxDetailPage() {
         <div className="grid grid-cols-4 border-b border-border">
           <div className="border-r border-border px-4 py-4">
             <p className="text-xs text-muted">Resources</p>
-            <p className="mt-2 text-sm text-foreground/80">
+            <p className="mt-2 text-sm text-foreground/80 tabular-nums">
               {sandbox.vcpu_count} vCPU &middot; {sandbox.memory_mib} MB
             </p>
           </div>
@@ -280,7 +251,7 @@ export default function SandboxDetailPage() {
           </div>
           <div className="px-4 py-4">
             <p className="text-xs text-muted">Created</p>
-            <p className="mt-2 text-sm text-foreground/80">
+            <p className="mt-2 text-sm text-foreground/80 tabular-nums">
               {formatDate(new Date(sandbox.created_at))}
             </p>
           </div>
@@ -331,7 +302,7 @@ export default function SandboxDetailPage() {
                   )
                   return (
                     <TableRow key={entry.id}>
-                      <TableCell className="whitespace-nowrap">
+                      <TableCell className="whitespace-nowrap tabular-nums">
                         <span className="text-foreground/80">{relative}</span>
                         <span className="ml-2 text-xs text-muted">
                           {absolute}
@@ -343,7 +314,7 @@ export default function SandboxDetailPage() {
                       <TableCell className="text-foreground/80">
                         {entry.action}
                       </TableCell>
-                      <TableCell className="font-mono text-xs text-muted">
+                      <TableCell className="font-mono text-xs text-muted tabular-nums">
                         {formatDuration(entry.duration_ms)}
                       </TableCell>
                       <TableCell>
@@ -431,7 +402,7 @@ export default function SandboxDetailPage() {
                   <TableCell className="font-mono text-foreground/80">
                     {snapshot.name ?? `${snapshot.id.slice(0, 12)}...`}
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-muted">
+                  <TableCell className="font-mono text-xs text-muted tabular-nums">
                     {formatBytes(snapshot.size_bytes)}
                   </TableCell>
                   <TableCell className="capitalize text-foreground/80">
@@ -442,7 +413,7 @@ export default function SandboxDetailPage() {
                       {snapshot.saved ? "Yes" : "No"}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-muted">
+                  <TableCell className="text-muted tabular-nums">
                     {formatDate(new Date(snapshot.created_at))}
                   </TableCell>
                 </TableRow>

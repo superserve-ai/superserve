@@ -34,7 +34,9 @@ export function useCreateApiKey() {
     },
     onError: (error) => {
       const message =
-        error instanceof ApiError ? error.message : "Failed to create API key"
+        error instanceof ApiError
+          ? error.message
+          : "Failed to create API key. Try again or check your plan limits."
       addToast(message, "error")
     },
   })
@@ -59,7 +61,9 @@ export function useRevokeApiKey() {
     onError: (error, _id, context) => {
       queryClient.setQueryData(apiKeyKeys.all, context?.previous)
       const message =
-        error instanceof ApiError ? error.message : "Failed to revoke API key"
+        error instanceof ApiError
+          ? error.message
+          : "Failed to revoke API key. It may have already been revoked."
       addToast(message, "error")
     },
     onSettled: () => {
@@ -90,7 +94,9 @@ export function useBulkRevokeApiKeys() {
     onError: (error, _ids, context) => {
       queryClient.setQueryData(apiKeyKeys.all, context?.previous)
       const message =
-        error instanceof ApiError ? error.message : "Failed to revoke API keys"
+        error instanceof ApiError
+          ? error.message
+          : "Failed to revoke API keys. Some may have already been revoked."
       addToast(message, "error")
     },
     onSettled: () => {

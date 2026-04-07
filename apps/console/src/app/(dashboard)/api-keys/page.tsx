@@ -1,5 +1,16 @@
 "use client"
 
+import { Suspense } from "react"
+import { TableSkeleton } from "@/components/table-skeleton"
+
+export default function ApiKeysPage() {
+  return (
+    <Suspense fallback={<TableSkeleton columns={4} />}>
+      <ApiKeysPageContent />
+    </Suspense>
+  )
+}
+
 import {
   CopyIcon,
   DotsThreeVerticalIcon,
@@ -30,13 +41,13 @@ import {
   TableRow,
   useToast,
 } from "@superserve/ui"
+import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
-import { TableSkeleton } from "@/components/table-skeleton"
 import { TableToolbar } from "@/components/table-toolbar"
 import {
   useApiKeys,
@@ -173,12 +184,21 @@ function CreateKeyDialog({
   )
 }
 
-export default function ApiKeysPage() {
+function ApiKeysPageContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const posthog = usePostHog()
   const { data: keys, isPending, error, refetch } = useApiKeys()
   const revokeMutation = useRevokeApiKey()
   const bulkRevoke = useBulkRevokeApiKeys()
-  const [search, setSearch] = useState("")
+  const search = searchParams.get("q") ?? ""
+
+  const setSearch = (value: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (!value) params.delete("q")
+    else params.set("q", value)
+    router.replace(`?${params.toString()}`)
+  }
   const [createOpen, setCreateOpen] = useState(false)
 
   const filtered = useMemo(() => {
@@ -291,10 +311,10 @@ export default function ApiKeysPage() {
                       />
                     </TableCell>
                     <TableCell className="font-medium">{apiKey.name}</TableCell>
-                    <TableCell className="text-muted">
+                    <TableCell className="text-muted tabular-nums">
                       {formatDate(new Date(apiKey.created_at))}
                     </TableCell>
-                    <TableCell className="text-muted">
+                    <TableCell className="text-muted tabular-nums">
                       {apiKey.last_used_at
                         ? formatDate(new Date(apiKey.last_used_at))
                         : "Never"}

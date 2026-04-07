@@ -2,6 +2,8 @@
 import { useCallback, useRef, useState } from "react"
 import type { ExecStreamEvent } from "@/lib/api/types"
 
+const MAX_OUTPUT_LINES = 5000
+
 export interface OutputLine {
   type: "stdout" | "stderr" | "error" | "exit" | "command"
   text: string
@@ -27,18 +29,25 @@ export function useExecStream(sandboxId: string) {
       abortRef.current?.abort()
       const controller = new AbortController()
       abortRef.current = controller
-      setState((s) => ({
-        status: "running",
-        output: [
+      setState((s) => {
+        const newOutput = [
           ...s.output,
           {
-            type: "command",
+            type: "command" as const,
             text: `$ ${command}`,
             timestamp: new Date().toISOString(),
           },
-        ],
-        exitCode: null,
-      }))
+        ]
+        const trimmed =
+          newOutput.length > MAX_OUTPUT_LINES
+            ? newOutput.slice(-MAX_OUTPUT_LINES)
+            : newOutput
+        return {
+          status: "running" as const,
+          output: trimmed,
+          exitCode: null,
+        }
+      })
 
       try {
         const response = await fetch(
@@ -54,18 +63,25 @@ export function useExecStream(sandboxId: string) {
         if (!response.ok) {
           const body = await response.json().catch(() => ({}))
           const message = body?.error?.message ?? `HTTP ${response.status}`
-          setState((s) => ({
-            ...s,
-            status: "error",
-            output: [
+          setState((s) => {
+            const newOutput = [
               ...s.output,
               {
-                type: "error",
+                type: "error" as const,
                 text: message,
                 timestamp: new Date().toISOString(),
               },
-            ],
-          }))
+            ]
+            const trimmed =
+              newOutput.length > MAX_OUTPUT_LINES
+                ? newOutput.slice(-MAX_OUTPUT_LINES)
+                : newOutput
+            return {
+              ...s,
+              status: "error" as const,
+              output: trimmed,
+            }
+          })
           return
         }
 
@@ -120,8 +136,12 @@ export function useExecStream(sandboxId: string) {
                     timestamp: event.timestamp,
                   })
                 }
+                const trimmed =
+                  newOutput.length > MAX_OUTPUT_LINES
+                    ? newOutput.slice(-MAX_OUTPUT_LINES)
+                    : newOutput
                 return {
-                  output: newOutput,
+                  output: trimmed,
                   exitCode: event.exit_code ?? s.exitCode,
                   status: event.finished
                     ? event.exit_code === 0
@@ -137,18 +157,25 @@ export function useExecStream(sandboxId: string) {
         }
       } catch (err) {
         if (controller.signal.aborted) return
-        setState((s) => ({
-          ...s,
-          status: "error",
-          output: [
+        setState((s) => {
+          const newOutput = [
             ...s.output,
             {
-              type: "error",
+              type: "error" as const,
               text: err instanceof Error ? err.message : "Unknown error",
               timestamp: new Date().toISOString(),
             },
-          ],
-        }))
+          ]
+          const trimmed =
+            newOutput.length > MAX_OUTPUT_LINES
+              ? newOutput.slice(-MAX_OUTPUT_LINES)
+              : newOutput
+          return {
+            ...s,
+            status: "error" as const,
+            output: trimmed,
+          }
+        })
       }
     },
     [sandboxId],

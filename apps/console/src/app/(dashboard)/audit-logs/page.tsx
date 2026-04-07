@@ -44,7 +44,7 @@ function formatDuration(ms: number | null): string {
 function TimeCell({ date }: { date: Date }) {
   const { relative, absolute } = formatTime(date)
   return (
-    <div>
+    <div className="tabular-nums">
       <span className="text-foreground/80">{relative}</span>
       <span className="ml-2 text-xs text-muted">{absolute}</span>
     </div>
@@ -157,7 +157,7 @@ export default function AuditLogsPage() {
                     <TableCell className="text-foreground/80">
                       {log.action}
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-muted">
+                    <TableCell className="font-mono text-xs text-muted tabular-nums">
                       {formatDuration(log.duration_ms)}
                     </TableCell>
                     <TableCell>

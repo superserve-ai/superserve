@@ -123,7 +123,7 @@ export default function SnapshotsPage() {
                     <TableCell className="font-mono text-foreground/80">
                       {snapshot.name ?? `${snapshot.sandbox_id.slice(0, 8)}...`}
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-muted">
+                    <TableCell className="font-mono text-xs text-muted tabular-nums">
                       {formatBytes(snapshot.size_bytes)}
                     </TableCell>
                     <TableCell className="text-foreground/80">
@@ -134,7 +134,7 @@ export default function SnapshotsPage() {
                         {snapshot.saved ? "Yes" : "No"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-muted">
+                    <TableCell className="text-muted tabular-nums">
                       {formatDate(new Date(snapshot.created_at))}
                     </TableCell>
                     <TableCell>

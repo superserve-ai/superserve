@@ -9,37 +9,19 @@ import {
   TooltipPopup,
   TooltipTrigger,
 } from "@superserve/ui"
-import { useEffect, useRef } from "react"
 import { bottomNavItems, mainNavItems } from "./nav-config"
 import { useSidebar } from "./sidebar-context"
 import { SidebarNav } from "./sidebar-nav"
 import { SidebarUserMenu } from "./sidebar-user-menu"
 
+function openCommandPalette() {
+  window.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "k", metaKey: true }),
+  )
+}
+
 export function Sidebar() {
-  const { isCollapsed, toggle, setCollapsed } = useSidebar()
-  const searchInputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault()
-        if (isCollapsed) setCollapsed(false)
-        // Wait for sidebar expansion transition before focusing
-        setTimeout(() => searchInputRef.current?.focus(), 50)
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [isCollapsed, setCollapsed])
-
-  const handleSearchClick = () => {
-    if (isCollapsed) {
-      setCollapsed(false)
-      setTimeout(() => searchInputRef.current?.focus(), 200)
-    } else {
-      searchInputRef.current?.focus()
-    }
-  }
+  const { isCollapsed, toggle } = useSidebar()
 
   return (
     <aside
@@ -66,7 +48,7 @@ export function Sidebar() {
                 <Button
                   variant="outline"
                   size="icon-sm"
-                  onClick={handleSearchClick}
+                  onClick={openCommandPalette}
                   aria-label="Search"
                   className="w-full border-dashed"
                 />
@@ -77,15 +59,15 @@ export function Sidebar() {
             <TooltipPopup>Search</TooltipPopup>
           </Tooltip>
         ) : (
-          <label className="flex w-full group items-center gap-2.5 border border-dashed border-border px-2.5 py-2.5 text-foreground/70 transition-colors hover:text-foreground hover:bg-foreground/5 cursor-text focus-within:border-border-focus">
+          <button
+            type="button"
+            onClick={openCommandPalette}
+            className="flex w-full group items-center gap-2.5 border border-dashed border-border px-2.5 py-2.5 text-foreground/70 transition-colors hover:text-foreground hover:bg-foreground/5 cursor-pointer"
+          >
             <MagnifyingGlassIcon className="size-4 shrink-0" weight="light" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder="Search"
-              aria-label="Search"
-              className="flex-1 bg-transparent text-sm leading-none tracking-tight text-foreground placeholder:text-foreground/70 outline-none w-20"
-            />
+            <span className="flex-1 text-left text-sm leading-none tracking-tight text-foreground/70">
+              Search
+            </span>
             <div className="flex items-center gap-0.5">
               <Kbd className="transition-colors group-hover:bg-neutral-900">
                 &#8984;
@@ -94,7 +76,7 @@ export function Sidebar() {
                 K
               </Kbd>
             </div>
-          </label>
+          </button>
         )}
       </div>
 

@@ -60,6 +60,7 @@ export { Field } from "./components/field"
 export { HighlightedCode } from "./components/highlighted-code"
 
 // Input
+export type { InputProps } from "./components/input"
 export { Input } from "./components/input"
 
 // Kbd
@@ -96,6 +97,10 @@ export {
 // Separator
 export { Separator } from "./components/separator"
 
+// Spinner
+export type { SpinnerSize } from "./components/spinner"
+export { Spinner } from "./components/spinner"
+
 // Skeleton
 export { Skeleton } from "./components/skeleton"
 
@@ -116,6 +121,7 @@ export {
 export { Tabs, TabsList, TabsPanel, TabsTab } from "./components/tabs"
 
 // Textarea
+export type { TextareaProps } from "./components/textarea"
 export { Textarea } from "./components/textarea"
 
 // Toast

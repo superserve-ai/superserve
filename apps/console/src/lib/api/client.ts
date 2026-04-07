@@ -29,29 +29,37 @@ export async function apiClient<T>(
     headers.set("Content-Type", "application/json")
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  })
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 30_000)
 
-  if (!response.ok) {
-    let code = "unknown_error"
-    let message = response.statusText
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    })
 
-    try {
-      const body = await response.json()
-      if (body?.error?.code) code = body.error.code
-      if (body?.error?.message) message = body.error.message
-    } catch {
-      // response body is not JSON, use defaults
+    if (!response.ok) {
+      let code = "unknown_error"
+      let message = response.statusText
+
+      try {
+        const body = await response.json()
+        if (body?.error?.code) code = body.error.code
+        if (body?.error?.message) message = body.error.message
+      } catch {
+        // response body is not JSON, use defaults
+      }
+
+      throw new ApiError(response.status, code, message)
     }
 
-    throw new ApiError(response.status, code, message)
-  }
+    if (response.status === 204) {
+      return undefined as T
+    }
 
-  if (response.status === 204) {
-    return undefined as T
+    return response.json()
+  } finally {
+    clearTimeout(timeout)
   }
-
-  return response.json()
 }

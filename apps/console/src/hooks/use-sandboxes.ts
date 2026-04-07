@@ -18,6 +18,8 @@ export function useSandboxes() {
   return useQuery({
     queryKey: sandboxKeys.all,
     queryFn: listSandboxes,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
   })
 }
 
@@ -30,6 +32,7 @@ export function useSandbox(id: string | null) {
       const status = query.state.data?.status
       return status === "pausing" ? 2000 : false
     },
+    refetchOnWindowFocus: true,
   })
 }
 
@@ -47,7 +50,9 @@ export function useCreateSandbox() {
     },
     onError: (error) => {
       const message =
-        error instanceof ApiError ? error.message : "Failed to create sandbox"
+        error instanceof ApiError
+          ? error.message
+          : "Failed to create sandbox. Check your plan limits or try again."
       addToast(message, "error")
     },
   })
@@ -72,7 +77,9 @@ export function useDeleteSandbox() {
     onError: (error, _id, context) => {
       queryClient.setQueryData(sandboxKeys.all, context?.previous)
       const message =
-        error instanceof ApiError ? error.message : "Failed to delete sandbox"
+        error instanceof ApiError
+          ? error.message
+          : "Failed to delete sandbox. The sandbox may already be deleted."
       addToast(message, "error")
     },
     onSettled: () => {
@@ -103,7 +110,9 @@ export function useBulkDeleteSandboxes() {
     onError: (error, _ids, context) => {
       queryClient.setQueryData(sandboxKeys.all, context?.previous)
       const message =
-        error instanceof ApiError ? error.message : "Failed to delete sandboxes"
+        error instanceof ApiError
+          ? error.message
+          : "Failed to delete sandboxes. Some may have already been deleted."
       addToast(message, "error")
     },
     onSettled: () => {
@@ -131,7 +140,9 @@ export function usePauseSandbox() {
     onError: (error, _id, context) => {
       queryClient.setQueryData(sandboxKeys.all, context?.previous)
       const message =
-        error instanceof ApiError ? error.message : "Failed to pause sandbox"
+        error instanceof ApiError
+          ? error.message
+          : "Failed to pause sandbox. It may have already stopped."
       addToast(message, "error")
     },
     onSettled: () => {
@@ -161,7 +172,9 @@ export function useResumeSandbox() {
     onError: (error, _id, context) => {
       queryClient.setQueryData(sandboxKeys.all, context?.previous)
       const message =
-        error instanceof ApiError ? error.message : "Failed to resume sandbox"
+        error instanceof ApiError
+          ? error.message
+          : "Failed to resume sandbox. Check that it hasn't been deleted."
       addToast(message, "error")
     },
     onSettled: () => {

@@ -1,4 +1,4 @@
-import { cloneElement, type ReactElement } from "react"
+import { cloneElement, forwardRef, type ReactElement } from "react"
 
 import { cn } from "../lib/utils"
 
@@ -43,31 +43,30 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   render?: ReactElement
 }
 
-function Button({
-  className,
-  variant = "default",
-  size = "default",
-  render,
-  children,
-  ...props
-}: ButtonProps) {
-  const classes = cn(buttonVariants({ variant, size }), className)
+const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  (
+    { className, variant = "default", size = "default", render, children, ...props },
+    ref,
+  ) => {
+    const classes = cn(buttonVariants({ variant, size }), className)
 
-  if (render) {
-    const renderProps = render.props as Record<string, unknown>
-    return cloneElement(render as React.ReactElement<Record<string, unknown>>, {
-      ...props,
-      className: cn(classes, renderProps.className as string | undefined),
-      children,
-    })
-  }
+    if (render) {
+      const renderProps = render.props as Record<string, unknown>
+      return cloneElement(render as React.ReactElement<Record<string, unknown>>, {
+        ...props,
+        className: cn(classes, renderProps.className as string | undefined),
+        children,
+      })
+    }
 
-  return (
-    <button className={classes} {...props}>
-      {children}
-    </button>
-  )
-}
+    return (
+      <button ref={ref} className={classes} {...props}>
+        {children}
+      </button>
+    )
+  },
+)
+Button.displayName = "Button"
 
 export { Button, buttonVariants }
 export type { ButtonProps }

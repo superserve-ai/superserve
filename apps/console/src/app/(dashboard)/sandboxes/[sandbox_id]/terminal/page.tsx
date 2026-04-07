@@ -6,7 +6,7 @@ import {
   StopIcon,
   TrashIcon,
 } from "@phosphor-icons/react"
-import { Badge, type BadgeVariant, Button } from "@superserve/ui"
+import { Badge, Button } from "@superserve/ui"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { useRef } from "react"
@@ -20,23 +20,7 @@ import {
   useResumeSandbox,
   useSandbox,
 } from "@/hooks/use-sandboxes"
-import type { SandboxStatus } from "@/lib/api/types"
-
-const STATUS_BADGE_VARIANT: Record<SandboxStatus, BadgeVariant> = {
-  active: "success",
-  pausing: "warning",
-  idle: "muted",
-  deleted: "destructive",
-  failed: "destructive",
-}
-
-const STATUS_LABEL: Record<SandboxStatus, string> = {
-  active: "Active",
-  pausing: "Pausing",
-  idle: "Idle",
-  deleted: "Deleted",
-  failed: "Failed",
-}
+import { STATUS_BADGE_VARIANT, STATUS_LABEL } from "@/lib/sandbox-utils"
 
 function TerminalSkeleton() {
   return (
@@ -162,7 +146,10 @@ export default function TerminalPage() {
       {canRun ? (
         <CommandRunner sandboxId={sandboxId} handleRef={runnerRef} />
       ) : (
-        <ErrorState message="Sandbox is not running. Start it to use the terminal." />
+        <ErrorState
+          message="Sandbox is not running. Start it to use the terminal."
+          suggestion="Click the Start button above to resume the sandbox."
+        />
       )}
     </div>
   )

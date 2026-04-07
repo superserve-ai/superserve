@@ -25,8 +25,9 @@ function SignInContent() {
   const { addToast } = useToast()
 
   const rawNext = searchParams.get("next") || "/"
-  // Only allow relative paths to prevent open redirect
-  const nextUrl = rawNext.startsWith("/") ? rawNext : "/"
+  // Only allow relative paths to prevent open redirect (reject protocol-relative URLs like //evil.com)
+  const nextUrl =
+    rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/"
 
   useEffect(() => {
     const checkUser = async () => {

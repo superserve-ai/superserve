@@ -1,7 +1,17 @@
 "use client"
 
+import { Suspense } from "react"
+import { TableSkeleton } from "@/components/table-skeleton"
+
+export default function SandboxesPage() {
+  return (
+    <Suspense fallback={<TableSkeleton columns={6} tabs={3} />}>
+      <SandboxesPageContent />
+    </Suspense>
+  )
+}
+
 import {
-  CubeIcon,
   DotsThreeVerticalIcon,
   KeyIcon,
   KeyReturnIcon,
@@ -13,7 +23,6 @@ import {
 } from "@phosphor-icons/react"
 import {
   Badge,
-  type BadgeVariant,
   Button,
   Checkbox,
   Menu,
@@ -27,17 +36,16 @@ import {
   TableHeader,
   TableRow,
 } from "@superserve/ui"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { useMemo, useState } from "react"
-import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
 import { ConnectSandboxDialog } from "@/components/sandboxes/connect-sandbox-dialog"
 import { CreateSandboxDialog } from "@/components/sandboxes/create-sandbox-dialog"
 import { DeleteSandboxDialog } from "@/components/sandboxes/delete-sandbox-dialog"
+import { OnboardingEmptyState } from "@/components/sandboxes/onboarding-empty-state"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
-import { TableSkeleton } from "@/components/table-skeleton"
 import { TableToolbar } from "@/components/table-toolbar"
 import {
   useBulkDeleteSandboxes,
@@ -47,24 +55,8 @@ import {
   useSandboxes,
 } from "@/hooks/use-sandboxes"
 import { useSelection } from "@/hooks/use-selection"
-import type { SandboxStatus } from "@/lib/api/types"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
-
-const STATUS_BADGE_VARIANT: Record<SandboxStatus, BadgeVariant> = {
-  active: "success",
-  pausing: "warning",
-  idle: "muted",
-  deleted: "destructive",
-  failed: "destructive",
-}
-
-const STATUS_LABEL: Record<SandboxStatus, string> = {
-  active: "Active",
-  pausing: "Pausing",
-  idle: "Idle",
-  deleted: "Deleted",
-  failed: "Failed",
-}
+import { STATUS_BADGE_VARIANT, STATUS_LABEL } from "@/lib/sandbox-utils"
 
 const STATUS_TABS = [
   { label: "All", value: "all" },
@@ -72,11 +64,26 @@ const STATUS_TABS = [
   { label: "Idle", value: "idle" },
 ]
 
-export default function SandboxesPage() {
+function SandboxesPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const posthog = usePostHog()
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [search, setSearch] = useState("")
+  const statusFilter = searchParams.get("status") ?? "all"
+  const search = searchParams.get("q") ?? ""
+
+  const setStatusFilter = (value: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (value === "all") params.delete("status")
+    else params.set("status", value)
+    router.replace(`?${params.toString()}`)
+  }
+
+  const setSearch = (value: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (!value) params.delete("q")
+    else params.set("q", value)
+    router.replace(`?${params.toString()}`)
+  }
   const [createOpen, setCreateOpen] = useState(false)
   const [connectSandboxId, setConnectSandboxId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{
@@ -135,13 +142,7 @@ export default function SandboxesPage() {
       ) : error ? (
         <ErrorState message={error.message} onRetry={() => refetch()} />
       ) : isEmpty ? (
-        <EmptyState
-          icon={CubeIcon}
-          title="No Sandboxes"
-          description="Create your first sandbox to start deploying agents."
-          actionLabel="Create Sandbox"
-          onAction={() => setCreateOpen(true)}
-        />
+        <OnboardingEmptyState onCreateClick={() => setCreateOpen(true)} />
       ) : (
         <>
           <TableToolbar
@@ -205,7 +206,7 @@ export default function SandboxesPage() {
                         ? `${sandbox.snapshot_id.slice(0, 8)}...`
                         : "-"}
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-muted">
+                    <TableCell className="font-mono text-xs text-muted tabular-nums">
                       {sandbox.vcpu_count}CPU | {sandbox.memory_mib}MB
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
