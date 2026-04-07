@@ -13,6 +13,7 @@ import {
   RocketLaunchIcon,
 } from "@phosphor-icons/react"
 import { Command } from "cmdk"
+import { AnimatePresence, motion } from "motion/react"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useState } from "react"
 
@@ -28,6 +29,7 @@ interface CommandItem {
 
 export function CommandPalette({ onCreateSandbox }: CommandPaletteProps) {
   const [open, setOpen] = useState(false)
+  const [hoveredLabel, setHoveredLabel] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -104,69 +106,115 @@ export function CommandPalette({ onCreateSandbox }: CommandPaletteProps) {
   ]
 
   return (
-    <Command.Dialog
-      open={open}
-      onOpenChange={setOpen}
-      label="Command palette"
-      className="fixed inset-0 z-50"
-    >
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: backdrop dismiss */}
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismiss */}
-      <div
-        className="fixed inset-0 bg-black/50"
-        onClick={() => setOpen(false)}
-      />
-      <div className="fixed left-1/2 top-[20%] z-50 w-full max-w-lg -translate-x-1/2 border border-dashed border-border bg-surface shadow-lg">
-        <div className="flex items-center gap-2.5 border-b border-dashed border-border px-3">
-          <MagnifyingGlassIcon
-            className="size-4 shrink-0 text-muted"
-            weight="light"
+    <AnimatePresence>
+      {open && (
+        <Command.Dialog
+          open={open}
+          onOpenChange={setOpen}
+          label="Command palette"
+          className="fixed inset-0 z-50"
+          forceMount
+        >
+          <motion.div
+            className="fixed inset-0 bg-black/50"
+            onClick={() => setOpen(false)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
           />
-          <Command.Input
-            placeholder="Type a command or search..."
-            className="flex-1 bg-transparent py-3 text-sm text-foreground outline-none placeholder:text-muted"
-          />
-        </div>
-        <Command.List className="max-h-72 overflow-y-auto p-1.5">
-          <Command.Empty className="px-3 py-6 text-center text-sm text-muted">
-            No results found.
-          </Command.Empty>
-
-          <Command.Group
-            heading="Navigation"
-            className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:text-muted"
+          <motion.div
+            className="fixed left-1/2 top-[20%] z-50 w-full max-w-lg border border-dashed border-border bg-surface shadow-lg"
+            initial={{ opacity: 0, x: "-50%", scale: 0.96 }}
+            animate={{ opacity: 1, x: "-50%", scale: 1 }}
+            exit={{ opacity: 0, x: "-50%", scale: 0.96 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
           >
-            {navigationItems.map((item) => (
-              <Command.Item
-                key={item.label}
-                onSelect={item.onSelect}
-                className="flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm text-foreground transition-colors data-[selected=true]:bg-foreground/5"
-              >
-                <item.icon className="size-4 shrink-0" weight="light" />
-                <span>{item.label}</span>
-              </Command.Item>
-            ))}
-          </Command.Group>
+            <div className="flex items-center gap-2.5 border-b border-dashed border-border px-3">
+              <MagnifyingGlassIcon
+                className="size-4 shrink-0 text-muted"
+                weight="light"
+              />
+              <Command.Input
+                placeholder="Type a command or search..."
+                className="flex-1 bg-transparent py-3 text-sm text-foreground outline-none placeholder:text-muted"
+              />
+            </div>
+            <Command.List
+              className="max-h-72 overflow-y-auto p-1.5"
+              onMouseLeave={() => setHoveredLabel(null)}
+            >
+              <Command.Empty className="px-3 py-6 text-center text-sm text-muted">
+                No results found.
+              </Command.Empty>
 
-          <Command.Separator className="mx-2.5 my-1.5 h-px bg-border" />
-
-          <Command.Group
-            heading="Actions"
-            className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:text-muted"
-          >
-            {actionItems.map((item) => (
-              <Command.Item
-                key={item.label}
-                onSelect={item.onSelect}
-                className="flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm text-foreground transition-colors data-[selected=true]:bg-foreground/5"
+              <Command.Group
+                heading="Navigation"
+                className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:text-muted"
               >
-                <item.icon className="size-4 shrink-0" weight="light" />
-                <span>{item.label}</span>
-              </Command.Item>
-            ))}
-          </Command.Group>
-        </Command.List>
-      </div>
-    </Command.Dialog>
+                {navigationItems.map((item) => (
+                  <Command.Item
+                    key={item.label}
+                    onSelect={item.onSelect}
+                    onMouseEnter={() => setHoveredLabel(item.label)}
+                    className="relative flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm text-foreground"
+                  >
+                    {hoveredLabel === item.label && (
+                      <motion.span
+                        className="absolute inset-0 rounded-sm bg-foreground/5"
+                        layoutId="cmd-hover"
+                        transition={{
+                          type: "spring",
+                          bounce: 0.15,
+                          duration: 0.4,
+                        }}
+                      />
+                    )}
+                    <item.icon
+                      className="relative size-4 shrink-0"
+                      weight="light"
+                    />
+                    <span className="relative">{item.label}</span>
+                  </Command.Item>
+                ))}
+              </Command.Group>
+
+              <Command.Separator className="mx-2.5 my-1.5 h-px bg-border" />
+
+              <Command.Group
+                heading="Actions"
+                className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:text-muted"
+              >
+                {actionItems.map((item) => (
+                  <Command.Item
+                    key={item.label}
+                    onSelect={item.onSelect}
+                    onMouseEnter={() => setHoveredLabel(item.label)}
+                    className="relative flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm text-foreground"
+                  >
+                    {hoveredLabel === item.label && (
+                      <motion.span
+                        className="absolute inset-0 rounded-sm bg-foreground/5"
+                        layoutId="cmd-hover"
+                        transition={{
+                          type: "spring",
+                          bounce: 0.15,
+                          duration: 0.4,
+                        }}
+                      />
+                    )}
+                    <item.icon
+                      className="relative size-4 shrink-0"
+                      weight="light"
+                    />
+                    <span className="relative">{item.label}</span>
+                  </Command.Item>
+                ))}
+              </Command.Group>
+            </Command.List>
+          </motion.div>
+        </Command.Dialog>
+      )}
+    </AnimatePresence>
   )
 }
