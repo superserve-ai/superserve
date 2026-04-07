@@ -33,6 +33,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { useMemo, useState } from "react"
 import { CreateKeyDialog } from "@/components/api-keys/create-key-dialog"
+import { RevokeKeyDialog } from "@/components/api-keys/revoke-key-dialog"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
@@ -63,6 +64,11 @@ function ApiKeysPageContent() {
     router.replace(`?${params.toString()}`)
   }
   const [createOpen, setCreateOpen] = useState(false)
+  const [revokeTarget, setRevokeTarget] = useState<{
+    id: string
+    name: string
+  } | null>(null)
+  const [bulkRevokeOpen, setBulkRevokeOpen] = useState(false)
 
   const filtered = useMemo(() => {
     if (!keys) return []
@@ -84,16 +90,8 @@ function ApiKeysPageContent() {
     clearSelection,
   } = useSelection(filtered)
 
-  const deleteKey = (id: string) => {
-    posthog.capture(API_KEY_EVENTS.REVOKED)
-    revokeMutation.mutate(id)
-    clearSelection()
-  }
-
   const deleteSelected = () => {
-    posthog.capture(API_KEY_EVENTS.BULK_REVOKED, { count: selected.size })
-    bulkRevoke.mutate(Array.from(selected))
-    clearSelection()
+    setBulkRevokeOpen(true)
   }
 
   if (isPending) {
@@ -143,6 +141,7 @@ function ApiKeysPageContent() {
             onSearchChange={setSearch}
             selectedCount={selected.size}
             onClearSelection={clearSelection}
+            deleteLabel="Revoke"
             onDeleteSelected={deleteSelected}
           />
 
@@ -202,7 +201,12 @@ function ApiKeysPageContent() {
                         <MenuPopup>
                           <MenuItem
                             className="text-destructive hover:text-destructive"
-                            onClick={() => deleteKey(apiKey.id)}
+                            onClick={() =>
+                              setRevokeTarget({
+                                id: apiKey.id,
+                                name: apiKey.name,
+                              })
+                            }
                           >
                             <TrashIcon className="size-4" weight="light" />
                             Revoke Key
@@ -217,6 +221,49 @@ function ApiKeysPageContent() {
           </div>
         </>
       )}
+
+      {revokeTarget && (
+        <RevokeKeyDialog
+          open={!!revokeTarget}
+          onOpenChange={(v) => {
+            if (!v) setRevokeTarget(null)
+          }}
+          keyName={revokeTarget.name}
+          onConfirm={() => {
+            posthog.capture(API_KEY_EVENTS.REVOKED)
+            return new Promise<void>((resolve, reject) => {
+              revokeMutation.mutate(revokeTarget.id, {
+                onSuccess: () => {
+                  setRevokeTarget(null)
+                  resolve()
+                },
+                onError: reject,
+              })
+            })
+          }}
+        />
+      )}
+
+      <RevokeKeyDialog
+        open={bulkRevokeOpen}
+        onOpenChange={setBulkRevokeOpen}
+        bulkCount={selected.size}
+        onConfirm={() => {
+          posthog.capture(API_KEY_EVENTS.BULK_REVOKED, {
+            count: selected.size,
+          })
+          return new Promise<void>((resolve, reject) => {
+            bulkRevoke.mutate([...selected], {
+              onSuccess: () => {
+                clearSelection()
+                setBulkRevokeOpen(false)
+                resolve()
+              },
+              onError: reject,
+            })
+          })
+        }}
+      />
     </div>
   )
 }

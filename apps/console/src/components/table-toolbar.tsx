@@ -23,6 +23,7 @@ interface TableToolbarProps {
   selectedCount?: number
   onClearSelection?: () => void
   onDeleteSelected?: () => void
+  deleteLabel?: string
 }
 
 export function TableToolbar({
@@ -36,6 +37,7 @@ export function TableToolbar({
   selectedCount = 0,
   onClearSelection,
   onDeleteSelected,
+  deleteLabel = "Delete",
 }: TableToolbarProps) {
   const [hoveredTab, setHoveredTab] = useState<string | null>(null)
 
@@ -65,7 +67,7 @@ export function TableToolbar({
                 onClick={onDeleteSelected}
               >
                 <TrashIcon className="size-3" weight="light" />
-                Delete
+                {deleteLabel}
               </Button>
             )}
           </div>
