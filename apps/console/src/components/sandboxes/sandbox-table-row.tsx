@@ -19,15 +19,15 @@ import {
   MenuSeparator,
   MenuTrigger,
   TableCell,
-  TableRow,
 } from "@superserve/ui"
+import type { HTMLMotionProps } from "motion/react"
 import { useRouter } from "next/navigation"
 
+import { AnimatedTableRow } from "@/components/animated-table-row"
 import type { SandboxResponse } from "@/lib/api/types"
 import { STATUS_BADGE_VARIANT, STATUS_LABEL } from "@/lib/sandbox-utils"
 
-interface SandboxTableRowProps
-  extends React.HTMLAttributes<HTMLTableRowElement> {
+interface SandboxTableRowProps extends HTMLMotionProps<"tr"> {
   sandbox: SandboxResponse
   selected: boolean
   onToggle: () => void
@@ -51,7 +51,7 @@ export function SandboxTableRow({
   const router = useRouter()
 
   return (
-    <TableRow
+    <AnimatedTableRow
       className={cn("cursor-pointer", className)}
       onClick={() => router.push(`/sandboxes/${sandbox.id}/`)}
       {...rest}
@@ -160,6 +160,6 @@ export function SandboxTableRow({
           </Menu>
         </div>
       </TableCell>
-    </TableRow>
+    </AnimatedTableRow>
   )
 }

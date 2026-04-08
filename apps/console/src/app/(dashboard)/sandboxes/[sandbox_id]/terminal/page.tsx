@@ -1,20 +1,11 @@
 "use client"
 
-import {
-  ArrowLeftIcon,
-  PlayIcon,
-  StopIcon,
-  TrashIcon,
-} from "@phosphor-icons/react"
+import { ArrowLeftIcon, PlayIcon, StopIcon } from "@phosphor-icons/react"
 import { Badge, Button } from "@superserve/ui"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
-import { useRef } from "react"
 import { ErrorState } from "@/components/error-state"
-import {
-  CommandRunner,
-  type CommandRunnerHandle,
-} from "@/components/sandboxes/command-runner"
+import { SandboxTerminal } from "@/components/sandboxes/terminal"
 import {
   usePauseSandbox,
   useResumeSandbox,
@@ -32,12 +23,7 @@ function TerminalSkeleton() {
         <span className="text-muted">/</span>
         <div className="h-4 w-20 animate-pulse bg-muted/20" />
       </div>
-      <div className="flex-1 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-xs text-muted">$</span>
-          <div className="h-3 w-48 animate-pulse bg-muted/20" />
-        </div>
-      </div>
+      <div className="flex-1 bg-background" />
     </div>
   )
 }
@@ -50,7 +36,6 @@ export default function TerminalPage() {
   const { data: sandbox, isPending, error, refetch } = useSandbox(sandboxId)
   const pauseMutation = usePauseSandbox()
   const resumeMutation = useResumeSandbox()
-  const runnerRef = useRef<CommandRunnerHandle>(null)
 
   if (isPending) return <TerminalSkeleton />
 
@@ -78,12 +63,12 @@ export default function TerminalPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-border bg-background px-6">
+      <div className="sticky top-0 z-10 flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-6">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => router.back()}
-            className="flex items-center gap-1.5 text-sm text-muted hover:text-foreground cursor-pointer"
+            className="flex cursor-pointer items-center gap-1.5 text-sm text-muted hover:text-foreground"
           >
             <ArrowLeftIcon className="size-3.5" weight="light" />
           </button>
@@ -107,15 +92,6 @@ export default function TerminalPage() {
           </Badge>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => runnerRef.current?.clear()}
-            aria-label="Clear terminal"
-          >
-            <TrashIcon className="size-3.5" weight="light" />
-            Clear
-          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -144,7 +120,7 @@ export default function TerminalPage() {
       </div>
 
       {canRun ? (
-        <CommandRunner sandboxId={sandboxId} handleRef={runnerRef} />
+        <SandboxTerminal sandboxId={sandboxId} />
       ) : (
         <ErrorState
           message="Sandbox is not running. Start it to use the terminal."

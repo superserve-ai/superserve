@@ -13,7 +13,9 @@ import {
   TooltipPopup,
   TooltipTrigger,
 } from "@superserve/ui"
+import { AnimatePresence } from "motion/react"
 import { useMemo, useState } from "react"
+import { AnimatedTableRow } from "@/components/animated-table-row"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
@@ -143,58 +145,60 @@ export default function AuditLogsPage() {
                 </TableRow>
               </TableHeader>
               <StickyHoverTableBody>
-                {filtered.map((log) => (
-                  <TableRow key={log.id}>
-                    <TableCell className="whitespace-nowrap">
-                      <TimeCell date={new Date(log.created_at)} />
-                    </TableCell>
-                    <TableCell className="font-mono text-foreground/80">
-                      {log.sandbox_name ?? "-"}
-                    </TableCell>
-                    <TableCell className="text-muted capitalize">
-                      {log.category}
-                    </TableCell>
-                    <TableCell className="text-foreground/80">
-                      {log.action}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-muted tabular-nums">
-                      {formatDuration(log.duration_ms)}
-                    </TableCell>
-                    <TableCell>
-                      {log.status ? (
-                        log.error ? (
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={
-                                <Badge
-                                  variant={
-                                    STATUS_VARIANT[log.status] ?? "muted"
-                                  }
-                                  dot
-                                  className="cursor-default"
-                                />
-                              }
+                <AnimatePresence initial={false}>
+                  {filtered.map((log) => (
+                    <AnimatedTableRow key={log.id}>
+                      <TableCell className="whitespace-nowrap">
+                        <TimeCell date={new Date(log.created_at)} />
+                      </TableCell>
+                      <TableCell className="font-mono text-foreground/80">
+                        {log.sandbox_name ?? "-"}
+                      </TableCell>
+                      <TableCell className="text-muted capitalize">
+                        {log.category}
+                      </TableCell>
+                      <TableCell className="text-foreground/80">
+                        {log.action}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-muted tabular-nums">
+                        {formatDuration(log.duration_ms)}
+                      </TableCell>
+                      <TableCell>
+                        {log.status ? (
+                          log.error ? (
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <Badge
+                                    variant={
+                                      STATUS_VARIANT[log.status] ?? "muted"
+                                    }
+                                    dot
+                                    className="cursor-default"
+                                  />
+                                }
+                              >
+                                {log.status}
+                              </TooltipTrigger>
+                              <TooltipPopup className="max-w-xs text-xs">
+                                {log.error}
+                              </TooltipPopup>
+                            </Tooltip>
+                          ) : (
+                            <Badge
+                              variant={STATUS_VARIANT[log.status] ?? "muted"}
+                              dot
                             >
                               {log.status}
-                            </TooltipTrigger>
-                            <TooltipPopup className="max-w-xs text-xs">
-                              {log.error}
-                            </TooltipPopup>
-                          </Tooltip>
+                            </Badge>
+                          )
                         ) : (
-                          <Badge
-                            variant={STATUS_VARIANT[log.status] ?? "muted"}
-                            dot
-                          >
-                            {log.status}
-                          </Badge>
-                        )
-                      ) : (
-                        <span className="text-muted">-</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                          <span className="text-muted">-</span>
+                        )}
+                      </TableCell>
+                    </AnimatedTableRow>
+                  ))}
+                </AnimatePresence>
               </StickyHoverTableBody>
             </Table>
           </div>
