@@ -25,8 +25,9 @@ export const SANDBOX_EVENTS = {
 } as const
 
 export const TERMINAL_EVENTS = {
-  COMMAND_EXECUTED: "terminal_command_executed",
-  COMMAND_ABORTED: "terminal_command_aborted",
+  SESSION_STARTED: "terminal_session_started",
+  SESSION_ENDED: "terminal_session_ended",
+  RECONNECTED: "terminal_reconnected",
 } as const
 
 export const API_KEY_EVENTS = {

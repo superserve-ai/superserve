@@ -20,7 +20,7 @@ function Logo() {
           alt="Superserve"
           width={200}
           height={40}
-          className="h-10 mb-2"
+          className="h-10 w-auto mb-2"
         />
       </Link>
     </div>

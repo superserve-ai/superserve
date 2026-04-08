@@ -17,6 +17,8 @@
     "@superserve/supabase": "workspace:*",
     "@superserve/ui": "workspace:*",
     "@tanstack/react-query": "^5.96.2",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "cmdk": "^1.1.1",
     "motion": "^12.0.0",
     "next": "^16.1.6",
