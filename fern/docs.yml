@@ -47,8 +47,8 @@ navigation:
 
 colors:
   accent-primary:
-    light: "#105C60"
-    dark: "#119CA3"
+    light: "#292524"  # stone-800 — warm near-black
+    dark: "#e7e5e4"   # stone-200 — warm near-white
 
 logo:
   light: ../docs/logo/light.svg
