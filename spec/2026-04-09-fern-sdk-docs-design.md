@@ -6,13 +6,13 @@
 
 ## Goal
 
-Make `api/openapi.yaml` the single source of truth for the Superserve API, and use Fern to generate:
+The OpenAPI spec lives in the backend repo at `https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml`. This monorepo references that URL and uses Fern to generate:
 
 1. `@superserve/sdk` — TypeScript client (npm)
 2. `superserve` — Python client (PyPI)
 3. Superserve docs site — replaces current Mintlify setup
 
-All three live in and ship from the `superserve/` monorepo. Everything works with the existing Bun workspaces + Turborepo + uv workspaces toolchain.
+All three live in and ship from the `superserve/` monorepo. Everything works with the existing Bun workspaces + Turborepo + uv workspaces toolchain. Zero changes required in the backend repo.
 
 ## Non-goals
 
@@ -23,20 +23,19 @@ All three live in and ship from the `superserve/` monorepo. Everything works wit
 ## Context
 
 - `packages/sdk` (TS) and `packages/python-sdk` (Python) are handwritten today and target the old agents/sessions API. The product pivoted to sandbox/VM infrastructure; the handwritten code is outdated and can be removed.
-- A trial Fern setup exists at `/Users/nirnejak/Code/superserve/sdk/` with a working `openapi.yaml` (605 lines, ~8 endpoints across Sandboxes / Exec / Files / System) and a Fern config that generates TS + Python. It is reference-only. Package names and publish metadata there are placeholders. We rebuild in the monorepo.
+- The backend repo at `github.com/superserve-ai/sandbox` owns `api/openapi.yaml` (~605 lines, ~8 endpoints across Sandboxes / Exec / Files / System). It is the single source of truth. This monorepo references it by URL — no local copy, no mirroring.
+- A trial Fern setup exists at `/Users/nirnejak/Code/superserve/sdk/` that generates TS + Python from a local copy of the spec. It is reference-only. Package names and publish metadata there are placeholders. We rebuild in the monorepo using the remote URL.
 - Docs today run on Mintlify (`docs/docs.json` + `docs/introduction.mdx`). We replace with Fern Docs on the free Hobby tier.
-- Fern is Apache 2.0; the OSS CLI can generate locally via Docker at zero cost. Managed Fern (paid) handles hosted generation and auto-publishing. Initial plan: run the OSS CLI from the monorepo and publish from our own CI. Upgrading to managed Fern later is a config change, not a rewrite.
+- Fern is Apache 2.0; the OSS CLI can generate locally via Docker at zero cost. Fern's OpenAPI spec field accepts HTTP(S) URLs and fetches on each generate run. Managed Fern (paid) is not needed for this plan — upgrade later is a config change, not a rewrite.
 
 ## Repo layout
 
 ```
 superserve/
-├── api/                                  NEW
-│   ├── openapi.yaml                      single source of truth, ported from trial repo
-│   └── fern/
-│       ├── fern.config.json              { organization: "superserve", version: "<pinned>" }
-│       ├── generators.yml                TS + Python generators, local-file-system output
-│       └── docs.yml                      Fern Docs site config
+├── fern/                                 NEW — Fern's own convention (fern init layout)
+│   ├── fern.config.json                  { organization: "superserve", version: "<pinned>" }
+│   ├── generators.yml                    TS + Python generators; spec is a remote URL
+│   └── docs.yml                          Fern Docs site config
 │
 ├── packages/
 │   ├── sdk/                              EXISTING — handwritten code wiped
@@ -55,16 +54,16 @@ superserve/
 └── docs/                                 EXISTING — Mintlify files removed
     ├── pages/                            MDX content (ported from existing docs)
     │   └── introduction.mdx
-    └── logo/                             re-referenced from api/fern/docs.yml
+    └── logo/                             re-referenced from fern/docs.yml
 ```
 
-**Why `api/` at the repo root rather than `packages/api-spec/`:** the OpenAPI spec and Fern config are not a JS/Python/Go package. They are shared infrastructure that configures multiple packages. `api/` signals that plainly and keeps it out of the workspace glob.
+**Why `fern/` at the repo root:** it is Fern's default convention, what `fern init` creates, and what every Fern example uses. Short path, zero ambiguity about what it is. No local OpenAPI spec lives here — Fern fetches it from the backend repo URL on each generate run.
 
 **Why `.fernignore` per SDK package:** Fern's default behavior is to own the output directory and overwrite everything in it. `.fernignore` marks files/paths that Fern must leave alone across regenerations. We use it to hand-maintain `package.json` / `pyproject.toml` / build config / README per package, while Fern owns `src/`.
 
 ## Fern configuration
 
-### `api/fern/fern.config.json`
+### `fern/fern.config.json`
 
 ```json
 {
@@ -73,12 +72,12 @@ superserve/
 }
 ```
 
-### `api/fern/generators.yml`
+### `fern/generators.yml`
 
 ```yaml
 api:
   specs:
-    - openapi: ../openapi.yaml
+    - openapi: https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml
 
 default-group: local
 groups:
@@ -88,7 +87,7 @@ groups:
         version: <latest stable>
         output:
           location: local-file-system
-          path: ../../packages/sdk/src
+          path: ../packages/sdk/src
         config:
           namespaceExport: Superserve
           packageName: "@superserve/sdk"
@@ -97,14 +96,16 @@ groups:
         version: <latest stable>
         output:
           location: local-file-system
-          path: ../../packages/python-sdk/src/superserve
+          path: ../packages/python-sdk/src/superserve
         config:
           client_class_name: Superserve
           package_name: superserve
 ```
 
 Notes:
-- Generator versions are pinned explicitly. Upgrades are deliberate PRs, not drift.
+- The spec is referenced via a remote URL pinned to the backend repo's `main` branch. Fern fetches it on every `fern generate` run. No local copy.
+- Pinning to `main` means any backend merge that changes the spec is picked up the next time we regenerate. Tight coupling is intentional during active development. Post-1.0 we can pin to a tag or commit SHA for deliberate upgrades.
+- Generator versions themselves are pinned explicitly. Generator upgrades are deliberate PRs, not drift.
 - Both generators write into the existing workspace packages. Package metadata (`package.json`, `pyproject.toml`) is hand-owned via `.fernignore`.
 - `packageName` / `package_name` config fields are still set so that generated code references the correct import path in examples and snippets, even though we own the manifest files.
 
@@ -160,7 +161,7 @@ Python package stays part of the existing uv workspace at the repo root — no c
 {
   "tasks": {
     "generate": {
-      "inputs": ["api/openapi.yaml", "api/fern/**"],
+      "inputs": ["fern/**"],
       "outputs": [
         "packages/sdk/src/**",
         "packages/python-sdk/src/superserve/**"
@@ -175,15 +176,15 @@ Python package stays part of the existing uv workspace at the repo root — no c
 }
 ```
 
-`generate` is intentionally `cache: false` — Fern is fast, and caching regeneration adds a footgun when the spec changes.
+`generate` is intentionally `cache: false` — the remote spec can change without any local file changing, so caching on inputs would be wrong. Fern is fast enough that caching adds no value.
 
 ### Root `package.json` scripts
 
 ```jsonc
 {
   "scripts": {
-    "generate": "cd api/fern && fern generate --group local",
-    "generate:check": "cd api/fern && fern check"
+    "generate": "cd fern && fern generate --group local",
+    "generate:check": "cd fern && fern check"
   }
 }
 ```
@@ -191,11 +192,13 @@ Python package stays part of the existing uv workspace at the repo root — no c
 ### Developer loop
 
 ```bash
-# edit api/openapi.yaml
-bun run generate              # Fern regenerates TS + Python sources
+# backend team merges a spec change in github.com/superserve-ai/sandbox
+bun run generate              # Fern fetches latest openapi.yaml from URL and regenerates
 bun run build                 # tsup TS, uv build Python
 # apps/console picks up the new SDK on next build/dev
 ```
+
+Because there is no local spec file, regeneration is a **pull-on-demand** operation. No file-watcher, no automatic trigger — you run it when you know (or suspect) the backend spec has changed.
 
 ## Publishing
 
@@ -217,21 +220,23 @@ A root `bun run release` script that runs generate → build → publish for bot
 
 ## CI / CD
 
+Kept deliberately minimal. No backend changes, no cross-repo dispatch, no scheduled jobs. Everything is manual and explicit.
+
 ### `.github/workflows/fern-generate.yml` (new)
 
-- **Trigger:** push to `main` touching `api/openapi.yaml` or `api/fern/**`
+- **Trigger:** `workflow_dispatch` only (manual button in GitHub Actions UI)
 - **Steps:** checkout → install Bun → install Fern CLI → `bun run generate` → if `git status` shows changes, open a PR titled `chore(sdk): regenerate from openapi.yaml`
-- **Effect:** spec changes always produce visible regeneration PRs. No silent drift between spec and generated code.
+- **When to run it:** when the backend team merges a spec change and you want the SDKs updated. Documented in README.
 
 ### `.github/workflows/release.yml` (new)
 
 - **Trigger:** `workflow_dispatch` with inputs: `package` (`ts` / `python` / `both`), `version`
 - **Steps:** bump manifest → build → publish to npm and/or PyPI → commit bump → tag `@superserve/sdk@<v>` and/or `superserve-py@<v>`
-- Manual, deliberate, one button per release.
+- Manual, deliberate, one button per release. Documented in README.
 
-### Spec linting on PRs
+### Spec linting
 
-Existing lint workflow adds `bun run generate:check` as a step so PRs that change `api/openapi.yaml` get immediate feedback if the spec is malformed before Fern runs.
+Optional: `bun run generate:check` as a pre-release sanity check. Not wired to PR CI since PRs in this repo don't touch the spec.
 
 ## Docs: Mintlify → Fern Docs
 
@@ -242,11 +247,11 @@ Existing lint workflow adds `bun run generate:check` as a step so PRs that chang
 
 ### Add
 
-- `api/fern/docs.yml` — Fern Docs config. Free Hobby tier, one site. Start on the `superserve.docs.buildwithfern.com` subdomain; flip to a custom domain (e.g. `docs.superserve.ai`) via DNS later.
+- `fern/docs.yml` — Fern Docs config. Free Hobby tier, one site. Start on the `superserve.docs.buildwithfern.com` subdomain; flip to a custom domain (e.g. `docs.superserve.ai`) via DNS later.
 - `docs/pages/introduction.mdx` — ported narrative content. Fern MDX is close enough to Mintlify MDX that this is mostly a copy with a few component renames.
 - `docs/pages/` — future place for guides.
 
-### `api/fern/docs.yml` shape
+### `fern/docs.yml` shape
 
 ```yaml
 instances:
@@ -259,7 +264,7 @@ navigation:
   - section: Getting Started
     contents:
       - page: Introduction
-        path: ../../docs/pages/introduction.mdx
+        path: ../docs/pages/introduction.mdx
   - api: API Reference
     snippets:
       typescript: "@superserve/sdk"
@@ -271,44 +276,97 @@ colors:
     dark: "#119CA3"
 
 logo:
-  light: ../../docs/logo/light.svg
-  dark: ../../docs/logo/dark.svg
+  light: ../docs/logo/light.svg
+  dark: ../docs/logo/dark.svg
 ```
 
-The API Reference section is auto-generated from `api/openapi.yaml`; the generator wires TS/Python snippets from the two SDK packages so every endpoint page shows idiomatic client usage.
+The API Reference section is auto-generated from the remote OpenAPI spec (same URL as `generators.yml`). TS/Python snippets come from the two SDK packages so every endpoint page shows idiomatic client usage.
 
-### Docs CI
+### Docs publishing
 
 A third workflow `.github/workflows/docs.yml`:
-- **Trigger:** push to `main` touching `api/openapi.yaml`, `api/fern/docs.yml`, or `docs/pages/**`
-- **Steps:** checkout → install Fern CLI → `cd api/fern && fern docs publish`
-
-Preview on PRs via `fern docs generate --preview` in a PR comment bot is a nice-to-have, not blocking.
+- **Trigger:** `workflow_dispatch` only — manual button
+- **Steps:** checkout → install Fern CLI → `cd fern && fern docs publish`
+- **When to run it:** after spec changes, after editing MDX content, or on any docs update. Documented in README.
 
 ## Migration / teardown checklist
 
-1. Create `api/openapi.yaml` from the trial repo, audit for correctness against the current backend.
-2. Create `api/fern/` with `fern.config.json`, `generators.yml`, `docs.yml`.
-3. Wipe handwritten code from `packages/sdk/src/` (including `src/react/`).
-4. Wipe handwritten code from `packages/python-sdk/src/superserve/`.
-5. Rewrite `packages/sdk/package.json` with publishable manifest.
-6. Rewrite `packages/python-sdk/pyproject.toml` with PyPI metadata.
-7. Add `.fernignore` files.
-8. Run `bun run generate`. Commit generated sources.
-9. Run `bun run build`. Verify artifacts.
-10. Update `apps/console` and any other monorepo consumers to the new SDK surface. Expect import-site changes — the client class and method names differ from the old handwritten SDK.
-11. Port `docs/introduction.mdx` to `docs/pages/introduction.mdx`, adjust component usage if needed.
-12. Delete `docs/docs.json`.
-13. Add the three GitHub Actions workflows.
+1. Create `fern/` at repo root with `fern.config.json`, `generators.yml` (referencing the backend spec URL), `docs.yml`.
+2. Wipe handwritten code from `packages/sdk/src/` (including `src/react/`).
+3. Wipe handwritten code from `packages/python-sdk/src/superserve/`.
+4. Rewrite `packages/sdk/package.json` with publishable manifest.
+5. Rewrite `packages/python-sdk/pyproject.toml` with PyPI metadata.
+6. Add `.fernignore` files to both SDK packages.
+7. Run `bun run generate`. Commit generated sources.
+8. Run `bun run build`. Verify artifacts.
+9. Update `apps/console` and any other monorepo consumers to the new SDK surface. Expect import-site changes — the client class and method names differ from the old handwritten SDK.
+10. Port `docs/introduction.mdx` to `docs/pages/introduction.mdx`, adjust component usage if needed.
+11. Delete `docs/docs.json`.
+12. Add the three GitHub Actions workflows (all `workflow_dispatch`).
+13. Add a **SDK & Docs** section to the root `README.md` documenting: how to regenerate SDKs, how to publish npm/PyPI, how to publish docs, and when to run each step.
 14. First manual release: publish `@superserve/sdk@0.1.0` to npm, `superserve==0.1.0` to PyPI.
 15. First docs publish: `fern docs publish`.
 16. Follow-up (separate task): review `packages/cli/` for references to the old SDK surface and plan its rewrite.
 
+## README documentation
+
+The root `README.md` gets a new section with three subsections covering every manual operation. Sample shape:
+
+```markdown
+## SDKs & Docs
+
+The Superserve SDKs (`@superserve/sdk`, `superserve`) and docs site are generated
+by Fern from the OpenAPI spec in the backend repo
+(`github.com/superserve-ai/sandbox/api/openapi.yaml`). This monorepo references
+that URL directly — no local copy.
+
+### Regenerating the SDKs
+
+Run this when the backend team has merged a spec change:
+
+\`\`\`bash
+bun run generate       # fetches latest spec from main, regenerates TS + Python
+bun run build          # tsup TS, uv build Python
+\`\`\`
+
+Commit the diff. If you prefer CI, trigger the `fern-generate` workflow manually
+in GitHub Actions.
+
+### Publishing to npm and PyPI
+
+\`\`\`bash
+# TypeScript
+cd packages/sdk
+# bump version in package.json
+bun run build
+bun publish --access public
+
+# Python
+cd packages/python-sdk
+# bump version in pyproject.toml
+uv build
+uv publish             # requires UV_PUBLISH_TOKEN
+\`\`\`
+
+Or trigger the `release` workflow manually in GitHub Actions with `package` and
+`version` inputs.
+
+### Publishing the docs
+
+\`\`\`bash
+cd fern
+fern docs publish
+\`\`\`
+
+Or trigger the `docs` workflow manually in GitHub Actions.
+```
+
 ## Open items
 
 - **Fern org ownership.** Confirm we own `superserve` on `dashboard.buildwithfern.com`. The trial repo uses this name, but needs verification before we point production CI at it.
-- **Fern tier.** Start on the free OSS CLI path. Upgrading to managed Fern (Basic $250/mo per SDK, or Pro $600/mo for SSE support) is deferred until there's a concrete reason — automated publishing via Fern, hosted spec validation, or SSE endpoints that need richer codegen than the OSS CLI produces.
+- **Fern tier.** Stay on the free OSS CLI path. Managed Fern (Basic $250/mo per SDK, or Pro $600/mo for SSE support) is deferred until there is a concrete reason.
 - **Custom docs domain.** Defer until the content is ported and the site looks right on the Fern subdomain.
-- **SSE / streaming endpoints.** The current `openapi.yaml` has a streaming exec endpoint. The OSS TS and Python generators handle SSE but ergonomics are generator-version-dependent. Verify the generated `stream()`-equivalent is acceptable during step 8; if not, we either upgrade generators or consider the managed Pro tier.
+- **SSE / streaming endpoints.** The remote `openapi.yaml` has a streaming exec endpoint. OSS TS and Python generators handle SSE but ergonomics are generator-version-dependent. Verify the generated `stream()`-equivalent during step 8; if unacceptable, either upgrade generators or consider managed Pro.
+- **Spec URL pinning.** Pinned to `main` during development — any backend merge can change the SDK surface on next `generate`. Tighten to a tag or commit SHA post-1.0.
 - **Versioning automation.** Manual bumps are fine for v0.x. Revisit Changesets or release-please at 1.0.
 - **CLI fate.** `packages/cli/` may have commands tied to the old agents API. Audit as a follow-up, not part of this spec.
