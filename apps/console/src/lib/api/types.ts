@@ -11,7 +11,6 @@ export interface SandboxResponse {
   status: SandboxStatus
   vcpu_count: number
   memory_mib: number
-  ip_address?: string
   snapshot_id?: string
   created_at: string
 }
