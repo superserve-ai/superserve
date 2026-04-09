@@ -1,0 +1,112 @@
+---
+title: TypeScript Quickstart
+description: Get started with the Superserve TypeScript SDK
+---
+
+Install, authenticate, and run your first sandbox in under a minute.
+
+## Install
+
+```bash
+npm install @superserve/sdk
+# or
+bun add @superserve/sdk
+# or
+yarn add @superserve/sdk
+```
+
+The package is ESM + CJS, targets Node 18+, and has no runtime dependency on React, fetch polyfills, or a specific runtime — it works in Node, Bun, Deno, Cloudflare Workers, and modern browsers.
+
+## Authenticate
+
+Create an API key in the [Superserve console](https://console.superserve.ai) and pass it to the client:
+
+```ts
+import { SuperserveClient } from "@superserve/sdk"
+
+const client = new SuperserveClient({
+  apiKey: process.env.SUPERSERVE_API_KEY,
+})
+```
+
+Never hardcode the key in source. Read it from an environment variable.
+
+## Create a sandbox
+
+```ts
+const sandbox = await client.sandboxes.createSandbox({
+  name: "my-first-sandbox",
+})
+
+console.log(sandbox.id)      // "sbx_..."
+console.log(sandbox.status)  // "starting" → "active"
+```
+
+Sandboxes boot from a clean VM by default. To boot from a previously saved snapshot, pass `from_snapshot`:
+
+```ts
+const sandbox = await client.sandboxes.createSandbox({
+  name: "resumed",
+  from_snapshot: "snp_abc123",
+})
+```
+
+## Run a command
+
+```ts
+const result = await client.exec.command({
+  sandbox_id: sandbox.id!,
+  body: { command: "echo 'Hello from Superserve!'" },
+})
+
+console.log(result.stdout)    // "Hello from Superserve!\n"
+console.log(result.exit_code) // 0
+```
+
+For long-running or streaming commands, use `client.exec.commandStream(...)` instead — it returns a stream of output events rather than waiting for the whole command to finish.
+
+## Clean up
+
+When you're done with a sandbox:
+
+```ts
+await client.sandboxes.deleteSandbox(sandbox.id!)
+```
+
+You can also **pause** a sandbox (saves a snapshot, stops the VM, keeps the state) and **resume** later:
+
+```ts
+await client.sandboxes.pauseSandbox(sandbox.id!)
+// ...later
+await client.sandboxes.resumeSandbox(sandbox.id!)
+```
+
+## Full example
+
+```ts
+import { SuperserveClient } from "@superserve/sdk"
+
+const client = new SuperserveClient({
+  apiKey: process.env.SUPERSERVE_API_KEY,
+})
+
+async function main() {
+  const sandbox = await client.sandboxes.createSandbox({
+    name: "hello-world",
+  })
+
+  try {
+    const result = await client.exec.command({
+      sandbox_id: sandbox.id!,
+      body: { command: "uname -a && date" },
+    })
+    console.log(result.stdout)
+  } finally {
+    await client.sandboxes.deleteSandbox(sandbox.id!)
+  }
+}
+
+main().catch(console.error)
+```
+
+See the [TypeScript SDK Reference](/typescript-reference) for the full list of methods.

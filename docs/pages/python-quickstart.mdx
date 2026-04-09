@@ -1,0 +1,125 @@
+---
+title: Python Quickstart
+description: Get started with the Superserve Python SDK
+---
+
+Install, authenticate, and run your first sandbox in under a minute.
+
+## Install
+
+```bash
+pip install superserve
+# or
+uv add superserve
+# or
+poetry add superserve
+```
+
+Requires Python 3.9+. Built on `httpx` + `pydantic`. Both synchronous and asynchronous clients are provided.
+
+## Authenticate
+
+Create an API key in the [Superserve console](https://console.superserve.ai) and pass it to the client:
+
+```python
+import os
+from superserve import Superserve
+
+client = Superserve(api_key=os.environ["SUPERSERVE_API_KEY"])
+```
+
+Never hardcode the key in source. Read it from an environment variable.
+
+## Create a sandbox
+
+```python
+sandbox = client.sandboxes.create_sandbox(name="my-first-sandbox")
+
+print(sandbox.id)      # "sbx_..."
+print(sandbox.status)  # "starting" → "active"
+```
+
+To boot from a previously saved snapshot:
+
+```python
+sandbox = client.sandboxes.create_sandbox(
+    name="resumed",
+    from_snapshot="snp_abc123",
+)
+```
+
+## Run a command
+
+```python
+result = client.exec.command(
+    sandbox_id=sandbox.id,
+    body={"command": "echo 'Hello from Superserve!'"},
+)
+
+print(result.stdout)    # "Hello from Superserve!\n"
+print(result.exit_code) # 0
+```
+
+For long-running or streaming commands, use `client.exec.command_stream(...)` — it yields output events as they arrive.
+
+## Clean up
+
+```python
+client.sandboxes.delete_sandbox(sandbox.id)
+```
+
+You can also **pause** a sandbox (saves a snapshot, stops the VM) and **resume** later:
+
+```python
+client.sandboxes.pause_sandbox(sandbox.id)
+# ...later
+client.sandboxes.resume_sandbox(sandbox.id)
+```
+
+## Async client
+
+Every method is also available on `AsyncSuperserve`:
+
+```python
+import asyncio
+from superserve import AsyncSuperserve
+
+async def main():
+    client = AsyncSuperserve(api_key=os.environ["SUPERSERVE_API_KEY"])
+    sandbox = await client.sandboxes.create_sandbox(name="async-example")
+    try:
+        result = await client.exec.command(
+            sandbox_id=sandbox.id,
+            body={"command": "uname -a"},
+        )
+        print(result.stdout)
+    finally:
+        await client.sandboxes.delete_sandbox(sandbox.id)
+
+asyncio.run(main())
+```
+
+## Full example
+
+```python
+import os
+from superserve import Superserve
+
+client = Superserve(api_key=os.environ["SUPERSERVE_API_KEY"])
+
+def main():
+    sandbox = client.sandboxes.create_sandbox(name="hello-world")
+    try:
+        result = client.exec.command(
+            sandbox_id=sandbox.id,
+            body={"command": "uname -a && date"},
+        )
+        print(result.stdout)
+    finally:
+        client.sandboxes.delete_sandbox(sandbox.id)
+
+if __name__ == "__main__":
+    main()
+```
+
+See the [Python SDK Reference](/python-reference) for the full list of methods.

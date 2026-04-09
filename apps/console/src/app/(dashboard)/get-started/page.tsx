@@ -17,9 +17,9 @@ function getSnippet(language: Language, apiKey: string): string {
   const key = apiKey || "ss_live_xxxxxxxx..."
 
   if (language === "typescript") {
-    return `import { Superserve } from "@superserve/sdk"
+    return `import { SuperserveClient } from "@superserve/sdk"
 
-const client = new Superserve({ apiKey: "${key}" })
+const client = new SuperserveClient({ apiKey: "${key}" })
 
 const sandbox = await client.sandboxes.create({
   snapshot: "superserve/base",

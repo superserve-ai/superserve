@@ -18,6 +18,14 @@
     },
     "test": {
       "dependsOn": ["^build"]
+    },
+    "generate": {
+      "inputs": ["fern/**"],
+      "outputs": [
+        "packages/sdk/src/**",
+        "packages/python-sdk/src/superserve/**"
+      ],
+      "cache": false
     }
   }
 }

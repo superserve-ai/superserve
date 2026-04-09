@@ -1,0 +1,178 @@
+---
+title: Python SDK Reference
+description: Method reference for the superserve Python package
+---
+
+The `Superserve` client exposes four resource clients: `sandboxes`, `exec`, `files`, and `system`. An `AsyncSuperserve` variant with identical method signatures is also available.
+
+## Client
+
+```python
+from superserve import Superserve, AsyncSuperserve
+
+client = Superserve(
+    api_key="ss_live_...",           # required
+    environment=None,                # optional — defaults to production
+    base_url=None,                   # optional — overrides environment
+    timeout=60.0,                    # request timeout in seconds
+    max_retries=2,
+)
+```
+
+## `client.sandboxes`
+
+Lifecycle operations for Firecracker MicroVM sandboxes.
+
+### `list_sandboxes()`
+
+Lists all sandboxes for the authenticated team.
+
+```python
+response = client.sandboxes.list_sandboxes()
+for sandbox in response.sandboxes:
+    print(sandbox.id, sandbox.status)
+```
+
+### `create_sandbox(name, from_snapshot=None, network=None)`
+
+Creates a new sandbox.
+
+```python
+sandbox = client.sandboxes.create_sandbox(
+    name="my-sandbox",              # required
+    from_snapshot="snp_...",        # optional
+)
+```
+
+Returns a `SandboxResponse` with `id`, `name`, `status`, `vcpu_count`, `memory_mib`, `ip_address`, `snapshot_id`, `created_at`.
+
+### `get_sandbox(sandbox_id)`
+
+```python
+sandbox = client.sandboxes.get_sandbox("sbx_...")
+```
+
+### `patch_sandbox(sandbox_id, name=None)`
+
+Updates mutable fields on a sandbox.
+
+```python
+client.sandboxes.patch_sandbox("sbx_...", name="renamed")
+```
+
+### `pause_sandbox(sandbox_id)`
+
+Takes a snapshot and stops the VM. The sandbox can be resumed later.
+
+```python
+client.sandboxes.pause_sandbox("sbx_...")
+```
+
+### `resume_sandbox(sandbox_id)`
+
+Resumes a previously paused sandbox from its snapshot.
+
+```python
+client.sandboxes.resume_sandbox("sbx_...")
+```
+
+### `delete_sandbox(sandbox_id)`
+
+Permanently deletes a sandbox. Any in-progress execution is terminated.
+
+```python
+client.sandboxes.delete_sandbox("sbx_...")
+```
+
+## `client.exec`
+
+Run commands inside a sandbox.
+
+### `command(sandbox_id, body)`
+
+Runs a command and waits for it to complete. Good for short-lived commands.
+
+```python
+result = client.exec.command(
+    sandbox_id="sbx_...",
+    body={"command": "ls -la /"},
+)
+
+result.stdout     # str
+result.stderr     # str
+result.exit_code  # int
+```
+
+### `command_stream(sandbox_id, body)`
+
+Runs a command and yields stdout/stderr events as they're produced. Use for long-running commands or interactive output.
+
+```python
+for event in client.exec.command_stream(
+    sandbox_id="sbx_...",
+    body={"command": "npm install"},
+):
+    if event.type == "stdout":
+        print(event.data, end="")
+    elif event.type == "done":
+        print("exit code:", event.exit_code)
+```
+
+## `client.files`
+
+Upload and download files to and from a sandbox. See the generated `superserve` package for full request shapes.
+
+## `client.system`
+
+### `health()`
+
+Health check for the Superserve API itself.
+
+```python
+health = client.system.health()
+```
+
+## Async client
+
+Every method above is also available on `AsyncSuperserve` with the same signature:
+
+```python
+import asyncio
+from superserve import AsyncSuperserve
+
+async def main():
+    client = AsyncSuperserve(api_key="ss_live_...")
+    sandbox = await client.sandboxes.create_sandbox(name="async")
+    try:
+        result = await client.exec.command(
+            sandbox_id=sandbox.id,
+            body={"command": "echo hi"},
+        )
+        print(result.stdout)
+    finally:
+        await client.sandboxes.delete_sandbox(sandbox.id)
+
+asyncio.run(main())
+```
+
+## Errors
+
+All errors extend `superserve.core.ApiError`. Specific subclasses:
+
+- `BadRequestError` — 400
+- `UnauthorizedError` — 401
+- `NotFoundError` — 404
+- `ConflictError` — 409
+- `InternalServerError` — 500
+
+```python
+from superserve import Superserve
+from superserve.errors import BadRequestError
+
+client = Superserve(api_key="ss_live_...")
+
+try:
+    client.sandboxes.create_sandbox(name="")
+except BadRequestError as e:
+    print(e.status_code, e.body)
+```
