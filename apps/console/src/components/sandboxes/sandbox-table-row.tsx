@@ -127,10 +127,6 @@ export function SandboxTableRow({
               <DotsThreeVerticalIcon className="size-4" weight="bold" />
             </MenuTrigger>
             <MenuPopup>
-              <MenuItem onClick={onConnect}>
-                <PlugIcon className="size-4" weight="light" />
-                Connect
-              </MenuItem>
               <MenuItem
                 onClick={() =>
                   router.push(`/sandboxes/${sandbox.id}/terminal/`)
