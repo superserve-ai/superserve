@@ -6,6 +6,8 @@ api:
 
 default-group: local
 groups:
+  # `local` — invoked by `bun run generate`. Writes generated SDKs into the
+  # workspace packages. Never publishes.
   local:
     generators:
       - name: fernapi/fern-typescript-sdk
@@ -23,4 +25,28 @@ groups:
           path: ../packages/python-sdk/src/superserve
         config:
           client_class_name: Superserve
-          package_name: superserve
+
+  # `production` — NEVER invoked directly. Exists so `fern generate --docs`
+  # can resolve the snippet `package-name` references in `docs.yml` and
+  # render real SDK code samples per endpoint in the API Reference section.
+  # Actual publishing to npm/PyPI is done by the `release` GitHub workflow.
+  production:
+    generators:
+      - name: fernapi/fern-typescript-sdk
+        version: 3.63.0
+        output:
+          location: npm
+          url: https://registry.npmjs.org
+          token: ${NPM_TOKEN}
+          package-name: "@superserve/sdk"
+        config:
+          namespaceExport: Superserve
+
+      - name: fernapi/fern-python-sdk
+        version: 5.3.2
+        output:
+          location: pypi
+          token: ${PYPI_TOKEN}
+          package-name: superserve
+        config:
+          client_class_name: Superserve

@@ -3,6 +3,34 @@ instances:
 
 title: Superserve
 
+default-language: typescript
+
+typography:
+  bodyFont:
+    name: Instrument Sans
+    paths:
+      - path: ./fonts/instrument-sans-variable.woff2
+        weight: 400 700
+        style: normal
+  headingsFont:
+    name: Instrument Sans
+    paths:
+      - path: ./fonts/instrument-sans-variable.woff2
+        weight: 400 700
+        style: normal
+  codeFont:
+    name: Geist Mono
+    paths:
+      - path: ./fonts/geist-mono-variable.woff2
+        weight: 400 700
+        style: normal
+
+settings:
+  http-snippets:
+    - curl
+    - python
+    - typescript
+
 navigation:
   - section: Getting Started
     contents:
@@ -12,15 +40,7 @@ navigation:
         path: ../docs/pages/typescript-quickstart.mdx
       - page: Python Quickstart
         path: ../docs/pages/python-quickstart.mdx
-  - section: TypeScript SDK
-    contents:
-      - page: Reference
-        path: ../docs/pages/typescript-reference.mdx
-  - section: Python SDK
-    contents:
-      - page: Reference
-        path: ../docs/pages/python-reference.mdx
-  - api: API Reference
+  - api: SDK Reference
     snippets:
       typescript: "@superserve/sdk"
       python: superserve
