@@ -21,6 +21,9 @@ export async function listSnapshotsBySandboxAction(sandboxId: string) {
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
+  const teamId = await getTeamId(user.id)
+  if (!teamId) return []
+
   const admin = createAdminClient()
   const { data, error } = await admin
     .from("snapshot")
@@ -28,6 +31,7 @@ export async function listSnapshotsBySandboxAction(sandboxId: string) {
       "id, sandbox_id, team_id, name, size_bytes, saved, trigger, created_at",
     )
     .eq("sandbox_id", sandboxId)
+    .eq("team_id", teamId)
     .order("created_at", { ascending: false })
 
   if (error) throw new Error(error.message)
