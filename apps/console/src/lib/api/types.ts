@@ -25,39 +25,12 @@ export interface SandboxPatch {
   network?: NetworkConfig
 }
 
-export interface ExecRequest {
-  command: string
-  args?: string[]
-  env?: Record<string, string>
-  working_dir?: string
-  timeout_s?: number
-}
-
-export interface ExecResult {
-  stdout: string
-  stderr: string
-  exit_code: number
-}
-
-export interface ExecStreamEvent {
-  timestamp: string
-  stdout?: string
-  stderr?: string
-  exit_code?: number
-  finished?: boolean
-  error?: string
-}
-
 export interface ApiKeyResponse {
   id: string
   name: string
   prefix: string
   created_at: string
   last_used_at: string | null
-}
-
-export interface CreateApiKeyRequest {
-  name: string
 }
 
 export interface CreateApiKeyResponse {
@@ -89,16 +62,4 @@ export interface ActivityResponse {
   error: string | null
   metadata: Record<string, unknown>
   created_at: string
-}
-
-export interface ApiError {
-  error: {
-    code: string
-    message: string
-  }
-}
-
-export interface HealthResponse {
-  status: string
-  version: string
 }

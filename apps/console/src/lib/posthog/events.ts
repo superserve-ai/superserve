@@ -9,13 +9,6 @@ export const AUTH_EVENTS = {
   DEVICE_AUTHORIZED: "cli_device_authorized",
 } as const
 
-export const ONBOARDING_EVENTS = {
-  STEP_COMPLETED: "onboarding_step_completed",
-  FRAMEWORK_SELECTED: "onboarding_framework_selected",
-  AGENT_PATH_SELECTED: "onboarding_agent_path_selected",
-  PLAYGROUND_OPENED: "playground_agent_opened",
-} as const
-
 export const SANDBOX_EVENTS = {
   CREATED: "sandbox_created",
   STARTED: "sandbox_started",
