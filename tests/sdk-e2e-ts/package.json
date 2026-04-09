@@ -1,0 +1,15 @@
+{
+  "name": "@superserve/test-sdk-e2e-ts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "e2e": "bun run index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@superserve/typescript-config": "workspace:*",
+    "@types/node": "^25.5.2",
+    "typescript": "^5.7.0"
+  }
+}

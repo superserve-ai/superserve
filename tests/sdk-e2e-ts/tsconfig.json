@@ -1,0 +1,14 @@
+{
+  "extends": "@superserve/typescript-config/library.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@superserve/sdk": ["../../packages/sdk/src/index.ts"],
+      "@superserve/sdk/*": ["../../packages/sdk/src/*"]
+    }
+  },
+  "include": ["index.ts"]
+}
