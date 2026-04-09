@@ -2,15 +2,15 @@
 
 import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react"
 import { createBrowserClient } from "@superserve/supabase"
-import { Button, Input, useToast } from "@superserve/ui"
+import { Button, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useState } from "react"
+import { CornerBrackets } from "@/components/corner-brackets"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
-import { AUTH_INPUT_CLASS } from "../styles"
 import { signUpWithEmail } from "./action"
 
 function SignUpContent() {
@@ -23,31 +23,31 @@ function SignUpContent() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const posthog = usePostHog()
-  const { addToast } = useToast()
   const searchParams = useSearchParams()
   const rawNext = searchParams.get("next") || "/"
-  // Only allow relative paths to prevent open redirect
   const nextUrl = rawNext.startsWith("/") ? rawNext : "/"
 
   useEffect(() => {
     if (searchParams.get("error") === "link_expired") {
-      addToast("Verification link expired or invalid", "error")
+      setErrors({ form: "Verification link expired or invalid." })
     }
-  }, [searchParams, addToast])
+  }, [searchParams])
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email || !password || !fullName) {
-      addToast("Please fill in all fields.", "error")
-      return
-    }
-    if (password.length < 8) {
-      addToast("Password must be at least 8 characters.", "error")
-      return
-    }
-    if (password !== confirmPassword) {
-      addToast("Passwords do not match.", "error")
+    setErrors({})
+    const newErrors: Record<string, string> = {}
+    if (!fullName) newErrors.fullName = "Name is required."
+    if (!email) newErrors.email = "Email is required."
+    if (!password) newErrors.password = "Password is required."
+    else if (password.length < 8)
+      newErrors.password = "Must be at least 8 characters."
+    if (password && password !== confirmPassword)
+      newErrors.confirmPassword = "Passwords do not match."
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
       return
     }
     setIsLoading(true)
@@ -58,14 +58,13 @@ function SignUpContent() {
           method: "email",
           reason: result.error,
         })
-        addToast(result.error || "Error creating account.", "error")
+        setErrors({ form: result.error || "Error creating account." })
         return
       }
       posthog.capture(AUTH_EVENTS.SIGN_UP_COMPLETED, { method: "email" })
       setEmailSent(true)
-    } catch (err) {
-      console.error("Sign up error:", err)
-      addToast("Error creating account. Please try again.", "error")
+    } catch {
+      setErrors({ form: "Error creating account. Please try again." })
     } finally {
       setIsLoading(false)
     }
@@ -73,6 +72,7 @@ function SignUpContent() {
 
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true)
+    setErrors({})
     try {
       const supabase = createBrowserClient()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
@@ -84,177 +84,201 @@ function SignUpContent() {
         options: { redirectTo: callbackUrl.toString() },
       })
       if (error) {
-        console.error("Error signing in:", error)
-        addToast("Error signing in. Please try again.", "error")
+        setErrors({ form: "Error signing in. Please try again." })
       }
-    } catch (err) {
-      console.error("Sign in error:", err)
-      addToast("Error signing in. Please try again.", "error")
+    } catch {
+      setErrors({ form: "Error signing in. Please try again." })
     } finally {
       setIsGoogleLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6">
-      <div className="mb-8">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-6">
+      <div className="mb-6">
         <Link href="/">
           <Image
             src="/logo.svg"
             alt="Superserve"
             width={200}
             height={40}
-            className="h-10 w-auto"
+            className="h-8 w-auto"
           />
         </Link>
       </div>
 
-      <div className="w-full max-w-sm">
-        <div className="p-8 border border-dashed border-border bg-surface">
-          {emailSent ? (
-            <>
-              <h1 className="text-2xl font-semibold tracking-tight text-center mb-2 text-foreground">
-                Check Your Email
-              </h1>
-              <p className="text-center mb-6 text-sm leading-relaxed text-muted">
-                We&apos;ve sent a verification link to{" "}
-                <strong className="text-foreground">{email}</strong>. Please
-                check your inbox and click the link to verify your account.
-              </p>
-              <p className="text-sm text-center text-muted">
-                Already verified?{" "}
-                <Link
-                  href="/auth/signin"
-                  className="hover:underline transition-colors font-medium text-primary"
-                >
-                  Sign in
-                </Link>
-              </p>
-            </>
-          ) : (
-            <>
-              <h1 className="text-2xl font-semibold tracking-tight text-center mb-2 text-foreground">
-                Create Account
-              </h1>
-              <p className="text-center mb-8 text-sm text-muted">
-                Sign up to get started with Superserve
-              </p>
+      <div className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6">
+        <CornerBrackets size="lg" />
 
-              <form onSubmit={handleSignUp} className="space-y-4 mb-6">
+        {emailSent ? (
+          <>
+            <h1 className="text-center text-sm font-medium text-foreground">
+              Check Your Email
+            </h1>
+            <p className="mt-2 text-center text-xs leading-relaxed text-muted">
+              We&apos;ve sent a verification link to{" "}
+              <strong className="text-foreground">{email}</strong>. Check your
+              inbox and click the link to verify your account.
+            </p>
+            <p className="mt-5 text-center text-xs text-muted">
+              Already verified?{" "}
+              <Link
+                href="/auth/signin"
+                className="font-medium text-foreground hover:underline"
+              >
+                Sign in
+              </Link>
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="text-center text-sm font-medium text-foreground">
+              Create Account
+            </h1>
+            <p className="mb-6 text-center text-xs text-muted">
+              Sign up to get started with Superserve
+            </p>
+
+            {/* Google OAuth — first */}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleGoogleSignIn}
+              disabled={isGoogleLoading}
+              className="w-full gap-2 border-solid font-sans normal-case tracking-normal"
+            >
+              {isGoogleLoading ? <Spinner /> : <GoogleIcon />}
+              {isGoogleLoading ? "Signing up..." : "Continue with Google"}
+            </Button>
+
+            {/* Divider */}
+            <div className="relative my-5">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-dashed border-border" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-surface px-3 text-muted">or</span>
+              </div>
+            </div>
+
+            {/* Sign up form */}
+            <form onSubmit={handleSignUp} className="space-y-3">
+              <div>
                 <Input
                   type="text"
                   placeholder="Full Name"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className={AUTH_INPUT_CLASS}
+                  error={errors.fullName}
                 />
+                {errors.fullName && (
+                  <p className="mt-1 text-xs text-destructive">
+                    {errors.fullName}
+                  </p>
+                )}
+              </div>
+              <div>
                 <Input
                   type="email"
                   placeholder="Email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className={AUTH_INPUT_CLASS}
+                  error={errors.email}
                 />
+                {errors.email && (
+                  <p className="mt-1 text-xs text-destructive">
+                    {errors.email}
+                  </p>
+                )}
+              </div>
+              <div>
                 <Input
                   type={showPassword ? "text" : "password"}
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className={AUTH_INPUT_CLASS}
+                  error={errors.password}
                   suffix={
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="p-0.5 transition-colors text-muted"
+                      className="text-muted"
                     >
                       {showPassword ? (
-                        <EyeSlashIcon className="size-4.5" weight="light" />
+                        <EyeSlashIcon className="size-4" weight="light" />
                       ) : (
-                        <EyeIcon className="size-4.5" weight="light" />
+                        <EyeIcon className="size-4" weight="light" />
                       )}
                     </button>
                   }
                 />
+                {errors.password && (
+                  <p className="mt-1 text-xs text-destructive">
+                    {errors.password}
+                  </p>
+                )}
+              </div>
+              <div>
                 <Input
                   type={showConfirmPassword ? "text" : "password"}
                   placeholder="Confirm Password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className={AUTH_INPUT_CLASS}
+                  error={errors.confirmPassword}
                   suffix={
                     <button
                       type="button"
                       onClick={() =>
                         setShowConfirmPassword(!showConfirmPassword)
                       }
-                      className="p-0.5 transition-colors text-muted"
+                      className="text-muted"
                     >
                       {showConfirmPassword ? (
-                        <EyeSlashIcon className="size-4.5" weight="light" />
+                        <EyeSlashIcon className="size-4" weight="light" />
                       ) : (
-                        <EyeIcon className="size-4.5" weight="light" />
+                        <EyeIcon className="size-4" weight="light" />
                       )}
                     </button>
                   }
                 />
-                <Button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full h-auto py-3.5 bg-primary text-background hover:bg-primary-hover duration-300"
-                >
-                  {isLoading ? <Spinner /> : null}
-                  {isLoading ? "Creating account..." : "Sign Up"}
-                </Button>
-              </form>
-
-              <div className="relative mb-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-dashed border-border" />
-                </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="px-3 bg-surface text-muted">or</span>
-                </div>
-              </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleGoogleSignIn}
-                disabled={isGoogleLoading}
-                className="w-full h-auto gap-3 py-3.5 font-sans normal-case tracking-normal bg-surface text-foreground border-solid border-border hover:bg-surface-hover hover:text-foreground duration-300"
-              >
-                {isGoogleLoading ? (
-                  <Spinner className="border-dashed border-primary" />
-                ) : (
-                  <GoogleIcon />
+                {errors.confirmPassword && (
+                  <p className="mt-1 text-xs text-destructive">
+                    {errors.confirmPassword}
+                  </p>
                 )}
-                {isGoogleLoading ? "Signing up..." : "Continue with Google"}
+              </div>
+              {errors.form && (
+                <p className="text-xs text-destructive">{errors.form}</p>
+              )}
+              <Button type="submit" disabled={isLoading} className="w-full">
+                {isLoading ? <Spinner /> : null}
+                {isLoading ? "Creating account..." : "Sign Up"}
               </Button>
+            </form>
 
-              <p className="text-sm text-center mt-6 text-muted">
-                Already have an account?{" "}
-                <Link
-                  href="/auth/signin"
-                  className="hover:underline transition-colors font-medium text-primary"
-                >
-                  Sign in
-                </Link>
-              </p>
+            <p className="mt-5 text-center text-xs text-muted">
+              Already have an account?{" "}
+              <Link
+                href="/auth/signin"
+                className="font-medium text-foreground hover:underline"
+              >
+                Sign in
+              </Link>
+            </p>
 
-              <p className="text-xs text-center mt-6 leading-relaxed text-muted">
-                By continuing, you agree to our{" "}
-                <a
-                  href={`${process.env.NEXT_PUBLIC_WEBSITE_URL}/privacy`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline-offset-2 hover:underline transition-colors text-foreground"
-                >
-                  Privacy Policy
-                </a>
-              </p>
-            </>
-          )}
-        </div>
+            <p className="mt-4 text-center text-xs leading-relaxed text-muted">
+              By continuing, you agree to our{" "}
+              <a
+                href={`${process.env.NEXT_PUBLIC_WEBSITE_URL}/privacy`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-foreground underline-offset-2 hover:underline"
+              >
+                Privacy Policy
+              </a>
+            </p>
+          </>
+        )}
       </div>
     </div>
   )
@@ -264,8 +288,8 @@ export default function SignUpPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-background">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         </div>
       }
     >
