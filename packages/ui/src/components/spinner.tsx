@@ -15,17 +15,16 @@ interface SpinnerProps {
 
 function Spinner({ size = "md", className }: SpinnerProps) {
   return (
-    <div
+    <output
       className={cn(
         "animate-spin rounded-full border-current border-t-transparent",
         sizeClasses[size],
         className,
       )}
-      role="status"
       aria-label="Loading"
     >
       <span className="sr-only">Loading</span>
-    </div>
+    </output>
   )
 }
 

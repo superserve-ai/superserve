@@ -72,7 +72,15 @@ async function proxyRequest(
     responseHeaders.set(key, value)
   }
 
-  const data = await response.arrayBuffer()
+  // Per the Fetch spec, 204/205/304 responses must not have a body.
+  // Next.js 16's NextResponse throws if you pass any body (even empty) for
+  // these statuses, so we forward null and skip reading the upstream body.
+  const isNullBodyStatus =
+    response.status === 204 ||
+    response.status === 205 ||
+    response.status === 304
+
+  const data = isNullBodyStatus ? null : await response.arrayBuffer()
 
   return new NextResponse(data, {
     status: response.status,
