@@ -1,6 +1,7 @@
 "use client"
 
 import { Suspense } from "react"
+import { AnimatedTableRow } from "@/components/animated-table-row"
 import { TableSkeleton } from "@/components/table-skeleton"
 
 export default function ApiKeysPage() {
@@ -29,11 +30,9 @@ import {
   TableHeader,
   TableRow,
 } from "@superserve/ui"
-import { AnimatePresence } from "motion/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { useMemo, useState } from "react"
-import { AnimatedTableRow } from "@/components/animated-table-row"
 import { CreateKeyDialog } from "@/components/api-keys/create-key-dialog"
 import { RevokeKeyDialog } from "@/components/api-keys/revoke-key-dialog"
 import { EmptyState } from "@/components/empty-state"
@@ -166,62 +165,58 @@ function ApiKeysPageContent() {
                 </TableRow>
               </TableHeader>
               <StickyHoverTableBody>
-                <AnimatePresence initial={false}>
-                  {filtered.map((apiKey) => (
-                    <AnimatedTableRow key={apiKey.id}>
-                      <TableCell className="pr-0">
-                        <Checkbox
-                          checked={selected.has(apiKey.id)}
-                          onCheckedChange={() => toggleOne(apiKey.id)}
-                          aria-label={`Select ${apiKey.name}`}
-                        />
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {apiKey.name}
-                      </TableCell>
-                      <TableCell className="text-muted tabular-nums">
-                        {formatDate(new Date(apiKey.created_at))}
-                      </TableCell>
-                      <TableCell className="text-muted tabular-nums">
-                        {apiKey.last_used_at
-                          ? formatDate(new Date(apiKey.last_used_at))
-                          : "Never"}
-                      </TableCell>
-                      <TableCell>
-                        <Menu>
-                          <MenuTrigger
-                            render={
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label="Key actions"
-                              />
+                {filtered.map((apiKey) => (
+                  <AnimatedTableRow key={apiKey.id}>
+                    <TableCell className="pr-0">
+                      <Checkbox
+                        checked={selected.has(apiKey.id)}
+                        onCheckedChange={() => toggleOne(apiKey.id)}
+                        aria-label={`Select ${apiKey.name}`}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium">{apiKey.name}</TableCell>
+                    <TableCell className="text-muted tabular-nums">
+                      {formatDate(new Date(apiKey.created_at))}
+                    </TableCell>
+                    <TableCell className="text-muted tabular-nums">
+                      {apiKey.last_used_at
+                        ? formatDate(new Date(apiKey.last_used_at))
+                        : "Never"}
+                    </TableCell>
+                    <TableCell>
+                      <Menu>
+                        <MenuTrigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label="Key actions"
+                            />
+                          }
+                        >
+                          <DotsThreeVerticalIcon
+                            className="size-4"
+                            weight="bold"
+                          />
+                        </MenuTrigger>
+                        <MenuPopup>
+                          <MenuItem
+                            className="text-destructive hover:text-destructive"
+                            onClick={() =>
+                              setRevokeTarget({
+                                id: apiKey.id,
+                                name: apiKey.name,
+                              })
                             }
                           >
-                            <DotsThreeVerticalIcon
-                              className="size-4"
-                              weight="bold"
-                            />
-                          </MenuTrigger>
-                          <MenuPopup>
-                            <MenuItem
-                              className="text-destructive hover:text-destructive"
-                              onClick={() =>
-                                setRevokeTarget({
-                                  id: apiKey.id,
-                                  name: apiKey.name,
-                                })
-                              }
-                            >
-                              <TrashIcon className="size-4" weight="light" />
-                              Revoke Key
-                            </MenuItem>
-                          </MenuPopup>
-                        </Menu>
-                      </TableCell>
-                    </AnimatedTableRow>
-                  ))}
-                </AnimatePresence>
+                            <TrashIcon className="size-4" weight="light" />
+                            Revoke Key
+                          </MenuItem>
+                        </MenuPopup>
+                      </Menu>
+                    </TableCell>
+                  </AnimatedTableRow>
+                ))}
               </StickyHoverTableBody>
             </Table>
           </div>

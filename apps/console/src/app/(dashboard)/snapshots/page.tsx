@@ -11,7 +11,6 @@ import {
   TableHeader,
   TableRow,
 } from "@superserve/ui"
-import { AnimatePresence } from "motion/react"
 import { useMemo, useState } from "react"
 import { AnimatedTableRow } from "@/components/animated-table-row"
 import { EmptyState } from "@/components/empty-state"
@@ -113,52 +112,46 @@ export default function SnapshotsPage() {
                 </TableRow>
               </TableHeader>
               <StickyHoverTableBody>
-                <AnimatePresence initial={false}>
-                  {filtered.map((snapshot) => (
-                    <AnimatedTableRow key={snapshot.id}>
-                      <TableCell className="pr-0">
-                        <Checkbox
-                          checked={selected.has(snapshot.id)}
-                          onCheckedChange={() => toggleOne(snapshot.id)}
-                          aria-label={`Select ${snapshot.name ?? snapshot.id}`}
+                {filtered.map((snapshot) => (
+                  <AnimatedTableRow key={snapshot.id}>
+                    <TableCell className="pr-0">
+                      <Checkbox
+                        checked={selected.has(snapshot.id)}
+                        onCheckedChange={() => toggleOne(snapshot.id)}
+                        aria-label={`Select ${snapshot.name ?? snapshot.id}`}
+                      />
+                    </TableCell>
+                    <TableCell className="font-mono text-foreground/80">
+                      {snapshot.name ?? `${snapshot.sandbox_id.slice(0, 8)}...`}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted tabular-nums">
+                      {formatBytes(snapshot.size_bytes)}
+                    </TableCell>
+                    <TableCell className="text-foreground/80">
+                      {TRIGGER_LABEL[snapshot.trigger] ?? snapshot.trigger}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={snapshot.saved ? "success" : "muted"} dot>
+                        {snapshot.saved ? "Yes" : "No"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted tabular-nums">
+                      {formatDate(new Date(snapshot.created_at))}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Snapshot actions"
+                      >
+                        <DotsThreeVerticalIcon
+                          className="size-4"
+                          weight="bold"
                         />
-                      </TableCell>
-                      <TableCell className="font-mono text-foreground/80">
-                        {snapshot.name ??
-                          `${snapshot.sandbox_id.slice(0, 8)}...`}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-muted tabular-nums">
-                        {formatBytes(snapshot.size_bytes)}
-                      </TableCell>
-                      <TableCell className="text-foreground/80">
-                        {TRIGGER_LABEL[snapshot.trigger] ?? snapshot.trigger}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={snapshot.saved ? "success" : "muted"}
-                          dot
-                        >
-                          {snapshot.saved ? "Yes" : "No"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted tabular-nums">
-                        {formatDate(new Date(snapshot.created_at))}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label="Snapshot actions"
-                        >
-                          <DotsThreeVerticalIcon
-                            className="size-4"
-                            weight="bold"
-                          />
-                        </Button>
-                      </TableCell>
-                    </AnimatedTableRow>
-                  ))}
-                </AnimatePresence>
+                      </Button>
+                    </TableCell>
+                  </AnimatedTableRow>
+                ))}
               </StickyHoverTableBody>
             </Table>
           </div>

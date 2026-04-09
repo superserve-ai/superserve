@@ -19,7 +19,6 @@ import {
   TableHeader,
   TableRow,
 } from "@superserve/ui"
-import { AnimatePresence } from "motion/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { useMemo, useState } from "react"
@@ -167,25 +166,23 @@ function SandboxesPageContent() {
                 </TableRow>
               </TableHeader>
               <StickyHoverTableBody>
-                <AnimatePresence initial={false}>
-                  {filtered.map((sandbox) => (
-                    <SandboxTableRow
-                      key={sandbox.id}
-                      sandbox={sandbox}
-                      selected={selected.has(sandbox.id)}
-                      onToggle={() => toggleOne(sandbox.id)}
-                      onConnect={() => setConnectSandboxId(sandbox.id)}
-                      onDelete={() =>
-                        setDeleteTarget({
-                          id: sandbox.id,
-                          name: sandbox.name,
-                        })
-                      }
-                      onPause={() => pauseMutation.mutate(sandbox.id)}
-                      onResume={() => resumeMutation.mutate(sandbox.id)}
-                    />
-                  ))}
-                </AnimatePresence>
+                {filtered.map((sandbox) => (
+                  <SandboxTableRow
+                    key={sandbox.id}
+                    sandbox={sandbox}
+                    selected={selected.has(sandbox.id)}
+                    onToggle={() => toggleOne(sandbox.id)}
+                    onConnect={() => setConnectSandboxId(sandbox.id)}
+                    onDelete={() =>
+                      setDeleteTarget({
+                        id: sandbox.id,
+                        name: sandbox.name,
+                      })
+                    }
+                    onPause={() => pauseMutation.mutate(sandbox.id)}
+                    onResume={() => resumeMutation.mutate(sandbox.id)}
+                  />
+                ))}
               </StickyHoverTableBody>
             </Table>
           </div>
