@@ -9,6 +9,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
+import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { DEV_AUTH_ENABLED, devSignIn } from "@/lib/auth-helpers"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
@@ -142,28 +143,26 @@ function SignInContent() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-6">
-      <div className="mb-6">
-        <Link href="/">
-          <Image
-            src="/logo.svg"
-            alt="Superserve"
-            width={200}
-            height={40}
-            className="h-8 w-auto"
-          />
-        </Link>
-      </div>
-
+    <div className="flex min-h-screen flex-col items-center justify-center p-6">
+      <DitherBackground />
       <div className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6">
         <CornerBrackets size="lg" />
 
-        <h1 className="text-center text-sm font-medium text-foreground">
-          Welcome Back
+        <div className="mb-8 flex justify-center">
+          <Link href="/">
+            <Image
+              src="/logo.svg"
+              alt="Superserve"
+              width={120}
+              height={24}
+              className="h-6 w-auto"
+            />
+          </Link>
+        </div>
+
+        <h1 className="mb-6 text-center text-sm font-medium text-foreground">
+          Sign in to Superserve
         </h1>
-        <p className="mb-6 text-center text-xs text-muted">
-          Sign in to continue to Superserve
-        </p>
 
         {/* Google OAuth — first */}
         <Button
@@ -178,7 +177,7 @@ function SignInContent() {
         </Button>
 
         {/* Divider */}
-        <div className="relative my-5">
+        <div className="relative my-6">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-dashed border-border" />
           </div>
@@ -229,7 +228,7 @@ function SignInContent() {
           <div className="flex justify-end">
             <Link
               href="/auth/forgot-password"
-              className="text-xs text-muted hover:text-foreground"
+              className="text-xs text-muted/60 hover:text-muted"
             >
               Forgot password?
             </Link>
@@ -255,7 +254,7 @@ function SignInContent() {
         </p>
 
         {/* Privacy */}
-        <p className="mt-4 text-center text-xs leading-relaxed text-muted">
+        <p className="mt-6 text-center text-xs leading-relaxed text-muted/60">
           By continuing, you agree to our{" "}
           <a
             href={`${process.env.NEXT_PUBLIC_WEBSITE_URL}/privacy`}
@@ -292,7 +291,7 @@ export default function SignInPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex min-h-screen items-center justify-center">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         </div>
       }
