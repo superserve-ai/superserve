@@ -42,11 +42,13 @@ export function SnapshotsSection({
           ))}
         </div>
       ) : !snapshots || snapshots.length === 0 ? (
-        <EmptyState
-          icon={CameraIcon}
-          title="No Snapshots"
-          description="Snapshots are created when you pause this sandbox to preserve its state."
-        />
+        <div className="flex min-h-60 items-center justify-center">
+          <EmptyState
+            icon={CameraIcon}
+            title="No Snapshots"
+            description="Snapshots are created when you pause this sandbox to preserve its state."
+          />
+        </div>
       ) : (
         <Table>
           <TableHeader>
