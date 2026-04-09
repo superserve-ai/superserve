@@ -70,15 +70,15 @@ For long-running or streaming commands, use `client.exec.commandStream(...)` ins
 When you're done with a sandbox:
 
 ```ts
-await client.sandboxes.deleteSandbox(sandbox.id!)
+await client.sandboxes.deleteSandbox({ sandbox_id: sandbox.id! })
 ```
 
 You can also **pause** a sandbox (saves a snapshot, stops the VM, keeps the state) and **resume** later:
 
 ```ts
-await client.sandboxes.pauseSandbox(sandbox.id!)
+await client.sandboxes.pauseSandbox({ sandbox_id: sandbox.id! })
 // ...later
-await client.sandboxes.resumeSandbox(sandbox.id!)
+await client.sandboxes.resumeSandbox({ sandbox_id: sandbox.id! })
 ```
 
 ## Full example
@@ -102,7 +102,7 @@ async function main() {
     })
     console.log(result.stdout)
   } finally {
-    await client.sandboxes.deleteSandbox(sandbox.id!)
+    await client.sandboxes.deleteSandbox({ sandbox_id: sandbox.id! })
   }
 }
 
