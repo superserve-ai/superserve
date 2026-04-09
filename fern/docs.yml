@@ -53,3 +53,5 @@ colors:
 logo:
   light: ../docs/logo/light.svg
   dark: ../docs/logo/dark.svg
+
+css: ./styles.css
