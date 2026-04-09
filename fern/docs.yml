@@ -1,0 +1,35 @@
+instances:
+  - url: superserve.docs.buildwithfern.com
+
+title: Superserve
+
+navigation:
+  - section: Getting Started
+    contents:
+      - page: Introduction
+        path: ../docs/pages/introduction.mdx
+      - page: TypeScript Quickstart
+        path: ../docs/pages/typescript-quickstart.mdx
+      - page: Python Quickstart
+        path: ../docs/pages/python-quickstart.mdx
+  - section: TypeScript SDK
+    contents:
+      - page: Reference
+        path: ../docs/pages/typescript-reference.mdx
+  - section: Python SDK
+    contents:
+      - page: Reference
+        path: ../docs/pages/python-reference.mdx
+  - api: API Reference
+    snippets:
+      typescript: "@superserve/sdk"
+      python: superserve
+
+colors:
+  accent-primary:
+    light: "#105C60"
+    dark: "#119CA3"
+
+logo:
+  light: ../docs/logo/light.svg
+  dark: ../docs/logo/dark.svg

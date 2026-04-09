@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://schema.buildwithfern.dev/generators-yml.json
+api:
+  specs:
+    - openapi: ./openapi.yaml
+      origin: https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml
+
+default-group: local
+groups:
+  local:
+    generators:
+      - name: fernapi/fern-typescript-sdk
+        version: 3.63.0
+        output:
+          location: local-file-system
+          path: ../packages/sdk/src
+        config:
+          namespaceExport: Superserve
+
+      - name: fernapi/fern-python-sdk
+        version: 5.3.2
+        output:
+          location: local-file-system
+          path: ../packages/python-sdk/src/superserve
+        config:
+          client_class_name: Superserve
+          package_name: superserve
