@@ -11,13 +11,11 @@ import { Suspense, useEffect, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
-import { DEV_AUTH_ENABLED, devSignIn } from "@/lib/auth-helpers"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 
 function SignInContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [isEmailLoading, setIsEmailLoading] = useState(false)
-  const [isDevLoading, setIsDevLoading] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -121,24 +119,6 @@ function SignInContent() {
       setErrors({ form: "Error signing in. Please try again." })
     } finally {
       setIsLoading(false)
-    }
-  }
-
-  const handleDevSignIn = async () => {
-    if (!DEV_AUTH_ENABLED) return
-    setIsDevLoading(true)
-    setErrors({})
-    try {
-      const result = await devSignIn()
-      if (!result.success) {
-        setErrors({ form: result.error || "Dev auth failed." })
-        return
-      }
-      router.push(nextUrl)
-    } catch {
-      setErrors({ form: "Dev auth failed." })
-    } finally {
-      setIsDevLoading(false)
     }
   }
 
@@ -265,23 +245,6 @@ function SignInContent() {
             Privacy Policy
           </a>
         </p>
-
-        {/* Dev Auth */}
-        {DEV_AUTH_ENABLED && (
-          <div className="mt-4 border-t border-dashed border-border pt-4">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleDevSignIn}
-              disabled={isDevLoading}
-              className="w-full text-muted"
-            >
-              {isDevLoading ? <Spinner /> : null}
-              {isDevLoading ? "Signing in..." : "Dev Sign In"}
-            </Button>
-          </div>
-        )}
       </div>
     </div>
   )

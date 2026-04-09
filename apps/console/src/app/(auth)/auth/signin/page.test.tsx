@@ -54,11 +54,6 @@ vi.mock("@/components/icons", () => ({
   ),
 }))
 
-vi.mock("@/lib/auth-helpers", () => ({
-  DEV_AUTH_ENABLED: false,
-  devSignIn: vi.fn(),
-}))
-
 vi.mock("@superserve/supabase", () => ({
   createBrowserClient: () => ({
     auth: {
