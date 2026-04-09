@@ -163,11 +163,8 @@ export function SandboxTerminal({ sandboxId }: Props) {
   }
 
   return (
-    <div className="relative flex h-full flex-col">
-      <div
-        ref={containerRef}
-        className="h-full w-full bg-background px-2 pt-2"
-      />
+    <div className="relative flex h-full flex-col bg-background p-2">
+      <div ref={containerRef} className="h-full w-full" />
       {status === "connecting" && (
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="font-mono text-xs text-muted animate-pulse">
