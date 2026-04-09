@@ -16,10 +16,10 @@ function PopoverPopup({
 }) {
   return (
     <PopoverPrimitive.Portal>
-      <PopoverPrimitive.Positioner sideOffset={sideOffset}>
+      <PopoverPrimitive.Positioner sideOffset={sideOffset} className="z-50">
         <PopoverPrimitive.Popup
           className={cn(
-            "ss-popover-popup z-50 min-w-[8rem] overflow-hidden border border-dashed border-border bg-surface p-4",
+            "ss-popover-popup min-w-[8rem] overflow-hidden border border-dashed border-border bg-surface p-4",
             className,
           )}
           {...props}

@@ -17,6 +17,7 @@ interface TableToolbarProps {
   tabs?: FilterTab[]
   activeTab?: string
   onTabChange?: (value: string) => void
+  filters?: React.ReactNode
   searchPlaceholder?: string
   searchValue?: string
   onSearchChange?: (value: string) => void
@@ -31,6 +32,7 @@ export function TableToolbar({
   tabs,
   activeTab,
   onTabChange,
+  filters,
   searchPlaceholder = "Search...",
   searchValue = "",
   onSearchChange,
@@ -133,16 +135,19 @@ export function TableToolbar({
         )}
       </nav>
 
-      {/* Search */}
-      <Input
-        type="text"
-        placeholder={searchPlaceholder}
-        aria-label={searchPlaceholder}
-        value={searchValue}
-        onChange={(e) => onSearchChange?.(e.target.value)}
-        suffix={<MagnifyingGlassIcon className="size-3.5" weight="light" />}
-        className="h-8 w-48 text-xs"
-      />
+      {/* Filters + Search */}
+      <div className="flex items-center gap-2">
+        {filters}
+        <Input
+          type="text"
+          placeholder={searchPlaceholder}
+          aria-label={searchPlaceholder}
+          value={searchValue}
+          onChange={(e) => onSearchChange?.(e.target.value)}
+          suffix={<MagnifyingGlassIcon className="size-3.5" weight="light" />}
+          className="h-8 w-48 text-xs"
+        />
+      </div>
     </div>
   )
 }

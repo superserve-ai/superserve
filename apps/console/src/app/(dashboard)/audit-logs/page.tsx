@@ -15,6 +15,7 @@ import {
 } from "@superserve/ui"
 import { useMemo, useState } from "react"
 import { AnimatedTableRow } from "@/components/animated-table-row"
+import { DateRangeFilter } from "@/components/date-range-filter"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
@@ -55,11 +56,19 @@ function TimeCell({ date }: { date: Date }) {
 export default function AuditLogsPage() {
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [search, setSearch] = useState("")
+  const [dateRange, setDateRange] = useState<{
+    start: Date
+    end: Date
+  } | null>(null)
 
   const { data: activity, isPending, error, refetch } = useActivity()
 
   const filtered = useMemo(() => {
     return (activity ?? []).filter((a) => {
+      if (dateRange) {
+        const created = new Date(a.created_at)
+        if (created < dateRange.start || created > dateRange.end) return false
+      }
       if (categoryFilter === "_errors" && a.status !== "error") return false
       if (
         categoryFilter !== "all" &&
@@ -78,7 +87,7 @@ export default function AuditLogsPage() {
       }
       return true
     })
-  }, [activity, categoryFilter, search])
+  }, [activity, categoryFilter, search, dateRange])
 
   const tabs = CATEGORY_TABS.map((tab) => ({
     ...tab,
@@ -126,6 +135,9 @@ export default function AuditLogsPage() {
             tabs={tabs}
             activeTab={categoryFilter}
             onTabChange={setCategoryFilter}
+            filters={
+              <DateRangeFilter value={dateRange} onChange={setDateRange} />
+            }
             searchPlaceholder="Search by sandbox or action..."
             searchValue={search}
             onSearchChange={setSearch}
