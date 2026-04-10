@@ -11,19 +11,29 @@ export interface SandboxResponse {
   status: SandboxStatus
   vcpu_count: number
   memory_mib: number
+  template_id?: string
   snapshot_id?: string
   access_token: string
+  timeout?: number
+  env_vars?: Record<string, string>
+  network?: NetworkConfig
+  metadata: Record<string, string>
   created_at: string
 }
 
 export interface CreateSandboxRequest {
   name: string
+  template_id?: string
   from_snapshot?: string
+  timeout?: number
+  env_vars?: Record<string, string>
+  metadata?: Record<string, string>
   network?: NetworkConfig
 }
 
 export interface SandboxPatch {
   network?: NetworkConfig
+  metadata?: Record<string, string>
 }
 
 export interface ApiKeyResponse {

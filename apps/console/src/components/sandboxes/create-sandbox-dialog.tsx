@@ -1,6 +1,6 @@
 "use client"
 
-import { CheckIcon, CopyIcon } from "@phosphor-icons/react"
+import { CheckIcon, CopyIcon, PlusIcon, XIcon } from "@phosphor-icons/react"
 import {
   Button,
   cn,
@@ -124,6 +124,13 @@ export function CreateSandboxDialog({
   const open = controlledOpen ?? internalOpen
   const setOpen = onOpenChange ?? setInternalOpen
   const [name, setName] = useState("")
+  const [timeout, setTimeout] = useState("")
+  const [envEntries, setEnvEntries] = useState<
+    { key: string; value: string }[]
+  >([])
+  const [metadataEntries, setMetadataEntries] = useState<
+    { key: string; value: string }[]
+  >([])
   const [mode, setMode] = useState<Mode>("form")
   const [language, setLanguage] = useState<Language>("typescript")
   const [hoveredMode, setHoveredMode] = useState<string | null>(null)
@@ -133,13 +140,36 @@ export function CreateSandboxDialog({
 
   const handleReset = () => {
     setName("")
+    setTimeout("")
+    setEnvEntries([])
+    setMetadataEntries([])
     setMode("form")
   }
 
   const handleCreate = () => {
     posthog.capture(SANDBOX_EVENTS.CREATED)
+
+    const envVars: Record<string, string> = {}
+    for (const entry of envEntries) {
+      const k = entry.key.trim()
+      const v = entry.value.trim()
+      if (k) envVars[k] = v
+    }
+
+    const metadata: Record<string, string> = {}
+    for (const entry of metadataEntries) {
+      const k = entry.key.trim()
+      const v = entry.value.trim()
+      if (k) metadata[k] = v
+    }
+
     createMutation.mutate(
-      { name: name.trim() },
+      {
+        name: name.trim(),
+        ...(timeout ? { timeout: Number(timeout) } : {}),
+        ...(Object.keys(envVars).length > 0 ? { env_vars: envVars } : {}),
+        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+      },
       {
         onSuccess: (sandbox) => {
           setOpen(false)
@@ -241,6 +271,127 @@ export function CreateSandboxDialog({
                   </SelectPopup>
                 </Select>
               </Field>
+
+              <Field
+                label="Timeout"
+                description="Auto-delete after this many seconds (max 604800 = 7 days)"
+              >
+                <Input
+                  type="number"
+                  placeholder="No timeout"
+                  min={1}
+                  max={604800}
+                  value={timeout}
+                  onChange={(e) => setTimeout(e.target.value)}
+                />
+              </Field>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-foreground">
+                    Environment Variables
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEnvEntries([...envEntries, { key: "", value: "" }])
+                    }
+                    className="flex items-center gap-1 text-xs text-muted hover:text-foreground"
+                  >
+                    <PlusIcon className="size-3.5" weight="light" />
+                    Add
+                  </button>
+                </div>
+                {envEntries.map((entry, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Input
+                      placeholder="KEY"
+                      value={entry.key}
+                      onChange={(e) => {
+                        const updated = [...envEntries]
+                        updated[i] = { ...entry, key: e.target.value }
+                        setEnvEntries(updated)
+                      }}
+                      className="flex-1"
+                    />
+                    <Input
+                      placeholder="value"
+                      value={entry.value}
+                      onChange={(e) => {
+                        const updated = [...envEntries]
+                        updated[i] = { ...entry, value: e.target.value }
+                        setEnvEntries(updated)
+                      }}
+                      className="flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEnvEntries(envEntries.filter((_, j) => j !== i))
+                      }
+                      className="shrink-0 text-muted hover:text-destructive"
+                    >
+                      <XIcon className="size-3.5" weight="light" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-foreground">
+                    Metadata
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setMetadataEntries([
+                        ...metadataEntries,
+                        { key: "", value: "" },
+                      ])
+                    }
+                    className="flex items-center gap-1 text-xs text-muted hover:text-foreground"
+                  >
+                    <PlusIcon className="size-3.5" weight="light" />
+                    Add
+                  </button>
+                </div>
+                {metadataEntries.map((entry, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Input
+                      placeholder="key"
+                      value={entry.key}
+                      onChange={(e) => {
+                        const updated = [...metadataEntries]
+                        updated[i] = { ...entry, key: e.target.value }
+                        setMetadataEntries(updated)
+                      }}
+                      className="flex-1"
+                    />
+                    <Input
+                      placeholder="value"
+                      value={entry.value}
+                      onChange={(e) => {
+                        const updated = [...metadataEntries]
+                        updated[i] = { ...entry, value: e.target.value }
+                        setMetadataEntries(updated)
+                      }}
+                      className="flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setMetadataEntries(
+                          metadataEntries.filter((_, j) => j !== i),
+                        )
+                      }
+                      className="shrink-0 text-muted hover:text-destructive"
+                    >
+                      <XIcon className="size-3.5" weight="light" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <DialogFooter>

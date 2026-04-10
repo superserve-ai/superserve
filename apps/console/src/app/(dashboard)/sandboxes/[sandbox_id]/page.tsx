@@ -36,7 +36,7 @@ function DetailSkeleton() {
         <span className="text-muted">/</span>
         <div className="h-4 w-32 animate-pulse bg-muted/20" />
       </div>
-      <div className="grid grid-cols-4 border-b border-border">
+      <div className="grid grid-cols-4 border-b border-border border-b-0">
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
