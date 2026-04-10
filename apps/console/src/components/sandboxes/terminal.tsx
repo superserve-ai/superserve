@@ -4,19 +4,22 @@ import { FitAddon } from "@xterm/addon-fit"
 import { Terminal } from "@xterm/xterm"
 import { usePostHog } from "posthog-js/react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { mintTerminalToken } from "@/lib/api/terminal"
 import { TERMINAL_EVENTS } from "@/lib/posthog/events"
 import "@xterm/xterm/css/xterm.css"
 
 type Status = "connecting" | "connected" | "disconnected" | "error"
 
 const encoder = new TextEncoder()
+const TERMINAL_SUBPROTOCOL = "superserve.terminal.v1"
+const SANDBOX_HOST =
+  process.env.NEXT_PUBLIC_SANDBOX_HOST ?? "sandbox.superserve.ai"
 
 interface Props {
   sandboxId: string
+  accessToken: string
 }
 
-export function SandboxTerminal({ sandboxId }: Props) {
+export function SandboxTerminal({ sandboxId, accessToken }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
@@ -30,17 +33,16 @@ export function SandboxTerminal({ sandboxId }: Props) {
   posthogRef.current = posthog
 
   const connectWebSocket = useCallback(
-    async (term: Terminal) => {
+    (term: Terminal) => {
       // Clean up previous WebSocket
       wsRef.current?.close(1000, "reconnect")
       setStatus("connecting")
 
       try {
-        const tok = await mintTerminalToken(sandboxId)
-
-        const ws = new WebSocket(tok.url, [
-          tok.subprotocol,
-          `token.${tok.token}`,
+        const url = `wss://boxd-${sandboxId}.${SANDBOX_HOST}/terminal`
+        const ws = new WebSocket(url, [
+          TERMINAL_SUBPROTOCOL,
+          `token.${accessToken}`,
         ])
         ws.binaryType = "arraybuffer"
         wsRef.current = ws
@@ -88,7 +90,7 @@ export function SandboxTerminal({ sandboxId }: Props) {
         setStatus("error")
       }
     },
-    [sandboxId],
+    [sandboxId, accessToken],
   )
 
   // Initialize terminal once on mount

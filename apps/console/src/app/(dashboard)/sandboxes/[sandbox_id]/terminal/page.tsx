@@ -120,7 +120,10 @@ export default function TerminalPage() {
       </div>
 
       {canRun ? (
-        <SandboxTerminal sandboxId={sandboxId} />
+        <SandboxTerminal
+          sandboxId={sandboxId}
+          accessToken={sandbox.access_token}
+        />
       ) : (
         <ErrorState
           message="Sandbox is not running. Start it to use the terminal."
