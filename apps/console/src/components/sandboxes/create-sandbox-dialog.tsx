@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@superserve/ui"
-import { LayoutGroup, motion } from "motion/react"
+import { AnimatePresence, LayoutGroup, motion } from "motion/react"
 import { usePostHog } from "posthog-js/react"
 import { useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
@@ -325,36 +325,161 @@ export function CreateSandboxDialog({
                 Advanced Options
               </button>
 
-              {showAdvanced && (
-                <div className="space-y-5">
-                  <div className="space-y-4">
-                    <span className="block text-sm font-medium text-foreground">
-                      Network
-                    </span>
+              <AnimatePresence initial={false}>
+                {showAdvanced && (
+                  <motion.div
+                    key="advanced"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2, ease: "easeInOut" }}
+                    className="overflow-hidden"
+                  >
+                    <div className="space-y-5">
+                      <div className="space-y-4">
+                        <span className="block text-sm font-medium text-foreground">
+                          Network
+                        </span>
 
-                    <div className="grid grid-cols-[160px_1fr] gap-x-4 gap-y-2">
-                      <span className="pt-1.5 text-xs text-muted">
-                        Allow — domains or CIDRs
-                      </span>
+                        <div className="grid grid-cols-[160px_1fr] gap-x-4 gap-y-2">
+                          <span className="pt-1.5 text-xs text-muted">
+                            Allow — domains or CIDRs
+                          </span>
+                          <div className="space-y-2">
+                            {allowRules.map((rule, i) => (
+                              <div key={i} className="flex items-center gap-2">
+                                <Input
+                                  placeholder="api.openai.com"
+                                  value={rule}
+                                  onChange={(e) => {
+                                    const updated = [...allowRules]
+                                    updated[i] = e.target.value
+                                    setAllowRules(updated)
+                                  }}
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="shrink-0"
+                                  onClick={() =>
+                                    setAllowRules(
+                                      allowRules.filter((_, j) => j !== i),
+                                    )
+                                  }
+                                >
+                                  <TrashIcon
+                                    className="size-3.5 text-muted"
+                                    weight="light"
+                                  />
+                                </Button>
+                              </div>
+                            ))}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="ml-auto"
+                              onClick={() => setAllowRules([...allowRules, ""])}
+                            >
+                              <PlusIcon className="size-3.5" weight="light" />
+                              Add
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-[160px_1fr] gap-x-4 gap-y-2">
+                          <span className="pt-1.5 text-xs text-muted">
+                            Deny — CIDRs
+                          </span>
+                          <div className="space-y-2">
+                            {denyRules.map((rule, i) => (
+                              <div key={i} className="flex items-center gap-2">
+                                <Input
+                                  placeholder="0.0.0.0/0"
+                                  value={rule}
+                                  onChange={(e) => {
+                                    const updated = [...denyRules]
+                                    updated[i] = e.target.value
+                                    setDenyRules(updated)
+                                  }}
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="shrink-0"
+                                  onClick={() =>
+                                    setDenyRules(
+                                      denyRules.filter((_, j) => j !== i),
+                                    )
+                                  }
+                                >
+                                  <TrashIcon
+                                    className="size-3.5 text-muted"
+                                    weight="light"
+                                  />
+                                </Button>
+                              </div>
+                            ))}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="ml-auto"
+                              onClick={() => setDenyRules([...denyRules, ""])}
+                            >
+                              <PlusIcon className="size-3.5" weight="light" />
+                              Add
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
                       <div className="space-y-2">
-                        {allowRules.map((rule, i) => (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-foreground">
+                            Environment Variables
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setEnvEntries([
+                                ...envEntries,
+                                { key: "", value: "" },
+                              ])
+                            }
+                          >
+                            <PlusIcon className="size-3.5" weight="light" />
+                            Add
+                          </Button>
+                        </div>
+                        {envEntries.map((entry, i) => (
                           <div key={i} className="flex items-center gap-2">
                             <Input
-                              placeholder="api.openai.com"
-                              value={rule}
+                              placeholder="KEY"
+                              value={entry.key}
                               onChange={(e) => {
-                                const updated = [...allowRules]
-                                updated[i] = e.target.value
-                                setAllowRules(updated)
+                                const updated = [...envEntries]
+                                updated[i] = { ...entry, key: e.target.value }
+                                setEnvEntries(updated)
                               }}
+                              className="flex-1"
+                            />
+                            <Input
+                              placeholder="value"
+                              value={entry.value}
+                              onChange={(e) => {
+                                const updated = [...envEntries]
+                                updated[i] = { ...entry, value: e.target.value }
+                                setEnvEntries(updated)
+                              }}
+                              className="flex-1"
                             />
                             <Button
                               variant="ghost"
                               size="icon-sm"
                               className="shrink-0"
                               onClick={() =>
-                                setAllowRules(
-                                  allowRules.filter((_, j) => j !== i),
+                                setEnvEntries(
+                                  envEntries.filter((_, j) => j !== i),
                                 )
                               }
                             >
@@ -365,41 +490,56 @@ export function CreateSandboxDialog({
                             </Button>
                           </div>
                         ))}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="ml-auto"
-                          onClick={() => setAllowRules([...allowRules, ""])}
-                        >
-                          <PlusIcon className="size-3.5" weight="light" />
-                          Add
-                        </Button>
                       </div>
-                    </div>
 
-                    <div className="grid grid-cols-[160px_1fr] gap-x-4 gap-y-2">
-                      <span className="pt-1.5 text-xs text-muted">
-                        Deny — CIDRs
-                      </span>
                       <div className="space-y-2">
-                        {denyRules.map((rule, i) => (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-foreground">
+                            Metadata
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setMetadataEntries([
+                                ...metadataEntries,
+                                { key: "", value: "" },
+                              ])
+                            }
+                          >
+                            <PlusIcon className="size-3.5" weight="light" />
+                            Add
+                          </Button>
+                        </div>
+                        {metadataEntries.map((entry, i) => (
                           <div key={i} className="flex items-center gap-2">
                             <Input
-                              placeholder="0.0.0.0/0"
-                              value={rule}
+                              placeholder="key"
+                              value={entry.key}
                               onChange={(e) => {
-                                const updated = [...denyRules]
-                                updated[i] = e.target.value
-                                setDenyRules(updated)
+                                const updated = [...metadataEntries]
+                                updated[i] = { ...entry, key: e.target.value }
+                                setMetadataEntries(updated)
                               }}
+                              className="flex-1"
+                            />
+                            <Input
+                              placeholder="value"
+                              value={entry.value}
+                              onChange={(e) => {
+                                const updated = [...metadataEntries]
+                                updated[i] = { ...entry, value: e.target.value }
+                                setMetadataEntries(updated)
+                              }}
+                              className="flex-1"
                             />
                             <Button
                               variant="ghost"
                               size="icon-sm"
                               className="shrink-0"
                               onClick={() =>
-                                setDenyRules(
-                                  denyRules.filter((_, j) => j !== i),
+                                setMetadataEntries(
+                                  metadataEntries.filter((_, j) => j !== i),
                                 )
                               }
                             >
@@ -410,135 +550,11 @@ export function CreateSandboxDialog({
                             </Button>
                           </div>
                         ))}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="ml-auto"
-                          onClick={() => setDenyRules([...denyRules, ""])}
-                        >
-                          <PlusIcon className="size-3.5" weight="light" />
-                          Add
-                        </Button>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-foreground">
-                        Environment Variables
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setEnvEntries([...envEntries, { key: "", value: "" }])
-                        }
-                      >
-                        <PlusIcon className="size-3.5" weight="light" />
-                        Add
-                      </Button>
-                    </div>
-                    {envEntries.map((entry, i) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <Input
-                          placeholder="KEY"
-                          value={entry.key}
-                          onChange={(e) => {
-                            const updated = [...envEntries]
-                            updated[i] = { ...entry, key: e.target.value }
-                            setEnvEntries(updated)
-                          }}
-                          className="flex-1"
-                        />
-                        <Input
-                          placeholder="value"
-                          value={entry.value}
-                          onChange={(e) => {
-                            const updated = [...envEntries]
-                            updated[i] = { ...entry, value: e.target.value }
-                            setEnvEntries(updated)
-                          }}
-                          className="flex-1"
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="shrink-0"
-                          onClick={() =>
-                            setEnvEntries(envEntries.filter((_, j) => j !== i))
-                          }
-                        >
-                          <TrashIcon
-                            className="size-3.5 text-muted"
-                            weight="light"
-                          />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-foreground">
-                        Metadata
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setMetadataEntries([
-                            ...metadataEntries,
-                            { key: "", value: "" },
-                          ])
-                        }
-                      >
-                        <PlusIcon className="size-3.5" weight="light" />
-                        Add
-                      </Button>
-                    </div>
-                    {metadataEntries.map((entry, i) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <Input
-                          placeholder="key"
-                          value={entry.key}
-                          onChange={(e) => {
-                            const updated = [...metadataEntries]
-                            updated[i] = { ...entry, key: e.target.value }
-                            setMetadataEntries(updated)
-                          }}
-                          className="flex-1"
-                        />
-                        <Input
-                          placeholder="value"
-                          value={entry.value}
-                          onChange={(e) => {
-                            const updated = [...metadataEntries]
-                            updated[i] = { ...entry, value: e.target.value }
-                            setMetadataEntries(updated)
-                          }}
-                          className="flex-1"
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="shrink-0"
-                          onClick={() =>
-                            setMetadataEntries(
-                              metadataEntries.filter((_, j) => j !== i),
-                            )
-                          }
-                        >
-                          <TrashIcon
-                            className="size-3.5 text-muted"
-                            weight="light"
-                          />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             <DialogFooter>
