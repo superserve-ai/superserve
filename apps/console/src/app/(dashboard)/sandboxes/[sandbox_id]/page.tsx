@@ -35,36 +35,77 @@ import { STATUS_BADGE_VARIANT, STATUS_LABEL } from "@/lib/sandbox-utils"
 function DetailSkeleton() {
   return (
     <div className="flex h-full flex-col">
+      {/* Header */}
       <div className="flex h-14 items-center gap-3 border-b border-border px-6">
         <div className="h-4 w-24 animate-pulse bg-muted/20" />
         <span className="text-muted">/</span>
         <div className="h-4 w-32 animate-pulse bg-muted/20" />
       </div>
-      <div className="grid grid-cols-4 border-b border-border border-b-0">
-        {Array.from({ length: 4 }).map((_, i) => (
+
+      <div className="flex-1 overflow-y-auto">
+        {/* Info grid */}
+        <div className="grid grid-cols-4 border-b border-border">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className={`px-4 py-4 ${i < 3 ? "border-r border-border" : ""}`}
+            >
+              <div className="mb-2 h-3 w-16 animate-pulse bg-muted/20" />
+              <div className="h-4 w-28 animate-pulse bg-muted/20" />
+            </div>
+          ))}
+        </div>
+
+        {/* Network | Metadata */}
+        <div className="grid grid-cols-2 border-b border-border">
+          <div className="border-r border-border px-4 py-4">
+            <div className="mb-3 h-3.5 w-16 animate-pulse bg-muted/20" />
+            <div className="flex gap-2">
+              <div className="h-6 w-28 animate-pulse bg-muted/20" />
+              <div className="h-6 w-20 animate-pulse bg-muted/20" />
+            </div>
+          </div>
+          <div className="px-4 py-4">
+            <div className="mb-3 h-3.5 w-16 animate-pulse bg-muted/20" />
+            <div className="flex gap-2">
+              <div className="h-6 w-24 animate-pulse bg-muted/20" />
+              <div className="h-6 w-20 animate-pulse bg-muted/20" />
+            </div>
+          </div>
+        </div>
+
+        {/* Activity */}
+        <div className="flex h-10 items-center border-b border-border px-4">
+          <div className="h-3.5 w-16 animate-pulse bg-muted/20" />
+        </div>
+        {Array.from({ length: 3 }).map((_, i) => (
           <div
-            key={i}
-            className={`px-4 py-4 ${i < 3 ? "border-r border-border" : ""}`}
+            key={`activity-${i}`}
+            className="flex items-center gap-6 border-b border-border px-4 py-3"
           >
-            <div className="mb-2 h-3 w-16 animate-pulse bg-muted/20" />
-            <div className="h-4 w-28 animate-pulse bg-muted/20" />
+            <div className="h-3 w-24 animate-pulse bg-muted/20" />
+            <div className="h-3 w-16 animate-pulse bg-muted/20" />
+            <div className="h-3 w-20 animate-pulse bg-muted/20" />
+            <div className="h-3 w-12 animate-pulse bg-muted/20" />
+          </div>
+        ))}
+
+        {/* Snapshots */}
+        <div className="flex h-10 items-center border-b border-border px-4">
+          <div className="h-3.5 w-20 animate-pulse bg-muted/20" />
+        </div>
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div
+            key={`snapshot-${i}`}
+            className="flex items-center gap-6 border-b border-border px-4 py-3"
+          >
+            <div className="h-3 w-32 animate-pulse bg-muted/20" />
+            <div className="h-3 w-16 animate-pulse bg-muted/20" />
+            <div className="h-3 w-16 animate-pulse bg-muted/20" />
+            <div className="h-3 w-20 animate-pulse bg-muted/20" />
           </div>
         ))}
       </div>
-      <div className="flex h-10 items-center border-b border-border px-4">
-        <div className="h-3 w-16 animate-pulse bg-muted/20" />
-      </div>
-      {Array.from({ length: 3 }).map((_, i) => (
-        <div
-          key={i}
-          className="flex items-center gap-6 border-b border-border px-4 py-3"
-        >
-          <div className="h-3 w-24 animate-pulse bg-muted/20" />
-          <div className="h-3 w-16 animate-pulse bg-muted/20" />
-          <div className="h-3 w-20 animate-pulse bg-muted/20" />
-          <div className="h-3 w-12 animate-pulse bg-muted/20" />
-        </div>
-      ))}
     </div>
   )
 }
