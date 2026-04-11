@@ -14,7 +14,11 @@ import { useParams, useRouter } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { ErrorState } from "@/components/error-state"
 import { ActivitySection } from "@/components/sandboxes/activity-section"
-import { SandboxInfoGrid } from "@/components/sandboxes/sandbox-info-grid"
+import {
+  MetadataSection,
+  NetworkSection,
+  SandboxInfoGrid,
+} from "@/components/sandboxes/sandbox-info-grid"
 import { SnapshotsSection } from "@/components/sandboxes/snapshots-section"
 import {
   useDeleteSandbox,
@@ -188,6 +192,12 @@ export default function SandboxDetailPage() {
 
       <div className="flex-1 overflow-y-auto">
         <SandboxInfoGrid sandbox={sandbox} />
+        <div className="grid grid-cols-2 border-b border-border">
+          <div className="border-r border-border">
+            <NetworkSection sandbox={sandbox} />
+          </div>
+          <MetadataSection sandbox={sandbox} />
+        </div>
         <ActivitySection activity={activity} isPending={activityPending} />
         <SnapshotsSection snapshots={snapshots} isPending={snapshotsPending} />
       </div>

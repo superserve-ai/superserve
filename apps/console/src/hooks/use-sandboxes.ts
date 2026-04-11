@@ -9,10 +9,15 @@ import {
   deleteSandbox,
   getSandbox,
   listSandboxes,
+  patchSandbox,
   pauseSandbox,
   resumeSandbox,
 } from "@/lib/api/sandboxes"
-import type { CreateSandboxRequest, SandboxResponse } from "@/lib/api/types"
+import type {
+  CreateSandboxRequest,
+  SandboxPatch,
+  SandboxResponse,
+} from "@/lib/api/types"
 
 export function useSandboxes() {
   return useQuery({
@@ -175,6 +180,27 @@ export function useResumeSandbox() {
         error instanceof ApiError
           ? error.message
           : "Failed to resume sandbox. Check that it hasn't been deleted."
+      addToast(message, "error")
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: sandboxKeys.all })
+    },
+  })
+}
+
+export function usePatchSandbox() {
+  const queryClient = useQueryClient()
+  const { addToast } = useToast()
+
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: SandboxPatch }) =>
+      patchSandbox(id, data),
+    onSuccess: () => {
+      addToast("Sandbox updated", "success")
+    },
+    onError: (error) => {
+      const message =
+        error instanceof ApiError ? error.message : "Failed to update sandbox."
       addToast(message, "error")
     },
     onSettled: () => {
