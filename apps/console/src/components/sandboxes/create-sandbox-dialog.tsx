@@ -1,6 +1,12 @@
 "use client"
 
-import { CheckIcon, CopyIcon, PlusIcon, XIcon } from "@phosphor-icons/react"
+import {
+  CaretDownIcon,
+  CheckIcon,
+  CopyIcon,
+  PlusIcon,
+  TrashIcon,
+} from "@phosphor-icons/react"
 import {
   Button,
   cn,
@@ -125,12 +131,15 @@ export function CreateSandboxDialog({
   const setOpen = onOpenChange ?? setInternalOpen
   const [name, setName] = useState("")
   const [timeout, setTimeout] = useState("")
+  const [allowRules, setAllowRules] = useState<string[]>([])
+  const [denyRules, setDenyRules] = useState<string[]>([])
   const [envEntries, setEnvEntries] = useState<
     { key: string; value: string }[]
   >([])
   const [metadataEntries, setMetadataEntries] = useState<
     { key: string; value: string }[]
   >([])
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [mode, setMode] = useState<Mode>("form")
   const [language, setLanguage] = useState<Language>("typescript")
   const [hoveredMode, setHoveredMode] = useState<string | null>(null)
@@ -141,13 +150,20 @@ export function CreateSandboxDialog({
   const handleReset = () => {
     setName("")
     setTimeout("")
+    setAllowRules([])
+    setDenyRules([])
     setEnvEntries([])
     setMetadataEntries([])
+    setShowAdvanced(false)
     setMode("form")
   }
 
   const handleCreate = () => {
     posthog.capture(SANDBOX_EVENTS.CREATED)
+
+    const allowList = allowRules.map((r) => r.trim()).filter(Boolean)
+    const denyList = denyRules.map((r) => r.trim()).filter(Boolean)
+    const hasNetwork = allowList.length > 0 || denyList.length > 0
 
     const envVars: Record<string, string> = {}
     for (const entry of envEntries) {
@@ -167,6 +183,14 @@ export function CreateSandboxDialog({
       {
         name: name.trim(),
         ...(timeout ? { timeout: Number(timeout) } : {}),
+        ...(hasNetwork
+          ? {
+              network: {
+                ...(allowList.length > 0 ? { allow_out: allowList } : {}),
+                ...(denyList.length > 0 ? { deny_out: denyList } : {}),
+              },
+            }
+          : {}),
         ...(Object.keys(envVars).length > 0 ? { env_vars: envVars } : {}),
         ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       },
@@ -191,7 +215,7 @@ export function CreateSandboxDialog({
       {!hideTrigger && (
         <DialogTrigger render={<Button />}>Create Sandbox</DialogTrigger>
       )}
-      <DialogPopup className="max-w-lg [&>.absolute]:hidden">
+      <DialogPopup className="max-w-xl [&>.absolute]:hidden">
         <DialogHeader className="flex flex-row items-center justify-between gap-4 p-6 pb-4">
           <DialogTitle>Create Sandbox</DialogTitle>
           <nav
@@ -252,7 +276,7 @@ export function CreateSandboxDialog({
 
         {mode === "form" ? (
           <>
-            <div className="space-y-5 p-6 pt-4">
+            <div className="max-h-[60vh] space-y-5 overflow-y-auto p-6 pt-4">
               <Field label="Sandbox Name" required>
                 <Input
                   placeholder="my-sandbox"
@@ -286,112 +310,235 @@ export function CreateSandboxDialog({
                 />
               </Field>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-foreground">
-                    Environment Variables
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEnvEntries([...envEntries, { key: "", value: "" }])
-                    }
-                    className="flex items-center gap-1 text-xs text-muted hover:text-foreground"
-                  >
-                    <PlusIcon className="size-3.5" weight="light" />
-                    Add
-                  </button>
-                </div>
-                {envEntries.map((entry, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <Input
-                      placeholder="KEY"
-                      value={entry.key}
-                      onChange={(e) => {
-                        const updated = [...envEntries]
-                        updated[i] = { ...entry, key: e.target.value }
-                        setEnvEntries(updated)
-                      }}
-                      className="flex-1"
-                    />
-                    <Input
-                      placeholder="value"
-                      value={entry.value}
-                      onChange={(e) => {
-                        const updated = [...envEntries]
-                        updated[i] = { ...entry, value: e.target.value }
-                        setEnvEntries(updated)
-                      }}
-                      className="flex-1"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setEnvEntries(envEntries.filter((_, j) => j !== i))
-                      }
-                      className="shrink-0 text-muted hover:text-destructive"
-                    >
-                      <XIcon className="size-3.5" weight="light" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="flex w-full cursor-pointer items-center gap-1.5 border-t border-dashed border-border pt-4 font-mono text-xs uppercase text-muted hover:text-foreground"
+              >
+                <CaretDownIcon
+                  className={cn(
+                    "size-3 transition-transform",
+                    showAdvanced && "rotate-180",
+                  )}
+                  weight="bold"
+                />
+                Advanced Options
+              </button>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-foreground">
-                    Metadata
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setMetadataEntries([
-                        ...metadataEntries,
-                        { key: "", value: "" },
-                      ])
-                    }
-                    className="flex items-center gap-1 text-xs text-muted hover:text-foreground"
-                  >
-                    <PlusIcon className="size-3.5" weight="light" />
-                    Add
-                  </button>
-                </div>
-                {metadataEntries.map((entry, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <Input
-                      placeholder="key"
-                      value={entry.key}
-                      onChange={(e) => {
-                        const updated = [...metadataEntries]
-                        updated[i] = { ...entry, key: e.target.value }
-                        setMetadataEntries(updated)
-                      }}
-                      className="flex-1"
-                    />
-                    <Input
-                      placeholder="value"
-                      value={entry.value}
-                      onChange={(e) => {
-                        const updated = [...metadataEntries]
-                        updated[i] = { ...entry, value: e.target.value }
-                        setMetadataEntries(updated)
-                      }}
-                      className="flex-1"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setMetadataEntries(
-                          metadataEntries.filter((_, j) => j !== i),
-                        )
-                      }
-                      className="shrink-0 text-muted hover:text-destructive"
-                    >
-                      <XIcon className="size-3.5" weight="light" />
-                    </button>
+              {showAdvanced && (
+                <div className="space-y-5">
+                  <div className="space-y-4">
+                    <span className="block text-sm font-medium text-foreground">
+                      Network
+                    </span>
+
+                    <div className="grid grid-cols-[160px_1fr] gap-x-4 gap-y-2">
+                      <span className="pt-1.5 text-xs text-muted">
+                        Allow — domains or CIDRs
+                      </span>
+                      <div className="space-y-2">
+                        {allowRules.map((rule, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <Input
+                              placeholder="api.openai.com"
+                              value={rule}
+                              onChange={(e) => {
+                                const updated = [...allowRules]
+                                updated[i] = e.target.value
+                                setAllowRules(updated)
+                              }}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="shrink-0"
+                              onClick={() =>
+                                setAllowRules(
+                                  allowRules.filter((_, j) => j !== i),
+                                )
+                              }
+                            >
+                              <TrashIcon
+                                className="size-3.5 text-muted"
+                                weight="light"
+                              />
+                            </Button>
+                          </div>
+                        ))}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="ml-auto"
+                          onClick={() => setAllowRules([...allowRules, ""])}
+                        >
+                          <PlusIcon className="size-3.5" weight="light" />
+                          Add
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-[160px_1fr] gap-x-4 gap-y-2">
+                      <span className="pt-1.5 text-xs text-muted">
+                        Deny — CIDRs
+                      </span>
+                      <div className="space-y-2">
+                        {denyRules.map((rule, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <Input
+                              placeholder="0.0.0.0/0"
+                              value={rule}
+                              onChange={(e) => {
+                                const updated = [...denyRules]
+                                updated[i] = e.target.value
+                                setDenyRules(updated)
+                              }}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="shrink-0"
+                              onClick={() =>
+                                setDenyRules(
+                                  denyRules.filter((_, j) => j !== i),
+                                )
+                              }
+                            >
+                              <TrashIcon
+                                className="size-3.5 text-muted"
+                                weight="light"
+                              />
+                            </Button>
+                          </div>
+                        ))}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="ml-auto"
+                          onClick={() => setDenyRules([...denyRules, ""])}
+                        >
+                          <PlusIcon className="size-3.5" weight="light" />
+                          Add
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-                ))}
-              </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-foreground">
+                        Environment Variables
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setEnvEntries([...envEntries, { key: "", value: "" }])
+                        }
+                      >
+                        <PlusIcon className="size-3.5" weight="light" />
+                        Add
+                      </Button>
+                    </div>
+                    {envEntries.map((entry, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <Input
+                          placeholder="KEY"
+                          value={entry.key}
+                          onChange={(e) => {
+                            const updated = [...envEntries]
+                            updated[i] = { ...entry, key: e.target.value }
+                            setEnvEntries(updated)
+                          }}
+                          className="flex-1"
+                        />
+                        <Input
+                          placeholder="value"
+                          value={entry.value}
+                          onChange={(e) => {
+                            const updated = [...envEntries]
+                            updated[i] = { ...entry, value: e.target.value }
+                            setEnvEntries(updated)
+                          }}
+                          className="flex-1"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="shrink-0"
+                          onClick={() =>
+                            setEnvEntries(envEntries.filter((_, j) => j !== i))
+                          }
+                        >
+                          <TrashIcon
+                            className="size-3.5 text-muted"
+                            weight="light"
+                          />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-foreground">
+                        Metadata
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setMetadataEntries([
+                            ...metadataEntries,
+                            { key: "", value: "" },
+                          ])
+                        }
+                      >
+                        <PlusIcon className="size-3.5" weight="light" />
+                        Add
+                      </Button>
+                    </div>
+                    {metadataEntries.map((entry, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <Input
+                          placeholder="key"
+                          value={entry.key}
+                          onChange={(e) => {
+                            const updated = [...metadataEntries]
+                            updated[i] = { ...entry, key: e.target.value }
+                            setMetadataEntries(updated)
+                          }}
+                          className="flex-1"
+                        />
+                        <Input
+                          placeholder="value"
+                          value={entry.value}
+                          onChange={(e) => {
+                            const updated = [...metadataEntries]
+                            updated[i] = { ...entry, value: e.target.value }
+                            setMetadataEntries(updated)
+                          }}
+                          className="flex-1"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="shrink-0"
+                          onClick={() =>
+                            setMetadataEntries(
+                              metadataEntries.filter((_, j) => j !== i),
+                            )
+                          }
+                        >
+                          <TrashIcon
+                            className="size-3.5 text-muted"
+                            weight="light"
+                          />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <DialogFooter>

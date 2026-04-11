@@ -1,4 +1,4 @@
-import { Badge } from "@superserve/ui"
+import { ArrowDownIcon, ArrowUpIcon } from "@phosphor-icons/react"
 import type { SandboxResponse } from "@/lib/api/types"
 import { formatDate } from "@/lib/format"
 
@@ -15,8 +15,9 @@ function formatTimeout(seconds: number): string {
 
 export function SandboxInfoGrid({ sandbox }: SandboxInfoGridProps) {
   const metadataEntries = Object.entries(sandbox.metadata ?? {})
-  const hasNetwork =
-    sandbox.network?.allow_out?.length || sandbox.network?.deny_out?.length
+  const allowRules = sandbox.network?.allow_out ?? []
+  const denyRules = sandbox.network?.deny_out ?? []
+  const hasNetwork = allowRules.length > 0 || denyRules.length > 0
 
   return (
     <div className="border-b border-border">
@@ -51,30 +52,59 @@ export function SandboxInfoGrid({ sandbox }: SandboxInfoGridProps) {
 
       {hasNetwork && (
         <div className="border-b border-border px-4 py-4">
-          <p className="mb-2 text-xs text-muted">Network</p>
-          <div className="flex flex-wrap gap-1.5">
-            {sandbox.network?.allow_out?.map((rule) => (
-              <Badge key={`allow-${rule}`} variant="success">
-                allow {rule}
-              </Badge>
-            ))}
-            {sandbox.network?.deny_out?.map((rule) => (
-              <Badge key={`deny-${rule}`} variant="destructive">
-                deny {rule}
-              </Badge>
-            ))}
+          <p className="mb-3 text-xs text-muted">Network</p>
+          <div className="space-y-2">
+            {allowRules.length > 0 && (
+              <div className="flex items-start gap-2">
+                <ArrowUpIcon
+                  className="mt-0.5 size-3.5 shrink-0 text-success"
+                  weight="light"
+                />
+                <div className="flex flex-wrap gap-1.5">
+                  {allowRules.map((rule) => (
+                    <span
+                      key={rule}
+                      className="border border-dashed border-border px-2 py-0.5 font-mono text-xs text-foreground/80"
+                    >
+                      {rule}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {denyRules.length > 0 && (
+              <div className="flex items-start gap-2">
+                <ArrowDownIcon
+                  className="mt-0.5 size-3.5 shrink-0 text-destructive"
+                  weight="light"
+                />
+                <div className="flex flex-wrap gap-1.5">
+                  {denyRules.map((rule) => (
+                    <span
+                      key={rule}
+                      className="border border-dashed border-border px-2 py-0.5 font-mono text-xs text-foreground/80"
+                    >
+                      {rule}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {metadataEntries.length > 0 && (
         <div className="px-4 py-4">
-          <p className="mb-2 text-xs text-muted">Metadata</p>
+          <p className="mb-3 text-xs text-muted">Metadata</p>
           <div className="flex flex-wrap gap-1.5">
             {metadataEntries.map(([key, value]) => (
-              <Badge key={key} variant="muted">
-                {key}: {value}
-              </Badge>
+              <span
+                key={key}
+                className="border border-dashed border-border px-2 py-0.5 font-mono text-xs text-foreground/80"
+              >
+                {key}={value}
+              </span>
             ))}
           </div>
         </div>
