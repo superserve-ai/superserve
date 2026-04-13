@@ -48,3 +48,4 @@ blog_draft*.md
 # Claude
 .claude/
 devcontainer.json
+.agents/
