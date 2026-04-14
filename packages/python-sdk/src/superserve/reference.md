@@ -50,9 +50,32 @@ client.system.health()
 </details>
 
 ## Sandboxes
-<details><summary><code>client.sandboxes.<a href="src/superserve/sandboxes/client.py">list_sandboxes</a>() -> typing.List[SandboxResponse]</code></summary>
+<details><summary><code>client.sandboxes.<a href="src/superserve/sandboxes/client.py">list_sandboxes</a>(...) -> typing.List[SandboxResponse]</code></summary>
 <dl>
 <dd>
+
+#### 📝 Description
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+Returns sandboxes belonging to the authenticated team, optionally
+filtered by metadata tags.
+
+## Filtering by metadata
+
+Any query parameter prefixed `metadata.` is treated as a filter
+clause: `?metadata.env=prod&metadata.owner=agent-7`. Multiple
+filters AND together — a sandbox matches only if every key/value
+pair is present in its metadata. Values are compared as exact
+strings; there is no type coercion or substring matching.
+</dd>
+</dl>
+</dd>
+</dl>
 
 #### 🔌 Usage
 
@@ -83,6 +106,18 @@ client.sandboxes.list_sandboxes()
 
 <dl>
 <dd>
+
+<dl>
+<dd>
+
+**metadata_key:** `typing.Optional[str]` 
+
+Filter sandboxes whose metadata contains an exact `{key}: <value>`
+pair. Repeat with different keys to AND multiple filters. Values
+are always strings. Example: `?metadata.env=prod`.
+    
+</dd>
+</dl>
 
 <dl>
 <dd>
@@ -163,6 +198,40 @@ client.sandboxes.create_sandbox(
 <dd>
 
 **from_snapshot:** `typing.Optional[str]` — If provided, boot the sandbox from this snapshot instead of creating a fresh VM. The snapshot must belong to the same team.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**timeout_seconds:** `typing.Optional[int]` — Optional hard lifetime cap in seconds, measured from sandbox creation. When set, the sandbox is destroyed this many seconds after creation regardless of state (active, paused, idle) or activity — the user asked for a hard deadline. When unset, the sandbox lives until explicitly paused or deleted. Maximum 604800 (7 days).
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**metadata:** `typing.Optional[typing.Dict[str, str]]` 
+
+Flat string-to-string tags attached to the sandbox at creation.
+Useful for grouping, owner labels, environment, run IDs, etc.
+
+## Constraints
+  - **Strings only.** Values must be strings. There is no type
+    coercion: `metadata.count=42` filters for the *string* "42".
+  - **At most 64 keys.**
+  - Each key may be at most **256 bytes**.
+  - Each value may be at most **2048 bytes** (2 KB).
+  - The serialized object may be at most **16384 bytes** (16 KB)
+    in total.
+  - Keys starting with `superserve.` or `_superserve` (case-
+    insensitive) are reserved for platform use and rejected.
+
+Metadata can be updated after creation via `PATCH /sandboxes/:id`.
+Filter sandboxes by metadata via the `metadata.{key}` query
+parameter on `GET /sandboxes`.
     
 </dd>
 </dl>
@@ -336,6 +405,8 @@ with `400` so typos surface as errors instead of silent no-ops.
   must be in the `active` state; patching a paused or idle sandbox
   returns `409`. Rules take effect immediately and are persisted so
   they survive a future pause/resume cycle.
+- `metadata` — replaces the sandbox's metadata tags. Can be updated
+  regardless of sandbox state (active, paused, idle).
 </dd>
 </dl>
 </dd>
@@ -350,7 +421,7 @@ with `400` so typos surface as errors instead of silent no-ops.
 <dd>
 
 ```python
-from superserve import Superserve, NetworkConfig
+from superserve import Superserve
 from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
@@ -360,15 +431,10 @@ client = Superserve(
 
 client.sandboxes.patch_sandbox(
     sandbox_id="sandbox_id",
-    network=NetworkConfig(
-        allow_out=[
-            "api.openai.com",
-            "*.github.com"
-        ],
-        deny_out=[
-            "0.0.0.0/0"
-        ],
-    ),
+    metadata={
+        "env": "prod",
+        "owner": "agent-7"
+    },
 )
 
 ```
@@ -398,6 +464,19 @@ client.sandboxes.patch_sandbox(
 Replace the sandbox's egress rules. The sandbox must be in
 the `active` state. The provided `allow_out` and `deny_out`
 lists fully replace whatever was previously configured.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**metadata:** `typing.Optional[typing.Dict[str, str]]` 
+
+Replace the sandbox's metadata tags. Fully replaces the existing
+metadata — omitted keys are removed. Can be patched regardless of
+sandbox state. Same validation limits as on create (64 keys,
+256-byte keys, 2 KB values, 16 KB total).
     
 </dd>
 </dl>
@@ -716,167 +795,6 @@ client.exec.command_stream(
 <dd>
 
 **request:** `ExecRequest` 
-    
-</dd>
-</dl>
-
-<dl>
-<dd>
-
-**request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
-</dd>
-</dl>
-</dd>
-</dl>
-
-
-</dd>
-</dl>
-</details>
-
-## Files
-<details><summary><code>client.files.<a href="src/superserve/files/client.py">download_file</a>(...) -> typing.Iterator[bytes]</code></summary>
-<dl>
-<dd>
-
-#### 📝 Description
-
-<dl>
-<dd>
-
-<dl>
-<dd>
-
-Idle sandboxes are automatically resumed before the download.
-</dd>
-</dl>
-</dd>
-</dl>
-
-#### 🔌 Usage
-
-<dl>
-<dd>
-
-<dl>
-<dd>
-
-```python
-from superserve import Superserve
-from superserve.environment import SuperserveEnvironment
-
-client = Superserve(
-    api_key="<value>",
-    environment=SuperserveEnvironment.PRODUCTION,
-)
-
-client.files.download_file(
-    sandbox_id="sandbox_id",
-    path="path",
-)
-
-```
-</dd>
-</dl>
-</dd>
-</dl>
-
-#### ⚙️ Parameters
-
-<dl>
-<dd>
-
-<dl>
-<dd>
-
-**sandbox_id:** `str` — The unique identifier of the sandbox.
-    
-</dd>
-</dl>
-
-<dl>
-<dd>
-
-**path:** `str` — File path inside the sandbox (without leading slash).
-    
-</dd>
-</dl>
-
-<dl>
-<dd>
-
-**request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
-    
-</dd>
-</dl>
-</dd>
-</dl>
-
-
-</dd>
-</dl>
-</details>
-
-<details><summary><code>client.files.<a href="src/superserve/files/client.py">upload_file</a>(...) -> UploadFileResponse</code></summary>
-<dl>
-<dd>
-
-#### 📝 Description
-
-<dl>
-<dd>
-
-<dl>
-<dd>
-
-Idle sandboxes are automatically resumed before the upload.
-</dd>
-</dl>
-</dd>
-</dl>
-
-#### 🔌 Usage
-
-<dl>
-<dd>
-
-<dl>
-<dd>
-
-```python
-client.files.upload_file(...)
-```
-</dd>
-</dl>
-</dd>
-</dl>
-
-#### ⚙️ Parameters
-
-<dl>
-<dd>
-
-<dl>
-<dd>
-
-**sandbox_id:** `str` — The unique identifier of the sandbox.
-    
-</dd>
-</dl>
-
-<dl>
-<dd>
-
-**path:** `str` — File path inside the sandbox (without leading slash).
-    
-</dd>
-</dl>
-
-<dl>
-<dd>
-
-**request:** `typing.Union[bytes, typing.Iterator[bytes], typing.AsyncIterator[bytes]]` 
     
 </dd>
 </dl>

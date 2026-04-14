@@ -6,9 +6,9 @@ import type * as Superserve from "../../../../index.js";
  * @example
  *     {
  *         sandbox_id: "sandbox_id",
- *         network: {
- *             allow_out: ["api.openai.com", "*.github.com"],
- *             deny_out: ["0.0.0.0/0"]
+ *         metadata: {
+ *             "env": "prod",
+ *             "owner": "agent-7"
  *         }
  *     }
  */
@@ -21,4 +21,11 @@ export interface SandboxPatch {
      * lists fully replace whatever was previously configured.
      */
     network?: Superserve.NetworkConfig;
+    /**
+     * Replace the sandbox's metadata tags. Fully replaces the existing
+     * metadata — omitted keys are removed. Can be patched regardless of
+     * sandbox state. Same validation limits as on create (64 keys,
+     * 256-byte keys, 2 KB values, 16 KB total).
+     */
+    metadata?: Record<string, string>;
 }

@@ -5,6 +5,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .network_config import NetworkConfig
 from .sandbox_response_status import SandboxResponseStatus
 
 
@@ -14,9 +15,13 @@ class SandboxResponse(UniversalBaseModel):
     status: typing.Optional[SandboxResponseStatus] = None
     vcpu_count: typing.Optional[int] = None
     memory_mib: typing.Optional[int] = None
-    ip_address: typing.Optional[str] = pydantic.Field(default=None)
+    access_token: typing.Optional[str] = pydantic.Field(default=None)
     """
-    IP address of the running VM (present when status is active).
+    Per-sandbox HMAC access token for data-plane operations
+    (file upload/download, terminal). Pass as `X-Access-Token`
+    header when hitting the edge proxy at
+    `boxd-{id}.sandbox.superserve.ai`. Reusable for the
+    lifetime of the sandbox.
     """
 
     snapshot_id: typing.Optional[str] = pydantic.Field(default=None)
@@ -25,6 +30,20 @@ class SandboxResponse(UniversalBaseModel):
     """
 
     created_at: typing.Optional[dt.datetime] = None
+    timeout_seconds: typing.Optional[int] = pydantic.Field(default=None)
+    """
+    Hard lifetime cap in seconds from creation, if set at creation time. Absent when no cap was configured.
+    """
+
+    network: typing.Optional[NetworkConfig] = pydantic.Field(default=None)
+    """
+    Current egress allow/deny rules, if any have been configured. Absent when the sandbox uses default network settings.
+    """
+
+    metadata: typing.Optional[typing.Dict[str, str]] = pydantic.Field(default=None)
+    """
+    User-supplied tags attached at creation. Always present — sandboxes created without metadata return `{}` rather than being absent.
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

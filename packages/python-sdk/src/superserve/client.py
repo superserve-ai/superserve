@@ -11,7 +11,6 @@ from .environment import SuperserveEnvironment
 
 if typing.TYPE_CHECKING:
     from .exec.client import AsyncExecClient, ExecClient
-    from .files.client import AsyncFilesClient, FilesClient
     from .sandboxes.client import AsyncSandboxesClient, SandboxesClient
     from .system.client import AsyncSystemClient, SystemClient
 
@@ -89,7 +88,6 @@ class Superserve:
         self._system: typing.Optional[SystemClient] = None
         self._sandboxes: typing.Optional[SandboxesClient] = None
         self._exec: typing.Optional[ExecClient] = None
-        self._files: typing.Optional[FilesClient] = None
 
     @property
     def system(self):
@@ -114,14 +112,6 @@ class Superserve:
 
             self._exec = ExecClient(client_wrapper=self._client_wrapper)
         return self._exec
-
-    @property
-    def files(self):
-        if self._files is None:
-            from .files.client import FilesClient  # noqa: E402
-
-            self._files = FilesClient(client_wrapper=self._client_wrapper)
-        return self._files
 
 
 def _make_default_async_client(
@@ -213,7 +203,6 @@ class AsyncSuperserve:
         self._system: typing.Optional[AsyncSystemClient] = None
         self._sandboxes: typing.Optional[AsyncSandboxesClient] = None
         self._exec: typing.Optional[AsyncExecClient] = None
-        self._files: typing.Optional[AsyncFilesClient] = None
 
     @property
     def system(self):
@@ -238,14 +227,6 @@ class AsyncSuperserve:
 
             self._exec = AsyncExecClient(client_wrapper=self._client_wrapper)
         return self._exec
-
-    @property
-    def files(self):
-        if self._files is None:
-            from .files.client import AsyncFilesClient  # noqa: E402
-
-            self._files = AsyncFilesClient(client_wrapper=self._client_wrapper)
-        return self._files
 
 
 def _get_base_url(*, base_url: typing.Optional[str] = None, environment: SuperserveEnvironment) -> str:

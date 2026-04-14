@@ -30,11 +30,27 @@ class RawSandboxesClient:
         self._client_wrapper = client_wrapper
 
     def list_sandboxes(
-        self, *, request_options: typing.Optional[RequestOptions] = None
+        self, *, metadata_key: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[typing.List[SandboxResponse]]:
         """
+        Returns sandboxes belonging to the authenticated team, optionally
+        filtered by metadata tags.
+
+        ## Filtering by metadata
+
+        Any query parameter prefixed `metadata.` is treated as a filter
+        clause: `?metadata.env=prod&metadata.owner=agent-7`. Multiple
+        filters AND together — a sandbox matches only if every key/value
+        pair is present in its metadata. Values are compared as exact
+        strings; there is no type coercion or substring matching.
+
         Parameters
         ----------
+        metadata_key : typing.Optional[str]
+            Filter sandboxes whose metadata contains an exact `{key}: <value>`
+            pair. Repeat with different keys to AND multiple filters. Values
+            are always strings. Example: `?metadata.env=prod`.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -46,6 +62,9 @@ class RawSandboxesClient:
         _response = self._client_wrapper.httpx_client.request(
             "sandboxes",
             method="GET",
+            params={
+                "metadata.{key}": metadata_key,
+            },
             request_options=request_options,
         )
         try:
@@ -58,6 +77,17 @@ class RawSandboxesClient:
                     ),
                 )
                 return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        Error,
+                        parse_obj_as(
+                            type_=Error,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     headers=dict(_response.headers),
@@ -94,6 +124,8 @@ class RawSandboxesClient:
         *,
         name: str,
         from_snapshot: typing.Optional[str] = OMIT,
+        timeout_seconds: typing.Optional[int] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         network: typing.Optional[NetworkConfig] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[SandboxResponse]:
@@ -109,6 +141,28 @@ class RawSandboxesClient:
 
         from_snapshot : typing.Optional[str]
             If provided, boot the sandbox from this snapshot instead of creating a fresh VM. The snapshot must belong to the same team.
+
+        timeout_seconds : typing.Optional[int]
+            Optional hard lifetime cap in seconds, measured from sandbox creation. When set, the sandbox is destroyed this many seconds after creation regardless of state (active, paused, idle) or activity — the user asked for a hard deadline. When unset, the sandbox lives until explicitly paused or deleted. Maximum 604800 (7 days).
+
+        metadata : typing.Optional[typing.Dict[str, str]]
+            Flat string-to-string tags attached to the sandbox at creation.
+            Useful for grouping, owner labels, environment, run IDs, etc.
+
+            ## Constraints
+              - **Strings only.** Values must be strings. There is no type
+                coercion: `metadata.count=42` filters for the *string* "42".
+              - **At most 64 keys.**
+              - Each key may be at most **256 bytes**.
+              - Each value may be at most **2048 bytes** (2 KB).
+              - The serialized object may be at most **16384 bytes** (16 KB)
+                in total.
+              - Keys starting with `superserve.` or `_superserve` (case-
+                insensitive) are reserved for platform use and rejected.
+
+            Metadata can be updated after creation via `PATCH /sandboxes/:id`.
+            Filter sandboxes by metadata via the `metadata.{key}` query
+            parameter on `GET /sandboxes`.
 
         network : typing.Optional[NetworkConfig]
 
@@ -126,6 +180,8 @@ class RawSandboxesClient:
             json={
                 "name": name,
                 "from_snapshot": from_snapshot,
+                "timeout_seconds": timeout_seconds,
+                "metadata": metadata,
                 "network": convert_and_respect_annotation_metadata(
                     object_=network, annotation=NetworkConfig, direction="write"
                 ),
@@ -333,6 +389,7 @@ class RawSandboxesClient:
         sandbox_id: str,
         *,
         network: typing.Optional[NetworkConfig] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -352,6 +409,8 @@ class RawSandboxesClient:
           must be in the `active` state; patching a paused or idle sandbox
           returns `409`. Rules take effect immediately and are persisted so
           they survive a future pause/resume cycle.
+        - `metadata` — replaces the sandbox's metadata tags. Can be updated
+          regardless of sandbox state (active, paused, idle).
 
         Parameters
         ----------
@@ -362,6 +421,12 @@ class RawSandboxesClient:
             Replace the sandbox's egress rules. The sandbox must be in
             the `active` state. The provided `allow_out` and `deny_out`
             lists fully replace whatever was previously configured.
+
+        metadata : typing.Optional[typing.Dict[str, str]]
+            Replace the sandbox's metadata tags. Fully replaces the existing
+            metadata — omitted keys are removed. Can be patched regardless of
+            sandbox state. Same validation limits as on create (64 keys,
+            256-byte keys, 2 KB values, 16 KB total).
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -377,6 +442,7 @@ class RawSandboxesClient:
                 "network": convert_and_respect_annotation_metadata(
                     object_=network, annotation=NetworkConfig, direction="write"
                 ),
+                "metadata": metadata,
             },
             headers={
                 "content-type": "application/json",
@@ -634,11 +700,27 @@ class AsyncRawSandboxesClient:
         self._client_wrapper = client_wrapper
 
     async def list_sandboxes(
-        self, *, request_options: typing.Optional[RequestOptions] = None
+        self, *, metadata_key: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[typing.List[SandboxResponse]]:
         """
+        Returns sandboxes belonging to the authenticated team, optionally
+        filtered by metadata tags.
+
+        ## Filtering by metadata
+
+        Any query parameter prefixed `metadata.` is treated as a filter
+        clause: `?metadata.env=prod&metadata.owner=agent-7`. Multiple
+        filters AND together — a sandbox matches only if every key/value
+        pair is present in its metadata. Values are compared as exact
+        strings; there is no type coercion or substring matching.
+
         Parameters
         ----------
+        metadata_key : typing.Optional[str]
+            Filter sandboxes whose metadata contains an exact `{key}: <value>`
+            pair. Repeat with different keys to AND multiple filters. Values
+            are always strings. Example: `?metadata.env=prod`.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -650,6 +732,9 @@ class AsyncRawSandboxesClient:
         _response = await self._client_wrapper.httpx_client.request(
             "sandboxes",
             method="GET",
+            params={
+                "metadata.{key}": metadata_key,
+            },
             request_options=request_options,
         )
         try:
@@ -662,6 +747,17 @@ class AsyncRawSandboxesClient:
                     ),
                 )
                 return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        Error,
+                        parse_obj_as(
+                            type_=Error,  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 401:
                 raise UnauthorizedError(
                     headers=dict(_response.headers),
@@ -698,6 +794,8 @@ class AsyncRawSandboxesClient:
         *,
         name: str,
         from_snapshot: typing.Optional[str] = OMIT,
+        timeout_seconds: typing.Optional[int] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         network: typing.Optional[NetworkConfig] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[SandboxResponse]:
@@ -713,6 +811,28 @@ class AsyncRawSandboxesClient:
 
         from_snapshot : typing.Optional[str]
             If provided, boot the sandbox from this snapshot instead of creating a fresh VM. The snapshot must belong to the same team.
+
+        timeout_seconds : typing.Optional[int]
+            Optional hard lifetime cap in seconds, measured from sandbox creation. When set, the sandbox is destroyed this many seconds after creation regardless of state (active, paused, idle) or activity — the user asked for a hard deadline. When unset, the sandbox lives until explicitly paused or deleted. Maximum 604800 (7 days).
+
+        metadata : typing.Optional[typing.Dict[str, str]]
+            Flat string-to-string tags attached to the sandbox at creation.
+            Useful for grouping, owner labels, environment, run IDs, etc.
+
+            ## Constraints
+              - **Strings only.** Values must be strings. There is no type
+                coercion: `metadata.count=42` filters for the *string* "42".
+              - **At most 64 keys.**
+              - Each key may be at most **256 bytes**.
+              - Each value may be at most **2048 bytes** (2 KB).
+              - The serialized object may be at most **16384 bytes** (16 KB)
+                in total.
+              - Keys starting with `superserve.` or `_superserve` (case-
+                insensitive) are reserved for platform use and rejected.
+
+            Metadata can be updated after creation via `PATCH /sandboxes/:id`.
+            Filter sandboxes by metadata via the `metadata.{key}` query
+            parameter on `GET /sandboxes`.
 
         network : typing.Optional[NetworkConfig]
 
@@ -730,6 +850,8 @@ class AsyncRawSandboxesClient:
             json={
                 "name": name,
                 "from_snapshot": from_snapshot,
+                "timeout_seconds": timeout_seconds,
+                "metadata": metadata,
                 "network": convert_and_respect_annotation_metadata(
                     object_=network, annotation=NetworkConfig, direction="write"
                 ),
@@ -937,6 +1059,7 @@ class AsyncRawSandboxesClient:
         sandbox_id: str,
         *,
         network: typing.Optional[NetworkConfig] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -956,6 +1079,8 @@ class AsyncRawSandboxesClient:
           must be in the `active` state; patching a paused or idle sandbox
           returns `409`. Rules take effect immediately and are persisted so
           they survive a future pause/resume cycle.
+        - `metadata` — replaces the sandbox's metadata tags. Can be updated
+          regardless of sandbox state (active, paused, idle).
 
         Parameters
         ----------
@@ -966,6 +1091,12 @@ class AsyncRawSandboxesClient:
             Replace the sandbox's egress rules. The sandbox must be in
             the `active` state. The provided `allow_out` and `deny_out`
             lists fully replace whatever was previously configured.
+
+        metadata : typing.Optional[typing.Dict[str, str]]
+            Replace the sandbox's metadata tags. Fully replaces the existing
+            metadata — omitted keys are removed. Can be patched regardless of
+            sandbox state. Same validation limits as on create (64 keys,
+            256-byte keys, 2 KB values, 16 KB total).
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -981,6 +1112,7 @@ class AsyncRawSandboxesClient:
                 "network": convert_and_respect_annotation_metadata(
                     object_=network, annotation=NetworkConfig, direction="write"
                 ),
+                "metadata": metadata,
             },
             headers={
                 "content-type": "application/json",

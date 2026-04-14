@@ -28,11 +28,27 @@ class SandboxesClient:
         return self._raw_client
 
     def list_sandboxes(
-        self, *, request_options: typing.Optional[RequestOptions] = None
+        self, *, metadata_key: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> typing.List[SandboxResponse]:
         """
+        Returns sandboxes belonging to the authenticated team, optionally
+        filtered by metadata tags.
+
+        ## Filtering by metadata
+
+        Any query parameter prefixed `metadata.` is treated as a filter
+        clause: `?metadata.env=prod&metadata.owner=agent-7`. Multiple
+        filters AND together — a sandbox matches only if every key/value
+        pair is present in its metadata. Values are compared as exact
+        strings; there is no type coercion or substring matching.
+
         Parameters
         ----------
+        metadata_key : typing.Optional[str]
+            Filter sandboxes whose metadata contains an exact `{key}: <value>`
+            pair. Repeat with different keys to AND multiple filters. Values
+            are always strings. Example: `?metadata.env=prod`.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -50,7 +66,7 @@ class SandboxesClient:
         )
         client.sandboxes.list_sandboxes()
         """
-        _response = self._raw_client.list_sandboxes(request_options=request_options)
+        _response = self._raw_client.list_sandboxes(metadata_key=metadata_key, request_options=request_options)
         return _response.data
 
     def create_sandbox(
@@ -58,6 +74,8 @@ class SandboxesClient:
         *,
         name: str,
         from_snapshot: typing.Optional[str] = OMIT,
+        timeout_seconds: typing.Optional[int] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         network: typing.Optional[NetworkConfig] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> SandboxResponse:
@@ -73,6 +91,28 @@ class SandboxesClient:
 
         from_snapshot : typing.Optional[str]
             If provided, boot the sandbox from this snapshot instead of creating a fresh VM. The snapshot must belong to the same team.
+
+        timeout_seconds : typing.Optional[int]
+            Optional hard lifetime cap in seconds, measured from sandbox creation. When set, the sandbox is destroyed this many seconds after creation regardless of state (active, paused, idle) or activity — the user asked for a hard deadline. When unset, the sandbox lives until explicitly paused or deleted. Maximum 604800 (7 days).
+
+        metadata : typing.Optional[typing.Dict[str, str]]
+            Flat string-to-string tags attached to the sandbox at creation.
+            Useful for grouping, owner labels, environment, run IDs, etc.
+
+            ## Constraints
+              - **Strings only.** Values must be strings. There is no type
+                coercion: `metadata.count=42` filters for the *string* "42".
+              - **At most 64 keys.**
+              - Each key may be at most **256 bytes**.
+              - Each value may be at most **2048 bytes** (2 KB).
+              - The serialized object may be at most **16384 bytes** (16 KB)
+                in total.
+              - Keys starting with `superserve.` or `_superserve` (case-
+                insensitive) are reserved for platform use and rejected.
+
+            Metadata can be updated after creation via `PATCH /sandboxes/:id`.
+            Filter sandboxes by metadata via the `metadata.{key}` query
+            parameter on `GET /sandboxes`.
 
         network : typing.Optional[NetworkConfig]
 
@@ -96,7 +136,12 @@ class SandboxesClient:
         )
         """
         _response = self._raw_client.create_sandbox(
-            name=name, from_snapshot=from_snapshot, network=network, request_options=request_options
+            name=name,
+            from_snapshot=from_snapshot,
+            timeout_seconds=timeout_seconds,
+            metadata=metadata,
+            network=network,
+            request_options=request_options,
         )
         return _response.data
 
@@ -164,6 +209,7 @@ class SandboxesClient:
         sandbox_id: str,
         *,
         network: typing.Optional[NetworkConfig] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -183,6 +229,8 @@ class SandboxesClient:
           must be in the `active` state; patching a paused or idle sandbox
           returns `409`. Rules take effect immediately and are persisted so
           they survive a future pause/resume cycle.
+        - `metadata` — replaces the sandbox's metadata tags. Can be updated
+          regardless of sandbox state (active, paused, idle).
 
         Parameters
         ----------
@@ -194,6 +242,12 @@ class SandboxesClient:
             the `active` state. The provided `allow_out` and `deny_out`
             lists fully replace whatever was previously configured.
 
+        metadata : typing.Optional[typing.Dict[str, str]]
+            Replace the sandbox's metadata tags. Fully replaces the existing
+            metadata — omitted keys are removed. Can be patched regardless of
+            sandbox state. Same validation limits as on create (64 keys,
+            256-byte keys, 2 KB values, 16 KB total).
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -203,20 +257,19 @@ class SandboxesClient:
 
         Examples
         --------
-        from superserve import NetworkConfig, Superserve
+        from superserve import Superserve
 
         client = Superserve(
             api_key="YOUR_API_KEY",
         )
         client.sandboxes.patch_sandbox(
             sandbox_id="sandbox_id",
-            network=NetworkConfig(
-                allow_out=["api.openai.com", "*.github.com"],
-                deny_out=["0.0.0.0/0"],
-            ),
+            metadata={"env": "prod", "owner": "agent-7"},
         )
         """
-        _response = self._raw_client.patch_sandbox(sandbox_id, network=network, request_options=request_options)
+        _response = self._raw_client.patch_sandbox(
+            sandbox_id, network=network, metadata=metadata, request_options=request_options
+        )
         return _response.data
 
     def pause_sandbox(
@@ -305,11 +358,27 @@ class AsyncSandboxesClient:
         return self._raw_client
 
     async def list_sandboxes(
-        self, *, request_options: typing.Optional[RequestOptions] = None
+        self, *, metadata_key: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> typing.List[SandboxResponse]:
         """
+        Returns sandboxes belonging to the authenticated team, optionally
+        filtered by metadata tags.
+
+        ## Filtering by metadata
+
+        Any query parameter prefixed `metadata.` is treated as a filter
+        clause: `?metadata.env=prod&metadata.owner=agent-7`. Multiple
+        filters AND together — a sandbox matches only if every key/value
+        pair is present in its metadata. Values are compared as exact
+        strings; there is no type coercion or substring matching.
+
         Parameters
         ----------
+        metadata_key : typing.Optional[str]
+            Filter sandboxes whose metadata contains an exact `{key}: <value>`
+            pair. Repeat with different keys to AND multiple filters. Values
+            are always strings. Example: `?metadata.env=prod`.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -335,7 +404,7 @@ class AsyncSandboxesClient:
 
         asyncio.run(main())
         """
-        _response = await self._raw_client.list_sandboxes(request_options=request_options)
+        _response = await self._raw_client.list_sandboxes(metadata_key=metadata_key, request_options=request_options)
         return _response.data
 
     async def create_sandbox(
@@ -343,6 +412,8 @@ class AsyncSandboxesClient:
         *,
         name: str,
         from_snapshot: typing.Optional[str] = OMIT,
+        timeout_seconds: typing.Optional[int] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         network: typing.Optional[NetworkConfig] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> SandboxResponse:
@@ -358,6 +429,28 @@ class AsyncSandboxesClient:
 
         from_snapshot : typing.Optional[str]
             If provided, boot the sandbox from this snapshot instead of creating a fresh VM. The snapshot must belong to the same team.
+
+        timeout_seconds : typing.Optional[int]
+            Optional hard lifetime cap in seconds, measured from sandbox creation. When set, the sandbox is destroyed this many seconds after creation regardless of state (active, paused, idle) or activity — the user asked for a hard deadline. When unset, the sandbox lives until explicitly paused or deleted. Maximum 604800 (7 days).
+
+        metadata : typing.Optional[typing.Dict[str, str]]
+            Flat string-to-string tags attached to the sandbox at creation.
+            Useful for grouping, owner labels, environment, run IDs, etc.
+
+            ## Constraints
+              - **Strings only.** Values must be strings. There is no type
+                coercion: `metadata.count=42` filters for the *string* "42".
+              - **At most 64 keys.**
+              - Each key may be at most **256 bytes**.
+              - Each value may be at most **2048 bytes** (2 KB).
+              - The serialized object may be at most **16384 bytes** (16 KB)
+                in total.
+              - Keys starting with `superserve.` or `_superserve` (case-
+                insensitive) are reserved for platform use and rejected.
+
+            Metadata can be updated after creation via `PATCH /sandboxes/:id`.
+            Filter sandboxes by metadata via the `metadata.{key}` query
+            parameter on `GET /sandboxes`.
 
         network : typing.Optional[NetworkConfig]
 
@@ -389,7 +482,12 @@ class AsyncSandboxesClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_sandbox(
-            name=name, from_snapshot=from_snapshot, network=network, request_options=request_options
+            name=name,
+            from_snapshot=from_snapshot,
+            timeout_seconds=timeout_seconds,
+            metadata=metadata,
+            network=network,
+            request_options=request_options,
         )
         return _response.data
 
@@ -473,6 +571,7 @@ class AsyncSandboxesClient:
         sandbox_id: str,
         *,
         network: typing.Optional[NetworkConfig] = OMIT,
+        metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -492,6 +591,8 @@ class AsyncSandboxesClient:
           must be in the `active` state; patching a paused or idle sandbox
           returns `409`. Rules take effect immediately and are persisted so
           they survive a future pause/resume cycle.
+        - `metadata` — replaces the sandbox's metadata tags. Can be updated
+          regardless of sandbox state (active, paused, idle).
 
         Parameters
         ----------
@@ -502,6 +603,12 @@ class AsyncSandboxesClient:
             Replace the sandbox's egress rules. The sandbox must be in
             the `active` state. The provided `allow_out` and `deny_out`
             lists fully replace whatever was previously configured.
+
+        metadata : typing.Optional[typing.Dict[str, str]]
+            Replace the sandbox's metadata tags. Fully replaces the existing
+            metadata — omitted keys are removed. Can be patched regardless of
+            sandbox state. Same validation limits as on create (64 keys,
+            256-byte keys, 2 KB values, 16 KB total).
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -514,7 +621,7 @@ class AsyncSandboxesClient:
         --------
         import asyncio
 
-        from superserve import AsyncSuperserve, NetworkConfig
+        from superserve import AsyncSuperserve
 
         client = AsyncSuperserve(
             api_key="YOUR_API_KEY",
@@ -524,16 +631,15 @@ class AsyncSandboxesClient:
         async def main() -> None:
             await client.sandboxes.patch_sandbox(
                 sandbox_id="sandbox_id",
-                network=NetworkConfig(
-                    allow_out=["api.openai.com", "*.github.com"],
-                    deny_out=["0.0.0.0/0"],
-                ),
+                metadata={"env": "prod", "owner": "agent-7"},
             )
 
 
         asyncio.run(main())
         """
-        _response = await self._raw_client.patch_sandbox(sandbox_id, network=network, request_options=request_options)
+        _response = await self._raw_client.patch_sandbox(
+            sandbox_id, network=network, metadata=metadata, request_options=request_options
+        )
         return _response.data
 
     async def pause_sandbox(

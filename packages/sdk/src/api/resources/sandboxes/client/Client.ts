@@ -23,8 +23,21 @@ export class SandboxesClient {
     }
 
     /**
+     * Returns sandboxes belonging to the authenticated team, optionally
+     * filtered by metadata tags.
+     *
+     * ## Filtering by metadata
+     *
+     * Any query parameter prefixed `metadata.` is treated as a filter
+     * clause: `?metadata.env=prod&metadata.owner=agent-7`. Multiple
+     * filters AND together — a sandbox matches only if every key/value
+     * pair is present in its metadata. Values are compared as exact
+     * strings; there is no type coercion or substring matching.
+     *
+     * @param {Superserve.ListSandboxesRequest} request
      * @param {SandboxesClient.RequestOptions} requestOptions - Request-specific configuration.
      *
+     * @throws {@link Superserve.BadRequestError}
      * @throws {@link Superserve.UnauthorizedError}
      * @throws {@link Superserve.InternalServerError}
      *
@@ -32,14 +45,20 @@ export class SandboxesClient {
      *     await client.sandboxes.listSandboxes()
      */
     public listSandboxes(
+        request: Superserve.ListSandboxesRequest = {},
         requestOptions?: SandboxesClient.RequestOptions,
     ): core.HttpResponsePromise<Superserve.SandboxResponse[]> {
-        return core.HttpResponsePromise.fromPromise(this.__listSandboxes(requestOptions));
+        return core.HttpResponsePromise.fromPromise(this.__listSandboxes(request, requestOptions));
     }
 
     private async __listSandboxes(
+        request: Superserve.ListSandboxesRequest = {},
         requestOptions?: SandboxesClient.RequestOptions,
     ): Promise<core.WithRawResponse<Superserve.SandboxResponse[]>> {
+        const { "metadata.{key}": metadataKey } = request;
+        const _queryParams: Record<string, unknown> = {
+            "metadata.{key}": metadataKey,
+        };
         const _authRequest: core.AuthRequest = await this._options.authProvider.getAuthRequest();
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             _authRequest.headers,
@@ -55,7 +74,7 @@ export class SandboxesClient {
             ),
             method: "GET",
             headers: _headers,
-            queryParameters: requestOptions?.queryParams,
+            queryParameters: { ..._queryParams, ...requestOptions?.queryParams },
             timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
             maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
             abortSignal: requestOptions?.abortSignal,
@@ -68,6 +87,11 @@ export class SandboxesClient {
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
+                case 400:
+                    throw new Superserve.BadRequestError(
+                        _response.error.body as Superserve.Error_,
+                        _response.rawResponse,
+                    );
                 case 401:
                     throw new Superserve.UnauthorizedError(
                         _response.error.body as Superserve.Error_,
@@ -353,6 +377,8 @@ export class SandboxesClient {
      *   must be in the `active` state; patching a paused or idle sandbox
      *   returns `409`. Rules take effect immediately and are persisted so
      *   they survive a future pause/resume cycle.
+     * - `metadata` — replaces the sandbox's metadata tags. Can be updated
+     *   regardless of sandbox state (active, paused, idle).
      *
      * @param {Superserve.SandboxPatch} request
      * @param {SandboxesClient.RequestOptions} requestOptions - Request-specific configuration.
@@ -366,9 +392,9 @@ export class SandboxesClient {
      * @example
      *     await client.sandboxes.patchSandbox({
      *         sandbox_id: "sandbox_id",
-     *         network: {
-     *             allow_out: ["api.openai.com", "*.github.com"],
-     *             deny_out: ["0.0.0.0/0"]
+     *         metadata: {
+     *             "env": "prod",
+     *             "owner": "agent-7"
      *         }
      *     })
      */

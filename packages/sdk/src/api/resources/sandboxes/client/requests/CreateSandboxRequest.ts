@@ -13,5 +13,27 @@ export interface CreateSandboxRequest {
     name: string;
     /** If provided, boot the sandbox from this snapshot instead of creating a fresh VM. The snapshot must belong to the same team. */
     from_snapshot?: string;
+    /** Optional hard lifetime cap in seconds, measured from sandbox creation. When set, the sandbox is destroyed this many seconds after creation regardless of state (active, paused, idle) or activity — the user asked for a hard deadline. When unset, the sandbox lives until explicitly paused or deleted. Maximum 604800 (7 days). */
+    timeout_seconds?: number;
+    /**
+     * Flat string-to-string tags attached to the sandbox at creation.
+     * Useful for grouping, owner labels, environment, run IDs, etc.
+     *
+     * ## Constraints
+     *   - **Strings only.** Values must be strings. There is no type
+     *     coercion: `metadata.count=42` filters for the *string* "42".
+     *   - **At most 64 keys.**
+     *   - Each key may be at most **256 bytes**.
+     *   - Each value may be at most **2048 bytes** (2 KB).
+     *   - The serialized object may be at most **16384 bytes** (16 KB)
+     *     in total.
+     *   - Keys starting with `superserve.` or `_superserve` (case-
+     *     insensitive) are reserved for platform use and rejected.
+     *
+     * Metadata can be updated after creation via `PATCH /sandboxes/:id`.
+     * Filter sandboxes by metadata via the `metadata.{key}` query
+     * parameter on `GET /sandboxes`.
+     */
+    metadata?: Record<string, string>;
     network?: Superserve.NetworkConfig;
 }

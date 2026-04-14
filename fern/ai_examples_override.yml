@@ -1,19 +1,5 @@
 paths:
   /sandboxes:
-    post:
-      x-fern-examples:
-        - request:
-            name: AI Agent Sandbox
-          response:
-            body:
-              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
-              name: AI Agent Sandbox
-              status: starting
-              vcpu_count: 1
-              memory_mib: 1024
-              ip_address: ''
-              snapshot_id: ''
-              created_at: '2024-01-15T09:30:00Z'
     get:
       x-fern-examples:
         - response:
@@ -26,6 +12,31 @@ paths:
                 ip_address: 192.168.1.42
                 snapshot_id: 7e57d004-2b97-0e7a-b45f-5387367791cd
                 created_at: '2024-01-15T09:30:00Z'
+    post:
+      x-fern-examples:
+        - request:
+            name: AI Agent Sandbox
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              name: AI Agent Sandbox
+              status: starting
+              vcpu_count: 1
+              memory_mib: 1024
+              access_token: a1b2c3d4e5f67890abcdef1234567890
+              snapshot_id: d290f1ee-6c54-4b01-90e6-d701748f0851
+              created_at: '2024-01-15T09:30:00Z'
+              timeout_seconds: 3600
+              network:
+                allow_out:
+                  - api.openai.com
+                  - '*.github.com'
+                  - 8.8.8.8/32
+                deny_out:
+                  - 0.0.0.0/0
+              metadata:
+                env: prod
+                owner: agent-7
   /sandboxes/sandbox_id/files/path:
     put:
       x-fern-examples:
