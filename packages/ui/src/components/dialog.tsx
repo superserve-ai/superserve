@@ -62,7 +62,7 @@ function DialogPopup({
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="absolute top-4 right-4 text-muted hover:text-foreground transition-colors">
+        <DialogPrimitive.Close className="absolute top-4 right-4 text-muted hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus">
           <XIcon weight="light" className="h-4 w-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>

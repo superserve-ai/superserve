@@ -96,9 +96,7 @@ export async function GET(request: Request) {
           { provider, email: user.email, is_new_user: isNewUser },
         )
 
-        if (next.startsWith("/device") || next.startsWith("https://")) {
-          // keep redirect as-is
-        } else {
+        if (!next.startsWith("/device") && !next.startsWith("https://")) {
           next = "/sandboxes"
         }
       }

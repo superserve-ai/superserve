@@ -23,7 +23,7 @@ export function TableSkeleton({
               <div
                 key={`tab-${i}`}
                 className={cn(
-                  "h-6 animate-pulse bg-surface-hover",
+                  "h-6 motion-safe:animate-pulse bg-surface-hover",
                   i === 0 ? "w-12" : "w-14",
                 )}
               />
@@ -32,7 +32,7 @@ export function TableSkeleton({
             <div className="h-6 w-20" />
           )}
         </div>
-        <div className="h-8 w-48 animate-pulse bg-surface-hover" />
+        <div className="h-8 w-48 motion-safe:animate-pulse bg-surface-hover" />
       </div>
 
       {/* Table header skeleton */}
@@ -41,7 +41,7 @@ export function TableSkeleton({
           <div
             key={`header-${i}`}
             className={cn(
-              "h-2.5 animate-pulse bg-surface-hover",
+              "h-2.5 motion-safe:animate-pulse bg-surface-hover",
               i === 0 ? "w-5" : "w-16",
               i > 0 && "flex-1 max-w-20",
             )}
@@ -59,7 +59,7 @@ export function TableSkeleton({
             <div
               key={`cell-${rowIndex}-${colIndex}`}
               className={cn(
-                "h-3 animate-pulse bg-surface-hover",
+                "h-3 motion-safe:animate-pulse bg-surface-hover",
                 colIndex === 0 ? "w-5" : "flex-1",
               )}
             />

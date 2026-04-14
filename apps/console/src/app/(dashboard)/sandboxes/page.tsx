@@ -121,7 +121,7 @@ function SandboxesPageContent() {
       </PageHeader>
 
       {isPending ? (
-        <TableSkeleton columns={6} tabs={4} />
+        <TableSkeleton columns={6} tabs={3} />
       ) : error ? (
         <ErrorState message={error.message} onRetry={() => refetch()} />
       ) : isEmpty ? (

@@ -191,7 +191,9 @@ function SignInContent() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="text-muted"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  className="text-muted hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
                 >
                   {showPassword ? (
                     <EyeSlashIcon className="size-4" weight="light" />
