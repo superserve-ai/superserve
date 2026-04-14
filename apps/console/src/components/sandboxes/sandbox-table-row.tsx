@@ -48,6 +48,7 @@ export function SandboxTableRow({
   ...rest
 }: SandboxTableRowProps) {
   const router = useRouter()
+  const isFailed = sandbox.status === "failed"
 
   return (
     <AnimatedTableRow
@@ -82,6 +83,7 @@ export function SandboxTableRow({
             variant="outline"
             size="sm"
             className="text-xs"
+            disabled={isFailed}
             onClick={onConnect}
           >
             <PlugIcon className="size-3.5" weight="light" />
@@ -91,9 +93,7 @@ export function SandboxTableRow({
             variant="outline"
             size="sm"
             className="w-20 text-xs"
-            disabled={
-              sandbox.status === "pausing" || sandbox.status === "failed"
-            }
+            disabled={sandbox.status === "pausing" || isFailed}
             onClick={() => {
               if (sandbox.status === "active") {
                 onPause()
@@ -128,6 +128,7 @@ export function SandboxTableRow({
             </MenuTrigger>
             <MenuPopup>
               <MenuItem
+                disabled={isFailed}
                 onClick={() =>
                   router.push(`/sandboxes/${sandbox.id}/terminal/`)
                 }
@@ -135,11 +136,11 @@ export function SandboxTableRow({
                 <TerminalIcon className="size-4" weight="light" />
                 Open Terminal
               </MenuItem>
-              <MenuItem>
+              <MenuItem disabled={isFailed}>
                 <KeyIcon className="size-4" weight="light" />
                 Create SSH Access
               </MenuItem>
-              <MenuItem>
+              <MenuItem disabled={isFailed}>
                 <KeyReturnIcon className="size-4" weight="light" />
                 Remove SSH Access
               </MenuItem>
