@@ -10,5 +10,5 @@
       "@superserve/sdk/*": ["../../packages/sdk/src/*"]
     }
   },
-  "include": ["index.ts"]
+  "include": ["src/**/*.ts", "tests/**/*.ts", "vitest.config.ts"]
 }

@@ -1,10 +1,28 @@
 # @superserve/test-sdk-e2e-ts
 
-End-to-end test for `@superserve/sdk` against a live Superserve environment. Creates a real sandbox, runs a command, deletes the sandbox, verifies everything worked.
+End-to-end tests for `@superserve/sdk` against a live Superserve environment. Exercises every resource the TS SDK currently exposes — `system`, `sandboxes`, `exec` — with real API calls, real sandboxes, real command execution.
 
-Imports the SDK directly from `packages/sdk/src` via tsconfig `paths` — no build step, no `dist/` indirection. Source changes are picked up on the next run.
+Built with [Vitest](https://vitest.dev) to match the rest of the monorepo (same runner the `apps/console` tests use). One test file per resource. Shared client factory and polling helpers in `src/`.
 
-**Not wired into `bun run test`.** This test is credentialed, slow, and hits real infrastructure — it would break CI on every commit. Invoke explicitly when you want to validate the SDK against a live environment.
+Imports `@superserve/sdk` directly from `packages/sdk/src` via tsconfig `paths` — no build step, no `dist/` indirection. Source changes in the SDK are picked up on the next `bun run e2e`.
+
+**Not wired into `bun run test`.** These tests are credentialed, slow, and create real cloud resources. They run only when explicitly invoked.
+
+## Structure
+
+```
+tests/sdk-e2e-ts/
+├── vitest.config.ts          # serial runs, 60s test timeout, 120s hook timeout
+├── src/
+│   ├── client.ts             # createClient(), hasCredentials(), RUN_ID
+│   └── polling.ts            # waitForStatus(client, id, expected, { timeoutMs })
+└── tests/
+    ├── system.test.ts        # client.system.health()
+    ├── sandboxes.test.ts     # create, get, list, patch, pause, resume, delete
+    └── exec.test.ts          # command (sync + failing), commandStream (SSE)
+```
+
+Each test file owns its own sandbox via `beforeAll` / `afterAll` — the sandbox is created once per file, reused across tests in that file, and deleted in `afterAll` so cleanup runs even on failure. Sandbox names include a unique `RUN_ID` so orphans from crashed runs are identifiable for manual cleanup.
 
 ## Run
 
@@ -15,15 +33,19 @@ cd tests/sdk-e2e-ts
 SUPERSERVE_API_KEY=ss_... bun run e2e
 ```
 
-Or from the repo root:
+From the repo root:
 
 ```bash
 SUPERSERVE_API_KEY=ss_... bun run test:e2e
 ```
 
-## Target a different environment
+Watch mode (re-runs on file change):
 
-Set `SUPERSERVE_BASE_URL` to override the default:
+```bash
+SUPERSERVE_API_KEY=ss_... bun run e2e:watch
+```
+
+### Target a different environment
 
 ```bash
 # production
@@ -37,45 +59,69 @@ SUPERSERVE_BASE_URL=http://localhost:8080 \
   bun run e2e
 ```
 
-## Expected output
-
-```
-Target: https://api-staging.superserve.ai
-
-Creating sandbox...
-  id: sbx_abc123...
-  status: starting
-
-Running command: uname -a && date
-
---- stdout ---
-Linux <hostname> ...
-Fri Apr 10 00:00:00 UTC 2026
---- exit code: 0 ---
-
-Deleting sandbox sbx_abc123...
-Done.
-```
-
-## Typecheck
+### Without credentials
 
 ```bash
-bun run typecheck
+bun run e2e
 ```
 
-Uses tsconfig `paths` to resolve `@superserve/sdk` to `../../packages/sdk/src/index.ts`. Catches regressions in the SDK's public types without needing the `dist/` build.
+Every `describe` block is guarded with `describe.skipIf(!hasCredentials())`. With no `SUPERSERVE_API_KEY` set, Vitest reports all suites as skipped and exits 0. Useful for sanity-checking that the tests at least parse and import correctly.
+
+## Coverage
+
+| Resource    | Method                | Covered |
+|-------------|-----------------------|---------|
+| `system`    | `health()`            | ✓       |
+| `sandboxes` | `createSandbox()`     | ✓       |
+| `sandboxes` | `getSandbox()`        | ✓       |
+| `sandboxes` | `listSandboxes()`     | ✓       |
+| `sandboxes` | `patchSandbox()`      | ✓       |
+| `sandboxes` | `pauseSandbox()`      | ✓       |
+| `sandboxes` | `resumeSandbox()`     | ✓       |
+| `sandboxes` | `deleteSandbox()`     | ✓ (via `afterAll`) |
+| `exec`      | `command()`           | ✓       |
+| `exec`      | `commandStream()`     | ✓       |
+
+The TS SDK does not currently expose a `files` resource — the backend's `openapi.yaml` doesn't include file upload/download endpoints. When those land, add a `tests/files.test.ts` following the same pattern.
+
+## Conventions
+
+- **One file per resource.** Matches Stripe, Anthropic, OpenAI, and most other OSS SDK test layouts. Easy to scan, easy to `vitest run tests/sandboxes.test.ts` a single file when debugging.
+- **Shared sandbox per suite.** Tests inside `sandboxes.test.ts` or `exec.test.ts` reuse the same sandbox via `beforeAll`. Minimizes API calls and matches how real consumers use the SDK (create once, do many things).
+- **Polling over sleeping.** Never `setTimeout`-and-hope. `waitForStatus()` polls `getSandbox` until the expected status is observed or the timeout elapses with a clear error message.
+- **Cleanup is non-fatal.** If `afterAll` cleanup fails, the error is logged but doesn't mask the real test failure. Orphans are identifiable by their `sdk-e2e-*-${RUN_ID}` prefix.
+- **Serial test file execution.** `vitest.config.ts` sets `sequence.concurrent: false` so two files don't race on resource quotas in the target environment.
+- **Generous timeouts.** 60s per test, 120s per hook. Lifecycle operations like `pauseSandbox` transitions can legitimately take 30–60s.
 
 ## Why this is separate from the CI test pipeline
 
-Two reasons:
+1. **Credentials.** Running on every PR would require a CI secret, generate load on staging, and cost money.
+2. **Speed.** A full suite run is ~30–90 seconds depending on sandbox boot times. The regular `test` task is sub-second.
+3. **Flakiness domain.** E2E failures can indicate backend issues, network issues, quota issues — not SDK bugs. Mixing them with unit tests muddies the signal.
 
-1. **Credentials.** This test needs a real API key. Running it on every PR would generate load on staging and cost money even if the key were in a CI secret.
-2. **Speed.** Creating + deleting a sandbox takes multiple seconds. The regular `test` task is sub-second; we want to keep it that way.
+### Recommended CI integration (not included by default)
 
-Recommended invocation patterns:
+When you want scheduled e2e coverage, add `.github/workflows/sdk-e2e.yml`:
 
-- **Manually** before a release, to verify the SDK works against production
-- **Scheduled CI** (e.g., a GitHub Actions cron job) running against staging nightly to catch backend-SDK drift
-- **On-demand CI** via `workflow_dispatch` for debugging
+```yaml
+name: SDK E2E (staging)
 
-To wire up a scheduled workflow, add a `.github/workflows/sdk-e2e.yml` with a `schedule:` trigger and `secrets.SUPERSERVE_API_KEY` plumbed in. Not included in this repo by default — add it when you have a real environment to hit.
+on:
+  schedule:
+    - cron: "0 6 * * *"   # daily at 06:00 UTC
+  workflow_dispatch:      # manual trigger
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+      - run: bun install --frozen-lockfile
+      - run: bun run test:e2e
+        env:
+          SUPERSERVE_API_KEY: ${{ secrets.SUPERSERVE_STAGING_API_KEY }}
+          SUPERSERVE_BASE_URL: https://api-staging.superserve.ai
+```
