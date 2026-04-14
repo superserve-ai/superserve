@@ -42,7 +42,7 @@ export function SnapshotsSection({
           ))}
         </div>
       ) : !snapshots || snapshots.length === 0 ? (
-        <div className="flex min-h-60 items-center justify-center">
+        <div className="flex min-h-60 items-center justify-center py-10">
           <EmptyState
             icon={CameraIcon}
             title="No Snapshots"

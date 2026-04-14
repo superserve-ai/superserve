@@ -42,7 +42,7 @@ export function ActivitySection({ activity, isPending }: ActivitySectionProps) {
           ))}
         </div>
       ) : !activity || activity.length === 0 ? (
-        <div className="border-b border-border">
+        <div className="border-b border-border py-10">
           <EmptyState
             icon={ClipboardTextIcon}
             title="No Activity"
