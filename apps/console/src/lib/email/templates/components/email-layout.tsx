@@ -1,7 +1,6 @@
 import {
   Body,
   Container,
-  Font,
   Head,
   Html,
   Img,
@@ -19,15 +18,9 @@ interface EmailLayoutProps {
 export const EmailLayout = ({ preview, children }: EmailLayoutProps) => (
   <Html>
     <Head>
-      <Font
-        fontFamily="Inter"
-        fallbackFontFamily="Helvetica"
-        webFont={{
-          url: "https://fonts.gstatic.com/s/inter/v18/UcCo3FwrK3iLTcviYwY.woff2",
-          format: "woff2",
-        }}
-        fontWeight={400}
-        fontStyle="normal"
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Geist+Mono:wght@500&display=swap"
       />
     </Head>
     <Preview>{preview}</Preview>
@@ -35,7 +28,7 @@ export const EmailLayout = ({ preview, children }: EmailLayoutProps) => (
       <Container style={container}>
         <Section style={header}>
           <Img
-            src="https://superserve.ai/assets/logo.png"
+            src="https://superserve.ai/assets/logo-light.png"
             width="173"
             height="32"
             alt="Superserve"
@@ -43,13 +36,13 @@ export const EmailLayout = ({ preview, children }: EmailLayoutProps) => (
         </Section>
         <Section style={card}>{children}</Section>
         <Section style={footer}>
-          <Text style={footerText}>Superserve</Text>
+          <Text style={footerText}>SUPERSERVE</Text>
           <Text style={footerSubtext}>
             455 Market St Ste 1940 PMB 924076, San Francisco, California
             94105-2448 US.
           </Text>
           <Text style={footerSubtext}>
-            If you have any questions, we're happy to help. Contact{" "}
+            Questions? Contact{" "}
             <Link href="mailto:support@superserve.ai" style={footerSubtextLink}>
               support@superserve.ai
             </Link>
@@ -60,36 +53,57 @@ export const EmailLayout = ({ preview, children }: EmailLayoutProps) => (
   </Html>
 )
 
-const body = {
-  backgroundColor: "#faf8f5",
-  fontFamily: "Inter, Helvetica, Arial, sans-serif",
+const body: React.CSSProperties = {
+  backgroundColor: "#0a0a0a",
+  fontFamily: "'Instrument Sans', Helvetica, Arial, sans-serif",
   margin: "0",
   padding: "0",
+  color: "#e5e5e5",
 }
 
-const container = { maxWidth: "520px", margin: "0 auto", padding: "40px 20px" }
-const header = { textAlign: "center" as const, padding: "0 0 32px 0" }
-const card = {
-  backgroundColor: "#fffefb",
-  border: "1px dashed #e8e4df",
+const container: React.CSSProperties = {
+  maxWidth: "520px",
+  margin: "0 auto",
+  padding: "40px 20px",
+}
+
+const header: React.CSSProperties = {
+  textAlign: "center",
+  padding: "0 0 32px 0",
+}
+
+const card: React.CSSProperties = {
+  backgroundColor: "#171717",
+  border: "1px dashed #262626",
   padding: "40px 32px",
 }
-const footer = { padding: "32px 0 0 0", textAlign: "center" as const }
-const footerText = {
-  color: "#8a8a8a",
-  fontSize: "13px",
+
+const footer: React.CSSProperties = {
+  padding: "32px 0 0 0",
+  textAlign: "center",
+}
+
+const footerText: React.CSSProperties = {
+  color: "#737373",
+  fontFamily: "'Geist Mono', monospace",
+  fontSize: "11px",
+  fontWeight: 500,
+  letterSpacing: "0.08em",
   lineHeight: "20px",
   margin: "0 0 8px 0",
 }
-const footerSubtext = {
-  color: "#b0b0b0",
+
+const footerSubtext: React.CSSProperties = {
+  color: "#525252",
   fontSize: "11px",
   lineHeight: "18px",
   margin: "0",
 }
-const footerSubtextLink = {
-  color: "#105C60",
+
+const footerSubtextLink: React.CSSProperties = {
+  color: "#e5e5e5",
   fontSize: "11px",
   lineHeight: "18px",
-  margin: "0",
+  textDecoration: "underline",
+  textUnderlineOffset: "2px",
 }
