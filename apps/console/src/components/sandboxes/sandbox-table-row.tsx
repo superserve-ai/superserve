@@ -34,6 +34,7 @@ interface SandboxTableRowProps extends HTMLMotionProps<"tr"> {
   onDelete: () => void
   onPause: () => void
   onResume: () => void
+  onOpenTerminal: () => void
 }
 
 export function SandboxTableRow({
@@ -44,6 +45,7 @@ export function SandboxTableRow({
   onDelete,
   onPause,
   onResume,
+  onOpenTerminal,
   className,
   ...rest
 }: SandboxTableRowProps) {
@@ -129,9 +131,10 @@ export function SandboxTableRow({
             <MenuPopup>
               <MenuItem
                 disabled={sandbox.status !== "active"}
-                onClick={() =>
+                onClick={() => {
+                  onOpenTerminal()
                   router.push(`/sandboxes/${sandbox.id}/terminal/`)
-                }
+                }}
               >
                 <TerminalIcon className="size-4" weight="light" />
                 Open Terminal

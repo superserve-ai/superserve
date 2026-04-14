@@ -172,15 +172,36 @@ function SandboxesPageContent() {
                     sandbox={sandbox}
                     selected={selected.has(sandbox.id)}
                     onToggle={() => toggleOne(sandbox.id)}
-                    onConnect={() => setConnectSandboxId(sandbox.id)}
+                    onConnect={() => {
+                      posthog.capture(SANDBOX_EVENTS.CONNECT_OPENED, {
+                        sandbox_id: sandbox.id,
+                      })
+                      setConnectSandboxId(sandbox.id)
+                    }}
                     onDelete={() =>
                       setDeleteTarget({
                         id: sandbox.id,
                         name: sandbox.name,
                       })
                     }
-                    onPause={() => pauseMutation.mutate(sandbox.id)}
-                    onResume={() => resumeMutation.mutate(sandbox.id)}
+                    onPause={() => {
+                      posthog.capture(SANDBOX_EVENTS.PAUSED, {
+                        sandbox_id: sandbox.id,
+                      })
+                      pauseMutation.mutate(sandbox.id)
+                    }}
+                    onResume={() => {
+                      posthog.capture(SANDBOX_EVENTS.RESUMED, {
+                        sandbox_id: sandbox.id,
+                      })
+                      resumeMutation.mutate(sandbox.id)
+                    }}
+                    onOpenTerminal={() =>
+                      posthog.capture(SANDBOX_EVENTS.TERMINAL_OPENED, {
+                        sandbox_id: sandbox.id,
+                        source: "list_menu",
+                      })
+                    }
                   />
                 ))}
               </StickyHoverTableBody>

@@ -137,8 +137,6 @@ export function CreateSandboxDialog({
   }
 
   const handleCreate = () => {
-    posthog.capture(SANDBOX_EVENTS.CREATED)
-
     const allowList = allowRules.map((r) => r.trim()).filter(Boolean)
     const denyList = denyRules.map((r) => r.trim()).filter(Boolean)
     const hasNetwork = allowList.length > 0 || denyList.length > 0
@@ -156,6 +154,16 @@ export function CreateSandboxDialog({
       const v = entry.value.trim()
       if (k) metadata[k] = v
     }
+
+    posthog.capture(SANDBOX_EVENTS.CREATED, {
+      has_timeout: !!timeout,
+      has_network_rules: hasNetwork,
+      allow_rule_count: allowList.length,
+      deny_rule_count: denyList.length,
+      env_var_count: Object.keys(envVars).length,
+      metadata_key_count: Object.keys(metadata).length,
+      advanced_expanded: showAdvanced,
+    })
 
     createMutation.mutate(
       {

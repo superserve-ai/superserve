@@ -4,8 +4,10 @@ import { CaretUpDownIcon, SignOutIcon, UserIcon } from "@phosphor-icons/react"
 import { createBrowserClient } from "@superserve/supabase"
 import { Avatar, cn } from "@superserve/ui"
 import { useRouter } from "next/navigation"
+import { usePostHog } from "posthog-js/react"
 import { useEffect, useRef, useState } from "react"
 import { useUser } from "@/hooks/use-user"
+import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { useSidebar } from "./sidebar-context"
 
 function getInitials(name: string): string {
@@ -21,6 +23,7 @@ export function SidebarUserMenu() {
   const { user } = useUser()
   const { isCollapsed } = useSidebar()
   const router = useRouter()
+  const posthog = usePostHog()
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -52,12 +55,14 @@ export function SidebarUserMenu() {
 
   const handleLogout = async () => {
     setOpen(false)
+    posthog.capture(AUTH_EVENTS.SIGN_OUT)
     try {
       const supabase = createBrowserClient()
       await supabase.auth.signOut()
     } catch {
       // Sign out failed, but redirect to sign-in anyway
     }
+    posthog.reset()
     router.push("/auth/signin")
   }
 

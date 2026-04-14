@@ -6,10 +6,12 @@ import { Button, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useRef, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { Spinner } from "@/components/icons"
+import { AUTH_EVENTS } from "@/lib/posthog/events"
 
 function ResetPasswordContent() {
   const [isLoading, setIsLoading] = useState(false)
@@ -20,6 +22,7 @@ function ResetPasswordContent() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [success, setSuccess] = useState(false)
   const router = useRouter()
+  const posthog = usePostHog()
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -49,6 +52,7 @@ function ResetPasswordContent() {
         setErrors({ form: "Failed to update password. Please try again." })
         return
       }
+      posthog.capture(AUTH_EVENTS.PASSWORD_RESET_COMPLETED)
       setSuccess(true)
       redirectTimerRef.current = setTimeout(
         () => router.push("/auth/signin"),

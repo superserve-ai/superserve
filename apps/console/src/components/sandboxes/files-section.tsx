@@ -13,8 +13,10 @@ import {
   TooltipTrigger,
   useToast,
 } from "@superserve/ui"
+import { usePostHog } from "posthog-js/react"
 import { useRef, useState } from "react"
 import type { SandboxResponse } from "@/lib/api/types"
+import { FILE_EVENTS } from "@/lib/posthog/events"
 import { formatBytes } from "@/lib/sandbox-utils"
 
 const SANDBOX_HOST =
@@ -109,6 +111,7 @@ function MaybeTooltip({
 
 function UploadPanel({ sandbox, disabled, reason }: PanelProps) {
   const { addToast } = useToast()
+  const posthog = usePostHog()
   const inputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
   const [path, setPath] = useState("/home/user/")
@@ -167,6 +170,7 @@ function UploadPanel({ sandbox, disabled, reason }: PanelProps) {
       return
     }
     setUploading(true)
+    const startedAt = performance.now()
     try {
       const res = await fetch(filesUrl(sandbox.id, target), {
         method: "POST",
@@ -177,11 +181,21 @@ function UploadPanel({ sandbox, disabled, reason }: PanelProps) {
         const text = await res.text().catch(() => "")
         throw new Error(text || `Upload failed (${res.status})`)
       }
+      posthog.capture(FILE_EVENTS.UPLOAD_SUCCEEDED, {
+        sandbox_id: sandbox.id,
+        file_size: file.size,
+        duration_ms: Math.round(performance.now() - startedAt),
+      })
       addToast(`Uploaded to ${target}`, "success")
       setFile(null)
       if (inputRef.current) inputRef.current.value = ""
     } catch (err) {
       const message = err instanceof Error ? err.message : "Upload failed"
+      posthog.capture(FILE_EVENTS.UPLOAD_FAILED, {
+        sandbox_id: sandbox.id,
+        file_size: file.size,
+        error: message,
+      })
       addToast(message, "error")
     } finally {
       setUploading(false)
@@ -260,6 +274,7 @@ function UploadPanel({ sandbox, disabled, reason }: PanelProps) {
 
 function DownloadPanel({ sandbox, disabled, reason }: PanelProps) {
   const { addToast } = useToast()
+  const posthog = usePostHog()
   const [path, setPath] = useState("/home/user/")
   const [downloading, setDownloading] = useState(false)
   const [progress, setProgress] = useState<{
@@ -280,6 +295,7 @@ function DownloadPanel({ sandbox, disabled, reason }: PanelProps) {
     }
     setDownloading(true)
     setProgress({ loaded: 0, total: null })
+    const startedAt = performance.now()
     try {
       const res = await fetch(filesUrl(sandbox.id, target), {
         method: "GET",
@@ -322,9 +338,18 @@ function DownloadPanel({ sandbox, disabled, reason }: PanelProps) {
       a.click()
       a.remove()
       URL.revokeObjectURL(url)
+      posthog.capture(FILE_EVENTS.DOWNLOAD_SUCCEEDED, {
+        sandbox_id: sandbox.id,
+        file_size: blob.size,
+        duration_ms: Math.round(performance.now() - startedAt),
+      })
       addToast(`Downloaded ${fileNameFromPath(target)}`, "success")
     } catch (err) {
       const message = err instanceof Error ? err.message : "Download failed"
+      posthog.capture(FILE_EVENTS.DOWNLOAD_FAILED, {
+        sandbox_id: sandbox.id,
+        error: message,
+      })
       addToast(message, "error")
     } finally {
       setDownloading(false)

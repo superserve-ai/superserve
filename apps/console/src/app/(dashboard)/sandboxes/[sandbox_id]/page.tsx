@@ -220,7 +220,13 @@ export default function SandboxDetailPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => router.push(`/sandboxes/${sandboxId}/terminal/`)}
+              onClick={() => {
+                posthog.capture(SANDBOX_EVENTS.TERMINAL_OPENED, {
+                  sandbox_id: sandbox.id,
+                  source: "detail_header",
+                })
+                router.push(`/sandboxes/${sandboxId}/terminal/`)
+              }}
             >
               <TerminalIcon className="size-3.5" weight="light" />
               Terminal
@@ -256,8 +262,14 @@ export default function SandboxDetailPage() {
             }
             onClick={() => {
               if (sandbox.status === "active") {
+                posthog.capture(SANDBOX_EVENTS.PAUSED, {
+                  sandbox_id: sandbox.id,
+                })
                 pauseMutation.mutate(sandbox.id)
               } else if (sandbox.status === "idle") {
+                posthog.capture(SANDBOX_EVENTS.RESUMED, {
+                  sandbox_id: sandbox.id,
+                })
                 resumeMutation.mutate(sandbox.id)
               }
             }}

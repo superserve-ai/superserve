@@ -3,10 +3,12 @@
 import { Button, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
+import { usePostHog } from "posthog-js/react"
 import { Suspense, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { Spinner } from "@/components/icons"
+import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { sendPasswordResetEmail } from "./action"
 
 function ForgotPasswordContent() {
@@ -14,6 +16,7 @@ function ForgotPasswordContent() {
   const [email, setEmail] = useState("")
   const [emailSent, setEmailSent] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const posthog = usePostHog()
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -25,6 +28,7 @@ function ForgotPasswordContent() {
     setIsLoading(true)
     try {
       await sendPasswordResetEmail(email)
+      posthog.capture(AUTH_EVENTS.PASSWORD_RESET_REQUESTED)
       setEmailSent(true)
     } catch {
       setErrors({ form: "Error sending reset email. Please try again." })
