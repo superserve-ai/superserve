@@ -33,26 +33,19 @@ function SignInContent() {
       const supabase = createBrowserClient()
       try {
         const {
-          data: { session },
+          data: { user },
           error,
-        } = await supabase.auth.getSession()
-        if (error) {
+        } = await supabase.auth.getUser()
+        // Only sign out on explicit auth errors (expired/invalid token), not
+        // transient network failures — otherwise a flaky connection would
+        // nuke a valid session on every page load.
+        if (error?.status === 401 || error?.status === 403) {
           await supabase.auth.signOut()
           return
         }
-        if (session) {
-          const {
-            data: { user },
-            error: userError,
-          } = await supabase.auth.getUser()
-          if (userError || !user) {
-            await supabase.auth.signOut()
-            return
-          }
-          router.push(nextUrl)
-        }
+        if (user) router.push(nextUrl)
       } catch {
-        await supabase.auth.signOut()
+        // Network error: leave the session alone.
       }
     }
     checkUser()
@@ -149,7 +142,7 @@ function SignInContent() {
           type="button"
           variant="outline"
           onClick={handleGoogleSignIn}
-          disabled={isLoading}
+          disabled={isLoading || isEmailLoading}
           className="w-full gap-2 border-solid font-sans normal-case tracking-normal"
         >
           {isLoading ? <Spinner /> : <GoogleIcon />}
@@ -168,45 +161,35 @@ function SignInContent() {
 
         {/* Email/Password Form */}
         <form onSubmit={handleEmailSignIn} className="space-y-3">
-          <div>
-            <Input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              error={errors.email}
-            />
-            {errors.email && (
-              <p className="mt-1 text-xs text-destructive">{errors.email}</p>
-            )}
-          </div>
-          <div>
-            <Input
-              type={showPassword ? "text" : "password"}
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              error={errors.password}
-              suffix={
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  aria-pressed={showPassword}
-                  className="text-muted hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
-                >
-                  {showPassword ? (
-                    <EyeSlashIcon className="size-4" weight="light" />
-                  ) : (
-                    <EyeIcon className="size-4" weight="light" />
-                  )}
-                </button>
-              }
-            />
-            {errors.password && (
-              <p className="mt-1 text-xs text-destructive">{errors.password}</p>
-            )}
-          </div>
+          <Input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            error={errors.email}
+          />
+          <Input
+            type={showPassword ? "text" : "password"}
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            error={errors.password}
+            suffix={
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-pressed={showPassword}
+                className="text-muted hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+              >
+                {showPassword ? (
+                  <EyeSlashIcon className="size-4" weight="light" />
+                ) : (
+                  <EyeIcon className="size-4" weight="light" />
+                )}
+              </button>
+            }
+          />
           <div className="flex justify-end">
             <Link
               href="/auth/forgot-password"
@@ -218,7 +201,11 @@ function SignInContent() {
           {errors.form && (
             <p className="text-xs text-destructive">{errors.form}</p>
           )}
-          <Button type="submit" disabled={isEmailLoading} className="w-full">
+          <Button
+            type="submit"
+            disabled={isEmailLoading || isLoading}
+            className="w-full"
+          >
             {isEmailLoading ? <Spinner /> : null}
             {isEmailLoading ? "Signing in..." : "Sign In"}
           </Button>

@@ -25,12 +25,14 @@ export function SandboxTerminal({ sandboxId, accessToken }: Props) {
   const wsRef = useRef<WebSocket | null>(null)
   const roRef = useRef<ResizeObserver | null>(null)
   const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const posthogRef = useRef(usePostHog())
+  const posthog = usePostHog()
+  const posthogRef = useRef(posthog)
   const [status, setStatus] = useState<Status>("connecting")
 
   // Keep posthog ref current without triggering reconnects
-  const posthog = usePostHog()
-  posthogRef.current = posthog
+  useEffect(() => {
+    posthogRef.current = posthog
+  }, [posthog])
 
   const connectWebSocket = useCallback(
     (term: Terminal) => {
@@ -77,11 +79,15 @@ export function SandboxTerminal({ sandboxId, accessToken }: Props) {
             sandbox_id: sandboxId,
             close_code: evt.code,
           })
-          if (evt.code === 1000) {
-            term.write("\r\n\x1b[33m[session ended]\x1b[0m\r\n")
-          } else {
-            term.write(`\r\n\x1b[31m[disconnected: ${evt.code}]\x1b[0m\r\n`)
-          }
+          const label =
+            evt.code === 1000
+              ? "\x1b[33m[session ended]\x1b[0m"
+              : evt.code === 1001
+                ? "\x1b[33m[sandbox going away]\x1b[0m"
+                : evt.code === 1006
+                  ? "\x1b[31m[connection lost]\x1b[0m"
+                  : `\x1b[31m[disconnected: ${evt.code}]\x1b[0m`
+          term.write(`\r\n${label}\r\n`)
           setStatus("disconnected")
         }
       } catch (err) {
@@ -168,7 +174,7 @@ export function SandboxTerminal({ sandboxId, accessToken }: Props) {
     <div className="relative flex h-full flex-col bg-background p-2">
       <div ref={containerRef} className="h-full w-full" />
       {status === "connecting" && (
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <span className="font-mono text-xs text-muted animate-pulse">
             Connecting...
           </span>

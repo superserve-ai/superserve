@@ -143,7 +143,7 @@ function SignUpContent() {
               type="button"
               variant="outline"
               onClick={handleGoogleSignIn}
-              disabled={isGoogleLoading}
+              disabled={isGoogleLoading || isLoading}
               className="w-full gap-2 border-solid font-sans normal-case tracking-normal"
             >
               {isGoogleLoading ? <Spinner /> : <GoogleIcon />}
@@ -162,94 +162,68 @@ function SignUpContent() {
 
             {/* Sign up form */}
             <form onSubmit={handleSignUp} className="space-y-3">
-              <div>
-                <Input
-                  type="text"
-                  placeholder="Full Name"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  error={errors.fullName}
-                />
-                {errors.fullName && (
-                  <p className="mt-1 text-xs text-destructive">
-                    {errors.fullName}
-                  </p>
-                )}
-              </div>
-              <div>
-                <Input
-                  type="email"
-                  placeholder="Email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  error={errors.email}
-                />
-                {errors.email && (
-                  <p className="mt-1 text-xs text-destructive">
-                    {errors.email}
-                  </p>
-                )}
-              </div>
-              <div>
-                <Input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  error={errors.password}
-                  suffix={
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="text-muted"
-                    >
-                      {showPassword ? (
-                        <EyeSlashIcon className="size-4" weight="light" />
-                      ) : (
-                        <EyeIcon className="size-4" weight="light" />
-                      )}
-                    </button>
-                  }
-                />
-                {errors.password && (
-                  <p className="mt-1 text-xs text-destructive">
-                    {errors.password}
-                  </p>
-                )}
-              </div>
-              <div>
-                <Input
-                  type={showConfirmPassword ? "text" : "password"}
-                  placeholder="Confirm Password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  error={errors.confirmPassword}
-                  suffix={
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowConfirmPassword(!showConfirmPassword)
-                      }
-                      className="text-muted"
-                    >
-                      {showConfirmPassword ? (
-                        <EyeSlashIcon className="size-4" weight="light" />
-                      ) : (
-                        <EyeIcon className="size-4" weight="light" />
-                      )}
-                    </button>
-                  }
-                />
-                {errors.confirmPassword && (
-                  <p className="mt-1 text-xs text-destructive">
-                    {errors.confirmPassword}
-                  </p>
-                )}
-              </div>
+              <Input
+                type="text"
+                placeholder="Full Name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                error={errors.fullName}
+              />
+              <Input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                error={errors.email}
+              />
+              <Input
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                error={errors.password}
+                suffix={
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-muted"
+                  >
+                    {showPassword ? (
+                      <EyeSlashIcon className="size-4" weight="light" />
+                    ) : (
+                      <EyeIcon className="size-4" weight="light" />
+                    )}
+                  </button>
+                }
+              />
+              <Input
+                type={showConfirmPassword ? "text" : "password"}
+                placeholder="Confirm Password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                error={errors.confirmPassword}
+                suffix={
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="text-muted"
+                  >
+                    {showConfirmPassword ? (
+                      <EyeSlashIcon className="size-4" weight="light" />
+                    ) : (
+                      <EyeIcon className="size-4" weight="light" />
+                    )}
+                  </button>
+                }
+              />
               {errors.form && (
                 <p className="text-xs text-destructive">{errors.form}</p>
               )}
-              <Button type="submit" disabled={isLoading} className="w-full">
+              <Button
+                type="submit"
+                disabled={isLoading || isGoogleLoading}
+                className="w-full"
+              >
                 {isLoading ? <Spinner /> : null}
                 {isLoading ? "Creating account..." : "Sign Up"}
               </Button>

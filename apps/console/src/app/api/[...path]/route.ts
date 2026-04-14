@@ -9,6 +9,23 @@ const ALLOWED_PREFIXES = ["sandboxes", "health", "v1"]
 /** Paths that carry their own auth (e.g. Bearer token). */
 const SKIP_KEY_INJECTION = ["v1/auth/"]
 
+/**
+ * Only these request headers are forwarded upstream. Everything else
+ * (cookies, client-supplied x-api-key, etc.) is stripped so a malicious or
+ * buggy client can't leak console cookies to the sandbox API or override the
+ * server-injected key.
+ */
+const FORWARD_REQUEST_HEADERS = new Set([
+  "accept",
+  "accept-encoding",
+  "accept-language",
+  "authorization",
+  "content-length",
+  "content-type",
+  "idempotency-key",
+  "user-agent",
+])
+
 function isAllowedPath(path: string): boolean {
   return ALLOWED_PREFIXES.some(
     (prefix) => path === prefix || path.startsWith(`${prefix}/`),
@@ -35,10 +52,9 @@ async function proxyRequest(
 
   const headers = new Headers()
   for (const [key, value] of request.headers.entries()) {
-    if (key === "host" || key === "connection" || key === "transfer-encoding") {
-      continue
+    if (FORWARD_REQUEST_HEADERS.has(key.toLowerCase())) {
+      headers.set(key, value)
     }
-    headers.set(key, value)
   }
 
   // Inject server-side API key for authenticated requests

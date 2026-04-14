@@ -77,20 +77,13 @@ function ForgotPasswordContent() {
             </h1>
 
             <form onSubmit={handleResetPassword} className="space-y-3">
-              <div>
-                <Input
-                  type="email"
-                  placeholder="Email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  error={errors.email}
-                />
-                {errors.email && (
-                  <p className="mt-1 text-xs text-destructive">
-                    {errors.email}
-                  </p>
-                )}
-              </div>
+              <Input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                error={errors.email}
+              />
               {errors.form && (
                 <p className="text-xs text-destructive">{errors.form}</p>
               )}

@@ -5,7 +5,14 @@ import {
   FileArrowUpIcon,
   UploadSimpleIcon,
 } from "@phosphor-icons/react"
-import { Button, Input, useToast } from "@superserve/ui"
+import {
+  Button,
+  Input,
+  Tooltip,
+  TooltipPopup,
+  TooltipTrigger,
+  useToast,
+} from "@superserve/ui"
 import { useRef, useState } from "react"
 import type { SandboxResponse } from "@/lib/api/types"
 import { formatBytes } from "@/lib/sandbox-utils"
@@ -23,28 +30,54 @@ function fileNameFromPath(path: string): string {
   return parts[parts.length - 1] || "download"
 }
 
+function isValidAbsolutePath(path: string): boolean {
+  if (!path.startsWith("/")) return false
+  for (const segment of path.split("/")) {
+    if (segment === ".." || segment === ".") return false
+  }
+  return true
+}
+
+function disabledReason(status: SandboxResponse["status"]): string | null {
+  switch (status) {
+    case "active":
+      return null
+    case "idle":
+      return "Start the sandbox to transfer files"
+    case "pausing":
+      return "Sandbox is pausing"
+    case "failed":
+      return "Sandbox failed — file transfer unavailable"
+    case "deleted":
+      return "Sandbox has been deleted"
+    default:
+      return "Sandbox is not running"
+  }
+}
+
 interface FilesSectionProps {
   sandbox: SandboxResponse
 }
 
 export function FilesSection({ sandbox }: FilesSectionProps) {
-  const disabled = sandbox.status !== "active"
+  const reason = disabledReason(sandbox.status)
+  const disabled = reason !== null
 
   return (
     <>
       <div className="flex h-10 items-center border-b border-border px-4">
         <h2 className="text-sm font-medium text-foreground">Files</h2>
-        {disabled && (
+        {reason && (
           <span className="ml-3 font-mono text-xs uppercase text-muted">
-            Sandbox must be active
+            {reason}
           </span>
         )}
       </div>
       <div className="grid grid-cols-2 border-b border-border">
         <div className="border-r border-border">
-          <UploadPanel sandbox={sandbox} disabled={disabled} />
+          <UploadPanel sandbox={sandbox} disabled={disabled} reason={reason} />
         </div>
-        <DownloadPanel sandbox={sandbox} disabled={disabled} />
+        <DownloadPanel sandbox={sandbox} disabled={disabled} reason={reason} />
       </div>
     </>
   )
@@ -53,9 +86,28 @@ export function FilesSection({ sandbox }: FilesSectionProps) {
 interface PanelProps {
   sandbox: SandboxResponse
   disabled: boolean
+  reason: string | null
 }
 
-function UploadPanel({ sandbox, disabled }: PanelProps) {
+function MaybeTooltip({
+  reason,
+  children,
+}: {
+  reason: string | null
+  children: React.ReactElement
+}) {
+  if (!reason) return children
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={<span className="inline-flex">{children}</span>}
+      />
+      <TooltipPopup>{reason}</TooltipPopup>
+    </Tooltip>
+  )
+}
+
+function UploadPanel({ sandbox, disabled, reason }: PanelProps) {
   const { addToast } = useToast()
   const inputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
@@ -63,7 +115,7 @@ function UploadPanel({ sandbox, disabled }: PanelProps) {
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
 
-  const defaultPath = (name: string) => {
+  const resolvePath = (name: string) => {
     if (!path || path.endsWith("/")) {
       return `${path || "/home/user/"}${name}`
     }
@@ -106,8 +158,8 @@ function UploadPanel({ sandbox, disabled }: PanelProps) {
 
   const handleUpload = async () => {
     if (!file) return
-    const target = defaultPath(file.name).trim()
-    if (!target.startsWith("/") || target.includes("..")) {
+    const target = resolvePath(file.name).trim()
+    if (!isValidAbsolutePath(target)) {
       addToast(
         "Path must be absolute and cannot contain '..' segments",
         "error",
@@ -118,10 +170,7 @@ function UploadPanel({ sandbox, disabled }: PanelProps) {
     try {
       const res = await fetch(filesUrl(sandbox.id, target), {
         method: "POST",
-        headers: {
-          "X-Access-Token": sandbox.access_token,
-          "Content-Type": "application/octet-stream",
-        },
+        headers: { "X-Access-Token": sandbox.access_token },
         body: file,
       })
       if (!res.ok) {
@@ -146,6 +195,7 @@ function UploadPanel({ sandbox, disabled }: PanelProps) {
         Upload
       </div>
       <label
+        aria-label="Select or drag a file to upload"
         onDragOver={handleDragOver}
         onDragEnter={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -192,34 +242,36 @@ function UploadPanel({ sandbox, disabled }: PanelProps) {
         className="font-mono text-xs"
       />
       <div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!canUpload}
-          onClick={handleUpload}
-        >
-          <UploadSimpleIcon className="size-3.5" weight="light" />
-          {uploading ? "Uploading..." : "Upload"}
-        </Button>
+        <MaybeTooltip reason={reason}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!canUpload}
+            onClick={handleUpload}
+          >
+            <UploadSimpleIcon className="size-3.5" weight="light" />
+            {uploading ? "Uploading..." : "Upload"}
+          </Button>
+        </MaybeTooltip>
       </div>
     </div>
   )
 }
 
-function DownloadPanel({ sandbox, disabled }: PanelProps) {
+function DownloadPanel({ sandbox, disabled, reason }: PanelProps) {
   const { addToast } = useToast()
   const [path, setPath] = useState("/home/user/")
   const [downloading, setDownloading] = useState(false)
+  const [progress, setProgress] = useState<{
+    loaded: number
+    total: number | null
+  } | null>(null)
 
   const canDownload = !disabled && !downloading && !!path.trim()
 
   const handleDownload = async () => {
     const target = path.trim()
-    if (
-      !target.startsWith("/") ||
-      target.includes("..") ||
-      target.endsWith("/")
-    ) {
+    if (!isValidAbsolutePath(target) || target.endsWith("/")) {
       addToast(
         "Path must be an absolute file path without '..' segments",
         "error",
@@ -227,6 +279,7 @@ function DownloadPanel({ sandbox, disabled }: PanelProps) {
       return
     }
     setDownloading(true)
+    setProgress({ loaded: 0, total: null })
     try {
       const res = await fetch(filesUrl(sandbox.id, target), {
         method: "GET",
@@ -236,7 +289,31 @@ function DownloadPanel({ sandbox, disabled }: PanelProps) {
         const text = await res.text().catch(() => "")
         throw new Error(text || `Download failed (${res.status})`)
       }
-      const blob = await res.blob()
+
+      const lengthHeader = res.headers.get("content-length")
+      const total = lengthHeader ? Number(lengthHeader) : null
+      setProgress({ loaded: 0, total })
+
+      const reader = res.body?.getReader()
+      const chunks: BlobPart[] = []
+      let loaded = 0
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          if (value) {
+            chunks.push(value)
+            loaded += value.byteLength
+            setProgress({ loaded, total })
+          }
+        }
+      } else {
+        const blob = await res.blob()
+        chunks.push(blob)
+        loaded = blob.size
+      }
+
+      const blob = new Blob(chunks)
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
@@ -251,8 +328,21 @@ function DownloadPanel({ sandbox, disabled }: PanelProps) {
       addToast(message, "error")
     } finally {
       setDownloading(false)
+      setProgress(null)
     }
   }
+
+  const progressLabel = (() => {
+    if (!progress) return null
+    if (progress.total) {
+      const pct = Math.min(
+        100,
+        Math.round((progress.loaded / progress.total) * 100),
+      )
+      return `${pct}% · ${formatBytes(progress.loaded)} / ${formatBytes(progress.total)}`
+    }
+    return formatBytes(progress.loaded)
+  })()
 
   return (
     <div className="flex h-full flex-col gap-3 px-4 py-4">
@@ -267,16 +357,23 @@ function DownloadPanel({ sandbox, disabled }: PanelProps) {
         disabled={disabled}
         className="font-mono text-xs"
       />
-      <div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!canDownload}
-          onClick={handleDownload}
-        >
-          <DownloadSimpleIcon className="size-3.5" weight="light" />
-          {downloading ? "Downloading..." : "Download"}
-        </Button>
+      <div className="flex items-center gap-3">
+        <MaybeTooltip reason={reason}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!canDownload}
+            onClick={handleDownload}
+          >
+            <DownloadSimpleIcon className="size-3.5" weight="light" />
+            {downloading ? "Downloading..." : "Download"}
+          </Button>
+        </MaybeTooltip>
+        {progressLabel && (
+          <span className="font-mono text-xs text-muted tabular-nums">
+            {progressLabel}
+          </span>
+        )}
       </div>
     </div>
   )

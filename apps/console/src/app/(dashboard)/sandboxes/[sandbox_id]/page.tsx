@@ -7,13 +7,21 @@ import {
   TerminalIcon,
   TrashIcon,
 } from "@phosphor-icons/react"
-import { Badge, Button } from "@superserve/ui"
+import {
+  Badge,
+  Button,
+  Tooltip,
+  TooltipPopup,
+  TooltipTrigger,
+} from "@superserve/ui"
 import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
+import { useState } from "react"
 import { ErrorState } from "@/components/error-state"
 import { ActivitySection } from "@/components/sandboxes/activity-section"
+import { DeleteSandboxDialog } from "@/components/sandboxes/delete-sandbox-dialog"
 import { FilesSection } from "@/components/sandboxes/files-section"
 import {
   MetadataSection,
@@ -75,6 +83,21 @@ function DetailSkeleton() {
           </div>
         </div>
 
+        {/* Files */}
+        <div className="flex h-10 items-center border-b border-border px-4">
+          <div className="h-3.5 w-12 animate-pulse bg-muted/20" />
+        </div>
+        <div className="grid grid-cols-2 border-b border-border">
+          <div className="border-r border-border px-4 py-4">
+            <div className="mb-3 h-3.5 w-16 animate-pulse bg-muted/20" />
+            <div className="h-40 animate-pulse border border-dashed border-border" />
+          </div>
+          <div className="px-4 py-4">
+            <div className="mb-3 h-3.5 w-20 animate-pulse bg-muted/20" />
+            <div className="h-9 animate-pulse bg-muted/20" />
+          </div>
+        </div>
+
         {/* Activity */}
         <div className="flex h-10 items-center border-b border-border px-4">
           <div className="h-3.5 w-16 animate-pulse bg-muted/20" />
@@ -121,17 +144,20 @@ export default function SandboxDetailPage() {
   const pauseMutation = usePauseSandbox()
   const resumeMutation = useResumeSandbox()
   const deleteMutation = useDeleteSandbox()
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   const { data: activity, isPending: activityPending } = useQuery({
     queryKey: auditLogKeys.bySandbox(sandboxId),
     queryFn: () => listActivityBySandboxAction(sandboxId),
     enabled: !!sandboxId,
+    staleTime: 30_000,
   })
 
   const { data: snapshots, isPending: snapshotsPending } = useQuery({
     queryKey: snapshotKeys.bySandbox(sandboxId),
     queryFn: () => listSnapshotsBySandboxAction(sandboxId),
     enabled: !!sandboxId,
+    staleTime: 30_000,
   })
 
   if (isPending) return <DetailSkeleton />
@@ -156,10 +182,16 @@ export default function SandboxDetailPage() {
     )
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     posthog.capture(SANDBOX_EVENTS.DELETED, { id: sandbox.id })
-    deleteMutation.mutate(sandbox.id, {
-      onSuccess: () => router.push("/sandboxes/"),
+    await new Promise<void>((resolve, reject) => {
+      deleteMutation.mutate(sandbox.id, {
+        onSuccess: () => {
+          router.push("/sandboxes/")
+          resolve()
+        },
+        onError: (err) => reject(err),
+      })
     })
   }
 
@@ -184,7 +216,7 @@ export default function SandboxDetailPage() {
           </Badge>
         </div>
         <div className="flex items-center gap-2">
-          {(sandbox.status === "active" || sandbox.status === "idle") && (
+          {sandbox.status === "active" ? (
             <Button
               variant="outline"
               size="sm"
@@ -193,6 +225,28 @@ export default function SandboxDetailPage() {
               <TerminalIcon className="size-3.5" weight="light" />
               Terminal
             </Button>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span className="inline-flex">
+                    <Button variant="outline" size="sm" disabled>
+                      <TerminalIcon className="size-3.5" weight="light" />
+                      Terminal
+                    </Button>
+                  </span>
+                }
+              />
+              <TooltipPopup>
+                {sandbox.status === "idle"
+                  ? "Start the sandbox to open a terminal"
+                  : sandbox.status === "failed"
+                    ? "Sandbox failed — terminal unavailable"
+                    : sandbox.status === "pausing"
+                      ? "Sandbox is pausing"
+                      : "Sandbox is not running"}
+              </TooltipPopup>
+            </Tooltip>
           )}
           <Button
             variant="outline"
@@ -224,13 +278,21 @@ export default function SandboxDetailPage() {
             variant="outline"
             size="sm"
             className="text-destructive hover:text-destructive"
-            onClick={handleDelete}
+            onClick={() => setDeleteOpen(true)}
           >
             <TrashIcon className="size-3.5" weight="light" />
             Delete
           </Button>
         </div>
       </div>
+
+      <DeleteSandboxDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        onConfirm={handleDelete}
+        isLoading={deleteMutation.isPending}
+        sandboxName={sandbox.name}
+      />
 
       <div className="flex-1 overflow-y-auto">
         <SandboxInfoGrid sandbox={sandbox} />

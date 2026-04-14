@@ -128,7 +128,7 @@ export function SandboxTableRow({
             </MenuTrigger>
             <MenuPopup>
               <MenuItem
-                disabled={isFailed}
+                disabled={sandbox.status !== "active"}
                 onClick={() =>
                   router.push(`/sandboxes/${sandbox.id}/terminal/`)
                 }

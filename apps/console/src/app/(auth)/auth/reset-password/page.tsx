@@ -6,7 +6,7 @@ import { Button, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Suspense, useState } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { Spinner } from "@/components/icons"
@@ -20,6 +20,13 @@ function ResetPasswordContent() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [success, setSuccess] = useState(false)
   const router = useRouter()
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current)
+    }
+  }, [])
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -43,7 +50,10 @@ function ResetPasswordContent() {
         return
       }
       setSuccess(true)
-      setTimeout(() => router.push("/auth/signin"), 2000)
+      redirectTimerRef.current = setTimeout(
+        () => router.push("/auth/signin"),
+        2000,
+      )
     } catch {
       setErrors({ form: "Error resetting password. Please try again." })
     } finally {
@@ -85,62 +95,46 @@ function ResetPasswordContent() {
             </h1>
 
             <form onSubmit={handleResetPassword} className="space-y-3">
-              <div>
-                <Input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="New Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  error={errors.password}
-                  suffix={
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="text-muted"
-                    >
-                      {showPassword ? (
-                        <EyeSlashIcon className="size-4" weight="light" />
-                      ) : (
-                        <EyeIcon className="size-4" weight="light" />
-                      )}
-                    </button>
-                  }
-                />
-                {errors.password && (
-                  <p className="mt-1 text-xs text-destructive">
-                    {errors.password}
-                  </p>
-                )}
-              </div>
-              <div>
-                <Input
-                  type={showConfirmPassword ? "text" : "password"}
-                  placeholder="Confirm New Password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  error={errors.confirmPassword}
-                  suffix={
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowConfirmPassword(!showConfirmPassword)
-                      }
-                      className="text-muted"
-                    >
-                      {showConfirmPassword ? (
-                        <EyeSlashIcon className="size-4" weight="light" />
-                      ) : (
-                        <EyeIcon className="size-4" weight="light" />
-                      )}
-                    </button>
-                  }
-                />
-                {errors.confirmPassword && (
-                  <p className="mt-1 text-xs text-destructive">
-                    {errors.confirmPassword}
-                  </p>
-                )}
-              </div>
+              <Input
+                type={showPassword ? "text" : "password"}
+                placeholder="New Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                error={errors.password}
+                suffix={
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-muted"
+                  >
+                    {showPassword ? (
+                      <EyeSlashIcon className="size-4" weight="light" />
+                    ) : (
+                      <EyeIcon className="size-4" weight="light" />
+                    )}
+                  </button>
+                }
+              />
+              <Input
+                type={showConfirmPassword ? "text" : "password"}
+                placeholder="Confirm New Password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                error={errors.confirmPassword}
+                suffix={
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="text-muted"
+                  >
+                    {showConfirmPassword ? (
+                      <EyeSlashIcon className="size-4" weight="light" />
+                    ) : (
+                      <EyeIcon className="size-4" weight="light" />
+                    )}
+                  </button>
+                }
+              />
               {errors.form && (
                 <p className="text-xs text-destructive">{errors.form}</p>
               )}
