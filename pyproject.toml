@@ -1,5 +1,5 @@
 [tool.uv.workspace]
-members = ["packages/python-sdk"]
+members = ["packages/python-sdk", "tests/sdk-e2e-py"]
 
 [dependency-groups]
 dev = [

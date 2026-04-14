@@ -1,0 +1,19 @@
+[project]
+name = "superserve-test-sdk-e2e"
+version = "0.0.0"
+description = "End-to-end tests for the superserve Python SDK against a live environment."
+requires-python = ">=3.9"
+dependencies = [
+    "superserve",
+]
+
+[tool.uv.sources]
+superserve = { workspace = true }
+
+[tool.pytest.ini_options]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+asyncio_mode = "strict"
+pythonpath = ["."]

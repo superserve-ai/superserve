@@ -9,6 +9,7 @@ resolution-markers = [
 [manifest]
 members = [
     "superserve",
+    "superserve-test-sdk-e2e",
 ]
 
 [manifest.dependency-groups]
@@ -493,6 +494,17 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "typing-extensions", specifier = ">=4.0.0" },
 ]
+
+[[package]]
+name = "superserve-test-sdk-e2e"
+version = "0.0.0"
+source = { virtual = "tests/sdk-e2e-py" }
+dependencies = [
+    { name = "superserve" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "superserve", editable = "packages/python-sdk" }]
 
 [[package]]
 name = "tomli"

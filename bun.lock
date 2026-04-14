@@ -177,6 +177,10 @@
         "react-dom": "^18 || ^19",
       },
     },
+    "tests/sdk-e2e-py": {
+      "name": "@superserve/test-sdk-e2e-py",
+      "version": "0.0.0",
+    },
     "tests/sdk-e2e-ts": {
       "name": "@superserve/test-sdk-e2e-ts",
       "version": "0.0.0",
@@ -685,6 +689,8 @@
     "@superserve/supabase": ["@superserve/supabase@workspace:packages/supabase"],
 
     "@superserve/tailwind-config": ["@superserve/tailwind-config@workspace:packages/tailwind-config"],
+
+    "@superserve/test-sdk-e2e-py": ["@superserve/test-sdk-e2e-py@workspace:tests/sdk-e2e-py"],
 
     "@superserve/test-sdk-e2e-ts": ["@superserve/test-sdk-e2e-ts@workspace:tests/sdk-e2e-ts"],
 
