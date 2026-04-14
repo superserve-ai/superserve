@@ -99,6 +99,11 @@ bun add -d @types/node --filter @superserve/sdk
 # Testing the CLI locally (no dev server, run directly)
 bun packages/cli/src/index.ts deploy --help
 
+# Email templates — preview server (React Email) at http://localhost:3002
+bun --filter @superserve/console run email:dev
+# Templates live at apps/console/src/lib/email/templates/*.tsx
+# Hot reloads on edit; sidebar lists welcome / confirmation / password-reset
+
 # Python SDK
 uv run pytest packages/python-sdk/tests/           # Run SDK tests
 uv run ruff check packages/python-sdk/ --fix        # Lint
