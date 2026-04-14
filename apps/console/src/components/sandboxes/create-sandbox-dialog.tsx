@@ -33,58 +33,36 @@ import { useCreateSandbox } from "@/hooks/use-sandboxes"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 
 type Mode = "form" | "code"
-type Language = "typescript" | "python" | "go"
+type Language = "typescript" | "python"
 
 const LANGUAGES: { label: string; value: Language }[] = [
   { label: "TypeScript", value: "typescript" },
   { label: "Python", value: "python" },
-  { label: "Go", value: "go" },
 ]
 
 const INSTALL_COMMANDS: Record<Language, string> = {
   typescript: "npm install @superserve/sdk",
   python: "pip install superserve",
-  go: "go get github.com/superserve/superserve-go",
 }
 
 function getCreateSnippet(language: Language): string {
   if (language === "typescript") {
-    return `import { Superserve } from "@superserve/sdk"
+    return `import { SuperserveClient } from "@superserve/sdk"
 
-const client = new Superserve({ apiKey: "YOUR_API_KEY" })
+const client = new SuperserveClient({ apiKey: "YOUR_API_KEY" })
 
-const sandbox = await client.sandboxes.create({
+const sandbox = await client.sandboxes.createSandbox({
   name: "my-sandbox",
 })
 console.log(sandbox.id)`
   }
 
-  if (language === "python") {
-    return `from superserve import Superserve
+  return `from superserve import Superserve
 
 client = Superserve(api_key="YOUR_API_KEY")
 
-sandbox = client.sandboxes.create(
-    name="my-sandbox",
-)
+sandbox = client.sandboxes.create_sandbox(name="my-sandbox")
 print(sandbox.id)`
-  }
-
-  return `package main
-
-import (
-	"fmt"
-	ss "github.com/superserve/superserve-go"
-)
-
-func main() {
-	client := ss.NewClient("YOUR_API_KEY")
-
-	sandbox, _ := client.Sandboxes.Create(ss.CreateParams{
-		Name: "my-sandbox",
-	})
-	fmt.Println(sandbox.ID)
-}`
 }
 
 function CopyButton({ text }: { text: string }) {

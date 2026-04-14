@@ -24,18 +24,16 @@ import { useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { useApiKeys, useCreateApiKey } from "@/hooks/use-api-keys"
 
-type Language = "typescript" | "python" | "go"
+type Language = "typescript" | "python"
 
 const LANGUAGES: { label: string; value: Language; icon: string }[] = [
   { label: "TypeScript", value: "typescript", icon: "TS" },
   { label: "Python", value: "python", icon: "PY" },
-  { label: "Go", value: "go", icon: "GO" },
 ]
 
 const INSTALL_COMMANDS: Record<Language, string> = {
   typescript: "npm install @superserve/sdk",
   python: "pip install superserve",
-  go: "go get github.com/superserve/superserve-go",
 }
 
 function getConnectSnippet(
@@ -46,39 +44,26 @@ function getConnectSnippet(
   const key = apiKey || "ss_live_xxxxxxxx..."
 
   if (language === "typescript") {
-    return `import { Superserve } from "@superserve/sdk"
+    return `import { SuperserveClient } from "@superserve/sdk"
 
-const client = new Superserve({ apiKey: "${key}" })
+const client = new SuperserveClient({ apiKey: "${key}" })
 
-const sandbox = await client.sandboxes.get("${sandboxId}")
-const result = await sandbox.exec("echo 'Hello from Superserve!'")
+const result = await client.exec.command({
+  sandbox_id: "${sandboxId}",
+  body: { command: "echo 'Hello from Superserve!'" },
+})
 console.log(result.stdout)`
   }
 
-  if (language === "python") {
-    return `from superserve import Superserve
+  return `from superserve import Superserve
 
 client = Superserve(api_key="${key}")
 
-sandbox = client.sandboxes.get("${sandboxId}")
-result = sandbox.exec("echo 'Hello from Superserve!'")
-print(result.stdout)`
-  }
-
-  return `package main
-
-import (
-	"fmt"
-	ss "github.com/superserve/superserve-go"
+result = client.exec.command(
+    "${sandboxId}",
+    command="echo 'Hello from Superserve!'",
 )
-
-func main() {
-	client := ss.NewClient("${key}")
-
-	sandbox, _ := client.Sandboxes.Get("${sandboxId}")
-	result, _ := sandbox.Exec("echo 'Hello from Superserve!'")
-	fmt.Println(result.Stdout)
-}`
+print(result.stdout)`
 }
 
 function CopyButton({ text, label }: { text: string; label?: string }) {

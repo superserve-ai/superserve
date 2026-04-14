@@ -8,63 +8,37 @@ import { CornerBrackets } from "@/components/corner-brackets"
 import { PageHeader } from "@/components/page-header"
 import { useCreateApiKey } from "@/hooks/use-api-keys"
 
-type Language = "typescript" | "python" | "go"
+type Language = "typescript" | "python"
 
 const INSTALL_COMMANDS: Record<Language, string> = {
   typescript: "npm install @superserve/sdk",
   python: "pip install superserve",
-  go: "go get github.com/superserve/superserve-go",
 }
 
 function getSnippet(language: Language, apiKey: string): string {
   const key = apiKey || "ss_live_xxxxxxxx..."
 
   if (language === "typescript") {
-    return `import { Superserve } from "@superserve/sdk"
+    return `import { SuperserveClient } from "@superserve/sdk"
 
-const client = new Superserve({ apiKey: "${key}" })
+const client = new SuperserveClient({ apiKey: "${key}" })
 
-const sandbox = await client.sandboxes.create({
-  snapshot: "superserve/base",
+const sandbox = await client.sandboxes.createSandbox({
+  name: "my-sandbox",
 })
+console.log(sandbox.id)
 
-const result = await sandbox.exec("echo 'Hello from Superserve!'")
-console.log(result.stdout)
-
-await sandbox.stop()`
+await client.sandboxes.deleteSandbox({ sandbox_id: sandbox.id })`
   }
 
-  if (language === "python") {
-    return `from superserve import Superserve
+  return `from superserve import Superserve
 
 client = Superserve(api_key="${key}")
 
-sandbox = client.sandboxes.create(
-    snapshot="superserve/base",
-)
+sandbox = client.sandboxes.create_sandbox(name="my-sandbox")
+print(sandbox.id)
 
-result = sandbox.exec("echo 'Hello from Superserve!'")
-print(result.stdout)
-
-sandbox.stop()`
-  }
-
-  return `package main
-
-import (
-	"fmt"
-	ss "github.com/superserve/superserve-go"
-)
-
-func main() {
-	client := ss.NewClient("${key}")
-
-	sandbox, _ := client.Sandboxes.Create("superserve/base")
-	result, _ := sandbox.Exec("echo 'Hello from Superserve!'")
-	fmt.Println(result.Stdout)
-
-	sandbox.Stop()
-}`
+client.sandboxes.delete_sandbox(sandbox.id)`
 }
 
 function CopyButton({ text, label }: { text: string; label?: string }) {
@@ -122,7 +96,7 @@ function CodeBlock({
   lang,
 }: {
   code: string
-  lang: "typescript" | "python" | "go" | "bash"
+  lang: "typescript" | "python" | "bash"
 }) {
   return (
     <div className="flex items-start bg-background border border-dashed border-border px-4 py-3.5">
@@ -137,7 +111,6 @@ function CodeBlock({
 const LANGUAGES: { label: string; value: Language }[] = [
   { label: "TypeScript", value: "typescript" },
   { label: "Python", value: "python" },
-  { label: "Go", value: "go" },
 ]
 
 export default function GetStartedPage() {
@@ -295,9 +268,9 @@ export default function GetStartedPage() {
 
             {/* Step 3: Create & Run Sandbox */}
             <div className="space-y-4">
-              <StepHeader stepNumber={3} title="Create and run a sandbox" />
+              <StepHeader stepNumber={3} title="Create your first sandbox" />
               <p className="pl-6 text-sm leading-none tracking-tight text-muted">
-                Use the SDK to spin up a sandbox and execute code
+                Use the SDK to spin up and tear down a sandbox
               </p>
               <div className="pl-6">
                 <CodeBlock
