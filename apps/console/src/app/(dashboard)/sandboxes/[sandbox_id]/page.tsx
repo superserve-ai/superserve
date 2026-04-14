@@ -14,6 +14,7 @@ import { useParams, useRouter } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { ErrorState } from "@/components/error-state"
 import { ActivitySection } from "@/components/sandboxes/activity-section"
+import { FilesSection } from "@/components/sandboxes/files-section"
 import {
   MetadataSection,
   NetworkSection,
@@ -239,6 +240,7 @@ export default function SandboxDetailPage() {
           </div>
           <MetadataSection sandbox={sandbox} />
         </div>
+        <FilesSection sandbox={sandbox} />
         <ActivitySection activity={activity} isPending={activityPending} />
         <SnapshotsSection snapshots={snapshots} isPending={snapshotsPending} />
       </div>
