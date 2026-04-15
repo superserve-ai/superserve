@@ -1,4 +1,4 @@
-import { Button, Tooltip, TooltipContent, TooltipTrigger } from "@superserve/ui"
+import { Button, Tooltip, TooltipPopup, TooltipTrigger } from "@superserve/ui"
 import type { ComponentMeta } from "../registry/types"
 
 export const tooltipMeta: ComponentMeta = {
@@ -7,31 +7,23 @@ export const tooltipMeta: ComponentMeta = {
   description: "A popup that displays information on hover.",
   category: "Feedback",
   source: "components/tooltip.tsx",
-  props: [
-    {
-      name: "sideOffset",
-      type: "number",
-      default: "4",
-      component: "TooltipContent",
-      description: "Distance from the trigger in pixels.",
-    },
-  ],
+  props: [],
   examples: [
     {
       title: "Default",
       preview: (
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="outline">Hover Me</Button>
+          <TooltipTrigger render={<Button variant="outline" />}>
+            Hover Me
           </TooltipTrigger>
-          <TooltipContent>This is a tooltip</TooltipContent>
+          <TooltipPopup>This is a tooltip</TooltipPopup>
         </Tooltip>
       ),
       code: `<Tooltip>
-  <TooltipTrigger asChild>
-    <Button variant="outline">Hover Me</Button>
+  <TooltipTrigger render={<Button variant="outline" />}>
+    Hover Me
   </TooltipTrigger>
-  <TooltipContent>This is a tooltip</TooltipContent>
+  <TooltipPopup>This is a tooltip</TooltipPopup>
 </Tooltip>`,
     },
   ],

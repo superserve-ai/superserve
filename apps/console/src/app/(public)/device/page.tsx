@@ -1,19 +1,26 @@
 "use client"
 
 import { createBrowserClient } from "@superserve/supabase"
-import { Badge, Button, useToast } from "@superserve/ui"
+import { Button, useToast } from "@superserve/ui"
+import Image from "next/image"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useState } from "react"
 import { GoogleIcon, Spinner } from "@/components/icons"
-import { DEV_AUTH_ENABLED, devSignIn } from "@/lib/auth-helpers"
+import { AUTH_EVENTS } from "@/lib/posthog/events"
 
 function Logo() {
   return (
     <div className="mb-8">
       <Link href="/" className="flex items-center gap-2">
-        <img src="/logo.svg" alt="Superserve" className="h-10 mb-2" />
+        <Image
+          src="/logo.svg"
+          alt="Superserve"
+          width={200}
+          height={40}
+          className="h-10 w-auto mb-2"
+        />
       </Link>
     </div>
   )
@@ -22,7 +29,6 @@ function Logo() {
 function DevicePageContent() {
   const [isCheckingSession, setIsCheckingSession] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
-  const [isDevLoading, setIsDevLoading] = useState(false)
   const [isAuthorizing, setIsAuthorizing] = useState(false)
   const [isAuthorized, setIsAuthorized] = useState(false)
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
@@ -100,35 +106,6 @@ function DevicePageContent() {
     }
   }
 
-  const handleDevSignIn = async () => {
-    if (!DEV_AUTH_ENABLED) return
-
-    setIsDevLoading(true)
-    try {
-      const result = await devSignIn()
-      if (!result.success) {
-        addToast(result.error || "Dev auth failed.", "error")
-        return
-      }
-
-      const supabase = createBrowserClient()
-      const {
-        data: { user: signedInUser },
-      } = await supabase.auth.getUser()
-      if (signedInUser) {
-        setUser({ id: signedInUser.id, email: signedInUser.email })
-        if (posthog) {
-          posthog.identify(signedInUser.id, { email: signedInUser.email })
-        }
-      }
-    } catch (err) {
-      console.error("Dev auth error:", err)
-      addToast("Dev auth failed. Check console.", "error")
-    } finally {
-      setIsDevLoading(false)
-    }
-  }
-
   const handleAuthorize = async () => {
     if (!userCode || !user) return
 
@@ -143,19 +120,16 @@ function DevicePageContent() {
         throw new Error("Session expired. Please sign in again.")
       }
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/v1/auth/device-authorize`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            user_code: userCode,
-          }),
+      const response = await fetch(`/api/v1/auth/device-authorize`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
         },
-      )
+        body: JSON.stringify({
+          user_code: userCode,
+        }),
+      })
 
       if (!response.ok) {
         const data = await response.json()
@@ -164,7 +138,7 @@ function DevicePageContent() {
 
       setIsAuthorized(true)
       if (posthog) {
-        posthog.capture("cli_device_authorized", {
+        posthog.capture(AUTH_EVENTS.DEVICE_AUTHORIZED, {
           user_email: user.email,
         })
       }
@@ -283,46 +257,6 @@ function DevicePageContent() {
                 )}
                 {isLoading ? "Signing in..." : "Continue with Google"}
               </Button>
-
-              {DEV_AUTH_ENABLED && (
-                <>
-                  <div className="relative my-6">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-dashed border-border" />
-                    </div>
-                    <div className="relative flex justify-center text-xs">
-                      <Badge>Dev Only</Badge>
-                    </div>
-                  </div>
-
-                  <Button
-                    type="button"
-                    onClick={handleDevSignIn}
-                    disabled={isDevLoading}
-                    className="w-full"
-                  >
-                    {isDevLoading ? (
-                      <Spinner />
-                    ) : (
-                      <svg
-                        className="size-5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
-                        />
-                      </svg>
-                    )}
-                    {isDevLoading ? "Signing in..." : "Dev Sign In"}
-                  </Button>
-                </>
-              )}
             </div>
           </div>
         </div>

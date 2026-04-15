@@ -1,91 +1,85 @@
 "use client"
 
+import { Suspense } from "react"
+import { TableSkeleton } from "@/components/table-skeleton"
+
+export default function SandboxesPage() {
+  return (
+    <Suspense fallback={<TableSkeleton columns={6} tabs={3} />}>
+      <SandboxesPageContent />
+    </Suspense>
+  )
+}
+
+import { CubeIcon } from "@phosphor-icons/react"
 import {
-  CubeIcon,
-  DotsThreeVerticalIcon,
-  KeyIcon,
-  KeyReturnIcon,
-  PlayIcon,
-  StopIcon,
-  TerminalIcon,
-  TrashIcon,
-} from "@phosphor-icons/react"
-import {
-  Badge,
-  type BadgeVariant,
-  Button,
   Checkbox,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
   Table,
-  TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from "@superserve/ui"
+import { useRouter, useSearchParams } from "next/navigation"
+import { usePostHog } from "posthog-js/react"
 import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
+import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
+import { ConnectSandboxDialog } from "@/components/sandboxes/connect-sandbox-dialog"
 import { CreateSandboxDialog } from "@/components/sandboxes/create-sandbox-dialog"
+import { DeleteSandboxDialog } from "@/components/sandboxes/delete-sandbox-dialog"
+import { SandboxTableRow } from "@/components/sandboxes/sandbox-table-row"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableToolbar } from "@/components/table-toolbar"
+import {
+  useBulkDeleteSandboxes,
+  useDeleteSandbox,
+  usePauseSandbox,
+  useResumeSandbox,
+  useSandboxes,
+} from "@/hooks/use-sandboxes"
 import { useSelection } from "@/hooks/use-selection"
-
-type SandboxStatus = "Ready" | "Stopped" | "Paused"
-
-interface Sandbox {
-  id: string
-  name: string
-  status: SandboxStatus
-  snapshot: string
-  resources: string
-}
-
-const STATUS_BADGE_VARIANT: Record<SandboxStatus, BadgeVariant> = {
-  Ready: "success",
-  Stopped: "destructive",
-  Paused: "muted",
-}
-
-const MOCK_SANDBOXES: Sandbox[] = [
-  {
-    id: "1",
-    name: "dc703f84-a11e-43bf-90db-af2f8a46cf1c",
-    status: "Ready",
-    snapshot: "superserve/snap-43",
-    resources: "1CPU | 2GB | 3GB",
-  },
-  {
-    id: "2",
-    name: "dc703f84-a11e-43bf-90db-af2f8a46cf1c",
-    status: "Stopped",
-    snapshot: "superserve/snap-32",
-    resources: "1CPU | 2GB | 3GB",
-  },
-  {
-    id: "3",
-    name: "dc703f84-a11e-43bf-90db-af2f8a46cf1c",
-    status: "Paused",
-    snapshot: "superserve/snap-12",
-    resources: "1CPU | 2GB | 3GB",
-  },
-]
+import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 
 const STATUS_TABS = [
   { label: "All", value: "all" },
-  { label: "Ready", value: "Ready" },
-  { label: "Stopped", value: "Stopped" },
-  { label: "Paused", value: "Paused" },
+  { label: "Active", value: "active" },
+  { label: "Idle", value: "idle" },
 ]
 
-export default function SandboxesPage() {
-  const [sandboxes, setSandboxes] = useState<Sandbox[]>(MOCK_SANDBOXES)
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [search, setSearch] = useState("")
+function SandboxesPageContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const posthog = usePostHog()
+  const statusFilter = searchParams.get("status") ?? "all"
+  const search = searchParams.get("q") ?? ""
+
+  const setStatusFilter = (value: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (value === "all") params.delete("status")
+    else params.set("status", value)
+    router.replace(`?${params.toString()}`)
+  }
+
+  const setSearch = (value: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (!value) params.delete("q")
+    else params.set("q", value)
+    router.replace(`?${params.toString()}`)
+  }
   const [createOpen, setCreateOpen] = useState(false)
+  const [connectSandboxId, setConnectSandboxId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string
+    name: string
+  } | null>(null)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+
+  const { data: sandboxes = [], isPending, error, refetch } = useSandboxes()
+  const deleteSandbox = useDeleteSandbox()
+  const bulkDelete = useBulkDeleteSandboxes()
+  const pauseMutation = usePauseSandbox()
+  const resumeMutation = useResumeSandbox()
 
   const filtered = useMemo(() => {
     return sandboxes.filter((s) => {
@@ -113,32 +107,31 @@ export default function SandboxesPage() {
     clearSelection,
   } = useSelection(filtered)
 
-  const deleteSelected = () => {
-    setSandboxes((prev) => prev.filter((s) => !selected.has(s.id)))
-    clearSelection()
-  }
-
-  const isEmpty = sandboxes.length === 0
+  const isEmpty = !isPending && !error && sandboxes.length === 0
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="Sandboxes">
-        {!isEmpty && (
-          <CreateSandboxDialog open={createOpen} onOpenChange={setCreateOpen} />
-        )}
+        <CreateSandboxDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          hideTrigger={isEmpty || isPending}
+          onCreated={(id) => setConnectSandboxId(id)}
+        />
       </PageHeader>
 
-      {isEmpty ? (
-        <>
-          <EmptyState
-            icon={CubeIcon}
-            title="No Sandboxes"
-            description="Create your first sandbox to start deploying agents."
-            actionLabel="Create Sandbox"
-            onAction={() => setCreateOpen(true)}
-          />
-          <CreateSandboxDialog open={createOpen} onOpenChange={setCreateOpen} />
-        </>
+      {isPending ? (
+        <TableSkeleton columns={6} tabs={3} />
+      ) : error ? (
+        <ErrorState message={error.message} onRetry={() => refetch()} />
+      ) : isEmpty ? (
+        <EmptyState
+          icon={CubeIcon}
+          title="No Sandboxes"
+          description="Create a sandbox to run code in an isolated cloud environment."
+          actionLabel="Create Sandbox"
+          onAction={() => setCreateOpen(true)}
+        />
       ) : (
         <>
           <TableToolbar
@@ -150,16 +143,17 @@ export default function SandboxesPage() {
             onSearchChange={setSearch}
             selectedCount={selected.size}
             onClearSelection={clearSelection}
-            onDeleteSelected={deleteSelected}
+            onDeleteSelected={() => setBulkDeleteOpen(true)}
           />
 
-          <div className="flex-1">
+          <div className="flex-1 overflow-y-auto">
             <Table>
-              <TableHeader>
+              <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead className="w-10 pr-0">
                     <Checkbox
-                      checked={someSelected ? "indeterminate" : allSelected}
+                      checked={allSelected}
+                      indeterminate={someSelected && !allSelected}
                       onCheckedChange={toggleAll}
                       aria-label="Select all sandboxes"
                     />
@@ -173,92 +167,101 @@ export default function SandboxesPage() {
               </TableHeader>
               <StickyHoverTableBody>
                 {filtered.map((sandbox) => (
-                  <TableRow key={sandbox.id}>
-                    <TableCell className="pr-0">
-                      <Checkbox
-                        checked={selected.has(sandbox.id)}
-                        onCheckedChange={() => toggleOne(sandbox.id)}
-                        aria-label={`Select ${sandbox.name}`}
-                      />
-                    </TableCell>
-                    <TableCell className="font-mono text-foreground/80">
-                      {sandbox.name}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={STATUS_BADGE_VARIANT[sandbox.status]} dot>
-                        {sandbox.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-foreground/80">
-                      {sandbox.snapshot}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-muted">
-                      {sandbox.resources}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-20 text-xs"
-                        >
-                          {sandbox.status === "Ready" ? (
-                            <>
-                              <StopIcon className="size-3" weight="light" />
-                              Stop
-                            </>
-                          ) : (
-                            <>
-                              <PlayIcon className="size-3" weight="light" />
-                              Start
-                            </>
-                          )}
-                        </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label="Sandbox actions"
-                            >
-                              <DotsThreeVerticalIcon
-                                className="size-4"
-                                weight="bold"
-                              />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem>
-                              <TerminalIcon className="size-4" weight="light" />
-                              Open Terminal
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <KeyIcon className="size-4" weight="light" />
-                              Create SSH Access
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <KeyReturnIcon
-                                className="size-4"
-                                weight="light"
-                              />
-                              Remove SSH Access
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive hover:text-destructive">
-                              <TrashIcon className="size-4" weight="light" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                  <SandboxTableRow
+                    key={sandbox.id}
+                    sandbox={sandbox}
+                    selected={selected.has(sandbox.id)}
+                    onToggle={() => toggleOne(sandbox.id)}
+                    onConnect={() => {
+                      posthog.capture(SANDBOX_EVENTS.CONNECT_OPENED, {
+                        sandbox_id: sandbox.id,
+                      })
+                      setConnectSandboxId(sandbox.id)
+                    }}
+                    onDelete={() =>
+                      setDeleteTarget({
+                        id: sandbox.id,
+                        name: sandbox.name,
+                      })
+                    }
+                    onPause={() => {
+                      posthog.capture(SANDBOX_EVENTS.PAUSED, {
+                        sandbox_id: sandbox.id,
+                      })
+                      pauseMutation.mutate(sandbox.id)
+                    }}
+                    onResume={() => {
+                      posthog.capture(SANDBOX_EVENTS.RESUMED, {
+                        sandbox_id: sandbox.id,
+                      })
+                      resumeMutation.mutate(sandbox.id)
+                    }}
+                    onOpenTerminal={() =>
+                      posthog.capture(SANDBOX_EVENTS.TERMINAL_OPENED, {
+                        sandbox_id: sandbox.id,
+                        source: "list_menu",
+                      })
+                    }
+                  />
                 ))}
               </StickyHoverTableBody>
             </Table>
           </div>
         </>
       )}
+
+      {connectSandboxId && (
+        <ConnectSandboxDialog
+          sandboxId={connectSandboxId}
+          open={!!connectSandboxId}
+          onOpenChange={(v) => {
+            if (!v) setConnectSandboxId(null)
+          }}
+        />
+      )}
+
+      {deleteTarget && (
+        <DeleteSandboxDialog
+          open={!!deleteTarget}
+          onOpenChange={(v) => {
+            if (!v) setDeleteTarget(null)
+          }}
+          sandboxName={deleteTarget.name}
+          onConfirm={() => {
+            posthog.capture(SANDBOX_EVENTS.DELETED, { id: deleteTarget.id })
+            return new Promise<void>((resolve, reject) => {
+              deleteSandbox.mutate(deleteTarget.id, {
+                onSuccess: () => {
+                  setDeleteTarget(null)
+                  resolve()
+                },
+                onError: reject,
+              })
+            })
+          }}
+        />
+      )}
+
+      <DeleteSandboxDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        bulkCount={selected.size}
+        onConfirm={() => {
+          posthog.capture(SANDBOX_EVENTS.BULK_DELETED, {
+            count: selected.size,
+          })
+          return new Promise<void>((resolve, reject) => {
+            bulkDelete.mutate([...selected], {
+              onSuccess: () => {
+                clearSelection()
+                setBulkDeleteOpen(false)
+                resolve()
+              },
+              onError: reject,
+            })
+          })
+        }}
+      />
     </div>
   )
 }

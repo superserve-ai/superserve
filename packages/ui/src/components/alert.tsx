@@ -74,5 +74,5 @@ function Alert({
   )
 }
 
-export { Alert }
 export type { AlertVariant }
+export { Alert }

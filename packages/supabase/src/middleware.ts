@@ -32,7 +32,11 @@ export function createMiddlewareClient(request: NextRequest) {
       },
       setAll(cookiesToSet) {
         for (const { name, value } of cookiesToSet) {
-          request.cookies.set(name, value)
+          request.cookies.set({
+            name,
+            value,
+            ...domainOpts,
+          } as { name: string; value: string })
         }
         response = NextResponse.next({ request })
         for (const { name, value, options } of cookiesToSet) {

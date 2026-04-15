@@ -49,6 +49,7 @@ blog_draft*.md
 # Claude
 .claude/
 devcontainer.json
+.agents/
 
 # Fern — openapi spec is fetched on demand from the backend repo, never committed
 fern/openapi.yaml

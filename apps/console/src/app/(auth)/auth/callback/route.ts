@@ -2,6 +2,8 @@ import { createServerClient } from "@superserve/supabase/server"
 import { NextResponse } from "next/server"
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { sendWelcomeEmail } from "@/app/(auth)/auth/signup/action"
+import { trackEvent } from "@/lib/posthog/actions"
+import { AUTH_EVENTS } from "@/lib/posthog/events"
 
 const TRUSTED_REDIRECT_PATTERN =
   /^https:\/\/([a-z0-9-]+\.)?superserve\.ai(\/.*)?$/
@@ -86,17 +88,16 @@ export async function GET(request: Request) {
           ).catch(() => {})
         }
 
-        if (next.startsWith("/device") || next.startsWith("https://")) {
-          // keep redirect as-is
-        } else {
-          const params = new URLSearchParams()
-          if (isNewUser) {
-            params.set("new_user", "1")
-            params.set("provider", provider)
-          }
-          next = params.toString()
-            ? `/get-started?${params.toString()}`
-            : "/get-started"
+        await trackEvent(
+          isNewUser
+            ? AUTH_EVENTS.SIGN_UP_COMPLETED
+            : AUTH_EVENTS.SIGN_IN_COMPLETED,
+          user.id,
+          { provider, email: user.email, is_new_user: isNewUser },
+        )
+
+        if (!next.startsWith("/device") && !next.startsWith("https://")) {
+          next = "/sandboxes"
         }
       }
 

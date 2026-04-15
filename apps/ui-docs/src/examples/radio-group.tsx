@@ -6,7 +6,7 @@ export const radioGroupMeta: ComponentMeta = {
   name: "Radio Group",
   description: "A set of mutually exclusive radio options.",
   category: "Inputs",
-  source: "components/radio-group.tsx",
+  source: "components/radio.tsx",
   props: [
     {
       name: "label",

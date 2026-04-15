@@ -1,230 +1,81 @@
 "use client"
 
+import { Suspense } from "react"
+import { AnimatedTableRow } from "@/components/animated-table-row"
+import { TableSkeleton } from "@/components/table-skeleton"
+
+export default function ApiKeysPage() {
+  return (
+    <Suspense fallback={<TableSkeleton columns={4} />}>
+      <ApiKeysPageContent />
+    </Suspense>
+  )
+}
+
 import {
-  CopyIcon,
   DotsThreeVerticalIcon,
-  EyeIcon,
-  EyeSlashIcon,
   KeyIcon,
-  PlusIcon,
   TrashIcon,
 } from "@phosphor-icons/react"
 import {
-  Alert,
   Button,
   Checkbox,
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-  FormField,
-  Input,
+  Menu,
+  MenuItem,
+  MenuPopup,
+  MenuTrigger,
   Table,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  useToast,
 } from "@superserve/ui"
+import { useRouter, useSearchParams } from "next/navigation"
+import { usePostHog } from "posthog-js/react"
 import { useMemo, useState } from "react"
+import { CreateKeyDialog } from "@/components/api-keys/create-key-dialog"
+import { RevokeKeyDialog } from "@/components/api-keys/revoke-key-dialog"
 import { EmptyState } from "@/components/empty-state"
+import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableToolbar } from "@/components/table-toolbar"
+import {
+  useApiKeys,
+  useBulkRevokeApiKeys,
+  useRevokeApiKey,
+} from "@/hooks/use-api-keys"
 import { useSelection } from "@/hooks/use-selection"
 import { formatDate } from "@/lib/format"
+import { API_KEY_EVENTS } from "@/lib/posthog/events"
 
-interface ApiKey {
-  id: string
-  name: string
-  prefix: string
-  createdAt: Date
-  lastUsedAt: Date | null
-}
+function ApiKeysPageContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const posthog = usePostHog()
+  const { data: keys, isPending, error, refetch } = useApiKeys()
+  const revokeMutation = useRevokeApiKey()
+  const bulkRevoke = useBulkRevokeApiKeys()
+  const search = searchParams.get("q") ?? ""
 
-function maskKey(prefix: string): string {
-  return `${prefix}${"•".repeat(20)}`
-}
-
-function generateMockKey(): { full: string; prefix: string } {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-  let key = ""
-  for (let i = 0; i < 32; i++) {
-    key += chars[Math.floor(Math.random() * chars.length)]
+  const setSearch = (value: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (!value) params.delete("q")
+    else params.set("q", value)
+    router.replace(`?${params.toString()}`)
   }
-  const full = `ss_live_${key}`
-  const prefix = `ss_live_${key.slice(0, 8)}...`
-  return { full, prefix }
-}
-
-const INITIAL_KEYS: ApiKey[] = [
-  {
-    id: "1",
-    name: "Production",
-    prefix: "ss_live_a1b2c3d4...",
-    createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-    lastUsedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-  },
-  {
-    id: "2",
-    name: "Development",
-    prefix: "ss_live_q7r8s9t0...",
-    createdAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
-    lastUsedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
-  },
-  {
-    id: "3",
-    name: "CI/CD Pipeline",
-    prefix: "ss_live_g3h4i5j6...",
-    createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-    lastUsedAt: null,
-  },
-]
-
-function CreateKeyDialog({
-  onCreated,
-  open: controlledOpen,
-  onOpenChange,
-}: {
-  onCreated: (key: ApiKey) => void
-  open?: boolean
-  onOpenChange?: (open: boolean) => void
-}) {
-  const [internalOpen, setInternalOpen] = useState(false)
-  const open = controlledOpen ?? internalOpen
-  const setOpen = onOpenChange ?? setInternalOpen
-  const [name, setName] = useState("")
-  const [createdKey, setCreatedKey] = useState<{
-    full: string
-    apiKey: ApiKey
-  } | null>(null)
-  const [copied, setCopied] = useState(false)
-  const { addToast } = useToast()
-
-  const handleCreate = () => {
-    if (!name.trim()) return
-    const { full, prefix } = generateMockKey()
-    const apiKey: ApiKey = {
-      id: crypto.randomUUID(),
-      name: name.trim(),
-      prefix,
-      createdAt: new Date(),
-      lastUsedAt: null,
-    }
-    setCreatedKey({ full, apiKey })
-  }
-
-  const handleCopy = async () => {
-    if (!createdKey) return
-    await navigator.clipboard.writeText(createdKey.full)
-    setCopied(true)
-    addToast("API key copied to clipboard", "success")
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  const handleClose = () => {
-    if (createdKey) {
-      onCreated(createdKey.apiKey)
-    }
-    setOpen(false)
-    setName("")
-    setCreatedKey(null)
-    setCopied(false)
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => (v ? setOpen(true) : handleClose())}
-    >
-      <DialogTrigger asChild>
-        <Button>
-          <PlusIcon className="size-3.5" weight="light" />
-          Create Key
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>
-            {createdKey ? "API Key Created" : "Create API Key"}
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="p-6 pt-2">
-          {createdKey ? (
-            <div className="space-y-4">
-              <Alert variant="warning">
-                Copy this key now. You won&apos;t be able to see it again.
-              </Alert>
-
-              <FormField label="Your API Key">
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 border border-border bg-background px-3 py-2 font-mono text-xs text-foreground break-all">
-                    {createdKey.full}
-                  </code>
-                  <Button
-                    variant="outline"
-                    size="icon-sm"
-                    onClick={handleCopy}
-                    aria-label={copied ? "Copied" : "Copy API key"}
-                  >
-                    <CopyIcon
-                      className="size-3.5"
-                      weight={copied ? "fill" : "light"}
-                    />
-                  </Button>
-                </div>
-              </FormField>
-            </div>
-          ) : (
-            <FormField label="Key Name" required>
-              <Input
-                placeholder="e.g. Production, CI/CD, Development"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCreate()
-                }}
-              />
-            </FormField>
-          )}
-        </div>
-
-        <DialogFooter>
-          {createdKey ? (
-            <Button onClick={handleClose}>Done</Button>
-          ) : (
-            <>
-              <Button variant="outline" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleCreate} disabled={!name.trim()}>
-                Create Key
-              </Button>
-            </>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-export default function ApiKeysPage() {
-  const [keys, setKeys] = useState<ApiKey[]>(INITIAL_KEYS)
-  const [search, setSearch] = useState("")
-  const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set())
   const [createOpen, setCreateOpen] = useState(false)
+  const [revokeTarget, setRevokeTarget] = useState<{
+    id: string
+    name: string
+  } | null>(null)
+  const [bulkRevokeOpen, setBulkRevokeOpen] = useState(false)
 
   const filtered = useMemo(() => {
-    if (!search) return keys
-    return keys.filter(
+    if (!keys) return []
+    const visible = keys.filter((k) => !k.name.startsWith("__console_"))
+    if (!search) return visible
+    return visible.filter(
       (k) =>
         k.name.toLowerCase().includes(search.toLowerCase()) ||
         k.prefix.toLowerCase().includes(search.toLowerCase()),
@@ -240,55 +91,49 @@ export default function ApiKeysPage() {
     clearSelection,
   } = useSelection(filtered)
 
-  const toggleReveal = (id: string) => {
-    setRevealedKeys((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
-
-  const deleteKey = (id: string) => {
-    setKeys((prev) => prev.filter((k) => k.id !== id))
-    clearSelection()
-  }
-
   const deleteSelected = () => {
-    setKeys((prev) => prev.filter((k) => !selected.has(k.id)))
-    clearSelection()
+    setBulkRevokeOpen(true)
   }
 
-  const isEmpty = keys.length === 0
+  if (isPending) {
+    return (
+      <div className="flex h-full flex-col">
+        <PageHeader title="API Keys" />
+        <TableSkeleton columns={5} />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-full flex-col">
+        <PageHeader title="API Keys" />
+        <ErrorState message={error.message} onRetry={() => refetch()} />
+      </div>
+    )
+  }
+
+  const userKeys = keys?.filter((k) => !k.name.startsWith("__console_")) ?? []
+  const isEmpty = userKeys.length === 0
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="API Keys">
-        {!isEmpty && (
-          <CreateKeyDialog
-            onCreated={(key) => setKeys((prev) => [key, ...prev])}
-          />
-        )}
+        <CreateKeyDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          hideTrigger={isEmpty}
+        />
       </PageHeader>
 
       {isEmpty ? (
-        <>
-          <EmptyState
-            icon={KeyIcon}
-            title="No API Keys"
-            description="Create an API key to authenticate with the Superserve SDK."
-            actionLabel="Create Key"
-            onAction={() => setCreateOpen(true)}
-          />
-          <CreateKeyDialog
-            open={createOpen}
-            onOpenChange={setCreateOpen}
-            onCreated={(key) => setKeys((prev) => [key, ...prev])}
-          />
-        </>
+        <EmptyState
+          icon={KeyIcon}
+          title="No API Keys"
+          description="Create an API key to authenticate with the Superserve SDK."
+          actionLabel="Create Key"
+          onAction={() => setCreateOpen(true)}
+        />
       ) : (
         <>
           <TableToolbar
@@ -297,30 +142,31 @@ export default function ApiKeysPage() {
             onSearchChange={setSearch}
             selectedCount={selected.size}
             onClearSelection={clearSelection}
+            deleteLabel="Revoke"
             onDeleteSelected={deleteSelected}
           />
 
-          <div className="flex-1">
+          <div className="flex-1 overflow-y-auto">
             <Table>
-              <TableHeader>
+              <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
                   <TableHead className="w-10 pr-0">
                     <Checkbox
-                      checked={someSelected ? "indeterminate" : allSelected}
+                      checked={allSelected}
+                      indeterminate={someSelected && !allSelected}
                       onCheckedChange={toggleAll}
                       aria-label="Select all keys"
                     />
                   </TableHead>
-                  <TableHead className="w-[20%]">Name</TableHead>
-                  <TableHead className="w-[35%]">Key</TableHead>
-                  <TableHead className="w-[15%]">Created</TableHead>
-                  <TableHead className="w-[15%]">Last Used</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead>Last Used</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
               <StickyHoverTableBody>
                 {filtered.map((apiKey) => (
-                  <TableRow key={apiKey.id}>
+                  <AnimatedTableRow key={apiKey.id}>
                     <TableCell className="pr-0">
                       <Checkbox
                         checked={selected.has(apiKey.id)}
@@ -329,80 +175,96 @@ export default function ApiKeysPage() {
                       />
                     </TableCell>
                     <TableCell className="font-medium">{apiKey.name}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <code className="font-mono text-xs text-muted">
-                          {revealedKeys.has(apiKey.id)
-                            ? apiKey.prefix
-                            : maskKey(apiKey.prefix.replace("...", ""))}
-                        </code>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => toggleReveal(apiKey.id)}
-                          aria-label={
-                            revealedKeys.has(apiKey.id)
-                              ? "Hide key"
-                              : "Reveal key"
-                          }
-                        >
-                          {revealedKeys.has(apiKey.id) ? (
-                            <EyeSlashIcon className="size-3.5" weight="light" />
-                          ) : (
-                            <EyeIcon className="size-3.5" weight="light" />
-                          )}
-                        </Button>
-                      </div>
+                    <TableCell className="text-muted tabular-nums">
+                      {formatDate(new Date(apiKey.created_at))}
                     </TableCell>
-                    <TableCell className="text-muted">
-                      {formatDate(apiKey.createdAt)}
-                    </TableCell>
-                    <TableCell className="text-muted">
-                      {apiKey.lastUsedAt
-                        ? formatDate(apiKey.lastUsedAt)
+                    <TableCell className="text-muted tabular-nums">
+                      {apiKey.last_used_at
+                        ? formatDate(new Date(apiKey.last_used_at))
                         : "Never"}
                     </TableCell>
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label="Key actions"
-                          >
-                            <DotsThreeVerticalIcon
-                              className="size-4"
-                              weight="bold"
+                      <Menu>
+                        <MenuTrigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label="Key actions"
                             />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={async () => {
-                              await navigator.clipboard.writeText(apiKey.prefix)
-                            }}
-                          >
-                            <CopyIcon className="size-4" weight="light" />
-                            Copy Key
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
+                          }
+                        >
+                          <DotsThreeVerticalIcon
+                            className="size-4"
+                            weight="bold"
+                          />
+                        </MenuTrigger>
+                        <MenuPopup>
+                          <MenuItem
                             className="text-destructive hover:text-destructive"
-                            onClick={() => deleteKey(apiKey.id)}
+                            onClick={() =>
+                              setRevokeTarget({
+                                id: apiKey.id,
+                                name: apiKey.name,
+                              })
+                            }
                           >
                             <TrashIcon className="size-4" weight="light" />
                             Revoke Key
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                          </MenuItem>
+                        </MenuPopup>
+                      </Menu>
                     </TableCell>
-                  </TableRow>
+                  </AnimatedTableRow>
                 ))}
               </StickyHoverTableBody>
             </Table>
           </div>
         </>
       )}
+
+      {revokeTarget && (
+        <RevokeKeyDialog
+          open={!!revokeTarget}
+          onOpenChange={(v) => {
+            if (!v) setRevokeTarget(null)
+          }}
+          keyName={revokeTarget.name}
+          onConfirm={() => {
+            posthog.capture(API_KEY_EVENTS.REVOKED)
+            return new Promise<void>((resolve, reject) => {
+              revokeMutation.mutate(revokeTarget.id, {
+                onSuccess: () => {
+                  setRevokeTarget(null)
+                  resolve()
+                },
+                onError: reject,
+              })
+            })
+          }}
+        />
+      )}
+
+      <RevokeKeyDialog
+        open={bulkRevokeOpen}
+        onOpenChange={setBulkRevokeOpen}
+        bulkCount={selected.size}
+        onConfirm={() => {
+          posthog.capture(API_KEY_EVENTS.BULK_REVOKED, {
+            count: selected.size,
+          })
+          return new Promise<void>((resolve, reject) => {
+            bulkRevoke.mutate([...selected], {
+              onSuccess: () => {
+                clearSelection()
+                setBulkRevokeOpen(false)
+                resolve()
+              },
+              onError: reject,
+            })
+          })
+        }}
+      />
     </div>
   )
 }

@@ -42,7 +42,7 @@ export const run = new Command("run")
         // If no prompt, ask for one
         if (!prompt) {
           const p = await promptUser()
-          if (!p || !p.trim()) return
+          if (!p?.trim()) return
           prompt = p
         }
 
@@ -148,8 +148,7 @@ export const run = new Command("run")
           while (true) {
             const nextPrompt = await promptUser()
             if (
-              !nextPrompt ||
-              !nextPrompt.trim() ||
+              !nextPrompt?.trim() ||
               nextPrompt.trim().toLowerCase() === "exit"
             ) {
               break

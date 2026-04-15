@@ -1,44 +1,32 @@
 "use client"
 
-import * as PopoverPrimitive from "@radix-ui/react-popover"
-import { AnimatePresence, motion } from "motion/react"
+import { Popover as PopoverPrimitive } from "@base-ui/react/popover"
+
 import { cn } from "../lib/utils"
 
 const Popover = PopoverPrimitive.Root
 const PopoverTrigger = PopoverPrimitive.Trigger
 
-function PopoverContent({
+function PopoverPopup({
   className,
-  align = "center",
   sideOffset = 4,
-  children,
   ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+}: React.ComponentProps<typeof PopoverPrimitive.Popup> & {
+  sideOffset?: number
+}) {
   return (
-    <PopoverPrimitive.Portal forceMount>
-      <AnimatePresence>
-        <PopoverPrimitive.Content
-          align={align}
-          sideOffset={sideOffset}
-          asChild
+    <PopoverPrimitive.Portal>
+      <PopoverPrimitive.Positioner sideOffset={sideOffset} className="z-50">
+        <PopoverPrimitive.Popup
+          className={cn(
+            "ss-popover-popup min-w-[8rem] overflow-hidden border border-dashed border-border bg-surface p-4",
+            className,
+          )}
           {...props}
-        >
-          <motion.div
-            className={cn(
-              "z-50 min-w-[8rem] overflow-hidden border border-dashed border-border bg-surface p-4",
-              className,
-            )}
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.96 }}
-            transition={{ duration: 0.12, ease: "easeOut" }}
-          >
-            {children}
-          </motion.div>
-        </PopoverPrimitive.Content>
-      </AnimatePresence>
+        />
+      </PopoverPrimitive.Positioner>
     </PopoverPrimitive.Portal>
   )
 }
 
-export { Popover, PopoverTrigger, PopoverContent }
+export { Popover, PopoverPopup, PopoverTrigger }

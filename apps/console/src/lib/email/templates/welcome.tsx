@@ -7,46 +7,48 @@ interface WelcomeEmailProps {
 }
 
 export const WelcomeEmail = ({ name, dashboardUrl }: WelcomeEmailProps) => (
-  <EmailLayout preview={`Welcome to Superserve, ${name}!`}>
+  <EmailLayout preview={`Welcome to Superserve, ${name}`}>
     <Heading style={heading}>Welcome to Superserve</Heading>
     <Text style={paragraph}>Hi {name},</Text>
     <Text style={paragraph}>
-      Thanks for signing up! Your account is ready. You can start deploying AI
-      agents right away from the dashboard.
+      Your account is ready. Spin up isolated cloud sandboxes and run code in
+      seconds — straight from the dashboard.
     </Text>
     <Button style={button} href={dashboardUrl}>
-      Go to Dashboard
+      Open Dashboard
     </Button>
   </EmailLayout>
 )
 
-const heading = {
-  fontFamily: "Inter, Helvetica, Arial, sans-serif",
-  color: "#3d3d3d",
-  fontSize: "22px",
-  fontWeight: "600" as const,
-  letterSpacing: "-0.02em",
-  textAlign: "center" as const,
+const heading: React.CSSProperties = {
+  fontFamily: "'Instrument Sans', Helvetica, Arial, sans-serif",
+  color: "#e5e5e5",
+  fontSize: "20px",
+  fontWeight: 600,
+  letterSpacing: "-0.01em",
   margin: "0 0 24px 0",
 }
 
-const paragraph = {
-  color: "#5c5c5c",
+const paragraph: React.CSSProperties = {
+  color: "#a3a3a3",
   fontSize: "14px",
   lineHeight: "24px",
   margin: "0 0 16px 0",
 }
 
-const button = {
-  backgroundColor: "#105C60",
-  color: "#ffffff",
-  fontSize: "14px",
-  fontWeight: "500" as const,
+const button: React.CSSProperties = {
+  backgroundColor: "#e5e5e5",
+  color: "#0a0a0a",
+  fontFamily: "'Geist Mono', monospace",
+  fontSize: "12px",
+  fontWeight: 500,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
   textDecoration: "none",
-  textAlign: "center" as const,
+  textAlign: "center",
   display: "block",
   padding: "14px 24px",
-  margin: "24px 0 0 0",
+  margin: "28px 0 0 0",
 }
 
 export default WelcomeEmail

@@ -1,35 +1,44 @@
 "use client"
 
-import * as TooltipPrimitive from "@radix-ui/react-tooltip"
-import { motion } from "motion/react"
+import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
+
 import { cn } from "../lib/utils"
 
 const TooltipProvider = TooltipPrimitive.Provider
-const Tooltip = TooltipPrimitive.Root
-const TooltipTrigger = TooltipPrimitive.Trigger
 
-function TooltipContent({
+function Tooltip({
+  ...props
+}: React.ComponentProps<typeof TooltipPrimitive.Root>) {
+  return <TooltipPrimitive.Root {...props} />
+}
+
+function TooltipTrigger({
+  className,
+  ...props
+}: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
+  return <TooltipPrimitive.Trigger className={className} {...props} />
+}
+
+function TooltipPopup({
   className,
   sideOffset = 4,
   ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Content>) {
+}: React.ComponentProps<typeof TooltipPrimitive.Popup> & {
+  sideOffset?: number
+}) {
   return (
     <TooltipPrimitive.Portal>
-      <TooltipPrimitive.Content sideOffset={sideOffset} asChild {...props}>
-        <motion.div
+      <TooltipPrimitive.Positioner sideOffset={sideOffset}>
+        <TooltipPrimitive.Popup
           className={cn(
-            "z-50 bg-foreground text-background px-2 py-1 text-xs",
+            "ss-tooltip-popup z-50 bg-foreground text-background px-2 py-1 text-xs",
             className,
           )}
-          initial={{ opacity: 0, scale: 0.96 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.15, ease: "easeOut" }}
-        >
-          {props.children}
-        </motion.div>
-      </TooltipPrimitive.Content>
+          {...props}
+        />
+      </TooltipPrimitive.Positioner>
     </TooltipPrimitive.Portal>
   )
 }
 
-export { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent }
+export { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger }

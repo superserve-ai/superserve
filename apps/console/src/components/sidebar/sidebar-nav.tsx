@@ -1,6 +1,6 @@
 "use client"
 
-import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@superserve/ui"
+import { cn, Tooltip, TooltipPopup, TooltipTrigger } from "@superserve/ui"
 import { motion } from "motion/react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -101,8 +101,8 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
         if (isCollapsed) {
           return (
             <Tooltip key={item.href}>
-              <TooltipTrigger asChild>{link}</TooltipTrigger>
-              <TooltipContent side="right">{item.label}</TooltipContent>
+              <TooltipTrigger render={link} />
+              <TooltipPopup>{item.label}</TooltipPopup>
             </Tooltip>
           )
         }

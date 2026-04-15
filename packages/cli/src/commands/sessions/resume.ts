@@ -45,11 +45,7 @@ export const resumeSession = new Command("resume")
         let messageCount = 0
         while (true) {
           const prompt = await promptUser()
-          if (
-            !prompt ||
-            !prompt.trim() ||
-            prompt.trim().toLowerCase() === "exit"
-          ) {
+          if (!prompt?.trim() || prompt.trim().toLowerCase() === "exit") {
             break
           }
 

@@ -1,10 +1,12 @@
 "use client"
 
 import { CheckIcon, CopyIcon, KeyIcon, PlusIcon } from "@phosphor-icons/react"
-import { Button, cn, useToast } from "@superserve/ui"
+import { Button, cn, HighlightedCode, useToast } from "@superserve/ui"
+import { motion } from "motion/react"
 import { useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { PageHeader } from "@/components/page-header"
+import { useCreateApiKey } from "@/hooks/use-api-keys"
 
 type Language = "typescript" | "python"
 
@@ -21,39 +23,22 @@ function getSnippet(language: Language, apiKey: string): string {
 
 const client = new SuperserveClient({ apiKey: "${key}" })
 
-const sandbox = await client.sandboxes.create({
-  snapshot: "superserve/base",
+const sandbox = await client.sandboxes.createSandbox({
+  name: "my-sandbox",
 })
+console.log(sandbox.id)
 
-const result = await sandbox.exec("echo 'Hello from Superserve!'")
-console.log(result.stdout)
-
-await sandbox.stop()`
+await client.sandboxes.deleteSandbox({ sandbox_id: sandbox.id })`
   }
 
   return `from superserve import Superserve
 
 client = Superserve(api_key="${key}")
 
-sandbox = client.sandboxes.create(
-    snapshot="superserve/base",
-)
+sandbox = client.sandboxes.create_sandbox(name="my-sandbox")
+print(sandbox.id)
 
-result = sandbox.exec("echo 'Hello from Superserve!'")
-print(result.stdout)
-
-sandbox.stop()`
-}
-
-function generateMockKey(): { full: string; prefix: string } {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-  let key = ""
-  for (let i = 0; i < 32; i++) {
-    key += chars[Math.floor(Math.random() * chars.length)]
-  }
-  const full = `ss_live_${key}`
-  const prefix = `ss_live_${key.slice(0, 8)}...`
-  return { full, prefix }
+client.sandboxes.delete_sandbox(sandbox.id)`
 }
 
 function CopyButton({ text, label }: { text: string; label?: string }) {
@@ -106,32 +91,43 @@ function StepHeader({
   )
 }
 
-function CodeBlock({ code, prefix }: { code: string; prefix?: string }) {
+function CodeBlock({
+  code,
+  lang,
+}: {
+  code: string
+  lang: "typescript" | "python" | "bash"
+}) {
   return (
-    <div className="flex items-start bg-background border border-border px-4 py-3.5">
-      <code className="flex-1 text-sm font-mono text-foreground/80 overflow-x-auto whitespace-pre">
-        {prefix && (
-          <span className="text-foreground/70 mr-2 select-none">{prefix}</span>
-        )}
-        {code}
-      </code>
+    <div className="flex items-start bg-background border border-dashed border-border px-4 py-3.5">
+      <div className="flex-1 min-w-0">
+        <HighlightedCode code={code} lang={lang} />
+      </div>
       <CopyButton text={code} />
     </div>
   )
 }
 
+const LANGUAGES: { label: string; value: Language }[] = [
+  { label: "TypeScript", value: "typescript" },
+  { label: "Python", value: "python" },
+]
+
 export default function GetStartedPage() {
   const [language, setLanguage] = useState<Language>("typescript")
-  const [createdKey, setCreatedKey] = useState<{
-    full: string
-    prefix: string
-  } | null>(null)
+  const [hoveredTab, setHoveredTab] = useState<string | null>(null)
+  const createKeyMutation = useCreateApiKey()
+  const createdKey = createKeyMutation.data
+    ? {
+        full: createKeyMutation.data.key,
+        prefix: createKeyMutation.data.prefix,
+      }
+    : null
   const [copied, setCopied] = useState(false)
   const { addToast } = useToast()
 
   const handleCreateKey = () => {
-    const key = generateMockKey()
-    setCreatedKey(key)
+    createKeyMutation.mutate("Get Started Key")
   }
 
   const handleCopyKey = async () => {
@@ -154,32 +150,59 @@ export default function GetStartedPage() {
             </p>
 
             {/* Language Toggle */}
-            <div className="flex items-center border border-border">
-              <button
-                type="button"
-                onClick={() => setLanguage("typescript")}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-mono transition-colors cursor-pointer",
-                  language === "typescript"
-                    ? "bg-surface-hover text-foreground"
-                    : "text-muted hover:text-foreground",
-                )}
-              >
-                TypeScript
-              </button>
-              <button
-                type="button"
-                onClick={() => setLanguage("python")}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-mono transition-colors cursor-pointer",
-                  language === "python"
-                    ? "bg-surface-hover text-foreground"
-                    : "text-muted hover:text-foreground",
-                )}
-              >
-                Python
-              </button>
-            </div>
+            <nav
+              className="flex items-center gap-1 py-2"
+              onMouseLeave={() => setHoveredTab(null)}
+            >
+              {LANGUAGES.map((lang) => {
+                const isActive = language === lang.value
+                const isHovered = hoveredTab === lang.value
+
+                return (
+                  <button
+                    key={lang.value}
+                    type="button"
+                    onClick={() => setLanguage(lang.value)}
+                    onMouseEnter={() => setHoveredTab(lang.value)}
+                    className={cn(
+                      "relative inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono transition-colors cursor-pointer",
+                      isActive
+                        ? "text-foreground"
+                        : "text-muted hover:text-foreground",
+                    )}
+                  >
+                    {isHovered && (
+                      <motion.span
+                        className="absolute inset-0 bg-foreground/4"
+                        layoutId="get-started-lang-hover"
+                        transition={{
+                          type: "spring",
+                          bounce: 0.15,
+                          duration: 0.4,
+                        }}
+                      />
+                    )}
+                    {isActive && !hoveredTab && (
+                      <span className="absolute inset-0 bg-foreground/4" />
+                    )}
+                    {isActive && (
+                      <motion.span
+                        className="absolute inset-0 pointer-events-none"
+                        layoutId="get-started-lang-active"
+                        transition={{
+                          type: "spring",
+                          bounce: 0.15,
+                          duration: 0.5,
+                        }}
+                      >
+                        <CornerBrackets size="sm" />
+                      </motion.span>
+                    )}
+                    <span className="relative">{lang.label}</span>
+                  </button>
+                )
+              })}
+            </nav>
           </div>
 
           <div className="mt-10 space-y-10">
@@ -190,7 +213,7 @@ export default function GetStartedPage() {
                 Add the Superserve SDK to your project
               </p>
               <div className="pl-6">
-                <CodeBlock code={INSTALL_COMMANDS[language]} prefix="$" />
+                <CodeBlock code={INSTALL_COMMANDS[language]} lang="bash" />
               </div>
             </div>
 
@@ -231,9 +254,13 @@ export default function GetStartedPage() {
                     </button>
                   </div>
                 ) : (
-                  <Button onClick={handleCreateKey} size="sm">
+                  <Button
+                    onClick={handleCreateKey}
+                    size="sm"
+                    disabled={createKeyMutation.isPending}
+                  >
                     <PlusIcon className="size-3.5" weight="light" />
-                    Create Key
+                    {createKeyMutation.isPending ? "Creating..." : "Create Key"}
                   </Button>
                 )}
               </div>
@@ -241,13 +268,14 @@ export default function GetStartedPage() {
 
             {/* Step 3: Create & Run Sandbox */}
             <div className="space-y-4">
-              <StepHeader stepNumber={3} title="Create and run a sandbox" />
+              <StepHeader stepNumber={3} title="Create your first sandbox" />
               <p className="pl-6 text-sm leading-none tracking-tight text-muted">
-                Use the SDK to spin up a sandbox and execute code
+                Use the SDK to spin up and tear down a sandbox
               </p>
               <div className="pl-6">
                 <CodeBlock
                   code={getSnippet(language, createdKey?.full ?? "")}
+                  lang={language}
                 />
               </div>
             </div>
