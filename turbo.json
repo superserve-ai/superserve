@@ -3,7 +3,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "env": ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY", "VITE_API_BASE_URL", "VITE_CONSOLE_URL", "VITE_COOKIE_DOMAIN", "VITE_POSTHOG_KEY", "VITE_POSTHOG_HOST", "NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_API_URL", "NEXT_PUBLIC_COOKIE_DOMAIN", "NEXT_PUBLIC_POSTHOG_KEY", "NEXT_PUBLIC_ENABLE_DEV_AUTH"],
+      "env": ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY", "VITE_API_BASE_URL", "VITE_CONSOLE_URL", "VITE_COOKIE_DOMAIN", "VITE_POSTHOG_KEY", "VITE_POSTHOG_HOST", "NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_API_URL", "NEXT_PUBLIC_COOKIE_DOMAIN", "NEXT_PUBLIC_POSTHOG_KEY", "NEXT_PUBLIC_ENABLE_DEV_AUTH", "SUPABASE_SERVICE_ROLE_KEY", "SANDBOX_API_URL"],
       "outputs": ["dist/**", ".next/**"]
     },
     "dev": {
@@ -17,7 +17,21 @@
       "dependsOn": ["^build"]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "inputs": [
+        "src/**/*.{ts,tsx}",
+        "tests/**/*.{ts,tsx}",
+        "vitest.config.{ts,js}",
+        "package.json"
+      ]
+    },
+    "test:coverage": {
+      "inputs": [
+        "src/**/*.{ts,tsx}",
+        "tests/**/*.{ts,tsx}",
+        "vitest.config.{ts,js}",
+        "package.json"
+      ],
+      "outputs": ["coverage/**"]
     }
   }
 }

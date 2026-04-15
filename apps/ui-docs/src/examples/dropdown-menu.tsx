@@ -1,55 +1,47 @@
 import {
   Button,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  Menu,
+  MenuItem,
+  MenuPopup,
+  MenuSeparator,
+  MenuTrigger,
 } from "@superserve/ui"
 import type { ComponentMeta } from "../registry/types"
 
 export const dropdownMenuMeta: ComponentMeta = {
-  slug: "dropdown-menu",
-  name: "DropdownMenu",
+  slug: "menu",
+  name: "Menu",
   description: "A menu triggered by a button click.",
   category: "Overlays",
-  source: "components/dropdown-menu.tsx",
-  props: [
-    {
-      name: "sideOffset",
-      type: "number",
-      default: "4",
-      component: "DropdownMenuContent",
-      description: "Distance from the trigger in pixels.",
-    },
-  ],
+  source: "components/menu.tsx",
+  props: [],
   examples: [
     {
       title: "Default",
       preview: (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline">Open Menu</Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem>Edit</DropdownMenuItem>
-            <DropdownMenuItem>Duplicate</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>Delete</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Menu>
+          <MenuTrigger render={<Button variant="outline" />}>
+            Open Menu
+          </MenuTrigger>
+          <MenuPopup>
+            <MenuItem>Edit</MenuItem>
+            <MenuItem>Duplicate</MenuItem>
+            <MenuSeparator />
+            <MenuItem>Delete</MenuItem>
+          </MenuPopup>
+        </Menu>
       ),
-      code: `<DropdownMenu>
-  <DropdownMenuTrigger asChild>
-    <Button variant="outline">Open Menu</Button>
-  </DropdownMenuTrigger>
-  <DropdownMenuContent>
-    <DropdownMenuItem>Edit</DropdownMenuItem>
-    <DropdownMenuItem>Duplicate</DropdownMenuItem>
-    <DropdownMenuSeparator />
-    <DropdownMenuItem>Delete</DropdownMenuItem>
-  </DropdownMenuContent>
-</DropdownMenu>`,
+      code: `<Menu>
+  <MenuTrigger render={<Button variant="outline" />}>
+    Open Menu
+  </MenuTrigger>
+  <MenuPopup>
+    <MenuItem>Edit</MenuItem>
+    <MenuItem>Duplicate</MenuItem>
+    <MenuSeparator />
+    <MenuItem>Delete</MenuItem>
+  </MenuPopup>
+</Menu>`,
     },
   ],
 }

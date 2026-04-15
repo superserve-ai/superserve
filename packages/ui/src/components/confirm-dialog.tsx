@@ -1,15 +1,14 @@
 "use client"
 
 import { WarningIcon } from "@phosphor-icons/react"
-import { motion } from "motion/react"
 import * as React from "react"
 import { cn } from "../lib/utils"
 import { Button } from "./button"
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogPopup,
   DialogTitle,
 } from "./dialog"
 
@@ -52,7 +51,7 @@ export function ConfirmDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogPopup>
         <div className="p-6">
           <div className="flex items-start gap-4">
             <div
@@ -91,21 +90,13 @@ export function ConfirmDialog({
               disabled={loading}
             >
               {loading ? (
-                <motion.div
-                  className="h-4 w-4 rounded-full border-2 border-current border-t-transparent"
-                  animate={{ rotate: 360 }}
-                  transition={{
-                    duration: 0.8,
-                    repeat: Infinity,
-                    ease: "linear",
-                  }}
-                />
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
               ) : null}
               {confirmLabel}
             </Button>
           </DialogFooter>
         </div>
-      </DialogContent>
+      </DialogPopup>
     </Dialog>
   )
 }

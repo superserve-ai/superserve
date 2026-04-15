@@ -1,27 +1,31 @@
 # CLAUDE.md
 
-Guidelines for working with the Superserve monorepo.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## What This Repository Is
 
-Superserve is a CLI and SDK for deploying AI agents to sandboxed cloud containers. Users write an agent (typically using the Claude Agent SDK), point `superserve deploy` at it, and get a hosted agent they can interact with via `superserve run`.
+Superserve provides sandbox infrastructure to run code in isolated cloud environments powered by Firecracker MicroVMs. Users create sandboxes via the console, CLI, or SDK, execute commands, upload/download files, and manage sandbox lifecycle (pause/resume/delete).
 
-This repo is a monorepo containing the CLI, TypeScript SDK, console, and UI library. The platform API and dashboard are being migrated here from a separate repo.
+This repo is a monorepo containing the console, CLI, TypeScript SDK, Python SDK, and UI library.
 
 ## Monorepo Structure
 
 ```
 superserve/
 ├── apps/
-│   ├── console/                 # React + Vite console app
-│   └── ui-docs/                 # UI component documentation
+│   ├── console/                 # Next.js 16 console app (App Router)
+│   └── ui-docs/                 # UI component documentation (Vite)
 ├── packages/
 │   ├── cli/                     # TypeScript CLI (@superserve/cli on npm)
 │   ├── python-sdk/              # Python SDK (superserve on PyPI)
 │   ├── sdk/                     # TypeScript SDK (@superserve/sdk on npm)
+│   ├── ui/                      # Shared UI component library (@superserve/ui)
+│   ├── supabase/                # Supabase client factories (browser/server/admin/middleware)
 │   ├── typescript-config/       # Shared tsconfig presets
+│   ├── tailwind-config/         # Shared Tailwind CSS config
 │   └── biome-config/            # Shared Biome linting/formatting config
-├── docs/                        # Mintlify documentation, no specs or planning docs here
+├── docs/                        # Mintlify documentation
+├── spec/                        # Planning and implementation documents
 └── examples/                    # Example projects
 ```
 
@@ -32,9 +36,27 @@ superserve/
 
 ## Architecture
 
+### Console (`apps/console/`)
+
+Next.js 16 App Router application with Supabase auth. Key architectural patterns:
+
+**API Proxy** (`src/app/api/[...path]/route.ts`): All sandbox API calls from the browser go through a Next.js API route that authenticates the user via Supabase session, generates a server-side `X-API-Key`, and forwards the request to the platform API (`SANDBOX_API_URL`). The proxy key is cached for 24 hours per user.
+
+**Server Actions** (`src/lib/api/*-actions.ts`): API keys, snapshots, activity, and audit logs are fetched directly via Supabase admin client in server actions, bypassing the proxy.
+
+**Data Fetching**: React Query (TanStack Query) with custom hooks (`src/hooks/`). Mutations use optimistic updates. Query keys are centralized in `src/lib/api/query-keys.ts`.
+
+**Auth**: Supabase Auth with Google OAuth and email/password. The proxy file (`src/proxy.ts`) handles route protection. Internal proxy API keys use the `__console_proxy__` name and are hidden from the UI.
+
+**Analytics**: PostHog for event tracking. Events are defined in `src/lib/posthog/events.ts`.
+
+### UI Library (`packages/ui/`)
+
+Built on **@base-ui/react** (headless components) + Tailwind CSS + **motion** (Framer Motion) for animations. Component animations use CSS transitions with `data-starting-style`/`data-ending-style` attributes (defined in `packages/ui/src/styles/globals.css`). Icons from `@phosphor-icons/react`. Code highlighting via `shiki`.
+
 ### TypeScript CLI (`packages/cli/`)
 
-Built with Bun + Commander. Entry point: `src/index.ts`.
+Built with Bun + Commander. Entry point: `src/index.ts`. Authenticates via device flow or API key.
 
 ### TypeScript SDK (`packages/sdk/`)
 
@@ -42,14 +64,15 @@ Published as `@superserve/sdk` with dual CJS/ESM output via tsup. Includes React
 
 ### Python SDK (`packages/python-sdk/`)
 
-Published as `superserve` on PyPI. Provides the `App`, `Session`, and `Stream` classes for building agents in Python. Zero runtime dependencies.
+Published as `superserve` on PyPI. Zero runtime dependencies.
 
 ## Key Patterns
 
-- **Agent IDs**: Prefixed with `agt_`, run IDs with `run_`, session IDs with `ses_`.
-- **SSE streaming**: Agent responses stream via Server-Sent Events. Events include `message`, `status`, `error`, `done`.
-- **Config file**: `superserve.yaml` defines agent name, start command, secrets, and ignore patterns.
-- **Shared configs**: TypeScript projects extend from `@superserve/typescript-config` presets. Biome projects extend from `@superserve/biome-config`.
+- **Sandbox IDs**: UUIDs. API keys prefixed with `ss_live_`.
+- **Sandbox lifecycle**: `starting → active ↔ idle → deleted`. Also `pausing` (transitional) and `failed`.
+- **API types**: Defined in `apps/console/src/lib/api/types.ts`. Must match the OpenAPI spec.
+- **Shared configs**: TypeScript projects extend from `@superserve/typescript-config`. Biome from `@superserve/biome-config`. Tailwind from `@superserve/tailwind-config`.
+- **Sticky hover animation**: Reusable pattern across sidebar, command palette, table bodies, and language tabs using `motion` `layoutId` for smooth hover transitions.
 
 ## Development
 
@@ -76,6 +99,11 @@ bun add -d @types/node --filter @superserve/sdk
 # Testing the CLI locally (no dev server, run directly)
 bun packages/cli/src/index.ts deploy --help
 
+# Email templates — preview server (React Email) at http://localhost:3002
+bun --filter @superserve/console run email:dev
+# Templates live at apps/console/src/lib/email/templates/*.tsx
+# Hot reloads on edit; sidebar lists welcome / confirmation / password-reset
+
 # Python SDK
 uv run pytest packages/python-sdk/tests/           # Run SDK tests
 uv run ruff check packages/python-sdk/ --fix        # Lint
@@ -90,23 +118,37 @@ bunx turbo run lint --filter=@superserve/python-sdk
 
 ### TypeScript
 - Biome for linting and formatting (2-space indent, double quotes, semicolons as needed)
-- TypeScript strict mode
-- ESM modules
+- TypeScript strict mode, ESM modules
+- Run `bunx biome check --write .` from the package directory to auto-fix lint/format issues
 
 ### Python
 - Python 3.12+, type hints on function signatures
 - Ruff for linting and formatting (line length 88)
 
-### General
-- Keep functions focused, avoid deep nesting
-- Use specific exception types, not bare `except:`
-- Validate inputs at system boundaries
+## Design Language
+
+The console has a deliberate austere, technical aesthetic. Follow these patterns when building UI:
+
+**Color & Theme**: Dark monochromatic palette (`#0a0a0a` background, `#e5e5e5` foreground, `#171717` surfaces). Color is reserved for status indicators only (green/red/orange). Tokens are in `packages/tailwind-config/theme.css`.
+
+**Borders**: Dashed borders everywhere — dialogs, cards, buttons (outline variant), separators, inputs. Use `border border-dashed border-border`. This is the signature visual trait. No solid decorative borders.
+
+**Typography**: Instrument Sans (sans) + Geist Mono (mono). Buttons, badges, and table headers use `font-mono uppercase text-xs`. Body text uses sans.
+
+**Corners**: Sharp corners throughout, no border-radius. This reinforces the technical feel.
+
+**Corner Brackets**: A custom decorative element (`<CornerBrackets />`) that frames active/selected items with small L-shaped corner marks. Used in sidebar nav, language tabs, empty states, and command palette. Sizes: `sm`, `md`, `lg`.
+
+**Animations**: Scale-based transitions (0.96x → 1x) for dialogs and popovers. Spring-based sticky hover (`layoutId` with `motion`) for nav items, table rows, tabs, and command palette items. Defined in `packages/ui/src/styles/globals.css`.
+
+**Layout**: Dashboard uses a collapsible sidebar (16px collapsed, 64px expanded) + full-height content. Pages follow: `PageHeader` (h-14) → optional `TableToolbar` → scrollable content. Settings pages use a `grid-cols-[240px_1fr]` two-column layout.
+
+**Icons**: Phosphor Icons with `weight="light"` consistently. Size `size-4` for inline, `size-3.5` for buttons.
 
 ## Branding
 
 - CLI tool is `superserve`, platform is `Superserve`
 - Never use "Claude" standalone — use "Claude Agent" or "Claude Agent SDK"
-- Internal infra names (e.g. `claude-runtime-template`) are fine but should migrate over time
 
 ## Git
 

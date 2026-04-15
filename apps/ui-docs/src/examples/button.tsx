@@ -21,10 +21,9 @@ export const buttonMeta: ComponentMeta = {
       description: "The size of the button.",
     },
     {
-      name: "asChild",
-      type: "boolean",
-      default: "false",
-      description: "Render as a child element using Radix Slot.",
+      name: "render",
+      type: "React.ReactElement",
+      description: "Render as a custom element via the render prop.",
     },
   ],
   examples: [

@@ -1,8 +1,8 @@
 "use client"
 
 import { cn } from "@superserve/ui"
-import { motion } from "motion/react"
-import { Children, cloneElement, isValidElement, useRef, useState } from "react"
+import { AnimatePresence, motion } from "motion/react"
+import { useRef, useState } from "react"
 
 interface StickyHoverTableBodyProps {
   children: React.ReactNode
@@ -19,10 +19,13 @@ export function StickyHoverTableBody({
   } | null>(null)
   const tbodyRef = useRef<HTMLTableSectionElement>(null)
 
-  const handleRowMouseEnter = (e: React.MouseEvent<HTMLTableRowElement>) => {
-    if (!tbodyRef.current) return
+  const handleMouseOver = (e: React.MouseEvent<HTMLTableSectionElement>) => {
+    const row = (e.target as HTMLElement).closest("tr")
+    if (!row || !tbodyRef.current?.contains(row)) return
+    // Skip the absolute-positioned hover indicator row
+    if (row.getAttribute("aria-hidden") === "true") return
     const tbodyRect = tbodyRef.current.getBoundingClientRect()
-    const rowRect = e.currentTarget.getBoundingClientRect()
+    const rowRect = row.getBoundingClientRect()
     setHoverStyle({
       top: rowRect.top - tbodyRect.top,
       height: rowRect.height,
@@ -33,6 +36,8 @@ export function StickyHoverTableBody({
     <tbody
       ref={tbodyRef}
       className={cn("relative [&_tr:last-child]:border-0", className)}
+      onMouseOver={handleMouseOver}
+      onFocus={() => {}}
       onMouseLeave={() => setHoverStyle(null)}
     >
       {hoverStyle && (
@@ -47,7 +52,7 @@ export function StickyHoverTableBody({
             padding: 0,
             margin: 0,
           }}
-          aria-hidden
+          aria-hidden="true"
         >
           <td style={{ padding: 0, border: 0 }}>
             <motion.div
@@ -65,20 +70,7 @@ export function StickyHoverTableBody({
           </td>
         </motion.tr>
       )}
-      {Children.map(children, (child) => {
-        if (!isValidElement<React.HTMLAttributes<HTMLTableRowElement>>(child))
-          return child
-        return cloneElement(child, {
-          onMouseEnter: (e: React.MouseEvent<HTMLTableRowElement>) => {
-            handleRowMouseEnter(e)
-            child.props.onMouseEnter?.(e)
-          },
-          className: cn(
-            "border-b border-border transition-colors",
-            child.props.className,
-          ),
-        })
-      })}
+      <AnimatePresence initial={false}>{children}</AnimatePresence>
     </tbody>
   )
 }

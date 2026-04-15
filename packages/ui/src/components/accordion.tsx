@@ -1,10 +1,25 @@
 "use client"
 
+import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion"
 import { CaretDownIcon } from "@phosphor-icons/react"
-import * as AccordionPrimitive from "@radix-ui/react-accordion"
+
 import { cn } from "../lib/utils"
 
-const Accordion = AccordionPrimitive.Root
+interface AccordionProps {
+  multiple?: boolean
+  defaultValue?: string[]
+  value?: string[]
+  onValueChange?: (value: string[]) => void
+  disabled?: boolean
+  className?: string
+  children: React.ReactNode
+}
+
+function Accordion({ className, ...props }: AccordionProps) {
+  return (
+    <AccordionPrimitive.Root className={cn("w-full", className)} {...props} />
+  )
+}
 
 function AccordionItem({
   className,
@@ -24,38 +39,39 @@ function AccordionTrigger({
   ...props
 }: React.ComponentProps<typeof AccordionPrimitive.Trigger>) {
   return (
-    <AccordionPrimitive.Header className="flex">
+    <AccordionPrimitive.Header>
       <AccordionPrimitive.Trigger
         className={cn(
-          "flex flex-1 items-center justify-between py-4 text-sm font-medium text-foreground transition-colors hover:text-foreground/80",
-          "[&[data-state=open]>svg]:rotate-180",
+          "flex flex-1 w-full items-center justify-between py-4 text-sm font-medium text-foreground transition-all",
+          "hover:underline",
+          "[&[data-panel-open]>svg]:rotate-180",
           className,
         )}
         {...props}
       >
         {children}
         <CaretDownIcon
-          className="h-4 w-4 text-muted shrink-0 transition-transform duration-200"
           weight="light"
+          className="h-4 w-4 shrink-0 text-muted transition-transform duration-200"
         />
       </AccordionPrimitive.Trigger>
     </AccordionPrimitive.Header>
   )
 }
 
-function AccordionContent({
+function AccordionPanel({
   className,
   children,
   ...props
-}: React.ComponentProps<typeof AccordionPrimitive.Content>) {
+}: React.ComponentProps<typeof AccordionPrimitive.Panel>) {
   return (
-    <AccordionPrimitive.Content
-      className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
+    <AccordionPrimitive.Panel
+      className={cn("ss-accordion-panel text-sm", className)}
       {...props}
     >
-      <div className={cn("pb-4 text-sm text-muted", className)}>{children}</div>
-    </AccordionPrimitive.Content>
+      <div className="pb-4 pt-0">{children}</div>
+    </AccordionPrimitive.Panel>
   )
 }
 
-export { Accordion, AccordionItem, AccordionTrigger, AccordionContent }
+export { Accordion, AccordionItem, AccordionPanel, AccordionTrigger }

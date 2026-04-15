@@ -1,7 +1,7 @@
 import {
   Accordion,
-  AccordionContent,
   AccordionItem,
+  AccordionPanel,
   AccordionTrigger,
 } from "@superserve/ui"
 import type { ComponentMeta } from "../registry/types"
@@ -18,27 +18,27 @@ export const accordionMeta: ComponentMeta = {
       title: "Default",
       preview: (
         <div className="max-w-lg">
-          <Accordion type="single" collapsible>
+          <Accordion>
             <AccordionItem value="item-1">
               <AccordionTrigger>What is Superserve?</AccordionTrigger>
-              <AccordionContent>
+              <AccordionPanel>
                 Superserve is a CLI and SDK for deploying AI agents to sandboxed
                 cloud containers.
-              </AccordionContent>
+              </AccordionPanel>
             </AccordionItem>
             <AccordionItem value="item-2">
               <AccordionTrigger>How do I deploy an agent?</AccordionTrigger>
-              <AccordionContent>
+              <AccordionPanel>
                 Use the superserve deploy command to deploy your agent to the
                 cloud.
-              </AccordionContent>
+              </AccordionPanel>
             </AccordionItem>
             <AccordionItem value="item-3">
               <AccordionTrigger>Is there a free tier?</AccordionTrigger>
-              <AccordionContent>
+              <AccordionPanel>
                 Yes, you can get started with a generous free tier that includes
                 sandbox hours.
-              </AccordionContent>
+              </AccordionPanel>
             </AccordionItem>
           </Accordion>
         </div>
@@ -46,21 +46,21 @@ export const accordionMeta: ComponentMeta = {
       code: `<Accordion type="single" collapsible>
   <AccordionItem value="item-1">
     <AccordionTrigger>What is Superserve?</AccordionTrigger>
-    <AccordionContent>
+    <AccordionPanel>
       Superserve is a CLI and SDK for deploying AI agents to sandboxed cloud containers.
-    </AccordionContent>
+    </AccordionPanel>
   </AccordionItem>
   <AccordionItem value="item-2">
     <AccordionTrigger>How do I deploy an agent?</AccordionTrigger>
-    <AccordionContent>
+    <AccordionPanel>
       Use the superserve deploy command to deploy your agent to the cloud.
-    </AccordionContent>
+    </AccordionPanel>
   </AccordionItem>
   <AccordionItem value="item-3">
     <AccordionTrigger>Is there a free tier?</AccordionTrigger>
-    <AccordionContent>
+    <AccordionPanel>
       Yes, you can get started with a generous free tier that includes sandbox hours.
-    </AccordionContent>
+    </AccordionPanel>
   </AccordionItem>
 </Accordion>`,
     },

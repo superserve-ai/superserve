@@ -1,36 +1,41 @@
 "use client"
 
+import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { XIcon } from "@phosphor-icons/react"
-import * as DialogPrimitive from "@radix-ui/react-dialog"
-import { AnimatePresence, motion } from "motion/react"
 import { createContext, useContext, useState } from "react"
+
 import { cn } from "../lib/utils"
 
-const DialogOpenContext = createContext(false)
+const DialogOpenContext = createContext<boolean>(false)
+export function useDialogOpen() {
+  return useContext(DialogOpenContext)
+}
+
+interface DialogProps {
+  children: React.ReactNode
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  defaultOpen?: boolean
+}
 
 function Dialog({
   children,
   open: controlledOpen,
   onOpenChange,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(
-    props.defaultOpen ?? false,
-  )
-
+}: DialogProps) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
   const isControlled = controlledOpen !== undefined
   const open = isControlled ? controlledOpen : uncontrolledOpen
-
-  const handleOpenChange = (value: boolean) => {
-    if (!isControlled) setUncontrolledOpen(value)
-    onOpenChange?.(value)
-  }
 
   return (
     <DialogPrimitive.Root
       {...props}
       open={open}
-      onOpenChange={handleOpenChange}
+      onOpenChange={(value) => {
+        if (!isControlled) setUncontrolledOpen(value)
+        onOpenChange?.(value)
+      }}
     >
       <DialogOpenContext.Provider value={open}>
         {children}
@@ -40,50 +45,29 @@ function Dialog({
 }
 
 const DialogTrigger = DialogPrimitive.Trigger
-const DialogClose = DialogPrimitive.Close
 
-function DialogContent({
+function DialogPopup({
   className,
   children,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content>) {
-  const open = useContext(DialogOpenContext)
-
+}: React.ComponentProps<typeof DialogPrimitive.Popup>) {
   return (
-    <AnimatePresence>
-      {open && (
-        <DialogPrimitive.Portal forceMount>
-          <DialogPrimitive.Overlay asChild forceMount>
-            <motion.div
-              className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-            />
-          </DialogPrimitive.Overlay>
-          <DialogPrimitive.Content asChild forceMount {...props}>
-            <motion.div
-              className={cn(
-                "fixed left-1/2 top-1/2 z-50 w-full max-w-md",
-                "bg-surface border border-dashed border-border",
-                className,
-              )}
-              initial={{ opacity: 0, x: "-50%", y: "-48%", scale: 0.96 }}
-              animate={{ opacity: 1, x: "-50%", y: "-50%", scale: 1 }}
-              exit={{ opacity: 0, x: "-50%", y: "-48%", scale: 0.96 }}
-              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            >
-              {children}
-              <DialogPrimitive.Close className="absolute right-4 top-4 p-1 text-muted hover:text-foreground hover:bg-surface-hover transition-colors">
-                <XIcon className="h-4 w-4" weight="light" />
-                <span className="sr-only">Close</span>
-              </DialogPrimitive.Close>
-            </motion.div>
-          </DialogPrimitive.Content>
-        </DialogPrimitive.Portal>
-      )}
-    </AnimatePresence>
+    <DialogPrimitive.Portal>
+      <DialogPrimitive.Backdrop className="ss-dialog-backdrop fixed inset-0 z-50 bg-black/50" />
+      <DialogPrimitive.Popup
+        className={cn(
+          "ss-dialog-popup fixed left-1/2 top-1/2 z-50 w-full max-w-md bg-surface border border-dashed border-border shadow-lg",
+          className,
+        )}
+        {...props}
+      >
+        {children}
+        <DialogPrimitive.Close className="absolute top-4 right-4 text-muted hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus">
+          <XIcon weight="light" className="h-4 w-4" />
+          <span className="sr-only">Close</span>
+        </DialogPrimitive.Close>
+      </DialogPrimitive.Popup>
+    </DialogPrimitive.Portal>
   )
 }
 
@@ -99,23 +83,25 @@ function DialogHeader({
   )
 }
 
-function DialogTitle(
-  props: React.ComponentProps<typeof DialogPrimitive.Title>,
-) {
+function DialogTitle({
+  className,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Title>) {
   return (
     <DialogPrimitive.Title
-      className={cn("text-lg font-semibold text-foreground", props.className)}
+      className={cn("text-base font-semibold text-foreground", className)}
       {...props}
     />
   )
 }
 
-function DialogDescription(
-  props: React.ComponentProps<typeof DialogPrimitive.Description>,
-) {
+function DialogDescription({
+  className,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Description>) {
   return (
     <DialogPrimitive.Description
-      className={cn("text-sm text-muted", props.className)}
+      className={cn("text-sm text-muted", className)}
       {...props}
     />
   )
@@ -133,13 +119,15 @@ function DialogFooter({
   )
 }
 
+const DialogClose = DialogPrimitive.Close
+
 export {
   Dialog,
-  DialogTrigger,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
+  DialogClose,
   DialogDescription,
   DialogFooter,
-  DialogClose,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+  DialogTrigger,
 }

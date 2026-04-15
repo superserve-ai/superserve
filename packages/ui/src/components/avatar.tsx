@@ -1,6 +1,7 @@
 "use client"
 
-import * as AvatarPrimitive from "@radix-ui/react-avatar"
+import { Avatar as AvatarPrimitive } from "@base-ui/react/avatar"
+
 import { cn } from "../lib/utils"
 
 type AvatarSize = "xs" | "sm" | "default" | "lg"
@@ -12,30 +13,28 @@ const sizeClasses: Record<AvatarSize, string> = {
   lg: "h-11 w-11 text-base",
 }
 
-interface AvatarProps
-  extends React.ComponentProps<typeof AvatarPrimitive.Root> {
-  src?: string
+interface AvatarProps {
+  src?: string | null
   alt?: string
   fallback: string
   size?: AvatarSize
+  className?: string
 }
 
 function Avatar({
-  className,
   src,
   alt,
   fallback,
   size = "default",
-  ...props
+  className,
 }: AvatarProps) {
   return (
     <AvatarPrimitive.Root
       className={cn(
-        "relative flex shrink-0 overflow-hidden",
+        "relative flex shrink-0 items-center justify-center overflow-hidden rounded-full",
         sizeClasses[size],
         className,
       )}
-      {...props}
     >
       {src && (
         <AvatarPrimitive.Image
@@ -44,12 +43,12 @@ function Avatar({
           className="aspect-square h-full w-full object-cover"
         />
       )}
-      <AvatarPrimitive.Fallback className="flex h-full w-full items-center justify-center border border-border bg-surface font-mono text-muted uppercase">
+      <AvatarPrimitive.Fallback className="flex h-full w-full items-center justify-center bg-surface font-mono text-muted uppercase border border-dashed border-border rounded-full">
         {fallback}
       </AvatarPrimitive.Fallback>
     </AvatarPrimitive.Root>
   )
 }
 
+export type { AvatarProps, AvatarSize }
 export { Avatar }
-export type { AvatarSize }

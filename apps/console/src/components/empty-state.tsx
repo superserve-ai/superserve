@@ -19,7 +19,7 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <div className="flex flex-1 items-center justify-center">
-      <div className="relative flex w-80 flex-col items-center px-10 py-14 text-center">
+      <div className="relative flex w-80 flex-col items-center px-10 py-10 text-center">
         <CornerBrackets size="lg" />
 
         <IconComponent className="size-10 text-foreground/60" weight="light" />

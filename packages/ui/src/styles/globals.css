@@ -1,2 +1,121 @@
 @import "tailwindcss";
 @import "@superserve/tailwind-config";
+
+/* Base UI component animations */
+
+/* Dialog */
+.ss-dialog-backdrop {
+  transition: opacity 200ms ease;
+  opacity: 1;
+}
+.ss-dialog-backdrop[data-starting-style],
+.ss-dialog-backdrop[data-ending-style] {
+  opacity: 0;
+}
+
+.ss-dialog-popup {
+  transition:
+    opacity 200ms ease,
+    transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+.ss-dialog-popup[data-starting-style],
+.ss-dialog-popup[data-ending-style] {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.96);
+}
+
+/* Popover */
+.ss-popover-popup {
+  transition:
+    opacity 150ms ease-out,
+    transform 150ms ease-out;
+  opacity: 1;
+  transform: scale(1);
+}
+.ss-popover-popup[data-starting-style],
+.ss-popover-popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+/* Tooltip */
+.ss-tooltip-popup {
+  transition:
+    opacity 150ms ease-out,
+    transform 150ms ease-out;
+  opacity: 1;
+  transform: scale(1);
+}
+.ss-tooltip-popup[data-starting-style],
+.ss-tooltip-popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+/* Menu */
+.ss-menu-popup {
+  transition:
+    opacity 150ms ease-out,
+    transform 150ms ease-out;
+  opacity: 1;
+  transform: scale(1);
+}
+.ss-menu-popup[data-starting-style],
+.ss-menu-popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+/* Select */
+.ss-select-popup {
+  transition:
+    opacity 150ms ease-out,
+    transform 150ms ease-out;
+  opacity: 1;
+  transform: scale(1);
+}
+.ss-select-popup[data-starting-style],
+.ss-select-popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+/* Checkbox indicator */
+.ss-checkbox-indicator {
+  transition:
+    opacity 100ms ease,
+    transform 100ms ease;
+  opacity: 1;
+  transform: scale(1);
+}
+.ss-checkbox-indicator[data-starting-style],
+.ss-checkbox-indicator[data-ending-style] {
+  opacity: 0;
+  transform: scale(0);
+}
+
+/* Radio indicator */
+.ss-radio-indicator {
+  transition:
+    opacity 100ms ease,
+    transform 100ms ease;
+  opacity: 1;
+  transform: scale(1);
+}
+.ss-radio-indicator[data-starting-style],
+.ss-radio-indicator[data-ending-style] {
+  opacity: 0;
+  transform: scale(0);
+}
+
+/* Accordion panel */
+.ss-accordion-panel {
+  overflow: hidden;
+  transition: height 200ms ease-out;
+}
+.ss-accordion-panel[data-starting-style],
+.ss-accordion-panel[data-ending-style] {
+  height: 0;
+}

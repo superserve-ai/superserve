@@ -1,7 +1,7 @@
 import {
   Select,
-  SelectContent,
   SelectItem,
+  SelectPopup,
   SelectTrigger,
   SelectValue,
 } from "@superserve/ui"
@@ -13,15 +13,7 @@ export const selectMeta: ComponentMeta = {
   description: "A dropdown select menu with customizable options.",
   category: "Inputs",
   source: "components/select.tsx",
-  props: [
-    {
-      name: "position",
-      type: '"popper" | "item-aligned"',
-      default: '"popper"',
-      component: "SelectContent",
-      description: "The positioning strategy.",
-    },
-  ],
+  props: [],
   examples: [
     {
       title: "Default",
@@ -31,11 +23,11 @@ export const selectMeta: ComponentMeta = {
             <SelectTrigger>
               <SelectValue placeholder="Select an option" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectPopup>
               <SelectItem value="option-1">Option One</SelectItem>
               <SelectItem value="option-2">Option Two</SelectItem>
               <SelectItem value="option-3">Option Three</SelectItem>
-            </SelectContent>
+            </SelectPopup>
           </Select>
         </div>
       ),
@@ -43,11 +35,11 @@ export const selectMeta: ComponentMeta = {
   <SelectTrigger>
     <SelectValue placeholder="Select an option" />
   </SelectTrigger>
-  <SelectContent>
+  <SelectPopup>
     <SelectItem value="option-1">Option One</SelectItem>
     <SelectItem value="option-2">Option Two</SelectItem>
     <SelectItem value="option-3">Option Three</SelectItem>
-  </SelectContent>
+  </SelectPopup>
 </Select>`,
     },
   ],

@@ -5,12 +5,10 @@ function Table({
   ...props
 }: React.HTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="w-full overflow-auto">
-      <table
-        className={cn("w-full caption-bottom text-sm", className)}
-        {...props}
-      />
-    </div>
+    <table
+      className={cn("w-full caption-bottom text-sm", className)}
+      {...props}
+    />
   )
 }
 
@@ -69,4 +67,4 @@ function TableCell({
   )
 }
 
-export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell }
+export { Table, TableBody, TableCell, TableHead, TableHeader, TableRow }

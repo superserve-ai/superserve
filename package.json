@@ -11,9 +11,36 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "test:coverage": "turbo run test:coverage",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,json,md}": [
+      "bunx biome check --write --no-errors-on-unmatched"
+    ]
   },
   "devDependencies": {
-    "turbo": "^2"
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "turbo": "^2.9.4"
+  },
+  "dependencies": {
+    "@biomejs/biome": "^2.4.10",
+    "@react-email/components": "^1.0.11",
+    "@supabase/ssr": "^0.10.0",
+    "@supabase/supabase-js": "^2.101.1",
+    "@tailwindcss/postcss": "^4.2.2",
+    "@types/node": "^25.5.2",
+    "@vitejs/plugin-react": "^5.1.4",
+    "cmdk": "^1.1.1",
+    "happy-dom": "^20.8.9",
+    "next": "^16.2.2",
+    "postcss": "^8.5.8",
+    "posthog-js": "^1.364.7",
+    "posthog-node": "^5.28.11",
+    "resend": "^6.10.0",
+    "tailwindcss": "^4.2.2",
+    "vitest": "^4.1.2"
   }
 }

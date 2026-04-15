@@ -2,7 +2,7 @@ import {
   createMiddlewareClient,
   matchesRoute,
 } from "@superserve/supabase/middleware"
-import type { NextRequest } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 
 const PUBLIC_ROUTES = [
   "/auth/signin",
@@ -28,7 +28,13 @@ export async function middleware(request: NextRequest) {
     const signinUrl = request.nextUrl.clone()
     signinUrl.pathname = "/auth/signin"
     signinUrl.searchParams.set("next", pathname)
-    return Response.redirect(signinUrl)
+    // Build the redirect on top of client.response so any refreshed Supabase
+    // auth cookies (written by getUser() via setAll) survive the redirect.
+    const redirect = NextResponse.redirect(signinUrl)
+    for (const cookie of client.response.cookies.getAll()) {
+      redirect.cookies.set(cookie)
+    }
+    return redirect
   }
 
   return client.response
@@ -36,6 +42,8 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // Skip Next internals and common static assets so getUser() isn't called
+    // on every font/css/js request.
+    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|otf|css|js|map)$).*)",
   ],
 }
