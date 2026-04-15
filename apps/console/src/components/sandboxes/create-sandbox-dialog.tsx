@@ -30,6 +30,7 @@ import { usePostHog } from "posthog-js/react"
 import { useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { useCreateSandbox } from "@/hooks/use-sandboxes"
+import type { CreateSandboxRequest } from "@/lib/api/types"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 
 type Mode = "form" | "code"
@@ -90,6 +91,66 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
+interface FormState {
+  name: string
+  timeout: string
+  allowRules: string[]
+  denyRules: string[]
+  envEntries: { key: string; value: string }[]
+  metadataEntries: { key: string; value: string }[]
+}
+
+/**
+ * Build the CreateSandboxRequest payload from the dialog's form state.
+ *
+ * Exported for unit testing. Keeps the network/env/metadata branches in
+ * one place so we can assert shape without driving the full dialog UI.
+ *
+ * Rules:
+ *  - `name` is trimmed.
+ *  - `timeout` is only included when set (coerced to number).
+ *  - `network` is only included when at least one allow or deny rule is
+ *    non-empty. Within it, `allow_out` / `deny_out` are each only included
+ *    when that specific list has entries.
+ *  - `env_vars` / `metadata` are only included when at least one entry has
+ *    a non-empty key. Empty string values are allowed but empty keys are
+ *    dropped.
+ */
+export function buildCreateSandboxRequest(
+  state: FormState,
+): CreateSandboxRequest {
+  const allowList = state.allowRules.map((r) => r.trim()).filter(Boolean)
+  const denyList = state.denyRules.map((r) => r.trim()).filter(Boolean)
+  const hasNetwork = allowList.length > 0 || denyList.length > 0
+
+  const envVars: Record<string, string> = {}
+  for (const entry of state.envEntries) {
+    const k = entry.key.trim()
+    if (k) envVars[k] = entry.value.trim()
+  }
+
+  const metadata: Record<string, string> = {}
+  for (const entry of state.metadataEntries) {
+    const k = entry.key.trim()
+    if (k) metadata[k] = entry.value.trim()
+  }
+
+  return {
+    name: state.name.trim(),
+    ...(state.timeout ? { timeout: Number(state.timeout) } : {}),
+    ...(hasNetwork
+      ? {
+          network: {
+            ...(allowList.length > 0 ? { allow_out: allowList } : {}),
+            ...(denyList.length > 0 ? { deny_out: denyList } : {}),
+          },
+        }
+      : {}),
+    ...(Object.keys(envVars).length > 0 ? { env_vars: envVars } : {}),
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+  }
+}
+
 interface CreateSandboxDialogProps {
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -137,57 +198,36 @@ export function CreateSandboxDialog({
   }
 
   const handleCreate = () => {
-    const allowList = allowRules.map((r) => r.trim()).filter(Boolean)
-    const denyList = denyRules.map((r) => r.trim()).filter(Boolean)
-    const hasNetwork = allowList.length > 0 || denyList.length > 0
-
-    const envVars: Record<string, string> = {}
-    for (const entry of envEntries) {
-      const k = entry.key.trim()
-      const v = entry.value.trim()
-      if (k) envVars[k] = v
-    }
-
-    const metadata: Record<string, string> = {}
-    for (const entry of metadataEntries) {
-      const k = entry.key.trim()
-      const v = entry.value.trim()
-      if (k) metadata[k] = v
-    }
+    const payload = buildCreateSandboxRequest({
+      name,
+      timeout,
+      allowRules,
+      denyRules,
+      envEntries,
+      metadataEntries,
+    })
 
     posthog.capture(SANDBOX_EVENTS.CREATED, {
       has_timeout: !!timeout,
-      has_network_rules: hasNetwork,
-      allow_rule_count: allowList.length,
-      deny_rule_count: denyList.length,
-      env_var_count: Object.keys(envVars).length,
-      metadata_key_count: Object.keys(metadata).length,
+      has_network_rules: !!payload.network,
+      allow_rule_count: payload.network?.allow_out?.length ?? 0,
+      deny_rule_count: payload.network?.deny_out?.length ?? 0,
+      env_var_count: payload.env_vars
+        ? Object.keys(payload.env_vars).length
+        : 0,
+      metadata_key_count: payload.metadata
+        ? Object.keys(payload.metadata).length
+        : 0,
       advanced_expanded: showAdvanced,
     })
 
-    createMutation.mutate(
-      {
-        name: name.trim(),
-        ...(timeout ? { timeout: Number(timeout) } : {}),
-        ...(hasNetwork
-          ? {
-              network: {
-                ...(allowList.length > 0 ? { allow_out: allowList } : {}),
-                ...(denyList.length > 0 ? { deny_out: denyList } : {}),
-              },
-            }
-          : {}),
-        ...(Object.keys(envVars).length > 0 ? { env_vars: envVars } : {}),
-        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+    createMutation.mutate(payload, {
+      onSuccess: (sandbox) => {
+        setOpen(false)
+        handleReset()
+        onCreated?.(sandbox.id)
       },
-      {
-        onSuccess: (sandbox) => {
-          setOpen(false)
-          handleReset()
-          onCreated?.(sandbox.id)
-        },
-      },
-    )
+    })
   }
 
   return (

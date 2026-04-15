@@ -13,7 +13,8 @@ const PROXY_KEY_VERSION = "v1"
  * or coordination — fixing the multi-instance race where one instance would
  * delete another's proxy-key row from the api_key table.
  */
-function getProxySecret(): string {
+/** @internal — exported for tests. */
+export function getProxySecret(): string {
   const secret = process.env.CONSOLE_PROXY_SECRET
   if (!secret || secret.length < 32) {
     throw new Error(
@@ -23,7 +24,8 @@ function getProxySecret(): string {
   return secret
 }
 
-function deriveRawKey(userId: string): string {
+/** @internal — exported for tests. Deterministic per-user key derivation. */
+export function deriveRawKey(userId: string): string {
   const mac = crypto
     .createHmac("sha256", getProxySecret())
     .update(`${PROXY_KEY_VERSION}:${userId}`)
@@ -31,7 +33,8 @@ function deriveRawKey(userId: string): string {
   return `ss_live_${mac.toString("base64url")}`
 }
 
-function hashKey(key: string): string {
+/** @internal — exported for tests. */
+export function hashKey(key: string): string {
   return crypto.createHash("sha256").update(key).digest("hex")
 }
 

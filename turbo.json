@@ -17,7 +17,21 @@
       "dependsOn": ["^build"]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "inputs": [
+        "src/**/*.{ts,tsx}",
+        "tests/**/*.{ts,tsx}",
+        "vitest.config.{ts,js}",
+        "package.json"
+      ]
+    },
+    "test:coverage": {
+      "inputs": [
+        "src/**/*.{ts,tsx}",
+        "tests/**/*.{ts,tsx}",
+        "vitest.config.{ts,js}",
+        "package.json"
+      ],
+      "outputs": ["coverage/**"]
     }
   }
 }

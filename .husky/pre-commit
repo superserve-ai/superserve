@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+
+# Run biome check + autofix on staged files. Fast — operates only on what's
+# actually staged via lint-staged. Tests run in CI, not on every commit.
+bunx lint-staged

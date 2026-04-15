@@ -24,19 +24,19 @@ import { useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { useApiKeys, useCreateApiKey } from "@/hooks/use-api-keys"
 
-type Language = "typescript" | "python"
+export type Language = "typescript" | "python"
 
-const LANGUAGES: { label: string; value: Language; icon: string }[] = [
+export const LANGUAGES: { label: string; value: Language; icon: string }[] = [
   { label: "TypeScript", value: "typescript", icon: "TS" },
   { label: "Python", value: "python", icon: "PY" },
 ]
 
-const INSTALL_COMMANDS: Record<Language, string> = {
+export const INSTALL_COMMANDS: Record<Language, string> = {
   typescript: "npm install @superserve/sdk",
   python: "pip install superserve",
 }
 
-function getConnectSnippet(
+export function getConnectSnippet(
   language: Language,
   apiKey: string,
   sandboxId: string,
