@@ -2,7 +2,7 @@
 
 import type { Icon } from "@phosphor-icons/react"
 import {
-  CameraIcon,
+  // CameraIcon, // TODO: re-enable when Snapshots ships
   ChartBarIcon,
   ClipboardTextIcon,
   CubeIcon,
@@ -54,11 +54,12 @@ export function CommandPalette() {
       icon: CubeIcon,
       onSelect: () => navigate("/sandboxes"),
     },
-    {
-      label: "Snapshots",
-      icon: CameraIcon,
-      onSelect: () => navigate("/snapshots"),
-    },
+    // TODO: re-enable when Snapshots ships
+    // {
+    //   label: "Snapshots",
+    //   icon: CameraIcon,
+    //   onSelect: () => navigate("/snapshots"),
+    // },
     {
       label: "Audit Logs",
       icon: ClipboardTextIcon,

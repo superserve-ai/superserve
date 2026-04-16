@@ -19,11 +19,11 @@ import {
   Field,
   HighlightedCode,
   Input,
-  Select,
-  SelectItem,
-  SelectPopup,
-  SelectTrigger,
-  SelectValue,
+  // Select, // TODO: re-enable when multiple snapshots are available
+  // SelectItem,
+  // SelectPopup,
+  // SelectTrigger,
+  // SelectValue,
 } from "@superserve/ui"
 import { AnimatePresence, LayoutGroup, motion } from "motion/react"
 import { usePostHog } from "posthog-js/react"
@@ -311,6 +311,7 @@ export function CreateSandboxDialog({
                 />
               </Field>
 
+              {/* TODO: re-enable when multiple snapshots are available
               <Field label="Snapshot" description="More snapshots coming soon">
                 <Select defaultValue="base">
                   <SelectTrigger>
@@ -321,6 +322,7 @@ export function CreateSandboxDialog({
                   </SelectPopup>
                 </Select>
               </Field>
+              */}
 
               <Field
                 label="Timeout"

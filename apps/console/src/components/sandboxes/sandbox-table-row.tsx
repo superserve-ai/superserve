@@ -1,7 +1,7 @@
 import {
   DotsThreeVerticalIcon,
-  KeyIcon,
-  KeyReturnIcon,
+  // KeyIcon, // TODO: re-enable when SSH access ships
+  // KeyReturnIcon, // TODO: re-enable when SSH access ships
   PlayIcon,
   PlugIcon,
   StopIcon,
@@ -139,6 +139,7 @@ export function SandboxTableRow({
                 <TerminalIcon className="size-4" weight="light" />
                 Open Terminal
               </MenuItem>
+              {/* TODO: re-enable when SSH access ships
               <MenuItem disabled={isFailed}>
                 <KeyIcon className="size-4" weight="light" />
                 Create SSH Access
@@ -147,6 +148,7 @@ export function SandboxTableRow({
                 <KeyReturnIcon className="size-4" weight="light" />
                 Remove SSH Access
               </MenuItem>
+              */}
               <MenuSeparator />
               <MenuItem
                 className="text-destructive hover:text-destructive"
