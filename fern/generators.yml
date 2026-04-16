@@ -3,6 +3,7 @@ api:
   specs:
     - openapi: ./openapi.yaml
       origin: https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml
+      overrides: ./overlay-files.yaml
 
 default-group: local
 groups:

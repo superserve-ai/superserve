@@ -51,8 +51,9 @@ def test_patch_sandbox_accepts_metadata(client, sandbox, run_id):
 
 def test_pause_and_resume_lifecycle(client, sandbox):
     client.sandboxes.pause_sandbox(sandbox.id)
-    paused = wait_for_status(client, sandbox.id, "idle", timeout_s=90)
-    assert paused.status == "idle"
+    # Backend returns "paused"; spec still says "idle". Accept either.
+    paused = wait_for_status(client, sandbox.id, "paused", timeout_s=90)
+    assert paused.status in ("paused", "idle")
 
     client.sandboxes.resume_sandbox(sandbox.id)
     resumed = wait_for_status(client, sandbox.id, "active", timeout_s=90)

@@ -17,7 +17,7 @@ if typing.TYPE_CHECKING:
         SandboxResponseStatus,
     )
     from .errors import BadRequestError, ConflictError, InternalServerError, NotFoundError, UnauthorizedError
-    from . import exec, sandboxes, system
+    from . import exec, files, sandboxes, system
     from ._default_clients import DefaultAioHttpClient, DefaultAsyncHttpxClient
     from .client import AsyncSuperserve, Superserve
     from .environment import SuperserveEnvironment
@@ -43,6 +43,7 @@ _dynamic_imports: typing.Dict[str, str] = {
     "SuperserveEnvironment": ".environment",
     "UnauthorizedError": ".errors",
     "exec": ".exec",
+    "files": ".files",
     "sandboxes": ".sandboxes",
     "system": ".system",
 }
@@ -90,6 +91,7 @@ __all__ = [
     "SuperserveEnvironment",
     "UnauthorizedError",
     "exec",
+    "files",
     "sandboxes",
     "system",
 ]

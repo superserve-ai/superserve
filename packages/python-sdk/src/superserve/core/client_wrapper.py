@@ -3,6 +3,7 @@
 import typing
 
 import httpx
+from ..environment import SuperserveEnvironment
 from .http_client import AsyncHttpClient, HttpClient
 from .logging import LogConfig, Logger
 
@@ -13,13 +14,13 @@ class BaseClientWrapper:
         *,
         api_key: str,
         headers: typing.Optional[typing.Dict[str, str]] = None,
-        base_url: str,
+        environment: SuperserveEnvironment,
         timeout: typing.Optional[float] = None,
         logging: typing.Optional[typing.Union[LogConfig, Logger]] = None,
     ):
         self.api_key = api_key
         self._headers = headers
-        self._base_url = base_url
+        self._environment = environment
         self._timeout = timeout
         self._logging = logging
 
@@ -38,8 +39,8 @@ class BaseClientWrapper:
     def get_custom_headers(self) -> typing.Optional[typing.Dict[str, str]]:
         return self._headers
 
-    def get_base_url(self) -> str:
-        return self._base_url
+    def get_environment(self) -> SuperserveEnvironment:
+        return self._environment
 
     def get_timeout(self) -> typing.Optional[float]:
         return self._timeout
@@ -51,17 +52,16 @@ class SyncClientWrapper(BaseClientWrapper):
         *,
         api_key: str,
         headers: typing.Optional[typing.Dict[str, str]] = None,
-        base_url: str,
+        environment: SuperserveEnvironment,
         timeout: typing.Optional[float] = None,
         logging: typing.Optional[typing.Union[LogConfig, Logger]] = None,
         httpx_client: httpx.Client,
     ):
-        super().__init__(api_key=api_key, headers=headers, base_url=base_url, timeout=timeout, logging=logging)
+        super().__init__(api_key=api_key, headers=headers, environment=environment, timeout=timeout, logging=logging)
         self.httpx_client = HttpClient(
             httpx_client=httpx_client,
             base_headers=self.get_headers,
             base_timeout=self.get_timeout,
-            base_url=self.get_base_url,
             logging_config=self._logging,
         )
 
@@ -72,19 +72,18 @@ class AsyncClientWrapper(BaseClientWrapper):
         *,
         api_key: str,
         headers: typing.Optional[typing.Dict[str, str]] = None,
-        base_url: str,
+        environment: SuperserveEnvironment,
         timeout: typing.Optional[float] = None,
         logging: typing.Optional[typing.Union[LogConfig, Logger]] = None,
         async_token: typing.Optional[typing.Callable[[], typing.Awaitable[str]]] = None,
         httpx_client: httpx.AsyncClient,
     ):
-        super().__init__(api_key=api_key, headers=headers, base_url=base_url, timeout=timeout, logging=logging)
+        super().__init__(api_key=api_key, headers=headers, environment=environment, timeout=timeout, logging=logging)
         self._async_token = async_token
         self.httpx_client = AsyncHttpClient(
             httpx_client=httpx_client,
             base_headers=self.get_headers,
             base_timeout=self.get_timeout,
-            base_url=self.get_base_url,
             async_base_headers=self.async_get_headers,
             logging_config=self._logging,
         )

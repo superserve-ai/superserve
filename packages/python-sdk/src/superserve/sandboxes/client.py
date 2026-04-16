@@ -76,6 +76,7 @@ class SandboxesClient:
         from_snapshot: typing.Optional[str] = OMIT,
         timeout_seconds: typing.Optional[int] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        env_vars: typing.Optional[typing.Dict[str, str]] = OMIT,
         network: typing.Optional[NetworkConfig] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> SandboxResponse:
@@ -114,6 +115,12 @@ class SandboxesClient:
             Filter sandboxes by metadata via the `metadata.{key}` query
             parameter on `GET /sandboxes`.
 
+        env_vars : typing.Optional[typing.Dict[str, str]]
+            Environment variables injected into every process inside the
+            sandbox (terminal sessions, exec calls). Not persisted in the
+            database — they live in the VM agent's memory for the sandbox's
+            lifetime and survive pause/resume via snapshot.
+
         network : typing.Optional[NetworkConfig]
 
         request_options : typing.Optional[RequestOptions]
@@ -140,6 +147,7 @@ class SandboxesClient:
             from_snapshot=from_snapshot,
             timeout_seconds=timeout_seconds,
             metadata=metadata,
+            env_vars=env_vars,
             network=network,
             request_options=request_options,
         )
@@ -414,6 +422,7 @@ class AsyncSandboxesClient:
         from_snapshot: typing.Optional[str] = OMIT,
         timeout_seconds: typing.Optional[int] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        env_vars: typing.Optional[typing.Dict[str, str]] = OMIT,
         network: typing.Optional[NetworkConfig] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> SandboxResponse:
@@ -452,6 +461,12 @@ class AsyncSandboxesClient:
             Filter sandboxes by metadata via the `metadata.{key}` query
             parameter on `GET /sandboxes`.
 
+        env_vars : typing.Optional[typing.Dict[str, str]]
+            Environment variables injected into every process inside the
+            sandbox (terminal sessions, exec calls). Not persisted in the
+            database — they live in the VM agent's memory for the sandbox's
+            lifetime and survive pause/resume via snapshot.
+
         network : typing.Optional[NetworkConfig]
 
         request_options : typing.Optional[RequestOptions]
@@ -486,6 +501,7 @@ class AsyncSandboxesClient:
             from_snapshot=from_snapshot,
             timeout_seconds=timeout_seconds,
             metadata=metadata,
+            env_vars=env_vars,
             network=network,
             request_options=request_options,
         )

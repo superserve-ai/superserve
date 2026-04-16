@@ -9,11 +9,17 @@
 
 import type { SuperserveClient } from "@superserve/sdk"
 
-/** Known sandbox lifecycle statuses. */
+/** Known sandbox lifecycle statuses.
+ *
+ * Note: `"paused"` is emitted by the live backend even though the OpenAPI
+ * spec currently documents the post-pause state as `"idle"`. Spec drift —
+ * we accept both here so tests don't flake while the two align.
+ */
 export type SandboxStatus =
   | "starting"
   | "active"
   | "pausing"
+  | "paused"
   | "idle"
   | "deleted"
 

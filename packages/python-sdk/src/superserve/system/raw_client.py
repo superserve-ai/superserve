@@ -31,6 +31,7 @@ class RawSystemClient:
         """
         _response = self._client_wrapper.httpx_client.request(
             "health",
+            base_url=self._client_wrapper.get_environment().base,
             method="GET",
             request_options=request_options,
         )
@@ -74,6 +75,7 @@ class AsyncRawSystemClient:
         """
         _response = await self._client_wrapper.httpx_client.request(
             "health",
+            base_url=self._client_wrapper.get_environment().base,
             method="GET",
             request_options=request_options,
         )

@@ -35,5 +35,12 @@ export interface CreateSandboxRequest {
      * parameter on `GET /sandboxes`.
      */
     metadata?: Record<string, string>;
+    /**
+     * Environment variables injected into every process inside the
+     * sandbox (terminal sessions, exec calls). Not persisted in the
+     * database — they live in the VM agent's memory for the sandbox's
+     * lifetime and survive pause/resume via snapshot.
+     */
+    env_vars?: Record<string, string>;
     network?: Superserve.NetworkConfig;
 }

@@ -33,7 +33,7 @@ SKIP_IF_NO_CREDS = pytest.mark.skipif(
 def wait_for_status(
     client: Superserve,
     sandbox_id: str,
-    expected: str,
+    expected: str,  # accepts any status string (e.g. "paused" — spec drift)
     *,
     timeout_s: float = 60.0,
     interval_s: float = 2.0,

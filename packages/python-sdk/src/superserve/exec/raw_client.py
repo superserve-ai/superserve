@@ -76,6 +76,7 @@ class RawExecClient:
         """
         _response = self._client_wrapper.httpx_client.request(
             f"sandboxes/{jsonable_encoder(sandbox_id)}/exec",
+            base_url=self._client_wrapper.get_environment().base,
             method="POST",
             json={
                 "command": command,
@@ -200,6 +201,7 @@ class RawExecClient:
         """
         with self._client_wrapper.httpx_client.stream(
             f"sandboxes/{jsonable_encoder(sandbox_id)}/exec/stream",
+            base_url=self._client_wrapper.get_environment().base,
             method="POST",
             json={
                 "command": command,
@@ -357,6 +359,7 @@ class AsyncRawExecClient:
         """
         _response = await self._client_wrapper.httpx_client.request(
             f"sandboxes/{jsonable_encoder(sandbox_id)}/exec",
+            base_url=self._client_wrapper.get_environment().base,
             method="POST",
             json={
                 "command": command,
@@ -481,6 +484,7 @@ class AsyncRawExecClient:
         """
         async with self._client_wrapper.httpx_client.stream(
             f"sandboxes/{jsonable_encoder(sandbox_id)}/exec/stream",
+            base_url=self._client_wrapper.get_environment().base,
             method="POST",
             json={
                 "command": command,

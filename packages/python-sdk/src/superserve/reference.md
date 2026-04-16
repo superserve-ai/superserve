@@ -18,7 +18,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.PRODUCTION,
+    environment=SuperserveEnvironment.STAGING,
 )
 
 client.system.health()
@@ -91,7 +91,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.PRODUCTION,
+    environment=SuperserveEnvironment.STAGING,
 )
 
 client.sandboxes.list_sandboxes()
@@ -168,7 +168,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.PRODUCTION,
+    environment=SuperserveEnvironment.STAGING,
 )
 
 client.sandboxes.create_sandbox(
@@ -239,6 +239,19 @@ parameter on `GET /sandboxes`.
 <dl>
 <dd>
 
+**env_vars:** `typing.Optional[typing.Dict[str, str]]` 
+
+Environment variables injected into every process inside the
+sandbox (terminal sessions, exec calls). Not persisted in the
+database — they live in the VM agent's memory for the sandbox's
+lifetime and survive pause/resume via snapshot.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
 **network:** `typing.Optional[NetworkConfig]` 
     
 </dd>
@@ -277,7 +290,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.PRODUCTION,
+    environment=SuperserveEnvironment.STAGING,
 )
 
 client.sandboxes.get_sandbox(
@@ -336,7 +349,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.PRODUCTION,
+    environment=SuperserveEnvironment.STAGING,
 )
 
 client.sandboxes.delete_sandbox(
@@ -426,7 +439,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.PRODUCTION,
+    environment=SuperserveEnvironment.STAGING,
 )
 
 client.sandboxes.patch_sandbox(
@@ -530,7 +543,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.PRODUCTION,
+    environment=SuperserveEnvironment.STAGING,
 )
 
 client.sandboxes.pause_sandbox(
@@ -604,7 +617,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.PRODUCTION,
+    environment=SuperserveEnvironment.STAGING,
 )
 
 client.sandboxes.resume_sandbox(
@@ -680,7 +693,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.PRODUCTION,
+    environment=SuperserveEnvironment.STAGING,
 )
 
 client.exec.command(
@@ -764,7 +777,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.PRODUCTION,
+    environment=SuperserveEnvironment.STAGING,
 )
 
 client.exec.command_stream(
@@ -795,6 +808,175 @@ client.exec.command_stream(
 <dd>
 
 **request:** `ExecRequest` 
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
+    
+</dd>
+</dl>
+</dd>
+</dl>
+
+
+</dd>
+</dl>
+</details>
+
+## Files
+<details><summary><code>client.files.<a href="src/superserve/files/client.py">download_file</a>(...) -> typing.Iterator[bytes]</code></summary>
+<dl>
+<dd>
+
+#### 📝 Description
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+Streams the file at `path` from the sandbox as `application/octet-stream`.
+Uses the same per-sandbox access token as upload.
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### 🔌 Usage
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+```python
+from superserve import Superserve
+from superserve.environment import SuperserveEnvironment
+
+client = Superserve(
+    api_key="<value>",
+    environment=SuperserveEnvironment.STAGING,
+)
+
+client.files.download_file(
+    path="path",
+    access_token="accessToken",
+)
+
+```
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### ⚙️ Parameters
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+**path:** `str` 
+
+Absolute file path inside the sandbox. Must start with `/` and
+must not contain `..` segments.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**access_token:** `str` 
+
+Per-sandbox HMAC access token. Take this from
+`SandboxResponse.access_token` on the sandbox you're reading from.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**request_options:** `typing.Optional[RequestOptions]` — Request-specific configuration.
+    
+</dd>
+</dl>
+</dd>
+</dl>
+
+
+</dd>
+</dl>
+</details>
+
+<details><summary><code>client.files.<a href="src/superserve/files/client.py">upload_file</a>(...)</code></summary>
+<dl>
+<dd>
+
+#### 📝 Description
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+Uploads raw file bytes to an absolute path inside the sandbox. The
+body is sent as `application/octet-stream` — the entire request body
+is the file contents.
+
+Authentication uses the per-sandbox access token from
+`SandboxResponse.access_token`, passed in the `X-Access-Token` header.
+This is distinct from the control-plane `X-API-Key`.
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### 🔌 Usage
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+```python
+client.files.upload_file(...)
+```
+</dd>
+</dl>
+</dd>
+</dl>
+
+#### ⚙️ Parameters
+
+<dl>
+<dd>
+
+<dl>
+<dd>
+
+**path:** `str` 
+
+Absolute destination path inside the sandbox. Must start with `/`
+and must not contain `..` segments.
+    
+</dd>
+</dl>
+
+<dl>
+<dd>
+
+**request:** `typing.Union[bytes, typing.Iterator[bytes], typing.AsyncIterator[bytes]]` 
     
 </dd>
 </dl>

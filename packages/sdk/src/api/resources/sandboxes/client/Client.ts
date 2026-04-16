@@ -68,8 +68,8 @@ export class SandboxesClient {
         const _response = await core.fetcher({
             url: core.url.join(
                 (await core.Supplier.get(this._options.baseUrl)) ??
-                    (await core.Supplier.get(this._options.environment)) ??
-                    environments.SuperserveEnvironment.Production,
+                    ((await core.Supplier.get(this._options.environment)) ?? environments.SuperserveEnvironment.Staging)
+                        .base,
                 "sandboxes",
             ),
             method: "GET",
@@ -151,8 +151,8 @@ export class SandboxesClient {
         const _response = await core.fetcher({
             url: core.url.join(
                 (await core.Supplier.get(this._options.baseUrl)) ??
-                    (await core.Supplier.get(this._options.environment)) ??
-                    environments.SuperserveEnvironment.Production,
+                    ((await core.Supplier.get(this._options.environment)) ?? environments.SuperserveEnvironment.Staging)
+                        .base,
                 "sandboxes",
             ),
             method: "POST",
@@ -234,8 +234,8 @@ export class SandboxesClient {
         const _response = await core.fetcher({
             url: core.url.join(
                 (await core.Supplier.get(this._options.baseUrl)) ??
-                    (await core.Supplier.get(this._options.environment)) ??
-                    environments.SuperserveEnvironment.Production,
+                    ((await core.Supplier.get(this._options.environment)) ?? environments.SuperserveEnvironment.Staging)
+                        .base,
                 `sandboxes/${core.url.encodePathParam(sandboxId)}`,
             ),
             method: "GET",
@@ -314,8 +314,8 @@ export class SandboxesClient {
         const _response = await core.fetcher({
             url: core.url.join(
                 (await core.Supplier.get(this._options.baseUrl)) ??
-                    (await core.Supplier.get(this._options.environment)) ??
-                    environments.SuperserveEnvironment.Production,
+                    ((await core.Supplier.get(this._options.environment)) ?? environments.SuperserveEnvironment.Staging)
+                        .base,
                 `sandboxes/${core.url.encodePathParam(sandboxId)}`,
             ),
             method: "DELETE",
@@ -419,8 +419,8 @@ export class SandboxesClient {
         const _response = await core.fetcher({
             url: core.url.join(
                 (await core.Supplier.get(this._options.baseUrl)) ??
-                    (await core.Supplier.get(this._options.environment)) ??
-                    environments.SuperserveEnvironment.Production,
+                    ((await core.Supplier.get(this._options.environment)) ?? environments.SuperserveEnvironment.Staging)
+                        .base,
                 `sandboxes/${core.url.encodePathParam(sandboxId)}`,
             ),
             method: "PATCH",
@@ -517,8 +517,8 @@ export class SandboxesClient {
         const _response = await core.fetcher({
             url: core.url.join(
                 (await core.Supplier.get(this._options.baseUrl)) ??
-                    (await core.Supplier.get(this._options.environment)) ??
-                    environments.SuperserveEnvironment.Production,
+                    ((await core.Supplier.get(this._options.environment)) ?? environments.SuperserveEnvironment.Staging)
+                        .base,
                 `sandboxes/${core.url.encodePathParam(sandboxId)}/pause`,
             ),
             method: "POST",
@@ -611,8 +611,8 @@ export class SandboxesClient {
         const _response = await core.fetcher({
             url: core.url.join(
                 (await core.Supplier.get(this._options.baseUrl)) ??
-                    (await core.Supplier.get(this._options.environment)) ??
-                    environments.SuperserveEnvironment.Production,
+                    ((await core.Supplier.get(this._options.environment)) ?? environments.SuperserveEnvironment.Staging)
+                        .base,
                 `sandboxes/${core.url.encodePathParam(sandboxId)}/resume`,
             ),
             method: "POST",

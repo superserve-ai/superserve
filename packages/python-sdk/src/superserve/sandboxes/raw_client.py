@@ -61,6 +61,7 @@ class RawSandboxesClient:
         """
         _response = self._client_wrapper.httpx_client.request(
             "sandboxes",
+            base_url=self._client_wrapper.get_environment().base,
             method="GET",
             params={
                 "metadata.{key}": metadata_key,
@@ -126,6 +127,7 @@ class RawSandboxesClient:
         from_snapshot: typing.Optional[str] = OMIT,
         timeout_seconds: typing.Optional[int] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        env_vars: typing.Optional[typing.Dict[str, str]] = OMIT,
         network: typing.Optional[NetworkConfig] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[SandboxResponse]:
@@ -164,6 +166,12 @@ class RawSandboxesClient:
             Filter sandboxes by metadata via the `metadata.{key}` query
             parameter on `GET /sandboxes`.
 
+        env_vars : typing.Optional[typing.Dict[str, str]]
+            Environment variables injected into every process inside the
+            sandbox (terminal sessions, exec calls). Not persisted in the
+            database — they live in the VM agent's memory for the sandbox's
+            lifetime and survive pause/resume via snapshot.
+
         network : typing.Optional[NetworkConfig]
 
         request_options : typing.Optional[RequestOptions]
@@ -176,12 +184,14 @@ class RawSandboxesClient:
         """
         _response = self._client_wrapper.httpx_client.request(
             "sandboxes",
+            base_url=self._client_wrapper.get_environment().base,
             method="POST",
             json={
                 "name": name,
                 "from_snapshot": from_snapshot,
                 "timeout_seconds": timeout_seconds,
                 "metadata": metadata,
+                "env_vars": env_vars,
                 "network": convert_and_respect_annotation_metadata(
                     object_=network, annotation=NetworkConfig, direction="write"
                 ),
@@ -263,6 +273,7 @@ class RawSandboxesClient:
         """
         _response = self._client_wrapper.httpx_client.request(
             f"sandboxes/{jsonable_encoder(sandbox_id)}",
+            base_url=self._client_wrapper.get_environment().base,
             method="GET",
             request_options=request_options,
         )
@@ -336,6 +347,7 @@ class RawSandboxesClient:
         """
         _response = self._client_wrapper.httpx_client.request(
             f"sandboxes/{jsonable_encoder(sandbox_id)}",
+            base_url=self._client_wrapper.get_environment().base,
             method="DELETE",
             request_options=request_options,
         )
@@ -437,6 +449,7 @@ class RawSandboxesClient:
         """
         _response = self._client_wrapper.httpx_client.request(
             f"sandboxes/{jsonable_encoder(sandbox_id)}",
+            base_url=self._client_wrapper.get_environment().base,
             method="PATCH",
             json={
                 "network": convert_and_respect_annotation_metadata(
@@ -540,6 +553,7 @@ class RawSandboxesClient:
         """
         _response = self._client_wrapper.httpx_client.request(
             f"sandboxes/{jsonable_encoder(sandbox_id)}/pause",
+            base_url=self._client_wrapper.get_environment().base,
             method="POST",
             request_options=request_options,
         )
@@ -628,6 +642,7 @@ class RawSandboxesClient:
         """
         _response = self._client_wrapper.httpx_client.request(
             f"sandboxes/{jsonable_encoder(sandbox_id)}/resume",
+            base_url=self._client_wrapper.get_environment().base,
             method="POST",
             request_options=request_options,
         )
@@ -731,6 +746,7 @@ class AsyncRawSandboxesClient:
         """
         _response = await self._client_wrapper.httpx_client.request(
             "sandboxes",
+            base_url=self._client_wrapper.get_environment().base,
             method="GET",
             params={
                 "metadata.{key}": metadata_key,
@@ -796,6 +812,7 @@ class AsyncRawSandboxesClient:
         from_snapshot: typing.Optional[str] = OMIT,
         timeout_seconds: typing.Optional[int] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
+        env_vars: typing.Optional[typing.Dict[str, str]] = OMIT,
         network: typing.Optional[NetworkConfig] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[SandboxResponse]:
@@ -834,6 +851,12 @@ class AsyncRawSandboxesClient:
             Filter sandboxes by metadata via the `metadata.{key}` query
             parameter on `GET /sandboxes`.
 
+        env_vars : typing.Optional[typing.Dict[str, str]]
+            Environment variables injected into every process inside the
+            sandbox (terminal sessions, exec calls). Not persisted in the
+            database — they live in the VM agent's memory for the sandbox's
+            lifetime and survive pause/resume via snapshot.
+
         network : typing.Optional[NetworkConfig]
 
         request_options : typing.Optional[RequestOptions]
@@ -846,12 +869,14 @@ class AsyncRawSandboxesClient:
         """
         _response = await self._client_wrapper.httpx_client.request(
             "sandboxes",
+            base_url=self._client_wrapper.get_environment().base,
             method="POST",
             json={
                 "name": name,
                 "from_snapshot": from_snapshot,
                 "timeout_seconds": timeout_seconds,
                 "metadata": metadata,
+                "env_vars": env_vars,
                 "network": convert_and_respect_annotation_metadata(
                     object_=network, annotation=NetworkConfig, direction="write"
                 ),
@@ -933,6 +958,7 @@ class AsyncRawSandboxesClient:
         """
         _response = await self._client_wrapper.httpx_client.request(
             f"sandboxes/{jsonable_encoder(sandbox_id)}",
+            base_url=self._client_wrapper.get_environment().base,
             method="GET",
             request_options=request_options,
         )
@@ -1006,6 +1032,7 @@ class AsyncRawSandboxesClient:
         """
         _response = await self._client_wrapper.httpx_client.request(
             f"sandboxes/{jsonable_encoder(sandbox_id)}",
+            base_url=self._client_wrapper.get_environment().base,
             method="DELETE",
             request_options=request_options,
         )
@@ -1107,6 +1134,7 @@ class AsyncRawSandboxesClient:
         """
         _response = await self._client_wrapper.httpx_client.request(
             f"sandboxes/{jsonable_encoder(sandbox_id)}",
+            base_url=self._client_wrapper.get_environment().base,
             method="PATCH",
             json={
                 "network": convert_and_respect_annotation_metadata(
@@ -1210,6 +1238,7 @@ class AsyncRawSandboxesClient:
         """
         _response = await self._client_wrapper.httpx_client.request(
             f"sandboxes/{jsonable_encoder(sandbox_id)}/pause",
+            base_url=self._client_wrapper.get_environment().base,
             method="POST",
             request_options=request_options,
         )
@@ -1298,6 +1327,7 @@ class AsyncRawSandboxesClient:
         """
         _response = await self._client_wrapper.httpx_client.request(
             f"sandboxes/{jsonable_encoder(sandbox_id)}/resume",
+            base_url=self._client_wrapper.get_environment().base,
             method="POST",
             request_options=request_options,
         )
