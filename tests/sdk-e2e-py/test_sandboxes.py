@@ -1,5 +1,4 @@
 import pytest
-
 from _helpers import SKIP_IF_NO_CREDS, wait_for_status
 
 pytestmark = SKIP_IF_NO_CREDS

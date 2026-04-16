@@ -17,12 +17,10 @@ from __future__ import annotations
 import asyncio
 import os
 import time
-from typing import Iterable, Optional, Union
+from collections.abc import Iterable
 
 import pytest
-
 from superserve import AsyncSuperserve, Superserve
-
 
 SKIP_IF_NO_CREDS = pytest.mark.skipif(
     not os.environ.get("SUPERSERVE_API_KEY"),
@@ -30,14 +28,14 @@ SKIP_IF_NO_CREDS = pytest.mark.skipif(
 )
 
 
-def _targets(expected: Union[str, Iterable[str]]) -> tuple[str, ...]:
+def _targets(expected: str | Iterable[str]) -> tuple[str, ...]:
     return (expected,) if isinstance(expected, str) else tuple(expected)
 
 
 def wait_for_status(
     client: Superserve,
     sandbox_id: str,
-    expected: Union[str, Iterable[str]],
+    expected: str | Iterable[str],
     *,
     timeout_s: float = 60.0,
     interval_s: float = 2.0,
@@ -45,7 +43,7 @@ def wait_for_status(
     """Poll `get_sandbox` until the sandbox reaches any of `expected`, or raise."""
     targets = _targets(expected)
     deadline = time.monotonic() + timeout_s
-    last_status: Optional[str] = None
+    last_status: str | None = None
     while time.monotonic() < deadline:
         sandbox = client.sandboxes.get_sandbox(sandbox_id)
         last_status = sandbox.status
@@ -61,7 +59,7 @@ def wait_for_status(
 async def async_wait_for_status(
     client: AsyncSuperserve,
     sandbox_id: str,
-    expected: Union[str, Iterable[str]],
+    expected: str | Iterable[str],
     *,
     timeout_s: float = 60.0,
     interval_s: float = 2.0,
@@ -69,7 +67,7 @@ async def async_wait_for_status(
     """Async variant of `wait_for_status` for `AsyncSuperserve`."""
     targets = _targets(expected)
     deadline = time.monotonic() + timeout_s
-    last_status: Optional[str] = None
+    last_status: str | None = None
     while time.monotonic() < deadline:
         sandbox = await client.sandboxes.get_sandbox(sandbox_id)
         last_status = sandbox.status
