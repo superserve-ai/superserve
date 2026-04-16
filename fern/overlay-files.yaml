@@ -100,6 +100,49 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+      x-fern-examples:
+        - query-parameters:
+            path: /home/user/data.txt
+          code-samples:
+            - sdk: typescript
+              name: Upload a file
+              code: |
+                import fs from "fs"
+                import { SuperserveClient } from "@superserve/sdk"
+
+                const client = new SuperserveClient({
+                  apiKey: process.env.SUPERSERVE_API_KEY,
+                  baseUrl: `https://boxd-${sandbox.id}.sandbox.superserve.ai`,
+                })
+
+                const file = fs.readFileSync("./local-file.txt")
+                await client.files.uploadFile(
+                  file,
+                  { path: "/home/user/data.txt" },
+                  { headers: { "X-Access-Token": sandbox.access_token } },
+                )
+            - sdk: python
+              name: Upload a file
+              code: |
+                from superserve import Superserve
+                from superserve.environment import SuperserveEnvironment
+
+                client = Superserve(
+                    api_key=os.environ["SUPERSERVE_API_KEY"],
+                    environment=SuperserveEnvironment(
+                        base="https://api.superserve.ai",
+                        sandbox_data_plane=f"https://boxd-{sandbox.id}.sandbox.superserve.ai",
+                    ),
+                )
+
+                with open("local-file.txt", "rb") as f:
+                    client.files.upload_file(
+                        path="/home/user/data.txt",
+                        request=f.read(),
+                        request_options={
+                            "additional_headers": {"X-Access-Token": sandbox.access_token},
+                        },
+                    )
 
     get:
       operationId: downloadFile
@@ -138,3 +181,50 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+      x-fern-examples:
+        - query-parameters:
+            path: /home/user/data.txt
+          headers:
+            X-Access-Token: sb_token_from_sandbox_response
+          code-samples:
+            - sdk: typescript
+              name: Download a file
+              code: |
+                import fs from "fs"
+                import { SuperserveClient } from "@superserve/sdk"
+
+                const client = new SuperserveClient({
+                  apiKey: process.env.SUPERSERVE_API_KEY,
+                  baseUrl: `https://boxd-${sandbox.id}.sandbox.superserve.ai`,
+                })
+
+                const response = await client.files.downloadFile({
+                  path: "/home/user/data.txt",
+                  "X-Access-Token": sandbox.access_token,
+                })
+
+                const blob = await response.blob()
+                fs.writeFileSync("./downloaded.txt", Buffer.from(await blob.arrayBuffer()))
+            - sdk: python
+              name: Download a file
+              code: |
+                from superserve import Superserve
+                from superserve.environment import SuperserveEnvironment
+
+                client = Superserve(
+                    api_key=os.environ["SUPERSERVE_API_KEY"],
+                    environment=SuperserveEnvironment(
+                        base="https://api.superserve.ai",
+                        sandbox_data_plane=f"https://boxd-{sandbox.id}.sandbox.superserve.ai",
+                    ),
+                )
+
+                chunks = list(
+                    client.files.download_file(
+                        path="/home/user/data.txt",
+                        access_token=sandbox.access_token,
+                    )
+                )
+                with open("downloaded.txt", "wb") as f:
+                    for chunk in chunks:
+                        f.write(chunk)
