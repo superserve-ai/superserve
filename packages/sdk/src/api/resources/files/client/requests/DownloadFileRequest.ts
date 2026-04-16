@@ -3,8 +3,8 @@
 /**
  * @example
  *     {
- *         "X-Access-Token": "accessToken",
- *         path: "path"
+ *         "X-Access-Token": "sb_token_from_sandbox_response",
+ *         path: "/home/user/data.txt"
  *     }
  */
 export interface DownloadFileRequest {

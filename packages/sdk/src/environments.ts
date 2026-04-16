@@ -6,12 +6,12 @@ export interface SuperserveEnvironmentUrls {
 }
 
 export const SuperserveEnvironment = {
-    Staging: {
-        base: "https://api-staging.superserve.ai",
-        sandboxDataPlane: "https://boxd-.sandbox.superserve.ai",
-    },
     Production: {
         base: "https://api.superserve.ai",
+        sandboxDataPlane: "https://boxd-.sandbox.superserve.ai",
+    },
+    Staging: {
+        base: "https://api-staging.superserve.ai",
         sandboxDataPlane: "https://boxd-.sandbox.superserve.ai",
     },
     Local: {
@@ -21,6 +21,6 @@ export const SuperserveEnvironment = {
 } as const;
 
 export type SuperserveEnvironment =
-    | typeof SuperserveEnvironment.Staging
     | typeof SuperserveEnvironment.Production
+    | typeof SuperserveEnvironment.Staging
     | typeof SuperserveEnvironment.Local;

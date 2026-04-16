@@ -52,8 +52,10 @@ export class FilesClient {
         const _response = await core.fetcher<core.BinaryResponse>({
             url: core.url.join(
                 (await core.Supplier.get(this._options.baseUrl)) ??
-                    ((await core.Supplier.get(this._options.environment)) ?? environments.SuperserveEnvironment.Staging)
-                        .sandboxDataPlane,
+                    (
+                        (await core.Supplier.get(this._options.environment)) ??
+                        environments.SuperserveEnvironment.Production
+                    ).sandboxDataPlane,
                 "files",
             ),
             method: "GET",
@@ -110,6 +112,12 @@ export class FilesClient {
      * @throws {@link Superserve.BadRequestError}
      * @throws {@link Superserve.UnauthorizedError}
      * @throws {@link Superserve.NotFoundError}
+     *
+     * @example
+     *     import { createReadStream } from "fs";
+     *     await client.files.uploadFile(createReadStream("path/to/file"), {
+     *         path: "/home/user/data.txt"
+     *     })
      */
     public uploadFile(
         uploadable: core.file.Uploadable,
@@ -136,8 +144,10 @@ export class FilesClient {
         const _response = await core.fetcher({
             url: core.url.join(
                 (await core.Supplier.get(this._options.baseUrl)) ??
-                    ((await core.Supplier.get(this._options.environment)) ?? environments.SuperserveEnvironment.Staging)
-                        .sandboxDataPlane,
+                    (
+                        (await core.Supplier.get(this._options.environment)) ??
+                        environments.SuperserveEnvironment.Production
+                    ).sandboxDataPlane,
                 "files",
             ),
             method: "POST",
