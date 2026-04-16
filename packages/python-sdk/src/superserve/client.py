@@ -31,6 +31,9 @@ class Superserve:
 
 
 
+    sandbox_id : typing.Optional[str]
+        Server URL variable for 'sandbox_id'. Defaults to ''.
+
     api_key : str
     headers : typing.Optional[typing.Dict[str, str]]
         Additional headers to send with every request.
@@ -60,6 +63,7 @@ class Superserve:
         self,
         *,
         environment: SuperserveEnvironment = SuperserveEnvironment.PRODUCTION,
+        sandbox_id: typing.Optional[str] = None,
         api_key: str,
         headers: typing.Optional[typing.Dict[str, str]] = None,
         timeout: typing.Optional[float] = None,
@@ -70,6 +74,12 @@ class Superserve:
         _defaulted_timeout = (
             timeout if timeout is not None else 60 if httpx_client is None else httpx_client.timeout.read
         )
+        if sandbox_id is not None:
+            _sandbox_id = sandbox_id if sandbox_id is not None else ""
+            environment = SuperserveEnvironment(
+                base="https://api.superserve.ai",
+                sandbox_data_plane="https://boxd-{sandbox_id}.sandbox.superserve.ai".format(sandbox_id=_sandbox_id),
+            )
         self._client_wrapper = SyncClientWrapper(
             environment=environment,
             api_key=api_key,
@@ -153,6 +163,9 @@ class AsyncSuperserve:
 
 
 
+    sandbox_id : typing.Optional[str]
+        Server URL variable for 'sandbox_id'. Defaults to ''.
+
     api_key : str
     headers : typing.Optional[typing.Dict[str, str]]
         Additional headers to send with every request.
@@ -182,6 +195,7 @@ class AsyncSuperserve:
         self,
         *,
         environment: SuperserveEnvironment = SuperserveEnvironment.PRODUCTION,
+        sandbox_id: typing.Optional[str] = None,
         api_key: str,
         headers: typing.Optional[typing.Dict[str, str]] = None,
         timeout: typing.Optional[float] = None,
@@ -192,6 +206,12 @@ class AsyncSuperserve:
         _defaulted_timeout = (
             timeout if timeout is not None else 60 if httpx_client is None else httpx_client.timeout.read
         )
+        if sandbox_id is not None:
+            _sandbox_id = sandbox_id if sandbox_id is not None else ""
+            environment = SuperserveEnvironment(
+                base="https://api.superserve.ai",
+                sandbox_data_plane="https://boxd-{sandbox_id}.sandbox.superserve.ai".format(sandbox_id=_sandbox_id),
+            )
         self._client_wrapper = AsyncClientWrapper(
             environment=environment,
             api_key=api_key,

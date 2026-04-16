@@ -30,15 +30,12 @@
 # When the backend adds files to the primary openapi.yaml (eventually), this
 # overlay and its generators.yml reference can be deleted.
 
-# Name the existing control-plane servers so Fern can distinguish them from
-# the per-operation data-plane server below.
+# Name the control-plane server so Fern can distinguish it from the
+# per-operation data-plane server below. Only Production is exposed publicly
+# — Staging and Local live only in internal configs, not the SDK or docs.
 servers:
   - url: https://api.superserve.ai
     x-fern-server-name: Production
-  - url: https://api-staging.superserve.ai
-    x-fern-server-name: Staging
-  - url: http://localhost:8080
-    x-fern-server-name: Local
 
 paths:
   /files:
