@@ -18,7 +18,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.STAGING,
+    environment=SuperserveEnvironment.PRODUCTION,
 )
 
 client.system.health()
@@ -91,7 +91,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.STAGING,
+    environment=SuperserveEnvironment.PRODUCTION,
 )
 
 client.sandboxes.list_sandboxes()
@@ -168,7 +168,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.STAGING,
+    environment=SuperserveEnvironment.PRODUCTION,
 )
 
 client.sandboxes.create_sandbox(
@@ -290,7 +290,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.STAGING,
+    environment=SuperserveEnvironment.PRODUCTION,
 )
 
 client.sandboxes.get_sandbox(
@@ -349,7 +349,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.STAGING,
+    environment=SuperserveEnvironment.PRODUCTION,
 )
 
 client.sandboxes.delete_sandbox(
@@ -439,7 +439,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.STAGING,
+    environment=SuperserveEnvironment.PRODUCTION,
 )
 
 client.sandboxes.patch_sandbox(
@@ -543,7 +543,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.STAGING,
+    environment=SuperserveEnvironment.PRODUCTION,
 )
 
 client.sandboxes.pause_sandbox(
@@ -617,7 +617,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.STAGING,
+    environment=SuperserveEnvironment.PRODUCTION,
 )
 
 client.sandboxes.resume_sandbox(
@@ -693,7 +693,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.STAGING,
+    environment=SuperserveEnvironment.PRODUCTION,
 )
 
 client.exec.command(
@@ -777,7 +777,7 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.STAGING,
+    environment=SuperserveEnvironment.PRODUCTION,
 )
 
 client.exec.command_stream(
@@ -861,12 +861,12 @@ from superserve.environment import SuperserveEnvironment
 
 client = Superserve(
     api_key="<value>",
-    environment=SuperserveEnvironment.STAGING,
+    environment=SuperserveEnvironment.PRODUCTION,
 )
 
 client.files.download_file(
-    path="path",
-    access_token="accessToken",
+    path="/home/user/data.txt",
+    access_token="sb_token_from_sandbox_response",
 )
 
 ```
@@ -950,7 +950,18 @@ This is distinct from the control-plane `X-API-Key`.
 <dd>
 
 ```python
-client.files.upload_file(...)
+from superserve import Superserve
+from superserve.environment import SuperserveEnvironment
+
+client = Superserve(
+    api_key="<value>",
+    environment=SuperserveEnvironment.PRODUCTION,
+)
+
+client.files.upload_file(
+    path="/home/user/data.txt",
+)
+
 ```
 </dd>
 </dl>

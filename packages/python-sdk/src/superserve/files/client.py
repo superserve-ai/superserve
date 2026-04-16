@@ -58,8 +58,8 @@ class FilesClient:
             api_key="YOUR_API_KEY",
         )
         client.files.download_file(
-            access_token="accessToken",
-            path="path",
+            access_token="sb_token_from_sandbox_response",
+            path="/home/user/data.txt",
         )
         """
         with self._raw_client.download_file(path=path, access_token=access_token, request_options=request_options) as r:
@@ -95,6 +95,17 @@ class FilesClient:
         Returns
         -------
         None
+
+        Examples
+        --------
+        from superserve import Superserve
+
+        client = Superserve(
+            api_key="YOUR_API_KEY",
+        )
+        client.files.upload_file(
+            path="/home/user/data.txt",
+        )
         """
         _response = self._raw_client.upload_file(path=path, request=request, request_options=request_options)
         return _response.data
@@ -153,8 +164,8 @@ class AsyncFilesClient:
 
         async def main() -> None:
             await client.files.download_file(
-                access_token="accessToken",
-                path="path",
+                access_token="sb_token_from_sandbox_response",
+                path="/home/user/data.txt",
             )
 
 
@@ -196,6 +207,25 @@ class AsyncFilesClient:
         Returns
         -------
         None
+
+        Examples
+        --------
+        import asyncio
+
+        from superserve import AsyncSuperserve
+
+        client = AsyncSuperserve(
+            api_key="YOUR_API_KEY",
+        )
+
+
+        async def main() -> None:
+            await client.files.upload_file(
+                path="/home/user/data.txt",
+            )
+
+
+        asyncio.run(main())
         """
         _response = await self._raw_client.upload_file(path=path, request=request, request_options=request_options)
         return _response.data

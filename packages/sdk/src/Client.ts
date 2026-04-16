@@ -68,7 +68,7 @@ export class SuperserveClient {
                         return typeof env === "string"
                             ? env
                             : ((env as Record<string, string>)?.base ??
-                                  environments.SuperserveEnvironment.Staging.base);
+                                  environments.SuperserveEnvironment.Production.base);
                     }),
                 headers: this._options.headers,
                 timeoutInSeconds: this._options.timeoutInSeconds,

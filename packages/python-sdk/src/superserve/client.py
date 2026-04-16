@@ -27,7 +27,7 @@ class Superserve:
 
 
 
-        Defaults to SuperserveEnvironment.STAGING
+        Defaults to SuperserveEnvironment.PRODUCTION
 
 
 
@@ -59,7 +59,7 @@ class Superserve:
     def __init__(
         self,
         *,
-        environment: SuperserveEnvironment = SuperserveEnvironment.STAGING,
+        environment: SuperserveEnvironment = SuperserveEnvironment.PRODUCTION,
         api_key: str,
         headers: typing.Optional[typing.Dict[str, str]] = None,
         timeout: typing.Optional[float] = None,
@@ -149,7 +149,7 @@ class AsyncSuperserve:
 
 
 
-        Defaults to SuperserveEnvironment.STAGING
+        Defaults to SuperserveEnvironment.PRODUCTION
 
 
 
@@ -181,7 +181,7 @@ class AsyncSuperserve:
     def __init__(
         self,
         *,
-        environment: SuperserveEnvironment = SuperserveEnvironment.STAGING,
+        environment: SuperserveEnvironment = SuperserveEnvironment.PRODUCTION,
         api_key: str,
         headers: typing.Optional[typing.Dict[str, str]] = None,
         timeout: typing.Optional[float] = None,

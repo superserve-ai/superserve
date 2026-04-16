@@ -39,8 +39,10 @@ export class SystemClient {
         const _response = await core.fetcher({
             url: core.url.join(
                 (await core.Supplier.get(this._options.baseUrl)) ??
-                    ((await core.Supplier.get(this._options.environment)) ?? environments.SuperserveEnvironment.Staging)
-                        .base,
+                    (
+                        (await core.Supplier.get(this._options.environment)) ??
+                        environments.SuperserveEnvironment.Production
+                    ).base,
                 "health",
             ),
             method: "GET",

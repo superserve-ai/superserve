@@ -33,10 +33,10 @@
 # Name the existing control-plane servers so Fern can distinguish them from
 # the per-operation data-plane server below.
 servers:
-  - url: https://api-staging.superserve.ai
-    x-fern-server-name: Staging
   - url: https://api.superserve.ai
     x-fern-server-name: Production
+  - url: https://api-staging.superserve.ai
+    x-fern-server-name: Staging
   - url: http://localhost:8080
     x-fern-server-name: Local
 
