@@ -1,0 +1,9 @@
+{
+  "cliVersion": "4.64.1",
+  "generatorName": "fernapi/fern-python-sdk",
+  "generatorVersion": "5.3.2",
+  "generatorConfig": {
+    "client_class_name": "Superserve"
+  },
+  "originGitCommit": "bc79405de5a4c8fc4011927aa02cc250a3e41a53"
+}

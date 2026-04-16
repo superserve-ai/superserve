@@ -1,0 +1,173 @@
+---
+title: Python Quickstart
+description: Get started with the Superserve Python SDK
+---
+
+Install, authenticate, and run your first sandbox in under a minute.
+
+## Install
+
+```bash
+pip install superserve
+# or
+uv add superserve
+# or
+poetry add superserve
+```
+
+Requires Python 3.9+. Built on `httpx` + `pydantic`. Both synchronous and asynchronous clients are provided.
+
+## Authenticate
+
+Create an API key in the [Superserve console](https://console.superserve.ai) and pass it to the client:
+
+```python
+import os
+from superserve import Superserve
+
+client = Superserve(api_key=os.environ["SUPERSERVE_API_KEY"])
+```
+
+Never hardcode the key in source. Read it from an environment variable.
+
+## Create a sandbox
+
+```python
+sandbox = client.sandboxes.create_sandbox(name="my-first-sandbox")
+
+print(sandbox.id)      # "sbx_..."
+print(sandbox.status)  # "starting" → "active"
+```
+
+To boot from a previously saved snapshot:
+
+```python
+sandbox = client.sandboxes.create_sandbox(
+    name="resumed",
+    from_snapshot="snp_abc123",
+)
+```
+
+## Run a command
+
+```python
+result = client.exec.command(
+    sandbox_id=sandbox.id,
+    body={"command": "echo 'Hello from Superserve!'"},
+)
+
+print(result.stdout)    # "Hello from Superserve!\n"
+print(result.exit_code) # 0
+```
+
+For long-running or streaming commands, use `client.exec.command_stream(...)` — it yields output events as they arrive.
+
+## Upload and download files
+
+File transfer goes **directly to the sandbox's data-plane proxy** at `boxd-{sandbox_id}.sandbox.superserve.ai`, not through the control plane. This keeps large uploads from bottlenecking on `api.superserve.ai`. The per-sandbox `access_token` on `SandboxResponse` is the auth credential for the data plane.
+
+Because the host is per-sandbox and the Python SDK takes its environment as a structured object, the cleanest pattern is to build a second `Superserve` client whose environment points at this sandbox's data plane:
+
+```python
+from superserve import Superserve
+from superserve.environment import SuperserveEnvironment
+
+# Control-plane client (already created above)
+client = Superserve(api_key=os.environ["SUPERSERVE_API_KEY"])
+
+sandbox = client.sandboxes.create_sandbox(name="my-sandbox")
+
+# Second client for this specific sandbox's data plane
+data_plane = Superserve(
+    api_key=os.environ["SUPERSERVE_API_KEY"],
+    environment=SuperserveEnvironment(
+        base="https://api-staging.superserve.ai",
+        sandbox_data_plane=f"https://boxd-{sandbox.id}.sandbox.superserve.ai",
+    ),
+)
+
+# Upload — Fern's generator dropped the X-Access-Token header param on
+# upload_file (binary body quirk), so pass it via additional_headers:
+with open("local.txt", "rb") as f:
+    data_plane.files.upload_file(
+        path="/home/user/greeting.txt",
+        request=f.read(),
+        request_options={
+            "additional_headers": {"X-Access-Token": sandbox.access_token},
+        },
+    )
+
+# Download — access_token is a normal kwarg here:
+chunks = list(
+    data_plane.files.download_file(
+        path="/home/user/greeting.txt",
+        access_token=sandbox.access_token,
+    )
+)
+content = b"".join(chunks)
+print(content.decode())
+```
+
+`upload_file` accepts `bytes`, `Iterator[bytes]`, or `AsyncIterator[bytes]`. `download_file` returns `Iterator[bytes]` (or `AsyncIterator[bytes]` on `AsyncSuperserve`) — streaming is free.
+
+## Clean up
+
+```python
+client.sandboxes.delete_sandbox(sandbox.id)
+```
+
+You can also **pause** a sandbox (saves a snapshot, stops the VM) and **resume** later:
+
+```python
+client.sandboxes.pause_sandbox(sandbox.id)
+# ...later
+client.sandboxes.resume_sandbox(sandbox.id)
+```
+
+## Async client
+
+Every method is also available on `AsyncSuperserve`:
+
+```python
+import asyncio
+from superserve import AsyncSuperserve
+
+async def main():
+    client = AsyncSuperserve(api_key=os.environ["SUPERSERVE_API_KEY"])
+    sandbox = await client.sandboxes.create_sandbox(name="async-example")
+    try:
+        result = await client.exec.command(
+            sandbox_id=sandbox.id,
+            body={"command": "uname -a"},
+        )
+        print(result.stdout)
+    finally:
+        await client.sandboxes.delete_sandbox(sandbox.id)
+
+asyncio.run(main())
+```
+
+## Full example
+
+```python
+import os
+from superserve import Superserve
+
+client = Superserve(api_key=os.environ["SUPERSERVE_API_KEY"])
+
+def main():
+    sandbox = client.sandboxes.create_sandbox(name="hello-world")
+    try:
+        result = client.exec.command(
+            sandbox_id=sandbox.id,
+            body={"command": "uname -a && date"},
+        )
+        print(result.stdout)
+    finally:
+        client.sandboxes.delete_sandbox(sandbox.id)
+
+if __name__ == "__main__":
+    main()
+```
+
+For endpoint-by-endpoint method signatures and live code samples, see the **SDK Reference** section in the sidebar.

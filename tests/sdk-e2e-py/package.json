@@ -1,0 +1,8 @@
+{
+  "name": "@superserve/test-sdk-e2e-py",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "e2e": "uv run pytest"
+  }
+}

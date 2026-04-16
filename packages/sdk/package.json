@@ -1,8 +1,8 @@
 {
   "name": "@superserve/sdk",
-  "version": "0.1.2",
-  "description": "TypeScript SDK for interacting with Superserve agents",
-  "license": "MIT",
+  "version": "0.2.4",
+  "description": "TypeScript SDK for the Superserve sandbox API",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -17,16 +17,6 @@
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
       }
-    },
-    "./react": {
-      "import": {
-        "types": "./dist/react.d.ts",
-        "default": "./dist/react.js"
-      },
-      "require": {
-        "types": "./dist/react.d.cts",
-        "default": "./dist/react.cjs"
-      }
     }
   },
   "files": [
@@ -35,38 +25,25 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "typecheck": "tsc --noEmit",
-    "test": "bun test"
-  },
-  "peerDependencies": {
-    "react": ">=18"
-  },
-  "peerDependenciesMeta": {
-    "react": {
-      "optional": true
-    }
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@superserve/typescript-config": "workspace:*",
-    "@types/bun": "^1.3.9",
-    "@types/react": "^19.0.0",
-    "react": "^19.0.0",
+    "@types/node": "^25.5.2",
     "tsup": "^8.0.0",
     "typescript": "^5.7.0"
   },
   "keywords": [
     "superserve",
-    "ai",
-    "agent",
-    "sdk",
-    "streaming",
-    "sse",
-    "react"
+    "sandbox",
+    "firecracker",
+    "microvm",
+    "sdk"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/superserve-ai/superserve.git",
-    "directory": "cli"
+    "directory": "packages/sdk"
   },
   "homepage": "https://superserve.ai",
   "bugs": {

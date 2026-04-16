@@ -32,6 +32,18 @@
         "package.json"
       ],
       "outputs": ["coverage/**"]
+    },
+    "generate": {
+      "inputs": ["fern/**"],
+      "outputs": [
+        "packages/sdk/src/**",
+        "packages/python-sdk/src/superserve/**"
+      ],
+      "cache": false
+    },
+    "e2e": {
+      "cache": false,
+      "passThroughEnv": ["SUPERSERVE_API_KEY", "SUPERSERVE_BASE_URL"]
     }
   }
 }

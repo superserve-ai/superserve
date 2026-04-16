@@ -1,0 +1,149 @@
+---
+title: TypeScript Quickstart
+description: Get started with the Superserve TypeScript SDK
+---
+
+Install, authenticate, and run your first sandbox in under a minute.
+
+## Install
+
+```bash
+npm install @superserve/sdk
+# or
+bun add @superserve/sdk
+# or
+yarn add @superserve/sdk
+```
+
+The package is ESM + CJS, targets Node 18+, and has no runtime dependency on React, fetch polyfills, or a specific runtime — it works in Node, Bun, Deno, Cloudflare Workers, and modern browsers.
+
+## Authenticate
+
+Create an API key in the [Superserve console](https://console.superserve.ai) and pass it to the client:
+
+```ts
+import { SuperserveClient } from "@superserve/sdk"
+
+const client = new SuperserveClient({
+  apiKey: process.env.SUPERSERVE_API_KEY,
+})
+```
+
+Never hardcode the key in source. Read it from an environment variable.
+
+## Create a sandbox
+
+```ts
+const sandbox = await client.sandboxes.createSandbox({
+  name: "my-first-sandbox",
+})
+
+console.log(sandbox.id)      // "sbx_..."
+console.log(sandbox.status)  // "starting" → "active"
+```
+
+Sandboxes boot from a clean VM by default. To boot from a previously saved snapshot, pass `from_snapshot`:
+
+```ts
+const sandbox = await client.sandboxes.createSandbox({
+  name: "resumed",
+  from_snapshot: "snp_abc123",
+})
+```
+
+## Run a command
+
+```ts
+const result = await client.exec.command({
+  sandbox_id: sandbox.id!,
+  body: { command: "echo 'Hello from Superserve!'" },
+})
+
+console.log(result.stdout)    // "Hello from Superserve!\n"
+console.log(result.exit_code) // 0
+```
+
+For long-running or streaming commands, use `client.exec.commandStream(...)` instead — it returns a stream of output events rather than waiting for the whole command to finish.
+
+## Upload and download files
+
+File transfer goes **directly to the sandbox's data-plane proxy** at `boxd-{sandbox_id}.sandbox.superserve.ai`, not through the control plane. This keeps large uploads from bottlenecking on `api.superserve.ai`. The per-sandbox `access_token` on `SandboxResponse` is the auth credential for the data plane.
+
+Because the host is per-sandbox, you pass a `baseUrl` and `accessToken` on each file call:
+
+```ts
+const fileOpts = (s: typeof sandbox) => ({
+  baseUrl: `https://boxd-${s.id}.sandbox.superserve.ai`,
+  accessToken: s.access_token!,
+})
+
+// Upload
+const data = new TextEncoder().encode("hello from typescript\n")
+await client.files.uploadFile(data, { path: "/home/user/greeting.txt" }, fileOpts(sandbox))
+
+// Download
+const response = await client.files.downloadFile(
+  { path: "/home/user/greeting.txt" },
+  fileOpts(sandbox),
+)
+const blob = response instanceof Blob ? response : new Blob([response as any])
+console.log(await blob.text())  // "hello from typescript\n"
+```
+
+`uploadFile` accepts anything compatible with `core.file.Uploadable` — `Uint8Array`, `ArrayBuffer`, `Blob`, `File`, `ReadableStream`, or a Node `Buffer`/`Readable`. For uploading from disk in Node or Bun, the `FromPath` form reads the file for you:
+
+```ts
+await client.files.uploadFile(
+  { path: "./local.txt" },                    // FromPath — reads local.txt
+  { path: "/home/user/remote.txt" },          // destination inside sandbox
+  fileOpts(sandbox),
+)
+```
+
+`downloadFile` returns a `core.BinaryResponse` — a `Blob` in browser/Bun or a `ReadableStream` in Node. Consume it as appropriate for your runtime.
+
+## Clean up
+
+When you're done with a sandbox:
+
+```ts
+await client.sandboxes.deleteSandbox({ sandbox_id: sandbox.id! })
+```
+
+You can also **pause** a sandbox (saves a snapshot, stops the VM, keeps the state) and **resume** later:
+
+```ts
+await client.sandboxes.pauseSandbox({ sandbox_id: sandbox.id! })
+// ...later
+await client.sandboxes.resumeSandbox({ sandbox_id: sandbox.id! })
+```
+
+## Full example
+
+```ts
+import { SuperserveClient } from "@superserve/sdk"
+
+const client = new SuperserveClient({
+  apiKey: process.env.SUPERSERVE_API_KEY,
+})
+
+async function main() {
+  const sandbox = await client.sandboxes.createSandbox({
+    name: "hello-world",
+  })
+
+  try {
+    const result = await client.exec.command({
+      sandbox_id: sandbox.id!,
+      body: { command: "uname -a && date" },
+    })
+    console.log(result.stdout)
+  } finally {
+    await client.sandboxes.deleteSandbox({ sandbox_id: sandbox.id! })
+  }
+}
+
+main().catch(console.error)
+```
+
+For endpoint-by-endpoint method signatures and live code samples, see the **SDK Reference** section in the sidebar.

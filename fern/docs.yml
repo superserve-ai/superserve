@@ -1,0 +1,57 @@
+instances:
+  - url: superserve.docs.buildwithfern.com
+
+title: Superserve
+
+default-language: typescript
+
+typography:
+  bodyFont:
+    name: Instrument Sans
+    paths:
+      - path: ./fonts/instrument-sans-variable.woff2
+        weight: 400 700
+        style: normal
+  headingsFont:
+    name: Instrument Sans
+    paths:
+      - path: ./fonts/instrument-sans-variable.woff2
+        weight: 400 700
+        style: normal
+  codeFont:
+    name: Geist Mono
+    paths:
+      - path: ./fonts/geist-mono-variable.woff2
+        weight: 400 700
+        style: normal
+
+settings:
+  http-snippets:
+    - curl
+    - python
+    - typescript
+
+navigation:
+  - section: Getting Started
+    contents:
+      - page: Introduction
+        path: ../docs/pages/introduction.mdx
+      - page: TypeScript Quickstart
+        path: ../docs/pages/typescript-quickstart.mdx
+      - page: Python Quickstart
+        path: ../docs/pages/python-quickstart.mdx
+  - api: SDK Reference
+    snippets:
+      typescript: "@superserve/sdk"
+      python: superserve
+
+colors:
+  accent-primary:
+    light: "#292524"  # stone-800 — warm near-black
+    dark: "#e7e5e4"   # stone-200 — warm near-white
+
+logo:
+  light: ../docs/logo/light.svg
+  dark: ../docs/logo/dark.svg
+
+css: ./styles.css

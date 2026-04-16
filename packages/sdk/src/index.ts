@@ -1,22 +1,6 @@
-export { Superserve } from "./client"
-export { Superserve as default } from "./client"
-export { Session } from "./session"
-export { AgentStream } from "./stream"
-export { SuperserveError, APIError } from "./errors"
-
-export type {
-  SuperserveOptions,
-  RunOptions,
-  StreamOptions,
-  SessionOptions,
-  RunResult,
-  ToolCall,
-  StreamEvent,
-  TextEvent,
-  ToolStartEvent,
-  ToolEndEvent,
-  RunCompletedEvent,
-  RunFailedEvent,
-  Agent,
-  SessionInfo,
-} from "./types"
+export * as Superserve from "./api/index.js";
+export type { BaseClientOptions, BaseRequestOptions } from "./BaseClient.js";
+export { SuperserveClient } from "./Client.js";
+export { SuperserveEnvironment, type SuperserveEnvironmentUrls } from "./environments.js";
+export { SuperserveError, SuperserveTimeoutError } from "./errors/index.js";
+export * from "./exports.js";
