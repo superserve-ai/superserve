@@ -48,21 +48,18 @@ const INSTALL_COMMANDS: Record<Language, string> = {
 
 function getCreateSnippet(language: Language): string {
   if (language === "typescript") {
-    return `import { SuperserveClient } from "@superserve/sdk"
+    return `import { Sandbox } from "@superserve/sdk"
 
-const client = new SuperserveClient({ apiKey: "YOUR_API_KEY" })
-
-const sandbox = await client.sandboxes.createSandbox({
+const sandbox = await Sandbox.create({
   name: "my-sandbox",
+  apiKey: "YOUR_API_KEY",
 })
 console.log(sandbox.id)`
   }
 
-  return `from superserve import Superserve
+  return `from superserve import Sandbox
 
-client = Superserve(api_key="YOUR_API_KEY")
-
-sandbox = client.sandboxes.create_sandbox(name="my-sandbox")
+sandbox = Sandbox.create(name="my-sandbox", api_key="YOUR_API_KEY")
 print(sandbox.id)`
 }
 

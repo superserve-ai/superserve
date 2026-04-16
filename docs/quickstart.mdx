@@ -1,0 +1,74 @@
+---
+title: Quickstart
+description: Get up and running with Superserve in under 5 minutes.
+---
+
+## Prerequisites
+
+Get your API key from the [Superserve Console](https://console.superserve.ai).
+
+Set it as an environment variable:
+
+```bash
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+## TypeScript
+
+Install the SDK:
+
+```bash
+npm install @superserve/sdk
+```
+
+Create and use a sandbox:
+
+```typescript
+import { Sandbox } from "@superserve/sdk"
+
+// Create a sandbox
+const sandbox = await Sandbox.create({ name: "quickstart" })
+await sandbox.waitForReady()
+
+// Run a command
+const result = await sandbox.commands.run("echo 'Hello from Superserve!'")
+console.log(result.stdout)
+
+// Write and read a file
+await sandbox.files.write("/tmp/hello.txt", "Hello, world!")
+const content = await sandbox.files.readText("/tmp/hello.txt")
+console.log(content)
+
+// Clean up
+await sandbox.kill()
+```
+
+## Python
+
+Install the SDK:
+
+```bash
+pip install superserve
+```
+
+Create and use a sandbox:
+
+```python
+from superserve import Sandbox
+
+# Create a sandbox
+sandbox = Sandbox.create(name="quickstart")
+sandbox.wait_for_ready()
+
+# Run a command
+result = sandbox.commands.run("echo 'Hello from Superserve!'")
+print(result.stdout)
+
+# Write and read a file
+sandbox.files.write("/tmp/hello.txt", b"Hello, world!")
+content = sandbox.files.read_text("/tmp/hello.txt")
+print(content)
+
+# Clean up
+sandbox.kill()
+```

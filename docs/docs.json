@@ -1,0 +1,96 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "maple",
+  "name": "Superserve",
+  "colors": {
+    "primary": "#105C60",
+    "light": "#119CA3",
+    "dark": "#0d474a"
+  },
+  "fonts": {
+    "heading": {
+      "family": "Funnel Display",
+      "weight": 600
+    },
+    "body": {
+      "family": "Inter"
+    }
+  },
+  "background": {
+    "color": {
+      "light": "#faf8f5",
+      "dark": "#1a1816"
+    },
+    "decoration": "gradient"
+  },
+  "styling": {
+    "codeblocks": {
+      "theme": {
+        "light": "github-light",
+        "dark": "vitesse-dark"
+      }
+    }
+  },
+  "favicon": "/favicon.svg",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg",
+    "href": "https://superserve.ai"
+  },
+  "appearance": {
+    "default": "light"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/superserve-ai/superserve"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart"]
+          }
+        ]
+      },
+      {
+        "tab": "SDK Reference",
+        "groups": [
+          {
+            "group": "TypeScript SDK",
+            "pages": [
+              "sdk/typescript/sandbox",
+              "sdk/typescript/commands",
+              "sdk/typescript/files"
+            ]
+          },
+          {
+            "group": "Python SDK",
+            "pages": [
+              "sdk/python/sandbox",
+              "sdk/python/commands",
+              "sdk/python/files"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "x": "https://x.com/superserve_ai",
+      "github": "https://github.com/superserve-ai/",
+      "linkedin": "https://www.linkedin.com/company/super-serve-ai/"
+    }
+  },
+  "integrations": {
+    "posthog": {
+      "apiKey": "phc_gjpDKKQJAnkxkqLrPGrAhoariKsaHNuTpI5rVhkYre",
+      "apiHost": "https://us.i.posthog.com"
+    }
+  }
+}

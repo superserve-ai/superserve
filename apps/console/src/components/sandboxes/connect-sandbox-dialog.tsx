@@ -44,25 +44,19 @@ export function getConnectSnippet(
   const key = apiKey || "ss_live_xxxxxxxx..."
 
   if (language === "typescript") {
-    return `import { SuperserveClient } from "@superserve/sdk"
+    return `import { Sandbox } from "@superserve/sdk"
 
-const client = new SuperserveClient({ apiKey: "${key}" })
+const sandbox = await Sandbox.connect("${sandboxId}", { apiKey: "${key}" })
 
-const result = await client.exec.command({
-  sandbox_id: "${sandboxId}",
-  body: { command: "echo 'Hello from Superserve!'" },
-})
+const result = await sandbox.commands.run("echo 'Hello from Superserve!'")
 console.log(result.stdout)`
   }
 
-  return `from superserve import Superserve
+  return `from superserve import Sandbox
 
-client = Superserve(api_key="${key}")
+sandbox = Sandbox.connect("${sandboxId}", api_key="${key}")
 
-result = client.exec.command(
-    "${sandboxId}",
-    command="echo 'Hello from Superserve!'",
-)
+result = sandbox.commands.run("echo 'Hello from Superserve!'")
 print(result.stdout)`
 }
 

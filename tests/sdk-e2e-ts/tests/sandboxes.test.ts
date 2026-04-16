@@ -1,75 +1,76 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest"
-import type { SuperserveClient } from "@superserve/sdk"
-import { createClient, hasCredentials, RUN_ID } from "../src/client.js"
-import { waitForStatus } from "../src/polling.js"
+import type { SandboxInfo } from "@superserve/sdk"
+import { Sandbox } from "@superserve/sdk"
+import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { connectionOptions, hasCredentials, RUN_ID } from "../src/client.js"
 
 describe.skipIf(!hasCredentials())("sandboxes", () => {
   const name = `sdk-e2e-sandbox-${RUN_ID}`
-  let client: SuperserveClient
-  let sandboxId: string
+  let sandbox: InstanceType<typeof Sandbox> & { id: string }
+  const opts = hasCredentials()
+    ? connectionOptions()
+    : { apiKey: "", baseUrl: "" }
 
   beforeAll(async () => {
-    client = createClient()
-    const sandbox = await client.sandboxes.createSandbox({ name })
-    if (!sandbox.id) {
-      throw new Error("createSandbox did not return an id")
-    }
-    sandboxId = sandbox.id
-    await waitForStatus(client, sandboxId, "active")
+    sandbox = await Sandbox.create({ name, ...opts })
+    await sandbox.waitForReady()
   })
 
   afterAll(async () => {
-    if (!sandboxId) return
+    if (!sandbox?.id) return
     try {
-      await client.sandboxes.deleteSandbox({ sandbox_id: sandboxId })
+      await sandbox.kill()
     } catch (err) {
-      // Non-fatal: log and let the test run finish. Orphaned sandboxes
-      // carry the RUN_ID in their name for manual cleanup if needed.
-      console.error(`Cleanup failed for sandbox ${sandboxId}:`, err)
+      console.error(`Cleanup failed for sandbox ${sandbox.id}:`, err)
     }
   })
 
-  it("getSandbox returns the created sandbox", async () => {
-    const sandbox = await client.sandboxes.getSandbox({ sandbox_id: sandboxId })
-    expect(sandbox.id).toBe(sandboxId)
-    expect(sandbox.name).toBe(name)
-    expect(sandbox.status).toBe("active")
+  it("getInfo returns the created sandbox", async () => {
+    const info = await sandbox.getInfo()
+    expect(info.id).toBe(sandbox.id)
+    expect(info.name).toBe(name)
+    expect(info.status).toBe("active")
   })
 
-  it("listSandboxes includes our sandbox", async () => {
-    const list = await client.sandboxes.listSandboxes()
+  it("list includes our sandbox", async () => {
+    const list = await Sandbox.list(opts)
     const ids = list.map((s) => s.id)
-    expect(ids).toContain(sandboxId)
+    expect(ids).toContain(sandbox.id)
   })
 
-  it("patchSandbox accepts metadata updates", async () => {
-    await client.sandboxes.patchSandbox({
-      sandbox_id: sandboxId,
-      metadata: {
-        env: "test",
-        "run-id": RUN_ID,
-      },
+  it("update accepts metadata", async () => {
+    await sandbox.update({
+      metadata: { env: "test", "run-id": RUN_ID },
     })
-    // The API may or may not return metadata on GET — we verify the
-    // patch completed without error and the sandbox is still reachable.
-    const sandbox = await client.sandboxes.getSandbox({ sandbox_id: sandboxId })
-    expect(sandbox.id).toBe(sandboxId)
+    const info = await sandbox.getInfo()
+    expect(info.id).toBe(sandbox.id)
   })
 
-  it("pauses the sandbox and transitions to paused", async () => {
-    await client.sandboxes.pauseSandbox({ sandbox_id: sandboxId })
-    // Backend returns "paused"; spec still says "idle". Accept either.
-    const paused = await waitForStatus(client, sandboxId, "paused", {
-      timeoutMs: 90_000,
-    })
-    expect(["paused", "idle"]).toContain(paused.status)
+  it("pauses and transitions to idle/paused", async () => {
+    await sandbox.pause()
+    // Poll for the paused state — backend may return "paused" or "idle"
+    const maxWait = Date.now() + 90_000
+    while (Date.now() < maxWait) {
+      const info = await sandbox.getInfo()
+      if (info.status === "idle" || (info.status as string) === "paused") {
+        expect(["paused", "idle"]).toContain(info.status)
+        return
+      }
+      await new Promise((r) => setTimeout(r, 2000))
+    }
+    throw new Error("Timed out waiting for paused/idle status")
   })
 
-  it("resumes the sandbox and transitions back to active", async () => {
-    await client.sandboxes.resumeSandbox({ sandbox_id: sandboxId })
-    const resumed = await waitForStatus(client, sandboxId, "active", {
-      timeoutMs: 90_000,
-    })
-    expect(resumed.status).toBe("active")
+  it("resumes back to active", async () => {
+    await sandbox.resume()
+    const maxWait = Date.now() + 90_000
+    while (Date.now() < maxWait) {
+      const info = await sandbox.getInfo()
+      if (info.status === "active") {
+        expect(info.status).toBe("active")
+        return
+      }
+      await new Promise((r) => setTimeout(r, 2000))
+    }
+    throw new Error("Timed out waiting for active status")
   })
 })

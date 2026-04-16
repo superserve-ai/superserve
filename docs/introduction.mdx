@@ -1,0 +1,27 @@
+---
+title: Introduction
+description: Superserve provides sandbox infrastructure to run code in isolated cloud environments powered by Firecracker MicroVMs.
+---
+
+# Superserve
+
+Superserve provides sandbox infrastructure to run code in isolated cloud environments. Each sandbox is a Firecracker MicroVM running Ubuntu 24.04 with Python 3.12, Node.js 22, and common dev tools pre-installed.
+
+## What you can do
+
+- **Create sandboxes** - spin up isolated VMs in seconds
+- **Execute commands** - run shell commands with real-time streaming output
+- **Transfer files** - upload and download files to/from sandboxes
+- **Pause & resume** - snapshot sandbox state and restore it later
+- **Network controls** - configure egress allow/deny rules per sandbox
+
+## SDKs
+
+<CardGroup cols={2}>
+  <Card title="TypeScript" href="/quickstart#typescript">
+    `npm install @superserve/sdk`
+  </Card>
+  <Card title="Python" href="/quickstart#python">
+    `pip install superserve`
+  </Card>
+</CardGroup>

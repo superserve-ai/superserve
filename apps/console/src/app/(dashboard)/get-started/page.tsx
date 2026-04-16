@@ -19,26 +19,23 @@ function getSnippet(language: Language, apiKey: string): string {
   const key = apiKey || "ss_live_xxxxxxxx..."
 
   if (language === "typescript") {
-    return `import { SuperserveClient } from "@superserve/sdk"
+    return `import { Sandbox } from "@superserve/sdk"
 
-const client = new SuperserveClient({ apiKey: "${key}" })
-
-const sandbox = await client.sandboxes.createSandbox({
+const sandbox = await Sandbox.create({
   name: "my-sandbox",
+  apiKey: "${key}",
 })
 console.log(sandbox.id)
 
-await client.sandboxes.deleteSandbox({ sandbox_id: sandbox.id })`
+await sandbox.kill()`
   }
 
-  return `from superserve import Superserve
+  return `from superserve import Sandbox
 
-client = Superserve(api_key="${key}")
-
-sandbox = client.sandboxes.create_sandbox(name="my-sandbox")
+sandbox = Sandbox.create(name="my-sandbox", api_key="${key}")
 print(sandbox.id)
 
-client.sandboxes.delete_sandbox(sandbox.id)`
+sandbox.kill()`
 }
 
 function CopyButton({ text, label }: { text: string; label?: string }) {

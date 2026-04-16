@@ -33,26 +33,22 @@ describe("getConnectSnippet", () => {
   const SBX = "sbx-42"
 
   describe("typescript", () => {
-    it("uses SuperserveClient (not the old Superserve class)", () => {
+    it("uses Sandbox.connect (not the old SuperserveClient)", () => {
       const snip = getConnectSnippet("typescript", KEY, SBX)
-      expect(snip).toContain(
-        'import { SuperserveClient } from "@superserve/sdk"',
-      )
-      expect(snip).toContain("new SuperserveClient(")
-      // Regression guard: the pre-fern SDK class was exported as `Superserve`.
-      expect(snip).not.toContain("new Superserve(")
+      expect(snip).toContain('import { Sandbox } from "@superserve/sdk"')
+      expect(snip).toContain("Sandbox.connect(")
+      expect(snip).not.toContain("SuperserveClient")
     })
 
-    it("uses client.exec.command (not sandbox.exec)", () => {
+    it("uses sandbox.commands.run", () => {
       const snip = getConnectSnippet("typescript", KEY, SBX)
-      expect(snip).toContain("client.exec.command")
-      expect(snip).not.toContain("sandbox.exec(")
+      expect(snip).toContain("sandbox.commands.run")
     })
 
     it("interpolates the API key and sandbox id", () => {
       const snip = getConnectSnippet("typescript", KEY, SBX)
       expect(snip).toContain(`apiKey: "${KEY}"`)
-      expect(snip).toContain(`sandbox_id: "${SBX}"`)
+      expect(snip).toContain(`"${SBX}"`)
     })
 
     it("falls back to a placeholder when no API key is supplied", () => {
@@ -62,16 +58,15 @@ describe("getConnectSnippet", () => {
   })
 
   describe("python", () => {
-    it("imports Superserve from superserve", () => {
+    it("imports Sandbox from superserve", () => {
       const snip = getConnectSnippet("python", KEY, SBX)
-      expect(snip).toContain("from superserve import Superserve")
-      expect(snip).toContain("Superserve(api_key=")
+      expect(snip).toContain("from superserve import Sandbox")
+      expect(snip).toContain("Sandbox.connect(")
     })
 
-    it("uses client.exec.command with sandbox id", () => {
+    it("uses sandbox.commands.run", () => {
       const snip = getConnectSnippet("python", KEY, SBX)
-      expect(snip).toContain("client.exec.command(")
-      expect(snip).toContain(`"${SBX}"`)
+      expect(snip).toContain("sandbox.commands.run(")
     })
 
     it("interpolates the API key", () => {

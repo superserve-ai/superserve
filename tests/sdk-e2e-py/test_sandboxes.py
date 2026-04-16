@@ -1,60 +1,60 @@
 import pytest
 
-from _helpers import SKIP_IF_NO_CREDS, wait_for_status
+from superserve import Sandbox
+
+from _helpers import SKIP_IF_NO_CREDS
 
 pytestmark = SKIP_IF_NO_CREDS
 
 
 @pytest.fixture(scope="module")
-def sandbox(client, run_id):
-    """Module-scoped: one sandbox shared across all tests in this file.
-
-    Created in `beforeAll`-style, deleted in teardown even if tests fail.
-    Orphans (from crashes before teardown) carry the run_id suffix in
-    their name for manual cleanup.
-    """
+def sandbox(connection_opts, run_id):
     name = f"sdk-e2e-py-sandbox-{run_id}"
-    sbx = client.sandboxes.create_sandbox(name=name)
-    assert sbx.id is not None
-    wait_for_status(client, sbx.id, "active")
+    sbx = Sandbox.create(name=name, **connection_opts)
+    sbx.wait_for_ready()
     yield sbx
     try:
-        client.sandboxes.delete_sandbox(sbx.id)
+        sbx.kill()
     except Exception as err:
-        # Non-fatal: log and let the test run finish.
         print(f"Cleanup failed for sandbox {sbx.id}: {err}")
 
 
-def test_get_sandbox_returns_created(client, sandbox):
-    result = client.sandboxes.get_sandbox(sandbox.id)
+def test_get_sandbox_returns_created(sandbox):
+    result = sandbox.get_info()
     assert result.id == sandbox.id
     assert result.name == sandbox.name
-    assert result.status == "active"
+    assert result.status.value == "active"
 
 
-def test_list_sandboxes_includes_ours(client, sandbox):
-    sandboxes = client.sandboxes.list_sandboxes()
+def test_list_sandboxes_includes_ours(sandbox, connection_opts):
+    sandboxes = Sandbox.list(**connection_opts)
     ids = [s.id for s in sandboxes]
     assert sandbox.id in ids
 
 
-def test_patch_sandbox_accepts_metadata(client, sandbox, run_id):
-    # The API may or may not echo metadata back on GET; we verify the
-    # patch call itself succeeds and the sandbox is still reachable.
-    client.sandboxes.patch_sandbox(
-        sandbox.id,
-        metadata={"env": "test", "run-id": run_id},
-    )
-    result = client.sandboxes.get_sandbox(sandbox.id)
+def test_update_accepts_metadata(sandbox, run_id):
+    sandbox.update(metadata={"env": "test", "run-id": run_id})
+    result = sandbox.get_info()
     assert result.id == sandbox.id
 
 
-def test_pause_and_resume_lifecycle(client, sandbox):
-    client.sandboxes.pause_sandbox(sandbox.id)
-    # Backend returns "paused"; spec still says "idle". Accept either.
-    paused = wait_for_status(client, sandbox.id, "paused", timeout_s=90)
-    assert paused.status in ("paused", "idle")
+def test_pause_and_resume_lifecycle(sandbox):
+    sandbox.pause()
+    # Poll for paused/idle
+    import time
+    deadline = time.monotonic() + 90
+    while time.monotonic() < deadline:
+        info = sandbox.get_info()
+        if info.status.value in ("paused", "idle"):
+            break
+        time.sleep(2)
+    assert sandbox.status.value in ("paused", "idle")
 
-    client.sandboxes.resume_sandbox(sandbox.id)
-    resumed = wait_for_status(client, sandbox.id, "active", timeout_s=90)
-    assert resumed.status == "active"
+    sandbox.resume()
+    deadline = time.monotonic() + 90
+    while time.monotonic() < deadline:
+        info = sandbox.get_info()
+        if info.status.value == "active":
+            break
+        time.sleep(2)
+    assert sandbox.status.value == "active"
