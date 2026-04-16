@@ -31,6 +31,7 @@ import { DeleteSandboxDialog } from "@/components/sandboxes/delete-sandbox-dialo
 import { SandboxTableRow } from "@/components/sandboxes/sandbox-table-row"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableToolbar } from "@/components/table-toolbar"
+import { useCreateParam } from "@/hooks/use-create-param"
 import {
   useBulkDeleteSandboxes,
   useDeleteSandbox,
@@ -67,7 +68,7 @@ function SandboxesPageContent() {
     else params.set("q", value)
     router.replace(`?${params.toString()}`)
   }
-  const [createOpen, setCreateOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useCreateParam()
   const [connectSandboxId, setConnectSandboxId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string

@@ -18,17 +18,13 @@ import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 
-interface CommandPaletteProps {
-  onCreateSandbox?: () => void
-}
-
 interface CommandItem {
   label: string
   icon: Icon
   onSelect: () => void
 }
 
-export function CommandPalette({ onCreateSandbox }: CommandPaletteProps) {
+export function CommandPalette() {
   const [open, setOpen] = useState(false)
   const [hoveredLabel, setHoveredLabel] = useState<string | null>(null)
   const router = useRouter()
@@ -94,15 +90,12 @@ export function CommandPalette({ onCreateSandbox }: CommandPaletteProps) {
     {
       label: "Create Sandbox",
       icon: PlusIcon,
-      onSelect: () => {
-        setOpen(false)
-        onCreateSandbox?.()
-      },
+      onSelect: () => navigate("/sandboxes?create=1"),
     },
     {
       label: "Create API Key",
       icon: KeyIcon,
-      onSelect: () => navigate("/api-keys"),
+      onSelect: () => navigate("/api-keys?create=1"),
     },
   ]
 
