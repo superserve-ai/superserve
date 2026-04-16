@@ -19,7 +19,7 @@
     "generate": "bun run generate:sync && cd fern && fern generate --group local --force",
     "generate:check": "bun run generate:sync && cd fern && fern check",
     "docs:dev": "bun run generate:sync && cd fern && fern docs dev",
-    "docs:publish": "bun run generate:sync && cd fern && fern generate --docs",
+    "docs:publish": "bun run generate:sync && cd fern && fern generate --docs --force",
     "prepare": "husky"
   },
   "lint-staged": {

@@ -128,3 +128,11 @@ paths:
                 -rw-r--r-- 1 user user 3771 Apr  4  2023 .bashrc
                 -rw-r--r-- 1 user user  807 Apr  4  2023 .profile
               stderr: ''
+  /files:
+    post:
+      x-fern-examples:
+        - query-parameters:
+            path: /home/user/data.txt
+          headers:
+            X-Access-Token: X-Access-Token
+          request: VGhpcyBpcyBhIHRlc3QgZmlsZSBjb250ZW50Lg==
