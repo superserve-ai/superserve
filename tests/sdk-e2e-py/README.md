@@ -98,7 +98,7 @@ The Python SDK does not currently expose a `files` resource — the backend's `o
 Same reasoning as the TS e2e:
 
 1. **Credentials.** Running on every PR would require a CI secret and generate load + cost on staging.
-2. **Speed.** A full run is ~30–90 seconds depending on sandbox boot times.
+2. **Speed.** A full run is ~30–90 seconds depending on sandbox start times.
 3. **Flakiness domain.** E2e failures can reflect backend issues, network issues, or quota issues — not SDK bugs. Keeping them out of the unit test pipeline preserves signal.
 
 Recommended invocation patterns:
