@@ -4,7 +4,7 @@ import { connectionOptions, hasCredentials, RUN_ID } from "../src/client.js"
 
 describe.skipIf(!hasCredentials())("files", () => {
   const name = `sdk-e2e-files-${RUN_ID}`
-  let sandbox: InstanceType<typeof Sandbox> & { id: string }
+  let sandbox: Sandbox
   const opts = hasCredentials()
     ? connectionOptions()
     : { apiKey: "", baseUrl: "" }
