@@ -1,3 +1,5 @@
+import time
+
 import pytest
 
 from superserve import Sandbox
@@ -40,8 +42,7 @@ def test_update_accepts_metadata(sandbox, run_id):
 
 def test_pause_and_resume_lifecycle(sandbox):
     sandbox.pause()
-    # Poll for paused/idle
-    import time
+    # Backend may return "paused" or "idle" depending on version — spec drift.
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
         info = sandbox.get_info()

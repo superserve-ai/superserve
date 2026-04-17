@@ -45,6 +45,7 @@ import {
   useBulkRevokeApiKeys,
   useRevokeApiKey,
 } from "@/hooks/use-api-keys"
+import { useCreateParam } from "@/hooks/use-create-param"
 import { useSelection } from "@/hooks/use-selection"
 import { formatDate } from "@/lib/format"
 import { API_KEY_EVENTS } from "@/lib/posthog/events"
@@ -64,7 +65,7 @@ function ApiKeysPageContent() {
     else params.set("q", value)
     router.replace(`?${params.toString()}`)
   }
-  const [createOpen, setCreateOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useCreateParam()
   const [revokeTarget, setRevokeTarget] = useState<{
     id: string
     name: string

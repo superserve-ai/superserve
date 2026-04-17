@@ -33,7 +33,7 @@ describe.skipIf(!hasCredentials())("sandboxes", () => {
 
   it("list includes our sandbox", async () => {
     const list = await Sandbox.list(opts)
-    const ids = list.map((s) => s.id)
+    const ids = list.map((s: SandboxInfo) => s.id)
     expect(ids).toContain(sandbox.id)
   })
 
@@ -47,7 +47,7 @@ describe.skipIf(!hasCredentials())("sandboxes", () => {
 
   it("pauses and transitions to idle/paused", async () => {
     await sandbox.pause()
-    // Poll for the paused state — backend may return "paused" or "idle"
+    // Backend may return "paused" or "idle" depending on version — spec drift.
     const maxWait = Date.now() + 90_000
     while (Date.now() < maxWait) {
       const info = await sandbox.getInfo()
@@ -58,7 +58,7 @@ describe.skipIf(!hasCredentials())("sandboxes", () => {
       await new Promise((r) => setTimeout(r, 2000))
     }
     throw new Error("Timed out waiting for paused/idle status")
-  })
+  }, 120_000)
 
   it("resumes back to active", async () => {
     await sandbox.resume()
@@ -72,5 +72,5 @@ describe.skipIf(!hasCredentials())("sandboxes", () => {
       await new Promise((r) => setTimeout(r, 2000))
     }
     throw new Error("Timed out waiting for active status")
-  })
+  }, 120_000)
 })
