@@ -1,0 +1,245 @@
+---
+title: Sandbox
+description: The main entry point for the Python SDK. Create, connect, and manage sandbox lifecycle.
+---
+
+## Import
+
+```python
+from superserve import Sandbox
+
+# Async variant
+from superserve import AsyncSandbox
+```
+
+Both `Sandbox` and `AsyncSandbox` share the same method names and signatures. Async methods are awaitable; everything else is identical.
+
+## Authentication
+
+All factory methods accept `api_key` and `base_url`, or read from environment variables:
+
+```bash
+export SUPERSERVE_API_KEY=ss_live_...
+export SUPERSERVE_BASE_URL=https://api.superserve.ai  # optional
+```
+
+## Factory methods
+
+### `Sandbox.create(...)`
+
+Create a new sandbox. Returns immediately after the API confirms creation (status may be `starting`). Call `sandbox.wait_for_ready()` to block until `active`.
+
+```python
+from superserve import Sandbox, NetworkConfig
+
+sandbox = Sandbox.create(
+    name="my-sandbox",
+    timeout_seconds=3600,
+    metadata={"env": "prod", "owner": "agent-7"},
+    env_vars={"OPENAI_API_KEY": "sk-..."},
+    network=NetworkConfig(
+        allow_out=["api.openai.com", "*.github.com"],
+        deny_out=["0.0.0.0/0"],
+    ),
+    from_snapshot="snapshot-uuid",  # optional: boot from snapshot
+)
+
+sandbox.wait_for_ready()
+```
+
+**Parameters:**
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | `str` | **Required.** Human-readable sandbox name. |
+| `from_snapshot` | `str` | Boot from a snapshot ID instead of a fresh VM. |
+| `timeout_seconds` | `int` | Hard lifetime cap in seconds (max 604800). |
+| `metadata` | `dict[str, str]` | String tags attached at creation. |
+| `env_vars` | `dict[str, str]` | Environment variables injected into every process. |
+| `network` | `NetworkConfig` | Egress allow/deny rules. |
+| `api_key` | `str` | Overrides `SUPERSERVE_API_KEY` env var. |
+| `base_url` | `str` | Overrides `SUPERSERVE_BASE_URL` env var. |
+
+### `Sandbox.connect(sandbox_id, ...)`
+
+Connect to an existing sandbox by ID. Fetches info and access token.
+
+```python
+sandbox = Sandbox.connect("sandbox-uuid")
+```
+
+### `Sandbox.list(...)`
+
+List all sandboxes for the authenticated team.
+
+```python
+all_boxes = Sandbox.list()
+prod_boxes = Sandbox.list(metadata={"env": "prod"})
+```
+
+Returns `list[SandboxInfo]`.
+
+### `Sandbox.get(sandbox_id, ...)`
+
+Get sandbox info by ID without creating an instance.
+
+```python
+info = Sandbox.get("sandbox-uuid")
+```
+
+Returns `SandboxInfo`.
+
+### `Sandbox.kill_by_id(sandbox_id, ...)`
+
+Delete a sandbox by ID.
+
+```python
+Sandbox.kill_by_id("sandbox-uuid")
+```
+
+## Instance attributes
+
+| Attribute | Type | Description |
+|---|---|---|
+| `id` | `str` | Unique sandbox ID (UUID). |
+| `name` | `str` | Human-readable sandbox name. |
+| `status` | `SandboxStatus` | Current status. Call `get_info()` to refresh. |
+| `metadata` | `dict[str, str]` | User-supplied tags. |
+| `access_token` | `str` | Per-sandbox token for data-plane operations. |
+| `commands` | `Commands` | [Commands](/sdk/python/commands) sub-module. |
+| `files` | `Files` | [Files](/sdk/python/files) sub-module. |
+
+## Instance methods
+
+### `sandbox.get_info()`
+
+Refresh the sandbox info from the API. Updates `status` and `metadata`.
+
+```python
+info = sandbox.get_info()
+print(info.status.value)  # "active"
+```
+
+### `sandbox.pause()`
+
+Pause the sandbox. Snapshots full state and suspends the VM. Status transitions to `idle`.
+
+```python
+sandbox.pause()
+```
+
+### `sandbox.resume()`
+
+Resume a paused sandbox. Status transitions back to `active`.
+
+```python
+sandbox.resume()
+```
+
+### `sandbox.kill()`
+
+Delete the sandbox and all its resources.
+
+```python
+sandbox.kill()
+```
+
+### `sandbox.update(...)`
+
+Partially update the sandbox. Only `metadata` and `network` are patchable.
+
+```python
+sandbox.update(
+    metadata={"env": "staging"},
+    network=NetworkConfig(allow_out=["api.openai.com"]),
+)
+```
+
+### `sandbox.wait_for_ready(timeout_seconds=60.0)`
+
+Poll until the sandbox reaches `active` status.
+
+```python
+sandbox.wait_for_ready()
+sandbox.wait_for_ready(timeout_seconds=120)
+```
+
+## Async usage
+
+`AsyncSandbox` has the same API with awaitable methods:
+
+```python
+import asyncio
+from superserve import AsyncSandbox
+
+async def main():
+    sandbox = await AsyncSandbox.create(name="async-example")
+    await sandbox.wait_for_ready()
+
+    result = await sandbox.commands.run("echo hello")
+    print(result.stdout)
+
+    await sandbox.kill()
+
+asyncio.run(main())
+```
+
+## Types
+
+### `SandboxStatus`
+
+```python
+class SandboxStatus(str, Enum):
+    STARTING = "starting"
+    ACTIVE = "active"
+    PAUSING = "pausing"
+    IDLE = "idle"
+    DELETED = "deleted"
+```
+
+### `SandboxInfo`
+
+```python
+class SandboxInfo(BaseModel):
+    id: str
+    name: str
+    status: SandboxStatus
+    vcpu_count: int
+    memory_mib: int
+    access_token: str
+    snapshot_id: Optional[str] = None
+    created_at: datetime
+    timeout_seconds: Optional[int] = None
+    network: Optional[NetworkConfig] = None
+    metadata: dict[str, str]
+```
+
+### `NetworkConfig`
+
+```python
+class NetworkConfig(BaseModel):
+    allow_out: Optional[list[str]] = None  # CIDRs or domains to allow
+    deny_out: Optional[list[str]] = None   # CIDRs to deny
+```
+
+## Errors
+
+All errors extend `SandboxError`:
+
+```python
+from superserve import (
+    SandboxError,
+    AuthenticationError,   # 401
+    ValidationError,       # 400
+    NotFoundError,         # 404
+    ConflictError,         # 409 — invalid state for operation
+    TimeoutError,          # request timed out
+    ServerError,           # 500
+)
+
+try:
+    sandbox.pause()
+except ConflictError:
+    # Sandbox is not in a pausable state
+    pass
+```

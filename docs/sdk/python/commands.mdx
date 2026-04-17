@@ -1,0 +1,87 @@
+---
+title: Commands
+description: Execute shell commands inside a sandbox, synchronously or with streaming output.
+---
+
+Commands are accessed via `sandbox.commands`. Idle sandboxes are automatically resumed before execution.
+
+## `sandbox.commands.run(command, ...)`
+
+Execute a command and return the result. If `on_stdout` or `on_stderr` callbacks are provided, output is streamed via Server-Sent Events.
+
+### Synchronous execution
+
+```python
+result = sandbox.commands.run("echo hello")
+print(result.stdout)     # "hello\n"
+print(result.stderr)     # ""
+print(result.exit_code)  # 0
+```
+
+### Streaming execution
+
+```python
+import sys
+
+result = sandbox.commands.run(
+    "for i in 1 2 3; do echo line-$i; sleep 0.5; done",
+    on_stdout=lambda data: print(data, end=""),
+    on_stderr=lambda data: print(data, end="", file=sys.stderr),
+    timeout_seconds=30,
+)
+```
+
+### With environment and working directory
+
+```python
+result = sandbox.commands.run(
+    "python script.py",
+    cwd="/app",
+    env={"PORT": "3000", "DEBUG": "1"},
+    timeout_seconds=60,
+)
+```
+
+## Parameters
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `command` | `str` | — | **Required.** Command to execute. |
+| `cwd` | `str` | `/home/user` | Working directory. |
+| `env` | `dict[str, str]` | — | Environment variables for this command. |
+| `timeout_seconds` | `int` | `30` | Command timeout in seconds. |
+| `on_stdout` | `Callable[[str], None]` | — | Stream stdout chunks. |
+| `on_stderr` | `Callable[[str], None]` | — | Stream stderr chunks. |
+
+## Return type
+
+```python
+class CommandResult(BaseModel):
+    stdout: str
+    stderr: str
+    exit_code: int
+```
+
+## Handling non-zero exit codes
+
+`run()` does not raise for non-zero exits — inspect `result.exit_code`:
+
+```python
+result = sandbox.commands.run("exit 42")
+if result.exit_code != 0:
+    print(f"Command failed: {result.stderr}")
+```
+
+It raises `TimeoutError` if the timeout elapses, or `NotFoundError` / `ConflictError` if the sandbox is unreachable.
+
+## Async usage
+
+```python
+from superserve import AsyncSandbox
+
+sandbox = await AsyncSandbox.create(name="async-example")
+await sandbox.wait_for_ready()
+
+result = await sandbox.commands.run("echo hello")
+print(result.stdout)
+```

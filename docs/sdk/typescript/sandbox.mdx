@@ -1,0 +1,217 @@
+---
+title: Sandbox
+description: The main entry point for the TypeScript SDK. Create, connect, and manage sandbox lifecycle.
+---
+
+## Import
+
+```typescript
+import { Sandbox } from "@superserve/sdk"
+```
+
+## Authentication
+
+All factory methods accept `apiKey` and `baseUrl`, or read from environment variables:
+
+```bash
+export SUPERSERVE_API_KEY=ss_live_...
+export SUPERSERVE_BASE_URL=https://api.superserve.ai  # optional
+```
+
+## Factory methods
+
+### `Sandbox.create(options)`
+
+Create a new sandbox. Returns immediately after the API confirms creation (status may be `starting`). Call `await sandbox.waitForReady()` to block until `active`.
+
+```typescript
+const sandbox = await Sandbox.create({
+  name: "my-sandbox",
+  timeoutSeconds: 3600,
+  metadata: { env: "prod", owner: "agent-7" },
+  envVars: { OPENAI_API_KEY: "sk-..." },
+  network: {
+    allowOut: ["api.openai.com", "*.github.com"],
+    denyOut: ["0.0.0.0/0"],
+  },
+  fromSnapshot: "snapshot-uuid",  // optional: boot from snapshot
+})
+
+await sandbox.waitForReady()
+```
+
+**Options:**
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | `string` | **Required.** Human-readable sandbox name. |
+| `fromSnapshot` | `string` | Boot from a snapshot ID instead of a fresh VM. |
+| `timeoutSeconds` | `number` | Hard lifetime cap in seconds (max 604800). |
+| `metadata` | `Record<string, string>` | String tags attached at creation. |
+| `envVars` | `Record<string, string>` | Environment variables injected into every process. |
+| `network` | `NetworkConfig` | Egress allow/deny rules. |
+| `apiKey` | `string` | Overrides `SUPERSERVE_API_KEY` env var. |
+| `baseUrl` | `string` | Overrides `SUPERSERVE_BASE_URL` env var. |
+
+### `Sandbox.connect(sandboxId, options?)`
+
+Connect to an existing sandbox by ID. Fetches info and access token.
+
+```typescript
+const sandbox = await Sandbox.connect("sandbox-uuid")
+```
+
+### `Sandbox.list(options?)`
+
+List all sandboxes for the authenticated team.
+
+```typescript
+const all = await Sandbox.list()
+const prod = await Sandbox.list({ metadata: { env: "prod" } })
+```
+
+Returns `SandboxInfo[]`.
+
+### `Sandbox.get(sandboxId, options?)`
+
+Get sandbox info by ID without creating an instance.
+
+```typescript
+const info = await Sandbox.get("sandbox-uuid")
+```
+
+Returns `SandboxInfo`.
+
+### `Sandbox.killById(sandboxId, options?)`
+
+Delete a sandbox by ID.
+
+```typescript
+await Sandbox.killById("sandbox-uuid")
+```
+
+## Instance properties
+
+| Property | Type | Description |
+|---|---|---|
+| `id` | `string` | Unique sandbox ID (UUID). |
+| `name` | `string` | Human-readable sandbox name. |
+| `status` | `SandboxStatus` | Current status. Call `getInfo()` to refresh. |
+| `metadata` | `Record<string, string>` | User-supplied tags. |
+| `accessToken` | `string` | Per-sandbox token for data-plane operations. |
+| `commands` | `Commands` | [Commands](/sdk/typescript/commands) sub-module. |
+| `files` | `Files` | [Files](/sdk/typescript/files) sub-module. |
+
+## Instance methods
+
+### `sandbox.getInfo()`
+
+Refresh the sandbox info from the API. Updates `status` and `metadata` on the instance.
+
+```typescript
+const info = await sandbox.getInfo()
+console.log(info.status)  // "active"
+```
+
+### `sandbox.pause()`
+
+Pause the sandbox. Snapshots full state (memory + disk) and suspends the VM. Status transitions to `idle`.
+
+```typescript
+await sandbox.pause()
+```
+
+### `sandbox.resume()`
+
+Resume a paused sandbox. Restores from snapshot. Status transitions back to `active`.
+
+```typescript
+await sandbox.resume()
+```
+
+### `sandbox.kill()`
+
+Delete the sandbox and all its resources.
+
+```typescript
+await sandbox.kill()
+```
+
+### `sandbox.update(options)`
+
+Partially update the sandbox. Only `metadata` and `network` are patchable.
+
+```typescript
+await sandbox.update({
+  metadata: { env: "staging" },
+  network: { allowOut: ["api.openai.com"] },
+})
+```
+
+### `sandbox.waitForReady(timeoutMs?)`
+
+Poll until the sandbox reaches `active` status. Default timeout is 60 seconds.
+
+```typescript
+await sandbox.waitForReady()
+await sandbox.waitForReady(120_000)  // 120s timeout
+```
+
+## Types
+
+### `SandboxStatus`
+
+```typescript
+type SandboxStatus = "starting" | "active" | "pausing" | "idle" | "deleted"
+```
+
+### `SandboxInfo`
+
+```typescript
+interface SandboxInfo {
+  id: string
+  name: string
+  status: SandboxStatus
+  vcpuCount: number
+  memoryMib: number
+  accessToken: string
+  snapshotId?: string
+  createdAt: Date
+  timeoutSeconds?: number
+  network?: NetworkConfig
+  metadata: Record<string, string>
+}
+```
+
+### `NetworkConfig`
+
+```typescript
+interface NetworkConfig {
+  allowOut?: string[]  // CIDRs or domains to allow
+  denyOut?: string[]   // CIDRs to deny (use "0.0.0.0/0" to deny all)
+}
+```
+
+## Errors
+
+All errors extend `SandboxError`:
+
+```typescript
+import {
+  SandboxError,
+  AuthenticationError,   // 401
+  ValidationError,       // 400
+  NotFoundError,         // 404
+  ConflictError,         // 409 — invalid state for operation
+  TimeoutError,          // request timed out
+  ServerError,           // 500
+} from "@superserve/sdk"
+
+try {
+  await sandbox.pause()
+} catch (err) {
+  if (err instanceof ConflictError) {
+    // Sandbox is not in a pausable state
+  }
+}
+```

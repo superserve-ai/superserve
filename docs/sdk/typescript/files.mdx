@@ -1,0 +1,69 @@
+---
+title: Files
+description: Upload and download files to and from a sandbox.
+---
+
+Files are accessed via the `sandbox.files` sub-module. File operations go directly to the data plane (`boxd-{id}.sandbox.superserve.ai`) using the per-sandbox access token — the SDK handles this transparently.
+
+## `sandbox.files.write(path, content, timeoutMs?)`
+
+Write a file to the sandbox at the given absolute path. Parent directories are created automatically.
+
+```typescript
+// String content
+await sandbox.files.write("/app/config.json", '{"key": "value"}')
+
+// Binary content
+await sandbox.files.write("/app/image.png", buffer)
+
+// From Uint8Array
+await sandbox.files.write("/app/data.bin", new Uint8Array([1, 2, 3]))
+```
+
+**Parameters:**
+
+| Field | Type | Description |
+|---|---|---|
+| `path` | `string` | Absolute destination path (must start with `/`, no `..`). |
+| `content` | `FileInput` | `string`, `Buffer`, `Uint8Array`, `Blob`, or `ArrayBuffer`. |
+| `timeoutMs` | `number` | Optional request timeout. |
+
+## `sandbox.files.read(path, timeoutMs?)`
+
+Read a file from the sandbox as raw bytes.
+
+```typescript
+const bytes: Uint8Array = await sandbox.files.read("/app/image.png")
+```
+
+## `sandbox.files.readText(path, timeoutMs?)`
+
+Read a file from the sandbox as a UTF-8 string.
+
+```typescript
+const text: string = await sandbox.files.readText("/app/config.json")
+console.log(text)  // '{"key": "value"}'
+```
+
+## Round-trip example
+
+```typescript
+const original = "hello, world!\n"
+
+await sandbox.files.write("/tmp/greeting.txt", original)
+const roundTripped = await sandbox.files.readText("/tmp/greeting.txt")
+
+console.log(roundTripped === original)  // true
+```
+
+## Path rules
+
+- Paths **must** start with `/`
+- Paths **must not** contain `..` segments
+- Parent directories are created automatically on write
+
+## Errors
+
+- `NotFoundError` — file does not exist (on read)
+- `ValidationError` — invalid path
+- `AuthenticationError` — access token invalid or sandbox deleted

@@ -1,0 +1,72 @@
+---
+title: Commands
+description: Execute shell commands inside a sandbox, synchronously or with streaming output.
+---
+
+Commands are accessed via the `sandbox.commands` sub-module. Idle sandboxes are automatically resumed before execution.
+
+## `sandbox.commands.run(command, options?)`
+
+Execute a command and return the result. If `onStdout` or `onStderr` callbacks are provided, output is streamed via Server-Sent Events.
+
+### Synchronous execution
+
+```typescript
+const result = await sandbox.commands.run("echo hello")
+console.log(result.stdout)    // "hello\n"
+console.log(result.stderr)    // ""
+console.log(result.exitCode)  // 0
+```
+
+### Streaming execution
+
+```typescript
+const result = await sandbox.commands.run("npm start", {
+  onStdout: (data) => process.stdout.write(data),
+  onStderr: (data) => process.stderr.write(data),
+  timeoutSeconds: 120,
+})
+```
+
+### With environment and working directory
+
+```typescript
+const result = await sandbox.commands.run("python script.py", {
+  cwd: "/app",
+  env: { PORT: "3000", DEBUG: "1" },
+  timeoutSeconds: 60,
+})
+```
+
+## Options
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `cwd` | `string` | `/home/user` | Working directory. |
+| `env` | `Record<string, string>` | — | Environment variables for this command. |
+| `timeoutSeconds` | `number` | `30` | Command timeout in seconds. |
+| `onStdout` | `(data: string) => void` | — | Stream stdout chunks. |
+| `onStderr` | `(data: string) => void` | — | Stream stderr chunks. |
+
+## Return type
+
+```typescript
+interface CommandResult {
+  stdout: string
+  stderr: string
+  exitCode: number
+}
+```
+
+## Handling non-zero exit codes
+
+`run()` does not throw for non-zero exits — inspect `result.exitCode`:
+
+```typescript
+const result = await sandbox.commands.run("exit 42")
+if (result.exitCode !== 0) {
+  console.error(`Command failed: ${result.stderr}`)
+}
+```
+
+It throws `TimeoutError` if the timeout elapses, or `NotFoundError` / `ConflictError` if the sandbox is unreachable.
