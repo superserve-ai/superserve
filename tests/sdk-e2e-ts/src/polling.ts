@@ -31,22 +31,24 @@ interface WaitOptions {
 }
 
 /**
- * Poll `getSandbox` until the sandbox reaches `expected` status, or throw.
- * Returns the final sandbox response so callers can assert on its fields.
+ * Poll `getSandbox` until the sandbox reaches `expected` status (or any of
+ * the statuses if an array is given), or throw. Returns the final sandbox
+ * response so callers can assert on its fields.
  */
 export async function waitForStatus(
   client: SuperserveClient,
   sandboxId: string,
-  expected: SandboxStatus,
+  expected: SandboxStatus | SandboxStatus[],
   { timeoutMs = 60_000, intervalMs = 2_000 }: WaitOptions = {},
 ) {
+  const targets = Array.isArray(expected) ? expected : [expected]
   const deadline = Date.now() + timeoutMs
   let lastStatus: string | undefined
 
   while (Date.now() < deadline) {
     const sandbox = await client.sandboxes.getSandbox({ sandbox_id: sandboxId })
     lastStatus = sandbox.status
-    if (sandbox.status === expected) {
+    if (targets.includes(sandbox.status as SandboxStatus)) {
       return sandbox
     }
     await sleep(intervalMs)
@@ -54,7 +56,7 @@ export async function waitForStatus(
 
   throw new Error(
     `Timed out after ${timeoutMs}ms waiting for sandbox ${sandboxId} to reach ` +
-    `status "${expected}". Last observed status: "${lastStatus ?? "unknown"}".`
+    `status ${targets.map((s) => `"${s}"`).join(" or ")}. Last observed status: "${lastStatus ?? "unknown"}".`
   )
 }
 

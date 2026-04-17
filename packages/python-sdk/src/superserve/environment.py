@@ -5,8 +5,6 @@ from __future__ import annotations
 
 class SuperserveEnvironment:
     PRODUCTION: SuperserveEnvironment
-    STAGING: SuperserveEnvironment
-    LOCAL: SuperserveEnvironment
 
     def __init__(self, *, base: str, sandbox_data_plane: str):
         self.base = base
@@ -14,11 +12,5 @@ class SuperserveEnvironment:
 
 
 SuperserveEnvironment.PRODUCTION = SuperserveEnvironment(
-    base="https://api.superserve.ai", sandbox_data_plane="https://boxd-.sandbox.superserve.ai"
-)
-SuperserveEnvironment.STAGING = SuperserveEnvironment(
-    base="https://api-staging.superserve.ai", sandbox_data_plane="https://boxd-.sandbox.superserve.ai"
-)
-SuperserveEnvironment.LOCAL = SuperserveEnvironment(
-    base="http://localhost:8080", sandbox_data_plane="https://boxd-.sandbox.superserve.ai"
+    base="https://api.superserve.ai", sandbox_data_plane="https://boxd.sandbox.superserve.ai"
 )

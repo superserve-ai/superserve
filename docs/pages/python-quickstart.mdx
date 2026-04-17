@@ -81,7 +81,7 @@ sandbox = client.sandboxes.create_sandbox(name="my-sandbox")
 data_plane = Superserve(
     api_key=os.environ["SUPERSERVE_API_KEY"],
     environment=SuperserveEnvironment(
-        base="https://api-staging.superserve.ai",
+        base="https://api.superserve.ai",
         sandbox_data_plane=f"https://boxd-{sandbox.id}.sandbox.superserve.ai",
     ),
 )

@@ -17,12 +17,10 @@ from __future__ import annotations
 import asyncio
 import os
 import time
-from typing import Optional
+from collections.abc import Iterable
 
 import pytest
-
 from superserve import AsyncSuperserve, Superserve
-
 
 SKIP_IF_NO_CREDS = pytest.mark.skipif(
     not os.environ.get("SUPERSERVE_API_KEY"),
@@ -30,47 +28,53 @@ SKIP_IF_NO_CREDS = pytest.mark.skipif(
 )
 
 
+def _targets(expected: str | Iterable[str]) -> tuple[str, ...]:
+    return (expected,) if isinstance(expected, str) else tuple(expected)
+
+
 def wait_for_status(
     client: Superserve,
     sandbox_id: str,
-    expected: str,  # accepts any status string (e.g. "paused" — spec drift)
+    expected: str | Iterable[str],
     *,
     timeout_s: float = 60.0,
     interval_s: float = 2.0,
 ):
-    """Poll `get_sandbox` until the sandbox reaches `expected`, or raise."""
+    """Poll `get_sandbox` until the sandbox reaches any of `expected`, or raise."""
+    targets = _targets(expected)
     deadline = time.monotonic() + timeout_s
-    last_status: Optional[str] = None
+    last_status: str | None = None
     while time.monotonic() < deadline:
         sandbox = client.sandboxes.get_sandbox(sandbox_id)
         last_status = sandbox.status
-        if sandbox.status == expected:
+        if sandbox.status in targets:
             return sandbox
         time.sleep(interval_s)
     raise TimeoutError(
         f"Timed out after {timeout_s}s waiting for sandbox {sandbox_id} "
-        f"to reach status {expected!r}. Last observed: {last_status!r}."
+        f"to reach status {targets!r}. Last observed: {last_status!r}."
     )
 
 
 async def async_wait_for_status(
     client: AsyncSuperserve,
     sandbox_id: str,
-    expected: str,
+    expected: str | Iterable[str],
     *,
     timeout_s: float = 60.0,
     interval_s: float = 2.0,
 ):
     """Async variant of `wait_for_status` for `AsyncSuperserve`."""
+    targets = _targets(expected)
     deadline = time.monotonic() + timeout_s
-    last_status: Optional[str] = None
+    last_status: str | None = None
     while time.monotonic() < deadline:
         sandbox = await client.sandboxes.get_sandbox(sandbox_id)
         last_status = sandbox.status
-        if sandbox.status == expected:
+        if sandbox.status in targets:
             return sandbox
         await asyncio.sleep(interval_s)
     raise TimeoutError(
         f"Timed out after {timeout_s}s waiting for sandbox {sandbox_id} "
-        f"to reach status {expected!r}. Last observed: {last_status!r}."
+        f"to reach status {targets!r}. Last observed: {last_status!r}."
     )

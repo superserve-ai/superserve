@@ -19,11 +19,11 @@ import {
   Field,
   HighlightedCode,
   Input,
-  Select,
-  SelectItem,
-  SelectPopup,
-  SelectTrigger,
-  SelectValue,
+  // Select, // TODO: re-enable when multiple snapshots are available
+  // SelectItem,
+  // SelectPopup,
+  // SelectTrigger,
+  // SelectValue,
 } from "@superserve/ui"
 import { AnimatePresence, LayoutGroup, motion } from "motion/react"
 import { usePostHog } from "posthog-js/react"
@@ -311,6 +311,7 @@ export function CreateSandboxDialog({
                 />
               </Field>
 
+              {/* TODO: re-enable when multiple snapshots are available
               <Field label="Snapshot" description="More snapshots coming soon">
                 <Select defaultValue="base">
                   <SelectTrigger>
@@ -321,20 +322,7 @@ export function CreateSandboxDialog({
                   </SelectPopup>
                 </Select>
               </Field>
-
-              <Field
-                label="Timeout"
-                description="Auto-delete after this many seconds (max 604800 = 7 days)"
-              >
-                <Input
-                  type="number"
-                  placeholder="No timeout"
-                  min={1}
-                  max={604800}
-                  value={timeout}
-                  onChange={(e) => setTimeout(e.target.value)}
-                />
-              </Field>
+              */}
 
               <button
                 type="button"
@@ -362,6 +350,20 @@ export function CreateSandboxDialog({
                     className="overflow-hidden"
                   >
                     <div className="space-y-5">
+                      <Field
+                        label="Timeout"
+                        description="Auto-pause after this many seconds (max 604800 = 7 days)"
+                      >
+                        <Input
+                          type="number"
+                          placeholder="No timeout"
+                          min={1}
+                          max={604800}
+                          value={timeout}
+                          onChange={(e) => setTimeout(e.target.value)}
+                        />
+                      </Field>
+
                       <div className="space-y-4">
                         <span className="block text-sm font-medium text-foreground">
                           Network

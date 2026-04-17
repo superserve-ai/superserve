@@ -58,12 +58,12 @@ describe.skipIf(!hasCredentials())("sandboxes", () => {
 
   it("pauses the sandbox and transitions to paused", async () => {
     await client.sandboxes.pauseSandbox({ sandbox_id: sandboxId })
-    // Backend returns "paused"; spec still says "idle". Accept either.
-    const paused = await waitForStatus(client, sandboxId, "paused", {
+    // Backend may return "paused" or "idle" depending on version — spec drift.
+    const paused = await waitForStatus(client, sandboxId, ["paused", "idle"], {
       timeoutMs: 90_000,
     })
     expect(["paused", "idle"]).toContain(paused.status)
-  })
+  }, 120_000)
 
   it("resumes the sandbox and transitions back to active", async () => {
     await client.sandboxes.resumeSandbox({ sandbox_id: sandboxId })
@@ -71,5 +71,5 @@ describe.skipIf(!hasCredentials())("sandboxes", () => {
       timeoutMs: 90_000,
     })
     expect(resumed.status).toBe("active")
-  })
+  }, 120_000)
 })

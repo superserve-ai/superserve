@@ -1,5 +1,4 @@
 import pytest
-
 from _helpers import SKIP_IF_NO_CREDS, wait_for_status
 
 pytestmark = SKIP_IF_NO_CREDS
@@ -51,8 +50,8 @@ def test_patch_sandbox_accepts_metadata(client, sandbox, run_id):
 
 def test_pause_and_resume_lifecycle(client, sandbox):
     client.sandboxes.pause_sandbox(sandbox.id)
-    # Backend returns "paused"; spec still says "idle". Accept either.
-    paused = wait_for_status(client, sandbox.id, "paused", timeout_s=90)
+    # Backend may return "paused" or "idle" depending on version — spec drift.
+    paused = wait_for_status(client, sandbox.id, ("paused", "idle"), timeout_s=90)
     assert paused.status in ("paused", "idle")
 
     client.sandboxes.resume_sandbox(sandbox.id)

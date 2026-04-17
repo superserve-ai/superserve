@@ -2,7 +2,7 @@
 
 import type { Icon } from "@phosphor-icons/react"
 import {
-  CameraIcon,
+  // CameraIcon, // TODO: re-enable when Snapshots ships
   ChartBarIcon,
   ClipboardTextIcon,
   CubeIcon,
@@ -18,17 +18,13 @@ import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 
-interface CommandPaletteProps {
-  onCreateSandbox?: () => void
-}
-
 interface CommandItem {
   label: string
   icon: Icon
   onSelect: () => void
 }
 
-export function CommandPalette({ onCreateSandbox }: CommandPaletteProps) {
+export function CommandPalette() {
   const [open, setOpen] = useState(false)
   const [hoveredLabel, setHoveredLabel] = useState<string | null>(null)
   const router = useRouter()
@@ -58,11 +54,12 @@ export function CommandPalette({ onCreateSandbox }: CommandPaletteProps) {
       icon: CubeIcon,
       onSelect: () => navigate("/sandboxes"),
     },
-    {
-      label: "Snapshots",
-      icon: CameraIcon,
-      onSelect: () => navigate("/snapshots"),
-    },
+    // TODO: re-enable when Snapshots ships
+    // {
+    //   label: "Snapshots",
+    //   icon: CameraIcon,
+    //   onSelect: () => navigate("/snapshots"),
+    // },
     {
       label: "Audit Logs",
       icon: ClipboardTextIcon,
@@ -94,15 +91,12 @@ export function CommandPalette({ onCreateSandbox }: CommandPaletteProps) {
     {
       label: "Create Sandbox",
       icon: PlusIcon,
-      onSelect: () => {
-        setOpen(false)
-        onCreateSandbox?.()
-      },
+      onSelect: () => navigate("/sandboxes?create=1"),
     },
     {
       label: "Create API Key",
       icon: KeyIcon,
-      onSelect: () => navigate("/api-keys"),
+      onSelect: () => navigate("/api-keys?create=1"),
     },
   ]
 
