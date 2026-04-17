@@ -147,7 +147,7 @@ are always strings. Example: `?metadata.env=prod`.
 <dd>
 
 Creates a sandbox and returns immediately with `status: starting`.
-The VM boots asynchronously. Poll `GET /sandboxes/{id}` until
+The VM starts asynchronously. Poll `GET /sandboxes/{id}` until
 `status` is `active` before running commands.
 </dd>
 </dl>

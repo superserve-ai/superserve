@@ -96,7 +96,7 @@ The TS SDK does not currently expose a `files` resource — the backend's `opena
 ## Why this is separate from the CI test pipeline
 
 1. **Credentials.** Running on every PR would require a CI secret, generate load on staging, and cost money.
-2. **Speed.** A full suite run is ~30–90 seconds depending on sandbox boot times. The regular `test` task is sub-second.
+2. **Speed.** A full suite run is ~30–90 seconds depending on sandbox start times. The regular `test` task is sub-second.
 3. **Flakiness domain.** E2E failures can indicate backend issues, network issues, quota issues — not SDK bugs. Mixing them with unit tests muddies the signal.
 
 ### Recommended CI integration (not included by default)
