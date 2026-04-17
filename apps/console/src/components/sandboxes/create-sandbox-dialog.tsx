@@ -324,20 +324,6 @@ export function CreateSandboxDialog({
               </Field>
               */}
 
-              <Field
-                label="Timeout"
-                description="Auto-delete after this many seconds (max 604800 = 7 days)"
-              >
-                <Input
-                  type="number"
-                  placeholder="No timeout"
-                  min={1}
-                  max={604800}
-                  value={timeout}
-                  onChange={(e) => setTimeout(e.target.value)}
-                />
-              </Field>
-
               <button
                 type="button"
                 onClick={() => setShowAdvanced(!showAdvanced)}
@@ -364,6 +350,20 @@ export function CreateSandboxDialog({
                     className="overflow-hidden"
                   >
                     <div className="space-y-5">
+                      <Field
+                        label="Timeout"
+                        description="Auto-pause after this many seconds (max 604800 = 7 days)"
+                      >
+                        <Input
+                          type="number"
+                          placeholder="No timeout"
+                          min={1}
+                          max={604800}
+                          value={timeout}
+                          onChange={(e) => setTimeout(e.target.value)}
+                        />
+                      </Field>
+
                       <div className="space-y-4">
                         <span className="block text-sm font-medium text-foreground">
                           Network
