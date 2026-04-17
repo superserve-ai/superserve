@@ -42,7 +42,7 @@ console.log(sandbox.id)      // "sbx_..."
 console.log(sandbox.status)  // "starting" → "active"
 ```
 
-Sandboxes boot from a clean VM by default. To boot from a previously saved snapshot, pass `from_snapshot`:
+Sandboxes start from a clean VM by default. To start from a previously saved snapshot, pass `from_snapshot`:
 
 ```ts
 const sandbox = await client.sandboxes.createSandbox({
@@ -62,45 +62,6 @@ const result = await client.exec.command({
 console.log(result.stdout)    // "Hello from Superserve!\n"
 console.log(result.exit_code) // 0
 ```
-
-For long-running or streaming commands, use `client.exec.commandStream(...)` instead — it returns a stream of output events rather than waiting for the whole command to finish.
-
-## Upload and download files
-
-File transfer goes **directly to the sandbox's data-plane proxy** at `boxd-{sandbox_id}.sandbox.superserve.ai`, not through the control plane. This keeps large uploads from bottlenecking on `api.superserve.ai`. The per-sandbox `access_token` on `SandboxResponse` is the auth credential for the data plane.
-
-Because the host is per-sandbox, you pass a `baseUrl` and `accessToken` on each file call:
-
-```ts
-const fileOpts = (s: typeof sandbox) => ({
-  baseUrl: `https://boxd-${s.id}.sandbox.superserve.ai`,
-  accessToken: s.access_token!,
-})
-
-// Upload
-const data = new TextEncoder().encode("hello from typescript\n")
-await client.files.uploadFile(data, { path: "/home/user/greeting.txt" }, fileOpts(sandbox))
-
-// Download
-const response = await client.files.downloadFile(
-  { path: "/home/user/greeting.txt" },
-  fileOpts(sandbox),
-)
-const blob = response instanceof Blob ? response : new Blob([response as any])
-console.log(await blob.text())  // "hello from typescript\n"
-```
-
-`uploadFile` accepts anything compatible with `core.file.Uploadable` — `Uint8Array`, `ArrayBuffer`, `Blob`, `File`, `ReadableStream`, or a Node `Buffer`/`Readable`. For uploading from disk in Node or Bun, the `FromPath` form reads the file for you:
-
-```ts
-await client.files.uploadFile(
-  { path: "./local.txt" },                    // FromPath — reads local.txt
-  { path: "/home/user/remote.txt" },          // destination inside sandbox
-  fileOpts(sandbox),
-)
-```
-
-`downloadFile` returns a `core.BinaryResponse` — a `Blob` in browser/Bun or a `ReadableStream` in Node. Consume it as appropriate for your runtime.
 
 ## Clean up
 
