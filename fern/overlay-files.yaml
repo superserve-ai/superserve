@@ -38,6 +38,12 @@ servers:
     x-fern-server-name: Production
 
 paths:
+  # Hide the internal health check from public SDK + docs. The endpoint
+  # stays in the backend openapi spec but is marked ignored here.
+  /health:
+    get:
+      x-fern-ignore: true
+
   /files:
     servers:
       - url: "https://boxd-{sandbox_id}.sandbox.superserve.ai"
