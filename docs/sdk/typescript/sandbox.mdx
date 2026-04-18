@@ -106,7 +106,7 @@ await Sandbox.killById("sandbox-uuid")
 
 ### `sandbox.getInfo()`
 
-Refresh the sandbox info from the API. Updates `status` and `metadata` on the instance.
+Fetch fresh sandbox info from the API. The returned `SandboxInfo` reflects the current state; the instance's own `status` and `metadata` are snapshots from construction and are not mutated — use the return value.
 
 ```typescript
 const info = await sandbox.getInfo()

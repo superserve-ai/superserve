@@ -245,8 +245,6 @@ class Sandbox:
             json_body=body,
             client=self._http_client,
         )
-        if metadata is not None:
-            self.metadata = metadata
 
     def wait_for_ready(self, timeout_seconds: float = 60.0) -> SandboxInfo:
         """Wait for this sandbox to reach active status."""

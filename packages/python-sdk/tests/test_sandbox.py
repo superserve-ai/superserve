@@ -162,7 +162,9 @@ class TestInstanceMethods:
             sbx = Sandbox.connect("sbx-1")
             try:
                 sbx.update(metadata={"env": "prod"})
-                assert sbx.metadata == {"env": "prod"}
                 assert route.call_count == 1
+                # metadata is a readonly snapshot; callers must use get_info()
+                # for fresh data. This matches the TS SDK contract.
+                assert sbx.metadata == {}
             finally:
                 sbx._close_http_client()

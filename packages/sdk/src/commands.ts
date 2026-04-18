@@ -78,7 +78,10 @@ export class Commands {
       url: `${this._baseUrl}/sandboxes/${this._sandboxId}/exec`,
       headers,
       body,
-      timeoutMs: options.timeoutMs,
+      // Add a 5s buffer so the server-side command timeout fires first
+      // and returns its proper response before the client aborts.
+      timeoutMs:
+        options.timeoutMs !== undefined ? options.timeoutMs + 5_000 : undefined,
       signal: options.signal,
     })
     return {
@@ -103,7 +106,9 @@ export class Commands {
       url: `${this._baseUrl}/sandboxes/${this._sandboxId}/exec/stream`,
       headers,
       body,
-      timeoutMs: options.timeoutMs,
+      // Idle timeout (resets per chunk); +5s matches Python SDK parity.
+      timeoutMs:
+        options.timeoutMs !== undefined ? options.timeoutMs + 5_000 : undefined,
       signal: options.signal,
       onEvent: (event: ApiExecStreamEvent) => {
         if (event.stdout) {

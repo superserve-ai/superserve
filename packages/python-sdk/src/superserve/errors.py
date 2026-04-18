@@ -20,25 +20,35 @@ class SandboxError(Exception):
 
 
 class AuthenticationError(SandboxError):
-    def __init__(self, message: str = "Missing or invalid API key") -> None:
-        super().__init__(message, status_code=401)
+    def __init__(
+        self,
+        message: str = "Missing or invalid API key",
+        code: Optional[str] = None,
+    ) -> None:
+        super().__init__(message, status_code=401, code=code)
 
 
 class ValidationError(SandboxError):
-    def __init__(self, message: str) -> None:
-        super().__init__(message, status_code=400)
+    def __init__(self, message: str, code: Optional[str] = None) -> None:
+        super().__init__(message, status_code=400, code=code)
 
 
 class NotFoundError(SandboxError):
-    def __init__(self, message: str = "Resource not found") -> None:
-        super().__init__(message, status_code=404)
+    def __init__(
+        self,
+        message: str = "Resource not found",
+        code: Optional[str] = None,
+    ) -> None:
+        super().__init__(message, status_code=404, code=code)
 
 
 class ConflictError(SandboxError):
     def __init__(
-        self, message: str = "Sandbox is not in a valid state for this operation"
+        self,
+        message: str = "Sandbox is not in a valid state for this operation",
+        code: Optional[str] = None,
     ) -> None:
-        super().__init__(message, status_code=409)
+        super().__init__(message, status_code=409, code=code)
 
 
 class SandboxTimeoutError(SandboxError):
@@ -49,8 +59,12 @@ class SandboxTimeoutError(SandboxError):
 
 
 class ServerError(SandboxError):
-    def __init__(self, message: str = "Internal server error") -> None:
-        super().__init__(message, status_code=500)
+    def __init__(
+        self,
+        message: str = "Internal server error",
+        code: Optional[str] = None,
+    ) -> None:
+        super().__init__(message, status_code=500, code=code)
 
 
 def map_api_error(status_code: int, body: Dict[str, Any]) -> SandboxError:
@@ -60,13 +74,13 @@ def map_api_error(status_code: int, body: Dict[str, Any]) -> SandboxError:
     code = error_data.get("code")
 
     if status_code == 400:
-        return ValidationError(message)
+        return ValidationError(message, code=code)
     elif status_code == 401:
-        return AuthenticationError(message)
+        return AuthenticationError(message, code=code)
     elif status_code == 404:
-        return NotFoundError(message)
+        return NotFoundError(message, code=code)
     elif status_code == 409:
-        return ConflictError(message)
+        return ConflictError(message, code=code)
     elif status_code >= 500:
-        return ServerError(message)
+        return ServerError(message, code=code)
     return SandboxError(message, status_code=status_code, code=code)

@@ -65,8 +65,8 @@ export class TimeoutError extends SandboxError {
 }
 
 export class ServerError extends SandboxError {
-  constructor(message = "Internal server error") {
-    super(message, 500)
+  constructor(message = "Internal server error", code?: string) {
+    super(message, 500, code)
     this.name = "ServerError"
   }
 }
@@ -92,7 +92,7 @@ export function mapApiError(
     case 409:
       return new ConflictError(message, code)
     default:
-      if (status >= 500) return new ServerError(message)
+      if (status >= 500) return new ServerError(message, code)
       return new SandboxError(message, status, code)
   }
 }
