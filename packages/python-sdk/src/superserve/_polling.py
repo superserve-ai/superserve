@@ -7,6 +7,8 @@ import random
 import time
 from typing import Optional
 
+import httpx
+
 from ._config import ResolvedConfig
 from ._http import api_request, async_api_request
 from .errors import SandboxError, SandboxTimeoutError
@@ -20,6 +22,7 @@ def wait_for_status(
     *,
     timeout_seconds: float = 60.0,
     interval_seconds: float = 1.0,
+    client: Optional[httpx.Client] = None,
 ) -> SandboxInfo:
     """Poll GET /sandboxes/{id} until status matches target."""
     deadline = time.monotonic() + timeout_seconds
@@ -30,6 +33,7 @@ def wait_for_status(
             "GET",
             f"{config.base_url}/sandboxes/{sandbox_id}",
             headers={"X-API-Key": config.api_key},
+            client=client,
         )
         last_status = raw.get("status")
         if last_status == target.value:
@@ -62,6 +66,7 @@ async def async_wait_for_status(
     *,
     timeout_seconds: float = 60.0,
     interval_seconds: float = 1.0,
+    client: Optional[httpx.AsyncClient] = None,
 ) -> SandboxInfo:
     """Async variant of wait_for_status."""
     deadline = time.monotonic() + timeout_seconds
@@ -72,6 +77,7 @@ async def async_wait_for_status(
             "GET",
             f"{config.base_url}/sandboxes/{sandbox_id}",
             headers={"X-API-Key": config.api_key},
+            client=client,
         )
         last_status = raw.get("status")
         if last_status == target.value:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+import httpx
+
 from ._config import ResolvedConfig, resolve_config
 from ._http import api_request
 from ._polling import wait_for_status
@@ -23,9 +25,15 @@ class Sandbox:
         self.metadata: Dict[str, str] = info.metadata
         self.access_token: str = info.access_token
         self._config = config
+        self._http_client: httpx.Client = httpx.Client(timeout=30.0)
+        self._closed = False
 
-        self.commands = Commands(config.base_url, self.id, config.api_key)
-        self.files = Files(self.id, config.sandbox_host, self.access_token)
+        self.commands = Commands(
+            config.base_url, self.id, config.api_key, client=self._http_client
+        )
+        self.files = Files(
+            self.id, config.sandbox_host, self.access_token, client=self._http_client
+        )
 
     @classmethod
     def create(
@@ -144,7 +152,20 @@ class Sandbox:
         """Update instance state from fresh API response."""
         if info.access_token and info.access_token != self.access_token:
             self.access_token = info.access_token
-            self.files = Files(self.id, self._config.sandbox_host, self.access_token)
+            self.files = Files(
+                self.id,
+                self._config.sandbox_host,
+                self.access_token,
+                client=self._http_client,
+            )
+
+    def _close_http_client(self) -> None:
+        if not self._closed:
+            self._closed = True
+            try:
+                self._http_client.close()
+            except Exception:
+                pass
 
     def get_info(self) -> SandboxInfo:
         """Refresh this sandbox's info from the API."""
@@ -152,6 +173,7 @@ class Sandbox:
             "GET",
             f"{self._config.base_url}/sandboxes/{self.id}",
             headers={"X-API-Key": self._config.api_key},
+            client=self._http_client,
         )
         info = to_sandbox_info(raw)
         self._refresh_from(info)
@@ -163,6 +185,7 @@ class Sandbox:
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/pause",
             headers={"X-API-Key": self._config.api_key},
+            client=self._http_client,
         )
         info = to_sandbox_info(raw)
         self._refresh_from(info)
@@ -174,6 +197,7 @@ class Sandbox:
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/resume",
             headers={"X-API-Key": self._config.api_key},
+            client=self._http_client,
         )
         info = to_sandbox_info(raw)
         self._refresh_from(info)
@@ -186,9 +210,12 @@ class Sandbox:
                 "DELETE",
                 f"{self._config.base_url}/sandboxes/{self.id}",
                 headers={"X-API-Key": self._config.api_key},
+                client=self._http_client,
             )
         except NotFoundError:
             pass  # Already deleted
+        finally:
+            self._close_http_client()
 
     def update(
         self,
@@ -211,6 +238,7 @@ class Sandbox:
             f"{self._config.base_url}/sandboxes/{self.id}",
             headers={"X-API-Key": self._config.api_key},
             json_body=body,
+            client=self._http_client,
         )
         if metadata is not None:
             self.metadata = metadata
@@ -218,7 +246,11 @@ class Sandbox:
     def wait_for_ready(self, timeout_seconds: float = 60.0) -> SandboxInfo:
         """Wait for this sandbox to reach active status."""
         info = wait_for_status(
-            self.id, SandboxStatus.ACTIVE, self._config, timeout_seconds=timeout_seconds
+            self.id,
+            SandboxStatus.ACTIVE,
+            self._config,
+            timeout_seconds=timeout_seconds,
+            client=self._http_client,
         )
         self._refresh_from(info)
         return info

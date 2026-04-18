@@ -126,16 +126,17 @@
     },
     "packages/python-sdk": {
       "name": "@superserve/python-sdk",
-      "version": "0.4.0",
+      "version": "0.5.0",
     },
     "packages/sdk": {
       "name": "@superserve/sdk",
-      "version": "0.2.4",
+      "version": "0.6.0",
       "devDependencies": {
         "@superserve/typescript-config": "workspace:*",
         "@types/node": "^25.5.2",
         "tsup": "^8.0.0",
         "typescript": "^5.7.0",
+        "vitest": "^4.0.0",
       },
     },
     "packages/supabase": {

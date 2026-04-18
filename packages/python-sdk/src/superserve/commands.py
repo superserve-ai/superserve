@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 
-from ._http import api_request, async_api_request, stream_sse, async_stream_sse
+import httpx
+
+from ._http import api_request, async_api_request, async_stream_sse, stream_sse
 from .errors import SandboxError
 from .types import CommandResult
 
@@ -12,10 +14,17 @@ from .types import CommandResult
 class Commands:
     """Sync command execution. Access as ``sandbox.commands``."""
 
-    def __init__(self, base_url: str, sandbox_id: str, api_key: str) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        sandbox_id: str,
+        api_key: str,
+        client: Optional[httpx.Client] = None,
+    ) -> None:
         self._base_url = base_url
         self._sandbox_id = sandbox_id
         self._api_key = api_key
+        self._client = client
 
     def run(
         self,
@@ -55,6 +64,7 @@ class Commands:
             headers=headers,
             json_body=body,
             timeout=float(timeout_seconds) + 5.0 if timeout_seconds is not None else 30.0,
+            client=self._client,
         )
         return CommandResult(
             stdout=raw.get("stdout", ""),
@@ -97,6 +107,7 @@ class Commands:
             json_body=body,
             timeout=float(timeout_seconds) + 5.0 if timeout_seconds is not None else 300.0,
             on_event=handle_event,
+            client=self._client,
         )
 
         if not saw_finished:
@@ -114,10 +125,17 @@ class Commands:
 class AsyncCommands:
     """Async command execution. Access as ``sandbox.commands``."""
 
-    def __init__(self, base_url: str, sandbox_id: str, api_key: str) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        sandbox_id: str,
+        api_key: str,
+        client: Optional[httpx.AsyncClient] = None,
+    ) -> None:
         self._base_url = base_url
         self._sandbox_id = sandbox_id
         self._api_key = api_key
+        self._client = client
 
     async def run(
         self,
@@ -157,6 +175,7 @@ class AsyncCommands:
             headers=headers,
             json_body=body,
             timeout=float(timeout_seconds) + 5.0 if timeout_seconds is not None else 30.0,
+            client=self._client,
         )
         return CommandResult(
             stdout=raw.get("stdout", ""),
@@ -199,6 +218,7 @@ class AsyncCommands:
             json_body=body,
             timeout=float(timeout_seconds) + 5.0 if timeout_seconds is not None else 300.0,
             on_event=handle_event,
+            client=self._client,
         )
 
         if not saw_finished:

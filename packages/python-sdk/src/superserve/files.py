@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Optional, Union
+from typing import Any, Dict, Optional, Union
 from urllib.parse import quote
+
+import httpx
 
 from ._config import data_plane_url
 from ._http import (
-    upload_bytes,
-    download_bytes,
-    async_upload_bytes,
     async_download_bytes,
+    async_upload_bytes,
+    download_bytes,
+    upload_bytes,
 )
 from .errors import ValidationError
 
@@ -25,9 +27,16 @@ def _validate_path(path: str) -> None:
 class Files:
     """Sync file operations. Access as ``sandbox.files``."""
 
-    def __init__(self, sandbox_id: str, sandbox_host: str, access_token: str) -> None:
+    def __init__(
+        self,
+        sandbox_id: str,
+        sandbox_host: str,
+        access_token: str,
+        client: Optional[httpx.Client] = None,
+    ) -> None:
         self._base_url = data_plane_url(sandbox_id, sandbox_host)
         self._access_token = access_token
+        self._client = client
 
     def write(
         self, path: str, content: Union[str, bytes], *, timeout: Optional[float] = None
@@ -37,10 +46,11 @@ class Files:
         if isinstance(content, str):
             content = content.encode("utf-8")
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
-        kwargs = {
+        kwargs: Dict[str, Any] = {
             "url": url,
             "headers": {"X-Access-Token": self._access_token},
             "content": content,
+            "client": self._client,
         }
         if timeout is not None:
             kwargs["timeout"] = timeout
@@ -50,7 +60,11 @@ class Files:
         """Read a file from the sandbox as raw bytes."""
         _validate_path(path)
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
-        kwargs = {"url": url, "headers": {"X-Access-Token": self._access_token}}
+        kwargs: Dict[str, Any] = {
+            "url": url,
+            "headers": {"X-Access-Token": self._access_token},
+            "client": self._client,
+        }
         if timeout is not None:
             kwargs["timeout"] = timeout
         return download_bytes(**kwargs)
@@ -64,9 +78,16 @@ class Files:
 class AsyncFiles:
     """Async file operations. Access as ``sandbox.files``."""
 
-    def __init__(self, sandbox_id: str, sandbox_host: str, access_token: str) -> None:
+    def __init__(
+        self,
+        sandbox_id: str,
+        sandbox_host: str,
+        access_token: str,
+        client: Optional[httpx.AsyncClient] = None,
+    ) -> None:
         self._base_url = data_plane_url(sandbox_id, sandbox_host)
         self._access_token = access_token
+        self._client = client
 
     async def write(
         self, path: str, content: Union[str, bytes], *, timeout: Optional[float] = None
@@ -76,10 +97,11 @@ class AsyncFiles:
         if isinstance(content, str):
             content = content.encode("utf-8")
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
-        kwargs = {
+        kwargs: Dict[str, Any] = {
             "url": url,
             "headers": {"X-Access-Token": self._access_token},
             "content": content,
+            "client": self._client,
         }
         if timeout is not None:
             kwargs["timeout"] = timeout
@@ -89,7 +111,11 @@ class AsyncFiles:
         """Read a file from the sandbox as raw bytes."""
         _validate_path(path)
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
-        kwargs = {"url": url, "headers": {"X-Access-Token": self._access_token}}
+        kwargs: Dict[str, Any] = {
+            "url": url,
+            "headers": {"X-Access-Token": self._access_token},
+            "client": self._client,
+        }
         if timeout is not None:
             kwargs["timeout"] = timeout
         return await async_download_bytes(**kwargs)
