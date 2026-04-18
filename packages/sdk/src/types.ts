@@ -28,7 +28,11 @@ export interface SandboxInfo {
   status: SandboxStatus
   vcpuCount: number
   memoryMib: number
-  accessToken: string
+  /**
+   * Per-sandbox access token for data-plane operations. Only returned on
+   * create/get/connect — may be absent on list responses.
+   */
+  accessToken?: string
   snapshotId?: string
   createdAt: Date
   timeoutSeconds?: number
@@ -135,16 +139,19 @@ export interface ApiExecStreamEvent {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** @internal Convert an API sandbox response to a SandboxInfo. */
+/**
+ * @internal Convert an API sandbox response to a SandboxInfo.
+ *
+ * Requires only `id` and `status` — `access_token` is optional because the
+ * list endpoint (`GET /sandboxes`) does not return it on each item. Call
+ * sites that need the token (Sandbox.create/connect) validate separately.
+ */
 export function toSandboxInfo(raw: ApiSandboxResponse): SandboxInfo {
   if (!raw.id) {
     throw new Error("Invalid API response: missing sandbox id")
   }
   if (!raw.status) {
     throw new Error("Invalid API response: missing sandbox status")
-  }
-  if (!raw.access_token) {
-    throw new Error("Invalid API response: missing access_token")
   }
 
   return {

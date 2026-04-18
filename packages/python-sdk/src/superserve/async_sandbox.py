@@ -10,7 +10,7 @@ from ._config import ResolvedConfig, resolve_config
 from ._http import async_api_request
 from ._polling import async_wait_for_status
 from .commands import AsyncCommands
-from .errors import NotFoundError
+from .errors import NotFoundError, SandboxError
 from .files import AsyncFiles
 from .types import NetworkConfig, SandboxInfo, SandboxStatus, to_sandbox_info
 
@@ -19,6 +19,11 @@ class AsyncSandbox:
     """Async variant of Sandbox with identical API surface."""
 
     def __init__(self, info: SandboxInfo, config: ResolvedConfig) -> None:
+        if not info.access_token:
+            raise SandboxError(
+                "Invalid API response: missing access_token "
+                "(required for a live Sandbox instance)"
+            )
         self.id: str = info.id
         self.name: str = info.name
         self.status: SandboxStatus = info.status

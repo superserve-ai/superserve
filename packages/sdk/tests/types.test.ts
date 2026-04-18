@@ -48,10 +48,10 @@ describe("toSandboxInfo", () => {
     )
   })
 
-  it("throws when access_token is missing", () => {
-    expect(() => toSandboxInfo({ ...valid, access_token: undefined })).toThrow(
-      /missing access_token/,
-    )
+  it("accepts a missing access_token (list responses omit it)", () => {
+    const info = toSandboxInfo({ ...valid, access_token: undefined })
+    expect(info.id).toBe(valid.id)
+    expect(info.accessToken).toBeUndefined()
   })
 
   it("defaults optional fields when missing", () => {

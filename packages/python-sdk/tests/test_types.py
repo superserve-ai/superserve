@@ -59,11 +59,13 @@ class TestToSandboxInfo:
         with pytest.raises(ValueError, match="status"):
             to_sandbox_info(raw)
 
-    def test_missing_access_token_raises(self) -> None:
+    def test_missing_access_token_is_allowed(self) -> None:
+        """List responses omit access_token per-item; SandboxInfo reflects that."""
         raw = _valid_raw()
         del raw["access_token"]
-        with pytest.raises(ValueError, match="access_token"):
-            to_sandbox_info(raw)
+        info = to_sandbox_info(raw)
+        assert info.id == raw["id"]
+        assert info.access_token is None
 
     def test_missing_optional_fields_uses_defaults(self) -> None:
         raw = {

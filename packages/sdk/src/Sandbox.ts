@@ -16,7 +16,7 @@
 
 import { Commands } from "./commands.js"
 import { type ResolvedConfig, resolveConfig } from "./config.js"
-import { NotFoundError } from "./errors.js"
+import { NotFoundError, SandboxError } from "./errors.js"
 import { Files } from "./files.js"
 import { request, requestVoid } from "./http.js"
 import { waitForStatus } from "./polling.js"
@@ -61,6 +61,11 @@ export class Sandbox {
 
   /** @internal — Use Sandbox.create() or Sandbox.connect() instead. */
   private constructor(info: SandboxInfo, config: ResolvedConfig) {
+    if (!info.accessToken) {
+      throw new SandboxError(
+        "Invalid API response: missing access_token (required for a live Sandbox instance)",
+      )
+    }
     this.id = info.id
     this.name = info.name
     this.status = info.status
