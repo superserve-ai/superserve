@@ -41,4 +41,5 @@ export type {
   SandboxListOptions,
   SandboxStatus,
   SandboxUpdateOptions,
+  SandboxWaitOptions,
 } from "./types.js"

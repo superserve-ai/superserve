@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import random
 import time
 from typing import Optional
 
 from ._config import ResolvedConfig
 from ._http import api_request, async_api_request
-from .errors import TimeoutError
+from .errors import SandboxError, SandboxTimeoutError
 from .types import SandboxInfo, SandboxStatus, to_sandbox_info
 
 
@@ -33,9 +34,22 @@ def wait_for_status(
         last_status = raw.get("status")
         if last_status == target.value:
             return to_sandbox_info(raw)
-        time.sleep(interval_seconds)
 
-    raise TimeoutError(
+        # Fail fast on terminal states
+        if target.value != "failed" and last_status == "failed":
+            raise SandboxError(
+                f"Sandbox {sandbox_id} reached 'failed' state before '{target.value}'"
+            )
+        if target.value != "deleted" and last_status == "deleted":
+            raise SandboxError(
+                f"Sandbox {sandbox_id} was deleted while waiting for '{target.value}'"
+            )
+
+        # Linear poll with ±20% jitter
+        jitter = interval_seconds * (0.8 + random.random() * 0.4)
+        time.sleep(jitter)
+
+    raise SandboxTimeoutError(
         f"Timed out after {timeout_seconds}s waiting for sandbox {sandbox_id} "
         f'to reach "{target.value}". Last status: "{last_status or "unknown"}".'
     )
@@ -62,9 +76,20 @@ async def async_wait_for_status(
         last_status = raw.get("status")
         if last_status == target.value:
             return to_sandbox_info(raw)
-        await asyncio.sleep(interval_seconds)
 
-    raise TimeoutError(
+        if target.value != "failed" and last_status == "failed":
+            raise SandboxError(
+                f"Sandbox {sandbox_id} reached 'failed' state before '{target.value}'"
+            )
+        if target.value != "deleted" and last_status == "deleted":
+            raise SandboxError(
+                f"Sandbox {sandbox_id} was deleted while waiting for '{target.value}'"
+            )
+
+        jitter = interval_seconds * (0.8 + random.random() * 0.4)
+        await asyncio.sleep(jitter)
+
+    raise SandboxTimeoutError(
         f"Timed out after {timeout_seconds}s waiting for sandbox {sandbox_id} "
         f'to reach "{target.value}". Last status: "{last_status or "unknown"}".'
     )

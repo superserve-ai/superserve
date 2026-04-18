@@ -8,6 +8,7 @@ from ._config import ResolvedConfig, resolve_config
 from ._http import async_api_request
 from ._polling import async_wait_for_status
 from .commands import AsyncCommands
+from .errors import NotFoundError
 from .files import AsyncFiles
 from .types import NetworkConfig, SandboxInfo, SandboxStatus, to_sandbox_info
 
@@ -128,15 +129,24 @@ class AsyncSandbox:
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
     ) -> None:
-        """Delete a sandbox by ID."""
+        """Delete a sandbox by ID. Idempotent."""
         config = resolve_config(api_key=api_key, base_url=base_url)
-        await async_api_request(
-            "DELETE",
-            f"{config.base_url}/sandboxes/{sandbox_id}",
-            headers={"X-API-Key": config.api_key},
-        )
+        try:
+            await async_api_request(
+                "DELETE",
+                f"{config.base_url}/sandboxes/{sandbox_id}",
+                headers={"X-API-Key": config.api_key},
+            )
+        except NotFoundError:
+            pass  # Already deleted
 
     # Instance methods
+
+    def _refresh_from(self, info: SandboxInfo) -> None:
+        """Update instance state from fresh API response."""
+        if info.access_token and info.access_token != self.access_token:
+            self.access_token = info.access_token
+            self.files = AsyncFiles(self.id, self._config.sandbox_host, self.access_token)
 
     async def get_info(self) -> SandboxInfo:
         """Refresh this sandbox's info from the API."""
@@ -146,8 +156,7 @@ class AsyncSandbox:
             headers={"X-API-Key": self._config.api_key},
         )
         info = to_sandbox_info(raw)
-        self.status = info.status
-        self.metadata = info.metadata
+        self._refresh_from(info)
         return info
 
     async def pause(self) -> SandboxInfo:
@@ -158,7 +167,7 @@ class AsyncSandbox:
             headers={"X-API-Key": self._config.api_key},
         )
         info = to_sandbox_info(raw)
-        self.status = info.status
+        self._refresh_from(info)
         return info
 
     async def resume(self) -> SandboxInfo:
@@ -169,17 +178,19 @@ class AsyncSandbox:
             headers={"X-API-Key": self._config.api_key},
         )
         info = to_sandbox_info(raw)
-        self.status = info.status
+        self._refresh_from(info)
         return info
 
     async def kill(self) -> None:
-        """Delete this sandbox and all its resources."""
-        await async_api_request(
-            "DELETE",
-            f"{self._config.base_url}/sandboxes/{self.id}",
-            headers={"X-API-Key": self._config.api_key},
-        )
-        self.status = SandboxStatus.DELETED
+        """Delete this sandbox and all its resources. Idempotent."""
+        try:
+            await async_api_request(
+                "DELETE",
+                f"{self._config.base_url}/sandboxes/{self.id}",
+                headers={"X-API-Key": self._config.api_key},
+            )
+        except NotFoundError:
+            pass  # Already deleted
 
     async def update(
         self,
@@ -211,5 +222,14 @@ class AsyncSandbox:
         info = await async_wait_for_status(
             self.id, SandboxStatus.ACTIVE, self._config, timeout_seconds=timeout_seconds
         )
-        self.status = info.status
+        self._refresh_from(info)
         return info
+
+    def __repr__(self) -> str:
+        return f"AsyncSandbox(id={self.id!r}, name={self.name!r}, status={self.status.value!r})"
+
+    async def __aenter__(self) -> AsyncSandbox:
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        await self.kill()

@@ -16,6 +16,7 @@
 
 import { Commands } from "./commands.js"
 import { type ResolvedConfig, resolveConfig } from "./config.js"
+import { NotFoundError } from "./errors.js"
 import { Files } from "./files.js"
 import { request, requestVoid } from "./http.js"
 import { waitForStatus } from "./polling.js"
@@ -27,6 +28,7 @@ import type {
   SandboxListOptions,
   SandboxStatus,
   SandboxUpdateOptions,
+  SandboxWaitOptions,
 } from "./types.js"
 import { toSandboxInfo } from "./types.js"
 
@@ -37,11 +39,11 @@ export class Sandbox {
   /** Human-readable sandbox name. */
   readonly name: string
 
-  /** Current sandbox status. Call `getInfo()` to refresh. */
-  status: SandboxStatus
+  /** Sandbox status at construction time. Call getInfo() for the current status. */
+  readonly status: SandboxStatus
 
-  /** User-supplied metadata tags. */
-  metadata: Record<string, string>
+  /** User-supplied metadata tags at construction time. Call getInfo() to refresh. */
+  readonly metadata: Record<string, string>
 
   /**
    * Per-sandbox access token for data-plane operations.
@@ -108,6 +110,7 @@ export class Sandbox {
       url: `${config.baseUrl}/sandboxes`,
       headers: { "X-API-Key": config.apiKey },
       body,
+      signal: options.signal,
     })
 
     return new Sandbox(toSandboxInfo(raw), config)
@@ -133,6 +136,7 @@ export class Sandbox {
       method: "GET",
       url: `${config.baseUrl}/sandboxes/${sandboxId}`,
       headers: { "X-API-Key": config.apiKey },
+      signal: options.signal,
     })
 
     return new Sandbox(toSandboxInfo(raw), config)
@@ -165,6 +169,7 @@ export class Sandbox {
       method: "GET",
       url,
       headers: { "X-API-Key": config.apiKey },
+      signal: options.signal,
     })
 
     return raw.map(toSandboxInfo)
@@ -182,23 +187,31 @@ export class Sandbox {
       method: "GET",
       url: `${config.baseUrl}/sandboxes/${sandboxId}`,
       headers: { "X-API-Key": config.apiKey },
+      signal: options.signal,
     })
     return toSandboxInfo(raw)
   }
 
   /**
    * Delete a sandbox by ID.
+   *
+   * Idempotent: if the sandbox is already deleted, this is a no-op.
    */
   static async killById(
     sandboxId: string,
     options: ConnectionOptions = {},
   ): Promise<void> {
     const config = resolveConfig(options)
-    await requestVoid({
-      method: "DELETE",
-      url: `${config.baseUrl}/sandboxes/${sandboxId}`,
-      headers: { "X-API-Key": config.apiKey },
-    })
+    try {
+      await requestVoid({
+        method: "DELETE",
+        url: `${config.baseUrl}/sandboxes/${sandboxId}`,
+        headers: { "X-API-Key": config.apiKey },
+        signal: options.signal,
+      })
+    } catch (err) {
+      if (!(err instanceof NotFoundError)) throw err
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -206,7 +219,11 @@ export class Sandbox {
   // -------------------------------------------------------------------------
 
   /**
-   * Refresh this sandbox's info from the API. Updates `status` and `metadata`.
+   * Refresh this sandbox's info from the API and return the fresh data.
+   *
+   * Note: the returned SandboxInfo reflects the current state. The sandbox
+   * instance's own `status` / `metadata` properties are snapshots from
+   * construction and are not mutated — use the return value.
    */
   async getInfo(): Promise<SandboxInfo> {
     const raw = await request<ApiSandboxResponse>({
@@ -214,10 +231,7 @@ export class Sandbox {
       url: `${this._config.baseUrl}/sandboxes/${this.id}`,
       headers: { "X-API-Key": this._config.apiKey },
     })
-    const info = toSandboxInfo(raw)
-    this.status = info.status
-    this.metadata = info.metadata
-    return info
+    return toSandboxInfo(raw)
   }
 
   /**
@@ -230,9 +244,7 @@ export class Sandbox {
       url: `${this._config.baseUrl}/sandboxes/${this.id}/pause`,
       headers: { "X-API-Key": this._config.apiKey },
     })
-    const info = toSandboxInfo(raw)
-    this.status = info.status
-    return info
+    return toSandboxInfo(raw)
   }
 
   /**
@@ -245,21 +257,25 @@ export class Sandbox {
       url: `${this._config.baseUrl}/sandboxes/${this.id}/resume`,
       headers: { "X-API-Key": this._config.apiKey },
     })
-    const info = toSandboxInfo(raw)
-    this.status = info.status
-    return info
+    return toSandboxInfo(raw)
   }
 
   /**
    * Delete this sandbox and all its resources.
+   *
+   * Idempotent: if the sandbox is already deleted, this is a no-op.
    */
   async kill(): Promise<void> {
-    await requestVoid({
-      method: "DELETE",
-      url: `${this._config.baseUrl}/sandboxes/${this.id}`,
-      headers: { "X-API-Key": this._config.apiKey },
-    })
-    this.status = "deleted"
+    try {
+      await requestVoid({
+        method: "DELETE",
+        url: `${this._config.baseUrl}/sandboxes/${this.id}`,
+        headers: { "X-API-Key": this._config.apiKey },
+      })
+    } catch (err) {
+      if (!(err instanceof NotFoundError)) throw err
+    }
+    // Note: can't mutate status (it's readonly). The sandbox is logically deleted.
   }
 
   /**
@@ -281,8 +297,6 @@ export class Sandbox {
       headers: { "X-API-Key": this._config.apiKey },
       body,
     })
-
-    if (options.metadata !== undefined) this.metadata = options.metadata
   }
 
   /**
@@ -290,18 +304,23 @@ export class Sandbox {
    *
    * Useful after `Sandbox.create()` since the API returns immediately
    * with `status: starting`.
-   *
-   * @param timeoutMs Maximum wait time. Default 60s.
    */
-  async waitForReady(timeoutMs = 60_000): Promise<SandboxInfo> {
+  async waitForReady(options: SandboxWaitOptions = {}): Promise<SandboxInfo> {
     const info = await waitForStatus(
       this.id,
       "active",
       this._config.baseUrl,
       this._config.apiKey,
-      { timeoutMs },
+      options,
     )
-    this.status = info.status
     return info
+  }
+
+  /**
+   * Auto-dispose pattern: `await using sandbox = await Sandbox.create(...)`
+   * calls kill() on scope exit.
+   */
+  async [Symbol.asyncDispose](): Promise<void> {
+    await this.kill()
   }
 }

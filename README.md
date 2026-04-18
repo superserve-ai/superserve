@@ -20,58 +20,60 @@
 
 ## Getting Started
 
-Visit our website to get started: [superserve.ai](https://www.superserve.ai/)
+Visit [superserve.ai](https://www.superserve.ai/) or jump straight into the [docs](https://docs.superserve.ai/).
 
 ## Structure
 
 ```
 apps/
-  console/                 # Sandbox Dashboard (Next.js)
+  console/                 # Sandbox Dashboard (Next.js 16, App Router)
   ui-docs/                 # UI component docs (Vite)
 packages/
   cli/                     # TypeScript CLI (@superserve/cli)
-  python-sdk/              # Python SDK (superserve on PyPI)
-  sdk/                     # TypeScript SDK (@superserve/sdk on npm)
-  ui/                      # Shared UI components
+  python-sdk/              # Python SDK (superserve on PyPI) — hand-crafted
+  sdk/                     # TypeScript SDK (@superserve/sdk on npm) — hand-crafted
+  ui/                      # Shared UI components (@superserve/ui)
   supabase/                # Supabase client factories
   typescript-config/       # Shared tsconfig presets
   tailwind-config/         # Shared Tailwind config
   biome-config/            # Shared Biome config
-docs/                      # Documentation (Mintlify)
+docs/                      # Mintlify documentation site
 tests/
   sdk-e2e-ts/              # TypeScript SDK e2e tests (Vitest)
   sdk-e2e-py/              # Python SDK e2e tests (pytest)
 spec/                      # Planning and design documents
 ```
 
-## Development
+## Setup
 
-This repo is a monorepo managed with [Bun workspaces](https://bun.sh/docs/install/workspaces), [Turborepo](https://turbo.build/repo), and [uv workspaces](https://docs.astral.sh/uv/concepts/projects/workspaces/) (for Python).
-
-### Setup
+This repo is a monorepo managed with [Bun workspaces](https://bun.sh/docs/install/workspaces), [Turborepo](https://turbo.build/repo), and [uv workspaces](https://docs.astral.sh/uv/concepts/projects/workspaces/).
 
 ```bash
 bun install               # install all JS/TS dependencies
 uv sync                   # install all Python dependencies
 ```
 
-### Day-to-day commands
+## Development
 
-Run tasks across all packages from the repo root:
+### All packages
+
+Run tasks across every package from the repo root:
 
 ```bash
-bun run build             # build all packages
 bun run dev               # start all dev servers
+bun run build             # build all packages
 bun run lint              # lint all packages
 bun run typecheck         # type check all packages
-bun run test              # run all unit/integration tests (fast, no credentials needed)
+bun run test              # unit/integration tests (fast, no credentials)
+bun run test:coverage     # unit tests with coverage
 ```
 
-Target a specific package with `--filter`:
+### Target a specific package
 
 ```bash
 bunx turbo run dev --filter=@superserve/console
 bunx turbo run build --filter=@superserve/sdk
+bunx turbo run test --filter=@superserve/console -- <pattern>   # vitest filter
 ```
 
 ### Adding dependencies
@@ -84,13 +86,13 @@ bun add react --filter @superserve/console
 bun add -d @types/node --filter @superserve/sdk
 ```
 
-> **Note:** Do not `cd` into a package directory and run `bun add` directly — this creates a separate `bun.lock` that conflicts with the monorepo's root lockfile.
+> **Note:** Do not `cd` into a package directory and run `bun add` — it creates a separate `bun.lock` that conflicts with the monorepo's root lockfile.
 
 ## SDKs
 
-The Superserve SDKs are hand-crafted TypeScript and Python packages.
+Both SDKs are hand-crafted (not code-generated). Current version: **0.6.0**.
 
-### TypeScript SDK (`@superserve/sdk`)
+### TypeScript SDK — `@superserve/sdk`
 
 ```typescript
 import { Sandbox } from "@superserve/sdk"
@@ -102,91 +104,69 @@ const result = await sandbox.commands.run("echo hello")
 console.log(result.stdout)
 
 await sandbox.files.write("/app/data.txt", "content")
+const text = await sandbox.files.readText("/app/data.txt")
+
 await sandbox.kill()
 ```
 
-### Python SDK (`superserve`)
+Use `await using sandbox = await Sandbox.create({ name: "..." })` for auto-cleanup.
+
+**Build / typecheck:**
+```bash
+bunx turbo run build --filter=@superserve/sdk
+bunx turbo run typecheck --filter=@superserve/sdk
+```
+
+### Python SDK — `superserve`
 
 ```python
 from superserve import Sandbox
 
-sandbox = Sandbox.create(name="my-sandbox")
-sandbox.wait_for_ready()
+with Sandbox.create(name="my-sandbox") as sandbox:
+    sandbox.wait_for_ready()
+    result = sandbox.commands.run("echo hello")
+    print(result.stdout)
 
-result = sandbox.commands.run("echo hello")
-print(result.stdout)
-
-sandbox.files.write("/app/data.txt", b"content")
-sandbox.kill()
+    sandbox.files.write("/app/data.txt", b"content")
+    text = sandbox.files.read_text("/app/data.txt")
+# sandbox.kill() runs automatically
 ```
 
-### Publishing the TypeScript SDK to npm
+Async variant: `AsyncSandbox` with `async with` support.
 
+**Build / typecheck / lint:**
 ```bash
-cd packages/sdk
-# bump `version` in package.json
-bun run build
-NPM_CONFIG_TOKEN=npm_... bun publish --access public
+bunx turbo run build --filter=@superserve/python-sdk
+bunx turbo run typecheck --filter=@superserve/python-sdk
+bunx turbo run lint --filter=@superserve/python-sdk
 ```
-
-### Publishing the Python SDK to PyPI
-
-From the **repo root** (not from `packages/python-sdk/`):
-
-```bash
-uv build --package superserve
-UV_PUBLISH_TOKEN=pypi-... uv publish dist/superserve-<version>*
-```
-
-## Docs
-
-Documentation is built with [Mintlify](https://mintlify.com) from the `docs/` directory.
-
-```bash
-bun run docs:dev           # start local Mintlify dev server
-bun run docs:build         # build docs
-```
-
-### Release environment setup
-
-For manual releases from your laptop, copy `.env.release.example` to `.env.release`, fill in the tokens, and `source` it before running any publish command. `.env.release` is gitignored.
-
-| Env variable | Used by | How to get it |
-|---|---|---|
-| `NPM_CONFIG_TOKEN` | `bun publish` (TS SDK) | [npmjs.com](https://www.npmjs.com) → account settings → access tokens → generate automation token |
-| `UV_PUBLISH_TOKEN` | `uv publish` (Python SDK) | [pypi.org](https://pypi.org/manage/account/) → account settings → API tokens → add token (starts with `pypi-`) |
-
-### CI workflows (GitHub Actions)
-
-| Workflow | What it does |
-|---|---|
-| **Release SDKs** | Bumps version, builds, publishes to npm and/or PyPI, commits + tags. Inputs: `package` (`ts` / `python` / `both`), `version` |
-
-Required repo secrets:
-
-| Secret | Workflow |
-|---|---|
-| `NPM_TOKEN` | Release SDKs (ts) |
-| `PYPI_TOKEN` | Release SDKs (python) |
 
 ## Testing
 
-### Unit / integration tests (fast, no credentials)
+### Unit tests (no credentials)
 
 ```bash
-bun run test               # runs all unit tests via turbo (console, cli, sdk)
+bun run test
 ```
 
-### End-to-end tests (credentialed, hits live API)
+### E2E tests (credentialed, hits live API)
 
 ```bash
 SUPERSERVE_API_KEY=ss_live_... bun run test:e2e
 ```
 
-Runs both the TypeScript (Vitest) and Python (pytest) e2e suites against a live Superserve environment. Defaults to staging; override with `SUPERSERVE_BASE_URL`:
+Defaults to staging. Override with `SUPERSERVE_BASE_URL`:
 
 ```bash
-SUPERSERVE_API_KEY=ss_live_... SUPERSERVE_BASE_URL=https://api.superserve.ai bun run test:e2e
+# Production
+SUPERSERVE_API_KEY=ss_live_... \
+  SUPERSERVE_BASE_URL=https://api.superserve.ai \
+  bun run test:e2e
+
+# Local backend
+SUPERSERVE_API_KEY=ss_dev_... \
+  SUPERSERVE_BASE_URL=http://localhost:8080 \
+  bun run test:e2e
 ```
 
 Run just one language:
@@ -200,27 +180,105 @@ Without `SUPERSERVE_API_KEY`, all e2e tests skip cleanly (exit 0).
 
 ### Coverage
 
-| Suite | Test files | What it covers |
+| Suite | Files | What it covers |
 |---|---|---|
-| TS e2e | `tests/sdk-e2e-ts/tests/{sandboxes,exec,files}.test.ts` | create/get/list/update/pause/resume/delete sandboxes, sync + streaming exec, file write/read |
-| Python e2e | `tests/sdk-e2e-py/test_{sandboxes,exec,files}.py` | same as TS |
+| TS e2e | `tests/sdk-e2e-ts/tests/{sandboxes,exec,files}.test.ts` | lifecycle (create/get/list/update/pause/resume/delete), sync + streaming exec, file write/read |
+| Python e2e | `tests/sdk-e2e-py/test_{sandboxes,exec,files,async}.py` | same as TS + AsyncSandbox smoke test |
 | Console unit | `apps/console/src/**/*.test.{ts,tsx}` | auth flows, components, API proxy |
 | CLI unit | `packages/cli/tests/**` | config validation, deploy logic |
+
+## Docs (Mintlify)
+
+The documentation site at [docs.superserve.ai](https://docs.superserve.ai/) is built with [Mintlify](https://mintlify.com) from the `docs/` directory.
+
+```bash
+bun run docs:dev          # local dev server, hot-reloads MDX changes
+bun run docs:build        # validate the docs build
+```
+
+Navigation is configured in `docs/docs.json`. SDK reference pages live under `docs/sdk/{typescript,python}/`.
+
+Deployment is handled by Mintlify on push to `main` (no manual publish step).
+
+## Releasing
+
+### TypeScript SDK to npm
+
+From the repo root:
+
+```bash
+# 1. Bump packages/sdk/package.json version
+# 2. Build + publish
+bunx turbo run build --filter=@superserve/sdk
+cd packages/sdk
+NPM_CONFIG_TOKEN=npm_... bun publish --access public
+```
+
+Or with `.env.release` sourced:
+```bash
+source .env.release
+bunx turbo run build --filter=@superserve/sdk
+cd packages/sdk && bun publish --access public
+```
+
+### Python SDK to PyPI
+
+**Important:** `uv build` must run from the **repo root** (uv workspaces put artifacts in root `dist/`). Bump the version in three places:
+
+1. `packages/python-sdk/pyproject.toml` → `version = "..."`
+2. `packages/python-sdk/src/superserve/__init__.py` → `__version__ = "..."`
+
+```bash
+uv build --package superserve
+UV_PUBLISH_TOKEN=pypi-... uv publish dist/superserve-<version>*
+```
+
+Or with `.env.release` sourced:
+```bash
+source .env.release
+uv build --package superserve
+uv publish dist/superserve-*
+```
+
+### Release environment setup
+
+Copy `.env.release.example` to `.env.release`, fill in tokens, and `source` it before running publish commands. `.env.release` is gitignored.
+
+| Env variable | Used by | How to get it |
+|---|---|---|
+| `NPM_CONFIG_TOKEN` | `bun publish` (TS SDK) | [npmjs.com](https://www.npmjs.com) → account → access tokens → automation token |
+| `UV_PUBLISH_TOKEN` | `uv publish` (Python SDK) | [pypi.org](https://pypi.org/manage/account/) → account → API tokens (starts with `pypi-`) |
+
+### CI workflow (GitHub Actions)
+
+| Workflow | Trigger | Action |
+|---|---|---|
+| **Release SDKs** | Manual (`workflow_dispatch`) | Bumps version, builds, publishes to npm and/or PyPI, commits + tags. Inputs: `package` (`ts` / `python` / `both`), `version`. |
+
+Required repo secrets:
+
+| Secret | Used by |
+|---|---|
+| `NPM_TOKEN` | Release SDKs (ts) |
+| `PYPI_TOKEN` | Release SDKs (python) |
 
 ## Quick reference
 
 | Task | Command |
 |---|---|
-| Install all deps | `bun install && uv sync` |
-| Build everything | `bun run build` |
-| Run all dev servers | `bun run dev` |
+| Install deps | `bun install && uv sync` |
+| Dev (all) | `bun run dev` |
+| Build (all) | `bun run build` |
 | Lint | `bun run lint` |
 | Typecheck | `bun run typecheck` |
 | Unit tests | `bun run test` |
-| E2e tests | `SUPERSERVE_API_KEY=... bun run test:e2e` |
-| Preview docs | `bun run docs:dev` |
-| Publish TS SDK | `cd packages/sdk && bun run build && bun publish --access public` |
-| Publish Python SDK | `uv build --package superserve && uv publish dist/superserve-*` |
+| E2E tests | `SUPERSERVE_API_KEY=... bun run test:e2e` |
+| Docs dev | `bun run docs:dev` |
+| Docs build | `bun run docs:build` |
+| Build TS SDK | `bunx turbo run build --filter=@superserve/sdk` |
+| Build Python SDK | `uv build --package superserve` (from repo root) |
+| Publish TS SDK | `cd packages/sdk && bun publish --access public` |
+| Publish Python SDK | `uv publish dist/superserve-*` (from repo root) |
 
 ## Where to find us
 
@@ -234,4 +292,4 @@ Contributions are welcome! See [CONTRIBUTING.md](https://github.com/superserve-a
 
 ## License
 
-This project is licensed under the Open Core Ventures Source Available License (OCVSAL) 1.0 - see the [LICENSE](https://github.com/superserve-ai/superserve/blob/main/LICENSE) file for details.
+Apache License 2.0 — see the [LICENSE](https://github.com/superserve-ai/superserve/blob/main/LICENSE) file for details.

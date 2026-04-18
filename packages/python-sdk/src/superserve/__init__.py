@@ -14,9 +14,11 @@ from .errors import (
     ValidationError,
     NotFoundError,
     ConflictError,
-    TimeoutError,
+    SandboxTimeoutError,
     ServerError,
 )
+
+__version__ = "0.6.0"
 
 __all__ = [
     "Sandbox",
@@ -30,6 +32,6 @@ __all__ = [
     "ValidationError",
     "NotFoundError",
     "ConflictError",
-    "TimeoutError",
+    "SandboxTimeoutError",
     "ServerError",
 ]

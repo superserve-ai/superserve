@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urlparse
 
+from .errors import AuthenticationError
+
 DEFAULT_BASE_URL = "https://api.superserve.ai"
 DEFAULT_SANDBOX_HOST = "sandbox.superserve.ai"
 
@@ -25,7 +27,7 @@ def resolve_config(
     """Resolve connection config from explicit args + environment variables."""
     resolved_key = api_key or os.environ.get("SUPERSERVE_API_KEY")
     if not resolved_key:
-        raise ValueError(
+        raise AuthenticationError(
             "Missing API key. Pass `api_key` or set the "
             "SUPERSERVE_API_KEY environment variable."
         )
@@ -44,11 +46,19 @@ def data_plane_url(sandbox_id: str, sandbox_host: str) -> str:
 
 
 def _derive_sandbox_host(base_url: str) -> str:
-    """Derive the sandbox host from the control-plane base URL."""
+    """Derive the data-plane sandbox host from the control-plane base URL.
+
+    https://api.superserve.ai         -> sandbox.superserve.ai
+    https://api-staging.superserve.ai -> sandbox-staging.superserve.ai
+    Any other URL                      -> sandbox.superserve.ai (safe default)
+    """
     try:
         parsed = urlparse(base_url)
-        if parsed.hostname and parsed.hostname.endswith("superserve.ai"):
+        host = parsed.hostname or ""
+        if host == "api-staging.superserve.ai":
+            return "sandbox-staging.superserve.ai"
+        if host == "api.superserve.ai":
             return DEFAULT_SANDBOX_HOST
-    except Exception:
+    except ValueError:
         pass
     return DEFAULT_SANDBOX_HOST

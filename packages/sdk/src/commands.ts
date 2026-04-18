@@ -8,6 +8,7 @@
  * Accessed as `sandbox.commands.run(...)`.
  */
 
+import { SandboxError } from "./errors.js"
 import { request, streamSSE } from "./http.js"
 import type {
   ApiExecResult,
@@ -42,7 +43,7 @@ export class Commands {
    * const result = await sandbox.commands.run("npm start", {
    *   onStdout: (data) => process.stdout.write(data),
    *   onStderr: (data) => process.stderr.write(data),
-   *   timeoutSeconds: 120,
+   *   timeoutMs: 120_000,
    * })
    * ```
    */
@@ -50,13 +51,14 @@ export class Commands {
     command: string,
     options: CommandOptions = {},
   ): Promise<CommandResult> {
-    const { cwd, env, timeoutSeconds, onStdout, onStderr } = options
+    const { cwd, env, timeoutMs, onStdout, onStderr } = options
     const isStreaming = onStdout !== undefined || onStderr !== undefined
 
     const body: Record<string, unknown> = { command }
     if (cwd !== undefined) body.working_dir = cwd
     if (env !== undefined) body.env = env
-    if (timeoutSeconds !== undefined) body.timeout_s = timeoutSeconds
+    // API expects seconds; convert from ms
+    if (timeoutMs !== undefined) body.timeout_s = Math.ceil(timeoutMs / 1000)
 
     const authHeaders = { "X-API-Key": this._apiKey }
 
@@ -76,10 +78,8 @@ export class Commands {
       url: `${this._baseUrl}/sandboxes/${this._sandboxId}/exec`,
       headers,
       body,
-      timeoutMs:
-        options.timeoutSeconds !== undefined
-          ? options.timeoutSeconds * 1000 + 5000
-          : undefined,
+      timeoutMs: options.timeoutMs,
+      signal: options.signal,
     })
     return {
       stdout: raw.stdout ?? "",
@@ -97,15 +97,14 @@ export class Commands {
     let stderr = ""
     let exitCode = 0
     let error: string | undefined
+    let sawFinished = false
 
     await streamSSE({
       url: `${this._baseUrl}/sandboxes/${this._sandboxId}/exec/stream`,
       headers,
       body,
-      timeoutMs:
-        options.timeoutSeconds !== undefined
-          ? options.timeoutSeconds * 1000 + 5000
-          : undefined,
+      timeoutMs: options.timeoutMs,
+      signal: options.signal,
       onEvent: (event: ApiExecStreamEvent) => {
         if (event.stdout) {
           stdout += event.stdout
@@ -116,11 +115,18 @@ export class Commands {
           options.onStderr?.(event.stderr)
         }
         if (event.finished) {
+          sawFinished = true
           exitCode = event.exit_code ?? 0
           error = event.error
         }
       },
     })
+
+    if (!sawFinished) {
+      throw new SandboxError(
+        "Command stream ended without a finished event (possible network disconnect)",
+      )
+    }
 
     if (error) {
       stderr += error

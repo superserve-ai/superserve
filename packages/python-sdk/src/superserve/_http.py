@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, Optional
 
 import httpx
 
-from .errors import SandboxError, TimeoutError, map_api_error
+from .errors import SandboxError, SandboxTimeoutError, map_api_error
 
 DEFAULT_TIMEOUT = 30.0
 
@@ -30,7 +30,7 @@ def api_request(
                 json=json_body,
             )
     except httpx.TimeoutException as exc:
-        raise TimeoutError(f"Request timed out after {timeout}s") from exc
+        raise SandboxTimeoutError(f"Request timed out after {timeout}s") from exc
     except httpx.HTTPError as exc:
         raise SandboxError(f"Network error: {exc}") from exc
 
@@ -41,7 +41,7 @@ def api_request(
         try:
             body = response.json()
         except Exception:
-            body = {}
+            body = {"error": {"message": response.text[:500] or f"API error ({response.status_code})"}}
         raise map_api_error(response.status_code, body)
 
     return response.json()
@@ -63,7 +63,7 @@ def upload_bytes(
                 content=content,
             )
     except httpx.TimeoutException as exc:
-        raise TimeoutError(f"Upload timed out after {timeout}s") from exc
+        raise SandboxTimeoutError(f"Upload timed out after {timeout}s") from exc
     except httpx.HTTPError as exc:
         raise SandboxError(f"Upload error: {exc}") from exc
 
@@ -71,7 +71,7 @@ def upload_bytes(
         try:
             body = response.json()
         except Exception:
-            body = {}
+            body = {"error": {"message": response.text[:500] or f"API error ({response.status_code})"}}
         raise map_api_error(response.status_code, body)
 
 
@@ -86,7 +86,7 @@ def download_bytes(
         with httpx.Client(timeout=timeout) as client:
             response = client.get(url, headers=headers)
     except httpx.TimeoutException as exc:
-        raise TimeoutError(f"Download timed out after {timeout}s") from exc
+        raise SandboxTimeoutError(f"Download timed out after {timeout}s") from exc
     except httpx.HTTPError as exc:
         raise SandboxError(f"Download error: {exc}") from exc
 
@@ -94,7 +94,7 @@ def download_bytes(
         try:
             body = response.json()
         except Exception:
-            body = {}
+            body = {"error": {"message": response.text[:500] or f"API error ({response.status_code})"}}
         raise map_api_error(response.status_code, body)
 
     return response.content
@@ -122,7 +122,7 @@ def stream_sse(
                     try:
                         body = response.json()
                     except Exception:
-                        body = {}
+                        body = {"error": {"message": response.text[:500] or f"API error ({response.status_code})"}}
                     raise map_api_error(response.status_code, body)
 
                 for line in response.iter_lines():
@@ -139,7 +139,7 @@ def stream_sse(
     except SandboxError:
         raise
     except httpx.TimeoutException as exc:
-        raise TimeoutError(f"Stream timed out after {timeout}s") from exc
+        raise SandboxTimeoutError(f"Stream timed out after {timeout}s") from exc
     except httpx.HTTPError as exc:
         raise SandboxError(f"Stream error: {exc}") from exc
 
@@ -167,7 +167,7 @@ async def async_api_request(
                 json=json_body,
             )
     except httpx.TimeoutException as exc:
-        raise TimeoutError(f"Request timed out after {timeout}s") from exc
+        raise SandboxTimeoutError(f"Request timed out after {timeout}s") from exc
     except httpx.HTTPError as exc:
         raise SandboxError(f"Network error: {exc}") from exc
 
@@ -178,7 +178,7 @@ async def async_api_request(
         try:
             body = response.json()
         except Exception:
-            body = {}
+            body = {"error": {"message": response.text[:500] or f"API error ({response.status_code})"}}
         raise map_api_error(response.status_code, body)
 
     return response.json()
@@ -200,7 +200,7 @@ async def async_upload_bytes(
                 content=content,
             )
     except httpx.TimeoutException as exc:
-        raise TimeoutError(f"Upload timed out after {timeout}s") from exc
+        raise SandboxTimeoutError(f"Upload timed out after {timeout}s") from exc
     except httpx.HTTPError as exc:
         raise SandboxError(f"Upload error: {exc}") from exc
 
@@ -208,7 +208,7 @@ async def async_upload_bytes(
         try:
             body = response.json()
         except Exception:
-            body = {}
+            body = {"error": {"message": response.text[:500] or f"API error ({response.status_code})"}}
         raise map_api_error(response.status_code, body)
 
 
@@ -223,7 +223,7 @@ async def async_download_bytes(
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.get(url, headers=headers)
     except httpx.TimeoutException as exc:
-        raise TimeoutError(f"Download timed out after {timeout}s") from exc
+        raise SandboxTimeoutError(f"Download timed out after {timeout}s") from exc
     except httpx.HTTPError as exc:
         raise SandboxError(f"Download error: {exc}") from exc
 
@@ -231,7 +231,7 @@ async def async_download_bytes(
         try:
             body = response.json()
         except Exception:
-            body = {}
+            body = {"error": {"message": response.text[:500] or f"API error ({response.status_code})"}}
         raise map_api_error(response.status_code, body)
 
     return response.content
@@ -259,7 +259,7 @@ async def async_stream_sse(
                     try:
                         body = response.json()
                     except Exception:
-                        body = {}
+                        body = {"error": {"message": response.text[:500] or f"API error ({response.status_code})"}}
                     raise map_api_error(response.status_code, body)
 
                 async for line in response.aiter_lines():
@@ -276,6 +276,6 @@ async def async_stream_sse(
     except SandboxError:
         raise
     except httpx.TimeoutException as exc:
-        raise TimeoutError(f"Stream timed out after {timeout}s") from exc
+        raise SandboxTimeoutError(f"Stream timed out after {timeout}s") from exc
     except httpx.HTTPError as exc:
         raise SandboxError(f"Stream error: {exc}") from exc

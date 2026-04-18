@@ -24,7 +24,7 @@ console.log(result.exitCode)  // 0
 const result = await sandbox.commands.run("npm start", {
   onStdout: (data) => process.stdout.write(data),
   onStderr: (data) => process.stderr.write(data),
-  timeoutSeconds: 120,
+  timeoutMs: 120_000,
 })
 ```
 
@@ -34,7 +34,18 @@ const result = await sandbox.commands.run("npm start", {
 const result = await sandbox.commands.run("python script.py", {
   cwd: "/app",
   env: { PORT: "3000", DEBUG: "1" },
-  timeoutSeconds: 60,
+  timeoutMs: 60_000,
+})
+```
+
+### With cancellation
+
+```typescript
+const controller = new AbortController()
+setTimeout(() => controller.abort(), 5000)
+
+const result = await sandbox.commands.run("sleep 100", {
+  signal: controller.signal,
 })
 ```
 
@@ -44,9 +55,10 @@ const result = await sandbox.commands.run("python script.py", {
 |---|---|---|---|
 | `cwd` | `string` | `/home/user` | Working directory. |
 | `env` | `Record<string, string>` | — | Environment variables for this command. |
-| `timeoutSeconds` | `number` | `30` | Command timeout in seconds. |
+| `timeoutMs` | `number` | `30_000` | Command timeout in milliseconds. |
 | `onStdout` | `(data: string) => void` | — | Stream stdout chunks. |
 | `onStderr` | `(data: string) => void` | — | Stream stderr chunks. |
+| `signal` | `AbortSignal` | — | Abort the command mid-execution. |
 
 ## Return type
 

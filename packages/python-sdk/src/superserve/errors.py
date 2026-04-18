@@ -41,7 +41,9 @@ class ConflictError(SandboxError):
         super().__init__(message, status_code=409)
 
 
-class TimeoutError(SandboxError):
+class SandboxTimeoutError(SandboxError):
+    """Raised when a request or polling operation times out."""
+
     def __init__(self, message: str = "Request timed out") -> None:
         super().__init__(message)
 
@@ -53,8 +55,9 @@ class ServerError(SandboxError):
 
 def map_api_error(status_code: int, body: Dict[str, Any]) -> SandboxError:
     """Map an HTTP status code and response body to a typed error."""
-    error_data = body.get("error", {})
+    error_data = body.get("error", {}) or {}
     message = error_data.get("message", f"API error ({status_code})")
+    code = error_data.get("code")
 
     if status_code == 400:
         return ValidationError(message)
@@ -66,4 +69,4 @@ def map_api_error(status_code: int, body: Dict[str, Any]) -> SandboxError:
         return ConflictError(message)
     elif status_code >= 500:
         return ServerError(message)
-    return SandboxError(message, status_code=status_code)
+    return SandboxError(message, status_code=status_code, code=code)

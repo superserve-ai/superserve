@@ -9,38 +9,50 @@ export class SandboxError extends Error {
   readonly statusCode?: number
   readonly code?: string
 
-  constructor(message: string, statusCode?: number, code?: string) {
+  constructor(
+    message: string,
+    statusCode?: number,
+    code?: string,
+    options?: { cause?: unknown },
+  ) {
     super(message)
     this.name = "SandboxError"
     this.statusCode = statusCode
     this.code = code
+    if (options?.cause !== undefined) {
+      // ES2022 `cause` — set directly to avoid requiring lib >= ES2022
+      ;(this as { cause?: unknown }).cause = options.cause
+    }
   }
 }
 
 export class AuthenticationError extends SandboxError {
-  constructor(message = "Missing or invalid API key") {
-    super(message, 401)
+  constructor(message = "Missing or invalid API key", code?: string) {
+    super(message, 401, code)
     this.name = "AuthenticationError"
   }
 }
 
 export class ValidationError extends SandboxError {
-  constructor(message: string) {
-    super(message, 400)
+  constructor(message: string, code?: string) {
+    super(message, 400, code)
     this.name = "ValidationError"
   }
 }
 
 export class NotFoundError extends SandboxError {
-  constructor(message = "Resource not found") {
-    super(message, 404)
+  constructor(message = "Resource not found", code?: string) {
+    super(message, 404, code)
     this.name = "NotFoundError"
   }
 }
 
 export class ConflictError extends SandboxError {
-  constructor(message = "Sandbox is not in a valid state for this operation") {
-    super(message, 409)
+  constructor(
+    message = "Sandbox is not in a valid state for this operation",
+    code?: string,
+  ) {
+    super(message, 409, code)
     this.name = "ConflictError"
   }
 }
@@ -72,13 +84,13 @@ export function mapApiError(
 
   switch (status) {
     case 400:
-      return new ValidationError(message)
+      return new ValidationError(message, code)
     case 401:
-      return new AuthenticationError(message)
+      return new AuthenticationError(message, code)
     case 404:
-      return new NotFoundError(message)
+      return new NotFoundError(message, code)
     case 409:
-      return new ConflictError(message)
+      return new ConflictError(message, code)
     default:
       if (status >= 500) return new ServerError(message)
       return new SandboxError(message, status, code)

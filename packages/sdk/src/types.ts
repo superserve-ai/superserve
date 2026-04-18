@@ -14,6 +14,7 @@ export type SandboxStatus =
   | "active"
   | "pausing"
   | "idle"
+  | "failed"
   | "deleted"
 
 export interface NetworkConfig {
@@ -42,6 +43,7 @@ export interface SandboxInfo {
 export interface ConnectionOptions {
   apiKey?: string
   baseUrl?: string
+  signal?: AbortSignal
 }
 
 export interface SandboxCreateOptions extends ConnectionOptions {
@@ -62,6 +64,12 @@ export interface SandboxUpdateOptions {
   network?: NetworkConfig
 }
 
+export interface SandboxWaitOptions {
+  timeoutMs?: number
+  intervalMs?: number
+  signal?: AbortSignal
+}
+
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
@@ -75,16 +83,17 @@ export interface CommandResult {
 export interface CommandOptions {
   cwd?: string
   env?: Record<string, string>
-  timeoutSeconds?: number
+  timeoutMs?: number
   onStdout?: (data: string) => void
   onStderr?: (data: string) => void
+  signal?: AbortSignal
 }
 
 // ---------------------------------------------------------------------------
 // Files
 // ---------------------------------------------------------------------------
 
-export type FileInput = string | Buffer | Uint8Array | Blob | ArrayBuffer
+export type FileInput = string | Uint8Array | ArrayBuffer | Blob
 
 // ---------------------------------------------------------------------------
 // Internal: API response shapes (snake_case, as returned by the API)
@@ -128,13 +137,23 @@ export interface ApiExecStreamEvent {
 
 /** @internal Convert an API sandbox response to a SandboxInfo. */
 export function toSandboxInfo(raw: ApiSandboxResponse): SandboxInfo {
+  if (!raw.id) {
+    throw new Error("Invalid API response: missing sandbox id")
+  }
+  if (!raw.status) {
+    throw new Error("Invalid API response: missing sandbox status")
+  }
+  if (!raw.access_token) {
+    throw new Error("Invalid API response: missing access_token")
+  }
+
   return {
-    id: raw.id ?? "",
+    id: raw.id,
     name: raw.name ?? "",
-    status: (raw.status ?? "starting") as SandboxStatus,
+    status: raw.status as SandboxStatus,
     vcpuCount: raw.vcpu_count ?? 0,
     memoryMib: raw.memory_mib ?? 0,
-    accessToken: raw.access_token ?? "",
+    accessToken: raw.access_token,
     snapshotId: raw.snapshot_id ?? undefined,
     createdAt: raw.created_at ? new Date(raw.created_at) : new Date(),
     timeoutSeconds: raw.timeout_seconds ?? undefined,

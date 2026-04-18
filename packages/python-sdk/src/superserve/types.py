@@ -14,6 +14,7 @@ class SandboxStatus(str, Enum):
     ACTIVE = "active"
     PAUSING = "pausing"
     IDLE = "idle"
+    FAILED = "failed"
     DELETED = "deleted"
 
 
@@ -43,7 +44,17 @@ class CommandResult(BaseModel):
 
 
 def to_sandbox_info(raw: Dict[str, Any]) -> SandboxInfo:
-    """Convert an API response dict to a SandboxInfo model."""
+    """Convert an API response dict to a SandboxInfo model.
+
+    Raises ValueError if required fields are missing.
+    """
+    if not raw.get("id"):
+        raise ValueError("Invalid API response: missing sandbox id")
+    if not raw.get("status"):
+        raise ValueError("Invalid API response: missing sandbox status")
+    if not raw.get("access_token"):
+        raise ValueError("Invalid API response: missing access_token")
+
     network = None
     if raw.get("network"):
         network = NetworkConfig(
@@ -52,12 +63,12 @@ def to_sandbox_info(raw: Dict[str, Any]) -> SandboxInfo:
         )
 
     return SandboxInfo(
-        id=raw.get("id", ""),
+        id=raw["id"],
         name=raw.get("name", ""),
-        status=SandboxStatus(raw.get("status", "starting")),
+        status=SandboxStatus(raw["status"]),
         vcpu_count=raw.get("vcpu_count", 0),
         memory_mib=raw.get("memory_mib", 0),
-        access_token=raw.get("access_token", ""),
+        access_token=raw["access_token"],
         snapshot_id=raw.get("snapshot_id"),
         created_at=datetime.fromisoformat(raw["created_at"])
         if raw.get("created_at")

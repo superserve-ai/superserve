@@ -5,6 +5,8 @@
  * variables. Constructs the data-plane URL for per-sandbox file operations.
  */
 
+import { AuthenticationError } from "./errors.js"
+
 const DEFAULT_BASE_URL = "https://api.superserve.ai"
 const DEFAULT_SANDBOX_HOST = "sandbox.superserve.ai"
 
@@ -26,7 +28,7 @@ export function resolveConfig(opts?: {
 }): ResolvedConfig {
   const apiKey = opts?.apiKey ?? process.env.SUPERSERVE_API_KEY
   if (!apiKey) {
-    throw new Error(
+    throw new AuthenticationError(
       "Missing API key. Pass `apiKey` or set the SUPERSERVE_API_KEY environment variable.",
     )
   }
@@ -46,17 +48,21 @@ export function dataPlaneUrl(sandboxId: string, sandboxHost: string): string {
 }
 
 /**
- * Derive the sandbox host from the control-plane base URL.
+ * Derive the data-plane sandbox host from the control-plane base URL.
  *
  * `https://api.superserve.ai`         → `sandbox.superserve.ai`
- * `https://api-staging.superserve.ai`  → `sandbox.superserve.ai`
- * `http://localhost:8080`              → `sandbox.superserve.ai` (fallback)
+ * `https://api-staging.superserve.ai` → `sandbox-staging.superserve.ai`
+ * Any other URL                        → `sandbox.superserve.ai` (safe default)
  */
 function deriveSandboxHost(baseUrl: string): string {
   try {
     const url = new URL(baseUrl)
-    if (url.hostname.endsWith("superserve.ai")) {
-      return DEFAULT_SANDBOX_HOST
+    const host = url.hostname
+    if (host === "api-staging.superserve.ai") {
+      return "sandbox-staging.superserve.ai"
+    }
+    if (host === "api.superserve.ai") {
+      return "sandbox.superserve.ai"
     }
   } catch {
     // Invalid URL — use default

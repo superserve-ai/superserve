@@ -9,8 +9,18 @@
  */
 
 import { dataPlaneUrl } from "./config.js"
+import { ValidationError } from "./errors.js"
 import { downloadBytes, uploadBytes } from "./http.js"
 import type { FileInput } from "./types.js"
+
+function validatePath(path: string): void {
+  if (!path.startsWith("/")) {
+    throw new ValidationError(`Path must start with "/": ${path}`)
+  }
+  if (path.split("/").some((seg) => seg === "..")) {
+    throw new ValidationError(`Path must not contain ".." segments: ${path}`)
+  }
+}
 
 export class Files {
   private readonly _dataPlaneBaseUrl: string
@@ -39,15 +49,17 @@ export class Files {
   async write(
     path: string,
     content: FileInput,
-    timeoutMs?: number,
+    options: { timeoutMs?: number; signal?: AbortSignal } = {},
   ): Promise<void> {
+    validatePath(path)
     const body = toBody(content)
     const url = `${this._dataPlaneBaseUrl}/files?path=${encodeURIComponent(path)}`
     await uploadBytes({
       url,
       headers: { "X-Access-Token": this._accessToken },
       body,
-      timeoutMs,
+      timeoutMs: options.timeoutMs,
+      signal: options.signal,
     })
   }
 
@@ -59,12 +71,17 @@ export class Files {
    * const bytes = await sandbox.files.read("/app/config.json")
    * ```
    */
-  async read(path: string, timeoutMs?: number): Promise<Uint8Array> {
+  async read(
+    path: string,
+    options: { timeoutMs?: number; signal?: AbortSignal } = {},
+  ): Promise<Uint8Array> {
+    validatePath(path)
     const url = `${this._dataPlaneBaseUrl}/files?path=${encodeURIComponent(path)}`
     return downloadBytes({
       url,
       headers: { "X-Access-Token": this._accessToken },
-      timeoutMs,
+      timeoutMs: options.timeoutMs,
+      signal: options.signal,
     })
   }
 
@@ -77,8 +94,12 @@ export class Files {
    * console.log(text) // '{"key": "value"}'
    * ```
    */
-  async readText(path: string, timeoutMs?: number): Promise<string> {
-    const bytes = await this.read(path, timeoutMs)
+  async readText(
+    path: string,
+    options: { timeoutMs?: number; signal?: AbortSignal } = {},
+  ): Promise<string> {
+    validatePath(path)
+    const bytes = await this.read(path, options)
     return new TextDecoder().decode(bytes)
   }
 }
@@ -94,8 +115,8 @@ function toBody(content: FileInput): Blob {
   if (content instanceof ArrayBuffer) {
     return new Blob([content])
   }
-  // Uint8Array or Buffer — copy into a plain ArrayBuffer to avoid
-  // SharedArrayBuffer type incompatibility with BlobPart
+  // Uint8Array (or Buffer, which extends Uint8Array) — copy into a plain
+  // ArrayBuffer to avoid SharedArrayBuffer type incompatibility with BlobPart
   if (content instanceof Uint8Array) {
     const copy = new ArrayBuffer(content.byteLength)
     new Uint8Array(copy).set(content)

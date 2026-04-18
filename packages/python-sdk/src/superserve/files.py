@@ -12,6 +12,14 @@ from ._http import (
     async_upload_bytes,
     async_download_bytes,
 )
+from .errors import ValidationError
+
+
+def _validate_path(path: str) -> None:
+    if not path.startswith("/"):
+        raise ValidationError(f'Path must start with "/": {path}')
+    if any(seg == ".." for seg in path.split("/")):
+        raise ValidationError(f'Path must not contain ".." segments: {path}')
 
 
 class Files:
@@ -25,6 +33,7 @@ class Files:
         self, path: str, content: Union[str, bytes], *, timeout: Optional[float] = None
     ) -> None:
         """Write a file to the sandbox at the given absolute path."""
+        _validate_path(path)
         if isinstance(content, str):
             content = content.encode("utf-8")
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
@@ -39,6 +48,7 @@ class Files:
 
     def read(self, path: str, *, timeout: Optional[float] = None) -> bytes:
         """Read a file from the sandbox as raw bytes."""
+        _validate_path(path)
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
         kwargs = {"url": url, "headers": {"X-Access-Token": self._access_token}}
         if timeout is not None:
@@ -47,6 +57,7 @@ class Files:
 
     def read_text(self, path: str, *, timeout: Optional[float] = None) -> str:
         """Read a file from the sandbox as a UTF-8 string."""
+        _validate_path(path)
         return self.read(path, timeout=timeout).decode("utf-8")
 
 
@@ -61,6 +72,7 @@ class AsyncFiles:
         self, path: str, content: Union[str, bytes], *, timeout: Optional[float] = None
     ) -> None:
         """Write a file to the sandbox at the given absolute path."""
+        _validate_path(path)
         if isinstance(content, str):
             content = content.encode("utf-8")
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
@@ -75,6 +87,7 @@ class AsyncFiles:
 
     async def read(self, path: str, *, timeout: Optional[float] = None) -> bytes:
         """Read a file from the sandbox as raw bytes."""
+        _validate_path(path)
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
         kwargs = {"url": url, "headers": {"X-Access-Token": self._access_token}}
         if timeout is not None:
@@ -83,5 +96,6 @@ class AsyncFiles:
 
     async def read_text(self, path: str, *, timeout: Optional[float] = None) -> str:
         """Read a file from the sandbox as a UTF-8 string."""
+        _validate_path(path)
         raw = await self.read(path, timeout=timeout)
         return raw.decode("utf-8")

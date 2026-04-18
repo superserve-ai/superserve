@@ -20,6 +20,19 @@ interface RequestOptions {
   headers?: Record<string, string>
   body?: unknown
   timeoutMs?: number
+  signal?: AbortSignal
+}
+
+/**
+ * Compose an internal controller signal with an optional user signal.
+ * Uses AbortSignal.any when available.
+ */
+function composeSignals(
+  internal: AbortSignal,
+  user?: AbortSignal,
+): AbortSignal {
+  if (!user) return internal
+  return AbortSignal.any([internal, user])
 }
 
 /**
@@ -34,10 +47,17 @@ export async function request<T>(opts: RequestOptions): Promise<T> {
     headers = {},
     body,
     timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal: userSignal,
   } = opts
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
+
+  const signal = composeSignals(controller.signal, userSignal)
 
   try {
     const res = await fetch(url, {
@@ -47,7 +67,7 @@ export async function request<T>(opts: RequestOptions): Promise<T> {
         ...headers,
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal: controller.signal,
+      signal,
     })
 
     if (!res.ok) {
@@ -69,10 +89,16 @@ export async function request<T>(opts: RequestOptions): Promise<T> {
   } catch (err) {
     if (err instanceof SandboxError) throw err
     if (err instanceof DOMException && err.name === "AbortError") {
-      throw new TimeoutError(`Request timed out after ${timeoutMs}ms`)
+      if (timedOut) throw new TimeoutError(`Request timed out after ${timeoutMs}ms`)
+      throw new SandboxError("Request aborted", undefined, undefined, {
+        cause: err,
+      })
     }
     throw new SandboxError(
       `Network error: ${err instanceof Error ? err.message : String(err)}`,
+      undefined,
+      undefined,
+      { cause: err },
     )
   } finally {
     clearTimeout(timer)
@@ -94,10 +120,23 @@ export async function uploadBytes(opts: {
   headers: Record<string, string>
   body: BodyInit
   timeoutMs?: number
+  signal?: AbortSignal
 }): Promise<void> {
-  const { url, headers, body, timeoutMs = DEFAULT_TIMEOUT_MS } = opts
+  const {
+    url,
+    headers,
+    body,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal: userSignal,
+  } = opts
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
+
+  const signal = composeSignals(controller.signal, userSignal)
 
   try {
     const res = await fetch(url, {
@@ -107,7 +146,7 @@ export async function uploadBytes(opts: {
         ...headers,
       },
       body,
-      signal: controller.signal,
+      signal,
     })
 
     if (!res.ok) {
@@ -122,10 +161,16 @@ export async function uploadBytes(opts: {
   } catch (err) {
     if (err instanceof SandboxError) throw err
     if (err instanceof DOMException && err.name === "AbortError") {
-      throw new TimeoutError(`Upload timed out after ${timeoutMs}ms`)
+      if (timedOut) throw new TimeoutError(`Upload timed out after ${timeoutMs}ms`)
+      throw new SandboxError("Upload aborted", undefined, undefined, {
+        cause: err,
+      })
     }
     throw new SandboxError(
       `Upload error: ${err instanceof Error ? err.message : String(err)}`,
+      undefined,
+      undefined,
+      { cause: err },
     )
   } finally {
     clearTimeout(timer)
@@ -139,16 +184,28 @@ export async function downloadBytes(opts: {
   url: string
   headers: Record<string, string>
   timeoutMs?: number
+  signal?: AbortSignal
 }): Promise<Uint8Array> {
-  const { url, headers, timeoutMs = DEFAULT_TIMEOUT_MS } = opts
+  const {
+    url,
+    headers,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal: userSignal,
+  } = opts
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
+
+  const signal = composeSignals(controller.signal, userSignal)
 
   try {
     const res = await fetch(url, {
       method: "GET",
       headers,
-      signal: controller.signal,
+      signal,
     })
 
     if (!res.ok) {
@@ -165,10 +222,16 @@ export async function downloadBytes(opts: {
   } catch (err) {
     if (err instanceof SandboxError) throw err
     if (err instanceof DOMException && err.name === "AbortError") {
-      throw new TimeoutError(`Download timed out after ${timeoutMs}ms`)
+      if (timedOut) throw new TimeoutError(`Download timed out after ${timeoutMs}ms`)
+      throw new SandboxError("Download aborted", undefined, undefined, {
+        cause: err,
+      })
     }
     throw new SandboxError(
       `Download error: ${err instanceof Error ? err.message : String(err)}`,
+      undefined,
+      undefined,
+      { cause: err },
     )
   } finally {
     clearTimeout(timer)
@@ -180,17 +243,34 @@ export async function downloadBytes(opts: {
  *
  * Calls `onEvent` for each parsed event. Returns when the stream ends
  * (server sends `finished: true` or closes the connection).
+ *
+ * The timeout is an idle timeout — it resets each time a chunk is received,
+ * so long-running commands won't spuriously abort.
  */
 export async function streamSSE(opts: {
   url: string
   headers: Record<string, string>
   body: unknown
   timeoutMs?: number
+  signal?: AbortSignal
   onEvent: (event: ApiExecStreamEvent) => void
 }): Promise<void> {
-  const { url, headers, body, timeoutMs = 300_000, onEvent } = opts
+  const {
+    url,
+    headers,
+    body,
+    timeoutMs = 300_000,
+    signal: userSignal,
+    onEvent,
+  } = opts
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  let timedOut = false
+  let timer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
+
+  const signal = composeSignals(controller.signal, userSignal)
 
   try {
     const res = await fetch(url, {
@@ -200,7 +280,7 @@ export async function streamSSE(opts: {
         ...headers,
       },
       body: JSON.stringify(body),
-      signal: controller.signal,
+      signal,
     })
 
     if (!res.ok) {
@@ -225,6 +305,15 @@ export async function streamSSE(opts: {
       const { done, value } = await reader.read()
       if (done) break
 
+      // Reset the idle timer on each chunk received
+      if (timer) {
+        clearTimeout(timer)
+        timer = setTimeout(() => {
+          timedOut = true
+          controller.abort()
+        }, timeoutMs)
+      }
+
       buffer += decoder.decode(value, { stream: true })
       const lines = buffer.split("\n")
       buffer = lines.pop() ?? ""
@@ -244,12 +333,18 @@ export async function streamSSE(opts: {
   } catch (err) {
     if (err instanceof SandboxError) throw err
     if (err instanceof DOMException && err.name === "AbortError") {
-      throw new TimeoutError(`Stream timed out after ${timeoutMs}ms`)
+      if (timedOut) throw new TimeoutError(`Stream timed out after ${timeoutMs}ms`)
+      throw new SandboxError("Stream aborted", undefined, undefined, {
+        cause: err,
+      })
     }
     throw new SandboxError(
       `Stream error: ${err instanceof Error ? err.message : String(err)}`,
+      undefined,
+      undefined,
+      { cause: err },
     )
   } finally {
-    clearTimeout(timer)
+    if (timer) clearTimeout(timer)
   }
 }

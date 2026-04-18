@@ -164,22 +164,30 @@ sandbox.wait_for_ready()
 sandbox.wait_for_ready(timeout_seconds=120)
 ```
 
+## Auto-cleanup with `with`
+
+Use `Sandbox` as a context manager to automatically delete on scope exit:
+
+```python
+with Sandbox.create(name="scoped") as sandbox:
+    sandbox.wait_for_ready()
+    result = sandbox.commands.run("echo hello")
+# sandbox.kill() runs automatically (even on exception)
+```
+
 ## Async usage
 
-`AsyncSandbox` has the same API with awaitable methods:
+`AsyncSandbox` has the same API with awaitable methods and `async with` support:
 
 ```python
 import asyncio
 from superserve import AsyncSandbox
 
 async def main():
-    sandbox = await AsyncSandbox.create(name="async-example")
-    await sandbox.wait_for_ready()
-
-    result = await sandbox.commands.run("echo hello")
-    print(result.stdout)
-
-    await sandbox.kill()
+    async with await AsyncSandbox.create(name="async-example") as sandbox:
+        await sandbox.wait_for_ready()
+        result = await sandbox.commands.run("echo hello")
+        print(result.stdout)
 
 asyncio.run(main())
 ```
@@ -194,6 +202,7 @@ class SandboxStatus(str, Enum):
     ACTIVE = "active"
     PAUSING = "pausing"
     IDLE = "idle"
+    FAILED = "failed"
     DELETED = "deleted"
 ```
 
@@ -229,12 +238,12 @@ All errors extend `SandboxError`:
 ```python
 from superserve import (
     SandboxError,
-    AuthenticationError,   # 401
-    ValidationError,       # 400
-    NotFoundError,         # 404
-    ConflictError,         # 409 — invalid state for operation
-    TimeoutError,          # request timed out
-    ServerError,           # 500
+    AuthenticationError,     # 401
+    ValidationError,         # 400
+    NotFoundError,           # 404
+    ConflictError,           # 409 — invalid state for operation
+    SandboxTimeoutError,     # request timed out (does not shadow builtin TimeoutError)
+    ServerError,             # 500
 )
 
 try:

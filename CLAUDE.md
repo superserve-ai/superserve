@@ -17,16 +17,16 @@ superserve/
 │   └── ui-docs/                 # UI component documentation (Vite, port 3003)
 ├── packages/
 │   ├── cli/                     # TypeScript CLI (@superserve/cli on npm)
-│   ├── python-sdk/              # Python SDK (superserve on PyPI) — Hand-crafted SDK
-│   ├── sdk/                     # TypeScript SDK (@superserve/sdk on npm) — Hand-crafted SDK
+│   ├── python-sdk/              # Python SDK (superserve on PyPI) — hand-crafted
+│   ├── sdk/                     # TypeScript SDK (@superserve/sdk on npm) — hand-crafted
 │   ├── ui/                      # Shared UI component library (@superserve/ui)
 │   ├── supabase/                # Supabase client factories (browser/server/admin/middleware)
 │   ├── typescript-config/       # Shared tsconfig presets
 │   ├── tailwind-config/         # Shared Tailwind CSS config
 │   └── biome-config/            # Shared Biome linting/formatting config
 ├── tests/
-│   ├── sdk-e2e-ts/              # TypeScript SDK end-to-end tests
-│   └── sdk-e2e-py/              # Python SDK end-to-end tests
+│   ├── sdk-e2e-ts/              # TypeScript SDK end-to-end tests (Vitest)
+│   └── sdk-e2e-py/              # Python SDK end-to-end tests (pytest)
 ├── docs/                        # Mintlify docs site (docs.json, MDX pages)
 ├── spec/                        # Planning and implementation documents
 └── examples/                    # Example projects
@@ -36,6 +36,7 @@ superserve/
 - **Bun workspaces** for dependency management (single `bun.lock` at root; workspaces: `apps/*`, `packages/*`, `tests/*`)
 - **Turborepo** for task orchestration (build, lint, typecheck, test, e2e)
 - **uv workspaces** for Python packages (`pyproject.toml` at root as workspace root)
+
 ## Architecture
 
 ### Console (`apps/console/`)
@@ -60,69 +61,156 @@ Built on **@base-ui/react** (headless components) + Tailwind CSS + **motion** (F
 
 Built with Bun + Commander. Entry point: `src/index.ts`. Authenticates via device flow or API key.
 
-### TypeScript SDK (`packages/sdk/`)
+### TypeScript SDK (`packages/sdk/`) — v0.6.0
 
-Published as `@superserve/sdk`. Hand-crafted SDK with `Sandbox` class as the main entry point. `Sandbox.create()`, `sandbox.commands.run()`, `sandbox.files.write()` / `sandbox.files.readText()`, `sandbox.pause()` / `sandbox.resume()` / `sandbox.kill()`.
+Published as `@superserve/sdk`. Hand-crafted SDK. Zero runtime dependencies (uses native `fetch`).
 
-### Python SDK (`packages/python-sdk/`)
+**Main API:**
+- `Sandbox.create({ name })` / `Sandbox.connect(id)` / `Sandbox.list()` / `Sandbox.get(id)` / `Sandbox.killById(id)`
+- Instance: `sandbox.pause()` / `resume()` / `kill()` / `update()` / `getInfo()` / `waitForReady()`
+- Sub-modules: `sandbox.commands.run(cmd, opts)`, `sandbox.files.write/read/readText(path, ...)`
+- `await using sandbox = await Sandbox.create(...)` for auto-cleanup
 
-Published as `superserve` on PyPI. Hand-crafted SDK with `Sandbox` / `AsyncSandbox` classes. Same API as the TypeScript SDK but snake_case. Runtime deps: `httpx`, `pydantic>=2`, `typing-extensions`. Supports Python >= 3.9.
+**Design choices:**
+- `status` / `metadata` are `readonly` — call `getInfo()` for fresh data
+- `kill()` is idempotent (swallows 404)
+- Every network op accepts `AbortSignal`
+- Streaming `run()` uses idle timeout (resets on each SSE chunk)
+- `toSandboxInfo` throws on missing required fields (no fabricated defaults)
+- Polling fails fast on terminal `failed` / `deleted` states
+- Typed errors: `SandboxError`, `AuthenticationError`, `ValidationError`, `NotFoundError`, `ConflictError`, `TimeoutError`, `ServerError`
+
+### Python SDK (`packages/python-sdk/`) — v0.6.0
+
+Published as `superserve` on PyPI. Hand-crafted SDK. Runtime deps: `httpx>=0.24.0`, `pydantic>=2.0.0`, `typing-extensions>=4.0.0`. Supports Python ≥ 3.9.
+
+Same API surface as TypeScript SDK (snake_case). `Sandbox` (sync) and `AsyncSandbox` (async) classes.
+
+**Design choices:**
+- `with Sandbox.create(...) as sb:` and `async with AsyncSandbox.create(...) as sb:` for auto-cleanup
+- `TimeoutError` is named `SandboxTimeoutError` to avoid shadowing Python's builtin
+- `kill()` is idempotent
+- `access_token` refreshed after pause/resume (rebuilds `sandbox.files`)
+- Fail-fast polling on terminal states
+- Typed errors match TS hierarchy (with `SandboxTimeoutError` rename)
 
 ## Key Patterns
 
 - **Sandbox IDs**: UUIDs. API keys prefixed with `ss_live_`.
 - **Sandbox lifecycle**: `starting → active ↔ idle → deleted`. Also `pausing` (transitional) and `failed`.
+- **Data plane vs control plane**: SDK hides this internally. Control plane is `api.superserve.ai` (API key). Data plane is `boxd-{id}.sandbox.superserve.ai` (access token). Users never construct data-plane URLs.
 - **API types**: Defined in `apps/console/src/lib/api/types.ts`. Must match the OpenAPI spec.
 - **Shared configs**: TypeScript projects extend from `@superserve/typescript-config`. Biome from `@superserve/biome-config`. Tailwind from `@superserve/tailwind-config`.
 - **Sticky hover animation**: Reusable pattern across sidebar, command palette, table bodies, and language tabs using `motion` `layoutId` for smooth hover transitions.
 
 ## Development
 
+### Setup
+
 ```bash
-# Install all dependencies (from repo root)
-bun install
+bun install              # install all JS/TS deps
+uv sync                  # install all Python deps
+```
 
-# TypeScript — all projects
-bun run build              # Build everything in dependency order
-bun run dev                # Start all dev servers
-bun run lint               # Lint all TS projects
-bun run typecheck          # Type check all TS projects
-bun run test               # Run all TS unit tests (Vitest)
-bun run test:coverage      # Run tests with coverage
-bun run test:e2e           # Run SDK e2e tests (requires SUPERSERVE_API_KEY, SUPERSERVE_BASE_URL)
+### All packages (from repo root)
 
-# TypeScript — single project
+```bash
+bun run dev              # start all dev servers
+bun run build            # build everything in dependency order
+bun run lint             # lint all packages
+bun run typecheck        # type check all packages
+bun run test             # unit/integration tests (Vitest, no credentials)
+bun run test:coverage    # tests with coverage
+bun run test:e2e         # SDK e2e tests (requires SUPERSERVE_API_KEY)
+```
+
+### Target a specific package
+
+```bash
 bunx turbo run dev --filter=@superserve/console
 bunx turbo run build --filter=@superserve/sdk
-bunx turbo run test --filter=@superserve/console -- <pattern>   # Single Vitest run with filter
+bunx turbo run typecheck --filter=@superserve/sdk
+bunx turbo run test --filter=@superserve/console -- <pattern>   # Vitest filter
+```
 
-# Adding dependencies — always from repo root with --filter
+### Adding dependencies
+
+```bash
 bun add zod --filter @superserve/cli
 bun add -d @types/node --filter @superserve/sdk
-# Never cd into a package and run bun add (creates a conflicting lockfile)
+```
 
-# Testing the CLI locally (no dev server, run directly)
+Never `cd` into a package and run `bun add` — creates a conflicting lockfile.
+
+### Testing the CLI locally
+
+```bash
 bun packages/cli/src/index.ts deploy --help
+```
 
-# Email templates — preview server (React Email) at http://localhost:3002
+### Email templates (React Email)
+
+```bash
 bun --filter @superserve/console run email:dev
-# Templates live at apps/console/src/lib/email/templates/*.tsx
-# Hot reloads on edit; sidebar lists welcome / confirmation / password-reset
+# preview server at http://localhost:3002
+# templates live at apps/console/src/lib/email/templates/*.tsx
+```
 
-# Python SDK
-uv run pytest packages/python-sdk/tests/                           # Run SDK tests
-uv run pytest packages/python-sdk/tests/test_file.py::test_name    # Run a single test
-uv run ruff check packages/python-sdk/ --fix                       # Lint
-uv run mypy packages/python-sdk/src/superserve/                    # Type check
+### Python SDK
 
-# Python via Turborepo
+```bash
+uv run pytest packages/python-sdk/tests/                           # run tests
+uv run pytest packages/python-sdk/tests/test_file.py::test_name    # single test
+uv run ruff check packages/python-sdk/ --fix                       # lint
+uv run mypy packages/python-sdk/src/superserve/                    # type check
+
+# via Turborepo
 bunx turbo run test --filter=@superserve/python-sdk
 bunx turbo run lint --filter=@superserve/python-sdk
-
-# Docs (Mintlify)
-bun run docs:dev           # Local Mintlify dev server
-bun run docs:build         # Build docs site
+bunx turbo run typecheck --filter=@superserve/python-sdk
 ```
+
+### E2E tests (credentialed)
+
+```bash
+SUPERSERVE_API_KEY=ss_live_... bun run test:e2e                   # both languages
+SUPERSERVE_API_KEY=ss_live_... bunx turbo run e2e --filter=@superserve/test-sdk-e2e-ts
+SUPERSERVE_API_KEY=ss_live_... bunx turbo run e2e --filter=@superserve/test-sdk-e2e-py
+
+# override target environment
+SUPERSERVE_BASE_URL=https://api.superserve.ai SUPERSERVE_API_KEY=... bun run test:e2e
+```
+
+Without `SUPERSERVE_API_KEY`, all e2e tests skip cleanly.
+
+### Docs (Mintlify)
+
+```bash
+bun run docs:dev         # local Mintlify dev server
+bun run docs:build       # validate docs build
+```
+
+Docs live in `docs/` — `docs.json` is the navigation config. SDK reference pages under `docs/sdk/{typescript,python}/`. Deployed by Mintlify on push to `main`.
+
+### Releasing SDKs
+
+**Version bumps** — both SDKs should be kept in sync:
+- TS: `packages/sdk/package.json` → `version`
+- Python: `packages/python-sdk/pyproject.toml` → `version` AND `packages/python-sdk/src/superserve/__init__.py` → `__version__` (keep them identical)
+
+**Publish TS to npm:**
+```bash
+bunx turbo run build --filter=@superserve/sdk
+cd packages/sdk && bun publish --access public
+```
+
+**Publish Python to PyPI** — run `uv build` from **repo root** (uv workspaces put artifacts in root `dist/`):
+```bash
+uv build --package superserve
+uv publish dist/superserve-*
+```
+
+Or use the **Release SDKs** GitHub Actions workflow (manual `workflow_dispatch` with `package` and `version` inputs).
 
 ## Coding Style
 

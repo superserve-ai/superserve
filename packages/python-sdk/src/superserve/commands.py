@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional
 
 from ._http import api_request, async_api_request, stream_sse, async_stream_sse
+from .errors import SandboxError
 from .types import CommandResult
 
 
@@ -72,9 +73,10 @@ class Commands:
         stdout_parts: List[str] = []
         stderr_parts: List[str] = []
         exit_code = 0
+        saw_finished = False
 
         def handle_event(event: Dict[str, Any]) -> None:
-            nonlocal exit_code
+            nonlocal exit_code, saw_finished
             if event.get("stdout"):
                 stdout_parts.append(event["stdout"])
                 if on_stdout:
@@ -84,6 +86,7 @@ class Commands:
                 if on_stderr:
                     on_stderr(event["stderr"])
             if event.get("finished"):
+                saw_finished = True
                 exit_code = event.get("exit_code", 0)
                 if event.get("error"):
                     stderr_parts.append(event["error"])
@@ -95,6 +98,11 @@ class Commands:
             timeout=float(timeout_seconds) + 5.0 if timeout_seconds is not None else 300.0,
             on_event=handle_event,
         )
+
+        if not saw_finished:
+            raise SandboxError(
+                "Command stream ended without a finished event (possible network disconnect)"
+            )
 
         return CommandResult(
             stdout="".join(stdout_parts),
@@ -167,9 +175,10 @@ class AsyncCommands:
         stdout_parts: List[str] = []
         stderr_parts: List[str] = []
         exit_code = 0
+        saw_finished = False
 
         def handle_event(event: Dict[str, Any]) -> None:
-            nonlocal exit_code
+            nonlocal exit_code, saw_finished
             if event.get("stdout"):
                 stdout_parts.append(event["stdout"])
                 if on_stdout:
@@ -179,6 +188,7 @@ class AsyncCommands:
                 if on_stderr:
                     on_stderr(event["stderr"])
             if event.get("finished"):
+                saw_finished = True
                 exit_code = event.get("exit_code", 0)
                 if event.get("error"):
                     stderr_parts.append(event["error"])
@@ -190,6 +200,11 @@ class AsyncCommands:
             timeout=float(timeout_seconds) + 5.0 if timeout_seconds is not None else 300.0,
             on_event=handle_event,
         )
+
+        if not saw_finished:
+            raise SandboxError(
+                "Command stream ended without a finished event (possible network disconnect)"
+            )
 
         return CommandResult(
             stdout="".join(stdout_parts),

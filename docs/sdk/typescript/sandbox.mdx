@@ -148,13 +148,27 @@ await sandbox.update({
 })
 ```
 
-### `sandbox.waitForReady(timeoutMs?)`
+### `sandbox.waitForReady(options?)`
 
 Poll until the sandbox reaches `active` status. Default timeout is 60 seconds.
 
 ```typescript
 await sandbox.waitForReady()
-await sandbox.waitForReady(120_000)  // 120s timeout
+await sandbox.waitForReady({ timeoutMs: 120_000 })
+await sandbox.waitForReady({ timeoutMs: 60_000, signal: controller.signal })
+```
+
+Options: `{ timeoutMs?: number, intervalMs?: number, signal?: AbortSignal }`. Fails fast (throws `SandboxError`) if the sandbox reaches a terminal `failed` or `deleted` state.
+
+### Auto-cleanup with `await using`
+
+```typescript
+{
+  await using sandbox = await Sandbox.create({ name: "scoped" })
+  await sandbox.waitForReady()
+  await sandbox.commands.run("echo hello")
+  // sandbox.kill() runs automatically when scope exits (even on throw)
+}
 ```
 
 ## Types
@@ -162,7 +176,7 @@ await sandbox.waitForReady(120_000)  // 120s timeout
 ### `SandboxStatus`
 
 ```typescript
-type SandboxStatus = "starting" | "active" | "pausing" | "idle" | "deleted"
+type SandboxStatus = "starting" | "active" | "pausing" | "idle" | "failed" | "deleted"
 ```
 
 ### `SandboxInfo`
