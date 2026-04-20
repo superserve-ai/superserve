@@ -20,8 +20,6 @@ Requires Python ≥ 3.9.
 from superserve import Sandbox
 
 with Sandbox.create(name="my-sandbox") as sandbox:
-    sandbox.wait_for_ready()
-
     result = sandbox.commands.run("echo hello")
     print(result.stdout)
 
@@ -56,8 +54,6 @@ from superserve import AsyncSandbox
 
 async def main():
     async with await AsyncSandbox.create(name="async-example") as sandbox:
-        await sandbox.wait_for_ready()
-
         result = await sandbox.commands.run("echo hello")
         print(result.stdout)
 

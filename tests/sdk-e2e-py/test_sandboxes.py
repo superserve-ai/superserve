@@ -1,5 +1,3 @@
-import time
-
 import pytest
 
 from superserve import Sandbox
@@ -13,7 +11,6 @@ pytestmark = SKIP_IF_NO_CREDS
 def sandbox(connection_opts, run_id):
     name = f"sdk-e2e-py-sandbox-{run_id}"
     sbx = Sandbox.create(name=name, **connection_opts)
-    sbx.wait_for_ready()
     yield sbx
     try:
         sbx.kill()
@@ -40,22 +37,11 @@ def test_update_accepts_metadata(sandbox, run_id):
     assert result.id == sandbox.id
 
 
-def test_pause_and_resume_lifecycle(sandbox):
+def test_pause_and_resume_lifecycle(sandbox, connection_opts):
     sandbox.pause()
-    # Backend may return "paused" or "idle" depending on version — spec drift.
-    deadline = time.monotonic() + 90
-    while time.monotonic() < deadline:
-        info = sandbox.get_info()
-        if info.status.value in ("paused", "idle"):
-            break
-        time.sleep(2)
-    assert sandbox.status.value in ("paused", "idle")
+    info = Sandbox.get(sandbox.id, **connection_opts)
+    assert info.status.value == "idle"
 
     sandbox.resume()
-    deadline = time.monotonic() + 90
-    while time.monotonic() < deadline:
-        info = sandbox.get_info()
-        if info.status.value == "active":
-            break
-        time.sleep(2)
-    assert sandbox.status.value == "active"
+    info = Sandbox.get(sandbox.id, **connection_opts)
+    assert info.status.value == "active"

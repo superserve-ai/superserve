@@ -7,18 +7,24 @@ import inspect
 import httpx
 import pytest
 import respx
-from superserve import AsyncSandbox, SandboxStatus
+from superserve import AsyncSandbox, SandboxError, SandboxStatus
 
 API = "https://api.example.com"
 
 
-def _raw(status: str = "active", sbx_id: str = "sbx-1") -> dict:
-    return {
+def _raw(
+    status: str = "active",
+    sbx_id: str = "sbx-1",
+    access_token: str | None = "tok",
+) -> dict:
+    data: dict = {
         "id": sbx_id,
         "name": "test",
         "status": status,
-        "access_token": "tok",
     }
+    if access_token is not None:
+        data["access_token"] = access_token
+    return data
 
 
 @pytest.fixture(autouse=True)
@@ -54,6 +60,7 @@ class TestAsyncSandboxSmoke:
             try:
                 assert sbx.id == "sbx-1"
                 assert sbx.status == SandboxStatus.ACTIVE
+                assert sbx._access_token == "tok"
             finally:
                 await sbx._close_http_client()
 
@@ -79,3 +86,61 @@ class TestAsyncSandboxSmoke:
             )
             sbx = await AsyncSandbox.connect("sbx-1")
             await sbx.kill()  # Should NOT raise
+
+    async def test_pause_returns_none(self) -> None:
+        with respx.mock() as router:
+            router.get(f"{API}/sandboxes/sbx-1").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            pause_route = router.post(f"{API}/sandboxes/sbx-1/pause").mock(
+                return_value=httpx.Response(204)
+            )
+            sbx = await AsyncSandbox.connect("sbx-1")
+            try:
+                result = await sbx.pause()
+                assert result is None
+                assert pause_route.call_count == 1
+            finally:
+                await sbx._close_http_client()
+
+    async def test_resume_rotates_token_and_rebuilds_files(self) -> None:
+        with respx.mock() as router:
+            router.get(f"{API}/sandboxes/sbx-1").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            router.post(f"{API}/sandboxes/sbx-1/resume").mock(
+                return_value=httpx.Response(
+                    200,
+                    json={
+                        "id": "sbx-1",
+                        "status": "active",
+                        "access_token": "rotated-tok",
+                    },
+                )
+            )
+            sbx = await AsyncSandbox.connect("sbx-1")
+            try:
+                old_files = sbx.files
+                result = await sbx.resume()
+                assert result is None
+                assert sbx._access_token == "rotated-tok"
+                assert sbx.files is not old_files
+            finally:
+                await sbx._close_http_client()
+
+    async def test_resume_missing_access_token_raises(self) -> None:
+        with respx.mock() as router:
+            router.get(f"{API}/sandboxes/sbx-1").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            router.post(f"{API}/sandboxes/sbx-1/resume").mock(
+                return_value=httpx.Response(
+                    200, json={"id": "sbx-1", "status": "active"}
+                )
+            )
+            sbx = await AsyncSandbox.connect("sbx-1")
+            try:
+                with pytest.raises(SandboxError, match="access_token"):
+                    await sbx.resume()
+            finally:
+                await sbx._close_http_client()

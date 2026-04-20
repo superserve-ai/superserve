@@ -6,7 +6,6 @@
  * import { Sandbox } from "@superserve/sdk"
  *
  * const sandbox = await Sandbox.create({ name: "my-sandbox" })
- * await sandbox.waitForReady()
  *
  * const result = await sandbox.commands.run("echo hello")
  * console.log(result.stdout)
@@ -41,5 +40,4 @@ export type {
   SandboxListOptions,
   SandboxStatus,
   SandboxUpdateOptions,
-  SandboxWaitOptions,
 } from "./types.js"

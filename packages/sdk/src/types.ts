@@ -9,13 +9,7 @@
 // Sandbox
 // ---------------------------------------------------------------------------
 
-export type SandboxStatus =
-  | "starting"
-  | "active"
-  | "pausing"
-  | "idle"
-  | "failed"
-  | "deleted"
+export type SandboxStatus = "active" | "idle"
 
 export interface NetworkConfig {
   allowOut?: string[]
@@ -28,12 +22,6 @@ export interface SandboxInfo {
   status: SandboxStatus
   vcpuCount: number
   memoryMib: number
-  /**
-   * Per-sandbox access token for data-plane operations. Only returned on
-   * create/get/connect — may be absent on list responses.
-   */
-  accessToken?: string
-  snapshotId?: string
   createdAt: Date
   timeoutSeconds?: number
   network?: NetworkConfig
@@ -52,7 +40,6 @@ export interface ConnectionOptions {
 
 export interface SandboxCreateOptions extends ConnectionOptions {
   name: string
-  fromSnapshot?: string
   timeoutSeconds?: number
   metadata?: Record<string, string>
   envVars?: Record<string, string>
@@ -66,12 +53,6 @@ export interface SandboxListOptions extends ConnectionOptions {
 export interface SandboxUpdateOptions {
   metadata?: Record<string, string>
   network?: NetworkConfig
-}
-
-export interface SandboxWaitOptions {
-  timeoutMs?: number
-  intervalMs?: number
-  signal?: AbortSignal
 }
 
 // ---------------------------------------------------------------------------
@@ -111,11 +92,17 @@ export interface ApiSandboxResponse {
   vcpu_count?: number
   memory_mib?: number
   access_token?: string
-  snapshot_id?: string
   created_at?: string
   timeout_seconds?: number
   network?: { allow_out?: string[]; deny_out?: string[] }
   metadata?: Record<string, string>
+}
+
+/** @internal Response shape from POST /sandboxes/{id}/resume. */
+export interface ApiResumeResponse {
+  id?: string
+  status?: string
+  access_token?: string
 }
 
 /** @internal */
@@ -142,9 +129,9 @@ export interface ApiExecStreamEvent {
 /**
  * @internal Convert an API sandbox response to a SandboxInfo.
  *
- * Requires only `id` and `status` — `access_token` is optional because the
- * list endpoint (`GET /sandboxes`) does not return it on each item. Call
- * sites that need the token (Sandbox.create/connect) validate separately.
+ * Requires only `id` and `status`. The raw `access_token` is surfaced only
+ * on create + get-by-id and is tracked privately on the Sandbox instance —
+ * it is not part of SandboxInfo.
  */
 export function toSandboxInfo(raw: ApiSandboxResponse): SandboxInfo {
   if (!raw.id) {
@@ -160,8 +147,6 @@ export function toSandboxInfo(raw: ApiSandboxResponse): SandboxInfo {
     status: raw.status as SandboxStatus,
     vcpuCount: raw.vcpu_count ?? 0,
     memoryMib: raw.memory_mib ?? 0,
-    accessToken: raw.access_token,
-    snapshotId: raw.snapshot_id ?? undefined,
     createdAt: raw.created_at ? new Date(raw.created_at) : new Date(),
     timeoutSeconds: raw.timeout_seconds ?? undefined,
     network: raw.network

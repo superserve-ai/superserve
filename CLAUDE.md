@@ -67,17 +67,18 @@ Published as `@superserve/sdk`. Hand-crafted SDK. Zero runtime dependencies (use
 
 **Main API:**
 - `Sandbox.create({ name })` / `Sandbox.connect(id)` / `Sandbox.list()` / `Sandbox.get(id)` / `Sandbox.killById(id)`
-- Instance: `sandbox.pause()` / `resume()` / `kill()` / `update()` / `getInfo()` / `waitForReady()`
+- Instance: `sandbox.pause()` / `resume()` / `kill()` / `update()` / `getInfo()`
 - Sub-modules: `sandbox.commands.run(cmd, opts)`, `sandbox.files.write/read/readText(path, ...)`
 - `await using sandbox = await Sandbox.create(...)` for auto-cleanup
 
 **Design choices:**
-- `status` / `metadata` are `readonly` — call `getInfo()` for fresh data
+- `status` / `metadata` are `readonly` snapshots from construction — call `getInfo()` for fresh data
+- `access_token` is private to the Sandbox instance (not exposed in `SandboxInfo`); rotated automatically on `resume()` and re-injected into the `files` sub-module
 - `kill()` is idempotent (swallows 404)
-- Every network op accepts `AbortSignal`
-- Streaming `run()` uses idle timeout (resets on each SSE chunk)
-- `toSandboxInfo` throws on missing required fields (no fabricated defaults)
-- Polling fails fast on terminal `failed` / `deleted` states
+- `pause()` / `resume()` / `kill()` return `void` (no body); `getInfo()` / `list()` / `get()` return `SandboxInfo`
+- Every network op accepts `AbortSignal`; GET/DELETE requests auto-retry transient errors (429, 5xx, network) with exponential backoff + jitter
+- Streaming `run()` uses idle timeout (resets on each SSE chunk); throws if stream ends without a `finished` event
+- `toSandboxInfo` throws on missing `id` / `status`; `create()` / `connect()` / `resume()` throw on missing `access_token`
 - Typed errors: `SandboxError`, `AuthenticationError`, `ValidationError`, `NotFoundError`, `ConflictError`, `TimeoutError`, `ServerError`
 
 ### Python SDK (`packages/python-sdk/`) — v0.6.0
@@ -89,15 +90,15 @@ Same API surface as TypeScript SDK (snake_case). `Sandbox` (sync) and `AsyncSand
 **Design choices:**
 - `with Sandbox.create(...) as sb:` and `async with AsyncSandbox.create(...) as sb:` for auto-cleanup
 - `TimeoutError` is named `SandboxTimeoutError` to avoid shadowing Python's builtin
-- `kill()` is idempotent
-- `access_token` refreshed after pause/resume (rebuilds `sandbox.files`)
-- Fail-fast polling on terminal states
+- `kill()` is idempotent; `pause()` / `resume()` / `kill()` return `None`
+- Shared `httpx.Client` per Sandbox instance (connection pooling) — closed on `kill()` / `__exit__`
+- `access_token` is private (`_access_token`); rotated on `resume()` and re-injected into the `files` sub-module
 - Typed errors match TS hierarchy (with `SandboxTimeoutError` rename)
 
 ## Key Patterns
 
 - **Sandbox IDs**: UUIDs. API keys prefixed with `ss_live_`.
-- **Sandbox lifecycle**: `starting → active ↔ idle → deleted`. Also `pausing` (transitional) and `failed`.
+- **Sandbox lifecycle**: `active ↔ idle → deleted`. Only two user-visible states — `active` (running) and `idle` (paused). Create is synchronous; `POST /pause` returns 204; `POST /resume` rotates the per-sandbox access token (SDK updates the files sub-module transparently).
 - **Data plane vs control plane**: SDK hides this internally. Control plane is `api.superserve.ai` (API key). Data plane is `boxd-{id}.sandbox.superserve.ai` (access token). Users never construct data-plane URLs.
 - **API types**: Defined in `apps/console/src/lib/api/types.ts`. Must match the OpenAPI spec.
 - **Shared configs**: TypeScript projects extend from `@superserve/typescript-config`. Biome from `@superserve/biome-config`. Tailwind from `@superserve/tailwind-config`.

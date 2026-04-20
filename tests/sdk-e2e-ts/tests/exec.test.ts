@@ -11,7 +11,6 @@ describe.skipIf(!hasCredentials())("exec", () => {
 
   beforeAll(async () => {
     sandbox = await Sandbox.create({ name, ...opts })
-    await sandbox.waitForReady()
   })
 
   afterAll(async () => {

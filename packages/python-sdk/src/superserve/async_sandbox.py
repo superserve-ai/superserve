@@ -9,7 +9,6 @@ import httpx
 
 from ._config import ResolvedConfig, resolve_config
 from ._http import async_api_request
-from ._polling import async_wait_for_status
 from .commands import AsyncCommands
 from .errors import NotFoundError, SandboxError
 from .files import AsyncFiles
@@ -19,17 +18,17 @@ from .types import NetworkConfig, SandboxInfo, SandboxStatus, to_sandbox_info
 class AsyncSandbox:
     """Async variant of Sandbox with identical API surface."""
 
-    def __init__(self, info: SandboxInfo, config: ResolvedConfig) -> None:
-        if not info.access_token:
-            raise SandboxError(
-                "Invalid API response: missing access_token "
-                "(required for a live Sandbox instance)"
-            )
+    def __init__(
+        self,
+        info: SandboxInfo,
+        access_token: str,
+        config: ResolvedConfig,
+    ) -> None:
         self.id: str = info.id
         self.name: str = info.name
         self.status: SandboxStatus = info.status
         self.metadata: dict[str, str] = info.metadata
-        self.access_token: str = info.access_token
+        self._access_token: str = access_token
         self._config = config
         self._http_client: httpx.AsyncClient = httpx.AsyncClient(timeout=30.0)
         self._closed = False
@@ -38,7 +37,7 @@ class AsyncSandbox:
             config.base_url, self.id, config.api_key, client=self._http_client
         )
         self.files = AsyncFiles(
-            self.id, config.sandbox_host, self.access_token, client=self._http_client
+            self.id, config.sandbox_host, self._access_token, client=self._http_client
         )
 
     @classmethod
@@ -46,7 +45,6 @@ class AsyncSandbox:
         cls,
         *,
         name: str,
-        from_snapshot: str | None = None,
         timeout_seconds: int | None = None,
         metadata: dict[str, str] | None = None,
         env_vars: dict[str, str] | None = None,
@@ -54,12 +52,10 @@ class AsyncSandbox:
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> AsyncSandbox:
-        """Create a new sandbox."""
+        """Create a new sandbox. Returns once the sandbox is ready."""
         config = resolve_config(api_key=api_key, base_url=base_url)
 
         body: dict[str, Any] = {"name": name}
-        if from_snapshot is not None:
-            body["from_snapshot"] = from_snapshot
         if timeout_seconds is not None:
             body["timeout_seconds"] = timeout_seconds
         if metadata is not None:
@@ -78,7 +74,12 @@ class AsyncSandbox:
             headers={"X-API-Key": config.api_key},
             json_body=body,
         )
-        return cls(to_sandbox_info(raw), config)
+        token = raw.get("access_token") if raw else None
+        if not token:
+            raise SandboxError(
+                "Invalid API response from POST /sandboxes: missing access_token"
+            )
+        return cls(to_sandbox_info(raw), token, config)
 
     @classmethod
     async def connect(
@@ -95,7 +96,12 @@ class AsyncSandbox:
             f"{config.base_url}/sandboxes/{sandbox_id}",
             headers={"X-API-Key": config.api_key},
         )
-        return cls(to_sandbox_info(raw), config)
+        token = raw.get("access_token") if raw else None
+        if not token:
+            raise SandboxError(
+                "Invalid API response from GET /sandboxes/{id}: missing access_token"
+            )
+        return cls(to_sandbox_info(raw), token, config)
 
     @classmethod
     async def list(
@@ -156,17 +162,6 @@ class AsyncSandbox:
 
     # Instance methods
 
-    def _refresh_from(self, info: SandboxInfo) -> None:
-        """Update instance state from fresh API response."""
-        if info.access_token and info.access_token != self.access_token:
-            self.access_token = info.access_token
-            self.files = AsyncFiles(
-                self.id,
-                self._config.sandbox_host,
-                self.access_token,
-                client=self._http_client,
-            )
-
     async def _close_http_client(self) -> None:
         if not self._closed:
             self._closed = True
@@ -183,33 +178,42 @@ class AsyncSandbox:
             headers={"X-API-Key": self._config.api_key},
             client=self._http_client,
         )
-        info = to_sandbox_info(raw)
-        self._refresh_from(info)
-        return info
+        return to_sandbox_info(raw)
 
-    async def pause(self) -> SandboxInfo:
-        """Pause this sandbox."""
-        raw = await async_api_request(
+    async def pause(self) -> None:
+        """Pause this sandbox. The sandbox transitions to ``idle``."""
+        await async_api_request(
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/pause",
             headers={"X-API-Key": self._config.api_key},
             client=self._http_client,
         )
-        info = to_sandbox_info(raw)
-        self._refresh_from(info)
-        return info
 
-    async def resume(self) -> SandboxInfo:
-        """Resume this sandbox from paused state."""
+    async def resume(self) -> None:
+        """Resume a paused sandbox.
+
+        The access token is rotated; the SDK updates the files sub-module
+        transparently.
+        """
         raw = await async_api_request(
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/resume",
             headers={"X-API-Key": self._config.api_key},
             client=self._http_client,
         )
-        info = to_sandbox_info(raw)
-        self._refresh_from(info)
-        return info
+        token = raw.get("access_token") if raw else None
+        if not token:
+            raise SandboxError(
+                "Invalid API response from POST /sandboxes/{id}/resume: "
+                "missing access_token"
+            )
+        self._access_token = token
+        self.files = AsyncFiles(
+            self.id,
+            self._config.sandbox_host,
+            self._access_token,
+            client=self._http_client,
+        )
 
     async def kill(self) -> None:
         """Delete this sandbox and all its resources. Idempotent."""
@@ -249,31 +253,11 @@ class AsyncSandbox:
             client=self._http_client,
         )
 
-    async def wait_for_ready(
-        self,
-        timeout_seconds: float = 60.0,
-        *,
-        interval_seconds: float = 1.0,
-    ) -> SandboxInfo:
-        """Wait for this sandbox to reach active status.
-
-        Raises ``SandboxTimeoutError`` if the deadline elapses, or
-        ``SandboxError`` if the sandbox reaches ``failed`` / ``deleted``
-        before ``active``.
-        """
-        info = await async_wait_for_status(
-            self.id,
-            SandboxStatus.ACTIVE,
-            self._config,
-            timeout_seconds=timeout_seconds,
-            interval_seconds=interval_seconds,
-            client=self._http_client,
-        )
-        self._refresh_from(info)
-        return info
-
     def __repr__(self) -> str:
-        return f"AsyncSandbox(id={self.id!r}, name={self.name!r}, status={self.status.value!r})"
+        return (
+            f"AsyncSandbox(id={self.id!r}, name={self.name!r}, "
+            f"status={self.status.value!r})"
+        )
 
     async def __aenter__(self) -> AsyncSandbox:
         return self

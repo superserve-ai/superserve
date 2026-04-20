@@ -19,8 +19,8 @@ Zero runtime dependencies. Requires Node.js ≥ 18 or any modern browser/runtime
 ```typescript
 import { Sandbox } from "@superserve/sdk"
 
+// Sandbox is ready to use when create() returns.
 const sandbox = await Sandbox.create({ name: "my-sandbox" })
-await sandbox.waitForReady()
 
 const result = await sandbox.commands.run("echo hello")
 console.log(result.stdout)
@@ -54,7 +54,6 @@ const sandbox = await Sandbox.create({
 ```typescript
 {
   await using sandbox = await Sandbox.create({ name: "scoped" })
-  await sandbox.waitForReady()
   await sandbox.commands.run("echo hello")
   // sandbox.kill() runs automatically on scope exit (even on throw)
 }
@@ -79,7 +78,6 @@ const controller = new AbortController()
 setTimeout(() => controller.abort(), 5000)
 
 await sandbox.commands.run("sleep 100", { signal: controller.signal })
-await sandbox.waitForReady({ signal: controller.signal })
 ```
 
 ## Error handling

@@ -27,7 +27,7 @@ export SUPERSERVE_BASE_URL=https://api.superserve.ai  # optional
 
 ### `Sandbox.create(...)`
 
-Create a new sandbox. Returns immediately after the API confirms creation (status may be `starting`). Call `sandbox.wait_for_ready()` to block until `active`.
+Create a new sandbox. The call is synchronous — when it returns, the sandbox is `active` and ready to run commands and file operations.
 
 ```python
 from superserve import Sandbox, NetworkConfig
@@ -41,10 +41,9 @@ sandbox = Sandbox.create(
         allow_out=["api.openai.com", "*.github.com"],
         deny_out=["0.0.0.0/0"],
     ),
-    from_snapshot="snapshot-uuid",  # optional: boot from snapshot
 )
 
-sandbox.wait_for_ready()
+result = sandbox.commands.run("echo hello")
 ```
 
 **Parameters:**
@@ -52,8 +51,7 @@ sandbox.wait_for_ready()
 | Field | Type | Description |
 |---|---|---|
 | `name` | `str` | **Required.** Human-readable sandbox name. |
-| `from_snapshot` | `str` | Boot from a snapshot ID instead of a fresh VM. |
-| `timeout_seconds` | `int` | Hard lifetime cap in seconds (max 604800). |
+| `timeout_seconds` | `int` | Cap on how long the sandbox can stay `active` before it's automatically paused (max 604800). |
 | `metadata` | `dict[str, str]` | String tags attached at creation. |
 | `env_vars` | `dict[str, str]` | Environment variables injected into every process. |
 | `network` | `NetworkConfig` | Egress allow/deny rules. |
@@ -91,7 +89,7 @@ Returns `SandboxInfo`.
 
 ### `Sandbox.kill_by_id(sandbox_id, ...)`
 
-Delete a sandbox by ID.
+Delete a sandbox by ID. Idempotent — deleting an already-deleted sandbox is a no-op.
 
 ```python
 Sandbox.kill_by_id("sandbox-uuid")
@@ -103,42 +101,45 @@ Sandbox.kill_by_id("sandbox-uuid")
 |---|---|---|
 | `id` | `str` | Unique sandbox ID (UUID). |
 | `name` | `str` | Human-readable sandbox name. |
-| `status` | `SandboxStatus` | Current status. Call `get_info()` to refresh. |
-| `metadata` | `dict[str, str]` | User-supplied tags. |
-| `access_token` | `str` | Per-sandbox token for data-plane operations. |
+| `status` | `SandboxStatus` | Status at construction time. Call `get_info()` to refresh. |
+| `metadata` | `dict[str, str]` | Tags at construction time. |
 | `commands` | `Commands` | [Commands](/sdk/python/commands) sub-module. |
-| `files` | `Files` | [Files](/sdk/python/files) sub-module. |
+| `files` | `Files` | [Files](/sdk/python/files) sub-module (rebuilt transparently after `resume()`). |
 
 ## Instance methods
 
 ### `sandbox.get_info()`
 
-Fetch the latest sandbox info from the API. Returns a fresh `SandboxInfo` — the instance attributes (`sandbox.status`, `sandbox.metadata`) are snapshots from construction and are not mutated.
+Fetch the latest info from the API. Returns a fresh `SandboxInfo` — instance attributes (`status`, `metadata`) are snapshots and are not mutated.
 
 ```python
 info = sandbox.get_info()
-print(info.status.value)  # "active"
+print(info.status.value)  # "active" or "idle"
 ```
 
 ### `sandbox.pause()`
 
-Pause the sandbox. Snapshots full state and suspends the VM. Status transitions to `idle`.
+Pause the sandbox. All state (memory, processes, files) is preserved. Status transitions to `idle`.
 
 ```python
 sandbox.pause()
 ```
 
+Returns `None`.
+
 ### `sandbox.resume()`
 
-Resume a paused sandbox. Status transitions back to `active`.
+Resume a paused sandbox. Status transitions back to `active`. The access token is rotated on the backend; the SDK updates the `files` sub-module transparently.
 
 ```python
 sandbox.resume()
 ```
 
+Returns `None`.
+
 ### `sandbox.kill()`
 
-Delete the sandbox and all its resources.
+Delete the sandbox and all its resources. Idempotent.
 
 ```python
 sandbox.kill()
@@ -155,22 +156,10 @@ sandbox.update(
 )
 ```
 
-### `sandbox.wait_for_ready(timeout_seconds=60.0)`
-
-Poll until the sandbox reaches `active` status.
-
-```python
-sandbox.wait_for_ready()
-sandbox.wait_for_ready(timeout_seconds=120)
-```
-
-## Auto-cleanup with `with`
-
-Use `Sandbox` as a context manager to automatically delete on scope exit:
+### Auto-cleanup with `with`
 
 ```python
 with Sandbox.create(name="scoped") as sandbox:
-    sandbox.wait_for_ready()
     result = sandbox.commands.run("echo hello")
 # sandbox.kill() runs automatically (even on exception)
 ```
@@ -185,7 +174,6 @@ from superserve import AsyncSandbox
 
 async def main():
     async with await AsyncSandbox.create(name="async-example") as sandbox:
-        await sandbox.wait_for_ready()
         result = await sandbox.commands.run("echo hello")
         print(result.stdout)
 
@@ -198,13 +186,11 @@ asyncio.run(main())
 
 ```python
 class SandboxStatus(str, Enum):
-    STARTING = "starting"
     ACTIVE = "active"
-    PAUSING = "pausing"
     IDLE = "idle"
-    FAILED = "failed"
-    DELETED = "deleted"
 ```
+
+A sandbox is `ACTIVE` when running, `IDLE` after `pause()`. Deletion removes the sandbox — the API returns `404` afterward.
 
 ### `SandboxInfo`
 
@@ -215,11 +201,9 @@ class SandboxInfo(BaseModel):
     status: SandboxStatus
     vcpu_count: int
     memory_mib: int
-    access_token: Optional[str] = None  # only on create/get/connect; None on list items
-    snapshot_id: Optional[str] = None
     created_at: datetime
-    timeout_seconds: Optional[int] = None
-    network: Optional[NetworkConfig] = None
+    timeout_seconds: int | None = None
+    network: NetworkConfig | None = None
     metadata: dict[str, str]
 ```
 
@@ -227,8 +211,8 @@ class SandboxInfo(BaseModel):
 
 ```python
 class NetworkConfig(BaseModel):
-    allow_out: Optional[list[str]] = None  # CIDRs or domains to allow
-    deny_out: Optional[list[str]] = None   # CIDRs to deny
+    allow_out: list[str] | None = None  # CIDRs or domains to allow
+    deny_out: list[str] | None = None   # CIDRs to deny
 ```
 
 ## Errors

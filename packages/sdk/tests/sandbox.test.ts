@@ -9,6 +9,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
+function noContentResponse(): Response {
+  return new Response(null, { status: 204 })
+}
+
 function errorResponse(
   status: number,
   code = "error",
@@ -23,7 +27,7 @@ function errorResponse(
 const baseSandbox = {
   id: "sbx-1",
   name: "my-sandbox",
-  status: "starting",
+  status: "active",
   vcpu_count: 2,
   memory_mib: 512,
   access_token: "tok-abc",
@@ -51,6 +55,7 @@ describe("Sandbox statics", () => {
       metadata: { env: "test" },
     })
     expect(sandbox.id).toBe("sbx-1")
+    expect(sandbox.status).toBe("active")
 
     const [url, init] = mock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe("https://api.superserve.ai/sandboxes")
@@ -59,6 +64,18 @@ describe("Sandbox statics", () => {
     expect(headers["X-API-Key"]).toBe("ss_live_test")
     const body = JSON.parse(init.body as string)
     expect(body).toEqual({ name: "my-sandbox", metadata: { env: "test" } })
+  })
+
+  it("Sandbox.create throws when access_token missing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({ ...baseSandbox, access_token: undefined }),
+      ),
+    )
+    await expect(
+      Sandbox.create({ ...commonOpts, name: "no-token" }),
+    ).rejects.toThrow(/missing access_token/)
   })
 
   it("Sandbox.connect fetches and returns instance", async () => {
@@ -73,10 +90,24 @@ describe("Sandbox statics", () => {
     expect(init.method).toBe("GET")
   })
 
+  it("Sandbox.connect throws when access_token missing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({ ...baseSandbox, access_token: undefined }),
+      ),
+    )
+    await expect(Sandbox.connect("sbx-1", commonOpts)).rejects.toThrow(
+      /missing access_token/,
+    )
+  })
+
   it("Sandbox.list returns an array", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => jsonResponse([baseSandbox, { ...baseSandbox, id: "sbx-2" }])),
+      vi.fn(async () =>
+        jsonResponse([baseSandbox, { ...baseSandbox, id: "sbx-2" }]),
+      ),
     )
 
     const list = await Sandbox.list(commonOpts)
@@ -139,34 +170,62 @@ describe("Sandbox instance methods", () => {
     await expect(sandbox.kill()).resolves.toBeUndefined()
   })
 
-  it("sandbox.pause returns updated SandboxInfo", async () => {
+  it("sandbox.pause returns void and posts to /pause", async () => {
     const sandbox = await makeSandbox()
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        jsonResponse({
-          ...baseSandbox,
-          status: "idle",
-        }),
-      ),
-    )
-    const info = await sandbox.pause()
-    expect(info.status).toBe("idle")
+    const mock = vi.fn(async () => noContentResponse())
+    vi.stubGlobal("fetch", mock)
+
+    const result = await sandbox.pause()
+    expect(result).toBeUndefined()
+
+    const [url, init] = mock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe("https://api.superserve.ai/sandboxes/sbx-1/pause")
+    expect(init.method).toBe("POST")
   })
 
-  it("sandbox.resume returns updated SandboxInfo", async () => {
+  it("sandbox.resume rotates access token and rebuilds files sub-module", async () => {
+    const sandbox = await makeSandbox()
+    const filesBefore = sandbox.files
+
+    // Capture the new token when it flows through to a subsequent files.write
+    const resumeMock = vi.fn(async () =>
+      jsonResponse({
+        id: "sbx-1",
+        status: "active",
+        access_token: "tok-new",
+      }),
+    )
+    vi.stubGlobal("fetch", resumeMock)
+
+    const result = await sandbox.resume()
+    expect(result).toBeUndefined()
+
+    const [url, init] = resumeMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe("https://api.superserve.ai/sandboxes/sbx-1/resume")
+    expect(init.method).toBe("POST")
+
+    // Files sub-module was rebuilt (new instance)
+    expect(sandbox.files).not.toBe(filesBefore)
+
+    // Verify subsequent file ops use the rotated token
+    vi.unstubAllGlobals()
+    const writeMock = vi.fn(async () => new Response(null, { status: 200 }))
+    vi.stubGlobal("fetch", writeMock)
+    await sandbox.files.write("/tmp/x", "hi")
+    const [, writeInit] = writeMock.mock.calls[0] as [string, RequestInit]
+    const headers = writeInit.headers as Record<string, string>
+    expect(headers["X-Access-Token"]).toBe("tok-new")
+  })
+
+  it("sandbox.resume throws when access_token missing", async () => {
     const sandbox = await makeSandbox()
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
-        jsonResponse({
-          ...baseSandbox,
-          status: "active",
-        }),
+        jsonResponse({ id: "sbx-1", status: "active" }),
       ),
     )
-    const info = await sandbox.resume()
-    expect(info.status).toBe("active")
+    await expect(sandbox.resume()).rejects.toThrow(/missing access_token/)
   })
 
   it("Symbol.asyncDispose calls kill", async () => {

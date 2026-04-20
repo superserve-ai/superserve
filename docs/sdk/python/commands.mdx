@@ -80,8 +80,6 @@ It raises `SandboxTimeoutError` if the timeout elapses, or `NotFoundError` / `Co
 from superserve import AsyncSandbox
 
 sandbox = await AsyncSandbox.create(name="async-example")
-await sandbox.wait_for_ready()
-
 result = await sandbox.commands.run("echo hello")
 print(result.stdout)
 ```

@@ -98,7 +98,6 @@ Both SDKs are hand-crafted (not code-generated). Current version: **0.6.0**.
 import { Sandbox } from "@superserve/sdk"
 
 const sandbox = await Sandbox.create({ name: "my-sandbox" })
-await sandbox.waitForReady()
 
 const result = await sandbox.commands.run("echo hello")
 console.log(result.stdout)
@@ -123,7 +122,6 @@ bunx turbo run typecheck --filter=@superserve/sdk
 from superserve import Sandbox
 
 with Sandbox.create(name="my-sandbox") as sandbox:
-    sandbox.wait_for_ready()
     result = sandbox.commands.run("echo hello")
     print(result.stdout)
 

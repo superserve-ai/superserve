@@ -72,8 +72,6 @@ print(round_tripped == original)  # True
 from superserve import AsyncSandbox
 
 sandbox = await AsyncSandbox.create(name="async-example")
-await sandbox.wait_for_ready()
-
 await sandbox.files.write("/tmp/data.txt", "hello")
 content = await sandbox.files.read_text("/tmp/data.txt")
 ```

@@ -22,7 +22,7 @@ export SUPERSERVE_BASE_URL=https://api.superserve.ai  # optional
 
 ### `Sandbox.create(options)`
 
-Create a new sandbox. Returns immediately after the API confirms creation (status may be `starting`). Call `await sandbox.waitForReady()` to block until `active`.
+Create a new sandbox. The call is synchronous — when it returns, the sandbox is `active` and ready to run commands and file operations.
 
 ```typescript
 const sandbox = await Sandbox.create({
@@ -34,10 +34,9 @@ const sandbox = await Sandbox.create({
     allowOut: ["api.openai.com", "*.github.com"],
     denyOut: ["0.0.0.0/0"],
   },
-  fromSnapshot: "snapshot-uuid",  // optional: boot from snapshot
 })
 
-await sandbox.waitForReady()
+const result = await sandbox.commands.run("echo hello")
 ```
 
 **Options:**
@@ -45,13 +44,13 @@ await sandbox.waitForReady()
 | Field | Type | Description |
 |---|---|---|
 | `name` | `string` | **Required.** Human-readable sandbox name. |
-| `fromSnapshot` | `string` | Boot from a snapshot ID instead of a fresh VM. |
-| `timeoutSeconds` | `number` | Hard lifetime cap in seconds (max 604800). |
+| `timeoutSeconds` | `number` | Cap on how long the sandbox can stay `active` before it's automatically paused (max 604800). |
 | `metadata` | `Record<string, string>` | String tags attached at creation. |
 | `envVars` | `Record<string, string>` | Environment variables injected into every process. |
 | `network` | `NetworkConfig` | Egress allow/deny rules. |
 | `apiKey` | `string` | Overrides `SUPERSERVE_API_KEY` env var. |
 | `baseUrl` | `string` | Overrides `SUPERSERVE_BASE_URL` env var. |
+| `signal` | `AbortSignal` | Abort the creation request. |
 
 ### `Sandbox.connect(sandboxId, options?)`
 
@@ -84,7 +83,7 @@ Returns `SandboxInfo`.
 
 ### `Sandbox.killById(sandboxId, options?)`
 
-Delete a sandbox by ID.
+Delete a sandbox by ID. Idempotent — deleting an already-deleted sandbox is a no-op.
 
 ```typescript
 await Sandbox.killById("sandbox-uuid")
@@ -96,42 +95,45 @@ await Sandbox.killById("sandbox-uuid")
 |---|---|---|
 | `id` | `string` | Unique sandbox ID (UUID). |
 | `name` | `string` | Human-readable sandbox name. |
-| `status` | `SandboxStatus` | Current status. Call `getInfo()` to refresh. |
-| `metadata` | `Record<string, string>` | User-supplied tags. |
-| `accessToken` | `string` | Per-sandbox token for data-plane operations. |
+| `status` | `SandboxStatus` | Status at construction time. Call `getInfo()` to refresh. |
+| `metadata` | `Record<string, string>` | Tags at construction time. |
 | `commands` | `Commands` | [Commands](/sdk/typescript/commands) sub-module. |
-| `files` | `Files` | [Files](/sdk/typescript/files) sub-module. |
+| `files` | `Files` | [Files](/sdk/typescript/files) sub-module (rebuilt transparently after `resume()`). |
 
 ## Instance methods
 
 ### `sandbox.getInfo()`
 
-Fetch fresh sandbox info from the API. The returned `SandboxInfo` reflects the current state; the instance's own `status` and `metadata` are snapshots from construction and are not mutated — use the return value.
+Fetch the latest info from the API. Returns a fresh `SandboxInfo` — the instance's own `status`/`metadata` are snapshots and are not mutated.
 
 ```typescript
 const info = await sandbox.getInfo()
-console.log(info.status)  // "active"
+console.log(info.status)  // "active" or "idle"
 ```
 
 ### `sandbox.pause()`
 
-Pause the sandbox. Snapshots full state (memory + disk) and suspends the VM. Status transitions to `idle`.
+Pause the sandbox. All state (memory, processes, files) is preserved. Status transitions to `idle`.
 
 ```typescript
 await sandbox.pause()
 ```
 
+Returns `Promise<void>`.
+
 ### `sandbox.resume()`
 
-Resume a paused sandbox. Restores from snapshot. Status transitions back to `active`.
+Resume a paused sandbox. Status transitions back to `active`. The access token is rotated on the backend; the SDK updates the `files` sub-module transparently.
 
 ```typescript
 await sandbox.resume()
 ```
 
+Returns `Promise<void>`.
+
 ### `sandbox.kill()`
 
-Delete the sandbox and all its resources.
+Delete the sandbox and all its resources. Idempotent.
 
 ```typescript
 await sandbox.kill()
@@ -148,24 +150,11 @@ await sandbox.update({
 })
 ```
 
-### `sandbox.waitForReady(options?)`
-
-Poll until the sandbox reaches `active` status. Default timeout is 60 seconds.
-
-```typescript
-await sandbox.waitForReady()
-await sandbox.waitForReady({ timeoutMs: 120_000 })
-await sandbox.waitForReady({ timeoutMs: 60_000, signal: controller.signal })
-```
-
-Options: `{ timeoutMs?: number, intervalMs?: number, signal?: AbortSignal }`. Fails fast (throws `SandboxError`) if the sandbox reaches a terminal `failed` or `deleted` state.
-
 ### Auto-cleanup with `await using`
 
 ```typescript
 {
   await using sandbox = await Sandbox.create({ name: "scoped" })
-  await sandbox.waitForReady()
   await sandbox.commands.run("echo hello")
   // sandbox.kill() runs automatically when scope exits (even on throw)
 }
@@ -176,8 +165,10 @@ Options: `{ timeoutMs?: number, intervalMs?: number, signal?: AbortSignal }`. Fa
 ### `SandboxStatus`
 
 ```typescript
-type SandboxStatus = "starting" | "active" | "pausing" | "idle" | "failed" | "deleted"
+type SandboxStatus = "active" | "idle"
 ```
+
+A sandbox is `active` when running, `idle` after `pause()`. Deletion removes the sandbox — the API returns `404` afterward.
 
 ### `SandboxInfo`
 
@@ -188,8 +179,6 @@ interface SandboxInfo {
   status: SandboxStatus
   vcpuCount: number
   memoryMib: number
-  accessToken?: string  // only on create/get/connect; undefined on list items
-  snapshotId?: string
   createdAt: Date
   timeoutSeconds?: number
   network?: NetworkConfig

@@ -12,7 +12,6 @@ describe.skipIf(!hasCredentials())("sandboxes", () => {
 
   beforeAll(async () => {
     sandbox = await Sandbox.create({ name, ...opts })
-    await sandbox.waitForReady()
   })
 
   afterAll(async () => {
@@ -45,32 +44,15 @@ describe.skipIf(!hasCredentials())("sandboxes", () => {
     expect(info.id).toBe(sandbox.id)
   })
 
-  it("pauses and transitions to idle/paused", async () => {
+  it("pauses and transitions to idle", async () => {
     await sandbox.pause()
-    // Backend may return "paused" or "idle" depending on version — spec drift.
-    const maxWait = Date.now() + 90_000
-    while (Date.now() < maxWait) {
-      const info = await sandbox.getInfo()
-      if (info.status === "idle" || (info.status as string) === "paused") {
-        expect(["paused", "idle"]).toContain(info.status)
-        return
-      }
-      await new Promise((r) => setTimeout(r, 2000))
-    }
-    throw new Error("Timed out waiting for paused/idle status")
-  }, 120_000)
+    const info = await Sandbox.get(sandbox.id, opts)
+    expect(info.status).toBe("idle")
+  })
 
   it("resumes back to active", async () => {
     await sandbox.resume()
-    const maxWait = Date.now() + 90_000
-    while (Date.now() < maxWait) {
-      const info = await sandbox.getInfo()
-      if (info.status === "active") {
-        expect(info.status).toBe("active")
-        return
-      }
-      await new Promise((r) => setTimeout(r, 2000))
-    }
-    throw new Error("Timed out waiting for active status")
-  }, 120_000)
+    const info = await Sandbox.get(sandbox.id, opts)
+    expect(info.status).toBe("active")
+  })
 })

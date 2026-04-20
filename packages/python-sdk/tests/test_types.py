@@ -20,8 +20,6 @@ def _valid_raw() -> dict:
         "status": "active",
         "vcpu_count": 2,
         "memory_mib": 1024,
-        "access_token": "tok-abc",
-        "snapshot_id": "snap-1",
         "created_at": "2026-01-01T12:00:00",
         "timeout_seconds": 600,
         "network": {"allow_out": ["1.2.3.4"], "deny_out": []},
@@ -38,8 +36,6 @@ class TestToSandboxInfo:
         assert info.status == SandboxStatus.ACTIVE
         assert info.vcpu_count == 2
         assert info.memory_mib == 1024
-        assert info.access_token == "tok-abc"
-        assert info.snapshot_id == "snap-1"
         assert info.timeout_seconds == 600
         assert info.metadata == {"key": "value"}
         assert info.network is not None
@@ -58,25 +54,15 @@ class TestToSandboxInfo:
         with pytest.raises(ValueError, match="status"):
             to_sandbox_info(raw)
 
-    def test_missing_access_token_is_allowed(self) -> None:
-        """List responses omit access_token per-item; SandboxInfo reflects that."""
-        raw = _valid_raw()
-        del raw["access_token"]
-        info = to_sandbox_info(raw)
-        assert info.id == raw["id"]
-        assert info.access_token is None
-
     def test_missing_optional_fields_uses_defaults(self) -> None:
         raw = {
             "id": "sbx-1",
-            "status": "starting",
-            "access_token": "tok",
+            "status": "active",
         }
         info = to_sandbox_info(raw)
         assert info.name == ""
         assert info.vcpu_count == 0
         assert info.memory_mib == 0
-        assert info.snapshot_id is None
         assert info.timeout_seconds is None
         assert info.network is None
         assert info.metadata == {}
@@ -102,9 +88,8 @@ class TestToSandboxInfo:
 
 class TestSandboxStatus:
     def test_all_statuses_exist(self) -> None:
-        assert SandboxStatus.STARTING.value == "starting"
         assert SandboxStatus.ACTIVE.value == "active"
-        assert SandboxStatus.PAUSING.value == "pausing"
         assert SandboxStatus.IDLE.value == "idle"
-        assert SandboxStatus.FAILED.value == "failed"
-        assert SandboxStatus.DELETED.value == "deleted"
+
+    def test_only_two_statuses(self) -> None:
+        assert {s.value for s in SandboxStatus} == {"active", "idle"}

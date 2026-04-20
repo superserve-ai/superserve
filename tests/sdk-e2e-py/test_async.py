@@ -20,8 +20,6 @@ async def test_async_create_exec_delete(connection_opts, run_id):
     sandbox = await AsyncSandbox.create(name=name, **connection_opts)
     assert sandbox.id is not None
 
-    await sandbox.wait_for_ready()
-
     try:
         result = await sandbox.commands.run("echo hello-async")
         assert "hello-async" in result.stdout

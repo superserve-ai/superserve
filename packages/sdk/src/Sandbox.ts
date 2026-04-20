@@ -19,8 +19,8 @@ import { type ResolvedConfig, resolveConfig } from "./config.js"
 import { NotFoundError, SandboxError } from "./errors.js"
 import { Files } from "./files.js"
 import { request, requestVoid } from "./http.js"
-import { waitForStatus } from "./polling.js"
 import type {
+  ApiResumeResponse,
   ApiSandboxResponse,
   ConnectionOptions,
   SandboxCreateOptions,
@@ -28,7 +28,6 @@ import type {
   SandboxListOptions,
   SandboxStatus,
   SandboxUpdateOptions,
-  SandboxWaitOptions,
 } from "./types.js"
 import { toSandboxInfo } from "./types.js"
 
@@ -45,36 +44,34 @@ export class Sandbox {
   /** User-supplied metadata tags at construction time. Call getInfo() to refresh. */
   readonly metadata: Record<string, string>
 
-  /**
-   * Per-sandbox access token for data-plane operations.
-   * Used internally by the Files sub-module. Exposed for advanced use cases.
-   */
-  readonly accessToken: string
-
   /** Execute shell commands inside this sandbox. */
   readonly commands: Commands
 
-  /** Upload and download files to/from this sandbox. */
-  readonly files: Files
+  /**
+   * Upload and download files to/from this sandbox.
+   *
+   * Rebuilt transparently after `resume()` to pick up the rotated token.
+   */
+  files: Files
 
+  private _accessToken: string
   private readonly _config: ResolvedConfig
 
   /** @internal — Use Sandbox.create() or Sandbox.connect() instead. */
-  private constructor(info: SandboxInfo, config: ResolvedConfig) {
-    if (!info.accessToken) {
-      throw new SandboxError(
-        "Invalid API response: missing access_token (required for a live Sandbox instance)",
-      )
-    }
+  private constructor(
+    info: SandboxInfo,
+    accessToken: string,
+    config: ResolvedConfig,
+  ) {
     this.id = info.id
     this.name = info.name
     this.status = info.status
     this.metadata = info.metadata
-    this.accessToken = info.accessToken
+    this._accessToken = accessToken
     this._config = config
 
     this.commands = new Commands(config.baseUrl, this.id, config.apiKey)
-    this.files = new Files(this.id, config.sandboxHost, this.accessToken)
+    this.files = new Files(this.id, config.sandboxHost, this._accessToken)
   }
 
   // -------------------------------------------------------------------------
@@ -84,21 +81,19 @@ export class Sandbox {
   /**
    * Create a new sandbox and return a connected Sandbox instance.
    *
-   * Returns immediately after the API confirms creation (status may be
-   * `starting`). Call `await sandbox.waitForReady()` to block until `active`.
+   * The request is synchronous: once it resolves, the sandbox is `active`
+   * and ready to execute commands and file operations.
    *
    * @example
    * ```typescript
    * const sandbox = await Sandbox.create({ name: "my-sandbox" })
-   * await sandbox.waitForReady()
+   * const result = await sandbox.commands.run("echo hello")
    * ```
    */
   static async create(options: SandboxCreateOptions): Promise<Sandbox> {
     const config = resolveConfig(options)
 
     const body: Record<string, unknown> = { name: options.name }
-    if (options.fromSnapshot !== undefined)
-      body.from_snapshot = options.fromSnapshot
     if (options.timeoutSeconds !== undefined)
       body.timeout_seconds = options.timeoutSeconds
     if (options.metadata !== undefined) body.metadata = options.metadata
@@ -118,7 +113,12 @@ export class Sandbox {
       signal: options.signal,
     })
 
-    return new Sandbox(toSandboxInfo(raw), config)
+    if (!raw.access_token) {
+      throw new SandboxError(
+        "Invalid API response from POST /sandboxes: missing access_token",
+      )
+    }
+    return new Sandbox(toSandboxInfo(raw), raw.access_token, config)
   }
 
   /**
@@ -144,7 +144,12 @@ export class Sandbox {
       signal: options.signal,
     })
 
-    return new Sandbox(toSandboxInfo(raw), config)
+    if (!raw.access_token) {
+      throw new SandboxError(
+        "Invalid API response from GET /sandboxes/{id}: missing access_token",
+      )
+    }
+    return new Sandbox(toSandboxInfo(raw), raw.access_token, config)
   }
 
   /**
@@ -240,29 +245,36 @@ export class Sandbox {
   }
 
   /**
-   * Pause this sandbox. Snapshots full state (memory + disk), suspends the VM.
-   * Status transitions to `idle`.
+   * Pause this sandbox. The sandbox transitions to `idle`.
+   * All running processes and file state are preserved.
    */
-  async pause(): Promise<SandboxInfo> {
-    const raw = await request<ApiSandboxResponse>({
+  async pause(): Promise<void> {
+    await requestVoid({
       method: "POST",
       url: `${this._config.baseUrl}/sandboxes/${this.id}/pause`,
       headers: { "X-API-Key": this._config.apiKey },
     })
-    return toSandboxInfo(raw)
   }
 
   /**
-   * Resume this sandbox from paused state. Restores from snapshot.
-   * Status transitions back to `active`.
+   * Resume a paused sandbox. Status transitions back to `active`.
+   * The access token is rotated; the SDK updates the files sub-module
+   * transparently.
    */
-  async resume(): Promise<SandboxInfo> {
-    const raw = await request<ApiSandboxResponse>({
+  async resume(): Promise<void> {
+    const raw = await request<ApiResumeResponse>({
       method: "POST",
       url: `${this._config.baseUrl}/sandboxes/${this.id}/resume`,
       headers: { "X-API-Key": this._config.apiKey },
     })
-    return toSandboxInfo(raw)
+    if (!raw.access_token) {
+      throw new SandboxError(
+        "Invalid API response from POST /sandboxes/{id}/resume: missing access_token",
+      )
+    }
+    this._accessToken = raw.access_token
+    // Rebuild files sub-module with fresh token
+    this.files = new Files(this.id, this._config.sandboxHost, this._accessToken)
   }
 
   /**
@@ -302,23 +314,6 @@ export class Sandbox {
       headers: { "X-API-Key": this._config.apiKey },
       body,
     })
-  }
-
-  /**
-   * Wait for this sandbox to reach `active` status.
-   *
-   * Useful after `Sandbox.create()` since the API returns immediately
-   * with `status: starting`.
-   */
-  async waitForReady(options: SandboxWaitOptions = {}): Promise<SandboxInfo> {
-    const info = await waitForStatus(
-      this.id,
-      "active",
-      this._config.baseUrl,
-      this._config.apiKey,
-      options,
-    )
-    return info
   }
 
   /**

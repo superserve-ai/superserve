@@ -26,9 +26,8 @@ Create and use a sandbox:
 ```typescript
 import { Sandbox } from "@superserve/sdk"
 
-// Create a sandbox
+// Create a sandbox — ready to use when create returns
 const sandbox = await Sandbox.create({ name: "quickstart" })
-await sandbox.waitForReady()
 
 // Run a command
 const result = await sandbox.commands.run("echo 'Hello from Superserve!'")
@@ -56,19 +55,14 @@ Create and use a sandbox:
 ```python
 from superserve import Sandbox
 
-# Create a sandbox
-sandbox = Sandbox.create(name="quickstart")
-sandbox.wait_for_ready()
+with Sandbox.create(name="quickstart") as sandbox:
+    # Run a command
+    result = sandbox.commands.run("echo 'Hello from Superserve!'")
+    print(result.stdout)
 
-# Run a command
-result = sandbox.commands.run("echo 'Hello from Superserve!'")
-print(result.stdout)
-
-# Write and read a file
-sandbox.files.write("/tmp/hello.txt", b"Hello, world!")
-content = sandbox.files.read_text("/tmp/hello.txt")
-print(content)
-
-# Clean up
-sandbox.kill()
+    # Write and read a file
+    sandbox.files.write("/tmp/hello.txt", b"Hello, world!")
+    content = sandbox.files.read_text("/tmp/hello.txt")
+    print(content)
+# sandbox.kill() runs automatically on scope exit
 ```

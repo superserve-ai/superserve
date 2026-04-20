@@ -11,7 +11,6 @@ pytestmark = SKIP_IF_NO_CREDS
 def sandbox(connection_opts, run_id):
     name = f"sdk-e2e-py-exec-{run_id}"
     sbx = Sandbox.create(name=name, **connection_opts)
-    sbx.wait_for_ready()
     yield sbx
     try:
         sbx.kill()
