@@ -28,10 +28,10 @@ export function CurrentBuildPanel({ templateId }: { templateId: string }) {
     latest.status === "failed" ? formatBuildError(latest.error_message) : null
 
   return (
-    <section className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
+    <>
+      <div className="flex h-10 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-3">
-          <h2 className="font-mono text-[11px] uppercase tracking-wide text-muted">
+          <h2 className="text-sm font-medium text-foreground">
             {isInFlight ? "Current build" : "Last build"}
           </h2>
           <TemplateStatusBadge status={latest.status} />
@@ -49,20 +49,21 @@ export function CurrentBuildPanel({ templateId }: { templateId: string }) {
         )}
       </div>
 
-      {err && (
-        <div className="border border-dashed border-destructive p-3">
-          <div className="font-mono text-xs uppercase text-destructive">
-            {err.title}
-          </div>
-          {err.detail && (
-            <div className="mt-1 font-mono text-xs text-muted">
-              {err.detail}
+      <div className="border-b border-border p-4">
+        {err && (
+          <div className="mb-3 border border-dashed border-destructive/40 p-3">
+            <div className="font-mono text-xs uppercase text-destructive">
+              {err.title}
             </div>
-          )}
-        </div>
-      )}
-
-      <BuildLogViewer templateId={templateId} buildId={latest.id} />
-    </section>
+            {err.detail && (
+              <div className="mt-1 font-mono text-xs text-muted">
+                {err.detail}
+              </div>
+            )}
+          </div>
+        )}
+        <BuildLogViewer templateId={templateId} buildId={latest.id} />
+      </div>
+    </>
   )
 }

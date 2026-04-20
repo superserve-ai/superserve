@@ -7,12 +7,14 @@ import { AnimatedTableRow } from "@/components/animated-table-row"
 import type { TemplateResponse } from "@/lib/api/types"
 import { formatTime } from "@/lib/format"
 import { formatBytes } from "@/lib/sandbox-utils"
+import { isSystemTemplate } from "@/lib/templates/is-system-template"
 import { TemplateResources } from "./template-resources"
 import { TemplateRowActions } from "./template-row-actions"
 import { TemplateStatusBadge } from "./template-status-badge"
 
 export function TemplateTableRow({ template }: { template: TemplateResponse }) {
   const router = useRouter()
+  const system = isSystemTemplate(template)
 
   const handleLaunch = (t: TemplateResponse) => {
     router.push(`/sandboxes?from_template=${encodeURIComponent(t.alias)}`)
@@ -66,7 +68,11 @@ export function TemplateTableRow({ template }: { template: TemplateResponse }) {
             <RocketLaunchIcon className="size-3.5" weight="light" />
             Launch
           </Button>
-          <TemplateRowActions template={template} onLaunch={handleLaunch} />
+          <TemplateRowActions
+            template={template}
+            isSystem={system}
+            onLaunch={handleLaunch}
+          />
         </div>
       </TableCell>
     </AnimatedTableRow>

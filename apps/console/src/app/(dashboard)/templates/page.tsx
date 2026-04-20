@@ -11,22 +11,42 @@ import { TableSkeleton } from "@/components/table-skeleton"
 import { TableToolbar } from "@/components/table-toolbar"
 import { CreateTemplateDialog } from "@/components/templates/create-template-dialog"
 import { TemplateTableRow } from "@/components/templates/template-table-row"
-import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { useTemplates } from "@/hooks/use-templates"
+import { isSystemTemplate } from "@/lib/templates/is-system-template"
+
+type Tab = "all" | "team" | "system"
 
 export default function TemplatesPage() {
   const [createOpen, setCreateOpen] = useState(false)
+  const [tab, setTab] = useState<Tab>("all")
   const [search, setSearch] = useState("")
-  const debouncedSearch = useDebouncedValue(search.trim(), 300)
 
-  const {
-    data: templates,
-    isPending,
-    error,
-    refetch,
-  } = useTemplates(debouncedSearch || undefined)
+  const { data: templates, isPending, error, refetch } = useTemplates()
 
-  const visible = useMemo(() => templates ?? [], [templates])
+  const counts = useMemo(() => {
+    if (!templates) return { all: 0, team: 0, system: 0 }
+    let team = 0
+    let system = 0
+    for (const t of templates) {
+      if (isSystemTemplate(t)) system++
+      else team++
+    }
+    return { all: templates.length, team, system }
+  }, [templates])
+
+  const filtered = useMemo(() => {
+    if (!templates) return []
+    const byTab =
+      tab === "all"
+        ? templates
+        : tab === "team"
+          ? templates.filter((t) => !isSystemTemplate(t))
+          : templates.filter((t) => isSystemTemplate(t))
+
+    const q = search.trim().toLowerCase()
+    if (!q) return byTab
+    return byTab.filter((t) => t.alias.toLowerCase().includes(q))
+  }, [templates, tab, search])
 
   const newButton = (
     <Button size="sm" onClick={() => setCreateOpen(true)}>
@@ -39,7 +59,7 @@ export default function TemplatesPage() {
     return (
       <div className="flex h-full flex-col">
         <PageHeader title="Templates">{newButton}</PageHeader>
-        <TableSkeleton columns={6} />
+        <TableSkeleton columns={6} tabs={3} />
       </div>
     )
   }
@@ -53,13 +73,13 @@ export default function TemplatesPage() {
     )
   }
 
-  const isEmpty = visible.length === 0
+  const totalEmpty = (templates?.length ?? 0) === 0
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="Templates">{newButton}</PageHeader>
 
-      {isEmpty && !debouncedSearch ? (
+      {totalEmpty ? (
         <EmptyState
           icon={StackIcon}
           title="No templates yet"
@@ -71,17 +91,44 @@ export default function TemplatesPage() {
         <>
           <TableToolbar
             id="templates-toolbar"
+            tabs={[
+              { value: "all", label: "All", count: counts.all },
+              { value: "team", label: "Team", count: counts.team },
+              { value: "system", label: "System", count: counts.system },
+            ]}
+            activeTab={tab}
+            onTabChange={(v) => setTab(v as Tab)}
             searchPlaceholder="Search aliases…"
             searchValue={search}
             onSearchChange={setSearch}
           />
 
-          <div className="flex-1 overflow-y-auto">
-            {isEmpty ? (
+          <div className="flex flex-1 flex-col overflow-y-auto">
+            {filtered.length === 0 ? (
               <EmptyState
                 icon={StackIcon}
-                title="No templates match that search"
-                description="Try a different alias prefix."
+                title={
+                  search
+                    ? "No templates match that search"
+                    : tab === "team"
+                      ? "No team templates yet"
+                      : "No system templates available"
+                }
+                description={
+                  search
+                    ? "Try a different alias prefix."
+                    : tab === "team"
+                      ? "Create one to get started."
+                      : "System templates are curated by Superserve."
+                }
+                actionLabel={
+                  !search && tab === "team" ? "Create template" : undefined
+                }
+                onAction={
+                  !search && tab === "team"
+                    ? () => setCreateOpen(true)
+                    : undefined
+                }
               />
             ) : (
               <Table>
@@ -96,7 +143,7 @@ export default function TemplatesPage() {
                   </TableRow>
                 </TableHeader>
                 <StickyHoverTableBody>
-                  {visible.map((t) => (
+                  {filtered.map((t) => (
                     <TemplateTableRow key={t.id} template={t} />
                   ))}
                 </StickyHoverTableBody>

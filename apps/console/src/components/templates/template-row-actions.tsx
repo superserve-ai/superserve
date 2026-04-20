@@ -22,10 +22,14 @@ import { DeleteTemplateDialog } from "./delete-template-dialog"
 
 interface TemplateRowActionsProps {
   template: TemplateResponse
+  isSystem: boolean
   onLaunch: (t: TemplateResponse) => void
 }
 
-export function TemplateRowActions({ template }: TemplateRowActionsProps) {
+export function TemplateRowActions({
+  template,
+  isSystem,
+}: TemplateRowActionsProps) {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const rebuild = useRebuildTemplate()
   const { addToast } = useToast()
@@ -55,13 +59,15 @@ export function TemplateRowActions({ template }: TemplateRowActionsProps) {
           <DotsThreeVerticalIcon className="size-4" weight="bold" />
         </MenuTrigger>
         <MenuPopup align="end">
-          <MenuItem
-            onClick={() => rebuild.mutate(template.id)}
-            disabled={rebuildDisabled}
-          >
-            <ArrowsClockwiseIcon className="size-4" weight="light" />
-            Rebuild
-          </MenuItem>
+          {!isSystem && (
+            <MenuItem
+              onClick={() => rebuild.mutate(template.id)}
+              disabled={rebuildDisabled}
+            >
+              <ArrowsClockwiseIcon className="size-4" weight="light" />
+              Rebuild
+            </MenuItem>
+          )}
           <MenuItem onClick={() => copy(template.alias, "Alias")}>
             <CopyIcon className="size-4" weight="light" />
             Copy alias
@@ -70,14 +76,18 @@ export function TemplateRowActions({ template }: TemplateRowActionsProps) {
             <CopyIcon className="size-4" weight="light" />
             Copy ID
           </MenuItem>
-          <MenuSeparator />
-          <MenuItem
-            onClick={() => setDeleteOpen(true)}
-            className="text-destructive hover:bg-destructive/5 focus:bg-destructive/5"
-          >
-            <TrashIcon className="size-4" weight="light" />
-            Delete
-          </MenuItem>
+          {!isSystem && (
+            <>
+              <MenuSeparator />
+              <MenuItem
+                onClick={() => setDeleteOpen(true)}
+                className="text-destructive hover:bg-destructive/5 focus:bg-destructive/5"
+              >
+                <TrashIcon className="size-4" weight="light" />
+                Delete
+              </MenuItem>
+            </>
+          )}
         </MenuPopup>
       </Menu>
 

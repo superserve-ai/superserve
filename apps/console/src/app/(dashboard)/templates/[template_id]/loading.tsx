@@ -1,10 +1,5 @@
-import { PageHeader } from "@/components/page-header"
+import { TemplateDetailSkeleton } from "@/components/templates/template-detail-skeleton"
 
 export default function Loading() {
-  return (
-    <div className="flex h-full flex-col">
-      <PageHeader title="Template" />
-      <div className="flex-1 animate-pulse" />
-    </div>
-  )
+  return <TemplateDetailSkeleton />
 }

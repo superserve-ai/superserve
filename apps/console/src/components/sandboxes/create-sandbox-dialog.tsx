@@ -19,19 +19,163 @@ import {
   Field,
   HighlightedCode,
   Input,
-  // Select, // TODO: re-enable when multiple snapshots are available
-  // SelectItem,
-  // SelectPopup,
-  // SelectTrigger,
-  // SelectValue,
 } from "@superserve/ui"
 import { AnimatePresence, LayoutGroup, motion } from "motion/react"
 import { usePostHog } from "posthog-js/react"
-import { useEffect, useState } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { useCreateSandbox } from "@/hooks/use-sandboxes"
+import { useTemplates } from "@/hooks/use-templates"
 import type { CreateSandboxRequest } from "@/lib/api/types"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
+import { isSystemTemplate } from "@/lib/templates/is-system-template"
+
+const DEFAULT_TEMPLATE = "ss/base"
+
+interface TemplatePickerItem {
+  id: string
+  alias: string
+  system: boolean
+}
+
+function TemplatePicker({
+  value,
+  items,
+  onChange,
+}: {
+  value: string
+  items: TemplatePickerItem[]
+  onChange: (alias: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  const [rect, setRect] = useState<DOMRect | null>(null)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const current = items.find((i) => i.alias === value)
+
+  useEffect(() => setMounted(true), [])
+
+  // Track trigger position for the portalled, fixed-positioned panel.
+  // Re-measures on scroll / resize so the panel stays anchored even when
+  // the dialog's inner scroll container moves.
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return
+    const measure = () => {
+      if (triggerRef.current)
+        setRect(triggerRef.current.getBoundingClientRect())
+    }
+    measure()
+    window.addEventListener("resize", measure)
+    window.addEventListener("scroll", measure, true)
+    return () => {
+      window.removeEventListener("resize", measure)
+      window.removeEventListener("scroll", measure, true)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const handlePointer = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (triggerRef.current?.contains(target)) return
+      if (panelRef.current?.contains(target)) return
+      setOpen(false)
+    }
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false)
+    }
+    document.addEventListener("mousedown", handlePointer)
+    document.addEventListener("keydown", handleKey)
+    return () => {
+      document.removeEventListener("mousedown", handlePointer)
+      document.removeEventListener("keydown", handleKey)
+    }
+  }, [open])
+
+  const panel =
+    open && rect && mounted
+      ? createPortal(
+          <div
+            ref={panelRef}
+            style={{
+              position: "fixed",
+              top: rect.bottom + 4,
+              left: rect.left,
+              width: rect.width,
+              zIndex: 100,
+            }}
+            className="max-h-60 overflow-y-auto border border-dashed border-border bg-surface shadow-lg"
+          >
+            {items.length === 0 ? (
+              <div className="px-3 py-2 font-mono text-xs text-muted">
+                No ready templates available
+              </div>
+            ) : (
+              items.map((item) => {
+                const selected = item.alias === value
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      onChange(item.alias)
+                      setOpen(false)
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors",
+                      selected
+                        ? "bg-foreground/10 text-foreground"
+                        : "text-foreground/80 hover:bg-surface-hover",
+                    )}
+                  >
+                    <span className="font-mono">{item.alias}</span>
+                    {item.system && (
+                      <span className="font-mono text-[10px] uppercase text-muted">
+                        System
+                      </span>
+                    )}
+                  </button>
+                )
+              })
+            )}
+          </div>,
+          document.body,
+        )
+      : null
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          "flex h-9 w-full items-center justify-between border border-input bg-background px-3 text-sm text-foreground",
+          "focus:outline-none focus:ring-2 focus:ring-border-focus focus:border-border-focus",
+        )}
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate font-mono">{value}</span>
+          {current?.system && (
+            <span className="font-mono text-[10px] uppercase text-muted">
+              System
+            </span>
+          )}
+        </span>
+        <CaretDownIcon
+          className={cn(
+            "size-4 shrink-0 text-muted transition-transform",
+            open && "rotate-180",
+          )}
+          weight="light"
+        />
+      </button>
+      {panel}
+    </>
+  )
+}
 
 type Mode = "form" | "code"
 type Language = "typescript" | "python"
@@ -194,14 +338,49 @@ export function CreateSandboxDialog({
   const [hoveredMode, setHoveredMode] = useState<string | null>(null)
   const [hoveredLang, setHoveredLang] = useState<string | null>(null)
   const [templateRef, setTemplateRef] = useState<string>(
-    initialTemplateRef ?? "",
+    initialTemplateRef ?? DEFAULT_TEMPLATE,
   )
 
   // Keep `templateRef` in sync when the caller changes `initialTemplateRef`
   // (e.g. a different Launch action was fired).
   useEffect(() => {
-    setTemplateRef(initialTemplateRef ?? "")
+    setTemplateRef(initialTemplateRef ?? DEFAULT_TEMPLATE)
   }, [initialTemplateRef])
+
+  const { data: templates } = useTemplates()
+  const templateOptions = useMemo(() => {
+    const list = templates ?? []
+    const ready = list.filter((t) => t.status === "ready")
+    // Sort: system templates first (ss/* curated), then team by alias.
+    return [...ready].sort((a, b) => {
+      const aSys = isSystemTemplate(a)
+      const bSys = isSystemTemplate(b)
+      if (aSys !== bSys) return aSys ? -1 : 1
+      return a.alias.localeCompare(b.alias)
+    })
+  }, [templates])
+
+  const selectItems = useMemo(() => {
+    const mapped = templateOptions.map((t) => ({
+      id: t.id,
+      alias: t.alias,
+      system: isSystemTemplate(t),
+    }))
+    // Ensure the current value is always in the items list, even if the
+    // templates query hasn't resolved yet.
+    const aliases = new Set(mapped.map((t) => t.alias))
+    if (templateRef && !aliases.has(templateRef)) {
+      return [
+        {
+          id: templateRef,
+          alias: templateRef,
+          system: isSystemTemplate({ alias: templateRef }),
+        },
+        ...mapped,
+      ]
+    }
+    return mapped
+  }, [templateOptions, templateRef])
 
   const createMutation = useCreateSandbox()
 
@@ -214,7 +393,7 @@ export function CreateSandboxDialog({
     setMetadataEntries([])
     setShowAdvanced(false)
     setMode("form")
-    setTemplateRef(initialTemplateRef ?? "")
+    setTemplateRef(initialTemplateRef ?? DEFAULT_TEMPLATE)
   }
 
   const handleCreate = () => {
@@ -325,31 +504,23 @@ export function CreateSandboxDialog({
         {mode === "form" ? (
           <>
             <div className="max-h-[60vh] space-y-5 overflow-y-auto p-6 pt-4">
-              {templateRef && (
-                <div className="flex items-center justify-between gap-3 border border-dashed border-border bg-surface px-3 py-2">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="font-mono text-[10px] uppercase text-muted">
-                      From template
-                    </span>
-                    <span className="truncate font-mono text-xs text-foreground">
-                      {templateRef}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setTemplateRef("")}
-                    className="cursor-pointer font-mono text-[10px] uppercase text-muted hover:text-foreground"
-                  >
-                    Clear
-                  </button>
-                </div>
-              )}
-
               <Field label="Sandbox Name" required>
                 <Input
                   placeholder="my-sandbox"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                />
+              </Field>
+
+              <Field
+                label="Template"
+                required
+                description="Base image the sandbox boots from."
+              >
+                <TemplatePicker
+                  value={templateRef}
+                  items={selectItems}
+                  onChange={setTemplateRef}
                 />
               </Field>
 

@@ -19,11 +19,10 @@ import type { CreateTemplateRequest, TemplateResponse } from "@/lib/api/types"
 const TERMINAL_TEMPLATE_STATUSES = new Set(["ready", "failed"])
 const TERMINAL_BUILD_STATUSES = new Set(["ready", "failed", "cancelled"])
 
-export function useTemplates(aliasPrefix?: string) {
+export function useTemplates() {
   return useQuery({
-    queryKey: templateKeys.list({ alias_prefix: aliasPrefix }),
-    queryFn: () =>
-      listTemplates(aliasPrefix ? { alias_prefix: aliasPrefix } : undefined),
+    queryKey: templateKeys.list(),
+    queryFn: () => listTemplates(),
     refetchInterval: 10_000,
     refetchIntervalInBackground: false,
   })
