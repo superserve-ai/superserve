@@ -5,7 +5,6 @@ from __future__ import annotations
 import httpx
 import pytest
 import respx
-
 from superserve.errors import ValidationError
 from superserve.files import Files
 
@@ -68,7 +67,7 @@ class TestFilesWrite:
                 "https://boxd-abc-123.sandbox.example.com/files"
             ).mock(return_value=httpx.Response(200))
             _make_files().write("/home/x.txt", "héllo")
-            assert route.calls.last.request.content == "héllo".encode("utf-8")
+            assert route.calls.last.request.content == "héllo".encode()
 
 
 class TestFilesRead:
@@ -93,13 +92,13 @@ class TestFilesReadText:
     def test_returns_string(self) -> None:
         with respx.mock() as router:
             router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
-                return_value=httpx.Response(200, content="hello world".encode("utf-8"))
+                return_value=httpx.Response(200, content=b"hello world")
             )
             assert _make_files().read_text("/home/x.txt") == "hello world"
 
     def test_handles_utf8(self) -> None:
         with respx.mock() as router:
             router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
-                return_value=httpx.Response(200, content="héllo".encode("utf-8"))
+                return_value=httpx.Response(200, content="héllo".encode())
             )
             assert _make_files().read_text("/home/x.txt") == "héllo"

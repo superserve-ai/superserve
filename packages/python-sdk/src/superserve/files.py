@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Union
+from typing import Any
 from urllib.parse import quote
 
 import httpx
@@ -32,21 +32,21 @@ class Files:
         sandbox_id: str,
         sandbox_host: str,
         access_token: str,
-        client: Optional[httpx.Client] = None,
+        client: httpx.Client | None = None,
     ) -> None:
         self._base_url = data_plane_url(sandbox_id, sandbox_host)
         self._access_token = access_token
         self._client = client
 
     def write(
-        self, path: str, content: Union[str, bytes], *, timeout: Optional[float] = None
+        self, path: str, content: str | bytes, *, timeout: float | None = None
     ) -> None:
         """Write a file to the sandbox at the given absolute path."""
         _validate_path(path)
         if isinstance(content, str):
             content = content.encode("utf-8")
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "url": url,
             "headers": {"X-Access-Token": self._access_token},
             "content": content,
@@ -56,11 +56,11 @@ class Files:
             kwargs["timeout"] = timeout
         upload_bytes(**kwargs)
 
-    def read(self, path: str, *, timeout: Optional[float] = None) -> bytes:
+    def read(self, path: str, *, timeout: float | None = None) -> bytes:
         """Read a file from the sandbox as raw bytes."""
         _validate_path(path)
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "url": url,
             "headers": {"X-Access-Token": self._access_token},
             "client": self._client,
@@ -69,7 +69,7 @@ class Files:
             kwargs["timeout"] = timeout
         return download_bytes(**kwargs)
 
-    def read_text(self, path: str, *, timeout: Optional[float] = None) -> str:
+    def read_text(self, path: str, *, timeout: float | None = None) -> str:
         """Read a file from the sandbox as a UTF-8 string."""
         _validate_path(path)
         return self.read(path, timeout=timeout).decode("utf-8")
@@ -83,21 +83,21 @@ class AsyncFiles:
         sandbox_id: str,
         sandbox_host: str,
         access_token: str,
-        client: Optional[httpx.AsyncClient] = None,
+        client: httpx.AsyncClient | None = None,
     ) -> None:
         self._base_url = data_plane_url(sandbox_id, sandbox_host)
         self._access_token = access_token
         self._client = client
 
     async def write(
-        self, path: str, content: Union[str, bytes], *, timeout: Optional[float] = None
+        self, path: str, content: str | bytes, *, timeout: float | None = None
     ) -> None:
         """Write a file to the sandbox at the given absolute path."""
         _validate_path(path)
         if isinstance(content, str):
             content = content.encode("utf-8")
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "url": url,
             "headers": {"X-Access-Token": self._access_token},
             "content": content,
@@ -107,11 +107,11 @@ class AsyncFiles:
             kwargs["timeout"] = timeout
         await async_upload_bytes(**kwargs)
 
-    async def read(self, path: str, *, timeout: Optional[float] = None) -> bytes:
+    async def read(self, path: str, *, timeout: float | None = None) -> bytes:
         """Read a file from the sandbox as raw bytes."""
         _validate_path(path)
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "url": url,
             "headers": {"X-Access-Token": self._access_token},
             "client": self._client,
@@ -120,7 +120,7 @@ class AsyncFiles:
             kwargs["timeout"] = timeout
         return await async_download_bytes(**kwargs)
 
-    async def read_text(self, path: str, *, timeout: Optional[float] = None) -> str:
+    async def read_text(self, path: str, *, timeout: float | None = None) -> str:
         """Read a file from the sandbox as a UTF-8 string."""
         _validate_path(path)
         raw = await self.read(path, timeout=timeout)

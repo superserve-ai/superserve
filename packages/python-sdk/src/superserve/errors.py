@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class SandboxError(Exception):
@@ -11,8 +11,8 @@ class SandboxError(Exception):
     def __init__(
         self,
         message: str,
-        status_code: Optional[int] = None,
-        code: Optional[str] = None,
+        status_code: int | None = None,
+        code: str | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
@@ -23,13 +23,13 @@ class AuthenticationError(SandboxError):
     def __init__(
         self,
         message: str = "Missing or invalid API key",
-        code: Optional[str] = None,
+        code: str | None = None,
     ) -> None:
         super().__init__(message, status_code=401, code=code)
 
 
 class ValidationError(SandboxError):
-    def __init__(self, message: str, code: Optional[str] = None) -> None:
+    def __init__(self, message: str, code: str | None = None) -> None:
         super().__init__(message, status_code=400, code=code)
 
 
@@ -37,7 +37,7 @@ class NotFoundError(SandboxError):
     def __init__(
         self,
         message: str = "Resource not found",
-        code: Optional[str] = None,
+        code: str | None = None,
     ) -> None:
         super().__init__(message, status_code=404, code=code)
 
@@ -46,7 +46,7 @@ class ConflictError(SandboxError):
     def __init__(
         self,
         message: str = "Sandbox is not in a valid state for this operation",
-        code: Optional[str] = None,
+        code: str | None = None,
     ) -> None:
         super().__init__(message, status_code=409, code=code)
 
@@ -62,12 +62,12 @@ class ServerError(SandboxError):
     def __init__(
         self,
         message: str = "Internal server error",
-        code: Optional[str] = None,
+        code: str | None = None,
     ) -> None:
         super().__init__(message, status_code=500, code=code)
 
 
-def map_api_error(status_code: int, body: Dict[str, Any]) -> SandboxError:
+def map_api_error(status_code: int, body: dict[str, Any]) -> SandboxError:
     """Map an HTTP status code and response body to a typed error."""
     error_data = body.get("error", {}) or {}
     message = error_data.get("message", f"API error ({status_code})")

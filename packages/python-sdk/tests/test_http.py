@@ -5,7 +5,6 @@ from __future__ import annotations
 import httpx
 import pytest
 import respx
-
 from superserve._http import (
     SDK_VERSION,
     USER_AGENT,

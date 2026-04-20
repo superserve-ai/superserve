@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -19,8 +19,8 @@ class SandboxStatus(str, Enum):
 
 
 class NetworkConfig(BaseModel):
-    allow_out: Optional[List[str]] = None
-    deny_out: Optional[List[str]] = None
+    allow_out: list[str] | None = None
+    deny_out: list[str] | None = None
 
 
 class SandboxInfo(BaseModel):
@@ -31,12 +31,12 @@ class SandboxInfo(BaseModel):
     memory_mib: int = 0
     # Per-sandbox data-plane token. Only returned on create/get/connect —
     # may be absent on list responses.
-    access_token: Optional[str] = None
-    snapshot_id: Optional[str] = None
+    access_token: str | None = None
+    snapshot_id: str | None = None
     created_at: datetime = Field(default_factory=datetime.now)
-    timeout_seconds: Optional[int] = None
-    network: Optional[NetworkConfig] = None
-    metadata: Dict[str, str] = Field(default_factory=dict)
+    timeout_seconds: int | None = None
+    network: NetworkConfig | None = None
+    metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class CommandResult(BaseModel):
@@ -45,7 +45,7 @@ class CommandResult(BaseModel):
     exit_code: int = 0
 
 
-def to_sandbox_info(raw: Dict[str, Any]) -> SandboxInfo:
+def to_sandbox_info(raw: dict[str, Any]) -> SandboxInfo:
     """Convert an API response dict to a SandboxInfo model.
 
     Requires only ``id`` and ``status``. ``access_token`` is optional because

@@ -11,8 +11,9 @@ import json as json_module
 import random
 import sys
 import time
+from collections.abc import Callable
 from email.utils import parsedate_to_datetime
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
 import httpx
 
@@ -39,12 +40,12 @@ _RETRY_CONNECTION_EXCEPTIONS = (
 )
 
 
-def _default_headers(extra: Dict[str, str], content_type: Optional[str] = None) -> Dict[str, str]:
+def _default_headers(extra: dict[str, str], content_type: str | None = None) -> dict[str, str]:
     """Merge SDK defaults with caller-supplied headers.
 
     Caller-supplied headers override defaults.
     """
-    defaults: Dict[str, str] = {"User-Agent": USER_AGENT}
+    defaults: dict[str, str] = {"User-Agent": USER_AGENT}
     if content_type is not None:
         defaults["Content-Type"] = content_type
     defaults.update(extra)
@@ -58,7 +59,7 @@ def _compute_backoff(attempt: int) -> float:
     return float(min(jitter, _MAX_BACKOFF))
 
 
-def _parse_retry_after(value: Optional[str]) -> Optional[float]:
+def _parse_retry_after(value: str | None) -> float | None:
     """Parse Retry-After header (seconds or HTTP-date). Returns seconds or None."""
     if not value:
         return None
@@ -88,7 +89,7 @@ def _should_retry_status(method: str, status_code: int) -> bool:
     )
 
 
-def _build_error_body(response: httpx.Response) -> Dict[str, Any]:
+def _build_error_body(response: httpx.Response) -> dict[str, Any]:
     try:
         parsed = response.json()
         if isinstance(parsed, dict):
@@ -112,10 +113,10 @@ def _do_request_with_retry(
     method: str,
     url: str,
     *,
-    headers: Dict[str, str],
-    json_body: Optional[Any] = None,
+    headers: dict[str, str],
+    json_body: Any | None = None,
     timeout: float = DEFAULT_TIMEOUT,
-    client: Optional[httpx.Client] = None,
+    client: httpx.Client | None = None,
 ) -> httpx.Response:
     """Perform an HTTP request with retry for idempotent methods.
 
@@ -129,7 +130,7 @@ def _do_request_with_retry(
     assert client is not None
 
     method_upper = method.upper()
-    last_exc: Optional[BaseException] = None
+    last_exc: BaseException | None = None
 
     try:
         for attempt in range(_MAX_ATTEMPTS):
@@ -184,10 +185,10 @@ def api_request(
     method: str,
     url: str,
     *,
-    headers: Dict[str, str],
-    json_body: Optional[Any] = None,
+    headers: dict[str, str],
+    json_body: Any | None = None,
     timeout: float = DEFAULT_TIMEOUT,
-    client: Optional[httpx.Client] = None,
+    client: httpx.Client | None = None,
 ) -> Any:
     """Make a JSON API request. Returns parsed response body or None for 204."""
     merged = _default_headers(headers, content_type="application/json")
@@ -212,10 +213,10 @@ def api_request(
 def upload_bytes(
     url: str,
     *,
-    headers: Dict[str, str],
+    headers: dict[str, str],
     content: bytes,
     timeout: float = DEFAULT_TIMEOUT,
-    client: Optional[httpx.Client] = None,
+    client: httpx.Client | None = None,
 ) -> None:
     """Upload raw bytes to data plane. POST — no retries."""
     owned = client is None
@@ -241,9 +242,9 @@ def upload_bytes(
 def download_bytes(
     url: str,
     *,
-    headers: Dict[str, str],
+    headers: dict[str, str],
     timeout: float = DEFAULT_TIMEOUT,
-    client: Optional[httpx.Client] = None,
+    client: httpx.Client | None = None,
 ) -> bytes:
     """Download raw bytes from data plane. GET — retries on transient failures."""
     merged = _default_headers(headers)
@@ -264,11 +265,11 @@ def download_bytes(
 def stream_sse(
     url: str,
     *,
-    headers: Dict[str, str],
+    headers: dict[str, str],
     json_body: Any,
     timeout: float = 300.0,
-    on_event: Callable[[Dict[str, Any]], None],
-    client: Optional[httpx.Client] = None,
+    on_event: Callable[[dict[str, Any]], None],
+    client: httpx.Client | None = None,
 ) -> None:
     """Consume an SSE stream from the exec/stream endpoint. POST — no retries."""
     owned = client is None
@@ -320,10 +321,10 @@ async def _async_do_request_with_retry(
     method: str,
     url: str,
     *,
-    headers: Dict[str, str],
-    json_body: Optional[Any] = None,
+    headers: dict[str, str],
+    json_body: Any | None = None,
     timeout: float = DEFAULT_TIMEOUT,
-    client: Optional[httpx.AsyncClient] = None,
+    client: httpx.AsyncClient | None = None,
 ) -> httpx.Response:
     """Async variant of ``_do_request_with_retry``."""
     owned = client is None
@@ -332,7 +333,7 @@ async def _async_do_request_with_retry(
     assert client is not None
 
     method_upper = method.upper()
-    last_exc: Optional[BaseException] = None
+    last_exc: BaseException | None = None
 
     try:
         for attempt in range(_MAX_ATTEMPTS):
@@ -386,10 +387,10 @@ async def async_api_request(
     method: str,
     url: str,
     *,
-    headers: Dict[str, str],
-    json_body: Optional[Any] = None,
+    headers: dict[str, str],
+    json_body: Any | None = None,
     timeout: float = DEFAULT_TIMEOUT,
-    client: Optional[httpx.AsyncClient] = None,
+    client: httpx.AsyncClient | None = None,
 ) -> Any:
     """Async variant of api_request."""
     merged = _default_headers(headers, content_type="application/json")
@@ -414,10 +415,10 @@ async def async_api_request(
 async def async_upload_bytes(
     url: str,
     *,
-    headers: Dict[str, str],
+    headers: dict[str, str],
     content: bytes,
     timeout: float = DEFAULT_TIMEOUT,
-    client: Optional[httpx.AsyncClient] = None,
+    client: httpx.AsyncClient | None = None,
 ) -> None:
     """Async variant of upload_bytes. POST — no retries."""
     owned = client is None
@@ -443,9 +444,9 @@ async def async_upload_bytes(
 async def async_download_bytes(
     url: str,
     *,
-    headers: Dict[str, str],
+    headers: dict[str, str],
     timeout: float = DEFAULT_TIMEOUT,
-    client: Optional[httpx.AsyncClient] = None,
+    client: httpx.AsyncClient | None = None,
 ) -> bytes:
     """Async variant of download_bytes. GET — retries on transient failures."""
     merged = _default_headers(headers)
@@ -466,11 +467,11 @@ async def async_download_bytes(
 async def async_stream_sse(
     url: str,
     *,
-    headers: Dict[str, str],
+    headers: dict[str, str],
     json_body: Any,
     timeout: float = 300.0,
-    on_event: Callable[[Dict[str, Any]], None],
-    client: Optional[httpx.AsyncClient] = None,
+    on_event: Callable[[dict[str, Any]], None],
+    client: httpx.AsyncClient | None = None,
 ) -> None:
     """Async variant of stream_sse. POST — no retries."""
     owned = client is None

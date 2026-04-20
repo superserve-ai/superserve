@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Optional
 from urllib.parse import urlparse
 
 from .errors import AuthenticationError
@@ -21,8 +20,8 @@ class ResolvedConfig:
 
 
 def resolve_config(
-    api_key: Optional[str] = None,
-    base_url: Optional[str] = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
 ) -> ResolvedConfig:
     """Resolve connection config from explicit args + environment variables."""
     resolved_key = api_key or os.environ.get("SUPERSERVE_API_KEY")

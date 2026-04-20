@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 import httpx
 
@@ -19,7 +20,7 @@ class Commands:
         base_url: str,
         sandbox_id: str,
         api_key: str,
-        client: Optional[httpx.Client] = None,
+        client: httpx.Client | None = None,
     ) -> None:
         self._base_url = base_url
         self._sandbox_id = sandbox_id
@@ -30,14 +31,14 @@ class Commands:
         self,
         command: str,
         *,
-        cwd: Optional[str] = None,
-        env: Optional[Dict[str, str]] = None,
-        timeout_seconds: Optional[int] = None,
-        on_stdout: Optional[Callable[[str], None]] = None,
-        on_stderr: Optional[Callable[[str], None]] = None,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout_seconds: int | None = None,
+        on_stdout: Callable[[str], None] | None = None,
+        on_stderr: Callable[[str], None] | None = None,
     ) -> CommandResult:
         """Execute a command inside the sandbox."""
-        body: Dict[str, Any] = {"command": command}
+        body: dict[str, Any] = {"command": command}
         if cwd is not None:
             body["working_dir"] = cwd
         if env is not None:
@@ -54,9 +55,9 @@ class Commands:
 
     def _run_sync(
         self,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
-        timeout_seconds: Optional[int],
+        body: dict[str, Any],
+        headers: dict[str, str],
+        timeout_seconds: int | None,
     ) -> CommandResult:
         raw = api_request(
             "POST",
@@ -74,18 +75,18 @@ class Commands:
 
     def _run_streaming(
         self,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
-        on_stdout: Optional[Callable[[str], None]],
-        on_stderr: Optional[Callable[[str], None]],
-        timeout_seconds: Optional[int],
+        body: dict[str, Any],
+        headers: dict[str, str],
+        on_stdout: Callable[[str], None] | None,
+        on_stderr: Callable[[str], None] | None,
+        timeout_seconds: int | None,
     ) -> CommandResult:
-        stdout_parts: List[str] = []
-        stderr_parts: List[str] = []
+        stdout_parts: list[str] = []
+        stderr_parts: list[str] = []
         exit_code = 0
         saw_finished = False
 
-        def handle_event(event: Dict[str, Any]) -> None:
+        def handle_event(event: dict[str, Any]) -> None:
             nonlocal exit_code, saw_finished
             if event.get("stdout"):
                 stdout_parts.append(event["stdout"])
@@ -130,7 +131,7 @@ class AsyncCommands:
         base_url: str,
         sandbox_id: str,
         api_key: str,
-        client: Optional[httpx.AsyncClient] = None,
+        client: httpx.AsyncClient | None = None,
     ) -> None:
         self._base_url = base_url
         self._sandbox_id = sandbox_id
@@ -141,14 +142,14 @@ class AsyncCommands:
         self,
         command: str,
         *,
-        cwd: Optional[str] = None,
-        env: Optional[Dict[str, str]] = None,
-        timeout_seconds: Optional[int] = None,
-        on_stdout: Optional[Callable[[str], None]] = None,
-        on_stderr: Optional[Callable[[str], None]] = None,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout_seconds: int | None = None,
+        on_stdout: Callable[[str], None] | None = None,
+        on_stderr: Callable[[str], None] | None = None,
     ) -> CommandResult:
         """Async variant of Commands.run()."""
-        body: Dict[str, Any] = {"command": command}
+        body: dict[str, Any] = {"command": command}
         if cwd is not None:
             body["working_dir"] = cwd
         if env is not None:
@@ -165,9 +166,9 @@ class AsyncCommands:
 
     async def _run_sync(
         self,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
-        timeout_seconds: Optional[int],
+        body: dict[str, Any],
+        headers: dict[str, str],
+        timeout_seconds: int | None,
     ) -> CommandResult:
         raw = await async_api_request(
             "POST",
@@ -185,18 +186,18 @@ class AsyncCommands:
 
     async def _run_streaming(
         self,
-        body: Dict[str, Any],
-        headers: Dict[str, str],
-        on_stdout: Optional[Callable[[str], None]],
-        on_stderr: Optional[Callable[[str], None]],
-        timeout_seconds: Optional[int],
+        body: dict[str, Any],
+        headers: dict[str, str],
+        on_stdout: Callable[[str], None] | None,
+        on_stderr: Callable[[str], None] | None,
+        timeout_seconds: int | None,
     ) -> CommandResult:
-        stdout_parts: List[str] = []
-        stderr_parts: List[str] = []
+        stdout_parts: list[str] = []
+        stderr_parts: list[str] = []
         exit_code = 0
         saw_finished = False
 
-        def handle_event(event: Dict[str, Any]) -> None:
+        def handle_event(event: dict[str, Any]) -> None:
             nonlocal exit_code, saw_finished
             if event.get("stdout"):
                 stdout_parts.append(event["stdout"])

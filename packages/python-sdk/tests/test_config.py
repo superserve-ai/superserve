@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from superserve._config import (
     DEFAULT_BASE_URL,
     DEFAULT_SANDBOX_HOST,

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import random
 import time
-from typing import Optional
 
 import httpx
 
@@ -22,11 +21,11 @@ def wait_for_status(
     *,
     timeout_seconds: float = 60.0,
     interval_seconds: float = 1.0,
-    client: Optional[httpx.Client] = None,
+    client: httpx.Client | None = None,
 ) -> SandboxInfo:
     """Poll GET /sandboxes/{id} until status matches target."""
     deadline = time.monotonic() + timeout_seconds
-    last_status: Optional[str] = None
+    last_status: str | None = None
 
     while time.monotonic() < deadline:
         raw = api_request(
@@ -66,11 +65,11 @@ async def async_wait_for_status(
     *,
     timeout_seconds: float = 60.0,
     interval_seconds: float = 1.0,
-    client: Optional[httpx.AsyncClient] = None,
+    client: httpx.AsyncClient | None = None,
 ) -> SandboxInfo:
     """Async variant of wait_for_status."""
     deadline = time.monotonic() + timeout_seconds
-    last_status: Optional[str] = None
+    last_status: str | None = None
 
     while time.monotonic() < deadline:
         raw = await async_api_request(

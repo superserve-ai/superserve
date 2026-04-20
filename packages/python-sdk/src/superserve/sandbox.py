@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+import builtins
+from typing import Any
 
 import httpx
 
@@ -27,7 +28,7 @@ class Sandbox:
         self.id: str = info.id
         self.name: str = info.name
         self.status: SandboxStatus = info.status
-        self.metadata: Dict[str, str] = info.metadata
+        self.metadata: dict[str, str] = info.metadata
         self.access_token: str = info.access_token
         self._config = config
         self._http_client: httpx.Client = httpx.Client(timeout=30.0)
@@ -45,18 +46,18 @@ class Sandbox:
         cls,
         *,
         name: str,
-        from_snapshot: Optional[str] = None,
-        timeout_seconds: Optional[int] = None,
-        metadata: Optional[Dict[str, str]] = None,
-        env_vars: Optional[Dict[str, str]] = None,
-        network: Optional[NetworkConfig] = None,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
+        from_snapshot: str | None = None,
+        timeout_seconds: int | None = None,
+        metadata: dict[str, str] | None = None,
+        env_vars: dict[str, str] | None = None,
+        network: NetworkConfig | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
     ) -> Sandbox:
         """Create a new sandbox."""
         config = resolve_config(api_key=api_key, base_url=base_url)
 
-        body: Dict[str, Any] = {"name": name}
+        body: dict[str, Any] = {"name": name}
         if from_snapshot is not None:
             body["from_snapshot"] = from_snapshot
         if timeout_seconds is not None:
@@ -84,8 +85,8 @@ class Sandbox:
         cls,
         sandbox_id: str,
         *,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
     ) -> Sandbox:
         """Connect to an existing sandbox by ID."""
         config = resolve_config(api_key=api_key, base_url=base_url)
@@ -100,10 +101,10 @@ class Sandbox:
     def list(
         cls,
         *,
-        metadata: Optional[Dict[str, str]] = None,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-    ) -> List[SandboxInfo]:
+        metadata: dict[str, str] | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ) -> builtins.list[SandboxInfo]:
         """List all sandboxes belonging to the authenticated team."""
         config = resolve_config(api_key=api_key, base_url=base_url)
         url = f"{config.base_url}/sandboxes"
@@ -120,8 +121,8 @@ class Sandbox:
         cls,
         sandbox_id: str,
         *,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
     ) -> SandboxInfo:
         """Get sandbox info by ID."""
         config = resolve_config(api_key=api_key, base_url=base_url)
@@ -137,8 +138,8 @@ class Sandbox:
         cls,
         sandbox_id: str,
         *,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
     ) -> None:
         """Delete a sandbox by ID. Idempotent."""
         config = resolve_config(api_key=api_key, base_url=base_url)
@@ -225,11 +226,11 @@ class Sandbox:
     def update(
         self,
         *,
-        metadata: Optional[Dict[str, str]] = None,
-        network: Optional[NetworkConfig] = None,
+        metadata: dict[str, str] | None = None,
+        network: NetworkConfig | None = None,
     ) -> None:
         """Partially update this sandbox."""
-        body: Dict[str, Any] = {}
+        body: dict[str, Any] = {}
         if metadata is not None:
             body["metadata"] = metadata
         if network is not None:
