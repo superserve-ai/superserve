@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from superserve.types import (
@@ -79,6 +79,19 @@ class TestToSandboxInfo:
         del raw["created_at"]
         info = to_sandbox_info(raw)
         assert isinstance(info.created_at, datetime)
+
+    def test_created_at_parses_z_suffix(self) -> None:
+        raw = _valid_raw()
+        raw["created_at"] = "2026-01-01T12:00:00Z"
+        info = to_sandbox_info(raw)
+        assert info.created_at == datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+    def test_created_at_parses_z_suffix_with_fractional(self) -> None:
+        raw = _valid_raw()
+        raw["created_at"] = "2026-01-01T12:00:00.123456Z"
+        info = to_sandbox_info(raw)
+        assert info.created_at.tzinfo is not None
+        assert info.created_at.microsecond == 123456
 
     def test_network_config_parses(self) -> None:
         cfg = NetworkConfig(allow_out=["1.1.1.1"], deny_out=None)

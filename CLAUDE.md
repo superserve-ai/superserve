@@ -22,8 +22,7 @@ superserve/
 │   ├── ui/                      # Shared UI component library (@superserve/ui)
 │   ├── supabase/                # Supabase client factories (browser/server/admin/middleware)
 │   ├── typescript-config/       # Shared tsconfig presets
-│   ├── tailwind-config/         # Shared Tailwind CSS config
-│   └── biome-config/            # Shared Biome linting/formatting config
+│   └── tailwind-config/         # Shared Tailwind CSS config
 ├── tests/
 │   ├── sdk-e2e-ts/              # TypeScript SDK end-to-end tests (Vitest)
 │   └── sdk-e2e-py/              # Python SDK end-to-end tests (pytest)
@@ -101,7 +100,7 @@ Same API surface as TypeScript SDK (snake_case). `Sandbox` (sync) and `AsyncSand
 - **Sandbox lifecycle**: `active ↔ idle → deleted`. Only two user-visible states — `active` (running) and `idle` (paused). Create is synchronous; `POST /pause` returns 204; `POST /resume` rotates the per-sandbox access token (SDK updates the files sub-module transparently).
 - **Data plane vs control plane**: SDK hides this internally. Control plane is `api.superserve.ai` (API key). Data plane is `boxd-{id}.sandbox.superserve.ai` (access token). Users never construct data-plane URLs.
 - **API types**: Defined in `apps/console/src/lib/api/types.ts`. Must match the OpenAPI spec.
-- **Shared configs**: TypeScript projects extend from `@superserve/typescript-config`. Biome from `@superserve/biome-config`. Tailwind from `@superserve/tailwind-config`.
+- **Shared configs**: TypeScript projects extend from `@superserve/typescript-config`. Tailwind from `@superserve/tailwind-config`. Biome is a single root `biome.json` that covers every workspace (Biome 2.x) — no per-package Biome config.
 - **Sticky hover animation**: Reusable pattern across sidebar, command palette, table bodies, and language tabs using `motion` `layoutId` for smooth hover transitions.
 
 ## Development
