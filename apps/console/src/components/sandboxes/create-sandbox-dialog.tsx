@@ -27,7 +27,7 @@ import {
 } from "@superserve/ui"
 import { AnimatePresence, LayoutGroup, motion } from "motion/react"
 import { usePostHog } from "posthog-js/react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { useCreateSandbox } from "@/hooks/use-sandboxes"
 import type { CreateSandboxRequest } from "@/lib/api/types"
@@ -98,6 +98,7 @@ interface FormState {
   denyRules: string[]
   envEntries: { key: string; value: string }[]
   metadataEntries: { key: string; value: string }[]
+  templateRef?: string
 }
 
 /**
@@ -115,6 +116,7 @@ interface FormState {
  *  - `env_vars` / `metadata` are only included when at least one entry has
  *    a non-empty key. Empty string values are allowed but empty keys are
  *    dropped.
+ *  - `template_id` is only included when `templateRef` is non-empty.
  */
 export function buildCreateSandboxRequest(
   state: FormState,
@@ -137,6 +139,7 @@ export function buildCreateSandboxRequest(
 
   return {
     name: state.name.trim(),
+    ...(state.templateRef ? { from_template: state.templateRef } : {}),
     ...(state.timeout ? { timeout: Number(state.timeout) } : {}),
     ...(hasNetwork
       ? {
@@ -156,6 +159,12 @@ interface CreateSandboxDialogProps {
   onOpenChange?: (open: boolean) => void
   hideTrigger?: boolean
   onCreated?: (sandboxId: string) => void
+  /**
+   * Template reference to launch the sandbox from — either a UUID or an
+   * alias. When set, the dialog shows a "From template" banner and the
+   * create payload includes `template_id`.
+   */
+  initialTemplateRef?: string | null
 }
 
 export function CreateSandboxDialog({
@@ -163,6 +172,7 @@ export function CreateSandboxDialog({
   onOpenChange,
   hideTrigger,
   onCreated,
+  initialTemplateRef,
 }: CreateSandboxDialogProps = {}) {
   const posthog = usePostHog()
   const [internalOpen, setInternalOpen] = useState(false)
@@ -183,6 +193,15 @@ export function CreateSandboxDialog({
   const [language, setLanguage] = useState<Language>("typescript")
   const [hoveredMode, setHoveredMode] = useState<string | null>(null)
   const [hoveredLang, setHoveredLang] = useState<string | null>(null)
+  const [templateRef, setTemplateRef] = useState<string>(
+    initialTemplateRef ?? "",
+  )
+
+  // Keep `templateRef` in sync when the caller changes `initialTemplateRef`
+  // (e.g. a different Launch action was fired).
+  useEffect(() => {
+    setTemplateRef(initialTemplateRef ?? "")
+  }, [initialTemplateRef])
 
   const createMutation = useCreateSandbox()
 
@@ -195,6 +214,7 @@ export function CreateSandboxDialog({
     setMetadataEntries([])
     setShowAdvanced(false)
     setMode("form")
+    setTemplateRef(initialTemplateRef ?? "")
   }
 
   const handleCreate = () => {
@@ -205,6 +225,7 @@ export function CreateSandboxDialog({
       denyRules,
       envEntries,
       metadataEntries,
+      templateRef: templateRef || undefined,
     })
 
     posthog.capture(SANDBOX_EVENTS.CREATED, {
@@ -219,6 +240,7 @@ export function CreateSandboxDialog({
         ? Object.keys(payload.metadata).length
         : 0,
       advanced_expanded: showAdvanced,
+      from_template: !!payload.from_template,
     })
 
     createMutation.mutate(payload, {
@@ -303,6 +325,26 @@ export function CreateSandboxDialog({
         {mode === "form" ? (
           <>
             <div className="max-h-[60vh] space-y-5 overflow-y-auto p-6 pt-4">
+              {templateRef && (
+                <div className="flex items-center justify-between gap-3 border border-dashed border-border bg-surface px-3 py-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="font-mono text-[10px] uppercase text-muted">
+                      From template
+                    </span>
+                    <span className="truncate font-mono text-xs text-foreground">
+                      {templateRef}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setTemplateRef("")}
+                    className="cursor-pointer font-mono text-[10px] uppercase text-muted hover:text-foreground"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+
               <Field label="Sandbox Name" required>
                 <Input
                   placeholder="my-sandbox"
