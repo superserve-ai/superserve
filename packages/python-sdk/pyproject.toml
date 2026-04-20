@@ -45,5 +45,10 @@ dev = [
 testpaths = ["tests"]
 asyncio_mode = "auto"
 
+[tool.ruff]
+# Match the package's Python floor so Ruff doesn't suggest 3.11+ APIs (e.g. datetime.UTC).
+target-version = "py39"
+line-length = 88
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/superserve"]

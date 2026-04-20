@@ -72,7 +72,7 @@ if result.exit_code != 0:
     print(f"Command failed: {result.stderr}")
 ```
 
-It raises `TimeoutError` if the timeout elapses, or `NotFoundError` / `ConflictError` if the sandbox is unreachable.
+It raises `SandboxTimeoutError` if the timeout elapses, or `NotFoundError` / `ConflictError` if the sandbox is unreachable.
 
 ## Async usage
 

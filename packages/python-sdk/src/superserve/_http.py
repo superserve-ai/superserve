@@ -75,7 +75,10 @@ def _parse_retry_after(value: str | None) -> float | None:
         return None
     try:
         import datetime as _dt
-        now = _dt.datetime.now(tz=dt.tzinfo) if dt.tzinfo else _dt.datetime.utcnow()
+        # If HTTP-date has no tz, assume UTC (per RFC 7231) — compare against now in UTC
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_dt.timezone.utc)
+        now = _dt.datetime.now(tz=_dt.timezone.utc)
         delta = (dt - now).total_seconds()
     except Exception:
         return None

@@ -188,7 +188,7 @@ interface SandboxInfo {
   status: SandboxStatus
   vcpuCount: number
   memoryMib: number
-  accessToken: string
+  accessToken?: string  // only on create/get/connect; undefined on list items
   snapshotId?: string
   createdAt: Date
   timeoutSeconds?: number

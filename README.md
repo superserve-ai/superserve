@@ -223,7 +223,7 @@ cd packages/sdk && bun publish --access public
 
 ### Python SDK to PyPI
 
-**Important:** `uv build` must run from the **repo root** (uv workspaces put artifacts in root `dist/`). Bump the version in three places:
+**Important:** `uv build` must run from the **repo root** (uv workspaces put artifacts in root `dist/`). Bump the version in two places (keep them identical):
 
 1. `packages/python-sdk/pyproject.toml` → `version = "..."`
 2. `packages/python-sdk/src/superserve/__init__.py` → `__version__ = "..."`

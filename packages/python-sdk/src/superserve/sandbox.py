@@ -247,13 +247,24 @@ class Sandbox:
             client=self._http_client,
         )
 
-    def wait_for_ready(self, timeout_seconds: float = 60.0) -> SandboxInfo:
-        """Wait for this sandbox to reach active status."""
+    def wait_for_ready(
+        self,
+        timeout_seconds: float = 60.0,
+        *,
+        interval_seconds: float = 1.0,
+    ) -> SandboxInfo:
+        """Wait for this sandbox to reach active status.
+
+        Raises ``SandboxTimeoutError`` if the deadline elapses, or
+        ``SandboxError`` if the sandbox reaches ``failed`` / ``deleted``
+        before ``active``.
+        """
         info = wait_for_status(
             self.id,
             SandboxStatus.ACTIVE,
             self._config,
             timeout_seconds=timeout_seconds,
+            interval_seconds=interval_seconds,
             client=self._http_client,
         )
         self._refresh_from(info)

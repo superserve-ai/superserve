@@ -113,7 +113,7 @@ Sandbox.kill_by_id("sandbox-uuid")
 
 ### `sandbox.get_info()`
 
-Refresh the sandbox info from the API. Updates `status` and `metadata`.
+Fetch the latest sandbox info from the API. Returns a fresh `SandboxInfo` — the instance attributes (`sandbox.status`, `sandbox.metadata`) are snapshots from construction and are not mutated.
 
 ```python
 info = sandbox.get_info()
@@ -215,7 +215,7 @@ class SandboxInfo(BaseModel):
     status: SandboxStatus
     vcpu_count: int
     memory_mib: int
-    access_token: str
+    access_token: Optional[str] = None  # only on create/get/connect; None on list items
     snapshot_id: Optional[str] = None
     created_at: datetime
     timeout_seconds: Optional[int] = None
