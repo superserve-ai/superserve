@@ -146,18 +146,18 @@ Fetch the current server-side state. Returns a fresh [`SandboxInfo`](#sandboxinf
 <CodeGroup>
 ```typescript TypeScript
 const info = await sandbox.getInfo()
-console.log(info.status)  // "active" or "idle"
+console.log(info.status)  // "active" or "paused"
 ```
 
 ```python Python
 info = sandbox.get_info()
-print(info.status.value)  # "active" or "idle"
+print(info.status.value)  # "active" or "paused"
 ```
 </CodeGroup>
 
 ### `pause`
 
-Checkpoint the VM state to disk. Returns nothing.
+Checkpoint the VM state to disk. The sandbox transitions to `paused`. Returns nothing.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -268,7 +268,7 @@ asyncio.run(main())
 
 <CodeGroup>
 ```typescript TypeScript
-type SandboxStatus = "active" | "idle"
+type SandboxStatus = "active" | "paused"
 ```
 
 ```python Python
@@ -276,11 +276,11 @@ from enum import Enum
 
 class SandboxStatus(str, Enum):
     ACTIVE = "active"
-    IDLE = "idle"
+    PAUSED = "paused"
 ```
 </CodeGroup>
 
-A sandbox is `active` when running and `idle` after `pause()`. Deletion removes it entirely — subsequent API calls return `404`.
+A sandbox is `active` when running and `paused` after `pause()`. Deletion removes it entirely — subsequent API calls return `404`.
 
 ### `SandboxInfo`
 
@@ -348,7 +348,7 @@ Sandbox methods commonly raise:
 - `AuthenticationError` — missing or invalid API key
 - `ValidationError` — bad request body
 - `NotFoundError` — sandbox doesn't exist (except `kill` / `killById`, which swallow 404)
-- `ConflictError` — wrong state (e.g., pausing an already-idle sandbox)
+- `ConflictError` — wrong state (e.g., pausing an already-paused sandbox, or running a command on a paused sandbox)
 - `ServerError` — platform error
 
 See [Errors](/errors) for the full hierarchy.

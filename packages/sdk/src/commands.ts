@@ -31,7 +31,7 @@ export class Commands {
    * If `onStdout` or `onStderr` callbacks are provided, the command is
    * streamed via SSE. Otherwise, it runs synchronously (waits for completion).
    *
-   * Idle sandboxes are automatically resumed by the API before execution.
+   * Paused sandboxes throw `ConflictError` (409); call `sandbox.resume()` first.
    *
    * @example
    * ```typescript

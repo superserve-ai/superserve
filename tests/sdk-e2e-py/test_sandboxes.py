@@ -40,7 +40,7 @@ def test_update_accepts_metadata(sandbox, run_id):
 def test_pause_and_resume_lifecycle(sandbox, connection_opts):
     sandbox.pause()
     info = Sandbox.get(sandbox.id, **connection_opts)
-    assert info.status.value == "idle"
+    assert info.status.value == "paused"
 
     sandbox.resume()
     info = Sandbox.get(sandbox.id, **connection_opts)

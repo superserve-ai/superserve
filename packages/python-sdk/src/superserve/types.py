@@ -13,7 +13,7 @@ from .errors import SandboxError
 
 class SandboxStatus(str, Enum):
     ACTIVE = "active"
-    IDLE = "idle"
+    PAUSED = "paused"
 
 
 class NetworkConfig(BaseModel):

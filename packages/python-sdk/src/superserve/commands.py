@@ -37,7 +37,10 @@ class Commands:
         on_stdout: Callable[[str], None] | None = None,
         on_stderr: Callable[[str], None] | None = None,
     ) -> CommandResult:
-        """Execute a command inside the sandbox."""
+        """Execute a command inside the sandbox.
+
+        Paused sandboxes raise ``ConflictError``; call ``sandbox.resume()`` first.
+        """
         body: dict[str, Any] = {"command": command}
         if cwd is not None:
             body["working_dir"] = cwd
@@ -148,7 +151,10 @@ class AsyncCommands:
         on_stdout: Callable[[str], None] | None = None,
         on_stderr: Callable[[str], None] | None = None,
     ) -> CommandResult:
-        """Async variant of Commands.run()."""
+        """Async variant of Commands.run().
+
+        Paused sandboxes raise ``ConflictError``; call ``sandbox.resume()`` first.
+        """
         body: dict[str, Any] = {"command": command}
         if cwd is not None:
             body["working_dir"] = cwd

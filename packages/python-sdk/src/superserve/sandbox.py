@@ -179,7 +179,7 @@ class Sandbox:
         return to_sandbox_info(raw)
 
     def pause(self) -> None:
-        """Pause this sandbox. The sandbox transitions to ``idle``."""
+        """Pause this sandbox. The sandbox transitions to ``paused``."""
         api_request(
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/pause",

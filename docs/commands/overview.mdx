@@ -74,9 +74,21 @@ result = sandbox.commands.run(
 TypeScript uses `timeoutMs` (milliseconds); Python uses `timeout_seconds` (integer seconds). Each follows its language's convention.
 </Note>
 
-## Resume-on-demand
+## Paused sandboxes
 
-If the sandbox is `idle` when you call `run()`, the API auto-resumes it before executing. You don't need to call `resume()` manually.
+If the sandbox is `paused`, `run()` raises `ConflictError` (HTTP 409). Call `sandbox.resume()` explicitly before executing commands.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.resume()
+const result = await sandbox.commands.run("echo hello")
+```
+
+```python Python
+sandbox.resume()
+result = sandbox.commands.run("echo hello")
+```
+</CodeGroup>
 
 ## Cancel in-flight commands
 

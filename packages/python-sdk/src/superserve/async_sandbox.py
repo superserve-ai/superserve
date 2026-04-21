@@ -181,7 +181,7 @@ class AsyncSandbox:
         return to_sandbox_info(raw)
 
     async def pause(self) -> None:
-        """Pause this sandbox. The sandbox transitions to ``idle``."""
+        """Pause this sandbox. The sandbox transitions to ``paused``."""
         await async_api_request(
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/pause",

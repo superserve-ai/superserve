@@ -44,10 +44,10 @@ describe.skipIf(!hasCredentials())("sandboxes", () => {
     expect(info.id).toBe(sandbox.id)
   })
 
-  it("pauses and transitions to idle", async () => {
+  it("pauses and transitions to paused", async () => {
     await sandbox.pause()
     const info = await Sandbox.get(sandbox.id, opts)
-    expect(info.status).toBe("idle")
+    expect(info.status).toBe("paused")
   })
 
   it("resumes back to active", async () => {

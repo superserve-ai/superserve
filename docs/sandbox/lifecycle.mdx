@@ -7,12 +7,12 @@ description: Manage sandbox state — pause to save compute costs, resume on dem
 A sandbox transitions between two user-visible states:
 
 - **`active`** — VM is running, processes executing, compute billed
-- **`idle`** — VM paused, state persisted to disk, no compute billed
+- **`paused`** — VM paused, state persisted to disk, no compute billed
 
 Deletion removes the sandbox entirely — any further API call returns `404`.
 
 ```
-active  ↔  idle  →  deleted
+active  ↔  paused  →  deleted
 ```
 
 ## Pause
@@ -31,7 +31,7 @@ sandbox.pause()
 
 ## Resume
 
-`resume()` restores an `idle` sandbox. Processes pick up where they left off.
+`resume()` restores a `paused` sandbox. Processes pick up where they left off.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -45,9 +45,9 @@ sandbox.commands.run("ls /tmp")
 ```
 </CodeGroup>
 
-<Tip>
-You usually don't need to call `resume()` explicitly. Calling `commands.run()` or `files.write()` on an `idle` sandbox auto-resumes it first.
-</Tip>
+<Warning>
+Calling `commands.run()` or `files.write()` on a `paused` sandbox throws `ConflictError` (HTTP 409). Call `resume()` explicitly first.
+</Warning>
 
 Resume rotates the sandbox's per-instance access token on the backend. The SDK re-injects the new token into the `files` sub-module transparently — nothing changes in your code.
 

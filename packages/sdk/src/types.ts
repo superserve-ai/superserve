@@ -11,7 +11,7 @@ import { SandboxError } from "./errors.js"
 // Sandbox
 // ---------------------------------------------------------------------------
 
-export type SandboxStatus = "active" | "idle"
+export type SandboxStatus = "active" | "paused"
 
 export interface NetworkConfig {
   allowOut?: string[]

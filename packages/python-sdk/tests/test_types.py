@@ -103,7 +103,7 @@ class TestToSandboxInfo:
 class TestSandboxStatus:
     def test_all_statuses_exist(self) -> None:
         assert SandboxStatus.ACTIVE.value == "active"
-        assert SandboxStatus.IDLE.value == "idle"
+        assert SandboxStatus.PAUSED.value == "paused"
 
     def test_only_two_statuses(self) -> None:
-        assert {s.value for s in SandboxStatus} == {"active", "idle"}
+        assert {s.value for s in SandboxStatus} == {"active", "paused"}

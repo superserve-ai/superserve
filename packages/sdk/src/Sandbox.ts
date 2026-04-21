@@ -245,7 +245,7 @@ export class Sandbox {
   }
 
   /**
-   * Pause this sandbox. The sandbox transitions to `idle`.
+   * Pause this sandbox. The sandbox transitions to `paused`.
    * All running processes and file state are preserved.
    */
   async pause(): Promise<void> {

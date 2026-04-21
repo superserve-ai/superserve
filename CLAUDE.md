@@ -97,7 +97,7 @@ Same API surface as TypeScript SDK (snake_case). `Sandbox` (sync) and `AsyncSand
 ## Key Patterns
 
 - **Sandbox IDs**: UUIDs. API keys prefixed with `ss_live_`.
-- **Sandbox lifecycle**: `active ↔ idle → deleted`. Only two user-visible states — `active` (running) and `idle` (paused). Create is synchronous; `POST /pause` returns 204; `POST /resume` rotates the per-sandbox access token (SDK updates the files sub-module transparently).
+- **Sandbox lifecycle**: `active ↔ paused → deleted`. Only two user-visible states — `active` (running) and `paused`. Create is synchronous; `POST /pause` returns 204; `POST /resume` rotates the per-sandbox access token (SDK updates the files sub-module transparently). Exec on a `paused` sandbox returns 409 Conflict — callers must `resume()` first.
 - **Data plane vs control plane**: SDK hides this internally. Control plane is `api.superserve.ai` (API key). Data plane is `boxd-{id}.sandbox.superserve.ai` (access token). Users never construct data-plane URLs.
 - **API types**: Defined in `apps/console/src/lib/api/types.ts`. Must match the OpenAPI spec.
 - **Shared configs**: TypeScript projects extend from `@superserve/typescript-config`. Tailwind from `@superserve/tailwind-config`. Biome is a single root `biome.json` that covers every workspace (Biome 2.x) — no per-package Biome config.

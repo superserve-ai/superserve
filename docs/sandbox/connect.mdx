@@ -26,9 +26,9 @@ sandbox.commands.run("ls /app")
 ```
 </CodeGroup>
 
-<Note>
-If the sandbox is `idle` when you call a command or file method, it auto-resumes before executing. You don't need to call `resume()` yourself.
-</Note>
+<Warning>
+If the sandbox is `paused`, calling a command or file method raises `ConflictError` (HTTP 409). Call `sandbox.resume()` explicitly first.
+</Warning>
 
 ## Find sandboxes with `list`
 
@@ -66,12 +66,12 @@ Use `Sandbox.get()` when you only need metadata about a sandbox, not a usable in
 <CodeGroup>
 ```typescript TypeScript
 const info = await Sandbox.get("7a3f2b8c-1234-...")
-console.log(info.status)  // "active" or "idle"
+console.log(info.status)  // "active" or "paused"
 ```
 
 ```python Python
 info = Sandbox.get("7a3f2b8c-1234-...")
-print(info.status.value)  # "active" or "idle"
+print(info.status.value)  # "active" or "paused"
 ```
 </CodeGroup>
 
