@@ -28,7 +28,7 @@ import {
   NetworkSection,
   SandboxInfoGrid,
 } from "@/components/sandboxes/sandbox-info-grid"
-import { SnapshotsSection } from "@/components/sandboxes/snapshots-section"
+// import { SnapshotsSection } from "@/components/sandboxes/snapshots-section"
 import {
   useDeleteSandbox,
   usePauseSandbox,
@@ -36,8 +36,9 @@ import {
   useSandbox,
 } from "@/hooks/use-sandboxes"
 import { listActivityBySandboxAction } from "@/lib/api/activity-actions"
-import { auditLogKeys, snapshotKeys } from "@/lib/api/query-keys"
-import { listSnapshotsBySandboxAction } from "@/lib/api/snapshots-actions"
+import { auditLogKeys } from "@/lib/api/query-keys"
+// import { snapshotKeys } from "@/lib/api/query-keys"
+// import { listSnapshotsBySandboxAction } from "@/lib/api/snapshots-actions"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 import { STATUS_BADGE_VARIANT, STATUS_LABEL } from "@/lib/sandbox-utils"
 
@@ -153,12 +154,12 @@ export default function SandboxDetailPage() {
     staleTime: 30_000,
   })
 
-  const { data: snapshots, isPending: snapshotsPending } = useQuery({
-    queryKey: snapshotKeys.bySandbox(sandboxId),
-    queryFn: () => listSnapshotsBySandboxAction(sandboxId),
-    enabled: !!sandboxId,
-    staleTime: 30_000,
-  })
+  // const { data: snapshots, isPending: snapshotsPending } = useQuery({
+  //   queryKey: snapshotKeys.bySandbox(sandboxId),
+  //   queryFn: () => listSnapshotsBySandboxAction(sandboxId),
+  //   enabled: !!sandboxId,
+  //   staleTime: 30_000,
+  // })
 
   if (isPending) return <DetailSkeleton />
 
@@ -316,7 +317,7 @@ export default function SandboxDetailPage() {
         </div>
         <FilesSection sandbox={sandbox} />
         <ActivitySection activity={activity} isPending={activityPending} />
-        <SnapshotsSection snapshots={snapshots} isPending={snapshotsPending} />
+        {/* <SnapshotsSection snapshots={snapshots} isPending={snapshotsPending} /> */}
       </div>
     </div>
   )
