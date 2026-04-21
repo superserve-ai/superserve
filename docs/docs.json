@@ -53,7 +53,41 @@
         "groups": [
           {
             "group": "Get Started",
-            "pages": ["introduction", "quickstart"]
+            "pages": [
+              "introduction",
+              "quickstart",
+              "api-key"
+            ]
+          },
+          {
+            "group": "Sandbox",
+            "pages": [
+              "sandbox/create",
+              "sandbox/connect",
+              "sandbox/lifecycle",
+              "sandbox/metadata",
+              "sandbox/networking",
+              "sandbox/environment-variables"
+            ]
+          },
+          {
+            "group": "Commands",
+            "pages": [
+              "commands/overview",
+              "commands/streaming"
+            ]
+          },
+          {
+            "group": "Filesystem",
+            "pages": [
+              "filesystem/read-write"
+            ]
+          },
+          {
+            "group": "Errors",
+            "pages": [
+              "errors"
+            ]
           }
         ]
       },
@@ -61,19 +95,36 @@
         "tab": "SDK Reference",
         "groups": [
           {
-            "group": "TypeScript SDK",
+            "group": "Reference",
             "pages": [
-              "sdk/typescript/sandbox",
-              "sdk/typescript/commands",
-              "sdk/typescript/files"
+              "sdk-reference/sandbox",
+              "sdk-reference/commands",
+              "sdk-reference/files"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "openapi": "https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml",
+        "groups": [
+          {
+            "group": "Sandboxes",
+            "pages": [
+              "GET /sandboxes",
+              "POST /sandboxes",
+              "GET /sandboxes/{sandbox_id}",
+              "PATCH /sandboxes/{sandbox_id}",
+              "DELETE /sandboxes/{sandbox_id}",
+              "POST /sandboxes/{sandbox_id}/pause",
+              "POST /sandboxes/{sandbox_id}/resume"
             ]
           },
           {
-            "group": "Python SDK",
+            "group": "Exec",
             "pages": [
-              "sdk/python/sandbox",
-              "sdk/python/commands",
-              "sdk/python/files"
+              "POST /sandboxes/{sandbox_id}/exec",
+              "POST /sandboxes/{sandbox_id}/exec/stream"
             ]
           }
         ]

@@ -1,0 +1,104 @@
+---
+title: "Pause, resume, and delete"
+sidebarTitle: Lifecycle
+description: Manage sandbox state — pause to save compute costs, resume on demand, delete when you're done.
+---
+
+A sandbox transitions between two user-visible states:
+
+- **`active`** — VM is running, processes executing, compute billed
+- **`idle`** — VM paused, state persisted to disk, no compute billed
+
+Deletion removes the sandbox entirely — any further API call returns `404`.
+
+```
+active  ↔  idle  →  deleted
+```
+
+## Pause
+
+`pause()` checkpoints the full VM state (memory, processes, filesystem) to disk and stops billing for compute.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.pause()
+```
+
+```python Python
+sandbox.pause()
+```
+</CodeGroup>
+
+## Resume
+
+`resume()` restores an `idle` sandbox. Processes pick up where they left off.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.resume()
+await sandbox.commands.run("ls /tmp")
+```
+
+```python Python
+sandbox.resume()
+sandbox.commands.run("ls /tmp")
+```
+</CodeGroup>
+
+<Tip>
+You usually don't need to call `resume()` explicitly. Calling `commands.run()` or `files.write()` on an `idle` sandbox auto-resumes it first.
+</Tip>
+
+Resume rotates the sandbox's per-instance access token on the backend. The SDK re-injects the new token into the `files` sub-module transparently — nothing changes in your code.
+
+## Kill
+
+`kill()` deletes the sandbox and all its resources. It's idempotent — deleting an already-deleted sandbox is a no-op that swallows the `404`.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.kill()
+```
+
+```python Python
+sandbox.kill()
+```
+</CodeGroup>
+
+## Kill without an instance
+
+In serverless contexts you often don't have the Sandbox instance — just the ID. Use `killById` / `kill_by_id` to delete it anyway.
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+await Sandbox.killById("7a3f2b8c-1234-...")
+```
+
+```python Python
+from superserve import Sandbox
+
+Sandbox.kill_by_id("7a3f2b8c-1234-...")
+```
+</CodeGroup>
+
+## Auto-cleanup
+
+Wrap the sandbox in a scoped resource to guarantee `kill()` runs even on throw.
+
+<CodeGroup>
+```typescript TypeScript
+{
+  await using sandbox = await Sandbox.create({ name: "scraper-1" })
+  await sandbox.commands.run("python scrape.py")
+}
+```
+
+```python Python
+with Sandbox.create(name="scraper-1") as sandbox:
+    sandbox.commands.run("python scrape.py")
+```
+</CodeGroup>
+
+See the [Sandbox reference](/sdk-reference/sandbox#auto-cleanup) for the `AsyncSandbox` variant.

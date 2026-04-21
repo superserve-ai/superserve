@@ -1,0 +1,354 @@
+---
+title: "Sandbox"
+sidebarTitle: Sandbox
+description: The Sandbox class — factory methods, instance methods, properties, types, and auto-cleanup patterns.
+---
+
+The `Sandbox` class is the main entry point for the SDK. Python ships both a sync `Sandbox` and an `AsyncSandbox` with identical method names.
+
+## Import
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+```
+
+```python Python
+from superserve import Sandbox
+# Async variant (awaitable methods, async with support):
+from superserve import AsyncSandbox
+```
+</CodeGroup>
+
+## Authentication
+
+The SDK reads `SUPERSERVE_API_KEY` from the environment by default. Pass `apiKey` / `api_key` explicitly to override, and `baseUrl` / `base_url` to target a different control-plane URL.
+
+```bash
+export SUPERSERVE_API_KEY=ss_live_...
+export SUPERSERVE_BASE_URL=https://api.superserve.ai  # optional
+```
+
+## Factory methods
+
+### `Sandbox.create`
+
+Create and boot a new sandbox. Synchronous — when the promise resolves, the VM is `active`.
+
+<CodeGroup>
+```typescript TypeScript
+const sandbox = await Sandbox.create({
+  name: "data-analyzer",
+  timeoutSeconds: 3600,
+  metadata: { env: "prod" },
+  envVars: { OPENAI_API_KEY: "sk-..." },
+  network: { allowOut: ["api.openai.com"], denyOut: ["0.0.0.0/0"] },
+})
+```
+
+```python Python
+from superserve import Sandbox, NetworkConfig
+
+sandbox = Sandbox.create(
+    name="data-analyzer",
+    timeout_seconds=3600,
+    metadata={"env": "prod"},
+    env_vars={"OPENAI_API_KEY": "sk-..."},
+    network=NetworkConfig(
+        allow_out=["api.openai.com"],
+        deny_out=["0.0.0.0/0"],
+    ),
+)
+```
+</CodeGroup>
+
+**Options:**
+
+| Option | Type | Description |
+|---|---|---|
+| `name` | `string` | **Required.** Human-readable sandbox name. |
+| `timeoutSeconds` / `timeout_seconds` | `number` | Max active lifetime before auto-pause. API-side upper bound (subject to change). |
+| `metadata` | `Record<string, string>` | String tags. |
+| `envVars` / `env_vars` | `Record<string, string>` | Env vars injected into every process. |
+| `network` | `NetworkConfig` | Egress allow/deny rules. |
+| `apiKey` / `api_key` | `string` | Overrides `SUPERSERVE_API_KEY`. |
+| `baseUrl` / `base_url` | `string` | Overrides `SUPERSERVE_BASE_URL`. |
+| `signal` | `AbortSignal` | TypeScript only — abort the creation request. |
+
+### `Sandbox.connect`
+
+Reconnect to an existing sandbox by ID. Fetches info and a fresh access token.
+
+<CodeGroup>
+```typescript TypeScript
+const sandbox = await Sandbox.connect("7a3f2b8c-1234-...")
+```
+
+```python Python
+sandbox = Sandbox.connect("7a3f2b8c-1234-...")
+```
+</CodeGroup>
+
+### `Sandbox.list`
+
+List sandboxes on the authenticated team. `metadata` filters combine with AND.
+
+<CodeGroup>
+```typescript TypeScript
+const all = await Sandbox.list()
+const prod = await Sandbox.list({ metadata: { env: "prod" } })
+```
+
+```python Python
+all_boxes = Sandbox.list()
+prod = Sandbox.list(metadata={"env": "prod"})
+```
+</CodeGroup>
+
+Returns an array of [`SandboxInfo`](#sandboxinfo).
+
+### `Sandbox.get`
+
+Fetch info about a sandbox without creating a usable instance.
+
+<CodeGroup>
+```typescript TypeScript
+const info = await Sandbox.get("7a3f2b8c-1234-...")
+```
+
+```python Python
+info = Sandbox.get("7a3f2b8c-1234-...")
+```
+</CodeGroup>
+
+Returns a [`SandboxInfo`](#sandboxinfo).
+
+### `Sandbox.killById` / `Sandbox.kill_by_id`
+
+Delete a sandbox by ID without instantiating it. Idempotent.
+
+<CodeGroup>
+```typescript TypeScript
+await Sandbox.killById("7a3f2b8c-1234-...")
+```
+
+```python Python
+Sandbox.kill_by_id("7a3f2b8c-1234-...")
+```
+</CodeGroup>
+
+## Instance methods
+
+### `getInfo` / `get_info`
+
+Fetch the current server-side state. Returns a fresh [`SandboxInfo`](#sandboxinfo) — the instance's own `status` / `metadata` properties are snapshots and are **not** mutated.
+
+<CodeGroup>
+```typescript TypeScript
+const info = await sandbox.getInfo()
+console.log(info.status)  // "active" or "idle"
+```
+
+```python Python
+info = sandbox.get_info()
+print(info.status.value)  # "active" or "idle"
+```
+</CodeGroup>
+
+### `pause`
+
+Checkpoint the VM state to disk. Returns nothing.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.pause()
+```
+
+```python Python
+sandbox.pause()
+```
+</CodeGroup>
+
+### `resume`
+
+Restore a paused sandbox. The backend rotates the per-instance access token; the SDK re-injects it into the `files` sub-module transparently.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.resume()
+```
+
+```python Python
+sandbox.resume()
+```
+</CodeGroup>
+
+### `kill`
+
+Delete the sandbox. Idempotent — swallows `404`.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.kill()
+```
+
+```python Python
+sandbox.kill()
+```
+</CodeGroup>
+
+### `update`
+
+Patch `metadata` and/or `network` on a live sandbox.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.update({
+  metadata: { env: "staging" },
+  network: { allowOut: ["api.openai.com"] },
+})
+```
+
+```python Python
+sandbox.update(
+    metadata={"env": "staging"},
+    network=NetworkConfig(allow_out=["api.openai.com"]),
+)
+```
+</CodeGroup>
+
+## Instance properties
+
+All properties are read-only snapshots taken at construction. Call `getInfo()` / `get_info()` for fresh data.
+
+| Property | Type | Description |
+|---|---|---|
+| `id` | `string` | Unique sandbox UUID. |
+| `name` | `string` | Human-readable name. |
+| `status` | `SandboxStatus` | Status at construction time. |
+| `metadata` | `Record<string, string>` | Tags at construction time. |
+| `commands` | `Commands` | [Commands](/sdk-reference/commands) sub-module. |
+| `files` | `Files` | [Files](/sdk-reference/files) sub-module. Rebuilt after `resume()`. |
+
+## Auto-cleanup
+
+Scoped resource syntax guarantees `kill()` runs even on throw.
+
+<CodeGroup>
+```typescript TypeScript
+{
+  await using sandbox = await Sandbox.create({ name: "scoped" })
+  await sandbox.commands.run("python analyze.py")
+}
+// kill() ran on scope exit
+```
+
+```python Python
+with Sandbox.create(name="scoped") as sandbox:
+    sandbox.commands.run("python analyze.py")
+# kill() ran on scope exit
+
+# Async variant
+import asyncio
+from superserve import AsyncSandbox
+
+async def main():
+    sandbox = await AsyncSandbox.create(name="async-scoped")
+    async with sandbox:
+        result = await sandbox.commands.run("python analyze.py")
+        print(result.stdout)
+
+asyncio.run(main())
+```
+</CodeGroup>
+
+## Types
+
+### `SandboxStatus`
+
+<CodeGroup>
+```typescript TypeScript
+type SandboxStatus = "active" | "idle"
+```
+
+```python Python
+from enum import Enum
+
+class SandboxStatus(str, Enum):
+    ACTIVE = "active"
+    IDLE = "idle"
+```
+</CodeGroup>
+
+A sandbox is `active` when running and `idle` after `pause()`. Deletion removes it entirely — subsequent API calls return `404`.
+
+### `SandboxInfo`
+
+<CodeGroup>
+```typescript TypeScript
+interface SandboxInfo {
+  id: string
+  name: string
+  status: SandboxStatus
+  vcpuCount: number
+  memoryMib: number
+  createdAt: Date
+  timeoutSeconds?: number
+  network?: NetworkConfig
+  metadata: Record<string, string>
+}
+```
+
+```python Python
+from datetime import datetime
+from pydantic import BaseModel
+
+class SandboxInfo(BaseModel):
+    id: str
+    name: str
+    status: SandboxStatus
+    vcpu_count: int
+    memory_mib: int
+    created_at: datetime
+    timeout_seconds: int | None = None
+    network: NetworkConfig | None = None
+    metadata: dict[str, str]
+```
+</CodeGroup>
+
+### `NetworkConfig`
+
+<CodeGroup>
+```typescript TypeScript
+interface NetworkConfig {
+  allowOut?: string[]  // CIDRs or domain patterns
+  denyOut?: string[]   // CIDRs only — use "0.0.0.0/0" to deny all
+}
+```
+
+```python Python
+from pydantic import BaseModel
+
+class NetworkConfig(BaseModel):
+    allow_out: list[str] | None = None  # CIDRs or domain patterns
+    deny_out: list[str] | None = None   # CIDRs only
+```
+</CodeGroup>
+
+## Retries
+
+GET and DELETE requests auto-retry on `429`, `502`, `503`, `504`, and network errors with exponential backoff + jitter (3 attempts max). POST and PATCH are not retried — the SDK surfaces the error so you can decide.
+
+See [Errors](/errors).
+
+## Errors
+
+Sandbox methods commonly raise:
+
+- `AuthenticationError` — missing or invalid API key
+- `ValidationError` — bad request body
+- `NotFoundError` — sandbox doesn't exist (except `kill` / `killById`, which swallow 404)
+- `ConflictError` — wrong state (e.g., pausing an already-idle sandbox)
+- `ServerError` — platform error
+
+See [Errors](/errors) for the full hierarchy.

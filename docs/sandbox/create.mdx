@@ -1,0 +1,78 @@
+---
+title: "Create a sandbox"
+sidebarTitle: Create
+description: Spin up an isolated Firecracker MicroVM in seconds, ready to run commands immediately.
+---
+
+`Sandbox.create()` boots a fresh VM and returns when it's ready to use. There's no readiness check or polling — the returned instance is already `active`.
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({ name: "data-analyzer" })
+```
+
+```python Python
+from superserve import Sandbox
+
+sandbox = Sandbox.create(name="data-analyzer")
+```
+</CodeGroup>
+
+## With options
+
+Attach metadata tags, inject environment variables, cap the active lifetime, or lock down network egress at creation time.
+
+<CodeGroup>
+```typescript TypeScript
+const sandbox = await Sandbox.create({
+  name: "data-analyzer",
+  timeoutSeconds: 3600,
+  metadata: { env: "prod", owner: "agent-7" },
+  envVars: { OPENAI_API_KEY: "sk-..." },
+  network: {
+    allowOut: ["api.openai.com", "*.github.com"],
+    denyOut: ["0.0.0.0/0"],
+  },
+})
+```
+
+```python Python
+from superserve import Sandbox, NetworkConfig
+
+sandbox = Sandbox.create(
+    name="data-analyzer",
+    timeout_seconds=3600,
+    metadata={"env": "prod", "owner": "agent-7"},
+    env_vars={"OPENAI_API_KEY": "sk-..."},
+    network=NetworkConfig(
+        allow_out=["api.openai.com", "*.github.com"],
+        deny_out=["0.0.0.0/0"],
+    ),
+)
+```
+</CodeGroup>
+
+## Common options
+
+| Option | Type | Description |
+|---|---|---|
+| `name` | `string` | **Required.** Human-readable sandbox name. |
+| `timeoutSeconds` / `timeout_seconds` | `number` | Max time the sandbox can stay `active` before auto-pause. |
+| `metadata` | `Record<string, string>` | String tags. See [Metadata](/sandbox/metadata). |
+| `envVars` / `env_vars` | `Record<string, string>` | Env vars applied to every process. See [Environment variables](/sandbox/environment-variables). |
+| `network` | `NetworkConfig` | Egress allow/deny rules. See [Networking](/sandbox/networking). |
+
+See the [Sandbox reference](/sdk-reference/sandbox#sandbox-create) for every option including `apiKey`, `baseUrl`, and `signal`.
+
+## What you get
+
+Every sandbox is:
+
+- Ubuntu 24.04 with Python 3.12 and Node.js 22 pre-installed
+- 1 vCPU, 1 GB RAM, 4 GB disk
+- Fully isolated — your code cannot see other tenants' processes, files, or network traffic
+- Given a unique UUID (`sandbox.id`) for reconnection later
+
+Next: [run commands](/commands/overview), [write files](/filesystem/read-write), or [pause the sandbox](/sandbox/lifecycle) to save costs between runs.

@@ -1,0 +1,81 @@
+---
+title: "Read and write files"
+sidebarTitle: Read & write
+description: Upload and download files to and from a sandbox's filesystem.
+---
+
+Use `sandbox.files` to move data in and out of a sandbox. The SDK handles data-plane routing and authentication transparently.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.files.write("/app/config.json", '{"key": "value"}')
+
+const text = await sandbox.files.readText("/app/config.json")
+console.log(text)
+```
+
+```python Python
+sandbox.files.write("/app/config.json", '{"key": "value"}')
+
+text = sandbox.files.read_text("/app/config.json")
+print(text)
+```
+</CodeGroup>
+
+<Note>
+`AsyncSandbox` exposes the same `files` API with awaitable methods.
+</Note>
+
+## Write binary content
+
+`write()` accepts strings or raw bytes. Parent directories are created automatically.
+
+<CodeGroup>
+```typescript TypeScript
+import { readFileSync } from "node:fs"
+
+const buffer = readFileSync("./local-image.png")
+await sandbox.files.write("/app/image.png", buffer)
+
+await sandbox.files.write("/app/data.bin", new Uint8Array([1, 2, 3, 4]))
+```
+
+```python Python
+with open("local-image.png", "rb") as f:
+    sandbox.files.write("/app/image.png", f.read())
+
+sandbox.files.write("/app/data.bin", bytes([1, 2, 3, 4]))
+```
+</CodeGroup>
+
+## Read as bytes or text
+
+- `read()` returns raw bytes (`Uint8Array` in TypeScript, `bytes` in Python)
+- `readText()` / `read_text()` returns a UTF-8-decoded string
+
+<CodeGroup>
+```typescript TypeScript
+const bytes: Uint8Array = await sandbox.files.read("/app/image.png")
+
+const text: string = await sandbox.files.readText("/app/config.json")
+```
+
+```python Python
+data: bytes = sandbox.files.read("/app/image.png")
+
+text: str = sandbox.files.read_text("/app/config.json")
+```
+</CodeGroup>
+
+## Path rules
+
+Paths passed to `files.*` methods must:
+
+- **Start with `/`** — only absolute paths are accepted
+- **Contain no `..` segments** — no traversal
+
+Parent directories are created automatically on write — you don't need to `mkdir -p` first.
+
+## Errors
+
+See the [files reference](/sdk-reference/files#errors) and the full [error hierarchy](/errors).

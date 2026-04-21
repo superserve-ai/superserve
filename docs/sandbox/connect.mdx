@@ -1,0 +1,97 @@
+---
+title: "Connect to an existing sandbox"
+sidebarTitle: Connect
+description: Reconnect to a sandbox you created earlier using its ID, list sandboxes, or fetch info without an instance.
+---
+
+A sandbox outlives the process that created it. Store `sandbox.id` somewhere durable (a database, a queue message), and reconnect later with `Sandbox.connect()`.
+
+- `Sandbox.connect(id)` — live instance with `commands` and `files` sub-modules
+- `Sandbox.get(id)` — info only, no live instance
+- `sandbox.getInfo()` — refresh state on an existing instance
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.connect("7a3f2b8c-1234-...")
+await sandbox.commands.run("ls /app")
+```
+
+```python Python
+from superserve import Sandbox
+
+sandbox = Sandbox.connect("7a3f2b8c-1234-...")
+sandbox.commands.run("ls /app")
+```
+</CodeGroup>
+
+<Note>
+If the sandbox is `idle` when you call a command or file method, it auto-resumes before executing. You don't need to call `resume()` yourself.
+</Note>
+
+## Find sandboxes with `list`
+
+List all sandboxes on the team, or filter by metadata. Filters combine with AND.
+
+<CodeGroup>
+```typescript TypeScript
+const all = await Sandbox.list()
+
+const prod = await Sandbox.list({
+  metadata: { env: "prod", owner: "agent-7" },
+})
+
+for (const info of prod) {
+  console.log(info.id, info.name, info.status)
+}
+```
+
+```python Python
+all_boxes = Sandbox.list()
+
+prod = Sandbox.list(metadata={"env": "prod", "owner": "agent-7"})
+
+for info in prod:
+    print(info.id, info.name, info.status.value)
+```
+</CodeGroup>
+
+`list()` returns an array of [`SandboxInfo`](/sdk-reference/sandbox#sandboxinfo) — it does not create Sandbox instances.
+
+## Fetch info without connecting
+
+Use `Sandbox.get()` when you only need metadata about a sandbox, not a usable instance.
+
+<CodeGroup>
+```typescript TypeScript
+const info = await Sandbox.get("7a3f2b8c-1234-...")
+console.log(info.status)  // "active" or "idle"
+```
+
+```python Python
+info = Sandbox.get("7a3f2b8c-1234-...")
+print(info.status.value)  # "active" or "idle"
+```
+</CodeGroup>
+
+## Typical pattern: resume work across requests
+
+In a serverless handler, look up the stored ID, reconnect, and run.
+
+<CodeGroup>
+```typescript TypeScript
+async function handleJob(jobId: string, sandboxId: string) {
+  const sandbox = await Sandbox.connect(sandboxId)
+  const result = await sandbox.commands.run(`./process-job ${jobId}`)
+  return result.stdout
+}
+```
+
+```python Python
+def handle_job(job_id: str, sandbox_id: str) -> str:
+    sandbox = Sandbox.connect(sandbox_id)
+    result = sandbox.commands.run(f"./process-job {job_id}")
+    return result.stdout
+```
+</CodeGroup>

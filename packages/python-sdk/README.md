@@ -53,7 +53,8 @@ import asyncio
 from superserve import AsyncSandbox
 
 async def main():
-    async with await AsyncSandbox.create(name="async-example") as sandbox:
+    sandbox = await AsyncSandbox.create(name="async-example")
+    async with sandbox:
         result = await sandbox.commands.run("echo hello")
         print(result.stdout)
 

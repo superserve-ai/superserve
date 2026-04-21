@@ -1,0 +1,75 @@
+---
+title: "Metadata tags"
+sidebarTitle: Metadata
+description: Attach string key-value tags to sandboxes, update them later, and filter sandboxes by tag.
+---
+
+Metadata is a flat `{string: string}` map attached to each sandbox. Use it to track the user, job, environment, or any other context you need to query later.
+
+## Set metadata on create
+
+<CodeGroup>
+```typescript TypeScript
+const sandbox = await Sandbox.create({
+  name: "data-analyzer",
+  metadata: {
+    env: "prod",
+    owner: "agent-7",
+    job_id: "job_01HE...",
+  },
+})
+```
+
+```python Python
+sandbox = Sandbox.create(
+    name="data-analyzer",
+    metadata={
+        "env": "prod",
+        "owner": "agent-7",
+        "job_id": "job_01HE...",
+    },
+)
+```
+</CodeGroup>
+
+## Update metadata
+
+`update()` replaces the metadata map — pass the full set you want to keep.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.update({
+  metadata: { env: "staging", owner: "agent-7" },
+})
+```
+
+```python Python
+sandbox.update(metadata={"env": "staging", "owner": "agent-7"})
+```
+</CodeGroup>
+
+## Filter sandboxes by metadata
+
+`Sandbox.list()` accepts a `metadata` filter. Multiple keys combine with AND — a sandbox must match every key-value pair to be returned.
+
+<CodeGroup>
+```typescript TypeScript
+const prodForAgent = await Sandbox.list({
+  metadata: { env: "prod", owner: "agent-7" },
+})
+```
+
+```python Python
+prod_for_agent = Sandbox.list(
+    metadata={"env": "prod", "owner": "agent-7"},
+)
+```
+</CodeGroup>
+
+## Limits
+
+Metadata has API-side size and key-count limits; exceeding them returns a `400` from the API. Keys with reserved prefixes (`superserve.`, `_superserve`) are also rejected.
+
+<Note>
+The `sandbox.metadata` instance property is a snapshot taken at construction. Call `getInfo()` / `get_info()` to fetch the current metadata after an `update()`.
+</Note>

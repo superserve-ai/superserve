@@ -8,6 +8,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
+from .errors import SandboxError
+
 
 class SandboxStatus(str, Enum):
     ACTIVE = "active"
@@ -47,9 +49,9 @@ def _parse_iso8601(value: str) -> datetime:
 def to_sandbox_info(raw: dict[str, Any]) -> SandboxInfo:
     """Convert an API response dict to a SandboxInfo model."""
     if not raw.get("id"):
-        raise ValueError("Invalid API response: missing sandbox id")
+        raise SandboxError("Invalid API response: missing sandbox id")
     if not raw.get("status"):
-        raise ValueError("Invalid API response: missing sandbox status")
+        raise SandboxError("Invalid API response: missing sandbox status")
 
     network = None
     if raw.get("network"):

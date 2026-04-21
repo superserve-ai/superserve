@@ -5,6 +5,8 @@
  * The SDK converts snake_case API responses to these types internally.
  */
 
+import { SandboxError } from "./errors.js"
+
 // ---------------------------------------------------------------------------
 // Sandbox
 // ---------------------------------------------------------------------------
@@ -135,10 +137,10 @@ export interface ApiExecStreamEvent {
  */
 export function toSandboxInfo(raw: ApiSandboxResponse): SandboxInfo {
   if (!raw.id) {
-    throw new Error("Invalid API response: missing sandbox id")
+    throw new SandboxError("Invalid API response: missing sandbox id")
   }
   if (!raw.status) {
-    throw new Error("Invalid API response: missing sandbox status")
+    throw new SandboxError("Invalid API response: missing sandbox status")
   }
 
   return {

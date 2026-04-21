@@ -1,68 +1,82 @@
 ---
-title: Quickstart
-description: Get up and running with Superserve in under 5 minutes.
+title: "Quickstart"
+sidebarTitle: Quickstart
+description: Create your first sandbox, run a command, and read a file — in under five minutes.
 ---
 
-## Prerequisites
+Install the SDK, set your API key, and create a sandbox.
 
-Get your API key from the [Superserve Console](https://console.superserve.ai).
+## 1. Install the SDK
 
-Set it as an environment variable:
+<CodeGroup>
+```bash npm
+npm install @superserve/sdk
+```
+
+```bash pip
+pip install superserve
+```
+</CodeGroup>
+
+## 2. Set your API key
+
+Grab your API key from the [Superserve Console](https://console.superserve.ai) and export it.
 
 ```bash
 export SUPERSERVE_API_KEY=ss_live_...
 ```
 
-## TypeScript
+See [Get an API key](/api-key) for more options.
 
-Install the SDK:
+## 3. Create a sandbox and run a command
 
-```bash
-npm install @superserve/sdk
-```
-
-Create and use a sandbox:
-
-```typescript
+<CodeGroup>
+```typescript TypeScript
 import { Sandbox } from "@superserve/sdk"
 
-// Create a sandbox — ready to use when create returns
 const sandbox = await Sandbox.create({ name: "quickstart" })
 
-// Run a command
 const result = await sandbox.commands.run("echo 'Hello from Superserve!'")
 console.log(result.stdout)
 
-// Write and read a file
 await sandbox.files.write("/tmp/hello.txt", "Hello, world!")
 const content = await sandbox.files.readText("/tmp/hello.txt")
 console.log(content)
 
-// Clean up
 await sandbox.kill()
 ```
 
-## Python
-
-Install the SDK:
-
-```bash
-pip install superserve
-```
-
-Create and use a sandbox:
-
-```python
+```python Python
 from superserve import Sandbox
 
 with Sandbox.create(name="quickstart") as sandbox:
-    # Run a command
     result = sandbox.commands.run("echo 'Hello from Superserve!'")
     print(result.stdout)
 
-    # Write and read a file
-    sandbox.files.write("/tmp/hello.txt", b"Hello, world!")
+    sandbox.files.write("/tmp/hello.txt", "Hello, world!")
     content = sandbox.files.read_text("/tmp/hello.txt")
     print(content)
 # sandbox.kill() runs automatically on scope exit
 ```
+</CodeGroup>
+
+<Note>
+`Sandbox.create()` is synchronous — when it returns, the VM is booted and ready. No polling, no readiness checks.
+</Note>
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Run commands" href="/commands/overview">
+    Sync, streaming, cwd, env, timeouts.
+  </Card>
+  <Card title="Pause & resume" href="/sandbox/lifecycle">
+    Checkpoint state to save money between runs.
+  </Card>
+  <Card title="Metadata" href="/sandbox/metadata">
+    Tag and query sandboxes at scale.
+  </Card>
+  <Card title="Networking" href="/sandbox/networking">
+    Restrict egress to specific domains or CIDRs.
+  </Card>
+</CardGroup>

@@ -1,0 +1,100 @@
+---
+title: "Errors"
+sidebarTitle: Errors
+description: Typed errors thrown by the Superserve SDK and when to catch each one.
+---
+
+Every error raised by the SDK extends a common base class — `SandboxError` in TypeScript, `SandboxError` in Python — so you can catch it broadly or narrow down to a specific case.
+
+## Error hierarchy
+
+| TypeScript | Python | HTTP status | Meaning |
+|---|---|---|---|
+| `SandboxError` | `SandboxError` | — | Base class for every SDK error. |
+| `AuthenticationError` | `AuthenticationError` | `401` | Missing or invalid API key / access token. |
+| `ValidationError` | `ValidationError` | `400` | Request body or parameters rejected by the API. |
+| `NotFoundError` | `NotFoundError` | `404` | Sandbox or resource does not exist. |
+| `ConflictError` | `ConflictError` | `409` | Sandbox is not in a valid state for the operation (e.g., pausing an already-idle sandbox). |
+| `TimeoutError` | `SandboxTimeoutError` | — | Request or command timed out. |
+| `ServerError` | `ServerError` | `500` | Platform error — usually transient. GET/DELETE requests auto-retry with exponential backoff. |
+
+<Note>
+Python renames `TimeoutError` to `SandboxTimeoutError` so it doesn't shadow Python's built-in `TimeoutError`.
+</Note>
+
+## Catching a specific error
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox, ConflictError } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({ name: "already-paused" })
+
+try {
+  await sandbox.pause()
+  await sandbox.pause()  // already idle — ConflictError
+} catch (err) {
+  if (err instanceof ConflictError) {
+    console.log("Sandbox was already idle.")
+  } else {
+    throw err
+  }
+}
+```
+
+```python Python
+from superserve import Sandbox, ConflictError
+
+sandbox = Sandbox.create(name="already-paused")
+
+try:
+    sandbox.pause()
+    sandbox.pause()  # already idle — ConflictError
+except ConflictError:
+    print("Sandbox was already idle.")
+```
+</CodeGroup>
+
+## Base error properties
+
+Every SDK error extends `SandboxError` and exposes:
+
+- `statusCode?: number` / `status_code: int | None` — HTTP status, if the error originated from an API response
+- `code?: string` / `code: str | None` — API-provided error code, when present
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox, SandboxError } from "@superserve/sdk"
+
+try {
+  await Sandbox.connect("missing-id")
+} catch (err) {
+  if (err instanceof SandboxError) {
+    console.error(err.statusCode, err.code, err.message)
+  }
+}
+```
+
+```python Python
+from superserve import Sandbox, SandboxError
+
+try:
+    Sandbox.connect("missing-id")
+except SandboxError as err:
+    print(err.status_code, err.code, err)
+```
+</CodeGroup>
+
+## Idempotent operations
+
+`kill()` / `kill_by_id()` swallow `404` internally — it's safe to call on a sandbox that was already deleted by another process. Every other method surfaces `NotFoundError` to the caller.
+
+## Retries
+
+The SDK automatically retries transient failures on `GET` and `DELETE` requests with exponential backoff and jitter:
+
+- `429 Too Many Requests`
+- `5xx` server errors
+- Network errors (connection reset, DNS failure)
+
+`POST` / `PATCH` requests are **not** retried automatically because they aren't safely idempotent — the SDK surfaces the error so you can decide.

@@ -1,0 +1,133 @@
+---
+title: "Files"
+sidebarTitle: Files
+description: sandbox.files — read and write files inside a sandbox's filesystem.
+---
+
+Access files via the `sandbox.files` sub-module. Operations route directly to the data plane (`boxd-{id}.sandbox.superserve.ai`) using a per-sandbox access token. The SDK manages the token transparently, including rotation after `resume()`.
+
+## `write`
+
+Write a file at an absolute path. Parent directories are created automatically.
+
+<CodeGroup>
+```typescript TypeScript
+// String content
+await sandbox.files.write("/app/config.json", '{"key": "value"}')
+
+// Binary content
+await sandbox.files.write("/app/image.png", buffer)
+
+// From Uint8Array
+await sandbox.files.write("/app/data.bin", new Uint8Array([1, 2, 3]))
+```
+
+```python Python
+# String content (UTF-8 encoded)
+sandbox.files.write("/app/config.json", '{"key": "value"}')
+
+# Binary content
+with open("local-image.png", "rb") as f:
+    sandbox.files.write("/app/image.png", f.read())
+```
+</CodeGroup>
+
+**Parameters:**
+
+| Option | Type | Description |
+|---|---|---|
+| `path` | `string` / `str` | Absolute destination path. |
+| `content` | `FileInput` / `str \| bytes` | File contents. See accepted types below. |
+| `timeoutMs` / `timeout` | `number` / `float` | Optional request timeout. |
+| `signal` | `AbortSignal` | TypeScript only — abort the request. |
+
+**Accepted content types:**
+
+<CodeGroup>
+```typescript TypeScript
+type FileInput = string | Uint8Array | ArrayBuffer | Blob
+```
+
+```python Python
+# str  — encoded as UTF-8
+# bytes — written as-is
+```
+</CodeGroup>
+
+**Cancellation (TypeScript):**
+
+```typescript
+const controller = new AbortController()
+setTimeout(() => controller.abort(), 5000)
+
+await sandbox.files.write("/app/large.bin", buffer, {
+  signal: controller.signal,
+})
+```
+
+## `read`
+
+Read a file as raw bytes.
+
+<CodeGroup>
+```typescript TypeScript
+const bytes: Uint8Array = await sandbox.files.read("/app/image.png")
+```
+
+```python Python
+data: bytes = sandbox.files.read("/app/image.png")
+```
+</CodeGroup>
+
+## `readText` / `read_text`
+
+Read a file and decode as UTF-8.
+
+<CodeGroup>
+```typescript TypeScript
+const text: string = await sandbox.files.readText("/app/config.json")
+```
+
+```python Python
+text: str = sandbox.files.read_text("/app/config.json")
+```
+</CodeGroup>
+
+## Round-trip example
+
+<CodeGroup>
+```typescript TypeScript
+const original = "hello, world!\n"
+
+await sandbox.files.write("/tmp/greeting.txt", original)
+const roundTripped = await sandbox.files.readText("/tmp/greeting.txt")
+
+console.log(roundTripped === original)  // true
+```
+
+```python Python
+original = "hello, world!\n"
+
+sandbox.files.write("/tmp/greeting.txt", original)
+round_tripped = sandbox.files.read_text("/tmp/greeting.txt")
+
+print(round_tripped == original)  # True
+```
+</CodeGroup>
+
+## Path rules
+
+- Paths **must** start with `/`
+- Paths **must not** contain `..` segments
+- Parent directories are created automatically on `write`
+
+## Errors
+
+Commonly raised:
+
+- `NotFoundError` — file does not exist (on read)
+- `ValidationError` — invalid path (relative, contains `..`, or malformed)
+- `AuthenticationError` — access token invalid or sandbox was deleted
+- `TimeoutError` / `SandboxTimeoutError` — the optional timeout elapsed
+
+See [Errors](/errors) for the full hierarchy.

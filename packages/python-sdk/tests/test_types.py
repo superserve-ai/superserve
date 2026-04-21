@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
+from superserve.errors import SandboxError
 from superserve.types import (
     NetworkConfig,
     SandboxInfo,
@@ -45,13 +46,13 @@ class TestToSandboxInfo:
     def test_missing_id_raises(self) -> None:
         raw = _valid_raw()
         del raw["id"]
-        with pytest.raises(ValueError, match="id"):
+        with pytest.raises(SandboxError, match="id"):
             to_sandbox_info(raw)
 
     def test_missing_status_raises(self) -> None:
         raw = _valid_raw()
         del raw["status"]
-        with pytest.raises(ValueError, match="status"):
+        with pytest.raises(SandboxError, match="status"):
             to_sandbox_info(raw)
 
     def test_missing_optional_fields_uses_defaults(self) -> None:
