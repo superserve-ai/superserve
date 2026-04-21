@@ -73,9 +73,9 @@ export function SandboxTableRow({
           {STATUS_LABEL[sandbox.status]}
         </Badge>
       </TableCell>
-      <TableCell className="text-foreground/80">
+      {/* <TableCell className="text-foreground/80">
         {sandbox.snapshot_id ? `${sandbox.snapshot_id.slice(0, 8)}...` : "-"}
-      </TableCell>
+      </TableCell> */}
       <TableCell className="font-mono text-xs text-muted tabular-nums">
         {sandbox.vcpu_count}CPU | {sandbox.memory_mib}MB
       </TableCell>

@@ -161,7 +161,7 @@ function SandboxesPageContent() {
                   </TableHead>
                   <TableHead className="w-[30%]">Name</TableHead>
                   <TableHead className="w-[15%]">Status</TableHead>
-                  <TableHead className="w-[20%]">Snapshot</TableHead>
+                  {/* <TableHead className="w-[20%]">Snapshot</TableHead> */}
                   <TableHead className="w-[15%]">Resources</TableHead>
                   <TableHead className="w-28" />
                 </TableRow>
