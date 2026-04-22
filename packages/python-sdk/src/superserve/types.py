@@ -14,6 +14,7 @@ from .errors import SandboxError
 class SandboxStatus(str, Enum):
     ACTIVE = "active"
     PAUSED = "paused"
+    RESUMING = "resuming"
 
 
 class NetworkConfig(BaseModel):

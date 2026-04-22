@@ -4,12 +4,12 @@ sidebarTitle: Lifecycle
 description: Manage sandbox state - pause to save compute costs, resume on demand, delete when you're done.
 ---
 
-A sandbox transitions between two user-visible states:
+A sandbox transitions between two long-lived states:
 
 - **`active`** - VM is running, processes executing, compute billed
 - **`paused`** - VM paused, state persisted to disk, no compute billed
 
-Deletion removes the sandbox entirely - any further API call returns `404`.
+You'll briefly see **`resuming`** while a paused sandbox is being restored to `active` - retry shortly. Deletion removes the sandbox entirely; further API calls return `404`.
 
 ```
 active  ↔  paused  →  deleted

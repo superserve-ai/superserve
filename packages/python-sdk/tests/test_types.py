@@ -104,6 +104,7 @@ class TestSandboxStatus:
     def test_all_statuses_exist(self) -> None:
         assert SandboxStatus.ACTIVE.value == "active"
         assert SandboxStatus.PAUSED.value == "paused"
+        assert SandboxStatus.RESUMING.value == "resuming"
 
-    def test_only_two_statuses(self) -> None:
-        assert {s.value for s in SandboxStatus} == {"active", "paused"}
+    def test_status_enum_values(self) -> None:
+        assert {s.value for s in SandboxStatus} == {"active", "paused", "resuming"}

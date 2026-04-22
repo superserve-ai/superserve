@@ -130,12 +130,12 @@ Fetch the current server-side state. Returns a fresh [`SandboxInfo`](#sandboxinf
 <CodeGroup>
 ```typescript TypeScript
 const info = await sandbox.getInfo()
-console.log(info.status)  // "active" or "paused"
+console.log(info.status)  // "active" | "paused" | "resuming"
 ```
 
 ```python Python
 info = sandbox.get_info()
-print(info.status.value)  # "active" or "paused"
+print(info.status.value)  # "active" | "paused" | "resuming"
 ```
 </CodeGroup>
 
@@ -221,7 +221,7 @@ sandbox.update(
 
 <CodeGroup>
 ```typescript TypeScript
-type SandboxStatus = "active" | "paused"
+type SandboxStatus = "active" | "paused" | "resuming"
 ```
 
 ```python Python
@@ -230,10 +230,15 @@ from enum import Enum
 class SandboxStatus(str, Enum):
     ACTIVE = "active"
     PAUSED = "paused"
+    RESUMING = "resuming"
 ```
 </CodeGroup>
 
-A sandbox is `active` when running and `paused` after `pause()`. Deletion removes it entirely - subsequent API calls return `404`.
+- `active` - running and ready to accept commands
+- `paused` - stopped with state saved to disk
+- `resuming` - transient, briefly visible while a paused sandbox is being restored to `active` (retry shortly)
+
+Deletion removes the sandbox entirely - subsequent API calls return `404`.
 
 ### `SandboxInfo`
 
