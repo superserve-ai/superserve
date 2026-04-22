@@ -16,7 +16,7 @@ Every error raised by the SDK extends a common base class — `SandboxError` in 
 | `NotFoundError` | `NotFoundError` | `404` | Sandbox or resource does not exist. |
 | `ConflictError` | `ConflictError` | `409` | Sandbox is not in a valid state for the operation (e.g., running a command on a paused sandbox, or pausing an already-paused sandbox). |
 | `TimeoutError` | `SandboxTimeoutError` | — | Request or command timed out. |
-| `ServerError` | `ServerError` | `500` | Platform error — usually transient. GET/DELETE requests auto-retry with exponential backoff. |
+| `ServerError` | `ServerError` | `5xx` | Platform error — usually transient (500/502/503/504). GET/DELETE requests auto-retry with exponential backoff. |
 
 <Note>
 Python renames `TimeoutError` to `SandboxTimeoutError` so it doesn't shadow Python's built-in `TimeoutError`.

@@ -36,23 +36,18 @@ describe.skipIf(!hasCredentials())("sandboxes", () => {
     expect(ids).toContain(sandbox.id)
   })
 
-  it("update accepts metadata", async () => {
-    await sandbox.update({
-      metadata: { env: "test", "run-id": RUN_ID },
-    })
+  it("update writes back metadata", async () => {
+    const metadata = { env: "test", "run-id": RUN_ID }
+    await sandbox.update({ metadata })
     const info = await sandbox.getInfo()
-    expect(info.id).toBe(sandbox.id)
+    expect(info.metadata).toMatchObject(metadata)
   })
 
-  it("pauses and transitions to paused", async () => {
+  it("pause → resume lifecycle", async () => {
     await sandbox.pause()
-    const info = await Sandbox.get(sandbox.id, opts)
-    expect(info.status).toBe("paused")
-  })
+    expect((await Sandbox.get(sandbox.id, opts)).status).toBe("paused")
 
-  it("resumes back to active", async () => {
     await sandbox.resume()
-    const info = await Sandbox.get(sandbox.id, opts)
-    expect(info.status).toBe("active")
+    expect((await Sandbox.get(sandbox.id, opts)).status).toBe("active")
   })
 })

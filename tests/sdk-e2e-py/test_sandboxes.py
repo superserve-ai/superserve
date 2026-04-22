@@ -31,10 +31,12 @@ def test_list_sandboxes_includes_ours(sandbox, connection_opts):
     assert sandbox.id in ids
 
 
-def test_update_accepts_metadata(sandbox, run_id):
-    sandbox.update(metadata={"env": "test", "run-id": run_id})
+def test_update_writes_back_metadata(sandbox, run_id):
+    metadata = {"env": "test", "run-id": run_id}
+    sandbox.update(metadata=metadata)
     result = sandbox.get_info()
-    assert result.id == sandbox.id
+    assert result.metadata["env"] == "test"
+    assert result.metadata["run-id"] == run_id
 
 
 def test_pause_and_resume_lifecycle(sandbox, connection_opts):

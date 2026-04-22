@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { Commands } from "../src/commands.js"
-import { SandboxError } from "../src/errors.js"
+import { ConflictError, SandboxError } from "../src/errors.js"
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -54,6 +54,26 @@ describe("Commands.run (sync)", () => {
       stderr: "warn\n",
       exitCode: 0,
     })
+  })
+
+  it("throws ConflictError when running on a paused sandbox", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse(
+          {
+            error: {
+              code: "sandbox_paused",
+              message: "Sandbox is paused; resume it before executing commands.",
+            },
+          },
+          409,
+        ),
+      ),
+    )
+
+    const commands = new Commands(baseUrl, sandboxId, apiKey)
+    await expect(commands.run("echo hi")).rejects.toBeInstanceOf(ConflictError)
   })
 
   it("converts timeoutMs to timeout_s (ceiled)", async () => {
