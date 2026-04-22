@@ -125,23 +125,6 @@ class AsyncSandbox:
         return [to_sandbox_info(item) for item in raw]
 
     @classmethod
-    async def get(
-        cls,
-        sandbox_id: str,
-        *,
-        api_key: str | None = None,
-        base_url: str | None = None,
-    ) -> SandboxInfo:
-        """Get sandbox info by ID."""
-        config = resolve_config(api_key=api_key, base_url=base_url)
-        raw = await async_api_request(
-            "GET",
-            f"{config.base_url}/sandboxes/{sandbox_id}",
-            headers={"X-API-Key": config.api_key},
-        )
-        return to_sandbox_info(raw)
-
-    @classmethod
     async def kill_by_id(
         cls,
         sandbox_id: str,

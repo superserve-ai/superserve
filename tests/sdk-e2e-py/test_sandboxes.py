@@ -39,11 +39,9 @@ def test_update_writes_back_metadata(sandbox, run_id):
     assert result.metadata["run-id"] == run_id
 
 
-def test_pause_and_resume_lifecycle(sandbox, connection_opts):
+def test_pause_and_resume_lifecycle(sandbox):
     sandbox.pause()
-    info = Sandbox.get(sandbox.id, **connection_opts)
-    assert info.status.value == "paused"
+    assert sandbox.get_info().status.value == "paused"
 
     sandbox.resume()
-    info = Sandbox.get(sandbox.id, **connection_opts)
-    assert info.status.value == "active"
+    assert sandbox.get_info().status.value == "active"

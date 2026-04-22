@@ -28,10 +28,10 @@ Catch the typed subclass you care about and fall back to `SandboxError` for ever
 
 <CodeGroup>
 ```typescript TypeScript
-import { NotFoundError, SandboxError } from "@superserve/sdk"
+import { NotFoundError, Sandbox, SandboxError } from "@superserve/sdk"
 
 try {
-  const info = await Sandbox.get("missing-id")
+  const sandbox = await Sandbox.connect("missing-id")
 } catch (err) {
   if (err instanceof NotFoundError) {
     // Sandbox doesn't exist or was already deleted
@@ -42,10 +42,10 @@ try {
 ```
 
 ```python Python
-from superserve import NotFoundError, SandboxError
+from superserve import NotFoundError, Sandbox, SandboxError
 
 try:
-    info = Sandbox.get("missing-id")
+    sandbox = Sandbox.connect("missing-id")
 except NotFoundError:
     # Sandbox doesn't exist or was already deleted
     pass

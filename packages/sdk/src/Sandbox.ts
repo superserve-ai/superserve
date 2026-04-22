@@ -186,23 +186,6 @@ export class Sandbox {
   }
 
   /**
-   * Get sandbox info by ID without creating a full Sandbox instance.
-   */
-  static async get(
-    sandboxId: string,
-    options: ConnectionOptions = {},
-  ): Promise<SandboxInfo> {
-    const config = resolveConfig(options)
-    const raw = await request<ApiSandboxResponse>({
-      method: "GET",
-      url: `${config.baseUrl}/sandboxes/${sandboxId}`,
-      headers: { "X-API-Key": config.apiKey },
-      signal: options.signal,
-    })
-    return toSandboxInfo(raw)
-  }
-
-  /**
    * Delete a sandbox by ID.
    *
    * Idempotent: if the sandbox is already deleted, this is a no-op.

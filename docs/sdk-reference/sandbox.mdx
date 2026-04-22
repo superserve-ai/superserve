@@ -107,22 +107,6 @@ prod = Sandbox.list(metadata={"env": "prod"})
 
 Returns an array of [`SandboxInfo`](#sandboxinfo).
 
-### `Sandbox.get`
-
-Fetch info about a sandbox without creating a usable instance.
-
-<CodeGroup>
-```typescript TypeScript
-const info = await Sandbox.get("7a3f2b8c-1234-...")
-```
-
-```python Python
-info = Sandbox.get("7a3f2b8c-1234-...")
-```
-</CodeGroup>
-
-Returns a [`SandboxInfo`](#sandboxinfo).
-
 ### `Sandbox.killById` / `Sandbox.kill_by_id`
 
 Delete a sandbox by ID without instantiating it. Idempotent.

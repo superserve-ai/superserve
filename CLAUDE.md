@@ -65,7 +65,7 @@ Built with Bun + Commander. Entry point: `src/index.ts`. Authenticates via devic
 Published as `@superserve/sdk`. Hand-crafted SDK. Zero runtime dependencies (uses native `fetch`).
 
 **Main API:**
-- `Sandbox.create({ name })` / `Sandbox.connect(id)` / `Sandbox.list()` / `Sandbox.get(id)` / `Sandbox.killById(id)`
+- `Sandbox.create({ name })` / `Sandbox.connect(id)` / `Sandbox.list()` / `Sandbox.killById(id)`
 - Instance: `sandbox.pause()` / `resume()` / `kill()` / `update()` / `getInfo()`
 - Sub-modules: `sandbox.commands.run(cmd, opts)`, `sandbox.files.write/read/readText(path, ...)`
 - Call `sandbox.kill()` or `Sandbox.killById(id)` to delete a sandbox — no `Symbol.asyncDispose` / `await using`

@@ -43,9 +43,6 @@ class TestAsyncStaticMethodsAreAsync:
     def test_list_is_coroutine(self) -> None:
         assert inspect.iscoroutinefunction(AsyncSandbox.list)
 
-    def test_get_is_coroutine(self) -> None:
-        assert inspect.iscoroutinefunction(AsyncSandbox.get)
-
     def test_kill_by_id_is_coroutine(self) -> None:
         assert inspect.iscoroutinefunction(AsyncSandbox.kill_by_id)
 
