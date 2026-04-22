@@ -59,7 +59,7 @@ export default function TerminalPage() {
     )
   }
 
-  const canRun = sandbox.status === "active" || sandbox.status === "paused"
+  const canRun = sandbox.status === "active"
 
   return (
     <div className="flex h-full flex-col">
