@@ -19,6 +19,7 @@ def _raw(
         "id": sbx_id,
         "name": "test",
         "status": status,
+        "created_at": "2026-01-01T00:00:00Z",
     }
     if access_token is not None:
         data["access_token"] = access_token
@@ -152,6 +153,23 @@ class TestInstanceMethods:
                 assert "tok" not in r
             finally:
                 sandbox._close_http_client()
+
+    def test_calls_after_kill_raise_sandbox_error(self) -> None:
+        with respx.mock() as router:
+            router.post(f"{API}/sandboxes").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            router.delete(f"{API}/sandboxes/sbx-1").mock(
+                return_value=httpx.Response(204)
+            )
+            sbx = Sandbox.create(name="x")
+            sbx.kill()
+            with pytest.raises(SandboxError, match="has been deleted"):
+                sbx.get_info()
+            with pytest.raises(SandboxError, match="has been deleted"):
+                sbx.pause()
+            # kill() itself stays safe (no-op on already-killed)
+            sbx.kill()
 
     def test_pause_returns_none(self) -> None:
         with respx.mock() as router:

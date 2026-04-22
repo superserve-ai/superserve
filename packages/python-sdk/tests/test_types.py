@@ -59,6 +59,7 @@ class TestToSandboxInfo:
         raw = {
             "id": "sbx-1",
             "status": "active",
+            "created_at": "2026-01-01T00:00:00Z",
         }
         info = to_sandbox_info(raw)
         assert info.name == ""
@@ -75,11 +76,11 @@ class TestToSandboxInfo:
         assert info.created_at.year == 2026
         assert info.created_at.month == 1
 
-    def test_created_at_defaults_when_missing(self) -> None:
+    def test_missing_created_at_raises(self) -> None:
         raw = _valid_raw()
         del raw["created_at"]
-        info = to_sandbox_info(raw)
-        assert isinstance(info.created_at, datetime)
+        with pytest.raises(SandboxError, match="created_at"):
+            to_sandbox_info(raw)
 
     def test_created_at_parses_z_suffix(self) -> None:
         raw = _valid_raw()

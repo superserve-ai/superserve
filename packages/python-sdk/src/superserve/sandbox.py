@@ -151,8 +151,16 @@ class Sandbox:
             except Exception:
                 pass
 
+    def _require_live(self) -> None:
+        if self._closed:
+            raise SandboxError(
+                f"Sandbox {self.id!r} has been deleted; create or connect to "
+                "a new one."
+            )
+
     def get_info(self) -> SandboxInfo:
         """Refresh this sandbox's info from the API."""
+        self._require_live()
         raw = api_request(
             "GET",
             f"{self._config.base_url}/sandboxes/{self.id}",
@@ -163,6 +171,7 @@ class Sandbox:
 
     def pause(self) -> None:
         """Pause this sandbox. The sandbox transitions to ``paused``."""
+        self._require_live()
         api_request(
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/pause",
@@ -176,6 +185,7 @@ class Sandbox:
         The access token is rotated; the SDK rebuilds ``sandbox.files`` with
         the fresh token transparently.
         """
+        self._require_live()
         raw = api_request(
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/resume",
@@ -198,6 +208,8 @@ class Sandbox:
 
     def kill(self) -> None:
         """Delete this sandbox and all its resources. Idempotent."""
+        if self._closed:
+            return
         try:
             api_request(
                 "DELETE",
@@ -217,6 +229,7 @@ class Sandbox:
         network: NetworkConfig | None = None,
     ) -> None:
         """Partially update this sandbox."""
+        self._require_live()
         body: dict[str, Any] = {}
         if metadata is not None:
             body["metadata"] = metadata

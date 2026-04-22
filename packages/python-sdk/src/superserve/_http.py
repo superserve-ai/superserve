@@ -294,9 +294,10 @@ def stream_sse(
                 raise map_api_error(response.status_code, _build_error_body(response))
 
             for line in response.iter_lines():
-                if not line.startswith("data: "):
+                # SSE spec: `data:` with optional leading space on the value.
+                if not line.startswith("data:"):
                     continue
-                data = line[6:].strip()
+                data = line[5:].strip()
                 if not data or data == "[DONE]":
                     continue
                 try:
@@ -496,9 +497,10 @@ async def async_stream_sse(
                 raise map_api_error(response.status_code, _build_error_body(response))
 
             async for line in response.aiter_lines():
-                if not line.startswith("data: "):
+                # SSE spec: `data:` with optional leading space on the value.
+                if not line.startswith("data:"):
                     continue
-                data = line[6:].strip()
+                data = line[5:].strip()
                 if not data or data == "[DONE]":
                     continue
                 try:

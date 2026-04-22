@@ -250,7 +250,9 @@ export async function request<T>(opts: RequestOptions): Promise<T> {
       return undefined as T
     }
 
-    return (await res.json()) as T
+    // Some endpoints legally return 2xx with an empty body.
+    const text = await res.text()
+    return (text ? (JSON.parse(text) as T) : (undefined as T))
   } catch (err) {
     if (err instanceof SandboxError) throw err
     if (err instanceof DOMException && err.name === "AbortError") {
@@ -458,8 +460,9 @@ export async function streamSSE(opts: {
       buffer = lines.pop() ?? ""
 
       for (const line of lines) {
-        if (!line.startsWith("data: ")) continue
-        const json = line.slice(6).trim()
+        // SSE spec: `data:` with optional leading space on the value.
+        if (!line.startsWith("data:")) continue
+        const json = line.slice(5).trim()
         if (!json || json === "[DONE]") continue
         try {
           const event = JSON.parse(json) as ApiExecStreamEvent

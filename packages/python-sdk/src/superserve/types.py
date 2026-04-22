@@ -28,7 +28,7 @@ class SandboxInfo(BaseModel):
     status: SandboxStatus
     vcpu_count: int = 0
     memory_mib: int = 0
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime
     timeout_seconds: Optional[int] = None
     network: Optional[NetworkConfig] = None
     metadata: dict[str, str] = Field(default_factory=dict)
@@ -53,6 +53,8 @@ def to_sandbox_info(raw: dict[str, Any]) -> SandboxInfo:
         raise SandboxError("Invalid API response: missing sandbox id")
     if not raw.get("status"):
         raise SandboxError("Invalid API response: missing sandbox status")
+    if not raw.get("created_at"):
+        raise SandboxError("Invalid API response: missing created_at")
 
     network = None
     if raw.get("network"):
@@ -67,9 +69,7 @@ def to_sandbox_info(raw: dict[str, Any]) -> SandboxInfo:
         status=SandboxStatus(raw["status"]),
         vcpu_count=raw.get("vcpu_count", 0),
         memory_mib=raw.get("memory_mib", 0),
-        created_at=_parse_iso8601(raw["created_at"])
-        if raw.get("created_at")
-        else datetime.now(),
+        created_at=_parse_iso8601(raw["created_at"]),
         timeout_seconds=raw.get("timeout_seconds"),
         network=network,
         metadata=raw.get("metadata", {}),

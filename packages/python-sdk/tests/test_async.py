@@ -21,6 +21,7 @@ def _raw(
         "id": sbx_id,
         "name": "test",
         "status": status,
+        "created_at": "2026-01-01T00:00:00Z",
     }
     if access_token is not None:
         data["access_token"] = access_token

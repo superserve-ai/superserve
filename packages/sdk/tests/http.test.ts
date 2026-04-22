@@ -58,6 +58,15 @@ describe("http.request", () => {
     expect(out).toBeUndefined()
   })
 
+  it("returns undefined when 2xx has an empty body (no JSON parse crash)", async () => {
+    installFetch(async () => new Response("", { status: 200 }))
+    const out = await request<void>({
+      method: "GET",
+      url: "https://example.com/x",
+    })
+    expect(out).toBeUndefined()
+  })
+
   it("throws mapped error on 4xx", async () => {
     installFetch(async () =>
       jsonResponse(

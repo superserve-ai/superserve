@@ -142,6 +142,9 @@ export function toSandboxInfo(raw: ApiSandboxResponse): SandboxInfo {
   if (!raw.status) {
     throw new SandboxError("Invalid API response: missing sandbox status")
   }
+  if (!raw.created_at) {
+    throw new SandboxError("Invalid API response: missing created_at")
+  }
 
   return {
     id: raw.id,
@@ -149,7 +152,7 @@ export function toSandboxInfo(raw: ApiSandboxResponse): SandboxInfo {
     status: raw.status as SandboxStatus,
     vcpuCount: raw.vcpu_count ?? 0,
     memoryMib: raw.memory_mib ?? 0,
-    createdAt: raw.created_at ? new Date(raw.created_at) : new Date(),
+    createdAt: new Date(raw.created_at),
     timeoutSeconds: raw.timeout_seconds ?? undefined,
     network: raw.network
       ? { allowOut: raw.network.allow_out, denyOut: raw.network.deny_out }

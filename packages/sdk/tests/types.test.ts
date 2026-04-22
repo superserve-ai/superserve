@@ -48,6 +48,7 @@ describe("toSandboxInfo", () => {
     const info = toSandboxInfo({
       id: "sbx-1",
       status: "active",
+      created_at: "2026-01-01T00:00:00.000Z",
     })
     expect(info.name).toBe("")
     expect(info.vcpuCount).toBe(0)
@@ -57,15 +58,9 @@ describe("toSandboxInfo", () => {
     expect(info.metadata).toEqual({})
   })
 
-  it("uses current time when created_at missing", () => {
-    const before = Date.now()
-    const info = toSandboxInfo({
-      id: "sbx-1",
-      status: "active",
-    })
-    const after = Date.now()
-    expect(info.createdAt).toBeInstanceOf(Date)
-    expect(info.createdAt.getTime()).toBeGreaterThanOrEqual(before)
-    expect(info.createdAt.getTime()).toBeLessThanOrEqual(after)
+  it("throws when created_at is missing", () => {
+    expect(() =>
+      toSandboxInfo({ id: "sbx-1", status: "active" }),
+    ).toThrow(/missing created_at/)
   })
 })
