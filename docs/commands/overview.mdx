@@ -76,22 +76,18 @@ result = sandbox.commands.run(
 TypeScript uses `timeoutMs` (milliseconds); Python uses `timeout_seconds` (integer seconds). Each follows its language's convention.
 </Note>
 
-## Cancel in-flight commands
+## Timeouts
 
-Abort a command mid-execution by passing a cancellation token.
+Pass a timeout to kill a command that runs longer than you expect.
 
 <CodeGroup>
 ```typescript TypeScript
-const controller = new AbortController()
-setTimeout(() => controller.abort(), 5000)
-
 const result = await sandbox.commands.run("sleep 100", {
-  signal: controller.signal,
+  timeoutMs: 5_000,
 })
 ```
 
 ```python Python
-# Python: use timeout_seconds to bound command duration.
 result = sandbox.commands.run("sleep 100", timeout_seconds=5)
 ```
 </CodeGroup>
