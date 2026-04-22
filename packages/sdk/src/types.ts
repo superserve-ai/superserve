@@ -132,7 +132,7 @@ export interface ApiExecStreamEvent {
  * @internal Convert an API sandbox response to a SandboxInfo.
  *
  * Requires only `id` and `status`. The raw `access_token` is surfaced only
- * on create + get-by-id and is tracked privately on the Sandbox instance —
+ * on create + get-by-id and is tracked privately on the `sandbox` -
  * it is not part of SandboxInfo.
  */
 export function toSandboxInfo(raw: ApiSandboxResponse): SandboxInfo {

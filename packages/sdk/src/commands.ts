@@ -1,5 +1,5 @@
 /**
- * Commands sub-module for executing shell commands inside a sandbox.
+ * `sandbox.commands` - run shell commands inside a sandbox.
  *
  * Supports two modes:
  * - Synchronous: waits for command to finish, returns stdout/stderr/exitCode

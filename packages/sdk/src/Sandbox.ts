@@ -1,8 +1,8 @@
 /**
  * Main Sandbox class — the primary entry point for the Superserve SDK.
  *
- * Uses the E2B pattern: static factory methods (create/connect), sub-modules
- * as properties (.commands, .files), dual static/instance lifecycle methods.
+ * Static factory methods (create/connect) return a `sandbox`. Call methods on
+ * it directly (`sandbox.commands.run(...)`, `sandbox.files.write(...)`, etc.).
  *
  * ```typescript
  * import { Sandbox } from "@superserve/sdk"
@@ -79,7 +79,7 @@ export class Sandbox {
   // -------------------------------------------------------------------------
 
   /**
-   * Create a new sandbox and return a connected Sandbox instance.
+   * Create a new sandbox and return a ready-to-use `sandbox`.
    *
    * The request is synchronous: once it resolves, the sandbox is `active`
    * and ready to execute commands and file operations.
@@ -241,8 +241,8 @@ export class Sandbox {
 
   /**
    * Resume a paused sandbox. Status transitions back to `active`.
-   * The access token is rotated; the SDK updates the files sub-module
-   * transparently.
+   * The access token is rotated; the SDK rebuilds `sandbox.files` with the
+   * fresh token transparently.
    */
   async resume(): Promise<void> {
     const raw = await request<ApiResumeResponse>({
@@ -256,7 +256,7 @@ export class Sandbox {
       )
     }
     this._accessToken = raw.access_token
-    // Rebuild files sub-module with fresh token
+    // Rebuild sandbox.files with the fresh token
     this.files = new Files(this.id, this._config.sandboxHost, this._accessToken)
   }
 

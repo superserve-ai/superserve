@@ -16,7 +16,7 @@ from .types import NetworkConfig, SandboxInfo, SandboxStatus, to_sandbox_info
 
 
 class Sandbox:
-    """A connected sandbox instance with lifecycle methods and sub-modules."""
+    """A live sandbox - call methods directly (`sandbox.commands.run(...)`, etc.)."""
 
     def __init__(
         self,
@@ -141,7 +141,7 @@ class Sandbox:
         except NotFoundError:
             pass  # Already deleted
 
-    # Instance methods
+    # Methods on sandbox
 
     def _close_http_client(self) -> None:
         if not self._closed:
@@ -173,8 +173,8 @@ class Sandbox:
     def resume(self) -> None:
         """Resume a paused sandbox.
 
-        The access token is rotated; the SDK updates the files sub-module
-        transparently.
+        The access token is rotated; the SDK rebuilds ``sandbox.files`` with
+        the fresh token transparently.
         """
         raw = api_request(
             "POST",

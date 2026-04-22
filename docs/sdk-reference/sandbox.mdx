@@ -1,7 +1,7 @@
 ---
 title: "Sandbox"
 sidebarTitle: Sandbox
-description: The Sandbox class - factory methods, instance methods, properties, and types.
+description: The Sandbox class - factory methods, sandbox methods, properties, and types.
 ---
 
 The `Sandbox` class is the main entry point for the SDK. Python ships both a sync `Sandbox` and an `AsyncSandbox` with identical method names.
@@ -121,11 +121,11 @@ Sandbox.kill_by_id("7a3f2b8c-1234-...")
 ```
 </CodeGroup>
 
-## Instance methods
+## Methods on `sandbox`
 
 ### `getInfo` / `get_info`
 
-Fetch the current server-side state. Returns a fresh [`SandboxInfo`](#sandboxinfo) - the instance's own `status` / `metadata` properties are snapshots and are **not** mutated.
+Fetch the current server-side state. Returns a fresh [`SandboxInfo`](#sandboxinfo) - the returned `sandbox`'s own `status` / `metadata` properties are snapshots and are **not** mutated.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -155,7 +155,7 @@ sandbox.pause()
 
 ### `resume`
 
-Restore a paused sandbox. The backend rotates the per-instance access token; the SDK re-injects it into the `files` sub-module transparently.
+Restore a paused sandbox. The backend rotates the per-sandbox access token; the SDK re-injects it into `sandbox.files` transparently.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -201,9 +201,9 @@ sandbox.update(
 ```
 </CodeGroup>
 
-## Instance properties
+## Properties on `sandbox`
 
-All properties are read-only snapshots taken at construction. Call `getInfo()` / `get_info()` for fresh data.
+`id`, `name`, `status`, and `metadata` are read-only snapshots taken at construction. Call `getInfo()` / `get_info()` for fresh data.
 
 | Property | Type | Description |
 |---|---|---|
@@ -211,8 +211,8 @@ All properties are read-only snapshots taken at construction. Call `getInfo()` /
 | `name` | `string` | Human-readable name. |
 | `status` | `SandboxStatus` | Status at construction time. |
 | `metadata` | `Record<string, string>` | Tags at construction time. |
-| `commands` | `Commands` | [Commands](/sdk-reference/commands) sub-module. |
-| `files` | `Files` | [Files](/sdk-reference/files) sub-module. Rebuilt after `resume()`. |
+| `commands` | `Commands` | See [Commands](/sdk-reference/commands). |
+| `files` | `Files` | See [Files](/sdk-reference/files). Rebuilt after `resume()`. |
 
 
 ## Types

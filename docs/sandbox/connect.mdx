@@ -1,13 +1,13 @@
 ---
 title: "Connect to an existing sandbox"
 sidebarTitle: Connect
-description: Reconnect to a sandbox you created earlier using its ID, list sandboxes, or fetch info without an instance.
+description: Reconnect to a sandbox you created earlier using its ID, and list sandboxes on your team.
 ---
 
 A sandbox outlives the process that created it. Store `sandbox.id` somewhere durable (a database, a queue message), and reconnect later with `Sandbox.connect()`.
 
-- `Sandbox.connect(id)` - live instance with `commands` and `files` sub-modules
-- `sandbox.getInfo()` - refresh state on an existing instance
+- `Sandbox.connect(id)` - returns a live `sandbox` with `commands` and `files` ready to use
+- `sandbox.getInfo()` - fetch the current status and metadata for a sandbox you already have
 
 <CodeGroup>
 ```typescript TypeScript
@@ -52,4 +52,4 @@ for info in prod:
 ```
 </CodeGroup>
 
-`list()` returns an array of [`SandboxInfo`](/sdk-reference/sandbox#sandboxinfo) - it does not create Sandbox instances.
+`list()` returns an array of [`SandboxInfo`](/sdk-reference/sandbox#sandboxinfo) - no live `sandbox` is constructed. Call `Sandbox.connect(id)` when you need one.

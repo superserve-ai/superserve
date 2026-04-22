@@ -4,7 +4,7 @@ sidebarTitle: Files
 description: sandbox.files - read and write files inside a sandbox's filesystem.
 ---
 
-Access files via the `sandbox.files` sub-module. Operations route directly to the data plane (`boxd-{id}.sandbox.superserve.ai`) using a per-sandbox access token. The SDK manages the token transparently, including rotation after `resume()`.
+Read and write files inside a sandbox via `sandbox.files`. Operations route directly to the data plane (`boxd-{id}.sandbox.superserve.ai`) using a per-sandbox access token. The SDK manages the token transparently, including rotation after `resume()`.
 
 ## `write`
 

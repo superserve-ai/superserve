@@ -1,5 +1,5 @@
 /**
- * Files sub-module for uploading/downloading files to/from a sandbox.
+ * `sandbox.files` - read and write files inside a sandbox.
  *
  * Hits the data-plane directly at `boxd-{id}.sandbox.superserve.ai`
  * using the per-sandbox access token. The control-plane API key is

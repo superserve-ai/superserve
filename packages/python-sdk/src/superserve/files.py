@@ -1,4 +1,4 @@
-"""Files sub-module for uploading/downloading files to/from a sandbox."""
+"""`sandbox.files` - read and write files inside a sandbox."""
 
 from __future__ import annotations
 

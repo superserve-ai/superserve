@@ -1,4 +1,4 @@
-"""Commands sub-module for executing shell commands inside a sandbox."""
+"""`sandbox.commands` - run shell commands inside a sandbox."""
 
 from __future__ import annotations
 

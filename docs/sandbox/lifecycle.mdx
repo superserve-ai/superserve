@@ -69,7 +69,7 @@ sandbox.commands.run("ls /tmp")
 You don't need to call `resume()` before running a command. `commands.run()` on a `paused` sandbox transparently resumes it and executes. Call `resume()` explicitly only when you want the sandbox to be ready in advance.
 </Tip>
 
-Resume rotates the sandbox's per-instance access token on the backend. The SDK re-injects the new token into the `files` sub-module transparently - nothing changes in your code.
+Resume rotates the sandbox's per-sandbox access token on the backend. The SDK re-injects the new token into `sandbox.files` transparently - nothing changes in your code.
 
 ## Kill
 
@@ -95,7 +95,7 @@ sandbox.kill()
 
 ## Kill without an instance
 
-In serverless contexts you often don't have the Sandbox instance - just the ID. Use `killById` / `kill_by_id` to delete it anyway.
+In serverless contexts you often don't have the `sandbox` - just the ID. Use `killById` / `kill_by_id` to delete it anyway.
 
 <CodeGroup>
 ```typescript TypeScript {3}
