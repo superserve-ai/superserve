@@ -137,7 +137,7 @@ export function buildCreateSandboxRequest(
 
   return {
     name: state.name.trim(),
-    ...(state.timeout ? { timeout: Number(state.timeout) } : {}),
+    ...(state.timeout ? { timeout_seconds: Number(state.timeout) } : {}),
     ...(hasNetwork
       ? {
           network: {

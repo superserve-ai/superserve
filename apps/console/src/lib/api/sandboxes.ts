@@ -1,12 +1,14 @@
 import { apiClient } from "./client"
 import type {
   CreateSandboxRequest,
+  ResumeResponse,
+  SandboxListItem,
   SandboxPatch,
   SandboxResponse,
 } from "./types"
 
-export async function listSandboxes(): Promise<SandboxResponse[]> {
-  return apiClient<SandboxResponse[]>("/sandboxes")
+export async function listSandboxes(): Promise<SandboxListItem[]> {
+  return apiClient<SandboxListItem[]>("/sandboxes")
 }
 
 export async function getSandbox(id: string): Promise<SandboxResponse> {
@@ -38,14 +40,14 @@ export async function patchSandbox(
   })
 }
 
-export async function pauseSandbox(id: string): Promise<SandboxResponse> {
-  return apiClient<SandboxResponse>(`/sandboxes/${id}/pause`, {
+export async function pauseSandbox(id: string): Promise<void> {
+  return apiClient<void>(`/sandboxes/${id}/pause`, {
     method: "POST",
   })
 }
 
-export async function resumeSandbox(id: string): Promise<SandboxResponse> {
-  return apiClient<SandboxResponse>(`/sandboxes/${id}/resume`, {
+export async function resumeSandbox(id: string): Promise<ResumeResponse> {
+  return apiClient<ResumeResponse>(`/sandboxes/${id}/resume`, {
     method: "POST",
   })
 }

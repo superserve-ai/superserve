@@ -10,7 +10,7 @@ export function useFaviconStatus() {
   const { data: sandboxes } = useSandboxes()
 
   useEffect(() => {
-    const hasTransitional = sandboxes?.some((s) => s.status === "pausing")
+    const hasTransitional = sandboxes?.some((s) => s.status === "resuming")
 
     const link = document.querySelector<HTMLLinkElement>("link[rel='icon']")
     if (!link) return

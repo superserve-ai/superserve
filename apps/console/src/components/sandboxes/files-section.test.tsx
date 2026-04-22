@@ -2,7 +2,7 @@
  * files-section — the upload/download panel on the sandbox detail page.
  *
  * Covers:
- *   - Disabled gating for non-active / non-idle sandboxes with tooltip hint
+ *   - Disabled gating for non-active / non-paused sandboxes with tooltip hint
  *   - Path validation: absolute, no '..', no '.'
  *   - Upload happy path + failure path (toasts + posthog events)
  *   - Download happy path + failure path
@@ -80,17 +80,17 @@ function successResponse(
 }
 
 describe("FilesSection — disabled gating", () => {
-  it("disables panels when sandbox is pausing, with reason in header", () => {
-    render(<FilesSection sandbox={{ ...activeSandbox, status: "pausing" }} />)
+  it("disables panels when sandbox is resuming, with reason in header", () => {
+    render(<FilesSection sandbox={{ ...activeSandbox, status: "resuming" }} />)
     // Reason text appears both in the section header and in tooltip popups.
-    expect(screen.getAllByText(/pausing/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/resuming/i).length).toBeGreaterThan(0)
     expect(screen.getByRole("button", { name: /Upload/ })).toBeDisabled()
     expect(screen.getByRole("button", { name: /Download/ })).toBeDisabled()
   })
 
-  it("disables panels when sandbox is failed", () => {
-    render(<FilesSection sandbox={{ ...activeSandbox, status: "failed" }} />)
-    expect(screen.getAllByText(/failed/i).length).toBeGreaterThan(0)
+  it("disables panels when sandbox is paused, with hint to start", () => {
+    render(<FilesSection sandbox={{ ...activeSandbox, status: "paused" }} />)
+    expect(screen.getAllByText(/Start the sandbox/i).length).toBeGreaterThan(0)
     expect(screen.getByRole("button", { name: /Upload/ })).toBeDisabled()
   })
 

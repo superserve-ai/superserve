@@ -201,7 +201,7 @@ describe("usePauseSandbox / useResumeSandbox", () => {
     mockAddToast.mockReset()
   })
 
-  it("pauses: flips the cached sandbox to idle optimistically", async () => {
+  it("pauses: flips the cached sandbox to paused optimistically", async () => {
     const { queryClient, wrapper } = createQueryWrapper()
     queryClient.setQueryData(sandboxKeys.all, [
       sandbox({ id: "a", status: "active" }),
@@ -215,14 +215,14 @@ describe("usePauseSandbox / useResumeSandbox", () => {
 
     await waitFor(() => {
       const list = queryClient.getQueryData<SandboxResponse[]>(sandboxKeys.all)
-      expect(list?.[0].status).toBe("idle")
+      expect(list?.[0].status).toBe("paused")
     })
   })
 
-  it("resumes: flips the cached sandbox to active optimistically", async () => {
+  it("resumes: flips the cached sandbox to resuming optimistically", async () => {
     const { queryClient, wrapper } = createQueryWrapper()
     queryClient.setQueryData(sandboxKeys.all, [
-      sandbox({ id: "a", status: "idle" }),
+      sandbox({ id: "a", status: "paused" }),
     ])
     mockResume.mockResolvedValue(undefined)
 
@@ -233,7 +233,7 @@ describe("usePauseSandbox / useResumeSandbox", () => {
 
     await waitFor(() => {
       const list = queryClient.getQueryData<SandboxResponse[]>(sandboxKeys.all)
-      expect(list?.[0].status).toBe("active")
+      expect(list?.[0].status).toBe("resuming")
     })
   })
 
