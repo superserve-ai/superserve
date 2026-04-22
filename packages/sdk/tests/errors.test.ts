@@ -54,7 +54,15 @@ describe("mapApiError", () => {
   it("maps 401 to AuthenticationError with code", () => {
     const err = mapApiError(401, withError("unauthorized", "go away"))
     expect(err).toBeInstanceOf(AuthenticationError)
+    expect(err.statusCode).toBe(401)
     expect(err.code).toBe("unauthorized")
+  })
+
+  it("maps 403 to AuthenticationError preserving the 403 status", () => {
+    const err = mapApiError(403, withError("forbidden", "no access"))
+    expect(err).toBeInstanceOf(AuthenticationError)
+    expect(err.statusCode).toBe(403)
+    expect(err.code).toBe("forbidden")
   })
 
   it("maps 404 to NotFoundError with code", () => {

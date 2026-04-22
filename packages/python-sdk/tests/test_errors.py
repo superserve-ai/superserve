@@ -27,6 +27,12 @@ class TestMapApiError:
         assert isinstance(err, AuthenticationError)
         assert err.status_code == 401
 
+    def test_403_returns_authentication_error_preserving_status(self) -> None:
+        err = map_api_error(403, {"error": {"message": "forbidden", "code": "no_access"}})
+        assert isinstance(err, AuthenticationError)
+        assert err.status_code == 403
+        assert err.code == "no_access"
+
     def test_404_returns_not_found_error(self) -> None:
         err = map_api_error(404, {"error": {"message": "nope"}})
         assert isinstance(err, NotFoundError)

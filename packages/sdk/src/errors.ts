@@ -27,8 +27,12 @@ export class SandboxError extends Error {
 }
 
 export class AuthenticationError extends SandboxError {
-  constructor(message = "Missing or invalid API key", code?: string) {
-    super(message, 401, code)
+  constructor(
+    message = "Missing or invalid API key",
+    code?: string,
+    statusCode = 401,
+  ) {
+    super(message, statusCode, code)
     this.name = "AuthenticationError"
   }
 }
@@ -86,7 +90,8 @@ export function mapApiError(
     case 400:
       return new ValidationError(message, code)
     case 401:
-      return new AuthenticationError(message, code)
+    case 403:
+      return new AuthenticationError(message, code, status)
     case 404:
       return new NotFoundError(message, code)
     case 409:

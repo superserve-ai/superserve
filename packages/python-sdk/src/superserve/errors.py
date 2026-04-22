@@ -24,8 +24,9 @@ class AuthenticationError(SandboxError):
         self,
         message: str = "Missing or invalid API key",
         code: str | None = None,
+        status_code: int = 401,
     ) -> None:
-        super().__init__(message, status_code=401, code=code)
+        super().__init__(message, status_code=status_code, code=code)
 
 
 class ValidationError(SandboxError):
@@ -75,8 +76,8 @@ def map_api_error(status_code: int, body: dict[str, Any]) -> SandboxError:
 
     if status_code == 400:
         return ValidationError(message, code=code)
-    elif status_code == 401:
-        return AuthenticationError(message, code=code)
+    elif status_code in (401, 403):
+        return AuthenticationError(message, code=code, status_code=status_code)
     elif status_code == 404:
         return NotFoundError(message, code=code)
     elif status_code == 409:
