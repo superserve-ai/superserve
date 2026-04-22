@@ -6,9 +6,9 @@ description: Reconnect to a sandbox you created earlier using its ID, list sandb
 
 A sandbox outlives the process that created it. Store `sandbox.id` somewhere durable (a database, a queue message), and reconnect later with `Sandbox.connect()`.
 
-- `Sandbox.connect(id)` — live instance with `commands` and `files` sub-modules
-- `Sandbox.get(id)` — info only, no live instance
-- `sandbox.getInfo()` — refresh state on an existing instance
+- `Sandbox.connect(id)` - live instance with `commands` and `files` sub-modules
+- `Sandbox.get(id)` - info only, no live instance
+- `sandbox.getInfo()` - refresh state on an existing instance
 
 <CodeGroup>
 ```typescript TypeScript
@@ -25,10 +25,6 @@ sandbox = Sandbox.connect("7a3f2b8c-1234-...")
 sandbox.commands.run("ls /app")
 ```
 </CodeGroup>
-
-<Warning>
-If the sandbox is `paused`, calling a command or file method raises `ConflictError` (HTTP 409). Call `sandbox.resume()` explicitly first.
-</Warning>
 
 ## Find sandboxes with `list`
 
@@ -57,7 +53,7 @@ for info in prod:
 ```
 </CodeGroup>
 
-`list()` returns an array of [`SandboxInfo`](/sdk-reference/sandbox#sandboxinfo) — it does not create Sandbox instances.
+`list()` returns an array of [`SandboxInfo`](/sdk-reference/sandbox#sandboxinfo) - it does not create Sandbox instances.
 
 ## Fetch info without connecting
 
@@ -72,26 +68,5 @@ console.log(info.status)  // "active" or "paused"
 ```python Python
 info = Sandbox.get("7a3f2b8c-1234-...")
 print(info.status.value)  # "active" or "paused"
-```
-</CodeGroup>
-
-## Typical pattern: resume work across requests
-
-In a serverless handler, look up the stored ID, reconnect, and run.
-
-<CodeGroup>
-```typescript TypeScript
-async function handleJob(jobId: string, sandboxId: string) {
-  const sandbox = await Sandbox.connect(sandboxId)
-  const result = await sandbox.commands.run(`./process-job ${jobId}`)
-  return result.stdout
-}
-```
-
-```python Python
-def handle_job(job_id: str, sandbox_id: str) -> str:
-    sandbox = Sandbox.connect(sandbox_id)
-    result = sandbox.commands.run(f"./process-job {job_id}")
-    return result.stdout
 ```
 </CodeGroup>

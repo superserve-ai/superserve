@@ -258,9 +258,3 @@ class AsyncSandbox:
             f"AsyncSandbox(id={self.id!r}, name={self.name!r}, "
             f"status={self.status.value!r})"
         )
-
-    async def __aenter__(self) -> AsyncSandbox:
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb) -> None:
-        await self.kill()

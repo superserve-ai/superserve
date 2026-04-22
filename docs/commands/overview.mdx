@@ -18,19 +18,21 @@ console.log(result.stdout)
 ```python Python
 from superserve import Sandbox
 
-with Sandbox.create(name="data-analyzer") as sandbox:
-    result = sandbox.commands.run("python analyze.py")
-    print(result.stdout)
+sandbox = Sandbox.create(name="data-analyzer")
+result = sandbox.commands.run("python analyze.py")
+print(result.stdout)
+
+sandbox.kill()
 ```
 </CodeGroup>
 
 <Note>
-`AsyncSandbox` exposes the same API with awaitable methods — see the [Sandbox reference](/sdk-reference/sandbox#auto-cleanup).
+`AsyncSandbox` exposes the same API with awaitable methods - see the [Sandbox reference](/sdk-reference/sandbox).
 </Note>
 
 ## Handling exit codes
 
-`run()` doesn't throw for non-zero exit codes — inspect `exitCode` on the result.
+`run()` doesn't throw for non-zero exit codes - inspect `exitCode` on the result.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -73,22 +75,6 @@ result = sandbox.commands.run(
 <Note>
 TypeScript uses `timeoutMs` (milliseconds); Python uses `timeout_seconds` (integer seconds). Each follows its language's convention.
 </Note>
-
-## Paused sandboxes
-
-If the sandbox is `paused`, `run()` raises `ConflictError` (HTTP 409). Call `sandbox.resume()` explicitly before executing commands.
-
-<CodeGroup>
-```typescript TypeScript
-await sandbox.resume()
-const result = await sandbox.commands.run("echo hello")
-```
-
-```python Python
-sandbox.resume()
-result = sandbox.commands.run("echo hello")
-```
-</CodeGroup>
 
 ## Cancel in-flight commands
 

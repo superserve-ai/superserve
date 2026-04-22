@@ -108,8 +108,6 @@ const text = await sandbox.files.readText("/app/data.txt")
 await sandbox.kill()
 ```
 
-Use `await using sandbox = await Sandbox.create({ name: "..." })` for auto-cleanup.
-
 **Build / typecheck:**
 ```bash
 bunx turbo run build --filter=@superserve/sdk
@@ -121,16 +119,18 @@ bunx turbo run typecheck --filter=@superserve/sdk
 ```python
 from superserve import Sandbox
 
-with Sandbox.create(name="my-sandbox") as sandbox:
-    result = sandbox.commands.run("echo hello")
-    print(result.stdout)
+sandbox = Sandbox.create(name="my-sandbox")
 
-    sandbox.files.write("/app/data.txt", b"content")
-    text = sandbox.files.read_text("/app/data.txt")
-# sandbox.kill() runs automatically
+result = sandbox.commands.run("echo hello")
+print(result.stdout)
+
+sandbox.files.write("/app/data.txt", b"content")
+text = sandbox.files.read_text("/app/data.txt")
+
+sandbox.kill()
 ```
 
-Async variant: `AsyncSandbox` with `async with` support.
+Async variant: `AsyncSandbox` exposes awaitable methods.
 
 **Build / typecheck / lint:**
 ```bash

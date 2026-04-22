@@ -1,7 +1,7 @@
 ---
 title: "Environment variables"
 sidebarTitle: Env vars
-description: Inject environment variables at sandbox creation — applied to every process spawned inside the VM.
+description: Inject environment variables at sandbox creation - applied to every process spawned inside the VM.
 ---
 
 Env vars set at creation time are applied to **every** process the sandbox runs: `commands.run()`, shells, and anything those spawn. They persist across `pause()` / `resume()` cycles.
@@ -58,5 +58,5 @@ print(result.stdout)  # "staging\n"
 </CodeGroup>
 
 <Note>
-Values pass through unmodified — no shell expansion or interpolation. Escape `$` and special characters yourself if needed.
+Values pass through unmodified - no shell expansion or interpolation. Escape `$` and special characters yourself if needed.
 </Note>

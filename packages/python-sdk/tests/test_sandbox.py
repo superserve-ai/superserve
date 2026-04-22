@@ -138,18 +138,6 @@ class TestInstanceMethods:
             # Should not raise
             sandbox.kill()
 
-    def test_context_manager_calls_kill(self) -> None:
-        with respx.mock() as router:
-            router.post(f"{API}/sandboxes").mock(
-                return_value=httpx.Response(200, json=_raw())
-            )
-            delete_route = router.delete(f"{API}/sandboxes/sbx-1").mock(
-                return_value=httpx.Response(204)
-            )
-            with Sandbox.create(name="x") as sbx:
-                assert sbx.id == "sbx-1"
-            assert delete_route.call_count == 1
-
     def test_repr_includes_id_and_status(self) -> None:
         with respx.mock() as router:
             router.get(f"{API}/sandboxes/sbx-1").mock(

@@ -1,7 +1,7 @@
 ---
 title: "Quickstart"
 sidebarTitle: Quickstart
-description: Create your first sandbox, run a command, and read a file — in under five minutes.
+description: Create your first sandbox, run a command, and read a file - in under five minutes.
 ---
 
 Install the SDK, set your API key, and create a sandbox.
@@ -49,20 +49,18 @@ await sandbox.kill()
 ```python Python
 from superserve import Sandbox
 
-with Sandbox.create(name="quickstart") as sandbox:
-    result = sandbox.commands.run("echo 'Hello from Superserve!'")
-    print(result.stdout)
+sandbox = Sandbox.create(name="quickstart")
 
-    sandbox.files.write("/tmp/hello.txt", "Hello, world!")
-    content = sandbox.files.read_text("/tmp/hello.txt")
-    print(content)
-# sandbox.kill() runs automatically on scope exit
+result = sandbox.commands.run("echo 'Hello from Superserve!'")
+print(result.stdout)
+
+sandbox.files.write("/tmp/hello.txt", "Hello, world!")
+content = sandbox.files.read_text("/tmp/hello.txt")
+print(content)
+
+sandbox.kill()
 ```
 </CodeGroup>
-
-<Note>
-`Sandbox.create()` is synchronous — when it returns, the VM is booted and ready. No polling, no readiness checks.
-</Note>
 
 ## Where to go next
 

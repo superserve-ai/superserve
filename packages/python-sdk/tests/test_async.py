@@ -64,18 +64,6 @@ class TestAsyncSandboxSmoke:
             finally:
                 await sbx._close_http_client()
 
-    async def test_context_manager_calls_kill(self) -> None:
-        with respx.mock() as router:
-            router.post(f"{API}/sandboxes").mock(
-                return_value=httpx.Response(200, json=_raw())
-            )
-            del_route = router.delete(f"{API}/sandboxes/sbx-1").mock(
-                return_value=httpx.Response(204)
-            )
-            async with await AsyncSandbox.create(name="x") as sbx:
-                assert sbx.id == "sbx-1"
-            assert del_route.call_count == 1
-
     async def test_kill_swallows_404(self) -> None:
         with respx.mock() as router:
             router.get(f"{API}/sandboxes/sbx-1").mock(

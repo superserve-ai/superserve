@@ -256,9 +256,3 @@ class Sandbox:
             f"Sandbox(id={self.id!r}, name={self.name!r}, "
             f"status={self.status.value!r})"
         )
-
-    def __enter__(self) -> Sandbox:
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> None:
-        self.kill()

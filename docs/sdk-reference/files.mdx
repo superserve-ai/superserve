@@ -1,7 +1,7 @@
 ---
 title: "Files"
 sidebarTitle: Files
-description: sandbox.files — read and write files inside a sandbox's filesystem.
+description: sandbox.files - read and write files inside a sandbox's filesystem.
 ---
 
 Access files via the `sandbox.files` sub-module. Operations route directly to the data plane (`boxd-{id}.sandbox.superserve.ai`) using a per-sandbox access token. The SDK manages the token transparently, including rotation after `resume()`.
@@ -39,7 +39,7 @@ with open("local-image.png", "rb") as f:
 | `path` | `string` / `str` | Absolute destination path. |
 | `content` | `FileInput` / `str \| bytes` | File contents. See accepted types below. |
 | `timeoutMs` / `timeout` | `number` / `float` | Optional request timeout. |
-| `signal` | `AbortSignal` | TypeScript only — abort the request. |
+| `signal` | `AbortSignal` | TypeScript only - abort the request. |
 
 **Accepted content types:**
 
@@ -49,8 +49,8 @@ type FileInput = string | Uint8Array | ArrayBuffer | Blob
 ```
 
 ```python Python
-# str  — encoded as UTF-8
-# bytes — written as-is
+# str  - encoded as UTF-8
+# bytes - written as-is
 ```
 </CodeGroup>
 
@@ -125,9 +125,9 @@ print(round_tripped == original)  # True
 
 Commonly raised:
 
-- `NotFoundError` — file does not exist (on read)
-- `ValidationError` — invalid path (relative, contains `..`, or malformed)
-- `AuthenticationError` — access token invalid or sandbox was deleted
-- `TimeoutError` / `SandboxTimeoutError` — the optional timeout elapsed
+- `NotFoundError` - file does not exist (on read)
+- `ValidationError` - invalid path (relative, contains `..`, or malformed)
+- `AuthenticationError` - access token invalid or sandbox was deleted
+- `TimeoutError` / `SandboxTimeoutError` - the optional timeout elapsed
 
 See [Errors](/errors) for the full hierarchy.

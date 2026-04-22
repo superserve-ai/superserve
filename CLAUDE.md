@@ -68,7 +68,7 @@ Published as `@superserve/sdk`. Hand-crafted SDK. Zero runtime dependencies (use
 - `Sandbox.create({ name })` / `Sandbox.connect(id)` / `Sandbox.list()` / `Sandbox.get(id)` / `Sandbox.killById(id)`
 - Instance: `sandbox.pause()` / `resume()` / `kill()` / `update()` / `getInfo()`
 - Sub-modules: `sandbox.commands.run(cmd, opts)`, `sandbox.files.write/read/readText(path, ...)`
-- `await using sandbox = await Sandbox.create(...)` for auto-cleanup
+- Call `sandbox.kill()` or `Sandbox.killById(id)` to delete a sandbox — no `Symbol.asyncDispose` / `await using`
 
 **Design choices:**
 - `status` / `metadata` are `readonly` snapshots from construction — call `getInfo()` for fresh data
@@ -87,7 +87,7 @@ Published as `superserve` on PyPI. Hand-crafted SDK. Runtime deps: `httpx>=0.24.
 Same API surface as TypeScript SDK (snake_case). `Sandbox` (sync) and `AsyncSandbox` (async) classes.
 
 **Design choices:**
-- `with Sandbox.create(...) as sb:` and `async with AsyncSandbox.create(...) as sb:` for auto-cleanup
+- No context manager (`with`/`async with`); call `sandbox.kill()` / `Sandbox.kill_by_id(id)` explicitly
 - `TimeoutError` is named `SandboxTimeoutError` to avoid shadowing Python's builtin
 - `kill()` is idempotent; `pause()` / `resume()` / `kill()` return `None`
 - Shared `httpx.Client` per Sandbox instance (connection pooling) — closed on `kill()` / `__exit__`
@@ -97,7 +97,7 @@ Same API surface as TypeScript SDK (snake_case). `Sandbox` (sync) and `AsyncSand
 ## Key Patterns
 
 - **Sandbox IDs**: UUIDs. API keys prefixed with `ss_live_`.
-- **Sandbox lifecycle**: `active ↔ paused → deleted`. Only two user-visible states — `active` (running) and `paused`. Create is synchronous; `POST /pause` returns 204; `POST /resume` rotates the per-sandbox access token (SDK updates the files sub-module transparently). Exec on a `paused` sandbox returns 409 Conflict — callers must `resume()` first.
+- **Sandbox lifecycle**: `active ↔ paused → deleted`. Only two user-visible states — `active` (running) and `paused`. Create is synchronous; `POST /pause` returns 204; `POST /resume` rotates the per-sandbox access token (SDK updates the files sub-module transparently). Exec on a `paused` sandbox is transparently resumed by the platform before execution — callers do not need to `resume()` first.
 - **Data plane vs control plane**: SDK hides this internally. Control plane is `api.superserve.ai` (API key). Data plane is `boxd-{id}.sandbox.superserve.ai` (access token). Users never construct data-plane URLs.
 - **API types**: Defined in `apps/console/src/lib/api/types.ts`. Must match the OpenAPI spec.
 - **Shared configs**: TypeScript projects extend from `@superserve/typescript-config`. Tailwind from `@superserve/tailwind-config`. Biome is a single root `biome.json` that covers every workspace (Biome 2.x) — no per-package Biome config.

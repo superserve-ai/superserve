@@ -227,16 +227,4 @@ describe("Sandbox instance methods", () => {
     )
     await expect(sandbox.resume()).rejects.toThrow(/missing access_token/)
   })
-
-  it("Symbol.asyncDispose calls kill", async () => {
-    const sandbox = await makeSandbox()
-    const mock = vi.fn(async () => new Response(null, { status: 204 }))
-    vi.stubGlobal("fetch", mock)
-
-    await sandbox[Symbol.asyncDispose]()
-    expect(mock).toHaveBeenCalledTimes(1)
-    const [url, init] = mock.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe("https://api.superserve.ai/sandboxes/sbx-1")
-    expect(init.method).toBe("DELETE")
-  })
 })

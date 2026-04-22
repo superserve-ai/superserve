@@ -4,7 +4,7 @@ sidebarTitle: Create
 description: Spin up an isolated Firecracker MicroVM in seconds, ready to run commands immediately.
 ---
 
-`Sandbox.create()` boots a fresh VM and returns when it's ready to use. There's no readiness check or polling — the returned instance is already `active`.
+`Sandbox.create()` boots a fresh VM and returns when it's ready to use. There's no readiness check or polling - the returned instance is already `active`.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -26,6 +26,8 @@ Attach metadata tags, inject environment variables, cap the active lifetime, or 
 
 <CodeGroup>
 ```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
 const sandbox = await Sandbox.create({
   name: "data-analyzer",
   timeoutSeconds: 3600,
@@ -72,7 +74,6 @@ Every sandbox is:
 
 - Ubuntu 24.04 with Python 3.12 and Node.js 22 pre-installed
 - 1 vCPU, 1 GB RAM, 4 GB disk
-- Fully isolated — your code cannot see other tenants' processes, files, or network traffic
-- Given a unique UUID (`sandbox.id`) for reconnection later
+- Fully isolated - your code cannot see other tenants' processes, files, or network traffic
 
 Next: [run commands](/commands/overview), [write files](/filesystem/read-write), or [pause the sandbox](/sandbox/lifecycle) to save costs between runs.

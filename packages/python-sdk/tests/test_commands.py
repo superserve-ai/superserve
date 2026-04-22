@@ -6,7 +6,7 @@ import httpx
 import pytest
 import respx
 from superserve.commands import Commands
-from superserve.errors import ConflictError, SandboxError
+from superserve.errors import SandboxError
 
 
 def _make_commands() -> Commands:
@@ -30,22 +30,6 @@ class TestCommandsRun:
             assert result.stdout == "hi\n"
             assert result.stderr == ""
             assert result.exit_code == 0
-
-    def test_sync_raises_conflict_error_on_paused_sandbox(self) -> None:
-        with respx.mock() as router:
-            router.post("https://api.example.com/sandboxes/sbx-1/exec").mock(
-                return_value=httpx.Response(
-                    409,
-                    json={
-                        "error": {
-                            "code": "sandbox_paused",
-                            "message": "Sandbox is paused; resume before exec.",
-                        }
-                    },
-                )
-            )
-            with pytest.raises(ConflictError):
-                _make_commands().run("echo hi")
 
     def test_sync_with_env_and_cwd(self) -> None:
         with respx.mock() as router:

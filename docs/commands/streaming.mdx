@@ -4,7 +4,7 @@ sidebarTitle: Streaming
 description: Subscribe to stdout and stderr chunks as they arrive over Server-Sent Events.
 ---
 
-For long-running commands — builds, training runs, servers — pass `onStdout` / `on_stdout` and `onStderr` / `on_stderr` callbacks. Output streams over Server-Sent Events and is flushed to your callback line-by-line (or chunk-by-chunk for large bursts).
+For long-running commands - builds, training runs, servers - pass `onStdout` / `on_stdout` and `onStderr` / `on_stderr` callbacks. Output streams over Server-Sent Events and is flushed to your callback line-by-line (or chunk-by-chunk for large bursts).
 
 <CodeGroup>
 ```typescript TypeScript
@@ -36,7 +36,7 @@ The returned `result` still contains the full `stdout` and `stderr` concatenated
 </Note>
 
 <Note>
-`AsyncSandbox` supports the same streaming callbacks with awaitable `run()`. See the [Sandbox reference](/sdk-reference/sandbox#auto-cleanup).
+`AsyncSandbox` supports the same streaming callbacks with awaitable `run()`. See the [Sandbox reference](/sdk-reference/sandbox).
 </Note>
 
 ## Idle timeout
@@ -45,11 +45,11 @@ The SDK resets its internal idle timer on every chunk, so a slow-moving process 
 
 ## Network drops
 
-If the SSE stream ends without a terminal `finished` event — for example, a transient network hiccup — `run()` throws. Retry from the caller if you need resilience. The sandbox continues running the command even if your client disconnects; use `Sandbox.connect(id)` to pick it back up if you've stored the ID.
+If the SSE stream ends without a terminal `finished` event - for example, a transient network hiccup - `run()` throws. Retry from the caller if you need resilience. The sandbox continues running the command even if your client disconnects; use `Sandbox.connect(id)` to pick it back up if you've stored the ID.
 
 ## Capture and stream together
 
-Streaming and sync return aren't mutually exclusive — capture chunks for logs while also collecting the full buffer for analysis.
+Streaming and sync return aren't mutually exclusive - capture chunks for logs while also collecting the full buffer for analysis.
 
 <CodeGroup>
 ```typescript TypeScript

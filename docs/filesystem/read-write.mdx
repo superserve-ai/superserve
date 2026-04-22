@@ -71,10 +71,10 @@ text: str = sandbox.files.read_text("/app/config.json")
 
 Paths passed to `files.*` methods must:
 
-- **Start with `/`** — only absolute paths are accepted
-- **Contain no `..` segments** — no traversal
+- **Start with `/`** - only absolute paths are accepted
+- **Contain no `..` segments** - no traversal
 
-Parent directories are created automatically on write — you don't need to `mkdir -p` first.
+Parent directories are created automatically on write - you don't need to `mkdir -p` first.
 
 ## Errors
 

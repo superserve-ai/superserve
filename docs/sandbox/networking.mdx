@@ -8,7 +8,7 @@ By default, a sandbox can reach any public IP on the internet. The platform alwa
 
 ## Allow specific destinations
 
-`allowOut` / `allow_out` accepts a mix of CIDRs and domain patterns. Combine it with `denyOut: ["0.0.0.0/0"]` to build a strict allowlist — deny everything, then add exceptions.
+`allowOut` / `allow_out` accepts a mix of CIDRs and domain patterns. Combine it with `denyOut: ["0.0.0.0/0"]` to build a strict allowlist - deny everything, then add exceptions.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -45,7 +45,7 @@ Deny rules take precedence over allow rules when they overlap.
 
 ## Update rules on a running sandbox
 
-Networking can be updated after creation — changes apply immediately to new connections.
+Networking can be updated after creation - changes apply immediately to new connections.
 
 <CodeGroup>
 ```typescript TypeScript

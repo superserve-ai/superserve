@@ -8,7 +8,7 @@ Every SDK call is authenticated with an API key. Keys are prefixed with `ss_live
 
 ## 1. Create a key in the console
 
-Go to [console.superserve.ai](https://console.superserve.ai), open **Settings &rarr; API keys**, and click **Create key**. Copy the value — it's only shown once.
+Go to [console.superserve.ai](https://console.superserve.ai), open **Settings &rarr; API keys**, and click **Create key**. Copy the value - it's only shown once.
 
 <Warning>
 Treat API keys like passwords. Never commit them to source control or paste them into client-side code.
@@ -22,7 +22,7 @@ By default, the SDK reads `SUPERSERVE_API_KEY` from the environment.
 export SUPERSERVE_API_KEY=ss_live_...
 ```
 
-You can also pass the key explicitly — useful in serverless environments where env vars are awkward.
+You can also pass the key explicitly - useful in serverless environments where env vars are awkward.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -44,11 +44,3 @@ sandbox = Sandbox.create(
 )
 ```
 </CodeGroup>
-
-## Overriding the base URL
-
-Self-hosted or staging deployments can override the control-plane URL with `SUPERSERVE_BASE_URL` or the `baseUrl` / `base_url` option.
-
-```bash
-export SUPERSERVE_BASE_URL=https://api.superserve.ai
-```

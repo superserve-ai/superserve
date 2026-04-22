@@ -49,16 +49,6 @@ const sandbox = await Sandbox.create({
 })
 ```
 
-## Auto-cleanup with `await using`
-
-```typescript
-{
-  await using sandbox = await Sandbox.create({ name: "scoped" })
-  await sandbox.commands.run("echo hello")
-  // sandbox.kill() runs automatically on scope exit (even on throw)
-}
-```
-
 ## Streaming command output
 
 ```typescript

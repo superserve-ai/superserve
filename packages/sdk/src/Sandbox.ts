@@ -315,12 +315,4 @@ export class Sandbox {
       body,
     })
   }
-
-  /**
-   * Auto-dispose pattern: `await using sandbox = await Sandbox.create(...)`
-   * calls kill() on scope exit.
-   */
-  async [Symbol.asyncDispose](): Promise<void> {
-    await this.kill()
-  }
 }

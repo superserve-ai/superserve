@@ -19,13 +19,15 @@ Requires Python ≥ 3.9.
 ```python
 from superserve import Sandbox
 
-with Sandbox.create(name="my-sandbox") as sandbox:
-    result = sandbox.commands.run("echo hello")
-    print(result.stdout)
+sandbox = Sandbox.create(name="my-sandbox")
 
-    sandbox.files.write("/app/data.txt", b"content")
-    text = sandbox.files.read_text("/app/data.txt")
-# sandbox.kill() runs automatically
+result = sandbox.commands.run("echo hello")
+print(result.stdout)
+
+sandbox.files.write("/app/data.txt", b"content")
+text = sandbox.files.read_text("/app/data.txt")
+
+sandbox.kill()
 ```
 
 ## Authentication
@@ -54,9 +56,11 @@ from superserve import AsyncSandbox
 
 async def main():
     sandbox = await AsyncSandbox.create(name="async-example")
-    async with sandbox:
+    try:
         result = await sandbox.commands.run("echo hello")
         print(result.stdout)
+    finally:
+        await sandbox.kill()
 
 asyncio.run(main())
 ```

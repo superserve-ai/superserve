@@ -4,19 +4,19 @@ sidebarTitle: Errors
 description: Typed errors thrown by the Superserve SDK and when to catch each one.
 ---
 
-Every error raised by the SDK extends a common base class — `SandboxError` in TypeScript, `SandboxError` in Python — so you can catch it broadly or narrow down to a specific case.
+Every error raised by the SDK extends a common base class - `SandboxError` in TypeScript, `SandboxError` in Python - so you can catch it broadly or narrow down to a specific case.
 
 ## Error hierarchy
 
 | TypeScript | Python | HTTP status | Meaning |
 |---|---|---|---|
-| `SandboxError` | `SandboxError` | — | Base class for every SDK error. |
+| `SandboxError` | `SandboxError` | - | Base class for every SDK error. |
 | `AuthenticationError` | `AuthenticationError` | `401` | Missing or invalid API key / access token. |
 | `ValidationError` | `ValidationError` | `400` | Request body or parameters rejected by the API. |
 | `NotFoundError` | `NotFoundError` | `404` | Sandbox or resource does not exist. |
-| `ConflictError` | `ConflictError` | `409` | Sandbox is not in a valid state for the operation (e.g., running a command on a paused sandbox, or pausing an already-paused sandbox). |
-| `TimeoutError` | `SandboxTimeoutError` | — | Request or command timed out. |
-| `ServerError` | `ServerError` | `5xx` | Platform error — usually transient (500/502/503/504). GET/DELETE requests auto-retry with exponential backoff. |
+| `ConflictError` | `ConflictError` | `409` | Sandbox is not in a valid state for the operation (e.g., pausing an already-paused sandbox, or patching `network` rules while paused). |
+| `TimeoutError` | `SandboxTimeoutError` | - | Request or command timed out. |
+| `ServerError` | `ServerError` | `5xx` | Platform error - usually transient (500/502/503/504). GET/DELETE requests auto-retry with exponential backoff. |
 
 <Note>
 Python renames `TimeoutError` to `SandboxTimeoutError` so it doesn't shadow Python's built-in `TimeoutError`.
@@ -24,34 +24,34 @@ Python renames `TimeoutError` to `SandboxTimeoutError` so it doesn't shadow Pyth
 
 ## Catching a specific error
 
-Running a command on a paused sandbox raises `ConflictError`. Call `resume()` first, then retry.
+Catch the typed subclass you care about and fall back to `SandboxError` for everything else.
 
 <CodeGroup>
 ```typescript TypeScript
-import { Sandbox, ConflictError } from "@superserve/sdk"
+import { NotFoundError, SandboxError } from "@superserve/sdk"
 
 try {
-  await sandbox.commands.run("echo hello")
+  const info = await Sandbox.get("missing-id")
 } catch (err) {
-  if (err instanceof ConflictError) {
-    // Sandbox is paused — resume and retry
-    await sandbox.resume()
-    await sandbox.commands.run("echo hello")
-  } else {
-    throw err
+  if (err instanceof NotFoundError) {
+    // Sandbox doesn't exist or was already deleted
+  } else if (err instanceof SandboxError) {
+    // Any other SDK error
   }
 }
 ```
 
 ```python Python
-from superserve import ConflictError
+from superserve import NotFoundError, SandboxError
 
 try:
-    sandbox.commands.run("echo hello")
-except ConflictError:
-    # Sandbox is paused — resume and retry
-    sandbox.resume()
-    sandbox.commands.run("echo hello")
+    info = Sandbox.get("missing-id")
+except NotFoundError:
+    # Sandbox doesn't exist or was already deleted
+    pass
+except SandboxError:
+    # Any other SDK error
+    pass
 ```
 </CodeGroup>
 
@@ -59,8 +59,8 @@ except ConflictError:
 
 Every SDK error extends `SandboxError` and exposes:
 
-- `statusCode?: number` / `status_code: int | None` — HTTP status, if the error originated from an API response
-- `code?: string` / `code: str | None` — API-provided error code, when present
+- `statusCode?: number` / `status_code: int | None` - HTTP status, if the error originated from an API response
+- `code?: string` / `code: str | None` - API-provided error code, when present
 
 <CodeGroup>
 ```typescript TypeScript
@@ -87,7 +87,7 @@ except SandboxError as err:
 
 ## Idempotent operations
 
-`kill()` / `kill_by_id()` swallow `404` internally — it's safe to call on a sandbox that was already deleted by another process. Every other method surfaces `NotFoundError` to the caller.
+`kill()` / `kill_by_id()` swallow `404` internally - it's safe to call on a sandbox that was already deleted by another process. Every other method surfaces `NotFoundError` to the caller.
 
 ## Retries
 
@@ -97,4 +97,4 @@ The SDK automatically retries transient failures on `GET` and `DELETE` requests 
 - `5xx` server errors
 - Network errors (connection reset, DNS failure)
 
-`POST` / `PATCH` requests are **not** retried automatically because they aren't safely idempotent — the SDK surfaces the error so you can decide.
+`POST` / `PATCH` requests are **not** retried automatically because they aren't safely idempotent - the SDK surfaces the error so you can decide.

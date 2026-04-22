@@ -39,7 +39,7 @@ class Commands:
     ) -> CommandResult:
         """Execute a command inside the sandbox.
 
-        Paused sandboxes raise ``ConflictError``; call ``sandbox.resume()`` first.
+        Paused sandboxes are transparently resumed before execution.
         """
         body: dict[str, Any] = {"command": command}
         if cwd is not None:
@@ -153,7 +153,7 @@ class AsyncCommands:
     ) -> CommandResult:
         """Async variant of Commands.run().
 
-        Paused sandboxes raise ``ConflictError``; call ``sandbox.resume()`` first.
+        Paused sandboxes are transparently resumed before execution.
         """
         body: dict[str, Any] = {"command": command}
         if cwd is not None:
