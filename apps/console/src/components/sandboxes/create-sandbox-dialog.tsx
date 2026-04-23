@@ -59,7 +59,10 @@ console.log(sandbox.id)`
 
   return `from superserve import Sandbox
 
-sandbox = Sandbox.create(name="my-sandbox", api_key="YOUR_API_KEY")
+sandbox = Sandbox.create(
+    name="my-sandbox",
+    api_key="YOUR_API_KEY",
+)
 print(sandbox.id)`
 }
 
@@ -134,7 +137,7 @@ export function buildCreateSandboxRequest(
 
   return {
     name: state.name.trim(),
-    ...(state.timeout ? { timeout: Number(state.timeout) } : {}),
+    ...(state.timeout ? { timeout_seconds: Number(state.timeout) } : {}),
     ...(hasNetwork
       ? {
           network: {

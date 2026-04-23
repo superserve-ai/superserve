@@ -38,11 +38,14 @@ describe("getConnectSnippet", () => {
       expect(snip).toContain('import { Sandbox } from "@superserve/sdk"')
       expect(snip).toContain("Sandbox.connect(")
       expect(snip).not.toContain("SuperserveClient")
+      expect(snip).not.toContain("new Superserve(")
     })
 
-    it("uses sandbox.commands.run", () => {
+    it("uses sandbox.commands.run (not client.exec.command)", () => {
       const snip = getConnectSnippet("typescript", KEY, SBX)
-      expect(snip).toContain("sandbox.commands.run")
+      expect(snip).toContain("sandbox.commands.run(")
+      expect(snip).not.toContain("client.exec.command")
+      expect(snip).not.toContain("sandbox.exec(")
     })
 
     it("interpolates the API key and sandbox id", () => {
@@ -62,11 +65,14 @@ describe("getConnectSnippet", () => {
       const snip = getConnectSnippet("python", KEY, SBX)
       expect(snip).toContain("from superserve import Sandbox")
       expect(snip).toContain("Sandbox.connect(")
+      expect(snip).not.toContain("import Superserve")
     })
 
-    it("uses sandbox.commands.run", () => {
+    it("uses sandbox.commands.run with sandbox id", () => {
       const snip = getConnectSnippet("python", KEY, SBX)
       expect(snip).toContain("sandbox.commands.run(")
+      expect(snip).toContain(`"${SBX}"`)
+      expect(snip).not.toContain("client.exec.command")
     })
 
     it("interpolates the API key", () => {

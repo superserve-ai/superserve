@@ -46,7 +46,9 @@ export function getConnectSnippet(
   if (language === "typescript") {
     return `import { Sandbox } from "@superserve/sdk"
 
-const sandbox = await Sandbox.connect("${sandboxId}", { apiKey: "${key}" })
+const sandbox = await Sandbox.connect("${sandboxId}", {
+  apiKey: "${key}",
+})
 
 const result = await sandbox.commands.run("echo 'Hello from Superserve!'")
 console.log(result.stdout)`
@@ -54,7 +56,10 @@ console.log(result.stdout)`
 
   return `from superserve import Sandbox
 
-sandbox = Sandbox.connect("${sandboxId}", api_key="${key}")
+sandbox = Sandbox.connect(
+    "${sandboxId}",
+    api_key="${key}",
+)
 
 result = sandbox.commands.run("echo 'Hello from Superserve!'")
 print(result.stdout)`

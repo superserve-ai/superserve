@@ -23,11 +23,11 @@ import {
 import type { HTMLMotionProps } from "motion/react"
 import { useRouter } from "next/navigation"
 import { AnimatedTableRow } from "@/components/animated-table-row"
-import type { SandboxResponse } from "@/lib/api/types"
+import type { SandboxListItem } from "@/lib/api/types"
 import { STATUS_BADGE_VARIANT, STATUS_LABEL } from "@/lib/sandbox-utils"
 
 interface SandboxTableRowProps extends HTMLMotionProps<"tr"> {
-  sandbox: SandboxResponse
+  sandbox: SandboxListItem
   selected: boolean
   onToggle: () => void
   onConnect: () => void
@@ -50,7 +50,7 @@ export function SandboxTableRow({
   ...rest
 }: SandboxTableRowProps) {
   const router = useRouter()
-  const isFailed = sandbox.status === "failed"
+  const isTransitioning = sandbox.status === "resuming"
 
   return (
     <AnimatedTableRow
@@ -85,7 +85,6 @@ export function SandboxTableRow({
             variant="outline"
             size="sm"
             className="text-xs"
-            disabled={isFailed}
             onClick={onConnect}
           >
             <PlugIcon className="size-3.5" weight="light" />
@@ -95,16 +94,16 @@ export function SandboxTableRow({
             variant="outline"
             size="sm"
             className="w-20 text-xs"
-            disabled={sandbox.status === "pausing" || isFailed}
+            disabled={isTransitioning}
             onClick={() => {
               if (sandbox.status === "active") {
                 onPause()
-              } else if (sandbox.status === "idle") {
+              } else if (sandbox.status === "paused") {
                 onResume()
               }
             }}
           >
-            {sandbox.status === "active" || sandbox.status === "pausing" ? (
+            {sandbox.status === "active" ? (
               <>
                 <StopIcon className="size-3" weight="light" />
                 Stop

@@ -25,15 +25,30 @@ const sandbox = await Sandbox.create({
   name: "my-sandbox",
   apiKey: "${key}",
 })
-console.log(sandbox.id)
+
+const result = await sandbox.commands.run("echo 'Hello from Superserve!'")
+console.log(result.stdout)
+
+await sandbox.files.write("/tmp/hello.txt", "Hello, world!")
+const content = await sandbox.files.readText("/tmp/hello.txt")
+console.log(content)
 
 await sandbox.kill()`
   }
 
   return `from superserve import Sandbox
 
-sandbox = Sandbox.create(name="my-sandbox", api_key="${key}")
-print(sandbox.id)
+sandbox = Sandbox.create(
+    name="my-sandbox",
+    api_key="${key}",
+)
+
+result = sandbox.commands.run("echo 'Hello from Superserve!'")
+print(result.stdout)
+
+sandbox.files.write("/tmp/hello.txt", "Hello, world!")
+content = sandbox.files.read_text("/tmp/hello.txt")
+print(content)
 
 sandbox.kill()`
 }

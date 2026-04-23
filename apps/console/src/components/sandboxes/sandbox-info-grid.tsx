@@ -357,7 +357,9 @@ export function SandboxInfoGrid({ sandbox }: SandboxInfoGridProps) {
         <div className="border-r border-border px-4 py-4">
           <p className="text-xs text-muted">Timeout</p>
           <p className="mt-2 font-mono text-sm text-foreground/80">
-            {sandbox.timeout ? formatTimeout(sandbox.timeout) : "None"}
+            {sandbox.timeout_seconds
+              ? formatTimeout(sandbox.timeout_seconds)
+              : "None"}
           </p>
         </div>
         <div className="border-r border-border px-4 py-4">
