@@ -245,29 +245,25 @@ export default function SandboxDetailPage() {
                 }
               />
               <TooltipPopup>
-                {sandbox.status === "idle"
+                {sandbox.status === "paused"
                   ? "Start the sandbox to open a terminal"
-                  : sandbox.status === "failed"
-                    ? "Sandbox failed — terminal unavailable"
-                    : sandbox.status === "pausing"
-                      ? "Sandbox is pausing"
-                      : "Sandbox is not running"}
+                  : sandbox.status === "resuming"
+                    ? "Sandbox is resuming"
+                    : "Sandbox is not running"}
               </TooltipPopup>
             </Tooltip>
           )}
           <Button
             variant="outline"
             size="sm"
-            disabled={
-              sandbox.status === "pausing" || sandbox.status === "failed"
-            }
+            disabled={sandbox.status === "resuming"}
             onClick={() => {
               if (sandbox.status === "active") {
                 posthog.capture(SANDBOX_EVENTS.PAUSED, {
                   sandbox_id: sandbox.id,
                 })
                 pauseMutation.mutate(sandbox.id)
-              } else if (sandbox.status === "idle") {
+              } else if (sandbox.status === "paused") {
                 posthog.capture(SANDBOX_EVENTS.RESUMED, {
                   sandbox_id: sandbox.id,
                 })
@@ -275,7 +271,7 @@ export default function SandboxDetailPage() {
               }
             }}
           >
-            {sandbox.status === "active" || sandbox.status === "pausing" ? (
+            {sandbox.status === "active" ? (
               <>
                 <StopIcon className="size-3.5" weight="light" />
                 Stop

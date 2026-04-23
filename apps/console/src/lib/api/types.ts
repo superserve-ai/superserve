@@ -1,24 +1,31 @@
-export type SandboxStatus = "active" | "pausing" | "idle" | "deleted" | "failed"
+export type SandboxStatus = "active" | "paused" | "resuming"
 
 export interface NetworkConfig {
   allow_out?: string[]
   deny_out?: string[]
 }
 
-export interface SandboxResponse {
+export interface SandboxListItem {
   id: string
   name: string
   status: SandboxStatus
   vcpu_count: number
   memory_mib: number
-  template_id?: string
   snapshot_id?: string
-  access_token: string
-  timeout?: number
-  env_vars?: Record<string, string>
+  timeout_seconds?: number
   network?: NetworkConfig
   metadata: Record<string, string>
   created_at: string
+}
+
+export interface SandboxResponse extends SandboxListItem {
+  access_token: string
+}
+
+export interface ResumeResponse {
+  id: string
+  status: "active"
+  access_token: string
 }
 
 export interface CreateSandboxRequest {
@@ -26,7 +33,7 @@ export interface CreateSandboxRequest {
   /** Template UUID or alias to boot from. */
   from_template?: string
   from_snapshot?: string
-  timeout?: number
+  timeout_seconds?: number
   env_vars?: Record<string, string>
   metadata?: Record<string, string>
   network?: NetworkConfig

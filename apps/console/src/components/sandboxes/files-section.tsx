@@ -44,14 +44,10 @@ function disabledReason(status: SandboxResponse["status"]): string | null {
   switch (status) {
     case "active":
       return null
-    case "idle":
+    case "paused":
       return "Start the sandbox to transfer files"
-    case "pausing":
-      return "Sandbox is pausing"
-    case "failed":
-      return "Sandbox failed — file transfer unavailable"
-    case "deleted":
-      return "Sandbox has been deleted"
+    case "resuming":
+      return "Sandbox is resuming"
     default:
       return "Sandbox is not running"
   }

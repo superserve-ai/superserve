@@ -59,7 +59,7 @@ export default function TerminalPage() {
     )
   }
 
-  const canRun = sandbox.status === "active" || sandbox.status === "idle"
+  const canRun = sandbox.status === "active"
 
   return (
     <div className="flex h-full flex-col">
@@ -95,16 +95,14 @@ export default function TerminalPage() {
           <Button
             variant="outline"
             size="sm"
-            disabled={
-              sandbox.status === "pausing" || sandbox.status === "failed"
-            }
+            disabled={sandbox.status === "resuming"}
             onClick={() => {
               if (sandbox.status === "active") pauseMutation.mutate(sandbox.id)
-              else if (sandbox.status === "idle")
+              else if (sandbox.status === "paused")
                 resumeMutation.mutate(sandbox.id)
             }}
           >
-            {sandbox.status === "active" || sandbox.status === "pausing" ? (
+            {sandbox.status === "active" ? (
               <>
                 <StopIcon className="size-3.5" weight="light" />
                 Stop
