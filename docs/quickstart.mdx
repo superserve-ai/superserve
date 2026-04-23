@@ -1,0 +1,80 @@
+---
+title: "Quickstart"
+sidebarTitle: Quickstart
+description: Create your first sandbox, run a command, and read a file - in under five minutes.
+---
+
+Install the SDK, set your API key, and create a sandbox.
+
+## 1. Install the SDK
+
+<CodeGroup>
+```bash npm
+npm install @superserve/sdk
+```
+
+```bash pip
+pip install superserve
+```
+</CodeGroup>
+
+## 2. Set your API key
+
+Grab your API key from the [Superserve Console](https://console.superserve.ai) and export it.
+
+```bash
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+See [Get an API key](/api-key) for more options.
+
+## 3. Create a sandbox and run a command
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({ name: "quickstart" })
+
+const result = await sandbox.commands.run("echo 'Hello from Superserve!'")
+console.log(result.stdout)
+
+await sandbox.files.write("/tmp/hello.txt", "Hello, world!")
+const content = await sandbox.files.readText("/tmp/hello.txt")
+console.log(content)
+
+await sandbox.kill()
+```
+
+```python Python
+from superserve import Sandbox
+
+sandbox = Sandbox.create(name="quickstart")
+
+result = sandbox.commands.run("echo 'Hello from Superserve!'")
+print(result.stdout)
+
+sandbox.files.write("/tmp/hello.txt", "Hello, world!")
+content = sandbox.files.read_text("/tmp/hello.txt")
+print(content)
+
+sandbox.kill()
+```
+</CodeGroup>
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Run commands" href="/commands/overview">
+    Sync, streaming, cwd, env, timeouts.
+  </Card>
+  <Card title="Pause & resume" href="/sandbox/lifecycle">
+    Checkpoint state to save money between runs.
+  </Card>
+  <Card title="Metadata" href="/sandbox/metadata">
+    Tag and query sandboxes at scale.
+  </Card>
+  <Card title="Networking" href="/sandbox/networking">
+    Restrict egress to specific domains or CIDRs.
+  </Card>
+</CardGroup>

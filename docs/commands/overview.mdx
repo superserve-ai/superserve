@@ -1,0 +1,95 @@
+---
+title: "Run commands in a sandbox"
+sidebarTitle: Overview
+description: Execute shell commands inside a sandbox with sync or streaming output.
+---
+
+Run any shell command inside a sandbox using `sandbox.commands.run()`.
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({ name: "data-analyzer" })
+const result = await sandbox.commands.run("python analyze.py")
+console.log(result.stdout)
+```
+
+```python Python
+from superserve import Sandbox
+
+sandbox = Sandbox.create(name="data-analyzer")
+result = sandbox.commands.run("python analyze.py")
+print(result.stdout)
+
+sandbox.kill()
+```
+</CodeGroup>
+
+<Note>
+`AsyncSandbox` exposes the same API with awaitable methods - see the [Sandbox reference](/sdk-reference/sandbox).
+</Note>
+
+## Handling exit codes
+
+`run()` doesn't throw for non-zero exit codes - inspect `exitCode` on the result.
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run("exit 42")
+if (result.exitCode !== 0) {
+  console.error(`Command failed: ${result.stderr}`)
+}
+```
+
+```python Python
+result = sandbox.commands.run("exit 42")
+if result.exit_code != 0:
+    print(f"Command failed: {result.stderr}")
+```
+</CodeGroup>
+
+## Working directory and environment
+
+Pass `cwd` and `env` to control the execution context.
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run("python script.py", {
+  cwd: "/app",
+  env: { PORT: "3000", DEBUG: "1" },
+  timeoutMs: 60_000,
+})
+```
+
+```python Python
+result = sandbox.commands.run(
+    "python script.py",
+    cwd="/app",
+    env={"PORT": "3000", "DEBUG": "1"},
+    timeout_seconds=60,
+)
+```
+</CodeGroup>
+
+<Note>
+TypeScript uses `timeoutMs` (milliseconds); Python uses `timeout_seconds` (integer seconds). Each follows its language's convention.
+</Note>
+
+## Timeouts
+
+Pass a timeout to kill a command that runs longer than you expect.
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run("sleep 100", {
+  timeoutMs: 5_000,
+})
+```
+
+```python Python
+result = sandbox.commands.run("sleep 100", timeout_seconds=5)
+```
+</CodeGroup>
+
+See [streaming output](/commands/streaming) for long-running commands where you want to watch stdout as it happens.
