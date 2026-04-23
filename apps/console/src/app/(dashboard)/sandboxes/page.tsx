@@ -45,7 +45,7 @@ import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 const STATUS_TABS = [
   { label: "All", value: "all" },
   { label: "Active", value: "active" },
-  { label: "Idle", value: "idle" },
+  { label: "Paused", value: "paused" },
 ]
 
 function SandboxesPageContent() {

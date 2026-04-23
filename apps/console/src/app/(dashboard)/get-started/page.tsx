@@ -19,26 +19,38 @@ function getSnippet(language: Language, apiKey: string): string {
   const key = apiKey || "ss_live_xxxxxxxx..."
 
   if (language === "typescript") {
-    return `import { SuperserveClient } from "@superserve/sdk"
+    return `import { Sandbox } from "@superserve/sdk"
 
-const client = new SuperserveClient({ apiKey: "${key}" })
-
-const sandbox = await client.sandboxes.createSandbox({
+const sandbox = await Sandbox.create({
   name: "my-sandbox",
+  apiKey: "${key}",
 })
-console.log(sandbox.id)
 
-await client.sandboxes.deleteSandbox({ sandbox_id: sandbox.id })`
+const result = await sandbox.commands.run("echo 'Hello from Superserve!'")
+console.log(result.stdout)
+
+await sandbox.files.write("/tmp/hello.txt", "Hello, world!")
+const content = await sandbox.files.readText("/tmp/hello.txt")
+console.log(content)
+
+await sandbox.kill()`
   }
 
-  return `from superserve import Superserve
+  return `from superserve import Sandbox
 
-client = Superserve(api_key="${key}")
+sandbox = Sandbox.create(
+    name="my-sandbox",
+    api_key="${key}",
+)
 
-sandbox = client.sandboxes.create_sandbox(name="my-sandbox")
-print(sandbox.id)
+result = sandbox.commands.run("echo 'Hello from Superserve!'")
+print(result.stdout)
 
-client.sandboxes.delete_sandbox(sandbox.id)`
+sandbox.files.write("/tmp/hello.txt", "Hello, world!")
+content = sandbox.files.read_text("/tmp/hello.txt")
+print(content)
+
+sandbox.kill()`
 }
 
 function CopyButton({ text, label }: { text: string; label?: string }) {

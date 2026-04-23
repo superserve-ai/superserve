@@ -201,7 +201,7 @@ describe("usePauseSandbox / useResumeSandbox", () => {
     mockAddToast.mockReset()
   })
 
-  it("pauses: flips the cached sandbox to idle optimistically", async () => {
+  it("pauses: flips the cached sandbox to paused optimistically", async () => {
     const { queryClient, wrapper } = createQueryWrapper()
     queryClient.setQueryData(sandboxKeys.all, [
       sandbox({ id: "a", status: "active" }),
@@ -215,16 +215,32 @@ describe("usePauseSandbox / useResumeSandbox", () => {
 
     await waitFor(() => {
       const list = queryClient.getQueryData<SandboxResponse[]>(sandboxKeys.all)
-      expect(list?.[0].status).toBe("idle")
+      expect(list?.[0].status).toBe("paused")
     })
   })
 
-  it("resumes: flips the cached sandbox to active optimistically", async () => {
+  it("resumes: flips the cached sandbox to resuming optimistically, then active on success with the fresh access_token", async () => {
     const { queryClient, wrapper } = createQueryWrapper()
     queryClient.setQueryData(sandboxKeys.all, [
-      sandbox({ id: "a", status: "idle" }),
+      sandbox({ id: "a", status: "paused" }),
     ])
-    mockResume.mockResolvedValue(undefined)
+    queryClient.setQueryData(
+      sandboxKeys.detail("a"),
+      sandbox({ id: "a", status: "paused", access_token: "old" }),
+    )
+    // Resolve slowly so the optimistic "resuming" state is observable before
+    // the success handler lands.
+    let resolveResume: (value: {
+      id: string
+      status: "active"
+      access_token: string
+    }) => void = () => {}
+    mockResume.mockImplementation(
+      () =>
+        new Promise((r) => {
+          resolveResume = r
+        }),
+    )
 
     const { result } = renderHook(() => useResumeSandbox(), { wrapper })
     act(() => {
@@ -233,7 +249,23 @@ describe("usePauseSandbox / useResumeSandbox", () => {
 
     await waitFor(() => {
       const list = queryClient.getQueryData<SandboxResponse[]>(sandboxKeys.all)
-      expect(list?.[0].status).toBe("active")
+      expect(list?.[0].status).toBe("resuming")
+      const detail = queryClient.getQueryData<SandboxResponse>(
+        sandboxKeys.detail("a"),
+      )
+      expect(detail?.status).toBe("resuming")
+    })
+
+    await act(async () => {
+      resolveResume({ id: "a", status: "active", access_token: "fresh" })
+    })
+
+    await waitFor(() => {
+      const detail = queryClient.getQueryData<SandboxResponse>(
+        sandboxKeys.detail("a"),
+      )
+      expect(detail?.status).toBe("active")
+      expect(detail?.access_token).toBe("fresh")
     })
   })
 

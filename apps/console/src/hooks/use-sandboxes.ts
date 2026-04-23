@@ -15,6 +15,7 @@ import {
 } from "@/lib/api/sandboxes"
 import type {
   CreateSandboxRequest,
+  SandboxListItem,
   SandboxPatch,
   SandboxResponse,
 } from "@/lib/api/types"
@@ -35,7 +36,7 @@ export function useSandbox(id: string | null) {
     enabled: !!id,
     refetchInterval: (query) => {
       const status = query.state.data?.status
-      return status === "pausing" ? 2000 : false
+      return status === "resuming" ? 2000 : false
     },
     refetchOnWindowFocus: true,
   })
@@ -48,7 +49,7 @@ export function useCreateSandbox() {
   return useMutation({
     mutationFn: (data: CreateSandboxRequest) => createSandbox(data),
     onSuccess: (newSandbox) => {
-      queryClient.setQueryData<SandboxResponse[]>(sandboxKeys.all, (old) =>
+      queryClient.setQueryData<SandboxListItem[]>(sandboxKeys.all, (old) =>
         old ? [newSandbox, ...old] : [newSandbox],
       )
       addToast(`Sandbox "${newSandbox.name}" created`, "success")
@@ -71,10 +72,10 @@ export function useDeleteSandbox() {
     mutationFn: (id: string) => deleteSandbox(id),
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: sandboxKeys.all })
-      const previous = queryClient.getQueryData<SandboxResponse[]>(
+      const previous = queryClient.getQueryData<SandboxListItem[]>(
         sandboxKeys.all,
       )
-      queryClient.setQueryData<SandboxResponse[]>(sandboxKeys.all, (old) =>
+      queryClient.setQueryData<SandboxListItem[]>(sandboxKeys.all, (old) =>
         old?.filter((s) => s.id !== id),
       )
       return { previous }
@@ -103,11 +104,11 @@ export function useBulkDeleteSandboxes() {
     },
     onMutate: async (ids) => {
       await queryClient.cancelQueries({ queryKey: sandboxKeys.all })
-      const previous = queryClient.getQueryData<SandboxResponse[]>(
+      const previous = queryClient.getQueryData<SandboxListItem[]>(
         sandboxKeys.all,
       )
       const idSet = new Set(ids)
-      queryClient.setQueryData<SandboxResponse[]>(sandboxKeys.all, (old) =>
+      queryClient.setQueryData<SandboxListItem[]>(sandboxKeys.all, (old) =>
         old?.filter((s) => !idSet.has(s.id)),
       )
       return { previous }
@@ -134,16 +135,30 @@ export function usePauseSandbox() {
     mutationFn: (id: string) => pauseSandbox(id),
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: sandboxKeys.all })
-      const previous = queryClient.getQueryData<SandboxResponse[]>(
+      const previousList = queryClient.getQueryData<SandboxListItem[]>(
         sandboxKeys.all,
       )
-      queryClient.setQueryData<SandboxResponse[]>(sandboxKeys.all, (old) =>
-        old?.map((s) => (s.id === id ? { ...s, status: "idle" as const } : s)),
+      const previousDetail = queryClient.getQueryData<SandboxResponse>(
+        sandboxKeys.detail(id),
       )
-      return { previous }
+      queryClient.setQueryData<SandboxListItem[]>(sandboxKeys.all, (old) =>
+        old?.map((s) =>
+          s.id === id ? { ...s, status: "paused" as const } : s,
+        ),
+      )
+      queryClient.setQueryData<SandboxResponse>(
+        sandboxKeys.detail(id),
+        (old) => (old ? { ...old, status: "paused" as const } : old),
+      )
+      return { previousList, previousDetail }
     },
-    onError: (error, _id, context) => {
-      queryClient.setQueryData(sandboxKeys.all, context?.previous)
+    onError: (error, id, context) => {
+      if (context?.previousList !== undefined) {
+        queryClient.setQueryData(sandboxKeys.all, context.previousList)
+      }
+      if (context?.previousDetail !== undefined) {
+        queryClient.setQueryData(sandboxKeys.detail(id), context.previousDetail)
+      }
       const message =
         error instanceof ApiError
           ? error.message
@@ -164,18 +179,49 @@ export function useResumeSandbox() {
     mutationFn: (id: string) => resumeSandbox(id),
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: sandboxKeys.all })
-      const previous = queryClient.getQueryData<SandboxResponse[]>(
+      const previousList = queryClient.getQueryData<SandboxListItem[]>(
         sandboxKeys.all,
       )
-      queryClient.setQueryData<SandboxResponse[]>(sandboxKeys.all, (old) =>
+      const previousDetail = queryClient.getQueryData<SandboxResponse>(
+        sandboxKeys.detail(id),
+      )
+      queryClient.setQueryData<SandboxListItem[]>(sandboxKeys.all, (old) =>
         old?.map((s) =>
-          s.id === id ? { ...s, status: "active" as const } : s,
+          s.id === id ? { ...s, status: "resuming" as const } : s,
         ),
       )
-      return { previous }
+      queryClient.setQueryData<SandboxResponse>(
+        sandboxKeys.detail(id),
+        (old) => (old ? { ...old, status: "resuming" as const } : old),
+      )
+      return { previousList, previousDetail }
     },
-    onError: (error, _id, context) => {
-      queryClient.setQueryData(sandboxKeys.all, context?.previous)
+    onSuccess: (resumed, id) => {
+      // Server returns a fresh access_token with the resume response — write
+      // it into the detail cache so the terminal and file-transfer panels
+      // pick up the new token without waiting for a refetch.
+      queryClient.setQueryData<SandboxResponse>(
+        sandboxKeys.detail(id),
+        (old) =>
+          old
+            ? {
+                ...old,
+                status: resumed.status,
+                access_token: resumed.access_token,
+              }
+            : old,
+      )
+      queryClient.setQueryData<SandboxListItem[]>(sandboxKeys.all, (old) =>
+        old?.map((s) => (s.id === id ? { ...s, status: resumed.status } : s)),
+      )
+    },
+    onError: (error, id, context) => {
+      if (context?.previousList !== undefined) {
+        queryClient.setQueryData(sandboxKeys.all, context.previousList)
+      }
+      if (context?.previousDetail !== undefined) {
+        queryClient.setQueryData(sandboxKeys.detail(id), context.previousDetail)
+      }
       const message =
         error instanceof ApiError
           ? error.message

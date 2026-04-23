@@ -28,19 +28,19 @@ describe("buildCreateSandboxRequest", () => {
   it("omits optional fields when form is minimal", () => {
     const req = buildCreateSandboxRequest({ ...emptyState, name: "x" })
     expect(req).toEqual({ name: "x" })
-    expect(req.timeout).toBeUndefined()
+    expect(req.timeout_seconds).toBeUndefined()
     expect(req.network).toBeUndefined()
     expect(req.env_vars).toBeUndefined()
     expect(req.metadata).toBeUndefined()
   })
 
-  it("includes timeout as a number when present", () => {
+  it("includes timeout_seconds as a number when present", () => {
     const req = buildCreateSandboxRequest({
       ...emptyState,
       name: "x",
       timeout: "300",
     })
-    expect(req.timeout).toBe(300)
+    expect(req.timeout_seconds).toBe(300)
   })
 
   it("omits network when all rules are empty strings", () => {
@@ -130,7 +130,7 @@ describe("buildCreateSandboxRequest", () => {
     })
     expect(req).toEqual({
       name: "full",
-      timeout: 600,
+      timeout_seconds: 600,
       network: {
         allow_out: ["api.example.com"],
         deny_out: ["malicious.test"],
