@@ -1,8 +1,8 @@
-# Superserve Python SDK
+# superserve
 
-Python SDK for the [Superserve](https://superserve.ai) sandbox API — spin up isolated sandboxes, run commands in them, and tear them down from code.
+Python SDK for the Superserve sandbox API — run code in isolated Firecracker MicroVMs.
 
-## Install
+## Installation
 
 ```bash
 pip install superserve
@@ -12,101 +12,103 @@ uv add superserve
 poetry add superserve
 ```
 
-Requires Python 3.9+.
+Requires Python ≥ 3.9.
 
-## Quick start
+## Quick Start
 
 ```python
-import os
-from superserve import Superserve
+from superserve import Sandbox
 
-client = Superserve(api_key=os.environ["SUPERSERVE_API_KEY"])
+sandbox = Sandbox.create(name="my-sandbox")
 
-sandbox = client.sandboxes.create_sandbox(name="hello-world")
+result = sandbox.commands.run("echo hello")
+print(result.stdout)
 
-try:
-    result = client.exec.command(
-        sandbox_id=sandbox.id,
-        body={"command": "echo 'Hello from Superserve!'"},
-    )
-    print(result.stdout)
-finally:
-    client.sandboxes.delete_sandbox(sandbox.id)
+sandbox.files.write("/app/data.txt", b"content")
+text = sandbox.files.read_text("/app/data.txt")
+
+sandbox.kill()
 ```
 
-Get an API key from the [Superserve console](https://console.superserve.ai).
+## Authentication
 
-## Resource clients
+Set the `SUPERSERVE_API_KEY` environment variable:
 
-The `Superserve` client exposes four resource groups:
+```bash
+export SUPERSERVE_API_KEY=ss_live_...
+```
 
-- **`client.sandboxes`** — create, list, get, patch, pause, resume, and delete sandboxes
-- **`client.exec`** — run commands inside a sandbox (`command`) or stream output (`command_stream`)
-- **`client.files`** — upload and download files to and from a sandbox
-- **`client.system`** — health check
-
-## Configuration
+Or pass it explicitly:
 
 ```python
-from superserve import Superserve
-from superserve.environment import SuperserveEnvironment
-
-client = Superserve(
-    api_key="ss_live_...",                            # required
-    environment=SuperserveEnvironment.PRODUCTION,     # optional
-    base_url="http://localhost:8080",                 # optional, overrides environment
-    timeout=60.0,                                     # optional, default 60
-    httpx_client=None,                                # optional, inject a custom httpx.Client
+sandbox = Sandbox.create(
+    name="my-sandbox",
+    api_key="ss_live_...",
+    base_url="https://api.superserve.ai",  # optional
 )
 ```
 
-## Async client
-
-`AsyncSuperserve` mirrors every method on `Superserve` with `async`/`await`:
+## Async usage
 
 ```python
 import asyncio
-import os
-from superserve import AsyncSuperserve
+from superserve import AsyncSandbox
 
 async def main():
-    client = AsyncSuperserve(api_key=os.environ["SUPERSERVE_API_KEY"])
-
-    sandbox = await client.sandboxes.create_sandbox(name="async-example")
+    sandbox = await AsyncSandbox.create(name="async-example")
     try:
-        result = await client.exec.command(
-            sandbox_id=sandbox.id,
-            body={"command": "uname -a"},
-        )
+        result = await sandbox.commands.run("echo hello")
         print(result.stdout)
     finally:
-        await client.sandboxes.delete_sandbox(sandbox.id)
+        await sandbox.kill()
 
 asyncio.run(main())
+```
+
+## Streaming command output
+
+```python
+result = sandbox.commands.run(
+    "pip install numpy",
+    on_stdout=lambda data: print(data, end=""),
+    on_stderr=lambda data: print(data, end=""),
+    timeout_seconds=120,
+)
 ```
 
 ## Error handling
 
 ```python
-from superserve import Superserve
-from superserve.errors import BadRequestError, NotFoundError
-
-client = Superserve(api_key=os.environ["SUPERSERVE_API_KEY"])
+from superserve import (
+    SandboxError,
+    AuthenticationError,     # 401
+    ValidationError,         # 400
+    NotFoundError,           # 404
+    ConflictError,           # 409 — invalid state for operation
+    SandboxTimeoutError,     # request timed out (does not shadow builtin TimeoutError)
+    ServerError,             # 500
+)
 
 try:
-    client.sandboxes.get_sandbox("sbx_missing")
-except NotFoundError:
-    print("sandbox does not exist")
-except BadRequestError as err:
-    print("invalid request:", err.body)
+    sandbox.pause()
+except ConflictError:
+    # Sandbox is not in a pausable state
+    pass
 ```
 
-Available error classes: `BadRequestError`, `UnauthorizedError`, `NotFoundError`, `ConflictError`, `InternalServerError`.
+## Full documentation
 
-## Documentation
+[docs.superserve.ai](https://docs.superserve.ai/sdk/python/sandbox)
 
-Full docs: [docs.superserve.ai](https://docs.superserve.ai)
+## Development
+
+```bash
+# From repo root:
+bunx turbo run build --filter=@superserve/python-sdk
+bunx turbo run typecheck --filter=@superserve/python-sdk
+bunx turbo run lint --filter=@superserve/python-sdk
+```
 
 ## License
 
-Apache-2.0
+Apache License 2.0.

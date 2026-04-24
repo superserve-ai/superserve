@@ -1,0 +1,118 @@
+---
+title: "Commands"
+sidebarTitle: Commands
+description: sandbox.commands - run shell commands with sync results or streaming output.
+---
+
+Run shell commands inside a sandbox via `sandbox.commands`. Running a command on a `paused` sandbox transparently resumes it and executes.
+
+## `run` (synchronous)
+
+Execute a command and wait for it to finish. Returns a [`CommandResult`](#commandresult).
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run("echo hello")
+console.log(result.stdout)    // "hello\n"
+console.log(result.stderr)    // ""
+console.log(result.exitCode)  // 0
+```
+
+```python Python
+result = sandbox.commands.run("echo hello")
+print(result.stdout)     # "hello\n"
+print(result.stderr)     # ""
+print(result.exit_code)  # 0
+```
+</CodeGroup>
+
+## `run` (streaming)
+
+Pass `onStdout` / `on_stdout` and/or `onStderr` / `on_stderr` callbacks. Output is delivered over Server-Sent Events and flushed to your callback as it arrives. The final `result` still contains the full concatenated output.
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run("npm run build", {
+  onStdout: (data) => process.stdout.write(data),
+  onStderr: (data) => process.stderr.write(data),
+  timeoutMs: 300_000,
+})
+```
+
+```python Python
+import sys
+
+result = sandbox.commands.run(
+    "npm run build",
+    on_stdout=lambda data: sys.stdout.write(data),
+    on_stderr=lambda data: sys.stderr.write(data),
+    timeout_seconds=300,
+)
+```
+</CodeGroup>
+
+<Note>
+Streaming uses an *idle* timeout - the timer resets on every chunk. A command that produces output regularly will not trip the timeout no matter how long it runs overall. A completely silent command still has to finish before the timeout.
+</Note>
+
+## Options
+
+| Option | Type | Description |
+|---|---|---|
+| `cwd` | `string` | Working directory. Server-side default when unset. |
+| `env` | `Record<string, string>` | Env vars for this command only (merged with sandbox-wide env vars). |
+| `timeoutMs` / `timeout_seconds` | `number` | Command timeout. Only sent when specified. |
+| `onStdout` / `on_stdout` | `(data: string) => void` | Stream stdout chunks. |
+| `onStderr` / `on_stderr` | `(data: string) => void` | Stream stderr chunks. |
+| `signal` | `AbortSignal` | TypeScript only - abort mid-execution. |
+
+## `CommandResult`
+
+<CodeGroup>
+```typescript TypeScript
+interface CommandResult {
+  stdout: string
+  stderr: string
+  exitCode: number
+}
+```
+
+```python Python
+from pydantic import BaseModel
+
+class CommandResult(BaseModel):
+    stdout: str
+    stderr: str
+    exit_code: int
+```
+</CodeGroup>
+
+## Non-zero exit codes
+
+`run()` does **not** raise for non-zero exits. Inspect the exit code yourself.
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run("exit 42")
+if (result.exitCode !== 0) {
+  console.error(`Failed: ${result.stderr}`)
+}
+```
+
+```python Python
+result = sandbox.commands.run("exit 42")
+if result.exit_code != 0:
+    print(f"Failed: {result.stderr}")
+```
+</CodeGroup>
+
+## Errors
+
+Commonly raised:
+
+- `TimeoutError` / `SandboxTimeoutError` - timeout elapsed before the command finished
+- `NotFoundError` - sandbox was deleted
+- `ConflictError` - sandbox is in an invalid state
+- `SandboxError` - connection dropped mid-stream without a terminal `finished` event (streaming only)
+
+See [Errors](/errors) for the full hierarchy.

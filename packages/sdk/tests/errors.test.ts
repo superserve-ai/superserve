@@ -1,42 +1,112 @@
-import { describe, expect, test } from "bun:test"
-import { APIError, SuperserveError } from "../src/errors"
+import { describe, expect, it } from "vitest"
 
-describe("SuperserveError", () => {
-  test("creates error with message", () => {
-    const error = new SuperserveError("something went wrong")
-    expect(error.message).toBe("something went wrong")
-    expect(error.name).toBe("SuperserveError")
+import {
+  AuthenticationError,
+  ConflictError,
+  NotFoundError,
+  SandboxError,
+  ServerError,
+  TimeoutError,
+  ValidationError,
+  mapApiError,
+} from "../src/errors.js"
+
+describe("error hierarchy", () => {
+  it("each typed error extends SandboxError", () => {
+    expect(new AuthenticationError()).toBeInstanceOf(SandboxError)
+    expect(new ValidationError("bad input")).toBeInstanceOf(SandboxError)
+    expect(new NotFoundError()).toBeInstanceOf(SandboxError)
+    expect(new ConflictError()).toBeInstanceOf(SandboxError)
+    expect(new TimeoutError()).toBeInstanceOf(SandboxError)
+    expect(new ServerError()).toBeInstanceOf(SandboxError)
   })
 
-  test("is an instance of Error", () => {
-    const error = new SuperserveError("test")
-    expect(error).toBeInstanceOf(Error)
+  it("sets name correctly on each subclass", () => {
+    expect(new AuthenticationError().name).toBe("AuthenticationError")
+    expect(new ValidationError("x").name).toBe("ValidationError")
+    expect(new NotFoundError().name).toBe("NotFoundError")
+    expect(new ConflictError().name).toBe("ConflictError")
+    expect(new TimeoutError().name).toBe("TimeoutError")
+    expect(new ServerError().name).toBe("ServerError")
+    expect(new SandboxError("boom").name).toBe("SandboxError")
+  })
+
+  it("stores cause when provided", () => {
+    const cause = new Error("root")
+    const err = new SandboxError("wrap", 500, undefined, { cause })
+    expect((err as { cause?: unknown }).cause).toBe(cause)
   })
 })
 
-describe("APIError", () => {
-  test("creates error with status and message", () => {
-    const error = new APIError(404, "Not found")
-    expect(error.status).toBe(404)
-    expect(error.message).toBe("Not found")
-    expect(error.name).toBe("APIError")
-    expect(error.details).toEqual({})
+describe("mapApiError", () => {
+  const withError = (code: string, message: string) => ({
+    error: { code, message },
   })
 
-  test("creates error with details", () => {
-    const details = { field: "name", reason: "required" }
-    const error = new APIError(400, "Bad request", details)
-    expect(error.details).toEqual(details)
+  it("maps 400 to ValidationError with code", () => {
+    const err = mapApiError(400, withError("bad_request", "no"))
+    expect(err).toBeInstanceOf(ValidationError)
+    expect(err.statusCode).toBe(400)
+    expect(err.code).toBe("bad_request")
+    expect(err.message).toBe("no")
   })
 
-  test("defaults details to empty object", () => {
-    const error = new APIError(500, "Server error")
-    expect(error.details).toEqual({})
+  it("maps 401 to AuthenticationError with code", () => {
+    const err = mapApiError(401, withError("unauthorized", "go away"))
+    expect(err).toBeInstanceOf(AuthenticationError)
+    expect(err.statusCode).toBe(401)
+    expect(err.code).toBe("unauthorized")
   })
 
-  test("extends SuperserveError", () => {
-    const error = new APIError(500, "Server error")
-    expect(error).toBeInstanceOf(SuperserveError)
-    expect(error).toBeInstanceOf(Error)
+  it("maps 403 to AuthenticationError preserving the 403 status", () => {
+    const err = mapApiError(403, withError("forbidden", "no access"))
+    expect(err).toBeInstanceOf(AuthenticationError)
+    expect(err.statusCode).toBe(403)
+    expect(err.code).toBe("forbidden")
+  })
+
+  it("maps 404 to NotFoundError with code", () => {
+    const err = mapApiError(404, withError("not_found", "gone"))
+    expect(err).toBeInstanceOf(NotFoundError)
+    expect(err.code).toBe("not_found")
+  })
+
+  it("maps 409 to ConflictError with code", () => {
+    const err = mapApiError(409, withError("conflict", "wrong state"))
+    expect(err).toBeInstanceOf(ConflictError)
+    expect(err.code).toBe("conflict")
+  })
+
+  it("maps 429 to base SandboxError", () => {
+    const err = mapApiError(429, withError("rate_limited", "slow down"))
+    expect(err).toBeInstanceOf(SandboxError)
+    // Not one of the more specific subclasses
+    expect(err).not.toBeInstanceOf(ValidationError)
+    expect(err).not.toBeInstanceOf(ServerError)
+    expect(err.statusCode).toBe(429)
+    expect(err.code).toBe("rate_limited")
+  })
+
+  it("maps 500 to ServerError", () => {
+    const err = mapApiError(500, withError("server_error", "boom"))
+    expect(err).toBeInstanceOf(ServerError)
+    expect(err.statusCode).toBe(500)
+  })
+
+  it("maps 502 to ServerError", () => {
+    const err = mapApiError(502, withError("bad_gateway", "upstream"))
+    expect(err).toBeInstanceOf(ServerError)
+  })
+
+  it("unknown 4xx status falls back to base SandboxError", () => {
+    const err = mapApiError(418, withError("teapot", "short and stout"))
+    expect(err).toBeInstanceOf(SandboxError)
+    expect(err).not.toBeInstanceOf(ValidationError)
+    expect(err.statusCode).toBe(418)
+  })
+
+  it("uses default message when body lacks error", () => {
+    const err = mapApiError(400, {})
+    expect(err.message).toBe("API error (400)")
   })
 })

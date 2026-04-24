@@ -20,7 +20,6 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",
-    "@superserve/biome-config": "workspace:*",
     "@superserve/typescript-config": "workspace:*",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

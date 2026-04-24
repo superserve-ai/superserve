@@ -1,0 +1,113 @@
+---
+title: "Pause, resume, and delete"
+sidebarTitle: Lifecycle
+description: Manage sandbox state - pause to save compute costs, resume on demand, delete when you're done.
+---
+
+A sandbox transitions between two long-lived states:
+
+- **`active`** - VM is running, processes executing, compute billed
+- **`paused`** - VM paused, state persisted to disk, no compute billed
+
+You'll briefly see **`resuming`** while a paused sandbox is being restored to `active` - retry shortly. Deletion removes the sandbox entirely; further API calls return `404`.
+
+```
+active  ↔  paused  →  deleted
+```
+
+## Pause
+
+`pause()` checkpoints the full VM state (memory, processes, filesystem) to disk and stops billing for compute.
+
+<CodeGroup>
+```typescript TypeScript {5}
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({ name: "long-job" })
+
+await sandbox.pause()
+```
+
+```python Python {5}
+from superserve import Sandbox
+
+sandbox = Sandbox.create(name="long-job")
+
+sandbox.pause()
+```
+</CodeGroup>
+
+## Resume
+
+`resume()` restores a `paused` sandbox. Processes pick up where they left off.
+
+<CodeGroup>
+```typescript TypeScript {7}
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.connect("7a3f2b8c-1234-...")
+
+// sandbox is currently paused
+
+await sandbox.resume()
+await sandbox.commands.run("ls /tmp")
+```
+
+```python Python {7}
+from superserve import Sandbox
+
+sandbox = Sandbox.connect("7a3f2b8c-1234-...")
+
+# sandbox is currently paused
+
+sandbox.resume()
+sandbox.commands.run("ls /tmp")
+```
+</CodeGroup>
+
+<Tip>
+You don't need to call `resume()` before running a command. `commands.run()` on a `paused` sandbox transparently resumes it and executes. Call `resume()` explicitly only when you want the sandbox to be ready in advance.
+</Tip>
+
+Resume rotates the sandbox's per-sandbox access token on the backend. The SDK re-injects the new token into `sandbox.files` transparently - nothing changes in your code.
+
+## Kill
+
+`kill()` deletes the sandbox and all its resources. It's idempotent - deleting an already-deleted sandbox is a no-op that swallows the `404`.
+
+<CodeGroup>
+```typescript TypeScript {5}
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({ name: "one-shot" })
+
+await sandbox.kill()
+```
+
+```python Python {5}
+from superserve import Sandbox
+
+sandbox = Sandbox.create(name="one-shot")
+
+sandbox.kill()
+```
+</CodeGroup>
+
+## Kill without an instance
+
+In serverless contexts you often don't have the `sandbox` - just the ID. Use `killById` / `kill_by_id` to delete it anyway.
+
+<CodeGroup>
+```typescript TypeScript {3}
+import { Sandbox } from "@superserve/sdk"
+
+await Sandbox.killById("7a3f2b8c-1234-...")
+```
+
+```python Python {3}
+from superserve import Sandbox
+
+Sandbox.kill_by_id("7a3f2b8c-1234-...")
+```
+</CodeGroup>
+

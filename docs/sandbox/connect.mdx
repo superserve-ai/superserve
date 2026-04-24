@@ -1,0 +1,55 @@
+---
+title: "Connect to an existing sandbox"
+sidebarTitle: Connect
+description: Reconnect to a sandbox you created earlier using its ID, and list sandboxes on your team.
+---
+
+A sandbox outlives the process that created it. Store `sandbox.id` somewhere durable (a database, a queue message), and reconnect later with `Sandbox.connect()`.
+
+- `Sandbox.connect(id)` - returns a live `sandbox` with `commands` and `files` ready to use
+- `sandbox.getInfo()` - fetch the current status and metadata for a sandbox you already have
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.connect("7a3f2b8c-1234-...")
+await sandbox.commands.run("ls /app")
+```
+
+```python Python
+from superserve import Sandbox
+
+sandbox = Sandbox.connect("7a3f2b8c-1234-...")
+sandbox.commands.run("ls /app")
+```
+</CodeGroup>
+
+## Find sandboxes with `list`
+
+List all sandboxes on the team, or filter by metadata. Filters combine with AND.
+
+<CodeGroup>
+```typescript TypeScript
+const all = await Sandbox.list()
+
+const prod = await Sandbox.list({
+  metadata: { env: "prod", owner: "agent-7" },
+})
+
+for (const info of prod) {
+  console.log(info.id, info.name, info.status)
+}
+```
+
+```python Python
+all_boxes = Sandbox.list()
+
+prod = Sandbox.list(metadata={"env": "prod", "owner": "agent-7"})
+
+for info in prod:
+    print(info.id, info.name, info.status.value)
+```
+</CodeGroup>
+
+`list()` returns an array of [`SandboxInfo`](/sdk-reference/sandbox#sandboxinfo) - no live `sandbox` is constructed. Call `Sandbox.connect(id)` when you need one.

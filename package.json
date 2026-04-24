@@ -15,11 +15,8 @@
     "test": "turbo run test",
     "test:coverage": "turbo run test:coverage",
     "test:e2e": "turbo run e2e",
-    "generate:sync": "curl -fsSL https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml -o fern/openapi.yaml",
-    "generate": "bun run generate:sync && cd fern && fern generate --group local --force",
-    "generate:check": "bun run generate:sync && cd fern && fern check",
-    "docs:dev": "bun run generate:sync && cd fern && fern docs dev",
-    "docs:publish": "bun run generate:sync && cd fern && fern generate --docs --force",
+    "docs:dev": "mintlify dev --dir docs",
+    "docs:build": "mintlify build --dir docs",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -28,9 +25,9 @@
     ]
   },
   "devDependencies": {
-    "fern-api": "^4.64.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
+    "mintlify": "^4.0.0",
     "turbo": "^2.9.4"
   },
   "dependencies": {

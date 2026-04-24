@@ -1,101 +1,109 @@
-# Superserve SDK
+# @superserve/sdk
 
-TypeScript SDK for the [Superserve](https://superserve.ai) sandbox API — spin up isolated sandboxes, run commands in them, and tear them down from code.
+TypeScript SDK for the Superserve sandbox API — run code in isolated Firecracker MicroVMs.
 
-## Install
+## Installation
 
 ```bash
 npm install @superserve/sdk
 # or
 bun add @superserve/sdk
 # or
-yarn add @superserve/sdk
+pnpm add @superserve/sdk
 ```
 
-## Quick start
+Zero runtime dependencies. Requires Node.js ≥ 18 or any modern browser/runtime with `fetch`.
 
-```ts
-import { SuperserveClient } from "@superserve/sdk"
+## Quick Start
 
-const client = new SuperserveClient({
-  apiKey: process.env.SUPERSERVE_API_KEY!,
-})
+```typescript
+import { Sandbox } from "@superserve/sdk"
 
-const sandbox = await client.sandboxes.createSandbox({
-  name: "hello-world",
-})
+// Sandbox is ready to use when create() returns.
+const sandbox = await Sandbox.create({ name: "my-sandbox" })
 
-try {
-  const result = await client.exec.command({
-    sandbox_id: sandbox.id!,
-    body: { command: "echo 'Hello from Superserve!'" },
-  })
-  console.log(result.stdout)
-} finally {
-  await client.sandboxes.deleteSandbox({ sandbox_id: sandbox.id! })
-}
+const result = await sandbox.commands.run("echo hello")
+console.log(result.stdout)
+
+await sandbox.files.write("/app/data.txt", "content")
+const text = await sandbox.files.readText("/app/data.txt")
+
+await sandbox.kill()
 ```
 
-Get an API key from the [Superserve console](https://console.superserve.ai).
+## Authentication
 
-## Resource clients
+Set the `SUPERSERVE_API_KEY` environment variable:
 
-The `SuperserveClient` exposes four resource groups:
+```bash
+export SUPERSERVE_API_KEY=ss_live_...
+```
 
-- **`client.sandboxes`** — create, list, get, patch, pause, resume, and delete sandboxes
-- **`client.exec`** — run commands inside a sandbox (`command`) or stream output (`commandStream`)
-- **`client.files`** — upload and download files to and from a sandbox
-- **`client.system`** — health check
+Or pass it explicitly:
 
-## Configuration
-
-```ts
-import { SuperserveClient, SuperserveEnvironment } from "@superserve/sdk"
-
-const client = new SuperserveClient({
-  apiKey: "ss_live_...",               // required
-  environment: SuperserveEnvironment.Production,  // optional
-  baseUrl: "http://localhost:8080",    // optional, overrides environment
-  timeoutInSeconds: 60,                // optional, default 60
-  maxRetries: 2,                       // optional, default 2
+```typescript
+const sandbox = await Sandbox.create({
+  name: "my-sandbox",
+  apiKey: "ss_live_...",
+  baseUrl: "https://api.superserve.ai",   // optional
 })
 ```
 
-Request-level overrides are supported via an optional second argument on every method:
+## Streaming command output
 
-```ts
-await client.exec.command(
-  { sandbox_id: "sbx_...", body: { command: "long-running-task" } },
-  { timeoutInSeconds: 300, maxRetries: 0 },
-)
+```typescript
+const result = await sandbox.commands.run("npm install", {
+  onStdout: (data) => process.stdout.write(data),
+  onStderr: (data) => process.stderr.write(data),
+  timeoutMs: 120_000,
+})
+```
+
+## Cancellation
+
+Every network operation accepts an `AbortSignal`:
+
+```typescript
+const controller = new AbortController()
+setTimeout(() => controller.abort(), 5000)
+
+await sandbox.commands.run("sleep 100", { signal: controller.signal })
 ```
 
 ## Error handling
 
-All errors extend `SuperserveError`. Specific API error classes are exposed under the `Superserve` namespace:
-
-```ts
-import { SuperserveClient, Superserve } from "@superserve/sdk"
+```typescript
+import {
+  SandboxError,
+  AuthenticationError,   // 401
+  ValidationError,       // 400
+  NotFoundError,         // 404
+  ConflictError,         // 409 — invalid state for operation
+  TimeoutError,          // request timed out
+  ServerError,           // 500
+} from "@superserve/sdk"
 
 try {
-  await client.sandboxes.getSandbox({ sandbox_id: "sbx_missing" })
+  await sandbox.pause()
 } catch (err) {
-  if (err instanceof Superserve.NotFoundError) {
-    console.log("sandbox does not exist")
-  } else if (err instanceof Superserve.BadRequestError) {
-    console.error("invalid request:", err.body)
-  } else {
-    throw err
+  if (err instanceof ConflictError) {
+    // Sandbox is not in a pausable state
   }
 }
 ```
 
-Available error classes: `BadRequestError`, `UnauthorizedError`, `NotFoundError`, `ConflictError`, `InternalServerError`.
+## Full documentation
 
-## Documentation
+[docs.superserve.ai](https://docs.superserve.ai/sdk/typescript/sandbox)
 
-Full docs: [docs.superserve.ai](https://docs.superserve.ai)
+## Development
+
+```bash
+# From repo root:
+bunx turbo run build --filter=@superserve/sdk
+bunx turbo run typecheck --filter=@superserve/sdk
+```
 
 ## License
 
-Apache-2.0
+Apache License 2.0.

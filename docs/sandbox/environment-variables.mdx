@@ -1,0 +1,62 @@
+---
+title: "Environment variables"
+sidebarTitle: Env vars
+description: Inject environment variables at sandbox creation - applied to every process spawned inside the VM.
+---
+
+Env vars set at creation time are applied to **every** process the sandbox runs: `commands.run()`, shells, and anything those spawn. They persist across `pause()` / `resume()` cycles.
+
+<CodeGroup>
+```typescript TypeScript
+const sandbox = await Sandbox.create({
+  name: "data-analyzer",
+  envVars: {
+    OPENAI_API_KEY: "sk-...",
+    DATABASE_URL: "postgres://...",
+    NODE_ENV: "production",
+  },
+})
+
+const result = await sandbox.commands.run("echo $NODE_ENV")
+console.log(result.stdout)  // "production\n"
+```
+
+```python Python
+sandbox = Sandbox.create(
+    name="data-analyzer",
+    env_vars={
+        "OPENAI_API_KEY": "sk-...",
+        "DATABASE_URL": "postgres://...",
+        "NODE_ENV": "production",
+    },
+)
+
+result = sandbox.commands.run("echo $NODE_ENV")
+print(result.stdout)  # "production\n"
+```
+</CodeGroup>
+
+## Per-command overrides
+
+The `env` option on `commands.run()` adds to or overrides the sandbox-wide env for a single command.
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run("echo $NODE_ENV", {
+  env: { NODE_ENV: "staging" },
+})
+console.log(result.stdout)  // "staging\n"
+```
+
+```python Python
+result = sandbox.commands.run(
+    "echo $NODE_ENV",
+    env={"NODE_ENV": "staging"},
+)
+print(result.stdout)  # "staging\n"
+```
+</CodeGroup>
+
+<Note>
+Values pass through unmodified - no shell expansion or interpolation. Escape `$` and special characters yourself if needed.
+</Note>
