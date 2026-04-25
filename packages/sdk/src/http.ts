@@ -392,18 +392,20 @@ export async function downloadBytes(opts: {
  *
  * Not retried — POST is not idempotent.
  */
-export async function streamSSE(opts: {
+export async function streamSSE<TEvent = ApiExecStreamEvent>(opts: {
   url: string
   headers: Record<string, string>
-  body: unknown
+  body?: unknown
+  method?: "GET" | "POST"
   timeoutMs?: number
   signal?: AbortSignal
-  onEvent: (event: ApiExecStreamEvent) => void
+  onEvent: (event: TEvent) => void
 }): Promise<void> {
   const {
     url,
     headers,
     body,
+    method = "POST",
     timeoutMs = 300_000,
     signal: userSignal,
     onEvent,
@@ -418,16 +420,22 @@ export async function streamSSE(opts: {
   const signal = composeSignals(controller.signal, userSignal)
 
   try {
-    const res = await fetch(url, {
-      method: "POST",
+    const init: RequestInit = {
+      method,
       headers: {
         "User-Agent": USER_AGENT,
-        "Content-Type": "application/json",
+        ...(method === "POST"
+          ? { "Content-Type": "application/json" }
+          : {}),
         ...headers,
       },
-      body: JSON.stringify(body),
       signal,
-    })
+    }
+    if (method === "POST") {
+      init.body = JSON.stringify(body ?? {})
+    }
+
+    const res = await fetch(url, init)
 
     if (!res.ok) {
       const errorBody = await readErrorBody(res)
@@ -465,7 +473,7 @@ export async function streamSSE(opts: {
         const json = line.slice(5).trim()
         if (!json || json === "[DONE]") continue
         try {
-          const event = JSON.parse(json) as ApiExecStreamEvent
+          const event = JSON.parse(json) as TEvent
           onEvent(event)
         } catch {
           // Skip malformed events

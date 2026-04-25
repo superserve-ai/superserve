@@ -67,6 +67,8 @@ sandbox = Sandbox.create(
 | Option | Type | Description |
 |---|---|---|
 | `name` | `string` | **Required.** Human-readable sandbox name. |
+| `fromTemplate` / `from_template` | `string \| Template` | Template alias, UUID, or `Template` instance to boot from. Defaults to `superserve/base`. |
+| `fromSnapshot` / `from_snapshot` | `string` | Snapshot UUID to boot from. |
 | `timeoutSeconds` / `timeout_seconds` | `number` | Max active lifetime before auto-pause. API-side upper bound (subject to change). |
 | `metadata` | `Record<string, string>` | String tags. |
 | `envVars` / `env_vars` | `Record<string, string>` | Env vars injected into every process. |

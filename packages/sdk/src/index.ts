@@ -1,26 +1,10 @@
 /**
  * Superserve SDK — sandbox infrastructure for running code in isolated cloud environments.
- *
- * @example
- * ```typescript
- * import { Sandbox } from "@superserve/sdk"
- *
- * const sandbox = await Sandbox.create({ name: "my-sandbox" })
- *
- * const result = await sandbox.commands.run("echo hello")
- * console.log(result.stdout)
- *
- * await sandbox.files.write("/app/data.txt", "content")
- * const text = await sandbox.files.readText("/app/data.txt")
- *
- * await sandbox.kill()
- * ```
- *
- * @packageDocumentation
  */
 
 export {
   AuthenticationError,
+  BuildError,
   ConflictError,
   NotFoundError,
   SandboxError,
@@ -29,7 +13,12 @@ export {
   ValidationError,
 } from "./errors.js"
 export { Sandbox } from "./Sandbox.js"
+export { Template } from "./Template.js"
 export type {
+  BuildLogEvent,
+  BuildLogsOptions,
+  BuildLogStream,
+  BuildStep,
   CommandOptions,
   CommandResult,
   ConnectionOptions,
@@ -40,4 +29,12 @@ export type {
   SandboxListOptions,
   SandboxStatus,
   SandboxUpdateOptions,
+  TemplateBuildInfo,
+  TemplateBuildsListOptions,
+  TemplateBuildStatus,
+  TemplateCreateOptions,
+  TemplateInfo,
+  TemplateListOptions,
+  TemplateStatus,
+  WaitUntilReadyOptions,
 } from "./types.js"

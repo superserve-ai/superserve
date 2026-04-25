@@ -270,25 +270,27 @@ def stream_sse(
     *,
     headers: dict[str, str],
     json_body: Any,
+    method: str = "POST",
     timeout: float = 300.0,
     on_event: Callable[[dict[str, Any]], None],
     client: httpx.Client | None = None,
 ) -> None:
-    """Consume an SSE stream from the exec/stream endpoint. POST — no retries."""
+    """Consume an SSE stream. Supports both POST (with body) and GET (no body). No retries."""
     owned = client is None
     if owned:
         client = httpx.Client(timeout=timeout)
     assert client is not None
 
-    merged = _default_headers(headers, content_type="application/json")
+    merged = _default_headers(
+        headers,
+        content_type="application/json" if method == "POST" else None,
+    )
+    stream_kwargs: dict[str, Any] = {"headers": merged, "timeout": timeout}
+    if method == "POST":
+        stream_kwargs["json"] = json_body
+
     try:
-        with client.stream(
-            "POST",
-            url,
-            headers=merged,
-            json=json_body,
-            timeout=timeout,
-        ) as response:
+        with client.stream(method, url, **stream_kwargs) as response:
             if not response.is_success:
                 response.read()
                 raise map_api_error(response.status_code, _build_error_body(response))
@@ -473,25 +475,27 @@ async def async_stream_sse(
     *,
     headers: dict[str, str],
     json_body: Any,
+    method: str = "POST",
     timeout: float = 300.0,
     on_event: Callable[[dict[str, Any]], None],
     client: httpx.AsyncClient | None = None,
 ) -> None:
-    """Async variant of stream_sse. POST — no retries."""
+    """Async variant of stream_sse. Supports both POST (with body) and GET (no body). No retries."""
     owned = client is None
     if owned:
         client = httpx.AsyncClient(timeout=timeout)
     assert client is not None
 
-    merged = _default_headers(headers, content_type="application/json")
+    merged = _default_headers(
+        headers,
+        content_type="application/json" if method == "POST" else None,
+    )
+    stream_kwargs: dict[str, Any] = {"headers": merged, "timeout": timeout}
+    if method == "POST":
+        stream_kwargs["json"] = json_body
+
     try:
-        async with client.stream(
-            "POST",
-            url,
-            headers=merged,
-            json=json_body,
-            timeout=timeout,
-        ) as response:
+        async with client.stream(method, url, **stream_kwargs) as response:
             if not response.is_success:
                 await response.aread()
                 raise map_api_error(response.status_code, _build_error_body(response))

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from superserve.errors import (
     AuthenticationError,
+    BuildError,
     ConflictError,
     NotFoundError,
     SandboxError,
@@ -127,3 +128,33 @@ class TestSandboxErrorFields:
             except ValueError as inner:
                 raise SandboxError("outer") from inner
         assert info.value.__cause__ is not None
+
+
+class TestBuildError:
+    def test_extends_sandbox_error(self) -> None:
+        err = BuildError(
+            "step_failed: boom",
+            code="step_failed",
+            build_id="b-1",
+            template_id="t-1",
+        )
+        assert isinstance(err, SandboxError)
+        assert isinstance(err, Exception)
+
+    def test_exposes_code_build_id_template_id(self) -> None:
+        err = BuildError(
+            "build_failed: boom",
+            code="build_failed",
+            build_id="b-2",
+            template_id="t-2",
+        )
+        assert err.code == "build_failed"
+        assert err.build_id == "b-2"
+        assert err.template_id == "t-2"
+        assert str(err) == "build_failed: boom"
+
+    def test_status_code_none_by_default(self) -> None:
+        err = BuildError(
+            "x", code="c", build_id="b", template_id="t",
+        )
+        assert err.status_code is None

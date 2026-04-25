@@ -1,8 +1,10 @@
-"""Superserve Python SDK — sandbox infrastructure for running code in isolated cloud environments."""
+"""Superserve SDK — sandbox infrastructure for running code in isolated cloud environments."""
 
 from .async_sandbox import AsyncSandbox
+from .async_template import AsyncTemplate
 from .errors import (
     AuthenticationError,
+    BuildError,
     ConflictError,
     NotFoundError,
     SandboxError,
@@ -11,27 +13,57 @@ from .errors import (
     ValidationError,
 )
 from .sandbox import Sandbox
+from .template import Template
 from .types import (
+    BuildLogEvent,
+    BuildLogStream,
+    BuildStep,
     CommandResult,
+    EnvStep,
+    EnvStepValue,
     NetworkConfig,
+    RunStep,
     SandboxInfo,
     SandboxStatus,
+    TemplateBuildInfo,
+    TemplateBuildStatus,
+    TemplateInfo,
+    TemplateStatus,
+    UserStep,
+    UserStepValue,
+    WorkdirStep,
 )
 
 __version__ = "0.6.0"
 
 __all__ = [
-    "Sandbox",
     "AsyncSandbox",
+    "AsyncTemplate",
+    "AuthenticationError",
+    "BuildError",
+    "BuildLogEvent",
+    "BuildLogStream",
+    "BuildStep",
     "CommandResult",
+    "ConflictError",
+    "EnvStep",
+    "EnvStepValue",
     "NetworkConfig",
+    "NotFoundError",
+    "RunStep",
+    "Sandbox",
+    "SandboxError",
     "SandboxInfo",
     "SandboxStatus",
-    "SandboxError",
-    "AuthenticationError",
-    "ValidationError",
-    "NotFoundError",
-    "ConflictError",
     "SandboxTimeoutError",
     "ServerError",
+    "Template",
+    "TemplateBuildInfo",
+    "TemplateBuildStatus",
+    "TemplateInfo",
+    "TemplateStatus",
+    "UserStep",
+    "UserStepValue",
+    "ValidationError",
+    "WorkdirStep",
 ]

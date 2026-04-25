@@ -76,6 +76,34 @@ export class ServerError extends SandboxError {
 }
 
 /**
+ * Thrown by `Template.waitUntilReady()` when the awaited build lands on
+ * status `failed`. `code` is the stable error prefix on the `error_message`
+ * field — e.g. `image_pull_failed`, `step_failed`, `boot_failed`,
+ * `snapshot_failed`, `start_cmd_failed`, `ready_cmd_failed`, `build_failed`.
+ */
+export class BuildError extends SandboxError {
+  readonly code: string
+  readonly buildId: string
+  readonly templateId: string
+
+  constructor(
+    message: string,
+    opts: {
+      code: string
+      buildId: string
+      templateId: string
+      statusCode?: number
+    },
+  ) {
+    super(message, opts.statusCode, opts.code)
+    this.name = "BuildError"
+    this.code = opts.code
+    this.buildId = opts.buildId
+    this.templateId = opts.templateId
+  }
+}
+
+/**
  * Map an HTTP status code and response body to a typed error.
  * @internal
  */
