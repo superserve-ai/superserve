@@ -1,0 +1,101 @@
+---
+title: "BuildSpec reference"
+description: "How to describe a template's base image, build steps, and runtime defaults"
+---
+
+A `BuildSpec` is the canonical declaration of how to build a template. The SDK flattens it onto `TemplateCreateOptions` for convenience — `from` / `steps` / `startCmd` / `readyCmd` are top-level options.
+
+## `from` — base image
+
+An OCI image reference. Resolved to a digest at build time for reproducibility.
+
+```typescript
+from: "python:3.11"           // Docker Hub
+from: "ghcr.io/myorg/foo:v1"  // any OCI registry
+```
+
+**Constraints:**
+- Must be a **linux/amd64** image
+- **Alpine and distroless bases are rejected** at validation time (musl/busybox incompat with build tooling)
+
+## `steps` — ordered build steps
+
+A list of tagged objects executed in order inside the build VM. Exactly one of `run` / `env` / `workdir` / `user` must be set per step.
+
+### `run` — shell command
+
+```typescript
+{ run: "pip install -r requirements.txt" }
+```
+
+Wrapped in `/bin/sh -c` inside the build VM.
+
+### `env` — environment variable
+
+```typescript
+{ env: { key: "DEBUG", value: "1" } }
+```
+
+Sets an env var for subsequent build steps AND as a runtime default. Caller-supplied `envVars` on sandbox create override on conflict.
+
+### `workdir` — working directory
+
+```typescript
+{ workdir: "/srv/app" }
+```
+
+Working directory for subsequent build steps and the runtime default cwd. Auto-created and chowned to the current build user. Per-exec `workingDir` overrides at runtime.
+
+### `user` — switch user
+
+```typescript
+{ user: { name: "appuser", sudo: true } }
+```
+
+Switches the user for subsequent build steps and sets the runtime default exec user. User is created if not present. `sudo: true` grants passwordless sudo.
+
+## `startCmd` — process to start after build
+
+```typescript
+startCmd: "python server.py"
+```
+
+The snapshot captures the running process, so sandboxes restored from this template come up with it already live.
+
+## `readyCmd` — readiness probe
+
+```typescript
+readyCmd: "curl -f http://localhost:8080/health"
+```
+
+Polled every 2s after `startCmd` until it exits `0` or 10 minutes elapse. Use this to wait for a server to bind its port before snapshotting.
+
+## Resource limits
+
+Templates specify the VM shape — sandboxes inherit these and cannot override them per-sandbox.
+
+| Field | Min | Max | Default |
+|---|---|---|---|
+| `vcpu` | 1 | 4 | 1 |
+| `memoryMib` | 256 | 4096 | 1024 |
+| `diskMib` | 1024 | 8192 | 4096 |
+
+## Build error codes
+
+On failure, `BuildError.code` is one of these stable identifiers (parsed from `errorMessage`):
+
+| Code | Meaning |
+|---|---|
+| `image_pull_failed` | Base image couldn't be pulled or resolved |
+| `step_failed` | A build step exited non-zero |
+| `boot_failed` | Build VM failed to boot |
+| `snapshot_failed` | Snapshot bundle couldn't be produced |
+| `start_cmd_failed` | `startCmd` exited non-zero before snapshot |
+| `ready_cmd_failed` | `readyCmd` didn't exit `0` within 10 minutes |
+| `too_many_builds` | Team's concurrent build limit reached |
+| `build_failed` | Catch-all when no specific code applies |
+
+## Related
+
+- [Create a template](/templates/create)
+- [Errors](/errors)

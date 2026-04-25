@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   AuthenticationError,
+  BuildError,
   ConflictError,
   NotFoundError,
   SandboxError,
@@ -108,5 +109,36 @@ describe("mapApiError", () => {
   it("uses default message when body lacks error", () => {
     const err = mapApiError(400, {})
     expect(err.message).toBe("API error (400)")
+  })
+})
+
+describe("BuildError", () => {
+  it("extends SandboxError", () => {
+    const err = new BuildError("step_failed: boom", {
+      code: "step_failed",
+      buildId: "b-1",
+      templateId: "t-1",
+      statusCode: 200,
+    })
+    expect(err).toBeInstanceOf(SandboxError)
+    expect(err).toBeInstanceOf(Error)
+    expect(err.name).toBe("BuildError")
+  })
+
+  it("exposes code, buildId, templateId", () => {
+    const err = new BuildError("build_failed: boom", {
+      code: "build_failed",
+      buildId: "b-2",
+      templateId: "t-2",
+    })
+    expect(err.code).toBe("build_failed")
+    expect(err.buildId).toBe("b-2")
+    expect(err.templateId).toBe("t-2")
+    expect(err.message).toBe("build_failed: boom")
+  })
+
+  it("has no statusCode when not provided", () => {
+    const err = new BuildError("x", { code: "c", buildId: "b", templateId: "t" })
+    expect(err.statusCode).toBeUndefined()
   })
 })

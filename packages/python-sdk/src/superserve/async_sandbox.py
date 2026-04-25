@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import builtins
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -13,6 +13,10 @@ from .commands import AsyncCommands
 from .errors import NotFoundError, SandboxError
 from .files import AsyncFiles
 from .types import NetworkConfig, SandboxInfo, SandboxStatus, to_sandbox_info
+
+if TYPE_CHECKING:
+    from .async_template import AsyncTemplate
+    from .template import Template
 
 
 class AsyncSandbox:
@@ -45,6 +49,8 @@ class AsyncSandbox:
         cls,
         *,
         name: str,
+        from_template: "str | Template | AsyncTemplate | None" = None,
+        from_snapshot: str | None = None,
         timeout_seconds: int | None = None,
         metadata: dict[str, str] | None = None,
         env_vars: dict[str, str] | None = None,
@@ -56,6 +62,16 @@ class AsyncSandbox:
         config = resolve_config(api_key=api_key, base_url=base_url)
 
         body: dict[str, Any] = {"name": name}
+        if from_template is not None:
+            if isinstance(from_template, str):
+                body["from_template"] = from_template
+            else:
+                # Template / AsyncTemplate instance — extract alias (fallback to id)
+                body["from_template"] = (
+                    getattr(from_template, "alias", None) or from_template.id
+                )
+        if from_snapshot is not None:
+            body["from_snapshot"] = from_snapshot
         if timeout_seconds is not None:
             body["timeout_seconds"] = timeout_seconds
         if metadata is not None:

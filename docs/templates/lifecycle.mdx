@@ -1,0 +1,91 @@
+---
+title: "Rebuild, cancel, delete"
+description: "Manage a template over time: trigger new builds, cancel in-flight ones, delete stale templates"
+---
+
+## Rebuild
+
+Queue a new build for an existing template — e.g. after a failed build, or to pick up an updated base image.
+
+<CodeGroup>
+
+```typescript TypeScript
+const build = await template.rebuild()
+console.log(`Build queued: ${build.id}`)
+```
+
+```python Python
+build = template.rebuild()
+print(f"Build queued: {build.id}")
+```
+
+</CodeGroup>
+
+Rebuild is **idempotent on spec hash**: if an in-flight build already exists for this template with the same `build_spec_hash`, the API returns the existing build's id with `200` instead of creating a duplicate.
+
+## List and inspect builds
+
+<CodeGroup>
+
+```typescript TypeScript
+const builds = await template.listBuilds({ limit: 10 })
+for (const b of builds) {
+  console.log(b.id, b.status, b.errorMessage ?? "")
+}
+
+const build = await template.getBuild(builds[0].id)
+```
+
+```python Python
+builds = template.list_builds(limit=10)
+for b in builds:
+    print(b.id, b.status, b.error_message or "")
+
+build = template.get_build(builds[0].id)
+```
+
+</CodeGroup>
+
+## Cancel an in-flight build
+
+<CodeGroup>
+
+```typescript TypeScript
+await template.cancelBuild(build.id)
+```
+
+```python Python
+template.cancel_build(build.id)
+```
+
+</CodeGroup>
+
+`cancelBuild` is a no-op for builds already in a terminal state.
+
+## Delete a template
+
+<CodeGroup>
+
+```typescript TypeScript
+await template.delete()
+
+// Or by id / alias
+await Template.deleteById("my-python-env")
+```
+
+```python Python
+template.delete()
+
+# Or by id / alias
+Template.delete_by_id("my-python-env")
+```
+
+</CodeGroup>
+
+Both calls are idempotent on `404`. If any non-destroyed sandbox still references the template, the call raises `ConflictError` — destroy those sandboxes first.
+
+## Related
+
+- [Create a template](/templates/create)
+- [BuildSpec reference](/templates/build-spec)
+- [SDK reference: Template](/sdk-reference/template)
