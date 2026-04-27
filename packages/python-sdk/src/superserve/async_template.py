@@ -17,6 +17,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -293,6 +294,7 @@ class AsyncTemplate:
             bid = None
 
         if bid:
+
             def _on_raw(raw: dict[str, Any]) -> None:
                 nonlocal final_status
                 ev = to_build_log_event(raw)

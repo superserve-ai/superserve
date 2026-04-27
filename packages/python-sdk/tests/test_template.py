@@ -1,4 +1,5 @@
 """Tests for the sync Template class."""
+
 from __future__ import annotations
 
 import httpx

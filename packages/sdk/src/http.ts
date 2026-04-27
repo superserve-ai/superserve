@@ -120,7 +120,9 @@ async function retryableFetch(
     userSignal?: AbortSignal
   },
 ): Promise<Response> {
-  const maxAttempts = opts.retryable ? (opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS) : 1
+  const maxAttempts = opts.retryable
+    ? (opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS)
+    : 1
 
   let lastError: unknown
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -252,7 +254,7 @@ export async function request<T>(opts: RequestOptions): Promise<T> {
 
     // Some endpoints legally return 2xx with an empty body.
     const text = await res.text()
-    return (text ? (JSON.parse(text) as T) : (undefined as T))
+    return text ? (JSON.parse(text) as T) : (undefined as T)
   } catch (err) {
     if (err instanceof SandboxError) throw err
     if (err instanceof DOMException && err.name === "AbortError") {
@@ -424,9 +426,7 @@ export async function streamSSE<TEvent = ApiExecStreamEvent>(opts: {
       method,
       headers: {
         "User-Agent": USER_AGENT,
-        ...(method === "POST"
-          ? { "Content-Type": "application/json" }
-          : {}),
+        ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
         ...headers,
       },
       signal,
@@ -483,7 +483,8 @@ export async function streamSSE<TEvent = ApiExecStreamEvent>(opts: {
   } catch (err) {
     if (err instanceof SandboxError) throw err
     if (err instanceof DOMException && err.name === "AbortError") {
-      if (timedOut) throw new TimeoutError(`Stream timed out after ${timeoutMs}ms`)
+      if (timedOut)
+        throw new TimeoutError(`Stream timed out after ${timeoutMs}ms`)
       throw new SandboxError("Stream aborted", undefined, undefined, {
         cause: err,
       })

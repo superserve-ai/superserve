@@ -125,18 +125,20 @@ class TestSandboxStatus:
 
 class TestToTemplateInfo:
     def test_basic(self) -> None:
-        info = to_template_info({
-            "id": "t-1",
-            "team_id": "team-1",
-            "alias": "my-env",
-            "status": "ready",
-            "vcpu": 2,
-            "memory_mib": 2048,
-            "disk_mib": 4096,
-            "size_bytes": 12345,
-            "created_at": "2026-01-01T00:00:00Z",
-            "built_at": "2026-01-01T00:01:00Z",
-        })
+        info = to_template_info(
+            {
+                "id": "t-1",
+                "team_id": "team-1",
+                "alias": "my-env",
+                "status": "ready",
+                "vcpu": 2,
+                "memory_mib": 2048,
+                "disk_mib": 4096,
+                "size_bytes": 12345,
+                "created_at": "2026-01-01T00:00:00Z",
+                "built_at": "2026-01-01T00:01:00Z",
+            }
+        )
         assert info.id == "t-1"
         assert info.alias == "my-env"
         assert info.status == TemplateStatus.READY
@@ -148,16 +150,18 @@ class TestToTemplateInfo:
         assert isinstance(info.built_at, datetime)
 
     def test_optional_fields_absent(self) -> None:
-        info = to_template_info({
-            "id": "t-1",
-            "team_id": "team-1",
-            "alias": "my-env",
-            "status": "building",
-            "vcpu": 1,
-            "memory_mib": 1024,
-            "disk_mib": 4096,
-            "created_at": "2026-01-01T00:00:00Z",
-        })
+        info = to_template_info(
+            {
+                "id": "t-1",
+                "team_id": "team-1",
+                "alias": "my-env",
+                "status": "building",
+                "vcpu": 1,
+                "memory_mib": 1024,
+                "disk_mib": 4096,
+                "created_at": "2026-01-01T00:00:00Z",
+            }
+        )
         assert info.size_bytes is None
         assert info.built_at is None
         assert info.error_message is None
@@ -165,15 +169,17 @@ class TestToTemplateInfo:
 
 class TestToTemplateBuildInfo:
     def test_basic(self) -> None:
-        b = to_template_build_info({
-            "id": "b-1",
-            "template_id": "t-1",
-            "status": "ready",
-            "build_spec_hash": "h",
-            "started_at": "2026-01-01T00:00:00Z",
-            "finalized_at": "2026-01-01T00:01:00Z",
-            "created_at": "2026-01-01T00:00:00Z",
-        })
+        b = to_template_build_info(
+            {
+                "id": "b-1",
+                "template_id": "t-1",
+                "status": "ready",
+                "build_spec_hash": "h",
+                "started_at": "2026-01-01T00:00:00Z",
+                "finalized_at": "2026-01-01T00:01:00Z",
+                "created_at": "2026-01-01T00:00:00Z",
+            }
+        )
         assert b.id == "b-1"
         assert b.template_id == "t-1"
         assert b.status == TemplateBuildStatus.READY
@@ -182,13 +188,15 @@ class TestToTemplateBuildInfo:
 
 class TestToBuildLogEvent:
     def test_basic(self) -> None:
-        ev = to_build_log_event({
-            "timestamp": "2026-01-01T00:00:00Z",
-            "stream": "stdout",
-            "text": "hello",
-            "finished": True,
-            "status": "ready",
-        })
+        ev = to_build_log_event(
+            {
+                "timestamp": "2026-01-01T00:00:00Z",
+                "stream": "stdout",
+                "text": "hello",
+                "finished": True,
+                "status": "ready",
+            }
+        )
         assert ev.text == "hello"
         assert ev.finished is True
         assert ev.status == "ready"
@@ -212,5 +220,7 @@ class TestBuildStepsToApi:
         assert out == [{"user": {"name": "appuser", "sudo": False}}]
 
     def test_user_sudo_true(self) -> None:
-        out = build_steps_to_api([UserStep(user=UserStepValue(name="appuser", sudo=True))])
+        out = build_steps_to_api(
+            [UserStep(user=UserStepValue(name="appuser", sudo=True))]
+        )
         assert out == [{"user": {"name": "appuser", "sudo": True}}]

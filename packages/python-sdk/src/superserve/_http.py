@@ -40,7 +40,9 @@ _RETRY_CONNECTION_EXCEPTIONS = (
 )
 
 
-def _default_headers(extra: dict[str, str], content_type: str | None = None) -> dict[str, str]:
+def _default_headers(
+    extra: dict[str, str], content_type: str | None = None
+) -> dict[str, str]:
     """Merge SDK defaults with caller-supplied headers.
 
     Caller-supplied headers override defaults.
@@ -54,7 +56,7 @@ def _default_headers(extra: dict[str, str], content_type: str | None = None) -> 
 
 def _compute_backoff(attempt: int) -> float:
     """Exponential backoff: 100ms, 200ms, 400ms with ±20% jitter, capped."""
-    base = _BASE_BACKOFF * (2 ** attempt)
+    base = _BASE_BACKOFF * (2**attempt)
     jitter = base * (0.8 + random.random() * 0.4)
     return float(min(jitter, _MAX_BACKOFF))
 
@@ -75,6 +77,7 @@ def _parse_retry_after(value: str | None) -> float | None:
         return None
     try:
         import datetime as _dt
+
         # If HTTP-date has no tz, assume UTC (per RFC 7231) — compare against now in UTC
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=_dt.timezone.utc)
@@ -86,10 +89,7 @@ def _parse_retry_after(value: str | None) -> float | None:
 
 
 def _should_retry_status(method: str, status_code: int) -> bool:
-    return (
-        method.upper() in _IDEMPOTENT_METHODS
-        and status_code in _RETRY_STATUS_CODES
-    )
+    return method.upper() in _IDEMPOTENT_METHODS and status_code in _RETRY_STATUS_CODES
 
 
 def _build_error_body(response: httpx.Response) -> dict[str, Any]:
@@ -101,8 +101,7 @@ def _build_error_body(response: httpx.Response) -> dict[str, Any]:
         pass
     return {
         "error": {
-            "message": response.text[:500]
-            or f"API error ({response.status_code})"
+            "message": response.text[:500] or f"API error ({response.status_code})"
         }
     }
 
@@ -151,7 +150,10 @@ def _do_request_with_retry(
                 ) from exc
             except _RETRY_CONNECTION_EXCEPTIONS as exc:
                 last_exc = exc
-                if method_upper not in _IDEMPOTENT_METHODS or attempt == _MAX_ATTEMPTS - 1:
+                if (
+                    method_upper not in _IDEMPOTENT_METHODS
+                    or attempt == _MAX_ATTEMPTS - 1
+                ):
                     raise SandboxError(f"Network error: {exc}") from exc
                 time.sleep(_compute_backoff(attempt))
                 continue
@@ -164,8 +166,14 @@ def _do_request_with_retry(
             ):
                 delay: float
                 if response.status_code == 429:
-                    retry_after = _parse_retry_after(response.headers.get("Retry-After"))
-                    delay = min(retry_after, _MAX_BACKOFF) if retry_after is not None else _compute_backoff(attempt)
+                    retry_after = _parse_retry_after(
+                        response.headers.get("Retry-After")
+                    )
+                    delay = (
+                        min(retry_after, _MAX_BACKOFF)
+                        if retry_after is not None
+                        else _compute_backoff(attempt)
+                    )
                 else:
                     delay = _compute_backoff(attempt)
                 response.close()
@@ -357,7 +365,10 @@ async def _async_do_request_with_retry(
                 ) from exc
             except _RETRY_CONNECTION_EXCEPTIONS as exc:
                 last_exc = exc
-                if method_upper not in _IDEMPOTENT_METHODS or attempt == _MAX_ATTEMPTS - 1:
+                if (
+                    method_upper not in _IDEMPOTENT_METHODS
+                    or attempt == _MAX_ATTEMPTS - 1
+                ):
                     raise SandboxError(f"Network error: {exc}") from exc
                 await asyncio.sleep(_compute_backoff(attempt))
                 continue
@@ -370,8 +381,14 @@ async def _async_do_request_with_retry(
             ):
                 delay: float
                 if response.status_code == 429:
-                    retry_after = _parse_retry_after(response.headers.get("Retry-After"))
-                    delay = min(retry_after, _MAX_BACKOFF) if retry_after is not None else _compute_backoff(attempt)
+                    retry_after = _parse_retry_after(
+                        response.headers.get("Retry-After")
+                    )
+                    delay = (
+                        min(retry_after, _MAX_BACKOFF)
+                        if retry_after is not None
+                        else _compute_backoff(attempt)
+                    )
                 else:
                     delay = _compute_backoff(attempt)
                 await response.aclose()
@@ -434,7 +451,9 @@ async def async_upload_bytes(
 
     merged = _default_headers(headers, content_type="application/octet-stream")
     try:
-        response = await client.post(url, headers=merged, content=content, timeout=timeout)
+        response = await client.post(
+            url, headers=merged, content=content, timeout=timeout
+        )
     except httpx.TimeoutException as exc:
         raise SandboxTimeoutError(f"Upload timed out after {timeout}s") from exc
     except httpx.HTTPError as exc:

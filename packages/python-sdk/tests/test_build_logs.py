@@ -1,4 +1,5 @@
 """Tests for stream_build_logs and wait_until_ready."""
+
 from __future__ import annotations
 
 import httpx
@@ -17,8 +18,13 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 BASE = {
-    "id": "t-1", "team_id": "team-1", "alias": "my-env", "status": "building",
-    "vcpu": 1, "memory_mib": 1024, "disk_mib": 4096,
+    "id": "t-1",
+    "team_id": "team-1",
+    "alias": "my-env",
+    "status": "building",
+    "vcpu": 1,
+    "memory_mib": 1024,
+    "disk_mib": 4096,
     "created_at": "2026-01-01T00:00:00Z",
 }
 
@@ -38,10 +44,12 @@ class TestStreamBuildLogs:
     def test_forwards_events(self) -> None:
         with respx.mock() as router:
             t = _make_template(router)
-            sse = _sse_text([
-                '{"timestamp":"2026-01-01T00:00:00Z","stream":"stdout","text":"hello"}',
-                '{"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"done","finished":true,"status":"ready"}',
-            ])
+            sse = _sse_text(
+                [
+                    '{"timestamp":"2026-01-01T00:00:00Z","stream":"stdout","text":"hello"}',
+                    '{"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"done","finished":true,"status":"ready"}',
+                ]
+            )
             router.get(f"{API}/templates/t-1/builds/b-1/logs").mock(
                 return_value=httpx.Response(200, text=sse)
             )
@@ -77,9 +85,9 @@ class TestStreamBuildLogs:
                     '{"timestamp":"2026-01-01T00:00:00Z","stream":"stdout","text":"hi"}',
                 ]
             )
-            stream_route = router.get(
-                f"{API}/templates/t-1/builds/b-recent/logs"
-            ).mock(return_value=httpx.Response(200, text=sse))
+            stream_route = router.get(f"{API}/templates/t-1/builds/b-recent/logs").mock(
+                return_value=httpx.Response(200, text=sse)
+            )
 
             t.stream_build_logs(on_event=lambda ev: None)
             assert stream_route.call_count == 1
@@ -101,9 +109,11 @@ class TestWaitUntilReady:
     def test_resolves_on_ready(self) -> None:
         with respx.mock() as router:
             t = _make_template(router)
-            sse = _sse_text([
-                '{"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"ok","finished":true,"status":"ready"}',
-            ])
+            sse = _sse_text(
+                [
+                    '{"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"ok","finished":true,"status":"ready"}',
+                ]
+            )
             router.get(f"{API}/templates/t-1/builds/b-1/logs").mock(
                 return_value=httpx.Response(200, text=sse)
             )
@@ -116,9 +126,11 @@ class TestWaitUntilReady:
     def test_raises_build_error_on_failed(self) -> None:
         with respx.mock() as router:
             t = _make_template(router)
-            sse = _sse_text([
-                '{"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"fail","finished":true,"status":"failed"}',
-            ])
+            sse = _sse_text(
+                [
+                    '{"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"fail","finished":true,"status":"failed"}',
+                ]
+            )
             router.get(f"{API}/templates/t-1/builds/b-1/logs").mock(
                 return_value=httpx.Response(200, text=sse)
             )
@@ -126,7 +138,8 @@ class TestWaitUntilReady:
                 return_value=httpx.Response(
                     200,
                     json={
-                        **BASE, "status": "failed",
+                        **BASE,
+                        "status": "failed",
                         "error_message": "step_failed: step 1/1 failed",
                     },
                 )
@@ -140,9 +153,11 @@ class TestWaitUntilReady:
     def test_raises_conflict_on_cancelled(self) -> None:
         with respx.mock() as router:
             t = _make_template(router)
-            sse = _sse_text([
-                '{"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"cx","finished":true,"status":"cancelled"}',
-            ])
+            sse = _sse_text(
+                [
+                    '{"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"cx","finished":true,"status":"cancelled"}',
+                ]
+            )
             router.get(f"{API}/templates/t-1/builds/b-1/logs").mock(
                 return_value=httpx.Response(200, text=sse)
             )

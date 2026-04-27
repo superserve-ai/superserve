@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { NotFoundError } from "../src/errors.js"
 import { Template } from "../src/Template.js"
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -13,7 +12,11 @@ function noContentResponse(): Response {
   return new Response(null, { status: 204 })
 }
 
-function errorResponse(status: number, code = "error", message = "boom"): Response {
+function errorResponse(
+  status: number,
+  code = "error",
+  message = "boom",
+): Response {
   return new Response(JSON.stringify({ error: { code, message } }), {
     status,
     headers: { "Content-Type": "application/json" },
@@ -40,7 +43,9 @@ describe("Template.create", () => {
   afterEach(() => vi.unstubAllGlobals())
 
   it("POSTs /templates with flattened BuildSpec", async () => {
-    const mock = vi.fn(async () => jsonResponse({ ...baseTemplate, build_id: "b-1" }))
+    const mock = vi.fn(async () =>
+      jsonResponse({ ...baseTemplate, build_id: "b-1" }),
+    )
     vi.stubGlobal("fetch", mock)
 
     const template = await Template.create({
@@ -50,7 +55,10 @@ describe("Template.create", () => {
       memoryMib: 2048,
       diskMib: 4096,
       from: "python:3.11",
-      steps: [{ run: "pip install numpy" }, { env: { key: "DEBUG", value: "1" } }],
+      steps: [
+        { run: "pip install numpy" },
+        { env: { key: "DEBUG", value: "1" } },
+      ],
       startCmd: "python server.py",
       readyCmd: "curl -f http://localhost:8080/",
     })
@@ -81,7 +89,9 @@ describe("Template.create", () => {
   })
 
   it("omits resource fields and start/ready when not provided", async () => {
-    const mock = vi.fn(async () => jsonResponse({ ...baseTemplate, build_id: "b-1" }))
+    const mock = vi.fn(async () =>
+      jsonResponse({ ...baseTemplate, build_id: "b-1" }),
+    )
     vi.stubGlobal("fetch", mock)
 
     await Template.create({ ...commonOpts, alias: "x", from: "python:3.11" })
@@ -92,7 +102,10 @@ describe("Template.create", () => {
   })
 
   it("throws when build_id missing from response", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(baseTemplate)))
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse(baseTemplate)),
+    )
     await expect(
       Template.create({ ...commonOpts, alias: "x", from: "python:3.11" }),
     ).rejects.toThrow(/missing build_id/)
@@ -153,12 +166,20 @@ describe("Template.deleteById", () => {
   })
 
   it("swallows 404", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => errorResponse(404, "not_found")))
-    await expect(Template.deleteById("missing", commonOpts)).resolves.toBeUndefined()
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => errorResponse(404, "not_found")),
+    )
+    await expect(
+      Template.deleteById("missing", commonOpts),
+    ).resolves.toBeUndefined()
   })
 
   it("throws other errors", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => errorResponse(409, "conflict")))
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => errorResponse(409, "conflict")),
+    )
     await expect(Template.deleteById("busy", commonOpts)).rejects.toThrow()
   })
 })
@@ -169,8 +190,15 @@ describe("Template instance methods", () => {
   const fullTemplate = { ...baseTemplate, build_id: "b-1" }
 
   async function createTemplate() {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(fullTemplate)))
-    const t = await Template.create({ ...commonOpts, alias: "my-env", from: "python:3.11" })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse(fullTemplate)),
+    )
+    const t = await Template.create({
+      ...commonOpts,
+      alias: "my-env",
+      from: "python:3.11",
+    })
     vi.unstubAllGlobals()
     return t
   }
@@ -178,7 +206,10 @@ describe("Template instance methods", () => {
   it("getInfo refreshes from GET /templates/{id}", async () => {
     const t = await createTemplate()
     const updated = { ...baseTemplate, status: "ready" }
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(updated)))
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse(updated)),
+    )
 
     const info = await t.getInfo()
     expect(info.status).toBe("ready")
@@ -195,7 +226,10 @@ describe("Template instance methods", () => {
 
   it("delete throws on 409 (has active sandboxes)", async () => {
     const t = await createTemplate()
-    vi.stubGlobal("fetch", vi.fn(async () => errorResponse(409, "conflict")))
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => errorResponse(409, "conflict")),
+    )
     await expect(t.delete()).rejects.toThrow()
   })
 
@@ -238,7 +272,10 @@ describe("Template instance methods", () => {
       build_spec_hash: "h",
       created_at: "2026-01-01T00:00:00Z",
     }
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(build)))
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse(build)),
+    )
 
     const info = await t.getBuild("b-1")
     expect(info.id).toBe("b-1")
@@ -257,7 +294,10 @@ describe("Template instance methods", () => {
 
   it("cancelBuild is idempotent on 404", async () => {
     const t = await createTemplate()
-    vi.stubGlobal("fetch", vi.fn(async () => errorResponse(404, "not_found")))
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => errorResponse(404, "not_found")),
+    )
     await expect(t.cancelBuild("b-1")).resolves.toBeUndefined()
   })
 })

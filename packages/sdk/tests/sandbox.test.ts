@@ -221,9 +221,7 @@ describe("Sandbox instance methods", () => {
     const sandbox = await makeSandbox()
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        jsonResponse({ id: "sbx-1", status: "active" }),
-      ),
+      vi.fn(async () => jsonResponse({ id: "sbx-1", status: "active" })),
     )
     await expect(sandbox.resume()).rejects.toThrow(/missing access_token/)
   })

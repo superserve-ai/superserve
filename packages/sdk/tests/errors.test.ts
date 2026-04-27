@@ -4,12 +4,12 @@ import {
   AuthenticationError,
   BuildError,
   ConflictError,
+  mapApiError,
   NotFoundError,
   SandboxError,
   ServerError,
   TimeoutError,
   ValidationError,
-  mapApiError,
 } from "../src/errors.js"
 
 describe("error hierarchy", () => {
@@ -138,7 +138,11 @@ describe("BuildError", () => {
   })
 
   it("has no statusCode when not provided", () => {
-    const err = new BuildError("x", { code: "c", buildId: "b", templateId: "t" })
+    const err = new BuildError("x", {
+      code: "c",
+      buildId: "b",
+      templateId: "t",
+    })
     expect(err.statusCode).toBeUndefined()
   })
 })

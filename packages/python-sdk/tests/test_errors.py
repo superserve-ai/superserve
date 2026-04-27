@@ -29,7 +29,9 @@ class TestMapApiError:
         assert err.status_code == 401
 
     def test_403_returns_authentication_error_preserving_status(self) -> None:
-        err = map_api_error(403, {"error": {"message": "forbidden", "code": "no_access"}})
+        err = map_api_error(
+            403, {"error": {"message": "forbidden", "code": "no_access"}}
+        )
         assert isinstance(err, AuthenticationError)
         assert err.status_code == 403
         assert err.code == "no_access"
@@ -51,7 +53,13 @@ class TestMapApiError:
         # But NOT any of the more specific typed errors
         assert not isinstance(
             err,
-            (ValidationError, AuthenticationError, NotFoundError, ConflictError, ServerError),
+            (
+                ValidationError,
+                AuthenticationError,
+                NotFoundError,
+                ConflictError,
+                ServerError,
+            ),
         )
         assert err.status_code == 429
 
@@ -65,7 +73,9 @@ class TestMapApiError:
         assert isinstance(err, ServerError)
 
     def test_code_preserved_on_unknown(self) -> None:
-        err = map_api_error(418, {"error": {"message": "teapot", "code": "teapot_error"}})
+        err = map_api_error(
+            418, {"error": {"message": "teapot", "code": "teapot_error"}}
+        )
         assert err.code == "teapot_error"
         assert err.status_code == 418
 
@@ -155,6 +165,9 @@ class TestBuildError:
 
     def test_status_code_none_by_default(self) -> None:
         err = BuildError(
-            "x", code="c", build_id="b", template_id="t",
+            "x",
+            code="c",
+            build_id="b",
+            template_id="t",
         )
         assert err.status_code is None

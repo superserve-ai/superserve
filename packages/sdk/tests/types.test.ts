@@ -65,9 +65,9 @@ describe("toSandboxInfo", () => {
   })
 
   it("throws when created_at is missing", () => {
-    expect(() =>
-      toSandboxInfo({ id: "sbx-1", status: "active" }),
-    ).toThrow(/missing created_at/)
+    expect(() => toSandboxInfo({ id: "sbx-1", status: "active" })).toThrow(
+      /missing created_at/,
+    )
   })
 })
 
@@ -114,7 +114,12 @@ describe("toTemplateInfo", () => {
 
   it("throws on missing id", () => {
     expect(() =>
-      toTemplateInfo({ alias: "x", status: "ready", team_id: "t", created_at: "2026-01-01T00:00:00Z" }),
+      toTemplateInfo({
+        alias: "x",
+        status: "ready",
+        team_id: "t",
+        created_at: "2026-01-01T00:00:00Z",
+      }),
     ).toThrow(/missing template id/)
   })
 
@@ -253,9 +258,9 @@ describe("toBuildLogEvent", () => {
   })
 
   it("throws on missing timestamp", () => {
-    expect(() =>
-      toBuildLogEvent({ stream: "stdout", text: "x" }),
-    ).toThrow(/missing timestamp/)
+    expect(() => toBuildLogEvent({ stream: "stdout", text: "x" })).toThrow(
+      /missing timestamp/,
+    )
   })
 
   it("throws on missing stream", () => {

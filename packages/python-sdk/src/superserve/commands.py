@@ -53,7 +53,9 @@ class Commands:
         is_streaming = on_stdout is not None or on_stderr is not None
 
         if is_streaming:
-            return self._run_streaming(body, headers, on_stdout, on_stderr, timeout_seconds)
+            return self._run_streaming(
+                body, headers, on_stdout, on_stderr, timeout_seconds
+            )
         return self._run_sync(body, headers, timeout_seconds)
 
     def _run_sync(
@@ -67,7 +69,9 @@ class Commands:
             f"{self._base_url}/sandboxes/{self._sandbox_id}/exec",
             headers=headers,
             json_body=body,
-            timeout=float(timeout_seconds) + 5.0 if timeout_seconds is not None else 30.0,
+            timeout=float(timeout_seconds) + 5.0
+            if timeout_seconds is not None
+            else 30.0,
             client=self._client,
         )
         return CommandResult(
@@ -109,7 +113,9 @@ class Commands:
             f"{self._base_url}/sandboxes/{self._sandbox_id}/exec/stream",
             headers=headers,
             json_body=body,
-            timeout=float(timeout_seconds) + 5.0 if timeout_seconds is not None else 300.0,
+            timeout=float(timeout_seconds) + 5.0
+            if timeout_seconds is not None
+            else 300.0,
             on_event=handle_event,
             client=self._client,
         )
@@ -167,7 +173,9 @@ class AsyncCommands:
         is_streaming = on_stdout is not None or on_stderr is not None
 
         if is_streaming:
-            return await self._run_streaming(body, headers, on_stdout, on_stderr, timeout_seconds)
+            return await self._run_streaming(
+                body, headers, on_stdout, on_stderr, timeout_seconds
+            )
         return await self._run_sync(body, headers, timeout_seconds)
 
     async def _run_sync(
@@ -181,7 +189,9 @@ class AsyncCommands:
             f"{self._base_url}/sandboxes/{self._sandbox_id}/exec",
             headers=headers,
             json_body=body,
-            timeout=float(timeout_seconds) + 5.0 if timeout_seconds is not None else 30.0,
+            timeout=float(timeout_seconds) + 5.0
+            if timeout_seconds is not None
+            else 30.0,
             client=self._client,
         )
         return CommandResult(
@@ -223,7 +233,9 @@ class AsyncCommands:
             f"{self._base_url}/sandboxes/{self._sandbox_id}/exec/stream",
             headers=headers,
             json_body=body,
-            timeout=float(timeout_seconds) + 5.0 if timeout_seconds is not None else 300.0,
+            timeout=float(timeout_seconds) + 5.0
+            if timeout_seconds is not None
+            else 300.0,
             on_event=handle_event,
             client=self._client,
         )

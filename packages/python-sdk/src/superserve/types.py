@@ -222,7 +222,9 @@ def to_template_build_info(raw: dict[str, Any]) -> TemplateBuildInfo:
         build_spec_hash=raw["build_spec_hash"],
         error_message=raw.get("error_message"),
         started_at=_parse_iso8601(raw["started_at"]) if raw.get("started_at") else None,
-        finalized_at=_parse_iso8601(raw["finalized_at"]) if raw.get("finalized_at") else None,
+        finalized_at=_parse_iso8601(raw["finalized_at"])
+        if raw.get("finalized_at")
+        else None,
         created_at=_parse_iso8601(raw["created_at"]),
     )
 

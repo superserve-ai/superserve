@@ -132,6 +132,7 @@ class Sandbox:
         url = f"{config.base_url}/sandboxes"
         if metadata:
             from urllib.parse import urlencode
+
             params = {f"metadata.{k}": v for k, v in metadata.items()}
             url += f"?{urlencode(params)}"
 
@@ -170,8 +171,7 @@ class Sandbox:
     def _require_live(self) -> None:
         if self._closed:
             raise SandboxError(
-                f"Sandbox {self.id!r} has been deleted; create or connect to "
-                "a new one."
+                f"Sandbox {self.id!r} has been deleted; create or connect to a new one."
             )
 
     def get_info(self) -> SandboxInfo:
@@ -265,6 +265,5 @@ class Sandbox:
 
     def __repr__(self) -> str:
         return (
-            f"Sandbox(id={self.id!r}, name={self.name!r}, "
-            f"status={self.status.value!r})"
+            f"Sandbox(id={self.id!r}, name={self.name!r}, status={self.status.value!r})"
         )

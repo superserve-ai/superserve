@@ -15,7 +15,12 @@
  */
 
 import { type ResolvedConfig, resolveConfig } from "./config.js"
-import { BuildError, ConflictError, NotFoundError, SandboxError } from "./errors.js"
+import {
+  BuildError,
+  ConflictError,
+  NotFoundError,
+  SandboxError,
+} from "./errors.js"
 import { request, requestVoid, streamSSE } from "./http.js"
 import type {
   ApiBuildLogEvent,
@@ -81,7 +86,8 @@ export class Template {
     const config = resolveConfig(options)
 
     const buildSpec: Record<string, unknown> = { from: options.from }
-    if (options.steps !== undefined) buildSpec.steps = buildStepsToApi(options.steps)
+    if (options.steps !== undefined)
+      buildSpec.steps = buildStepsToApi(options.steps)
     if (options.startCmd !== undefined) buildSpec.start_cmd = options.startCmd
     if (options.readyCmd !== undefined) buildSpec.ready_cmd = options.readyCmd
 

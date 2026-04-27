@@ -16,8 +16,8 @@ export { Sandbox } from "./Sandbox.js"
 export { Template } from "./Template.js"
 export type {
   BuildLogEvent,
-  BuildLogsOptions,
   BuildLogStream,
+  BuildLogsOptions,
   BuildStep,
   CommandOptions,
   CommandResult,
@@ -30,8 +30,8 @@ export type {
   SandboxStatus,
   SandboxUpdateOptions,
   TemplateBuildInfo,
-  TemplateBuildsListOptions,
   TemplateBuildStatus,
+  TemplateBuildsListOptions,
   TemplateCreateOptions,
   TemplateInfo,
   TemplateListOptions,

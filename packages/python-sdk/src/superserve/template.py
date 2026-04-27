@@ -12,6 +12,7 @@ template.wait_until_ready()
 sandbox = Sandbox.create(name="run-1", from_template=template)
 ```
 """
+
 from __future__ import annotations
 
 import builtins
@@ -290,6 +291,7 @@ class Template:
             bid = None
 
         if bid:
+
             def _on_raw(raw: dict[str, Any]) -> None:
                 nonlocal final_status
                 ev = to_build_log_event(raw)

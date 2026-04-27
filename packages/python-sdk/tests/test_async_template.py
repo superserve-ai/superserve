@@ -1,4 +1,5 @@
 """Tests for the AsyncTemplate class."""
+
 from __future__ import annotations
 
 import inspect

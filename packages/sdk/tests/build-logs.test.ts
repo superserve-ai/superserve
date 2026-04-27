@@ -32,8 +32,15 @@ const baseTemplate = {
 const commonOpts = { apiKey: "k", baseUrl: "https://api.superserve.ai" }
 
 async function makeTemplate() {
-  vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ ...baseTemplate, build_id: "b-1" })))
-  const t = await Template.create({ ...commonOpts, alias: "my-env", from: "python:3.11" })
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => jsonResponse({ ...baseTemplate, build_id: "b-1" })),
+  )
+  const t = await Template.create({
+    ...commonOpts,
+    alias: "my-env",
+    from: "python:3.11",
+  })
   vi.unstubAllGlobals()
   return t
 }
@@ -53,7 +60,9 @@ describe("Template.streamBuildLogs", () => {
     vi.stubGlobal("fetch", mock)
 
     const events: Array<{ stream: string; text: string }> = []
-    await t.streamBuildLogs({ onEvent: (ev) => events.push({ stream: ev.stream, text: ev.text }) })
+    await t.streamBuildLogs({
+      onEvent: (ev) => events.push({ stream: ev.stream, text: ev.text }),
+    })
 
     const [url, init] = mock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe("https://api.superserve.ai/templates/t-1/builds/b-1/logs")
@@ -77,7 +86,10 @@ describe("Template.streamBuildLogs", () => {
 
   it("falls back to listBuilds when latestBuildId is unset (e.g. after connect)", async () => {
     // Connect: no build_id in response → latestBuildId is undefined
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(baseTemplate)))
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse(baseTemplate)),
+    )
     const t = await Template.connect("my-env", commonOpts)
     vi.unstubAllGlobals()
 
@@ -95,23 +107,35 @@ describe("Template.streamBuildLogs", () => {
           },
         ]),
       )
-      .mockImplementationOnce(async () => new Response(sseStream([]), { status: 200 }))
+      .mockImplementationOnce(
+        async () => new Response(sseStream([]), { status: 200 }),
+      )
     vi.stubGlobal("fetch", fetchMock)
 
     await t.streamBuildLogs({ onEvent: () => {} })
     const [listUrl] = fetchMock.mock.calls[0] as [string]
     const [streamUrl] = fetchMock.mock.calls[1] as [string]
-    expect(listUrl).toBe("https://api.superserve.ai/templates/t-1/builds?limit=1")
-    expect(streamUrl).toBe("https://api.superserve.ai/templates/t-1/builds/b-recent/logs")
+    expect(listUrl).toBe(
+      "https://api.superserve.ai/templates/t-1/builds?limit=1",
+    )
+    expect(streamUrl).toBe(
+      "https://api.superserve.ai/templates/t-1/builds/b-recent/logs",
+    )
   })
 
   it("throws helpful error when template has no builds", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(baseTemplate)))
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse(baseTemplate)),
+    )
     const t = await Template.connect("my-env", commonOpts)
     vi.unstubAllGlobals()
 
     // listBuilds returns empty
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse([])))
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse([])),
+    )
 
     await expect(t.streamBuildLogs({ onEvent: () => {} })).rejects.toThrow(
       /has no builds — call rebuild/,
@@ -129,16 +153,17 @@ describe("Template.waitUntilReady", () => {
     // First fetch: SSE stream; second fetch: getInfo refresh
     const fetchMock = vi
       .fn()
-      .mockImplementationOnce(async () =>
-        new Response(
-          sseStream([
-            'data: {"timestamp":"2026-01-01T00:00:00Z","stream":"stdout","text":"built"}',
-            "",
-            'data: {"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"done","finished":true,"status":"ready"}',
-            "",
-          ]),
-          { status: 200 },
-        ),
+      .mockImplementationOnce(
+        async () =>
+          new Response(
+            sseStream([
+              'data: {"timestamp":"2026-01-01T00:00:00Z","stream":"stdout","text":"built"}',
+              "",
+              'data: {"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"done","finished":true,"status":"ready"}',
+              "",
+            ]),
+            { status: 200 },
+          ),
       )
       .mockImplementationOnce(async () => jsonResponse(readyTemplate))
     vi.stubGlobal("fetch", fetchMock)
@@ -154,18 +179,20 @@ describe("Template.waitUntilReady", () => {
     const failedTemplate = {
       ...baseTemplate,
       status: "failed",
-      error_message: "step_failed: step 1/1 failed after 3s: exited with code 100",
+      error_message:
+        "step_failed: step 1/1 failed after 3s: exited with code 100",
     }
     const fetchMock = vi
       .fn()
-      .mockImplementationOnce(async () =>
-        new Response(
-          sseStream([
-            'data: {"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"failed","finished":true,"status":"failed"}',
-            "",
-          ]),
-          { status: 200 },
-        ),
+      .mockImplementationOnce(
+        async () =>
+          new Response(
+            sseStream([
+              'data: {"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"failed","finished":true,"status":"failed"}',
+              "",
+            ]),
+            { status: 200 },
+          ),
       )
       .mockImplementationOnce(async () => jsonResponse(failedTemplate))
     vi.stubGlobal("fetch", fetchMock)
@@ -183,14 +210,15 @@ describe("Template.waitUntilReady", () => {
     const cancelledTemplate = { ...baseTemplate, status: "failed" }
     const fetchMock = vi
       .fn()
-      .mockImplementationOnce(async () =>
-        new Response(
-          sseStream([
-            'data: {"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"cancelled","finished":true,"status":"cancelled"}',
-            "",
-          ]),
-          { status: 200 },
-        ),
+      .mockImplementationOnce(
+        async () =>
+          new Response(
+            sseStream([
+              'data: {"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"cancelled","finished":true,"status":"cancelled"}',
+              "",
+            ]),
+            { status: 200 },
+          ),
       )
       .mockImplementationOnce(async () => jsonResponse(cancelledTemplate))
     vi.stubGlobal("fetch", fetchMock)

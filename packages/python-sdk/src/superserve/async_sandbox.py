@@ -132,12 +132,11 @@ class AsyncSandbox:
         url = f"{config.base_url}/sandboxes"
         if metadata:
             from urllib.parse import urlencode
+
             params = {f"metadata.{k}": v for k, v in metadata.items()}
             url += f"?{urlencode(params)}"
 
-        raw = await async_api_request(
-            "GET", url, headers={"X-API-Key": config.api_key}
-        )
+        raw = await async_api_request("GET", url, headers={"X-API-Key": config.api_key})
         return [to_sandbox_info(item) for item in raw]
 
     @classmethod
@@ -172,8 +171,7 @@ class AsyncSandbox:
     def _require_live(self) -> None:
         if self._closed:
             raise SandboxError(
-                f"Sandbox {self.id!r} has been deleted; create or connect to "
-                "a new one."
+                f"Sandbox {self.id!r} has been deleted; create or connect to a new one."
             )
 
     async def get_info(self) -> SandboxInfo:

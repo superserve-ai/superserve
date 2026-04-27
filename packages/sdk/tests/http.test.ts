@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   NotFoundError,
@@ -28,7 +28,9 @@ function emptyResponse(
   return new Response(null, { status, headers })
 }
 
-function installFetch(impl: (...args: unknown[]) => Promise<Response>): FetchMock {
+function installFetch(
+  impl: (...args: unknown[]) => Promise<Response>,
+): FetchMock {
   const mock = vi.fn(impl)
   vi.stubGlobal("fetch", mock)
   return mock
