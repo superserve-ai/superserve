@@ -90,7 +90,7 @@ export function SidebarUserMenu() {
       {open && (
         <div
           className={cn(
-            "absolute z-50 w-56 border border-dashed border-border bg-surface p-1",
+            "absolute z-50 w-56 border border-border bg-surface p-1",
             isCollapsed
               ? "bottom-0 left-full ml-1"
               : "bottom-full left-2.5 mb-1",
