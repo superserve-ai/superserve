@@ -440,7 +440,10 @@ export function CreateSandboxDialog({
       }}
     >
       {!hideTrigger && (
-        <DialogTrigger render={<Button />}>Create Sandbox</DialogTrigger>
+        <DialogTrigger render={<Button size="sm" />}>
+          <PlusIcon className="size-3.5" weight="light" />
+          Create sandbox
+        </DialogTrigger>
       )}
       <DialogPopup className="max-w-xl [&>.absolute]:hidden">
         <DialogHeader className="flex flex-row items-center justify-between gap-4 p-6 pb-4">
