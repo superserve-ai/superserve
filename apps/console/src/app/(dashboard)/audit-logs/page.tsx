@@ -33,6 +33,7 @@ const STATUS_VARIANT: Record<string, BadgeVariant> = {
 const CATEGORY_TABS = [
   { label: "All", value: "all" },
   { label: "Sandbox", value: "sandbox" },
+  { label: "Template", value: "template" },
   { label: "Exec", value: "exec" },
   { label: "Errors", value: "_errors" },
 ]
