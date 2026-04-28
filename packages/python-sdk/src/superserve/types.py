@@ -15,6 +15,7 @@ class SandboxStatus(str, Enum):
     ACTIVE = "active"
     PAUSED = "paused"
     RESUMING = "resuming"
+    FAILED = "failed"
 
 
 class NetworkConfig(BaseModel):

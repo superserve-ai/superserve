@@ -46,7 +46,7 @@ template = Template.create(
 
 </CodeGroup>
 
-`Template.create` returns once the template is registered and the first build is queued — **not** when the build is finished. Call `waitUntilReady()` (TS) / `wait_until_ready()` (Python) to block until the build reaches a terminal state.
+`Template.create` returns once the template is registered and the first build is queued, **not** when the build is finished. Call `waitUntilReady()` (TS) / `wait_until_ready()` (Python) to block until the build reaches a terminal state.
 
 ## Stream build logs
 
@@ -109,7 +109,7 @@ sandbox2 = Sandbox.create(name="run-2", from_template="my-python-env")
 
 </CodeGroup>
 
-The sandbox's vCPU, memory, and disk size are inherited from the template — they cannot be overridden at sandbox creation (the snapshot dictates VM shape).
+The sandbox's vCPU, memory, and disk size are inherited from the template; they cannot be overridden at sandbox creation (the snapshot dictates VM shape).
 
 ## Related
 

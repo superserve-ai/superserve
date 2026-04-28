@@ -3,7 +3,7 @@ title: "Templates"
 description: "Reusable base images with build steps that sandboxes boot from"
 ---
 
-A **template** is a snapshot of a Linux filesystem — base image, build steps, and optionally a long-running process — that sandboxes boot from. Templates let you pre-install dependencies once and launch identically configured sandboxes in seconds.
+A **template** is a snapshot of a Linux filesystem (base image, build steps, and optionally a long-running process) that sandboxes boot from. Templates let you pre-install dependencies once and launch identically configured sandboxes in seconds.
 
 Every sandbox is created from a template. If you don't specify one, Superserve defaults to `superserve/base`.
 
@@ -21,7 +21,7 @@ Curated by Superserve, available to every team. Identified by the `superserve/` 
 
 Team-owned templates let you bake in team-specific dependencies (e.g. `my-python-env` with scientific libs pre-installed). They're created via `Template.create()` and referenced by alias.
 
-Team template aliases **cannot** start with `superserve/` — that prefix is reserved.
+Team template aliases **cannot** start with `superserve/`; that prefix is reserved.
 
 ## Aliases vs UUIDs
 

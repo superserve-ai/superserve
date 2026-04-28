@@ -3,9 +3,9 @@ title: "BuildSpec reference"
 description: "How to describe a template's base image, build steps, and runtime defaults"
 ---
 
-A `BuildSpec` is the canonical declaration of how to build a template. The SDK flattens it onto `TemplateCreateOptions` for convenience — `from` / `steps` / `startCmd` / `readyCmd` are top-level options.
+A `BuildSpec` is the canonical declaration of how to build a template. The SDK flattens it onto `TemplateCreateOptions` for convenience: `from` / `steps` / `startCmd` / `readyCmd` are top-level options.
 
-## `from` — base image
+## `from`: base image
 
 An OCI image reference. Resolved to a digest at build time for reproducibility.
 
@@ -18,11 +18,11 @@ from: "ghcr.io/myorg/foo:v1"  // any OCI registry
 - Must be a **linux/amd64** image
 - **Alpine and distroless bases are rejected** at validation time (musl/busybox incompat with build tooling)
 
-## `steps` — ordered build steps
+## `steps`: ordered build steps
 
 A list of tagged objects executed in order inside the build VM. Exactly one of `run` / `env` / `workdir` / `user` must be set per step.
 
-### `run` — shell command
+### `run`: shell command
 
 ```typescript
 { run: "pip install -r requirements.txt" }
@@ -30,7 +30,7 @@ A list of tagged objects executed in order inside the build VM. Exactly one of `
 
 Wrapped in `/bin/sh -c` inside the build VM.
 
-### `env` — environment variable
+### `env`: environment variable
 
 ```typescript
 { env: { key: "DEBUG", value: "1" } }
@@ -38,7 +38,7 @@ Wrapped in `/bin/sh -c` inside the build VM.
 
 Sets an env var for subsequent build steps AND as a runtime default. Caller-supplied `envVars` on sandbox create override on conflict.
 
-### `workdir` — working directory
+### `workdir`: working directory
 
 ```typescript
 { workdir: "/srv/app" }
@@ -46,7 +46,7 @@ Sets an env var for subsequent build steps AND as a runtime default. Caller-supp
 
 Working directory for subsequent build steps and the runtime default cwd. Auto-created and chowned to the current build user. Per-exec `workingDir` overrides at runtime.
 
-### `user` — switch user
+### `user`: switch user
 
 ```typescript
 { user: { name: "appuser", sudo: true } }
@@ -54,7 +54,7 @@ Working directory for subsequent build steps and the runtime default cwd. Auto-c
 
 Switches the user for subsequent build steps and sets the runtime default exec user. User is created if not present. `sudo: true` grants passwordless sudo.
 
-## `startCmd` — process to start after build
+## `startCmd`: process to start after build
 
 ```typescript
 startCmd: "python server.py"
@@ -62,7 +62,7 @@ startCmd: "python server.py"
 
 The snapshot captures the running process, so sandboxes restored from this template come up with it already live.
 
-## `readyCmd` — readiness probe
+## `readyCmd`: readiness probe
 
 ```typescript
 readyCmd: "curl -f http://localhost:8080/health"
@@ -72,7 +72,7 @@ Polled every 2s after `startCmd` until it exits `0` or 10 minutes elapse. Use th
 
 ## Resource limits
 
-Templates specify the VM shape — sandboxes inherit these and cannot override them per-sandbox.
+Templates specify the VM shape; sandboxes inherit these and cannot override them per-sandbox.
 
 | Field | Min | Max | Default |
 |---|---|---|---|

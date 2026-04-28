@@ -118,9 +118,15 @@ class TestSandboxStatus:
         assert SandboxStatus.ACTIVE.value == "active"
         assert SandboxStatus.PAUSED.value == "paused"
         assert SandboxStatus.RESUMING.value == "resuming"
+        assert SandboxStatus.FAILED.value == "failed"
 
     def test_status_enum_values(self) -> None:
-        assert {s.value for s in SandboxStatus} == {"active", "paused", "resuming"}
+        assert {s.value for s in SandboxStatus} == {
+            "active",
+            "paused",
+            "resuming",
+            "failed",
+        }
 
 
 class TestToTemplateInfo:

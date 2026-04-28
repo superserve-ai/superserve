@@ -104,9 +104,9 @@ The SDK automatically retries transient failures on `GET` and `DELETE` requests 
 Raised by `Template.waitUntilReady()` / `wait_until_ready()` when the awaited build lands on status `failed`.
 
 **Fields:**
-- `code` — stable error prefix (`image_pull_failed`, `step_failed`, `boot_failed`, `snapshot_failed`, `start_cmd_failed`, `ready_cmd_failed`, `build_failed`)
-- `buildId` / `build_id` — the build that failed
-- `templateId` / `template_id` — the template id
-- `message` — the original `error_message` from the API
+- `code` - stable error prefix (`image_pull_failed`, `step_failed`, `boot_failed`, `snapshot_failed`, `start_cmd_failed`, `ready_cmd_failed`, `build_failed`)
+- `buildId` / `build_id` - the build that failed
+- `templateId` / `template_id` - the template id
+- `message` - the original `error_message` from the API
 
 See [BuildSpec reference: build error codes](/templates/build-spec#build-error-codes) for a full list of codes and their meanings.

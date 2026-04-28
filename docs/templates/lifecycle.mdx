@@ -5,7 +5,7 @@ description: "Manage a template over time: trigger new builds, cancel in-flight 
 
 ## Rebuild
 
-Queue a new build for an existing template — e.g. after a failed build, or to pick up an updated base image.
+Queue a new build for an existing template, e.g. after a failed build, or to pick up an updated base image.
 
 <CodeGroup>
 
@@ -82,7 +82,7 @@ Template.delete_by_id("my-python-env")
 
 </CodeGroup>
 
-Both calls are idempotent on `404`. If any non-destroyed sandbox still references the template, the call raises `ConflictError` — destroy those sandboxes first.
+Both calls are idempotent on `404`. If any non-destroyed sandbox still references the template, the call raises `ConflictError`; destroy those sandboxes first.
 
 ## Related
 
