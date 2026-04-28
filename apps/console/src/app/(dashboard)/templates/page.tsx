@@ -51,7 +51,7 @@ export default function TemplatesPage() {
   const newButton = (
     <Button size="sm" onClick={() => setCreateOpen(true)}>
       <PlusIcon className="size-3.5" weight="light" />
-      New template
+      Create template
     </Button>
   )
 
