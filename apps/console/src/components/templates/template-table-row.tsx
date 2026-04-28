@@ -1,12 +1,11 @@
 "use client"
 
 import { RocketLaunchIcon } from "@phosphor-icons/react"
-import { Button, TableCell } from "@superserve/ui"
+import { Badge, Button, TableCell } from "@superserve/ui"
 import { useRouter } from "next/navigation"
 import { AnimatedTableRow } from "@/components/animated-table-row"
 import type { TemplateResponse } from "@/lib/api/types"
 import { formatTime } from "@/lib/format"
-import { formatBytes } from "@/lib/sandbox-utils"
 import { isSystemTemplate } from "@/lib/templates/is-system-template"
 import { TemplateResources } from "./template-resources"
 import { TemplateRowActions } from "./template-row-actions"
@@ -27,15 +26,29 @@ export function TemplateTableRow({ template }: { template: TemplateResponse }) {
     router.push(`/templates/${template.id}`)
   }
 
-  const built = template.built_at
+  const created = formatTime(new Date(template.created_at))
+  const updated = template.built_at
     ? formatTime(new Date(template.built_at))
     : null
   const canLaunch = template.status === "ready"
 
   return (
     <AnimatedTableRow onClick={handleRowClick} className="cursor-pointer">
-      <TableCell className="font-mono text-foreground/80">
-        {template.alias}
+      <TableCell>
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-foreground/80">
+              {template.alias}
+            </span>
+            {system && <Badge variant="muted">System</Badge>}
+          </div>
+          <span
+            className="font-mono text-[10px] text-muted tabular-nums"
+            title={template.id}
+          >
+            {template.id.slice(0, 8)}
+          </span>
+        </div>
       </TableCell>
       <TableCell>
         <TemplateStatusBadge status={template.status} />
@@ -47,14 +60,17 @@ export function TemplateTableRow({ template }: { template: TemplateResponse }) {
           diskMib={template.disk_mib}
         />
       </TableCell>
-      <TableCell className="font-mono text-xs text-muted tabular-nums">
-        {template.size_bytes != null ? formatBytes(template.size_bytes) : "—"}
+      <TableCell
+        className="text-xs text-muted tabular-nums"
+        title={created.absolute}
+      >
+        {created.relative}
       </TableCell>
       <TableCell
         className="text-xs text-muted tabular-nums"
-        title={built?.absolute}
+        title={updated?.absolute}
       >
-        {built ? built.relative : "Never"}
+        {updated ? updated.relative : "—"}
       </TableCell>
       <TableCell onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-end gap-1">

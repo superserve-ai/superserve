@@ -134,11 +134,11 @@ export default function TemplatesPage() {
               <Table>
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
-                    <TableHead className="w-[28%]">Alias</TableHead>
-                    <TableHead className="w-[14%]">Status</TableHead>
+                    <TableHead className="w-[30%]">Name</TableHead>
+                    <TableHead className="w-[12%]">Status</TableHead>
                     <TableHead className="w-[26%]">Resources</TableHead>
-                    <TableHead className="w-[12%]">Size</TableHead>
-                    <TableHead className="w-[14%]">Built</TableHead>
+                    <TableHead className="w-[14%]">Created</TableHead>
+                    <TableHead className="w-[14%]">Updated</TableHead>
                     <TableHead className="w-12" />
                   </TableRow>
                 </TableHeader>

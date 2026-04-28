@@ -1,4 +1,4 @@
-export type SandboxStatus = "active" | "paused" | "resuming"
+export type SandboxStatus = "active" | "paused" | "resuming" | "failed"
 
 export interface NetworkConfig {
   allow_out?: string[]
