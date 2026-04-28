@@ -290,6 +290,12 @@ class Template:
         except SandboxError:
             bid = None
 
+        # Only the three terminal statuses end the wait. The server sends
+        # `finished:true, status:"pending"` to signal "build not yet
+        # dispatched, reconnect or poll later"; the SDK must NOT treat
+        # that as a final outcome.
+        terminal_build_statuses = {"ready", "failed", "cancelled"}
+
         if bid:
 
             def _on_raw(raw: dict[str, Any]) -> None:
@@ -297,7 +303,11 @@ class Template:
                 ev = to_build_log_event(raw)
                 if on_log:
                     on_log(ev)
-                if ev.finished and ev.status:
+                if (
+                    ev.finished
+                    and ev.status
+                    and ev.status in terminal_build_statuses
+                ):
                     final_status = ev.status
 
             try:
@@ -312,6 +322,8 @@ class Template:
                 # Fall through to polling.
                 pass
 
+        # Poll until terminal status. Handles SSE errors, SSE closing on
+        # a non-terminal status (e.g. `pending`), and the no-bid case.
         while final_status is None:
             info = self.get_info()
             if info.status in (TemplateStatus.READY, TemplateStatus.FAILED):
@@ -325,9 +337,19 @@ class Template:
         if final_status == "cancelled":
             raise ConflictError("template build was cancelled", code="cancelled")
 
-        msg = info.error_message or "build_failed"
-        match = re.match(r"^(\w+):", msg)
-        code = match.group(1) if match else "build_failed"
+        # Split a backend `error_message` of the form `"<code>: <detail>"`
+        # into a stable code and a clean human-readable message.
+        if info.error_message:
+            match = re.match(r"^(\w+):\s*(.*)$", info.error_message, re.DOTALL)
+            if match and match.group(2).strip():
+                code = match.group(1)
+                msg = match.group(2).strip()
+            else:
+                code = "build_failed"
+                msg = info.error_message
+        else:
+            code = "build_failed"
+            msg = "Template build failed"
         raise BuildError(msg, code=code, build_id=bid or "", template_id=self.id)
 
     def __repr__(self) -> str:

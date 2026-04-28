@@ -279,11 +279,36 @@ export class Template {
       // No builds — wait by polling status; logs unavailable.
     }
 
-    const parseBuildErrorCode = (message?: string): string => {
-      if (!message) return "build_failed"
-      const match = /^(\w+):/.exec(message)
-      return match ? match[1] : "build_failed"
+    /**
+     * Split a backend `error_message` into a stable code and a clean
+     * human-readable message. Backend convention is `"<code>: <detail>"`
+     * (e.g. `"image_too_large: image is too large for disk_mib"`). When
+     * the message is missing or unprefixed, fall back to `build_failed`
+     * + a generic message.
+     */
+    const parseBuildError = (
+      errorMessage?: string,
+    ): { code: string; message: string } => {
+      if (!errorMessage) {
+        return { code: "build_failed", message: "Template build failed" }
+      }
+      const match = /^(\w+):\s*(.*)$/s.exec(errorMessage)
+      if (match && match[2].trim().length > 0) {
+        return { code: match[1], message: match[2].trim() }
+      }
+      return { code: "build_failed", message: errorMessage }
     }
+
+    // Only the three terminal statuses end the wait. The server sends
+    // `finished:true, status:"pending"` to signal "build not yet
+    // dispatched — reconnect or poll later"; the SDK must NOT treat that
+    // as a final outcome (otherwise it'll throw BuildError before the
+    // build has actually run).
+    const TERMINAL_BUILD_STATUSES = new Set([
+      "ready",
+      "failed",
+      "cancelled",
+    ] as const)
 
     let finalStatus: "ready" | "failed" | "cancelled" | undefined
     let polledInfo: TemplateInfo | undefined
@@ -298,7 +323,17 @@ export class Template {
           onEvent: (raw) => {
             const ev: BuildLogEvent = toBuildLogEvent(raw)
             if (options.onLog) options.onLog(ev)
-            if (ev.finished && ev.status) finalStatus = ev.status
+            if (
+              ev.finished &&
+              ev.status &&
+              TERMINAL_BUILD_STATUSES.has(
+                ev.status as (typeof TERMINAL_BUILD_STATUSES extends Set<infer T>
+                  ? T
+                  : never),
+              )
+            ) {
+              finalStatus = ev.status
+            }
           },
         })
       } catch {
@@ -306,7 +341,8 @@ export class Template {
       }
     }
 
-    // Poll until terminal status (handles both SSE-error and no-buildId cases).
+    // Poll until terminal status. Handles SSE errors, SSE closing on a
+    // non-terminal status (e.g. `pending`), and the no-buildId case.
     while (finalStatus === undefined) {
       if (options.signal?.aborted) throw new SandboxError("aborted")
       const info = await this.getInfo()
@@ -325,8 +361,9 @@ export class Template {
     if (finalStatus === "cancelled") {
       throw new ConflictError("template build was cancelled", "cancelled")
     }
-    throw new BuildError(info.errorMessage ?? "build_failed", {
-      code: parseBuildErrorCode(info.errorMessage),
+    const { code, message } = parseBuildError(info.errorMessage)
+    throw new BuildError(message, {
+      code,
       buildId: buildId ?? "",
       templateId: this.id,
     })

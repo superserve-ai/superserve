@@ -242,4 +242,89 @@ describe("Template.waitUntilReady", () => {
     expect(info.status).toBe("ready")
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
+
+  it("ignores SSE 'pending' status and polls for the real terminal state", async () => {
+    // Repro for the regression where the server sends
+    //   {finished:true, status:"pending"}
+    // (meaning "build hasn't been dispatched yet — reconnect or poll")
+    // and the SDK previously treated it as a real terminal outcome,
+    // throwing BuildError before the build had even started.
+    const t = await makeTemplate()
+    const readyTemplate = { ...baseTemplate, status: "ready" }
+
+    const fetchMock = vi
+      .fn()
+      // SSE replies with one "pending" event and closes — must NOT terminate.
+      .mockImplementationOnce(
+        async () =>
+          new Response(
+            sseStream([
+              'data: {"timestamp":"2026-01-01T00:00:00Z","stream":"system","text":"pending","finished":true,"status":"pending"}',
+              "",
+            ]),
+            { status: 200 },
+          ),
+      )
+      // Then polling kicks in and observes the real `ready` status.
+      .mockImplementationOnce(async () => jsonResponse(readyTemplate))
+    vi.stubGlobal("fetch", fetchMock)
+
+    const info = await t.waitUntilReady({ pollIntervalMs: 1 })
+    expect(info.status).toBe("ready")
+  })
+
+  it("BuildError separates code from message when error_message is prefixed", async () => {
+    const t = await makeTemplate()
+    const failedTemplate = {
+      ...baseTemplate,
+      status: "failed",
+      error_message:
+        "image_too_large: image is too large for the requested disk_mib",
+    }
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(
+        async () =>
+          new Response(
+            sseStream([
+              'data: {"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"failed","finished":true,"status":"failed"}',
+              "",
+            ]),
+            { status: 200 },
+          ),
+      )
+      .mockImplementationOnce(async () => jsonResponse(failedTemplate))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(t.waitUntilReady()).rejects.toMatchObject({
+      name: "BuildError",
+      code: "image_too_large",
+      message: "image is too large for the requested disk_mib",
+    })
+  })
+
+  it("BuildError uses generic message when error_message is missing", async () => {
+    const t = await makeTemplate()
+    const failedTemplate = { ...baseTemplate, status: "failed" }
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(
+        async () =>
+          new Response(
+            sseStream([
+              'data: {"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"failed","finished":true,"status":"failed"}',
+              "",
+            ]),
+            { status: 200 },
+          ),
+      )
+      .mockImplementationOnce(async () => jsonResponse(failedTemplate))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(t.waitUntilReady()).rejects.toMatchObject({
+      name: "BuildError",
+      code: "build_failed",
+      message: "Template build failed",
+    })
+  })
 })
