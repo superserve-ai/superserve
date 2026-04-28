@@ -2,7 +2,7 @@
 
 import { PlusIcon, StackIcon } from "@phosphor-icons/react"
 import { Button, Table, TableHead, TableHeader, TableRow } from "@superserve/ui"
-import { useMemo, useState } from "react"
+import { Suspense, useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
@@ -11,13 +11,22 @@ import { TableSkeleton } from "@/components/table-skeleton"
 import { TableToolbar } from "@/components/table-toolbar"
 import { CreateTemplateDialog } from "@/components/templates/create-template-dialog"
 import { TemplateTableRow } from "@/components/templates/template-table-row"
+import { useCreateParam } from "@/hooks/use-create-param"
 import { useTemplates } from "@/hooks/use-templates"
 import { isSystemTemplate } from "@/lib/templates/is-system-template"
 
 type Tab = "all" | "team" | "system"
 
 export default function TemplatesPage() {
-  const [createOpen, setCreateOpen] = useState(false)
+  return (
+    <Suspense fallback={<TableSkeleton columns={6} tabs={3} />}>
+      <TemplatesPageContent />
+    </Suspense>
+  )
+}
+
+function TemplatesPageContent() {
+  const [createOpen, setCreateOpen] = useCreateParam()
   const [tab, setTab] = useState<Tab>("all")
   const [search, setSearch] = useState("")
 
