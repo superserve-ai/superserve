@@ -18,10 +18,13 @@ const variantClasses: Record<ButtonVariant, string> = {
   link: "text-primary underline-offset-4 hover:underline normal-case font-sans",
 }
 
+// When a button has a leading or trailing svg child, tighten the padding on
+// that side so the icon sits closer to the edge. Standard pattern across
+// most design systems (Heroicons docs, GitHub Primer, Vercel Geist, etc.).
 const sizeClasses: Record<ButtonSize, string> = {
-  default: "h-9 px-6",
-  sm: "h-8 px-4 gap-1.5",
-  lg: "h-10 px-8",
+  default: "h-9 px-6 has-[>svg:first-child]:pl-4 has-[>svg:last-child]:pr-4",
+  sm: "h-8 px-4 gap-1.5 has-[>svg:first-child]:pl-3 has-[>svg:last-child]:pr-3",
+  lg: "h-10 px-8 has-[>svg:first-child]:pl-5 has-[>svg:last-child]:pr-5",
   icon: "size-9",
   "icon-sm": "size-8",
   "icon-lg": "size-10",
