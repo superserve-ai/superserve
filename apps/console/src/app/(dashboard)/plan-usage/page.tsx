@@ -1,6 +1,7 @@
 import { Lightning } from "@phosphor-icons/react/dist/ssr"
 import type { Metadata } from "next"
 import { EmptyState } from "@/components/empty-state"
+import { PageHeader } from "@/components/page-header"
 
 export const metadata: Metadata = {
   title: "Plan & Usage",
@@ -9,11 +10,7 @@ export const metadata: Metadata = {
 export default function PlanUsagePage() {
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center h-14 border-b border-border px-6">
-        <h1 className="text-lg font-medium tracking-tight text-foreground">
-          Plan & Usage
-        </h1>
-      </div>
+      <PageHeader title="Plan & Usage" />
 
       <EmptyState
         icon={Lightning}
