@@ -158,7 +158,7 @@ print(info.status.value)  # "pending" | "building" | "ready" | "failed"
 
 ### `waitUntilReady` / `wait_until_ready`
 
-Block until the current build reaches a terminal status. Subscribes to the build's SSE log stream if `onLog` / `on_log` is provided; falls back to polling on network errors. Returns a refreshed [`TemplateInfo`](#templateinfo) with `status = "ready"`.
+Block until the current build reaches a terminal status (`ready`, `failed`, or `cancelled`). Subscribes to the build's SSE log stream if `onLog` / `on_log` is provided; falls back to polling when the stream errors or closes on a non-terminal state (e.g. the server's "build pending - reconnect later" signal). Returns a refreshed [`TemplateInfo`](#templateinfo) with `status = "ready"`.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -190,7 +190,7 @@ info = template.wait_until_ready(on_log=print_log)
 
 **Throws:**
 
-- `BuildError` if the build transitions to `failed` - `.code` is parsed from the `errorMessage` prefix (see [BuildSpec: Build error codes](/templates/build-spec#build-error-codes))
+- `BuildError` if the build transitions to `failed`. The backend's `error_message` follows a `"<code>: <detail>"` convention; the SDK splits it so `BuildError.code` is the stable prefix and `BuildError.message` is the human-readable detail. See [BuildSpec: Build error codes](/templates/build-spec#build-error-codes).
 - `ConflictError` if the build is `cancelled`
 
 ### `streamBuildLogs` / `stream_build_logs`
@@ -520,6 +520,7 @@ Thrown by `waitUntilReady` / `wait_until_ready` when the build transitions to `f
 ```typescript TypeScript
 class BuildError extends SandboxError {
   readonly code: string        // e.g. "image_pull_failed" | "step_failed" | ...
+  readonly message: string     // human-readable detail (prefix stripped)
   readonly buildId: string
   readonly templateId: string
 }
@@ -528,10 +529,13 @@ class BuildError extends SandboxError {
 ```python Python
 class BuildError(SandboxError):
     code: str             # e.g. "image_pull_failed" | "step_failed" | ...
+    # `str(err)` returns the human-readable detail (prefix stripped)
     build_id: str
     template_id: str
 ```
 </CodeGroup>
+
+The backend's `error_message` follows a `"<code>: <detail>"` convention (e.g. `"image_too_large: image is too large for the requested disk_mib"`). The SDK splits it so `code` holds the prefix and the error message holds the detail. When the backend doesn't include a prefix, `code` falls back to `"build_failed"` and the message falls back to `"Template build failed"`.
 
 See the [full list of build error codes](/templates/build-spec#build-error-codes) and the general [Errors](/errors) reference.
 
