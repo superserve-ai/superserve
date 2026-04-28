@@ -77,12 +77,19 @@ On success, `waitUntilReady` returns the refreshed `TemplateInfo` with `status =
 
 ## Create a sandbox from the template
 
-Once ready, create sandboxes with either the template alias or the instance.
+Once ready, create sandboxes by passing the `Template` instance, the alias, or the UUID.
 
 <CodeGroup>
 
-```typescript TypeScript
-import { Sandbox } from "@superserve/sdk"
+```typescript TypeScript {13,19,25}
+import { Sandbox, Template } from "@superserve/sdk"
+
+// Create the template first (see the section above)
+const template = await Template.create({
+  alias: "my-python-env",
+  from: "python:3.11",
+})
+await template.waitUntilReady()
 
 // Option 1: pass the Template instance
 const sandbox = await Sandbox.create({
@@ -95,16 +102,41 @@ const sandbox2 = await Sandbox.create({
   name: "run-2",
   fromTemplate: "my-python-env",
 })
+
+// Option 3: pass the ID
+const sandbox3 = await Sandbox.create({
+  name: "run-3",
+  fromTemplate: "8b050452",
+})
 ```
 
-```python Python
-from superserve import Sandbox
+```python Python {13,19,25}
+from superserve import Sandbox, Template
+
+# Create the template first (see the section above)
+template = Template.create(
+    alias="my-python-env",
+    from_="python:3.11",
+)
+template.wait_until_ready()
 
 # Option 1: pass the Template instance
-sandbox = Sandbox.create(name="run-1", from_template=template)
+sandbox = Sandbox.create(
+    name="run-1",
+    from_template=template,
+)
 
 # Option 2: pass the alias
-sandbox2 = Sandbox.create(name="run-2", from_template="my-python-env")
+sandbox2 = Sandbox.create(
+    name="run-2",
+    from_template="my-python-env",
+)
+
+# Option 3: pass the ID
+sandbox3 = Sandbox.create(
+    name="run-3",
+    from_template="8b050452",
+)
 ```
 
 </CodeGroup>

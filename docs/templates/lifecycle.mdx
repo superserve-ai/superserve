@@ -21,7 +21,7 @@ print(f"Build queued: {build.id}")
 
 </CodeGroup>
 
-Rebuild is **idempotent on spec hash**: if an in-flight build already exists for this template with the same `build_spec_hash`, the API returns the existing build's id with `200` instead of creating a duplicate.
+Rebuild is **idempotent**: if an in-flight build already exists with the same configuration, you get back the existing build instead of a duplicate.
 
 ## List and inspect builds
 

@@ -228,7 +228,7 @@ Throws `SandboxError` if no `buildId` is supplied and the template has no `lates
 
 ### `rebuild`
 
-Queue a new build for this template. Returns the new [`TemplateBuildInfo`](#templatebuildinfo). Idempotent on `build_spec_hash` - if an in-flight build already matches, the existing build is returned.
+Queue a new build for this template. Returns the new [`TemplateBuildInfo`](#templatebuildinfo). Idempotent: if an in-flight build already matches the same configuration, the existing build is returned.
 
 <CodeGroup>
 ```typescript TypeScript
