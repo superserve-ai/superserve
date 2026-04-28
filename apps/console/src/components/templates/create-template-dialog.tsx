@@ -33,8 +33,8 @@ const VCPU_OPTIONS = [1, 2, 4] as const
 const ALIAS_RE = /^[a-z0-9][a-z0-9-]*$/
 
 function validateAlias(alias: string): string | null {
-  if (!alias) return "Alias is required"
-  if (alias.length > 128) return "Alias must be 128 characters or fewer"
+  if (!alias) return "Name is required"
+  if (alias.length > 128) return "Name must be 128 characters or fewer"
   if (!ALIAS_RE.test(alias))
     return "Use lowercase letters, numbers, and hyphens; start with a letter or number"
   return null
@@ -136,7 +136,7 @@ export function CreateTemplateDialog({
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 409) {
-          setErrors({ alias: "An alias with this name already exists." })
+          setErrors({ alias: "A template with this name already exists." })
           return
         }
         if (err.status === 429) {
@@ -169,7 +169,7 @@ export function CreateTemplateDialog({
         </DialogHeader>
 
         <div className="space-y-5 px-6 pb-4">
-          <Field label="Alias" required>
+          <Field label="Name" required>
             <Input
               autoFocus
               value={alias}
