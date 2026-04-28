@@ -470,7 +470,7 @@ class BuildLogEvent(BaseModel):
 ```
 </CodeGroup>
 
-`stream == "system"` events are supervisor metadata (build-step boundaries, snapshot progress). Filter them out when rendering to a user-facing console. `finished: true` marks the last event in a stream and carries the terminal `status`.
+`stream == "system"` events are status messages from the build runner (build-step boundaries, snapshot progress). Filter them out when rendering to a user-facing console. `finished: true` marks the last event in a stream and carries the terminal `status`.
 
 ### `BuildStep`
 

@@ -57,7 +57,7 @@ template = Template.create(
 ```typescript TypeScript
 await template.waitUntilReady({
   onLog: (event) => {
-    if (event.stream === "system") return  // skip supervisor metadata
+    if (event.stream === "system") return  // skip system messages
     process.stdout.write(event.text)
   },
 })
