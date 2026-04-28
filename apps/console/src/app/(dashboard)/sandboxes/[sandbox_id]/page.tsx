@@ -1,19 +1,6 @@
 "use client"
 
-import {
-  ArrowLeftIcon,
-  PlayIcon,
-  StopIcon,
-  TerminalIcon,
-  TrashIcon,
-} from "@phosphor-icons/react"
-import {
-  Badge,
-  Button,
-  Tooltip,
-  TooltipPopup,
-  TooltipTrigger,
-} from "@superserve/ui"
+import { ArrowLeftIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
@@ -26,9 +13,9 @@ import { FilesSection } from "@/components/sandboxes/files-section"
 import {
   MetadataSection,
   NetworkSection,
-  SandboxInfoGrid,
 } from "@/components/sandboxes/sandbox-info-grid"
-// import { SnapshotsSection } from "@/components/sandboxes/snapshots-section"
+import { SandboxResourceBar } from "@/components/sandboxes/sandbox-resource-bar"
+import { SandboxStatusHero } from "@/components/sandboxes/sandbox-status-hero"
 import {
   useDeleteSandbox,
   usePauseSandbox,
@@ -37,71 +24,90 @@ import {
 } from "@/hooks/use-sandboxes"
 import { listActivityBySandboxAction } from "@/lib/api/activity-actions"
 import { auditLogKeys } from "@/lib/api/query-keys"
-// import { snapshotKeys } from "@/lib/api/query-keys"
-// import { listSnapshotsBySandboxAction } from "@/lib/api/snapshots-actions"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
-import { STATUS_BADGE_VARIANT, STATUS_LABEL } from "@/lib/sandbox-utils"
 
 function DetailSkeleton() {
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex h-14 items-center gap-3 border-b border-border px-6">
-        <div className="h-4 w-24 animate-pulse bg-muted/20" />
-        <span className="text-muted">/</span>
-        <div className="h-4 w-32 animate-pulse bg-muted/20" />
+      {/* Breadcrumb */}
+      <div className="flex h-10 items-center border-b border-border px-4">
+        <div className="h-3 w-24 animate-pulse bg-muted/20" />
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {/* Info grid */}
-        <div className="grid grid-cols-4 border-b border-border">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div
-              key={i}
-              className={`px-4 py-4 ${i < 3 ? "border-r border-border" : ""}`}
-            >
-              <div className="mb-2 h-3 w-16 animate-pulse bg-muted/20" />
-              <div className="h-4 w-28 animate-pulse bg-muted/20" />
+        {/* Status hero */}
+        <div className="border-b border-border bg-foreground/[0.02] px-4 py-6">
+          <div className="flex items-start justify-between gap-6">
+            <div className="flex items-start gap-3">
+              <div className="mt-2 size-2 shrink-0 animate-pulse bg-muted/40" />
+              <div>
+                <div className="h-6 w-48 animate-pulse bg-muted/30" />
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="h-3 w-12 animate-pulse bg-muted/20" />
+                  <div className="h-3 w-16 animate-pulse bg-muted/20" />
+                  <div className="h-3 w-24 animate-pulse bg-muted/20" />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-24 animate-pulse bg-muted/20" />
+              <div className="h-8 w-20 animate-pulse bg-muted/20" />
+              <div className="size-8 animate-pulse bg-muted/20" />
+            </div>
+          </div>
+        </div>
+
+        {/* Resource bar */}
+        <div className="flex h-10 items-center gap-6 border-b border-border px-4">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <div className="h-2.5 w-12 animate-pulse bg-muted/20" />
+              <div className="h-3 w-10 animate-pulse bg-muted/20" />
             </div>
           ))}
         </div>
 
         {/* Network | Metadata */}
         <div className="grid grid-cols-2 border-b border-border">
-          <div className="border-r border-border px-4 py-4">
-            <div className="mb-3 h-3.5 w-16 animate-pulse bg-muted/20" />
-            <div className="flex gap-2">
-              <div className="h-6 w-28 animate-pulse bg-muted/20" />
-              <div className="h-6 w-20 animate-pulse bg-muted/20" />
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div
+              key={i}
+              className={i === 0 ? "border-r border-border" : undefined}
+            >
+              <div className="flex h-10 items-center border-b border-border px-4">
+                <div className="h-2.5 w-16 animate-pulse bg-muted/20" />
+              </div>
+              <div className="flex flex-wrap gap-1.5 px-4 py-4">
+                <div className="h-6 w-28 animate-pulse bg-muted/20" />
+                <div className="h-6 w-20 animate-pulse bg-muted/20" />
+              </div>
             </div>
-          </div>
-          <div className="px-4 py-4">
-            <div className="mb-3 h-3.5 w-16 animate-pulse bg-muted/20" />
-            <div className="flex gap-2">
-              <div className="h-6 w-24 animate-pulse bg-muted/20" />
-              <div className="h-6 w-20 animate-pulse bg-muted/20" />
-            </div>
-          </div>
+          ))}
         </div>
 
         {/* Files */}
-        <div className="flex h-10 items-center border-b border-border px-4">
-          <div className="h-3.5 w-12 animate-pulse bg-muted/20" />
-        </div>
-        <div className="grid grid-cols-2 border-b border-border">
-          <div className="border-r border-border px-4 py-4">
-            <div className="mb-3 h-3.5 w-16 animate-pulse bg-muted/20" />
-            <div className="h-40 animate-pulse border border-dashed border-border" />
+        <div className="border-b border-border">
+          <div className="flex h-10 items-center border-b border-border px-4">
+            <div className="h-2.5 w-12 animate-pulse bg-muted/20" />
           </div>
-          <div className="px-4 py-4">
-            <div className="mb-3 h-3.5 w-20 animate-pulse bg-muted/20" />
-            <div className="h-9 animate-pulse bg-muted/20" />
+          <div className="grid grid-cols-2">
+            <div className="flex flex-col gap-3 border-r border-border px-4 py-4">
+              <div className="h-3 w-16 animate-pulse bg-muted/20" />
+              <div className="h-40 animate-pulse border border-dashed border-border" />
+              <div className="h-9 animate-pulse bg-muted/20" />
+              <div className="h-8 w-24 animate-pulse bg-muted/20" />
+            </div>
+            <div className="flex flex-col gap-3 px-4 py-4">
+              <div className="h-3 w-20 animate-pulse bg-muted/20" />
+              <div className="h-9 animate-pulse bg-muted/20" />
+              <div className="h-8 w-28 animate-pulse bg-muted/20" />
+            </div>
           </div>
         </div>
 
         {/* Activity */}
         <div className="flex h-10 items-center border-b border-border px-4">
-          <div className="h-3.5 w-16 animate-pulse bg-muted/20" />
+          <div className="h-2.5 w-16 animate-pulse bg-muted/20" />
         </div>
         {Array.from({ length: 3 }).map((_, i) => (
           <div
@@ -112,22 +118,6 @@ function DetailSkeleton() {
             <div className="h-3 w-16 animate-pulse bg-muted/20" />
             <div className="h-3 w-20 animate-pulse bg-muted/20" />
             <div className="h-3 w-12 animate-pulse bg-muted/20" />
-          </div>
-        ))}
-
-        {/* Snapshots */}
-        <div className="flex h-10 items-center border-b border-border px-4">
-          <div className="h-3.5 w-20 animate-pulse bg-muted/20" />
-        </div>
-        {Array.from({ length: 2 }).map((_, i) => (
-          <div
-            key={`snapshot-${i}`}
-            className="flex items-center gap-6 border-b border-border px-4 py-3"
-          >
-            <div className="h-3 w-32 animate-pulse bg-muted/20" />
-            <div className="h-3 w-16 animate-pulse bg-muted/20" />
-            <div className="h-3 w-16 animate-pulse bg-muted/20" />
-            <div className="h-3 w-20 animate-pulse bg-muted/20" />
           </div>
         ))}
       </div>
@@ -166,10 +156,10 @@ export default function SandboxDetailPage() {
   if (error || !sandbox) {
     return (
       <div className="flex h-full flex-col">
-        <div className="flex h-14 items-center gap-3 border-b border-border px-6">
+        <div className="flex h-10 items-center border-b border-border px-4">
           <Link
             href="/sandboxes/"
-            className="flex items-center gap-1.5 text-sm text-muted hover:text-foreground"
+            className="flex items-center gap-1.5 font-mono text-xs uppercase text-muted hover:text-foreground"
           >
             <ArrowLeftIcon className="size-3.5" weight="light" />
             Sandboxes
@@ -196,103 +186,35 @@ export default function SandboxDetailPage() {
     })
   }
 
+  const handleStart = () => {
+    posthog.capture(SANDBOX_EVENTS.RESUMED, { sandbox_id: sandbox.id })
+    resumeMutation.mutate(sandbox.id)
+  }
+
+  const handleStop = () => {
+    posthog.capture(SANDBOX_EVENTS.PAUSED, { sandbox_id: sandbox.id })
+    pauseMutation.mutate(sandbox.id)
+  }
+
+  const handleOpenTerminal = () => {
+    posthog.capture(SANDBOX_EVENTS.TERMINAL_OPENED, {
+      sandbox_id: sandbox.id,
+      source: "detail_hero",
+    })
+    router.push(`/sandboxes/${sandboxId}/terminal/`)
+  }
+
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex h-14 items-center justify-between border-b border-border px-6">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/sandboxes/"
-            className="flex items-center gap-1.5 text-sm text-muted hover:text-foreground"
-          >
-            <ArrowLeftIcon className="size-3.5" weight="light" />
-            Sandboxes
-          </Link>
-          <span className="text-muted">/</span>
-          <h1 className="font-mono text-sm font-medium text-foreground">
-            {sandbox.name}
-          </h1>
-          <Badge variant={STATUS_BADGE_VARIANT[sandbox.status]} dot>
-            {STATUS_LABEL[sandbox.status]}
-          </Badge>
-        </div>
-        <div className="flex items-center gap-2">
-          {sandbox.status === "active" ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                posthog.capture(SANDBOX_EVENTS.TERMINAL_OPENED, {
-                  sandbox_id: sandbox.id,
-                  source: "detail_header",
-                })
-                router.push(`/sandboxes/${sandboxId}/terminal/`)
-              }}
-            >
-              <TerminalIcon className="size-3.5" weight="light" />
-              Terminal
-            </Button>
-          ) : (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <span className="inline-flex">
-                    <Button variant="outline" size="sm" disabled>
-                      <TerminalIcon className="size-3.5" weight="light" />
-                      Terminal
-                    </Button>
-                  </span>
-                }
-              />
-              <TooltipPopup>
-                {sandbox.status === "paused"
-                  ? "Start the sandbox to open a terminal"
-                  : sandbox.status === "resuming"
-                    ? "Sandbox is resuming"
-                    : "Sandbox is not running"}
-              </TooltipPopup>
-            </Tooltip>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={sandbox.status === "resuming"}
-            onClick={() => {
-              if (sandbox.status === "active") {
-                posthog.capture(SANDBOX_EVENTS.PAUSED, {
-                  sandbox_id: sandbox.id,
-                })
-                pauseMutation.mutate(sandbox.id)
-              } else if (sandbox.status === "paused") {
-                posthog.capture(SANDBOX_EVENTS.RESUMED, {
-                  sandbox_id: sandbox.id,
-                })
-                resumeMutation.mutate(sandbox.id)
-              }
-            }}
-          >
-            {sandbox.status === "active" ? (
-              <>
-                <StopIcon className="size-3.5" weight="light" />
-                Stop
-              </>
-            ) : (
-              <>
-                <PlayIcon className="size-3.5" weight="light" />
-                Start
-              </>
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-destructive hover:text-destructive"
-            onClick={() => setDeleteOpen(true)}
-          >
-            <TrashIcon className="size-3.5" weight="light" />
-            Delete
-          </Button>
-        </div>
+      {/* Breadcrumb */}
+      <div className="flex h-10 shrink-0 items-center border-b border-border bg-background px-4">
+        <Link
+          href="/sandboxes/"
+          className="flex items-center gap-1.5 font-mono text-xs uppercase text-muted hover:text-foreground"
+        >
+          <ArrowLeftIcon className="size-3.5" weight="light" />
+          Sandboxes
+        </Link>
       </div>
 
       <DeleteSandboxDialog
@@ -304,16 +226,31 @@ export default function SandboxDetailPage() {
       />
 
       <div className="flex-1 overflow-y-auto">
-        <SandboxInfoGrid sandbox={sandbox} />
+        {/* Layer 1: status hero — most important, state-tinted */}
+        <SandboxStatusHero
+          sandbox={sandbox}
+          onStart={handleStart}
+          onStop={handleStop}
+          onOpenTerminal={handleOpenTerminal}
+          onDelete={() => setDeleteOpen(true)}
+        />
+
+        {/* Layer 2: compact resource summary */}
+        <SandboxResourceBar sandbox={sandbox} />
+
+        {/* Layer 3: configuration (read-mostly, edit on demand) */}
         <div className="grid grid-cols-2 border-b border-border">
           <div className="border-r border-border">
             <NetworkSection sandbox={sandbox} />
           </div>
           <MetadataSection sandbox={sandbox} />
         </div>
-        <FilesSection sandbox={sandbox} />
+
+        {/* Layer 4: files (state-aware) */}
+        <FilesSection sandbox={sandbox} onStart={handleStart} />
+
+        {/* Layer 5: activity (history, lower priority) */}
         <ActivitySection activity={activity} isPending={activityPending} />
-        {/* <SnapshotsSection snapshots={snapshots} isPending={snapshotsPending} /> */}
       </div>
     </div>
   )

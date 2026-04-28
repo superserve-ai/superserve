@@ -3,6 +3,8 @@
 import {
   DownloadSimpleIcon,
   FileArrowUpIcon,
+  FilesIcon,
+  PlayIcon,
   UploadSimpleIcon,
 } from "@phosphor-icons/react"
 import {
@@ -55,29 +57,58 @@ function disabledReason(status: SandboxResponse["status"]): string | null {
 
 interface FilesSectionProps {
   sandbox: SandboxResponse
+  onStart?: () => void
 }
 
-export function FilesSection({ sandbox }: FilesSectionProps) {
+export function FilesSection({ sandbox, onStart }: FilesSectionProps) {
   const reason = disabledReason(sandbox.status)
-  const disabled = reason !== null
+  const isActive = sandbox.status === "active"
 
   return (
-    <>
+    <section className="border-b border-border">
       <div className="flex h-10 items-center border-b border-border px-4">
-        <h2 className="text-sm font-medium text-foreground">Files</h2>
-        {reason && (
-          <span className="ml-3 font-mono text-xs uppercase text-muted">
-            {reason}
-          </span>
+        <h2 className="text-sm font-semibold text-foreground">Files</h2>
+      </div>
+      {isActive ? (
+        <div className="grid grid-cols-2">
+          <div className="border-r border-border">
+            <UploadPanel sandbox={sandbox} disabled={false} reason={null} />
+          </div>
+          <DownloadPanel sandbox={sandbox} disabled={false} reason={null} />
+        </div>
+      ) : (
+        <FilesEmptyState
+          status={sandbox.status}
+          reason={reason ?? "Files unavailable"}
+          onStart={onStart}
+        />
+      )}
+    </section>
+  )
+}
+
+function FilesEmptyState({
+  status,
+  reason,
+  onStart,
+}: {
+  status: SandboxResponse["status"]
+  reason: string
+  onStart?: () => void
+}) {
+  return (
+    <div className="flex min-h-[180px] flex-col items-center justify-center gap-4 px-6 py-12">
+      <FilesIcon className="size-8 text-muted" weight="light" />
+      <div className="flex flex-col items-center gap-1.5">
+        <p className="font-mono text-sm text-foreground/60">{reason}</p>
+        {status === "paused" && onStart && (
+          <Button size="sm" onClick={onStart} className="mt-3">
+            <PlayIcon className="size-3.5" weight="light" />
+            Start sandbox
+          </Button>
         )}
       </div>
-      <div className="grid grid-cols-2 border-b border-border">
-        <div className="border-r border-border">
-          <UploadPanel sandbox={sandbox} disabled={disabled} reason={reason} />
-        </div>
-        <DownloadPanel sandbox={sandbox} disabled={disabled} reason={reason} />
-      </div>
-    </>
+    </div>
   )
 }
 

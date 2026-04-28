@@ -61,7 +61,7 @@ export function NetworkSection({ sandbox }: { sandbox: SandboxResponse }) {
     return (
       <div>
         <div className="flex h-10 items-center justify-between px-4">
-          <h2 className="text-sm font-medium text-foreground">Network</h2>
+          <h2 className="text-sm font-semibold text-foreground">Network</h2>
           <div className="flex gap-2">
             <Button
               variant="outline"
@@ -166,7 +166,7 @@ export function NetworkSection({ sandbox }: { sandbox: SandboxResponse }) {
   return (
     <div>
       <div className="flex h-10 items-center justify-between px-4">
-        <h2 className="text-sm font-medium text-foreground">Network</h2>
+        <h2 className="text-sm font-semibold text-foreground">Network</h2>
         <Button variant="ghost" size="icon-sm" onClick={startEdit}>
           <PencilSimpleIcon className="size-3.5 text-muted" weight="light" />
         </Button>
@@ -252,7 +252,7 @@ export function MetadataSection({ sandbox }: { sandbox: SandboxResponse }) {
     return (
       <div>
         <div className="flex h-10 items-center justify-between px-4">
-          <h2 className="text-sm font-medium text-foreground">Metadata</h2>
+          <h2 className="text-sm font-semibold text-foreground">Metadata</h2>
           <div className="flex gap-2">
             <Button
               variant="outline"
@@ -321,7 +321,7 @@ export function MetadataSection({ sandbox }: { sandbox: SandboxResponse }) {
   return (
     <div>
       <div className="flex h-10 items-center justify-between px-4">
-        <h2 className="text-sm font-medium text-foreground">Metadata</h2>
+        <h2 className="text-sm font-semibold text-foreground">Metadata</h2>
         <Button variant="ghost" size="icon-sm" onClick={startEdit}>
           <PencilSimpleIcon className="size-3.5 text-muted" weight="light" />
         </Button>
