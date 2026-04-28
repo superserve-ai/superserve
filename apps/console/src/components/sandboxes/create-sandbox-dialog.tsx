@@ -31,7 +31,7 @@ import type { CreateSandboxRequest } from "@/lib/api/types"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 import { isSystemTemplate } from "@/lib/templates/is-system-template"
 
-const DEFAULT_TEMPLATE = "ss/base"
+const DEFAULT_TEMPLATE = "superserve/base"
 
 interface TemplatePickerItem {
   id: string

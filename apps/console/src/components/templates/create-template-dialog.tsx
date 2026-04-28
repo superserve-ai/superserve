@@ -13,7 +13,7 @@ import {
   Input,
 } from "@superserve/ui"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useCreateTemplate } from "@/hooks/use-templates"
 import { ApiError } from "@/lib/api/client"
 
@@ -96,9 +96,21 @@ export function CreateTemplateDialog({
     setErrors({})
   }
 
-  const handleCreate = async () => {
-    const image = imageMode === "curated" ? curatedImage : customImage.trim()
+  // Live-computed errors so the user sees feedback as they type.
+  // Only surfaced after the field has been touched (alias) or always when
+  // the user has entered a custom image (image).
+  const trimmedImage =
+    imageMode === "curated" ? curatedImage : customImage.trim()
+  const liveAliasError = useMemo(() => validateAlias(alias.trim()), [alias])
+  const liveImageError = useMemo(
+    () => (trimmedImage ? validateImage(trimmedImage) : null),
+    [trimmedImage],
+  )
 
+  const isValid = !liveAliasError && !liveImageError && trimmedImage.length > 0
+
+  const handleCreate = async () => {
+    const image = trimmedImage
     const aliasError = validateAlias(alias.trim())
     const imageError = validateImage(image)
     if (aliasError || imageError) {
@@ -157,12 +169,16 @@ export function CreateTemplateDialog({
         </DialogHeader>
 
         <div className="space-y-5 px-6 pb-4">
-          <Field label="Alias" required error={errors.alias}>
+          <Field label="Alias" required>
             <Input
               autoFocus
               value={alias}
               onChange={(e) => setAlias(e.target.value)}
               placeholder="e.g. python-ml"
+              error={
+                errors.alias ??
+                (alias ? (liveAliasError ?? undefined) : undefined)
+              }
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault()
@@ -172,7 +188,11 @@ export function CreateTemplateDialog({
             />
           </Field>
 
-          <Field label="Base image" required error={errors.image}>
+          <Field
+            label="Base image"
+            required
+            description="Linux/amd64 image with glibc. Alpine and distroless are not supported."
+          >
             <div className="grid grid-cols-2 gap-2">
               {CURATED_IMAGES.map((img) => {
                 const active = imageMode === "curated" && curatedImage === img
@@ -214,12 +234,34 @@ export function CreateTemplateDialog({
                   value={customImage}
                   onChange={(e) => setCustomImage(e.target.value)}
                   placeholder="ghcr.io/myorg/base:v1"
+                  error={errors.image ?? liveImageError ?? undefined}
                 />
               </div>
             )}
           </Field>
 
-          <div className="grid grid-cols-3 gap-3">
+          <Field label="Memory">
+            <div className="flex border border-dashed border-border">
+              {MEMORY_OPTIONS.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMemory(m)}
+                  className={cn(
+                    "flex-1 cursor-pointer font-mono text-xs uppercase py-2 transition-colors",
+                    memory === m
+                      ? "bg-foreground text-background"
+                      : "text-muted hover:text-foreground",
+                  )}
+                  title={formatMemory(m)}
+                >
+                  {m >= 1024 ? `${m / 1024} GB` : `${m} MB`}
+                </button>
+              ))}
+            </div>
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
             <Field label="vCPU">
               <div className="flex border border-dashed border-border">
                 {VCPU_OPTIONS.map((n) => (
@@ -240,27 +282,6 @@ export function CreateTemplateDialog({
               </div>
             </Field>
 
-            <Field label="Memory">
-              <div className="flex border border-dashed border-border">
-                {MEMORY_OPTIONS.map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setMemory(m)}
-                    className={cn(
-                      "flex-1 cursor-pointer font-mono text-[10px] uppercase py-2 transition-colors",
-                      memory === m
-                        ? "bg-foreground text-background"
-                        : "text-muted hover:text-foreground",
-                    )}
-                    title={formatMemory(m)}
-                  >
-                    {m >= 1024 ? `${m / 1024}G` : `${m}M`}
-                  </button>
-                ))}
-              </div>
-            </Field>
-
             <Field label="Disk">
               <div className="flex border border-dashed border-border">
                 {DISK_OPTIONS.map((d) => (
@@ -269,14 +290,14 @@ export function CreateTemplateDialog({
                     type="button"
                     onClick={() => setDisk(d)}
                     className={cn(
-                      "flex-1 cursor-pointer font-mono text-[10px] uppercase py-2 transition-colors",
+                      "flex-1 cursor-pointer font-mono text-xs uppercase py-2 transition-colors",
                       disk === d
                         ? "bg-foreground text-background"
                         : "text-muted hover:text-foreground",
                     )}
                     title={`${d / 1024} GB`}
                   >
-                    {d / 1024}G
+                    {d / 1024} GB
                   </button>
                 ))}
               </div>
@@ -294,7 +315,7 @@ export function CreateTemplateDialog({
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={handleCreate} disabled={create.isPending}>
+          <Button onClick={handleCreate} disabled={!isValid || create.isPending}>
             {create.isPending ? "Creating…" : "Create & build"}
           </Button>
         </DialogFooter>
