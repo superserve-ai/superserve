@@ -9,7 +9,7 @@ A sandbox transitions between two long-lived states:
 - **`active`** - VM is running, processes executing, compute billed
 - **`paused`** - VM paused, state persisted to disk, no compute billed
 
-You'll briefly see **`resuming`** while a paused sandbox is being restored to `active` - retry shortly. Deletion removes the sandbox entirely; further API calls return `404`.
+You'll briefly see **`resuming`** while a paused sandbox is being restored to `active` - retry shortly. **`failed`** indicates the sandbox couldn't boot or resume; the entry remains until you delete it. Deletion removes the sandbox entirely; further API calls return `404`.
 
 ```
 active  ↔  paused  →  deleted

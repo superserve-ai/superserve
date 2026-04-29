@@ -31,3 +31,16 @@ export const auditLogKeys = {
   bySandbox: (sandboxId: string) =>
     [...auditLogKeys.all, "sandbox", sandboxId] as const,
 }
+
+export const templateKeys = {
+  all: ["templates"] as const,
+  lists: () => [...templateKeys.all, "list"] as const,
+  list: (filters?: { alias_prefix?: string }) =>
+    [...templateKeys.lists(), filters ?? {}] as const,
+  details: () => [...templateKeys.all, "detail"] as const,
+  detail: (id: string) => [...templateKeys.details(), id] as const,
+  builds: (templateId: string) =>
+    [...templateKeys.detail(templateId), "builds"] as const,
+  build: (templateId: string, buildId: string) =>
+    [...templateKeys.builds(templateId), buildId] as const,
+}

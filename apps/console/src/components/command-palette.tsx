@@ -11,6 +11,7 @@ import {
   MagnifyingGlassIcon,
   PlusIcon,
   RocketLaunchIcon,
+  StackIcon,
 } from "@phosphor-icons/react"
 import { Command } from "cmdk"
 import { AnimatePresence, motion } from "motion/react"
@@ -54,6 +55,11 @@ export function CommandPalette() {
       icon: CubeIcon,
       onSelect: () => navigate("/sandboxes"),
     },
+    {
+      label: "Templates",
+      icon: StackIcon,
+      onSelect: () => navigate("/templates"),
+    },
     // TODO: re-enable when Snapshots ships
     // {
     //   label: "Snapshots",
@@ -89,12 +95,17 @@ export function CommandPalette() {
 
   const actionItems: CommandItem[] = [
     {
-      label: "Create Sandbox",
+      label: "Create sandbox",
       icon: PlusIcon,
       onSelect: () => navigate("/sandboxes?create=1"),
     },
     {
-      label: "Create API Key",
+      label: "Create template",
+      icon: PlusIcon,
+      onSelect: () => navigate("/templates?create=1"),
+    },
+    {
+      label: "Create API key",
       icon: KeyIcon,
       onSelect: () => navigate("/api-keys?create=1"),
     },

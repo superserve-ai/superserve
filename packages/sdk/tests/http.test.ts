@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   NotFoundError,
@@ -7,7 +7,7 @@ import {
   TimeoutError,
   ValidationError,
 } from "../src/errors.js"
-import { request } from "../src/http.js"
+import { request, streamSSE } from "../src/http.js"
 
 type FetchMock = ReturnType<typeof vi.fn>
 
@@ -28,7 +28,9 @@ function emptyResponse(
   return new Response(null, { status, headers })
 }
 
-function installFetch(impl: (...args: unknown[]) => Promise<Response>): FetchMock {
+function installFetch(
+  impl: (...args: unknown[]) => Promise<Response>,
+): FetchMock {
   const mock = vi.fn(impl)
   vi.stubGlobal("fetch", mock)
   return mock
@@ -251,5 +253,44 @@ describe("http.request", () => {
       request({ method: "GET", url: "https://example.com/x" }),
     ).rejects.toBeInstanceOf(NotFoundError)
     expect(mock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("streamSSE with GET", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("uses GET and omits body when method=GET", async () => {
+    const sseLines = [
+      'data: {"stream":"stdout","text":"hello","timestamp":"2026-01-01T00:00:00Z"}',
+      "",
+      'data: {"stream":"system","text":"done","timestamp":"2026-01-01T00:00:01Z","finished":true,"status":"ready"}',
+      "",
+    ].join("\n")
+
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(sseLines))
+        controller.close()
+      },
+    })
+
+    const mock = vi.fn(async () => new Response(stream, { status: 200 }))
+    vi.stubGlobal("fetch", mock)
+
+    const events: unknown[] = []
+    await streamSSE({
+      url: "https://api.example.com/templates/t-1/builds/b-1/logs",
+      headers: { "X-API-Key": "k" },
+      method: "GET",
+      onEvent: (ev) => events.push(ev),
+    })
+
+    expect(mock).toHaveBeenCalledTimes(1)
+    const init = mock.mock.calls[0][1] as RequestInit
+    expect(init.method).toBe("GET")
+    expect(init.body).toBeUndefined()
+    expect(events.length).toBe(2)
   })
 })

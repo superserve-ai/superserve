@@ -71,6 +71,15 @@
             ]
           },
           {
+            "group": "Templates",
+            "pages": [
+              "templates/overview",
+              "templates/create",
+              "templates/lifecycle",
+              "templates/build-spec"
+            ]
+          },
+          {
             "group": "Commands",
             "pages": [
               "commands/overview",
@@ -98,6 +107,7 @@
             "group": "Reference",
             "pages": [
               "sdk-reference/sandbox",
+              "sdk-reference/template",
               "sdk-reference/commands",
               "sdk-reference/files"
             ]

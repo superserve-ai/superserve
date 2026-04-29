@@ -68,6 +68,29 @@ class ServerError(SandboxError):
         super().__init__(message, status_code=500, code=code)
 
 
+class BuildError(SandboxError):
+    """Raised when a template build transitions to status 'failed'.
+
+    `code` is the stable error prefix on `error_message` (e.g. `image_pull_failed`,
+    `step_failed`, `boot_failed`, `snapshot_failed`, `start_cmd_failed`,
+    `ready_cmd_failed`, `build_failed`).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str,
+        build_id: str,
+        template_id: str,
+        status_code: int | None = None,
+    ) -> None:
+        super().__init__(message, status_code=status_code, code=code)
+        self.code = code
+        self.build_id = build_id
+        self.template_id = template_id
+
+
 def map_api_error(status_code: int, body: dict[str, Any]) -> SandboxError:
     """Map an HTTP status code and response body to a typed error."""
     error_data = body.get("error", {}) or {}

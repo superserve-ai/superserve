@@ -21,7 +21,7 @@ import {
 } from "@superserve/ui"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
@@ -75,6 +75,21 @@ function SandboxesPageContent() {
     name: string
   } | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [templateRef, setTemplateRef] = useState<string | null>(null)
+
+  // When the user clicks "Launch sandbox" from the templates section, we
+  // navigate here with ?from_template=<alias>. Open the dialog with the
+  // template prefilled, then strip the param so refreshing doesn't re-open.
+  useEffect(() => {
+    const alias = searchParams.get("from_template")
+    if (!alias) return
+    setTemplateRef(alias)
+    setCreateOpen(true)
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete("from_template")
+    const qs = params.toString()
+    router.replace(qs ? `?${qs}` : window.location.pathname)
+  }, [searchParams, router, setCreateOpen])
 
   const { data: sandboxes = [], isPending, error, refetch } = useSandboxes()
   const deleteSandbox = useDeleteSandbox()
@@ -115,9 +130,13 @@ function SandboxesPageContent() {
       <PageHeader title="Sandboxes">
         <CreateSandboxDialog
           open={createOpen}
-          onOpenChange={setCreateOpen}
+          onOpenChange={(v) => {
+            setCreateOpen(v)
+            if (!v) setTemplateRef(null)
+          }}
           hideTrigger={isEmpty || isPending}
           onCreated={(id) => setConnectSandboxId(id)}
+          initialTemplateRef={templateRef}
         />
       </PageHeader>
 

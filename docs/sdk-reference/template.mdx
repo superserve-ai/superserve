@@ -1,0 +1,565 @@
+---
+title: "Template"
+sidebarTitle: Template
+description: The Template class - factory methods, instance methods, properties, and types.
+---
+
+The `Template` class creates and manages reusable sandbox base images. Templates are built once and then used to launch any number of identically configured sandboxes in seconds.
+
+See the [Templates overview](/templates/overview) for concepts, or jump to the [Create a template](/templates/create) guide for the end-to-end flow.
+
+## Import
+
+<CodeGroup>
+```typescript TypeScript
+import { Template } from "@superserve/sdk"
+```
+
+```python Python
+from superserve import Template
+# Step types for the `steps` array:
+from superserve import RunStep, EnvStep, EnvStepValue, WorkdirStep, UserStep, UserStepValue
+```
+</CodeGroup>
+
+## Factory methods
+
+### `Template.create`
+
+Register a new template and queue its first build. Returns as soon as the template row exists and a `build_id` is assigned - the build itself runs asynchronously. Call [`waitUntilReady`](#waituntilready-wait-until-ready) to block until the build finishes.
+
+<CodeGroup>
+```typescript TypeScript
+const template = await Template.create({
+  alias: "my-python-env",
+  vcpu: 2,
+  memoryMib: 2048,
+  diskMib: 4096,
+  from: "python:3.11",
+  steps: [
+    { run: "pip install numpy pandas" },
+    { env: { key: "DEBUG", value: "1" } },
+    { workdir: "/app" },
+    { user: { name: "appuser", sudo: true } },
+  ],
+  startCmd: "python server.py",
+  readyCmd: "curl -f http://localhost:8080/health",
+})
+```
+
+```python Python
+from superserve import Template, RunStep, EnvStep, EnvStepValue, WorkdirStep, UserStep, UserStepValue
+
+template = Template.create(
+    alias="my-python-env",
+    vcpu=2,
+    memory_mib=2048,
+    disk_mib=4096,
+    from_="python:3.11",
+    steps=[
+        RunStep(run="pip install numpy pandas"),
+        EnvStep(env=EnvStepValue(key="DEBUG", value="1")),
+        WorkdirStep(workdir="/app"),
+        UserStep(user=UserStepValue(name="appuser", sudo=True)),
+    ],
+    start_cmd="python server.py",
+    ready_cmd="curl -f http://localhost:8080/health",
+)
+```
+</CodeGroup>
+
+**Options:**
+
+| Option | Type | Description |
+|---|---|---|
+| `alias` | `string` | **Required.** Team-scoped identifier. Must not start with `superserve/`. |
+| `from` / `from_` | `string` | **Required.** OCI base image (e.g. `python:3.11`). See [BuildSpec](/templates/build-spec#from-base-image). |
+| `vcpu` | `number` | 1-4. Default `1`. |
+| `memoryMib` / `memory_mib` | `number` | 256-4096. Default `1024`. |
+| `diskMib` / `disk_mib` | `number` | 1024-8192. Default `4096`. |
+| `steps` | [`BuildStep[]`](#buildstep) | Ordered build steps. |
+| `startCmd` / `start_cmd` | `string` | Long-running process captured in the snapshot. |
+| `readyCmd` / `ready_cmd` | `string` | Readiness probe polled every 2s after `startCmd`. |
+| `apiKey` / `api_key` | `string` | Overrides `SUPERSERVE_API_KEY`. |
+| `baseUrl` / `base_url` | `string` | Overrides `SUPERSERVE_BASE_URL`. |
+| `signal` | `AbortSignal` | TypeScript only - abort the creation request. |
+
+Throws `SandboxError` if the API response is missing `build_id`.
+
+### `Template.connect`
+
+Load an existing template by alias or UUID. The backend resolves either form.
+
+<CodeGroup>
+```typescript TypeScript
+const template = await Template.connect("my-python-env")
+// or by UUID
+const template2 = await Template.connect("7a3f2b8c-1234-...")
+```
+
+```python Python
+template = Template.connect("my-python-env")
+# or by UUID
+template2 = Template.connect("7a3f2b8c-1234-...")
+```
+</CodeGroup>
+
+### `Template.list`
+
+List all templates visible to the authenticated team (includes system templates).
+
+<CodeGroup>
+```typescript TypeScript
+const all = await Template.list()
+const mine = await Template.list({ aliasPrefix: "my-" })
+```
+
+```python Python
+all_templates = Template.list()
+mine = Template.list(alias_prefix="my-")
+```
+</CodeGroup>
+
+Returns an array of [`TemplateInfo`](#templateinfo).
+
+### `Template.deleteById` / `Template.delete_by_id`
+
+Delete a template by alias or UUID without instantiating it. Idempotent on `404`.
+
+<CodeGroup>
+```typescript TypeScript
+await Template.deleteById("my-python-env")
+```
+
+```python Python
+Template.delete_by_id("my-python-env")
+```
+</CodeGroup>
+
+Throws `ConflictError` if any non-destroyed sandbox still references the template.
+
+## Methods on `template`
+
+### `getInfo` / `get_info`
+
+Fetch the current server-side state. Returns a fresh [`TemplateInfo`](#templateinfo) - the `template`'s own properties are snapshots and are **not** mutated.
+
+<CodeGroup>
+```typescript TypeScript
+const info = await template.getInfo()
+console.log(info.status)  // "pending" | "building" | "ready" | "failed"
+```
+
+```python Python
+info = template.get_info()
+print(info.status.value)  # "pending" | "building" | "ready" | "failed"
+```
+</CodeGroup>
+
+### `waitUntilReady` / `wait_until_ready`
+
+Block until the current build reaches a terminal status (`ready`, `failed`, or `cancelled`). Subscribes to the build's SSE log stream if `onLog` / `on_log` is provided; falls back to polling when the stream errors or closes on a non-terminal state (e.g. the server's "build pending - reconnect later" signal). Returns a refreshed [`TemplateInfo`](#templateinfo) with `status = "ready"`.
+
+<CodeGroup>
+```typescript TypeScript
+const info = await template.waitUntilReady({
+  onLog: (event) => {
+    if (event.stream === "system") return
+    process.stdout.write(event.text)
+  },
+})
+```
+
+```python Python
+def print_log(ev):
+    if ev.stream.value != "system":
+        print(ev.text, end="")
+
+info = template.wait_until_ready(on_log=print_log)
+```
+</CodeGroup>
+
+**Options:**
+
+| Option | Type | Description |
+|---|---|---|
+| `onLog` / `on_log` | `(ev: BuildLogEvent) => void` | Called for every SSE log event. |
+| `signal` | `AbortSignal` | TypeScript only - aborts the stream and any pending poll. |
+| `pollIntervalMs` | `number` | TypeScript only. Fallback poll interval. Default `2000`. |
+| `poll_interval_s` | `float` | Python only. Fallback poll interval. Default `2.0`. |
+
+**Throws:**
+
+- `BuildError` if the build transitions to `failed`. The backend's `error_message` follows a `"<code>: <detail>"` convention; the SDK splits it so `BuildError.code` is the stable prefix and `BuildError.message` is the human-readable detail. See [BuildSpec: Build error codes](/templates/build-spec#build-error-codes).
+- `ConflictError` if the build is `cancelled`
+
+### `streamBuildLogs` / `stream_build_logs`
+
+Pure SSE stream of build logs. The promise resolves when the stream closes. Does **not** wait for a terminal status - use `waitUntilReady` for that.
+
+<CodeGroup>
+```typescript TypeScript
+await template.streamBuildLogs({
+  onEvent: (ev) => {
+    console.log(`[${ev.stream}] ${ev.text}`)
+  },
+  // buildId defaults to template.latestBuildId
+})
+```
+
+```python Python
+def on_event(ev):
+    print(f"[{ev.stream.value}] {ev.text}")
+
+template.stream_build_logs(on_event=on_event)
+# build_id defaults to template.latest_build_id
+```
+</CodeGroup>
+
+**Options:**
+
+| Option | Type | Description |
+|---|---|---|
+| `onEvent` / `on_event` | `(ev: BuildLogEvent) => void` | **Required.** Called for every event. |
+| `buildId` / `build_id` | `string` | Target build. Defaults to `latestBuildId` / `latest_build_id`. |
+| `signal` | `AbortSignal` | TypeScript only - aborts the stream. |
+
+Throws `SandboxError` if no `buildId` is supplied and the template has no `latestBuildId`.
+
+### `rebuild`
+
+Queue a new build for this template. Returns the new [`TemplateBuildInfo`](#templatebuildinfo). Idempotent: if an in-flight build already matches the same configuration, the existing build is returned.
+
+<CodeGroup>
+```typescript TypeScript
+const build = await template.rebuild()
+console.log(build.id, build.status)
+```
+
+```python Python
+build = template.rebuild()
+print(build.id, build.status.value)
+```
+</CodeGroup>
+
+### `listBuilds` / `list_builds`
+
+List recent builds for this template, newest first.
+
+<CodeGroup>
+```typescript TypeScript
+const builds = await template.listBuilds({ limit: 10 })
+```
+
+```python Python
+builds = template.list_builds(limit=10)
+```
+</CodeGroup>
+
+Returns an array of [`TemplateBuildInfo`](#templatebuildinfo).
+
+### `getBuild` / `get_build`
+
+Fetch a single build by ID.
+
+<CodeGroup>
+```typescript TypeScript
+const build = await template.getBuild("build-uuid")
+```
+
+```python Python
+build = template.get_build("build-uuid")
+```
+</CodeGroup>
+
+### `cancelBuild` / `cancel_build`
+
+Cancel an in-flight build. Idempotent - no-op for builds already in a terminal state, and for `404`.
+
+<CodeGroup>
+```typescript TypeScript
+await template.cancelBuild(build.id)
+```
+
+```python Python
+template.cancel_build(build.id)
+```
+</CodeGroup>
+
+### `delete`
+
+Delete this template. Idempotent on `404`.
+
+<CodeGroup>
+```typescript TypeScript
+await template.delete()
+```
+
+```python Python
+template.delete()
+```
+</CodeGroup>
+
+Throws `ConflictError` if any non-destroyed sandbox still references the template - destroy those sandboxes first.
+
+## Properties on `template`
+
+All properties are read-only snapshots taken at construction. Call `getInfo()` / `get_info()` to refresh.
+
+| Property | Type | Description |
+|---|---|---|
+| `id` | `string` | Template UUID. |
+| `alias` | `string` | Team-scoped identifier. |
+| `teamId` / `team_id` | `string` | Owning team UUID. |
+| `status` | `TemplateStatus` | Status at construction time. |
+| `vcpu` | `number` | vCPU count the template boots with. |
+| `memoryMib` / `memory_mib` | `number` | Memory the template boots with. |
+| `diskMib` / `disk_mib` | `number` | Disk the template boots with. |
+| `sizeBytes?` / `size_bytes?` | `number` | Snapshot size in bytes, once built. |
+| `errorMessage?` / `error_message?` | `string` | Last build's error message, if any. |
+| `createdAt` / `created_at` | `Date` / `datetime` | When the template row was created. |
+| `builtAt?` / `built_at?` | `Date` / `datetime` | When the latest successful build finished. |
+| `latestBuildId?` / `latest_build_id?` | `string` | Most recent build UUID. |
+
+## Types
+
+### `TemplateStatus`
+
+<CodeGroup>
+```typescript TypeScript
+type TemplateStatus = "pending" | "building" | "ready" | "failed"
+```
+
+```python Python
+from enum import Enum
+
+class TemplateStatus(str, Enum):
+    PENDING = "pending"
+    BUILDING = "building"
+    READY = "ready"
+    FAILED = "failed"
+```
+</CodeGroup>
+
+- `pending` - template exists; first build is queued
+- `building` - a build is in progress
+- `ready` - at least one successful build exists; sandboxes can boot from this template
+- `failed` - the latest build failed; rebuild or fix the spec
+
+### `TemplateBuildStatus`
+
+<CodeGroup>
+```typescript TypeScript
+type TemplateBuildStatus =
+  | "pending"
+  | "building"
+  | "snapshotting"
+  | "ready"
+  | "failed"
+  | "cancelled"
+```
+
+```python Python
+from enum import Enum
+
+class TemplateBuildStatus(str, Enum):
+    PENDING = "pending"
+    BUILDING = "building"
+    SNAPSHOTTING = "snapshotting"
+    READY = "ready"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+```
+</CodeGroup>
+
+### `TemplateInfo`
+
+<CodeGroup>
+```typescript TypeScript
+interface TemplateInfo {
+  id: string
+  alias: string
+  teamId: string
+  status: TemplateStatus
+  vcpu: number
+  memoryMib: number
+  diskMib: number
+  sizeBytes?: number
+  errorMessage?: string
+  createdAt: Date
+  builtAt?: Date
+  latestBuildId?: string
+}
+```
+
+```python Python
+from datetime import datetime
+from pydantic import BaseModel
+
+class TemplateInfo(BaseModel):
+    id: str
+    alias: str
+    team_id: str
+    status: TemplateStatus
+    vcpu: int
+    memory_mib: int
+    disk_mib: int
+    size_bytes: int | None = None
+    error_message: str | None = None
+    created_at: datetime
+    built_at: datetime | None = None
+    latest_build_id: str | None = None
+```
+</CodeGroup>
+
+### `TemplateBuildInfo`
+
+<CodeGroup>
+```typescript TypeScript
+interface TemplateBuildInfo {
+  id: string
+  templateId: string
+  status: TemplateBuildStatus
+  buildSpecHash: string
+  errorMessage?: string
+  startedAt?: Date
+  finalizedAt?: Date
+  createdAt: Date
+}
+```
+
+```python Python
+from datetime import datetime
+from pydantic import BaseModel
+
+class TemplateBuildInfo(BaseModel):
+    id: str
+    template_id: str
+    status: TemplateBuildStatus
+    build_spec_hash: str
+    error_message: str | None = None
+    started_at: datetime | None = None
+    finalized_at: datetime | None = None
+    created_at: datetime
+```
+</CodeGroup>
+
+### `BuildLogEvent`
+
+<CodeGroup>
+```typescript TypeScript
+interface BuildLogEvent {
+  timestamp: Date
+  stream: "stdout" | "stderr" | "system"
+  text: string
+  finished?: boolean
+  status?: "ready" | "failed" | "cancelled"
+}
+```
+
+```python Python
+from datetime import datetime
+from pydantic import BaseModel
+
+class BuildLogEvent(BaseModel):
+    timestamp: datetime
+    stream: BuildLogStream        # "stdout" | "stderr" | "system"
+    text: str
+    finished: bool | None = None
+    status: str | None = None     # "ready" | "failed" | "cancelled"
+```
+</CodeGroup>
+
+`stream == "system"` events are status messages from the build runner (build-step boundaries, snapshot progress). Filter them out when rendering to a user-facing console. `finished: true` marks the last event in a stream and carries the terminal `status`.
+
+### `BuildStep`
+
+A discriminated union - exactly one of `run` / `env` / `workdir` / `user` must be set per step. See [BuildSpec: Steps](/templates/build-spec#steps-ordered-build-steps) for semantics.
+
+<CodeGroup>
+```typescript TypeScript
+type BuildStep =
+  | { run: string }
+  | { env: { key: string; value: string } }
+  | { workdir: string }
+  | { user: { name: string; sudo?: boolean } }
+```
+
+```python Python
+from pydantic import BaseModel
+
+class RunStep(BaseModel):
+    run: str
+
+class EnvStepValue(BaseModel):
+    key: str
+    value: str
+
+class EnvStep(BaseModel):
+    env: EnvStepValue
+
+class WorkdirStep(BaseModel):
+    workdir: str
+
+class UserStepValue(BaseModel):
+    name: str
+    sudo: bool = False
+
+class UserStep(BaseModel):
+    user: UserStepValue
+
+BuildStep = RunStep | EnvStep | WorkdirStep | UserStep
+```
+</CodeGroup>
+
+### `BuildError`
+
+Thrown by `waitUntilReady` / `wait_until_ready` when the build transitions to `failed`.
+
+<CodeGroup>
+```typescript TypeScript
+class BuildError extends SandboxError {
+  readonly code: string        // e.g. "image_pull_failed" | "step_failed" | ...
+  readonly message: string     // human-readable detail (prefix stripped)
+  readonly buildId: string
+  readonly templateId: string
+}
+```
+
+```python Python
+class BuildError(SandboxError):
+    code: str             # e.g. "image_pull_failed" | "step_failed" | ...
+    # `str(err)` returns the human-readable detail (prefix stripped)
+    build_id: str
+    template_id: str
+```
+</CodeGroup>
+
+The backend's `error_message` follows a `"<code>: <detail>"` convention (e.g. `"image_too_large: image is too large for the requested disk_mib"`). The SDK splits it so `code` holds the prefix and the error message holds the detail. When the backend doesn't include a prefix, `code` falls back to `"build_failed"` and the message falls back to `"Template build failed"`.
+
+See the [full list of build error codes](/templates/build-spec#build-error-codes) and the general [Errors](/errors) reference.
+
+## Retries
+
+GET and DELETE requests (including `Template.list`, `Template.connect`, `getInfo`, `listBuilds`, `getBuild`, `cancelBuild`, `delete`, `deleteById`) auto-retry on `429`, `502`, `503`, `504`, and network errors with exponential backoff + jitter (3 attempts max). POST requests (`create`, `rebuild`) are not retried - the SDK surfaces the error so you can decide.
+
+## Errors
+
+Template methods commonly raise:
+
+- `AuthenticationError` - missing or invalid API key
+- `ValidationError` - bad request body (invalid alias, unsupported base image, steps with multiple keys)
+- `NotFoundError` - template or build doesn't exist (except `delete` / `deleteById` / `cancelBuild`, which swallow 404)
+- `ConflictError` - template has dependent sandboxes (on delete) or build was cancelled (on `waitUntilReady`)
+- `BuildError` - build transitioned to `failed` (from `waitUntilReady` only)
+- `ServerError` - platform error
+
+See [Errors](/errors) for the full hierarchy.
+
+## Related
+
+- [Templates overview](/templates/overview)
+- [Create a template](/templates/create)
+- [Rebuild, cancel, delete](/templates/lifecycle)
+- [BuildSpec reference](/templates/build-spec)
+- [Errors](/errors)

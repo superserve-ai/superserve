@@ -46,26 +46,26 @@ class TestPathValidation:
 class TestFilesWrite:
     def test_sends_access_token_header(self) -> None:
         with respx.mock() as router:
-            route = router.post(
-                "https://boxd-abc-123.sandbox.example.com/files"
-            ).mock(return_value=httpx.Response(200))
+            route = router.post("https://boxd-abc-123.sandbox.example.com/files").mock(
+                return_value=httpx.Response(200)
+            )
             _make_files().write("/home/x.txt", "hello")
             req = route.calls.last.request
             assert req.headers["X-Access-Token"] == "tok-xyz"
 
     def test_accepts_bytes_content(self) -> None:
         with respx.mock() as router:
-            route = router.post(
-                "https://boxd-abc-123.sandbox.example.com/files"
-            ).mock(return_value=httpx.Response(200))
+            route = router.post("https://boxd-abc-123.sandbox.example.com/files").mock(
+                return_value=httpx.Response(200)
+            )
             _make_files().write("/home/x.bin", b"\x00\x01\x02")
             assert route.calls.last.request.content == b"\x00\x01\x02"
 
     def test_encodes_str_as_utf8(self) -> None:
         with respx.mock() as router:
-            route = router.post(
-                "https://boxd-abc-123.sandbox.example.com/files"
-            ).mock(return_value=httpx.Response(200))
+            route = router.post("https://boxd-abc-123.sandbox.example.com/files").mock(
+                return_value=httpx.Response(200)
+            )
             _make_files().write("/home/x.txt", "héllo")
             assert route.calls.last.request.content == "héllo".encode()
 

@@ -8,6 +8,7 @@ import {
   GearIcon,
   KeyIcon,
   LifebuoyIcon,
+  StackIcon,
 } from "@phosphor-icons/react"
 
 export interface NavItem {
@@ -19,6 +20,7 @@ export interface NavItem {
 
 export const mainNavItems: NavItem[] = [
   { label: "Sandboxes", href: "/sandboxes", icon: CubeIcon },
+  { label: "Templates", href: "/templates", icon: StackIcon },
   // { label: "Snapshots", href: "/snapshots", icon: CameraIcon }, // TODO: re-enable when Snapshots ships
   { label: "Audit Logs", href: "/audit-logs", icon: ClipboardTextIcon },
   { label: "API Keys", href: "/api-keys", icon: KeyIcon },

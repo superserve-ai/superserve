@@ -4,7 +4,7 @@ import { getAuthApiKey } from "@/lib/api/proxy-auth"
 const SANDBOX_API_URL =
   process.env.SANDBOX_API_URL ?? "https://api.superserve.ai"
 
-const ALLOWED_PREFIXES = ["sandboxes", "health", "v1"]
+const ALLOWED_PREFIXES = ["sandboxes", "health", "v1", "templates"]
 
 /** Paths that carry their own auth (e.g. Bearer token). */
 const SKIP_KEY_INJECTION = ["v1/auth/"]
@@ -96,7 +96,30 @@ async function proxyRequest(
     response.status === 205 ||
     response.status === 304
 
-  const data = isNullBodyStatus ? null : await response.arrayBuffer()
+  if (isNullBodyStatus) {
+    return new NextResponse(null, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+    })
+  }
+
+  // Stream Server-Sent Events through unbuffered. Buffering via
+  // arrayBuffer() would make the browser wait for the build to finish
+  // before seeing any log output.
+  const upstreamContentType = response.headers.get("content-type") ?? ""
+  if (upstreamContentType.includes("text/event-stream")) {
+    responseHeaders.set("cache-control", "no-cache, no-transform")
+    responseHeaders.set("connection", "keep-alive")
+    responseHeaders.set("x-accel-buffering", "no")
+    return new NextResponse(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+    })
+  }
+
+  const data = await response.arrayBuffer()
 
   return new NextResponse(data, {
     status: response.status,

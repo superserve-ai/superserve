@@ -18,7 +18,8 @@ describe("resolveConfig", () => {
     vi.unstubAllEnvs()
     if (savedApiKey !== undefined) process.env.SUPERSERVE_API_KEY = savedApiKey
     else delete process.env.SUPERSERVE_API_KEY
-    if (savedBaseUrl !== undefined) process.env.SUPERSERVE_BASE_URL = savedBaseUrl
+    if (savedBaseUrl !== undefined)
+      process.env.SUPERSERVE_BASE_URL = savedBaseUrl
     else delete process.env.SUPERSERVE_BASE_URL
   })
 

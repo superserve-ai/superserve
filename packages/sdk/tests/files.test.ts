@@ -7,7 +7,9 @@ const sandboxId = "sbx-1"
 const sandboxHost = "sandbox.superserve.ai"
 const accessToken = "tok-abc"
 
-async function readBodyAsBytes(body: BodyInit | null | undefined): Promise<Uint8Array> {
+async function readBodyAsBytes(
+  body: BodyInit | null | undefined,
+): Promise<Uint8Array> {
   if (!body) return new Uint8Array()
   if (body instanceof Blob) {
     return new Uint8Array(await body.arrayBuffer())

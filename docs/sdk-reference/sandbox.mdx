@@ -67,6 +67,8 @@ sandbox = Sandbox.create(
 | Option | Type | Description |
 |---|---|---|
 | `name` | `string` | **Required.** Human-readable sandbox name. |
+| `fromTemplate` / `from_template` | `string \| Template` | Template alias, UUID, or `Template` instance to boot from. Defaults to `superserve/base`. |
+| `fromSnapshot` / `from_snapshot` | `string` | Snapshot UUID to boot from. |
 | `timeoutSeconds` / `timeout_seconds` | `number` | Max active lifetime before auto-pause. API-side upper bound (subject to change). |
 | `metadata` | `Record<string, string>` | String tags. |
 | `envVars` / `env_vars` | `Record<string, string>` | Env vars injected into every process. |
@@ -130,12 +132,12 @@ Fetch the current server-side state. Returns a fresh [`SandboxInfo`](#sandboxinf
 <CodeGroup>
 ```typescript TypeScript
 const info = await sandbox.getInfo()
-console.log(info.status)  // "active" | "paused" | "resuming"
+console.log(info.status)  // "active" | "paused" | "resuming" | "failed"
 ```
 
 ```python Python
 info = sandbox.get_info()
-print(info.status.value)  # "active" | "paused" | "resuming"
+print(info.status.value)  # "active" | "paused" | "resuming" | "failed"
 ```
 </CodeGroup>
 
@@ -221,7 +223,7 @@ sandbox.update(
 
 <CodeGroup>
 ```typescript TypeScript
-type SandboxStatus = "active" | "paused" | "resuming"
+type SandboxStatus = "active" | "paused" | "resuming" | "failed"
 ```
 
 ```python Python
@@ -231,12 +233,14 @@ class SandboxStatus(str, Enum):
     ACTIVE = "active"
     PAUSED = "paused"
     RESUMING = "resuming"
+    FAILED = "failed"
 ```
 </CodeGroup>
 
 - `active` - running and ready to accept commands
 - `paused` - stopped with state saved to disk
 - `resuming` - transient, briefly visible while a paused sandbox is being restored to `active` (retry shortly)
+- `failed` - the sandbox couldn't boot or resume; the entry remains until you delete it
 
 Deletion removes the sandbox entirely - subsequent API calls return `404`.
 

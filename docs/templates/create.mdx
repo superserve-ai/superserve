@@ -1,0 +1,151 @@
+---
+title: "Create a template"
+description: "Build your first team template, stream logs, launch a sandbox from it"
+---
+
+Build a reusable sandbox environment in three steps: define the template, wait for the build to finish, then create sandboxes from it.
+
+## Create the template
+
+Pass a base image via `from` and (optionally) a list of build steps that run inside the build VM.
+
+<CodeGroup>
+
+```typescript TypeScript
+import { Template } from "@superserve/sdk"
+
+const template = await Template.create({
+  alias: "my-python-env",
+  vcpu: 2,
+  memoryMib: 2048,
+  from: "python:3.11",
+  steps: [
+    { run: "pip install numpy pandas" },
+    { env: { key: "DEBUG", value: "1" } },
+    { workdir: "/app" },
+  ],
+})
+```
+
+```python Python
+from superserve import Template
+from superserve import RunStep, EnvStep, EnvStepValue, WorkdirStep
+
+template = Template.create(
+    alias="my-python-env",
+    vcpu=2,
+    memory_mib=2048,
+    from_="python:3.11",
+    steps=[
+        RunStep(run="pip install numpy pandas"),
+        EnvStep(env=EnvStepValue(key="DEBUG", value="1")),
+        WorkdirStep(workdir="/app"),
+    ],
+)
+```
+
+</CodeGroup>
+
+`Template.create` returns once the template is registered and the first build is queued, **not** when the build is finished. Call `waitUntilReady()` (TS) / `wait_until_ready()` (Python) to block until the build reaches a terminal state.
+
+## Stream build logs
+
+`waitUntilReady` accepts an `onLog` callback that receives each SSE event as the build runs.
+
+<CodeGroup>
+
+```typescript TypeScript
+await template.waitUntilReady({
+  onLog: (event) => {
+    if (event.stream === "system") return  // skip system messages
+    process.stdout.write(event.text)
+  },
+})
+```
+
+```python Python
+def print_log(ev):
+    if ev.stream.value != "system":
+        print(ev.text, end="")
+
+template.wait_until_ready(on_log=print_log)
+```
+
+</CodeGroup>
+
+On success, `waitUntilReady` returns the refreshed `TemplateInfo` with `status = "ready"`. On failure, it raises `BuildError` with a machine-readable `code` (e.g. `step_failed`, `image_pull_failed`).
+
+## Create a sandbox from the template
+
+Once ready, create sandboxes by passing the `Template` instance, the alias, or the UUID.
+
+<CodeGroup>
+
+```typescript TypeScript {13,19,25}
+import { Sandbox, Template } from "@superserve/sdk"
+
+// Create the template first (see the section above)
+const template = await Template.create({
+  alias: "my-python-env",
+  from: "python:3.11",
+})
+await template.waitUntilReady()
+
+// Option 1: pass the Template instance
+const sandbox = await Sandbox.create({
+  name: "run-1",
+  fromTemplate: template,
+})
+
+// Option 2: pass the alias
+const sandbox2 = await Sandbox.create({
+  name: "run-2",
+  fromTemplate: "my-python-env",
+})
+
+// Option 3: pass the ID
+const sandbox3 = await Sandbox.create({
+  name: "run-3",
+  fromTemplate: "8b050452",
+})
+```
+
+```python Python {13,19,25}
+from superserve import Sandbox, Template
+
+# Create the template first (see the section above)
+template = Template.create(
+    alias="my-python-env",
+    from_="python:3.11",
+)
+template.wait_until_ready()
+
+# Option 1: pass the Template instance
+sandbox = Sandbox.create(
+    name="run-1",
+    from_template=template,
+)
+
+# Option 2: pass the alias
+sandbox2 = Sandbox.create(
+    name="run-2",
+    from_template="my-python-env",
+)
+
+# Option 3: pass the ID
+sandbox3 = Sandbox.create(
+    name="run-3",
+    from_template="8b050452",
+)
+```
+
+</CodeGroup>
+
+The sandbox's vCPU, memory, and disk size are inherited from the template; they cannot be overridden at sandbox creation (the snapshot dictates VM shape).
+
+## Related
+
+- [Templates overview](/templates/overview)
+- [Rebuild, cancel, delete](/templates/lifecycle)
+- [BuildSpec reference](/templates/build-spec)
+- [SDK reference: Template](/sdk-reference/template)

@@ -25,7 +25,7 @@ export function ActivitySection({ activity, isPending }: ActivitySectionProps) {
   return (
     <>
       <div className="flex h-10 items-center border-b border-border px-4">
-        <h2 className="text-sm font-medium text-foreground">Activity</h2>
+        <h2 className="text-sm font-semibold text-foreground">Activity</h2>
       </div>
       {isPending ? (
         <div className="border-b border-border">

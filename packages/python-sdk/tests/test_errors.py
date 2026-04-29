@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from superserve.errors import (
     AuthenticationError,
+    BuildError,
     ConflictError,
     NotFoundError,
     SandboxError,
@@ -28,7 +29,9 @@ class TestMapApiError:
         assert err.status_code == 401
 
     def test_403_returns_authentication_error_preserving_status(self) -> None:
-        err = map_api_error(403, {"error": {"message": "forbidden", "code": "no_access"}})
+        err = map_api_error(
+            403, {"error": {"message": "forbidden", "code": "no_access"}}
+        )
         assert isinstance(err, AuthenticationError)
         assert err.status_code == 403
         assert err.code == "no_access"
@@ -50,7 +53,13 @@ class TestMapApiError:
         # But NOT any of the more specific typed errors
         assert not isinstance(
             err,
-            (ValidationError, AuthenticationError, NotFoundError, ConflictError, ServerError),
+            (
+                ValidationError,
+                AuthenticationError,
+                NotFoundError,
+                ConflictError,
+                ServerError,
+            ),
         )
         assert err.status_code == 429
 
@@ -64,7 +73,9 @@ class TestMapApiError:
         assert isinstance(err, ServerError)
 
     def test_code_preserved_on_unknown(self) -> None:
-        err = map_api_error(418, {"error": {"message": "teapot", "code": "teapot_error"}})
+        err = map_api_error(
+            418, {"error": {"message": "teapot", "code": "teapot_error"}}
+        )
         assert err.code == "teapot_error"
         assert err.status_code == 418
 
@@ -127,3 +138,36 @@ class TestSandboxErrorFields:
             except ValueError as inner:
                 raise SandboxError("outer") from inner
         assert info.value.__cause__ is not None
+
+
+class TestBuildError:
+    def test_extends_sandbox_error(self) -> None:
+        err = BuildError(
+            "step_failed: boom",
+            code="step_failed",
+            build_id="b-1",
+            template_id="t-1",
+        )
+        assert isinstance(err, SandboxError)
+        assert isinstance(err, Exception)
+
+    def test_exposes_code_build_id_template_id(self) -> None:
+        err = BuildError(
+            "build_failed: boom",
+            code="build_failed",
+            build_id="b-2",
+            template_id="t-2",
+        )
+        assert err.code == "build_failed"
+        assert err.build_id == "b-2"
+        assert err.template_id == "t-2"
+        assert str(err) == "build_failed: boom"
+
+    def test_status_code_none_by_default(self) -> None:
+        err = BuildError(
+            "x",
+            code="c",
+            build_id="b",
+            template_id="t",
+        )
+        assert err.status_code is None

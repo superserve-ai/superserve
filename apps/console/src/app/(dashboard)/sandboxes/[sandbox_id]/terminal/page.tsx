@@ -1,16 +1,13 @@
 "use client"
 
-import { ArrowLeftIcon, PlayIcon, StopIcon } from "@phosphor-icons/react"
+import { ArrowLeftIcon, PlayIcon, TerminalIcon } from "@phosphor-icons/react"
 import { Badge, Button } from "@superserve/ui"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
+import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { SandboxTerminal } from "@/components/sandboxes/terminal"
-import {
-  usePauseSandbox,
-  useResumeSandbox,
-  useSandbox,
-} from "@/hooks/use-sandboxes"
+import { useResumeSandbox, useSandbox } from "@/hooks/use-sandboxes"
 import { STATUS_BADGE_VARIANT, STATUS_LABEL } from "@/lib/sandbox-utils"
 
 function TerminalSkeleton() {
@@ -34,7 +31,6 @@ export default function TerminalPage() {
 
   const router = useRouter()
   const { data: sandbox, isPending, error, refetch } = useSandbox(sandboxId)
-  const pauseMutation = usePauseSandbox()
   const resumeMutation = useResumeSandbox()
 
   if (isPending) return <TerminalSkeleton />
@@ -92,28 +88,17 @@ export default function TerminalPage() {
           </Badge>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={sandbox.status === "resuming"}
-            onClick={() => {
-              if (sandbox.status === "active") pauseMutation.mutate(sandbox.id)
-              else if (sandbox.status === "paused")
-                resumeMutation.mutate(sandbox.id)
-            }}
-          >
-            {sandbox.status === "active" ? (
-              <>
-                <StopIcon className="size-3.5" weight="light" />
-                Stop
-              </>
-            ) : (
-              <>
-                <PlayIcon className="size-3.5" weight="light" />
-                Start
-              </>
-            )}
-          </Button>
+          {sandbox.status === "paused" && (
+            <Button size="sm" onClick={() => resumeMutation.mutate(sandbox.id)}>
+              <PlayIcon className="size-3.5" weight="light" />
+              Start
+            </Button>
+          )}
+          {sandbox.status === "resuming" && (
+            <span className="font-mono text-xs uppercase text-muted">
+              Resuming…
+            </span>
+          )}
         </div>
       </div>
 
@@ -122,10 +107,26 @@ export default function TerminalPage() {
           sandboxId={sandboxId}
           accessToken={sandbox.access_token}
         />
+      ) : sandbox.status === "paused" ? (
+        <EmptyState
+          icon={TerminalIcon}
+          title="Sandbox is paused"
+          description="Start the sandbox to open a terminal session. Resume takes a second or two."
+          actionLabel={
+            resumeMutation.isPending ? "Starting…" : "Start sandbox"
+          }
+          onAction={() => resumeMutation.mutate(sandbox.id)}
+        />
+      ) : sandbox.status === "resuming" ? (
+        <EmptyState
+          icon={TerminalIcon}
+          title="Resuming…"
+          description="Sandbox is starting up. The terminal will be ready in a moment."
+        />
       ) : (
         <ErrorState
-          message="Sandbox is not running. Start it to use the terminal."
-          suggestion="Click the Start button above to resume the sandbox."
+          message="Sandbox is not running."
+          suggestion="Go back to the sandbox details to manage it."
         />
       )}
     </div>

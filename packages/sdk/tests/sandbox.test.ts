@@ -221,10 +221,72 @@ describe("Sandbox instance methods", () => {
     const sandbox = await makeSandbox()
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        jsonResponse({ id: "sbx-1", status: "active" }),
-      ),
+      vi.fn(async () => jsonResponse({ id: "sbx-1", status: "active" })),
     )
     await expect(sandbox.resume()).rejects.toThrow(/missing access_token/)
+  })
+})
+
+describe("Sandbox.create fromTemplate / fromSnapshot", () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("maps fromTemplate (string) to from_template body", async () => {
+    const mock = vi.fn(async () => jsonResponse(baseSandbox))
+    vi.stubGlobal("fetch", mock)
+
+    await Sandbox.create({
+      ...commonOpts,
+      name: "my-sandbox",
+      fromTemplate: "superserve/python-3.11",
+    })
+
+    const [, init] = mock.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string)
+    expect(body.from_template).toBe("superserve/python-3.11")
+  })
+
+  it("extracts alias from Template-like instance", async () => {
+    const mock = vi.fn(async () => jsonResponse(baseSandbox))
+    vi.stubGlobal("fetch", mock)
+
+    await Sandbox.create({
+      ...commonOpts,
+      name: "my-sandbox",
+      fromTemplate: { alias: "my-env", id: "t-1" },
+    })
+
+    const [, init] = mock.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string)
+    expect(body.from_template).toBe("my-env")
+  })
+
+  it("falls back to id when alias is undefined", async () => {
+    const mock = vi.fn(async () => jsonResponse(baseSandbox))
+    vi.stubGlobal("fetch", mock)
+
+    await Sandbox.create({
+      ...commonOpts,
+      name: "my-sandbox",
+      fromTemplate: { id: "t-1" },
+    })
+
+    const [, init] = mock.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string)
+    expect(body.from_template).toBe("t-1")
+  })
+
+  it("maps fromSnapshot to from_snapshot body", async () => {
+    const mock = vi.fn(async () => jsonResponse(baseSandbox))
+    vi.stubGlobal("fetch", mock)
+
+    await Sandbox.create({
+      ...commonOpts,
+      name: "my-sandbox",
+      fromSnapshot: "snap-abc",
+    })
+
+    const [, init] = mock.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string)
+    expect(body.from_snapshot).toBe("snap-abc")
   })
 })

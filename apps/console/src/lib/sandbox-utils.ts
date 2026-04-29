@@ -5,12 +5,14 @@ export const STATUS_BADGE_VARIANT: Record<SandboxStatus, BadgeVariant> = {
   active: "success",
   paused: "muted",
   resuming: "warning",
+  failed: "destructive",
 }
 
 export const STATUS_LABEL: Record<SandboxStatus, string> = {
   active: "Active",
   paused: "Paused",
   resuming: "Resuming",
+  failed: "Failed",
 }
 
 export const ACTIVITY_STATUS_VARIANT: Record<string, BadgeVariant> = {

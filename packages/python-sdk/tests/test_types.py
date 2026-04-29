@@ -7,10 +7,22 @@ from datetime import datetime, timezone
 import pytest
 from superserve.errors import SandboxError
 from superserve.types import (
+    EnvStep,
+    EnvStepValue,
     NetworkConfig,
+    RunStep,
     SandboxInfo,
     SandboxStatus,
+    TemplateBuildStatus,
+    TemplateStatus,
+    UserStep,
+    UserStepValue,
+    WorkdirStep,
+    build_steps_to_api,
+    to_build_log_event,
     to_sandbox_info,
+    to_template_build_info,
+    to_template_info,
 )
 
 
@@ -106,6 +118,115 @@ class TestSandboxStatus:
         assert SandboxStatus.ACTIVE.value == "active"
         assert SandboxStatus.PAUSED.value == "paused"
         assert SandboxStatus.RESUMING.value == "resuming"
+        assert SandboxStatus.FAILED.value == "failed"
 
     def test_status_enum_values(self) -> None:
-        assert {s.value for s in SandboxStatus} == {"active", "paused", "resuming"}
+        assert {s.value for s in SandboxStatus} == {
+            "active",
+            "paused",
+            "resuming",
+            "failed",
+        }
+
+
+class TestToTemplateInfo:
+    def test_basic(self) -> None:
+        info = to_template_info(
+            {
+                "id": "t-1",
+                "team_id": "team-1",
+                "alias": "my-env",
+                "status": "ready",
+                "vcpu": 2,
+                "memory_mib": 2048,
+                "disk_mib": 4096,
+                "size_bytes": 12345,
+                "created_at": "2026-01-01T00:00:00Z",
+                "built_at": "2026-01-01T00:01:00Z",
+            }
+        )
+        assert info.id == "t-1"
+        assert info.alias == "my-env"
+        assert info.status == TemplateStatus.READY
+        assert info.vcpu == 2
+        assert info.memory_mib == 2048
+        assert info.disk_mib == 4096
+        assert info.size_bytes == 12345
+        assert isinstance(info.created_at, datetime)
+        assert isinstance(info.built_at, datetime)
+
+    def test_optional_fields_absent(self) -> None:
+        info = to_template_info(
+            {
+                "id": "t-1",
+                "team_id": "team-1",
+                "alias": "my-env",
+                "status": "building",
+                "vcpu": 1,
+                "memory_mib": 1024,
+                "disk_mib": 4096,
+                "created_at": "2026-01-01T00:00:00Z",
+            }
+        )
+        assert info.size_bytes is None
+        assert info.built_at is None
+        assert info.error_message is None
+
+
+class TestToTemplateBuildInfo:
+    def test_basic(self) -> None:
+        b = to_template_build_info(
+            {
+                "id": "b-1",
+                "template_id": "t-1",
+                "status": "ready",
+                "build_spec_hash": "h",
+                "started_at": "2026-01-01T00:00:00Z",
+                "finalized_at": "2026-01-01T00:01:00Z",
+                "created_at": "2026-01-01T00:00:00Z",
+            }
+        )
+        assert b.id == "b-1"
+        assert b.template_id == "t-1"
+        assert b.status == TemplateBuildStatus.READY
+        assert b.build_spec_hash == "h"
+
+
+class TestToBuildLogEvent:
+    def test_basic(self) -> None:
+        ev = to_build_log_event(
+            {
+                "timestamp": "2026-01-01T00:00:00Z",
+                "stream": "stdout",
+                "text": "hello",
+                "finished": True,
+                "status": "ready",
+            }
+        )
+        assert ev.text == "hello"
+        assert ev.finished is True
+        assert ev.status == "ready"
+
+
+class TestBuildStepsToApi:
+    def test_run(self) -> None:
+        out = build_steps_to_api([RunStep(run="echo hello")])
+        assert out == [{"run": "echo hello"}]
+
+    def test_env(self) -> None:
+        out = build_steps_to_api([EnvStep(env=EnvStepValue(key="DEBUG", value="1"))])
+        assert out == [{"env": {"key": "DEBUG", "value": "1"}}]
+
+    def test_workdir(self) -> None:
+        out = build_steps_to_api([WorkdirStep(workdir="/app")])
+        assert out == [{"workdir": "/app"}]
+
+    def test_user_default_sudo_false(self) -> None:
+        out = build_steps_to_api([UserStep(user=UserStepValue(name="appuser"))])
+        assert out == [{"user": {"name": "appuser", "sudo": False}}]
+
+    def test_user_sudo_true(self) -> None:
+        out = build_steps_to_api(
+            [UserStep(user=UserStepValue(name="appuser", sudo=True))]
+        )
+        assert out == [{"user": {"name": "appuser", "sudo": True}}]

@@ -11,6 +11,7 @@ from superserve._http import (
     api_request,
     async_api_request,
     download_bytes,
+    stream_sse,
     upload_bytes,
 )
 from superserve.errors import (
@@ -61,9 +62,7 @@ class TestApiRequest:
     def test_400_raises_validation_error(self) -> None:
         with respx.mock() as router:
             router.post("https://api.example.com/foo").mock(
-                return_value=httpx.Response(
-                    400, json={"error": {"message": "bad"}}
-                )
+                return_value=httpx.Response(400, json={"error": {"message": "bad"}})
             )
             with pytest.raises(ValidationError):
                 api_request(
@@ -98,7 +97,9 @@ class TestApiRequest:
             route = router.get("https://api.example.com/foo").mock(
                 return_value=httpx.Response(200, json={})
             )
-            api_request("GET", "https://api.example.com/foo", headers={"X-API-Key": "k"})
+            api_request(
+                "GET", "https://api.example.com/foo", headers={"X-API-Key": "k"}
+            )
             request = route.calls.last.request
             assert request.headers.get("User-Agent") == USER_AGENT
             assert SDK_VERSION in request.headers.get("User-Agent", "")
@@ -368,3 +369,30 @@ class TestAsyncApiRequest:
                 await async_api_request(
                     "GET", "https://api.example.com/foo", headers={"X-API-Key": "k"}
                 )
+
+
+class TestStreamSSEGet:
+    def test_uses_get_without_body(self) -> None:
+        with respx.mock() as router:
+            route = router.get(
+                "https://api.example.com/templates/t/builds/b/logs"
+            ).mock(
+                return_value=httpx.Response(
+                    200,
+                    text=(
+                        'data: {"timestamp":"2026-01-01T00:00:00Z","stream":"stdout","text":"hi"}\n\n'
+                        'data: {"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"done","finished":true,"status":"ready"}\n\n'
+                    ),
+                )
+            )
+            events: list = []
+            stream_sse(
+                "https://api.example.com/templates/t/builds/b/logs",
+                headers={"X-API-Key": "k"},
+                json_body=None,
+                method="GET",
+                on_event=lambda ev: events.append(ev),
+            )
+            assert len(events) == 2
+            assert route.call_count == 1
+            assert route.calls.last.request.content == b""

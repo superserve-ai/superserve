@@ -18,7 +18,7 @@ export function EmptyState({
   onAction,
 }: EmptyStateProps) {
   return (
-    <div className="flex flex-1 items-center justify-center">
+    <div className="flex min-h-full flex-1 items-center justify-center py-16">
       <div className="relative flex w-80 flex-col items-center px-10 py-10 text-center">
         <CornerBrackets size="lg" />
 

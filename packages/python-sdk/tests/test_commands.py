@@ -73,9 +73,7 @@ class TestCommandsStreaming:
         stderr_chunks: list[str] = []
 
         with respx.mock() as router:
-            router.post(
-                "https://api.example.com/sandboxes/sbx-1/exec/stream"
-            ).mock(
+            router.post("https://api.example.com/sandboxes/sbx-1/exec/stream").mock(
                 return_value=httpx.Response(
                     200,
                     content=sse_body.encode(),
@@ -98,9 +96,7 @@ class TestCommandsStreaming:
         sse_body = 'data: {"stdout": "partial"}\n\n'
 
         with respx.mock() as router:
-            router.post(
-                "https://api.example.com/sandboxes/sbx-1/exec/stream"
-            ).mock(
+            router.post("https://api.example.com/sandboxes/sbx-1/exec/stream").mock(
                 return_value=httpx.Response(
                     200,
                     content=sse_body.encode(),
@@ -120,9 +116,7 @@ class TestCommandsStreaming:
         )
 
         with respx.mock() as router:
-            router.post(
-                "https://api.example.com/sandboxes/sbx-1/exec/stream"
-            ).mock(
+            router.post("https://api.example.com/sandboxes/sbx-1/exec/stream").mock(
                 return_value=httpx.Response(
                     200,
                     content=sse_body.encode(),

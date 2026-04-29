@@ -247,3 +247,65 @@ class TestInstanceMethods:
                 assert sbx.metadata == {}
             finally:
                 sbx._close_http_client()
+
+
+class TestCreateFromTemplate:
+    def test_maps_string(self) -> None:
+        with respx.mock() as router:
+            route = router.post(f"{API}/sandboxes").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            sbx = Sandbox.create(name="b", from_template="superserve/python-3.11")
+            try:
+                body = route.calls.last.request.content
+                assert b'"from_template"' in body
+                assert b"superserve/python-3.11" in body
+            finally:
+                sbx._close_http_client()
+
+    def test_maps_instance(self) -> None:
+        from superserve import Template
+
+        with respx.mock() as router:
+            router.post(f"{API}/templates").mock(
+                return_value=httpx.Response(
+                    202,
+                    json={
+                        "id": "t-1",
+                        "team_id": "team-1",
+                        "alias": "my-env",
+                        "status": "building",
+                        "vcpu": 1,
+                        "memory_mib": 1024,
+                        "disk_mib": 4096,
+                        "created_at": "2026-01-01T00:00:00Z",
+                        "build_id": "b-1",
+                    },
+                )
+            )
+            tpl = Template.create(alias="my-env", from_="python:3.11")
+            route = router.post(f"{API}/sandboxes").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            sbx = Sandbox.create(name="b", from_template=tpl)
+            try:
+                body = route.calls.last.request.content
+                assert (
+                    b'"from_template": "my-env"' in body
+                    or b'"from_template":"my-env"' in body
+                )
+            finally:
+                sbx._close_http_client()
+
+    def test_maps_from_snapshot(self) -> None:
+        with respx.mock() as router:
+            route = router.post(f"{API}/sandboxes").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            sbx = Sandbox.create(name="b", from_snapshot="snap-abc")
+            try:
+                body = route.calls.last.request.content
+                assert b"snap-abc" in body
+                assert b"from_snapshot" in body
+            finally:
+                sbx._close_http_client()

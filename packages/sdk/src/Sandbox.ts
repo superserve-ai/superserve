@@ -96,6 +96,15 @@ export class Sandbox {
     const body: Record<string, unknown> = { name: options.name }
     if (options.timeoutSeconds !== undefined)
       body.timeout_seconds = options.timeoutSeconds
+    if (options.fromTemplate !== undefined) {
+      body.from_template =
+        typeof options.fromTemplate === "string"
+          ? options.fromTemplate
+          : (options.fromTemplate.alias ?? options.fromTemplate.id)
+    }
+    if (options.fromSnapshot !== undefined) {
+      body.from_snapshot = options.fromSnapshot
+    }
     if (options.metadata !== undefined) body.metadata = options.metadata
     if (options.envVars !== undefined) body.env_vars = options.envVars
     if (options.network) {
