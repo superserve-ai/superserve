@@ -136,6 +136,20 @@
               "POST /sandboxes/{sandbox_id}/exec",
               "POST /sandboxes/{sandbox_id}/exec/stream"
             ]
+          },
+          {
+            "group": "Templates",
+            "pages": [
+              "GET /templates",
+              "POST /templates",
+              "GET /templates/{template_id}",
+              "DELETE /templates/{template_id}",
+              "GET /templates/{template_id}/builds",
+              "POST /templates/{template_id}/builds",
+              "GET /templates/{template_id}/builds/{build_id}",
+              "DELETE /templates/{template_id}/builds/{build_id}",
+              "GET /templates/{template_id}/builds/{build_id}/logs"
+            ]
           }
         ]
       }
