@@ -7,6 +7,7 @@ export {
   BuildError,
   ConflictError,
   NotFoundError,
+  RateLimitError,
   SandboxError,
   ServerError,
   TimeoutError,

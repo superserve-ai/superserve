@@ -26,9 +26,11 @@ const CURATED_IMAGES = [
   "debian:12-slim",
 ] as const
 
-const MEMORY_OPTIONS = [256, 512, 1024, 2048, 4096] as const
+// Trimmed to the default per-team caps from the backend (vcpu=2, memory_mib=2048,
+// disk_mib=8192). Teams with raised caps drop to the SDK/API for higher values.
+const MEMORY_OPTIONS = [256, 512, 1024, 2048] as const
 const DISK_OPTIONS = [1024, 2048, 4096, 8192] as const
-const VCPU_OPTIONS = [1, 2, 4] as const
+const VCPU_OPTIONS = [1, 2] as const
 
 const NAME_RE = /^[a-z0-9][a-z0-9-]*$/
 
@@ -140,9 +142,10 @@ export function CreateTemplateDialog({
           return
         }
         if (err.status === 429) {
-          setErrors({
-            form: "Concurrent build limit reached. Wait for a build to finish, then try again.",
-          })
+          // 429 from POST /templates can be too_many_builds (concurrent build
+          // limit) or too_many_templates (team count limit). Backend message
+          // already includes the cap and contact-support copy — surface it.
+          setErrors({ form: err.message })
           return
         }
         setErrors({ form: err.message })
