@@ -31,7 +31,7 @@ Register a new template and queue its first build. Returns as soon as the templa
 <CodeGroup>
 ```typescript TypeScript
 const template = await Template.create({
-  alias: "my-python-env",
+  name: "my-python-env",
   vcpu: 2,
   memoryMib: 2048,
   diskMib: 4096,
@@ -51,7 +51,7 @@ const template = await Template.create({
 from superserve import Template, RunStep, EnvStep, EnvStepValue, WorkdirStep, UserStep, UserStepValue
 
 template = Template.create(
-    alias="my-python-env",
+    name="my-python-env",
     vcpu=2,
     memory_mib=2048,
     disk_mib=4096,
@@ -72,7 +72,7 @@ template = Template.create(
 
 | Option | Type | Description |
 |---|---|---|
-| `alias` | `string` | **Required.** Team-scoped identifier. Must not start with `superserve/`. |
+| `name` | `string` | **Required.** Team-scoped identifier. Must not start with `superserve/`. Names are unique per team among non-deleted templates and are released for reuse the moment a template is deleted. |
 | `from` / `from_` | `string` | **Required.** OCI base image (e.g. `python:3.11`). See [BuildSpec](/templates/build-spec#from-base-image). |
 | `vcpu` | `number` | 1-4. Default `1`. |
 | `memoryMib` / `memory_mib` | `number` | 256-4096. Default `1024`. |
@@ -88,19 +88,15 @@ Throws `SandboxError` if the API response is missing `build_id`.
 
 ### `Template.connect`
 
-Load an existing template by alias or UUID. The backend resolves either form.
+Load an existing template by UUID.
 
 <CodeGroup>
 ```typescript TypeScript
-const template = await Template.connect("my-python-env")
-// or by UUID
-const template2 = await Template.connect("7a3f2b8c-1234-...")
+const template = await Template.connect("7a3f2b8c-1234-...")
 ```
 
 ```python Python
-template = Template.connect("my-python-env")
-# or by UUID
-template2 = Template.connect("7a3f2b8c-1234-...")
+template = Template.connect("7a3f2b8c-1234-...")
 ```
 </CodeGroup>
 
@@ -111,12 +107,12 @@ List all templates visible to the authenticated team (includes system templates)
 <CodeGroup>
 ```typescript TypeScript
 const all = await Template.list()
-const mine = await Template.list({ aliasPrefix: "my-" })
+const mine = await Template.list({ namePrefix: "my-" })
 ```
 
 ```python Python
 all_templates = Template.list()
-mine = Template.list(alias_prefix="my-")
+mine = Template.list(name_prefix="my-")
 ```
 </CodeGroup>
 
@@ -124,19 +120,19 @@ Returns an array of [`TemplateInfo`](#templateinfo).
 
 ### `Template.deleteById` / `Template.delete_by_id`
 
-Delete a template by alias or UUID without instantiating it. Idempotent on `404`.
+Delete a template by UUID without instantiating it. Idempotent on `404`.
 
 <CodeGroup>
 ```typescript TypeScript
-await Template.deleteById("my-python-env")
+await Template.deleteById("7a3f2b8c-1234-...")
 ```
 
 ```python Python
-Template.delete_by_id("my-python-env")
+Template.delete_by_id("7a3f2b8c-1234-...")
 ```
 </CodeGroup>
 
-Throws `ConflictError` if any non-destroyed sandbox still references the template.
+Throws `ConflictError` if any non-destroyed sandbox still references the template. The template's name is released for reuse as soon as the call succeeds.
 
 ## Methods on `template`
 
@@ -309,7 +305,7 @@ All properties are read-only snapshots taken at construction. Call `getInfo()` /
 | Property | Type | Description |
 |---|---|---|
 | `id` | `string` | Template UUID. |
-| `alias` | `string` | Team-scoped identifier. |
+| `name` | `string` | Team-scoped identifier. |
 | `teamId` / `team_id` | `string` | Owning team UUID. |
 | `status` | `TemplateStatus` | Status at construction time. |
 | `vcpu` | `number` | vCPU count the template boots with. |
@@ -378,7 +374,7 @@ class TemplateBuildStatus(str, Enum):
 ```typescript TypeScript
 interface TemplateInfo {
   id: string
-  alias: string
+  name: string
   teamId: string
   status: TemplateStatus
   vcpu: number
@@ -398,7 +394,7 @@ from pydantic import BaseModel
 
 class TemplateInfo(BaseModel):
     id: str
-    alias: str
+    name: str
     team_id: str
     status: TemplateStatus
     vcpu: int
@@ -548,7 +544,7 @@ GET and DELETE requests (including `Template.list`, `Template.connect`, `getInfo
 Template methods commonly raise:
 
 - `AuthenticationError` - missing or invalid API key
-- `ValidationError` - bad request body (invalid alias, unsupported base image, steps with multiple keys)
+- `ValidationError` - bad request body (invalid name, unsupported base image, steps with multiple keys)
 - `NotFoundError` - template or build doesn't exist (except `delete` / `deleteById` / `cancelBuild`, which swallow 404)
 - `ConflictError` - template has dependent sandboxes (on delete) or build was cancelled (on `waitUntilReady`)
 - `BuildError` - build transitioned to `failed` (from `waitUntilReady` only)

@@ -70,14 +70,14 @@ See the [Sandbox reference](/sdk-reference/sandbox#sandbox-create) for every opt
 
 ## Create from a template
 
-Boot a sandbox from a system or team template via `fromTemplate` (alias, UUID, or `Template` instance).
+Boot a sandbox from a system or team template via `fromTemplate` (name, UUID, or `Template` instance).
 
 <CodeGroup>
 
 ```typescript TypeScript
 const sandbox = await Sandbox.create({
   name: "my-sandbox",
-  fromTemplate: "superserve/python-3.11",  // alias
+  fromTemplate: "superserve/python-3.11",  // name
 })
 ```
 

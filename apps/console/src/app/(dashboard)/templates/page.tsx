@@ -54,7 +54,7 @@ function TemplatesPageContent() {
 
     const q = search.trim().toLowerCase()
     if (!q) return byTab
-    return byTab.filter((t) => t.alias.toLowerCase().includes(q))
+    return byTab.filter((t) => t.name.toLowerCase().includes(q))
   }, [templates, tab, search])
 
   const newButton = (
@@ -107,7 +107,7 @@ function TemplatesPageContent() {
             ]}
             activeTab={tab}
             onTabChange={(v) => setTab(v as Tab)}
-            searchPlaceholder="Search aliases…"
+            searchPlaceholder="Search names…"
             searchValue={search}
             onSearchChange={setSearch}
           />
@@ -125,7 +125,7 @@ function TemplatesPageContent() {
                 }
                 description={
                   search
-                    ? "Try a different alias prefix."
+                    ? "Try a different name prefix."
                     : tab === "team"
                       ? "Create one to get started."
                       : "System templates are curated by Superserve."

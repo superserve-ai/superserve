@@ -7,10 +7,10 @@ import type {
 } from "./types"
 
 export async function listTemplates(params?: {
-  alias_prefix?: string
+  name_prefix?: string
 }): Promise<TemplateResponse[]> {
   const query = new URLSearchParams()
-  if (params?.alias_prefix) query.set("alias_prefix", params.alias_prefix)
+  if (params?.name_prefix) query.set("name_prefix", params.name_prefix)
   const suffix = query.toString()
   return apiClient<TemplateResponse[]>(
     `/templates${suffix ? `?${suffix}` : ""}`,

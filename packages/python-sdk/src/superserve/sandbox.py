@@ -66,9 +66,9 @@ class Sandbox:
             if isinstance(from_template, str):
                 body["from_template"] = from_template
             else:
-                # Template / AsyncTemplate instance — extract alias (fallback to id)
+                # Template / AsyncTemplate instance — extract name (fallback to id)
                 body["from_template"] = (
-                    getattr(from_template, "alias", None) or from_template.id
+                    getattr(from_template, "name", None) or from_template.id
                 )
         if from_snapshot is not None:
             body["from_snapshot"] = from_snapshot

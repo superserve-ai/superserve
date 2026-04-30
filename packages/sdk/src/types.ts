@@ -42,8 +42,8 @@ export interface ConnectionOptions {
 
 export interface SandboxCreateOptions extends ConnectionOptions {
   name: string
-  /** Template alias, UUID, or Template instance. */
-  fromTemplate?: string | { alias?: string; id: string }
+  /** Template name, UUID, or Template instance. */
+  fromTemplate?: string | { name?: string; id: string }
   /** Snapshot UUID. */
   fromSnapshot?: string
   timeoutSeconds?: number
@@ -183,7 +183,7 @@ export type BuildLogStream = "stdout" | "stderr" | "system"
 
 export interface TemplateInfo {
   id: string
-  alias: string
+  name: string
   teamId: string
   status: TemplateStatus
   vcpu: number
@@ -223,7 +223,7 @@ export type BuildStep =
   | { user: { name: string; sudo?: boolean } }
 
 export interface TemplateCreateOptions extends ConnectionOptions {
-  alias: string
+  name: string
   vcpu?: number
   memoryMib?: number
   diskMib?: number
@@ -234,7 +234,7 @@ export interface TemplateCreateOptions extends ConnectionOptions {
 }
 
 export interface TemplateListOptions extends ConnectionOptions {
-  aliasPrefix?: string
+  namePrefix?: string
 }
 
 export interface TemplateBuildsListOptions extends ConnectionOptions {
@@ -261,7 +261,7 @@ export interface WaitUntilReadyOptions {
 export interface ApiTemplateResponse {
   id?: string
   team_id?: string
-  alias?: string
+  name?: string
   status?: string
   vcpu?: number
   memory_mib?: number
@@ -310,8 +310,8 @@ export function toTemplateInfo(
   if (!raw.id) {
     throw new SandboxError("Invalid API response: missing template id")
   }
-  if (!raw.alias) {
-    throw new SandboxError("Invalid API response: missing template alias")
+  if (!raw.name) {
+    throw new SandboxError("Invalid API response: missing template name")
   }
   if (!raw.status) {
     throw new SandboxError("Invalid API response: missing template status")
@@ -325,7 +325,7 @@ export function toTemplateInfo(
 
   return {
     id: raw.id,
-    alias: raw.alias,
+    name: raw.name,
     teamId: raw.team_id,
     status: raw.status as TemplateStatus,
     vcpu: raw.vcpu ?? 0,

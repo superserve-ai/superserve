@@ -28,15 +28,15 @@ async function main() {
     process.exit(1)
   }
 
-  const alias = `test-tpl-${Date.now().toString(36)}`
-  console.log(`Creating template: ${alias}`)
+  const name = `test-tpl-${Date.now().toString(36)}`
+  console.log(`Creating template: ${name}`)
   console.log(`Target: ${BASE_URL}`)
   console.log()
 
   const template = await Template.create({
     apiKey: API_KEY,
     baseUrl: BASE_URL,
-    alias,
+    name,
     vcpu: 2,
     memoryMib: 2048,
     diskMib: 4096,
@@ -65,7 +65,9 @@ async function main() {
     })
     const fresh = await template.getInfo()
     console.log("\n--- end logs ---")
-    console.log(`Build succeeded. status=${fresh.status} built_at=${fresh.builtAt?.toISOString()}`)
+    console.log(
+      `Build succeeded. status=${fresh.status} built_at=${fresh.builtAt?.toISOString()}`,
+    )
     console.log(`Size: ${fresh.sizeBytes ?? "n/a"} bytes`)
   } catch (err) {
     console.log("\n--- end logs ---")
@@ -87,7 +89,7 @@ async function main() {
     // } catch (err) {
     //   console.error(`Cleanup failed for template ${template.id}:`, err)
     // }
-    console.log(`Template left in place: ${template.id} (${template.alias})`)
+    console.log(`Template left in place: ${template.id} (${template.name})`)
   }
 }
 
