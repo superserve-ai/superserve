@@ -26,6 +26,7 @@ from .types import (
     BuildLogEvent,
     BuildStep,
     TemplateBuildInfo,
+    TemplateBuildStatus,
     TemplateInfo,
     TemplateStatus,
     build_steps_to_api,
@@ -276,39 +277,29 @@ class Template:
     ) -> TemplateInfo:
         """Block until the current build reaches terminal status.
 
-        Attempts SSE first; falls back to polling on SSE error. Raises
-        `BuildError` on `failed` or `ConflictError` on `cancelled`.
+        Polls ``GET /templates/{id}/builds/{bid}`` (the DB-backed build row)
+        as the source of truth — SSE is only used for live log delivery
+        when ``on_log`` is provided. Raises ``BuildError`` on ``failed``
+        or ``ConflictError`` on ``cancelled``.
         """
         import re
         import time as _time
 
-        final_status: str | None = None
-        # Try to resolve a build to follow. If template has no builds, fall
-        # through to polling status only (no log stream).
         try:
             bid: str | None = self._resolve_build_id()
         except SandboxError:
             bid = None
 
-        # Only the three terminal statuses end the wait. The server sends
-        # `finished:true, status:"pending"` to signal "build not yet
-        # dispatched, reconnect or poll later"; the SDK must NOT treat
-        # that as a final outcome.
-        terminal_build_statuses = {"ready", "failed", "cancelled"}
-
-        if bid:
+        # SSE for live logs only. The server emits `finished:true,
+        # status:"ready"` the instant vmd finishes, but the DB row that
+        # POST /sandboxes reads is updated by a separate ~1s poller.
+        # Treating SSE as the terminal-state signal would race that
+        # update and leave callers seeing 409 "template is not ready"
+        # on the very next request. Source of truth is the build poll.
+        if bid and on_log is not None:
 
             def _on_raw(raw: dict[str, Any]) -> None:
-                nonlocal final_status
-                ev = to_build_log_event(raw)
-                if on_log:
-                    on_log(ev)
-                if (
-                    ev.finished
-                    and ev.status
-                    and ev.status in terminal_build_statuses
-                ):
-                    final_status = ev.status
+                on_log(to_build_log_event(raw))
 
             try:
                 stream_sse(
@@ -319,38 +310,51 @@ class Template:
                     on_event=_on_raw,
                 )
             except Exception:
-                # Fall through to polling.
+                # SSE failures are non-fatal — polling drives terminal detection.
                 pass
-
-        # Poll until terminal status. Handles SSE errors, SSE closing on
-        # a non-terminal status (e.g. `pending`), and the no-bid case.
-        while final_status is None:
-            info = self.get_info()
-            if info.status in (TemplateStatus.READY, TemplateStatus.FAILED):
-                final_status = info.status.value
-                break
-            _time.sleep(poll_interval_s)
-
-        info = self.get_info()
-        if final_status == "ready":
-            return info
-        if final_status == "cancelled":
-            raise ConflictError("template build was cancelled", code="cancelled")
 
         # Split a backend `error_message` of the form `"<code>: <detail>"`
         # into a stable code and a clean human-readable message.
-        if info.error_message:
-            match = re.match(r"^(\w+):\s*(.*)$", info.error_message, re.DOTALL)
+        def _parse_err(msg: str | None) -> tuple[str, str]:
+            if not msg:
+                return "build_failed", "Template build failed"
+            match = re.match(r"^(\w+):\s*(.*)$", msg, re.DOTALL)
             if match and match.group(2).strip():
-                code = match.group(1)
-                msg = match.group(2).strip()
-            else:
-                code = "build_failed"
-                msg = info.error_message
-        else:
-            code = "build_failed"
-            msg = "Template build failed"
-        raise BuildError(msg, code=code, build_id=bid or "", template_id=self.id)
+                return match.group(1), match.group(2).strip()
+            return "build_failed", msg
+
+        if bid:
+            # Build status transitions pending → building → snapshotting → ready/failed/cancelled.
+            # Template-level status reflects the *latest successful* build,
+            # so polling /templates/{id} would say "ready" instantly when
+            # rebuilding an already-ready template. The build-level row is
+            # what we need.
+            while True:
+                build = self.get_build(bid)
+                if build.status == TemplateBuildStatus.READY:
+                    return self.get_info()
+                if build.status == TemplateBuildStatus.FAILED:
+                    code, msg = _parse_err(build.error_message)
+                    raise BuildError(
+                        msg, code=code, build_id=bid, template_id=self.id
+                    )
+                if build.status == TemplateBuildStatus.CANCELLED:
+                    raise ConflictError(
+                        "template build was cancelled", code="cancelled"
+                    )
+                _time.sleep(poll_interval_s)
+
+        # No build_id — rare path; poll template status as a best effort.
+        while True:
+            info = self.get_info()
+            if info.status == TemplateStatus.READY:
+                return info
+            if info.status == TemplateStatus.FAILED:
+                code, msg = _parse_err(info.error_message)
+                raise BuildError(
+                    msg, code=code, build_id="", template_id=self.id
+                )
+            _time.sleep(poll_interval_s)
 
     def __repr__(self) -> str:
         return (

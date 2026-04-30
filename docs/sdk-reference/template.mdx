@@ -158,7 +158,7 @@ print(info.status.value)  # "pending" | "building" | "ready" | "failed"
 
 ### `waitUntilReady` / `wait_until_ready`
 
-Block until the current build reaches a terminal status (`ready`, `failed`, or `cancelled`). Subscribes to the build's SSE log stream if `onLog` / `on_log` is provided; falls back to polling when the stream errors or closes on a non-terminal state (e.g. the server's "build pending - reconnect later" signal). Returns a refreshed [`TemplateInfo`](#templateinfo) with `status = "ready"`.
+Block until the current build reaches a terminal status. The SDK polls `GET /templates/{id}/builds/{buildId}` for the authoritative build status — SSE is used only for live log delivery when `onLog` / `on_log` is provided, never to detect termination. Returns a refreshed [`TemplateInfo`](#templateinfo) with `status = "ready"`.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -185,8 +185,8 @@ info = template.wait_until_ready(on_log=print_log)
 |---|---|---|
 | `onLog` / `on_log` | `(ev: BuildLogEvent) => void` | Called for every SSE log event. |
 | `signal` | `AbortSignal` | TypeScript only - aborts the stream and any pending poll. |
-| `pollIntervalMs` | `number` | TypeScript only. Fallback poll interval. Default `2000`. |
-| `poll_interval_s` | `float` | Python only. Fallback poll interval. Default `2.0`. |
+| `pollIntervalMs` | `number` | TypeScript only. Build status poll interval. Default `2000`. |
+| `poll_interval_s` | `float` | Python only. Build status poll interval. Default `2.0`. |
 
 **Throws:**
 

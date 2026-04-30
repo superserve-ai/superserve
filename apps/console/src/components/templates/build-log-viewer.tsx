@@ -2,8 +2,10 @@
 
 import { ArrowDownIcon } from "@phosphor-icons/react"
 import { cn } from "@superserve/ui"
+import { useQueryClient } from "@tanstack/react-query"
 import { useEffect, useRef, useState } from "react"
-import type { BuildLogEvent } from "@/lib/api/types"
+import { templateKeys } from "@/lib/api/query-keys"
+import type { BuildLogEvent, TemplateResponse } from "@/lib/api/types"
 
 interface LogLine {
   ts: string
@@ -39,6 +41,7 @@ export function BuildLogViewer({
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     // `attempt` is listed so explicit Reconnect clicks trigger a reconnect.
@@ -50,12 +53,50 @@ export function BuildLogViewer({
     const url = `/api/templates/${templateId}/builds/${buildId}/logs`
     const es = new EventSource(url)
 
+    let cancelled = false
+    let burstTimer: ReturnType<typeof setTimeout> | null = null
+
+    /**
+     * SSE emits `finished:status:"ready"` the instant vmd reports the
+     * build is done, but the DB row that template/sandbox endpoints read
+     * is updated by a separate ~1s supervisor poll. Burst-invalidate the
+     * template queries so dependent UI (Launch button, status badges,
+     * template picker) reflects terminal state without waiting for the
+     * next 5–10s polling tick. Bounded to 3s so a stuck DB doesn't loop
+     * forever — normal polling takes over after.
+     */
+    const burstInvalidateUntilTerminal = () => {
+      const deadline = Date.now() + 3000
+      const tick = async () => {
+        if (cancelled) return
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: templateKeys.detail(templateId),
+          }),
+          queryClient.invalidateQueries({ queryKey: templateKeys.lists() }),
+          queryClient.invalidateQueries({
+            queryKey: templateKeys.builds(templateId),
+          }),
+        ])
+        if (cancelled) return
+        const cached = queryClient.getQueryData<TemplateResponse>(
+          templateKeys.detail(templateId),
+        )
+        const terminal =
+          cached?.status === "ready" || cached?.status === "failed"
+        if (terminal || Date.now() > deadline) return
+        burstTimer = setTimeout(() => void tick(), 400)
+      }
+      void tick()
+    }
+
     es.onmessage = (evt) => {
       try {
         const data = JSON.parse(evt.data) as BuildLogEvent
         if (data.finished) {
           setFinalStatus(data.status ?? null)
           es.close()
+          burstInvalidateUntilTerminal()
           return
         }
         setLines((prev) => {
@@ -81,9 +122,11 @@ export function BuildLogViewer({
     }
 
     return () => {
+      cancelled = true
+      if (burstTimer) clearTimeout(burstTimer)
       es.close()
     }
-  }, [templateId, buildId, attempt])
+  }, [templateId, buildId, attempt, queryClient])
 
   // Auto-scroll whenever new lines arrive or the follow mode toggles back on.
   // `lineCount` is intentionally read from state rather than a ref so the
