@@ -6,6 +6,7 @@ import {
   ConflictError,
   mapApiError,
   NotFoundError,
+  RateLimitError,
   SandboxError,
   ServerError,
   TimeoutError,
@@ -20,6 +21,7 @@ describe("error hierarchy", () => {
     expect(new ConflictError()).toBeInstanceOf(SandboxError)
     expect(new TimeoutError()).toBeInstanceOf(SandboxError)
     expect(new ServerError()).toBeInstanceOf(SandboxError)
+    expect(new RateLimitError()).toBeInstanceOf(SandboxError)
   })
 
   it("sets name correctly on each subclass", () => {
@@ -29,6 +31,7 @@ describe("error hierarchy", () => {
     expect(new ConflictError().name).toBe("ConflictError")
     expect(new TimeoutError().name).toBe("TimeoutError")
     expect(new ServerError().name).toBe("ServerError")
+    expect(new RateLimitError().name).toBe("RateLimitError")
     expect(new SandboxError("boom").name).toBe("SandboxError")
   })
 
@@ -78,14 +81,39 @@ describe("mapApiError", () => {
     expect(err.code).toBe("conflict")
   })
 
-  it("maps 429 to base SandboxError", () => {
+  it("maps 429 rate_limited to RateLimitError", () => {
     const err = mapApiError(429, withError("rate_limited", "slow down"))
-    expect(err).toBeInstanceOf(SandboxError)
-    // Not one of the more specific subclasses
-    expect(err).not.toBeInstanceOf(ValidationError)
-    expect(err).not.toBeInstanceOf(ServerError)
+    expect(err).toBeInstanceOf(RateLimitError)
     expect(err.statusCode).toBe(429)
     expect(err.code).toBe("rate_limited")
+  })
+
+  it("maps 429 too_many_templates to RateLimitError preserving code", () => {
+    const err = mapApiError(
+      429,
+      withError(
+        "too_many_templates",
+        "team has reached the limit of 10 templates",
+      ),
+    )
+    expect(err).toBeInstanceOf(RateLimitError)
+    expect(err.code).toBe("too_many_templates")
+    expect(err.message).toContain("limit of 10")
+  })
+
+  it("maps 429 too_many_sandboxes to RateLimitError preserving code", () => {
+    const err = mapApiError(
+      429,
+      withError("too_many_sandboxes", "team has reached the limit of 50"),
+    )
+    expect(err).toBeInstanceOf(RateLimitError)
+    expect(err.code).toBe("too_many_sandboxes")
+  })
+
+  it("maps 429 too_many_builds to RateLimitError preserving code", () => {
+    const err = mapApiError(429, withError("too_many_builds", "wait"))
+    expect(err).toBeInstanceOf(RateLimitError)
+    expect(err.code).toBe("too_many_builds")
   })
 
   it("maps 500 to ServerError", () => {

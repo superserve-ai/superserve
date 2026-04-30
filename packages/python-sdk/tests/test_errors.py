@@ -8,6 +8,7 @@ from superserve.errors import (
     BuildError,
     ConflictError,
     NotFoundError,
+    RateLimitError,
     SandboxError,
     SandboxTimeoutError,
     ServerError,
@@ -46,22 +47,47 @@ class TestMapApiError:
         assert isinstance(err, ConflictError)
         assert err.status_code == 409
 
-    def test_429_returns_generic_sandbox_error(self) -> None:
-        err = map_api_error(429, {"error": {"message": "too many"}})
-        # 429 is not specifically mapped — stays a base SandboxError with status_code
-        assert isinstance(err, SandboxError)
-        # But NOT any of the more specific typed errors
-        assert not isinstance(
-            err,
-            (
-                ValidationError,
-                AuthenticationError,
-                NotFoundError,
-                ConflictError,
-                ServerError,
-            ),
+    def test_429_rate_limited_returns_rate_limit_error(self) -> None:
+        err = map_api_error(
+            429, {"error": {"message": "slow down", "code": "rate_limited"}}
         )
+        assert isinstance(err, RateLimitError)
         assert err.status_code == 429
+        assert err.code == "rate_limited"
+
+    def test_429_too_many_templates_preserves_code(self) -> None:
+        err = map_api_error(
+            429,
+            {
+                "error": {
+                    "message": "team has reached the limit of 10 templates",
+                    "code": "too_many_templates",
+                }
+            },
+        )
+        assert isinstance(err, RateLimitError)
+        assert err.code == "too_many_templates"
+        assert "limit of 10" in str(err)
+
+    def test_429_too_many_sandboxes_preserves_code(self) -> None:
+        err = map_api_error(
+            429,
+            {
+                "error": {
+                    "message": "team has reached the limit of 50",
+                    "code": "too_many_sandboxes",
+                }
+            },
+        )
+        assert isinstance(err, RateLimitError)
+        assert err.code == "too_many_sandboxes"
+
+    def test_429_too_many_builds_preserves_code(self) -> None:
+        err = map_api_error(
+            429, {"error": {"message": "wait", "code": "too_many_builds"}}
+        )
+        assert isinstance(err, RateLimitError)
+        assert err.code == "too_many_builds"
 
     def test_500_returns_server_error(self) -> None:
         err = map_api_error(500, {"error": {"message": "boom"}})
@@ -93,6 +119,12 @@ class TestErrorHierarchy:
         assert issubclass(ConflictError, SandboxError)
         assert issubclass(SandboxTimeoutError, SandboxError)
         assert issubclass(ServerError, SandboxError)
+        assert issubclass(RateLimitError, SandboxError)
+
+    def test_rate_limit_error_has_status_429(self) -> None:
+        err = RateLimitError(code="rate_limited")
+        assert err.status_code == 429
+        assert err.code == "rate_limited"
 
     def test_authentication_error_has_status_401(self) -> None:
         err = AuthenticationError()

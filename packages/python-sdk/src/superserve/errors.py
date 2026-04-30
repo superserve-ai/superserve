@@ -68,6 +68,23 @@ class ServerError(SandboxError):
         super().__init__(message, status_code=500, code=code)
 
 
+class RateLimitError(SandboxError):
+    """Raised on 429 responses. ``code`` distinguishes the variant:
+
+    - ``rate_limited`` — request rate exceeded; retry after a short backoff.
+    - ``too_many_builds`` — team has reached its concurrent build limit.
+    - ``too_many_templates`` — team has reached its total template count limit.
+    - ``too_many_sandboxes`` — team has reached its active sandbox count limit.
+    """
+
+    def __init__(
+        self,
+        message: str = "Rate limit exceeded",
+        code: str | None = None,
+    ) -> None:
+        super().__init__(message, status_code=429, code=code)
+
+
 class BuildError(SandboxError):
     """Raised when a template build transitions to status 'failed'.
 
@@ -105,6 +122,8 @@ def map_api_error(status_code: int, body: dict[str, Any]) -> SandboxError:
         return NotFoundError(message, code=code)
     elif status_code == 409:
         return ConflictError(message, code=code)
+    elif status_code == 429:
+        return RateLimitError(message, code=code)
     elif status_code >= 500:
         return ServerError(message, code=code)
     return SandboxError(message, status_code=status_code, code=code)

@@ -142,9 +142,10 @@ export function CreateTemplateDialog({
           return
         }
         if (err.status === 429) {
-          setErrors({
-            form: "Concurrent build limit reached. Wait for a build to finish, then try again.",
-          })
+          // 429 from POST /templates can be too_many_builds (concurrent build
+          // limit) or too_many_templates (team count limit). Backend message
+          // already includes the cap and contact-support copy — surface it.
+          setErrors({ form: err.message })
           return
         }
         setErrors({ form: err.message })
