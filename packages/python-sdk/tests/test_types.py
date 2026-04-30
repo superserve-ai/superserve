@@ -135,7 +135,7 @@ class TestToTemplateInfo:
             {
                 "id": "t-1",
                 "team_id": "team-1",
-                "alias": "my-env",
+                "name": "my-env",
                 "status": "ready",
                 "vcpu": 2,
                 "memory_mib": 2048,
@@ -146,7 +146,7 @@ class TestToTemplateInfo:
             }
         )
         assert info.id == "t-1"
-        assert info.alias == "my-env"
+        assert info.name == "my-env"
         assert info.status == TemplateStatus.READY
         assert info.vcpu == 2
         assert info.memory_mib == 2048
@@ -160,7 +160,7 @@ class TestToTemplateInfo:
             {
                 "id": "t-1",
                 "team_id": "team-1",
-                "alias": "my-env",
+                "name": "my-env",
                 "status": "building",
                 "vcpu": 1,
                 "memory_mib": 1024,

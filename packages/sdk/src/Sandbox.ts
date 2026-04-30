@@ -100,7 +100,7 @@ export class Sandbox {
       body.from_template =
         typeof options.fromTemplate === "string"
           ? options.fromTemplate
-          : (options.fromTemplate.alias ?? options.fromTemplate.id)
+          : (options.fromTemplate.name ?? options.fromTemplate.id)
     }
     if (options.fromSnapshot !== undefined) {
       body.from_snapshot = options.fromSnapshot

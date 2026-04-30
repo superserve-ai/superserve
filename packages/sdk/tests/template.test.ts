@@ -26,7 +26,7 @@ function errorResponse(
 const baseTemplate = {
   id: "t-1",
   team_id: "team-1",
-  alias: "my-env",
+  name: "my-env",
   status: "building",
   vcpu: 1,
   memory_mib: 1024,
@@ -50,7 +50,7 @@ describe("Template.create", () => {
 
     const template = await Template.create({
       ...commonOpts,
-      alias: "my-env",
+      name: "my-env",
       vcpu: 2,
       memoryMib: 2048,
       diskMib: 4096,
@@ -64,7 +64,7 @@ describe("Template.create", () => {
     })
 
     expect(template.id).toBe("t-1")
-    expect(template.alias).toBe("my-env")
+    expect(template.name).toBe("my-env")
     expect(template.latestBuildId).toBe("b-1")
 
     const [url, init] = mock.mock.calls[0] as [string, RequestInit]
@@ -72,7 +72,7 @@ describe("Template.create", () => {
     expect(init.method).toBe("POST")
     const body = JSON.parse(init.body as string)
     expect(body).toEqual({
-      alias: "my-env",
+      name: "my-env",
       vcpu: 2,
       memory_mib: 2048,
       disk_mib: 4096,
@@ -94,11 +94,11 @@ describe("Template.create", () => {
     )
     vi.stubGlobal("fetch", mock)
 
-    await Template.create({ ...commonOpts, alias: "x", from: "python:3.11" })
+    await Template.create({ ...commonOpts, name: "x", from: "python:3.11" })
 
     const [, init] = mock.mock.calls[0] as [string, RequestInit]
     const body = JSON.parse(init.body as string)
-    expect(body).toEqual({ alias: "x", build_spec: { from: "python:3.11" } })
+    expect(body).toEqual({ name: "x", build_spec: { from: "python:3.11" } })
   })
 
   it("throws when build_id missing from response", async () => {
@@ -107,7 +107,7 @@ describe("Template.create", () => {
       vi.fn(async () => jsonResponse(baseTemplate)),
     )
     await expect(
-      Template.create({ ...commonOpts, alias: "x", from: "python:3.11" }),
+      Template.create({ ...commonOpts, name: "x", from: "python:3.11" }),
     ).rejects.toThrow(/missing build_id/)
   })
 })
@@ -137,18 +137,18 @@ describe("Template.list", () => {
 
     const list = await Template.list(commonOpts)
     expect(list).toHaveLength(1)
-    expect(list[0].alias).toBe("my-env")
+    expect(list[0].name).toBe("my-env")
     const [url] = mock.mock.calls[0] as [string]
     expect(url).toBe("https://api.superserve.ai/templates")
   })
 
-  it("appends alias_prefix query param", async () => {
+  it("appends name_prefix query param", async () => {
     const mock = vi.fn(async () => jsonResponse([]))
     vi.stubGlobal("fetch", mock)
 
-    await Template.list({ ...commonOpts, aliasPrefix: "my-" })
+    await Template.list({ ...commonOpts, namePrefix: "my-" })
     const [url] = mock.mock.calls[0] as [string]
-    expect(url).toBe("https://api.superserve.ai/templates?alias_prefix=my-")
+    expect(url).toBe("https://api.superserve.ai/templates?name_prefix=my-")
   })
 })
 
@@ -196,7 +196,7 @@ describe("Template instance methods", () => {
     )
     const t = await Template.create({
       ...commonOpts,
-      alias: "my-env",
+      name: "my-env",
       from: "python:3.11",
     })
     vi.unstubAllGlobals()

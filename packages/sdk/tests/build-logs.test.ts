@@ -22,7 +22,7 @@ function sseStream(lines: string[]): ReadableStream {
 const baseTemplate = {
   id: "t-1",
   team_id: "team-1",
-  alias: "my-env",
+  name: "my-env",
   status: "building",
   vcpu: 1,
   memory_mib: 1024,
@@ -38,7 +38,7 @@ async function makeTemplate() {
   )
   const t = await Template.create({
     ...commonOpts,
-    alias: "my-env",
+    name: "my-env",
     from: "python:3.11",
   })
   vi.unstubAllGlobals()

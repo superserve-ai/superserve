@@ -19,7 +19,7 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 BASE = {
     "id": "t-1",
     "team_id": "team-1",
-    "alias": "my-env",
+    "name": "my-env",
     "status": "building",
     "vcpu": 1,
     "memory_mib": 1024,
@@ -35,7 +35,7 @@ class TestCreate:
                 return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
             )
             t = Template.create(
-                alias="my-env",
+                name="my-env",
                 vcpu=2,
                 memory_mib=2048,
                 disk_mib=4096,
@@ -55,7 +55,7 @@ class TestCreate:
                 return_value=httpx.Response(202, json=BASE)
             )
             with pytest.raises(Exception, match="missing build_id"):
-                Template.create(alias="x", from_="python:3.11")
+                Template.create(name="x", from_="python:3.11")
 
 
 class TestConnect:
@@ -65,7 +65,7 @@ class TestConnect:
                 return_value=httpx.Response(200, json=BASE)
             )
             t = Template.connect("my-env")
-            assert t.alias == "my-env"
+            assert t.name == "my-env"
 
 
 class TestList:
@@ -76,14 +76,14 @@ class TestList:
             )
             lst = Template.list()
             assert len(lst) == 1
-            assert lst[0].alias == "my-env"
+            assert lst[0].name == "my-env"
 
-    def test_with_alias_prefix(self) -> None:
+    def test_with_name_prefix(self) -> None:
         with respx.mock() as router:
-            route = router.get(f"{API}/templates", params={"alias_prefix": "my-"}).mock(
+            route = router.get(f"{API}/templates", params={"name_prefix": "my-"}).mock(
                 return_value=httpx.Response(200, json=[])
             )
-            Template.list(alias_prefix="my-")
+            Template.list(name_prefix="my-")
             assert route.call_count == 1
 
 
@@ -110,7 +110,7 @@ class TestInstanceMethods:
         router.post(f"{API}/templates").mock(
             return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
         )
-        return Template.create(alias="my-env", from_="python:3.11")
+        return Template.create(name="my-env", from_="python:3.11")
 
     def test_get_info(self) -> None:
         with respx.mock() as router:

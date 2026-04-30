@@ -72,17 +72,12 @@ export function SandboxStatusHero({
   const created = formatTime(new Date(sandbox.created_at))
 
   return (
-    <section
-      className={cn("border-b border-border px-4 py-6", cfg.bg)}
-    >
+    <section className={cn("border-b border-border px-4 py-6", cfg.bg)}>
       <div className="flex items-start justify-between gap-6">
         {/* Identity + status */}
         <div className="flex min-w-0 items-start gap-3">
           <span
-            className={cn(
-              "relative mt-2 inline-flex size-2 shrink-0",
-              cfg.dot,
-            )}
+            className={cn("relative mt-2 inline-flex size-2 shrink-0", cfg.dot)}
           >
             {cfg.pulse && (
               <span
@@ -102,9 +97,7 @@ export function SandboxStatusHero({
               <span>·</span>
               <span title={sandbox.id}>{sandbox.id.slice(0, 8)}</span>
               <span>·</span>
-              <span title={created.absolute}>
-                Created {created.relative}
-              </span>
+              <span title={created.absolute}>Created {created.relative}</span>
             </div>
           </div>
         </div>

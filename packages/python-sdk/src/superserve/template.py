@@ -4,7 +4,7 @@
 from superserve import Template, Sandbox
 
 template = Template.create(
-    alias="my-python-env",
+    name="my-python-env",
     from_="python:3.11",
     steps=[{"run": "pip install numpy"}],
 )
@@ -41,7 +41,7 @@ class Template:
 
     def __init__(self, info: TemplateInfo, config: ResolvedConfig) -> None:
         self.id: str = info.id
-        self.alias: str = info.alias
+        self.name: str = info.name
         self.team_id: str = info.team_id
         self.status: TemplateStatus = info.status
         self.vcpu: int = info.vcpu
@@ -62,7 +62,7 @@ class Template:
     def create(
         cls,
         *,
-        alias: str,
+        name: str,
         from_: str,
         vcpu: int | None = None,
         memory_mib: int | None = None,
@@ -84,7 +84,7 @@ class Template:
         if ready_cmd is not None:
             build_spec["ready_cmd"] = ready_cmd
 
-        body: dict[str, Any] = {"alias": alias, "build_spec": build_spec}
+        body: dict[str, Any] = {"name": name, "build_spec": build_spec}
         if vcpu is not None:
             body["vcpu"] = vcpu
         if memory_mib is not None:
@@ -108,16 +108,16 @@ class Template:
     @classmethod
     def connect(
         cls,
-        alias_or_id: str,
+        name_or_id: str,
         *,
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> Template:
-        """Connect to an existing template by alias or ID."""
+        """Connect to an existing template by name or ID."""
         config = resolve_config(api_key=api_key, base_url=base_url)
         raw = api_request(
             "GET",
-            f"{config.base_url}/templates/{alias_or_id}",
+            f"{config.base_url}/templates/{name_or_id}",
             headers={"X-API-Key": config.api_key},
         )
         return cls(to_template_info(raw), config)
@@ -126,15 +126,15 @@ class Template:
     def list(
         cls,
         *,
-        alias_prefix: str | None = None,
+        name_prefix: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> builtins.list[TemplateInfo]:
         """List all templates visible to the authenticated team."""
         config = resolve_config(api_key=api_key, base_url=base_url)
         url = f"{config.base_url}/templates"
-        if alias_prefix:
-            url += "?" + urlencode({"alias_prefix": alias_prefix})
+        if name_prefix:
+            url += "?" + urlencode({"name_prefix": name_prefix})
         raw = api_request(
             "GET",
             url,
@@ -145,17 +145,17 @@ class Template:
     @classmethod
     def delete_by_id(
         cls,
-        alias_or_id: str,
+        name_or_id: str,
         *,
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> None:
-        """Delete a template by alias or ID. Idempotent on 404."""
+        """Delete a template by name or ID. Idempotent on 404."""
         config = resolve_config(api_key=api_key, base_url=base_url)
         try:
             api_request(
                 "DELETE",
-                f"{config.base_url}/templates/{alias_or_id}",
+                f"{config.base_url}/templates/{name_or_id}",
                 headers={"X-API-Key": config.api_key},
             )
         except NotFoundError:
@@ -245,7 +245,7 @@ class Template:
         recent = self.list_builds(limit=1)
         if not recent:
             raise SandboxError(
-                f"Template {self.alias} has no builds — call rebuild() first"
+                f"Template {self.name} has no builds — call rebuild() first"
             )
         return recent[0].id
 
@@ -358,6 +358,6 @@ class Template:
 
     def __repr__(self) -> str:
         return (
-            f"Template(id={self.id!r}, alias={self.alias!r}, "
+            f"Template(id={self.id!r}, name={self.name!r}, "
             f"status={self.status.value!r})"
         )

@@ -5,7 +5,7 @@
  * import { Template, Sandbox } from "@superserve/sdk"
  *
  * const template = await Template.create({
- *   alias: "my-python-env",
+ *   name: "my-python-env",
  *   from: "python:3.11",
  *   steps: [{ run: "pip install numpy" }],
  * })
@@ -46,7 +46,7 @@ import {
 
 export class Template {
   readonly id: string
-  readonly alias: string
+  readonly name: string
   readonly teamId: string
   readonly status: TemplateStatus
   readonly vcpu: number
@@ -63,7 +63,7 @@ export class Template {
   /** @internal — use `Template.create()` / `Template.connect()` instead. */
   private constructor(info: TemplateInfo, config: ResolvedConfig) {
     this.id = info.id
-    this.alias = info.alias
+    this.name = info.name
     this.teamId = info.teamId
     this.status = info.status
     this.vcpu = info.vcpu
@@ -91,7 +91,7 @@ export class Template {
     if (options.readyCmd !== undefined) buildSpec.ready_cmd = options.readyCmd
 
     const body: Record<string, unknown> = {
-      alias: options.alias,
+      name: options.name,
       build_spec: buildSpec,
     }
     if (options.vcpu !== undefined) body.vcpu = options.vcpu
@@ -115,13 +115,13 @@ export class Template {
   }
 
   static async connect(
-    aliasOrId: string,
+    nameOrId: string,
     options: ConnectionOptions = {},
   ): Promise<Template> {
     const config = resolveConfig(options)
     const raw = await request<ApiTemplateResponse>({
       method: "GET",
-      url: `${config.baseUrl}/templates/${encodeURIComponent(aliasOrId)}`,
+      url: `${config.baseUrl}/templates/${encodeURIComponent(nameOrId)}`,
       headers: { "X-API-Key": config.apiKey },
       signal: options.signal,
     })
@@ -133,8 +133,8 @@ export class Template {
   ): Promise<TemplateInfo[]> {
     const config = resolveConfig(options)
     let url = `${config.baseUrl}/templates`
-    if (options.aliasPrefix) {
-      const qs = new URLSearchParams({ alias_prefix: options.aliasPrefix })
+    if (options.namePrefix) {
+      const qs = new URLSearchParams({ name_prefix: options.namePrefix })
       url += `?${qs.toString()}`
     }
 
@@ -148,14 +148,14 @@ export class Template {
   }
 
   static async deleteById(
-    aliasOrId: string,
+    nameOrId: string,
     options: ConnectionOptions = {},
   ): Promise<void> {
     const config = resolveConfig(options)
     try {
       await requestVoid({
         method: "DELETE",
-        url: `${config.baseUrl}/templates/${encodeURIComponent(aliasOrId)}`,
+        url: `${config.baseUrl}/templates/${encodeURIComponent(nameOrId)}`,
         headers: { "X-API-Key": config.apiKey },
         signal: options.signal,
       })
@@ -247,7 +247,7 @@ export class Template {
     const recent = await this.listBuilds({ limit: 1 })
     if (recent.length === 0) {
       throw new SandboxError(
-        `Template ${this.alias} has no builds — call rebuild() first`,
+        `Template ${this.name} has no builds — call rebuild() first`,
       )
     }
     return recent[0].id

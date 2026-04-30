@@ -22,7 +22,7 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 BASE = {
     "id": "t-1",
     "team_id": "team-1",
-    "alias": "my-env",
+    "name": "my-env",
     "status": "building",
     "vcpu": 1,
     "memory_mib": 1024,
@@ -56,7 +56,7 @@ class TestAsyncCreate:
                 return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
             )
             t = await AsyncTemplate.create(
-                alias="my-env",
+                name="my-env",
                 vcpu=2,
                 memory_mib=2048,
                 disk_mib=4096,
@@ -76,7 +76,7 @@ class TestAsyncCreate:
                 return_value=httpx.Response(202, json=BASE)
             )
             with pytest.raises(Exception, match="missing build_id"):
-                await AsyncTemplate.create(alias="x", from_="python:3.11")
+                await AsyncTemplate.create(name="x", from_="python:3.11")
 
 
 class TestAsyncConnect:
@@ -86,7 +86,7 @@ class TestAsyncConnect:
                 return_value=httpx.Response(200, json=BASE)
             )
             t = await AsyncTemplate.connect("my-env")
-            assert t.alias == "my-env"
+            assert t.name == "my-env"
 
 
 class TestAsyncList:
@@ -97,14 +97,14 @@ class TestAsyncList:
             )
             lst = await AsyncTemplate.list()
             assert len(lst) == 1
-            assert lst[0].alias == "my-env"
+            assert lst[0].name == "my-env"
 
-    async def test_with_alias_prefix(self) -> None:
+    async def test_with_name_prefix(self) -> None:
         with respx.mock() as router:
-            route = router.get(f"{API}/templates", params={"alias_prefix": "my-"}).mock(
+            route = router.get(f"{API}/templates", params={"name_prefix": "my-"}).mock(
                 return_value=httpx.Response(200, json=[])
             )
-            await AsyncTemplate.list(alias_prefix="my-")
+            await AsyncTemplate.list(name_prefix="my-")
             assert route.call_count == 1
 
 
@@ -131,7 +131,7 @@ class TestAsyncInstanceMethods:
         router.post(f"{API}/templates").mock(
             return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
         )
-        return await AsyncTemplate.create(alias="my-env", from_="python:3.11")
+        return await AsyncTemplate.create(name="my-env", from_="python:3.11")
 
     async def test_get_info(self) -> None:
         with respx.mock() as router:
@@ -193,7 +193,7 @@ class TestAsyncStreamBuildLogs:
             router.post(f"{API}/templates").mock(
                 return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
             )
-            t = await AsyncTemplate.create(alias="my-env", from_="python:3.11")
+            t = await AsyncTemplate.create(name="my-env", from_="python:3.11")
             sse = _sse_text(
                 [
                     '{"timestamp":"2026-01-01T00:00:00Z","stream":"stdout","text":"hello"}',
@@ -222,7 +222,7 @@ class TestAsyncWaitUntilReady:
             router.post(f"{API}/templates").mock(
                 return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
             )
-            t = await AsyncTemplate.create(alias="my-env", from_="python:3.11")
+            t = await AsyncTemplate.create(name="my-env", from_="python:3.11")
             router.get(f"{API}/templates/t-1/builds/b-1").mock(
                 return_value=httpx.Response(
                     200, json={**BUILD_BASE, "status": "ready"}
@@ -244,7 +244,7 @@ class TestAsyncWaitUntilReady:
             router.post(f"{API}/templates").mock(
                 return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
             )
-            t = await AsyncTemplate.create(alias="my-env", from_="python:3.11")
+            t = await AsyncTemplate.create(name="my-env", from_="python:3.11")
             sse = _sse_text(
                 [
                     '{"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"done","finished":true,"status":"ready"}',
@@ -273,7 +273,7 @@ class TestAsyncWaitUntilReady:
             router.post(f"{API}/templates").mock(
                 return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
             )
-            t = await AsyncTemplate.create(alias="my-env", from_="python:3.11")
+            t = await AsyncTemplate.create(name="my-env", from_="python:3.11")
             router.get(f"{API}/templates/t-1/builds/b-1").mock(
                 return_value=httpx.Response(
                     200,

@@ -35,7 +35,7 @@ export const auditLogKeys = {
 export const templateKeys = {
   all: ["templates"] as const,
   lists: () => [...templateKeys.all, "list"] as const,
-  list: (filters?: { alias_prefix?: string }) =>
+  list: (filters?: { name_prefix?: string }) =>
     [...templateKeys.lists(), filters ?? {}] as const,
   details: () => [...templateKeys.all, "detail"] as const,
   detail: (id: string) => [...templateKeys.details(), id] as const,

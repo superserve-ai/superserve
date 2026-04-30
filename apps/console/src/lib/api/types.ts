@@ -30,7 +30,7 @@ export interface ResumeResponse {
 
 export interface CreateSandboxRequest {
   name: string
-  /** Template UUID or alias to boot from. */
+  /** Template UUID or name to boot from. */
   from_template?: string
   from_snapshot?: string
   timeout_seconds?: number
@@ -123,7 +123,7 @@ export interface BuildSpec {
 }
 
 export interface CreateTemplateRequest {
-  alias: string
+  name: string
   vcpu?: number
   memory_mib?: number
   disk_mib?: number
@@ -133,7 +133,7 @@ export interface CreateTemplateRequest {
 export interface CreateTemplateResponse {
   id: string
   team_id: string
-  alias: string
+  name: string
   status: Exclude<TemplateStatus, "pending">
   vcpu: number
   memory_mib: number
@@ -145,7 +145,7 @@ export interface CreateTemplateResponse {
 export interface TemplateResponse {
   id: string
   team_id: string
-  alias: string
+  name: string
   status: TemplateStatus
   vcpu: number
   memory_mib: number

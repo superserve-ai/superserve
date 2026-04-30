@@ -20,7 +20,7 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 BASE = {
     "id": "t-1",
     "team_id": "team-1",
-    "alias": "my-env",
+    "name": "my-env",
     "status": "building",
     "vcpu": 1,
     "memory_mib": 1024,
@@ -40,7 +40,7 @@ def _make_template(router: respx.MockRouter) -> Template:
     router.post(f"{API}/templates").mock(
         return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
     )
-    return Template.create(alias="my-env", from_="python:3.11")
+    return Template.create(name="my-env", from_="python:3.11")
 
 
 def _sse_text(events: list[str]) -> str:
