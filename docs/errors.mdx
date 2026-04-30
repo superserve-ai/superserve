@@ -15,6 +15,7 @@ Every error raised by the SDK extends a common base class - `SandboxError` in Ty
 | `ValidationError` | `ValidationError` | `400` | Request body or parameters rejected by the API. |
 | `NotFoundError` | `NotFoundError` | `404` | Sandbox or resource does not exist. |
 | `ConflictError` | `ConflictError` | `409` | Sandbox is not in a valid state for the operation (e.g., pausing an already-paused sandbox, or patching `network` rules while paused). |
+| `RateLimitError` | `RateLimitError` | `429` | Rate limit or per-team quota reached. Branch on `code` (see below). |
 | `TimeoutError` | `SandboxTimeoutError` | - | Request or command timed out. |
 | `ServerError` | `ServerError` | `5xx` | Platform error - usually transient (500/502/503/504). GET/DELETE requests auto-retry with exponential backoff. |
 
@@ -98,6 +99,19 @@ The SDK automatically retries transient failures on `GET` and `DELETE` requests 
 - Network errors (connection reset, DNS failure)
 
 `POST` / `PATCH` requests are **not** retried automatically because they aren't safely idempotent - the SDK surfaces the error so you can decide.
+
+## `RateLimitError`
+
+Raised on `429` responses. Branch on `code` to distinguish the variant:
+
+| Code | Endpoint(s) | Meaning |
+|---|---|---|
+| `rate_limited` | any | Request rate exceeded; retry after a short backoff. |
+| `too_many_builds` | `POST /templates` | Team has reached its concurrent build limit. Wait for an active build to finish. |
+| `too_many_templates` | `POST /templates` | Team has reached its total template count limit. Delete one or contact support. |
+| `too_many_sandboxes` | `POST /sandboxes` | Team has reached its active sandbox count limit. Pause/delete one or contact support. |
+
+The error `message` already includes the cap and a contact-support hint, so surfacing it directly to users is usually fine.
 
 ## `BuildError`
 
