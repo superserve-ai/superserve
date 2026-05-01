@@ -6,19 +6,30 @@ interface WelcomeEmailProps {
   dashboardUrl: string
 }
 
-export const WelcomeEmail = ({ name, dashboardUrl }: WelcomeEmailProps) => (
-  <EmailLayout preview={`Welcome to Superserve, ${name}`}>
-    <Heading style={heading}>Welcome to Superserve</Heading>
-    <Text style={paragraph}>Hi {name},</Text>
-    <Text style={paragraph}>
-      Your account is ready. Spin up isolated cloud sandboxes and run code in
-      seconds — straight from the dashboard.
-    </Text>
-    <Button style={button} href={dashboardUrl}>
-      Open Dashboard
-    </Button>
-  </EmailLayout>
-)
+const MEETING_URL = "https://www.superserve.ai/meet/"
+
+const getFirstName = (name: string) => name.trim().split(/\s+/)[0] || "there"
+
+export const WelcomeEmail = ({ name, dashboardUrl }: WelcomeEmailProps) => {
+  const firstName = getFirstName(name)
+  return (
+    <EmailLayout preview={`Welcome to Superserve, ${firstName}`}>
+      <Heading style={heading}>Welcome to Superserve</Heading>
+      <Text style={paragraph}>Hi {firstName},</Text>
+      <Text style={paragraph}>
+        I am the founder of Superserve and I&apos;d love to give you the VIP
+        treatment. Happy to answer any questions or help you get set up (for
+        free!). Grab time on my calendar link below.
+      </Text>
+      <Button style={primaryButton} href={dashboardUrl}>
+        View Account
+      </Button>
+      <Button style={secondaryButton} href={MEETING_URL}>
+        Book a Meeting
+      </Button>
+    </EmailLayout>
+  )
+}
 
 const heading: React.CSSProperties = {
   fontFamily: "'Instrument Sans', Helvetica, Arial, sans-serif",
@@ -36,7 +47,7 @@ const paragraph: React.CSSProperties = {
   margin: "0 0 16px 0",
 }
 
-const button: React.CSSProperties = {
+const primaryButton: React.CSSProperties = {
   backgroundColor: "#e5e5e5",
   color: "#0a0a0a",
   fontFamily: "'Geist Mono', monospace",
@@ -50,5 +61,26 @@ const button: React.CSSProperties = {
   padding: "14px 24px",
   margin: "28px 0 0 0",
 }
+
+const secondaryButton: React.CSSProperties = {
+  backgroundColor: "transparent",
+  color: "#e5e5e5",
+  fontFamily: "'Geist Mono', monospace",
+  fontSize: "12px",
+  fontWeight: 500,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  textDecoration: "none",
+  textAlign: "center",
+  display: "block",
+  padding: "13px 24px",
+  margin: "12px 0 0 0",
+  border: "1px dashed #404040",
+}
+
+WelcomeEmail.PreviewProps = {
+  name: "Jeet",
+  dashboardUrl: "https://console.superserve.ai",
+} satisfies WelcomeEmailProps
 
 export default WelcomeEmail
