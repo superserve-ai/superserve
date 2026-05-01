@@ -78,4 +78,9 @@ const secondaryButton: React.CSSProperties = {
   border: "1px dashed #404040",
 }
 
+WelcomeEmail.PreviewProps = {
+  name: "Jeet",
+  dashboardUrl: "https://console.superserve.ai",
+} satisfies WelcomeEmailProps
+
 export default WelcomeEmail
