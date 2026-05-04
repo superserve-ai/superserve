@@ -92,7 +92,8 @@ On failure, `BuildError.code` is one of these stable identifiers (parsed from `e
 | `snapshot_failed` | Snapshot bundle couldn't be produced |
 | `start_cmd_failed` | `startCmd` exited non-zero before snapshot |
 | `ready_cmd_failed` | `readyCmd` didn't exit `0` within 10 minutes |
-| `too_many_builds` | Team's concurrent build limit reached |
+| `too_many_builds` | Team's concurrent build limit reached (raised as `RateLimitError`, not `BuildError`) |
+| `too_many_templates` | Team's total template count limit reached (raised as `RateLimitError`) |
 | `build_failed` | Catch-all when no specific code applies |
 
 ## Related

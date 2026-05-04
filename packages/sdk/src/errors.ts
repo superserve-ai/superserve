@@ -68,6 +68,20 @@ export class TimeoutError extends SandboxError {
   }
 }
 
+/**
+ * 429 from the API. `code` distinguishes the variant:
+ * - `rate_limited` — request rate exceeded; retry after a short backoff.
+ * - `too_many_builds` — team has reached its concurrent build limit.
+ * - `too_many_templates` — team has reached its total template count limit.
+ * - `too_many_sandboxes` — team has reached its active sandbox count limit.
+ */
+export class RateLimitError extends SandboxError {
+  constructor(message = "Rate limit exceeded", code?: string) {
+    super(message, 429, code)
+    this.name = "RateLimitError"
+  }
+}
+
 export class ServerError extends SandboxError {
   constructor(message = "Internal server error", code?: string) {
     super(message, 500, code)
@@ -124,6 +138,8 @@ export function mapApiError(
       return new NotFoundError(message, code)
     case 409:
       return new ConflictError(message, code)
+    case 429:
+      return new RateLimitError(message, code)
     default:
       if (status >= 500) return new ServerError(message, code)
       return new SandboxError(message, status, code)
