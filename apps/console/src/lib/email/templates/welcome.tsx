@@ -24,11 +24,11 @@ export const WelcomeEmail = ({ name, dashboardUrl }: WelcomeEmailProps) => {
       <Text style={paragraph}>
         - Pavitra
       </Text>
-      <Button style={primaryButton} href={dashboardUrl}>
-        View Account
-      </Button>
-      <Button style={secondaryButton} href={MEETING_URL}>
+      <Button style={primaryButton} href={MEETING_URL}>
         Book a Meeting
+      </Button>
+      <Button style={secondaryButton} href={dashboardUrl}>
+        View Account
       </Button>
     </EmailLayout>
   )
