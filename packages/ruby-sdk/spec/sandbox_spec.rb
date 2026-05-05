@@ -43,6 +43,22 @@ RSpec.describe Superserve::Sandbox do
         described_class.create(name: "x")
       }.to raise_error(Superserve::SandboxError, /missing access_token/)
     end
+
+    it "accepts a network hash with symbol keys" do
+      stub = stub_request(:post, "#{base}/sandboxes")
+        .with(body: hash_including("network" => { "allow_out" => ["1.2.3.4"], "deny_out" => nil }))
+        .to_return(status: 200, body: sandbox_response.to_json)
+      described_class.create(name: "x", network: { allow_out: ["1.2.3.4"] })
+      expect(stub).to have_been_requested
+    end
+
+    it "accepts a network hash with string keys (JSON/YAML configs)" do
+      stub = stub_request(:post, "#{base}/sandboxes")
+        .with(body: hash_including("network" => { "allow_out" => ["5.6.7.8"], "deny_out" => nil }))
+        .to_return(status: 200, body: sandbox_response.to_json)
+      described_class.create(name: "x", network: { "allow_out" => ["5.6.7.8"] })
+      expect(stub).to have_been_requested
+    end
   end
 
   describe ".connect" do

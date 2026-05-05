@@ -98,27 +98,18 @@ module Superserve
       )
 
       buffer = String.new
-      error_buffer = String.new
-      response_status = nil
 
       begin
         response = conn.run_request(method_sym, url, body, merged_headers) do |req|
           req.options.timeout = timeout
           req.options.read_timeout = timeout
-          req.options.on_data = proc do |chunk, _bytes, env|
-            response_status ||= env&.status
-            if response_status && response_status >= 400
-              error_buffer << chunk.to_s
-              next
-            end
-
+          req.options.on_data = proc do |chunk, _bytes|
             buffer << chunk.to_s
             loop do
               newline_idx = buffer.index("\n")
               break if newline_idx.nil?
 
-              line = buffer[0...newline_idx]
-              buffer = buffer[(newline_idx + 1)..] || String.new
+              line = buffer.slice!(0..newline_idx).chomp
 
               next unless line.start_with?("data:")
 
@@ -140,10 +131,10 @@ module Superserve
         raise Superserve::SandboxError.new("Stream error: #{e.message}")
       end
 
-      final_status = response_status || response.status
-      unless success?(final_status)
-        body_for_error = error_buffer.empty? ? response.body.to_s : error_buffer
-        raise Superserve.map_api_error(final_status, parse_error_body(body_for_error))
+      # On error, `buffer` retains any unparsed content (typically the full
+      # error JSON body, since error responses don't use `data:` framing).
+      unless success?(response.status)
+        raise Superserve.map_api_error(response.status, parse_error_body(buffer))
       end
 
       nil

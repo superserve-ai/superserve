@@ -110,11 +110,16 @@ module Superserve
     end
 
     # @api private
+    # Accepts a NetworkConfig instance or a Hash with either symbol or string
+    # keys (so configs loaded from JSON/YAML work without conversion).
     def self.serialize_network(network)
       if network.respond_to?(:allow_out)
         { allow_out: network.allow_out, deny_out: network.deny_out }
       else
-        { allow_out: network[:allow_out], deny_out: network[:deny_out] }
+        {
+          allow_out: network[:allow_out] || network["allow_out"],
+          deny_out: network[:deny_out] || network["deny_out"]
+        }
       end
     end
 

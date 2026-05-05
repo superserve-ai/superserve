@@ -18,7 +18,7 @@ module Superserve
     # Parent directories are created automatically by the sandbox agent.
     # The path must start with `/` and must not contain `..` segments.
     def write(path, content, timeout: nil)
-      self.class.send(:validate_path!, path)
+      self.class.validate_path!(path)
       bytes = content.is_a?(String) ? content.b : content
       url = "#{@base_url}/files?path=#{ERB::Util.url_encode(path)}"
       kwargs = {
@@ -32,7 +32,7 @@ module Superserve
 
     # Read a file from the sandbox as raw bytes (binary string).
     def read(path, timeout: nil)
-      self.class.send(:validate_path!, path)
+      self.class.validate_path!(path)
       url = "#{@base_url}/files?path=#{ERB::Util.url_encode(path)}"
       kwargs = {
         headers: { "X-Access-Token" => @access_token },
