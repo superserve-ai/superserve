@@ -1,0 +1,11 @@
+{
+  "name": "@superserve/ruby-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "bundle exec rake build",
+    "test": "bundle exec rspec",
+    "lint": "echo 'lint: no-op (rubocop not configured)' && exit 0",
+    "typecheck": "echo 'typecheck: no-op (Ruby is duck-typed; no static checker configured)' && exit 0"
+  }
+}
