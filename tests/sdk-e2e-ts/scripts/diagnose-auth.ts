@@ -22,7 +22,12 @@ const apiKey = process.env.SUPERSERVE_API_KEY
 const baseUrl = process.env.SUPERSERVE_BASE_URL
 
 console.log("=== Env ===")
-console.log("SUPERSERVE_API_KEY:", apiKey ? `set (length=${apiKey.length}, prefix=${apiKey.slice(0, 8)}..., suffix=...${apiKey.slice(-4)})` : "NOT SET")
+console.log(
+  "SUPERSERVE_API_KEY:",
+  apiKey
+    ? `set (length=${apiKey.length}, prefix=${apiKey.slice(0, 8)}..., suffix=...${apiKey.slice(-4)})`
+    : "NOT SET",
+)
 console.log("SUPERSERVE_BASE_URL:", baseUrl ?? "(default → prod)")
 
 if (!apiKey) {
@@ -34,7 +39,7 @@ async function probe(label: string, url: string): Promise<void> {
   try {
     const res = await fetch(`${url}/sandboxes`, {
       method: "GET",
-      headers: { "X-API-Key": apiKey! },
+      headers: { "X-API-Key": apiKey },
     })
     const body = await res.text()
     console.log(`  ${label} (${url}) → ${res.status}`)
@@ -52,17 +57,25 @@ console.log("\n=== SDK probe (Sandbox.list) ===")
 try {
   const list = await Sandbox.list({ apiKey, baseUrl })
   console.log(`  OK — returned ${list.length} sandboxes`)
-} catch (err: any) {
-  console.log(`  FAIL — ${err.name}: ${err.message}`)
+} catch (err) {
+  const e = err as Error
+  console.log(`  FAIL — ${e.name}: ${e.message}`)
 }
 
 console.log("\n=== Diagnosis ===")
 const resolved = baseUrl ?? PROD
 if (resolved === PROD) {
   console.log("  Your SDK will hit PRODUCTION.")
-  console.log("  If the raw prod probe above returned 401, your key is not valid for production.")
-  console.log("  If the raw staging probe returned 200, your key is for staging — set SUPERSERVE_BASE_URL=" + STAGING)
+  console.log(
+    "  If the raw prod probe above returned 401, your key is not valid for production.",
+  )
+  console.log(
+    "  If the raw staging probe returned 200, your key is for staging — set SUPERSERVE_BASE_URL=" +
+      STAGING,
+  )
 } else {
   console.log("  Your SDK will hit:", resolved)
-  console.log("  If the raw probe at that URL returned 401, your key is not valid for that environment.")
+  console.log(
+    "  If the raw probe at that URL returned 401, your key is not valid for that environment.",
+  )
 }

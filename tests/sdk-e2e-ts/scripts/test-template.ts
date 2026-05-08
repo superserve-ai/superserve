@@ -65,7 +65,9 @@ async function main() {
     })
     const fresh = await template.getInfo()
     console.log("\n--- end logs ---")
-    console.log(`Build succeeded. status=${fresh.status} built_at=${fresh.builtAt?.toISOString()}`)
+    console.log(
+      `Build succeeded. status=${fresh.status} built_at=${fresh.builtAt?.toISOString()}`,
+    )
     console.log(`Size: ${fresh.sizeBytes ?? "n/a"} bytes`)
   } catch (err) {
     console.log("\n--- end logs ---")

@@ -327,9 +327,9 @@ export class Template {
               ev.finished &&
               ev.status &&
               TERMINAL_BUILD_STATUSES.has(
-                ev.status as (typeof TERMINAL_BUILD_STATUSES extends Set<infer T>
+                ev.status as typeof TERMINAL_BUILD_STATUSES extends Set<infer T>
                   ? T
-                  : never),
+                  : never,
               )
             ) {
               finalStatus = ev.status
