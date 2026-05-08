@@ -94,7 +94,7 @@ const mockSignInWithOAuth = vi.fn()
 const mockGetUser = vi.fn()
 const mockSignOut = vi.fn()
 
-vi.mock("@superserve/supabase", () => ({
+vi.mock("@/lib/supabase/client", () => ({
   createBrowserClient: () => ({
     auth: {
       signInWithPassword: mockSignInWithPassword,

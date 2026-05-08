@@ -1,6 +1,5 @@
 "use client"
 
-import { createBrowserClient } from "@superserve/supabase"
 import { Button, Field, Input, Separator, useToast } from "@superserve/ui"
 import { usePostHog } from "posthog-js/react"
 import { useEffect, useState } from "react"
@@ -8,6 +7,7 @@ import { GoogleIcon, Spinner } from "@/components/icons"
 import { PageHeader } from "@/components/page-header"
 import { useUser } from "@/hooks/use-user"
 import { SETTINGS_EVENTS } from "@/lib/posthog/events"
+import { createBrowserClient } from "@/lib/supabase/client"
 
 export default function SettingsPage() {
   const { user, loading } = useUser()

@@ -118,7 +118,7 @@ export function mockNextImage() {
   }))
 }
 
-// --------- @superserve/supabase ---------
+// --------- @/lib/supabase/client ---------
 
 export function mockSupabase(overrides: Partial<Record<string, unknown>> = {}) {
   const auth = {
@@ -134,7 +134,7 @@ export function mockSupabase(overrides: Partial<Record<string, unknown>> = {}) {
     exchangeCodeForSession: vi.fn(),
     ...overrides,
   }
-  vi.mock("@superserve/supabase", () => ({
+  vi.mock("@/lib/supabase/client", () => ({
     createBrowserClient: () => ({ auth }),
   }))
   return { auth }

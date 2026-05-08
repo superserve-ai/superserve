@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mock dependencies before importing the action
 const mockGenerateLink = vi.fn()
-vi.mock("@superserve/supabase/admin", () => ({
+vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     auth: {
       admin: {

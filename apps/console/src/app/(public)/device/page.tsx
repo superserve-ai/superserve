@@ -1,6 +1,5 @@
 "use client"
 
-import { createBrowserClient } from "@superserve/supabase"
 import { Button, useToast } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
@@ -9,6 +8,7 @@ import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useState } from "react"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
+import { createBrowserClient } from "@/lib/supabase/client"
 
 function Logo() {
   return (

@@ -1,7 +1,7 @@
 "use client"
 
-import { createBrowserClient } from "@superserve/supabase"
 import { useEffect, useState } from "react"
+import { createBrowserClient } from "@/lib/supabase/client"
 
 type User = Awaited<
   ReturnType<ReturnType<typeof createBrowserClient>["auth"]["getUser"]>

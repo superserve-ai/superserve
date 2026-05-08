@@ -52,11 +52,7 @@
         "groups": [
           {
             "group": "Get Started",
-            "pages": [
-              "introduction",
-              "quickstart",
-              "api-key"
-            ]
+            "pages": ["introduction", "quickstart", "api-key"]
           },
           {
             "group": "Sandbox",
@@ -80,22 +76,15 @@
           },
           {
             "group": "Commands",
-            "pages": [
-              "commands/overview",
-              "commands/streaming"
-            ]
+            "pages": ["commands/overview", "commands/streaming"]
           },
           {
             "group": "Filesystem",
-            "pages": [
-              "filesystem/read-write"
-            ]
+            "pages": ["filesystem/read-write"]
           },
           {
             "group": "Errors",
-            "pages": [
-              "errors"
-            ]
+            "pages": ["errors"]
           }
         ]
       },

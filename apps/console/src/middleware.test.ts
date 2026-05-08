@@ -3,7 +3,7 @@
  * preservation on redirect.
  *
  * The middleware delegates session lookup to `createMiddlewareClient` from
- * `@superserve/supabase/middleware`, which we mock. We assert:
+ * `@/lib/supabase/middleware`, which we mock. We assert:
  *   1. Unauthenticated users on protected routes get a redirect to
  *      /auth/signin?next=<current path>, with cookies from
  *      client.response copied onto the redirect (regression guard for the
@@ -28,7 +28,7 @@ type MockClient = {
 
 let mockClient: MockClient
 
-vi.mock("@superserve/supabase/middleware", () => ({
+vi.mock("@/lib/supabase/middleware", () => ({
   createMiddlewareClient: () => mockClient,
   matchesRoute: (pathname: string, routes: string[]) =>
     routes.some((r) => pathname === r || pathname.startsWith(`${r}/`)),

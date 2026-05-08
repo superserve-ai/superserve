@@ -1,5 +1,5 @@
-import { defineConfig } from "vitest/config"
 import tsconfigPaths from "vite-tsconfig-paths"
+import { defineConfig } from "vitest/config"
 
 export default defineConfig({
   // `vite-tsconfig-paths` reads tsconfig.json `paths` and handles the

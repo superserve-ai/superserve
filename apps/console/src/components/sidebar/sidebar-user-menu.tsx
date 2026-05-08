@@ -1,13 +1,13 @@
 "use client"
 
 import { CaretUpDownIcon, SignOutIcon, UserIcon } from "@phosphor-icons/react"
-import { createBrowserClient } from "@superserve/supabase"
 import { Avatar, cn } from "@superserve/ui"
 import { useRouter } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { useEffect, useRef, useState } from "react"
 import { useUser } from "@/hooks/use-user"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
+import { createBrowserClient } from "@/lib/supabase/client"
 import { useSidebar } from "./sidebar-context"
 
 function getInitials(name: string): string {

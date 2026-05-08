@@ -21,9 +21,7 @@ export const WelcomeEmail = ({ name, dashboardUrl }: WelcomeEmailProps) => {
         treatment. Happy to answer any questions or help you get set up (for
         free!). Grab time on my calendar link below.
       </Text>
-      <Text style={paragraph}>
-        - Pavitra
-      </Text>
+      <Text style={paragraph}>- Pavitra</Text>
       <Button style={primaryButton} href={MEETING_URL}>
         Book a Meeting
       </Button>

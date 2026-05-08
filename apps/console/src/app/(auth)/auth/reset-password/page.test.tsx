@@ -75,7 +75,7 @@ vi.mock("posthog-js/react", () => ({
 }))
 
 const mockUpdateUser = vi.fn()
-vi.mock("@superserve/supabase", () => ({
+vi.mock("@/lib/supabase/client", () => ({
   createBrowserClient: () => ({
     auth: { updateUser: mockUpdateUser },
   }),

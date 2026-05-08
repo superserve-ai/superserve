@@ -1,7 +1,6 @@
 "use client"
 
 import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react"
-import { createBrowserClient } from "@superserve/supabase"
 import { Button, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
@@ -12,6 +11,7 @@ import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { Spinner } from "@/components/icons"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
+import { createBrowserClient } from "@/lib/supabase/client"
 
 function ResetPasswordContent() {
   const [isLoading, setIsLoading] = useState(false)
