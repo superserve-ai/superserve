@@ -15,9 +15,6 @@
 
 </div>
 
-> [!Note]
-> **Beta Release**: This project is in beta and under active development. We welcome feedback but cannot guarantee backwards compatibility at this time.
-
 ## Getting Started
 
 Visit [superserve.ai](https://www.superserve.ai/) or jump straight into the [docs](https://docs.superserve.ai/).
