@@ -16,7 +16,8 @@
   "dependencies": {
     "@phosphor-icons/react": "^2.1.7",
     "@react-email/components": "^1.0.7",
-    "@superserve/supabase": "workspace:*",
+    "@supabase/ssr": "^0.10.0",
+    "@supabase/supabase-js": "^2.98.0",
     "@superserve/ui": "workspace:*",
     "@tanstack/react-query": "^5.96.2",
     "@xterm/addon-fit": "^0.11.0",

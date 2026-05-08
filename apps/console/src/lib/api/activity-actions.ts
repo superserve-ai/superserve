@@ -1,7 +1,7 @@
 "use server"
 
-import { createAdminClient } from "@superserve/supabase/admin"
-import { createServerClient } from "@superserve/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { createServerClient } from "@/lib/supabase/server"
 
 async function getTeamId(userId: string): Promise<string | null> {
   const admin = createAdminClient()

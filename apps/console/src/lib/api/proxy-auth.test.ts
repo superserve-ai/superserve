@@ -14,10 +14,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 // Mock supabase clients so the proxy-auth module loads without a real
 // connection. The pure helpers don't use them, but the module imports
 // them at the top.
-vi.mock("@superserve/supabase/admin", () => ({
+vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: vi.fn(),
 }))
-vi.mock("@superserve/supabase/server", () => ({
+vi.mock("@/lib/supabase/server", () => ({
   createServerClient: vi.fn(),
 }))
 

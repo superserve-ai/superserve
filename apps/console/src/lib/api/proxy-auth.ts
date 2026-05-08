@@ -1,6 +1,6 @@
 import crypto from "node:crypto"
-import { createAdminClient } from "@superserve/supabase/admin"
-import { createServerClient } from "@superserve/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { createServerClient } from "@/lib/supabase/server"
 
 const PROXY_KEY_NAME = "__console_proxy__"
 // Bump this when you want to force-rotate every user's proxy key.

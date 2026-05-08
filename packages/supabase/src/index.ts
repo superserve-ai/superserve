@@ -1,1 +1,0 @@
-export { createBrowserClient } from "./client"

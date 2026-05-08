@@ -1,8 +1,8 @@
 "use server"
 
 import crypto from "node:crypto"
-import { createAdminClient } from "@superserve/supabase/admin"
-import { createServerClient } from "@superserve/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { createServerClient } from "@/lib/supabase/server"
 
 function generateRawKey(): string {
   const bytes = crypto.randomBytes(24)

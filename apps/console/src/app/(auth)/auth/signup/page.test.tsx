@@ -53,7 +53,7 @@ vi.mock("next/image", () => ({
 }))
 
 const mockSignInWithOAuth = vi.fn()
-vi.mock("@superserve/supabase", () => ({
+vi.mock("@/lib/supabase/client", () => ({
   createBrowserClient: () => ({
     auth: {
       signInWithOAuth: mockSignInWithOAuth,

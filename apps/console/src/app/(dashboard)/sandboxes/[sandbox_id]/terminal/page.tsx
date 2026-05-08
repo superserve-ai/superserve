@@ -112,9 +112,7 @@ export default function TerminalPage() {
           icon={TerminalIcon}
           title="Sandbox is paused"
           description="Start the sandbox to open a terminal session. Resume takes a second or two."
-          actionLabel={
-            resumeMutation.isPending ? "Starting…" : "Start sandbox"
-          }
+          actionLabel={resumeMutation.isPending ? "Starting…" : "Start sandbox"}
           onAction={() => resumeMutation.mutate(sandbox.id)}
         />
       ) : sandbox.status === "resuming" ? (

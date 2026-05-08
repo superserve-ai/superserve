@@ -315,7 +315,10 @@ export function CreateTemplateDialog({
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={handleCreate} disabled={!isValid || create.isPending}>
+          <Button
+            onClick={handleCreate}
+            disabled={!isValid || create.isPending}
+          >
             {create.isPending ? "Creating…" : "Create & build"}
           </Button>
         </DialogFooter>

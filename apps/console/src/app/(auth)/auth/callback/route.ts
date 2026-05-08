@@ -1,9 +1,9 @@
-import { createServerClient } from "@superserve/supabase/server"
 import { NextResponse } from "next/server"
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { sendWelcomeEmail } from "@/app/(auth)/auth/signup/action"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
+import { createServerClient } from "@/lib/supabase/server"
 
 const TRUSTED_REDIRECT_PATTERN =
   /^https:\/\/([a-z0-9-]+\.)?superserve\.ai(\/.*)?$/

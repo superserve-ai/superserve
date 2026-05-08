@@ -35,7 +35,8 @@
       "dependencies": {
         "@phosphor-icons/react": "^2.1.7",
         "@react-email/components": "^1.0.7",
-        "@superserve/supabase": "workspace:*",
+        "@supabase/ssr": "^0.10.0",
+        "@supabase/supabase-js": "^2.98.0",
         "@superserve/ui": "workspace:*",
         "@tanstack/react-query": "^5.96.2",
         "@xterm/addon-fit": "^0.11.0",
@@ -123,7 +124,7 @@
     },
     "packages/sdk": {
       "name": "@superserve/sdk",
-      "version": "0.6.0",
+      "version": "0.7.0",
       "devDependencies": {
         "@superserve/typescript-config": "workspace:*",
         "@types/node": "^25.5.2",
@@ -131,26 +132,6 @@
         "typescript": "^5.7.0",
         "vitest": "^4.0.0",
       },
-    },
-    "packages/supabase": {
-      "name": "@superserve/supabase",
-      "version": "0.0.0",
-      "dependencies": {
-        "@supabase/ssr": "^0.10.0",
-        "@supabase/supabase-js": "^2.98.0",
-      },
-      "devDependencies": {
-        "@biomejs/biome": "^2.4.4",
-        "@superserve/typescript-config": "workspace:*",
-        "typescript": "~5.9.3",
-        "vitest": "^4.0.18",
-      },
-      "peerDependencies": {
-        "next": ">=15",
-      },
-      "optionalPeers": [
-        "next",
-      ],
     },
     "packages/tailwind-config": {
       "name": "@superserve/tailwind-config",
@@ -779,8 +760,6 @@
     "@superserve/python-sdk": ["@superserve/python-sdk@workspace:packages/python-sdk"],
 
     "@superserve/sdk": ["@superserve/sdk@workspace:packages/sdk"],
-
-    "@superserve/supabase": ["@superserve/supabase@workspace:packages/supabase"],
 
     "@superserve/tailwind-config": ["@superserve/tailwind-config@workspace:packages/tailwind-config"],
 

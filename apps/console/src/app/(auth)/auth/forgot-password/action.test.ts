@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const mockGenerateLink = vi.fn()
 const mockSendEmail = vi.fn()
 
-vi.mock("@superserve/supabase/admin", () => ({
+vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     auth: {
       admin: { generateLink: mockGenerateLink },

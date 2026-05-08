@@ -20,6 +20,7 @@ describe("createBrowserClient", () => {
   })
 
   it("throws when NEXT_PUBLIC_SUPABASE_URL is missing", () => {
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "test-key"
     expect(() => createBrowserClient()).toThrow(
       "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY",
@@ -27,6 +28,7 @@ describe("createBrowserClient", () => {
   })
 
   it("throws when NEXT_PUBLIC_SUPABASE_ANON_KEY is missing", () => {
+    delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co"
     expect(() => createBrowserClient()).toThrow(
       "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY",
