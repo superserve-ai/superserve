@@ -15,7 +15,7 @@ Pass a base image via `from` and (optionally) a list of build steps that run ins
 import { Template } from "@superserve/sdk"
 
 const template = await Template.create({
-  alias: "my-python-env",
+  name: "my-python-env",
   vcpu: 2,
   memoryMib: 2048,
   from: "python:3.11",
@@ -32,7 +32,7 @@ from superserve import Template
 from superserve import RunStep, EnvStep, EnvStepValue, WorkdirStep
 
 template = Template.create(
-    alias="my-python-env",
+    name="my-python-env",
     vcpu=2,
     memory_mib=2048,
     from_="python:3.11",
@@ -77,7 +77,7 @@ On success, `waitUntilReady` returns the refreshed `TemplateInfo` with `status =
 
 ## Create a sandbox from the template
 
-Once ready, create sandboxes by passing the `Template` instance, the alias, or the UUID.
+Once ready, create sandboxes by passing the `Template` instance, the name, or the UUID.
 
 <CodeGroup>
 
@@ -86,7 +86,7 @@ import { Sandbox, Template } from "@superserve/sdk"
 
 // Create the template first (see the section above)
 const template = await Template.create({
-  alias: "my-python-env",
+  name: "my-python-env",
   from: "python:3.11",
 })
 await template.waitUntilReady()
@@ -97,7 +97,7 @@ const sandbox = await Sandbox.create({
   fromTemplate: template,
 })
 
-// Option 2: pass the alias
+// Option 2: pass the name
 const sandbox2 = await Sandbox.create({
   name: "run-2",
   fromTemplate: "my-python-env",
@@ -115,7 +115,7 @@ from superserve import Sandbox, Template
 
 # Create the template first (see the section above)
 template = Template.create(
-    alias="my-python-env",
+    name="my-python-env",
     from_="python:3.11",
 )
 template.wait_until_ready()
@@ -126,7 +126,7 @@ sandbox = Sandbox.create(
     from_template=template,
 )
 
-# Option 2: pass the alias
+# Option 2: pass the name
 sandbox2 = Sandbox.create(
     name="run-2",
     from_template="my-python-env",

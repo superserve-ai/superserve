@@ -7,6 +7,7 @@ from .errors import (
     BuildError,
     ConflictError,
     NotFoundError,
+    RateLimitError,
     SandboxError,
     SandboxTimeoutError,
     ServerError,
@@ -34,7 +35,7 @@ from .types import (
     WorkdirStep,
 )
 
-__version__ = "0.7.0"
+__version__ = "0.7.1"
 
 __all__ = [
     "AsyncSandbox",
@@ -50,6 +51,7 @@ __all__ = [
     "EnvStepValue",
     "NetworkConfig",
     "NotFoundError",
+    "RateLimitError",
     "RunStep",
     "Sandbox",
     "SandboxError",

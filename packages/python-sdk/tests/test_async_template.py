@@ -22,7 +22,7 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 BASE = {
     "id": "t-1",
     "team_id": "team-1",
-    "alias": "my-env",
+    "name": "my-env",
     "status": "building",
     "vcpu": 1,
     "memory_mib": 1024,
@@ -56,7 +56,7 @@ class TestAsyncCreate:
                 return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
             )
             t = await AsyncTemplate.create(
-                alias="my-env",
+                name="my-env",
                 vcpu=2,
                 memory_mib=2048,
                 disk_mib=4096,
@@ -76,7 +76,7 @@ class TestAsyncCreate:
                 return_value=httpx.Response(202, json=BASE)
             )
             with pytest.raises(Exception, match="missing build_id"):
-                await AsyncTemplate.create(alias="x", from_="python:3.11")
+                await AsyncTemplate.create(name="x", from_="python:3.11")
 
 
 class TestAsyncConnect:
@@ -86,7 +86,7 @@ class TestAsyncConnect:
                 return_value=httpx.Response(200, json=BASE)
             )
             t = await AsyncTemplate.connect("my-env")
-            assert t.alias == "my-env"
+            assert t.name == "my-env"
 
 
 class TestAsyncList:
@@ -97,14 +97,14 @@ class TestAsyncList:
             )
             lst = await AsyncTemplate.list()
             assert len(lst) == 1
-            assert lst[0].alias == "my-env"
+            assert lst[0].name == "my-env"
 
-    async def test_with_alias_prefix(self) -> None:
+    async def test_with_name_prefix(self) -> None:
         with respx.mock() as router:
-            route = router.get(f"{API}/templates", params={"alias_prefix": "my-"}).mock(
+            route = router.get(f"{API}/templates", params={"name_prefix": "my-"}).mock(
                 return_value=httpx.Response(200, json=[])
             )
-            await AsyncTemplate.list(alias_prefix="my-")
+            await AsyncTemplate.list(name_prefix="my-")
             assert route.call_count == 1
 
 
@@ -131,7 +131,7 @@ class TestAsyncInstanceMethods:
         router.post(f"{API}/templates").mock(
             return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
         )
-        return await AsyncTemplate.create(alias="my-env", from_="python:3.11")
+        return await AsyncTemplate.create(name="my-env", from_="python:3.11")
 
     async def test_get_info(self) -> None:
         with respx.mock() as router:
@@ -193,7 +193,7 @@ class TestAsyncStreamBuildLogs:
             router.post(f"{API}/templates").mock(
                 return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
             )
-            t = await AsyncTemplate.create(alias="my-env", from_="python:3.11")
+            t = await AsyncTemplate.create(name="my-env", from_="python:3.11")
             sse = _sse_text(
                 [
                     '{"timestamp":"2026-01-01T00:00:00Z","stream":"stdout","text":"hello"}',
@@ -208,25 +208,64 @@ class TestAsyncStreamBuildLogs:
             assert len(events) == 2
 
 
+BUILD_BASE = {
+    "id": "b-1",
+    "template_id": "t-1",
+    "build_spec_hash": "h",
+    "created_at": "2026-01-01T00:00:00Z",
+}
+
+
 class TestAsyncWaitUntilReady:
-    async def test_resolves_on_ready(self) -> None:
+    async def test_resolves_when_build_poll_returns_ready(self) -> None:
         with respx.mock() as router:
             router.post(f"{API}/templates").mock(
                 return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
             )
-            t = await AsyncTemplate.create(alias="my-env", from_="python:3.11")
+            t = await AsyncTemplate.create(name="my-env", from_="python:3.11")
+            router.get(f"{API}/templates/t-1/builds/b-1").mock(
+                return_value=httpx.Response(
+                    200, json={**BUILD_BASE, "status": "ready"}
+                )
+            )
+            router.get(f"{API}/templates/t-1").mock(
+                return_value=httpx.Response(200, json={**BASE, "status": "ready"})
+            )
+            info = await t.wait_until_ready(poll_interval_s=0.001)
+            assert info.status == TemplateStatus.READY
+
+    async def test_ignores_sse_ready_while_build_poll_says_building(self) -> None:
+        # Regression: SSE sends `finished:true,status:"ready"` the instant
+        # vmd finishes, but the DB row that POST /sandboxes reads is updated
+        # by a separate ~1s poller. The SDK must trust the build poll, not
+        # the SSE event — otherwise callers race to POST /sandboxes and hit
+        # 409 "template is not ready".
+        with respx.mock() as router:
+            router.post(f"{API}/templates").mock(
+                return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
+            )
+            t = await AsyncTemplate.create(name="my-env", from_="python:3.11")
             sse = _sse_text(
                 [
-                    '{"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"ok","finished":true,"status":"ready"}',
+                    '{"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"done","finished":true,"status":"ready"}',
                 ]
             )
             router.get(f"{API}/templates/t-1/builds/b-1/logs").mock(
                 return_value=httpx.Response(200, text=sse)
             )
+            router.get(f"{API}/templates/t-1/builds/b-1").mock(
+                side_effect=[
+                    httpx.Response(200, json={**BUILD_BASE, "status": "building"}),
+                    httpx.Response(200, json={**BUILD_BASE, "status": "building"}),
+                    httpx.Response(200, json={**BUILD_BASE, "status": "ready"}),
+                ]
+            )
             router.get(f"{API}/templates/t-1").mock(
                 return_value=httpx.Response(200, json={**BASE, "status": "ready"})
             )
-            info = await t.wait_until_ready()
+            info = await t.wait_until_ready(
+                poll_interval_s=0.001, on_log=lambda ev: None
+            )
             assert info.status == TemplateStatus.READY
 
     async def test_raises_build_error_on_failed(self) -> None:
@@ -234,25 +273,17 @@ class TestAsyncWaitUntilReady:
             router.post(f"{API}/templates").mock(
                 return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
             )
-            t = await AsyncTemplate.create(alias="my-env", from_="python:3.11")
-            sse = _sse_text(
-                [
-                    '{"timestamp":"2026-01-01T00:00:01Z","stream":"system","text":"fail","finished":true,"status":"failed"}',
-                ]
-            )
-            router.get(f"{API}/templates/t-1/builds/b-1/logs").mock(
-                return_value=httpx.Response(200, text=sse)
-            )
-            router.get(f"{API}/templates/t-1").mock(
+            t = await AsyncTemplate.create(name="my-env", from_="python:3.11")
+            router.get(f"{API}/templates/t-1/builds/b-1").mock(
                 return_value=httpx.Response(
                     200,
                     json={
-                        **BASE,
+                        **BUILD_BASE,
                         "status": "failed",
                         "error_message": "step_failed: boom",
                     },
                 )
             )
             with pytest.raises(BuildError) as exc:
-                await t.wait_until_ready()
+                await t.wait_until_ready(poll_interval_s=0.001)
             assert exc.value.code == "step_failed"

@@ -16,7 +16,7 @@ export function TemplateTableRow({ template }: { template: TemplateResponse }) {
   const system = isSystemTemplate(template)
 
   const handleLaunch = (t: TemplateResponse) => {
-    router.push(`/sandboxes?from_template=${encodeURIComponent(t.alias)}`)
+    router.push(`/sandboxes?from_template=${encodeURIComponent(t.name)}`)
   }
 
   const handleRowClick = (e: React.MouseEvent) => {
@@ -38,7 +38,7 @@ export function TemplateTableRow({ template }: { template: TemplateResponse }) {
         <div className="flex flex-col gap-0.5">
           <div className="flex items-center gap-2">
             <span className="font-mono text-foreground/80">
-              {template.alias}
+              {template.name}
             </span>
             {system && <Badge variant="muted">System</Badge>}
           </div>

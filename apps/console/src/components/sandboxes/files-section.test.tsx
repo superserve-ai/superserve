@@ -39,6 +39,7 @@ vi.mock("posthog-js/react", () => ({
 vi.mock("@phosphor-icons/react", () => ({
   DownloadSimpleIcon: () => <span>↓</span>,
   FileArrowUpIcon: () => <span>f</span>,
+  FilesIcon: () => <span>📁</span>,
   UploadSimpleIcon: () => <span>↑</span>,
 }))
 
@@ -80,18 +81,17 @@ function successResponse(
 }
 
 describe("FilesSection — disabled gating", () => {
-  it("disables panels when sandbox is resuming, with reason in header", () => {
+  it("renders the empty state when sandbox is resuming, with reason text", () => {
     render(<FilesSection sandbox={{ ...activeSandbox, status: "resuming" }} />)
-    // Reason text appears both in the section header and in tooltip popups.
-    expect(screen.getAllByText(/resuming/i).length).toBeGreaterThan(0)
-    expect(screen.getByRole("button", { name: /Upload/ })).toBeDisabled()
-    expect(screen.getByRole("button", { name: /Download/ })).toBeDisabled()
+    expect(screen.getByText(/Sandbox is resuming/i)).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /Upload/ })).toBeNull()
+    expect(screen.queryByRole("button", { name: /Download/ })).toBeNull()
   })
 
-  it("disables panels when sandbox is paused, with hint to start", () => {
+  it("renders the empty state when sandbox is paused, with hint to start", () => {
     render(<FilesSection sandbox={{ ...activeSandbox, status: "paused" }} />)
-    expect(screen.getAllByText(/Start the sandbox/i).length).toBeGreaterThan(0)
-    expect(screen.getByRole("button", { name: /Upload/ })).toBeDisabled()
+    expect(screen.getByText(/Start the sandbox/i)).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /Upload/ })).toBeNull()
   })
 
   it("enables download input but keeps Upload button disabled with no file", () => {

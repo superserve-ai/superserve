@@ -69,7 +69,7 @@ export default function TemplateDetailPage() {
           </Link>
           <span className="text-muted">/</span>
           <h1 className="font-mono text-sm font-medium text-foreground">
-            {data.alias}
+            {data.name}
           </h1>
           <TemplateStatusBadge status={data.status} />
           {system && (
@@ -85,7 +85,7 @@ export default function TemplateDetailPage() {
             disabled={data.status !== "ready"}
             onClick={() =>
               router.push(
-                `/sandboxes?from_template=${encodeURIComponent(data.alias)}`,
+                `/sandboxes?from_template=${encodeURIComponent(data.name)}`,
               )
             }
           >

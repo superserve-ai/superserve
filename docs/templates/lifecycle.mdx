@@ -69,20 +69,20 @@ template.cancel_build(build.id)
 ```typescript TypeScript
 await template.delete()
 
-// Or by id / alias
-await Template.deleteById("my-python-env")
+// Or by UUID
+await Template.deleteById("7a3f2b8c-1234-...")
 ```
 
 ```python Python
 template.delete()
 
-# Or by id / alias
-Template.delete_by_id("my-python-env")
+# Or by UUID
+Template.delete_by_id("7a3f2b8c-1234-...")
 ```
 
 </CodeGroup>
 
-Both calls are idempotent on `404`. If any non-destroyed sandbox still references the template, the call raises `ConflictError`; destroy those sandboxes first.
+Both calls are idempotent on `404`. If any non-destroyed sandbox still references the template, the call raises `ConflictError`; destroy those sandboxes first. Once the delete succeeds the template's `name` is released for reuse — you can immediately create a new template with the same name.
 
 ## Related
 

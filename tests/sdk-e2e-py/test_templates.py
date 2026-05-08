@@ -18,15 +18,15 @@ pytestmark = SKIP_IF_NO_CREDS
 def test_list_includes_system_templates(connection_opts):
     templates = Template.list(**connection_opts)
     assert len(templates) > 0
-    assert any(t.alias.startswith("superserve/") for t in templates)
+    assert any(t.name.startswith("superserve/") for t in templates)
 
 
 def test_full_lifecycle(connection_opts, run_id):
     """Multi-step build, launch, verify env/workdir propagate, rebuild
     idempotency, conflict-on-delete-while-referenced."""
-    alias = f"sdk-e2e-py-tpl-{run_id}"
+    name = f"sdk-e2e-py-tpl-{run_id}"
     template = Template.create(
-        alias=alias,
+        name=name,
         vcpu=2,
         memory_mib=2048,
         disk_mib=4096,
@@ -40,7 +40,7 @@ def test_full_lifecycle(connection_opts, run_id):
         ],
         **connection_opts,
     )
-    assert template.alias == alias
+    assert template.name == name
     assert template.vcpu == 2
     assert template.memory_mib == 2048
 
@@ -107,9 +107,9 @@ def test_full_lifecycle(connection_opts, run_id):
 
 def test_build_error_on_failed_step(connection_opts, run_id):
     """A build with a failing step raises BuildError."""
-    alias = f"sdk-e2e-py-tpl-fail-{run_id}"
+    name = f"sdk-e2e-py-tpl-fail-{run_id}"
     template = Template.create(
-        alias=alias,
+        name=name,
         from_="python:3.11",
         # Force a step failure as quickly as possible: `false` exits 1.
         steps=[RunStep(run="false")],

@@ -106,7 +106,7 @@ class BuildLogStream(str, Enum):
 
 class TemplateInfo(BaseModel):
     id: str
-    alias: str
+    name: str
     team_id: str
     status: TemplateStatus
     vcpu: int = 0
@@ -179,8 +179,8 @@ def to_template_info(
 ) -> TemplateInfo:
     if not raw.get("id"):
         raise SandboxError("Invalid API response: missing template id")
-    if not raw.get("alias"):
-        raise SandboxError("Invalid API response: missing template alias")
+    if not raw.get("name"):
+        raise SandboxError("Invalid API response: missing template name")
     if not raw.get("status"):
         raise SandboxError("Invalid API response: missing template status")
     if not raw.get("team_id"):
@@ -190,7 +190,7 @@ def to_template_info(
 
     return TemplateInfo(
         id=raw["id"],
-        alias=raw["alias"],
+        name=raw["name"],
         team_id=raw["team_id"],
         status=TemplateStatus(raw["status"]),
         vcpu=raw.get("vcpu", 0),

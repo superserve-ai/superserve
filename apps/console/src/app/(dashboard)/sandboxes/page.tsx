@@ -78,12 +78,12 @@ function SandboxesPageContent() {
   const [templateRef, setTemplateRef] = useState<string | null>(null)
 
   // When the user clicks "Launch sandbox" from the templates section, we
-  // navigate here with ?from_template=<alias>. Open the dialog with the
+  // navigate here with ?from_template=<name>. Open the dialog with the
   // template prefilled, then strip the param so refreshing doesn't re-open.
   useEffect(() => {
-    const alias = searchParams.get("from_template")
-    if (!alias) return
-    setTemplateRef(alias)
+    const name = searchParams.get("from_template")
+    if (!name) return
+    setTemplateRef(name)
     setCreateOpen(true)
     const params = new URLSearchParams(searchParams.toString())
     params.delete("from_template")

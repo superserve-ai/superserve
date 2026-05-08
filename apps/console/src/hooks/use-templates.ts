@@ -79,7 +79,7 @@ export function useCreateTemplate() {
     mutationFn: (data: CreateTemplateRequest) => createTemplate(data),
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: templateKeys.all })
-      addToast(`Template "${created.alias}" created — build queued`, "success")
+      addToast(`Template "${created.name}" created — build queued`, "success")
     },
     onError: (error) => {
       const message =

@@ -35,7 +35,7 @@ const DEFAULT_TEMPLATE = "superserve/base"
 
 interface TemplatePickerItem {
   id: string
-  alias: string
+  name: string
   system: boolean
 }
 
@@ -46,14 +46,14 @@ function TemplatePicker({
 }: {
   value: string
   items: TemplatePickerItem[]
-  onChange: (alias: string) => void
+  onChange: (name: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [rect, setRect] = useState<DOMRect | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
-  const current = items.find((i) => i.alias === value)
+  const current = items.find((i) => i.name === value)
 
   useEffect(() => setMounted(true), [])
 
@@ -114,13 +114,13 @@ function TemplatePicker({
               </div>
             ) : (
               items.map((item) => {
-                const selected = item.alias === value
+                const selected = item.name === value
                 return (
                   <button
                     key={item.id}
                     type="button"
                     onClick={() => {
-                      onChange(item.alias)
+                      onChange(item.name)
                       setOpen(false)
                     }}
                     className={cn(
@@ -130,7 +130,7 @@ function TemplatePicker({
                         : "text-foreground/80 hover:bg-surface-hover",
                     )}
                   >
-                    <span className="font-mono">{item.alias}</span>
+                    <span className="font-mono">{item.name}</span>
                     {item.system && (
                       <span className="font-mono text-[10px] uppercase text-muted">
                         System
@@ -304,8 +304,8 @@ interface CreateSandboxDialogProps {
   hideTrigger?: boolean
   onCreated?: (sandboxId: string) => void
   /**
-   * Template reference to launch the sandbox from — either a UUID or an
-   * alias. When set, the dialog shows a "From template" banner and the
+   * Template reference to launch the sandbox from — either a UUID or a
+   * name. When set, the dialog shows a "From template" banner and the
    * create payload includes `template_id`.
    */
   initialTemplateRef?: string | null
@@ -351,30 +351,30 @@ export function CreateSandboxDialog({
   const templateOptions = useMemo(() => {
     const list = templates ?? []
     const ready = list.filter((t) => t.status === "ready")
-    // Sort: system templates first (ss/* curated), then team by alias.
+    // Sort: system templates first (ss/* curated), then team by name.
     return [...ready].sort((a, b) => {
       const aSys = isSystemTemplate(a)
       const bSys = isSystemTemplate(b)
       if (aSys !== bSys) return aSys ? -1 : 1
-      return a.alias.localeCompare(b.alias)
+      return a.name.localeCompare(b.name)
     })
   }, [templates])
 
   const selectItems = useMemo(() => {
     const mapped = templateOptions.map((t) => ({
       id: t.id,
-      alias: t.alias,
+      name: t.name,
       system: isSystemTemplate(t),
     }))
     // Ensure the current value is always in the items list, even if the
     // templates query hasn't resolved yet.
-    const aliases = new Set(mapped.map((t) => t.alias))
-    if (templateRef && !aliases.has(templateRef)) {
+    const names = new Set(mapped.map((t) => t.name))
+    if (templateRef && !names.has(templateRef)) {
       return [
         {
           id: templateRef,
-          alias: templateRef,
-          system: isSystemTemplate({ alias: templateRef }),
+          name: templateRef,
+          system: isSystemTemplate({ name: templateRef }),
         },
         ...mapped,
       ]

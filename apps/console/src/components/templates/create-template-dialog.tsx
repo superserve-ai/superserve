@@ -26,16 +26,18 @@ const CURATED_IMAGES = [
   "debian:12-slim",
 ] as const
 
-const MEMORY_OPTIONS = [256, 512, 1024, 2048, 4096] as const
+// Trimmed to the default per-team caps from the backend (vcpu=2, memory_mib=2048,
+// disk_mib=8192). Teams with raised caps drop to the SDK/API for higher values.
+const MEMORY_OPTIONS = [256, 512, 1024, 2048] as const
 const DISK_OPTIONS = [1024, 2048, 4096, 8192] as const
-const VCPU_OPTIONS = [1, 2, 4] as const
+const VCPU_OPTIONS = [1, 2] as const
 
-const ALIAS_RE = /^[a-z0-9][a-z0-9-]*$/
+const NAME_RE = /^[a-z0-9][a-z0-9-]*$/
 
-function validateAlias(alias: string): string | null {
-  if (!alias) return "Name is required"
-  if (alias.length > 128) return "Name must be 128 characters or fewer"
-  if (!ALIAS_RE.test(alias))
+function validateName(name: string): string | null {
+  if (!name) return "Name is required"
+  if (name.length > 128) return "Name must be 128 characters or fewer"
+  if (!NAME_RE.test(name))
     return "Use lowercase letters, numbers, and hyphens; start with a letter or number"
   return null
 }
@@ -72,7 +74,7 @@ export function CreateTemplateDialog({
   const open = controlledOpen ?? internalOpen
   const setOpen = onOpenChange ?? setInternalOpen
 
-  const [alias, setAlias] = useState("")
+  const [name, setName] = useState("")
   const [imageMode, setImageMode] = useState<"curated" | "custom">("curated")
   const [curatedImage, setCuratedImage] = useState<string>(CURATED_IMAGES[1])
   const [customImage, setCustomImage] = useState("")
@@ -80,13 +82,13 @@ export function CreateTemplateDialog({
   const [memory, setMemory] = useState<number>(1024)
   const [disk, setDisk] = useState<number>(4096)
   const [errors, setErrors] = useState<{
-    alias?: string
+    name?: string
     image?: string
     form?: string
   }>({})
 
   const reset = () => {
-    setAlias("")
+    setName("")
     setImageMode("curated")
     setCuratedImage(CURATED_IMAGES[1])
     setCustomImage("")
@@ -97,25 +99,25 @@ export function CreateTemplateDialog({
   }
 
   // Live-computed errors so the user sees feedback as they type.
-  // Only surfaced after the field has been touched (alias) or always when
-  // the user has entered a custom image (image).
+  // Only surfaced after the name field has been touched, or always when
+  // the user has entered a custom image.
   const trimmedImage =
     imageMode === "curated" ? curatedImage : customImage.trim()
-  const liveAliasError = useMemo(() => validateAlias(alias.trim()), [alias])
+  const liveNameError = useMemo(() => validateName(name.trim()), [name])
   const liveImageError = useMemo(
     () => (trimmedImage ? validateImage(trimmedImage) : null),
     [trimmedImage],
   )
 
-  const isValid = !liveAliasError && !liveImageError && trimmedImage.length > 0
+  const isValid = !liveNameError && !liveImageError && trimmedImage.length > 0
 
   const handleCreate = async () => {
     const image = trimmedImage
-    const aliasError = validateAlias(alias.trim())
+    const nameError = validateName(name.trim())
     const imageError = validateImage(image)
-    if (aliasError || imageError) {
+    if (nameError || imageError) {
       setErrors({
-        alias: aliasError ?? undefined,
+        name: nameError ?? undefined,
         image: imageError ?? undefined,
       })
       return
@@ -124,7 +126,7 @@ export function CreateTemplateDialog({
 
     try {
       const created = await create.mutateAsync({
-        alias: alias.trim(),
+        name: name.trim(),
         vcpu,
         memory_mib: memory,
         disk_mib: disk,
@@ -136,13 +138,14 @@ export function CreateTemplateDialog({
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 409) {
-          setErrors({ alias: "A template with this name already exists." })
+          setErrors({ name: "A template with this name already exists." })
           return
         }
         if (err.status === 429) {
-          setErrors({
-            form: "Concurrent build limit reached. Wait for a build to finish, then try again.",
-          })
+          // 429 from POST /templates can be too_many_builds (concurrent build
+          // limit) or too_many_templates (team count limit). Backend message
+          // already includes the cap and contact-support copy — surface it.
+          setErrors({ form: err.message })
           return
         }
         setErrors({ form: err.message })
@@ -172,12 +175,11 @@ export function CreateTemplateDialog({
           <Field label="Name" required>
             <Input
               autoFocus
-              value={alias}
-              onChange={(e) => setAlias(e.target.value)}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               placeholder="e.g. python-ml"
               error={
-                errors.alias ??
-                (alias ? (liveAliasError ?? undefined) : undefined)
+                errors.name ?? (name ? (liveNameError ?? undefined) : undefined)
               }
               onKeyDown={(e) => {
                 if (e.key === "Enter") {

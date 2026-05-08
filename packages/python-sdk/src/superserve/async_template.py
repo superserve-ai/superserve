@@ -7,7 +7,7 @@ from superserve import AsyncTemplate, AsyncSandbox
 
 async def main() -> None:
     template = await AsyncTemplate.create(
-        alias="my-python-env",
+        name="my-python-env",
         from_="python:3.11",
         steps=[{"run": "pip install numpy"}],
     )
@@ -32,6 +32,7 @@ from .types import (
     BuildLogEvent,
     BuildStep,
     TemplateBuildInfo,
+    TemplateBuildStatus,
     TemplateInfo,
     TemplateStatus,
     build_steps_to_api,
@@ -46,7 +47,7 @@ class AsyncTemplate:
 
     def __init__(self, info: TemplateInfo, config: ResolvedConfig) -> None:
         self.id: str = info.id
-        self.alias: str = info.alias
+        self.name: str = info.name
         self.team_id: str = info.team_id
         self.status: TemplateStatus = info.status
         self.vcpu: int = info.vcpu
@@ -67,7 +68,7 @@ class AsyncTemplate:
     async def create(
         cls,
         *,
-        alias: str,
+        name: str,
         from_: str,
         vcpu: int | None = None,
         memory_mib: int | None = None,
@@ -89,7 +90,7 @@ class AsyncTemplate:
         if ready_cmd is not None:
             build_spec["ready_cmd"] = ready_cmd
 
-        body: dict[str, Any] = {"alias": alias, "build_spec": build_spec}
+        body: dict[str, Any] = {"name": name, "build_spec": build_spec}
         if vcpu is not None:
             body["vcpu"] = vcpu
         if memory_mib is not None:
@@ -113,16 +114,16 @@ class AsyncTemplate:
     @classmethod
     async def connect(
         cls,
-        alias_or_id: str,
+        name_or_id: str,
         *,
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> AsyncTemplate:
-        """Connect to an existing template by alias or ID."""
+        """Connect to an existing template by name or ID."""
         config = resolve_config(api_key=api_key, base_url=base_url)
         raw = await async_api_request(
             "GET",
-            f"{config.base_url}/templates/{alias_or_id}",
+            f"{config.base_url}/templates/{name_or_id}",
             headers={"X-API-Key": config.api_key},
         )
         return cls(to_template_info(raw), config)
@@ -131,15 +132,15 @@ class AsyncTemplate:
     async def list(
         cls,
         *,
-        alias_prefix: str | None = None,
+        name_prefix: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> builtins.list[TemplateInfo]:
         """List all templates visible to the authenticated team."""
         config = resolve_config(api_key=api_key, base_url=base_url)
         url = f"{config.base_url}/templates"
-        if alias_prefix:
-            url += "?" + urlencode({"alias_prefix": alias_prefix})
+        if name_prefix:
+            url += "?" + urlencode({"name_prefix": name_prefix})
         raw = await async_api_request(
             "GET",
             url,
@@ -150,17 +151,17 @@ class AsyncTemplate:
     @classmethod
     async def delete_by_id(
         cls,
-        alias_or_id: str,
+        name_or_id: str,
         *,
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> None:
-        """Delete a template by alias or ID. Idempotent on 404."""
+        """Delete a template by name or ID. Idempotent on 404."""
         config = resolve_config(api_key=api_key, base_url=base_url)
         try:
             await async_api_request(
                 "DELETE",
-                f"{config.base_url}/templates/{alias_or_id}",
+                f"{config.base_url}/templates/{name_or_id}",
                 headers={"X-API-Key": config.api_key},
             )
         except NotFoundError:
@@ -250,7 +251,7 @@ class AsyncTemplate:
         recent = await self.list_builds(limit=1)
         if not recent:
             raise SandboxError(
-                f"Template {self.alias} has no builds — call rebuild() first"
+                f"Template {self.name} has no builds — call rebuild() first"
             )
         return recent[0].id
 
@@ -282,81 +283,98 @@ class AsyncTemplate:
     ) -> TemplateInfo:
         """Block until the current build reaches terminal status.
 
-        Attempts SSE first; falls back to polling on SSE error. Raises
-        `BuildError` on `failed` or `ConflictError` on `cancelled`.
+        Polls ``GET /templates/{id}/builds/{bid}`` (the DB-backed build row)
+        as the source of truth — SSE is only used for live log delivery
+        when ``on_log`` is provided. Raises ``BuildError`` on ``failed``
+        or ``ConflictError`` on ``cancelled``.
         """
         import re
 
-        final_status: str | None = None
         try:
             bid: str | None = await self._resolve_build_id()
         except SandboxError:
             bid = None
 
-        # Only the three terminal statuses end the wait. The server sends
-        # `finished:true, status:"pending"` to signal "build not yet
-        # dispatched, reconnect or poll later"; the SDK must NOT treat
-        # that as a final outcome.
-        terminal_build_statuses = {"ready", "failed", "cancelled"}
-
-        if bid:
+        # SSE for live logs — best effort, runs concurrently with the poll
+        # loop. The server emits `finished:true, status:"ready"` the instant
+        # vmd finishes, but the DB row that POST /sandboxes reads is updated
+        # by a separate ~1s poller. Treating SSE as the terminal signal
+        # would race that update and leave callers seeing 409 "template is
+        # not ready" on the very next request. Build poll is source of truth.
+        sse_task: asyncio.Task[None] | None = None
+        if bid and on_log is not None:
 
             def _on_raw(raw: dict[str, Any]) -> None:
-                nonlocal final_status
-                ev = to_build_log_event(raw)
-                if on_log:
-                    on_log(ev)
-                if (
-                    ev.finished
-                    and ev.status
-                    and ev.status in terminal_build_statuses
-                ):
-                    final_status = ev.status
+                on_log(to_build_log_event(raw))
 
-            try:
-                await async_stream_sse(
-                    f"{self._config.base_url}/templates/{self.id}/builds/{bid}/logs",
-                    headers={"X-API-Key": self._config.api_key},
-                    json_body=None,
-                    method="GET",
-                    on_event=_on_raw,
-                )
-            except Exception:
-                # Fall through to polling.
-                pass
+            async def _run_sse(build_id: str) -> None:
+                try:
+                    await async_stream_sse(
+                        f"{self._config.base_url}/templates/{self.id}/builds/{build_id}/logs",
+                        headers={"X-API-Key": self._config.api_key},
+                        json_body=None,
+                        method="GET",
+                        on_event=_on_raw,
+                    )
+                except Exception:
+                    # SSE failures are non-fatal — polling drives detection.
+                    pass
 
-        # Poll until terminal status. Handles SSE errors, SSE closing on
-        # a non-terminal status (e.g. `pending`), and the no-bid case.
-        while final_status is None:
-            info = await self.get_info()
-            if info.status in (TemplateStatus.READY, TemplateStatus.FAILED):
-                final_status = info.status.value
-                break
-            await asyncio.sleep(poll_interval_s)
-
-        info = await self.get_info()
-        if final_status == "ready":
-            return info
-        if final_status == "cancelled":
-            raise ConflictError("template build was cancelled", code="cancelled")
+            sse_task = asyncio.create_task(_run_sse(bid))
 
         # Split a backend `error_message` of the form `"<code>: <detail>"`
         # into a stable code and a clean human-readable message.
-        if info.error_message:
-            match = re.match(r"^(\w+):\s*(.*)$", info.error_message, re.DOTALL)
+        def _parse_err(msg: str | None) -> tuple[str, str]:
+            if not msg:
+                return "build_failed", "Template build failed"
+            match = re.match(r"^(\w+):\s*(.*)$", msg, re.DOTALL)
             if match and match.group(2).strip():
-                code = match.group(1)
-                msg = match.group(2).strip()
-            else:
-                code = "build_failed"
-                msg = info.error_message
-        else:
-            code = "build_failed"
-            msg = "Template build failed"
-        raise BuildError(msg, code=code, build_id=bid or "", template_id=self.id)
+                return match.group(1), match.group(2).strip()
+            return "build_failed", msg
+
+        try:
+            if bid:
+                # Build status transitions pending → building → snapshotting →
+                # ready/failed/cancelled. Template-level status reflects the
+                # *latest successful* build, so polling /templates/{id} would
+                # say "ready" instantly when rebuilding an already-ready
+                # template. The build-level row is what we need.
+                while True:
+                    build = await self.get_build(bid)
+                    if build.status == TemplateBuildStatus.READY:
+                        return await self.get_info()
+                    if build.status == TemplateBuildStatus.FAILED:
+                        code, msg = _parse_err(build.error_message)
+                        raise BuildError(
+                            msg, code=code, build_id=bid, template_id=self.id
+                        )
+                    if build.status == TemplateBuildStatus.CANCELLED:
+                        raise ConflictError(
+                            "template build was cancelled", code="cancelled"
+                        )
+                    await asyncio.sleep(poll_interval_s)
+
+            # No build_id — rare path; poll template status as a best effort.
+            while True:
+                info = await self.get_info()
+                if info.status == TemplateStatus.READY:
+                    return info
+                if info.status == TemplateStatus.FAILED:
+                    code, msg = _parse_err(info.error_message)
+                    raise BuildError(
+                        msg, code=code, build_id="", template_id=self.id
+                    )
+                await asyncio.sleep(poll_interval_s)
+        finally:
+            if sse_task is not None and not sse_task.done():
+                sse_task.cancel()
+                try:
+                    await sse_task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
     def __repr__(self) -> str:
         return (
-            f"AsyncTemplate(id={self.id!r}, alias={self.alias!r}, "
+            f"AsyncTemplate(id={self.id!r}, name={self.name!r}, "
             f"status={self.status.value!r})"
         )

@@ -3,23 +3,21 @@
   "theme": "maple",
   "name": "Superserve",
   "colors": {
-    "primary": "#105C60",
-    "light": "#119CA3",
-    "dark": "#0d474a"
+    "primary": "#B2FAB4",
+    "light": "#B2FAB4",
+    "dark": "#B2FAB4"
   },
   "fonts": {
     "heading": {
-      "family": "Funnel Display",
-      "weight": 600
+      "family": "Instrument Sans"
     },
     "body": {
-      "family": "Inter"
+      "family": "Instrument Sans"
     }
   },
   "background": {
     "color": {
-      "light": "#faf8f5",
-      "dark": "#1a1816"
+      "dark": "#141414"
     },
     "decoration": "gradient"
   },
@@ -38,7 +36,8 @@
     "href": "https://superserve.ai"
   },
   "appearance": {
-    "default": "light"
+    "default": "dark",
+    "strict": true
   },
   "navbar": {
     "primary": {

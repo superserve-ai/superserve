@@ -76,7 +76,7 @@ describe("toTemplateInfo", () => {
     const info = toTemplateInfo({
       id: "t-1",
       team_id: "team-1",
-      alias: "my-env",
+      name: "my-env",
       status: "ready",
       vcpu: 2,
       memory_mib: 2048,
@@ -86,7 +86,7 @@ describe("toTemplateInfo", () => {
       built_at: "2026-01-01T00:01:00Z",
     })
     expect(info.id).toBe("t-1")
-    expect(info.alias).toBe("my-env")
+    expect(info.name).toBe("my-env")
     expect(info.status).toBe("ready")
     expect(info.vcpu).toBe(2)
     expect(info.memoryMib).toBe(2048)
@@ -100,7 +100,7 @@ describe("toTemplateInfo", () => {
     const info = toTemplateInfo({
       id: "t-1",
       team_id: "team-1",
-      alias: "my-env",
+      name: "my-env",
       status: "building",
       vcpu: 1,
       memory_mib: 1024,
@@ -115,7 +115,7 @@ describe("toTemplateInfo", () => {
   it("throws on missing id", () => {
     expect(() =>
       toTemplateInfo({
-        alias: "x",
+        name: "x",
         status: "ready",
         team_id: "t",
         created_at: "2026-01-01T00:00:00Z",
@@ -123,7 +123,7 @@ describe("toTemplateInfo", () => {
     ).toThrow(/missing template id/)
   })
 
-  it("throws on missing alias", () => {
+  it("throws on missing name", () => {
     expect(() =>
       toTemplateInfo({
         id: "t-1",
@@ -131,7 +131,7 @@ describe("toTemplateInfo", () => {
         status: "ready",
         created_at: "2026-01-01T00:00:00Z",
       }),
-    ).toThrow(/missing template alias/)
+    ).toThrow(/missing template name/)
   })
 
   it("throws on missing status", () => {
@@ -139,7 +139,7 @@ describe("toTemplateInfo", () => {
       toTemplateInfo({
         id: "t-1",
         team_id: "team-1",
-        alias: "x",
+        name: "x",
         created_at: "2026-01-01T00:00:00Z",
       }),
     ).toThrow(/missing template status/)
@@ -149,7 +149,7 @@ describe("toTemplateInfo", () => {
     expect(() =>
       toTemplateInfo({
         id: "t-1",
-        alias: "x",
+        name: "x",
         status: "ready",
         created_at: "2026-01-01T00:00:00Z",
       }),
@@ -161,7 +161,7 @@ describe("toTemplateInfo", () => {
       toTemplateInfo({
         id: "t-1",
         team_id: "team-1",
-        alias: "x",
+        name: "x",
         status: "ready",
       }),
     ).toThrow(/missing created_at/)

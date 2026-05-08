@@ -273,7 +273,7 @@ class TestCreateFromTemplate:
                     json={
                         "id": "t-1",
                         "team_id": "team-1",
-                        "alias": "my-env",
+                        "name": "my-env",
                         "status": "building",
                         "vcpu": 1,
                         "memory_mib": 1024,
@@ -283,7 +283,7 @@ class TestCreateFromTemplate:
                     },
                 )
             )
-            tpl = Template.create(alias="my-env", from_="python:3.11")
+            tpl = Template.create(name="my-env", from_="python:3.11")
             route = router.post(f"{API}/sandboxes").mock(
                 return_value=httpx.Response(200, json=_raw())
             )

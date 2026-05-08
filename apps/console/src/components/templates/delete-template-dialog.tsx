@@ -48,7 +48,7 @@ export function DeleteTemplateDialog({
         </DialogHeader>
         <div className="px-6 pb-2 text-sm text-muted">
           This will soft-delete{" "}
-          <span className="font-mono text-foreground">{template?.alias}</span>.
+          <span className="font-mono text-foreground">{template?.name}</span>.
           Sandboxes still using this template will block the delete — stop or
           delete them first.
         </div>

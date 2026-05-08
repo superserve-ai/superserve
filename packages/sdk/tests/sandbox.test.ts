@@ -245,14 +245,14 @@ describe("Sandbox.create fromTemplate / fromSnapshot", () => {
     expect(body.from_template).toBe("superserve/python-3.11")
   })
 
-  it("extracts alias from Template-like instance", async () => {
+  it("extracts name from Template-like instance", async () => {
     const mock = vi.fn(async () => jsonResponse(baseSandbox))
     vi.stubGlobal("fetch", mock)
 
     await Sandbox.create({
       ...commonOpts,
       name: "my-sandbox",
-      fromTemplate: { alias: "my-env", id: "t-1" },
+      fromTemplate: { name: "my-env", id: "t-1" },
     })
 
     const [, init] = mock.mock.calls[0] as [string, RequestInit]
@@ -260,7 +260,7 @@ describe("Sandbox.create fromTemplate / fromSnapshot", () => {
     expect(body.from_template).toBe("my-env")
   })
 
-  it("falls back to id when alias is undefined", async () => {
+  it("falls back to id when name is undefined", async () => {
     const mock = vi.fn(async () => jsonResponse(baseSandbox))
     vi.stubGlobal("fetch", mock)
 

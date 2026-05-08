@@ -68,9 +68,9 @@ export function TemplateRowActions({
               Rebuild
             </MenuItem>
           )}
-          <MenuItem onClick={() => copy(template.alias, "Alias")}>
+          <MenuItem onClick={() => copy(template.name, "Name")}>
             <CopyIcon className="size-4" weight="light" />
-            Copy alias
+            Copy name
           </MenuItem>
           <MenuItem onClick={() => copy(template.id, "ID")}>
             <CopyIcon className="size-4" weight="light" />

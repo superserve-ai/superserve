@@ -10,14 +10,14 @@ describe.skipIf(!hasCredentials())("templates", () => {
   it("lists templates (includes system templates)", async () => {
     const list = await Template.list(opts)
     expect(list.length).toBeGreaterThan(0)
-    expect(list.some((t) => t.alias.startsWith("superserve/"))).toBe(true)
+    expect(list.some((t) => t.name.startsWith("superserve/"))).toBe(true)
   })
 
   it("full lifecycle: multi-step build, launch, verify, rebuild idempotency, conflict-on-delete", async () => {
-    const alias = `sdk-e2e-tpl-${RUN_ID}`
+    const name = `sdk-e2e-tpl-${RUN_ID}`
     const template = await Template.create({
       ...opts,
-      alias,
+      name,
       vcpu: 2,
       memoryMib: 2048,
       diskMib: 4096,
@@ -30,7 +30,7 @@ describe.skipIf(!hasCredentials())("templates", () => {
         { run: "python --version > /srv/app/pyver.txt 2>&1" },
       ],
     })
-    expect(template.alias).toBe(alias)
+    expect(template.name).toBe(name)
     expect(template.vcpu).toBe(2)
     expect(template.memoryMib).toBe(2048)
 
@@ -99,10 +99,10 @@ describe.skipIf(!hasCredentials())("templates", () => {
   }, 600_000)
 
   it("BuildError: failed build raises BuildError with parsed code", async () => {
-    const alias = `sdk-e2e-tpl-fail-${RUN_ID}`
+    const name = `sdk-e2e-tpl-fail-${RUN_ID}`
     const template = await Template.create({
       ...opts,
-      alias,
+      name,
       from: "python:3.11",
       // Force a step failure as quickly as possible: `false` exits 1.
       steps: [{ run: "false" }],
