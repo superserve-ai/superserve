@@ -2,13 +2,13 @@
   <br/>
   <br/>
   <picture>
-    <img width="1500" height="auto" alt="Twitter Header - Personal" src="https://github.com/user-attachments/assets/565a469e-bc80-4e0a-af70-4e6ed07975c2" />
+    <img width="1500" height="auto" alt="Twitter Header - Personal" src="https://github.com/user-attachments/assets/ba41a4ed-1c8b-4826-bd3d-6fc8d84472ae" />
   </picture>
 
   <br/>
   <br/>
 
-  <p><strong>Sandbox infrastructure to run AI Agents in the cloud. Powered by Firecracker MicroVMs.</strong></p>
+  <p><strong>Peristent and secure sandboxes for AI Agents, powered by Firecracker microVMs.</strong></p>
 
   [![Docs](https://img.shields.io/badge/Docs-latest-blue)](https://docs.superserve.ai/)
   [![License](https://img.shields.io/badge/license-Apache%20License%202.0-blue)](https://github.com/superserve-ai/superserve/blob/main/LICENSE)
