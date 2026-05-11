@@ -1,11 +1,55 @@
 ---
 title: "Claude Agent SDK"
 sidebarTitle: Claude Agent SDK
-description: Build agents with the Claude Agent SDK that execute inside Superserve sandboxes.
+description: Use Superserve sandboxes as the execution runtime for agents built with the Claude Agent SDK.
 ---
 
-The Claude Agent SDK is Anthropic's framework for building production agents. Wire it up to Superserve so your agents have an isolated, reproducible execution environment for every tool call.
+The Claude Agent SDK is Anthropic's framework for building agents with tool-use loops. Wire `sandbox.commands.run` into your bash tool so every command the agent generates runs inside an isolated VM instead of on your machine.
 
-<Note>
-This integration guide is in progress. See [Quickstart](/quickstart) and [Run commands](/commands/overview) for the building blocks while we wire this up.
-</Note>
+## Setup
+
+```bash
+npm install @superserve/sdk
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+## Wrap a sandbox as a bash tool
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({ name: "agent-runtime" })
+
+export async function bash(command: string) {
+  const result = await sandbox.commands.run(command, { timeoutMs: 60_000 })
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    exitCode: result.exitCode,
+  }
+}
+```
+
+```python Python
+from superserve import Sandbox
+
+sandbox = Sandbox.create(name="agent-runtime")
+
+def bash(command: str):
+    result = sandbox.commands.run(command, timeout_seconds=60)
+    return {
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "exit_code": result.exit_code,
+    }
+```
+</CodeGroup>
+
+Register `bash` (and equivalents for file reads / writes) as tools in your Claude Agent SDK setup. See [Run commands](/commands/overview) for streaming, `cwd` / `env`, and timeouts, and [Read & write files](/filesystem/read-write) for filesystem access.
+
+## Clean up
+
+```typescript
+await sandbox.kill()
+```

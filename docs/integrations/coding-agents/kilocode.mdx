@@ -1,11 +1,56 @@
 ---
 title: "Kilocode"
 sidebarTitle: Kilocode
-description: Wire Kilocode up to Superserve sandboxes for isolated coding sessions.
+description: Run Kilocode inside a Superserve sandbox.
 ---
 
-Kilocode is an AI coding agent. Use Superserve as the execution runtime so every generated change runs in a sandboxed environment. No risk to your local setup, full reproducibility across sessions.
+Pair Kilocode with a Superserve sandbox to run its generated commands and file edits inside an isolated VM.
 
-<Note>
-This integration guide is in progress. See [Quickstart](/quickstart) and [Run commands](/commands/overview) for the building blocks while we wire this up.
-</Note>
+## Via the console
+
+1. Go to [console.superserve.ai](https://console.superserve.ai) and click **Create sandbox**.
+2. Pick the **`superserve/node-22`** template.
+3. Open **Advanced Options** and add your model provider key (e.g. `ANTHROPIC_API_KEY`) under **Environment Variables**.
+4. Create the sandbox, open its **Terminal**, and install Kilocode.
+
+## Via the SDK
+
+```bash
+npm install @superserve/sdk
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({
+  name: "kilocode",
+  fromTemplate: "superserve/node-22",
+  envVars: { ANTHROPIC_API_KEY: "sk-ant-..." },
+})
+
+await sandbox.commands.run("npm install -g kilocode")
+```
+
+```python Python
+from superserve import Sandbox
+
+sandbox = Sandbox.create(
+    name="kilocode",
+    from_template="superserve/node-22",
+    env_vars={"ANTHROPIC_API_KEY": "sk-ant-..."},
+)
+
+sandbox.commands.run("npm install -g kilocode")
+```
+</CodeGroup>
+
+Open the sandbox in the [console](https://console.superserve.ai), launch the terminal, and run `kilocode`.
+
+## Persist sessions
+
+```typescript
+await sandbox.pause()
+await sandbox.resume()
+```

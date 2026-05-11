@@ -1,11 +1,60 @@
 ---
 title: "Opencode"
 sidebarTitle: Opencode
-description: Use Opencode with Superserve sandboxes for safe, reproducible AI coding sessions.
+description: Run Opencode inside a Superserve sandbox.
 ---
 
-Opencode is an open-source AI coding agent. Boot it inside a Superserve sandbox to keep its actions isolated from your local environment, with full file and command access scoped to the VM.
+Opencode is an open-source terminal coding agent. Run it inside a Superserve sandbox so its shell commands and file edits stay isolated from your machine.
 
-<Note>
-This integration guide is in progress. See [Quickstart](/quickstart) and [Run commands](/commands/overview) for the building blocks while we wire this up.
-</Note>
+## Via the console
+
+1. Go to [console.superserve.ai](https://console.superserve.ai) and click **Create sandbox**.
+2. Pick the **`superserve/node-22`** template.
+3. Open **Advanced Options** and add `ANTHROPIC_API_KEY` under **Environment Variables**.
+4. Create the sandbox, open its **Terminal**, and run:
+
+   ```bash
+   curl -fsSL https://opencode.ai/install | bash && opencode
+   ```
+
+## Via the SDK
+
+```bash
+npm install @superserve/sdk
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({
+  name: "opencode",
+  fromTemplate: "superserve/node-22",
+  envVars: { ANTHROPIC_API_KEY: "sk-ant-..." },
+})
+
+await sandbox.commands.run("curl -fsSL https://opencode.ai/install | bash")
+```
+
+```python Python
+from superserve import Sandbox
+
+sandbox = Sandbox.create(
+    name="opencode",
+    from_template="superserve/node-22",
+    env_vars={"ANTHROPIC_API_KEY": "sk-ant-..."},
+)
+
+sandbox.commands.run("curl -fsSL https://opencode.ai/install | bash")
+```
+</CodeGroup>
+
+Open the sandbox in the [console](https://console.superserve.ai), launch the terminal, and run `opencode`.
+
+## Persist sessions
+
+```typescript
+await sandbox.pause()
+await sandbox.resume()
+```
