@@ -15,6 +15,7 @@ Opencode is an open-source terminal coding agent. Run it in a Superserve sandbox
 
    ```bash
    curl -fsSL https://opencode.ai/install | bash && opencode
+   export PATH=/home/user/.opencode/bin:$PATH
    ```
 
 ## Via the SDK
@@ -35,6 +36,7 @@ const sandbox = await Sandbox.create({
 })
 
 await sandbox.commands.run("curl -fsSL https://opencode.ai/install | bash")
+await sandbox.commands.run("echo 'export PATH=/home/user/.opencode/bin:$PATH' >> ~/.bashrc")
 ```
 
 ```python Python
@@ -47,6 +49,7 @@ sandbox = Sandbox.create(
 )
 
 sandbox.commands.run("curl -fsSL https://opencode.ai/install | bash")
+sandbox.commands.run("echo 'export PATH=/home/user/.opencode/bin:$PATH' >> ~/.bashrc")
 ```
 </CodeGroup>
 
