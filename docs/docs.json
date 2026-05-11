@@ -45,6 +45,9 @@
       "href": "https://github.com/superserve-ai/superserve"
     }
   },
+  "contextual": {
+    "options": ["copy", "view", "chatgpt", "claude"]
+  },
   "navigation": {
     "tabs": [
       {
