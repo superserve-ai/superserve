@@ -25,6 +25,9 @@ export const TERMINAL_EVENTS = {
   SESSION_STARTED: "terminal_session_started",
   SESSION_ENDED: "terminal_session_ended",
   RECONNECTED: "terminal_reconnected",
+  TAB_OPENED: "terminal_tab_opened",
+  TAB_CLOSED: "terminal_tab_closed",
+  TAB_RENAMED: "terminal_tab_renamed",
 } as const
 
 export const FILE_EVENTS = {

@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react"
 import { useUser } from "@/hooks/use-user"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
+import { clearTerminalTabsStorage } from "@/lib/terminal-tabs-storage"
 import { useSidebar } from "./sidebar-context"
 
 function getInitials(name: string): string {
@@ -62,6 +63,8 @@ export function SidebarUserMenu() {
     } catch {
       // Sign out failed, but redirect to sign-in anyway
     }
+    // Drop any locally-scoped state tied to the previous user.
+    clearTerminalTabsStorage()
     posthog.reset()
     router.push("/auth/signin")
   }

@@ -91,11 +91,26 @@ class FakeWebSocket {
 
 vi.stubGlobal("WebSocket", FakeWebSocket)
 
+// --- Controllable ResizeObserver so we can simulate container size changes ---
+class MockResizeObserver {
+  static callbacks: ResizeObserverCallback[] = []
+  callback: ResizeObserverCallback
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback
+    MockResizeObserver.callbacks.push(callback)
+  }
+}
+vi.stubGlobal("ResizeObserver", MockResizeObserver)
+
 import { SandboxTerminal } from "./terminal"
 
 describe("SandboxTerminal", () => {
   beforeEach(() => {
     FakeWebSocket.instances = []
+    MockResizeObserver.callbacks = []
     termWriteCalls.length = 0
     mockCapture.mockReset()
     mockTerm.write.mockClear()
@@ -217,5 +232,77 @@ describe("SandboxTerminal", () => {
     unmount()
     expect(ws.close).toHaveBeenCalled()
     expect(mockTerm.dispose).toHaveBeenCalled()
+  })
+
+  it("does not focus xterm on connect when rendered inactive", () => {
+    render(
+      <SandboxTerminal sandboxId="sbx-1" accessToken="t" isActive={false} />,
+    )
+    const ws = FakeWebSocket.instances[0]
+    ws.triggerOpen()
+    // The resize message still fires, but focus stays where it is.
+    expect(ws.send).toHaveBeenCalledTimes(1)
+    expect(mockTerm.focus).not.toHaveBeenCalled()
+  })
+
+  it("focuses xterm when transitioning from inactive to active", async () => {
+    const { rerender } = render(
+      <SandboxTerminal sandboxId="sbx-1" accessToken="t" isActive={false} />,
+    )
+    const ws = FakeWebSocket.instances[0]
+    ws.triggerOpen()
+    expect(mockTerm.focus).not.toHaveBeenCalled()
+
+    rerender(
+      <SandboxTerminal sandboxId="sbx-1" accessToken="t" isActive={true} />,
+    )
+    // The activation effect schedules focus via requestAnimationFrame.
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
+    expect(mockTerm.focus).toHaveBeenCalled()
+  })
+
+  it("does not send a resize when the container becomes 0×0 (hidden tab)", () => {
+    vi.useFakeTimers()
+    try {
+      render(<SandboxTerminal sandboxId="sbx-1" accessToken="t" />)
+      const ws = FakeWebSocket.instances[0]
+      ws.triggerOpen()
+      ws.send.mockClear()
+
+      // Simulate the container being hidden: ResizeObserver fires 0×0.
+      const callback = MockResizeObserver.callbacks.at(-1)
+      callback?.(
+        [{ contentRect: { width: 0, height: 0 } } as ResizeObserverEntry],
+        {} as ResizeObserver,
+      )
+      vi.advanceTimersByTime(200)
+
+      expect(ws.send).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("sends a resize when the container reports real dimensions", () => {
+    vi.useFakeTimers()
+    try {
+      render(<SandboxTerminal sandboxId="sbx-1" accessToken="t" />)
+      const ws = FakeWebSocket.instances[0]
+      ws.triggerOpen()
+      ws.send.mockClear()
+
+      const callback = MockResizeObserver.callbacks.at(-1)
+      callback?.(
+        [{ contentRect: { width: 600, height: 400 } } as ResizeObserverEntry],
+        {} as ResizeObserver,
+      )
+      vi.advanceTimersByTime(200)
+
+      expect(ws.send).toHaveBeenCalledTimes(1)
+      const payload = JSON.parse(ws.send.mock.calls[0][0] as string)
+      expect(payload).toMatchObject({ type: "resize" })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
