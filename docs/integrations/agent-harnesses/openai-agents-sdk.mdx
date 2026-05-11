@@ -4,52 +4,88 @@ sidebarTitle: OpenAI Agents SDK
 description: Use Superserve sandboxes as the execution runtime for agents built with the OpenAI Agents SDK.
 ---
 
-The OpenAI Agents SDK is OpenAI's framework for building agents with tool-use loops. Wire `sandbox.commands.run` into your bash tool so every command the agent generates runs in an isolated VM instead of on your machine.
+The OpenAI Agents SDK is OpenAI's framework for building agents with tool-use loops. Expose `sandbox.commands.run` as a function tool so every command the agent generates runs in an isolated VM instead of on your machine.
 
 ## Setup
 
-```bash
-npm install @superserve/sdk
+<CodeGroup>
+```bash TypeScript
+npm install @superserve/sdk @openai/agents zod
 export SUPERSERVE_API_KEY=ss_live_...
 ```
 
-## Wrap a sandbox as a bash tool
+```bash Python
+pip install superserve openai-agents
+export SUPERSERVE_API_KEY=ss_live_...
+```
+</CodeGroup>
+
+## Wire the sandbox into the agent
+
+The highlighted block defines a `bash` tool backed by the sandbox. Everything else is standard OpenAI Agents SDK usage.
 
 <CodeGroup>
-```typescript TypeScript
+```typescript TypeScript {7-15}
+import { Agent, run, tool } from "@openai/agents"
 import { Sandbox } from "@superserve/sdk"
+import { z } from "zod"
 
 const sandbox = await Sandbox.create({ name: "agent-runtime" })
 
-export async function bash(command: string) {
-  const result = await sandbox.commands.run(command, { timeoutMs: 60_000 })
-  return {
-    stdout: result.stdout,
-    stderr: result.stderr,
-    exitCode: result.exitCode,
-  }
-}
+const bash = tool({
+  name: "bash",
+  description: "Run a shell command in the sandbox.",
+  parameters: z.object({ command: z.string() }),
+  execute: async ({ command }) => {
+    const result = await sandbox.commands.run(command, { timeoutMs: 60_000 })
+    return `${result.stdout}\n${result.stderr}`
+  },
+})
+
+const agent = new Agent({
+  name: "Workspace Assistant",
+  instructions: "Use the bash tool to inspect the sandbox before answering.",
+  tools: [bash],
+})
+
+const result = await run(
+  agent,
+  "List the files in /tmp and tell me how many there are.",
+)
+console.log(result.finalOutput)
+
+await sandbox.kill()
 ```
 
-```python Python
+```python Python {7-11}
+import asyncio
+from agents import Agent, Runner, function_tool
 from superserve import Sandbox
 
 sandbox = Sandbox.create(name="agent-runtime")
 
-def bash(command: str):
+@function_tool
+def bash(command: str) -> str:
+    """Run a shell command in the sandbox."""
     result = sandbox.commands.run(command, timeout_seconds=60)
-    return {
-        "stdout": result.stdout,
-        "stderr": result.stderr,
-        "exit_code": result.exit_code,
-    }
+    return f"{result.stdout}\n{result.stderr}"
+
+agent = Agent(
+    name="Workspace Assistant",
+    instructions="Use the bash tool to inspect the sandbox before answering.",
+    tools=[bash],
+)
+
+async def main():
+    result = await Runner.run(
+        agent,
+        "List the files in /tmp and tell me how many there are.",
+    )
+    print(result.final_output)
+    sandbox.kill()
+
+asyncio.run(main())
 ```
 </CodeGroup>
 
-Register `bash` (and equivalents for file reads / writes) as tools in your OpenAI Agents SDK setup. See [Run commands](/commands/overview) for streaming, `cwd` / `env`, and timeouts, and [Read & write files](/filesystem/read-write) for filesystem access.
-
-## Clean up
-
-```typescript
-await sandbox.kill()
-```
+Add equivalent tools for file reads/writes the same way; see [Run commands](/commands/overview) and [Read & write files](/filesystem/read-write).
