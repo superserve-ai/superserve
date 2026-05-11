@@ -1,7 +1,7 @@
 "use client"
 
 import { PlusIcon, XIcon } from "@phosphor-icons/react"
-import { cn, Tooltip, TooltipPopup, TooltipTrigger } from "@superserve/ui"
+import { cn, Kbd, Tooltip, TooltipPopup, TooltipTrigger } from "@superserve/ui"
 import { motion } from "motion/react"
 import { usePostHog } from "posthog-js/react"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -102,7 +102,7 @@ export function TerminalTabs({ sandboxId, accessToken }: Props) {
         aria-label="Terminal tabs"
         onMouseLeave={() => setHoveredId(null)}
         onKeyDown={handleStripKeyDown}
-        className="flex h-9 shrink-0 items-stretch overflow-x-auto border-b border-dashed border-border bg-background"
+        className="flex h-10 shrink-0 items-stretch overflow-x-auto border-b border-dashed border-border bg-background"
       >
         {tabs.map((tab) => (
           <TerminalTabButton
@@ -183,7 +183,7 @@ function TerminalTabButton({
   return (
     <div
       className={cn(
-        "group relative flex h-full min-w-[140px] max-w-[220px] shrink-0 items-center border-r border-dashed border-border",
+        "group relative flex h-full min-w-[120px] max-w-[200px] shrink-0 items-center border-r border-dashed border-foreground/8",
         isActive ? "text-foreground" : "text-muted hover:text-foreground",
       )}
     >
@@ -194,14 +194,14 @@ function TerminalTabButton({
           transition={{ type: "spring", bounce: 0.15, duration: 0.4 }}
         />
       )}
-      {isActive && <span className="absolute inset-0 bg-foreground/4" />}
+      {isActive && <span className="absolute inset-0 bg-foreground/6" />}
       {isActive && (
         <motion.span
           className="pointer-events-none absolute inset-0"
           layoutId="terminal-tab-active"
           transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
         >
-          <CornerBrackets size="sm" />
+          <CornerBrackets size="md" />
         </motion.span>
       )}
 
@@ -215,7 +215,7 @@ function TerminalTabButton({
         onClick={() => onSelect(tab.id)}
         onDoubleClick={onStartEdit}
         onMouseEnter={handleHover}
-        className="relative flex h-full flex-1 cursor-pointer select-none items-center gap-2 px-3 outline-none"
+        className="relative flex h-full flex-1 cursor-pointer select-none items-center gap-1.5 px-3 outline-none"
       >
         <StatusDot status={status} />
         {isEditing ? (
@@ -245,14 +245,14 @@ function TerminalTabButton({
           }}
           onMouseEnter={handleHover}
           className={cn(
-            "relative mr-2 flex size-5 shrink-0 cursor-pointer items-center justify-center transition-opacity",
-            "text-muted hover:text-foreground",
+            "relative mr-1.5 flex size-5 shrink-0 cursor-pointer items-center justify-center transition",
+            "text-muted hover:bg-foreground/8 hover:text-foreground",
             isActive
               ? "opacity-60 hover:opacity-100"
               : "opacity-0 group-hover:opacity-60 group-hover:hover:opacity-100",
           )}
         >
-          <XIcon className="size-3" weight="light" />
+          <XIcon className="size-2.5" weight="light" />
         </button>
       )}
     </div>
@@ -279,7 +279,7 @@ function StatusDot({
             : "Disconnected"
       }
       className={cn(
-        "size-1.5 shrink-0 rounded-full",
+        "size-1 shrink-0 rounded-full",
         isConnecting ? "animate-pulse bg-orange-400" : "bg-red-500",
       )}
     />
@@ -339,7 +339,7 @@ function AddTabButton({
   disabled: boolean
 }) {
   const className = cn(
-    "flex h-full w-9 shrink-0 cursor-pointer items-center justify-center transition-colors",
+    "flex h-full w-10 shrink-0 cursor-pointer items-center justify-center transition-colors",
     disabled
       ? "cursor-not-allowed text-muted/40"
       : "text-muted hover:bg-foreground/4 hover:text-foreground",
@@ -361,7 +361,13 @@ function AddTabButton({
     <Tooltip>
       <TooltipTrigger render={button} />
       <TooltipPopup>
-        {disabled ? `Max ${MAX_TERMINAL_TABS} tabs` : "New terminal tab"}
+        {disabled ? (
+          `Max ${MAX_TERMINAL_TABS} tabs`
+        ) : (
+          <span className="inline-flex items-center gap-2">
+            New tab <Kbd>⌘⌃T</Kbd>
+          </span>
+        )}
       </TooltipPopup>
     </Tooltip>
   )
