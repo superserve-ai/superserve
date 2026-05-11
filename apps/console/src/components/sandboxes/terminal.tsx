@@ -169,8 +169,14 @@ export function SandboxTerminal({
       }
     })
 
-    // Debounced resize: refit terminal and notify server
-    const ro = new ResizeObserver(() => {
+    // Debounced resize: refit terminal and notify server.
+    // Skip when the container is hidden (0×0) — sending a tiny resize would
+    // make the remote shell redraw its TUI (htop, opencode, etc.) at 1×1, and
+    // the user sees that tiny snapshot briefly when switching back. Keeping
+    // the shell's idea of the size stable across tab switches avoids the flash.
+    const ro = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect
+      if (!rect || rect.width === 0 || rect.height === 0) return
       if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
       resizeTimerRef.current = setTimeout(() => {
         fit.fit()
@@ -207,12 +213,19 @@ export function SandboxTerminal({
     if (!isActive) return
     const term = termRef.current
     const fit = fitRef.current
-    if (!term || !fit) return
+    const container = containerRef.current
+    if (!term || !fit || !container) return
     const rafId = requestAnimationFrame(() => {
+      const rect = container.getBoundingClientRect()
+      if (rect.width === 0 || rect.height === 0) {
+        // Layout hasn't settled yet; the ResizeObserver will pick it up.
+        term.focus()
+        return
+      }
       try {
         fit.fit()
       } catch {
-        // Container may still be 0x0 — ignore; the ResizeObserver will catch up.
+        // FitAddon can throw if dimensions aren't sensible — skip the resize.
       }
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(
