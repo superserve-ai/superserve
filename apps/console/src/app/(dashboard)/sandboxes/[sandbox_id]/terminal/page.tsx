@@ -6,7 +6,7 @@ import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
-import { SandboxTerminal } from "@/components/sandboxes/terminal"
+import { TerminalTabs } from "@/components/sandboxes/terminal-tabs"
 import { useResumeSandbox, useSandbox } from "@/hooks/use-sandboxes"
 import { STATUS_BADGE_VARIANT, STATUS_LABEL } from "@/lib/sandbox-utils"
 
@@ -103,7 +103,7 @@ export default function TerminalPage() {
       </div>
 
       {canRun ? (
-        <SandboxTerminal
+        <TerminalTabs
           sandboxId={sandboxId}
           accessToken={sandbox.access_token}
         />

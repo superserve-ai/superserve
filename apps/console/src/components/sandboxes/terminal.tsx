@@ -7,7 +7,11 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { TERMINAL_EVENTS } from "@/lib/posthog/events"
 import "@xterm/xterm/css/xterm.css"
 
-type Status = "connecting" | "connected" | "disconnected" | "error"
+export type TerminalConnectionStatus =
+  | "connecting"
+  | "connected"
+  | "disconnected"
+  | "error"
 
 const encoder = new TextEncoder()
 const TERMINAL_SUBPROTOCOL = "superserve.terminal.v1"
@@ -17,22 +21,54 @@ const SANDBOX_HOST =
 interface Props {
   sandboxId: string
   accessToken: string
+  /**
+   * Whether this terminal is the foreground tab. When true, the component
+   * focuses xterm on connect and refits whenever it becomes active (the
+   * container may have been `display: none` while inactive, leaving xterm
+   * with stale dimensions). Defaults to true so single-tab usage is unchanged.
+   */
+  isActive?: boolean
+  /**
+   * Called whenever the WebSocket lifecycle status changes. Used by the
+   * multi-tab container to surface a status indicator per tab.
+   */
+  onStatusChange?: (status: TerminalConnectionStatus) => void
 }
 
-export function SandboxTerminal({ sandboxId, accessToken }: Props) {
+export function SandboxTerminal({
+  sandboxId,
+  accessToken,
+  isActive = true,
+  onStatusChange,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
+  const fitRef = useRef<FitAddon | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const roRef = useRef<ResizeObserver | null>(null)
   const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isActiveRef = useRef(isActive)
   const posthog = usePostHog()
   const posthogRef = useRef(posthog)
-  const [status, setStatus] = useState<Status>("connecting")
+  const onStatusChangeRef = useRef(onStatusChange)
+  const [status, setStatus] = useState<TerminalConnectionStatus>("connecting")
+
+  useEffect(() => {
+    onStatusChangeRef.current = onStatusChange
+  }, [onStatusChange])
+
+  useEffect(() => {
+    onStatusChangeRef.current?.(status)
+  }, [status])
 
   // Keep posthog ref current without triggering reconnects
   useEffect(() => {
     posthogRef.current = posthog
   }, [posthog])
+
+  useEffect(() => {
+    isActiveRef.current = isActive
+  }, [isActive])
 
   const connectWebSocket = useCallback(
     (term: Terminal) => {
@@ -61,7 +97,9 @@ export function SandboxTerminal({ sandboxId, accessToken }: Props) {
               rows: term.rows,
             }),
           )
-          term.focus()
+          // Don't steal focus from another tab if this terminal is mounted
+          // hidden — only focus when this is the foreground tab.
+          if (isActiveRef.current) term.focus()
         }
 
         ws.onmessage = (evt) => {
@@ -122,6 +160,7 @@ export function SandboxTerminal({ sandboxId, accessToken }: Props) {
     term.open(container)
     fit.fit()
     termRef.current = term
+    fitRef.current = fit
 
     // Forward keystrokes to WebSocket
     term.onData((data) => {
@@ -158,8 +197,36 @@ export function SandboxTerminal({ sandboxId, accessToken }: Props) {
       wsRef.current?.close(1000, "unmount")
       term.dispose()
       termRef.current = null
+      fitRef.current = null
     }
   }, [connectWebSocket])
+
+  // When this terminal becomes the foreground tab, refit (its container may
+  // have been hidden) and focus. The RAF gives layout a chance to settle.
+  useEffect(() => {
+    if (!isActive) return
+    const term = termRef.current
+    const fit = fitRef.current
+    if (!term || !fit) return
+    const rafId = requestAnimationFrame(() => {
+      try {
+        fit.fit()
+      } catch {
+        // Container may still be 0x0 — ignore; the ResizeObserver will catch up.
+      }
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(
+          JSON.stringify({
+            type: "resize",
+            cols: term.cols,
+            rows: term.rows,
+          }),
+        )
+      }
+      term.focus()
+    })
+    return () => cancelAnimationFrame(rafId)
+  }, [isActive])
 
   const handleReconnect = () => {
     const term = termRef.current

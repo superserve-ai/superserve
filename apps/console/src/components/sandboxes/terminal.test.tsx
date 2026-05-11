@@ -218,4 +218,31 @@ describe("SandboxTerminal", () => {
     expect(ws.close).toHaveBeenCalled()
     expect(mockTerm.dispose).toHaveBeenCalled()
   })
+
+  it("does not focus xterm on connect when rendered inactive", () => {
+    render(
+      <SandboxTerminal sandboxId="sbx-1" accessToken="t" isActive={false} />,
+    )
+    const ws = FakeWebSocket.instances[0]
+    ws.triggerOpen()
+    // The resize message still fires, but focus stays where it is.
+    expect(ws.send).toHaveBeenCalledTimes(1)
+    expect(mockTerm.focus).not.toHaveBeenCalled()
+  })
+
+  it("focuses xterm when transitioning from inactive to active", async () => {
+    const { rerender } = render(
+      <SandboxTerminal sandboxId="sbx-1" accessToken="t" isActive={false} />,
+    )
+    const ws = FakeWebSocket.instances[0]
+    ws.triggerOpen()
+    expect(mockTerm.focus).not.toHaveBeenCalled()
+
+    rerender(
+      <SandboxTerminal sandboxId="sbx-1" accessToken="t" isActive={true} />,
+    )
+    // The activation effect schedules focus via requestAnimationFrame.
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
+    expect(mockTerm.focus).toHaveBeenCalled()
+  })
 })
