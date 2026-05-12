@@ -1,12 +1,10 @@
 {
   "editor.formatOnSave": true,
   "editor.formatOnPaste": true,
-  "editor.defaultFormatter": "biomejs.biome",
   "editor.codeActionsOnSave": {
-    "source.fixAll": "explicit"
+    "source.fixAll.oxc": "explicit"
   },
-  "biome.configurationPath": "packages/biome-config/biome.json",
-  "biome.lsp.bin": "node_modules/.bin/biome",
+  "oxc.configPath": ".oxlintrc.json",
   "emmet.includeLanguages": {
     "javascript": "javascriptreact",
     "typescript": "typescriptreact"

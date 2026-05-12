@@ -25,6 +25,9 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "lint": "bunx oxlint",
+    "format": "bunx oxfmt --write",
+    "format:check": "bunx oxfmt --check",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"

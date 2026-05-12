@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "vite --port 3003",
     "build": "tsc -b && vite build",
-    "lint": "bunx biome check .",
+    "lint": "bunx oxlint",
+    "format": "bunx oxfmt --write",
+    "format:check": "bunx oxfmt --check",
     "typecheck": "tsc -b"
   },
   "dependencies": {
@@ -19,7 +21,6 @@
     "tailwindcss": "^4.2.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.4",
     "@superserve/typescript-config": "workspace:*",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

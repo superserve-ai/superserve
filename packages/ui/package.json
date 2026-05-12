@@ -9,7 +9,9 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "bunx biome check ."
+    "lint": "bunx oxlint",
+    "format": "bunx oxfmt --write",
+    "format:check": "bunx oxfmt --check"
   },
   "peerDependencies": {
     "react": "^18 || ^19",
@@ -25,7 +27,6 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.4",
     "@superserve/typescript-config": "workspace:*",
     "@types/react": "^19",
     "@types/react-dom": "^19",

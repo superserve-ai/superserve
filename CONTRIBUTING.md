@@ -43,7 +43,6 @@ packages/cli/              # TypeScript CLI (@superserve/cli)
 packages/python-sdk/       # Python SDK (superserve on PyPI)
 packages/sdk/              # TypeScript SDK (@superserve/sdk)
 packages/typescript-config/ # Shared tsconfig presets
-packages/biome-config/     # Shared Biome config
 ```
 
 ## Common Commands
@@ -118,7 +117,7 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ## Code Style
 
-- [Biome](https://biomejs.dev/) for TypeScript linting and formatting
+- [oxlint](https://oxc.rs) for TypeScript linting and [oxfmt](https://oxc.rs) for formatting (Tailwind classes auto-sorted)
 - [Ruff](https://github.com/astral-sh/ruff) for Python linting and formatting
 - [mypy](https://mypy-lang.org/) for Python type checking
 - Type hints are encouraged in both TypeScript and Python
