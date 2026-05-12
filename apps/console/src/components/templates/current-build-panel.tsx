@@ -2,11 +2,13 @@
 
 import { StopCircleIcon } from "@phosphor-icons/react"
 import { Button } from "@superserve/ui"
+
 import {
   useCancelTemplateBuild,
   useTemplateBuilds,
 } from "@/hooks/use-templates"
 import { formatBuildError } from "@/lib/templates/format-build-error"
+
 import { BuildLogViewer } from "./build-log-viewer"
 import { TemplateStatusBadge } from "./template-status-badge"
 
@@ -52,7 +54,7 @@ export function CurrentBuildPanel({ templateId }: { templateId: string }) {
       <div className="border-b border-border p-4">
         {err && (
           <div className="mb-3 border border-dashed border-destructive/40 p-3">
-            <div className="font-mono text-xs uppercase text-destructive">
+            <div className="font-mono text-xs text-destructive uppercase">
               {err.title}
             </div>
             {err.detail && (

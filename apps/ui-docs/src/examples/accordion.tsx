@@ -4,6 +4,7 @@ import {
   AccordionPanel,
   AccordionTrigger,
 } from "@superserve/ui"
+
 import type { ComponentMeta } from "../registry/types"
 
 export const accordionMeta: ComponentMeta = {

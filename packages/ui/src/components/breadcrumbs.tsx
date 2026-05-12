@@ -1,6 +1,7 @@
 "use client"
 
 import { CaretRightIcon } from "@phosphor-icons/react"
+
 import { cn } from "../lib/utils"
 
 interface BreadcrumbItem {
@@ -23,7 +24,7 @@ const defaultRenderLink = ({
   href: string
   children: React.ReactNode
 }) => (
-  <a href={href} className="text-muted hover:text-foreground transition-colors">
+  <a href={href} className="text-muted transition-colors hover:text-foreground">
     {children}
   </a>
 )
@@ -53,7 +54,7 @@ function Breadcrumbs({
             {isLast || !item.href ? (
               <span
                 className={cn(
-                  isLast ? "text-foreground font-medium" : "text-muted",
+                  isLast ? "font-medium text-foreground" : "text-muted",
                 )}
               >
                 {item.label}

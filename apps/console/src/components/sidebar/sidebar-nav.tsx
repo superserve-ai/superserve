@@ -5,7 +5,9 @@ import { motion } from "motion/react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
+
 import { CornerBrackets } from "@/components/corner-brackets"
+
 import type { NavItem } from "./nav-config"
 import { useSidebar } from "./sidebar-context"
 
@@ -47,7 +49,7 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
             )}
             {isActive && (
               <motion.span
-                className="absolute inset-0 pointer-events-none"
+                className="pointer-events-none absolute inset-0"
                 layoutId={`sidebar-active-${groupId}-${isCollapsed}`}
                 transition={{
                   type: "spring",

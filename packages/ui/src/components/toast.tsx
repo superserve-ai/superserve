@@ -7,6 +7,7 @@ import {
   type ReactNode,
   useCallback,
   useContext,
+  useMemo,
   useState,
 } from "react"
 
@@ -76,8 +77,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((prev) => prev.filter((toast) => toast.id !== id))
   }, [])
 
+  const value = useMemo(
+    () => ({ addToast, removeToast, toasts }),
+    [addToast, removeToast, toasts],
+  )
+
   return (
-    <ToastContext.Provider value={{ addToast, removeToast, toasts }}>
+    <ToastContext.Provider value={value}>
       {children}
       <ToastContainer toasts={toasts} removeToast={removeToast} />
     </ToastContext.Provider>
@@ -100,7 +106,7 @@ function ToastContainer({
   removeToast: (id: string) => void
 }) {
   return (
-    <div className="fixed top-4 right-4 z-50 flex flex-col gap-3 pointer-events-none">
+    <div className="pointer-events-none fixed top-4 right-4 z-50 flex flex-col gap-3">
       <AnimatePresence>
         {toasts.map((toast) => (
           <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
@@ -146,16 +152,16 @@ function ToastItem({
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 50 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
-      className="pointer-events-auto border border-dashed border-border min-w-[320px] max-w-[420px] bg-surface"
+      className="pointer-events-auto max-w-[420px] min-w-[320px] border border-dashed border-border bg-surface"
     >
       <div className="p-4">
         <div className="flex items-start gap-3">
           <Icon
-            className={`w-5 h-5 flex-shrink-0 ${config.iconColor}`}
+            className={`h-5 w-5 flex-shrink-0 ${config.iconColor}`}
             weight="light"
           />
 
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-foreground">{toast.title}</p>
             {toast.description && (
               <p className="mt-1 text-sm text-muted">{toast.description}</p>
@@ -183,10 +189,10 @@ function ToastItem({
           <button
             type="button"
             onClick={() => onRemove(toast.id)}
-            className="shrink-0 p-1 text-muted hover:text-foreground transition-colors"
+            className="shrink-0 p-1 text-muted transition-colors hover:text-foreground"
             aria-label="Dismiss notification"
           >
-            <XIcon className="w-4 h-4" weight="light" />
+            <XIcon className="h-4 w-4" weight="light" />
           </button>
         </div>
       </div>

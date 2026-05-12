@@ -27,9 +27,9 @@ function Checkbox({ className, label, id, ...props }: CheckboxProps) {
         id={id}
         className={cn(
           "peer h-4 w-4 shrink-0 border border-foreground/25 transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus",
+          "focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none",
           "disabled:cursor-not-allowed disabled:opacity-30",
-          "data-[checked]:bg-primary data-[checked]:border-primary",
+          "data-[checked]:border-primary data-[checked]:bg-primary",
           className,
         )}
         {...props}
@@ -44,7 +44,7 @@ function Checkbox({ className, label, id, ...props }: CheckboxProps) {
       {label && (
         <label
           htmlFor={id}
-          className="text-sm font-medium text-foreground cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-30"
+          className="cursor-pointer text-sm font-medium text-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-30"
         >
           {label}
         </label>

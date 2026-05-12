@@ -3,6 +3,7 @@ import pc from "picocolors"
 const { bold, dim } = pc
 
 import { Command } from "commander"
+
 import { track } from "../../analytics"
 import { createClient } from "../../api/client"
 import type { SessionData } from "../../api/types"

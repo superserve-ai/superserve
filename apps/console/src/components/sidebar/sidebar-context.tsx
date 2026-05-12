@@ -1,6 +1,12 @@
 "use client"
 
-import { createContext, useCallback, useContext, useState } from "react"
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from "react"
 
 const STORAGE_KEY = "superserve-sidebar-collapsed"
 
@@ -28,11 +34,12 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
     [isCollapsed, setCollapsed],
   )
 
-  return (
-    <SidebarContext value={{ isCollapsed, toggle, setCollapsed }}>
-      {children}
-    </SidebarContext>
+  const value = useMemo(
+    () => ({ isCollapsed, toggle, setCollapsed }),
+    [isCollapsed, toggle, setCollapsed],
   )
+
+  return <SidebarContext value={value}>{children}</SidebarContext>
 }
 
 export function useSidebar() {

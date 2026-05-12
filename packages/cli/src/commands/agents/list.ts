@@ -4,6 +4,7 @@ const { bold, dim } = pc
 
 import { Command } from "commander"
 import terminalLink from "terminal-link"
+
 import { track } from "../../analytics"
 import { createClient } from "../../api/client"
 import type { AgentResponse } from "../../api/types"

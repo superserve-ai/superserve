@@ -4,6 +4,7 @@ import { CheckIcon, CopyIcon, KeyIcon, PlusIcon } from "@phosphor-icons/react"
 import { Button, cn, HighlightedCode, useToast } from "@superserve/ui"
 import { motion } from "motion/react"
 import { useState } from "react"
+
 import { CornerBrackets } from "@/components/corner-brackets"
 import { PageHeader } from "@/components/page-header"
 import { useCreateApiKey } from "@/hooks/use-api-keys"
@@ -67,7 +68,7 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
       type="button"
       onClick={copy}
       aria-label={copied ? "Copied" : (label ?? "Copy")}
-      className="text-muted hover:text-foreground transition-colors shrink-0 cursor-pointer"
+      className="shrink-0 cursor-pointer text-muted transition-colors hover:text-foreground"
     >
       {copied ? (
         <CheckIcon className="size-4 text-success" weight="light" />
@@ -111,8 +112,8 @@ function CodeBlock({
   lang: "typescript" | "python" | "bash"
 }) {
   return (
-    <div className="flex items-start bg-background border border-dashed border-border px-4 py-3.5">
-      <div className="flex-1 min-w-0">
+    <div className="flex items-start border border-dashed border-border bg-background px-4 py-3.5">
+      <div className="min-w-0 flex-1">
         <HighlightedCode code={code} lang={lang} />
       </div>
       <CopyButton text={code} />
@@ -177,7 +178,7 @@ export default function GetStartedPage() {
                     onClick={() => setLanguage(lang.value)}
                     onMouseEnter={() => setHoveredTab(lang.value)}
                     className={cn(
-                      "relative inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono transition-colors cursor-pointer",
+                      "relative inline-flex cursor-pointer items-center gap-1.5 px-3 py-1.5 font-mono text-xs transition-colors",
                       isActive
                         ? "text-foreground"
                         : "text-muted hover:text-foreground",
@@ -199,7 +200,7 @@ export default function GetStartedPage() {
                     )}
                     {isActive && (
                       <motion.span
-                        className="absolute inset-0 pointer-events-none"
+                        className="pointer-events-none absolute inset-0"
                         layoutId="get-started-lang-active"
                         transition={{
                           type: "spring",
@@ -241,19 +242,19 @@ export default function GetStartedPage() {
               </p>
               <div className="pl-6">
                 {createdKey ? (
-                  <div className="flex items-center gap-2 bg-background border border-border px-4 py-3.5">
+                  <div className="flex items-center gap-2 border border-border bg-background px-4 py-3.5">
                     <KeyIcon
-                      className="size-4 text-muted shrink-0"
+                      className="size-4 shrink-0 text-muted"
                       weight="light"
                     />
-                    <code className="flex-1 text-sm font-mono text-foreground/80 break-all">
+                    <code className="flex-1 font-mono text-sm break-all text-foreground/80">
                       {createdKey.full}
                     </code>
                     <button
                       type="button"
                       onClick={handleCopyKey}
                       aria-label={copied ? "Copied" : "Copy API key"}
-                      className="text-muted hover:text-foreground transition-colors shrink-0 cursor-pointer"
+                      className="shrink-0 cursor-pointer text-muted transition-colors hover:text-foreground"
                     >
                       {copied ? (
                         <CheckIcon

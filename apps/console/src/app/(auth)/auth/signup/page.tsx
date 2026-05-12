@@ -7,11 +7,13 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useState } from "react"
+
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
+
 import { signUpWithEmail } from "./action"
 
 function SignUpContent() {
@@ -144,7 +146,7 @@ function SignUpContent() {
               variant="outline"
               onClick={handleGoogleSignIn}
               disabled={isGoogleLoading || isLoading}
-              className="w-full gap-2 border-solid font-sans normal-case tracking-normal"
+              className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
             >
               {isGoogleLoading ? <Spinner /> : <GoogleIcon />}
               {isGoogleLoading ? "Signing up..." : "Continue with Google"}

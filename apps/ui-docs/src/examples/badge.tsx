@@ -1,4 +1,5 @@
 import { Badge } from "@superserve/ui"
+
 import type { ComponentMeta } from "../registry/types"
 
 export const badgeMeta: ComponentMeta = {

@@ -1,6 +1,7 @@
 "use server"
 
 import { z } from "zod"
+
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { sendEmail } from "@/lib/email/send"
 import { ConfirmationEmail } from "@/lib/email/templates/confirmation"

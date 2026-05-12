@@ -24,7 +24,7 @@ function Switch({ className, label, id, ...props }: SwitchProps) {
         id={id}
         className={cn(
           "peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus",
+          "focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none",
           "disabled:cursor-not-allowed disabled:opacity-30",
           "data-[checked]:bg-primary data-[unchecked]:bg-input",
           className,
@@ -41,7 +41,7 @@ function Switch({ className, label, id, ...props }: SwitchProps) {
       {label && (
         <label
           htmlFor={id}
-          className="text-sm font-medium text-foreground cursor-pointer"
+          className="cursor-pointer text-sm font-medium text-foreground"
         >
           {label}
         </label>

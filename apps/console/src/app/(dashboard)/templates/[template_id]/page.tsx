@@ -10,6 +10,7 @@ import { Button } from "@superserve/ui"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { useState } from "react"
+
 import { ErrorState } from "@/components/error-state"
 import { BuildHistorySection } from "@/components/templates/build-history-section"
 import { CurrentBuildPanel } from "@/components/templates/current-build-panel"
@@ -73,7 +74,7 @@ export default function TemplateDetailPage() {
           </h1>
           <TemplateStatusBadge status={data.status} />
           {system && (
-            <span className="font-mono text-[10px] uppercase text-muted">
+            <span className="font-mono text-[10px] text-muted uppercase">
               System
             </span>
           )}

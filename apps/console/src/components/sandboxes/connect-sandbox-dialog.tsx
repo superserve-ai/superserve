@@ -21,6 +21,7 @@ import {
 import { motion } from "motion/react"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
+
 import { CornerBrackets } from "@/components/corner-brackets"
 import { useApiKeys, useCreateApiKey } from "@/hooks/use-api-keys"
 
@@ -79,7 +80,7 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
       type="button"
       onClick={copy}
       aria-label={copied ? "Copied" : (label ?? "Copy")}
-      className="text-muted hover:text-foreground transition-colors shrink-0 cursor-pointer"
+      className="shrink-0 cursor-pointer text-muted transition-colors hover:text-foreground"
     >
       {copied ? (
         <CheckIcon className="size-4 text-success" weight="light" />
@@ -134,7 +135,7 @@ export function ConnectSandboxDialog({
 
         {/* Language Tabs */}
         <nav
-          className="flex items-center gap-1 mx-6 border-b border-dashed border-border py-2"
+          className="mx-6 flex items-center gap-1 border-b border-dashed border-border py-2"
           onMouseLeave={() => setHoveredTab(null)}
         >
           {LANGUAGES.map((lang) => {
@@ -148,7 +149,7 @@ export function ConnectSandboxDialog({
                 onClick={() => setLanguage(lang.value)}
                 onMouseEnter={() => setHoveredTab(lang.value)}
                 className={cn(
-                  "relative inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono transition-colors cursor-pointer",
+                  "relative inline-flex cursor-pointer items-center gap-1.5 px-3 py-1.5 font-mono text-xs transition-colors",
                   isActive
                     ? "text-foreground"
                     : "text-muted hover:text-foreground",
@@ -170,7 +171,7 @@ export function ConnectSandboxDialog({
                 )}
                 {isActive && (
                   <motion.span
-                    className="absolute inset-0 pointer-events-none"
+                    className="pointer-events-none absolute inset-0"
                     layoutId="connect-lang-active"
                     transition={{
                       type: "spring",
@@ -214,19 +215,19 @@ export function ConnectSandboxDialog({
               <span className="block text-sm font-medium text-foreground">
                 API Key
               </span>
-              <div className="flex items-center gap-2 bg-background border border-border px-4 py-3">
+              <div className="flex items-center gap-2 border border-border bg-background px-4 py-3">
                 <KeyIcon
-                  className="size-4 text-muted shrink-0"
+                  className="size-4 shrink-0 text-muted"
                   weight="light"
                 />
-                <code className="flex-1 text-sm font-mono text-foreground/80 break-all">
+                <code className="flex-1 font-mono text-sm break-all text-foreground/80">
                   {newlyCreatedKey}
                 </code>
                 <button
                   type="button"
                   onClick={handleCopyKey}
                   aria-label={copiedKey ? "Copied" : "Copy API key"}
-                  className="text-muted hover:text-foreground transition-colors shrink-0 cursor-pointer"
+                  className="shrink-0 cursor-pointer text-muted transition-colors hover:text-foreground"
                 >
                   {copiedKey ? (
                     <CheckIcon className="size-4 text-success" weight="light" />
@@ -246,8 +247,8 @@ export function ConnectSandboxDialog({
             <span className="block text-sm font-medium text-foreground">
               Install SDK
             </span>
-            <div className="flex items-start bg-background border border-dashed border-border px-4 py-3">
-              <div className="flex-1 min-w-0">
+            <div className="flex items-start border border-dashed border-border bg-background px-4 py-3">
+              <div className="min-w-0 flex-1">
                 <HighlightedCode
                   code={INSTALL_COMMANDS[language]}
                   lang="bash"
@@ -262,8 +263,8 @@ export function ConnectSandboxDialog({
             <span className="block text-sm font-medium text-foreground">
               Connect and Run
             </span>
-            <div className="flex items-start bg-background border border-dashed border-border px-4 py-3 max-h-[180px] overflow-y-auto">
-              <div className="flex-1 min-w-0">
+            <div className="flex max-h-[180px] items-start overflow-y-auto border border-dashed border-border bg-background px-4 py-3">
+              <div className="min-w-0 flex-1">
                 <HighlightedCode
                   code={getConnectSnippet(language, snippetKey, sandboxId)}
                   lang={language}

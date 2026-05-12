@@ -17,6 +17,7 @@ import {
 } from "@superserve/ui"
 import { usePostHog } from "posthog-js/react"
 import { useRef, useState } from "react"
+
 import type { SandboxResponse } from "@/lib/api/types"
 import { FILE_EVENTS } from "@/lib/posthog/events"
 import { formatBytes } from "@/lib/sandbox-utils"
@@ -231,7 +232,7 @@ function UploadPanel({ sandbox, disabled, reason }: PanelProps) {
 
   return (
     <div className="flex h-full flex-col gap-3 px-4 py-4">
-      <div className="flex items-center gap-2 font-mono text-xs uppercase text-muted">
+      <div className="flex items-center gap-2 font-mono text-xs text-muted uppercase">
         <UploadSimpleIcon className="size-3.5" weight="light" />
         Upload
       </div>
@@ -263,7 +264,7 @@ function UploadPanel({ sandbox, disabled, reason }: PanelProps) {
             </span>
           </>
         ) : (
-          <span className="font-mono text-xs uppercase text-muted">
+          <span className="font-mono text-xs text-muted uppercase">
             {dragOver ? "Drop to attach" : "Select or drag a file"}
           </span>
         )}
@@ -398,7 +399,7 @@ function DownloadPanel({ sandbox, disabled, reason }: PanelProps) {
 
   return (
     <div className="flex h-full flex-col gap-3 px-4 py-4">
-      <div className="flex items-center gap-2 font-mono text-xs uppercase text-muted">
+      <div className="flex items-center gap-2 font-mono text-xs text-muted uppercase">
         <DownloadSimpleIcon className="size-3.5" weight="light" />
         Download
       </div>

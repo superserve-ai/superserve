@@ -1,6 +1,7 @@
 import { Separator } from "@superserve/ui"
 import { useEffect } from "react"
 import { Link, useParams } from "react-router"
+
 import { ExamplePreview } from "../components/example-preview"
 import { PropsTable } from "../components/props-table"
 import { getBySlug } from "../registry"
@@ -20,7 +21,7 @@ export function ComponentPage() {
     return (
       <div className="p-8">
         <h1 className="text-2xl font-semibold text-foreground">Not Found</h1>
-        <p className="text-muted mt-2">
+        <p className="mt-2 text-muted">
           Component "{slug}" does not exist.{" "}
           <Link to="/" className="text-primary underline underline-offset-2">
             Go home
@@ -31,11 +32,11 @@ export function ComponentPage() {
   }
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="max-w-4xl p-8">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-foreground">{meta.name}</h1>
-        <p className="text-muted mt-1">{meta.description}</p>
-        <p className="text-xs font-mono text-muted mt-2">
+        <p className="mt-1 text-muted">{meta.description}</p>
+        <p className="mt-2 font-mono text-xs text-muted">
           Source: <code className="text-primary">{meta.source}</code>
         </p>
       </div>

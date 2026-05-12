@@ -1,6 +1,7 @@
 "use client"
 
 import { Suspense } from "react"
+
 import { AnimatedTableRow } from "@/components/animated-table-row"
 import { TableSkeleton } from "@/components/table-skeleton"
 
@@ -33,6 +34,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { useMemo, useState } from "react"
+
 import { CreateKeyDialog } from "@/components/api-keys/create-key-dialog"
 import { RevokeKeyDialog } from "@/components/api-keys/revoke-key-dialog"
 import { EmptyState } from "@/components/empty-state"

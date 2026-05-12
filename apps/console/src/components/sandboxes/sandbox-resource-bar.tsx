@@ -54,7 +54,7 @@ export function SandboxResourceBar({ sandbox }: SandboxResourceBarProps) {
     <section className="flex h-10 items-center gap-6 border-b border-border bg-background px-4">
       {items.map((item, i) => (
         <div key={item.label} className="flex items-center gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-muted">
+          <span className="font-mono text-[10px] tracking-wider text-muted uppercase">
             {item.label}
           </span>
           <span

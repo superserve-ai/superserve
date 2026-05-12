@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { existsSync, unlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { basename, extname, join, resolve } from "node:path"
+
 import { Command } from "commander"
 
 import { track } from "../analytics"

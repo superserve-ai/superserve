@@ -1,4 +1,5 @@
 import { forwardRef } from "react"
+
 import { cn } from "../lib/utils"
 
 interface TextareaProps extends React.ComponentProps<"textarea"> {
@@ -11,8 +12,8 @@ const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       <textarea
         ref={ref}
         className={cn(
-          "min-h-[80px] w-full border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted transition-colors",
-          "focus:outline-none focus:ring-2 focus:ring-border-focus focus:border-border-focus",
+          "min-h-[80px] w-full border border-input bg-background px-3 py-2 text-sm text-foreground transition-colors placeholder:text-muted",
+          "focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none",
           "disabled:cursor-not-allowed disabled:opacity-30",
           error && "border-destructive focus:ring-destructive/20",
           className,

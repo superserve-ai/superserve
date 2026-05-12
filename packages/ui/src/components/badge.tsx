@@ -1,4 +1,5 @@
 import { forwardRef } from "react"
+
 import { cn } from "../lib/utils"
 
 type BadgeVariant = "default" | "success" | "warning" | "destructive" | "muted"
@@ -33,7 +34,7 @@ const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
       <span
         ref={ref}
         className={cn(
-          "inline-flex items-center gap-1.5 px-2 py-0.5 text-xs uppercase font-mono",
+          "inline-flex items-center gap-1.5 px-2 py-0.5 font-mono text-xs uppercase",
           variantClasses[variant],
           className,
         )}

@@ -7,6 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@superserve/ui"
+
 import type { PropDef } from "../registry/types"
 
 export function PropsTable({ props }: { props: PropDef[] }) {
@@ -16,7 +17,7 @@ export function PropsTable({ props }: { props: PropDef[] }) {
 
   return (
     <div>
-      <h3 className="text-sm font-semibold text-foreground mb-3">Props</h3>
+      <h3 className="mb-3 text-sm font-semibold text-foreground">Props</h3>
       <Table>
         <TableHeader>
           <TableRow>
@@ -31,7 +32,7 @@ export function PropsTable({ props }: { props: PropDef[] }) {
             <TableRow key={`${prop.component ?? ""}.${prop.name}`}>
               <TableCell>
                 {hasSubComponents && prop.component && (
-                  <span className="text-xs text-muted font-mono">
+                  <span className="font-mono text-xs text-muted">
                     {prop.component}.
                   </span>
                 )}
@@ -39,7 +40,7 @@ export function PropsTable({ props }: { props: PropDef[] }) {
                   {prop.name}
                 </code>
                 {prop.required && (
-                  <span className="text-destructive ml-1">*</span>
+                  <span className="ml-1 text-destructive">*</span>
                 )}
               </TableCell>
               <TableCell>

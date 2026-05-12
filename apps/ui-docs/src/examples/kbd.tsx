@@ -1,4 +1,5 @@
 import { Kbd } from "@superserve/ui"
+
 import type { ComponentMeta } from "../registry/types"
 
 export const kbdMeta: ComponentMeta = {

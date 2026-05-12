@@ -1,6 +1,7 @@
 "use client"
 
 import { CheckCircleIcon } from "@phosphor-icons/react"
+
 import { CodeBlock } from "@/components/code-block"
 import { CornerBrackets } from "@/components/corner-brackets"
 

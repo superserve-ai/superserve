@@ -1,4 +1,5 @@
 import { Progress } from "@superserve/ui"
+
 import type { ComponentMeta } from "../registry/types"
 
 export const progressMeta: ComponentMeta = {
@@ -31,7 +32,7 @@ export const progressMeta: ComponentMeta = {
     {
       title: "Default (60%)",
       preview: (
-        <div className="max-w-md w-full">
+        <div className="w-full max-w-md">
           <Progress value={60} />
         </div>
       ),
@@ -40,7 +41,7 @@ export const progressMeta: ComponentMeta = {
     {
       title: "Success (80%)",
       preview: (
-        <div className="max-w-md w-full">
+        <div className="w-full max-w-md">
           <Progress value={80} variant="success" />
         </div>
       ),
@@ -49,7 +50,7 @@ export const progressMeta: ComponentMeta = {
     {
       title: "Warning (45%)",
       preview: (
-        <div className="max-w-md w-full">
+        <div className="w-full max-w-md">
           <Progress value={45} variant="warning" />
         </div>
       ),
@@ -58,7 +59,7 @@ export const progressMeta: ComponentMeta = {
     {
       title: "Destructive (90%)",
       preview: (
-        <div className="max-w-md w-full">
+        <div className="w-full max-w-md">
           <Progress value={90} variant="destructive" />
         </div>
       ),

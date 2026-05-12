@@ -11,9 +11,9 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.7",
     "@superserve/ui": "workspace:*",
     "@tailwindcss/vite": "^4.2.1",
-    "@phosphor-icons/react": "^2.1.7",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router": "^7",

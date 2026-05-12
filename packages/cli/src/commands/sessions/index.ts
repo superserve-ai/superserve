@@ -1,4 +1,5 @@
 import { Command } from "commander"
+
 import { endSession } from "./end"
 import { getSession } from "./get"
 import { listSessions } from "./list"

@@ -3,10 +3,12 @@
 import { RocketLaunchIcon } from "@phosphor-icons/react"
 import { Badge, Button, TableCell } from "@superserve/ui"
 import { useRouter } from "next/navigation"
+
 import { AnimatedTableRow } from "@/components/animated-table-row"
 import type { TemplateResponse } from "@/lib/api/types"
 import { formatTime } from "@/lib/format"
 import { isSystemTemplate } from "@/lib/templates/is-system-template"
+
 import { TemplateResources } from "./template-resources"
 import { TemplateRowActions } from "./template-row-actions"
 import { TemplateStatusBadge } from "./template-status-badge"

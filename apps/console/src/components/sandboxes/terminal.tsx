@@ -4,7 +4,9 @@ import { FitAddon } from "@xterm/addon-fit"
 import { Terminal } from "@xterm/xterm"
 import { usePostHog } from "posthog-js/react"
 import { useCallback, useEffect, useRef, useState } from "react"
+
 import { TERMINAL_EVENTS } from "@/lib/posthog/events"
+
 import "@xterm/xterm/css/xterm.css"
 
 export type TerminalConnectionStatus =
@@ -255,7 +257,7 @@ export function SandboxTerminal({
       <div ref={containerRef} className="h-full w-full" />
       {status === "connecting" && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <span className="font-mono text-xs text-muted animate-pulse">
+          <span className="animate-pulse font-mono text-xs text-muted">
             Connecting...
           </span>
         </div>
@@ -265,7 +267,7 @@ export function SandboxTerminal({
           <button
             type="button"
             onClick={handleReconnect}
-            className="border border-dashed border-border bg-surface px-3 py-1.5 font-mono text-xs uppercase text-foreground hover:bg-surface-hover"
+            className="border border-dashed border-border bg-surface px-3 py-1.5 font-mono text-xs text-foreground uppercase hover:bg-surface-hover"
           >
             Reconnect
           </button>

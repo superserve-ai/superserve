@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
+
 import yaml from "js-yaml"
+
 import type { ProjectConfig } from "../api/types"
 import { SUPERSERVE_YAML } from "./constants"
 
@@ -23,10 +25,13 @@ export function loadProjectConfig(
     raw = yaml.load(text, { schema: yaml.JSON_SCHEMA })
   } catch (e) {
     if (e instanceof Error && e.message.includes("EACCES")) {
-      throw new Error(`Permission denied reading ${SUPERSERVE_YAML}.`)
+      throw new Error(`Permission denied reading ${SUPERSERVE_YAML}.`, {
+        cause: e,
+      })
     }
     throw new Error(
       `Invalid YAML in ${SUPERSERVE_YAML}. Check your syntax and try again.`,
+      { cause: e },
     )
   }
 

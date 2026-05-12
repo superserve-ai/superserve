@@ -1,6 +1,7 @@
 "use client"
 
 import { Suspense } from "react"
+
 import { TableSkeleton } from "@/components/table-skeleton"
 
 export default function SandboxesPage() {
@@ -22,6 +23,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { useEffect, useMemo, useState } from "react"
+
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
@@ -106,6 +108,7 @@ function SandboxesPageContent() {
     })
   }, [sandboxes, statusFilter, search])
 
+  // oxlint-disable-next-line no-map-spread -- small static array; clarity > micro-perf
   const tabs = STATUS_TABS.map((tab) => ({
     ...tab,
     count:

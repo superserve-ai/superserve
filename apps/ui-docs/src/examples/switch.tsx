@@ -1,4 +1,5 @@
 import { Switch } from "@superserve/ui"
+
 import type { ComponentMeta } from "../registry/types"
 
 export const switchMeta: ComponentMeta = {

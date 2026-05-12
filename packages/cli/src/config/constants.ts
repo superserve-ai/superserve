@@ -1,5 +1,6 @@
 import { homedir } from "node:os"
 import { join } from "node:path"
+
 import pkg from "../../package.json"
 
 export const PLATFORM_API_URL =

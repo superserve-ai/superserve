@@ -1,4 +1,5 @@
 import { Button, Tooltip, TooltipPopup, TooltipTrigger } from "@superserve/ui"
+
 import type { ComponentMeta } from "../registry/types"
 
 export const tooltipMeta: ComponentMeta = {

@@ -1,4 +1,5 @@
 import { Alert } from "@superserve/ui"
+
 import type { ComponentMeta } from "../registry/types"
 
 export const alertMeta: ComponentMeta = {
@@ -24,7 +25,7 @@ export const alertMeta: ComponentMeta = {
     {
       title: "Variants",
       preview: (
-        <div className="space-y-3 max-w-lg">
+        <div className="max-w-lg space-y-3">
           <Alert variant="default" title="Information">
             This is a default informational alert.
           </Alert>
@@ -55,7 +56,7 @@ export const alertMeta: ComponentMeta = {
     {
       title: "Without Title",
       preview: (
-        <div className="space-y-3 max-w-lg">
+        <div className="max-w-lg space-y-3">
           <Alert variant="default">This is an alert without a title.</Alert>
         </div>
       ),

@@ -7,6 +7,7 @@ import {
   writeFileSync,
 } from "node:fs"
 import { dirname } from "node:path"
+
 import type { Credentials } from "../api/types"
 import { AUTH_FILE } from "./constants"
 

@@ -1,4 +1,5 @@
 import { Command } from "commander"
+
 import { deleteSecret } from "./delete"
 import { listSecrets } from "./list"
 import { setSecrets } from "./set"

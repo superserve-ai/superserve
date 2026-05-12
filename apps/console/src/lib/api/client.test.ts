@@ -12,6 +12,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
 import { ApiError, apiClient } from "./client"
 
 const fetchSpy = vi.fn()

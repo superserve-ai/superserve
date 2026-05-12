@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { basename, join } from "node:path"
+
 import { Command } from "commander"
+
 import { track } from "../analytics"
 import { SUPERSERVE_YAML } from "../config/constants"
 import { withErrorHandler } from "../errors"

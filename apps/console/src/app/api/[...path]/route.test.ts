@@ -25,6 +25,7 @@ vi.stubGlobal("fetch", fetchSpy)
 // module is imported (route reads it at module load).
 
 import { getAuthApiKey } from "@/lib/api/proxy-auth"
+
 import { DELETE, GET, POST, PUT } from "./route"
 
 type AnyParams = { params: Promise<{ path: string[] }> }

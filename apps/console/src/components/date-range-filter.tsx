@@ -171,7 +171,7 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
         </PopoverTrigger>
         <PopoverPopup className="w-64 space-y-3 p-4">
           <div className="space-y-2">
-            <span className="block font-mono text-xs uppercase text-muted">
+            <span className="block font-mono text-xs text-muted uppercase">
               Start
             </span>
             <Input
@@ -183,7 +183,7 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
             />
           </div>
           <div className="space-y-2">
-            <span className="block font-mono text-xs uppercase text-muted">
+            <span className="block font-mono text-xs text-muted uppercase">
               End
             </span>
             <Input

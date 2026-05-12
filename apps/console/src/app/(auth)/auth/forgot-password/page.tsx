@@ -5,10 +5,12 @@ import Image from "next/image"
 import Link from "next/link"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useState } from "react"
+
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { Spinner } from "@/components/icons"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
+
 import { sendPasswordResetEmail } from "./action"
 
 function ForgotPasswordContent() {

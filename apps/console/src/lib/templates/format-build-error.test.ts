@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+
 import { formatBuildError } from "./format-build-error"
 
 describe("formatBuildError", () => {
