@@ -1,0 +1,104 @@
+---
+title: "Claude Agent SDK"
+sidebarTitle: Claude Agent SDK
+description: Use Superserve sandboxes as the execution runtime for agents built with the Claude Agent SDK.
+---
+
+The Claude Agent SDK is Anthropic's framework for building agents with tool-use loops. Expose `sandbox.commands.run` as an in-process MCP tool so every command the agent generates runs in an isolated VM instead of on your machine.
+
+## Setup
+
+<CodeGroup>
+```bash TypeScript
+npm install @superserve/sdk @anthropic-ai/claude-agent-sdk zod
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+```bash Python
+pip install superserve claude-agent-sdk
+export SUPERSERVE_API_KEY=ss_live_...
+```
+</CodeGroup>
+
+## Wire the sandbox into the agent
+
+The highlighted block defines a `bash` tool backed by the sandbox. Everything else is standard Claude Agent SDK usage.
+
+<CodeGroup>
+```typescript TypeScript {7-19}
+import { query, tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk"
+import { Sandbox } from "@superserve/sdk"
+import { z } from "zod"
+
+const sandbox = await Sandbox.create({ name: "agent-runtime" })
+
+const bash = tool(
+  "bash",
+  "Run a shell command in the sandbox.",
+  { command: z.string() },
+  async ({ command }) => {
+    const result = await sandbox.commands.run(command, { timeoutMs: 60_000 })
+    return {
+      content: [
+        { type: "text", text: `${result.stdout}\n${result.stderr}` },
+      ],
+    }
+  },
+)
+
+const superserve = createSdkMcpServer({
+  name: "superserve",
+  version: "1.0.0",
+  tools: [bash],
+})
+
+for await (const message of query({
+  prompt: "List the files in /tmp and tell me how many there are.",
+  options: {
+    mcpServers: { superserve },
+    allowedTools: ["mcp__superserve__bash"],
+  },
+})) {
+  if (message.type === "result" && message.subtype === "success") {
+    console.log(message.result)
+  }
+}
+
+await sandbox.kill()
+```
+
+```python Python {7-14}
+import anyio
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, create_sdk_mcp_server, tool
+from superserve import Sandbox
+
+sandbox = Sandbox.create(name="agent-runtime")
+
+@tool("bash", "Run a shell command in the sandbox.", {"command": str})
+async def bash(args):
+    result = sandbox.commands.run(args["command"], timeout_seconds=60)
+    return {
+        "content": [
+            {"type": "text", "text": f"{result.stdout}\n{result.stderr}"},
+        ],
+    }
+
+superserve = create_sdk_mcp_server(name="superserve", version="1.0.0", tools=[bash])
+
+options = ClaudeAgentOptions(
+    mcp_servers={"superserve": superserve},
+    allowed_tools=["mcp__superserve__bash"],
+)
+
+async def main():
+    async with ClaudeSDKClient(options=options) as client:
+        await client.query("List the files in /tmp and tell me how many there are.")
+        async for msg in client.receive_response():
+            print(msg)
+    sandbox.kill()
+
+anyio.run(main)
+```
+</CodeGroup>
+
+Add equivalent tools for file reads/writes the same way; see [Run commands](/commands/overview) and [Read & write files](/filesystem/read-write).

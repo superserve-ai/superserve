@@ -45,6 +45,9 @@
       "href": "https://github.com/superserve-ai/superserve"
     }
   },
+  "contextual": {
+    "options": ["copy", "view", "chatgpt", "claude"]
+  },
   "navigation": {
     "tabs": [
       {
@@ -98,6 +101,40 @@
               "sdk-reference/template",
               "sdk-reference/commands",
               "sdk-reference/files"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Integration Guides",
+        "groups": [
+          {
+            "group": "Coding Agents",
+            "pages": [
+              "integrations/coding-agents/claude",
+              "integrations/coding-agents/codex",
+              "integrations/coding-agents/opencode",
+              "integrations/coding-agents/kilocode"
+            ]
+          },
+          {
+            "group": "Personal Agents",
+            "pages": [
+              "integrations/personal-agents/openclaw",
+              "integrations/personal-agents/hermes"
+            ]
+          },
+          {
+            "group": "Agent Harnesses",
+            "pages": [
+              "integrations/agent-harnesses/claude-agent-sdk",
+              "integrations/agent-harnesses/openai-agents-sdk"
+            ]
+          },
+          {
+            "group": "Virtual Filesystems",
+            "pages": [
+              "integrations/virtual-filesystems/mesa"
             ]
           }
         ]
