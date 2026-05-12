@@ -218,7 +218,7 @@ Or use the **Release SDKs** GitHub Actions workflow (manual `workflow_dispatch` 
 - oxlint for linting, oxfmt for formatting (2-space indent, double quotes, semicolons as needed, Tailwind classes auto-sorted in `cn`/`clsx` calls)
 - TypeScript strict mode, ESM modules
 - Run `bunx oxlint --fix && bunx oxfmt --write` to auto-fix lint and format issues
-- VSCode has an official oxc extension for lint diagnostics; oxfmt format-on-save is not yet supported — use the pre-commit hook or run the command explicitly
+- VSCode: install the official `oxc.oxc-vscode` extension (recommended in `.vscode/extensions.json`) for lint diagnostics and format-on-save
 
 ### Python
 - Python ≥ 3.9 (SDK target); repo uses 3.12 locally (see `.python-version`)
