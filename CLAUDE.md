@@ -60,7 +60,7 @@ Built on **@base-ui/react** (headless components) + Tailwind CSS + **motion** (F
 
 Built with Bun + Commander. Entry point: `src/index.ts`. Authenticates via device flow or API key.
 
-### TypeScript SDK (`packages/sdk/`) — v0.6.0
+### TypeScript SDK (`packages/sdk/`)
 
 Published as `@superserve/sdk`. Hand-crafted SDK. Zero runtime dependencies (uses native `fetch`).
 
@@ -80,7 +80,7 @@ Published as `@superserve/sdk`. Hand-crafted SDK. Zero runtime dependencies (use
 - `toSandboxInfo` throws on missing `id` / `status`; `create()` / `connect()` / `resume()` throw on missing `access_token`
 - Typed errors: `SandboxError`, `AuthenticationError`, `ValidationError`, `NotFoundError`, `ConflictError`, `TimeoutError`, `ServerError`
 
-### Python SDK (`packages/python-sdk/`) — v0.6.0
+### Python SDK (`packages/python-sdk/`)
 
 Published as `superserve` on PyPI. Hand-crafted SDK. Runtime deps: `httpx>=0.24.0`, `pydantic>=2.0.0`, `typing-extensions>=4.0.0`. Supports Python ≥ 3.9.
 
@@ -117,7 +117,9 @@ uv sync                  # install all Python deps
 ```bash
 bun run dev              # start all dev servers
 bun run build            # build everything in dependency order
-bun run lint             # lint all packages
+bun run lint             # lint all packages (oxlint)
+bun run format           # format all files in place (oxfmt)
+bun run format:check     # verify formatting without writing (CI-friendly)
 bun run typecheck        # type check all packages
 bun run test             # unit/integration tests (Vitest, no credentials)
 bun run test:coverage    # tests with coverage
@@ -218,6 +220,7 @@ Or use the **Release SDKs** GitHub Actions workflow (manual `workflow_dispatch` 
 - oxlint for linting, oxfmt for formatting (2-space indent, double quotes, semicolons as needed, Tailwind classes auto-sorted in `cn`/`clsx` calls)
 - TypeScript strict mode, ESM modules
 - Run `bunx oxlint --fix && bunx oxfmt --write` to auto-fix lint and format issues
+- Pre-commit hook (Husky + lint-staged) runs `oxlint --fix` then `oxfmt --write` on staged files — committing mutates files
 - VSCode: install the official `oxc.oxc-vscode` extension (recommended in `.vscode/extensions.json`) for lint diagnostics and format-on-save
 
 ### Python
