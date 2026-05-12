@@ -1,0 +1,60 @@
+---
+title: "Codex"
+sidebarTitle: Codex
+description: Run the OpenAI Codex CLI in a Superserve sandbox.
+---
+
+Codex is OpenAI's terminal coding agent. Run it in a Superserve sandbox so its shell commands and file edits stay isolated from your machine.
+
+## Via the console
+
+1. Go to [console.superserve.ai](https://console.superserve.ai) and click **Create sandbox**.
+2. Pick the **`superserve/node-22`** template.
+3. Open **Advanced Options** and add `OPENAI_API_KEY` under **Environment Variables**.
+4. Create the sandbox, open its **Terminal**, and run:
+
+   ```bash
+   npm install -g @openai/codex && codex
+   ```
+
+## Via the SDK
+
+```bash
+npm install @superserve/sdk
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({
+  name: "codex",
+  fromTemplate: "superserve/node-22",
+  envVars: { OPENAI_API_KEY: "sk-..." },
+})
+
+await sandbox.commands.run("npm install -g @openai/codex")
+```
+
+```python Python
+from superserve import Sandbox
+
+sandbox = Sandbox.create(
+    name="codex",
+    from_template="superserve/node-22",
+    env_vars={"OPENAI_API_KEY": "sk-..."},
+)
+
+sandbox.commands.run("npm install -g @openai/codex")
+```
+</CodeGroup>
+
+Open the sandbox in the [console](https://console.superserve.ai), launch the terminal, and run `codex`.
+
+## Persist sessions
+
+```typescript
+await sandbox.pause()
+await sandbox.resume()
+```
