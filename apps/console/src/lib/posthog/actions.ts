@@ -22,7 +22,6 @@ function getPostHogClient(): PostHog | null {
 export async function trackEvent(
   event: string,
   distinctId: string,
-  // biome-ignore lint/suspicious/noExplicitAny: PostHog properties type
   properties?: Record<string, any>,
 ) {
   const client = getPostHogClient()

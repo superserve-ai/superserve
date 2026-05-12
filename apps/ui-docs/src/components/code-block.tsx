@@ -71,7 +71,6 @@ export function CodeBlock({ code }: { code: string }) {
       </Button>
       <div className="overflow-x-auto border border-border bg-[#0d1117] px-4 py-3 font-mono text-xs leading-relaxed [&_code]:!bg-transparent [&_pre]:!bg-transparent">
         {html ? (
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki-generated HTML
           <div dangerouslySetInnerHTML={{ __html: html }} />
         ) : (
           <pre className="text-neutral-400">

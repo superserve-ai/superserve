@@ -93,7 +93,6 @@ export function Sidebar() {
 
       {/* Mobile overlay */}
       {open && (
-        // biome-ignore lint/a11y/noStaticElementInteractions: overlay backdrop
         <div
           className="fixed inset-0 z-40 bg-black/30 md:hidden"
           onClick={() => setOpen(false)}

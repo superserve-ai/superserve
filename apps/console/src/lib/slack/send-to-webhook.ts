@@ -1,4 +1,3 @@
-// biome-ignore lint/suspicious/noExplicitAny: deeply nested Slack block type
 const sendToSlackHook = async (message: Record<string, any>) => {
   const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL
 
