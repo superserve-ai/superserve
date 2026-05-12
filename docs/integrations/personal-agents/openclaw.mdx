@@ -33,6 +33,7 @@ const sandbox = await Sandbox.create({
   name: "openclaw",
   fromTemplate: "superserve/node-22",
   envVars: { ANTHROPIC_API_KEY: "sk-ant-..." },
+  timeoutMs: 100000,
 })
 
 await sandbox.commands.run("npm i -g openclaw")
@@ -45,6 +46,7 @@ sandbox = Sandbox.create(
     name="openclaw",
     from_template="superserve/node-22",
     env_vars={"ANTHROPIC_API_KEY": "sk-ant-..."},
+    timeout_ms=100000,
 )
 
 sandbox.commands.run("npm i -g openclaw")

@@ -34,10 +34,11 @@ const sandbox = await Sandbox.create({
   name: "hermes",
   fromTemplate: "superserve/node-22",
   envVars: { ANTHROPIC_API_KEY: "sk-ant-..." },
+  timeoutMs: 100000,
 })
 
 await sandbox.commands.run(
-  "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash",
+  "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
 )
 ```
 
@@ -48,6 +49,7 @@ sandbox = Sandbox.create(
     name="hermes",
     from_template="superserve/node-22",
     env_vars={"ANTHROPIC_API_KEY": "sk-ant-..."},
+    timeout_ms=100000,
 )
 
 sandbox.commands.run(
