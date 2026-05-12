@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from "@superserve/ui"
 import { useMemo, useState } from "react"
+
 import { AnimatedTableRow } from "@/components/animated-table-row"
 import { DateRangeFilter } from "@/components/date-range-filter"
 import { EmptyState } from "@/components/empty-state"
@@ -90,6 +91,7 @@ export default function AuditLogsPage() {
     })
   }, [activity, categoryFilter, search, dateRange])
 
+  // oxlint-disable-next-line no-map-spread -- small static array; clarity > micro-perf
   const tabs = CATEGORY_TABS.map((tab) => ({
     ...tab,
     count:

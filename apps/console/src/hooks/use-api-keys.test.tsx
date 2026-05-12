@@ -4,6 +4,7 @@
 
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
 import { ApiError } from "@/lib/api/client"
 import { apiKeyKeys } from "@/lib/api/query-keys"
 import type { ApiKeyResponse, CreateApiKeyResponse } from "@/lib/api/types"

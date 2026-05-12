@@ -26,10 +26,10 @@ function TabsTab({
     <TabsPrimitive.Tab
       className={cn(
         "px-4 py-2 text-sm font-medium text-muted transition-colors",
-        "border-b-2 border-transparent -mb-px",
+        "-mb-px border-b-2 border-transparent",
         "hover:text-foreground",
         "data-[selected]:border-primary data-[selected]:text-foreground",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus",
+        "focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none",
         className,
       )}
       {...props}

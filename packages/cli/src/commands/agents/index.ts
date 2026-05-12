@@ -1,4 +1,5 @@
 import { Command } from "commander"
+
 import { deleteAgent } from "./delete"
 import { getAgent } from "./get"
 import { listAgents } from "./list"

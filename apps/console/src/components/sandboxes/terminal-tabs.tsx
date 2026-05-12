@@ -5,6 +5,7 @@ import { cn, Kbd, Tooltip, TooltipPopup, TooltipTrigger } from "@superserve/ui"
 import { motion } from "motion/react"
 import { usePostHog } from "posthog-js/react"
 import { useCallback, useEffect, useRef, useState } from "react"
+
 import { CornerBrackets } from "@/components/corner-brackets"
 import {
   MAX_TERMINAL_TAB_NAME_LENGTH,
@@ -13,6 +14,7 @@ import {
   useTerminalTabs,
 } from "@/hooks/use-terminal-tabs"
 import { TERMINAL_EVENTS } from "@/lib/posthog/events"
+
 import { SandboxTerminal, type TerminalConnectionStatus } from "./terminal"
 
 interface Props {
@@ -100,6 +102,7 @@ export function TerminalTabs({ sandboxId, accessToken }: Props) {
       <div
         role="tablist"
         aria-label="Terminal tabs"
+        tabIndex={0}
         onMouseLeave={() => setHoveredId(null)}
         onKeyDown={handleStripKeyDown}
         className="flex h-10 shrink-0 items-stretch overflow-x-auto border-b border-dashed border-border bg-background"
@@ -183,7 +186,7 @@ function TerminalTabButton({
   return (
     <div
       className={cn(
-        "group relative flex h-full min-w-[120px] max-w-[200px] shrink-0 items-center border-r border-dashed border-foreground/8",
+        "group relative flex h-full max-w-[200px] min-w-[120px] shrink-0 items-center border-r border-dashed border-foreground/8",
         isActive ? "text-foreground" : "text-muted hover:text-foreground",
       )}
     >
@@ -215,7 +218,7 @@ function TerminalTabButton({
         onClick={() => onSelect(tab.id)}
         onDoubleClick={onStartEdit}
         onMouseEnter={handleHover}
-        className="relative flex h-full flex-1 cursor-pointer select-none items-center gap-1.5 px-3 outline-none"
+        className="relative flex h-full flex-1 cursor-pointer items-center gap-1.5 px-3 outline-none select-none"
       >
         <StatusDot status={status} />
         {isEditing ? (
@@ -326,7 +329,7 @@ function RenameInput({ initialValue, onCommit, onCancel }: RenameInputProps) {
       }}
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
-      className="w-full min-w-0 border border-dashed border-foreground/30 bg-surface px-1 py-0.5 font-mono text-xs uppercase text-foreground outline-none"
+      className="w-full min-w-0 border border-dashed border-foreground/30 bg-surface px-1 py-0.5 font-mono text-xs text-foreground uppercase outline-none"
     />
   )
 }

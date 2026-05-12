@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+
 import { useSandboxes } from "./use-sandboxes"
 
 const DEFAULT_FAVICON = "/favicon.ico"

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+
 import { parseSSEStream } from "../../src/api/streaming"
 import type { RunEvent } from "../../src/api/types"
 

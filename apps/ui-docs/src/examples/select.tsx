@@ -5,6 +5,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@superserve/ui"
+
 import type { ComponentMeta } from "../registry/types"
 
 export const selectMeta: ComponentMeta = {

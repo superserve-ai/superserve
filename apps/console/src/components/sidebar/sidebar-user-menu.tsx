@@ -5,10 +5,12 @@ import { Avatar, cn } from "@superserve/ui"
 import { useRouter } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { useEffect, useRef, useState } from "react"
+
 import { useUser } from "@/hooks/use-user"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { clearTerminalTabsStorage } from "@/lib/terminal-tabs-storage"
+
 import { useSidebar } from "./sidebar-context"
 
 function getInitials(name: string): string {
@@ -75,7 +77,7 @@ export function SidebarUserMenu() {
         type="button"
         onClick={() => setOpen(!open)}
         className={cn(
-          "flex w-full items-center gap-2.5 px-2.5 py-2.5 text-foreground/70 transition-colors hover:text-foreground hover:bg-surface-hover cursor-pointer",
+          "flex w-full cursor-pointer items-center gap-2.5 px-2.5 py-2.5 text-foreground/70 transition-colors hover:bg-surface-hover hover:text-foreground",
           isCollapsed && "justify-center",
         )}
       >
@@ -114,7 +116,7 @@ export function SidebarUserMenu() {
           <button
             type="button"
             onClick={handleLogout}
-            className="flex w-full cursor-pointer select-none items-center gap-2 px-2 py-1.5 text-sm text-foreground transition-colors hover:bg-surface-hover"
+            className="flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-sm text-foreground transition-colors select-none hover:bg-surface-hover"
           >
             <SignOutIcon className="size-4" weight="light" />
             Log out

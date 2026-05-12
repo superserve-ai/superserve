@@ -33,7 +33,6 @@ packages/
   supabase/                # Supabase client factories
   typescript-config/       # Shared tsconfig presets
   tailwind-config/         # Shared Tailwind config
-  biome-config/            # Shared Biome config
 docs/                      # Mintlify documentation site
 tests/
   sdk-e2e-ts/              # TypeScript SDK e2e tests (Vitest)

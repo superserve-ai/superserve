@@ -1,4 +1,5 @@
 import { Field, Input, Kbd } from "@superserve/ui"
+
 import type { ComponentMeta } from "../registry/types"
 
 export const inputMeta: ComponentMeta = {

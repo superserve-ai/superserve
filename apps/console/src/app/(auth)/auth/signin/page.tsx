@@ -7,6 +7,7 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useState } from "react"
+
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
@@ -143,7 +144,7 @@ function SignInContent() {
           variant="outline"
           onClick={handleGoogleSignIn}
           disabled={isLoading || isEmailLoading}
-          className="w-full gap-2 border-solid font-sans normal-case tracking-normal"
+          className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
         >
           {isLoading ? <Spinner /> : <GoogleIcon />}
           {isLoading ? "Signing in..." : "Continue with Google"}
@@ -180,7 +181,7 @@ function SignInContent() {
                 onClick={() => setShowPassword(!showPassword)}
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 aria-pressed={showPassword}
-                className="text-muted hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                className="text-muted transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
               >
                 {showPassword ? (
                   <EyeSlashIcon className="size-4" weight="light" />

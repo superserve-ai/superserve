@@ -1,6 +1,7 @@
 "use client"
 
 import { cn, TooltipProvider } from "@superserve/ui"
+
 import { CommandPalette } from "@/components/command-palette"
 import { Sidebar } from "@/components/sidebar/sidebar"
 import {
@@ -21,7 +22,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
       <CommandPalette />
       <main
         className={cn(
-          "flex-1 flex flex-col overflow-hidden transition-all duration-200",
+          "flex flex-1 flex-col overflow-hidden transition-all duration-200",
           isCollapsed ? "ml-16" : "ml-64",
         )}
       >

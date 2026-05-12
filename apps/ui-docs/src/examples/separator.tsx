@@ -1,4 +1,5 @@
 import { Separator } from "@superserve/ui"
+
 import type { ComponentMeta } from "../registry/types"
 
 export const separatorMeta: ComponentMeta = {
@@ -20,9 +21,9 @@ export const separatorMeta: ComponentMeta = {
       title: "Horizontal",
       preview: (
         <div className="max-w-sm space-y-0">
-          <p className="text-sm text-foreground py-2">Content above</p>
+          <p className="py-2 text-sm text-foreground">Content above</p>
           <Separator />
-          <p className="text-sm text-foreground py-2">Content below</p>
+          <p className="py-2 text-sm text-foreground">Content below</p>
         </div>
       ),
       code: `<p>Content above</p>

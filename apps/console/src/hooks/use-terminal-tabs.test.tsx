@@ -1,9 +1,11 @@
 import { act, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
+
 import {
   TERMINAL_TABS_MAX_COUNT,
   TERMINAL_TABS_STORAGE_KEY,
 } from "@/lib/terminal-tabs-storage"
+
 import { MAX_TERMINAL_TABS, useTerminalTabs } from "./use-terminal-tabs"
 
 function fireKey(

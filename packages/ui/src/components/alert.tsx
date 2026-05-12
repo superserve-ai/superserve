@@ -1,6 +1,7 @@
 "use client"
 
 import { CheckIcon, InfoIcon, WarningIcon } from "@phosphor-icons/react"
+
 import { cn } from "../lib/utils"
 
 type AlertVariant = "default" | "success" | "warning" | "destructive"
@@ -57,10 +58,10 @@ function Alert({
       {...props}
     >
       <Icon
-        className={cn("h-4 w-4 shrink-0 mt-0.5", config.iconClass)}
+        className={cn("mt-0.5 h-4 w-4 shrink-0", config.iconClass)}
         weight="light"
       />
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1">
         {title && (
           <p className="text-sm font-medium text-foreground">{title}</p>
         )}

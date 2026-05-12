@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+
 import { PlatformAPIError } from "../../src/api/errors"
 
 describe("PlatformAPIError", () => {

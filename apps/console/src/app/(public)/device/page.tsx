@@ -6,6 +6,7 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useState } from "react"
+
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
@@ -19,7 +20,7 @@ function Logo() {
           alt="Superserve"
           width={200}
           height={40}
-          className="h-10 w-auto mb-2"
+          className="mb-2 h-10 w-auto"
         />
       </Link>
     </div>
@@ -155,12 +156,12 @@ function DevicePageContent() {
   // No code provided
   if (!userCode) {
     return (
-      <div className="min-h-screen bg-background relative overflow-hidden">
-        <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4">
+      <div className="relative min-h-screen overflow-hidden bg-background">
+        <div className="relative z-10 flex min-h-screen flex-col items-center justify-center p-4">
           <Logo />
           <div className="w-full max-w-sm">
-            <div className="bg-surface border border-border border-dashed p-8 text-center">
-              <h1 className="text-xl font-semibold text-foreground mb-4">
+            <div className="border border-dashed border-border bg-surface p-8 text-center">
+              <h1 className="mb-4 text-xl font-semibold text-foreground">
                 Invalid Request
               </h1>
               <p className="text-sm text-muted">
@@ -180,13 +181,13 @@ function DevicePageContent() {
   // Successfully authorized
   if (isAuthorized) {
     return (
-      <div className="min-h-screen bg-background relative overflow-hidden">
-        <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4">
+      <div className="relative min-h-screen overflow-hidden bg-background">
+        <div className="relative z-10 flex min-h-screen flex-col items-center justify-center p-4">
           <Logo />
           <div className="w-full max-w-sm">
-            <div className="bg-surface border border-border border-dashed p-8 text-center">
+            <div className="border border-dashed border-border bg-surface p-8 text-center">
               <svg
-                className="w-12 h-12 text-success mx-auto mb-4"
+                className="mx-auto mb-4 h-12 w-12 text-success"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -199,7 +200,7 @@ function DevicePageContent() {
                   d="M5 13l4 4L19 7"
                 />
               </svg>
-              <h1 className="text-xl font-semibold text-foreground mb-2">
+              <h1 className="mb-2 text-xl font-semibold text-foreground">
                 Device Authorized
               </h1>
               <p className="text-sm text-muted">
@@ -215,12 +216,12 @@ function DevicePageContent() {
   // Checking session
   if (isCheckingSession) {
     return (
-      <div className="min-h-screen bg-background relative overflow-hidden">
-        <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4">
+      <div className="relative min-h-screen overflow-hidden bg-background">
+        <div className="relative z-10 flex min-h-screen flex-col items-center justify-center p-4">
           <Logo />
           <div className="w-full max-w-sm">
-            <div className="bg-surface border border-border border-dashed p-8 text-center">
-              <Spinner className="border-muted mx-auto" />
+            <div className="border border-dashed border-border bg-surface p-8 text-center">
+              <Spinner className="mx-auto border-muted" />
             </div>
           </div>
         </div>
@@ -231,15 +232,15 @@ function DevicePageContent() {
   // Not signed in - show sign-in options
   if (!user) {
     return (
-      <div className="min-h-screen bg-background relative overflow-hidden">
-        <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4">
+      <div className="relative min-h-screen overflow-hidden bg-background">
+        <div className="relative z-10 flex min-h-screen flex-col items-center justify-center p-4">
           <Logo />
           <div className="w-full max-w-sm">
-            <div className="bg-surface border border-border border-dashed p-8">
-              <h1 className="text-xl font-semibold text-foreground mb-2 text-center">
+            <div className="border border-dashed border-border bg-surface p-8">
+              <h1 className="mb-2 text-center text-xl font-semibold text-foreground">
                 Authorize Device
               </h1>
-              <p className="text-sm text-muted mb-6 text-center">
+              <p className="mb-6 text-center text-sm text-muted">
                 Sign in to authorize your CLI.
               </p>
 
@@ -266,22 +267,22 @@ function DevicePageContent() {
 
   // Signed in - show authorize button
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
-      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4">
+    <div className="relative min-h-screen overflow-hidden bg-background">
+      <div className="relative z-10 flex min-h-screen flex-col items-center justify-center p-4">
         <Logo />
         <div className="w-full max-w-sm">
-          <div className="bg-surface border border-border border-dashed p-8 text-center">
-            <h1 className="text-xl font-semibold text-foreground mb-2">
+          <div className="border border-dashed border-border bg-surface p-8 text-center">
+            <h1 className="mb-2 text-xl font-semibold text-foreground">
               Authorize Device
             </h1>
-            <p className="text-sm text-muted mb-8">
+            <p className="mb-8 text-sm text-muted">
               Signed in as{" "}
               <span className="font-medium text-foreground">{user.email}</span>
             </p>
-            <p className="text-xs text-muted mb-2">
+            <p className="mb-2 text-xs text-muted">
               Confirm to authorize your CLI with code:
             </p>
-            <code className="flex justify-center bg-background text-primary text-2xl font-mono font-medium tracking-wide px-3 py-2 mb-3">
+            <code className="mb-3 flex justify-center bg-background px-3 py-2 font-mono text-2xl font-medium tracking-wide text-primary">
               {userCode}
             </code>
             <Button
@@ -304,12 +305,12 @@ export default function DevicePage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-background relative overflow-hidden">
-          <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4">
+        <div className="relative min-h-screen overflow-hidden bg-background">
+          <div className="relative z-10 flex min-h-screen flex-col items-center justify-center p-4">
             <Logo />
             <div className="w-full max-w-sm">
-              <div className="bg-surface border border-border border-dashed p-8 text-center">
-                <Spinner className="border-muted mx-auto" />
+              <div className="border border-dashed border-border bg-surface p-8 text-center">
+                <Spinner className="mx-auto border-muted" />
               </div>
             </div>
           </div>

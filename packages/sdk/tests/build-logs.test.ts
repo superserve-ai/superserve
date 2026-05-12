@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
+
 import { ConflictError } from "../src/errors.js"
 import { Template } from "../src/Template.js"
 

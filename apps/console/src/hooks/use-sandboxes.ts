@@ -2,6 +2,7 @@
 
 import { useToast } from "@superserve/ui"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+
 import { ApiError } from "@/lib/api/client"
 import { sandboxKeys } from "@/lib/api/query-keys"
 import {
@@ -146,9 +147,8 @@ export function usePauseSandbox() {
           s.id === id ? { ...s, status: "paused" as const } : s,
         ),
       )
-      queryClient.setQueryData<SandboxResponse>(
-        sandboxKeys.detail(id),
-        (old) => (old ? { ...old, status: "paused" as const } : old),
+      queryClient.setQueryData<SandboxResponse>(sandboxKeys.detail(id), (old) =>
+        old ? { ...old, status: "paused" as const } : old,
       )
       return { previousList, previousDetail }
     },
@@ -190,9 +190,8 @@ export function useResumeSandbox() {
           s.id === id ? { ...s, status: "resuming" as const } : s,
         ),
       )
-      queryClient.setQueryData<SandboxResponse>(
-        sandboxKeys.detail(id),
-        (old) => (old ? { ...old, status: "resuming" as const } : old),
+      queryClient.setQueryData<SandboxResponse>(sandboxKeys.detail(id), (old) =>
+        old ? { ...old, status: "resuming" as const } : old,
       )
       return { previousList, previousDetail }
     },
@@ -200,16 +199,14 @@ export function useResumeSandbox() {
       // Server returns a fresh access_token with the resume response — write
       // it into the detail cache so the terminal and file-transfer panels
       // pick up the new token without waiting for a refetch.
-      queryClient.setQueryData<SandboxResponse>(
-        sandboxKeys.detail(id),
-        (old) =>
-          old
-            ? {
-                ...old,
-                status: resumed.status,
-                access_token: resumed.access_token,
-              }
-            : old,
+      queryClient.setQueryData<SandboxResponse>(sandboxKeys.detail(id), (old) =>
+        old
+          ? {
+              ...old,
+              status: resumed.status,
+              access_token: resumed.access_token,
+            }
+          : old,
       )
       queryClient.setQueryData<SandboxListItem[]>(sandboxKeys.all, (old) =>
         old?.map((s) => (s.id === id ? { ...s, status: resumed.status } : s)),

@@ -4,6 +4,7 @@ import { ArrowLeftIcon, PlayIcon, TerminalIcon } from "@phosphor-icons/react"
 import { Badge, Button } from "@superserve/ui"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
+
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { TerminalTabs } from "@/components/sandboxes/terminal-tabs"
@@ -95,7 +96,7 @@ export default function TerminalPage() {
             </Button>
           )}
           {sandbox.status === "resuming" && (
-            <span className="font-mono text-xs uppercase text-muted">
+            <span className="font-mono text-xs text-muted uppercase">
               Resuming…
             </span>
           )}

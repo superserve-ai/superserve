@@ -31,7 +31,7 @@ function TooltipPopup({
       <TooltipPrimitive.Positioner sideOffset={sideOffset}>
         <TooltipPrimitive.Popup
           className={cn(
-            "ss-tooltip-popup z-50 bg-foreground text-background px-2 py-1 text-xs",
+            "ss-tooltip-popup z-50 bg-foreground px-2 py-1 text-xs text-background",
             className,
           )}
           {...props}

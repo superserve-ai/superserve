@@ -2,6 +2,7 @@ import { ListIcon, XIcon } from "@phosphor-icons/react"
 import { Button } from "@superserve/ui"
 import { useState } from "react"
 import { Link, useParams } from "react-router"
+
 import { categories, getByCategory } from "../../registry"
 
 function Logo() {
@@ -38,7 +39,7 @@ export function Sidebar() {
     <>
       <Link
         to="/"
-        className="flex items-center gap-2.5 mb-6"
+        className="mb-6 flex items-center gap-2.5"
         onClick={() => setOpen(false)}
       >
         <Logo />
@@ -49,10 +50,10 @@ export function Sidebar() {
       <nav className="space-y-6">
         {categories.map((cat) => (
           <div key={cat}>
-            <p className="text-xs font-mono uppercase tracking-widest text-muted mb-2">
+            <p className="mb-2 font-mono text-xs tracking-widest text-muted uppercase">
               {cat}
             </p>
-            <div className="border-l border-border/50 ml-px space-y-px">
+            <div className="ml-px space-y-px border-l border-border/50">
               {getByCategory(cat).map((item) => {
                 const isActive = slug === item.slug
                 return (
@@ -60,10 +61,10 @@ export function Sidebar() {
                     key={item.slug}
                     to={`/components/${item.slug}`}
                     onClick={() => setOpen(false)}
-                    className={`block py-1 pl-3 text-sm transition-colors -ml-px border-l ${
+                    className={`-ml-px block border-l py-1 pl-3 text-sm transition-colors ${
                       isActive
-                        ? "border-foreground text-foreground font-medium"
-                        : "border-transparent text-muted hover:text-foreground hover:border-border"
+                        ? "border-foreground font-medium text-foreground"
+                        : "border-transparent text-muted hover:border-border hover:text-foreground"
                     }`}
                   >
                     {item.name}
@@ -80,7 +81,7 @@ export function Sidebar() {
   return (
     <>
       {/* Mobile toggle */}
-      <div className="md:hidden fixed top-3 left-3 z-50">
+      <div className="fixed top-3 left-3 z-50 md:hidden">
         <Button variant="outline" size="icon-sm" onClick={() => setOpen(!open)}>
           {open ? (
             <XIcon className="size-4" weight="light" />
@@ -92,9 +93,8 @@ export function Sidebar() {
 
       {/* Mobile overlay */}
       {open && (
-        // biome-ignore lint/a11y/noStaticElementInteractions: overlay backdrop
         <div
-          className="md:hidden fixed inset-0 z-40 bg-black/30"
+          className="fixed inset-0 z-40 bg-black/30 md:hidden"
           onClick={() => setOpen(false)}
           onKeyDown={() => {}}
           role="presentation"
@@ -103,7 +103,7 @@ export function Sidebar() {
 
       {/* Mobile drawer */}
       <aside
-        className={`md:hidden fixed inset-y-0 left-0 z-40 w-56 bg-background border-r border-border overflow-y-auto p-5 pt-14 transition-transform ${
+        className={`fixed inset-y-0 left-0 z-40 w-56 overflow-y-auto border-r border-border bg-background p-5 pt-14 transition-transform md:hidden ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -111,7 +111,7 @@ export function Sidebar() {
       </aside>
 
       {/* Desktop sidebar */}
-      <aside className="hidden md:block w-56 shrink-0 border-r border-border overflow-y-auto p-5">
+      <aside className="hidden w-56 shrink-0 overflow-y-auto border-r border-border p-5 md:block">
         {nav}
       </aside>
     </>

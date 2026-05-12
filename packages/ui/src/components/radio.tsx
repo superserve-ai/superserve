@@ -43,7 +43,7 @@ function RadioGroupItem({
         value={value}
         className={cn(
           "peer relative h-4 w-4 shrink-0 rounded-full border border-input transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus",
+          "focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none",
           "disabled:cursor-not-allowed disabled:opacity-30",
           "data-[checked]:border-primary",
           className,
@@ -57,7 +57,7 @@ function RadioGroupItem({
       {label && (
         <label
           htmlFor={id}
-          className="text-sm font-medium text-foreground cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-30"
+          className="cursor-pointer text-sm font-medium text-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-30"
         >
           {label}
         </label>

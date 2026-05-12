@@ -21,6 +21,7 @@ function CardTitle({
   ...props
 }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
+    // oxlint-disable-next-line jsx-a11y/heading-has-content -- children passed via {...props}
     <h3
       className={cn("text-base font-semibold text-foreground", className)}
       {...props}
@@ -32,7 +33,7 @@ function CardDescription({
   className,
   ...props
 }: React.HTMLAttributes<HTMLParagraphElement>) {
-  return <p className={cn("text-sm text-muted mt-1", className)} {...props} />
+  return <p className={cn("mt-1 text-sm text-muted", className)} {...props} />
 }
 
 function CardContent({

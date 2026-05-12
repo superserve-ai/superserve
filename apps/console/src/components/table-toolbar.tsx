@@ -4,6 +4,7 @@ import { MagnifyingGlassIcon, TrashIcon } from "@phosphor-icons/react"
 import { Button, cn, Input } from "@superserve/ui"
 import { motion } from "motion/react"
 import { useState } from "react"
+
 import { CornerBrackets } from "./corner-brackets"
 
 interface FilterTab {
@@ -44,7 +45,7 @@ export function TableToolbar({
   const [hoveredTab, setHoveredTab] = useState<string | null>(null)
 
   return (
-    <div className="flex shrink-0 h-12 items-center justify-between border-b border-border bg-background px-4">
+    <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-background px-4">
       {/* Left side: selection actions or filter tabs */}
       <nav
         className="flex items-center gap-1"
@@ -85,7 +86,7 @@ export function TableToolbar({
                 onClick={() => onTabChange?.(tab.value)}
                 onMouseEnter={() => setHoveredTab(tab.value)}
                 className={cn(
-                  "relative inline-flex items-center gap-1.5 px-3 py-1.5 text-xs transition-colors cursor-pointer",
+                  "relative inline-flex cursor-pointer items-center gap-1.5 px-3 py-1.5 text-xs transition-colors",
                   isActive
                     ? "text-foreground"
                     : "text-muted hover:text-foreground",
@@ -107,7 +108,7 @@ export function TableToolbar({
                 )}
                 {isActive && (
                   <motion.span
-                    className="absolute inset-0 pointer-events-none"
+                    className="pointer-events-none absolute inset-0"
                     layoutId={`${id}-active`}
                     transition={{
                       type: "spring",

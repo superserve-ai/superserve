@@ -60,7 +60,7 @@ Built on **@base-ui/react** (headless components) + Tailwind CSS + **motion** (F
 
 Built with Bun + Commander. Entry point: `src/index.ts`. Authenticates via device flow or API key.
 
-### TypeScript SDK (`packages/sdk/`) — v0.6.0
+### TypeScript SDK (`packages/sdk/`)
 
 Published as `@superserve/sdk`. Hand-crafted SDK. Zero runtime dependencies (uses native `fetch`).
 
@@ -80,7 +80,7 @@ Published as `@superserve/sdk`. Hand-crafted SDK. Zero runtime dependencies (use
 - `toSandboxInfo` throws on missing `id` / `status`; `create()` / `connect()` / `resume()` throw on missing `access_token`
 - Typed errors: `SandboxError`, `AuthenticationError`, `ValidationError`, `NotFoundError`, `ConflictError`, `TimeoutError`, `ServerError`
 
-### Python SDK (`packages/python-sdk/`) — v0.6.0
+### Python SDK (`packages/python-sdk/`)
 
 Published as `superserve` on PyPI. Hand-crafted SDK. Runtime deps: `httpx>=0.24.0`, `pydantic>=2.0.0`, `typing-extensions>=4.0.0`. Supports Python ≥ 3.9.
 
@@ -100,7 +100,7 @@ Same API surface as TypeScript SDK (snake_case). `Sandbox` (sync) and `AsyncSand
 - **Sandbox lifecycle**: `active ↔ paused → deleted`. Only two user-visible states — `active` (running) and `paused`. Create is synchronous; `POST /pause` returns 204; `POST /resume` rotates the per-sandbox access token (SDK updates `sandbox.files` transparently). Exec on a `paused` sandbox is transparently resumed by the platform before execution — callers do not need to `resume()` first.
 - **Data plane vs control plane**: SDK hides this internally. Control plane is `api.superserve.ai` (API key). Data plane is `boxd-{id}.sandbox.superserve.ai` (access token). Users never construct data-plane URLs.
 - **API types**: Defined in `apps/console/src/lib/api/types.ts`. Must match the OpenAPI spec.
-- **Shared configs**: TypeScript projects extend from `@superserve/typescript-config`. Tailwind from `@superserve/tailwind-config`. Biome is a single root `biome.json` that covers every workspace (Biome 2.x) — no per-package Biome config.
+- **Shared configs**: TypeScript projects extend from `@superserve/typescript-config`. Tailwind from `@superserve/tailwind-config`. Linting (oxlint) and formatting (oxfmt) use single root configs — `.oxlintrc.json` and `.oxfmtrc.json` — that cover every workspace. No per-package configs.
 - **Sticky hover animation**: Reusable pattern across sidebar, command palette, table bodies, and language tabs using `motion` `layoutId` for smooth hover transitions.
 
 ## Development
@@ -117,7 +117,9 @@ uv sync                  # install all Python deps
 ```bash
 bun run dev              # start all dev servers
 bun run build            # build everything in dependency order
-bun run lint             # lint all packages
+bun run lint             # lint all packages (oxlint)
+bun run format           # format all files in place (oxfmt)
+bun run format:check     # verify formatting without writing (CI-friendly)
 bun run typecheck        # type check all packages
 bun run test             # unit/integration tests (Vitest, no credentials)
 bun run test:coverage    # tests with coverage
@@ -215,9 +217,11 @@ Or use the **Release SDKs** GitHub Actions workflow (manual `workflow_dispatch` 
 ## Coding Style
 
 ### TypeScript
-- Biome for linting and formatting (2-space indent, double quotes, semicolons as needed)
+- oxlint for linting, oxfmt for formatting (2-space indent, double quotes, semicolons as needed, Tailwind classes auto-sorted in `cn`/`clsx` calls)
 - TypeScript strict mode, ESM modules
-- Run `bunx biome check --write .` from the package directory to auto-fix lint/format issues
+- Run `bunx oxlint --fix && bunx oxfmt --write` to auto-fix lint and format issues
+- Pre-commit hook (Husky + lint-staged) runs `oxlint --fix` then `oxfmt --write` on staged files — committing mutates files
+- VSCode: install the official `oxc.oxc-vscode` extension (recommended in `.vscode/extensions.json`) for lint diagnostics and format-on-save
 
 ### Python
 - Python ≥ 3.9 (SDK target); repo uses 3.12 locally (see `.python-version`)

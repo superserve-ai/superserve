@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+
 import { isSystemTemplate } from "./is-system-template"
 
 describe("isSystemTemplate", () => {

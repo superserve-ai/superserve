@@ -1,6 +1,7 @@
 import { CodeIcon, XIcon } from "@phosphor-icons/react"
 import { Button } from "@superserve/ui"
 import { useState } from "react"
+
 import type { ComponentExample } from "../registry/types"
 import { CodeBlock } from "./code-block"
 
@@ -9,8 +10,8 @@ export function ExamplePreview({ example }: { example: ComponentExample }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-xs font-mono text-muted">{example.title}</p>
+      <div className="mb-2 flex items-center justify-between">
+        <p className="font-mono text-xs text-muted">{example.title}</p>
         <Button
           variant="ghost"
           size="icon-sm"

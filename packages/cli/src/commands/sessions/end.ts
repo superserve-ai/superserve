@@ -1,4 +1,5 @@
 import { Command } from "commander"
+
 import { track } from "../../analytics"
 import { createClient } from "../../api/client"
 import { withErrorHandler } from "../../errors"

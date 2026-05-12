@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join, relative, sep } from "node:path"
 import { createGzip } from "node:zlib"
+
 import { pack } from "tar-stream"
 
 const EXCLUDE_DIRS = new Set([
@@ -71,7 +72,7 @@ function collectFiles(
     }
   }
 
-  return files.sort()
+  return files.toSorted()
 }
 
 export async function makeTarball(

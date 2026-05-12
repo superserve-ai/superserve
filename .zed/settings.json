@@ -1,0 +1,19 @@
+{
+  "tab_size": 2,
+  "format_on_save": "on",
+  "prettier": { "allowed": false },
+  "formatter": [
+    { "language_server": { "name": "oxfmt" } },
+    { "code_action": "source.fixAll.oxc" }
+  ],
+  "languages": {
+    "Python": {
+      "language_servers": ["ruff", "pyright"],
+      "formatter": [
+        { "code_action": "source.organizeImports.ruff" },
+        { "code_action": "source.fixAll.ruff" },
+        { "language_server": { "name": "ruff" } }
+      ]
+    }
+  }
+}

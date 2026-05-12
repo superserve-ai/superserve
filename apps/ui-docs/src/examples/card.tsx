@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@superserve/ui"
+
 import type { ComponentMeta } from "../registry/types"
 
 export const cardMeta: ComponentMeta = {

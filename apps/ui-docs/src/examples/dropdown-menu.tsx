@@ -6,6 +6,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "@superserve/ui"
+
 import type { ComponentMeta } from "../registry/types"
 
 export const dropdownMenuMeta: ComponentMeta = {

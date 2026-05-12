@@ -4,6 +4,7 @@ import { ArrowDownIcon } from "@phosphor-icons/react"
 import { cn } from "@superserve/ui"
 import { useQueryClient } from "@tanstack/react-query"
 import { useEffect, useRef, useState } from "react"
+
 import { templateKeys } from "@/lib/api/query-keys"
 import type { BuildLogEvent, TemplateResponse } from "@/lib/api/types"
 
@@ -167,12 +168,12 @@ export function BuildLogViewer({
           <div className="text-muted">Waiting for log output…</div>
         )}
         {lines.map((l, i) => (
-          <div key={i} className="flex gap-3 whitespace-pre-wrap break-words">
+          <div key={i} className="flex gap-3 break-words whitespace-pre-wrap">
             <span className="shrink-0 text-muted/50">{timeSlice(l.ts)}</span>
             <span
               className={cn(
                 l.stream === "stderr" && "text-destructive",
-                l.stream === "system" && "italic text-muted",
+                l.stream === "system" && "text-muted italic",
                 l.stream === "stdout" && "text-foreground/90",
               )}
             >
@@ -214,7 +215,7 @@ export function BuildLogViewer({
         <button
           type="button"
           onClick={jumpToLatest}
-          className="absolute bottom-3 right-3 flex cursor-pointer items-center gap-1 border border-dashed border-border bg-surface px-2 py-1 font-mono text-[10px] uppercase text-muted hover:text-foreground"
+          className="absolute right-3 bottom-3 flex cursor-pointer items-center gap-1 border border-dashed border-border bg-surface px-2 py-1 font-mono text-[10px] text-muted uppercase hover:text-foreground"
         >
           <ArrowDownIcon className="size-3" weight="light" />
           Jump to latest

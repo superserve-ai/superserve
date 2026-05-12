@@ -7,6 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@superserve/ui"
+
 import type { ComponentMeta } from "../registry/types"
 
 export const tableMeta: ComponentMeta = {

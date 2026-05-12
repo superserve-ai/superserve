@@ -24,6 +24,7 @@ import { AnimatePresence, LayoutGroup, motion } from "motion/react"
 import { usePostHog } from "posthog-js/react"
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+
 import { CornerBrackets } from "@/components/corner-brackets"
 import { useCreateSandbox } from "@/hooks/use-sandboxes"
 import { useTemplates } from "@/hooks/use-templates"
@@ -132,7 +133,7 @@ function TemplatePicker({
                   >
                     <span className="font-mono">{item.name}</span>
                     {item.system && (
-                      <span className="font-mono text-[10px] uppercase text-muted">
+                      <span className="font-mono text-[10px] text-muted uppercase">
                         System
                       </span>
                     )}
@@ -153,13 +154,13 @@ function TemplatePicker({
         onClick={() => setOpen((o) => !o)}
         className={cn(
           "flex h-9 w-full items-center justify-between border border-input bg-background px-3 text-sm text-foreground",
-          "focus:outline-none focus:ring-2 focus:ring-border-focus focus:border-border-focus",
+          "focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none",
         )}
       >
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate font-mono">{value}</span>
           {current?.system && (
-            <span className="font-mono text-[10px] uppercase text-muted">
+            <span className="font-mono text-[10px] text-muted uppercase">
               System
             </span>
           )}
@@ -352,7 +353,7 @@ export function CreateSandboxDialog({
     const list = templates ?? []
     const ready = list.filter((t) => t.status === "ready")
     // Sort: system templates first (ss/* curated), then team by name.
-    return [...ready].sort((a, b) => {
+    return [...ready].toSorted((a, b) => {
       const aSys = isSystemTemplate(a)
       const bSys = isSystemTemplate(b)
       if (aSys !== bSys) return aSys ? -1 : 1
@@ -543,7 +544,7 @@ export function CreateSandboxDialog({
               <button
                 type="button"
                 onClick={() => setShowAdvanced(!showAdvanced)}
-                className="flex w-full cursor-pointer items-center gap-1.5 border-t border-dashed border-border pt-4 font-mono text-xs uppercase text-muted hover:text-foreground"
+                className="flex w-full cursor-pointer items-center gap-1.5 border-t border-dashed border-border pt-4 font-mono text-xs text-muted uppercase hover:text-foreground"
               >
                 <CaretDownIcon
                   className={cn(

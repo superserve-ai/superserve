@@ -2,6 +2,7 @@
 
 import { WarningCircleIcon } from "@phosphor-icons/react"
 import { Button } from "@superserve/ui"
+
 import { CornerBrackets } from "./corner-brackets"
 
 interface ErrorStateProps {

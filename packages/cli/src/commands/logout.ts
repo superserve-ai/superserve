@@ -1,4 +1,5 @@
 import { Command } from "commander"
+
 import { resetIdentity, track } from "../analytics"
 import { clearCredentials, getCredentials } from "../config/auth"
 import { withErrorHandler } from "../errors"

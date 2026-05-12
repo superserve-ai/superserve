@@ -15,6 +15,7 @@ import {
   MenuPopup,
   MenuTrigger,
 } from "@superserve/ui"
+
 import type { SandboxResponse } from "@/lib/api/types"
 import { formatTime } from "@/lib/format"
 
@@ -92,7 +93,7 @@ export function SandboxStatusHero({
             <h1 className="truncate font-mono text-xl font-medium text-foreground">
               {sandbox.name}
             </h1>
-            <div className="mt-1.5 flex items-center gap-2 font-mono text-xs uppercase text-muted">
+            <div className="mt-1.5 flex items-center gap-2 font-mono text-xs text-muted uppercase">
               <span className="text-foreground/80">{cfg.label}</span>
               <span>·</span>
               <span title={sandbox.id}>{sandbox.id.slice(0, 8)}</span>
@@ -163,7 +164,7 @@ function SandboxActions({
   if (status === "resuming") {
     return (
       <div className="flex items-center gap-2">
-        <span className="font-mono text-xs uppercase text-muted">
+        <span className="font-mono text-xs text-muted uppercase">
           Resuming…
         </span>
         <ActionsMenu onDelete={onDelete} />

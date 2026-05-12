@@ -1,6 +1,6 @@
 {
   "recommendations": [
-    "biomejs.biome",
+    "oxc.oxc-vscode",
     "csstools.postcss",
     "unifiedjs.vscode-mdx",
     "bradlc.vscode-tailwindcss",

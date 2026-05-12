@@ -1,5 +1,6 @@
 import { Lightning } from "@phosphor-icons/react/dist/ssr"
 import type { Metadata } from "next"
+
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
 

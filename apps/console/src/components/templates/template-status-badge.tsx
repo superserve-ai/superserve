@@ -1,5 +1,6 @@
 import type { BadgeVariant } from "@superserve/ui"
 import { Badge } from "@superserve/ui"
+
 import type { BuildStatus, TemplateStatus } from "@/lib/api/types"
 
 type Status = TemplateStatus | BuildStatus

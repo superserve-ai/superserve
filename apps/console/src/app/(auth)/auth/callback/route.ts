@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { sendWelcomeEmail } from "@/app/(auth)/auth/signup/action"
 import { trackEvent } from "@/lib/posthog/actions"

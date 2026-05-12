@@ -16,8 +16,10 @@ import {
   useToast,
 } from "@superserve/ui"
 import { useState } from "react"
+
 import { useRebuildTemplate } from "@/hooks/use-templates"
 import type { TemplateResponse } from "@/lib/api/types"
+
 import { DeleteTemplateDialog } from "./delete-template-dialog"
 
 interface TemplateRowActionsProps {

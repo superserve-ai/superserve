@@ -5,9 +5,9 @@ import { BrowserRouter, Route, Routes } from "react-router"
 import App from "./app"
 import { ComponentPage } from "./pages/component-page"
 import { Home } from "./pages/home"
+
 import "./styles/globals.css"
 
-// biome-ignore lint/style/noNonNullAssertion: root element always exists
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>

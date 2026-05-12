@@ -56,11 +56,11 @@ export function CodeBlock({ code }: { code: string }) {
   }
 
   return (
-    <div className="relative group">
+    <div className="group relative">
       <Button
         variant="link"
         size="icon-sm"
-        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 text-neutral-200"
+        className="absolute top-2 right-2 z-10 text-neutral-200 opacity-0 transition-opacity group-hover:opacity-100"
         onClick={handleCopy}
       >
         {copied ? (
@@ -69,9 +69,8 @@ export function CodeBlock({ code }: { code: string }) {
           <CopyIcon className="size-3.5" weight="light" />
         )}
       </Button>
-      <div className="overflow-x-auto border border-border bg-[#0d1117] px-4 py-3 font-mono text-xs leading-relaxed [&_pre]:!bg-transparent [&_code]:!bg-transparent">
+      <div className="overflow-x-auto border border-border bg-[#0d1117] px-4 py-3 font-mono text-xs leading-relaxed [&_code]:!bg-transparent [&_pre]:!bg-transparent">
         {html ? (
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki-generated HTML
           <div dangerouslySetInnerHTML={{ __html: html }} />
         ) : (
           <pre className="text-neutral-400">

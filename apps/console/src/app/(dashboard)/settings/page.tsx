@@ -3,6 +3,7 @@
 import { Button, Field, Input, Separator, useToast } from "@superserve/ui"
 import { usePostHog } from "posthog-js/react"
 import { useEffect, useState } from "react"
+
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { PageHeader } from "@/components/page-header"
 import { useUser } from "@/hooks/use-user"
@@ -216,7 +217,7 @@ export default function SettingsPage() {
             <p className="mt-1 text-xs text-muted">Irreversible actions.</p>
           </div>
           <div className="max-w-md">
-            <p className="text-xs text-muted leading-loose">
+            <p className="text-xs leading-loose text-muted">
               To delete your account and all associated data, please contact us
               at{" "}
               <a

@@ -28,7 +28,35 @@
       "persistent": true
     },
     "lint": {
-      "dependsOn": ["^build"]
+      "inputs": [
+        "src/**/*.{ts,tsx,js,jsx,mjs,cjs,css}",
+        "tests/**/*.{ts,tsx,js,jsx}",
+        "*.{ts,tsx,js,jsx,mjs,cjs,css,json}",
+        "$TURBO_ROOT$/.oxlintrc.json",
+        "package.json"
+      ],
+      "outputs": []
+    },
+    "format": {
+      "inputs": [
+        "src/**/*.{ts,tsx,js,jsx,mjs,cjs,css,json,md,mdx,yaml,yml}",
+        "tests/**/*.{ts,tsx,js,jsx,json,md,yaml,yml}",
+        "*.{ts,tsx,js,jsx,mjs,cjs,css,json,md,mdx,yaml,yml}",
+        "$TURBO_ROOT$/.oxfmtrc.json",
+        "package.json"
+      ],
+      "outputs": [],
+      "cache": false
+    },
+    "format:check": {
+      "inputs": [
+        "src/**/*.{ts,tsx,js,jsx,mjs,cjs,css,json,md,mdx,yaml,yml}",
+        "tests/**/*.{ts,tsx,js,jsx,json,md,yaml,yml}",
+        "*.{ts,tsx,js,jsx,mjs,cjs,css,json,md,mdx,yaml,yml}",
+        "$TURBO_ROOT$/.oxfmtrc.json",
+        "package.json"
+      ],
+      "outputs": []
     },
     "typecheck": {
       "dependsOn": ["^build"]
