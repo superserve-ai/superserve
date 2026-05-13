@@ -24,6 +24,7 @@ const mockTerm = {
   write: vi.fn((data: string | Uint8Array) => {
     termWriteCalls.push(data)
   }),
+  unicode: { activeVersion: "6" },
 }
 
 vi.mock("@xterm/xterm", () => {
@@ -41,6 +42,28 @@ vi.mock("@xterm/addon-fit", () => {
     dispose = vi.fn()
   }
   return { FitAddon }
+})
+vi.mock("@xterm/addon-webgl", () => {
+  class WebglAddon {
+    onContextLoss = vi.fn()
+    activate = vi.fn()
+    dispose = vi.fn()
+  }
+  return { WebglAddon }
+})
+vi.mock("@xterm/addon-unicode11", () => {
+  class Unicode11Addon {
+    activate = vi.fn()
+    dispose = vi.fn()
+  }
+  return { Unicode11Addon }
+})
+vi.mock("@xterm/addon-clipboard", () => {
+  class ClipboardAddon {
+    activate = vi.fn()
+    dispose = vi.fn()
+  }
+  return { ClipboardAddon }
 })
 vi.mock("@xterm/xterm/css/xterm.css", () => ({}))
 

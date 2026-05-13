@@ -1,6 +1,9 @@
 "use client"
 
+import { ClipboardAddon } from "@xterm/addon-clipboard"
 import { FitAddon } from "@xterm/addon-fit"
+import { Unicode11Addon } from "@xterm/addon-unicode11"
+import { WebglAddon } from "@xterm/addon-webgl"
 import { Terminal } from "@xterm/xterm"
 import { usePostHog } from "posthog-js/react"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -150,6 +153,11 @@ export function SandboxTerminal({
       fontSize: 13,
       lineHeight: 1.4,
       letterSpacing: -0.8,
+      // Stop macOS Option from inserting diacritics into pastes/keystrokes.
+      macOptionIsMeta: true,
+      // Required by Unicode11Addon.
+      allowProposedApi: true,
+      scrollback: 5000,
       theme: {
         background: "#0a0a0a",
         foreground: "#e5e5e5",
@@ -160,6 +168,24 @@ export function SandboxTerminal({
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(container)
+
+    // WebGL renderer — big perf win over canvas. On context loss, dispose so
+    // xterm falls back to its canvas renderer automatically.
+    try {
+      const webgl = new WebglAddon()
+      webgl.onContextLoss(() => webgl.dispose())
+      term.loadAddon(webgl)
+    } catch {
+      // WebGL unavailable (headless/older browsers) — canvas fallback is fine.
+    }
+
+    // Modern Unicode width tables: fixes emoji and CJK alignment.
+    term.loadAddon(new Unicode11Addon())
+    term.unicode.activeVersion = "11"
+
+    // Proper bracketed-paste handling + OSC 52 clipboard.
+    term.loadAddon(new ClipboardAddon())
+
     fit.fit()
     termRef.current = term
     fitRef.current = fit
