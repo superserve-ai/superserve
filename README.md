@@ -30,7 +30,6 @@ packages/
   python-sdk/              # Python SDK (superserve on PyPI) — hand-crafted
   sdk/                     # TypeScript SDK (@superserve/sdk on npm) — hand-crafted
   ui/                      # Shared UI components (@superserve/ui)
-  supabase/                # Supabase client factories
   typescript-config/       # Shared tsconfig presets
   tailwind-config/         # Shared Tailwind config
 docs/                      # Mintlify documentation site
