@@ -7,6 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@superserve/ui"
+
 import { EmptyState } from "@/components/empty-state"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import type { SnapshotResponse } from "@/lib/api/types"
@@ -69,7 +70,7 @@ export function SnapshotsSection({
                 <TableCell className="font-mono text-xs text-muted tabular-nums">
                   {formatBytes(snapshot.size_bytes)}
                 </TableCell>
-                <TableCell className="capitalize text-foreground/80">
+                <TableCell className="text-foreground/80 capitalize">
                   {snapshot.trigger}
                 </TableCell>
                 <TableCell>

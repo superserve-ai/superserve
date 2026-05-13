@@ -33,7 +33,7 @@ export function CornerBrackets({
       />
       <span
         className={cn(
-          "absolute bottom-0 right-0 border-b border-r",
+          "absolute right-0 bottom-0 border-r border-b",
           s,
           className,
         )}

@@ -6,6 +6,7 @@ import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { useState } from "react"
+
 import { ErrorState } from "@/components/error-state"
 import { ActivitySection } from "@/components/sandboxes/activity-section"
 import { DeleteSandboxDialog } from "@/components/sandboxes/delete-sandbox-dialog"
@@ -159,7 +160,7 @@ export default function SandboxDetailPage() {
         <div className="flex h-10 items-center border-b border-border px-4">
           <Link
             href="/sandboxes/"
-            className="flex items-center gap-1.5 font-mono text-xs uppercase text-muted hover:text-foreground"
+            className="flex items-center gap-1.5 font-mono text-xs text-muted uppercase hover:text-foreground"
           >
             <ArrowLeftIcon className="size-3.5" weight="light" />
             Sandboxes
@@ -210,7 +211,7 @@ export default function SandboxDetailPage() {
       <div className="flex h-10 shrink-0 items-center border-b border-border bg-background px-4">
         <Link
           href="/sandboxes/"
-          className="flex items-center gap-1.5 font-mono text-xs uppercase text-muted hover:text-foreground"
+          className="flex items-center gap-1.5 font-mono text-xs text-muted uppercase hover:text-foreground"
         >
           <ArrowLeftIcon className="size-3.5" weight="light" />
           Sandboxes

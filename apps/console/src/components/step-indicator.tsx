@@ -22,17 +22,17 @@ export function StepIndicator({
       onClick={onClick}
       aria-current={active ? "step" : undefined}
       className={cn(
-        "w-full flex items-center gap-4 px-4 py-4 text-left transition-colors",
+        "flex w-full items-center gap-4 px-4 py-4 text-left transition-colors",
         active
-          ? "bg-surface border border-dashed border-border"
-          : "hover:bg-surface-hover border border-dashed border-transparent",
+          ? "border border-dashed border-border bg-surface"
+          : "border border-dashed border-transparent hover:bg-surface-hover",
       )}
     >
       <div
         className={cn(
-          "flex items-center justify-center h-7 w-7 rounded-full border text-xs font-mono shrink-0",
+          "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border font-mono text-xs",
           completed
-            ? "bg-primary border-primary text-background"
+            ? "border-primary bg-primary text-background"
             : active
               ? "border-primary text-primary"
               : "border-border text-muted",
@@ -42,7 +42,7 @@ export function StepIndicator({
       </div>
       <span
         className={cn(
-          "font-medium text-sm",
+          "text-sm font-medium",
           completed || active ? "text-foreground" : "text-muted",
         )}
       >

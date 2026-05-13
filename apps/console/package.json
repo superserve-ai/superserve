@@ -6,7 +6,9 @@
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start -p 3001",
-    "lint": "bunx biome check .",
+    "lint": "bunx oxlint",
+    "format": "bunx oxfmt --write",
+    "format:check": "bunx oxfmt --check",
     "typecheck": "tsc --pretty --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -33,7 +35,6 @@
     "zod": "^3.25.67"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.4",
     "@react-email/preview-server": "^5.2.10",
     "@superserve/typescript-config": "workspace:*",
     "@tailwindcss/postcss": "^4.1.18",

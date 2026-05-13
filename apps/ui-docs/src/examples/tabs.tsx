@@ -1,4 +1,5 @@
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@superserve/ui"
+
 import type { ComponentMeta } from "../registry/types"
 
 export const tabsMeta: ComponentMeta = {
@@ -19,17 +20,17 @@ export const tabsMeta: ComponentMeta = {
             <TabsTab value="tab-3">Logs</TabsTab>
           </TabsList>
           <TabsPanel value="tab-1">
-            <p className="text-sm text-muted p-4">
+            <p className="p-4 text-sm text-muted">
               This is the overview tab content.
             </p>
           </TabsPanel>
           <TabsPanel value="tab-2">
-            <p className="text-sm text-muted p-4">
+            <p className="p-4 text-sm text-muted">
               This is the settings tab content.
             </p>
           </TabsPanel>
           <TabsPanel value="tab-3">
-            <p className="text-sm text-muted p-4">
+            <p className="p-4 text-sm text-muted">
               This is the logs tab content.
             </p>
           </TabsPanel>

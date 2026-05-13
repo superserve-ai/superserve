@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+
 import { sanitizeTerminalOutput } from "../../src/utils/sanitize"
 
 describe("sanitizeTerminalOutput", () => {

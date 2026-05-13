@@ -1,4 +1,5 @@
 import { Skeleton } from "@superserve/ui"
+
 import type { ComponentMeta } from "../registry/types"
 
 export const skeletonMeta: ComponentMeta = {
@@ -12,7 +13,7 @@ export const skeletonMeta: ComponentMeta = {
     {
       title: "Default",
       preview: (
-        <div className="space-y-3 max-w-sm">
+        <div className="max-w-sm space-y-3">
           <Skeleton className="h-4 w-3/4" />
           <Skeleton className="h-4 w-1/2" />
           <Skeleton className="h-20 w-full" />

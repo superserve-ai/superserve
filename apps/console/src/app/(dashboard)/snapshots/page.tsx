@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@superserve/ui"
 import { useMemo, useState } from "react"
+
 import { AnimatedTableRow } from "@/components/animated-table-row"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"

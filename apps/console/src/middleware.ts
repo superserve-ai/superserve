@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+
 import { createMiddlewareClient, matchesRoute } from "@/lib/supabase/middleware"
 
 const PUBLIC_ROUTES = [

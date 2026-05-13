@@ -10,8 +10,8 @@
 
   <p><strong>Peristent and secure sandboxes for AI Agents, powered by Firecracker microVMs.</strong></p>
 
-  [![Docs](https://img.shields.io/badge/Docs-latest-blue)](https://docs.superserve.ai/)
-  [![License](https://img.shields.io/badge/license-Apache%20License%202.0-blue)](https://github.com/superserve-ai/superserve/blob/main/LICENSE)
+[![Docs](https://img.shields.io/badge/Docs-latest-blue)](https://docs.superserve.ai/)
+[![License](https://img.shields.io/badge/license-Apache%20License%202.0-blue)](https://github.com/superserve-ai/superserve/blob/main/LICENSE)
 
 </div>
 
@@ -33,7 +33,6 @@ packages/
   supabase/                # Supabase client factories
   typescript-config/       # Shared tsconfig presets
   tailwind-config/         # Shared Tailwind config
-  biome-config/            # Shared Biome config
 docs/                      # Mintlify documentation site
 tests/
   sdk-e2e-ts/              # TypeScript SDK e2e tests (Vitest)
@@ -106,6 +105,7 @@ await sandbox.kill()
 ```
 
 **Build / typecheck:**
+
 ```bash
 bunx turbo run build --filter=@superserve/sdk
 bunx turbo run typecheck --filter=@superserve/sdk
@@ -130,6 +130,7 @@ sandbox.kill()
 Async variant: `AsyncSandbox` exposes awaitable methods.
 
 **Build / typecheck / lint:**
+
 ```bash
 bunx turbo run build --filter=@superserve/python-sdk
 bunx turbo run typecheck --filter=@superserve/python-sdk
@@ -175,12 +176,12 @@ Without `SUPERSERVE_API_KEY`, all e2e tests skip cleanly (exit 0).
 
 ### Coverage
 
-| Suite | Files | What it covers |
-|---|---|---|
-| TS e2e | `tests/sdk-e2e-ts/tests/{sandboxes,exec,files}.test.ts` | lifecycle (create/get/list/update/pause/resume/delete), sync + streaming exec, file write/read |
-| Python e2e | `tests/sdk-e2e-py/test_{sandboxes,exec,files,async}.py` | same as TS + AsyncSandbox smoke test |
-| Console unit | `apps/console/src/**/*.test.{ts,tsx}` | auth flows, components, API proxy |
-| CLI unit | `packages/cli/tests/**` | config validation, deploy logic |
+| Suite        | Files                                                   | What it covers                                                                                 |
+| ------------ | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| TS e2e       | `tests/sdk-e2e-ts/tests/{sandboxes,exec,files}.test.ts` | lifecycle (create/get/list/update/pause/resume/delete), sync + streaming exec, file write/read |
+| Python e2e   | `tests/sdk-e2e-py/test_{sandboxes,exec,files,async}.py` | same as TS + AsyncSandbox smoke test                                                           |
+| Console unit | `apps/console/src/**/*.test.{ts,tsx}`                   | auth flows, components, API proxy                                                              |
+| CLI unit     | `packages/cli/tests/**`                                 | config validation, deploy logic                                                                |
 
 ## Docs (Mintlify)
 
@@ -210,6 +211,7 @@ NPM_CONFIG_TOKEN=npm_... bun publish --access public
 ```
 
 Or with `.env.release` sourced:
+
 ```bash
 source .env.release
 bunx turbo run build --filter=@superserve/sdk
@@ -229,6 +231,7 @@ UV_PUBLISH_TOKEN=pypi-... uv publish dist/superserve-<version>*
 ```
 
 Or with `.env.release` sourced:
+
 ```bash
 source .env.release
 uv build --package superserve
@@ -239,41 +242,41 @@ uv publish dist/superserve-*
 
 Copy `.env.release.example` to `.env.release`, fill in tokens, and `source` it before running publish commands. `.env.release` is gitignored.
 
-| Env variable | Used by | How to get it |
-|---|---|---|
-| `NPM_CONFIG_TOKEN` | `bun publish` (TS SDK) | [npmjs.com](https://www.npmjs.com) → account → access tokens → automation token |
+| Env variable       | Used by                   | How to get it                                                                             |
+| ------------------ | ------------------------- | ----------------------------------------------------------------------------------------- |
+| `NPM_CONFIG_TOKEN` | `bun publish` (TS SDK)    | [npmjs.com](https://www.npmjs.com) → account → access tokens → automation token           |
 | `UV_PUBLISH_TOKEN` | `uv publish` (Python SDK) | [pypi.org](https://pypi.org/manage/account/) → account → API tokens (starts with `pypi-`) |
 
 ### CI workflow (GitHub Actions)
 
-| Workflow | Trigger | Action |
-|---|---|---|
+| Workflow         | Trigger                      | Action                                                                                                                        |
+| ---------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | **Release SDKs** | Manual (`workflow_dispatch`) | Bumps version, builds, publishes to npm and/or PyPI, commits + tags. Inputs: `package` (`ts` / `python` / `both`), `version`. |
 
 Required repo secrets:
 
-| Secret | Used by |
-|---|---|
-| `NPM_TOKEN` | Release SDKs (ts) |
+| Secret       | Used by               |
+| ------------ | --------------------- |
+| `NPM_TOKEN`  | Release SDKs (ts)     |
 | `PYPI_TOKEN` | Release SDKs (python) |
 
 ## Quick reference
 
-| Task | Command |
-|---|---|
-| Install deps | `bun install && uv sync` |
-| Dev (all) | `bun run dev` |
-| Build (all) | `bun run build` |
-| Lint | `bun run lint` |
-| Typecheck | `bun run typecheck` |
-| Unit tests | `bun run test` |
-| E2E tests | `SUPERSERVE_API_KEY=... bun run test:e2e` |
-| Docs dev | `bun run docs:dev` |
-| Docs build | `bun run docs:build` |
-| Build TS SDK | `bunx turbo run build --filter=@superserve/sdk` |
-| Build Python SDK | `uv build --package superserve` (from repo root) |
-| Publish TS SDK | `cd packages/sdk && bun publish --access public` |
-| Publish Python SDK | `uv publish dist/superserve-*` (from repo root) |
+| Task               | Command                                          |
+| ------------------ | ------------------------------------------------ |
+| Install deps       | `bun install && uv sync`                         |
+| Dev (all)          | `bun run dev`                                    |
+| Build (all)        | `bun run build`                                  |
+| Lint               | `bun run lint`                                   |
+| Typecheck          | `bun run typecheck`                              |
+| Unit tests         | `bun run test`                                   |
+| E2E tests          | `SUPERSERVE_API_KEY=... bun run test:e2e`        |
+| Docs dev           | `bun run docs:dev`                               |
+| Docs build         | `bun run docs:build`                             |
+| Build TS SDK       | `bunx turbo run build --filter=@superserve/sdk`  |
+| Build Python SDK   | `uv build --package superserve` (from repo root) |
+| Publish TS SDK     | `cd packages/sdk && bun publish --access public` |
+| Publish Python SDK | `uv publish dist/superserve-*` (from repo root)  |
 
 ## Where to find us
 

@@ -345,6 +345,7 @@ export class Template {
       }
 
       // No build_id — rare path; poll template status as a best effort.
+      // oxlint-disable-next-line no-unreachable -- reachable when buildId is falsy
       while (true) {
         if (options.signal?.aborted) throw new SandboxError("aborted")
         const info = await this.getInfo()

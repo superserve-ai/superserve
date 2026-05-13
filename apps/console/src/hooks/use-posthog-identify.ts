@@ -2,6 +2,7 @@
 
 import { usePostHog } from "posthog-js/react"
 import { useEffect, useRef } from "react"
+
 import { useUser } from "@/hooks/use-user"
 
 export function usePostHogIdentify() {

@@ -50,11 +50,9 @@ function errorProperties(e: unknown): Record<string, unknown> {
   return { error_type: "unknown" }
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: Commander passes variadic args
 export function withErrorHandler<T extends (...args: any[]) => Promise<void>>(
   fn: T,
 ): T {
-  // biome-ignore lint/suspicious/noExplicitAny: wraps Commander action callbacks
   const wrapped = async (...args: any[]) => {
     try {
       await fn(...args)

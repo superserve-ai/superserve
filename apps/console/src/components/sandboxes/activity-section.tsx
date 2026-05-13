@@ -10,6 +10,7 @@ import {
   TooltipPopup,
   TooltipTrigger,
 } from "@superserve/ui"
+
 import { EmptyState } from "@/components/empty-state"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import type { ActivityResponse } from "@/lib/api/types"
@@ -74,7 +75,7 @@ export function ActivitySection({ activity, isPending }: ActivitySectionProps) {
                         {absolute}
                       </span>
                     </TableCell>
-                    <TableCell className="capitalize text-muted">
+                    <TableCell className="text-muted capitalize">
                       {entry.category}
                     </TableCell>
                     <TableCell className="text-foreground/80">

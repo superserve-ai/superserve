@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process"
 import { platform } from "node:os"
+
 import { Command } from "commander"
+
 import { identify, track } from "../analytics"
 import type { SuperserveClient } from "../api/client"
 import { createClient } from "../api/client"

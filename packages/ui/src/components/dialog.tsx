@@ -56,13 +56,13 @@ function DialogPopup({
       <DialogPrimitive.Backdrop className="ss-dialog-backdrop fixed inset-0 z-50 bg-black/50" />
       <DialogPrimitive.Popup
         className={cn(
-          "ss-dialog-popup fixed left-1/2 top-1/2 z-50 w-full max-w-md bg-surface border border-dashed border-border shadow-lg",
+          "ss-dialog-popup fixed top-1/2 left-1/2 z-50 w-full max-w-md border border-dashed border-border bg-surface shadow-lg",
           className,
         )}
         {...props}
       >
         {children}
-        <DialogPrimitive.Close className="absolute top-4 right-4 text-muted hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus">
+        <DialogPrimitive.Close className="absolute top-4 right-4 text-muted transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none">
           <XIcon weight="light" className="h-4 w-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>

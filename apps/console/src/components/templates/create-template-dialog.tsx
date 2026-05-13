@@ -14,6 +14,7 @@ import {
 } from "@superserve/ui"
 import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
+
 import { useCreateTemplate } from "@/hooks/use-templates"
 import { ApiError } from "@/lib/api/client"
 
@@ -174,6 +175,7 @@ export function CreateTemplateDialog({
         <div className="space-y-5 px-6 pb-4">
           <Field label="Name" required>
             <Input
+              // oxlint-disable-next-line jsx-a11y/no-autofocus -- modal opens with focus on first field
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -250,7 +252,7 @@ export function CreateTemplateDialog({
                   type="button"
                   onClick={() => setMemory(m)}
                   className={cn(
-                    "flex-1 cursor-pointer font-mono text-xs uppercase py-2 transition-colors",
+                    "flex-1 cursor-pointer py-2 font-mono text-xs uppercase transition-colors",
                     memory === m
                       ? "bg-foreground text-background"
                       : "text-muted hover:text-foreground",
@@ -272,7 +274,7 @@ export function CreateTemplateDialog({
                     type="button"
                     onClick={() => setVcpu(n)}
                     className={cn(
-                      "flex-1 cursor-pointer font-mono text-xs uppercase py-2 transition-colors",
+                      "flex-1 cursor-pointer py-2 font-mono text-xs uppercase transition-colors",
                       vcpu === n
                         ? "bg-foreground text-background"
                         : "text-muted hover:text-foreground",
@@ -292,7 +294,7 @@ export function CreateTemplateDialog({
                     type="button"
                     onClick={() => setDisk(d)}
                     className={cn(
-                      "flex-1 cursor-pointer font-mono text-xs uppercase py-2 transition-colors",
+                      "flex-1 cursor-pointer py-2 font-mono text-xs uppercase transition-colors",
                       disk === d
                         ? "bg-foreground text-background"
                         : "text-muted hover:text-foreground",

@@ -2,6 +2,7 @@ import { cn, ToastProvider } from "@superserve/ui"
 import type { Metadata } from "next"
 import { Geist_Mono, Instrument_Sans } from "next/font/google"
 import { Suspense } from "react"
+
 import { PostHogPageView } from "@/components/posthog-pageview"
 import { PostHogProvider } from "@/components/posthog-provider"
 

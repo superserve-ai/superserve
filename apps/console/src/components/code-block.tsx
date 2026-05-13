@@ -27,16 +27,16 @@ export function CodeBlock({ command, eventName }: CodeBlockProps) {
   }
 
   return (
-    <div className="flex items-center bg-background border border-border px-4 py-3.5">
-      <code className="flex-1 text-sm font-mono text-foreground/80 overflow-x-auto">
-        <span className="text-foreground/70 mr-2 select-none">$</span>
+    <div className="flex items-center border border-border bg-background px-4 py-3.5">
+      <code className="flex-1 overflow-x-auto font-mono text-sm text-foreground/80">
+        <span className="mr-2 text-foreground/70 select-none">$</span>
         {command}
       </code>
       <button
         type="button"
         onClick={copy}
         aria-label={copied ? "Copied" : "Copy command"}
-        className="ml-3 text-muted hover:text-foreground transition-colors shrink-0"
+        className="ml-3 shrink-0 text-muted transition-colors hover:text-foreground"
       >
         {copied ? (
           <CheckIcon className="h-4 w-4 text-success" weight="light" />

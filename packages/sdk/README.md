@@ -45,7 +45,7 @@ Or pass it explicitly:
 const sandbox = await Sandbox.create({
   name: "my-sandbox",
   apiKey: "ss_live_...",
-  baseUrl: "https://api.superserve.ai",   // optional
+  baseUrl: "https://api.superserve.ai", // optional
 })
 ```
 
@@ -75,12 +75,12 @@ await sandbox.commands.run("sleep 100", { signal: controller.signal })
 ```typescript
 import {
   SandboxError,
-  AuthenticationError,   // 401
-  ValidationError,       // 400
-  NotFoundError,         // 404
-  ConflictError,         // 409 — invalid state for operation
-  TimeoutError,          // request timed out
-  ServerError,           // 500
+  AuthenticationError, // 401
+  ValidationError, // 400
+  NotFoundError, // 404
+  ConflictError, // 409 — invalid state for operation
+  TimeoutError, // request timed out
+  ServerError, // 500
 } from "@superserve/sdk"
 
 try {

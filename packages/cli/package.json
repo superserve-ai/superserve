@@ -2,36 +2,39 @@
   "name": "@superserve/cli",
   "version": "1.1.0",
   "description": "CLI for deploying AI agents to sandboxed cloud containers",
-  "type": "module",
+  "keywords": [
+    "agents",
+    "ai",
+    "cli",
+    "cloud",
+    "deploy",
+    "sandbox"
+  ],
+  "homepage": "https://superserve.ai",
+  "bugs": {
+    "url": "https://github.com/superserve-ai/superserve/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/superserve-ai/superserve.git",
+    "directory": "cli"
+  },
   "bin": {
     "superserve": "src/index.ts"
   },
   "files": [
     "src/"
   ],
+  "type": "module",
   "scripts": {
     "dev": "echo 'CLI has no dev server use directly with bun src/index.ts'",
     "build": "bun run scripts/build.ts",
-    "lint": "bunx biome check .",
-    "lint:fix": "bunx biome check --write .",
+    "lint": "bunx oxlint",
+    "lint:fix": "bunx oxlint --fix",
+    "format": "bunx oxfmt --write",
+    "format:check": "bunx oxfmt --check",
     "test": "bun test"
-  },
-  "keywords": [
-    "cli",
-    "ai",
-    "agents",
-    "deploy",
-    "sandbox",
-    "cloud"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/superserve-ai/superserve.git",
-    "directory": "cli"
-  },
-  "homepage": "https://superserve.ai",
-  "bugs": {
-    "url": "https://github.com/superserve-ai/superserve/issues"
   },
   "dependencies": {
     "boxen": "^8.0.1",
@@ -44,10 +47,8 @@
     "terminal-link": "^5.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.4",
     "@superserve/typescript-config": "workspace:*",
     "@types/bun": "^1.2.4",
     "@types/js-yaml": "^4.0.9"
-  },
-  "license": "MIT"
+  }
 }

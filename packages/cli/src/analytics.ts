@@ -8,7 +8,9 @@ import {
 } from "node:fs"
 import { arch, platform } from "node:os"
 import { join } from "node:path"
+
 import type { PostHog } from "posthog-node"
+
 import { CLI_VERSION, SUPERSERVE_CONFIG_DIR } from "./config/constants"
 
 const POSTHOG_API_KEY =

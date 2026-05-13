@@ -52,15 +52,14 @@ export function HighlightedCode({ code, lang }: HighlightedCodeProps) {
   if (html) {
     return (
       <div
-        className="overflow-x-auto font-mono text-sm leading-relaxed [&_pre]:!bg-transparent [&_code]:!bg-transparent [&_pre]:!m-0 [&_pre]:!p-0"
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: shiki-generated HTML
+        className="overflow-x-auto font-mono text-sm leading-relaxed [&_code]:!bg-transparent [&_pre]:!m-0 [&_pre]:!bg-transparent [&_pre]:!p-0"
         dangerouslySetInnerHTML={{ __html: html }}
       />
     )
   }
 
   return (
-    <pre className="overflow-x-auto font-mono text-sm leading-relaxed text-foreground/80 whitespace-pre">
+    <pre className="overflow-x-auto font-mono text-sm leading-relaxed whitespace-pre text-foreground/80">
       <code>{code}</code>
     </pre>
   )

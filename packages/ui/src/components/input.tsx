@@ -39,7 +39,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           className={cn(
             "h-9 w-full border border-input bg-background px-3 text-sm text-foreground",
             "placeholder:text-muted",
-            "focus:outline-none focus:ring-2 focus:ring-border-focus focus:border-border-focus",
+            "focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none",
             "disabled:cursor-not-allowed disabled:opacity-30",
             error && "border-destructive focus:ring-destructive/20",
             suffix && "pr-10",
@@ -50,7 +50,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           {...props}
         />
         {suffix && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted">
+          <div className="absolute top-1/2 right-3 -translate-y-1/2 text-muted">
             {suffix}
           </div>
         )}

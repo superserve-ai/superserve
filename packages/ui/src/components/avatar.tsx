@@ -43,7 +43,7 @@ function Avatar({
           className="aspect-square h-full w-full object-cover"
         />
       )}
-      <AvatarPrimitive.Fallback className="flex h-full w-full items-center justify-center bg-surface font-mono text-muted uppercase border border-dashed border-border rounded-full">
+      <AvatarPrimitive.Fallback className="flex h-full w-full items-center justify-center rounded-full border border-dashed border-border bg-surface font-mono text-muted uppercase">
         {fallback}
       </AvatarPrimitive.Fallback>
     </AvatarPrimitive.Root>

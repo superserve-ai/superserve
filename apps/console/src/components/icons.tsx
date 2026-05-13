@@ -32,7 +32,7 @@ export function Spinner({
 }) {
   return (
     <motion.div
-      className={`h-5 w-5 border-2 border-t-transparent rounded-full ${className}`}
+      className={`h-5 w-5 rounded-full border-2 border-t-transparent ${className}`}
       animate={{ rotate: 360 }}
       transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
     />

@@ -1,7 +1,6 @@
 {
   "name": "superserve",
   "private": true,
-  "packageManager": "bun@1.3.5",
   "workspaces": [
     "apps/*",
     "packages/*",
@@ -11,6 +10,8 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
+    "format": "turbo run format",
+    "format:check": "turbo run format:check",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:coverage": "turbo run test:coverage",
@@ -19,19 +20,7 @@
     "docs:build": "mintlify build --dir docs",
     "prepare": "husky"
   },
-  "lint-staged": {
-    "*.{ts,tsx,js,jsx,json,md}": [
-      "bunx biome check --write --no-errors-on-unmatched"
-    ]
-  },
-  "devDependencies": {
-    "husky": "^9.1.7",
-    "lint-staged": "^16.4.0",
-    "mintlify": "^4.0.0",
-    "turbo": "^2.9.4"
-  },
   "dependencies": {
-    "@biomejs/biome": "^2.4.10",
     "@react-email/components": "^1.0.11",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.1",
@@ -47,5 +36,20 @@
     "resend": "^6.10.0",
     "tailwindcss": "^4.2.2",
     "vitest": "^4.1.2"
-  }
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "mintlify": "^4.0.0",
+    "oxfmt": "0.49.0",
+    "oxlint": "1.64.0",
+    "turbo": "^2.9.4"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,json,jsonc,md,css,yaml,yml}": [
+      "bunx oxlint --fix",
+      "bunx oxfmt --write"
+    ]
+  },
+  "packageManager": "bun@1.3.5"
 }

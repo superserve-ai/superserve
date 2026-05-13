@@ -132,6 +132,7 @@ export function CommandPalette() {
       {open && (
         <div
           className="fixed inset-0 z-50"
+          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- cmdk pattern, not native dialog
           role="dialog"
           aria-label="Command palette"
         >
@@ -144,7 +145,7 @@ export function CommandPalette() {
             transition={{ duration: 0.2 }}
           />
           <motion.div
-            className="fixed left-1/2 top-[20%] z-50 w-full max-w-lg border border-dashed border-border bg-surface shadow-lg"
+            className="fixed top-[20%] left-1/2 z-50 w-full max-w-lg border border-dashed border-border bg-surface shadow-lg"
             initial={{ opacity: 0, x: "-50%", scale: 0.96 }}
             animate={{ opacity: 1, x: "-50%", scale: 1 }}
             exit={{ opacity: 0, x: "-50%", scale: 0.96 }}
@@ -175,7 +176,7 @@ export function CommandPalette() {
 
                 <Command.Group
                   heading="Navigation"
-                  className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:text-muted"
+                  className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:text-muted [&_[cmdk-group-heading]]:uppercase"
                 >
                   {navigationItems.map((item) => (
                     <Command.Item
@@ -208,7 +209,7 @@ export function CommandPalette() {
 
                 <Command.Group
                   heading="Actions"
-                  className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:text-muted"
+                  className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:text-muted [&_[cmdk-group-heading]]:uppercase"
                 >
                   {actionItems.map((item) => (
                     <Command.Item

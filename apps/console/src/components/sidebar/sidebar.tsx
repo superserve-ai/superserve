@@ -10,6 +10,7 @@ import {
   TooltipTrigger,
 } from "@superserve/ui"
 import Image from "next/image"
+
 import { bottomNavItems, mainNavItems } from "./nav-config"
 import { useSidebar } from "./sidebar-context"
 import { SidebarNav } from "./sidebar-nav"
@@ -27,7 +28,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-border bg-background transition-all duration-200",
+        "fixed top-0 left-0 z-40 flex h-screen flex-col border-r border-border bg-background transition-all duration-200",
         isCollapsed ? "w-16" : "w-64",
       )}
     >
@@ -53,7 +54,7 @@ export function Sidebar() {
       </div>
 
       {/* Search */}
-      <div className="px-2.5 mb-2">
+      <div className="mb-2 px-2.5">
         {isCollapsed ? (
           <Tooltip>
             <TooltipTrigger
@@ -75,7 +76,7 @@ export function Sidebar() {
           <button
             type="button"
             onClick={openCommandPalette}
-            className="flex w-full group items-center gap-2.5 border border-border px-2.5 py-2.5 text-foreground/70 transition-colors hover:text-foreground hover:bg-foreground/5 cursor-pointer"
+            className="group flex w-full cursor-pointer items-center gap-2.5 border border-border px-2.5 py-2.5 text-foreground/70 transition-colors hover:bg-foreground/5 hover:text-foreground"
           >
             <MagnifyingGlassIcon className="size-4 shrink-0" weight="light" />
             <span className="flex-1 text-left text-sm leading-none tracking-tight text-foreground/70">
@@ -100,7 +101,7 @@ export function Sidebar() {
       <div className="flex-1" />
 
       {/* Collapse Toggle */}
-      <nav className="px-2.5 mb-0.5">
+      <nav className="mb-0.5 px-2.5">
         <Tooltip>
           <TooltipTrigger
             render={
@@ -109,7 +110,7 @@ export function Sidebar() {
                 onClick={toggle}
                 aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
                 className={cn(
-                  "flex w-full items-center gap-2.5 px-2.5 py-2.5 text-foreground/70 hover:text-foreground hover:bg-foreground/4 transition-colors cursor-pointer",
+                  "flex w-full cursor-pointer items-center gap-2.5 px-2.5 py-2.5 text-foreground/70 transition-colors hover:bg-foreground/4 hover:text-foreground",
                   isCollapsed && "justify-center",
                 )}
               />

@@ -44,7 +44,7 @@ function MenuItem({
   return (
     <MenuPrimitive.Item
       className={cn(
-        "flex cursor-pointer select-none items-center gap-2 px-2 py-1.5 text-sm text-foreground outline-none transition-colors",
+        "flex cursor-pointer items-center gap-2 px-2 py-1.5 text-sm text-foreground transition-colors outline-none select-none",
         "hover:bg-surface-hover focus:bg-surface-hover",
         "data-[disabled]:pointer-events-none data-[disabled]:opacity-30",
         className,

@@ -1,0 +1,78 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "typescript",
+    "unicorn",
+    "oxc",
+    "react",
+    "jsx-a11y",
+    "import",
+    "nextjs"
+  ],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "env": {
+    "builtin": true,
+    "browser": true,
+    "node": true
+  },
+  "settings": {
+    "next": {
+      "rootDir": "apps/console/"
+    }
+  },
+  "rules": {
+    "react/no-array-index-key": "off",
+    "react/react-in-jsx-scope": "off",
+    "prefer-template": "off",
+    "no-control-regex": "off",
+    "no-underscore-dangle": "off",
+    "no-await-in-loop": "off",
+    "no-shadow": "off",
+    "unicorn/prefer-add-event-listener": "off",
+    "unicorn/consistent-function-scoping": "off",
+    "import/no-unassigned-import": "off",
+    "import/no-named-as-default-member": "off",
+    "nextjs/no-img-element": "off",
+    "nextjs/no-page-custom-font": "off",
+    "no-unreachable": "warn",
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }
+    ],
+    "unicorn/no-useless-fallback-in-spread": "warn",
+    "jsx-a11y/heading-has-content": "warn",
+    "jsx-a11y/prefer-tag-over-role": "warn",
+    "jsx-a11y/no-autofocus": "warn",
+    "jsx-a11y/interactive-supports-focus": "warn"
+  },
+  "ignorePatterns": [
+    "node_modules",
+    "dist",
+    ".next",
+    ".turbo",
+    "coverage",
+    "**/next-env.d.ts"
+  ],
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/tests/**"],
+      "rules": {
+        "jsx-a11y/alt-text": "off",
+        "jsx-a11y/label-has-associated-control": "off",
+        "jsx-a11y/prefer-tag-over-role": "off",
+        "typescript/no-non-null-assertion": "off",
+        "typescript/no-extraneous-class": "off",
+        "no-constructor-return": "off",
+        "nextjs/no-img-element": "off"
+      }
+    }
+  ]
+}

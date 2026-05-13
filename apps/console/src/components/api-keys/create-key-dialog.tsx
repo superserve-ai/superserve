@@ -16,6 +16,7 @@ import {
 } from "@superserve/ui"
 import { usePostHog } from "posthog-js/react"
 import { useState } from "react"
+
 import { useCreateApiKey } from "@/hooks/use-api-keys"
 import { API_KEY_EVENTS } from "@/lib/posthog/events"
 
@@ -91,7 +92,7 @@ export function CreateKeyDialog({
 
               <Field label="Your API Key">
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 border border-border bg-background px-3 py-2 font-mono text-xs text-foreground break-all">
+                  <code className="flex-1 border border-border bg-background px-3 py-2 font-mono text-xs break-all text-foreground">
                     {createdKey.full}
                   </code>
                   <Button

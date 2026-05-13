@@ -2,7 +2,26 @@
   "name": "@superserve/sdk",
   "version": "0.7.1",
   "description": "TypeScript SDK for the Superserve sandbox API",
+  "keywords": [
+    "firecracker",
+    "microvm",
+    "sandbox",
+    "sdk",
+    "superserve"
+  ],
+  "homepage": "https://superserve.ai",
+  "bugs": {
+    "url": "https://github.com/superserve-ai/superserve/issues"
+  },
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/superserve-ai/superserve.git",
+    "directory": "packages/sdk"
+  },
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -19,12 +38,12 @@
       }
     }
   },
-  "files": [
-    "dist"
-  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "lint": "bunx oxlint",
+    "format": "bunx oxfmt --write",
+    "format:check": "bunx oxfmt --check",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -35,21 +54,5 @@
     "tsup": "^8.0.0",
     "typescript": "^5.7.0",
     "vitest": "^4.0.0"
-  },
-  "keywords": [
-    "superserve",
-    "sandbox",
-    "firecracker",
-    "microvm",
-    "sdk"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/superserve-ai/superserve.git",
-    "directory": "packages/sdk"
-  },
-  "homepage": "https://superserve.ai",
-  "bugs": {
-    "url": "https://github.com/superserve-ai/superserve/issues"
   }
 }

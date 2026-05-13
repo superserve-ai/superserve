@@ -15,6 +15,7 @@ import {
 } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
 import { TERMINAL_TABS_STORAGE_KEY } from "@/lib/terminal-tabs-storage"
 
 // --- wterm mocks (same shape as terminal.test.tsx) ---

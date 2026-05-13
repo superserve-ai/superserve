@@ -17,7 +17,7 @@ function jsonResponse(
 ): Response {
   return new Response(JSON.stringify(body), {
     status: init.status ?? 200,
-    headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
+    headers: { "Content-Type": "application/json", ...init.headers },
   })
 }
 

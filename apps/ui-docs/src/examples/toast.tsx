@@ -1,4 +1,5 @@
 import { Button, useToast } from "@superserve/ui"
+
 import type { ComponentMeta } from "../registry/types"
 
 function ToastDemo() {

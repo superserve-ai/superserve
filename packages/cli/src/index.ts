@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { Command } from "commander"
+
 import { flushAnalytics, registerExitHook, track } from "./analytics"
 import { agents } from "./commands/agents/index"
 import { deploy } from "./commands/deploy"

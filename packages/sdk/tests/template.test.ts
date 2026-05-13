@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
+
 import { Template } from "../src/Template.js"
 
 function jsonResponse(body: unknown, status = 200): Response {
