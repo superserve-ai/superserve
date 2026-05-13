@@ -46,14 +46,6 @@ vi.mock("@xterm/addon-fit", () => {
   }
   return { FitAddon }
 })
-vi.mock("@xterm/addon-webgl", () => {
-  class WebglAddon {
-    onContextLoss = vi.fn()
-    activate = vi.fn()
-    dispose = vi.fn()
-  }
-  return { WebglAddon }
-})
 vi.mock("@xterm/addon-unicode11", () => {
   class Unicode11Addon {
     activate = vi.fn()
