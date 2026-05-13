@@ -152,7 +152,6 @@ export function SandboxTerminal({
       fontFamily: "var(--font-mono), ui-monospace, SFMono-Regular, monospace",
       fontSize: 13,
       lineHeight: 1.4,
-      letterSpacing: -0.8,
       // Stop macOS Option from inserting diacritics into pastes/keystrokes.
       macOptionIsMeta: true,
       // Required by Unicode11Addon.
