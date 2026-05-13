@@ -1,7 +1,7 @@
 /**
  * terminal-tabs — container, tab strip, tab panels, rename UX.
  *
- * Mocks xterm/WebSocket so the SandboxTerminal children render without real
+ * Mocks wterm/WebSocket so the SandboxTerminal children render without real
  * resources. Mocks `motion/react` to plain spans (the layoutId animation logic
  * isn't relevant to behavior tests).
  */
@@ -17,34 +17,45 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { TERMINAL_TABS_STORAGE_KEY } from "@/lib/terminal-tabs-storage"
 
-// --- xterm mocks (same shape as terminal.test.tsx) ---
-const mockTerm = {
-  cols: 80,
-  rows: 24,
-  loadAddon: vi.fn(),
-  open: vi.fn(),
-  focus: vi.fn(),
-  dispose: vi.fn(),
-  onData: vi.fn(),
-  write: vi.fn(),
-}
-vi.mock("@xterm/xterm", () => {
-  class Terminal {
-    constructor() {
-      return mockTerm
+// --- wterm mocks (same shape as terminal.test.tsx) ---
+const wtermInstances: Array<{
+  cols: number
+  rows: number
+  options: {
+    onData?: (data: string) => void
+    onResize?: (cols: number, rows: number) => void
+  }
+  init: ReturnType<typeof vi.fn>
+  write: ReturnType<typeof vi.fn>
+  focus: ReturnType<typeof vi.fn>
+  destroy: ReturnType<typeof vi.fn>
+}> = []
+
+vi.mock("@wterm/dom", () => {
+  class WTerm {
+    cols = 80
+    rows = 24
+    options: (typeof wtermInstances)[number]["options"]
+    init = vi.fn().mockResolvedValue(undefined)
+    write = vi.fn()
+    focus = vi.fn()
+    destroy = vi.fn()
+    constructor(
+      _element: HTMLElement,
+      options: (typeof wtermInstances)[number]["options"],
+    ) {
+      this.options = options
+      wtermInstances.push(this)
     }
   }
-  return { Terminal }
+  return { WTerm }
 })
-vi.mock("@xterm/addon-fit", () => {
-  class FitAddon {
-    fit = vi.fn()
-    activate = vi.fn()
-    dispose = vi.fn()
-  }
-  return { FitAddon }
-})
-vi.mock("@xterm/xterm/css/xterm.css", () => ({}))
+
+vi.mock("@wterm/ghostty", () => ({
+  GhosttyCore: { load: vi.fn().mockResolvedValue({}) },
+}))
+
+vi.mock("@wterm/dom/css", () => ({}))
 
 // --- posthog ---
 const mockCapture = vi.fn()
@@ -136,9 +147,8 @@ describe("TerminalTabs", () => {
   beforeEach(() => {
     window.localStorage.clear()
     FakeWebSocket.instances = []
+    wtermInstances.length = 0
     mockCapture.mockReset()
-    mockTerm.write.mockClear()
-    mockTerm.focus.mockClear()
   })
 
   afterEach(() => {
@@ -171,7 +181,7 @@ describe("TerminalTabs", () => {
       expect(tabs[0]).toHaveAttribute("aria-selected", "true")
     })
 
-    it("opens a WebSocket per tab", () => {
+    it("opens a WebSocket per tab", async () => {
       window.localStorage.setItem(
         TERMINAL_TABS_STORAGE_KEY,
         JSON.stringify([
@@ -180,7 +190,9 @@ describe("TerminalTabs", () => {
         ]),
       )
       render(<TerminalTabs sandboxId="sbx-1" accessToken="tok" />)
-      expect(FakeWebSocket.instances).toHaveLength(2)
+      // Each SandboxTerminal goes through an async WASM-load + init chain
+      // before it opens its WebSocket.
+      await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2))
     })
 
     it("only the active tab panel is visible", () => {
