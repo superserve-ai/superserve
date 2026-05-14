@@ -106,7 +106,7 @@ bun run test
 SUPERSERVE_API_KEY=ss_live_... bun run test:e2e
 ```
 
-Defaults to staging. Override with `SUPERSERVE_BASE_URL`:
+Defaults to production. Override with `SUPERSERVE_BASE_URL`:
 
 ```bash
 # Production
