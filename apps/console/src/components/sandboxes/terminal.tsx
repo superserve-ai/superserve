@@ -1,8 +1,6 @@
 "use client"
 
-import { ClipboardAddon } from "@xterm/addon-clipboard"
 import { FitAddon } from "@xterm/addon-fit"
-import { Unicode11Addon } from "@xterm/addon-unicode11"
 import { Terminal } from "@xterm/xterm"
 import { usePostHog } from "posthog-js/react"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -151,11 +149,7 @@ export function SandboxTerminal({
       fontFamily: "var(--font-mono), ui-monospace, SFMono-Regular, monospace",
       fontSize: 13,
       lineHeight: 1.4,
-      // Stop macOS Option from inserting diacritics into pastes/keystrokes.
-      macOptionIsMeta: true,
-      // Required by Unicode11Addon.
-      allowProposedApi: true,
-      scrollback: 5000,
+      letterSpacing: -0.8,
       theme: {
         background: "#0a0a0a",
         foreground: "#e5e5e5",
@@ -163,15 +157,6 @@ export function SandboxTerminal({
         selectionBackground: "#525252",
       },
     })
-    // Activate Unicode 11 width tables BEFORE opening the terminal so the
-    // renderer measures cells with the correct widths from the start. This
-    // fixes emoji and CJK alignment.
-    term.loadAddon(new Unicode11Addon())
-    term.unicode.activeVersion = "11"
-
-    // Proper bracketed-paste handling + OSC 52 clipboard.
-    term.loadAddon(new ClipboardAddon())
-
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(container)
