@@ -20,7 +20,6 @@ superserve/
 │   ├── python-sdk/              # Python SDK (superserve on PyPI) — hand-crafted
 │   ├── sdk/                     # TypeScript SDK (@superserve/sdk on npm) — hand-crafted
 │   ├── ui/                      # Shared UI component library (@superserve/ui)
-│   ├── supabase/                # Supabase client factories (browser/server/admin/middleware)
 │   ├── typescript-config/       # Shared tsconfig presets
 │   └── tailwind-config/         # Shared Tailwind CSS config
 ├── tests/
