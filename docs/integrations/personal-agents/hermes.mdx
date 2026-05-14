@@ -2,6 +2,7 @@
 title: "Hermes"
 sidebarTitle: Hermes
 description: Run the Hermes agent in a Superserve sandbox.
+icon: "/logos/integrations/hermes.svg"
 ---
 
 Hermes is NousResearch's open-source personal AI agent. Run it in a Superserve sandbox so its tools and shell commands stay isolated from your machine.
@@ -59,6 +60,20 @@ sandbox.commands.run(
 </CodeGroup>
 
 Open the sandbox in the [console](https://console.superserve.ai), launch the terminal, and run `hermes`.
+
+## Keep it running
+
+Start Hermes inside `tmux` so it survives closing the terminal or browser tab:
+
+```bash
+tmux new -d -s hermes 'hermes gateway'
+```
+
+Press `Ctrl+b` then `d` to detach. Reattach later with:
+
+```bash
+tmux attach -t hermes
+```
 
 ## Persist sessions
 

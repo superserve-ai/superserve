@@ -2,6 +2,7 @@
 title: "OpenClaw"
 sidebarTitle: OpenClaw
 description: Run OpenClaw in a Superserve sandbox.
+icon: "/logos/integrations/openclaw.svg"
 ---
 
 OpenClaw is an open-source personal AI assistant. Run it in a Superserve sandbox so its actions and shell commands stay isolated from your machine.
@@ -54,6 +55,21 @@ sandbox.commands.run("npm i -g openclaw")
 </CodeGroup>
 
 Open the sandbox in the [console](https://console.superserve.ai), launch the terminal, and run `openclaw onboard` to start the setup wizard.
+
+## Keep it running
+
+Start OpenClaw inside `tmux` so it survives closing the terminal or browser tab:
+
+```bash
+tmux new -s openclaw
+openclaw gateway run
+```
+
+Press `Ctrl+b` then `d` to detach. Reattach later with:
+
+```bash
+tmux attach -t openclaw
+```
 
 ## Persist sessions
 
