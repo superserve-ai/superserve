@@ -82,12 +82,12 @@ See [RELEASING.md](./RELEASING.md) for publishing the SDKs to npm and PyPI.
 
 Contributions welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
+## License
+
+Apache License 2.0 — see [LICENSE](./LICENSE).
+
 ## Where to find us
 
 - [Email us](mailto:engineering@superserve.ai)
 - [Twitter/X](https://x.com/superserve_ai)
 - [LinkedIn](https://www.linkedin.com/company/super-serve-ai)
-
-## License
-
-Apache License 2.0 — see [LICENSE](./LICENSE).
