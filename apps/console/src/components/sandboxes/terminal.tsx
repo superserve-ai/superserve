@@ -1,13 +1,15 @@
 "use client"
 
-import { WTerm } from "@wterm/dom"
-import { GhosttyCore } from "@wterm/ghostty"
+import { ClipboardAddon } from "@xterm/addon-clipboard"
+import { FitAddon } from "@xterm/addon-fit"
+import { Unicode11Addon } from "@xterm/addon-unicode11"
+import { Terminal } from "@xterm/xterm"
 import { usePostHog } from "posthog-js/react"
 import { useCallback, useEffect, useRef, useState } from "react"
 
 import { TERMINAL_EVENTS } from "@/lib/posthog/events"
 
-import "@wterm/dom/css"
+import "@xterm/xterm/css/xterm.css"
 
 export type TerminalConnectionStatus =
   | "connecting"
@@ -25,8 +27,9 @@ interface Props {
   accessToken: string
   /**
    * Whether this terminal is the foreground tab. When true, the component
-   * focuses wterm on connect and again when this tab becomes active. Defaults
-   * to true so single-tab usage is unchanged.
+   * focuses xterm on connect and refits whenever it becomes active (the
+   * container may have been `display: none` while inactive, leaving xterm
+   * with stale dimensions). Defaults to true so single-tab usage is unchanged.
    */
   isActive?: boolean
   /**
@@ -43,8 +46,11 @@ export function SandboxTerminal({
   onStatusChange,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const termRef = useRef<WTerm | null>(null)
+  const termRef = useRef<Terminal | null>(null)
+  const fitRef = useRef<FitAddon | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
+  const roRef = useRef<ResizeObserver | null>(null)
+  const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isActiveRef = useRef(isActive)
   const posthog = usePostHog()
   const posthogRef = useRef(posthog)
@@ -69,7 +75,7 @@ export function SandboxTerminal({
   }, [isActive])
 
   const connectWebSocket = useCallback(
-    (term: WTerm) => {
+    (term: Terminal) => {
       // Clean up previous WebSocket
       wsRef.current?.close(1000, "reconnect")
       setStatus("connecting")
@@ -135,70 +141,120 @@ export function SandboxTerminal({
     [sandboxId, accessToken],
   )
 
-  // Initialize terminal once on mount. Both GhosttyCore.load() and term.init()
-  // are async (WASM load + container measurement), so guard with a cancellation
-  // flag to avoid destroying a half-initialized instance.
+  // Initialize terminal once on mount
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
 
-    let cancelled = false
+    const term = new Terminal({
+      cursorBlink: true,
+      fontFamily: "var(--font-mono), ui-monospace, SFMono-Regular, monospace",
+      fontSize: 13,
+      lineHeight: 1.4,
+      // Stop macOS Option from inserting diacritics into pastes/keystrokes.
+      macOptionIsMeta: true,
+      // Required by Unicode11Addon.
+      allowProposedApi: true,
+      scrollback: 5000,
+      theme: {
+        background: "#0a0a0a",
+        foreground: "#e5e5e5",
+        cursor: "#e5e5e5",
+        selectionBackground: "#525252",
+      },
+    })
+    // Activate Unicode 11 width tables BEFORE opening the terminal so the
+    // renderer measures cells with the correct widths from the start. This
+    // fixes emoji and CJK alignment.
+    term.loadAddon(new Unicode11Addon())
+    term.unicode.activeVersion = "11"
 
-    ;(async () => {
-      try {
-        const core = await GhosttyCore.load()
-        if (cancelled) return
+    // Proper bracketed-paste handling + OSC 52 clipboard.
+    term.loadAddon(new ClipboardAddon())
 
-        const term = new WTerm(container, {
-          core,
-          cursorBlink: true,
-          onData: (data) => {
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
-              wsRef.current.send(encoder.encode(data))
-            }
-          },
-          // Skip 0×0 / 1×1 resizes — wterm's auto-resize observer briefly sees
-          // these when a hidden tab is offscreen, and we don't want the remote
-          // shell redrawing its TUI (htop, opencode, etc.) at 1×1.
-          onResize: (cols, rows) => {
-            if (cols < 2 || rows < 2) return
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({ type: "resize", cols, rows }))
-            }
-          },
-        })
+    const fit = new FitAddon()
+    term.loadAddon(fit)
+    term.open(container)
+    fit.fit()
+    termRef.current = term
+    fitRef.current = fit
 
-        await term.init()
-        if (cancelled) {
-          term.destroy()
-          return
-        }
-
-        termRef.current = term
-        connectWebSocket(term)
-      } catch (err) {
-        if (cancelled) return
-        // eslint-disable-next-line no-console
-        console.error("Failed to initialize terminal:", err)
-        setStatus("error")
+    // Forward keystrokes to WebSocket
+    term.onData((data) => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(encoder.encode(data))
       }
-    })()
+    })
+
+    // Debounced resize: refit terminal and notify server.
+    // Skip when the container is hidden (0×0) — sending a tiny resize would
+    // make the remote shell redraw its TUI (htop, opencode, etc.) at 1×1, and
+    // the user sees that tiny snapshot briefly when switching back. Keeping
+    // the shell's idea of the size stable across tab switches avoids the flash.
+    const ro = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect
+      if (!rect || rect.width === 0 || rect.height === 0) return
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
+      resizeTimerRef.current = setTimeout(() => {
+        fit.fit()
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(
+            JSON.stringify({
+              type: "resize",
+              cols: term.cols,
+              rows: term.rows,
+            }),
+          )
+        }
+      }, 100)
+    })
+    ro.observe(container)
+    roRef.current = ro
+
+    // Start first connection
+    connectWebSocket(term)
 
     return () => {
-      cancelled = true
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
+      ro.disconnect()
       wsRef.current?.close(1000, "unmount")
-      termRef.current?.destroy()
+      term.dispose()
       termRef.current = null
+      fitRef.current = null
     }
   }, [connectWebSocket])
 
-  // When this terminal becomes the foreground tab, focus. wterm's autoResize
-  // observer handles dimension recalculation on visibility changes.
+  // When this terminal becomes the foreground tab, refit (its container may
+  // have been hidden) and focus. The RAF gives layout a chance to settle.
   useEffect(() => {
     if (!isActive) return
     const term = termRef.current
-    if (!term) return
-    const rafId = requestAnimationFrame(() => term.focus())
+    const fit = fitRef.current
+    const container = containerRef.current
+    if (!term || !fit || !container) return
+    const rafId = requestAnimationFrame(() => {
+      const rect = container.getBoundingClientRect()
+      if (rect.width === 0 || rect.height === 0) {
+        // Layout hasn't settled yet; the ResizeObserver will pick it up.
+        term.focus()
+        return
+      }
+      try {
+        fit.fit()
+      } catch {
+        // FitAddon can throw if dimensions aren't sensible — skip the resize.
+      }
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(
+          JSON.stringify({
+            type: "resize",
+            cols: term.cols,
+            rows: term.rows,
+          }),
+        )
+      }
+      term.focus()
+    })
     return () => cancelAnimationFrame(rafId)
   }, [isActive])
 
