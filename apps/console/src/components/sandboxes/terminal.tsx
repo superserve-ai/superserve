@@ -613,6 +613,7 @@ export function SandboxTerminal({
   const handleClearBuffer = useCallback(() => {
     const key = bufferKeyRef.current
     if (key) clearTerminalBuffer(key)
+    termRef.current?.clear()
   }, [])
 
   const findNext = (query: string) => {
