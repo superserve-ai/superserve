@@ -7,7 +7,8 @@ interface WelcomeEmailProps {
   dashboardUrl: string
 }
 
-const MEETING_URL = "https://www.superserve.ai/meet/"
+const MEETING_URL =
+  "https://www.superserve.ai/meet/?utm_source=email&utm_medium=welcome"
 
 const getFirstName = (name: string) => name.trim().split(/\s+/)[0] || "there"
 

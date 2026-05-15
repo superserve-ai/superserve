@@ -37,7 +37,7 @@ export const bottomNavItems: NavItem[] = [
   },
   {
     label: "Docs",
-    href: "https://docs.superserve.ai",
+    href: "https://docs.superserve.ai?utm_source=console&utm_medium=nav",
     icon: BookOpenIcon,
     external: true,
   },

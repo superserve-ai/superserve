@@ -10,14 +10,14 @@
 
   <p><strong>Peristent and secure sandboxes for AI Agents, powered by Firecracker microVMs.</strong></p>
 
-  [![Docs](https://img.shields.io/badge/Docs-latest-blue)](https://docs.superserve.ai/)
+  [![Docs](https://img.shields.io/badge/Docs-latest-blue)](https://docs.superserve.ai/?utm_source=github&utm_medium=readme)
   [![License](https://img.shields.io/badge/license-Apache%20License%202.0-blue)](https://github.com/superserve-ai/superserve/blob/main/LICENSE)
 
 </div>
 
 ## Getting Started
 
-Visit [superserve.ai](https://www.superserve.ai/) or jump straight into the [docs](https://docs.superserve.ai/).
+Visit [superserve.ai](https://www.superserve.ai/?utm_source=github&utm_medium=readme) or jump straight into the [docs](https://docs.superserve.ai/?utm_source=github&utm_medium=readme).
 
 ## Structure
 
@@ -183,7 +183,7 @@ Without `SUPERSERVE_API_KEY`, all e2e tests skip cleanly (exit 0).
 
 ## Docs (Mintlify)
 
-The documentation site at [docs.superserve.ai](https://docs.superserve.ai/) is built with [Mintlify](https://mintlify.com) from the `docs/` directory.
+The documentation site at [docs.superserve.ai](https://docs.superserve.ai/?utm_source=github&utm_medium=readme) is built with [Mintlify](https://mintlify.com) from the `docs/` directory.
 
 ```bash
 bun run docs:dev          # local dev server, hot-reloads MDX changes

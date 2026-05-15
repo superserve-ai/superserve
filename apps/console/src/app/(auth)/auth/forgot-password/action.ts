@@ -37,6 +37,8 @@ export const sendPasswordResetEmail = async (email: string) => {
     const resetUrlObj = new URL(redirectTo)
     resetUrlObj.searchParams.set("token_hash", data.properties.hashed_token)
     resetUrlObj.searchParams.set("type", "recovery")
+    resetUrlObj.searchParams.set("utm_source", "email")
+    resetUrlObj.searchParams.set("utm_medium", "password_reset")
 
     await sendEmail({
       to: parsed.data.email,

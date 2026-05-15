@@ -98,7 +98,7 @@ except ConflictError:
 
 ## Full documentation
 
-[docs.superserve.ai](https://docs.superserve.ai/sdk/python/sandbox)
+[docs.superserve.ai](https://docs.superserve.ai/sdk/python/sandbox?utm_source=pypi&utm_medium=readme)
 
 ## Development
 
