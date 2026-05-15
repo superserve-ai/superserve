@@ -56,7 +56,7 @@ export const signUpWithEmail = async (
       return { success: false, error: "Failed to generate confirmation link." }
     }
 
-    const confirmationUrl = `${redirectTo}?token_hash=${tokenHash}&type=signup`
+    const confirmationUrl = `${redirectTo}?token_hash=${tokenHash}&type=signup&utm_source=email&utm_medium=signup_confirmation`
 
     await sendEmail({
       to: parsed.data.email,
@@ -82,8 +82,9 @@ export const signUpWithEmail = async (
 
 export const sendWelcomeEmail = async (email: string, name: string) => {
   try {
-    const dashboardUrl =
+    const baseDashboardUrl =
       process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai"
+    const dashboardUrl = `${baseDashboardUrl}?utm_source=email&utm_medium=welcome`
 
     await sendEmail({
       to: email,

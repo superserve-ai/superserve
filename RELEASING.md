@@ -15,6 +15,7 @@ NPM_CONFIG_TOKEN=npm_... bun publish --access public
 ```
 
 Or with `.env.release` sourced:
+
 ```bash
 source .env.release
 bunx turbo run build --filter=@superserve/sdk
@@ -34,6 +35,7 @@ UV_PUBLISH_TOKEN=pypi-... uv publish dist/superserve-<version>*
 ```
 
 Or with `.env.release` sourced:
+
 ```bash
 source .env.release
 uv build --package superserve
@@ -44,20 +46,20 @@ uv publish dist/superserve-*
 
 Copy `.env.release.example` to `.env.release`, fill in tokens, and `source` it before running publish commands. `.env.release` is gitignored.
 
-| Env variable | Used by | How to get it |
-|---|---|---|
-| `NPM_CONFIG_TOKEN` | `bun publish` (TS SDK) | [npmjs.com](https://www.npmjs.com) → account → access tokens → automation token |
+| Env variable       | Used by                   | How to get it                                                                             |
+| ------------------ | ------------------------- | ----------------------------------------------------------------------------------------- |
+| `NPM_CONFIG_TOKEN` | `bun publish` (TS SDK)    | [npmjs.com](https://www.npmjs.com) → account → access tokens → automation token           |
 | `UV_PUBLISH_TOKEN` | `uv publish` (Python SDK) | [pypi.org](https://pypi.org/manage/account/) → account → API tokens (starts with `pypi-`) |
 
 ## CI workflow (GitHub Actions)
 
-| Workflow | Trigger | Action |
-|---|---|---|
+| Workflow         | Trigger                      | Action                                                                                                                        |
+| ---------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | **Release SDKs** | Manual (`workflow_dispatch`) | Bumps version, builds, publishes to npm and/or PyPI, commits + tags. Inputs: `package` (`ts` / `python` / `both`), `version`. |
 
 Required repo secrets:
 
-| Secret | Used by |
-|---|---|
-| `NPM_TOKEN` | Release SDKs (ts) |
+| Secret       | Used by               |
+| ------------ | --------------------- |
+| `NPM_TOKEN`  | Release SDKs (ts)     |
 | `PYPI_TOKEN` | Release SDKs (python) |

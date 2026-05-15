@@ -1,6 +1,6 @@
 # Superserve Docs
 
-Documentation for [Superserve](https://superserve.ai). Published at [docs.superserve.ai](https://docs.superserve.ai).
+Documentation for [Superserve](https://superserve.ai?utm_source=github&utm_medium=readme). Published at [docs.superserve.ai](https://docs.superserve.ai?utm_source=github&utm_medium=readme).
 
 ## Local development
 

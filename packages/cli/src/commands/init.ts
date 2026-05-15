@@ -11,7 +11,7 @@ import { installPythonPackage } from "../utils/python-deps"
 
 const TEMPLATE = `\
 # Superserve agent configuration
-# Docs: https://docs.superserve.ai
+# Docs: https://docs.superserve.ai?utm_source=cli&utm_medium=config_template
 
 # Agent name (lowercase, alphanumeric, hyphens only)
 name: {name}

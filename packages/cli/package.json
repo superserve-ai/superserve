@@ -10,7 +10,7 @@
     "deploy",
     "sandbox"
   ],
-  "homepage": "https://superserve.ai",
+  "homepage": "https://superserve.ai?utm_source=npm&utm_medium=package_meta",
   "bugs": {
     "url": "https://github.com/superserve-ai/superserve/issues"
   },

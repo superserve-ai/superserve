@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://superserve.ai"
+Homepage = "https://superserve.ai?utm_source=pypi&utm_medium=package_meta"
 Repository = "https://github.com/superserve-ai/superserve"
 Issues = "https://github.com/superserve-ai/superserve/issues"
 

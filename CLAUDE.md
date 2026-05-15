@@ -31,6 +31,7 @@ superserve/
 ```
 
 **Workspace tooling:**
+
 - **Bun workspaces** for dependency management (single `bun.lock` at root; workspaces: `apps/*`, `packages/*`, `tests/*`)
 - **Turborepo** for task orchestration (build, lint, typecheck, test, e2e)
 - **uv workspaces** for Python packages (`pyproject.toml` at root as workspace root)
@@ -64,12 +65,14 @@ Built with Bun + Commander. Entry point: `src/index.ts`. Authenticates via devic
 Published as `@superserve/sdk`. Hand-crafted SDK. Zero runtime dependencies (uses native `fetch`).
 
 **Main API:**
+
 - `Sandbox.create({ name })` / `Sandbox.connect(id)` / `Sandbox.list()` / `Sandbox.killById(id)`
 - Instance: `sandbox.pause()` / `resume()` / `kill()` / `update()` / `getInfo()`
 - Sub-modules: `sandbox.commands.run(cmd, opts)`, `sandbox.files.write/read/readText(path, ...)`
 - Call `sandbox.kill()` or `Sandbox.killById(id)` to delete a sandbox — no `Symbol.asyncDispose` / `await using`
 
 **Design choices:**
+
 - `status` / `metadata` are `readonly` snapshots from construction — call `getInfo()` for fresh data
 - `access_token` is private to the `sandbox` (not exposed in `SandboxInfo`); rotated automatically on `resume()` and re-injected into `sandbox.files`
 - `kill()` is idempotent (swallows 404)
@@ -86,6 +89,7 @@ Published as `superserve` on PyPI. Hand-crafted SDK. Runtime deps: `httpx>=0.24.
 Same API surface as TypeScript SDK (snake_case). `Sandbox` (sync) and `AsyncSandbox` (async) classes.
 
 **Design choices:**
+
 - No context manager (`with`/`async with`); call `sandbox.kill()` / `Sandbox.kill_by_id(id)` explicitly
 - `TimeoutError` is named `SandboxTimeoutError` to avoid shadowing Python's builtin
 - `kill()` is idempotent; `pause()` / `resume()` / `kill()` return `None`
@@ -196,16 +200,19 @@ Docs live in `docs/` — `docs.json` is the navigation config. SDK reference pag
 ### Releasing SDKs
 
 **Version bumps** — both SDKs should be kept in sync:
+
 - TS: `packages/sdk/package.json` → `version`
 - Python: `packages/python-sdk/pyproject.toml` → `version` AND `packages/python-sdk/src/superserve/__init__.py` → `__version__` (keep them identical)
 
 **Publish TS to npm:**
+
 ```bash
 bunx turbo run build --filter=@superserve/sdk
 cd packages/sdk && bun publish --access public
 ```
 
 **Publish Python to PyPI** — run `uv build` from **repo root** (uv workspaces put artifacts in root `dist/`):
+
 ```bash
 uv build --package superserve
 uv publish dist/superserve-*
@@ -216,6 +223,7 @@ Or use the **Release SDKs** GitHub Actions workflow (manual `workflow_dispatch` 
 ## Coding Style
 
 ### TypeScript
+
 - oxlint for linting, oxfmt for formatting (2-space indent, double quotes, semicolons as needed, Tailwind classes auto-sorted in `cn`/`clsx` calls)
 - TypeScript strict mode, ESM modules
 - Run `bunx oxlint --fix && bunx oxfmt --write` to auto-fix lint and format issues
@@ -223,6 +231,7 @@ Or use the **Release SDKs** GitHub Actions workflow (manual `workflow_dispatch` 
 - VSCode: install the official `oxc.oxc-vscode` extension (recommended in `.vscode/extensions.json`) for lint diagnostics and format-on-save
 
 ### Python
+
 - Python ≥ 3.9 (SDK target); repo uses 3.12 locally (see `.python-version`)
 - Type hints on function signatures
 - Ruff for linting and formatting (line length 88)
