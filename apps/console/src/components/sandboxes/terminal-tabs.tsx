@@ -14,6 +14,7 @@ import {
   useTerminalTabs,
 } from "@/hooks/use-terminal-tabs"
 import { TERMINAL_EVENTS } from "@/lib/posthog/events"
+import { clearTerminalBuffer } from "@/lib/terminal-tabs-storage"
 
 import { SandboxTerminal, type TerminalConnectionStatus } from "./terminal"
 
@@ -56,6 +57,7 @@ export function TerminalTabs({ sandboxId, accessToken }: Props) {
         sandbox_id: sandboxId,
       })
       closeTab(id)
+      clearTerminalBuffer(`${sandboxId}:${id}`)
       setEditingId((current) => (current === id ? null : current))
       setStatuses((prev) => {
         if (!(id in prev)) return prev
@@ -129,19 +131,28 @@ export function TerminalTabs({ sandboxId, accessToken }: Props) {
       <div className="relative flex-1">
         {tabs.map((tab) => {
           const isActive = tab.id === activeId
+          // DOM-park inactive panels with visibility:hidden so xterm keeps
+          // its dimensions (no relayout on switch, no remeasure flash) but
+          // the user only sees the active terminal. pointer-events:none
+          // stops stray clicks reaching parked xterm instances.
           return (
             <div
               key={tab.id}
               role="tabpanel"
               id={`terminal-panel-${tab.id}`}
               aria-labelledby={`terminal-tab-${tab.id}`}
+              aria-hidden={!isActive}
               className="absolute inset-0"
-              style={{ display: isActive ? "block" : "none" }}
+              style={{
+                visibility: isActive ? "visible" : "hidden",
+                pointerEvents: isActive ? "auto" : "none",
+              }}
             >
               <SandboxTerminal
                 sandboxId={sandboxId}
                 accessToken={accessToken}
                 isActive={isActive}
+                bufferKey={`${sandboxId}:${tab.id}`}
                 onStatusChange={(status) => handleStatusChange(tab.id, status)}
               />
             </div>

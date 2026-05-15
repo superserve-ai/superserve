@@ -16,20 +16,25 @@ const termWriteCalls: Array<string | Uint8Array> = []
 const mockTerm = {
   cols: 80,
   rows: 24,
+  options: {} as Record<string, unknown>,
   loadAddon: vi.fn(),
   open: vi.fn(),
   focus: vi.fn(),
   dispose: vi.fn(),
+  refresh: vi.fn(),
   onData: vi.fn(),
-  write: vi.fn((data: string | Uint8Array) => {
+  attachCustomKeyEventHandler: vi.fn(),
+  write: vi.fn((data: string | Uint8Array, cb?: () => void) => {
     termWriteCalls.push(data)
+    cb?.()
   }),
   unicode: { activeVersion: "6" },
 }
 
 vi.mock("@xterm/xterm", () => {
   class Terminal {
-    constructor() {
+    constructor(options?: Record<string, unknown>) {
+      mockTerm.options = { ...options }
       return mockTerm
     }
   }
@@ -57,12 +62,76 @@ vi.mock("@xterm/addon-clipboard", () => {
   }
   return { ClipboardAddon }
 })
+vi.mock("@xterm/addon-image", () => {
+  class ImageAddon {
+    activate = vi.fn()
+    dispose = vi.fn()
+  }
+  return { ImageAddon }
+})
+vi.mock("@xterm/addon-search", () => {
+  class SearchAddon {
+    activate = vi.fn()
+    dispose = vi.fn()
+    findNext = vi.fn()
+    findPrevious = vi.fn()
+  }
+  return { SearchAddon }
+})
+vi.mock("@xterm/addon-web-links", () => {
+  class WebLinksAddon {
+    activate = vi.fn()
+    dispose = vi.fn()
+  }
+  return { WebLinksAddon }
+})
+vi.mock("@xterm/addon-ligatures", () => {
+  class LigaturesAddon {
+    activate = vi.fn()
+    dispose = vi.fn()
+  }
+  return { LigaturesAddon }
+})
+vi.mock("@xterm/addon-serialize", () => {
+  class SerializeAddon {
+    activate = vi.fn()
+    dispose = vi.fn()
+    serialize = vi.fn(() => "SERIALIZED_BUFFER")
+  }
+  return { SerializeAddon }
+})
+vi.mock("@xterm/addon-webgl", () => {
+  class WebglAddon {
+    activate = vi.fn()
+    dispose = vi.fn()
+    onContextLoss = vi.fn()
+  }
+  return { WebglAddon }
+})
 vi.mock("@xterm/xterm/css/xterm.css", () => ({}))
 
 // --- posthog ---
 const mockCapture = vi.fn()
 vi.mock("posthog-js/react", () => ({
   usePostHog: () => ({ capture: mockCapture }),
+}))
+
+// --- terminal-tabs-storage (so we can assert save/restore) ---
+const mockLoadBuffer = vi.fn<(key: string) => string | null>()
+const mockSaveBuffer = vi.fn<(key: string, value: string) => void>()
+const mockClearBuffer = vi.fn<(key: string) => void>()
+const mockLoadFontSize = vi.fn<() => number>()
+const mockSaveFontSize = vi.fn<(size: number) => void>()
+vi.mock("@/lib/terminal-tabs-storage", () => ({
+  loadTerminalBuffer: (key: string) => mockLoadBuffer(key),
+  saveTerminalBuffer: (key: string, value: string) =>
+    mockSaveBuffer(key, value),
+  clearTerminalBuffer: (key: string) => mockClearBuffer(key),
+  loadTerminalFontSize: () => mockLoadFontSize(),
+  saveTerminalFontSize: (size: number) => mockSaveFontSize(size),
+  TERMINAL_FONT_SIZE_DEFAULT: 16,
+  TERMINAL_FONT_SIZE_MIN: 12,
+  TERMINAL_FONT_SIZE_MAX: 32,
 }))
 
 // --- Controllable fake WebSocket ---
@@ -130,6 +199,15 @@ describe("SandboxTerminal", () => {
     mockCapture.mockReset()
     mockTerm.write.mockClear()
     mockTerm.focus.mockClear()
+    mockTerm.refresh.mockClear()
+    mockTerm.attachCustomKeyEventHandler.mockClear()
+    mockLoadBuffer.mockReset()
+    mockLoadBuffer.mockReturnValue(null)
+    mockSaveBuffer.mockReset()
+    mockClearBuffer.mockReset()
+    mockLoadFontSize.mockReset()
+    mockLoadFontSize.mockReturnValue(16)
+    mockSaveFontSize.mockReset()
   })
 
   afterEach(() => {
@@ -143,6 +221,16 @@ describe("SandboxTerminal", () => {
     expect(ws.url).toContain("wss://boxd-sbx-123.")
     expect(ws.url).toContain("/terminal")
     expect(ws.protocols).toEqual(["superserve.terminal.v1", "token.tok-xyz"])
+  })
+
+  it("configures xterm with dense resolved monospace typography", () => {
+    render(<SandboxTerminal sandboxId="sbx-1" accessToken="t" />)
+
+    expect(mockTerm.options.fontFamily).toContain("Geist Mono")
+    expect(mockTerm.options.fontFamily).not.toContain("var(")
+    expect(mockTerm.options.fontSize).toBe(16)
+    expect(mockTerm.options.lineHeight).toBe(1.12)
+    expect(mockTerm.options.letterSpacing).toBe(0)
   })
 
   it("sends a resize message and focuses the terminal on open", () => {
@@ -319,5 +407,84 @@ describe("SandboxTerminal", () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it("restores saved buffer before opening the WebSocket when bufferKey is set", () => {
+    mockLoadBuffer.mockReturnValue("RESTORED_OUTPUT")
+    render(
+      <SandboxTerminal
+        sandboxId="sbx-1"
+        accessToken="t"
+        bufferKey="sbx-1:tab-a"
+      />,
+    )
+
+    expect(mockLoadBuffer).toHaveBeenCalledWith("sbx-1:tab-a")
+    // The restore write goes through write() with a callback that triggers
+    // the WS connect — so by the time we get here, both have happened.
+    expect(mockTerm.write).toHaveBeenCalledWith(
+      "RESTORED_OUTPUT",
+      expect.any(Function),
+    )
+    expect(FakeWebSocket.instances).toHaveLength(1)
+  })
+
+  it("does not call loadTerminalBuffer when bufferKey is not provided", () => {
+    render(<SandboxTerminal sandboxId="sbx-1" accessToken="t" />)
+    expect(mockLoadBuffer).not.toHaveBeenCalled()
+  })
+
+  it("serializes the buffer on unmount when bufferKey is set", () => {
+    const { unmount } = render(
+      <SandboxTerminal
+        sandboxId="sbx-1"
+        accessToken="t"
+        bufferKey="sbx-1:tab-a"
+      />,
+    )
+    unmount()
+    expect(mockSaveBuffer).toHaveBeenCalledWith(
+      "sbx-1:tab-a",
+      "SERIALIZED_BUFFER",
+    )
+  })
+
+  it("schedules an auto-reconnect on an abnormal close", () => {
+    vi.useFakeTimers()
+    try {
+      render(<SandboxTerminal sandboxId="sbx-1" accessToken="t" />)
+      const first = FakeWebSocket.instances[0]
+      first.triggerOpen()
+      first.triggerClose(1006)
+
+      expect(FakeWebSocket.instances).toHaveLength(1)
+      // First retry is at 500ms (RECONNECT_BASE_MS * 2^0).
+      vi.advanceTimersByTime(600)
+      expect(FakeWebSocket.instances).toHaveLength(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("does not auto-reconnect on a clean (1000) close", () => {
+    vi.useFakeTimers()
+    try {
+      render(<SandboxTerminal sandboxId="sbx-1" accessToken="t" />)
+      const first = FakeWebSocket.instances[0]
+      first.triggerOpen()
+      first.triggerClose(1000)
+
+      vi.advanceTimersByTime(15_000)
+      expect(FakeWebSocket.instances).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("attaches a custom key handler for Cmd+F search", () => {
+    render(<SandboxTerminal sandboxId="sbx-1" accessToken="t" />)
+    expect(mockTerm.attachCustomKeyEventHandler).toHaveBeenCalledWith(
+      expect.any(Function),
+    )
   })
 })
