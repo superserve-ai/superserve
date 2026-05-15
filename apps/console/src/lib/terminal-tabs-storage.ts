@@ -226,7 +226,7 @@ export const TERMINAL_BUFFER_MAX_BYTES = MAX_BUFFER_BYTES
  */
 
 const FONT_SIZE_KEY = "superserve.terminal-font-size"
-const DEFAULT_FONT_SIZE = 16
+const DEFAULT_FONT_SIZE = 14
 const MIN_FONT_SIZE = 12
 const MAX_FONT_SIZE = 32
 

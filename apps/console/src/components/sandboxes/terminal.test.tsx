@@ -129,7 +129,7 @@ vi.mock("@/lib/terminal-tabs-storage", () => ({
   clearTerminalBuffer: (key: string) => mockClearBuffer(key),
   loadTerminalFontSize: () => mockLoadFontSize(),
   saveTerminalFontSize: (size: number) => mockSaveFontSize(size),
-  TERMINAL_FONT_SIZE_DEFAULT: 16,
+  TERMINAL_FONT_SIZE_DEFAULT: 14,
   TERMINAL_FONT_SIZE_MIN: 12,
   TERMINAL_FONT_SIZE_MAX: 32,
 }))
@@ -206,7 +206,7 @@ describe("SandboxTerminal", () => {
     mockSaveBuffer.mockReset()
     mockClearBuffer.mockReset()
     mockLoadFontSize.mockReset()
-    mockLoadFontSize.mockReturnValue(16)
+    mockLoadFontSize.mockReturnValue(14)
     mockSaveFontSize.mockReset()
   })
 
@@ -228,7 +228,7 @@ describe("SandboxTerminal", () => {
 
     expect(mockTerm.options.fontFamily).toContain("Geist Mono")
     expect(mockTerm.options.fontFamily).not.toContain("var(")
-    expect(mockTerm.options.fontSize).toBe(16)
+    expect(mockTerm.options.fontSize).toBe(14)
     expect(mockTerm.options.lineHeight).toBe(1.12)
     expect(mockTerm.options.letterSpacing).toBe(0)
   })
