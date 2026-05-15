@@ -41,6 +41,8 @@ const RECONNECT_BASE_MS = 500
 const RECONNECT_MAX_MS = 10_000
 const RECONNECT_MAX_ATTEMPTS = 10
 const SERIALIZE_SCROLLBACK_LINES = 1000
+const MIN_TERMINAL_COLS = 2
+const MIN_TERMINAL_ROWS = 1
 const TERMINAL_LINE_HEIGHT = 1.12
 const TERMINAL_LETTER_SPACING = 0
 const TERMINAL_FONT_FAMILY_FALLBACK =
@@ -162,12 +164,18 @@ export function SandboxTerminal({
   }, [])
 
   const sendResize = useCallback((term: Terminal) => {
-    if (wsRef.current?.readyState !== WebSocket.OPEN) return
-    wsRef.current.send(
+    const ws = wsRef.current
+    if (ws?.readyState !== WebSocket.OPEN) return
+
+    const cols = Math.floor(term.cols)
+    const rows = Math.floor(term.rows)
+    if (cols < MIN_TERMINAL_COLS || rows < MIN_TERMINAL_ROWS) return
+
+    ws.send(
       JSON.stringify({
         type: "resize",
-        cols: term.cols,
-        rows: term.rows,
+        cols,
+        rows,
       }),
     )
   }, [])
@@ -216,6 +224,8 @@ export function SandboxTerminal({
             sandbox_id: sandboxId,
             close_code: evt.code,
           })
+          const closeReason = evt.reason?.trim() ?? ""
+          const reasonSuffix = closeReason ? `: ${closeReason}` : ""
           const label =
             evt.code === 1000
               ? "\x1b[33m[session ended]\x1b[0m"
@@ -223,7 +233,9 @@ export function SandboxTerminal({
                 ? "\x1b[33m[sandbox going away]\x1b[0m"
                 : evt.code === 1006
                   ? "\x1b[31m[connection lost]\x1b[0m"
-                  : `\x1b[31m[disconnected: ${evt.code}]\x1b[0m`
+                  : evt.code === 1011
+                    ? `\x1b[31m[server error${reasonSuffix}]\x1b[0m`
+                    : `\x1b[31m[disconnected: ${evt.code}${reasonSuffix}]\x1b[0m`
           term.write(`\r\n${label}\r\n`)
           setStatus("disconnected")
 
@@ -338,6 +350,8 @@ export function SandboxTerminal({
     let fontReadyCancelled = false
     const refitAfterFontLoad = () => {
       if (fontReadyCancelled || !isMountedRef.current) return
+      const rect = container.getBoundingClientRect()
+      if (rect.width === 0 || rect.height === 0) return
       term.options.fontFamily = resolveTerminalFontFamily(container)
       term.options.lineHeight = TERMINAL_LINE_HEIGHT
       term.options.letterSpacing = TERMINAL_LETTER_SPACING

@@ -147,7 +147,7 @@ class FakeWebSocket {
   onopen: (() => void) | null = null
   onmessage: ((evt: { data: unknown }) => void) | null = null
   onerror: (() => void) | null = null
-  onclose: ((evt: { code: number }) => void) | null = null
+  onclose: ((evt: { code: number; reason?: string }) => void) | null = null
   send = vi.fn()
   close = vi.fn((_code?: number, _reason?: string) => {
     this.readyState = FakeWebSocket.CLOSED
@@ -167,9 +167,9 @@ class FakeWebSocket {
   triggerMessage(data: unknown) {
     this.onmessage?.({ data })
   }
-  triggerClose(code: number) {
+  triggerClose(code: number, reason?: string) {
     this.readyState = FakeWebSocket.CLOSED
-    this.onclose?.({ code })
+    this.onclose?.({ code, reason })
   }
 }
 
@@ -195,6 +195,8 @@ describe("SandboxTerminal", () => {
   beforeEach(() => {
     FakeWebSocket.instances = []
     MockResizeObserver.callbacks = []
+    mockTerm.cols = 80
+    mockTerm.rows = 24
     termWriteCalls.length = 0
     mockCapture.mockReset()
     mockTerm.write.mockClear()
@@ -249,6 +251,16 @@ describe("SandboxTerminal", () => {
     )
   })
 
+  it("does not send an invalid 0×0 resize", () => {
+    mockTerm.cols = 0
+    mockTerm.rows = 0
+    render(<SandboxTerminal sandboxId="sbx-1" accessToken="t" />)
+    const ws = FakeWebSocket.instances[0]
+    ws.triggerOpen()
+
+    expect(ws.send).not.toHaveBeenCalled()
+  })
+
   it("writes incoming binary messages to the terminal", () => {
     render(<SandboxTerminal sandboxId="sbx-1" accessToken="t" />)
     const ws = FakeWebSocket.instances[0]
@@ -294,6 +306,16 @@ describe("SandboxTerminal", () => {
 
     const writes = mockTerm.write.mock.calls.map((c) => c[0]).join("")
     expect(writes).toContain("connection lost")
+  })
+
+  it("surfaces close code 1011 as a server error with the close reason", () => {
+    render(<SandboxTerminal sandboxId="sbx-1" accessToken="t" />)
+    const ws = FakeWebSocket.instances[0]
+    ws.triggerOpen()
+    ws.triggerClose(1011, "pty resize failed")
+
+    const writes = mockTerm.write.mock.calls.map((c) => c[0]).join("")
+    expect(writes).toContain("server error: pty resize failed")
   })
 
   it("labels close code 1001 as sandbox going away", () => {
