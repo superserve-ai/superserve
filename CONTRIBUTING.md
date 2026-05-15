@@ -14,17 +14,20 @@ Thank you for your interest in contributing to Superserve! We welcome contributi
 1. Fork the repository on GitHub.
 
 2. Clone your fork locally:
+
    ```bash
    git clone https://github.com/YOUR_USERNAME/superserve.git
    cd superserve
    ```
 
 3. Create a new branch for your changes:
+
    ```bash
    git checkout -b my-feature-branch
    ```
 
 4. Install dependencies:
+
    ```bash
    bun install
    ```
@@ -37,12 +40,14 @@ Thank you for your interest in contributing to Superserve! We welcome contributi
 ## Repo Structure
 
 ```
-apps/console/              # React + Vite console app
-apps/ui-docs/              # UI component documentation
+apps/console/              # Sandbox dashboard (Next.js 16, App Router)
+apps/ui-docs/              # UI component documentation (Vite)
 packages/cli/              # TypeScript CLI (@superserve/cli)
 packages/python-sdk/       # Python SDK (superserve on PyPI)
 packages/sdk/              # TypeScript SDK (@superserve/sdk)
+packages/ui/               # Shared UI components (@superserve/ui)
 packages/typescript-config/ # Shared tsconfig presets
+packages/tailwind-config/  # Shared Tailwind config
 ```
 
 ## Common Commands
@@ -51,21 +56,65 @@ packages/typescript-config/ # Shared tsconfig presets
 bun run build              # build all packages
 bun run dev                # start all dev servers
 bun run lint               # lint all packages
+bun run format             # format all files in place
 bun run typecheck          # type check all packages
 bun run test               # run all tests
 ```
 
 For a single package:
+
 ```bash
 bunx turbo run dev --filter=@superserve/console
 ```
 
 For the Python SDK:
+
 ```bash
 uv sync
 uv run pytest packages/python-sdk/tests/
 uv run ruff check packages/python-sdk/ --fix
 uv run mypy packages/python-sdk/src/superserve
+```
+
+## Adding dependencies
+
+Always add dependencies from the repo root using `--filter`:
+
+```bash
+bun add zod --filter @superserve/cli
+bun add react --filter @superserve/console
+bun add -d @types/node --filter @superserve/sdk
+```
+
+> **Note:** Do not `cd` into a package directory and run `bun add` — it creates a separate `bun.lock` that conflicts with the monorepo's root lockfile.
+
+## E2E tests
+
+E2E tests hit the live API and require an API key. Without `SUPERSERVE_API_KEY`, they skip cleanly (exit 0).
+
+```bash
+SUPERSERVE_API_KEY=ss_live_... bun run test:e2e          # default: staging
+```
+
+Override the target environment with `SUPERSERVE_BASE_URL`:
+
+```bash
+# Production
+SUPERSERVE_API_KEY=ss_live_... \
+  SUPERSERVE_BASE_URL=https://api.superserve.ai \
+  bun run test:e2e
+
+# Local backend
+SUPERSERVE_API_KEY=ss_dev_... \
+  SUPERSERVE_BASE_URL=http://localhost:8080 \
+  bun run test:e2e
+```
+
+Run just one language:
+
+```bash
+SUPERSERVE_API_KEY=ss_live_... bunx turbo run e2e --filter=@superserve/test-sdk-e2e-ts
+SUPERSERVE_API_KEY=ss_live_... bunx turbo run e2e --filter=@superserve/test-sdk-e2e-py
 ```
 
 ## How to Contribute
@@ -90,6 +139,7 @@ uv run mypy packages/python-sdk/src/superserve
 2. Make your changes and write tests if applicable
 
 3. Ensure all checks pass:
+
    ```bash
    bun run lint
    bun run typecheck
@@ -98,6 +148,7 @@ uv run mypy packages/python-sdk/src/superserve
    ```
 
 4. Commit with a clear message:
+
    ```bash
    git commit -m "feat: add your feature description"
    ```
