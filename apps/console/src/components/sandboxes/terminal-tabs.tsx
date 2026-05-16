@@ -14,7 +14,7 @@ import {
   useTerminalTabs,
 } from "@/hooks/use-terminal-tabs"
 import { TERMINAL_EVENTS } from "@/lib/posthog/events"
-import { clearTerminalBuffer } from "@/lib/terminal-tabs-storage"
+import { closeTerminalBuffer } from "@/lib/terminal-tabs-storage"
 
 import { SandboxTerminal, type TerminalConnectionStatus } from "./terminal"
 
@@ -57,7 +57,7 @@ export function TerminalTabs({ sandboxId, accessToken }: Props) {
         sandbox_id: sandboxId,
       })
       closeTab(id)
-      clearTerminalBuffer(`${sandboxId}:${id}`)
+      closeTerminalBuffer(`${sandboxId}:${id}`)
       setEditingId((current) => (current === id ? null : current))
       setStatuses((prev) => {
         if (!(id in prev)) return prev

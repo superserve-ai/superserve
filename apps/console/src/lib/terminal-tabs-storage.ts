@@ -109,6 +109,14 @@ const BUFFER_PREFIX = "superserve.terminal-buffer."
 const MAX_BUFFER_BYTES = 256 * 1024
 const MAX_BUFFERS = MAX_TABS
 
+// In-memory tombstone for keys explicitly closed this session. Closing a tab
+// runs `closeTab` (state update) → `clearTerminalBuffer` synchronously, but
+// the SandboxTerminal unmount cleanup later calls `saveTerminalBuffer` and
+// resurrects the buffer. The tombstone makes those later writes a no-op.
+// In-memory only — fresh page loads start with an empty set, and tab IDs are
+// unique per session so collisions are not a concern.
+const tombstonedKeys = new Set<string>()
+
 interface BufferIndexEntry {
   key: string
   size: number
@@ -155,6 +163,7 @@ export function loadTerminalBuffer(key: string): string | null {
 export function saveTerminalBuffer(key: string, value: string): void {
   const storage = safeStorage()
   if (!storage || !key) return
+  if (tombstonedKeys.has(key)) return
   // Single-buffer cap: drop the whole entry rather than persist a giant blob.
   if (value.length > MAX_BUFFER_BYTES) return
 
@@ -202,6 +211,18 @@ export function clearTerminalBuffer(key: string): void {
   } catch {
     // Ignore — best-effort cleanup.
   }
+}
+
+/**
+ * Clear + tombstone the buffer. Call from the close-tab path so the
+ * subsequent unmount cleanup (which serializes and writes) can't resurrect
+ * what the user explicitly threw away. The tombstone lasts for the page
+ * session — sufficient because tab IDs are unique per session.
+ */
+export function closeTerminalBuffer(key: string): void {
+  if (!key) return
+  tombstonedKeys.add(key)
+  clearTerminalBuffer(key)
 }
 
 export function clearAllTerminalBuffers(): void {
