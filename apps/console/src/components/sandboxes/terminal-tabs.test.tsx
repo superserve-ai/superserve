@@ -22,17 +22,23 @@ import { TERMINAL_TABS_STORAGE_KEY } from "@/lib/terminal-tabs-storage"
 const mockTerm = {
   cols: 80,
   rows: 24,
+  options: {} as Record<string, unknown>,
   loadAddon: vi.fn(),
   open: vi.fn(),
   focus: vi.fn(),
   dispose: vi.fn(),
+  refresh: vi.fn(),
   onData: vi.fn(),
-  write: vi.fn(),
+  attachCustomKeyEventHandler: vi.fn(),
+  write: vi.fn((_data: unknown, cb?: () => void) => {
+    cb?.()
+  }),
   unicode: { activeVersion: "6" },
 }
 vi.mock("@xterm/xterm", () => {
   class Terminal {
-    constructor() {
+    constructor(options?: Record<string, unknown>) {
+      mockTerm.options = { ...options }
       return mockTerm
     }
   }
@@ -59,6 +65,52 @@ vi.mock("@xterm/addon-clipboard", () => {
     dispose = vi.fn()
   }
   return { ClipboardAddon }
+})
+vi.mock("@xterm/addon-image", () => {
+  class ImageAddon {
+    activate = vi.fn()
+    dispose = vi.fn()
+  }
+  return { ImageAddon }
+})
+vi.mock("@xterm/addon-search", () => {
+  class SearchAddon {
+    activate = vi.fn()
+    dispose = vi.fn()
+    findNext = vi.fn()
+    findPrevious = vi.fn()
+  }
+  return { SearchAddon }
+})
+vi.mock("@xterm/addon-web-links", () => {
+  class WebLinksAddon {
+    activate = vi.fn()
+    dispose = vi.fn()
+  }
+  return { WebLinksAddon }
+})
+vi.mock("@xterm/addon-ligatures", () => {
+  class LigaturesAddon {
+    activate = vi.fn()
+    dispose = vi.fn()
+  }
+  return { LigaturesAddon }
+})
+vi.mock("@xterm/addon-serialize", () => {
+  class SerializeAddon {
+    activate = vi.fn()
+    dispose = vi.fn()
+    serialize = vi.fn(() => "")
+  }
+  return { SerializeAddon }
+})
+vi.mock("@xterm/addon-webgl", () => {
+  class WebglAddon {
+    activate = vi.fn()
+    dispose = vi.fn()
+    onContextLoss = vi.fn()
+  }
+  return { WebglAddon }
 })
 vi.mock("@xterm/xterm/css/xterm.css", () => ({}))
 
@@ -210,8 +262,10 @@ describe("TerminalTabs", () => {
       render(<TerminalTabs sandboxId="sbx-1" accessToken="t" />)
       const panels = document.querySelectorAll('[role="tabpanel"]')
       expect(panels).toHaveLength(2)
-      expect((panels[0] as HTMLElement).style.display).toBe("block")
-      expect((panels[1] as HTMLElement).style.display).toBe("none")
+      // DOM parking: both panels stay mounted; visibility toggles.
+      expect((panels[0] as HTMLElement).style.visibility).toBe("visible")
+      expect((panels[1] as HTMLElement).style.visibility).toBe("hidden")
+      expect(panels[1]).toHaveAttribute("aria-hidden", "true")
     })
   })
 
@@ -266,10 +320,10 @@ describe("TerminalTabs", () => {
       expect(second).toHaveAttribute("aria-selected", "true")
       expect(first).toHaveAttribute("aria-selected", "false")
 
-      // The active panel switches
+      // The active panel switches (DOM parking — visibility, not display).
       const panels = document.querySelectorAll('[role="tabpanel"]')
-      expect((panels[0] as HTMLElement).style.display).toBe("none")
-      expect((panels[1] as HTMLElement).style.display).toBe("block")
+      expect((panels[0] as HTMLElement).style.visibility).toBe("hidden")
+      expect((panels[1] as HTMLElement).style.visibility).toBe("visible")
     })
   })
 

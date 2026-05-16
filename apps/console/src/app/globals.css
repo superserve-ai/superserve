@@ -2,3 +2,24 @@
 @import "@superserve/ui/styles";
 
 @source "../../../../packages/ui/src";
+
+/* Hide xterm's built-in scrollbar — FitAddon otherwise reserves scrollbar
+   width from usable columns, even when `scrollbar.showScrollbar: false` is
+   set in the Terminal options. This is the belt-and-braces CSS guard. */
+.xterm-viewport::-webkit-scrollbar {
+  display: none;
+}
+.xterm-viewport {
+  scrollbar-width: none;
+}
+
+/* Keep xterm's DOM fallback typographically dense and deterministic. The
+   WebGL/canvas renderers use Terminal options for these values, but the DOM
+   renderer also observes CSS. */
+.superserve-terminal .xterm {
+  height: 100%;
+  font-kerning: none;
+}
+.superserve-terminal .xterm-rows {
+  letter-spacing: 0 !important;
+}
