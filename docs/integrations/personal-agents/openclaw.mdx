@@ -10,14 +10,9 @@ OpenClaw is an open-source personal AI assistant. Run it in a Superserve sandbox
 ## Via the console
 
 1. Go to [console.superserve.ai](https://console.superserve.ai?utm_source=docs&utm_medium=link) and click **Create sandbox**.
-2. Pick the **`superserve/node-22`** template.
+2. Pick the **`superserve/openclaw`** template (OpenClaw and `tmux` preinstalled).
 3. Open **Advanced Options** and add your model provider key (e.g. `ANTHROPIC_API_KEY`) under **Environment Variables**.
-4. Create the sandbox, open its **Terminal**, and run:
-
-   ```bash
-   npm i -g openclaw
-   openclaw onboard
-   ```
+4. Create the sandbox, open its **Terminal**, and run `openclaw onboard` to start the setup wizard.
 
 ## Via the SDK
 
@@ -32,12 +27,9 @@ import { Sandbox } from "@superserve/sdk"
 
 const sandbox = await Sandbox.create({
   name: "openclaw",
-  fromTemplate: "superserve/node-22",
+  fromTemplate: "superserve/openclaw",
   envVars: { ANTHROPIC_API_KEY: "sk-ant-..." },
-  timeoutMs: 100000,
 })
-
-await sandbox.commands.run("npm i -g openclaw")
 ```
 
 ```python Python
@@ -45,12 +37,9 @@ from superserve import Sandbox
 
 sandbox = Sandbox.create(
     name="openclaw",
-    from_template="superserve/node-22",
+    from_template="superserve/openclaw",
     env_vars={"ANTHROPIC_API_KEY": "sk-ant-..."},
-    timeout_ms=100000,
 )
-
-sandbox.commands.run("npm i -g openclaw")
 ```
 </CodeGroup>
 
