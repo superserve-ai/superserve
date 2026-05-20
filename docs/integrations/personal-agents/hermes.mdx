@@ -10,15 +10,9 @@ Hermes is NousResearch's open-source personal AI agent. Run it in a Superserve s
 ## Via the console
 
 1. Go to [console.superserve.ai](https://console.superserve.ai?utm_source=docs&utm_medium=link) and click **Create sandbox**.
-2. Pick the **`superserve/node-22`** template.
+2. Pick the **`superserve/hermes`** template (Hermes and `tmux` preinstalled).
 3. Open **Advanced Options** and add your model provider key (e.g. `ANTHROPIC_API_KEY`) under **Environment Variables**.
-4. Create the sandbox, open its **Terminal**, and run:
-
-   ```bash
-   curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
-   source ~/.bashrc
-   hermes
-   ```
+4. Create the sandbox, open its **Terminal**, and run `hermes`.
 
 ## Via the SDK
 
@@ -33,14 +27,9 @@ import { Sandbox } from "@superserve/sdk"
 
 const sandbox = await Sandbox.create({
   name: "hermes",
-  fromTemplate: "superserve/node-22",
+  fromTemplate: "superserve/hermes",
   envVars: { ANTHROPIC_API_KEY: "sk-ant-..." },
-  timeoutMs: 100000,
 })
-
-await sandbox.commands.run(
-  "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
-)
 ```
 
 ```python Python
@@ -48,13 +37,8 @@ from superserve import Sandbox
 
 sandbox = Sandbox.create(
     name="hermes",
-    from_template="superserve/node-22",
+    from_template="superserve/hermes",
     env_vars={"ANTHROPIC_API_KEY": "sk-ant-..."},
-    timeout_ms=100000,
-)
-
-sandbox.commands.run(
-    "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash"
 )
 ```
 </CodeGroup>
