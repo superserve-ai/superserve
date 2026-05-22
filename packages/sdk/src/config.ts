@@ -51,7 +51,7 @@ export function dataPlaneUrl(sandboxId: string, sandboxHost: string): string {
  * Derive the data-plane sandbox host from the control-plane base URL.
  *
  * `https://api.superserve.ai`         → `sandbox.superserve.ai`
- * `https://api-staging.superserve.ai` → `sandbox-staging.superserve.ai`
+ * `https://api-staging.superserve.ai` → `staging-sandbox.superserve.ai`
  * Any other URL                        → `sandbox.superserve.ai` (safe default)
  */
 function deriveSandboxHost(baseUrl: string): string {
@@ -59,7 +59,7 @@ function deriveSandboxHost(baseUrl: string): string {
     const url = new URL(baseUrl)
     const host = url.hostname
     if (host === "api-staging.superserve.ai") {
-      return "sandbox-staging.superserve.ai"
+      return "staging-sandbox.superserve.ai"
     }
     if (host === "api.superserve.ai") {
       return "sandbox.superserve.ai"
