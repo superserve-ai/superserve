@@ -59,7 +59,7 @@ class TestDeriveSandboxHost:
     def test_staging(self) -> None:
         assert (
             _derive_sandbox_host("https://api-staging.superserve.ai")
-            == "sandbox-staging.superserve.ai"
+            == "staging-sandbox.superserve.ai"
         )
 
     def test_other(self) -> None:

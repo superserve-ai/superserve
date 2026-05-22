@@ -72,7 +72,7 @@ describe("resolveConfig", () => {
       apiKey: "k",
       baseUrl: "https://api-staging.superserve.ai",
     })
-    expect(cfg.sandboxHost).toBe("sandbox-staging.superserve.ai")
+    expect(cfg.sandboxHost).toBe("staging-sandbox.superserve.ai")
   })
 
   it("derives sandboxHost falls back to default for unknown URL", () => {
@@ -92,8 +92,8 @@ describe("dataPlaneUrl", () => {
   })
 
   it("builds staging data plane URL", () => {
-    expect(dataPlaneUrl("xyz", "sandbox-staging.superserve.ai")).toBe(
-      "https://boxd-xyz.sandbox-staging.superserve.ai",
+    expect(dataPlaneUrl("xyz", "staging-sandbox.superserve.ai")).toBe(
+      "https://boxd-xyz.staging-sandbox.superserve.ai",
     )
   })
 })

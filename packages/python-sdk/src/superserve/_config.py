@@ -48,14 +48,14 @@ def _derive_sandbox_host(base_url: str) -> str:
     """Derive the data-plane sandbox host from the control-plane base URL.
 
     https://api.superserve.ai         -> sandbox.superserve.ai
-    https://api-staging.superserve.ai -> sandbox-staging.superserve.ai
+    https://api-staging.superserve.ai -> staging-sandbox.superserve.ai
     Any other URL                      -> sandbox.superserve.ai (safe default)
     """
     try:
         parsed = urlparse(base_url)
         host = parsed.hostname or ""
         if host == "api-staging.superserve.ai":
-            return "sandbox-staging.superserve.ai"
+            return "staging-sandbox.superserve.ai"
         if host == "api.superserve.ai":
             return DEFAULT_SANDBOX_HOST
     except ValueError:
