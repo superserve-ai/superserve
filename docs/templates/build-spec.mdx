@@ -16,7 +16,8 @@ from: "ghcr.io/myorg/foo:v1"  // any OCI registry
 
 **Constraints:**
 - Must be a **linux/amd64** image
-- **Alpine and distroless bases are rejected** at validation time (musl/busybox incompat with build tooling)
+- **Alpine bases are rejected** — musl + a non-systemd init are incompatible with the build tooling; use a Debian/Ubuntu-based image
+- **Distroless bases are rejected** — they ship no shell, so `run` steps can't execute
 
 ## `steps`: ordered build steps
 
@@ -80,21 +81,27 @@ Templates specify the VM shape; sandboxes inherit these and cannot override them
 | `memoryMib` | 256 | 4096 | 1024 |
 | `diskMib` | 1024 | 8192 | 4096 |
 
+The **Max** column is the platform ceiling. New teams start with a lower per-team cap (2 vCPU, 2048 MiB memory); email [support@superserve.ai](mailto:support@superserve.ai) to raise it.
+
 ## Build error codes
 
-On failure, `BuildError.code` is one of these stable identifiers (parsed from `errorMessage`):
+When a build lands on `failed`, `BuildError.code` carries one of these stable identifiers (the SDK parses it from the `"<code>: <detail>"` prefix on `errorMessage`):
 
 | Code | Meaning |
 |---|---|
-| `image_pull_failed` | Base image couldn't be pulled or resolved |
-| `step_failed` | A build step exited non-zero |
-| `boot_failed` | Build VM failed to boot |
-| `snapshot_failed` | Snapshot bundle couldn't be produced |
-| `start_cmd_failed` | `startCmd` exited non-zero before snapshot |
-| `ready_cmd_failed` | `readyCmd` didn't exit `0` within 10 minutes |
-| `too_many_builds` | Team's concurrent build limit reached (raised as `RateLimitError`, not `BuildError`) |
-| `too_many_templates` | Team's total template count limit reached (raised as `RateLimitError`) |
-| `build_failed` | Catch-all when no specific code applies |
+| `bad_reference` | The `from` image reference is malformed (expected `python:3.11` or `ghcr.io/org/image:tag`). |
+| `unsupported_platform` | The base image isn't `linux/amd64`. |
+| `image_pull_failed` | Base image couldn't be pulled or resolved — bad reference, or the registry was unreachable. |
+| `image_unsafe` | Image rejected for unsafe paths (tar / symlink / hardlink entries escaping the root). |
+| `image_too_large` | Flattened image exceeds the requested `diskMib`; raise `diskMib`. |
+| `step_failed` | A build step exited non-zero. The message includes the failing step and its exit code. |
+| `boot_failed` | Build VM failed to boot. |
+| `snapshot_failed` | Snapshot couldn't be captured. |
+| `start_cmd_failed` | `startCmd` didn't launch successfully. |
+| `ready_cmd_failed` | `readyCmd` didn't exit `0` within 10 minutes. |
+| `build_failed` | Catch-all when no specific code applies. |
+
+`Template.create` / `rebuild` can also be rejected **before a build starts** with a `RateLimitError` — `too_many_builds` (team's concurrent-build limit) or `too_many_templates` (team's template-count limit). These are not `BuildError` codes; see [Errors](/errors#ratelimiterror).
 
 ## Related
 
