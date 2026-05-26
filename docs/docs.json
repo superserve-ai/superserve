@@ -125,10 +125,15 @@
             ]
           },
           {
+            "group": "Claude Managed Agents",
+            "pages": [
+              "integrations/agent-harnesses/claude-managed-agents"
+            ]
+          },
+          {
             "group": "Agent Harnesses",
             "pages": [
               "integrations/agent-harnesses/claude-agent-sdk",
-              "integrations/agent-harnesses/claude-managed-agents",
               "integrations/agent-harnesses/openai-agents-sdk"
             ]
           },
