@@ -1,12 +1,12 @@
 ---
 title: "Run Claude Managed Agents on Superserve"
 sidebarTitle: Claude Managed Agents
-description: "Execute Claude agent tool calls in isolated Firecracker microVMs with snapshot-based cold starts, pause/resume, and per-sandbox network isolation."
+description: "Run Claude agent tool calls inside Superserve sandboxes - isolated Firecracker microVMs with sub-second cold starts, pause/resume, and per-sandbox network isolation."
 ---
 
 [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) is Anthropic's agent infrastructure for autonomous Claude deployments. You define an agent with a model, system prompt, and tools, then open sessions that stream events while the agent reads files, runs commands, and calls tools. By default, sessions run inside Anthropic's cloud containers.
 
-A self-hosted environment moves the execution layer to your infrastructure. The agent loop, model calls, and session history stay on Anthropic's servers. The filesystem and shell — where the agent's tools actually run — operate inside Superserve's Firecracker microVMs.
+A self-hosted environment moves the execution layer to your infrastructure. The agent loop, model calls, and session history stay on Anthropic's servers. The filesystem and shell - where the agent's tools actually run - operate inside Superserve sandboxes.
 
 ## How it works
 
@@ -14,14 +14,14 @@ Three parties are involved in every session:
 
 - **Anthropic** runs the API, agent loop, and a per-environment work queue that signals when tools need to execute.
 - **You** run an orchestrator that watches the queue, manages sandbox lifecycle, and starts the tool runner inside each sandbox. Separately, your application creates sessions and engages end users.
-- **Superserve** provides per-session Firecracker microVMs — isolated sandboxes with their own filesystem, network namespace, and process tree.
+- **Superserve** provides per-session sandboxes - isolated microVMs with their own filesystem, network namespace, and process tree.
 
 Tool dispatch depends on the tool type:
 
 - **Filesystem and shell tools** (`bash`, `read`, `write`, `edit`, `glob`, `grep`) execute inside your Superserve sandbox. The tool runner handles each call against the sandbox's filesystem and shell, posting results back to the session.
 - **Web tools** (`web_search`, `web_fetch`) and **MCP server tools** route through Anthropic's servers. The sandbox is not involved.
 
-Each session gets its own isolated VM. Filesystem changes persist across tool calls within a session. Between activity bursts, sandboxes can be paused to disk and resumed on demand.
+Each session gets its own sandbox. Filesystem state persists across tool calls, and idle sandboxes can be paused and resumed on demand.
 
 ## Prerequisites
 
@@ -57,7 +57,7 @@ print(environment.id)
 ```
 </CodeGroup>
 
-Open the environment in the Console and click **Generate environment key**. Export both values on the host where your orchestrator will run:
+Open the environment in the Console and click **Generate environment key**. Export these values on the host where your orchestrator will run:
 
 ```bash
 export ANTHROPIC_ENVIRONMENT_KEY="sk-ant-oat01-..."
@@ -65,11 +65,11 @@ export ANTHROPIC_ENVIRONMENT_ID="env_..."
 export SUPERSERVE_API_KEY="ss_live_..."
 ```
 
-Create your agent as you would for any Managed Agents setup — the agent doesn't know it will run on self-hosted infrastructure. That's determined per session by `environment_id`.
+Create your agent as you would for any Managed Agents setup - nothing in the agent definition is specific to self-hosted. The execution environment is selected per session via `environment_id`.
 
 ## Build the sandbox template
 
-Build a Superserve template with Python and the Anthropic SDK pre-installed. This template becomes a Firecracker snapshot — every sandbox created from it boots in under a second with no image pull or package install.
+Build a Superserve template with Python and the Anthropic SDK pre-installed. Sandboxes created from this template boot in under a second - no image pull or package install at session time.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -158,7 +158,7 @@ asyncio.run(main())
 
 ## Run the orchestrator
 
-The orchestrator long-polls Anthropic's work queue, ensures a Superserve sandbox is running for each session, and launches the runner inside it. For multi-turn sessions it reuses the same sandbox, resuming from a paused state if needed — preserving the agent's filesystem and in-memory state across turns.
+The orchestrator long-polls Anthropic's work queue, ensures a Superserve sandbox is running for each session, and launches the runner inside it. For multi-turn sessions it reuses the same sandbox, resuming from a paused state if needed - preserving the agent's filesystem and in-memory state across turns.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -288,22 +288,22 @@ asyncio.run(main())
 What the orchestrator does on each work item:
 
 1. **Finds or creates** a sandbox for the session using a metadata tag. Existing paused sandboxes are resumed rather than recreated.
-2. **Locks down egress** — each sandbox can only reach `api.anthropic.com`. The deny-all + allowlist pattern prevents data exfiltration to arbitrary endpoints.
+2. **Locks down egress** - each sandbox can only reach `api.anthropic.com`. The deny-all + allowlist pattern prevents data exfiltration to arbitrary endpoints.
 3. **Uploads and launches** the runner with per-session credentials passed as environment variables.
 
-Long-polling works behind any NAT or firewall. For webhook-triggered orchestration, subscribe to `session.status_run_started` events and drain the work queue on each delivery — see Anthropic's [webhook documentation](https://platform.claude.com/docs/en/managed-agents/webhooks).
+Long-polling works behind any NAT or firewall. For webhook-triggered orchestration, subscribe to `session.status_run_started` events and drain the work queue on each delivery - see Anthropic's [webhook documentation](https://platform.claude.com/docs/en/managed-agents/webhooks).
 
 <Warning>
-Keep `ANTHROPIC_ENVIRONMENT_KEY` on the orchestrator host only. The orchestrator passes it into each sandbox as an environment variable scoped to the runner process. Never set `ANTHROPIC_API_KEY` inside the sandbox — that would expose an organization-scoped credential to agent tool calls.
+Keep `ANTHROPIC_ENVIRONMENT_KEY` on the orchestrator host only. The orchestrator passes it into each sandbox as an environment variable scoped to the runner process. Never set `ANTHROPIC_API_KEY` inside the sandbox - that would expose an organization-scoped credential to agent tool calls.
 </Warning>
 
 <Tip>
-For cost optimization, add a janitor thread that pauses sandboxes idle past a threshold. Superserve's `pause()` checkpoints the full VM state — memory, processes, and filesystem — to disk at zero compute cost. The next work item for that session calls `resume()` and picks up exactly where it left off, in under a second.
+To reduce costs, pause sandboxes that sit idle between turns. Superserve's `pause()` checkpoints the full VM state - memory, processes, and filesystem - at zero compute cost. The next work item for that session calls `resume()` and picks up exactly where it left off, in under a second.
 </Tip>
 
 ## Start a session
 
-From your application, create a session targeting the self-hosted environment. The code is identical to a cloud deployment — only `environment_id` changes.
+From your application, create a session targeting the self-hosted environment. The code is identical to a cloud deployment - only `environment_id` changes.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -367,9 +367,9 @@ See [Events and streaming](https://platform.claude.com/docs/en/managed-agents/ev
 
 ## What you get
 
-- **Firecracker microVM isolation.** Each session runs in its own lightweight VM — not a shared container. Process tree, filesystem, and network namespace are fully isolated. A compromised sandbox cannot affect others.
-- **Sub-second cold starts.** Sandboxes restore from pre-built Firecracker snapshots. No image pull, no package install, no boot sequence at session time.
-- **Pause and resume.** Checkpoint the full VM state to disk between turns. Resume picks up exactly where it left off — running processes, open files, in-memory state. Pay for compute only when the agent is actively working.
+- **Firecracker microVM isolation.** Each session runs in its own lightweight VM - not a shared container. Process tree, filesystem, and network namespace are fully isolated. A compromised sandbox cannot affect others.
+- **Sub-second cold starts.** Sandboxes are ready instantly. No image pull, no package install, no boot sequence at session time.
+- **Pause and resume.** Checkpoint the full sandbox state between turns. Resume picks up exactly where it left off - running processes, open files, in-memory state. Pay for compute only when the agent is actively working.
 - **Per-sandbox network isolation.** Each sandbox gets its own network namespace with CIDR and domain-based egress filtering. Lock the agent down to `api.anthropic.com` only, or open access to specific internal services.
 - **The sandbox is yours.** Beyond running the agent's tools, you control the full VM. Pre-install packages in the template, mount data via the files API, stream command output for observability. The tool runner is one process in a VM you own.
 - **One line to switch.** Point `environment_id` at a cloud environment and the same application code works unchanged. The only Superserve-specific piece is the orchestrator.
