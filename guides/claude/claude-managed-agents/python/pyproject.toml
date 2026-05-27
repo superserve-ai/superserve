@@ -1,0 +1,31 @@
+[project]
+name = "superserve-claude-managed-agents"
+version = "0.1.0"
+description = "Reference implementation for running Claude Managed Agents on Superserve."
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.103",
+    "superserve>=0.7",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+webhook = [
+    "anthropic[webhooks]>=0.103",
+    "fastapi",
+    "uvicorn[standard]",
+]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = [
+    "build_template",
+    "create_agent",
+    "create_environment",
+    "orchestrator",
+    "orchestrator_webhook",
+    "runner",
+]

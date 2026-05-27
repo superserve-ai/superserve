@@ -1,0 +1,528 @@
+---
+title: "Run Claude Managed Agents on Superserve"
+sidebarTitle: Claude Managed Agents
+description: "A guide to running Claude Managed Agents inside your own Superserve sandboxes, as a self-hosted environment."
+icon: "/logos/integrations/claude.svg"
+---
+
+[Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) is Anthropic's configurable harness and infrastructure for running Claude as an autonomous agent. You define an agent (model, system prompt, tools, and MCP servers), then open sessions and stream events as Claude reads files, runs commands, and calls tools to complete a task.
+
+By default, those tool calls run inside Anthropic-managed cloud containers. A self-hosted environment moves just the container to your own infrastructure. Everything else stays on Anthropic's side: the agent loop, model calls, prompt caching, event stream, and session history. Only the filesystem and shell (where `bash`, `read`, `write`, and similar tools execute) run in a Superserve sandbox.
+
+## How it works
+
+- **Anthropic** runs the API, agent loop, and a per-environment work queue that signals when tools need to execute.
+- **You** run an orchestrator that watches the queue, manages sandbox lifecycle, and starts the tool runner inside each sandbox. Separately, your application creates sessions and engages end users.
+- **Superserve** provides per-session sandboxes - isolated microVMs with their own filesystem, network namespace, and process tree.
+
+Tool dispatch depends on the tool type:
+
+- **Filesystem and shell tools** (`bash`, `read`, `write`, `edit`, `glob`, `grep`) execute inside your Superserve sandbox. The tool runner handles each call against the sandbox's filesystem and shell, posting results back to the session.
+- **Web tools** (`web_search`, `web_fetch`) and **MCP server tools** route through Anthropic's servers. The sandbox is not involved.
+
+Each session gets its own sandbox. Filesystem state persists across tool calls, and idle sandboxes can be paused and resumed on demand.
+
+<Tip>
+A [reference implementation](https://github.com/superserve-ai/superserve/tree/main/guides/claude/claude-managed-agents) with the orchestrator, runner, and setup scripts is available on GitHub in both Python and TypeScript.
+</Tip>
+
+## Prerequisites
+
+- A [Superserve account](https://console.superserve.ai) and API key
+- An [Anthropic account](https://platform.claude.com) with environments access
+- Python 3.12+ or Node.js 22+ on the orchestrator host
+
+## Create a self-hosted environment
+
+In the [Claude Platform Console](https://platform.claude.com/workspaces/default/environments): **Workspace > Environments > New > Self-hosted**. Or create one via the API:
+
+<CodeGroup>
+```typescript TypeScript
+import Anthropic from "@anthropic-ai/sdk"
+
+const client = new Anthropic()
+const environment = await client.beta.environments.create({
+  name: "superserve",
+  config: { type: "self_hosted" },
+})
+console.log(environment.id)
+```
+
+```python Python
+import anthropic
+
+client = anthropic.Anthropic()
+environment = client.beta.environments.create(
+    name="superserve",
+    config={"type": "self_hosted"},
+)
+print(environment.id)
+```
+</CodeGroup>
+
+Open the environment in the Console and click **Generate environment key**. Export these values on the host where your orchestrator will run:
+
+```bash
+export ANTHROPIC_ENVIRONMENT_KEY="sk-ant-oat01-..."
+export ANTHROPIC_ENVIRONMENT_ID="env_..."
+export SUPERSERVE_API_KEY="ss_live_..."
+```
+
+Create your agent. The same definition works for both cloud and self-hosted - the environment is chosen per session.
+
+<CodeGroup>
+```typescript TypeScript
+const agent = await client.beta.agents.create({
+  name: "sandbox-agent",
+  model: "claude-sonnet-4-6",
+  system: "You are a coding assistant with a Linux sandbox.",
+})
+```
+
+```python Python
+agent = client.beta.agents.create(
+    name="sandbox-agent",
+    model="claude-sonnet-4-6",
+    system="You are a coding assistant with a Linux sandbox.",
+)
+```
+</CodeGroup>
+
+## Build the sandbox template
+
+Build a Superserve template with Python and the Anthropic SDK pre-installed. Sandboxes created from this template boot in under a second - no image pull or package install at session time.
+
+<CodeGroup>
+```typescript TypeScript
+import { Template } from "@superserve/sdk"
+
+const template = await Template.create({
+  name: "claude-managed-agent",
+  from: "python:3.12-slim",
+  vcpu: 2,
+  memoryMib: 2048,
+  steps: [
+    {
+      run:
+        "apt-get update && apt-get install -y --no-install-recommends " +
+        "curl git jq procps && rm -rf /var/lib/apt/lists/*",
+    },
+    { run: "pip install --no-cache-dir anthropic" },
+    { run: "mkdir -p /workspace /mnt/session/outputs" },
+    { workdir: "/workspace" },
+  ],
+})
+
+await template.waitUntilReady({
+  onLog: (ev) => {
+    if (ev.stream !== "system") process.stdout.write(ev.text)
+  },
+})
+```
+
+```python Python
+from superserve import Template, RunStep, WorkdirStep
+
+template = Template.create(
+    name="claude-managed-agent",
+    from_="python:3.12-slim",
+    vcpu=2,
+    memory_mib=2048,
+    steps=[
+        RunStep(run=(
+            "apt-get update && apt-get install -y --no-install-recommends "
+            "curl git jq procps && rm -rf /var/lib/apt/lists/*"
+        )),
+        RunStep(run="pip install --no-cache-dir anthropic"),
+        RunStep(run="mkdir -p /workspace /mnt/session/outputs"),
+        WorkdirStep(workdir="/workspace"),
+    ],
+)
+
+template.wait_until_ready(
+    on_log=lambda ev: print(ev.text, end="")
+    if ev.stream.value != "system"
+    else None,
+)
+```
+</CodeGroup>
+
+Run this once. The template persists in your Superserve account and every session reuses it.
+
+<Tip>
+Add any runtimes, system packages, or internal tools your agent needs to the template's build steps. The snapshot captures the full filesystem, so sandboxes inherit everything without install cost at session time.
+</Tip>
+
+## Write the in-sandbox runner
+
+The runner is a small Python script that the orchestrator starts inside each sandbox. It calls Anthropic's `handle_item()`, which attaches to the session event stream, executes tool calls (`bash`, `read`, `write`, `edit`, `glob`, `grep`) against the sandbox, heartbeats the work-item lease, and stops cleanly on exit.
+
+```python runner.py
+import asyncio
+import os
+from anthropic import AsyncAnthropic
+
+
+async def main():
+    environment_key = os.environ["ANTHROPIC_ENVIRONMENT_KEY"]
+    async with AsyncAnthropic(auth_token=environment_key) as client:
+        await client.beta.environments.work.worker(
+            environment_key=environment_key,
+            workdir="/workspace",
+        ).handle_item()
+
+
+asyncio.run(main())
+```
+
+`handle_item()` reads `ANTHROPIC_SESSION_ID`, `ANTHROPIC_WORK_ID`, and `ANTHROPIC_ENVIRONMENT_ID` from environment variables automatically. The orchestrator sets all four when it launches the runner.
+
+## Run the orchestrator
+
+The orchestrator long-polls Anthropic's work queue, ensures a Superserve sandbox is running for each session, and launches the runner inside it. For multi-turn sessions it reuses the same sandbox, resuming from a paused state if needed - preserving the agent's filesystem and in-memory state across turns.
+
+<CodeGroup>
+```typescript TypeScript
+import Anthropic from "@anthropic-ai/sdk"
+import { Sandbox } from "@superserve/sdk"
+import { readFileSync } from "node:fs"
+
+const environmentKey = process.env.ANTHROPIC_ENVIRONMENT_KEY!
+const environmentId = process.env.ANTHROPIC_ENVIRONMENT_ID!
+const runner = readFileSync("runner.py", "utf8")
+
+const client = new Anthropic({ authToken: environmentKey })
+
+async function handleWork(work: { id: string; data: { id: string } }) {
+  const sessionId = work.data.id
+
+  // Find existing sandbox for this session, or create a new one
+  const existing = await Sandbox.list({
+    metadata: { "cma.session_id": sessionId },
+  })
+  const live = existing.filter(
+    (s) => s.status === "active" || s.status === "paused",
+  )
+
+  let sandbox: Sandbox
+  if (live.length > 0) {
+    sandbox = await Sandbox.connect(live[0].id)
+    if (live[0].status === "paused") await sandbox.resume()
+  } else {
+    sandbox = await Sandbox.create({
+      name: `cma-${sessionId.slice(0, 8)}`,
+      fromTemplate: "claude-managed-agent",
+      metadata: { "cma.session_id": sessionId },
+      network: { allowOut: ["api.anthropic.com"] },
+    })
+  }
+
+  await sandbox.files.write("/workspace/runner.py", runner)
+  await sandbox.commands.run(
+    "nohup python3 /workspace/runner.py > /workspace/runner.log 2>&1 &",
+    {
+      env: {
+        ANTHROPIC_ENVIRONMENT_KEY: environmentKey,
+        ANTHROPIC_WORK_ID: work.id,
+        ANTHROPIC_SESSION_ID: sessionId,
+        ANTHROPIC_ENVIRONMENT_ID: environmentId,
+      },
+    },
+  )
+}
+
+for await (const work of client.beta.environments.work.poller({
+  environmentId,
+  environmentKey,
+  autoStop: false,
+})) {
+  await handleWork(work)
+}
+```
+
+```python Python
+import asyncio
+import os
+from pathlib import Path
+
+from anthropic import AsyncAnthropic
+from superserve import AsyncSandbox, NetworkConfig
+
+ENVIRONMENT_KEY = os.environ["ANTHROPIC_ENVIRONMENT_KEY"]
+ENVIRONMENT_ID = os.environ["ANTHROPIC_ENVIRONMENT_ID"]
+RUNNER = Path("runner.py").read_text()
+
+
+async def handle_work(work):
+    session_id = work.data.id
+
+    # Find existing sandbox for this session, or create a new one
+    existing = await AsyncSandbox.list(
+        metadata={"cma.session_id": session_id},
+    )
+    live = [s for s in existing if s.status in ("active", "paused")]
+
+    if live:
+        sandbox = await AsyncSandbox.connect(live[0].id)
+        if live[0].status == "paused":
+            await sandbox.resume()
+    else:
+        sandbox = await AsyncSandbox.create(
+            name=f"cma-{session_id[:8]}",
+            from_template="claude-managed-agent",
+            metadata={"cma.session_id": session_id},
+            network=NetworkConfig(allow_out=["api.anthropic.com"]),
+        )
+
+    await sandbox.files.write("/workspace/runner.py", RUNNER)
+    await sandbox.commands.run(
+        "nohup python3 /workspace/runner.py > /workspace/runner.log 2>&1 &",
+        env={
+            "ANTHROPIC_ENVIRONMENT_KEY": ENVIRONMENT_KEY,
+            "ANTHROPIC_WORK_ID": work.id,
+            "ANTHROPIC_SESSION_ID": session_id,
+            "ANTHROPIC_ENVIRONMENT_ID": ENVIRONMENT_ID,
+        },
+    )
+
+
+async def main():
+    async with AsyncAnthropic(auth_token=ENVIRONMENT_KEY) as client:
+        async for work in client.beta.environments.work.poller(
+            environment_id=ENVIRONMENT_ID,
+            environment_key=ENVIRONMENT_KEY,
+            auto_stop=False,
+        ):
+            await handle_work(work)
+
+
+asyncio.run(main())
+```
+</CodeGroup>
+
+What the orchestrator does on each work item:
+
+1. **Finds or creates** a sandbox for the session using a metadata tag. Existing paused sandboxes are resumed rather than recreated.
+2. **Locks down egress** — each sandbox can only reach `api.anthropic.com`, preventing data exfiltration to arbitrary endpoints.
+3. **Uploads and launches** the runner with per-session credentials passed as environment variables.
+
+Long-polling works behind any NAT or firewall. For push-based dispatch, use a webhook instead.
+
+### Webhook variant
+
+Subscribe to `session.status_run_started` [webhooks](https://platform.claude.com/docs/en/managed-agents/webhooks), then drain the work queue on each delivery. The sandbox lifecycle logic is the same — only the trigger changes.
+
+<CodeGroup>
+```typescript TypeScript
+import Anthropic from "@anthropic-ai/sdk"
+
+const client = new Anthropic({ authToken: environmentKey })
+
+export async function handleWebhook(req: Request): Promise<Response> {
+  const body = await req.text()
+  const event = client.beta.webhooks.unwrap(body, {
+    headers: Object.fromEntries(req.headers),
+  })
+  if (event.data.type !== "session.status_run_started") {
+    return Response.json({ status: "ignored" })
+  }
+
+  for await (const work of client.beta.environments.work.poller({
+    environmentId,
+    environmentKey,
+    blockMs: null,
+    drain: true,
+    autoStop: false,
+  })) {
+    await handleWork(work)
+  }
+  return Response.json({ status: "ok" })
+}
+```
+
+```python Python
+async def handle_webhook(raw: bytes, headers: dict) -> dict:
+    event = client.beta.webhooks.unwrap(raw.decode(), headers=headers)
+    if event.data.type != "session.status_run_started":
+        return {"status": "ignored"}
+
+    async for work in client.beta.environments.work.poller(
+        environment_id=ENVIRONMENT_ID,
+        environment_key=ENVIRONMENT_KEY,
+        block_ms=None,
+        drain=True,
+        auto_stop=False,
+    ):
+        await handle_work(work)
+    return {"status": "ok"}
+```
+</CodeGroup>
+
+<Warning>
+Keep `ANTHROPIC_ENVIRONMENT_KEY` on the orchestrator host only. The orchestrator passes it into each sandbox as an environment variable scoped to the runner process. Never set `ANTHROPIC_API_KEY` inside the sandbox - that would expose an organization-scoped credential to agent tool calls.
+</Warning>
+
+<Tip>
+To reduce costs, pause sandboxes that sit idle between turns. Superserve's `pause()` checkpoints the full VM state - memory, processes, and filesystem - at zero compute cost. The next work item for that session calls `resume()` and picks up exactly where it left off, in under a second.
+</Tip>
+
+## Start a session
+
+Create a session, send a message, and stream the response.
+
+<CodeGroup>
+```typescript TypeScript
+import Anthropic from "@anthropic-ai/sdk"
+
+const client = new Anthropic()
+
+const session = await client.beta.sessions.create({
+  agent: process.env.ANTHROPIC_AGENT_ID!,
+  environment_id: process.env.ANTHROPIC_ENVIRONMENT_ID!,
+})
+
+await client.beta.sessions.events.send(session.id, {
+  events: [
+    {
+      type: "user.message",
+      content: [
+        {
+          type: "text",
+          text: "Summarize every .py file in the workspace.",
+        },
+      ],
+    },
+  ],
+})
+
+const stream = await client.beta.sessions.events.stream(session.id)
+for await (const event of stream) {
+  if (event.type === "agent.message") {
+    for (const block of event.content) {
+      if ("text" in block) process.stdout.write(block.text)
+    }
+  }
+  if (
+    event.type === "session.status_idle" &&
+    event.stop_reason?.type === "end_turn"
+  ) break
+}
+```
+
+```python Python
+import os
+import anthropic
+
+client = anthropic.Anthropic()
+
+session = client.beta.sessions.create(
+    agent=os.environ["ANTHROPIC_AGENT_ID"],
+    environment_id=os.environ["ANTHROPIC_ENVIRONMENT_ID"],
+)
+
+client.beta.sessions.events.send(
+    session.id,
+    events=[
+        {
+            "type": "user.message",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Summarize every .py file in the workspace.",
+                }
+            ],
+        }
+    ],
+)
+
+with client.beta.sessions.events.stream(session.id) as stream:
+    for event in stream:
+        if event.type == "agent.message":
+            for block in event.content:
+                if hasattr(block, "text"):
+                    print(block.text, end="")
+        if (
+            event.type == "session.status_idle"
+            and getattr(event.stop_reason, "type", None) == "end_turn"
+        ):
+            break
+```
+</CodeGroup>
+
+See [Events and streaming](https://platform.claude.com/docs/en/managed-agents/events-and-streaming) for the full event vocabulary.
+
+### Pre-prepared sandboxes
+
+For sessions that need custom data loaded before the agent starts - a cloned repo, a dataset, customer-specific files - create and seed a sandbox ahead of time, then pass its ID via session metadata. The orchestrator detects the metadata and attaches the existing sandbox instead of creating a new one.
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+import Anthropic from "@anthropic-ai/sdk"
+
+const sandbox = await Sandbox.create({
+  name: "prepped-session",
+  fromTemplate: "claude-managed-agent",
+})
+await sandbox.files.write("/workspace/data.csv", dataContents)
+await sandbox.commands.run("git clone https://github.com/org/repo /workspace/repo")
+
+const session = await client.beta.sessions.create({
+  agent: agentId,
+  environment_id: environmentId,
+  metadata: { "superserve.sandbox_id": sandbox.id },
+})
+```
+
+```python Python
+from superserve import Sandbox
+
+sandbox = Sandbox.create(
+    name="prepped-session",
+    from_template="claude-managed-agent",
+)
+sandbox.files.write("/workspace/data.csv", data_contents)
+sandbox.commands.run("git clone https://github.com/org/repo /workspace/repo")
+
+session = client.beta.sessions.create(
+    agent=agent_id,
+    environment_id=environment_id,
+    metadata={"superserve.sandbox_id": sandbox.id},
+)
+```
+</CodeGroup>
+
+The orchestrator reads `superserve.sandbox_id` from `work.data.metadata` and connects to that sandbox instead of creating one from scratch.
+
+<Note>
+[Memory](https://platform.claude.com/docs/en/managed-agents/memory) is not yet supported with self-hosted sandboxes.
+</Note>
+
+## What you get
+
+- **Firecracker microVM isolation.** Each session runs in its own lightweight VM - not a shared container. Process tree, filesystem, and network namespace are fully isolated. A compromised sandbox cannot affect others.
+- **Sub-second cold starts.** Sandboxes are ready instantly. No image pull, no package install, no boot sequence at session time.
+- **Pause and resume.** Checkpoint the full sandbox state between turns. Resume picks up exactly where it left off - running processes, open files, in-memory state. Pay for compute only when the agent is actively working.
+- **Per-sandbox network isolation.** Each sandbox gets its own network namespace with CIDR and domain-based egress filtering. Lock the agent down to `api.anthropic.com` only, or open access to specific internal services.
+- **The sandbox is yours.** Beyond running the agent's tools, you control the full VM. Pre-install packages in the template, mount data via the files API, stream command output for observability. The tool runner is one process in a VM you own.
+- **One line to switch.** Point `environment_id` at a cloud environment and the same application code works unchanged. The only Superserve-specific piece is the orchestrator.
+
+## See also
+
+<CardGroup cols={2}>
+  <Card title="Claude Managed Agents" href="https://platform.claude.com/docs/en/managed-agents/overview">
+    Anthropic's full documentation for agents, sessions, tools, and events.
+  </Card>
+  <Card title="Self-hosted sandboxes" href="https://platform.claude.com/docs/en/managed-agents/self-hosted-sandboxes">
+    Anthropic's self-hosted reference — worker config, monitoring, and operations.
+  </Card>
+  <Card title="Create a template" href="/templates/create">
+    Customize your sandbox template with build steps, start commands, and resource limits.
+  </Card>
+  <Card title="Network rules" href="/sandbox/networking">
+    Lock down sandbox egress with allow and deny lists.
+  </Card>
+  <Card title="Reference implementation" href="https://github.com/superserve-ai/superserve/tree/main/guides/claude/claude-managed-agents">
+    Working orchestrator, runner, and setup scripts you can clone and run.
+  </Card>
+</CardGroup>
