@@ -1,8 +1,6 @@
 # Claude Managed Agents on Superserve
 
-Reference implementation for running [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) inside Superserve sandboxes as a self-hosted environment. See the [full guide](https://docs.superserve.ai/integrations/managed-agents/claude-managed-agents) for the architecture story; this README covers how to run the reference.
-
-Both Python and TypeScript implementations are included. Pick the one that matches your stack.
+Reference implementation for running [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) inside Superserve sandboxes as a self-hosted environment. See the [full guide](https://docs.superserve.ai/integrations/managed-agents/claude-managed-agents) for the architecture story.
 
 ## Prerequisites
 
@@ -45,9 +43,9 @@ node orchestrator.mjs           # long-running
 
 1. The orchestrator claims work items from the environment's work queue.
 2. For each session, it finds an existing Superserve sandbox (resuming if paused) or creates a new one.
-3. It uploads `runner.py` and starts it inside the sandbox.
+3. It uploads the runner and starts it inside the sandbox.
 4. The runner executes tool calls (`bash`, `read`, `write`, `edit`, `glob`, `grep`) against the sandbox filesystem.
-5. A janitor (Python) pauses sandboxes idle for 5 minutes. The next work item resumes them in under a second.
+5. A janitor pauses sandboxes that have been idle for more than 5 minutes. The next work item resumes them in under a second.
 
 ## See also
 
