@@ -1,17 +1,15 @@
 ---
 title: "Run Claude Managed Agents on Superserve"
 sidebarTitle: Claude Managed Agents
-description: "Run Claude agent tool calls inside Superserve sandboxes - isolated Firecracker microVMs with sub-second cold starts, pause/resume, and per-sandbox network isolation."
+description: "A guide to running Claude Managed Agents inside your own Superserve sandboxes, as a self-hosted environment."
 icon: "/logos/integrations/claude.svg"
 ---
 
-[Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) is Anthropic's agent infrastructure for autonomous Claude deployments. You define an agent with a model, system prompt, and tools, then open sessions that stream events while the agent reads files, runs commands, and calls tools. By default, sessions run inside Anthropic's cloud containers.
+[Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) is Anthropic's configurable harness and infrastructure for running Claude as an autonomous agent. You define an agent (model, system prompt, tools, and MCP servers), then open sessions and stream events as Claude reads files, runs commands, and calls tools to complete a task.
 
-A self-hosted environment moves the execution layer to your infrastructure. The agent loop, model calls, and session history stay on Anthropic's servers. The filesystem and shell - where the agent's tools actually run - operate inside Superserve sandboxes.
+By default, those tool calls run inside Anthropic-managed cloud containers. A self-hosted environment moves just the container to your own infrastructure. Everything else stays on Anthropic's side: the agent loop, model calls, prompt caching, event stream, and session history. Only the filesystem and shell (where `bash`, `read`, `write`, and similar tools execute) run in a Superserve sandbox.
 
 ## How it works
-
-Three parties are involved in every session:
 
 - **Anthropic** runs the API, agent loop, and a per-environment work queue that signals when tools need to execute.
 - **You** run an orchestrator that watches the queue, manages sandbox lifecycle, and starts the tool runner inside each sandbox. Separately, your application creates sessions and engages end users.
