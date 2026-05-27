@@ -66,7 +66,25 @@ export ANTHROPIC_ENVIRONMENT_ID="env_..."
 export SUPERSERVE_API_KEY="ss_live_..."
 ```
 
-Create your agent as you would for any Managed Agents setup - nothing in the agent definition is specific to self-hosted. The execution environment is selected per session via `environment_id`.
+Create your agent. The same definition works for both cloud and self-hosted - the environment is chosen per session.
+
+<CodeGroup>
+```typescript TypeScript
+const agent = await client.beta.agents.create({
+  name: "sandbox-agent",
+  model: "claude-sonnet-4-6",
+  system: "You are a coding assistant with a Linux sandbox.",
+})
+```
+
+```python Python
+agent = client.beta.agents.create(
+    name="sandbox-agent",
+    model="claude-sonnet-4-6",
+    system="You are a coding assistant with a Linux sandbox.",
+)
+```
+</CodeGroup>
 
 ## Build the sandbox template
 
@@ -292,7 +310,57 @@ What the orchestrator does on each work item:
 2. **Locks down egress** - each sandbox can only reach `api.anthropic.com`. The deny-all + allowlist pattern prevents data exfiltration to arbitrary endpoints.
 3. **Uploads and launches** the runner with per-session credentials passed as environment variables.
 
-Long-polling works behind any NAT or firewall. For webhook-triggered orchestration, subscribe to `session.status_run_started` events and drain the work queue on each delivery - see Anthropic's [webhook documentation](https://platform.claude.com/docs/en/managed-agents/webhooks).
+Long-polling works behind any NAT or firewall. For push-based dispatch, use a webhook instead.
+
+### Webhook variant
+
+Subscribe to `session.status_run_started` [webhooks](https://platform.claude.com/docs/en/managed-agents/webhooks), then drain the work queue on each delivery. The sandbox lifecycle logic is the same — only the trigger changes.
+
+<CodeGroup>
+```typescript TypeScript
+import Anthropic from "@anthropic-ai/sdk"
+
+const client = new Anthropic({ authToken: environmentKey })
+
+export async function handleWebhook(req: Request): Promise<Response> {
+  const body = await req.text()
+  const event = client.beta.webhooks.unwrap(body, {
+    headers: Object.fromEntries(req.headers),
+  })
+  if (event.data.type !== "session.status_run_started") {
+    return Response.json({ status: "ignored" })
+  }
+
+  for await (const work of client.beta.environments.work.poller({
+    environmentId,
+    environmentKey,
+    blockMs: null,
+    drain: true,
+    autoStop: false,
+  })) {
+    await handleWork(work)
+  }
+  return Response.json({ status: "ok" })
+}
+```
+
+```python Python
+async def handle_webhook(raw: bytes, headers: dict) -> dict:
+    event = client.beta.webhooks.unwrap(raw.decode(), headers=headers)
+    if event.data.type != "session.status_run_started":
+        return {"status": "ignored"}
+
+    async for work in client.beta.environments.work.poller(
+        environment_id=ENVIRONMENT_ID,
+        environment_key=ENVIRONMENT_KEY,
+        block_ms=None,
+        drain=True,
+        auto_stop=False,
+    ):
+        await handle_work(work)
+    return {"status": "ok"}
+```
+</CodeGroup>
 
 <Warning>
 Keep `ANTHROPIC_ENVIRONMENT_KEY` on the orchestrator host only. The orchestrator passes it into each sandbox as an environment variable scoped to the runner process. Never set `ANTHROPIC_API_KEY` inside the sandbox - that would expose an organization-scoped credential to agent tool calls.
@@ -304,7 +372,7 @@ To reduce costs, pause sandboxes that sit idle between turns. Superserve's `paus
 
 ## Start a session
 
-From your application, create a session targeting the self-hosted environment. The code is identical to a cloud deployment - only `environment_id` changes.
+Create a session, send a message, and stream the response.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -330,6 +398,19 @@ await client.beta.sessions.events.send(session.id, {
     },
   ],
 })
+
+const stream = await client.beta.sessions.events.stream(session.id)
+for await (const event of stream) {
+  if (event.type === "agent.message") {
+    for (const block of event.content) {
+      if ("text" in block) process.stdout.write(block.text)
+    }
+  }
+  if (
+    event.type === "session.status_idle" &&
+    event.stop_reason?.type === "end_turn"
+  ) break
+}
 ```
 
 ```python Python
@@ -357,10 +438,65 @@ client.beta.sessions.events.send(
         }
     ],
 )
+
+with client.beta.sessions.events.stream(session.id) as stream:
+    for event in stream:
+        if event.type == "agent.message":
+            for block in event.content:
+                if hasattr(block, "text"):
+                    print(block.text, end="")
+        if (
+            event.type == "session.status_idle"
+            and getattr(event.stop_reason, "type", None) == "end_turn"
+        ):
+            break
 ```
 </CodeGroup>
 
-See [Events and streaming](https://platform.claude.com/docs/en/managed-agents/events-and-streaming) for the full event vocabulary and rendering examples.
+See [Events and streaming](https://platform.claude.com/docs/en/managed-agents/events-and-streaming) for the full event vocabulary.
+
+### Pre-prepared sandboxes
+
+For sessions that need custom data loaded before the agent starts - a cloned repo, a dataset, customer-specific files - create and seed a sandbox ahead of time, then pass its ID via session metadata. The orchestrator detects the metadata and attaches the existing sandbox instead of creating a new one.
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+import Anthropic from "@anthropic-ai/sdk"
+
+const sandbox = await Sandbox.create({
+  name: "prepped-session",
+  fromTemplate: "claude-managed-agent",
+})
+await sandbox.files.write("/workspace/data.csv", dataContents)
+await sandbox.commands.run("git clone https://github.com/org/repo /workspace/repo")
+
+const session = await client.beta.sessions.create({
+  agent: agentId,
+  environment_id: environmentId,
+  metadata: { "superserve.sandbox_id": sandbox.id },
+})
+```
+
+```python Python
+from superserve import Sandbox
+
+sandbox = Sandbox.create(
+    name="prepped-session",
+    from_template="claude-managed-agent",
+)
+sandbox.files.write("/workspace/data.csv", data_contents)
+sandbox.commands.run("git clone https://github.com/org/repo /workspace/repo")
+
+session = client.beta.sessions.create(
+    agent=agent_id,
+    environment_id=environment_id,
+    metadata={"superserve.sandbox_id": sandbox.id},
+)
+```
+</CodeGroup>
+
+The orchestrator reads `superserve.sandbox_id` from `work.data.metadata` and connects to that sandbox instead of creating one from scratch.
 
 <Note>
 [Memory](https://platform.claude.com/docs/en/managed-agents/memory) is not yet supported with self-hosted sandboxes.
