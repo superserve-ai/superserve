@@ -1,6 +1,7 @@
 """Webhook orchestrator for Claude Managed Agents on Superserve."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import threading
@@ -15,17 +16,23 @@ import orchestrator
 dotenv.load_dotenv(override=True)
 
 PORT = int(os.environ.get("PORT", "5051"))
-WEBHOOK_SECRET = os.environ.get("ANTHROPIC_WEBHOOK_SECRET")
+WEBHOOK_SECRET = os.environ["ANTHROPIC_WEBHOOK_SECRET"]
 
 log = logging.getLogger("orchestrator.webhook")
 app = FastAPI()
 
 _client = anthropic.Anthropic(auth_token=orchestrator.ENVIRONMENT_KEY)
+_drain_lock = threading.Lock()
 
 
 def _drain_work() -> None:
-    import asyncio
-    asyncio.run(_drain_work_async())
+    if not _drain_lock.acquire(blocking=False):
+        log.debug("drain already in progress, skipping")
+        return
+    try:
+        asyncio.run(_drain_work_async())
+    finally:
+        _drain_lock.release()
 
 
 async def _drain_work_async() -> None:
@@ -34,21 +41,29 @@ async def _drain_work_async() -> None:
             environment_id=orchestrator.ENVIRONMENT_ID,
             environment_key=orchestrator.ENVIRONMENT_KEY,
             block_ms=None,
-            reclaim_older_than_ms=int(os.environ.get("POLL_RECLAIM_OLDER_THAN_MS", "2000")),
+            reclaim_older_than_ms=2000,
             drain=True,
             auto_stop=False,
         ):
             try:
                 await orchestrator.handle_work(work)
             except Exception as e:
-                log.error("failed to handle work=%s: %s", work.id, e, exc_info=True)
+                log.error("failed work=%s: %s", work.id, e, exc_info=True)
+
+
+def _fallback_drain_loop() -> None:
+    while True:
+        try:
+            _drain_work()
+        except Exception as e:
+            log.warning("fallback drain error: %s", e)
+        orchestrator.shutdown_thread.wait(30)
+        if orchestrator.shutdown_thread.is_set():
+            return
 
 
 @app.post("/")
 async def webhook(request: Request, background_tasks: BackgroundTasks):
-    if WEBHOOK_SECRET is None:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_WEBHOOK_SECRET not set")
-
     raw = await request.body()
     try:
         event = _client.beta.webhooks.unwrap(
@@ -71,17 +86,23 @@ def healthz():
     return {"ok": True, "environment_id": orchestrator.ENVIRONMENT_ID}
 
 
+@app.on_event("startup")
+def on_startup() -> None:
+    orchestrator.acquire_lock()
+    threading.Thread(target=_fallback_drain_loop, daemon=True).start()
+    log.info("webhook orchestrator listening on :%d env=%s", PORT, orchestrator.ENVIRONMENT_ID)
+
+
+@app.on_event("shutdown")
+def on_shutdown() -> None:
+    orchestrator.shutdown_thread.set()
+
+
 def main() -> None:
     logging.basicConfig(
-        level=os.environ.get("LOG_LEVEL", "INFO"),
+        level="INFO",
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
-    if WEBHOOK_SECRET is None:
-        raise RuntimeError(
-            "ANTHROPIC_WEBHOOK_SECRET is not set. "
-            "Use orchestrator.py for polling mode, or set the secret for webhook mode."
-        )
-    log.info("webhook orchestrator listening on :%d env=%s", PORT, orchestrator.ENVIRONMENT_ID)
     uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info")
 
 

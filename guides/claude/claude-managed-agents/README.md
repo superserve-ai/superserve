@@ -5,20 +5,17 @@ Reference implementation for running [Claude Managed Agents](https://platform.cl
 ## Prerequisites
 
 - A [Superserve account](https://console.superserve.ai) and API key.
-- An Anthropic account with Claude Managed Agents access. Create a self-hosted environment from the Claude Console under *Workspace > Environments > New > Self-hosted*, then click *Generate environment key*.
-- An Anthropic API key for `create_agent.py` and for the application that creates sessions.
+- An Anthropic account with Claude Managed Agents access.
 - Python 3.12+.
-- For webhook mode: an Anthropic webhook configured with `session.status_run_started` enabled, plus its signing secret.
+- For webhook mode: an Anthropic webhook with `session.status_run_started` enabled, plus its signing secret.
 
 ## Setup
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
+uv sync
 
 # Webhook mode also needs:
-pip install -e ".[webhook]"
+uv sync --extra webhook
 
 cp .env.example .env
 # Fill in the values.
@@ -38,7 +35,7 @@ Follow the printed instructions to generate an environment key in the Claude Con
 python build_template.py
 ```
 
-Builds a Superserve template from `python:3.12-slim` with the Anthropic SDK and common tools pre-installed. Idempotent — skips the build if a ready template with the same name already exists. Sandboxes created from this template boot in under a second.
+Builds a Superserve template from `python:3.12-slim` with the Anthropic SDK and common tools pre-installed.
 
 ## 3. Create an agent
 
@@ -64,45 +61,31 @@ Long-polls Anthropic's work queue. Works behind any NAT or firewall.
 python orchestrator_webhook.py
 ```
 
-Listens for `session.status_run_started` webhooks on port 5051 (configurable via `PORT`). Requires `ANTHROPIC_WEBHOOK_SECRET` in `.env`.
+Listens for webhooks on port 5051. Set `ANTHROPIC_WEBHOOK_SECRET` in `.env`. Includes a fallback drain loop so work is never missed even if a webhook delivery fails.
 
 ## What happens
 
 1. The orchestrator claims work items from Anthropic's queue.
-2. For each session, it finds an existing Superserve sandbox (resuming if paused) or creates a new one from the template.
-3. It uploads `runner.py` into the sandbox and starts it with the session's credentials.
-4. The runner attaches to the session's event stream and executes tool calls (`bash`, `read`, `write`, `edit`, `glob`, `grep`) against the sandbox filesystem.
-5. After the turn completes, the runner exits. The sandbox stays active for the next turn.
+2. For each session, it finds an existing Superserve sandbox (resuming if paused) or creates a new one.
+3. It checks whether a runner from a previous turn is still alive. If not, it uploads `runner.py` and starts it.
+4. The runner executes tool calls (`bash`, `read`, `write`, `edit`, `glob`, `grep`) against the sandbox filesystem.
+5. A janitor pauses sandboxes that have been idle for 5 minutes. The next work item resumes them in under a second.
 
-## Configuration
+## Production features
 
-| Variable | Default | Description |
-|---|---|---|
-| `ANTHROPIC_ENVIRONMENT_KEY` | — | Environment key for the worker |
-| `ANTHROPIC_ENVIRONMENT_ID` | — | Environment ID |
-| `SUPERSERVE_API_KEY` | — | Superserve API key |
-| `ANTHROPIC_API_KEY` | — | API key for setup scripts and your app |
-| `TEMPLATE_NAME` | `claude-managed-agent` | Template to create sandboxes from |
-| `IDLE_PAUSE_SECONDS` | `300` | Seconds before the janitor pauses idle sandboxes |
-| `POLL_BLOCK_MS` | `999` | Long-poll block duration (1–999) |
-| `POLL_RECLAIM_OLDER_THAN_MS` | `2000` | Reclaim stale work items older than this |
-| `RUNNER_MAX_IDLE_SECONDS` | `300` | Runner exits after this many idle seconds |
-| `LOG_LEVEL` | `INFO` | Logging level |
-
-## Files
-
-| File | Runs on | Purpose |
-|---|---|---|
-| `create_environment.py` | Your machine | One-time: create the self-hosted environment |
-| `create_agent.py` | Your machine | One-time: create the agent |
-| `build_template.py` | Your machine | One-time: build the sandbox template |
-| `orchestrator.py` | Your server | Long-running: polls work queue, manages sandboxes |
-| `orchestrator_webhook.py` | Your server | Long-running: webhook alternative to polling |
-| `runner.py` | Inside sandbox | Per-session: executes tool calls via Anthropic SDK |
+- **File locking** — prevents two orchestrators from racing on the same environment.
+- **PID file + exit code tracking** — knows exactly whether a runner is alive, exited cleanly, or crashed. Reads `runner.log` on failure.
+- **Process group management** — stops runners via `kill -TERM "-$pgid"` so child processes are cleaned up, with `SIGKILL` fallback.
+- **State tracking metadata** — each sandbox carries `cma.mode`, `cma.work_id`, `cma.paused_at` for full audit trail.
+- **Exponential backoff** — retries transient poll errors with increasing delay up to 60 seconds.
+- **Activity-based janitor** — only pauses sandboxes confirmed idle (no running runner, no recent work items). Stamps `cma.paused_at` on pause.
+- **Prepared sandboxes** — pass `superserve.sandbox_id` in session metadata to attach a pre-seeded sandbox.
+- **Drain lock** — webhook mode serializes concurrent drain calls to avoid duplicate work.
+- **Fallback drain** — webhook mode polls every 30 seconds as a safety net for missed deliveries.
+- **Clean shutdown** — SIGTERM/SIGINT drain in-flight work before stopping.
 
 ## See also
 
 - [Full integration guide](https://docs.superserve.ai/integrations/agent-harnesses/claude-managed-agents)
 - [Claude Managed Agents docs](https://platform.claude.com/docs/en/managed-agents/overview)
-- [Self-hosted sandboxes reference](https://platform.claude.com/docs/en/managed-agents/self-hosted-sandboxes)
 - [Superserve SDK reference](https://docs.superserve.ai/sdk-reference/sandbox)

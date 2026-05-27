@@ -127,7 +127,7 @@
           {
             "group": "Claude Managed Agents",
             "pages": [
-              "integrations/agent-harnesses/claude-managed-agents"
+              "integrations/claude-managed-agents"
             ]
           },
           {

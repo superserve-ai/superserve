@@ -1,11 +1,8 @@
 """Build the Superserve template for Claude Managed Agents sandboxes."""
 from __future__ import annotations
 
-import sys
-
 import dotenv
 from superserve import Template, RunStep, WorkdirStep
-from superserve.errors import ConflictError
 
 dotenv.load_dotenv(override=True)
 
