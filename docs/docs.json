@@ -125,9 +125,9 @@
             ]
           },
           {
-            "group": "Claude Managed Agents",
+            "group": "Managed Agents",
             "pages": [
-              "integrations/claude-managed-agents"
+              "integrations/managed-agents/claude-managed-agents"
             ]
           },
           {

@@ -1,6 +1,6 @@
 # Claude Managed Agents on Superserve
 
-Reference implementation for running [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) inside Superserve sandboxes as a self-hosted environment. See the [full guide](https://docs.superserve.ai/integrations/agent-harnesses/claude-managed-agents) for the architecture story; this README covers how to run the reference.
+Reference implementation for running [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) inside Superserve sandboxes as a self-hosted environment. See the [full guide](https://docs.superserve.ai/integrations/managed-agents/claude-managed-agents) for the architecture story; this README covers how to run the reference.
 
 ## Prerequisites
 
@@ -86,6 +86,6 @@ Listens for webhooks on port 5051. Set `ANTHROPIC_WEBHOOK_SECRET` in `.env`. Inc
 
 ## See also
 
-- [Full integration guide](https://docs.superserve.ai/integrations/agent-harnesses/claude-managed-agents)
+- [Full integration guide](https://docs.superserve.ai/integrations/managed-agents/claude-managed-agents)
 - [Claude Managed Agents docs](https://platform.claude.com/docs/en/managed-agents/overview)
 - [Superserve SDK reference](https://docs.superserve.ai/sdk-reference/sandbox)
