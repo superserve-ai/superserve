@@ -183,11 +183,11 @@ export function CommandPalette() {
                       key={item.label}
                       onSelect={item.onSelect}
                       onMouseEnter={() => setHoveredLabel(item.label)}
-                      className="relative flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm text-foreground"
+                      className="relative flex cursor-pointer items-center gap-2.5 px-2.5 py-2 text-sm text-foreground"
                     >
                       {hoveredLabel === item.label && (
                         <motion.span
-                          className="absolute inset-0 rounded-sm bg-foreground/5"
+                          className="absolute inset-0 bg-brand/10"
                           layoutId="cmd-hover"
                           transition={{
                             type: "spring",
@@ -216,11 +216,11 @@ export function CommandPalette() {
                       key={item.label}
                       onSelect={item.onSelect}
                       onMouseEnter={() => setHoveredLabel(item.label)}
-                      className="relative flex cursor-pointer items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm text-foreground"
+                      className="relative flex cursor-pointer items-center gap-2.5 px-2.5 py-2 text-sm text-foreground"
                     >
                       {hoveredLabel === item.label && (
                         <motion.span
-                          className="absolute inset-0 rounded-sm bg-foreground/5"
+                          className="absolute inset-0 bg-brand/10"
                           layoutId="cmd-hover"
                           transition={{
                             type: "spring",

@@ -35,7 +35,7 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
           <>
             {isHovered && (
               <motion.span
-                className="absolute inset-0 bg-foreground/4"
+                className="absolute inset-0 bg-brand/10"
                 layoutId={`sidebar-hover-${groupId}-${isCollapsed}`}
                 transition={{
                   type: "spring",

@@ -186,7 +186,7 @@ export default function GetStartedPage() {
                   >
                     {isHovered && (
                       <motion.span
-                        className="absolute inset-0 bg-foreground/4"
+                        className="absolute inset-0 bg-brand/10"
                         layoutId="get-started-lang-hover"
                         transition={{
                           type: "spring",
@@ -196,7 +196,7 @@ export default function GetStartedPage() {
                       />
                     )}
                     {isActive && !hoveredTab && (
-                      <span className="absolute inset-0 bg-foreground/4" />
+                      <span className="absolute inset-0 bg-brand/10" />
                     )}
                     {isActive && (
                       <motion.span

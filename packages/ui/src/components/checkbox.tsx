@@ -26,7 +26,7 @@ function Checkbox({ className, label, id, ...props }: CheckboxProps) {
       <CheckboxPrimitive.Root
         id={id}
         className={cn(
-          "peer h-4 w-4 shrink-0 border border-foreground/25 transition-colors",
+          "group peer h-4 w-4 shrink-0 border border-foreground/25 transition-colors",
           "focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none",
           "disabled:cursor-not-allowed disabled:opacity-30",
           "data-[checked]:border-primary data-[checked]:bg-primary",
@@ -38,7 +38,10 @@ function Checkbox({ className, label, id, ...props }: CheckboxProps) {
           className="ss-checkbox-indicator flex items-center justify-center"
           keepMounted
         >
-          <CheckIcon weight="bold" className="h-3 w-3 text-background" />
+          <CheckIcon
+            weight="bold"
+            className="h-3 w-3 text-transparent transition-colors group-data-[checked]:text-background"
+          />
         </CheckboxPrimitive.Indicator>
       </CheckboxPrimitive.Root>
       {label && (

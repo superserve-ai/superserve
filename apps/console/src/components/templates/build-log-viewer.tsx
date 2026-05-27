@@ -186,7 +186,7 @@ export function BuildLogViewer({
           <div
             className={cn(
               "mt-3 inline-block border border-dashed px-2 py-1 font-mono text-xs uppercase",
-              finalStatus === "ready" && "border-success/40 text-success",
+              finalStatus === "ready" && "border-brand/40 text-brand",
               finalStatus === "failed" &&
                 "border-destructive/40 text-destructive",
               finalStatus === "cancelled" && "border-muted/40 text-muted",
