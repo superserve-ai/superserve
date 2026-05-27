@@ -32,7 +32,7 @@ export function StepIndicator({
         className={cn(
           "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border font-mono text-xs",
           completed
-            ? "border-primary bg-primary text-background"
+            ? "border-primary bg-primary text-brand-ink"
             : active
               ? "border-primary text-primary"
               : "border-border text-muted",

@@ -137,7 +137,7 @@ export function CommandPalette() {
           aria-label="Command palette"
         >
           <motion.div
-            className="fixed inset-0 bg-black/50"
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
             onClick={() => setOpen(false)}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -145,7 +145,7 @@ export function CommandPalette() {
             transition={{ duration: 0.2 }}
           />
           <motion.div
-            className="fixed top-[20%] left-1/2 z-50 w-full max-w-lg border border-dashed border-border bg-surface shadow-lg"
+            className="fixed top-[20%] left-1/2 z-50 w-full max-w-lg border border-dashed border-border bg-surface/75 shadow-lg backdrop-blur-xl"
             initial={{ opacity: 0, x: "-50%", scale: 0.96 }}
             animate={{ opacity: 1, x: "-50%", scale: 1 }}
             exit={{ opacity: 0, x: "-50%", scale: 0.96 }}

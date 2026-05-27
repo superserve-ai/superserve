@@ -45,7 +45,7 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
               />
             )}
             {isActive && !hoveredHref && (
-              <span className="absolute inset-0 bg-foreground/4" />
+              <span className="absolute inset-0 bg-brand/10" />
             )}
             {isActive && (
               <motion.span
@@ -57,7 +57,7 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
                   duration: 0.5,
                 }}
               >
-                <CornerBrackets size="sm" />
+                <CornerBrackets size="sm" className="border-brand/50" />
               </motion.span>
             )}
             <Icon className="relative size-4 shrink-0" weight="light" />
@@ -72,9 +72,7 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
         const className = cn(
           "relative flex items-center gap-2.5 px-2.5 py-2.5 transition-colors",
           isCollapsed && "justify-center",
-          isActive
-            ? "text-foreground"
-            : "text-foreground/70 hover:text-foreground",
+          isActive ? "text-brand" : "text-foreground/70 hover:text-foreground",
         )
 
         const link = item.external ? (

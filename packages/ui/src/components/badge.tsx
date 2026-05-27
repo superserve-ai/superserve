@@ -2,7 +2,13 @@ import { forwardRef } from "react"
 
 import { cn } from "../lib/utils"
 
-type BadgeVariant = "default" | "success" | "warning" | "destructive" | "muted"
+type BadgeVariant =
+  | "default"
+  | "active"
+  | "success"
+  | "warning"
+  | "destructive"
+  | "muted"
 
 interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   variant?: BadgeVariant
@@ -10,7 +16,8 @@ interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
 }
 
 const variantClasses: Record<BadgeVariant, string> = {
-  default: "bg-primary/10 text-primary",
+  default: "bg-foreground/10 text-foreground/80",
+  active: "bg-brand/10 text-brand",
   success: "bg-success/10 text-success",
   warning: "bg-warning/10 text-warning",
   destructive: "bg-destructive/10 text-destructive",
@@ -18,7 +25,8 @@ const variantClasses: Record<BadgeVariant, string> = {
 }
 
 const dotColorClasses: Record<BadgeVariant, string> = {
-  default: "bg-primary",
+  default: "bg-foreground/60",
+  active: "bg-brand",
   success: "bg-success",
   warning: "bg-warning",
   destructive: "bg-destructive",

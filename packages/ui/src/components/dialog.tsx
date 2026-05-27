@@ -53,10 +53,10 @@ function DialogPopup({
 }: React.ComponentProps<typeof DialogPrimitive.Popup>) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Backdrop className="ss-dialog-backdrop fixed inset-0 z-50 bg-black/50" />
+      <DialogPrimitive.Backdrop className="ss-dialog-backdrop fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
       <DialogPrimitive.Popup
         className={cn(
-          "ss-dialog-popup fixed top-1/2 left-1/2 z-50 w-full max-w-md border border-dashed border-border bg-surface shadow-lg",
+          "ss-dialog-popup fixed top-1/2 left-1/2 z-50 w-full max-w-md border border-dashed border-border bg-surface/80 shadow-lg backdrop-blur-xl",
           className,
         )}
         {...props}

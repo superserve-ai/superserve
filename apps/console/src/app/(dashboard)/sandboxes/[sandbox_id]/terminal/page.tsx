@@ -60,7 +60,7 @@ export default function TerminalPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="sticky top-0 z-10 flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-6">
+      <div className="sticky top-0 z-10 flex h-14 shrink-0 items-center justify-between border-b border-border bg-background/70 px-6 backdrop-blur-md">
         <div className="flex items-center gap-3">
           <button
             type="button"

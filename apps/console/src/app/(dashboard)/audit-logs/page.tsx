@@ -148,7 +148,7 @@ export default function AuditLogsPage() {
 
           <div className="flex-1 overflow-y-auto">
             <Table>
-              <TableHeader className="sticky top-0 z-10 bg-background">
+              <TableHeader className="sticky top-0 z-10 bg-background/70 backdrop-blur-md">
                 <TableRow>
                   <TableHead className="w-[20%]">Time</TableHead>
                   <TableHead className="w-[20%]">Sandbox</TableHead>

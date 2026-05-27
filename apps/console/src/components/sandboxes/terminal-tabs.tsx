@@ -107,7 +107,7 @@ export function TerminalTabs({ sandboxId, accessToken }: Props) {
         tabIndex={0}
         onMouseLeave={() => setHoveredId(null)}
         onKeyDown={handleStripKeyDown}
-        className="flex h-10 shrink-0 items-stretch overflow-x-auto border-b border-dashed border-border bg-background"
+        className="stripes-slanted flex h-10 shrink-0 items-stretch overflow-x-auto border-b border-dashed border-border bg-background"
       >
         {tabs.map((tab) => (
           <TerminalTabButton

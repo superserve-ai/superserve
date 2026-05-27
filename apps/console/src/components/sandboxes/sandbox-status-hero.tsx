@@ -38,8 +38,8 @@ const STATUS_CONFIG: Record<
 > = {
   active: {
     label: "Active",
-    bg: "bg-success/[0.04]",
-    dot: "bg-success",
+    bg: "bg-brand/[0.05]",
+    dot: "bg-brand",
     pulse: true,
   },
   paused: {
