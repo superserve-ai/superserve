@@ -64,7 +64,7 @@ class Sandbox:
             client=self._http_client,
         )
         token = raw.get("access_token") if raw else None
-        if not token:
+        if not isinstance(token, str) or not token:
             raise SandboxError(
                 f"Invalid API response from POST /sandboxes/{self.id}/{endpoint}: "
                 "missing access_token"

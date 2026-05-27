@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeVar
 
 import httpx
 
@@ -16,6 +16,8 @@ from ._config import data_plane_url
 from ._http import api_request, async_api_request, async_stream_sse, stream_sse
 from .errors import AuthenticationError, SandboxError
 from .types import CommandResult
+
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -87,7 +89,7 @@ class Commands:
         body: dict[str, Any],
         timeout_seconds: int | None,
     ) -> CommandResult:
-        def send(token: str) -> dict[str, Any]:
+        def send(token: str) -> Any:
             return api_request(
                 "POST",
                 f"{self._data_plane_base_url}/exec",
@@ -99,7 +101,7 @@ class Commands:
                 client=self._client,
             )
 
-        raw = self._with_token_retry(send)
+        raw: dict[str, Any] = self._with_token_retry(send)
         return CommandResult(
             stdout=raw.get("stdout", ""),
             stderr=raw.get("stderr", ""),
@@ -127,9 +129,7 @@ class Commands:
 
     # Safe for streaming: 401 is returned in the HTTP status code before
     # any SSE data is written, so the retry can't double-emit callbacks.
-    def _with_token_retry(
-        self, send: Callable[[str], Any]
-    ) -> Any:
+    def _with_token_retry(self, send: Callable[[str], T]) -> T:
         try:
             return send(self._deps.get_access_token())
         except AuthenticationError:
@@ -236,7 +236,7 @@ class AsyncCommands:
         body: dict[str, Any],
         timeout_seconds: int | None,
     ) -> CommandResult:
-        async def send(token: str) -> dict[str, Any]:
+        async def send(token: str) -> Any:
             return await async_api_request(
                 "POST",
                 f"{self._data_plane_base_url}/exec",
@@ -248,7 +248,7 @@ class AsyncCommands:
                 client=self._client,
             )
 
-        raw = await self._with_token_retry(send)
+        raw: dict[str, Any] = await self._with_token_retry(send)
         return CommandResult(
             stdout=raw.get("stdout", ""),
             stderr=raw.get("stderr", ""),
@@ -275,8 +275,8 @@ class AsyncCommands:
         return await self._with_token_retry(send)
 
     async def _with_token_retry(
-        self, send: Callable[[str], Awaitable[Any]]
-    ) -> Any:
+        self, send: Callable[[str], Awaitable[T]]
+    ) -> T:
         try:
             return await send(self._deps.get_access_token())
         except AuthenticationError:
