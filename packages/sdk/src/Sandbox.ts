@@ -54,6 +54,7 @@ export class Sandbox {
   files: Files
 
   private _accessToken: string
+  private _refreshInFlight: Promise<string> | null = null
   private readonly _config: ResolvedConfig
 
   /** @internal — Use Sandbox.create() or Sandbox.connect() instead. */
@@ -93,7 +94,7 @@ export class Sandbox {
     })
     if (!raw.access_token) {
       throw new SandboxError(
-        `Invalid API response from POST /sandboxes/{id}/${endpoint}: missing access_token`,
+        `Invalid API response from POST /sandboxes/${this.id}/${endpoint}: missing access_token`,
       )
     }
     this._accessToken = raw.access_token
@@ -102,11 +103,16 @@ export class Sandbox {
   }
 
   /**
-   * Call `POST /activate` to ensure the sandbox is active and refresh the
-   * access token. Slow-path fallback for data-plane AuthenticationError. @internal
+   * Slow-path fallback for data-plane AuthenticationError. Coalesces
+   * concurrent callers onto a single in-flight POST /activate so a
+   * paused-sandbox resume isn't claimed twice (the loser gets 409). @internal
    */
   private _refreshActivate(): Promise<string> {
-    return this._postAndRotateToken("activate")
+    if (this._refreshInFlight) return this._refreshInFlight
+    this._refreshInFlight = this._postAndRotateToken("activate").finally(() => {
+      this._refreshInFlight = null
+    })
+    return this._refreshInFlight
   }
 
   // -------------------------------------------------------------------------
@@ -191,7 +197,7 @@ export class Sandbox {
 
     if (!raw.access_token) {
       throw new SandboxError(
-        "Invalid API response from POST /sandboxes/{id}/activate: missing access_token",
+        `Invalid API response from POST /sandboxes/${sandboxId}/activate: missing access_token`,
       )
     }
     return new Sandbox(toSandboxInfo(raw), raw.access_token, config)

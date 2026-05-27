@@ -309,3 +309,100 @@ class TestCreateFromTemplate:
                 assert b"from_snapshot" in body
             finally:
                 sbx._close_http_client()
+
+
+class TestConcurrentRefresh:
+    def test_serialized_refresh_under_concurrent_401(self) -> None:
+        import threading
+
+        sbx_id = "sbx-conc"
+        sandbox_host = "sandbox.example.com"
+        data_plane = f"https://boxd-{sbx_id}.{sandbox_host}"
+
+        exec_call_count = 0
+        activate_call_count = 0
+        activate_lock = threading.Lock()
+        exec_lock = threading.Lock()
+
+        def exec_response(_request: httpx.Request) -> httpx.Response:
+            nonlocal exec_call_count
+            with exec_lock:
+                exec_call_count += 1
+                this_call = exec_call_count
+            # First two calls (one per thread) 401; subsequent succeed
+            if this_call <= 2:
+                return httpx.Response(
+                    401, json={"error": {"code": "auth_failed"}}
+                )
+            return httpx.Response(
+                200, json={"stdout": "ok", "stderr": "", "exit_code": 0}
+            )
+
+        def activate_response(_request: httpx.Request) -> httpx.Response:
+            nonlocal activate_call_count
+            with activate_lock:
+                activate_call_count += 1
+            # Slow enough to maximize chance of overlap if the lock were missing
+            import time as _t
+
+            _t.sleep(0.02)
+            return httpx.Response(
+                200,
+                json={
+                    "id": sbx_id,
+                    "name": "c",
+                    "status": "active",
+                    "created_at": "2026-01-01T00:00:00Z",
+                    "access_token": "tok-refreshed",
+                },
+            )
+
+        with respx.mock(
+            base_url=API, assert_all_called=False
+        ) as router:
+            router.post(f"{API}/sandboxes/{sbx_id}/activate").mock(
+                side_effect=activate_response
+            )
+            router.post(f"{data_plane}/exec").mock(side_effect=exec_response)
+
+            sbx = Sandbox.connect(
+                sbx_id, api_key="ss_live_x", base_url=API
+            )
+            try:
+                # Override sandbox_host so the data-plane URL matches our mock
+                sbx._config = sbx._config.__class__(
+                    api_key=sbx._config.api_key,
+                    base_url=sbx._config.base_url,
+                    sandbox_host=sandbox_host,
+                )
+                sbx.commands._data_plane_base_url = data_plane
+
+                results: list[Exception | str] = [None, None]  # type: ignore
+
+                def worker(idx: int) -> None:
+                    try:
+                        r = sbx.commands.run(f"echo {idx}")
+                        results[idx] = r.stdout
+                    except Exception as e:
+                        results[idx] = e
+
+                t1 = threading.Thread(target=worker, args=(0,))
+                t2 = threading.Thread(target=worker, args=(1,))
+                t1.start()
+                t2.start()
+                t1.join()
+                t2.join()
+
+                # Both must succeed (no 409 from lost-race second refresh)
+                for r in results:
+                    assert not isinstance(
+                        r, Exception
+                    ), f"expected success, got {r!r}"
+                assert results[0] == "ok"
+                assert results[1] == "ok"
+
+                # connect() did 1 activate + serialized refreshes added 2
+                assert activate_call_count == 3
+                assert exec_call_count == 4  # 2 initial 401s + 2 retries
+            finally:
+                sbx._close_http_client()

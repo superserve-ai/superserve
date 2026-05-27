@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import builtins
 from typing import TYPE_CHECKING, Any
 
@@ -36,6 +37,7 @@ class AsyncSandbox:
         self._config = config
         self._http_client: httpx.AsyncClient = httpx.AsyncClient(timeout=30.0)
         self._closed = False
+        self._refresh_lock = asyncio.Lock()
 
         self.commands = AsyncCommands(
             AsyncCommandsDeps(
@@ -61,7 +63,7 @@ class AsyncSandbox:
         token = raw.get("access_token") if raw else None
         if not token:
             raise SandboxError(
-                f"Invalid API response from POST /sandboxes/{{id}}/{endpoint}: "
+                f"Invalid API response from POST /sandboxes/{self.id}/{endpoint}: "
                 "missing access_token"
             )
         self._access_token = token
@@ -74,8 +76,9 @@ class AsyncSandbox:
         return token
 
     async def _refresh_activate(self) -> str:
-        """Slow-path fallback for data-plane AuthenticationError."""
-        return await self._post_and_rotate_token("activate")
+        """Async variant of Sandbox._refresh_activate."""
+        async with self._refresh_lock:
+            return await self._post_and_rotate_token("activate")
 
     @classmethod
     async def create(
@@ -153,7 +156,7 @@ class AsyncSandbox:
         token = raw.get("access_token") if raw else None
         if not token:
             raise SandboxError(
-                "Invalid API response from POST /sandboxes/{id}/activate: "
+                f"Invalid API response from POST /sandboxes/{sandbox_id}/activate: "
                 "missing access_token"
             )
         return cls(to_sandbox_info(raw), token, config)

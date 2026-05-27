@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import builtins
+import threading
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -36,6 +37,7 @@ class Sandbox:
         self._config = config
         self._http_client: httpx.Client = httpx.Client(timeout=30.0)
         self._closed = False
+        self._refresh_lock = threading.Lock()
 
         self.commands = Commands(
             CommandsDeps(
@@ -64,7 +66,7 @@ class Sandbox:
         token = raw.get("access_token") if raw else None
         if not token:
             raise SandboxError(
-                f"Invalid API response from POST /sandboxes/{{id}}/{endpoint}: "
+                f"Invalid API response from POST /sandboxes/{self.id}/{endpoint}: "
                 "missing access_token"
             )
         self._access_token = token
@@ -77,8 +79,12 @@ class Sandbox:
         return token
 
     def _refresh_activate(self) -> str:
-        """Slow-path fallback for data-plane AuthenticationError."""
-        return self._post_and_rotate_token("activate")
+        """Slow-path fallback for data-plane AuthenticationError. Lock
+        serializes refreshes so concurrent callers don't race the
+        server-side BeginResume claim (the loser gets 409).
+        """
+        with self._refresh_lock:
+            return self._post_and_rotate_token("activate")
 
     @classmethod
     def create(
@@ -156,7 +162,7 @@ class Sandbox:
         token = raw.get("access_token") if raw else None
         if not token:
             raise SandboxError(
-                "Invalid API response from POST /sandboxes/{id}/activate: "
+                f"Invalid API response from POST /sandboxes/{sandbox_id}/activate: "
                 "missing access_token"
             )
         return cls(to_sandbox_info(raw), token, config)
