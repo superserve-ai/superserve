@@ -5,22 +5,45 @@ from __future__ import annotations
 import httpx
 import pytest
 import respx
-from superserve.commands import Commands
-from superserve.errors import SandboxError
+from superserve.commands import Commands, CommandsDeps
+from superserve.errors import AuthenticationError, SandboxError
+
+SANDBOX_HOST = "sandbox.example.com"
+SBX = "sbx-1"
+DATA_PLANE = f"https://boxd-{SBX}.{SANDBOX_HOST}"
+
+
+def _make_deps(
+    *,
+    initial_token: str = "tok-initial",
+    refreshed_token: str = "tok-refreshed",
+) -> tuple[CommandsDeps, dict]:
+    """Returns deps + a state dict so tests can inspect refresh count."""
+    state: dict = {"token": initial_token, "refreshes": 0}
+
+    def refresh() -> str:
+        state["refreshes"] += 1
+        state["token"] = refreshed_token
+        return refreshed_token
+
+    deps = CommandsDeps(
+        sandbox_id=SBX,
+        sandbox_host=SANDBOX_HOST,
+        get_access_token=lambda: state["token"],
+        refresh_activate=refresh,
+    )
+    return deps, state
 
 
 def _make_commands() -> Commands:
-    return Commands(
-        base_url="https://api.example.com",
-        sandbox_id="sbx-1",
-        api_key="ss_live_key",
-    )
+    deps, _ = _make_deps()
+    return Commands(deps)
 
 
 class TestCommandsRun:
-    def test_sync_returns_command_result(self) -> None:
+    def test_hits_data_plane_with_access_token(self) -> None:
         with respx.mock() as router:
-            router.post("https://api.example.com/sandboxes/sbx-1/exec").mock(
+            route = router.post(f"{DATA_PLANE}/exec").mock(
                 return_value=httpx.Response(
                     200,
                     json={"stdout": "hi\n", "stderr": "", "exit_code": 0},
@@ -28,37 +51,74 @@ class TestCommandsRun:
             )
             result = _make_commands().run("echo hi")
             assert result.stdout == "hi\n"
-            assert result.stderr == ""
-            assert result.exit_code == 0
+
+            req = route.calls.last.request
+            assert req.headers.get("x-access-token") == "tok-initial"
+            assert "x-api-key" not in {k.lower() for k in req.headers}
 
     def test_sync_with_env_and_cwd(self) -> None:
         with respx.mock() as router:
-            route = router.post("https://api.example.com/sandboxes/sbx-1/exec").mock(
+            route = router.post(f"{DATA_PLANE}/exec").mock(
                 return_value=httpx.Response(
-                    200,
-                    json={"stdout": "ok", "stderr": "", "exit_code": 0},
+                    200, json={"stdout": "ok", "stderr": "", "exit_code": 0}
                 )
             )
-            result = _make_commands().run(
+            _make_commands().run(
                 "ls", cwd="/tmp", env={"FOO": "bar"}, timeout_seconds=10
             )
-            assert result.stdout == "ok"
-            # verify body was sent
             request_body = route.calls.last.request.content
             assert b"/tmp" in request_body
             assert b"FOO" in request_body
 
     def test_nonzero_exit_code(self) -> None:
         with respx.mock() as router:
-            router.post("https://api.example.com/sandboxes/sbx-1/exec").mock(
+            router.post(f"{DATA_PLANE}/exec").mock(
                 return_value=httpx.Response(
-                    200,
-                    json={"stdout": "", "stderr": "boom", "exit_code": 1},
+                    200, json={"stdout": "", "stderr": "boom", "exit_code": 1}
                 )
             )
             result = _make_commands().run("false")
             assert result.exit_code == 1
             assert result.stderr == "boom"
+
+    def test_refreshes_token_and_retries_on_401(self) -> None:
+        deps, state = _make_deps()
+        with respx.mock() as router:
+            router.post(f"{DATA_PLANE}/exec").mock(
+                side_effect=[
+                    httpx.Response(401, json={"error": {"code": "auth_failed"}}),
+                    httpx.Response(
+                        200,
+                        json={"stdout": "ok\n", "stderr": "", "exit_code": 0},
+                    ),
+                ]
+            )
+            result = Commands(deps).run("echo")
+            assert result.stdout == "ok\n"
+            assert state["refreshes"] == 1
+
+    def test_does_not_retry_on_non_auth_errors(self) -> None:
+        deps, state = _make_deps()
+        with respx.mock() as router:
+            router.post(f"{DATA_PLANE}/exec").mock(
+                return_value=httpx.Response(
+                    500, json={"error": {"code": "server_error"}}
+                )
+            )
+            with pytest.raises(SandboxError):
+                Commands(deps).run("echo")
+        assert state["refreshes"] == 0
+
+    def test_propagates_auth_error_when_refresh_also_fails(self) -> None:
+        deps, _ = _make_deps()
+        with respx.mock() as router:
+            router.post(f"{DATA_PLANE}/exec").mock(
+                return_value=httpx.Response(
+                    401, json={"error": {"code": "auth_failed"}}
+                )
+            )
+            with pytest.raises(AuthenticationError):
+                Commands(deps).run("echo")
 
 
 class TestCommandsStreaming:
@@ -73,7 +133,7 @@ class TestCommandsStreaming:
         stderr_chunks: list[str] = []
 
         with respx.mock() as router:
-            router.post("https://api.example.com/sandboxes/sbx-1/exec/stream").mock(
+            router.post(f"{DATA_PLANE}/exec/stream").mock(
                 return_value=httpx.Response(
                     200,
                     content=sse_body.encode(),
@@ -96,7 +156,7 @@ class TestCommandsStreaming:
         sse_body = 'data: {"stdout": "partial"}\n\n'
 
         with respx.mock() as router:
-            router.post("https://api.example.com/sandboxes/sbx-1/exec/stream").mock(
+            router.post(f"{DATA_PLANE}/exec/stream").mock(
                 return_value=httpx.Response(
                     200,
                     content=sse_body.encode(),
@@ -105,8 +165,7 @@ class TestCommandsStreaming:
             )
             with pytest.raises(SandboxError, match="finished"):
                 _make_commands().run(
-                    "echo partial",
-                    on_stdout=lambda _c: None,
+                    "echo partial", on_stdout=lambda _c: None
                 )
 
     def test_streaming_with_nonzero_exit_code(self) -> None:
@@ -116,7 +175,7 @@ class TestCommandsStreaming:
         )
 
         with respx.mock() as router:
-            router.post("https://api.example.com/sandboxes/sbx-1/exec/stream").mock(
+            router.post(f"{DATA_PLANE}/exec/stream").mock(
                 return_value=httpx.Response(
                     200,
                     content=sse_body.encode(),

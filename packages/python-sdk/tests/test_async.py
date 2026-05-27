@@ -64,7 +64,7 @@ class TestAsyncSandboxSmoke:
 
     async def test_kill_swallows_404(self) -> None:
         with respx.mock() as router:
-            router.get(f"{API}/sandboxes/sbx-1").mock(
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw())
             )
             router.delete(f"{API}/sandboxes/sbx-1").mock(
@@ -75,7 +75,7 @@ class TestAsyncSandboxSmoke:
 
     async def test_pause_returns_none(self) -> None:
         with respx.mock() as router:
-            router.get(f"{API}/sandboxes/sbx-1").mock(
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw())
             )
             pause_route = router.post(f"{API}/sandboxes/sbx-1/pause").mock(
@@ -91,7 +91,7 @@ class TestAsyncSandboxSmoke:
 
     async def test_resume_rotates_token_and_rebuilds_files(self) -> None:
         with respx.mock() as router:
-            router.get(f"{API}/sandboxes/sbx-1").mock(
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw())
             )
             router.post(f"{API}/sandboxes/sbx-1/resume").mock(
@@ -116,7 +116,7 @@ class TestAsyncSandboxSmoke:
 
     async def test_resume_missing_access_token_raises(self) -> None:
         with respx.mock() as router:
-            router.get(f"{API}/sandboxes/sbx-1").mock(
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw())
             )
             router.post(f"{API}/sandboxes/sbx-1/resume").mock(

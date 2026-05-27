@@ -78,7 +78,7 @@ describe("Sandbox statics", () => {
     ).rejects.toThrow(/missing access_token/)
   })
 
-  it("Sandbox.connect fetches and returns instance", async () => {
+  it("Sandbox.connect POSTs /activate and returns instance", async () => {
     const mock = vi.fn(async () => jsonResponse(baseSandbox))
     vi.stubGlobal("fetch", mock)
 
@@ -86,8 +86,8 @@ describe("Sandbox statics", () => {
     expect(sandbox.id).toBe("sbx-1")
 
     const [url, init] = mock.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe("https://api.superserve.ai/sandboxes/sbx-1")
-    expect(init.method).toBe("GET")
+    expect(url).toBe("https://api.superserve.ai/sandboxes/sbx-1/activate")
+    expect(init.method).toBe("POST")
   })
 
   it("Sandbox.connect throws when access_token missing", async () => {

@@ -63,7 +63,7 @@ class TestCreate:
 class TestConnect:
     def test_gets_and_returns_instance(self) -> None:
         with respx.mock() as router:
-            route = router.get(f"{API}/sandboxes/sbx-1").mock(
+            route = router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw())
             )
             sandbox = Sandbox.connect("sbx-1")
@@ -76,7 +76,7 @@ class TestConnect:
 
     def test_missing_access_token_raises(self) -> None:
         with respx.mock() as router:
-            router.get(f"{API}/sandboxes/sbx-1").mock(
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw(access_token=None))
             )
             with pytest.raises(SandboxError, match="access_token"):
@@ -129,7 +129,7 @@ class TestKillById:
 class TestInstanceMethods:
     def test_kill_swallows_404(self) -> None:
         with respx.mock() as router:
-            router.get(f"{API}/sandboxes/sbx-1").mock(
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw())
             )
             router.delete(f"{API}/sandboxes/sbx-1").mock(
@@ -141,7 +141,7 @@ class TestInstanceMethods:
 
     def test_repr_includes_id_and_status(self) -> None:
         with respx.mock() as router:
-            router.get(f"{API}/sandboxes/sbx-1").mock(
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw())
             )
             sandbox = Sandbox.connect("sbx-1")
@@ -173,7 +173,7 @@ class TestInstanceMethods:
 
     def test_pause_returns_none(self) -> None:
         with respx.mock() as router:
-            router.get(f"{API}/sandboxes/sbx-1").mock(
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw())
             )
             pause_route = router.post(f"{API}/sandboxes/sbx-1/pause").mock(
@@ -189,7 +189,7 @@ class TestInstanceMethods:
 
     def test_resume_rotates_token_and_rebuilds_files(self) -> None:
         with respx.mock() as router:
-            router.get(f"{API}/sandboxes/sbx-1").mock(
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw())
             )
             router.post(f"{API}/sandboxes/sbx-1/resume").mock(
@@ -215,7 +215,7 @@ class TestInstanceMethods:
 
     def test_resume_missing_access_token_raises(self) -> None:
         with respx.mock() as router:
-            router.get(f"{API}/sandboxes/sbx-1").mock(
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw())
             )
             router.post(f"{API}/sandboxes/sbx-1/resume").mock(
@@ -232,7 +232,7 @@ class TestInstanceMethods:
 
     def test_update_metadata(self) -> None:
         with respx.mock() as router:
-            router.get(f"{API}/sandboxes/sbx-1").mock(
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw())
             )
             route = router.patch(f"{API}/sandboxes/sbx-1").mock(
