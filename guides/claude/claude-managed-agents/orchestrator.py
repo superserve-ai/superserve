@@ -200,10 +200,7 @@ async def find_or_create_sandbox(
         name=f"cma-{session_id[:8]}",
         from_template=TEMPLATE_NAME,
         metadata={META_SESSION_ID: session_id, META_WORK_ID: work_id, META_MODE: MODE_ACTIVE},
-        network=NetworkConfig(
-            allow_out=["api.anthropic.com"],
-            deny_out=["0.0.0.0/0"],
-        ),
+        network=NetworkConfig(allow_out=["api.anthropic.com"]),
     )
 
 

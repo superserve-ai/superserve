@@ -215,10 +215,7 @@ async function handleWork(work: { id: string; data: { id: string } }) {
       name: `cma-${sessionId.slice(0, 8)}`,
       fromTemplate: "claude-managed-agent",
       metadata: { "cma.session_id": sessionId },
-      network: {
-        allowOut: ["api.anthropic.com"],
-        denyOut: ["0.0.0.0/0"],
-      },
+      network: { allowOut: ["api.anthropic.com"] },
     })
   }
 
@@ -276,10 +273,7 @@ async def handle_work(work):
             name=f"cma-{session_id[:8]}",
             from_template="claude-managed-agent",
             metadata={"cma.session_id": session_id},
-            network=NetworkConfig(
-                allow_out=["api.anthropic.com"],
-                deny_out=["0.0.0.0/0"],
-            ),
+            network=NetworkConfig(allow_out=["api.anthropic.com"]),
         )
 
     await sandbox.files.write("/workspace/runner.py", RUNNER)
@@ -311,7 +305,7 @@ asyncio.run(main())
 What the orchestrator does on each work item:
 
 1. **Finds or creates** a sandbox for the session using a metadata tag. Existing paused sandboxes are resumed rather than recreated.
-2. **Locks down egress** - each sandbox can only reach `api.anthropic.com`. The deny-all + allowlist pattern prevents data exfiltration to arbitrary endpoints.
+2. **Locks down egress** — each sandbox can only reach `api.anthropic.com`, preventing data exfiltration to arbitrary endpoints.
 3. **Uploads and launches** the runner with per-session credentials passed as environment variables.
 
 Long-polling works behind any NAT or firewall. For push-based dispatch, use a webhook instead.
