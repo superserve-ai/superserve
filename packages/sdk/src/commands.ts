@@ -7,7 +7,7 @@
  * Accessed as `sandbox.commands.run(...)`.
  */
 
-import { dataPlaneUrl } from "./config.js"
+import { dataPlaneTarget } from "./config.js"
 import { AuthenticationError, SandboxError } from "./errors.js"
 import { request, streamSSE } from "./http.js"
 import type {
@@ -27,10 +27,13 @@ export interface CommandsDeps {
 
 export class Commands {
   private readonly _dataPlaneBaseUrl: string
+  private readonly _routingHeaders: Record<string, string>
 
   /** @internal */
   constructor(private readonly _deps: CommandsDeps) {
-    this._dataPlaneBaseUrl = dataPlaneUrl(_deps.sandboxId, _deps.sandboxHost)
+    const target = dataPlaneTarget(_deps.sandboxId, _deps.sandboxHost)
+    this._dataPlaneBaseUrl = target.url
+    this._routingHeaders = target.headers
   }
 
   /**
@@ -82,7 +85,7 @@ export class Commands {
       request<ApiExecResult>({
         method: "POST",
         url: `${this._dataPlaneBaseUrl}/exec`,
-        headers: { "X-Access-Token": token },
+        headers: { ...this._routingHeaders, "X-Access-Token": token },
         body,
         // Add a 5s buffer so the server-side command timeout fires first
         // and returns its proper response before the client aborts.
@@ -108,7 +111,7 @@ export class Commands {
     const send = async (token: string) =>
       this._consumeStream(
         `${this._dataPlaneBaseUrl}/exec/stream`,
-        { "X-Access-Token": token },
+        { ...this._routingHeaders, "X-Access-Token": token },
         body,
         options,
       )

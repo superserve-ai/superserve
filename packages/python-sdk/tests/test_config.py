@@ -7,7 +7,7 @@ from superserve._config import (
     DEFAULT_BASE_URL,
     DEFAULT_SANDBOX_HOST,
     _derive_sandbox_host,
-    data_plane_url,
+    data_plane_target,
     resolve_config,
 )
 from superserve.errors import AuthenticationError
@@ -72,9 +72,23 @@ class TestDeriveSandboxHost:
         assert _derive_sandbox_host("not a url") == DEFAULT_SANDBOX_HOST
 
 
-class TestDataPlaneUrl:
-    def test_builds_url(self) -> None:
-        assert (
-            data_plane_url("abc-123", "sandbox.superserve.ai")
-            == "https://boxd-abc-123.sandbox.superserve.ai"
-        )
+class TestDataPlaneTarget:
+    def test_shared_host_on_prod(self) -> None:
+        target = data_plane_target("abc-123", "sandbox.superserve.ai")
+        assert target.url == "https://sandbox.superserve.ai"
+        assert target.headers["X-Superserve-Sandbox-Id"] == "abc-123"
+
+    def test_shared_host_on_staging(self) -> None:
+        target = data_plane_target("xyz", "staging-sandbox.superserve.ai")
+        assert target.url == "https://staging-sandbox.superserve.ai"
+        assert target.headers["X-Superserve-Sandbox-Id"] == "xyz"
+
+    def test_falls_back_to_subdomain_on_unsupported_host(self) -> None:
+        target = data_plane_target("abc", "self-hosted.example.org")
+        assert target.url == "https://boxd-abc.self-hosted.example.org"
+        assert target.headers == {}
+
+    def test_matches_supported_hosts_case_insensitively(self) -> None:
+        target = data_plane_target("abc", "Sandbox.SuperServe.AI")
+        assert target.url == "https://sandbox.superserve.ai"
+        assert target.headers["X-Superserve-Sandbox-Id"] == "abc"

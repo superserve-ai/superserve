@@ -4,7 +4,7 @@ import { ValidationError } from "../src/errors.js"
 import { Files } from "../src/files.js"
 
 const sandboxId = "sbx-1"
-const sandboxHost = "sandbox.superserve.ai"
+const sandboxHost = "sandbox.example.com"
 const accessToken = "tok-abc"
 
 async function readBodyAsBytes(
@@ -151,5 +151,48 @@ describe("Files.readText", () => {
     const files = new Files(sandboxId, sandboxHost, accessToken)
     const out = await files.readText("/app/file.txt")
     expect(out).toBe("héllo world")
+  })
+})
+
+describe("Files shared-host routing", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("uses shared host + X-Superserve-Sandbox-Id when sandboxHost is supported", async () => {
+    const mock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response("ok", { status: 200 }))
+    vi.stubGlobal("fetch", mock)
+
+    const files = new Files(sandboxId, "sandbox.superserve.ai", accessToken)
+    await files.write("/tmp/f.txt", "data")
+
+    const [url, init] = mock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(
+      `https://sandbox.superserve.ai/files?path=${encodeURIComponent("/tmp/f.txt")}`,
+    )
+    const headers = init.headers as Record<string, string>
+    expect(headers["X-Superserve-Sandbox-Id"]).toBe(sandboxId)
+    expect(headers["X-Access-Token"]).toBe(accessToken)
+  })
+
+  it("read also carries X-Superserve-Sandbox-Id on shared host", async () => {
+    const mock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([1, 2, 3]), { status: 200 }),
+      )
+    vi.stubGlobal("fetch", mock)
+
+    const files = new Files(sandboxId, "sandbox.superserve.ai", accessToken)
+    await files.read("/tmp/f.bin")
+
+    const [url, init] = mock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(
+      `https://sandbox.superserve.ai/files?path=${encodeURIComponent("/tmp/f.bin")}`,
+    )
+    const headers = init.headers as Record<string, string>
+    expect(headers["X-Superserve-Sandbox-Id"]).toBe(sandboxId)
   })
 })
