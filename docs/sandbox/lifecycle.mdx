@@ -39,34 +39,30 @@ sandbox.pause()
 
 ## Resume
 
-`resume()` restores a `paused` sandbox. Processes pick up where they left off.
+`resume()` restores a `paused` sandbox you already hold a reference to. Processes pick up where they left off.
 
 <CodeGroup>
-```typescript TypeScript {7}
+```typescript TypeScript {5}
 import { Sandbox } from "@superserve/sdk"
 
-const sandbox = await Sandbox.connect("7a3f2b8c-1234-...")
-
-// sandbox is currently paused
-
+const sandbox = await Sandbox.create({ name: "long-job" })
+await sandbox.pause()
 await sandbox.resume()
 await sandbox.commands.run("ls /tmp")
 ```
 
-```python Python {7}
+```python Python {5}
 from superserve import Sandbox
 
-sandbox = Sandbox.connect("7a3f2b8c-1234-...")
-
-# sandbox is currently paused
-
+sandbox = Sandbox.create(name="long-job")
+sandbox.pause()
 sandbox.resume()
 sandbox.commands.run("ls /tmp")
 ```
 </CodeGroup>
 
 <Tip>
-You don't need to call `resume()` before running a command. `commands.run()` on a `paused` sandbox transparently resumes it and executes. Call `resume()` explicitly only when you want the sandbox to be ready in advance.
+A paused sandbox is auto-resumed by both `Sandbox.connect()` and `commands.run()`.
 </Tip>
 
 Resume rotates the sandbox's per-sandbox access token on the backend. The SDK re-injects the new token into `sandbox.files` transparently - nothing changes in your code.

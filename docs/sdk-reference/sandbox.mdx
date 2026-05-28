@@ -79,7 +79,7 @@ sandbox = Sandbox.create(
 
 ### `Sandbox.connect`
 
-Reconnect to an existing sandbox by ID. Fetches info and a fresh access token.
+Reconnect to an existing sandbox by ID. Returns a live `sandbox` with a fresh access token. If the sandbox is currently `paused`, it is auto-resumed before returning so it's immediately usable.
 
 <CodeGroup>
 ```typescript TypeScript
