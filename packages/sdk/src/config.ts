@@ -64,14 +64,15 @@ export function dataPlaneTarget(
   sandboxHost: string,
 ): DataPlaneTarget {
   const isBrowser = typeof window !== "undefined"
-  if (!isBrowser && SUPPORTED_SHARED_HOSTS.has(sandboxHost)) {
+  const host = sandboxHost.toLowerCase()
+  if (!isBrowser && SUPPORTED_SHARED_HOSTS.has(host)) {
     return {
-      url: `https://${sandboxHost}`,
+      url: `https://${host}`,
       headers: { [SANDBOX_ID_HEADER]: sandboxId },
     }
   }
   return {
-    url: `https://boxd-${sandboxId}.${sandboxHost}`,
+    url: `https://boxd-${sandboxId}.${host}`,
     headers: {},
   }
 }

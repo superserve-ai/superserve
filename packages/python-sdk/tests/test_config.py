@@ -87,3 +87,8 @@ class TestDataPlaneTarget:
         target = data_plane_target("abc", "self-hosted.example.org")
         assert target.url == "https://boxd-abc.self-hosted.example.org"
         assert target.headers == {}
+
+    def test_matches_supported_hosts_case_insensitively(self) -> None:
+        target = data_plane_target("abc", "Sandbox.SuperServe.AI")
+        assert target.url == "https://sandbox.superserve.ai"
+        assert target.headers["X-Superserve-Sandbox-Id"] == "abc"

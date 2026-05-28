@@ -65,13 +65,14 @@ def data_plane_target(sandbox_id: str, sandbox_host: str) -> DataPlaneTarget:
     X-Superserve-Sandbox-Id. Unsupported hosts fall back to the
     per-sandbox subdomain.
     """
-    if sandbox_host in _SUPPORTED_SHARED_HOSTS:
+    host = sandbox_host.lower()
+    if host in _SUPPORTED_SHARED_HOSTS:
         return DataPlaneTarget(
-            url=f"https://{sandbox_host}",
+            url=f"https://{host}",
             headers={_SANDBOX_ID_HEADER: sandbox_id},
         )
     return DataPlaneTarget(
-        url=f"https://boxd-{sandbox_id}.{sandbox_host}",
+        url=f"https://boxd-{sandbox_id}.{host}",
         headers={},
     )
 

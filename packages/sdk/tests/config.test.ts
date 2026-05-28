@@ -102,4 +102,10 @@ describe("dataPlaneTarget", () => {
     expect(target.url).toBe("https://boxd-abc.self-hosted.example.org")
     expect(target.headers).toEqual({})
   })
+
+  it("matches supported hosts case-insensitively (RFC 4343)", () => {
+    const target = dataPlaneTarget("abc", "Sandbox.SuperServe.AI")
+    expect(target.url).toBe("https://sandbox.superserve.ai")
+    expect(target.headers["X-Superserve-Sandbox-Id"]).toBe("abc")
+  })
 })
