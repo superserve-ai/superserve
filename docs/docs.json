@@ -133,9 +133,7 @@
           },
           {
             "group": "Virtual Filesystems",
-            "pages": [
-              "integrations/virtual-filesystems/mesa"
-            ]
+            "pages": ["integrations/virtual-filesystems/mesa"]
           }
         ]
       },
