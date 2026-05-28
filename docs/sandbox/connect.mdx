@@ -6,8 +6,8 @@ description: Reconnect to a sandbox you created earlier using its ID, and list s
 
 A sandbox outlives the process that created it. Store `sandbox.id` somewhere durable (a database, a queue message), and reconnect later with `Sandbox.connect()`.
 
-- `Sandbox.connect(id)` - returns a live `sandbox` with `commands` and `files` ready to use
-- `sandbox.getInfo()` - fetch the current status and metadata for a sandbox you already have
+- `Sandbox.connect(id)` - returns a live `sandbox` with `commands` and `files` ready to use. If the sandbox is `paused`, it's auto-resumed before returning.
+- `sandbox.getInfo()` - fetch the current status and metadata for a sandbox you already have (read-only, no state change)
 
 <CodeGroup>
 ```typescript TypeScript

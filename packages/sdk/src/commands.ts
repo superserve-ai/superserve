@@ -1,14 +1,14 @@
 /**
  * `sandbox.commands` - run shell commands inside a sandbox.
  *
- * Supports two modes:
- * - Synchronous: waits for command to finish, returns stdout/stderr/exitCode
- * - Streaming: fires onStdout/onStderr callbacks via SSE, then returns result
+ * Hits the per-sandbox data plane with the access token. On 401 the
+ * SDK auto-refreshes via `POST /activate` and retries once.
  *
  * Accessed as `sandbox.commands.run(...)`.
  */
 
-import { SandboxError } from "./errors.js"
+import { dataPlaneUrl } from "./config.js"
+import { AuthenticationError, SandboxError } from "./errors.js"
 import { request, streamSSE } from "./http.js"
 import type {
   ApiExecResult,
@@ -17,13 +17,21 @@ import type {
   CommandResult,
 } from "./types.js"
 
+/** @internal */
+export interface CommandsDeps {
+  sandboxId: string
+  sandboxHost: string
+  getAccessToken: () => string
+  refreshActivate: () => Promise<string>
+}
+
 export class Commands {
+  private readonly _dataPlaneBaseUrl: string
+
   /** @internal */
-  constructor(
-    private readonly _baseUrl: string,
-    private readonly _sandboxId: string,
-    private readonly _apiKey: string,
-  ) {}
+  constructor(private readonly _deps: CommandsDeps) {
+    this._dataPlaneBaseUrl = dataPlaneUrl(_deps.sandboxId, _deps.sandboxHost)
+  }
 
   /**
    * Execute a command inside the sandbox.
@@ -60,30 +68,32 @@ export class Commands {
     // API expects seconds; convert from ms
     if (timeoutMs !== undefined) body.timeout_s = Math.ceil(timeoutMs / 1000)
 
-    const authHeaders = { "X-API-Key": this._apiKey }
-
     if (isStreaming) {
-      return this._runStreaming(body, authHeaders, options)
+      return this._runStreaming(body, options)
     }
-    return this._runSync(body, authHeaders, options)
+    return this._runSync(body, options)
   }
 
   private async _runSync(
     body: Record<string, unknown>,
-    headers: Record<string, string>,
     options: CommandOptions,
   ): Promise<CommandResult> {
-    const raw = await request<ApiExecResult>({
-      method: "POST",
-      url: `${this._baseUrl}/sandboxes/${this._sandboxId}/exec`,
-      headers,
-      body,
-      // Add a 5s buffer so the server-side command timeout fires first
-      // and returns its proper response before the client aborts.
-      timeoutMs:
-        options.timeoutMs !== undefined ? options.timeoutMs + 5_000 : undefined,
-      signal: options.signal,
-    })
+    const send = (token: string) =>
+      request<ApiExecResult>({
+        method: "POST",
+        url: `${this._dataPlaneBaseUrl}/exec`,
+        headers: { "X-Access-Token": token },
+        body,
+        // Add a 5s buffer so the server-side command timeout fires first
+        // and returns its proper response before the client aborts.
+        timeoutMs:
+          options.timeoutMs !== undefined
+            ? options.timeoutMs + 5_000
+            : undefined,
+        signal: options.signal,
+      })
+
+    const raw = await this._withTokenRetry(send)
     return {
       stdout: raw.stdout ?? "",
       stderr: raw.stderr ?? "",
@@ -93,7 +103,38 @@ export class Commands {
 
   private async _runStreaming(
     body: Record<string, unknown>,
+    options: CommandOptions,
+  ): Promise<CommandResult> {
+    const send = async (token: string) =>
+      this._consumeStream(
+        `${this._dataPlaneBaseUrl}/exec/stream`,
+        { "X-Access-Token": token },
+        body,
+        options,
+      )
+    return this._withTokenRetry(send)
+  }
+
+  // Safe for streaming: 401 is returned in the HTTP status code before
+  // any SSE data is written, so the retry can't double-emit callbacks.
+  // The try/catch wraps `send` only — if `refreshActivate` itself 401s
+  // (bad API key), it propagates uncaught, so no recursion is possible.
+  private async _withTokenRetry<T>(
+    send: (token: string) => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await send(this._deps.getAccessToken())
+    } catch (err) {
+      if (!(err instanceof AuthenticationError)) throw err
+      const fresh = await this._deps.refreshActivate()
+      return send(fresh)
+    }
+  }
+
+  private async _consumeStream(
+    url: string,
     headers: Record<string, string>,
+    body: Record<string, unknown>,
     options: CommandOptions,
   ): Promise<CommandResult> {
     let stdout = ""
@@ -103,10 +144,9 @@ export class Commands {
     let sawFinished = false
 
     await streamSSE({
-      url: `${this._baseUrl}/sandboxes/${this._sandboxId}/exec/stream`,
+      url,
       headers,
       body,
-      // Idle timeout (resets per chunk); +5s matches Python SDK parity.
       timeoutMs:
         options.timeoutMs !== undefined ? options.timeoutMs + 5_000 : undefined,
       signal: options.signal,

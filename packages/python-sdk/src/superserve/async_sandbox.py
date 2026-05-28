@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import builtins
 from typing import TYPE_CHECKING, Any
 
@@ -9,7 +10,7 @@ import httpx
 
 from ._config import ResolvedConfig, resolve_config
 from ._http import async_api_request
-from .commands import AsyncCommands
+from .commands import AsyncCommands, AsyncCommandsDeps
 from .errors import NotFoundError, SandboxError
 from .files import AsyncFiles
 from .types import NetworkConfig, SandboxInfo, SandboxStatus, to_sandbox_info
@@ -36,13 +37,48 @@ class AsyncSandbox:
         self._config = config
         self._http_client: httpx.AsyncClient = httpx.AsyncClient(timeout=30.0)
         self._closed = False
+        self._refresh_lock = asyncio.Lock()
 
         self.commands = AsyncCommands(
-            config.base_url, self.id, config.api_key, client=self._http_client
+            AsyncCommandsDeps(
+                sandbox_id=self.id,
+                sandbox_host=config.sandbox_host,
+                get_access_token=lambda: self._access_token,
+                refresh_activate=self._refresh_activate,
+            ),
+            client=self._http_client,
         )
         self.files = AsyncFiles(
             self.id, config.sandbox_host, self._access_token, client=self._http_client
         )
+
+    async def _post_and_rotate_token(self, endpoint: str) -> str:
+        """Async variant of Sandbox._post_and_rotate_token."""
+        raw = await async_api_request(
+            "POST",
+            f"{self._config.base_url}/sandboxes/{self.id}/{endpoint}",
+            headers={"X-API-Key": self._config.api_key},
+            client=self._http_client,
+        )
+        token = raw.get("access_token") if raw else None
+        if not isinstance(token, str) or not token:
+            raise SandboxError(
+                f"Invalid API response from POST /sandboxes/{self.id}/{endpoint}: "
+                "missing access_token"
+            )
+        self._access_token = token
+        self.files = AsyncFiles(
+            self.id,
+            self._config.sandbox_host,
+            self._access_token,
+            client=self._http_client,
+        )
+        return token
+
+    async def _refresh_activate(self) -> str:
+        """Async variant of Sandbox._refresh_activate."""
+        async with self._refresh_lock:
+            return await self._post_and_rotate_token("activate")
 
     @classmethod
     async def create(
@@ -105,17 +141,23 @@ class AsyncSandbox:
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> AsyncSandbox:
-        """Connect to an existing sandbox by ID."""
+        """Connect to an existing sandbox by ID.
+
+        Calls ``POST /activate`` so the returned instance is guaranteed to
+        be active (paused sandboxes are auto-resumed) with a fresh access
+        token.
+        """
         config = resolve_config(api_key=api_key, base_url=base_url)
         raw = await async_api_request(
-            "GET",
-            f"{config.base_url}/sandboxes/{sandbox_id}",
+            "POST",
+            f"{config.base_url}/sandboxes/{sandbox_id}/activate",
             headers={"X-API-Key": config.api_key},
         )
         token = raw.get("access_token") if raw else None
         if not token:
             raise SandboxError(
-                "Invalid API response from GET /sandboxes/{id}: missing access_token"
+                f"Invalid API response from POST /sandboxes/{sandbox_id}/activate: "
+                "missing access_token"
             )
         return cls(to_sandbox_info(raw), token, config)
 
@@ -202,25 +244,7 @@ class AsyncSandbox:
         the fresh token transparently.
         """
         self._require_live()
-        raw = await async_api_request(
-            "POST",
-            f"{self._config.base_url}/sandboxes/{self.id}/resume",
-            headers={"X-API-Key": self._config.api_key},
-            client=self._http_client,
-        )
-        token = raw.get("access_token") if raw else None
-        if not token:
-            raise SandboxError(
-                "Invalid API response from POST /sandboxes/{id}/resume: "
-                "missing access_token"
-            )
-        self._access_token = token
-        self.files = AsyncFiles(
-            self.id,
-            self._config.sandbox_host,
-            self._access_token,
-            client=self._http_client,
-        )
+        await self._post_and_rotate_token("resume")
 
     async def kill(self) -> None:
         """Delete this sandbox and all its resources. Idempotent."""

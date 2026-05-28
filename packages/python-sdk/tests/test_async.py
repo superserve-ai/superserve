@@ -64,7 +64,7 @@ class TestAsyncSandboxSmoke:
 
     async def test_kill_swallows_404(self) -> None:
         with respx.mock() as router:
-            router.get(f"{API}/sandboxes/sbx-1").mock(
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw())
             )
             router.delete(f"{API}/sandboxes/sbx-1").mock(
@@ -75,7 +75,7 @@ class TestAsyncSandboxSmoke:
 
     async def test_pause_returns_none(self) -> None:
         with respx.mock() as router:
-            router.get(f"{API}/sandboxes/sbx-1").mock(
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw())
             )
             pause_route = router.post(f"{API}/sandboxes/sbx-1/pause").mock(
@@ -91,7 +91,7 @@ class TestAsyncSandboxSmoke:
 
     async def test_resume_rotates_token_and_rebuilds_files(self) -> None:
         with respx.mock() as router:
-            router.get(f"{API}/sandboxes/sbx-1").mock(
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw())
             )
             router.post(f"{API}/sandboxes/sbx-1/resume").mock(
@@ -116,7 +116,7 @@ class TestAsyncSandboxSmoke:
 
     async def test_resume_missing_access_token_raises(self) -> None:
         with respx.mock() as router:
-            router.get(f"{API}/sandboxes/sbx-1").mock(
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw())
             )
             router.post(f"{API}/sandboxes/sbx-1/resume").mock(
@@ -192,5 +192,74 @@ class TestAsyncCreateFromTemplate:
                 body = route.calls.last.request.content
                 assert b"snap-abc" in body
                 assert b"from_snapshot" in body
+            finally:
+                await sbx._close_http_client()
+
+
+class TestAsyncConcurrentRefresh:
+    async def test_serialized_refresh_under_concurrent_401(self) -> None:
+        import asyncio
+
+        sbx_id = "sbx-aconc"
+        sandbox_host = "sandbox.example.com"
+        data_plane = f"https://boxd-{sbx_id}.{sandbox_host}"
+
+        exec_call_count = 0
+        activate_call_count = 0
+
+        def exec_response(_request: httpx.Request) -> httpx.Response:
+            nonlocal exec_call_count
+            exec_call_count += 1
+            if exec_call_count <= 2:
+                return httpx.Response(
+                    401, json={"error": {"code": "auth_failed"}}
+                )
+            return httpx.Response(
+                200, json={"stdout": "ok", "stderr": "", "exit_code": 0}
+            )
+
+        async def activate_response(_request: httpx.Request) -> httpx.Response:
+            nonlocal activate_call_count
+            activate_call_count += 1
+            # Yield to event loop — if the lock were missing, both refreshes
+            # would interleave here.
+            await asyncio.sleep(0.02)
+            return httpx.Response(
+                200,
+                json={
+                    "id": sbx_id,
+                    "name": "c",
+                    "status": "active",
+                    "created_at": "2026-01-01T00:00:00Z",
+                    "access_token": "tok-refreshed",
+                },
+            )
+
+        with respx.mock(base_url=API, assert_all_called=False) as router:
+            router.post(f"{API}/sandboxes/{sbx_id}/activate").mock(
+                side_effect=activate_response
+            )
+            router.post(f"{data_plane}/exec").mock(side_effect=exec_response)
+
+            sbx = await AsyncSandbox.connect(
+                sbx_id, api_key="ss_live_x", base_url=API
+            )
+            try:
+                sbx._config = sbx._config.__class__(
+                    api_key=sbx._config.api_key,
+                    base_url=sbx._config.base_url,
+                    sandbox_host=sandbox_host,
+                )
+                sbx.commands._data_plane_base_url = data_plane
+
+                a, b = await asyncio.gather(
+                    sbx.commands.run("echo a"),
+                    sbx.commands.run("echo b"),
+                )
+                assert a.stdout == "ok"
+                assert b.stdout == "ok"
+                # connect did 1 + 2 serialized refreshes = 3
+                assert activate_call_count == 3
+                assert exec_call_count == 4
             finally:
                 await sbx._close_http_client()

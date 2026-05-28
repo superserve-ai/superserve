@@ -20,7 +20,6 @@ import { NotFoundError, SandboxError } from "./errors.js"
 import { Files } from "./files.js"
 import { request, requestVoid } from "./http.js"
 import type {
-  ApiResumeResponse,
   ApiSandboxResponse,
   ConnectionOptions,
   SandboxCreateOptions,
@@ -55,6 +54,7 @@ export class Sandbox {
   files: Files
 
   private _accessToken: string
+  private _refreshInFlight: Promise<string> | null = null
   private readonly _config: ResolvedConfig
 
   /** @internal — Use Sandbox.create() or Sandbox.connect() instead. */
@@ -70,8 +70,49 @@ export class Sandbox {
     this._accessToken = accessToken
     this._config = config
 
-    this.commands = new Commands(config.baseUrl, this.id, config.apiKey)
+    this.commands = new Commands({
+      sandboxId: this.id,
+      sandboxHost: config.sandboxHost,
+      getAccessToken: () => this._accessToken,
+      refreshActivate: () => this._refreshActivate(),
+    })
     this.files = new Files(this.id, config.sandboxHost, this._accessToken)
+  }
+
+  /**
+   * POST a token-rotating endpoint (`/resume` or `/activate`), update the
+   * cached token, and rebuild `this.files` with the fresh token. Returns
+   * the new token. @internal
+   */
+  private async _postAndRotateToken(
+    endpoint: "resume" | "activate",
+  ): Promise<string> {
+    const raw = await request<ApiSandboxResponse>({
+      method: "POST",
+      url: `${this._config.baseUrl}/sandboxes/${this.id}/${endpoint}`,
+      headers: { "X-API-Key": this._config.apiKey },
+    })
+    if (!raw.access_token) {
+      throw new SandboxError(
+        `Invalid API response from POST /sandboxes/${this.id}/${endpoint}: missing access_token`,
+      )
+    }
+    this._accessToken = raw.access_token
+    this.files = new Files(this.id, this._config.sandboxHost, this._accessToken)
+    return this._accessToken
+  }
+
+  /**
+   * Slow-path fallback for data-plane AuthenticationError. Coalesces
+   * concurrent callers onto a single in-flight POST /activate so a
+   * paused-sandbox resume isn't claimed twice (the loser gets 409). @internal
+   */
+  private _refreshActivate(): Promise<string> {
+    if (this._refreshInFlight) return this._refreshInFlight
+    this._refreshInFlight = this._postAndRotateToken("activate").finally(() => {
+      this._refreshInFlight = null
+    })
+    return this._refreshInFlight
   }
 
   // -------------------------------------------------------------------------
@@ -133,7 +174,8 @@ export class Sandbox {
   /**
    * Connect to an existing sandbox by ID.
    *
-   * Fetches the sandbox info and access token, returns a ready-to-use instance.
+   * Calls `POST /activate` so the returned instance is guaranteed to be
+   * active (paused sandboxes are auto-resumed) with a fresh access token.
    *
    * @example
    * ```typescript
@@ -147,15 +189,15 @@ export class Sandbox {
     const config = resolveConfig(options)
 
     const raw = await request<ApiSandboxResponse>({
-      method: "GET",
-      url: `${config.baseUrl}/sandboxes/${sandboxId}`,
+      method: "POST",
+      url: `${config.baseUrl}/sandboxes/${sandboxId}/activate`,
       headers: { "X-API-Key": config.apiKey },
       signal: options.signal,
     })
 
     if (!raw.access_token) {
       throw new SandboxError(
-        "Invalid API response from GET /sandboxes/{id}: missing access_token",
+        `Invalid API response from POST /sandboxes/${sandboxId}/activate: missing access_token`,
       )
     }
     return new Sandbox(toSandboxInfo(raw), raw.access_token, config)
@@ -254,19 +296,7 @@ export class Sandbox {
    * fresh token transparently.
    */
   async resume(): Promise<void> {
-    const raw = await request<ApiResumeResponse>({
-      method: "POST",
-      url: `${this._config.baseUrl}/sandboxes/${this.id}/resume`,
-      headers: { "X-API-Key": this._config.apiKey },
-    })
-    if (!raw.access_token) {
-      throw new SandboxError(
-        "Invalid API response from POST /sandboxes/{id}/resume: missing access_token",
-      )
-    }
-    this._accessToken = raw.access_token
-    // Rebuild sandbox.files with the fresh token
-    this.files = new Files(this.id, this._config.sandboxHost, this._accessToken)
+    await this._postAndRotateToken("resume")
   }
 
   /**
