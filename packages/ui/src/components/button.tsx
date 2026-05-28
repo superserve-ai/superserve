@@ -9,7 +9,7 @@ const baseClasses =
   "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-mono font-medium uppercase transition-colors disabled:pointer-events-none disabled:opacity-30 [&_svg]:pointer-events-none [&_svg]:shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus aria-invalid:ring-destructive/20 aria-invalid:ring-2"
 
 const variantClasses: Record<ButtonVariant, string> = {
-  default: "bg-primary text-background hover:bg-primary-hover",
+  default: "bg-primary text-brand-ink hover:bg-primary-hover",
   destructive:
     "bg-destructive text-foreground hover:bg-destructive-hover focus-visible:ring-destructive/20",
   outline:

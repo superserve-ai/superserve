@@ -94,7 +94,7 @@ export function TableToolbar({
               >
                 {isHovered && (
                   <motion.span
-                    className="absolute inset-0 bg-foreground/4"
+                    className="absolute inset-0 bg-brand/10"
                     layoutId={`${id}-hover`}
                     transition={{
                       type: "spring",
@@ -104,7 +104,7 @@ export function TableToolbar({
                   />
                 )}
                 {isActive && !hoveredTab && (
-                  <span className="absolute inset-0 bg-foreground/4" />
+                  <span className="absolute inset-0 bg-brand/10" />
                 )}
                 {isActive && (
                   <motion.span

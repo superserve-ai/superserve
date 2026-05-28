@@ -41,7 +41,7 @@ function SelectPopup({
       <SelectPrimitive.Positioner>
         <SelectPrimitive.Popup
           className={cn(
-            "ss-select-popup z-50 max-h-72 min-w-[8rem] overflow-auto border border-dashed border-border bg-surface p-1",
+            "ss-select-popup z-50 max-h-72 min-w-[8rem] overflow-auto border border-dashed border-border bg-surface/80 p-1 backdrop-blur-xl",
             className,
           )}
           {...props}

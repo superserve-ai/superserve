@@ -142,7 +142,7 @@ function TemplatesPageContent() {
               />
             ) : (
               <Table>
-                <TableHeader className="sticky top-0 z-10 bg-background">
+                <TableHeader className="sticky top-0 z-10 bg-background/70 backdrop-blur-md">
                   <TableRow>
                     <TableHead className="w-[30%]">Name</TableHead>
                     <TableHead className="w-[12%]">Status</TableHead>

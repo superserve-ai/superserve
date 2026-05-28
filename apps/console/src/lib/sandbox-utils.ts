@@ -3,7 +3,7 @@ import type { BadgeVariant } from "@superserve/ui"
 import type { SandboxStatus } from "@/lib/api/types"
 
 export const STATUS_BADGE_VARIANT: Record<SandboxStatus, BadgeVariant> = {
-  active: "success",
+  active: "active",
   paused: "muted",
   resuming: "warning",
   failed: "destructive",

@@ -56,7 +56,7 @@ export function StickyHoverTableBody({
         >
           <td style={{ padding: 0, border: 0 }}>
             <motion.div
-              className="absolute right-0 left-0 bg-foreground/4"
+              className="absolute right-0 left-0 bg-brand/5"
               animate={{
                 y: hoverStyle.top,
                 height: hoverStyle.height,

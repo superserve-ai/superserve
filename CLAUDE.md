@@ -240,9 +240,11 @@ Or use the **Release SDKs** GitHub Actions workflow (manual `workflow_dispatch` 
 
 The console has a deliberate austere, technical aesthetic. Follow these patterns when building UI:
 
-**Color & Theme**: Dark monochromatic palette (`#0a0a0a` background, `#e5e5e5` foreground, `#171717` surfaces). Color is reserved for status indicators only (green/red/orange). Tokens are in `packages/tailwind-config/theme.css`.
+**Color & Theme**: Charcoal canvas (`#141414` background, `#1c1c1c` surfaces, `#eaeaea` foreground) with translucent-white borders (`rgba(255,255,255,0.08)`). The brand accent is **mint** (`--color-brand` `#b2fab4`, hover `#9de89f`, ink `#0a2b0c`), used for interaction and live state: primary buttons, links, active nav, selected tabs, focus rings, checked controls, default progress, and "running" sandbox status. Status colors: mint = running/active, green (`success`) = ready/saved/healthy, amber (`warning`) = building/transitional, red (`destructive`) = failed. `--color-primary` is aliased to `--color-brand`. Tokens are in `packages/tailwind-config/theme.css`.
 
 **Borders**: Dashed borders everywhere — dialogs, cards, buttons (outline variant), separators, inputs. Use `border border-dashed border-border`. This is the signature visual trait. No solid decorative borders.
+
+**Translucency**: Surfaces that float over content use a translucent background + `backdrop-blur` (frosted glass): dialogs, command palette, menus, selects, popovers, toasts, and sticky page/table headers. Body surfaces (cards, table bodies, terminal) stay solid. Used tastefully — not everywhere.
 
 **Typography**: Instrument Sans (sans) + Geist Mono (mono). Buttons, badges, and table headers use `font-mono uppercase text-xs`. Body text uses sans.
 

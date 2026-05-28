@@ -142,7 +142,7 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
           className={cn(
             "cursor-pointer px-2 py-1 font-mono text-xs uppercase transition-colors",
             activePreset === preset.key
-              ? "bg-foreground/4 text-foreground"
+              ? "bg-brand/10 text-foreground"
               : "text-muted hover:text-foreground",
           )}
         >
@@ -158,7 +158,7 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
               className={cn(
                 "inline-flex cursor-pointer items-center gap-1.5 px-2 py-1 font-mono text-xs uppercase transition-colors",
                 isCustom
-                  ? "bg-foreground/4 text-foreground"
+                  ? "bg-brand/10 text-foreground"
                   : "text-muted hover:text-foreground",
               )}
             />
