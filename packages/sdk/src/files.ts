@@ -1,14 +1,13 @@
 /**
  * `sandbox.files` - read and write files inside a sandbox.
  *
- * Hits the data-plane directly at `boxd-{id}.sandbox.superserve.ai`
- * using the per-sandbox access token. The control-plane API key is
- * not used for file operations.
+ * Hits the data plane with the per-sandbox access token. The
+ * control-plane API key is not used for file operations.
  *
  * Accessed as `sandbox.files.write(...)` / `sandbox.files.read(...)`.
  */
 
-import { dataPlaneUrl } from "./config.js"
+import { dataPlaneTarget } from "./config.js"
 import { ValidationError } from "./errors.js"
 import { downloadBytes, uploadBytes } from "./http.js"
 import type { FileInput } from "./types.js"
@@ -24,6 +23,7 @@ function validatePath(path: string): void {
 
 export class Files {
   private readonly _dataPlaneBaseUrl: string
+  private readonly _routingHeaders: Record<string, string>
 
   /** @internal */
   constructor(
@@ -31,7 +31,9 @@ export class Files {
     sandboxHost: string,
     private readonly _accessToken: string,
   ) {
-    this._dataPlaneBaseUrl = dataPlaneUrl(sandboxId, sandboxHost)
+    const target = dataPlaneTarget(sandboxId, sandboxHost)
+    this._dataPlaneBaseUrl = target.url
+    this._routingHeaders = target.headers
   }
 
   /**
@@ -56,7 +58,7 @@ export class Files {
     const url = `${this._dataPlaneBaseUrl}/files?path=${encodeURIComponent(path)}`
     await uploadBytes({
       url,
-      headers: { "X-Access-Token": this._accessToken },
+      headers: { ...this._routingHeaders, "X-Access-Token": this._accessToken },
       body,
       timeoutMs: options.timeoutMs,
       signal: options.signal,
@@ -79,7 +81,7 @@ export class Files {
     const url = `${this._dataPlaneBaseUrl}/files?path=${encodeURIComponent(path)}`
     return downloadBytes({
       url,
-      headers: { "X-Access-Token": this._accessToken },
+      headers: { ...this._routingHeaders, "X-Access-Token": this._accessToken },
       timeoutMs: options.timeoutMs,
       signal: options.signal,
     })

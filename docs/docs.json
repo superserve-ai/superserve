@@ -121,6 +121,12 @@
             ]
           },
           {
+            "group": "Managed Agents",
+            "pages": [
+              "integrations/managed-agents/claude-managed-agents"
+            ]
+          },
+          {
             "group": "Agent Harnesses",
             "pages": [
               "integrations/agent-harnesses/claude-agent-sdk",

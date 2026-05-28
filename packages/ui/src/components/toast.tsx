@@ -152,7 +152,7 @@ function ToastItem({
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 50 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
-      className="pointer-events-auto max-w-[420px] min-w-[320px] border border-dashed border-border bg-surface"
+      className="pointer-events-auto max-w-[420px] min-w-[320px] border border-dashed border-border bg-surface/80 backdrop-blur-lg"
     >
       <div className="p-4">
         <div className="flex items-start gap-3">

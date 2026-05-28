@@ -1,0 +1,16 @@
+{
+  "name": "superserve-claude-managed-agents",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "create-environment": "node create-environment.mjs",
+    "create-agent": "node create-agent.mjs",
+    "build-template": "node build-template.mjs",
+    "orchestrator": "node orchestrator.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.103.0",
+    "@superserve/sdk": "^0.7.0",
+    "dotenv": "^16.0.0"
+  }
+}

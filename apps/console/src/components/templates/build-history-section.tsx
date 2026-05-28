@@ -69,7 +69,7 @@ export function BuildHistorySection({ templateId }: { templateId: string }) {
                       prev === build.id ? null : build.id,
                     )
                   }
-                  className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-foreground/4"
+                  className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-brand/10"
                 >
                   <CaretDownIcon
                     className={cn(

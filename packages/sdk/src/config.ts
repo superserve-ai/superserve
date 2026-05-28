@@ -38,13 +38,43 @@ export function resolveConfig(opts?: {
   return { apiKey, baseUrl, sandboxHost }
 }
 
+// Sandbox hosts where the proxy supports shared-host routing.
+const SUPPORTED_SHARED_HOSTS: ReadonlySet<string> = new Set([
+  "sandbox.superserve.ai",
+  "staging-sandbox.superserve.ai",
+])
+
+const SANDBOX_ID_HEADER = "X-Superserve-Sandbox-Id"
+
+/** Base URL + routing headers for one data-plane request. */
+export interface DataPlaneTarget {
+  url: string
+  headers: Record<string, string>
+}
+
 /**
- * Build the data-plane base URL for a specific sandbox.
+ * Resolve the data-plane base URL + routing headers for a sandbox.
  *
- * Example: `https://boxd-{sandboxId}.sandbox.superserve.ai`
+ * On a supported host (server-side), routes via the shared origin with
+ * `X-Superserve-Sandbox-Id`. Browsers and unsupported hosts use the
+ * per-sandbox subdomain.
  */
-export function dataPlaneUrl(sandboxId: string, sandboxHost: string): string {
-  return `https://boxd-${sandboxId}.${sandboxHost}`
+export function dataPlaneTarget(
+  sandboxId: string,
+  sandboxHost: string,
+): DataPlaneTarget {
+  const isBrowser = typeof window !== "undefined"
+  const host = sandboxHost.toLowerCase()
+  if (!isBrowser && SUPPORTED_SHARED_HOSTS.has(host)) {
+    return {
+      url: `https://${host}`,
+      headers: { [SANDBOX_ID_HEADER]: sandboxId },
+    }
+  }
+  return {
+    url: `https://boxd-${sandboxId}.${host}`,
+    headers: {},
+  }
 }
 
 /**

@@ -39,9 +39,42 @@ def resolve_config(
     )
 
 
-def data_plane_url(sandbox_id: str, sandbox_host: str) -> str:
-    """Build the data-plane base URL for a specific sandbox."""
-    return f"https://boxd-{sandbox_id}.{sandbox_host}"
+# Sandbox hosts where the proxy supports shared-host routing.
+_SUPPORTED_SHARED_HOSTS: frozenset[str] = frozenset(
+    {
+        "sandbox.superserve.ai",
+        "staging-sandbox.superserve.ai",
+    }
+)
+
+_SANDBOX_ID_HEADER = "X-Superserve-Sandbox-Id"
+
+
+@dataclass(frozen=True)
+class DataPlaneTarget:
+    """Base URL + routing headers for one data-plane request."""
+
+    url: str
+    headers: dict[str, str]
+
+
+def data_plane_target(sandbox_id: str, sandbox_host: str) -> DataPlaneTarget:
+    """Resolve the data-plane base URL + routing headers for a sandbox.
+
+    On a supported host, routes via the shared origin with
+    X-Superserve-Sandbox-Id. Unsupported hosts fall back to the
+    per-sandbox subdomain.
+    """
+    host = sandbox_host.lower()
+    if host in _SUPPORTED_SHARED_HOSTS:
+        return DataPlaneTarget(
+            url=f"https://{host}",
+            headers={_SANDBOX_ID_HEADER: sandbox_id},
+        )
+    return DataPlaneTarget(
+        url=f"https://boxd-{sandbox_id}.{host}",
+        headers={},
+    )
 
 
 def _derive_sandbox_host(base_url: str) -> str:

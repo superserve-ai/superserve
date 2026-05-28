@@ -51,3 +51,5 @@ blog_draft*.md
 devcontainer.json
 .agents/
 
+# Visual brainstorming companion
+.superpowers/

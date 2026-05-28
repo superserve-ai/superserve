@@ -28,7 +28,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "fixed top-0 left-0 z-40 flex h-screen flex-col border-r border-border bg-background transition-all duration-200",
+        "fixed top-0 left-0 z-40 flex h-screen flex-col border-r border-border bg-background/80 backdrop-blur-sm transition-all duration-200",
         isCollapsed ? "w-16" : "w-64",
       )}
     >
@@ -76,7 +76,7 @@ export function Sidebar() {
           <button
             type="button"
             onClick={openCommandPalette}
-            className="group flex w-full cursor-pointer items-center gap-2.5 border border-border px-2.5 py-2.5 text-foreground/70 transition-colors hover:bg-foreground/5 hover:text-foreground"
+            className="group flex w-full cursor-pointer items-center gap-2.5 border border-border px-2.5 py-2.5 text-foreground/70 transition-colors hover:bg-brand/10 hover:text-foreground"
           >
             <MagnifyingGlassIcon className="size-4 shrink-0" weight="light" />
             <span className="flex-1 text-left text-sm leading-none tracking-tight text-foreground/70">
@@ -110,7 +110,7 @@ export function Sidebar() {
                 onClick={toggle}
                 aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
                 className={cn(
-                  "flex w-full cursor-pointer items-center gap-2.5 px-2.5 py-2.5 text-foreground/70 transition-colors hover:bg-foreground/4 hover:text-foreground",
+                  "flex w-full cursor-pointer items-center gap-2.5 px-2.5 py-2.5 text-foreground/70 transition-colors hover:bg-brand/10 hover:text-foreground",
                   isCollapsed && "justify-center",
                 )}
               />

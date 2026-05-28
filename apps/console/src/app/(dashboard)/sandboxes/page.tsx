@@ -171,7 +171,7 @@ function SandboxesPageContent() {
 
           <div className="flex-1 overflow-y-auto">
             <Table>
-              <TableHeader className="sticky top-0 z-10 bg-background">
+              <TableHeader className="sticky top-0 z-10 bg-background/70 backdrop-blur-md">
                 <TableRow>
                   <TableHead className="w-10 pr-0">
                     <Checkbox

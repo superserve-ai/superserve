@@ -78,7 +78,7 @@ describe("Sandbox statics", () => {
     ).rejects.toThrow(/missing access_token/)
   })
 
-  it("Sandbox.connect fetches and returns instance", async () => {
+  it("Sandbox.connect POSTs /activate and returns instance", async () => {
     const mock = vi.fn(async () => jsonResponse(baseSandbox))
     vi.stubGlobal("fetch", mock)
 
@@ -86,8 +86,8 @@ describe("Sandbox statics", () => {
     expect(sandbox.id).toBe("sbx-1")
 
     const [url, init] = mock.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe("https://api.superserve.ai/sandboxes/sbx-1")
-    expect(init.method).toBe("GET")
+    expect(url).toBe("https://api.superserve.ai/sandboxes/sbx-1/activate")
+    expect(init.method).toBe("POST")
   })
 
   it("Sandbox.connect throws when access_token missing", async () => {
@@ -288,5 +288,47 @@ describe("Sandbox.create fromTemplate / fromSnapshot", () => {
     const [, init] = mock.mock.calls[0] as [string, RequestInit]
     const body = JSON.parse(init.body as string)
     expect(body.from_snapshot).toBe("snap-abc")
+  })
+})
+
+describe("Sandbox concurrent token refresh coalesce", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("two concurrent 401-retries fire only one /activate", async () => {
+    let activateCalls = 0
+    let execCalls = 0
+    const mock = vi.fn<typeof fetch>(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString()
+      if (url.includes("/activate")) {
+        activateCalls += 1
+        // Slow enough that both concurrent callers race onto the same
+        // in-flight promise.
+        await new Promise((r) => setTimeout(r, 20))
+        return jsonResponse({ ...baseSandbox, access_token: "tok-refreshed" })
+      }
+      if (url.endsWith("/exec")) {
+        execCalls += 1
+        if (execCalls <= 2) return errorResponse(401, "auth_failed")
+        return jsonResponse({ stdout: "ok", stderr: "", exit_code: 0 })
+      }
+      return jsonResponse(baseSandbox)
+    })
+    vi.stubGlobal("fetch", mock)
+
+    const sandbox = await Sandbox.connect("sbx-1", commonOpts)
+    expect(activateCalls).toBe(1) // baseline: connect() did one
+
+    const [a, b] = await Promise.all([
+      sandbox.commands.run("echo a"),
+      sandbox.commands.run("echo b"),
+    ])
+
+    expect(a.exitCode).toBe(0)
+    expect(b.exitCode).toBe(0)
+    // Two concurrent 401s → ONE additional /activate (coalesced)
+    expect(activateCalls).toBe(2)
+    expect(execCalls).toBe(4) // 2 initial 401s + 2 successful retries
   })
 })

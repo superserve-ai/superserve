@@ -107,7 +107,7 @@ export function TerminalTabs({ sandboxId, accessToken }: Props) {
         tabIndex={0}
         onMouseLeave={() => setHoveredId(null)}
         onKeyDown={handleStripKeyDown}
-        className="flex h-10 shrink-0 items-stretch overflow-x-auto border-b border-dashed border-border bg-background"
+        className="stripes-slanted flex h-10 shrink-0 items-stretch overflow-x-auto border-b border-dashed border-border bg-background"
       >
         {tabs.map((tab) => (
           <TerminalTabButton
@@ -203,12 +203,12 @@ function TerminalTabButton({
     >
       {isHovered && !isActive && (
         <motion.span
-          className="absolute inset-0 bg-foreground/4"
+          className="absolute inset-0 bg-brand/10"
           layoutId="terminal-tab-hover"
           transition={{ type: "spring", bounce: 0.15, duration: 0.4 }}
         />
       )}
-      {isActive && <span className="absolute inset-0 bg-foreground/6" />}
+      {isActive && <span className="absolute inset-0 bg-brand/10" />}
       {isActive && (
         <motion.span
           className="pointer-events-none absolute inset-0"
@@ -356,7 +356,7 @@ function AddTabButton({
     "flex h-full w-10 shrink-0 cursor-pointer items-center justify-center transition-colors",
     disabled
       ? "cursor-not-allowed text-muted/40"
-      : "text-muted hover:bg-foreground/4 hover:text-foreground",
+      : "text-muted hover:bg-brand/10 hover:text-foreground",
   )
 
   const button = (

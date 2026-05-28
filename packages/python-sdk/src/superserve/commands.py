@@ -1,15 +1,43 @@
-"""`sandbox.commands` - run shell commands inside a sandbox."""
+"""``sandbox.commands`` - run shell commands inside a sandbox.
+
+Hits the per-sandbox data plane with the access token. On 401 the SDK
+auto-refreshes via ``POST /activate`` and retries once.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from typing import Any, TypeVar
 
 import httpx
 
+from ._config import data_plane_target
 from ._http import api_request, async_api_request, async_stream_sse, stream_sse
-from .errors import SandboxError
+from .errors import AuthenticationError, SandboxError
 from .types import CommandResult
+
+T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class CommandsDeps:
+    """Internal deps from Sandbox. ``refresh_activate`` is invoked on 401."""
+
+    sandbox_id: str
+    sandbox_host: str
+    get_access_token: Callable[[], str]
+    refresh_activate: Callable[[], str]
+
+
+@dataclass(frozen=True)
+class AsyncCommandsDeps:
+    """Async variant of CommandsDeps."""
+
+    sandbox_id: str
+    sandbox_host: str
+    get_access_token: Callable[[], str]
+    refresh_activate: Callable[[], Awaitable[str]]
 
 
 class Commands:
@@ -17,15 +45,14 @@ class Commands:
 
     def __init__(
         self,
-        base_url: str,
-        sandbox_id: str,
-        api_key: str,
+        deps: CommandsDeps,
         client: httpx.Client | None = None,
     ) -> None:
-        self._base_url = base_url
-        self._sandbox_id = sandbox_id
-        self._api_key = api_key
+        self._deps = deps
         self._client = client
+        target = data_plane_target(deps.sandbox_id, deps.sandbox_host)
+        self._data_plane_base_url = target.url
+        self._routing_headers = target.headers
 
     def run(
         self,
@@ -49,31 +76,32 @@ class Commands:
         if timeout_seconds is not None:
             body["timeout_s"] = timeout_seconds
 
-        headers = {"X-API-Key": self._api_key}
         is_streaming = on_stdout is not None or on_stderr is not None
 
         if is_streaming:
             return self._run_streaming(
-                body, headers, on_stdout, on_stderr, timeout_seconds
+                body, on_stdout, on_stderr, timeout_seconds
             )
-        return self._run_sync(body, headers, timeout_seconds)
+        return self._run_sync(body, timeout_seconds)
 
     def _run_sync(
         self,
         body: dict[str, Any],
-        headers: dict[str, str],
         timeout_seconds: int | None,
     ) -> CommandResult:
-        raw = api_request(
-            "POST",
-            f"{self._base_url}/sandboxes/{self._sandbox_id}/exec",
-            headers=headers,
-            json_body=body,
-            timeout=float(timeout_seconds) + 5.0
-            if timeout_seconds is not None
-            else 30.0,
-            client=self._client,
-        )
+        def send(token: str) -> Any:
+            return api_request(
+                "POST",
+                f"{self._data_plane_base_url}/exec",
+                headers={**self._routing_headers, "X-Access-Token": token},
+                json_body=body,
+                timeout=float(timeout_seconds) + 5.0
+                if timeout_seconds is not None
+                else 30.0,
+                client=self._client,
+            )
+
+        raw: dict[str, Any] = self._with_token_retry(send)
         return CommandResult(
             stdout=raw.get("stdout", ""),
             stderr=raw.get("stderr", ""),
@@ -83,7 +111,38 @@ class Commands:
     def _run_streaming(
         self,
         body: dict[str, Any],
+        on_stdout: Callable[[str], None] | None,
+        on_stderr: Callable[[str], None] | None,
+        timeout_seconds: int | None,
+    ) -> CommandResult:
+        def send(token: str) -> CommandResult:
+            return self._consume_stream(
+                f"{self._data_plane_base_url}/exec/stream",
+                {**self._routing_headers, "X-Access-Token": token},
+                body,
+                on_stdout,
+                on_stderr,
+                timeout_seconds,
+            )
+
+        return self._with_token_retry(send)
+
+    # Safe for streaming: 401 is returned in the HTTP status code before
+    # any SSE data is written, so the retry can't double-emit callbacks.
+    # The try/except wraps `send` only — if `refresh_activate` itself 401s
+    # (bad API key), it propagates uncaught, so no recursion is possible.
+    def _with_token_retry(self, send: Callable[[str], T]) -> T:
+        try:
+            return send(self._deps.get_access_token())
+        except AuthenticationError:
+            fresh = self._deps.refresh_activate()
+            return send(fresh)
+
+    def _consume_stream(
+        self,
+        url: str,
         headers: dict[str, str],
+        body: dict[str, Any],
         on_stdout: Callable[[str], None] | None,
         on_stderr: Callable[[str], None] | None,
         timeout_seconds: int | None,
@@ -110,7 +169,7 @@ class Commands:
                     stderr_parts.append(event["error"])
 
         stream_sse(
-            f"{self._base_url}/sandboxes/{self._sandbox_id}/exec/stream",
+            url,
             headers=headers,
             json_body=body,
             timeout=float(timeout_seconds) + 5.0
@@ -122,7 +181,8 @@ class Commands:
 
         if not saw_finished:
             raise SandboxError(
-                "Command stream ended without a finished event (possible network disconnect)"
+                "Command stream ended without a finished event "
+                "(possible network disconnect)"
             )
 
         return CommandResult(
@@ -137,15 +197,14 @@ class AsyncCommands:
 
     def __init__(
         self,
-        base_url: str,
-        sandbox_id: str,
-        api_key: str,
+        deps: AsyncCommandsDeps,
         client: httpx.AsyncClient | None = None,
     ) -> None:
-        self._base_url = base_url
-        self._sandbox_id = sandbox_id
-        self._api_key = api_key
+        self._deps = deps
         self._client = client
+        target = data_plane_target(deps.sandbox_id, deps.sandbox_host)
+        self._data_plane_base_url = target.url
+        self._routing_headers = target.headers
 
     async def run(
         self,
@@ -157,10 +216,7 @@ class AsyncCommands:
         on_stdout: Callable[[str], None] | None = None,
         on_stderr: Callable[[str], None] | None = None,
     ) -> CommandResult:
-        """Async variant of Commands.run().
-
-        Paused sandboxes are transparently resumed before execution.
-        """
+        """Async variant of Commands.run()."""
         body: dict[str, Any] = {"command": command}
         if cwd is not None:
             body["working_dir"] = cwd
@@ -169,31 +225,32 @@ class AsyncCommands:
         if timeout_seconds is not None:
             body["timeout_s"] = timeout_seconds
 
-        headers = {"X-API-Key": self._api_key}
         is_streaming = on_stdout is not None or on_stderr is not None
 
         if is_streaming:
             return await self._run_streaming(
-                body, headers, on_stdout, on_stderr, timeout_seconds
+                body, on_stdout, on_stderr, timeout_seconds
             )
-        return await self._run_sync(body, headers, timeout_seconds)
+        return await self._run_sync(body, timeout_seconds)
 
     async def _run_sync(
         self,
         body: dict[str, Any],
-        headers: dict[str, str],
         timeout_seconds: int | None,
     ) -> CommandResult:
-        raw = await async_api_request(
-            "POST",
-            f"{self._base_url}/sandboxes/{self._sandbox_id}/exec",
-            headers=headers,
-            json_body=body,
-            timeout=float(timeout_seconds) + 5.0
-            if timeout_seconds is not None
-            else 30.0,
-            client=self._client,
-        )
+        async def send(token: str) -> Any:
+            return await async_api_request(
+                "POST",
+                f"{self._data_plane_base_url}/exec",
+                headers={**self._routing_headers, "X-Access-Token": token},
+                json_body=body,
+                timeout=float(timeout_seconds) + 5.0
+                if timeout_seconds is not None
+                else 30.0,
+                client=self._client,
+            )
+
+        raw: dict[str, Any] = await self._with_token_retry(send)
         return CommandResult(
             stdout=raw.get("stdout", ""),
             stderr=raw.get("stderr", ""),
@@ -203,7 +260,36 @@ class AsyncCommands:
     async def _run_streaming(
         self,
         body: dict[str, Any],
+        on_stdout: Callable[[str], None] | None,
+        on_stderr: Callable[[str], None] | None,
+        timeout_seconds: int | None,
+    ) -> CommandResult:
+        async def send(token: str) -> CommandResult:
+            return await self._consume_stream(
+                f"{self._data_plane_base_url}/exec/stream",
+                {**self._routing_headers, "X-Access-Token": token},
+                body,
+                on_stdout,
+                on_stderr,
+                timeout_seconds,
+            )
+
+        return await self._with_token_retry(send)
+
+    async def _with_token_retry(
+        self, send: Callable[[str], Awaitable[T]]
+    ) -> T:
+        try:
+            return await send(self._deps.get_access_token())
+        except AuthenticationError:
+            fresh = await self._deps.refresh_activate()
+            return await send(fresh)
+
+    async def _consume_stream(
+        self,
+        url: str,
         headers: dict[str, str],
+        body: dict[str, Any],
         on_stdout: Callable[[str], None] | None,
         on_stderr: Callable[[str], None] | None,
         timeout_seconds: int | None,
@@ -230,7 +316,7 @@ class AsyncCommands:
                     stderr_parts.append(event["error"])
 
         await async_stream_sse(
-            f"{self._base_url}/sandboxes/{self._sandbox_id}/exec/stream",
+            url,
             headers=headers,
             json_body=body,
             timeout=float(timeout_seconds) + 5.0
@@ -242,7 +328,8 @@ class AsyncCommands:
 
         if not saw_finished:
             raise SandboxError(
-                "Command stream ended without a finished event (possible network disconnect)"
+                "Command stream ended without a finished event "
+                "(possible network disconnect)"
             )
 
         return CommandResult(

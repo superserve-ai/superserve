@@ -246,7 +246,7 @@ function UploadPanel({ sandbox, disabled, reason }: PanelProps) {
           disabled
             ? "pointer-events-none border-border opacity-50"
             : dragOver
-              ? "border-foreground bg-foreground/5"
+              ? "border-brand bg-brand/10"
               : "border-border hover:border-foreground/40"
         }`}
       >

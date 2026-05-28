@@ -127,7 +127,7 @@ function TemplatePicker({
                     className={cn(
                       "flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors",
                       selected
-                        ? "bg-foreground/10 text-foreground"
+                        ? "bg-brand/10 text-foreground"
                         : "text-foreground/80 hover:bg-surface-hover",
                     )}
                   >
@@ -473,7 +473,7 @@ export function CreateSandboxDialog({
                 >
                   {isHovered && (
                     <motion.span
-                      className="absolute inset-0 bg-foreground/4"
+                      className="absolute inset-0 bg-brand/10"
                       layoutId="create-mode-hover"
                       transition={{
                         type: "spring",
@@ -483,7 +483,7 @@ export function CreateSandboxDialog({
                     />
                   )}
                   {isActive && !hoveredMode && (
-                    <span className="absolute inset-0 bg-foreground/4" />
+                    <span className="absolute inset-0 bg-brand/10" />
                   )}
                   {isActive && (
                     <motion.span
@@ -841,7 +841,7 @@ export function CreateSandboxDialog({
                     >
                       {isHovered && (
                         <motion.span
-                          className="absolute inset-0 bg-foreground/4"
+                          className="absolute inset-0 bg-brand/10"
                           layoutId="create-lang-hover"
                           transition={{
                             type: "spring",
@@ -851,7 +851,7 @@ export function CreateSandboxDialog({
                         />
                       )}
                       {isActive && !hoveredLang && (
-                        <span className="absolute inset-0 bg-foreground/4" />
+                        <span className="absolute inset-0 bg-brand/10" />
                       )}
                       {isActive && (
                         <motion.span

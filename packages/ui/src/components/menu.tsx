@@ -27,7 +27,7 @@ function MenuPopup({
       >
         <MenuPrimitive.Popup
           className={cn(
-            "ss-menu-popup z-50 min-w-32 border border-dashed border-border bg-surface p-1",
+            "ss-menu-popup z-50 min-w-32 border border-dashed border-border bg-surface/80 p-1 backdrop-blur-xl",
             className,
           )}
           {...props}
