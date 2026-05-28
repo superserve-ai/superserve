@@ -186,3 +186,32 @@ class TestCommandsStreaming:
 
         assert result.exit_code == 42
         assert result.stderr == "err\n"
+
+    def test_streaming_retry_on_401_does_not_double_emit_callbacks(
+        self,
+    ) -> None:
+        deps, state = _make_deps()
+        sse_body = (
+            'data: {"stdout": "one"}\n\n'
+            'data: {"finished": true, "exit_code": 0}\n\n'
+        )
+        with respx.mock() as router:
+            router.post(f"{DATA_PLANE}/exec/stream").mock(
+                side_effect=[
+                    httpx.Response(401, json={"error": {"code": "auth_failed"}}),
+                    httpx.Response(
+                        200,
+                        content=sse_body.encode(),
+                        headers={"Content-Type": "text/event-stream"},
+                    ),
+                ]
+            )
+
+            received: list[str] = []
+            result = Commands(deps).run("echo", on_stdout=received.append)
+
+        # Callbacks fire exactly once — the 401 attempt never invoked on_stdout
+        assert received == ["one"]
+        assert result.stdout == "one"
+        assert result.exit_code == 0
+        assert state["refreshes"] == 1

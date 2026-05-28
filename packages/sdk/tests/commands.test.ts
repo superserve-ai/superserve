@@ -207,4 +207,38 @@ describe("Commands.run (streaming)", () => {
     expect(result.stderr).toBe("warn\ncrashed")
     expect(result.exitCode).toBe(1)
   })
+
+  it("streaming retry on 401 doesn't double-emit callbacks", async () => {
+    let refreshCalls = 0
+    const deps = makeDeps({
+      refreshActivate: async () => {
+        refreshCalls += 1
+        return "tok-refreshed"
+      },
+    })
+    const mock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({ error: { code: "auth_failed" } }, 401),
+      )
+      .mockResolvedValueOnce(
+        sseResponse([
+          `data: ${JSON.stringify({ stdout: "one" })}\n`,
+          `data: ${JSON.stringify({ finished: true, exit_code: 0 })}\n`,
+        ]),
+      )
+    vi.stubGlobal("fetch", mock)
+
+    const received: string[] = []
+    const commands = new Commands(deps)
+    const result = await commands.run("echo", {
+      onStdout: (d) => received.push(d),
+    })
+
+    // Callbacks fire exactly once — the 401 attempt never invoked onStdout
+    expect(received).toEqual(["one"])
+    expect(result.stdout).toBe("one")
+    expect(result.exitCode).toBe(0)
+    expect(refreshCalls).toBe(1)
+  })
 })

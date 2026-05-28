@@ -129,6 +129,8 @@ class Commands:
 
     # Safe for streaming: 401 is returned in the HTTP status code before
     # any SSE data is written, so the retry can't double-emit callbacks.
+    # The try/except wraps `send` only — if `refresh_activate` itself 401s
+    # (bad API key), it propagates uncaught, so no recursion is possible.
     def _with_token_retry(self, send: Callable[[str], T]) -> T:
         try:
             return send(self._deps.get_access_token())

@@ -117,6 +117,8 @@ export class Commands {
 
   // Safe for streaming: 401 is returned in the HTTP status code before
   // any SSE data is written, so the retry can't double-emit callbacks.
+  // The try/catch wraps `send` only — if `refreshActivate` itself 401s
+  // (bad API key), it propagates uncaught, so no recursion is possible.
   private async _withTokenRetry<T>(
     send: (token: string) => Promise<T>,
   ): Promise<T> {
