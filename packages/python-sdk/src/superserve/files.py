@@ -7,7 +7,7 @@ from urllib.parse import quote
 
 import httpx
 
-from ._config import data_plane_url
+from ._config import data_plane_target
 from ._http import (
     async_download_bytes,
     async_upload_bytes,
@@ -34,7 +34,9 @@ class Files:
         access_token: str,
         client: httpx.Client | None = None,
     ) -> None:
-        self._base_url = data_plane_url(sandbox_id, sandbox_host)
+        target = data_plane_target(sandbox_id, sandbox_host)
+        self._base_url = target.url
+        self._routing_headers = target.headers
         self._access_token = access_token
         self._client = client
 
@@ -48,7 +50,7 @@ class Files:
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
         kwargs: dict[str, Any] = {
             "url": url,
-            "headers": {"X-Access-Token": self._access_token},
+            "headers": {**self._routing_headers, "X-Access-Token": self._access_token},
             "content": content,
             "client": self._client,
         }
@@ -62,7 +64,7 @@ class Files:
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
         kwargs: dict[str, Any] = {
             "url": url,
-            "headers": {"X-Access-Token": self._access_token},
+            "headers": {**self._routing_headers, "X-Access-Token": self._access_token},
             "client": self._client,
         }
         if timeout is not None:
@@ -85,7 +87,9 @@ class AsyncFiles:
         access_token: str,
         client: httpx.AsyncClient | None = None,
     ) -> None:
-        self._base_url = data_plane_url(sandbox_id, sandbox_host)
+        target = data_plane_target(sandbox_id, sandbox_host)
+        self._base_url = target.url
+        self._routing_headers = target.headers
         self._access_token = access_token
         self._client = client
 
@@ -99,7 +103,7 @@ class AsyncFiles:
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
         kwargs: dict[str, Any] = {
             "url": url,
-            "headers": {"X-Access-Token": self._access_token},
+            "headers": {**self._routing_headers, "X-Access-Token": self._access_token},
             "content": content,
             "client": self._client,
         }
@@ -113,7 +117,7 @@ class AsyncFiles:
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
         kwargs: dict[str, Any] = {
             "url": url,
-            "headers": {"X-Access-Token": self._access_token},
+            "headers": {**self._routing_headers, "X-Access-Token": self._access_token},
             "client": self._client,
         }
         if timeout is not None:

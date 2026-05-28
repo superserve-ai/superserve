@@ -27,7 +27,7 @@ function sseResponse(chunks: string[]): Response {
 }
 
 const sandboxId = "sbx-1"
-const sandboxHost = "sandbox.superserve.ai"
+const sandboxHost = "sandbox.example.com"
 const dataPlaneUrl = `https://boxd-${sandboxId}.${sandboxHost}`
 
 function makeDeps(overrides: Partial<CommandsDeps> = {}): CommandsDeps {
@@ -240,5 +240,50 @@ describe("Commands.run (streaming)", () => {
     expect(result.stdout).toBe("one")
     expect(result.exitCode).toBe(0)
     expect(refreshCalls).toBe(1)
+  })
+})
+
+describe("Commands.run (shared-host routing)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("uses shared host + X-Superserve-Sandbox-Id when sandboxHost is supported", async () => {
+    const mock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({ stdout: "hi\n", stderr: "", exit_code: 0 }),
+      )
+    vi.stubGlobal("fetch", mock)
+
+    const commands = new Commands(
+      makeDeps({ sandboxHost: "sandbox.superserve.ai" }),
+    )
+    await commands.run("echo hi")
+
+    const [url, init] = mock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe("https://sandbox.superserve.ai/exec")
+    const headers = init.headers as Record<string, string>
+    expect(headers["X-Superserve-Sandbox-Id"]).toBe(sandboxId)
+    expect(headers["X-Access-Token"]).toBe("tok-initial")
+  })
+
+  it("falls back to per-sandbox subdomain on unsupported host", async () => {
+    const mock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({ stdout: "", stderr: "", exit_code: 0 }),
+      )
+    vi.stubGlobal("fetch", mock)
+
+    const commands = new Commands(
+      makeDeps({ sandboxHost: "self-hosted.example.org" }),
+    )
+    await commands.run("echo")
+
+    const [url, init] = mock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(`https://boxd-${sandboxId}.self-hosted.example.org/exec`)
+    const headers = init.headers as Record<string, string>
+    expect(headers["X-Superserve-Sandbox-Id"]).toBeUndefined()
   })
 })

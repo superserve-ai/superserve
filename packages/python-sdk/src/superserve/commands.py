@@ -12,7 +12,7 @@ from typing import Any, TypeVar
 
 import httpx
 
-from ._config import data_plane_url
+from ._config import data_plane_target
 from ._http import api_request, async_api_request, async_stream_sse, stream_sse
 from .errors import AuthenticationError, SandboxError
 from .types import CommandResult
@@ -50,9 +50,9 @@ class Commands:
     ) -> None:
         self._deps = deps
         self._client = client
-        self._data_plane_base_url = data_plane_url(
-            deps.sandbox_id, deps.sandbox_host
-        )
+        target = data_plane_target(deps.sandbox_id, deps.sandbox_host)
+        self._data_plane_base_url = target.url
+        self._routing_headers = target.headers
 
     def run(
         self,
@@ -93,7 +93,7 @@ class Commands:
             return api_request(
                 "POST",
                 f"{self._data_plane_base_url}/exec",
-                headers={"X-Access-Token": token},
+                headers={**self._routing_headers, "X-Access-Token": token},
                 json_body=body,
                 timeout=float(timeout_seconds) + 5.0
                 if timeout_seconds is not None
@@ -118,7 +118,7 @@ class Commands:
         def send(token: str) -> CommandResult:
             return self._consume_stream(
                 f"{self._data_plane_base_url}/exec/stream",
-                {"X-Access-Token": token},
+                {**self._routing_headers, "X-Access-Token": token},
                 body,
                 on_stdout,
                 on_stderr,
@@ -202,9 +202,9 @@ class AsyncCommands:
     ) -> None:
         self._deps = deps
         self._client = client
-        self._data_plane_base_url = data_plane_url(
-            deps.sandbox_id, deps.sandbox_host
-        )
+        target = data_plane_target(deps.sandbox_id, deps.sandbox_host)
+        self._data_plane_base_url = target.url
+        self._routing_headers = target.headers
 
     async def run(
         self,
@@ -242,7 +242,7 @@ class AsyncCommands:
             return await async_api_request(
                 "POST",
                 f"{self._data_plane_base_url}/exec",
-                headers={"X-Access-Token": token},
+                headers={**self._routing_headers, "X-Access-Token": token},
                 json_body=body,
                 timeout=float(timeout_seconds) + 5.0
                 if timeout_seconds is not None
@@ -267,7 +267,7 @@ class AsyncCommands:
         async def send(token: str) -> CommandResult:
             return await self._consume_stream(
                 f"{self._data_plane_base_url}/exec/stream",
-                {"X-Access-Token": token},
+                {**self._routing_headers, "X-Access-Token": token},
                 body,
                 on_stdout,
                 on_stderr,

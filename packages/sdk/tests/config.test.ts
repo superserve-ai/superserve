@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { dataPlaneUrl, resolveConfig } from "../src/config.js"
+import { dataPlaneTarget, resolveConfig } from "../src/config.js"
 import { AuthenticationError } from "../src/errors.js"
 
 describe("resolveConfig", () => {
@@ -84,16 +84,22 @@ describe("resolveConfig", () => {
   })
 })
 
-describe("dataPlaneUrl", () => {
-  it("builds data plane URL from sandbox id and host", () => {
-    expect(dataPlaneUrl("abc-123", "sandbox.superserve.ai")).toBe(
-      "https://boxd-abc-123.sandbox.superserve.ai",
-    )
+describe("dataPlaneTarget", () => {
+  it("uses shared host + routing header on supported prod host", () => {
+    const target = dataPlaneTarget("abc-123", "sandbox.superserve.ai")
+    expect(target.url).toBe("https://sandbox.superserve.ai")
+    expect(target.headers["X-Superserve-Sandbox-Id"]).toBe("abc-123")
   })
 
-  it("builds staging data plane URL", () => {
-    expect(dataPlaneUrl("xyz", "staging-sandbox.superserve.ai")).toBe(
-      "https://boxd-xyz.staging-sandbox.superserve.ai",
-    )
+  it("uses shared host + routing header on supported staging host", () => {
+    const target = dataPlaneTarget("xyz", "staging-sandbox.superserve.ai")
+    expect(target.url).toBe("https://staging-sandbox.superserve.ai")
+    expect(target.headers["X-Superserve-Sandbox-Id"]).toBe("xyz")
+  })
+
+  it("falls back to per-sandbox subdomain on unsupported host", () => {
+    const target = dataPlaneTarget("abc", "self-hosted.example.org")
+    expect(target.url).toBe("https://boxd-abc.self-hosted.example.org")
+    expect(target.headers).toEqual({})
   })
 })

@@ -102,3 +102,20 @@ class TestFilesReadText:
                 return_value=httpx.Response(200, content="héllo".encode())
             )
             assert _make_files().read_text("/home/x.txt") == "héllo"
+
+
+class TestFilesSharedHostRouting:
+    def test_uses_shared_host_when_supported(self) -> None:
+        files = Files(
+            sandbox_id="abc-123",
+            sandbox_host="sandbox.superserve.ai",
+            access_token="tok-xyz",
+        )
+        with respx.mock() as router:
+            route = router.post("https://sandbox.superserve.ai/files").mock(
+                return_value=httpx.Response(200)
+            )
+            files.write("/tmp/f.txt", "data")
+            req = route.calls.last.request
+            assert req.headers.get("x-superserve-sandbox-id") == "abc-123"
+            assert req.headers.get("x-access-token") == "tok-xyz"

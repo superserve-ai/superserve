@@ -215,3 +215,42 @@ class TestCommandsStreaming:
         assert result.stdout == "one"
         assert result.exit_code == 0
         assert state["refreshes"] == 1
+
+
+class TestCommandsSharedHostRouting:
+    def test_uses_shared_host_when_supported(self) -> None:
+        deps = CommandsDeps(
+            sandbox_id=SBX,
+            sandbox_host="sandbox.superserve.ai",
+            get_access_token=lambda: "tok",
+            refresh_activate=lambda: "tok",
+        )
+        with respx.mock() as router:
+            route = router.post("https://sandbox.superserve.ai/exec").mock(
+                return_value=httpx.Response(
+                    200, json={"stdout": "ok", "stderr": "", "exit_code": 0}
+                )
+            )
+            Commands(deps).run("echo")
+            req = route.calls.last.request
+            assert req.headers.get("x-superserve-sandbox-id") == SBX
+            assert req.headers.get("x-access-token") == "tok"
+
+    def test_falls_back_to_subdomain_on_unsupported_host(self) -> None:
+        deps = CommandsDeps(
+            sandbox_id=SBX,
+            sandbox_host="self-hosted.example.org",
+            get_access_token=lambda: "tok",
+            refresh_activate=lambda: "tok",
+        )
+        with respx.mock() as router:
+            route = router.post(
+                f"https://boxd-{SBX}.self-hosted.example.org/exec"
+            ).mock(
+                return_value=httpx.Response(
+                    200, json={"stdout": "ok", "stderr": "", "exit_code": 0}
+                )
+            )
+            Commands(deps).run("echo")
+            req = route.calls.last.request
+            assert "x-superserve-sandbox-id" not in {k.lower() for k in req.headers}
