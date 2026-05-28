@@ -47,7 +47,7 @@ _SUPPORTED_SHARED_HOSTS: frozenset[str] = frozenset(
     }
 )
 
-SANDBOX_ID_HEADER = "X-Superserve-Sandbox-Id"
+_SANDBOX_ID_HEADER = "X-Superserve-Sandbox-Id"
 
 
 @dataclass(frozen=True)
@@ -68,7 +68,7 @@ def data_plane_target(sandbox_id: str, sandbox_host: str) -> DataPlaneTarget:
     if sandbox_host in _SUPPORTED_SHARED_HOSTS:
         return DataPlaneTarget(
             url=f"https://{sandbox_host}",
-            headers={SANDBOX_ID_HEADER: sandbox_id},
+            headers={_SANDBOX_ID_HEADER: sandbox_id},
         )
     return DataPlaneTarget(
         url=f"https://boxd-{sandbox_id}.{sandbox_host}",

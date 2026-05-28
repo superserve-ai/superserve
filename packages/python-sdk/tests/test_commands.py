@@ -254,3 +254,48 @@ class TestCommandsSharedHostRouting:
             Commands(deps).run("echo")
             req = route.calls.last.request
             assert "x-superserve-sandbox-id" not in {k.lower() for k in req.headers}
+
+    def test_streaming_carries_sandbox_id_header_on_shared_host(self) -> None:
+        deps = CommandsDeps(
+            sandbox_id=SBX,
+            sandbox_host="sandbox.superserve.ai",
+            get_access_token=lambda: "tok",
+            refresh_activate=lambda: "tok",
+        )
+        sse_body = (
+            'data: {"stdout": "x"}\n\n'
+            'data: {"finished": true, "exit_code": 0}\n\n'
+        )
+        with respx.mock() as router:
+            route = router.post("https://sandbox.superserve.ai/exec/stream").mock(
+                return_value=httpx.Response(
+                    200,
+                    content=sse_body.encode(),
+                    headers={"Content-Type": "text/event-stream"},
+                )
+            )
+            Commands(deps).run("echo", on_stdout=lambda _c: None)
+            req = route.calls.last.request
+            assert req.headers.get("x-superserve-sandbox-id") == SBX
+
+    def test_preserves_sandbox_id_header_after_401_retry_on_shared_host(self) -> None:
+        deps = CommandsDeps(
+            sandbox_id=SBX,
+            sandbox_host="sandbox.superserve.ai",
+            get_access_token=lambda: "tok",
+            refresh_activate=lambda: "tok-refreshed",
+        )
+        with respx.mock() as router:
+            route = router.post("https://sandbox.superserve.ai/exec").mock(
+                side_effect=[
+                    httpx.Response(401, json={"error": {"code": "auth_failed"}}),
+                    httpx.Response(
+                        200,
+                        json={"stdout": "ok\n", "stderr": "", "exit_code": 0},
+                    ),
+                ]
+            )
+            Commands(deps).run("echo")
+            second = route.calls[1].request
+            assert second.headers.get("x-superserve-sandbox-id") == SBX
+            assert second.headers.get("x-access-token") == "tok-refreshed"

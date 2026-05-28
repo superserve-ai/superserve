@@ -286,4 +286,49 @@ describe("Commands.run (shared-host routing)", () => {
     const headers = init.headers as Record<string, string>
     expect(headers["X-Superserve-Sandbox-Id"]).toBeUndefined()
   })
+
+  it("streaming carries X-Superserve-Sandbox-Id on shared host", async () => {
+    const mock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        sseResponse([
+          `data: ${JSON.stringify({ stdout: "x" })}\n`,
+          `data: ${JSON.stringify({ finished: true, exit_code: 0 })}\n`,
+        ]),
+      )
+    vi.stubGlobal("fetch", mock)
+
+    const commands = new Commands(
+      makeDeps({ sandboxHost: "sandbox.superserve.ai" }),
+    )
+    await commands.run("echo", { onStdout: () => {} })
+
+    const [url, init] = mock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe("https://sandbox.superserve.ai/exec/stream")
+    const headers = init.headers as Record<string, string>
+    expect(headers["X-Superserve-Sandbox-Id"]).toBe(sandboxId)
+  })
+
+  it("preserves X-Superserve-Sandbox-Id after 401 retry on shared host", async () => {
+    const deps = makeDeps({
+      sandboxHost: "sandbox.superserve.ai",
+      refreshActivate: async () => "tok-refreshed",
+    })
+    const mock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({ error: { code: "auth_failed" } }, 401),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ stdout: "ok\n", stderr: "", exit_code: 0 }),
+      )
+    vi.stubGlobal("fetch", mock)
+
+    await new Commands(deps).run("echo")
+
+    const [, secondInit] = mock.mock.calls[1] as [string, RequestInit]
+    const headers = secondInit.headers as Record<string, string>
+    expect(headers["X-Superserve-Sandbox-Id"]).toBe(sandboxId)
+    expect(headers["X-Access-Token"]).toBe("tok-refreshed")
+  })
 })

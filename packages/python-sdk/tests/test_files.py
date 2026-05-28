@@ -119,3 +119,17 @@ class TestFilesSharedHostRouting:
             req = route.calls.last.request
             assert req.headers.get("x-superserve-sandbox-id") == "abc-123"
             assert req.headers.get("x-access-token") == "tok-xyz"
+
+    def test_read_also_carries_sandbox_id_header_on_shared_host(self) -> None:
+        files = Files(
+            sandbox_id="abc-123",
+            sandbox_host="sandbox.superserve.ai",
+            access_token="tok-xyz",
+        )
+        with respx.mock() as router:
+            route = router.get("https://sandbox.superserve.ai/files").mock(
+                return_value=httpx.Response(200, content=b"hello")
+            )
+            files.read("/tmp/f.bin")
+            req = route.calls.last.request
+            assert req.headers.get("x-superserve-sandbox-id") == "abc-123"
