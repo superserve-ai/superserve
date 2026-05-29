@@ -24,6 +24,8 @@ export function StickyHoverTableBody({
     if (!row || !tbodyRef.current?.contains(row)) return
     // Skip the absolute-positioned hover indicator row
     if (row.getAttribute("aria-hidden") === "true") return
+    // Keep the indicator on summary rows only, not expanded detail rows
+    if (row.getAttribute("data-detail-row") === "true") return
     const tbodyRect = tbodyRef.current.getBoundingClientRect()
     const rowRect = row.getBoundingClientRect()
     setHoverStyle({
