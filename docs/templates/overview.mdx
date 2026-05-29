@@ -9,16 +9,20 @@ Every sandbox is created from a template. If you don't specify one, Superserve d
 
 ## System templates
 
-Curated by Superserve, available to every team. Identified by the `superserve/` name prefix.
+Curated by Superserve and available to every team. Identified by the `superserve/` name prefix (which is reserved — team templates can't use it). Each is built from an OCI base image plus a few `apt` / `pip` / `npm` steps. **Every template ships `ca-certificates`, `curl`, and `git`** — the column below lists only what each adds on top.
 
-| Name | Base | Notes |
-|---|---|---|
-| `superserve/base` | Ubuntu 24.04 | Python 3.12, Node.js 22, git, curl, build-essential. Default when `fromTemplate` is omitted. |
-| `superserve/python-3.11` | Python 3.11 | Python-focused image with common scientific libraries. |
-| `superserve/node-22` | Node.js 22 | Node-focused image with bun + npm. |
-| `superserve/claude-code` | `superserve/node-22` | Claude Code CLI and `tmux` preinstalled. |
-| `superserve/openclaw` | `superserve/node-22` | OpenClaw CLI and `tmux` preinstalled. |
-| `superserve/hermes` | `superserve/node-22` | Hermes agent and `tmux` preinstalled. |
+| Name | Base image | Shape (vCPU · mem · disk) | Adds on top of the base toolkit |
+|---|---|---|---|
+| `superserve/base` | `ubuntu:24.04` | 1 · 1024 MiB · 4096 MiB | Nothing — just the base toolkit. Default when `fromTemplate` is omitted. |
+| `superserve/python-3.11` | `python:3.11-slim` | 1 · 1024 MiB · 4096 MiB | `requests` (pip). |
+| `superserve/node-22` | `node:22-slim` | 1 · 1024 MiB · 4096 MiB | `pnpm`, `typescript` (npm global). |
+| `superserve/python-ml` | `python:3.11` | 2 · 2048 MiB · 4096 MiB | `build-essential` (apt); numpy, pandas, scikit-learn, matplotlib, jupyter, ipython, requests (pip). |
+| `superserve/code-interpreter` | `python:3.11` | 2 · 2048 MiB · 8192 MiB | `build-essential`, `libfreetype6-dev`, `libpng-dev` (apt); numpy, pandas, scikit-learn, matplotlib, jupyter, ipython, requests, pillow, seaborn, plotly, openpyxl (pip). |
+| `superserve/claude-code` | `ubuntu:24.04` | 2 · 2048 MiB · 8192 MiB | `build-essential`, `ripgrep`, `vim`, `python3`, `python3-pip` (apt); Claude Code CLI (`claude`). |
+| `superserve/openclaw` | `ubuntu:24.04` | 2 · 2048 MiB · 8192 MiB | `tmux` (apt); OpenClaw CLI. |
+| `superserve/hermes` | `ubuntu:24.04` | 2 · 2048 MiB · 8192 MiB | `tmux`, `xz-utils` (apt); Hermes agent. |
+
+A sandbox inherits its VM shape (vCPU, memory, disk) from the template it boots from — see [BuildSpec reference](/templates/build-spec) for the limits.
 
 ## Team templates
 

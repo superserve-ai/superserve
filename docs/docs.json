@@ -30,11 +30,7 @@
     }
   },
   "favicon": "/favicon.svg",
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg",
-    "href": "https://superserve.ai?utm_source=docs&utm_medium=logo"
-  },
+  "logo": "/logo.svg",
   "appearance": {
     "default": "dark",
     "strict": true
@@ -139,9 +135,7 @@
           },
           {
             "group": "Virtual Filesystems",
-            "pages": [
-              "integrations/virtual-filesystems/mesa"
-            ]
+            "pages": ["integrations/virtual-filesystems/mesa"]
           }
         ]
       },
