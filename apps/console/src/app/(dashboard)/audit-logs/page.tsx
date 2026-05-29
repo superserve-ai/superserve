@@ -1,21 +1,13 @@
 "use client"
 
 import { ClipboardTextIcon } from "@phosphor-icons/react"
-import {
-  Badge,
-  type BadgeVariant,
-  Table,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-  Tooltip,
-  TooltipPopup,
-  TooltipTrigger,
-} from "@superserve/ui"
+import { Table, TableHead, TableHeader, TableRow } from "@superserve/ui"
 import { useMemo, useState } from "react"
 
-import { AnimatedTableRow } from "@/components/animated-table-row"
+import {
+  ActivityDetailRow,
+  ActivitySummaryRow,
+} from "@/components/audit/activity-row"
 import { DateRangeFilter } from "@/components/date-range-filter"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
@@ -24,12 +16,6 @@ import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableSkeleton } from "@/components/table-skeleton"
 import { TableToolbar } from "@/components/table-toolbar"
 import { useActivity } from "@/hooks/use-activity"
-import { formatTime } from "@/lib/format"
-
-const STATUS_VARIANT: Record<string, BadgeVariant> = {
-  success: "success",
-  error: "destructive",
-}
 
 const CATEGORY_TABS = [
   { label: "All", value: "all" },
@@ -39,22 +25,6 @@ const CATEGORY_TABS = [
   { label: "Errors", value: "_errors" },
 ]
 
-function formatDuration(ms: number | null): string {
-  if (ms === null) return "-"
-  if (ms < 1000) return `${ms}ms`
-  return `${(ms / 1000).toFixed(1)}s`
-}
-
-function TimeCell({ date }: { date: Date }) {
-  const { relative, absolute } = formatTime(date)
-  return (
-    <div className="tabular-nums">
-      <span className="text-foreground/80">{relative}</span>
-      <span className="ml-2 text-xs text-muted">{absolute}</span>
-    </div>
-  )
-}
-
 export default function AuditLogsPage() {
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [search, setSearch] = useState("")
@@ -62,6 +32,7 @@ export default function AuditLogsPage() {
     start: Date
     end: Date
   } | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const { data: activity, isPending, error, refetch } = useActivity()
 
@@ -159,58 +130,27 @@ export default function AuditLogsPage() {
                 </TableRow>
               </TableHeader>
               <StickyHoverTableBody>
-                {filtered.map((log) => (
-                  <AnimatedTableRow key={log.id}>
-                    <TableCell className="whitespace-nowrap">
-                      <TimeCell date={new Date(log.created_at)} />
-                    </TableCell>
-                    <TableCell className="font-mono text-foreground/80">
-                      {log.sandbox_name ?? "-"}
-                    </TableCell>
-                    <TableCell className="text-muted capitalize">
-                      {log.category}
-                    </TableCell>
-                    <TableCell className="text-foreground/80">
-                      {log.action}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-muted tabular-nums">
-                      {formatDuration(log.duration_ms)}
-                    </TableCell>
-                    <TableCell>
-                      {log.status ? (
-                        log.error ? (
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={
-                                <Badge
-                                  variant={
-                                    STATUS_VARIANT[log.status] ?? "muted"
-                                  }
-                                  dot
-                                  className="cursor-default"
-                                />
-                              }
-                            >
-                              {log.status}
-                            </TooltipTrigger>
-                            <TooltipPopup className="max-w-xs text-xs">
-                              {log.error}
-                            </TooltipPopup>
-                          </Tooltip>
-                        ) : (
-                          <Badge
-                            variant={STATUS_VARIANT[log.status] ?? "muted"}
-                            dot
-                          >
-                            {log.status}
-                          </Badge>
+                {filtered.flatMap((log) => {
+                  const isOpen = expandedId === log.id
+                  const rows = [
+                    <ActivitySummaryRow
+                      key={log.id}
+                      log={log}
+                      isOpen={isOpen}
+                      onToggle={() =>
+                        setExpandedId((prev) =>
+                          prev === log.id ? null : log.id,
                         )
-                      ) : (
-                        <span className="text-muted">-</span>
-                      )}
-                    </TableCell>
-                  </AnimatedTableRow>
-                ))}
+                      }
+                    />,
+                  ]
+                  if (isOpen) {
+                    rows.push(
+                      <ActivityDetailRow key={`${log.id}-detail`} log={log} />,
+                    )
+                  }
+                  return rows
+                })}
               </StickyHoverTableBody>
             </Table>
           </div>
