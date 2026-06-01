@@ -22,7 +22,7 @@ const HTTP_METHODS = [
 // Paths defined in the spec but intentionally absent from the public nav.
 const EXEMPT_PATHS = new Set(["/health"])
 
-const OP_RE = new RegExp(`^(${HTTP_METHODS.join("|")}) /`)
+const OP_RE = new RegExp(`^(${HTTP_METHODS.join("|")})\\s+/`)
 
 type DocsConfig = {
   navigation: {
@@ -38,7 +38,9 @@ function navOpsFromDocs(docs: DocsConfig): {
   ops: Set<string>
   specUrl: string
 } {
-  const apiTab = docs.navigation.tabs.find((t) => typeof t.openapi === "string")
+  const apiTab = docs.navigation?.tabs?.find(
+    (t) => typeof t.openapi === "string",
+  )
   if (!apiTab?.openapi) {
     throw new Error("no tab with an `openapi` field found in docs.json")
   }
@@ -53,11 +55,15 @@ function navOpsFromDocs(docs: DocsConfig): {
   return { ops, specUrl: apiTab.openapi }
 }
 
-function specOps(spec: {
-  paths?: Record<string, Record<string, unknown>>
-}): Set<string> {
+function specOps(spec: unknown): Set<string> {
   const ops = new Set<string>()
-  for (const [path, item] of Object.entries(spec.paths ?? {})) {
+  const paths =
+    spec && typeof spec === "object"
+      ? (spec as { paths?: unknown }).paths
+      : null
+  if (!paths || typeof paths !== "object") return ops
+  for (const [path, item] of Object.entries(paths)) {
+    if (!item || typeof item !== "object") continue
     for (const key of Object.keys(item)) {
       const method = key.toUpperCase()
       if (HTTP_METHODS.includes(method)) ops.add(`${method} ${path}`)
@@ -75,8 +81,13 @@ if (!res.ok) {
   console.error(`failed to fetch OpenAPI spec (${res.status}): ${specUrl}`)
   process.exit(1)
 }
-const spec = Bun.YAML.parse(await res.text()) as Parameters<typeof specOps>[0]
-const api = specOps(spec)
+const api = specOps(Bun.YAML.parse(await res.text()))
+if (api.size === 0) {
+  console.error(
+    `OpenAPI spec produced no operations (fetch or parse problem): ${specUrl}`,
+  )
+  process.exit(1)
+}
 
 const missingFromNav = [...api].filter((op) => {
   const path = op.split(" ", 2)[1]
