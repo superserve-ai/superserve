@@ -6,17 +6,23 @@ on:
     paths:
       - "apps/**"
       - "packages/**"
+      - "docs/**"
+      - "scripts/**"
       - "package.json"
       - "bun.lock"
       - "turbo.json"
+      - ".github/workflows/ci.yml"
   pull_request:
     branches: [main]
     paths:
       - "apps/**"
       - "packages/**"
+      - "docs/**"
+      - "scripts/**"
       - "package.json"
       - "bun.lock"
       - "turbo.json"
+      - ".github/workflows/ci.yml"
 
 jobs:
   ci:
@@ -42,6 +48,9 @@ jobs:
 
       - name: Typecheck
         run: bun run typecheck
+
+      - name: Check docs nav matches OpenAPI spec
+        run: bun run docs:check-nav
 
       - name: Test
         run: bun run test
