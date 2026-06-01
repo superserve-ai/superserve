@@ -18,6 +18,7 @@
     "test:e2e": "turbo run e2e",
     "docs:dev": "mintlify dev --dir docs",
     "docs:build": "mintlify build --dir docs",
+    "docs:check-nav": "bun run scripts/check-docs-nav.ts",
     "prepare": "husky"
   },
   "dependencies": {
