@@ -122,9 +122,7 @@
           },
           {
             "group": "Managed Agents",
-            "pages": [
-              "integrations/managed-agents/claude-managed-agents"
-            ]
+            "pages": ["integrations/managed-agents/claude-managed-agents"]
           },
           {
             "group": "Agent Harnesses",
@@ -152,7 +150,8 @@
               "PATCH /sandboxes/{sandbox_id}",
               "DELETE /sandboxes/{sandbox_id}",
               "POST /sandboxes/{sandbox_id}/pause",
-              "POST /sandboxes/{sandbox_id}/resume"
+              "POST /sandboxes/{sandbox_id}/resume",
+              "POST /sandboxes/{sandbox_id}/activate"
             ]
           },
           {
@@ -161,6 +160,10 @@
               "POST /sandboxes/{sandbox_id}/exec",
               "POST /sandboxes/{sandbox_id}/exec/stream"
             ]
+          },
+          {
+            "group": "Files",
+            "pages": ["GET /files", "POST /files"]
           },
           {
             "group": "Templates",
