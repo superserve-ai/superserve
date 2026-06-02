@@ -229,7 +229,7 @@ describe("FilesSection — download", () => {
     await user.click(downloadBtn)
     expect(fetchSpy).not.toHaveBeenCalled()
     expect(mockAddToast).toHaveBeenCalledWith(
-      expect.stringContaining("absolute"),
+      expect.stringContaining("directory"),
       "error",
     )
   })
@@ -271,8 +271,89 @@ describe("FilesSection — download", () => {
     )
   })
 
-  it("surfaces upstream errors as a toast + fires DOWNLOAD_FAILED", async () => {
-    fetchSpy.mockResolvedValue(new Response("not found", { status: 404 }))
+  it("surfaces a parsed upstream error as a toast + fires DOWNLOAD_FAILED", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ error: "disk on fire" }), { status: 500 }),
+    )
+    render(<FilesSection sandbox={activeSandbox} />)
+
+    const downloadPathInput = screen.getAllByPlaceholderText(
+      "/home/user/file.txt",
+    )[1]
+    await user.clear(downloadPathInput)
+    await user.type(downloadPathInput, "/home/user/file.txt")
+
+    await user.click(screen.getByRole("button", { name: /Download/ }))
+
+    expect(mockAddToast).toHaveBeenCalledWith(
+      expect.stringContaining("disk on fire"),
+      "error",
+    )
+    expect(mockCapture).toHaveBeenCalledWith(
+      "file_download_failed",
+      expect.objectContaining({ sandbox_id: "sbx-1" }),
+    )
+  })
+
+  it("does not leak an unexpected JSON error body into the toast", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ unexpected: "shape" }), { status: 500 }),
+    )
+    render(<FilesSection sandbox={activeSandbox} />)
+
+    const downloadPathInput = screen.getAllByPlaceholderText(
+      "/home/user/file.txt",
+    )[1]
+    await user.clear(downloadPathInput)
+    await user.type(downloadPathInput, "/home/user/file.txt")
+
+    await user.click(screen.getByRole("button", { name: /Download/ }))
+
+    expect(mockAddToast).toHaveBeenCalledWith(
+      expect.stringContaining("Download failed"),
+      "error",
+    )
+    expect(mockAddToast).not.toHaveBeenCalledWith(
+      expect.stringContaining("unexpected"),
+      "error",
+    )
+  })
+
+  it("shows a friendly message for a directory path, not the raw backend error", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: "use FilesystemService.ListDir for directories",
+        }),
+        { status: 400 },
+      ),
+    )
+    render(<FilesSection sandbox={activeSandbox} />)
+
+    const downloadPathInput = screen.getAllByPlaceholderText(
+      "/home/user/file.txt",
+    )[1]
+    await user.clear(downloadPathInput)
+    await user.type(downloadPathInput, "/home/user/research")
+
+    await user.click(screen.getByRole("button", { name: /Download/ }))
+
+    expect(mockAddToast).toHaveBeenCalledWith(
+      expect.stringContaining("directory"),
+      "error",
+    )
+    expect(mockAddToast).not.toHaveBeenCalledWith(
+      expect.stringContaining("FilesystemService"),
+      "error",
+    )
+  })
+
+  it("shows a friendly message when the file is missing (404)", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ error: "file not found" }), {
+        status: 404,
+      }),
+    )
     render(<FilesSection sandbox={activeSandbox} />)
 
     const downloadPathInput = screen.getAllByPlaceholderText(
@@ -284,12 +365,8 @@ describe("FilesSection — download", () => {
     await user.click(screen.getByRole("button", { name: /Download/ }))
 
     expect(mockAddToast).toHaveBeenCalledWith(
-      expect.stringContaining("not found"),
+      expect.stringContaining("No file found"),
       "error",
-    )
-    expect(mockCapture).toHaveBeenCalledWith(
-      "file_download_failed",
-      expect.objectContaining({ sandbox_id: "sbx-1" }),
     )
   })
 })

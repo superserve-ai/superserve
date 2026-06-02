@@ -56,7 +56,7 @@ export function StickyHoverTableBody({
           }}
           aria-hidden="true"
         >
-          <td style={{ padding: 0, border: 0 }}>
+          <td aria-hidden="true" style={{ padding: 0, border: 0 }}>
             <motion.div
               className="absolute right-0 left-0 bg-brand/5"
               animate={{

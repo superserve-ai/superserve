@@ -43,6 +43,31 @@ function isValidAbsolutePath(path: string): boolean {
   return true
 }
 
+/**
+ * Pull a human-readable message out of a data-plane error response. Bodies are
+ * JSON like {"error":"..."} or {"error":{"code","message"}}; fall back to the
+ * raw text, then a generic message. Keeps internal error strings out of toasts.
+ */
+async function errorMessage(res: Response, fallback: string): Promise<string> {
+  const text = await res.text().catch(() => "")
+  try {
+    const parsed = JSON.parse(text) as Record<string, unknown>
+    const err = parsed.error
+    if (typeof err === "string") return err
+    if (err && typeof err === "object" && "message" in err) {
+      const message = (err as { message?: unknown }).message
+      if (typeof message === "string") return message
+    }
+    if (typeof parsed.message === "string") return parsed.message
+    // Parsed as JSON but no readable message — use the fallback rather than
+    // dumping the raw structure into a toast.
+    return fallback
+  } catch {
+    // Body wasn't JSON; fall through to the raw text.
+  }
+  return text || fallback
+}
+
 function disabledReason(status: SandboxResponse["status"]): string | null {
   switch (status) {
     case "active":
@@ -206,8 +231,9 @@ function UploadPanel({ sandbox, disabled, reason }: PanelProps) {
         body: file,
       })
       if (!res.ok) {
-        const text = await res.text().catch(() => "")
-        throw new Error(text || `Upload failed (${res.status})`)
+        throw new Error(
+          await errorMessage(res, `Upload failed (${res.status})`),
+        )
       }
       posthog.capture(FILE_EVENTS.UPLOAD_SUCCEEDED, {
         sandbox_id: sandbox.id,
@@ -271,6 +297,7 @@ function UploadPanel({ sandbox, disabled, reason }: PanelProps) {
         <input
           ref={inputRef}
           type="file"
+          aria-label="File to upload"
           className="hidden"
           disabled={disabled}
           onChange={handleFileChange}
@@ -280,6 +307,7 @@ function UploadPanel({ sandbox, disabled, reason }: PanelProps) {
         value={path}
         onChange={(e) => setPath(e.target.value)}
         placeholder="/home/user/file.txt"
+        aria-label="Upload destination path"
         disabled={disabled}
         className="font-mono text-xs"
       />
@@ -314,7 +342,14 @@ function DownloadPanel({ sandbox, disabled, reason }: PanelProps) {
 
   const handleDownload = async () => {
     const target = path.trim()
-    if (!isValidAbsolutePath(target) || target.endsWith("/")) {
+    if (target.endsWith("/")) {
+      addToast(
+        "That's a directory — enter a path to a specific file inside it.",
+        "error",
+      )
+      return
+    }
+    if (!isValidAbsolutePath(target)) {
       addToast(
         "Path must be an absolute file path without '..' segments",
         "error",
@@ -330,8 +365,22 @@ function DownloadPanel({ sandbox, disabled, reason }: PanelProps) {
         headers: { "X-Access-Token": sandbox.access_token },
       })
       if (!res.ok) {
-        const text = await res.text().catch(() => "")
-        throw new Error(text || `Download failed (${res.status})`)
+        const detail = await errorMessage(
+          res,
+          `Download failed (${res.status})`,
+        )
+        // Downloads are single-file only; a directory path is rejected by the
+        // data plane. Surface something the user can act on instead of the raw
+        // backend error.
+        if (res.status === 400 && /director/i.test(detail)) {
+          throw new Error(
+            `"${target}" is a directory — enter a path to a specific file inside it.`,
+          )
+        }
+        if (res.status === 404) {
+          throw new Error(`No file found at "${target}"`)
+        }
+        throw new Error(detail)
       }
 
       const lengthHeader = res.headers.get("content-length")
@@ -407,6 +456,7 @@ function DownloadPanel({ sandbox, disabled, reason }: PanelProps) {
         value={path}
         onChange={(e) => setPath(e.target.value)}
         placeholder="/home/user/file.txt"
+        aria-label="Download file path"
         disabled={disabled}
         className="font-mono text-xs"
       />
