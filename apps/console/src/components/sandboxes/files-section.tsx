@@ -51,12 +51,17 @@ function isValidAbsolutePath(path: string): boolean {
 async function errorMessage(res: Response, fallback: string): Promise<string> {
   const text = await res.text().catch(() => "")
   try {
-    const err = (JSON.parse(text) as { error?: unknown }).error
+    const parsed = JSON.parse(text) as Record<string, unknown>
+    const err = parsed.error
     if (typeof err === "string") return err
     if (err && typeof err === "object" && "message" in err) {
       const message = (err as { message?: unknown }).message
       if (typeof message === "string") return message
     }
+    if (typeof parsed.message === "string") return parsed.message
+    // Parsed as JSON but no readable message — use the fallback rather than
+    // dumping the raw structure into a toast.
+    return fallback
   } catch {
     // Body wasn't JSON; fall through to the raw text.
   }

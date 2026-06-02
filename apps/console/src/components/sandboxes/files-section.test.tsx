@@ -295,6 +295,30 @@ describe("FilesSection — download", () => {
     )
   })
 
+  it("does not leak an unexpected JSON error body into the toast", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ unexpected: "shape" }), { status: 500 }),
+    )
+    render(<FilesSection sandbox={activeSandbox} />)
+
+    const downloadPathInput = screen.getAllByPlaceholderText(
+      "/home/user/file.txt",
+    )[1]
+    await user.clear(downloadPathInput)
+    await user.type(downloadPathInput, "/home/user/file.txt")
+
+    await user.click(screen.getByRole("button", { name: /Download/ }))
+
+    expect(mockAddToast).toHaveBeenCalledWith(
+      expect.stringContaining("Download failed"),
+      "error",
+    )
+    expect(mockAddToast).not.toHaveBeenCalledWith(
+      expect.stringContaining("unexpected"),
+      "error",
+    )
+  })
+
   it("shows a friendly message for a directory path, not the raw backend error", async () => {
     fetchSpy.mockResolvedValue(
       new Response(
