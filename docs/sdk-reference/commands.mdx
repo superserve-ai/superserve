@@ -55,6 +55,47 @@ result = sandbox.commands.run(
 Streaming uses an *idle* timeout - the timer resets on every chunk. A command that produces output regularly will not trip the timeout no matter how long it runs overall. A completely silent command still has to finish before the timeout.
 </Note>
 
+## `spawn` (interactive session)
+
+`spawn()` returns a live [`CommandSession`](#commandsession) while the process is still running - stream output via callbacks, write to its `stdin`, `kill` it, and `wait()` for the exit result. Output streams over a WebSocket. See [Interactive sessions](/commands/sessions) for a walkthrough.
+
+<CodeGroup>
+```typescript TypeScript
+const session = await sandbox.commands.spawn("python -i", {
+  onStdout: (data) => process.stdout.write(data),
+})
+session.stdin.write("print(2 + 2)\n")
+session.stdin.close()
+const result = await session.wait()
+```
+
+```python Python
+# async-only - use AsyncSandbox
+session = await sandbox.commands.spawn(
+    "python -i",
+    on_stdout=lambda data: print(data, end=""),
+)
+await session.stdin.write("print(2 + 2)\n")
+await session.stdin.close()
+result = await session.wait()
+```
+</CodeGroup>
+
+<Note>
+`spawn()` is **async-only in Python** - call it on `AsyncSandbox`. The synchronous `Sandbox.commands.spawn()` raises. It takes the same `cwd`, `env`, `timeoutMs` / `timeout_seconds`, `onStdout`, and `onStderr` options as `run`; omit the timeout for a long-lived process.
+</Note>
+
+## `CommandSession`
+
+| Member | Description |
+|---|---|
+| `stdin.write(data)` | Write to stdin - a string (UTF-8 encoded) or raw bytes. |
+| `stdin.close()` | Close stdin, signalling EOF. |
+| `kill(signal?)` | Send a signal (default `"SIGTERM"`). |
+| `wait()` | Resolve with the [`CommandResult`](#commandresult) on exit; rejects if the connection drops first. |
+
+In Python the methods are awaitable (`await session.stdin.write(...)`, `await session.kill()`, `await session.wait()`) and the session is an `async with` context manager. In TypeScript the session supports `await using` for automatic cleanup.
+
 ## Options
 
 | Option | Type | Description |

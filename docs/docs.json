@@ -75,7 +75,11 @@
           },
           {
             "group": "Commands",
-            "pages": ["commands/overview", "commands/streaming"]
+            "pages": [
+              "commands/overview",
+              "commands/streaming",
+              "commands/sessions"
+            ]
           },
           {
             "group": "Filesystem",
