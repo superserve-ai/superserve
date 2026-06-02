@@ -7,6 +7,7 @@
  * Accessed as `sandbox.commands.run(...)`.
  */
 
+import { spawnCommand } from "./commandSession.js"
 import { dataPlaneTarget } from "./config.js"
 import { AuthenticationError, SandboxError } from "./errors.js"
 import { request, streamSSE } from "./http.js"
@@ -15,6 +16,8 @@ import type {
   ApiExecStreamEvent,
   CommandOptions,
   CommandResult,
+  CommandSession,
+  SpawnOptions,
 } from "./types.js"
 
 /** @internal */
@@ -75,6 +78,30 @@ export class Commands {
       return this._runStreaming(body, options)
     }
     return this._runSync(body, options)
+  }
+
+  /**
+   * Spawn a command and return a live, full-duplex session.
+   *
+   * Unlike `run` (one-shot), `spawn` hands back a handle while the process is
+   * still running: stream output via `onStdout`/`onStderr`, write to its
+   * `stdin`, `kill` it, and `await session.wait()` for the exit result. Output
+   * streams over a WebSocket — lower latency than `run`'s SSE.
+   *
+   * A paused sandbox is resumed transparently before the session opens.
+   *
+   * @example
+   * ```typescript
+   * const session = await sandbox.commands.spawn("python -i", {
+   *   onStdout: (data) => process.stdout.write(data),
+   * })
+   * session.stdin.write("print(2 + 2)\n")
+   * session.stdin.close()
+   * const { exitCode } = await session.wait()
+   * ```
+   */
+  spawn(command: string, options: SpawnOptions = {}): Promise<CommandSession> {
+    return spawnCommand(this._deps, command, options)
   }
 
   private async _runSync(

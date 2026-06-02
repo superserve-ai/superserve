@@ -80,6 +80,46 @@ export interface CommandOptions {
   signal?: AbortSignal
 }
 
+export interface SpawnOptions {
+  cwd?: string
+  env?: Record<string, string>
+  /** Per-command timeout. Omit for no timeout — interactive processes are long-lived. */
+  timeoutMs?: number
+  /** Called with decoded stdout text as it streams. */
+  onStdout?: (data: string) => void
+  /** Called with decoded stderr text as it streams. */
+  onStderr?: (data: string) => void
+  /** Abort to kill the process and close the connection. */
+  signal?: AbortSignal
+}
+
+/** Write to and close a running process's stdin. */
+export interface CommandStdin {
+  /** Write to stdin. Strings are UTF-8 encoded; bytes are sent as-is. */
+  write(data: string | Uint8Array): void
+  /** Close stdin, signalling EOF. */
+  close(): void
+}
+
+/**
+ * A live, full-duplex handle to a running command (returned by
+ * `commands.spawn`). Stream output via the `onStdout`/`onStderr` options,
+ * write to `stdin`, `kill` it, and `wait` for the exit result.
+ */
+export interface CommandSession {
+  /** Write to / close the process's stdin. */
+  readonly stdin: CommandStdin
+  /** Send a POSIX signal to the process (default `"SIGTERM"`). */
+  kill(signal?: string): void
+  /**
+   * Resolve with the final result when the process exits. Rejects if the
+   * connection drops before the process finishes.
+   */
+  wait(): Promise<CommandResult>
+  /** Kill the process and close the connection (enables `await using`). */
+  [Symbol.asyncDispose](): Promise<void>
+}
+
 // ---------------------------------------------------------------------------
 // Files
 // ---------------------------------------------------------------------------
