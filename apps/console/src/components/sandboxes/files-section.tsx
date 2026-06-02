@@ -374,7 +374,7 @@ function DownloadPanel({ sandbox, disabled, reason }: PanelProps) {
         // backend error.
         if (res.status === 400 && /director/i.test(detail)) {
           throw new Error(
-            `"${target}" is a directory — enter a path to a specific file inside it. Folder downloads aren't supported.`,
+            `"${target}" is a directory — enter a path to a specific file inside it.`,
           )
         }
         if (res.status === 404) {
