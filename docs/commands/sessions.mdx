@@ -38,6 +38,10 @@ print(f"exited {result.exit_code}")
 `spawn()` is **async-only in Python** — full-duplex I/O doesn't fit a blocking call, so the synchronous `Sandbox.commands.spawn()` raises and points you to `AsyncSandbox`. TypeScript has a single `spawn()` that works in both Node and the browser.
 </Note>
 
+<Note>
+In TypeScript, `spawn()` uses the global `WebSocket`, available in browsers and **Node.js 22+**. On older Node versions, supply a `WebSocket` polyfill (e.g. the [`ws`](https://www.npmjs.com/package/ws) package) on `globalThis`.
+</Note>
+
 ## `run` or `spawn`?
 
 | | `run()` | `spawn()` |

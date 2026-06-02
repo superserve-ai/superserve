@@ -189,6 +189,48 @@ async def test_closes_socket_after_finish(monkeypatch):
     assert c.closed
 
 
+async def test_replaces_invalid_utf8(monkeypatch):
+    conns: list[FakeConnection] = []
+
+    async def connect(uri, subprotocols=None):
+        c = FakeConnection(uri, subprotocols)
+        conns.append(c)
+        return c
+
+    patch_connect(monkeypatch, connect)
+
+    out: list[str] = []
+    session = await spawn_command(make_deps(), "emit", on_stdout=out.append)
+    c = conns[-1]
+
+    # 0xFF is never valid UTF-8 — it must become U+FFFD, not crash the session.
+    c.feed(bytes([0x01, 0xFF]))
+    c.feed('{"finished":true,"exit_code":0}')
+
+    result = await session.wait()
+    assert out == ["�"]
+    assert result.stdout == "�"
+
+
+async def test_close_before_finish_settles_wait(monkeypatch):
+    conns: list[FakeConnection] = []
+
+    async def connect(uri, subprotocols=None):
+        c = FakeConnection(uri, subprotocols)
+        conns.append(c)
+        return c
+
+    patch_connect(monkeypatch, connect)
+
+    session = await spawn_command(make_deps(), "run")
+    await session.close()
+
+    # The finally in the read loop settles wait() even though close() cancelled
+    # the reader — it must raise, not hang (wait_for guards against a hang).
+    with pytest.raises(SandboxError):
+        await asyncio.wait_for(session.wait(), timeout=1.0)
+
+
 async def test_wait_raises_if_closed_before_finished(monkeypatch):
     conns: list[FakeConnection] = []
 

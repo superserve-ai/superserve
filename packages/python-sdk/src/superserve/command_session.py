@@ -28,6 +28,12 @@ _CH_STDOUT = 1
 _CH_STDERR = 2
 
 
+def _retrieve_exception(fut: "asyncio.Future[Any]") -> None:
+    # Touch the result so asyncio doesn't warn when it's never awaited.
+    if not fut.cancelled():
+        fut.exception()
+
+
 @dataclass(frozen=True)
 class AsyncSpawnDeps:
     """Connection inputs, supplied by AsyncCommands."""
@@ -121,14 +127,19 @@ class AsyncCommandSession:
         self._on_stdout = on_stdout
         self._on_stderr = on_stderr
         self.stdin = AsyncStdin(ws)
-        # Incremental decoders carry partial multi-byte runes across frames.
-        self._out_decoder = codecs.getincrementaldecoder("utf-8")()
-        self._err_decoder = codecs.getincrementaldecoder("utf-8")()
+        # Incremental decoders carry partial multi-byte runes across frames;
+        # errors="replace" keeps non-UTF-8 output from killing the session
+        # (it becomes U+FFFD, matching the TypeScript TextDecoder).
+        self._out_decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        self._err_decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         self._stdout: list[str] = []
         self._stderr: list[str] = []
         self._result: asyncio.Future[CommandResult] = (
             asyncio.get_running_loop().create_future()
         )
+        # Mark the result retrieved so an unawaited failure (e.g. close()
+        # before wait()) doesn't log a noisy "exception never retrieved".
+        self._result.add_done_callback(_retrieve_exception)
         self._reader = asyncio.create_task(self._read_loop())
 
     async def kill(self, signal: str = "SIGTERM") -> None:
@@ -147,6 +158,10 @@ class AsyncCommandSession:
         self._reader.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await self._reader
+        # Settle wait() directly in case the reader was cancelled before it
+        # started (so its finally never ran) — wait() must never hang.
+        if not self._result.done():
+            self._result.set_exception(SandboxError("exec/connect: session closed"))
         with contextlib.suppress(Exception):
             await self._ws.close()
 
@@ -167,18 +182,18 @@ class AsyncCommandSession:
                     self._on_binary(message)
         except Exception:
             pass
-        # The socket closed without a finished frame.
-        if not self._result.done():
-            self._flush()
-            self._result.set_exception(
-                SandboxError(
-                    "exec/connect: connection closed before the command finished"
+        finally:
+            # Runs even on task cancellation (e.g. close()), so wait() is always
+            # settled and the socket is always closed — never a hang or a leak.
+            if not self._result.done():
+                self._flush()
+                self._result.set_exception(
+                    SandboxError(
+                        "exec/connect: connection closed before the command finished"
+                    )
                 )
-            )
-        # Close our side once the command is done (or the socket dropped) so the
-        # connection isn't left open when the caller only awaits wait().
-        with contextlib.suppress(Exception):
-            await self._ws.close()
+            with contextlib.suppress(Exception):
+                await self._ws.close()
 
     def _on_binary(self, message: bytes) -> None:
         if not message:

@@ -46,6 +46,11 @@ export async function spawnCommand(
   command: string,
   options: SpawnOptions,
 ): Promise<CommandSession> {
+  if (typeof WebSocket === "undefined") {
+    throw new SandboxError(
+      "commands.spawn requires a global WebSocket (Node 22+, a browser, or a polyfill).",
+    )
+  }
   const url = `wss://boxd-${deps.sandboxId}.${deps.sandboxHost}/exec/connect`
   const ws = await dialWithResume(deps, url)
   ws.send(JSON.stringify(buildStart(command, options)))
@@ -139,12 +144,18 @@ class Session implements CommandSession {
     ws.addEventListener("message", (ev) => this._onMessage(ev, options))
     ws.addEventListener("close", () => this._onClose())
 
-    if (options.signal) {
-      if (options.signal.aborted) this._abort()
-      else
-        options.signal.addEventListener("abort", () => this._abort(), {
-          once: true,
-        })
+    const signal = options.signal
+    if (signal) {
+      if (signal.aborted) this._abort()
+      else {
+        const onAbort = () => this._abort()
+        signal.addEventListener("abort", onAbort, { once: true })
+        // Drop the listener once settled so a reused signal doesn't retain
+        // every finished session.
+        void this._result.finally(() =>
+          signal.removeEventListener("abort", onAbort),
+        )
+      }
     }
   }
 

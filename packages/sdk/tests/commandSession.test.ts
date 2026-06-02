@@ -197,6 +197,40 @@ describe("Commands.spawn", () => {
     await expect(session.wait()).rejects.toBeInstanceOf(SandboxError)
   })
 
+  it("throws a clear error when WebSocket is unavailable", async () => {
+    vi.stubGlobal("WebSocket", undefined)
+    const refresh = vi.fn(async () => "x")
+    const commands = new Commands(makeDeps({ refreshActivate: refresh }))
+
+    await expect(commands.spawn("echo hi")).rejects.toThrow(/WebSocket/)
+    expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it("removes the abort listener once the session settles", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    const commands = new Commands(makeDeps())
+
+    let added = 0
+    let removed = 0
+    const fakeSignal = {
+      aborted: false,
+      addEventListener: () => {
+        added++
+      },
+      removeEventListener: () => {
+        removed++
+      },
+    } as unknown as AbortSignal
+
+    const session = await commands.spawn("run", { signal: fakeSignal })
+    last()._emit(`{"finished":true,"exit_code":0}`)
+    await session.wait()
+    await Promise.resolve() // let the .finally() microtask run
+
+    expect(added).toBe(1)
+    expect(removed).toBe(1)
+  })
+
   it("resumes and retries once when the first dial fails", async () => {
     vi.stubGlobal("WebSocket", FakeWebSocket)
     // First socket fails to open; the rest open normally.
