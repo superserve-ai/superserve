@@ -155,6 +155,7 @@ export function DateRangeFilter({ value, onChange }: DateRangeFilterProps) {
           render={
             <button
               type="button"
+              aria-label="Select a custom date range"
               className={cn(
                 "inline-flex cursor-pointer items-center gap-1.5 px-2 py-1 font-mono text-xs uppercase transition-colors",
                 isCustom
