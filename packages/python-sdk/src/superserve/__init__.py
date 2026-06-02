@@ -2,6 +2,7 @@
 
 from .async_sandbox import AsyncSandbox
 from .async_template import AsyncTemplate
+from .command_session import AsyncCommandSession
 from .errors import (
     AuthenticationError,
     BuildError,
@@ -38,6 +39,7 @@ from .types import (
 __version__ = "0.7.3"
 
 __all__ = [
+    "AsyncCommandSession",
     "AsyncSandbox",
     "AsyncTemplate",
     "AuthenticationError",

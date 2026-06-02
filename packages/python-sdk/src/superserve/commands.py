@@ -14,6 +14,7 @@ import httpx
 
 from ._config import data_plane_target
 from ._http import api_request, async_api_request, async_stream_sse, stream_sse
+from .command_session import AsyncCommandSession, AsyncSpawnDeps, spawn_command
 from .errors import AuthenticationError, SandboxError
 from .types import CommandResult
 
@@ -83,6 +84,17 @@ class Commands:
                 body, on_stdout, on_stderr, timeout_seconds
             )
         return self._run_sync(body, timeout_seconds)
+
+    def spawn(self, command: str, **kwargs: Any) -> "AsyncCommandSession":
+        """Spawn a full-duplex command session — async only.
+
+        Full-duplex stdin/output over a WebSocket doesn't fit a blocking call.
+        Use ``AsyncSandbox`` and ``await sandbox.commands.spawn(...)``.
+        """
+        raise NotImplementedError(
+            "commands.spawn (full-duplex exec) is async-only. Use AsyncSandbox: "
+            "`await sandbox.commands.spawn(...)`."
+        )
 
     def _run_sync(
         self,
@@ -232,6 +244,48 @@ class AsyncCommands:
                 body, on_stdout, on_stderr, timeout_seconds
             )
         return await self._run_sync(body, timeout_seconds)
+
+    async def spawn(
+        self,
+        command: str,
+        *,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout_seconds: int | None = None,
+        on_stdout: Callable[[str], None] | None = None,
+        on_stderr: Callable[[str], None] | None = None,
+    ) -> AsyncCommandSession:
+        """Spawn a command and return a live, full-duplex session.
+
+        Unlike ``run`` (one-shot), ``spawn`` hands back a handle while the
+        process is still running: stream output via ``on_stdout`` /
+        ``on_stderr``, write to its ``stdin``, ``kill`` it, and
+        ``await session.wait()`` for the exit result. Output streams over a
+        WebSocket — lower latency than ``run``'s SSE. Omit ``timeout_seconds``
+        for a long-lived process. A paused sandbox is resumed before the
+        session opens.
+
+        Example::
+
+            async with await sandbox.commands.spawn("python -i") as session:
+                await session.stdin.write("print(2 + 2)\\n")
+                await session.stdin.close()
+                result = await session.wait()
+        """
+        return await spawn_command(
+            AsyncSpawnDeps(
+                sandbox_id=self._deps.sandbox_id,
+                sandbox_host=self._deps.sandbox_host,
+                get_access_token=self._deps.get_access_token,
+                refresh_activate=self._deps.refresh_activate,
+            ),
+            command,
+            cwd=cwd,
+            env=env,
+            timeout_seconds=timeout_seconds,
+            on_stdout=on_stdout,
+            on_stderr=on_stderr,
+        )
 
     async def _run_sync(
         self,
