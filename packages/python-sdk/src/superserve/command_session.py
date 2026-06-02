@@ -63,6 +63,9 @@ async def spawn_command(
             "with superserve by default."
         ) from exc
 
+    # Always the per-sandbox subdomain, not the shared-host routing that run/
+    # files use: a browser can't set the sandbox-id header on a WS upgrade, and
+    # each session is its own long-lived socket, so there's no pool to share.
     uri = f"wss://boxd-{deps.sandbox_id}.{deps.sandbox_host}/exec/connect"
     start: dict[str, Any] = {"command": command}
     if cwd is not None:

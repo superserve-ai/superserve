@@ -278,3 +278,43 @@ async def test_resumes_and_retries_once_on_dial_failure(monkeypatch):
 
     conns[-1].feed('{"finished":true,"exit_code":0}')
     await session.wait()
+
+
+async def test_propagates_when_retry_dial_also_fails(monkeypatch):
+    attempts = {"n": 0}
+
+    async def connect(uri, subprotocols=None):
+        attempts["n"] += 1
+        raise OSError("handshake rejected")
+
+    patch_connect(monkeypatch, connect)
+
+    refreshed = {"n": 0}
+
+    async def refresh() -> str:
+        refreshed["n"] += 1
+        return "tok-refreshed"
+
+    with pytest.raises(OSError):
+        await spawn_command(make_deps(refresh), "run")
+
+    assert refreshed["n"] == 1
+    assert attempts["n"] == 2  # one retry, no loop
+
+
+async def test_server_error_frame_to_stderr(monkeypatch):
+    conns: list[FakeConnection] = []
+
+    async def connect(uri, subprotocols=None):
+        c = FakeConnection(uri, subprotocols)
+        conns.append(c)
+        return c
+
+    patch_connect(monkeypatch, connect)
+
+    session = await spawn_command(make_deps(), "run")
+    conns[-1].feed('{"error":"boom","code":"exec_failed","finished":true}')
+
+    result = await session.wait()
+    assert result.stderr == "boom"
+    assert result.exit_code == 0

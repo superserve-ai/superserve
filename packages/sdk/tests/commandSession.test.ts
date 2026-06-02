@@ -258,4 +258,27 @@ describe("Commands.spawn", () => {
     last()._emit(`{"finished":true,"exit_code":0}`)
     await session.wait()
   })
+
+  it("propagates the error when the retry dial also fails", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    behavior = (ws) => ws._closeWith(1006) // every socket fails to open
+    const refresh = vi.fn(async () => "tok-refreshed")
+    const commands = new Commands(makeDeps({ refreshActivate: refresh }))
+
+    await expect(commands.spawn("run")).rejects.toBeInstanceOf(SandboxError)
+    expect(refresh).toHaveBeenCalledOnce()
+    expect(instances).toHaveLength(2) // one retry, no loop
+  })
+
+  it("surfaces a server error frame as stderr and settles", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    const commands = new Commands(makeDeps())
+
+    const session = await commands.spawn("run")
+    last()._emit(`{"error":"boom","code":"exec_failed","finished":true}`)
+
+    const result = await session.wait()
+    expect(result.stderr).toBe("boom")
+    expect(result.exitCode).toBe(0)
+  })
 })

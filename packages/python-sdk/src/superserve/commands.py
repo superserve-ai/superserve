@@ -80,9 +80,7 @@ class Commands:
         is_streaming = on_stdout is not None or on_stderr is not None
 
         if is_streaming:
-            return self._run_streaming(
-                body, on_stdout, on_stderr, timeout_seconds
-            )
+            return self._run_streaming(body, on_stdout, on_stderr, timeout_seconds)
         return self._run_sync(body, timeout_seconds)
 
     def spawn(self, command: str, **kwargs: Any) -> "AsyncCommandSession":
@@ -260,10 +258,12 @@ class AsyncCommands:
         Unlike ``run`` (one-shot), ``spawn`` hands back a handle while the
         process is still running: stream output via ``on_stdout`` /
         ``on_stderr``, write to its ``stdin``, ``kill`` it, and
-        ``await session.wait()`` for the exit result. Output streams over a
-        WebSocket — lower latency than ``run``'s SSE. Omit ``timeout_seconds``
-        for a long-lived process. A paused sandbox is resumed before the
+        ``await session.wait()`` for the exit result. Omit ``timeout_seconds``
+        for a long-lived process; a paused sandbox is resumed before the
         session opens.
+
+        Use ``async with`` (or call ``wait()`` / ``close()``) so the socket and
+        its reader are cleaned up when you're done.
 
         Example::
 
@@ -330,9 +330,7 @@ class AsyncCommands:
 
         return await self._with_token_retry(send)
 
-    async def _with_token_retry(
-        self, send: Callable[[str], Awaitable[T]]
-    ) -> T:
+    async def _with_token_retry(self, send: Callable[[str], Awaitable[T]]) -> T:
         try:
             return await send(self._deps.get_access_token())
         except AuthenticationError:

@@ -85,8 +85,10 @@ export class Commands {
    *
    * Unlike `run` (one-shot), `spawn` hands back a handle while the process is
    * still running: stream output via `onStdout`/`onStderr`, write to its
-   * `stdin`, `kill` it, and `await session.wait()` for the exit result. Output
-   * streams over a WebSocket — lower latency than `run`'s SSE.
+   * `stdin`, `kill` it, and `await session.wait()` for the exit result.
+   *
+   * Release the session when you're done (use `await using`, or call `wait()`
+   * or `close()`) so the socket and its reader are cleaned up.
    *
    * A paused sandbox is resumed transparently before the session opens.
    *

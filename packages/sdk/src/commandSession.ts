@@ -51,6 +51,9 @@ export async function spawnCommand(
       "commands.spawn requires a global WebSocket (Node 22+, a browser, or a polyfill).",
     )
   }
+  // Always the per-sandbox subdomain, not the shared-host routing that run/
+  // files use: a browser can't set the sandbox-id header on a WS upgrade, and
+  // each session is its own long-lived socket, so there's no pool to share.
   const url = `wss://boxd-${deps.sandboxId}.${deps.sandboxHost}/exec/connect`
   const ws = await dialWithResume(deps, url)
   ws.send(JSON.stringify(buildStart(command, options)))
