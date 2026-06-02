@@ -10,7 +10,10 @@ Run any shell command inside a sandbox using `sandbox.commands.run()`.
 ```typescript TypeScript
 import { Sandbox } from "@superserve/sdk"
 
-const sandbox = await Sandbox.create({ name: "data-analyzer" })
+const sandbox = await Sandbox.create({
+  name: "data-analyzer",
+  fromTemplate: "superserve/python-3.11",
+})
 const result = await sandbox.commands.run("python analyze.py")
 console.log(result.stdout)
 ```
@@ -18,7 +21,7 @@ console.log(result.stdout)
 ```python Python
 from superserve import Sandbox
 
-sandbox = Sandbox.create(name="data-analyzer")
+sandbox = Sandbox.create(name="data-analyzer", from_template="superserve/python-3.11")
 result = sandbox.commands.run("python analyze.py")
 print(result.stdout)
 
@@ -27,12 +30,16 @@ sandbox.kill()
 </CodeGroup>
 
 <Note>
-`AsyncSandbox` exposes the same API with awaitable methods - see the [Sandbox reference](/sdk-reference/sandbox).
+This page covers `run()`. If you need to send input to a process while it runs, like a REPL, [`spawn()`](/commands/sessions) keeps the session open instead.
+</Note>
+
+<Note>
+Using `AsyncSandbox`? The same methods are there, awaitable. See the [Sandbox reference](/sdk-reference/sandbox).
 </Note>
 
 ## Handling exit codes
 
-`run()` doesn't throw for non-zero exit codes - inspect `exitCode` on the result.
+`run()` doesn't throw on a non-zero exit code. Check `exitCode` on the result yourself.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -73,7 +80,7 @@ result = sandbox.commands.run(
 </CodeGroup>
 
 <Note>
-TypeScript uses `timeoutMs` (milliseconds); Python uses `timeout_seconds` (integer seconds). Each follows its language's convention.
+Watch the units: TypeScript takes `timeoutMs` (milliseconds), Python takes `timeout_seconds` (seconds).
 </Note>
 
 ## Timeouts
@@ -92,4 +99,4 @@ result = sandbox.commands.run("sleep 100", timeout_seconds=5)
 ```
 </CodeGroup>
 
-See [streaming output](/commands/streaming) for long-running commands where you want to watch stdout as it happens, or [interactive sessions](/commands/sessions) when you need to write to a process's stdin while it runs.
+For longer commands, [stream the output](/commands/streaming) as it runs. To send input to a process while it runs, [open a session](/commands/sessions).

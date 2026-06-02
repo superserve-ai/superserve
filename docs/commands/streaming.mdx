@@ -1,10 +1,10 @@
 ---
 title: "Stream command output"
 sidebarTitle: Streaming
-description: Subscribe to stdout and stderr chunks as they arrive over Server-Sent Events.
+description: Watch a command's stdout and stderr as it runs.
 ---
 
-For long-running commands - builds, training runs, servers - pass `onStdout` / `on_stdout` and `onStderr` / `on_stderr` callbacks. Output streams over Server-Sent Events and is flushed to your callback line-by-line (or chunk-by-chunk for large bursts).
+For builds, training runs, servers, or anything else that takes a while, pass `onStdout` / `on_stdout` and `onStderr` / `on_stderr` callbacks. Output arrives as the command produces it, one line at a time, or in chunks when it comes fast.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -32,48 +32,17 @@ print(f"Build exited {result.exit_code}")
 </CodeGroup>
 
 <Note>
-The returned `result` still contains the full `stdout` and `stderr` concatenated. Use it for logging or post-processing after streaming finishes.
+Even while streaming, the returned `result` still holds the complete `stdout` and `stderr`.
 </Note>
 
 <Note>
-`AsyncSandbox` supports the same streaming callbacks with awaitable `run()`. See the [Sandbox reference](/sdk-reference/sandbox).
+`AsyncSandbox` takes the same callbacks with an awaitable `run()`. See the [Sandbox reference](/sdk-reference/sandbox).
 </Note>
 
 ## Idle timeout
 
-The SDK resets its internal idle timer on every chunk, so a slow-moving process won't trip `timeoutMs` as long as it produces *some* output. A completely silent command still has to finish before the timeout.
+The timer resets on every chunk, so a command that keeps producing output won't trip `timeoutMs` no matter how long it runs. A command that goes completely silent still has to finish before the timeout.
 
 ## Network drops
 
-If the SSE stream ends without a terminal `finished` event - for example, a transient network hiccup - `run()` throws. Retry from the caller if you need resilience. The sandbox continues running the command even if your client disconnects; use `Sandbox.connect(id)` to pick it back up if you've stored the ID.
-
-## Capture and stream together
-
-Streaming and sync return aren't mutually exclusive - capture chunks for logs while also collecting the full buffer for analysis.
-
-<CodeGroup>
-```typescript TypeScript
-const logLines: string[] = []
-
-const result = await sandbox.commands.run("./long-job.sh", {
-  onStdout: (data) => {
-    process.stdout.write(data)
-    logLines.push(data)
-  },
-})
-
-await uploadLogs(logLines.join(""))
-```
-
-```python Python
-log_lines: list[str] = []
-
-def on_stdout(data: str) -> None:
-    print(data, end="")
-    log_lines.append(data)
-
-result = sandbox.commands.run("./long-job.sh", on_stdout=on_stdout)
-
-upload_logs("".join(log_lines))
-```
-</CodeGroup>
+If the stream ends before the `finished` event (a network hiccup, say), `run()` throws. Retry from the caller if you need the resilience. The command keeps running in the sandbox after your client disconnects, so you can reconnect with `Sandbox.connect(id)` if you saved the ID.

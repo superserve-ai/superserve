@@ -162,7 +162,8 @@
             "group": "Exec",
             "pages": [
               "POST /sandboxes/{sandbox_id}/exec",
-              "POST /sandboxes/{sandbox_id}/exec/stream"
+              "POST /sandboxes/{sandbox_id}/exec/stream",
+              "GET /exec/connect"
             ]
           },
           {

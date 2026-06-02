@@ -1,10 +1,12 @@
 ---
-title: "Interactive command sessions"
+title: "Interactive processes"
 sidebarTitle: Sessions
-description: Spawn a command and stream its output while writing to its stdin over a WebSocket.
+description: Send input to a running command, signal it, and stream its output back.
 ---
 
-`run()` is one-shot: it starts a command and resolves when it finishes. When you need to **interact** with a running process — feed it stdin, signal it, stream output back with low latency — use `spawn()`. It returns a live session handle backed by a WebSocket.
+`run()` starts a command and gives you the result once it finishes. `spawn()` is for when you need to stay connected while it runs: send it input, signal it, and read its output as it arrives. You get back a session and keep it until the process exits.
+
+A REPL shows the whole shape:
 
 <CodeGroup>
 ```typescript TypeScript
@@ -13,123 +15,50 @@ const session = await sandbox.commands.spawn("python -i", {
 })
 
 session.stdin.write("print(2 + 2)\n")
-session.stdin.close()
+session.stdin.close() // EOF, so the REPL exits
 
 const result = await session.wait()
 console.log(`exited ${result.exitCode}`)
 ```
 
 ```python Python
-# spawn is async-only — use AsyncSandbox.
-session = await sandbox.commands.spawn(
-    "python -i",
-    on_stdout=lambda data: print(data, end=""),
-)
-
-await session.stdin.write("print(2 + 2)\n")
-await session.stdin.close()
-
-result = await session.wait()
-print(f"exited {result.exit_code}")
-```
-</CodeGroup>
-
-<Note>
-`spawn()` is **async-only in Python** — full-duplex I/O doesn't fit a blocking call, so the synchronous `Sandbox.commands.spawn()` raises and points you to `AsyncSandbox`. TypeScript has a single `spawn()` that works in both Node and the browser.
-</Note>
-
-<Note>
-In TypeScript, `spawn()` uses the global `WebSocket`, available in browsers and **Node.js 22+**. On older Node versions, supply a `WebSocket` polyfill (e.g. the [`ws`](https://www.npmjs.com/package/ws) package) on `globalThis`.
-</Note>
-
-## `run` or `spawn`?
-
-| | `run()` | `spawn()` |
-| --- | --- | --- |
-| Shape | one-shot, resolves with the result | live handle, returned while running |
-| Output | return value (or streaming callbacks) | streaming callbacks + `wait()` |
-| Stdin | — | `stdin.write()` / `stdin.close()` |
-| Signals | — | `kill(signal)` |
-| Transport | HTTP / Server-Sent Events | WebSocket |
-
-Reach for `run()` for scripts and builds. Reach for `spawn()` for REPLs, agents you stream tokens from, or anything you need to talk back to.
-
-## Writing to stdin
-
-`stdin.write()` accepts a string (UTF-8 encoded) or raw bytes, so binary input is sent faithfully. Call `stdin.close()` to signal EOF — many programs (like `cat` or a language REPL) wait for it before finishing.
-
-<CodeGroup>
-```typescript TypeScript
-const session = await sandbox.commands.spawn("cat", {
-  onStdout: (data) => process.stdout.write(data),
-})
-
-session.stdin.write("first line\n")
-session.stdin.write("second line\n")
-session.stdin.close()
-
-await session.wait()
-```
-
-```python Python
-session = await sandbox.commands.spawn(
-    "cat",
-    on_stdout=lambda data: print(data, end=""),
-)
-
-await session.stdin.write("first line\n")
-await session.stdin.write("second line\n")
-await session.stdin.close()
-
-await session.wait()
-```
-</CodeGroup>
-
-## Signals
-
-Send a POSIX signal to the running process — for example, to interrupt or stop it. `kill()` defaults to `SIGTERM`.
-
-<CodeGroup>
-```typescript TypeScript
-const session = await sandbox.commands.spawn("sleep 100")
-session.kill("SIGINT")
-const result = await session.wait() // exitCode reflects the signal
-```
-
-```python Python
-session = await sandbox.commands.spawn("sleep 100")
-await session.kill("SIGINT")
-result = await session.wait()  # exit_code reflects the signal
-```
-</CodeGroup>
-
-## Cleanup
-
-Dispose a session to kill the process and close the connection. Use `await using` in TypeScript or `async with` in Python so it happens automatically when the scope exits.
-
-<CodeGroup>
-```typescript TypeScript
-await using session = await sandbox.commands.spawn("python -i", {
-  onStdout: (data) => process.stdout.write(data),
-})
-session.stdin.write("print('hi')\n")
-session.stdin.close()
-await session.wait()
-// the process is killed and the socket closed here
-```
-
-```python Python
+# spawn is async only, so use AsyncSandbox.
 async with await sandbox.commands.spawn(
     "python -i",
     on_stdout=lambda data: print(data, end=""),
 ) as session:
-    await session.stdin.write("print('hi')\n")
-    await session.stdin.close()
-    await session.wait()
-# the process is killed and the socket closed here
+    await session.stdin.write("print(2 + 2)\n")
+    await session.stdin.close()  # EOF, so the REPL exits
+    result = await session.wait()
+    print(f"exited {result.exit_code}")
 ```
 </CodeGroup>
 
-## Network drops
+<Note>
+In Python, `spawn()` is on `AsyncSandbox` only; the synchronous `Sandbox.commands.spawn()` raises and points you there. In TypeScript it works in the browser and in Node 22+. Older Node needs a `WebSocket` polyfill such as [`ws`](https://www.npmjs.com/package/ws).
+</Note>
 
-If the connection closes before the command finishes — a transient network hiccup — `wait()` rejects (TypeScript) or raises (Python). The sandbox keeps running the process; reconnect with `Sandbox.connect(id)` if you stored the ID. A paused sandbox is resumed automatically before the session opens.
+## When to use which
+
+Most of the time you want `run()`: scripts, builds, anything that takes its input up front and hands back output. Switch to `spawn()` when the process reads from stdin, when you need to signal it, or when you're streaming an agent's output and feeding it more as it goes.
+
+| | `run()` | `spawn()` |
+| --- | --- | --- |
+| Gives you | the result, once it finishes | a session, while it runs |
+| Stdin | none | `stdin.write()`, `stdin.close()` |
+| Signals | none | `kill()` |
+
+## The session
+
+`spawn()` resolves once the process is running and hands back a session:
+
+- `stdin.write(data)` takes a string or raw bytes. `stdin.close()` sends EOF, which programs like `cat` or a REPL wait for before they finish.
+- `kill(signal)` sends a signal, `SIGTERM` by default.
+- `wait()` resolves with the result when the process exits.
+- Wrap the session in `await using` (TypeScript) or `async with` (Python) and it kills the process and closes the connection when the block ends.
+
+The [SDK reference](/sdk-reference/commands#commandsession) lists the full surface.
+
+## If the connection drops
+
+`wait()` fails if the socket closes before the command finishes. The process keeps running inside the sandbox, so save the ID and pick it back up with `Sandbox.connect(id)`. A paused sandbox wakes on its own before the session opens.
