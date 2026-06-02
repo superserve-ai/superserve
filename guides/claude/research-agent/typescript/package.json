@@ -1,0 +1,15 @@
+{
+  "name": "superserve-claude-research-agent",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build-template": "node build-template.mjs",
+    "create-agent": "node create-agent.mjs",
+    "orchestrator": "node orchestrator.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.103.0",
+    "@superserve/sdk": "^0.7.0",
+    "dotenv": "^16.0.0"
+  }
+}
