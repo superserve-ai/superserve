@@ -166,6 +166,29 @@ async def test_decodes_multibyte_rune_split_across_frames(monkeypatch):
     assert result.stdout == "é"
 
 
+async def test_closes_socket_after_finish(monkeypatch):
+    conns: list[FakeConnection] = []
+
+    async def connect(uri, subprotocols=None):
+        c = FakeConnection(uri, subprotocols)
+        conns.append(c)
+        return c
+
+    patch_connect(monkeypatch, connect)
+
+    session = await spawn_command(make_deps(), "run")
+    c = conns[-1]
+    c.feed('{"finished":true,"exit_code":0}')
+    await session.wait()
+
+    # The reader closes the socket once the command finishes.
+    for _ in range(50):
+        if c.closed:
+            break
+        await asyncio.sleep(0)
+    assert c.closed
+
+
 async def test_wait_raises_if_closed_before_finished(monkeypatch):
     conns: list[FakeConnection] = []
 

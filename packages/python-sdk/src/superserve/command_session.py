@@ -162,7 +162,7 @@ class AsyncCommandSession:
                 if isinstance(message, str):
                     self._on_lifecycle(message)
                     if self._result.done():
-                        return
+                        break
                 else:
                     self._on_binary(message)
         except Exception:
@@ -175,6 +175,10 @@ class AsyncCommandSession:
                     "exec/connect: connection closed before the command finished"
                 )
             )
+        # Close our side once the command is done (or the socket dropped) so the
+        # connection isn't left open when the caller only awaits wait().
+        with contextlib.suppress(Exception):
+            await self._ws.close()
 
     def _on_binary(self, message: bytes) -> None:
         if not message:

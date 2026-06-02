@@ -116,7 +116,9 @@ export interface CommandSession {
    * connection drops before the process finishes.
    */
   wait(): Promise<CommandResult>
-  /** Kill the process and close the connection (enables `await using`). */
+  /** Kill the process and close the connection. */
+  close(): Promise<void>
+  /** Alias of `close()`, enabling `await using`. */
   [Symbol.asyncDispose](): Promise<void>
 }
 

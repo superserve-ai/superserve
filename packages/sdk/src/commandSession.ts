@@ -158,13 +158,18 @@ class Session implements CommandSession {
     return this._result
   }
 
-  async [Symbol.asyncDispose](): Promise<void> {
+  // Kill the process, close the socket, and resolve once the session settles
+  // (swallowing the connection-closed rejection — cleanup isn't a failure).
+  close(): Promise<void> {
     this._abort()
-    try {
-      await this._result
-    } catch {
-      // disposal swallows the connection-closed rejection
-    }
+    return this._result.then(
+      () => undefined,
+      () => undefined,
+    )
+  }
+
+  async [Symbol.asyncDispose](): Promise<void> {
+    await this.close()
   }
 
   private _abort(): void {

@@ -93,6 +93,7 @@ result = await session.wait()
 | `stdin.close()` | Close stdin, signalling EOF. |
 | `kill(signal?)` | Send a signal (default `"SIGTERM"`). |
 | `wait()` | Resolve with the [`CommandResult`](#commandresult) on exit; rejects if the connection drops first. |
+| `close()` | Kill the process and close the connection. |
 
 In Python the methods are awaitable (`await session.stdin.write(...)`, `await session.kill()`, `await session.wait()`) and the session is an `async with` context manager. In TypeScript the session supports `await using` for automatic cleanup.
 

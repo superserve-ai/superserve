@@ -168,6 +168,23 @@ describe("Commands.spawn", () => {
     expect(result.stdout).toBe("é")
   })
 
+  it("close() kills the process and closes the socket", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    const commands = new Commands(makeDeps())
+
+    const session = await commands.spawn("python -i")
+    const ws = last()
+    ws.sent.length = 0 // drop the start frame
+
+    await session.close()
+
+    expect(JSON.parse(ws.sent[0] as string)).toEqual({
+      type: "signal",
+      name: "SIGTERM",
+    })
+    expect(ws.readyState).toBe(FakeWebSocket.CLOSED)
+  })
+
   it("rejects wait() if the connection closes before the command finishes", async () => {
     vi.stubGlobal("WebSocket", FakeWebSocket)
     const commands = new Commands(makeDeps())
