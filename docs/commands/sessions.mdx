@@ -6,8 +6,6 @@ description: Send input to a running command, signal it, and stream its output b
 
 `run()` starts a command and gives you the result once it finishes. `spawn()` is for when you need to stay connected while it runs: send it input, signal it, and read its output as it arrives. You get back a session and keep it until the process exits.
 
-A REPL shows the whole shape:
-
 <CodeGroup>
 ```typescript TypeScript
 const session = await sandbox.commands.spawn("python -i", {
