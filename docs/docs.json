@@ -75,7 +75,11 @@
           },
           {
             "group": "Commands",
-            "pages": ["commands/overview", "commands/streaming"]
+            "pages": [
+              "commands/overview",
+              "commands/streaming",
+              "commands/sessions"
+            ]
           },
           {
             "group": "Filesystem",
@@ -158,7 +162,8 @@
             "group": "Exec",
             "pages": [
               "POST /sandboxes/{sandbox_id}/exec",
-              "POST /sandboxes/{sandbox_id}/exec/stream"
+              "POST /sandboxes/{sandbox_id}/exec/stream",
+              "GET /exec/connect"
             ]
           },
           {
