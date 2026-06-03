@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any, NoReturn, TypeVar
 
 import httpx
 
@@ -83,7 +83,7 @@ class Commands:
             return self._run_streaming(body, on_stdout, on_stderr, timeout_seconds)
         return self._run_sync(body, timeout_seconds)
 
-    def spawn(self, command: str, **kwargs: Any) -> "AsyncCommandSession":
+    def spawn(self, command: str, **kwargs: Any) -> NoReturn:
         """Spawn a full-duplex command session — async only.
 
         Full-duplex stdin/output over a WebSocket doesn't fit a blocking call.

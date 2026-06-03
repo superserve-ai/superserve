@@ -81,11 +81,12 @@ async def spawn_command(
 
 
 async def _dial_with_resume(websockets: Any, deps: AsyncSpawnDeps, uri: str) -> Any:
-    # A failed dial can mean a stale token or a paused sandbox; both are fixed
-    # by activating (which resumes and rotates the token), so retry once.
+    # A failed dial usually means a stale token or a paused sandbox, both fixed
+    # by activating (which resumes and rotates the token). Retry once on
+    # connection-level errors only, so a programming bug surfaces immediately.
     try:
         return await _dial(websockets, uri, deps.get_access_token())
-    except Exception:
+    except (OSError, websockets.exceptions.WebSocketException):
         token = await deps.refresh_activate()
         return await _dial(websockets, uri, token)
 
@@ -99,16 +100,21 @@ async def _dial(websockets: Any, uri: str, token: str) -> Any:
 class AsyncStdin:
     """Write to and close a running process's stdin."""
 
-    def __init__(self, ws: Any) -> None:
+    def __init__(self, ws: Any, is_open: Callable[[], bool]) -> None:
         self._ws = ws
+        self._is_open = is_open
 
     async def write(self, data: Union[str, bytes]) -> None:
         """Write to stdin. ``str`` is UTF-8 encoded; ``bytes`` is sent as-is."""
+        if not self._is_open():
+            return
         raw = data.encode() if isinstance(data, str) else bytes(data)
         await self._ws.send(bytes([_CH_STDIN]) + raw)
 
     async def close(self) -> None:
         """Close stdin, signalling EOF."""
+        if not self._is_open():
+            return
         await self._ws.send(json.dumps({"type": "stdin_close"}))
 
 
@@ -129,7 +135,6 @@ class AsyncCommandSession:
         self._ws = ws
         self._on_stdout = on_stdout
         self._on_stderr = on_stderr
-        self.stdin = AsyncStdin(ws)
         # Incremental decoders carry partial multi-byte runes across frames;
         # errors="replace" keeps non-UTF-8 output from killing the session
         # (it becomes U+FFFD, matching the TypeScript TextDecoder).
@@ -143,10 +148,15 @@ class AsyncCommandSession:
         # Mark the result retrieved so an unawaited failure (e.g. close()
         # before wait()) doesn't log a noisy "exception never retrieved".
         self._result.add_done_callback(_retrieve_exception)
+        # stdin / kill no-op once the session has settled, instead of throwing
+        # from the closed socket.
+        self.stdin = AsyncStdin(ws, lambda: not self._result.done())
         self._reader = asyncio.create_task(self._read_loop())
 
     async def kill(self, signal: str = "SIGTERM") -> None:
         """Send a POSIX signal to the process (default ``"SIGTERM"``)."""
+        if self._result.done():
+            return
         await self._ws.send(json.dumps({"type": "signal", "name": signal}))
 
     async def wait(self) -> CommandResult:

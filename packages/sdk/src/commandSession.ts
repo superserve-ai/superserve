@@ -68,15 +68,17 @@ function buildStart(command: string, o: SpawnOptions): Record<string, unknown> {
   return start
 }
 
-// A failed dial can mean a stale token or a paused sandbox; both are fixed by
-// activating (which resumes and rotates the token), so retry once with it.
+// A failed dial usually means a stale token or a paused sandbox, both fixed by
+// activating (which resumes and rotates the token). Only retry on a dial error
+// (the SandboxError dial() throws), so a programming bug surfaces immediately.
 async function dialWithResume(
   deps: SpawnDeps,
   url: string,
 ): Promise<WebSocket> {
   try {
     return await dial(url, deps.getAccessToken())
-  } catch {
+  } catch (err) {
+    if (!(err instanceof SandboxError)) throw err
     const fresh = await deps.refreshActivate()
     return await dial(url, fresh)
   }
@@ -134,14 +136,20 @@ class Session implements CommandSession {
     this._result.catch(() => {})
 
     this.stdin = {
+      // No-op once the socket is closing/closed, instead of throwing.
       write: (data) => {
+        if (ws.readyState !== WebSocket.OPEN) return
         const bytes = typeof data === "string" ? encoder.encode(data) : data
         const frame = new Uint8Array(bytes.length + 1)
         frame[0] = CH_STDIN
         frame.set(bytes, 1)
         ws.send(frame)
       },
-      close: () => ws.send(JSON.stringify({ type: "stdin_close" })),
+      close: () => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "stdin_close" }))
+        }
+      },
     }
 
     ws.addEventListener("message", (ev) => this._onMessage(ev, options))

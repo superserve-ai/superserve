@@ -270,6 +270,22 @@ describe("Commands.spawn", () => {
     expect(instances).toHaveLength(2) // one retry, no loop
   })
 
+  it("stdin and kill are no-ops after the session closes", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    const commands = new Commands(makeDeps())
+
+    const session = await commands.spawn("run")
+    const ws = last()
+    await session.close()
+    ws.sent.length = 0 // drop the SIGTERM close() sent
+
+    session.stdin.write("x")
+    session.stdin.close()
+    session.kill()
+
+    expect(ws.sent).toHaveLength(0)
+  })
+
   it("surfaces a server error frame as stderr and settles", async () => {
     vi.stubGlobal("WebSocket", FakeWebSocket)
     const commands = new Commands(makeDeps())

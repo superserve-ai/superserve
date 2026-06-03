@@ -318,3 +318,25 @@ async def test_server_error_frame_to_stderr(monkeypatch):
     result = await session.wait()
     assert result.stderr == "boom"
     assert result.exit_code == 0
+
+
+async def test_stdin_kill_noop_after_close(monkeypatch):
+    conns: list[FakeConnection] = []
+
+    async def connect(uri, subprotocols=None):
+        c = FakeConnection(uri, subprotocols)
+        conns.append(c)
+        return c
+
+    patch_connect(monkeypatch, connect)
+
+    session = await spawn_command(make_deps(), "run")
+    c = conns[-1]
+    await session.close()
+    c.sent.clear()  # drop the SIGTERM close() sent
+
+    await session.stdin.write("x")
+    await session.stdin.close()
+    await session.kill()
+
+    assert c.sent == []
