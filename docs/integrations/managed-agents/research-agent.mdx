@@ -10,7 +10,7 @@ A Claude Managed Agent that researches topics across multiple sessions. Between 
 **The core pitch:** A deep research task might span 2 hours of wall-clock time but only 8 minutes of active compute. With Superserve, you pay for the 8 minutes.
 
 <Tip>
-A [reference implementation](https://github.com/superserve-ai/superserve/tree/main/guides/claude/research-agent) with the orchestrator, runner, and setup scripts is available on GitHub in both Python and TypeScript.
+A [reference implementation](https://github.com/superserve-ai/superserve/tree/main/recipes/claude/research-agent) with the orchestrator, runner, and setup scripts is available on GitHub in both Python and TypeScript.
 </Tip>
 
 ## How it works
@@ -197,7 +197,7 @@ IDLE_TIMEOUT = 600  # 10 minutes
 ```
 </CodeGroup>
 
-Everything else is identical to the base orchestrator. See the [reference implementation](https://github.com/superserve-ai/superserve/tree/main/guides/claude/research-agent) for the complete file.
+Everything else is identical to the base orchestrator. See the [reference implementation](https://github.com/superserve-ai/superserve/tree/main/recipes/claude/research-agent) for the complete file.
 
 ## Start a session
 
@@ -242,7 +242,7 @@ On the next turn, the same session ID is used. The orchestrator finds the existi
   <Card title="Claude Managed Agents docs" href="https://platform.claude.com/docs/en/managed-agents/overview">
     Anthropic's full documentation for agents, sessions, tools, and events.
   </Card>
-  <Card title="Reference implementation" href="https://github.com/superserve-ai/superserve/tree/main/guides/claude/research-agent">
+  <Card title="Reference implementation" href="https://github.com/superserve-ai/superserve/tree/main/recipes/claude/research-agent">
     Working orchestrator, runner, and setup scripts you can clone and run.
   </Card>
 </CardGroup>

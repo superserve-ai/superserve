@@ -1,4 +1,5 @@
 """Polling orchestrator for Claude Managed Agents on Superserve."""
+
 from __future__ import annotations
 
 import asyncio
@@ -52,7 +53,7 @@ def acquire_lock() -> None:
         os.close(fd)
         raise RuntimeError(
             f"another orchestrator is already running for environment {ENVIRONMENT_ID}"
-        )
+        ) from None
     os.ftruncate(fd, 0)
     os.write(fd, f"pid={os.getpid()} env={ENVIRONMENT_ID}\n".encode())
     _lock_fd = fd
@@ -177,7 +178,12 @@ async def find_or_create_sandbox(
             await sandbox.resume()
         await update_metadata(
             sandbox,
-            **{META_SESSION_ID: session_id, META_WORK_ID: work_id, META_MODE: MODE_ACTIVE, META_PAUSED_AT: None},
+            **{
+                META_SESSION_ID: session_id,
+                META_WORK_ID: work_id,
+                META_MODE: MODE_ACTIVE,
+                META_PAUSED_AT: None,
+            },
         )
         return sandbox
 
@@ -199,7 +205,11 @@ async def find_or_create_sandbox(
     return await AsyncSandbox.create(
         name=f"cma-{session_id[:8]}",
         from_template=TEMPLATE_NAME,
-        metadata={META_SESSION_ID: session_id, META_WORK_ID: work_id, META_MODE: MODE_ACTIVE},
+        metadata={
+            META_SESSION_ID: session_id,
+            META_WORK_ID: work_id,
+            META_MODE: MODE_ACTIVE,
+        },
         network=NetworkConfig(allow_out=["api.anthropic.com"]),
     )
 
@@ -233,7 +243,11 @@ async def handle_work(work) -> None:
         launched_pid = int(result.stdout.strip().splitlines()[-1])
     except (IndexError, ValueError):
         runner_log = await fetch_runner_log(sandbox)
-        log.error("runner launch did not report PID sandbox=%s\n%s", sandbox.id, runner_log[:500])
+        log.error(
+            "runner launch did not report PID sandbox=%s\n%s",
+            sandbox.id,
+            runner_log[:500],
+        )
         return
 
     await asyncio.sleep(2)
@@ -244,12 +258,21 @@ async def handle_work(work) -> None:
         runner_log = await fetch_runner_log(sandbox)
         log.error(
             "runner failed sandbox=%s pid=%s state=%s exit=%s\n%s",
-            sandbox.id, launched_pid, state["state"], state.get("exit_code"), runner_log[:500],
+            sandbox.id,
+            launched_pid,
+            state["state"],
+            state.get("exit_code"),
+            runner_log[:500],
         )
         return
 
     _last_active[session_id] = time.monotonic()
-    log.info("runner started pid=%s sandbox=%s session=%s", launched_pid, sandbox.id, session_id)
+    log.info(
+        "runner started pid=%s sandbox=%s session=%s",
+        launched_pid,
+        sandbox.id,
+        session_id,
+    )
 
 
 async def janitor_loop() -> None:
@@ -257,7 +280,7 @@ async def janitor_loop() -> None:
         try:
             await asyncio.wait_for(shutdown.wait(), timeout=JANITOR_INTERVAL)
             return
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
 
         try:
@@ -281,7 +304,11 @@ async def janitor_loop() -> None:
                     log.info("pausing idle sandbox=%s session=%s", s.id, session_id)
                     await update_metadata(
                         sandbox,
-                        **{META_PAUSED_AT: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
+                        **{
+                            META_PAUSED_AT: time.strftime(
+                                "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
+                            )
+                        },
                     )
                     await sandbox.pause()
                 except Exception as e:
@@ -311,12 +338,12 @@ async def poll_loop() -> None:
                         log.error("failed work=%s: %s", work.id, e, exc_info=True)
             except Exception as e:
                 backoff = min(backoff + 1, 6)
-                wait = min(60.0, 2.0 ** backoff)
+                wait = min(60.0, 2.0**backoff)
                 log.warning("poll error, retrying in %.0fs: %s", wait, e)
                 try:
                     await asyncio.wait_for(shutdown.wait(), timeout=wait)
                     return
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
 
 

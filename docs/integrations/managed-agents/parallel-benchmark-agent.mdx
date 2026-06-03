@@ -10,7 +10,7 @@ A Claude Managed Agent that benchmarks code across multiple configurations simul
 **The core pitch:** Benchmarking 9 configurations sequentially takes 9× longer than benchmarking them in parallel. Superserve sandboxes boot in under a second and run truly isolated. The agent drives all of this autonomously.
 
 <Tip>
-A [reference implementation](https://github.com/superserve-ai/superserve/tree/main/guides/claude/parallel-benchmark-agent) with the orchestrator, runner, and setup scripts is available on GitHub in both Python and TypeScript.
+A [reference implementation](https://github.com/superserve-ai/superserve/tree/main/recipes/claude/parallel-benchmark-agent) with the orchestrator, runner, and setup scripts is available on GitHub in both Python and TypeScript.
 </Tip>
 
 ## Why this is hard to replicate elsewhere
@@ -249,7 +249,7 @@ env={
 ```
 </CodeGroup>
 
-See the [reference implementation](https://github.com/superserve-ai/superserve/tree/main/guides/claude/parallel-benchmark-agent) for the complete orchestrator file.
+See the [reference implementation](https://github.com/superserve-ai/superserve/tree/main/recipes/claude/parallel-benchmark-agent) for the complete orchestrator file.
 
 ## Sub-sandbox billing
 
@@ -271,7 +271,7 @@ The agent is instructed to keep variant count under 20. If you extend this recip
   <Card title="Claude Managed Agents docs" href="https://platform.claude.com/docs/en/managed-agents/overview">
     Anthropic's full documentation for agents, sessions, tools, and events.
   </Card>
-  <Card title="Reference implementation" href="https://github.com/superserve-ai/superserve/tree/main/guides/claude/parallel-benchmark-agent">
+  <Card title="Reference implementation" href="https://github.com/superserve-ai/superserve/tree/main/recipes/claude/parallel-benchmark-agent">
     Working orchestrator, runner, and setup scripts you can clone and run.
   </Card>
 </CardGroup>
