@@ -26,7 +26,7 @@ After each session, update /workspace/.session-notes with:
 This means: install dependencies once. Run tests instantly. Never re-clone.
 Work carefully and test your changes before reporting completion.`
 
-for (const existing of await client.beta.agents.list()) {
+for await (const existing of client.beta.agents.list()) {
   if (existing.name === name && !existing.archived_at) {
     console.error(`agent named "${name}" already exists: ${existing.id}`)
     process.exit(1)

@@ -14,10 +14,11 @@ const META_WORK_ID = "cma.work_id"
 const META_MODE = "cma.mode"
 const META_PAUSED_AT = "cma.paused_at"
 
-const RUNNER = `import asyncio, os
+const RUNNER = `import asyncio, logging, os
 from anthropic import AsyncAnthropic
 
 async def main():
+    logging.basicConfig(level="INFO")
     key = os.environ["ANTHROPIC_ENVIRONMENT_KEY"]
     async with AsyncAnthropic(auth_token=key) as client:
         await client.beta.environments.work.worker(
@@ -207,8 +208,8 @@ async function handleWork(work) {
     return
   }
 
-  await stopRunner(sandbox)
   await installScripts(sandbox)
+  await stopRunner(sandbox)
 
   const result = await sandbox.commands.run("bash /workspace/.launch.sh", {
     env: {

@@ -28,7 +28,7 @@ Keep variant count <= 20. Always kill sub-sandboxes — never leave them running
 Sub-sandboxes should use from_template=None (platform default) unless the benchmark
 requires specific packages.`
 
-for (const existing of await client.beta.agents.list()) {
+for await (const existing of client.beta.agents.list()) {
   if (existing.name === name && !existing.archived_at) {
     console.error(`agent named "${name}" already exists: ${existing.id}`)
     process.exit(1)

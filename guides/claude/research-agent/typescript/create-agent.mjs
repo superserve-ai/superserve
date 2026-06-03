@@ -27,7 +27,7 @@ from where you left off.
 Save progress after every significant step. Search broadly first, then fetch and read the \
 most relevant sources in depth. Cite everything.`
 
-for (const existing of await client.beta.agents.list()) {
+for await (const existing of client.beta.agents.list()) {
   if (existing.name === name && !existing.archived_at) {
     console.error(`agent named "${name}" already exists: ${existing.id}`)
     process.exit(1)
