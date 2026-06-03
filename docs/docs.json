@@ -122,12 +122,7 @@
           },
           {
             "group": "Managed Agents",
-            "pages": [
-              "integrations/managed-agents/claude-managed-agents",
-              "integrations/managed-agents/research-agent",
-              "integrations/managed-agents/dev-environment",
-              "integrations/managed-agents/parallel-benchmark-agent"
-            ]
+            "pages": ["integrations/managed-agents/claude-managed-agents"]
           },
           {
             "group": "Agent Harnesses",

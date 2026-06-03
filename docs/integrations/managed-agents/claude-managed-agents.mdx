@@ -507,6 +507,22 @@ The orchestrator reads `superserve.sandbox_id` from `work.data.metadata` and con
 - **The sandbox is yours.** Beyond running the agent's tools, you control the full VM. Pre-install packages in the template, mount data via the files API, stream command output for observability. The tool runner is one process in a VM you own.
 - **One line to switch.** Point `environment_id` at a cloud environment and the same application code works unchanged. The only Superserve-specific piece is the orchestrator.
 
+## Recipes
+
+Ready-to-run examples that show specific use cases. Each recipe includes a working orchestrator, runner, and setup scripts in both Python and TypeScript.
+
+<CardGroup cols={3}>
+  <Card title="Research Agent" href="https://github.com/superserve-ai/superserve/tree/main/recipes/claude/research-agent">
+    Agent researches topics across multi-turn sessions. Sandbox pauses between turns — you pay only for active compute. Notes, citations, and drafts persist in `/workspace`.
+  </Card>
+  <Card title="Persistent Dev Environment" href="https://github.com/superserve-ai/superserve/tree/main/recipes/claude/dev-environment">
+    Conversational coding assistant with durable state. Clone once, install once — packages, repos, and build artifacts survive across sessions.
+  </Card>
+  <Card title="Parallel Benchmark Agent" href="https://github.com/superserve-ai/superserve/tree/main/recipes/claude/parallel-benchmark-agent">
+    Agent fans out N sandboxes in parallel — one per variant — runs benchmarks concurrently, and synthesizes a comparison report. Total time equals the slowest variant.
+  </Card>
+</CardGroup>
+
 ## See also
 
 <CardGroup cols={2}>
