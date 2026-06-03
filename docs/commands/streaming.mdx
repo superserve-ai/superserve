@@ -46,3 +46,26 @@ The timer resets on every chunk, so a command that keeps producing output won't 
 ## Network drops
 
 If the stream ends before the `finished` event (a network hiccup, say), `run()` throws. Retry from the caller if you need the resilience. The command keeps running in the sandbox after your client disconnects, so you can reconnect with `Sandbox.connect(id)` if you saved the ID.
+
+## Capture and stream together
+
+Streaming and sync return aren't mutually exclusive - capture chunks for logs while also collecting the full buffer for analysis.
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run("./long-job.sh", {
+  onStdout: (data) => process.stdout.write(data), // watch it live
+})
+
+await uploadLogs(result.stdout) // full buffer, already captured for you
+```
+
+```python Python
+result = sandbox.commands.run(
+    "./long-job.sh",
+    on_stdout=lambda data: print(data, end=""),  # watch it live
+)
+
+upload_logs(result.stdout)  # full buffer, already captured for you
+```
+</CodeGroup>
