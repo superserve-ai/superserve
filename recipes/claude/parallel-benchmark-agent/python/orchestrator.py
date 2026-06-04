@@ -1,4 +1,4 @@
-"""Polling orchestrator for Claude Managed Agents on Superserve."""
+"""Polling orchestrator for Claude Parallel Benchmark Agent on Superserve."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ dotenv.load_dotenv(override=True)
 
 ENVIRONMENT_KEY = os.environ["ANTHROPIC_ENVIRONMENT_KEY"]
 ENVIRONMENT_ID = os.environ["ANTHROPIC_ENVIRONMENT_ID"]
-TEMPLATE_NAME = "claude-managed-agent"
+TEMPLATE_NAME = "claude-benchmark-agent"
 
 RUNNER = Path(__file__).with_name("runner.py").read_text()
 RUNNER_PIDFILE = "/workspace/.runner.pid"
@@ -210,7 +210,14 @@ async def find_or_create_sandbox(
             META_WORK_ID: work_id,
             META_MODE: MODE_ACTIVE,
         },
-        network=NetworkConfig(allow_out=["api.anthropic.com"]),
+        network=NetworkConfig(
+            allow_out=[
+                "api.anthropic.com",
+                "api.superserve.ai",
+                "sandbox.superserve.ai",
+                "*.sandbox.superserve.ai",
+            ]
+        ),
     )
 
 
@@ -236,6 +243,7 @@ async def handle_work(work) -> None:
             "ANTHROPIC_WORK_ID": work.id,
             "ANTHROPIC_SESSION_ID": session_id,
             "ANTHROPIC_ENVIRONMENT_ID": ENVIRONMENT_ID,
+            "SUPERSERVE_API_KEY": os.environ["SUPERSERVE_API_KEY"],
         },
     )
 

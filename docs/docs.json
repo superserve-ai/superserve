@@ -161,6 +161,7 @@
           {
             "group": "Exec",
             "pages": [
+              "GET /exec/connect",
               "POST /sandboxes/{sandbox_id}/exec",
               "POST /sandboxes/{sandbox_id}/exec/stream",
               "GET /exec/connect"

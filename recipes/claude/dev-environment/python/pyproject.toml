@@ -1,0 +1,22 @@
+[project]
+name = "superserve-claude-dev-environment"
+version = "0.1.0"
+description = "Persistent dev environment recipe for Claude Managed Agents on Superserve."
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.103",
+    "superserve>=0.7",
+    "python-dotenv",
+]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = [
+    "build_template",
+    "create_agent",
+    "orchestrator",
+    "runner",
+]

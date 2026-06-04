@@ -1,4 +1,5 @@
 """Webhook orchestrator for Claude Managed Agents on Superserve."""
+
 from __future__ import annotations
 
 import asyncio
@@ -8,10 +9,9 @@ import threading
 
 import anthropic
 import dotenv
-import uvicorn
-from fastapi import BackgroundTasks, HTTPException, Request, FastAPI
-
 import orchestrator
+import uvicorn
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 
 dotenv.load_dotenv(override=True)
 
@@ -36,7 +36,9 @@ def _drain_work() -> None:
 
 
 async def _drain_work_async() -> None:
-    async with anthropic.AsyncAnthropic(auth_token=orchestrator.ENVIRONMENT_KEY) as client:
+    async with anthropic.AsyncAnthropic(
+        auth_token=orchestrator.ENVIRONMENT_KEY
+    ) as client:
         async for work in client.beta.environments.work.poller(
             environment_id=orchestrator.ENVIRONMENT_ID,
             environment_key=orchestrator.ENVIRONMENT_KEY,
@@ -90,7 +92,11 @@ def healthz():
 def on_startup() -> None:
     orchestrator.acquire_lock()
     threading.Thread(target=_fallback_drain_loop, daemon=True).start()
-    log.info("webhook orchestrator listening on :%d env=%s", PORT, orchestrator.ENVIRONMENT_ID)
+    log.info(
+        "webhook orchestrator listening on :%d env=%s",
+        PORT,
+        orchestrator.ENVIRONMENT_ID,
+    )
 
 
 @app.on_event("shutdown")

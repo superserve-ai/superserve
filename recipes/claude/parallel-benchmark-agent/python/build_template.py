@@ -1,4 +1,4 @@
-"""Build the Superserve template for Claude Managed Agents sandboxes."""
+"""Build the Superserve template for Claude Parallel Benchmark Agent sandboxes."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from superserve import RunStep, Template, WorkdirStep
 
 dotenv.load_dotenv(override=True)
 
-TEMPLATE_NAME = "claude-managed-agent"
+TEMPLATE_NAME = "claude-benchmark-agent"
 
 STEPS = [
     RunStep(
@@ -16,7 +16,7 @@ STEPS = [
             "curl git jq procps && rm -rf /var/lib/apt/lists/*"
         )
     ),
-    RunStep(run="pip install --no-cache-dir anthropic"),
+    RunStep(run="pip install --no-cache-dir anthropic superserve"),
     RunStep(run="mkdir -p /workspace /mnt/session/outputs"),
     WorkdirStep(workdir="/workspace"),
 ]

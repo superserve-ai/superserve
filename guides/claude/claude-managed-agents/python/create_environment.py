@@ -1,4 +1,5 @@
 """Create a self-hosted environment on Claude Platform."""
+
 from __future__ import annotations
 
 import os
@@ -18,7 +19,9 @@ environment = client.beta.environments.create(
 print(f"created environment {environment.id}")
 print()
 print("next steps:")
-print(f"  1. open https://platform.claude.com/workspaces/default/environments/{environment.id}")
+print(
+    f"  1. open https://platform.claude.com/workspaces/default/environments/{environment.id}"
+)
 print("  2. click 'Generate environment key'")
 print("  3. add both values to .env:")
 print(f"     ANTHROPIC_ENVIRONMENT_ID={environment.id}")

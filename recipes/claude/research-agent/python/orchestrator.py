@@ -1,4 +1,4 @@
-"""Polling orchestrator for Claude Managed Agents on Superserve."""
+"""Polling orchestrator for Claude Research Agent on Superserve."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ dotenv.load_dotenv(override=True)
 
 ENVIRONMENT_KEY = os.environ["ANTHROPIC_ENVIRONMENT_KEY"]
 ENVIRONMENT_ID = os.environ["ANTHROPIC_ENVIRONMENT_ID"]
-TEMPLATE_NAME = "claude-managed-agent"
+TEMPLATE_NAME = "claude-research-agent"
 
 RUNNER = Path(__file__).with_name("runner.py").read_text()
 RUNNER_PIDFILE = "/workspace/.runner.pid"
@@ -31,7 +31,7 @@ shutdown = asyncio.Event()
 shutdown_thread = threading.Event()
 _last_active: dict[str, float] = {}
 
-IDLE_TIMEOUT = 300
+IDLE_TIMEOUT = 600
 JANITOR_INTERVAL = 60
 
 META_SESSION_ID = "cma.session_id"

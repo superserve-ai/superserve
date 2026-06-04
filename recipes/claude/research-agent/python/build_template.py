@@ -1,4 +1,4 @@
-"""Build the Superserve template for Claude Managed Agents sandboxes."""
+"""Build the Superserve template for Claude Research Agent sandboxes."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from superserve import RunStep, Template, WorkdirStep
 
 dotenv.load_dotenv(override=True)
 
-TEMPLATE_NAME = "claude-managed-agent"
+TEMPLATE_NAME = "claude-research-agent"
 
 STEPS = [
     RunStep(

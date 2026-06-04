@@ -1,4 +1,4 @@
-"""Build the Superserve template for Claude Managed Agents sandboxes."""
+"""Build the Superserve template for Claude Dev Environment sandboxes."""
 
 from __future__ import annotations
 
@@ -7,16 +7,17 @@ from superserve import RunStep, Template, WorkdirStep
 
 dotenv.load_dotenv(override=True)
 
-TEMPLATE_NAME = "claude-managed-agent"
+TEMPLATE_NAME = "claude-dev-environment"
 
 STEPS = [
     RunStep(
         run=(
             "apt-get update && apt-get install -y --no-install-recommends "
-            "curl git jq procps && rm -rf /var/lib/apt/lists/*"
+            "curl git jq procps build-essential nodejs npm ripgrep && rm -rf /var/lib/apt/lists/*"
         )
     ),
     RunStep(run="pip install --no-cache-dir anthropic"),
+    RunStep(run="printf '127.0.0.1 localhost\\n::1 localhost\\n' > /etc/hosts"),
     RunStep(run="mkdir -p /workspace /mnt/session/outputs"),
     WorkdirStep(workdir="/workspace"),
 ]
