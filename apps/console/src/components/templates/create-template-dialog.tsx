@@ -265,53 +265,55 @@ export function CreateTemplateDialog({
             </div>
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="vCPU">
-              <div className="flex border border-dashed border-border">
-                {VCPU_OPTIONS.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setVcpu(n)}
-                    className={cn(
-                      "flex-1 cursor-pointer py-2 font-mono text-xs uppercase transition-colors",
-                      vcpu === n
-                        ? "bg-foreground text-background"
-                        : "text-muted hover:text-foreground",
-                    )}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-            </Field>
+          <div className="space-y-1.5">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="vCPU">
+                <div className="flex border border-dashed border-border">
+                  {VCPU_OPTIONS.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setVcpu(n)}
+                      className={cn(
+                        "flex-1 cursor-pointer py-2 font-mono text-xs uppercase transition-colors",
+                        vcpu === n
+                          ? "bg-foreground text-background"
+                          : "text-muted hover:text-foreground",
+                      )}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </Field>
 
-            <Field label="Disk">
-              <div className="flex border border-dashed border-border">
-                {DISK_OPTIONS.map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setDisk(d)}
-                    className={cn(
-                      "flex-1 cursor-pointer py-2 font-mono text-xs uppercase transition-colors",
-                      disk === d
-                        ? "bg-foreground text-background"
-                        : "text-muted hover:text-foreground",
-                    )}
-                    title={`${d / 1024} GB`}
-                  >
-                    {d / 1024} GB
-                  </button>
-                ))}
-              </div>
-            </Field>
+              <Field label="Disk">
+                <div className="flex border border-dashed border-border">
+                  {DISK_OPTIONS.map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setDisk(d)}
+                      className={cn(
+                        "flex-1 cursor-pointer py-2 font-mono text-xs uppercase transition-colors",
+                        disk === d
+                          ? "bg-foreground text-background"
+                          : "text-muted hover:text-foreground",
+                      )}
+                      title={`${d / 1024} GB`}
+                    >
+                      {d / 1024} GB
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            </div>
+
+            <p className="text-xs text-muted">
+              Make sure the disk is large enough for your base image and build
+              steps.
+            </p>
           </div>
-
-          <p className="text-xs text-muted">
-            Make sure the disk is large enough for your base image and build
-            steps.
-          </p>
 
           {errors.form && (
             <p className="border border-dashed border-destructive p-3 text-xs text-destructive">
