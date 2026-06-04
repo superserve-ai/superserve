@@ -38,10 +38,10 @@ sandbox = Sandbox.create(
 
 | Field | Accepts | Notes |
 |---|---|---|
-| `allowOut` / `allow_out` | CIDRs + domains | Domains support wildcards (`*.example.com`). |
+| `allowOut` / `allow_out` | CIDRs + domains | Domains support wildcards (`*.example.com`). A wildcard matches subdomains at any depth but not the bare domain — `*.example.com` does not match `example.com`; list both if you need the apex. |
 | `denyOut` / `deny_out` | CIDRs only | Use `0.0.0.0/0` to deny the entire internet and rely on `allowOut` for exceptions. |
 
-Deny rules take precedence over allow rules when they overlap.
+Allow rules take precedence over deny rules when they overlap.
 
 ## Update rules on a running sandbox
 
