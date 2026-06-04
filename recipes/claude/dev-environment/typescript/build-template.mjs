@@ -23,6 +23,7 @@ const template = await Template.create({
         "curl git jq procps build-essential nodejs npm ripgrep && rm -rf /var/lib/apt/lists/*",
     },
     { run: "pip install --no-cache-dir anthropic" },
+    { run: "printf '127.0.0.1 localhost\\n::1 localhost\\n' > /etc/hosts" },
     { run: "mkdir -p /workspace /mnt/session/outputs" },
     { workdir: "/workspace" },
   ],

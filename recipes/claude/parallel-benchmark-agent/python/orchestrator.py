@@ -210,7 +210,14 @@ async def find_or_create_sandbox(
             META_WORK_ID: work_id,
             META_MODE: MODE_ACTIVE,
         },
-        network=NetworkConfig(allow_out=["api.anthropic.com", "api.superserve.ai"]),
+        network=NetworkConfig(
+            allow_out=[
+                "api.anthropic.com",
+                "api.superserve.ai",
+                "sandbox.superserve.ai",
+                "*.sandbox.superserve.ai",
+            ]
+        ),
     )
 
 

@@ -30,16 +30,19 @@ The agent maintains a `/workspace/.session-notes` file that documents what is in
 # Session Notes — acme/api
 
 ## Environment
+
 - Repo: /workspace/acme-api (main branch, clean)
 - Node: 20.x, npm 10.x
 - node_modules: installed (last updated 2025-05-28)
 - Tests: all passing (jest, 47 tests)
 
 ## Last session
+
 Added rate limiting middleware to /search endpoint using express-rate-limit.
 Still TODO: write tests for the rate limiter.
 
 ## Next
+
 - Add tests in /tests/rate-limit.test.js
 - Consider adding sliding window vs fixed window options
 ```
@@ -63,11 +66,11 @@ uv sync
 cp .env.example .env  # fill in your API keys
 ```
 
-| Script | What it does |
-|---|---|
-| `build_template.py` | Builds the `claude-dev-environment` template (includes node, build-essential, ripgrep) |
-| `create_agent.py <name>` | Creates an agent with `bash`, `read`, `write`, `edit`, `glob`, `grep` |
-| `orchestrator.py` | Polls the work queue, creates/resumes sandboxes, starts runners |
+| Script                   | What it does                                                                           |
+| ------------------------ | -------------------------------------------------------------------------------------- |
+| `build_template.py`      | Builds the `claude-dev-environment` template (includes node, build-essential, ripgrep) |
+| `create_agent.py <name>` | Creates an agent with `bash`, `read`, `write`, `edit`, `glob`, `grep`                  |
+| `orchestrator.py`        | Polls the work queue, creates/resumes sandboxes, starts runners                        |
 
 ```bash
 uv run build_template.py         # one-time
@@ -83,17 +86,44 @@ npm install
 cp .env.example .env  # fill in your API keys
 ```
 
-| Script | What it does |
-|---|---|
-| `build-template.mjs` | Builds the `claude-dev-environment` template (includes node, build-essential, ripgrep) |
-| `create-agent.mjs <name>` | Creates an agent with `bash`, `read`, `write`, `edit`, `glob`, `grep` |
-| `orchestrator.mjs` | Polls the work queue, creates/resumes sandboxes, starts runners |
+| Script                    | What it does                                                                           |
+| ------------------------- | -------------------------------------------------------------------------------------- |
+| `build-template.mjs`      | Builds the `claude-dev-environment` template (includes node, build-essential, ripgrep) |
+| `create-agent.mjs <name>` | Creates an agent with `bash`, `read`, `write`, `edit`, `glob`, `grep`                  |
+| `orchestrator.mjs`        | Polls the work queue, creates/resumes sandboxes, starts runners                        |
 
 ```bash
 node build-template.mjs         # one-time
 node create-agent.mjs my-agent  # one-time
 node orchestrator.mjs           # long-running
 ```
+
+## Network access
+
+Sandboxes use a **deny-by-default egress allowlist** — only explicitly listed hosts are reachable, everything else is blocked (private IP ranges are always blocked by the platform). This is the `ALLOWED_EGRESS` list at the top of `orchestrator.py` / `orchestrator.mjs`.
+
+The defaults cover the recipe's standard workflow — running the agent, cloning from GitHub, and installing packages with npm and pip:
+
+```python
+ALLOWED_EGRESS = [
+    "api.anthropic.com",       # required: the in-sandbox runner talks to Anthropic
+    "github.com",              # git clone over HTTPS
+    "codeload.github.com",     # GitHub archive/tarball downloads
+    "registry.npmjs.org",      # npm install
+    "pypi.org",                # pip install
+    "files.pythonhosted.org",  # pip package downloads
+]
+```
+
+If the agent needs to reach a source that isn't in this list, **add the host** — otherwise those connections are silently blocked. Common additions:
+
+| To allow…                                         | Add                                     |
+| ------------------------------------------------- | --------------------------------------- |
+| Cloning from GitLab / Bitbucket                   | `gitlab.com` / `bitbucket.org`          |
+| A private package registry or internal Git server | that host                               |
+| System packages via `apt`                         | `deb.debian.org`, `security.debian.org` |
+
+To drop the restriction entirely and allow **all** public hosts (simplest, least restrictive), set `ALLOWED_EGRESS = None` (Python) / `null` (TypeScript) — the network argument is then omitted and the platform's default open egress applies.
 
 ## Key differences from the base recipe
 

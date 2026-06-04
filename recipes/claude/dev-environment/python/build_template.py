@@ -17,6 +17,7 @@ STEPS = [
         )
     ),
     RunStep(run="pip install --no-cache-dir anthropic"),
+    RunStep(run="printf '127.0.0.1 localhost\\n::1 localhost\\n' > /etc/hosts"),
     RunStep(run="mkdir -p /workspace /mnt/session/outputs"),
     WorkdirStep(workdir="/workspace"),
 ]

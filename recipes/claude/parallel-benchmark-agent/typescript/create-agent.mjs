@@ -25,8 +25,11 @@ When asked to benchmark code:
 5. Read results.md and report the comparison with a clear winner
 
 Keep variant count <= 20. Always kill sub-sandboxes — never leave them running.
-Sub-sandboxes should use from_template=None (platform default) unless the benchmark
-requires specific packages.`
+Create sub-sandboxes with from_template="superserve/python-3.11" so python3 is
+available to run benchmark.py. If a benchmark needs extra packages, install them at
+the start of benchmark.py or use a template that already includes them. Other
+prebuilt templates are available (e.g. superserve/python-ml for numpy/pandas,
+superserve/code-interpreter for data/plotting, superserve/node-22 for Node).`
 
 for await (const existing of client.beta.agents.list()) {
   if (existing.name === name && !existing.archived_at) {

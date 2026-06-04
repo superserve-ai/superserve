@@ -190,7 +190,7 @@ async function findOrCreateSandbox(sessionId, workId, metadata) {
     name: `cma-${sessionId.slice(0, 8)}`,
     fromTemplate: TEMPLATE_NAME,
     metadata: { [META_SESSION_ID]: sessionId, [META_WORK_ID]: workId, [META_MODE]: "active" },
-    network: { allowOut: ["api.anthropic.com", "api.superserve.ai"] },
+    network: { allowOut: ["api.anthropic.com", "api.superserve.ai", "sandbox.superserve.ai", "*.sandbox.superserve.ai"] },
   })
 }
 

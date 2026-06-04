@@ -9,6 +9,22 @@ const TEMPLATE_NAME = "claude-dev-environment"
 const IDLE_TIMEOUT = 300_000
 const JANITOR_INTERVAL = 60_000
 
+// Sandboxes use a deny-by-default egress allowlist: only the hosts below are
+// reachable, everything else is blocked (private IP ranges are always blocked
+// by the platform regardless). The defaults cover the agent runtime, cloning
+// from GitHub, and installing packages with npm and pip — the recipe's standard
+// workflow. To reach other sources (GitLab, a private registry, an internal Git
+// server), add those hosts here. To allow all public hosts instead, set
+// ALLOWED_EGRESS = null (the network option is omitted on create).
+const ALLOWED_EGRESS = [
+  "api.anthropic.com", // required: the in-sandbox runner talks to Anthropic
+  "github.com", // git clone over HTTPS
+  "codeload.github.com", // GitHub archive/tarball downloads
+  "registry.npmjs.org", // npm install
+  "pypi.org", // pip install
+  "files.pythonhosted.org", // pip package downloads
+]
+
 const META_SESSION_ID = "cma.session_id"
 const META_WORK_ID = "cma.work_id"
 const META_MODE = "cma.mode"
@@ -190,7 +206,7 @@ async function findOrCreateSandbox(sessionId, workId, metadata) {
     name: `cma-${sessionId.slice(0, 8)}`,
     fromTemplate: TEMPLATE_NAME,
     metadata: { [META_SESSION_ID]: sessionId, [META_WORK_ID]: workId, [META_MODE]: "active" },
-    network: { allowOut: ["api.anthropic.com"] },
+    network: ALLOWED_EGRESS ? { allowOut: ALLOWED_EGRESS } : undefined,
   })
 }
 

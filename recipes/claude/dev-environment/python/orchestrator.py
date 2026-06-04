@@ -22,6 +22,22 @@ ENVIRONMENT_KEY = os.environ["ANTHROPIC_ENVIRONMENT_KEY"]
 ENVIRONMENT_ID = os.environ["ANTHROPIC_ENVIRONMENT_ID"]
 TEMPLATE_NAME = "claude-dev-environment"
 
+# Sandboxes use a deny-by-default egress allowlist: only the hosts below are
+# reachable, everything else is blocked (private IP ranges are always blocked
+# by the platform regardless). The defaults cover the agent runtime, cloning
+# from GitHub, and installing packages with npm and pip — the recipe's standard
+# workflow. To reach other sources (GitLab, a private registry, an internal Git
+# server), add those hosts here. To allow all public hosts instead, set
+# ALLOWED_EGRESS = None (the network argument is omitted on create).
+ALLOWED_EGRESS = [
+    "api.anthropic.com",       # required: the in-sandbox runner talks to Anthropic
+    "github.com",              # git clone over HTTPS
+    "codeload.github.com",     # GitHub archive/tarball downloads
+    "registry.npmjs.org",      # npm install
+    "pypi.org",                # pip install
+    "files.pythonhosted.org",  # pip package downloads
+]
+
 RUNNER = Path(__file__).with_name("runner.py").read_text()
 RUNNER_PIDFILE = "/workspace/.runner.pid"
 RUNNER_EXITFILE = "/workspace/.runner.exit"
@@ -210,7 +226,7 @@ async def find_or_create_sandbox(
             META_WORK_ID: work_id,
             META_MODE: MODE_ACTIVE,
         },
-        network=NetworkConfig(allow_out=["api.anthropic.com"]),
+        network=NetworkConfig(allow_out=ALLOWED_EGRESS) if ALLOWED_EGRESS else None,
     )
 
 
