@@ -19,8 +19,8 @@ import { useCreateTemplate } from "@/hooks/use-templates"
 import { ApiError } from "@/lib/api/client"
 
 const CURATED_IMAGES = [
-  "python:3.11",
-  "python:3.12",
+  "python:3.11-slim",
+  "python:3.12-slim",
   "node:20-slim",
   "node:22-slim",
   "ubuntu:24.04",
@@ -307,6 +307,11 @@ export function CreateTemplateDialog({
               </div>
             </Field>
           </div>
+
+          <p className="text-xs text-muted">
+            Make sure the disk is large enough for your base image and build
+            steps.
+          </p>
 
           {errors.form && (
             <p className="border border-dashed border-destructive p-3 text-xs text-destructive">
