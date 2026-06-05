@@ -73,7 +73,7 @@ import anyio
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, create_sdk_mcp_server, tool
 from superserve import AsyncSandbox
 
-sandbox = None
+sandbox: AsyncSandbox | None = None
 
 @tool("bash", "Run a shell command in the sandbox.", {"command": str})
 async def bash(args):
