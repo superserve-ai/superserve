@@ -65,7 +65,7 @@ sandbox.commands.run("ls /tmp")
 A paused sandbox is auto-resumed by both `Sandbox.connect()` and `commands.run()`.
 </Tip>
 
-Resume rotates the sandbox's per-sandbox access token on the backend. The SDK re-injects the new token into `sandbox.files` transparently - nothing changes in your code.
+After a resume, keep using the same `sandbox` — your `commands` and `files` calls keep working with no changes on your side.
 
 ## Kill
 

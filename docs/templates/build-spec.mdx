@@ -104,6 +104,7 @@ When a build lands on `failed`, `BuildError.code` carries one of these stable id
 | `snapshot_failed`      | Snapshot couldn't be captured.                                                               |
 | `start_cmd_failed`     | `startCmd` didn't launch successfully.                                                       |
 | `ready_cmd_failed`     | `readyCmd` didn't exit `0` within 10 minutes.                                                |
+| `dispatch_failed`      | The build host was unreachable when the build was dispatched.                                |
 | `build_failed`         | Catch-all when no specific code applies.                                                     |
 
 `Template.create` / `rebuild` can also be rejected **before a build starts** with a `RateLimitError` — `too_many_builds` (team's concurrent-build limit) or `too_many_templates` (team's template-count limit). These are not `BuildError` codes; see [Errors](/errors#ratelimiterror).
