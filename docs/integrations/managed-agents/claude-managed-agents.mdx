@@ -23,7 +23,7 @@ Tool dispatch depends on the tool type:
 Each session gets its own sandbox. Filesystem state persists across tool calls, and idle sandboxes can be paused and resumed on demand.
 
 <Tip>
-A [reference implementation](https://github.com/superserve-ai/superserve/tree/main/guides/claude/claude-managed-agents) with the orchestrator, runner, and setup scripts is available on GitHub in both Python and TypeScript.
+A [reference implementation](https://github.com/superserve-ai/superserve/tree/main/guides/managed-agents/claude-managed-agents) with the orchestrator, runner, and setup scripts is available on GitHub in both Python and TypeScript.
 </Tip>
 
 ## Prerequisites
@@ -512,13 +512,13 @@ The orchestrator reads `superserve.sandbox_id` from `work.data.metadata` and con
 Ready-to-run examples that show specific use cases. Each recipe includes a working orchestrator, runner, and setup scripts in both Python and TypeScript.
 
 <CardGroup cols={3}>
-  <Card title="Research Agent" href="https://github.com/superserve-ai/superserve/tree/main/recipes/claude/research-agent">
+  <Card title="Research Agent" href="https://github.com/superserve-ai/superserve/tree/main/guides/managed-agents/claude-managed-agents/recipes/research-agent">
     Agent researches topics across multi-turn sessions. Sandbox pauses between turns — you pay only for active compute. Notes, citations, and drafts persist in `/workspace`.
   </Card>
-  <Card title="Persistent Dev Environment" href="https://github.com/superserve-ai/superserve/tree/main/recipes/claude/dev-environment">
+  <Card title="Persistent Dev Environment" href="https://github.com/superserve-ai/superserve/tree/main/guides/managed-agents/claude-managed-agents/recipes/dev-environment">
     Conversational coding assistant with durable state. Clone once, install once — packages, repos, and build artifacts survive across sessions.
   </Card>
-  <Card title="Parallel Benchmark Agent" href="https://github.com/superserve-ai/superserve/tree/main/recipes/claude/parallel-benchmark-agent">
+  <Card title="Parallel Benchmark Agent" href="https://github.com/superserve-ai/superserve/tree/main/guides/managed-agents/claude-managed-agents/recipes/parallel-benchmark-agent">
     Agent fans out N sandboxes in parallel — one per variant — runs benchmarks concurrently, and synthesizes a comparison report. Total time equals the slowest variant.
   </Card>
 </CardGroup>
@@ -538,7 +538,7 @@ Ready-to-run examples that show specific use cases. Each recipe includes a worki
   <Card title="Network rules" href="/sandbox/networking">
     Lock down sandbox egress with allow and deny lists.
   </Card>
-  <Card title="Reference implementation" href="https://github.com/superserve-ai/superserve/tree/main/guides/claude/claude-managed-agents">
+  <Card title="Reference implementation" href="https://github.com/superserve-ai/superserve/tree/main/guides/managed-agents/claude-managed-agents">
     Working orchestrator, runner, and setup scripts you can clone and run.
   </Card>
 </CardGroup>

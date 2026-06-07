@@ -73,11 +73,11 @@ uv sync
 cp .env.example .env  # fill in your API keys
 ```
 
-| Script | What it does |
-|---|---|
-| `build_template.py` | Builds the `claude-benchmark-agent` template (includes `superserve` pip package) |
-| `create_agent.py <name>` | Creates an agent with `bash`, `read`, `write` |
-| `orchestrator.py` | Polls the work queue, creates/resumes sandboxes, starts runners |
+| Script                   | What it does                                                                     |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| `build_template.py`      | Builds the `claude-benchmark-agent` template (includes `superserve` pip package) |
+| `create_agent.py <name>` | Creates an agent with `bash`, `read`, `write`                                    |
+| `orchestrator.py`        | Polls the work queue, creates/resumes sandboxes, starts runners                  |
 
 ```bash
 uv run build_template.py         # one-time
@@ -93,11 +93,11 @@ npm install
 cp .env.example .env  # fill in your API keys
 ```
 
-| Script | What it does |
-|---|---|
-| `build-template.mjs` | Builds the `claude-benchmark-agent` template (includes `superserve` pip package) |
-| `create-agent.mjs <name>` | Creates an agent with `bash`, `read`, `write` |
-| `orchestrator.mjs` | Polls the work queue, creates/resumes sandboxes, starts runners |
+| Script                    | What it does                                                                     |
+| ------------------------- | -------------------------------------------------------------------------------- |
+| `build-template.mjs`      | Builds the `claude-benchmark-agent` template (includes `superserve` pip package) |
+| `create-agent.mjs <name>` | Creates an agent with `bash`, `read`, `write`                                    |
+| `orchestrator.mjs`        | Polls the work queue, creates/resumes sandboxes, starts runners                  |
 
 ```bash
 node build-template.mjs         # one-time

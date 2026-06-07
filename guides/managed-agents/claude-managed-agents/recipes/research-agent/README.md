@@ -4,7 +4,7 @@ Run a Claude Managed Agent that researches topics across multiple sessions. The 
 
 **The core pitch:** A deep research task might span 2 hours of wall-clock time but only 8 minutes of active compute. With Superserve, you pay for the 8 minutes.
 
-This recipe is not about *what the agent can do* — any agent can search the web. It is about *the economics*: research tasks are naturally bursty and idle-heavy, which makes pause/resume unusually valuable.
+This recipe is not about _what the agent can do_ — any agent can search the web. It is about _the economics_: research tasks are naturally bursty and idle-heavy, which makes pause/resume unusually valuable.
 
 ## How it works
 
@@ -51,11 +51,11 @@ uv sync
 cp .env.example .env  # fill in your API keys
 ```
 
-| Script | What it does |
-|---|---|
-| `build_template.py` | Builds the `claude-research-agent` sandbox template |
+| Script                   | What it does                                                     |
+| ------------------------ | ---------------------------------------------------------------- |
+| `build_template.py`      | Builds the `claude-research-agent` sandbox template              |
 | `create_agent.py <name>` | Creates an agent with `web_search`, `web_fetch`, `read`, `write` |
-| `orchestrator.py` | Polls the work queue, creates/resumes sandboxes, starts runners |
+| `orchestrator.py`        | Polls the work queue, creates/resumes sandboxes, starts runners  |
 
 ```bash
 uv run build_template.py         # one-time
@@ -71,11 +71,11 @@ npm install
 cp .env.example .env  # fill in your API keys
 ```
 
-| Script | What it does |
-|---|---|
-| `build-template.mjs` | Builds the `claude-research-agent` sandbox template |
+| Script                    | What it does                                                     |
+| ------------------------- | ---------------------------------------------------------------- |
+| `build-template.mjs`      | Builds the `claude-research-agent` sandbox template              |
 | `create-agent.mjs <name>` | Creates an agent with `web_search`, `web_fetch`, `read`, `write` |
-| `orchestrator.mjs` | Polls the work queue, creates/resumes sandboxes, starts runners |
+| `orchestrator.mjs`        | Polls the work queue, creates/resumes sandboxes, starts runners  |
 
 ```bash
 node build-template.mjs         # one-time

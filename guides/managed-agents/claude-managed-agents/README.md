@@ -6,8 +6,8 @@ Anthropic runs the harness. Superserve runs the sandbox. You wire them together 
 
 ## How it fits together
 
-* [**Claude Managed Agents**](https://platform.claude.com/docs/en/managed-agents/overview) — Anthropic's remote agent harness. Orchestrates the agent loop, manages sessions, dispatches tool calls via a work queue.
-* [**Superserve**](https://docs.superserve.ai) — Firecracker microVM sandboxes. Each session gets its own VM with a full filesystem, shell, and network namespace. Sandboxes boot in under a second and can be paused between turns.
+- [**Claude Managed Agents**](https://platform.claude.com/docs/en/managed-agents/overview) — Anthropic's remote agent harness. Orchestrates the agent loop, manages sessions, dispatches tool calls via a work queue.
+- [**Superserve**](https://docs.superserve.ai) — Firecracker microVM sandboxes. Each session gets its own VM with a full filesystem, shell, and network namespace. Sandboxes boot in under a second and can be paused between turns.
 
 The orchestrator polls Anthropic's work queue, creates (or resumes) a Superserve sandbox for each session, and starts a runner inside it. The runner executes tool calls — `bash`, `read`, `write`, `edit`, `glob`, `grep` — against the sandbox and posts results back.
 
@@ -89,12 +89,12 @@ uv sync
 cp .env.example .env  # add your API keys
 ```
 
-| Script | What it does |
-|---|---|
-| `create_environment.py` | Creates a self-hosted environment on Claude Platform |
-| `build_template.py` | Builds the Superserve sandbox template with Python + Anthropic SDK |
-| `create_agent.py <name>` | Creates an agent with bash, file, and web tools enabled |
-| `orchestrator.py` | Polls the work queue, creates sandboxes, starts runners |
+| Script                   | What it does                                                       |
+| ------------------------ | ------------------------------------------------------------------ |
+| `create_environment.py`  | Creates a self-hosted environment on Claude Platform               |
+| `build_template.py`      | Builds the Superserve sandbox template with Python + Anthropic SDK |
+| `create_agent.py <name>` | Creates an agent with bash, file, and web tools enabled            |
+| `orchestrator.py`        | Polls the work queue, creates sandboxes, starts runners            |
 
 ```bash
 uv run create_environment.py     # one-time
@@ -111,12 +111,12 @@ npm install
 cp .env.example .env  # add your API keys
 ```
 
-| Script | What it does |
-|---|---|
-| `create-environment.mjs` | Creates a self-hosted environment on Claude Platform |
-| `build-template.mjs` | Builds the Superserve sandbox template |
+| Script                    | What it does                                            |
+| ------------------------- | ------------------------------------------------------- |
+| `create-environment.mjs`  | Creates a self-hosted environment on Claude Platform    |
+| `build-template.mjs`      | Builds the Superserve sandbox template                  |
 | `create-agent.mjs <name>` | Creates an agent with bash, file, and web tools enabled |
-| `orchestrator.mjs` | Polls the work queue, creates sandboxes, starts runners |
+| `orchestrator.mjs`        | Polls the work queue, creates sandboxes, starts runners |
 
 ```bash
 node create-environment.mjs     # one-time
