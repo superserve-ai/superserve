@@ -1,0 +1,27 @@
+a[href*="console.superserve.ai"] {
+  background-color: #b2fab4 !important;
+  color: #0a2b0c !important;
+  font-family: "Geist Mono", monospace !important;
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  border-radius: 0 !important;
+  border: none !important;
+  padding: 0 1.5rem !important;
+  height: 2.25rem !important;
+}
+
+a[href*="console.superserve.ai"] * {
+  color: #0a2b0c !important;
+}
+
+a[href*="console.superserve.ai"] svg,
+a[href*="console.superserve.ai"]::after {
+  display: none !important;
+}
+
+a[href*="console.superserve.ai"]:hover {
+  background-color: #9de89f !important;
+  color: #0a2b0c !important;
+}
