@@ -33,7 +33,7 @@ The agent maintains a `/workspace/.session-notes` file that documents what is in
 
 - Repo: /workspace/acme-api (main branch, clean)
 - Node: 20.x, npm 10.x
-- node_modules: installed (last updated 2025-05-28)
+- node_modules: installed (last updated 2026-05-28)
 - Tests: all passing (jest, 47 tests)
 
 ## Last session
@@ -134,7 +134,7 @@ To drop the restriction entirely and allow **all** public hosts (simplest, least
 
 ## See also
 
-- [Full guide](https://docs.superserve.ai/integrations/managed-agents/dev-environment)
-- [Base recipe](../claude-managed-agents/) — simpler starting point without the session-notes pattern
+- [Full guide](https://docs.superserve.ai/integrations/managed-agents/claude-managed-agents)
+- [Base recipe](../../) — simpler starting point without the session-notes pattern
 - [Claude Code guide](https://docs.superserve.ai/integrations/coding-agents/claude) — fully autonomous coding agent (no turn-by-turn guidance)
 - [Claude Managed Agents docs](https://platform.claude.com/docs/en/managed-agents/overview)

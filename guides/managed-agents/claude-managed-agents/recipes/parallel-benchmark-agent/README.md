@@ -118,6 +118,6 @@ Sub-sandboxes accrue charges while running. The agent-written harness always kil
 
 ## See also
 
-- [Full guide](https://docs.superserve.ai/integrations/managed-agents/parallel-benchmark-agent)
-- [Base recipe](../claude-managed-agents/) — simpler starting point without sub-sandbox creation
+- [Full guide](https://docs.superserve.ai/integrations/managed-agents/claude-managed-agents)
+- [Base recipe](../../) — simpler starting point without sub-sandbox creation
 - [Claude Managed Agents docs](https://platform.claude.com/docs/en/managed-agents/overview)
