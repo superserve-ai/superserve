@@ -36,9 +36,17 @@
     "strict": true
   },
   "navbar": {
+    "links": [
+      {
+        "type": "github",
+        "label": "GitHub",
+        "href": "https://github.com/superserve-ai/superserve"
+      }
+    ],
     "primary": {
-      "type": "github",
-      "href": "https://github.com/superserve-ai/superserve"
+      "type": "button",
+      "label": "Get Started",
+      "href": "https://console.superserve.ai?utm_source=docs&utm_medium=navbar"
     }
   },
   "contextual": {
