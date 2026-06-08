@@ -1,4 +1,4 @@
-a[href*="console.superserve.ai"] {
+a[href*="utm_medium=navbar"] {
   background-color: #b2fab4 !important;
   color: #0a2b0c !important;
   font-family: "Geist Mono", monospace !important;
@@ -12,16 +12,16 @@ a[href*="console.superserve.ai"] {
   height: 2.25rem !important;
 }
 
-a[href*="console.superserve.ai"] * {
+a[href*="utm_medium=navbar"] * {
   color: #0a2b0c !important;
 }
 
-a[href*="console.superserve.ai"] svg,
-a[href*="console.superserve.ai"]::after {
+a[href*="utm_medium=navbar"] svg,
+a[href*="utm_medium=navbar"]::after {
   display: none !important;
 }
 
-a[href*="console.superserve.ai"]:hover {
+a[href*="utm_medium=navbar"]:hover {
   background-color: #9de89f !important;
   color: #0a2b0c !important;
 }
