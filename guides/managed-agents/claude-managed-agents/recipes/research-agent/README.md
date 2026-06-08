@@ -92,6 +92,6 @@ node orchestrator.mjs           # long-running
 
 ## See also
 
-- [Full guide](https://docs.superserve.ai/integrations/managed-agents/research-agent)
-- [Base recipe](../claude-managed-agents/) — simpler starting point if you don't need web tools
+- [Full guide](https://docs.superserve.ai/integrations/managed-agents/claude-managed-agents)
+- [Base recipe](../../) — simpler starting point if you don't need web tools
 - [Claude Managed Agents docs](https://platform.claude.com/docs/en/managed-agents/overview)
