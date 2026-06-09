@@ -4,6 +4,7 @@ import { ShieldCheckIcon } from "@phosphor-icons/react"
 import type { BadgeVariant } from "@superserve/ui"
 import {
   Badge,
+  Button,
   Select,
   SelectItem,
   SelectPopup,
@@ -49,6 +50,9 @@ interface AuditLogTableProps {
   onStatusFilterChange: (filter: AuditStatusFilter) => void
   showSandboxColumn?: boolean
   emptyDescription?: string
+  hasMore?: boolean
+  isFetchingMore?: boolean
+  onLoadMore?: () => void
 }
 
 export function AuditLogTable({
@@ -59,6 +63,9 @@ export function AuditLogTable({
   onStatusFilterChange,
   showSandboxColumn,
   emptyDescription = "Authenticated egress requests appear here once an allowed host is called.",
+  hasMore,
+  isFetchingMore,
+  onLoadMore,
 }: AuditLogTableProps) {
   return (
     <>
@@ -196,6 +203,18 @@ export function AuditLogTable({
               })}
             </StickyHoverTableBody>
           </Table>
+          {hasMore && onLoadMore && (
+            <div className="flex justify-center border-t border-border py-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onLoadMore}
+                disabled={isFetchingMore}
+              >
+                {isFetchingMore ? "Loading…" : "Load more"}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </>

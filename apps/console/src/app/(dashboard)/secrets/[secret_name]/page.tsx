@@ -11,23 +11,35 @@ import { useParams, useRouter } from "next/navigation"
 import { useState } from "react"
 
 import { ErrorState } from "@/components/error-state"
+import { AuditLogTable } from "@/components/secrets/audit-log-table"
 import { AuthShapeVisualization } from "@/components/secrets/auth-shape-visualization"
 import { AUTH_TYPE_LABEL } from "@/components/secrets/auth-type-label"
 import { DeleteSecretDialog } from "@/components/secrets/delete-secret-dialog"
 import { RotateSecretDialog } from "@/components/secrets/rotate-secret-dialog"
 import { SecretDetailSkeleton } from "@/components/secrets/secret-detail-skeleton"
 import { SecretInfoGrid } from "@/components/secrets/secret-info-grid"
+import { SecretSandboxesPanel } from "@/components/secrets/secret-sandboxes-panel"
 import { useProviders } from "@/hooks/use-providers"
-import { useSecret } from "@/hooks/use-secrets"
+import {
+  useSecret,
+  useSecretAudit,
+  useSecretSandboxes,
+} from "@/hooks/use-secrets"
+import type { AuditStatusFilter } from "@/lib/api/types"
 
 export default function SecretDetailPage() {
   const params = useParams<{ secret_name: string }>()
   const router = useRouter()
   const [rotateOpen, setRotateOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [auditFilter, setAuditFilter] = useState<AuditStatusFilter>("")
 
   const { data, isPending, error, refetch } = useSecret(params?.secret_name)
   const { data: providers } = useProviders()
+  const { data: bindings, isPending: bindingsPending } = useSecretSandboxes(
+    params?.secret_name,
+  )
+  const audit = useSecretAudit(params?.secret_name, { status: auditFilter })
 
   if (isPending) return <SecretDetailSkeleton />
 
@@ -132,6 +144,21 @@ export default function SecretDetailPage() {
             authConfig={data.auth_config}
           />
         </div>
+
+        <SecretSandboxesPanel bindings={bindings} isPending={bindingsPending} />
+
+        <AuditLogTable
+          title="Activity"
+          events={audit.data?.pages.flat()}
+          isPending={audit.isPending}
+          statusFilter={auditFilter}
+          onStatusFilterChange={setAuditFilter}
+          showSandboxColumn
+          emptyDescription="Every request authenticated with this secret appears here."
+          hasMore={audit.hasNextPage}
+          isFetchingMore={audit.isFetchingNextPage}
+          onLoadMore={() => audit.fetchNextPage()}
+        />
       </div>
     </div>
   )
