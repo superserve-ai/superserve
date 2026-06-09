@@ -159,7 +159,8 @@ export function AuthConfigForm({
             )
           })}
           <p className="text-xs text-muted">
-            {"{{ value }}"} is replaced with the credential at egress.
+            {"{{ value }}"} is replaced with your credential when the request is
+            sent.
           </p>
         </div>
       )}

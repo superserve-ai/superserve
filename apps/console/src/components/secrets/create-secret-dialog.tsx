@@ -198,7 +198,7 @@ export function CreateSecretDialog({
             <Field
               label="Provider"
               required
-              description="The credential is encrypted at rest and only ever attached to requests for the provider's hosts."
+              description="The credential is stored encrypted and only ever used for requests to the provider's hosts."
             >
               {providersError ? (
                 <div className="flex items-center gap-3 border border-dashed border-destructive p-3">
@@ -242,7 +242,7 @@ export function CreateSecretDialog({
                 />
                 <span className="text-sm text-foreground">Per-host rules</span>
                 <span className="text-xs text-muted">
-                  — different auth per upstream host
+                  - different auth per upstream host
                 </span>
               </label>
 

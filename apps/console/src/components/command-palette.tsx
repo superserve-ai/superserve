@@ -12,7 +12,7 @@ import {
   PlusIcon,
   RocketLaunchIcon,
   StackIcon,
-  VaultIcon,
+  LockKeyIcon,
 } from "@phosphor-icons/react"
 import { Command } from "cmdk"
 import { AnimatePresence, motion } from "motion/react"
@@ -69,7 +69,7 @@ export function CommandPalette() {
     // },
     {
       label: "Secrets",
-      icon: VaultIcon,
+      icon: LockKeyIcon,
       onSelect: () => navigate("/secrets"),
     },
     {
@@ -112,7 +112,7 @@ export function CommandPalette() {
     },
     {
       label: "Add secret",
-      icon: VaultIcon,
+      icon: LockKeyIcon,
       onSelect: () => navigate("/secrets?create=1"),
     },
     {

@@ -1,6 +1,6 @@
 "use client"
 
-import { PlusIcon, VaultIcon } from "@phosphor-icons/react"
+import { PlusIcon, LockKeyIcon } from "@phosphor-icons/react"
 import { Button, Table, TableHead, TableHeader, TableRow } from "@superserve/ui"
 import { Suspense, useMemo, useState } from "react"
 
@@ -80,9 +80,9 @@ function SecretsPageContent() {
 
       {isEmpty ? (
         <EmptyState
-          icon={VaultIcon}
+          icon={LockKeyIcon}
           title="No secrets yet"
-          description="Encrypted credentials your agents can use without ever seeing the value. Add one to get started."
+          description="Encrypted credentials that code in your sandboxes can use without ever seeing the value. Add one to get started."
           actionLabel="Add secret"
           onAction={() => setCreateOpen(true)}
         />
@@ -97,7 +97,7 @@ function SecretsPageContent() {
           <div className="flex flex-1 flex-col overflow-y-auto">
             {filtered.length === 0 ? (
               <EmptyState
-                icon={VaultIcon}
+                icon={LockKeyIcon}
                 title="No secrets match that search"
                 description="Try a different name or provider."
               />

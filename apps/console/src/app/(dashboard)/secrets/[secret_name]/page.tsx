@@ -127,7 +127,7 @@ export default function SecretDetailPage() {
         </div>
         <div className="flex flex-wrap gap-1.5 border-b border-border p-4">
           {data.hosts.map((host) => (
-            <Badge key={host} variant="muted" className="font-mono">
+            <Badge key={host} variant="muted" className="font-mono lowercase">
               {host}
             </Badge>
           ))}
@@ -135,7 +135,7 @@ export default function SecretDetailPage() {
 
         <div className="flex h-10 items-center border-b border-border px-4">
           <p className="text-xs font-medium text-foreground/80">
-            Injected auth
+            Authentication
           </p>
         </div>
         <div className="border-b border-border p-4">

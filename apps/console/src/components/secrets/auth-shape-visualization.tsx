@@ -1,6 +1,6 @@
 import type { SecretAuthType, SecretPerHostRule } from "@/lib/api/types"
 
-const MASK = "********"
+const MASK = "••••••••"
 
 interface RuleConfig {
   header?: string

@@ -3,7 +3,7 @@ import {
   CubeIcon,
   StackIcon,
   TerminalIcon,
-  VaultIcon,
+  LockKeyIcon,
   WarningIcon,
 } from "@phosphor-icons/react"
 import { Badge, HighlightedCode, Separator } from "@superserve/ui"
@@ -25,7 +25,7 @@ const CATEGORY_META: Record<
   sandbox: { icon: CubeIcon, label: "Sandbox" },
   template: { icon: StackIcon, label: "Template" },
   exec: { icon: TerminalIcon, label: "Exec" },
-  secret: { icon: VaultIcon, label: "Secret" },
+  secret: { icon: LockKeyIcon, label: "Secret" },
 }
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/

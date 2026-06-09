@@ -70,7 +70,7 @@ function validateRuleHosts(rule: AuthRuleForm, label: string): string | null {
   if (hosts.length > MAX_HOSTS) return `${label}: max ${MAX_HOSTS} hosts`
   for (const h of hosts) {
     const err = validateHost(h)
-    if (err) return `${label}: "${h}" — ${err.toLowerCase()}`
+    if (err) return `${label}: "${h}" - ${err.toLowerCase()}`
   }
   return null
 }
@@ -99,7 +99,7 @@ function validateRuleShape(rule: AuthRuleForm, label: string): string | null {
         if (validateHeaderName(name))
           return `${label}: "${name}" is not a valid header name`
         if (!h.value.includes("{{ value }}"))
-          return `${label}: header "${name}" must reference {{ value }} so the credential is injected`
+          return `${label}: header "${name}" must reference {{ value }} so the credential is included in the request`
       }
       return null
     }

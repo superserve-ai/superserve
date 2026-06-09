@@ -15,7 +15,7 @@ export function SecretBindingList({
       </div>
       {!secrets || secrets.length === 0 ? (
         <p className="px-4 py-4 text-xs text-muted">
-          No secrets bound to this sandbox.
+          No secrets attached to this sandbox.
         </p>
       ) : (
         <div className="space-y-2 px-4 py-3">
@@ -42,8 +42,7 @@ export function SecretBindingList({
                     Revoked
                   </TooltipTrigger>
                   <TooltipPopup className="max-w-xs text-xs">
-                    This secret was deleted. The env var still holds the proxy
-                    token, which no longer authenticates.
+                    This secret was deleted - requests using it are rejected.
                   </TooltipPopup>
                 </Tooltip>
               )}

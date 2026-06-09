@@ -62,7 +62,7 @@ export function AuditLogTable({
   statusFilter,
   onStatusFilterChange,
   showSandboxColumn,
-  emptyDescription = "Authenticated egress requests appear here once an allowed host is called.",
+  emptyDescription = "Requests made with an attached secret appear here.",
   hasMore,
   isFetchingMore,
   onLoadMore,

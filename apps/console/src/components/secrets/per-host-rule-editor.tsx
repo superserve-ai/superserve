@@ -63,8 +63,8 @@ export function PerHostRuleEditor({
         </Button>
       )}
       <p className="text-xs text-muted">
-        Requests are matched against each rule&apos;s hosts; the matching
-        rule&apos;s auth is injected. Hosts may not overlap across rules.
+        Each request uses the rule matching its host. Hosts may not overlap
+        across rules.
       </p>
     </div>
   )

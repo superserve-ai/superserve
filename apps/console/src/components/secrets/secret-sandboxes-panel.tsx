@@ -50,7 +50,7 @@ export function SecretSandboxesPanel({
           <EmptyState
             icon={CubeIcon}
             title="Not in use"
-            description="Sandboxes bound to this secret will appear here."
+            description="Sandboxes using this secret appear here."
           />
         </div>
       ) : (

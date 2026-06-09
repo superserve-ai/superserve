@@ -5,7 +5,7 @@ import {
   CopyIcon,
   KeyIcon,
   PlusIcon,
-  VaultIcon,
+  LockKeyIcon,
 } from "@phosphor-icons/react"
 import { Button, cn, HighlightedCode, useToast } from "@superserve/ui"
 import { motion } from "motion/react"
@@ -305,17 +305,16 @@ export default function GetStartedPage() {
             <div className="space-y-4">
               <StepHeader stepNumber={4} title="Store a credential" />
               <p className="pl-6 text-sm leading-relaxed tracking-tight text-muted">
-                Give your agents API keys without exposing them — the sandbox
-                only ever sees a proxy token, and the real value is injected at
-                egress. Store a credential once, then bind it to sandboxes as an
-                env var.
+                Let sandboxed code use API keys it can never read - the real
+                value never enters the sandbox. Store a credential once, then
+                attach it to sandboxes as a secret.
               </p>
               <div className="pl-6">
                 <Button
                   size="sm"
                   onClick={() => router.push("/secrets?create=1")}
                 >
-                  <VaultIcon className="size-3.5" weight="light" />
+                  <LockKeyIcon className="size-3.5" weight="light" />
                   Add secret
                 </Button>
               </div>

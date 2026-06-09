@@ -51,7 +51,7 @@ export function DeleteSecretDialog({
         </DialogHeader>
         <div className="space-y-3 px-6 pb-2 text-sm text-muted">
           <p>
-            This revokes{" "}
+            This deletes{" "}
             <span className="font-mono text-foreground">{secretName}</span>{" "}
             immediately. Requests that use it will be rejected.
           </p>
@@ -62,7 +62,7 @@ export function DeleteSecretDialog({
               immediately.
             </p>
           ) : (
-            <p>No sandboxes are currently bound to this secret.</p>
+            <p>No sandboxes are currently using this secret.</p>
           )}
         </div>
         <DialogFooter>

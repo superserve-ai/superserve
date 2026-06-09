@@ -266,9 +266,9 @@ export default function SandboxDetailPage() {
         {/* Layer 6: activity (history, lower priority) */}
         <ActivitySection activity={activity} isPending={activityPending} />
 
-        {/* Layer 7: authenticated egress (proxy audit) */}
+        {/* Layer 7: requests made with attached secrets (proxy audit) */}
         <AuditLogTable
-          title="Egress audit"
+          title="Secret requests"
           events={auditEvents}
           isPending={auditPending}
           statusFilter={auditFilter}
