@@ -1,6 +1,6 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "willow",
+  "theme": "maple",
   "name": "Superserve",
   "colors": {
     "primary": "#B2FAB4",
@@ -36,17 +36,9 @@
     "strict": true
   },
   "navbar": {
-    "links": [
-      {
-        "type": "github",
-        "label": "GitHub",
-        "href": "https://github.com/superserve-ai/superserve"
-      }
-    ],
     "primary": {
-      "type": "button",
-      "label": "Get Started",
-      "href": "https://console.superserve.ai?utm_source=docs&utm_medium=navbar"
+      "type": "github",
+      "href": "https://github.com/superserve-ai/superserve"
     }
   },
   "contextual": {
@@ -146,10 +138,6 @@
           {
             "group": "Virtual Filesystems",
             "pages": ["integrations/virtual-filesystems/mesa"]
-          },
-          {
-            "group": "Documentation",
-            "pages": ["integrations/docs-mcp"]
           }
         ]
       },
