@@ -51,6 +51,8 @@ export const SNAPSHOT_EVENTS = {
 
 export const SECRET_EVENTS = {
   CREATED: "secret_created",
+  ROTATED: "secret_rotated",
+  DELETED: "secret_deleted",
 } as const
 
 export const SETTINGS_EVENTS = {

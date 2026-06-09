@@ -1,12 +1,14 @@
 "use client"
 
 import { Badge, TableCell } from "@superserve/ui"
+import { useRouter } from "next/navigation"
 
 import { AnimatedTableRow } from "@/components/animated-table-row"
 import type { SecretResponse } from "@/lib/api/types"
 import { formatTime } from "@/lib/format"
 
 import { AUTH_TYPE_LABEL } from "./auth-type-label"
+import { SecretRowActions } from "./secret-row-actions"
 
 export function SecretTableRow({
   secret,
@@ -15,6 +17,15 @@ export function SecretTableRow({
   secret: SecretResponse
   providerDisplay?: string
 }) {
+  const router = useRouter()
+
+  const handleRowClick = (e: React.MouseEvent) => {
+    // Don't navigate if the click was on an interactive child (menu, button).
+    const target = e.target as HTMLElement
+    if (target.closest("button, [role='menuitem']")) return
+    router.push(`/secrets/${secret.name}`)
+  }
+
   const created = formatTime(new Date(secret.created_at))
   const lastUsed = secret.last_used_at
     ? formatTime(new Date(secret.last_used_at))
@@ -22,7 +33,7 @@ export function SecretTableRow({
   const hosts = secret.hosts.join(", ")
 
   return (
-    <AnimatedTableRow>
+    <AnimatedTableRow onClick={handleRowClick} className="cursor-pointer">
       <TableCell className="font-mono text-foreground/80">
         {secret.name}
       </TableCell>
@@ -51,6 +62,11 @@ export function SecretTableRow({
         title={created.absolute}
       >
         {created.relative}
+      </TableCell>
+      <TableCell onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-end">
+          <SecretRowActions secret={secret} />
+        </div>
       </TableCell>
     </AnimatedTableRow>
   )

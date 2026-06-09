@@ -22,23 +22,7 @@ import { SECRET_EVENTS } from "@/lib/posthog/events"
 
 import { MaskToggleInput } from "./mask-toggle-input"
 import { ProviderPicker } from "./provider-picker"
-
-const NAME_RE = /^[A-Za-z_][A-Za-z0-9_-]*$/
-
-function validateName(name: string): string | null {
-  if (!name) return "Name is required"
-  if (name.length > 128) return "Name must be 128 characters or fewer"
-  if (!NAME_RE.test(name))
-    return "Use letters, digits, '_' and '-'; start with a letter or underscore"
-  return null
-}
-
-function validateValue(value: string): string | null {
-  if (!value) return "Value is required"
-  if (new TextEncoder().encode(value).length > 8 * 1024)
-    return "Value exceeds 8 KB"
-  return null
-}
+import { validateSecretName, validateSecretValue } from "./validate"
 
 interface CreateSecretDialogProps {
   open?: boolean
@@ -90,14 +74,14 @@ export function CreateSecretDialog({
     }
   }
 
-  const liveNameError = useMemo(() => validateName(name.trim()), [name])
-  const liveValueError = useMemo(() => validateValue(value), [value])
+  const liveNameError = useMemo(() => validateSecretName(name.trim()), [name])
+  const liveValueError = useMemo(() => validateSecretValue(value), [value])
   const isValid = !!provider && !liveNameError && !liveValueError
 
   const handleCreate = async () => {
     if (!provider) return
-    const nameError = validateName(name.trim())
-    const valueError = validateValue(value)
+    const nameError = validateSecretName(name.trim())
+    const valueError = validateSecretValue(value)
     if (nameError || valueError) {
       setErrors({
         name: nameError ?? undefined,

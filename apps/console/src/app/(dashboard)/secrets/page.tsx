@@ -111,6 +111,7 @@ function SecretsPageContent() {
                     <TableHead className="w-[28%]">Hosts</TableHead>
                     <TableHead className="w-[12%]">Last used</TableHead>
                     <TableHead className="w-[12%]">Created</TableHead>
+                    <TableHead className="w-12" />
                   </TableRow>
                 </TableHeader>
                 <StickyHoverTableBody>
