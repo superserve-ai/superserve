@@ -32,6 +32,28 @@ export const auditLogKeys = {
     [...auditLogKeys.all, "sandbox", sandboxId] as const,
 }
 
+export const secretKeys = {
+  all: ["secrets"] as const,
+  lists: () => [...secretKeys.all, "list"] as const,
+  list: (filters?: { search?: string }) =>
+    [...secretKeys.lists(), filters ?? {}] as const,
+  details: () => [...secretKeys.all, "detail"] as const,
+  detail: (name: string) => [...secretKeys.details(), name] as const,
+  audit: (name: string, filters?: { status?: string }) =>
+    [...secretKeys.detail(name), "audit", filters ?? {}] as const,
+  sandboxes: (name: string) =>
+    [...secretKeys.detail(name), "sandboxes"] as const,
+}
+
+export const providerKeys = {
+  all: ["providers"] as const,
+}
+
+export const proxyAuditKeys = {
+  sandbox: (sandboxId: string, filters?: { status?: string }) =>
+    ["proxy-audit", "sandbox", sandboxId, filters ?? {}] as const,
+}
+
 export const templateKeys = {
   all: ["templates"] as const,
   lists: () => [...templateKeys.all, "list"] as const,

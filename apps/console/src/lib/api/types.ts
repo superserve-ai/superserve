@@ -20,6 +20,18 @@ export interface SandboxListItem {
 
 export interface SandboxResponse extends SandboxListItem {
   access_token: string
+  secrets?: SandboxSecretBindingSummary[]
+}
+
+/**
+ * One env-var → secret binding on a sandbox. `revoked` flips true when the
+ * underlying secret has been soft-deleted — the env var still holds the
+ * (now-useless) proxy token and the daemon refuses to swap on use.
+ */
+export interface SandboxSecretBindingSummary {
+  env_key: string
+  secret_name: string
+  revoked?: boolean
 }
 
 export interface ResumeResponse {
@@ -35,6 +47,9 @@ export interface CreateSandboxRequest {
   from_snapshot?: string
   timeout_seconds?: number
   env_vars?: Record<string, string>
+  /** env-var name → secret name. The agent sees a proxy token under env_key;
+   *  the in-host daemon swaps it for the real value at egress. */
+  secrets?: Record<string, string>
   metadata?: Record<string, string>
   network?: NetworkConfig
 }
@@ -173,4 +188,102 @@ export interface BuildLogEvent {
   text: string
   finished?: boolean
   status?: "ready" | "failed" | "cancelled"
+}
+
+export type SecretAuthType =
+  | "bearer"
+  | "basic"
+  | "api-key"
+  | "custom"
+  | "per_host"
+
+export type AuditStatusFilter = "" | "2xx" | "3xx" | "4xx" | "5xx" | "errors"
+
+/** One rule inside an auth.per_host config. */
+export interface SecretPerHostRule {
+  hosts: string[]
+  type: "bearer" | "basic" | "api-key" | "custom"
+  header?: string
+  prefix?: string
+  username?: string
+  headers?: Record<string, string>
+}
+
+/** Single-rule auth shape: one type applied to every host in the allowlist. */
+export interface SecretAuthConfigSingleRule {
+  type: "bearer" | "basic" | "api-key" | "custom"
+  header?: string
+  prefix?: string
+  username?: string
+  headers?: Record<string, string>
+}
+
+/** Multi-rule auth: pick a rule by upstream host at egress. */
+export interface SecretAuthConfigPerHost {
+  per_host: SecretPerHostRule[]
+}
+
+export type SecretAuthConfig =
+  | SecretAuthConfigSingleRule
+  | SecretAuthConfigPerHost
+
+export interface CreateSecretRequest {
+  name: string
+  value: string
+  /** Mutually exclusive with `auth` + `hosts`. */
+  provider?: string
+  auth?: SecretAuthConfig
+  hosts?: string[]
+}
+
+export interface UpdateSecretRequest {
+  value: string
+}
+
+export interface SecretResponse {
+  id: string
+  name: string
+  auth_type: SecretAuthType
+  auth_config: Record<string, unknown>
+  provider_shortcut?: string | null
+  hosts: string[]
+  created_at: string
+  updated_at: string
+  last_used_at?: string | null
+}
+
+export interface ProxyAuditEvent {
+  id: number
+  ts: string
+  sandbox_id: string
+  /** Populated by cross-sandbox views (`GET /secrets/{name}/audit`).
+   *  Null when the referenced sandbox has been deleted. */
+  sandbox_name?: string | null
+  secret_id?: string
+  method: string
+  host: string
+  path: string
+  status: number
+  upstream_status?: number
+  latency_ms?: number
+  error_code?: string
+}
+
+export interface SecretSandboxBinding {
+  sandbox_id: string
+  sandbox_name: string
+  env_key: string
+  status: "active" | "paused" | "resuming" | "failed"
+}
+
+export interface ProviderShortcut {
+  /** Stable identifier used as `provider` on POST /secrets. */
+  name: string
+  /** Human-readable label for pickers. */
+  display: string
+  auth_type: SecretAuthType
+  auth_config: Record<string, unknown>
+  hosts: string[]
+  /** Prefix-shaped sample of the proxy token issued (e.g. "sk-ant-api03-..."). */
+  token_shape: string
 }
