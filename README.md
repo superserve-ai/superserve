@@ -17,7 +17,7 @@
 
 ## Getting Started
 
-Visit [superserve.ai](https://www.superserve.ai/?utm_source=github&utm_medium=readme) or jump straight into the [docs](https://docs.superserve.ai/?utm_source=github&utm_medium=readme).
+Visit [superserve.ai](https://www.superserve.ai/?utm_source=github&utm_medium=referral&utm_campaign=readme) or jump straight into the [docs](https://docs.superserve.ai/?utm_source=github&utm_medium=referral&utm_campaign=readme).
 
 ## Structure
 
