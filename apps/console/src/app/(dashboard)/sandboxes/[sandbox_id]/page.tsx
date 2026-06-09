@@ -17,6 +17,9 @@ import {
 } from "@/components/sandboxes/sandbox-info-grid"
 import { SandboxResourceBar } from "@/components/sandboxes/sandbox-resource-bar"
 import { SandboxStatusHero } from "@/components/sandboxes/sandbox-status-hero"
+import { AuditLogTable } from "@/components/secrets/audit-log-table"
+import { SecretBindingList } from "@/components/secrets/secret-binding-list"
+import { useSandboxAudit } from "@/hooks/use-proxy-audit"
 import {
   useDeleteSandbox,
   usePauseSandbox,
@@ -25,6 +28,7 @@ import {
 } from "@/hooks/use-sandboxes"
 import { listActivityBySandboxAction } from "@/lib/api/activity-actions"
 import { auditLogKeys } from "@/lib/api/query-keys"
+import type { AuditStatusFilter } from "@/lib/api/types"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 
 function DetailSkeleton() {
@@ -137,6 +141,12 @@ export default function SandboxDetailPage() {
   const resumeMutation = useResumeSandbox()
   const deleteMutation = useDeleteSandbox()
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [auditFilter, setAuditFilter] = useState<AuditStatusFilter>("")
+
+  const { data: auditEvents, isPending: auditPending } = useSandboxAudit(
+    sandboxId,
+    { status: auditFilter, limit: 50 },
+  )
 
   const { data: activity, isPending: activityPending } = useQuery({
     queryKey: auditLogKeys.bySandbox(sandboxId),
@@ -247,11 +257,23 @@ export default function SandboxDetailPage() {
           <MetadataSection sandbox={sandbox} />
         </div>
 
-        {/* Layer 4: files (state-aware) */}
+        {/* Layer 4: bound secrets */}
+        <SecretBindingList secrets={sandbox.secrets} />
+
+        {/* Layer 5: files (state-aware) */}
         <FilesSection sandbox={sandbox} onStart={handleStart} />
 
-        {/* Layer 5: activity (history, lower priority) */}
+        {/* Layer 6: activity (history, lower priority) */}
         <ActivitySection activity={activity} isPending={activityPending} />
+
+        {/* Layer 7: authenticated egress (proxy audit) */}
+        <AuditLogTable
+          title="Egress audit"
+          events={auditEvents}
+          isPending={auditPending}
+          statusFilter={auditFilter}
+          onStatusFilterChange={setAuditFilter}
+        />
       </div>
     </div>
   )

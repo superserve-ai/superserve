@@ -25,6 +25,13 @@ export function validateHost(host: string): string | null {
   return null
 }
 
+const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+export function validateEnvKey(key: string): string | null {
+  if (!ENV_KEY_RE.test(key)) return "Not a valid env var name"
+  return null
+}
+
 const HEADER_NAME_RE = /^[A-Za-z0-9!#$%&'*+\-.^_`|~]+$/
 
 export function validateHeaderName(name: string): string | null {
