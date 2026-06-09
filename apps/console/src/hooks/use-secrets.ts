@@ -30,8 +30,8 @@ export function useSecrets() {
 
 export function useSecret(name: string | undefined) {
   return useQuery({
-    queryKey: name ? secretKeys.detail(name) : secretKeys.details(),
-    queryFn: () => getSecret(name as string),
+    queryKey: secretKeys.detail(name),
+    queryFn: () => getSecret(name!),
     enabled: Boolean(name),
   })
 }
@@ -117,18 +117,16 @@ export function useSecretAudit(
   params?: AuditQueryParams,
 ) {
   return useQuery({
-    queryKey: name
-      ? secretKeys.audit(name, { status: params?.status })
-      : secretKeys.details(),
-    queryFn: () => getSecretAudit(name as string, params),
+    queryKey: secretKeys.audit(name, { status: params?.status }),
+    queryFn: () => getSecretAudit(name!, params),
     enabled: Boolean(name),
   })
 }
 
 export function useSecretSandboxes(name: string | undefined) {
   return useQuery({
-    queryKey: name ? secretKeys.sandboxes(name) : secretKeys.details(),
-    queryFn: () => getSecretSandboxes(name as string),
+    queryKey: secretKeys.sandboxes(name),
+    queryFn: () => getSecretSandboxes(name!),
     enabled: Boolean(name),
   })
 }

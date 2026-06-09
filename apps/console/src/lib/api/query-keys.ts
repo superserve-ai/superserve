@@ -38,10 +38,13 @@ export const secretKeys = {
   list: (filters?: { search?: string }) =>
     [...secretKeys.lists(), filters ?? {}] as const,
   details: () => [...secretKeys.all, "detail"] as const,
-  detail: (name: string) => [...secretKeys.details(), name] as const,
-  audit: (name: string, filters?: { status?: string }) =>
+  // Accepts undefined so disabled hooks (e.g. useSecret(undefined)) keep a
+  // distinct cache key per call site instead of all aliasing to details().
+  detail: (name: string | undefined) =>
+    [...secretKeys.details(), name] as const,
+  audit: (name: string | undefined, filters?: { status?: string }) =>
     [...secretKeys.detail(name), "audit", filters ?? {}] as const,
-  sandboxes: (name: string) =>
+  sandboxes: (name: string | undefined) =>
     [...secretKeys.detail(name), "sandboxes"] as const,
 }
 
@@ -50,7 +53,7 @@ export const providerKeys = {
 }
 
 export const proxyAuditKeys = {
-  sandbox: (sandboxId: string, filters?: { status?: string }) =>
+  sandbox: (sandboxId: string | undefined, filters?: { status?: string }) =>
     ["proxy-audit", "sandbox", sandboxId, filters ?? {}] as const,
 }
 

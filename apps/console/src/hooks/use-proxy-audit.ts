@@ -11,10 +11,8 @@ export function useSandboxAudit(
   params?: AuditQueryParams,
 ) {
   return useQuery({
-    queryKey: sandboxId
-      ? proxyAuditKeys.sandbox(sandboxId, { status: params?.status })
-      : ["proxy-audit", "sandbox"],
-    queryFn: () => getSandboxAudit(sandboxId as string, params),
+    queryKey: proxyAuditKeys.sandbox(sandboxId, { status: params?.status }),
+    queryFn: () => getSandboxAudit(sandboxId!, params),
     enabled: Boolean(sandboxId),
   })
 }
