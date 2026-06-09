@@ -87,11 +87,15 @@ export interface SnapshotResponse {
 
 export interface ActivityResponse {
   id: string
-  sandbox_id: string
+  /** Null for events not tied to a sandbox (e.g. secret CRUD). */
+  sandbox_id: string | null
   category: string
   action: string
   status: string | null
   sandbox_name: string | null
+  /** Set on secret events; secret_id is null once the secret is purged. */
+  secret_id: string | null
+  secret_name: string | null
   duration_ms: number | null
   error: string | null
   metadata: Record<string, unknown>

@@ -1,8 +1,15 @@
 "use client"
 
-import { CheckIcon, CopyIcon, KeyIcon, PlusIcon } from "@phosphor-icons/react"
+import {
+  CheckIcon,
+  CopyIcon,
+  KeyIcon,
+  PlusIcon,
+  VaultIcon,
+} from "@phosphor-icons/react"
 import { Button, cn, HighlightedCode, useToast } from "@superserve/ui"
 import { motion } from "motion/react"
+import { useRouter } from "next/navigation"
 import { useState } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
@@ -127,6 +134,7 @@ const LANGUAGES: { label: string; value: Language }[] = [
 ]
 
 export default function GetStartedPage() {
+  const router = useRouter()
   const [language, setLanguage] = useState<Language>("typescript")
   const [hoveredTab, setHoveredTab] = useState<string | null>(null)
   const createKeyMutation = useCreateApiKey()
@@ -290,6 +298,26 @@ export default function GetStartedPage() {
                   code={getSnippet(language, createdKey?.full ?? "")}
                   lang={language}
                 />
+              </div>
+            </div>
+
+            {/* Step 4: Store a credential */}
+            <div className="space-y-4">
+              <StepHeader stepNumber={4} title="Store a credential" />
+              <p className="pl-6 text-sm leading-relaxed tracking-tight text-muted">
+                Give your agents API keys without exposing them — the sandbox
+                only ever sees a proxy token, and the real value is injected at
+                egress. Store a credential once, then bind it to sandboxes as an
+                env var.
+              </p>
+              <div className="pl-6">
+                <Button
+                  size="sm"
+                  onClick={() => router.push("/secrets?create=1")}
+                >
+                  <VaultIcon className="size-3.5" weight="light" />
+                  Add secret
+                </Button>
               </div>
             </div>
           </div>
