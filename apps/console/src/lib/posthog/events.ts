@@ -49,6 +49,10 @@ export const SNAPSHOT_EVENTS = {
   BULK_DELETED: "snapshot_bulk_deleted",
 } as const
 
+export const SECRET_EVENTS = {
+  CREATED: "secret_created",
+} as const
+
 export const SETTINGS_EVENTS = {
   PROFILE_UPDATED: "settings_profile_updated",
   PASSWORD_CHANGED: "settings_password_changed",
