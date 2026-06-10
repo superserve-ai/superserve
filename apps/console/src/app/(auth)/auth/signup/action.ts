@@ -48,6 +48,16 @@ export const signUpWithEmail = async (
           error: "An account with this email already exists.",
         }
       }
+      if (
+        error.message.toLowerCase().includes("database error saving new user")
+      ) {
+        console.warn("Signup blocked by trigger", { email: parsed.data.email })
+        return {
+          success: false,
+          error: error.message,
+          errorCode: "blocked_email" as const,
+        }
+      }
       return { success: false, error: error.message }
     }
 

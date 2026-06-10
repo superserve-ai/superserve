@@ -218,6 +218,7 @@ describe("SignUpPage", () => {
     mockSignUpWithEmail.mockResolvedValue({
       success: false,
       error: "Database error saving new user",
+      errorCode: "blocked_email",
     })
     render(<SignUpPage />)
 
@@ -234,7 +235,9 @@ describe("SignUpPage", () => {
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
     await waitFor(() => {
-      expect(mockRouterPush).toHaveBeenCalledWith("/auth/auth-code-error")
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/auth/auth-code-error?reason=signup_blocked",
+      )
     })
   })
 
