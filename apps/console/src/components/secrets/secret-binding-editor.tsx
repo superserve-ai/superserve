@@ -14,11 +14,6 @@ export interface SecretBindingEntry {
   secret: string
 }
 
-/** Derive an env var name from a secret name ("my-openai-key" → "MY_OPENAI_KEY"). */
-function suggestEnvKey(secretName: string): string {
-  return secretName.toUpperCase().replaceAll("-", "_")
-}
-
 // Base UI Select doesn't open inside the dialog's focus trap, so this is a
 // portalled, fixed-positioned picker like the template picker in
 // create-sandbox-dialog.
@@ -197,12 +192,7 @@ export function SecretBindingEditor({
               <SecretPicker
                 value={entry.secret}
                 options={options}
-                onChange={(secret) =>
-                  setEntry(i, {
-                    key: entry.key.trim() ? entry.key : suggestEnvKey(secret),
-                    secret,
-                  })
-                }
+                onChange={(secret) => setEntry(i, { ...entry, secret })}
               />
             </div>
             <Button
