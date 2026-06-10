@@ -54,7 +54,7 @@ export const signUpWithEmail = async (
         console.warn("Signup blocked by trigger", { email: parsed.data.email })
         return {
           success: false,
-          error: error.message,
+          error: "Signup is not available for this email address.",
           errorCode: "blocked_email" as const,
         }
       }

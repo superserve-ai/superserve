@@ -62,7 +62,7 @@ function SignUpContent() {
           method: "email",
           reason: result.error,
         })
-        if (result.errorCode === "blocked_email") {
+        if ("errorCode" in result && result.errorCode === "blocked_email") {
           router.push("/auth/auth-code-error?reason=signup_blocked")
           return
         }

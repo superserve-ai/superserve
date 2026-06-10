@@ -56,7 +56,10 @@ export async function GET(request: Request) {
       if (blocked) {
         console.warn("OAuth signup blocked by trigger")
         return NextResponse.redirect(
-          `${origin}/auth/auth-code-error?reason=signup_blocked`,
+          buildRedirectUrl(
+            origin,
+            "/auth/auth-code-error?reason=signup_blocked",
+          ),
         )
       }
       console.error("Auth callback error:", error.message, {
