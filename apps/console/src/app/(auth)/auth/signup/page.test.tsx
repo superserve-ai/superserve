@@ -67,8 +67,10 @@ vi.mock("./action", () => ({
 }))
 
 const mockSearchParams = new URLSearchParams()
+const mockRouterPush = vi.fn()
 vi.mock("next/navigation", () => ({
   useSearchParams: () => mockSearchParams,
+  useRouter: () => ({ push: mockRouterPush }),
 }))
 
 vi.mock("next/link", () => ({
@@ -95,6 +97,7 @@ describe("SignUpPage", () => {
     mockSignUpWithEmail.mockReset()
     mockSignInWithOAuth.mockReset()
     mockCapture.mockReset()
+    mockRouterPush.mockReset()
   })
 
   it("renders the signup form", async () => {
@@ -209,6 +212,30 @@ describe("SignUpPage", () => {
     expect(
       await screen.findByText("An account with this email already exists."),
     ).toBeInTheDocument()
+  })
+
+  it("redirects to auth-code-error when signup is blocked by the trigger", async () => {
+    mockSignUpWithEmail.mockResolvedValue({
+      success: false,
+      error: "Database error saving new user",
+    })
+    render(<SignUpPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Full Name"),
+      "Test User",
+    )
+    await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
+    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(
+      screen.getByPlaceholderText("Confirm Password"),
+      "password123",
+    )
+    await user.click(screen.getByRole("button", { name: "Sign Up" }))
+
+    await waitFor(() => {
+      expect(mockRouterPush).toHaveBeenCalledWith("/auth/auth-code-error")
+    })
   })
 
   it("shows generic error when signUpWithEmail throws", async () => {

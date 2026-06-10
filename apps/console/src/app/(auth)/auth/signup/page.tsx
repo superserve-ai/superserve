@@ -4,7 +4,7 @@ import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react"
 import { Button, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useState } from "react"
 
@@ -28,6 +28,7 @@ function SignUpContent() {
   const [emailSent, setEmailSent] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const posthog = usePostHog()
+  const router = useRouter()
   const searchParams = useSearchParams()
   const rawNext = searchParams.get("next") || "/"
   const nextUrl = rawNext.startsWith("/") ? rawNext : "/"
@@ -61,6 +62,12 @@ function SignUpContent() {
           method: "email",
           reason: result.error,
         })
+        if (
+          result.error?.toLowerCase().includes("database error saving new user")
+        ) {
+          router.push("/auth/auth-code-error")
+          return
+        }
         setErrors({ form: result.error || "Error creating account." })
         return
       }
