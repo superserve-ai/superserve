@@ -273,6 +273,33 @@ export interface ProxyAuditEvent {
   error_code?: string
 }
 
+/** One row in the unified per-sandbox network log (`GET /sandboxes/{id}/network`).
+ *  `kind` selects which fields are present: `connection` rows carry
+ *  dst_ip/verdict/bytes; `request` rows carry method/path/status/secret_id. */
+export interface NetworkEvent {
+  kind: "connection" | "request"
+  id: number
+  ts: string
+  host?: string
+
+  // connection
+  dst_ip?: string
+  dst_port?: number
+  verdict?: "allowed" | "blocked" | "failed"
+  match_rule?: string
+  bytes_sent?: number
+  bytes_recv?: number
+
+  // request
+  method?: string
+  path?: string
+  status?: number
+  upstream_status?: number
+  latency_ms?: number
+  secret_id?: string
+  error_code?: string
+}
+
 export interface SecretSandboxBinding {
   sandbox_id: string
   sandbox_name: string

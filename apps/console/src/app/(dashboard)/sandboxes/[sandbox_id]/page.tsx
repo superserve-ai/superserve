@@ -17,9 +17,9 @@ import {
 } from "@/components/sandboxes/sandbox-info-grid"
 import { SandboxResourceBar } from "@/components/sandboxes/sandbox-resource-bar"
 import { SandboxStatusHero } from "@/components/sandboxes/sandbox-status-hero"
-import { AuditLogTable } from "@/components/secrets/audit-log-table"
+import { NetworkLogTable } from "@/components/secrets/network-log-table"
 import { SecretBindingList } from "@/components/secrets/secret-binding-list"
-import { useSandboxAudit } from "@/hooks/use-proxy-audit"
+import { useSandboxNetwork } from "@/hooks/use-network"
 import {
   useDeleteSandbox,
   usePauseSandbox,
@@ -28,7 +28,6 @@ import {
 } from "@/hooks/use-sandboxes"
 import { listActivityBySandboxAction } from "@/lib/api/activity-actions"
 import { auditLogKeys } from "@/lib/api/query-keys"
-import type { AuditStatusFilter } from "@/lib/api/types"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 
 function DetailSkeleton() {
@@ -141,12 +140,9 @@ export default function SandboxDetailPage() {
   const resumeMutation = useResumeSandbox()
   const deleteMutation = useDeleteSandbox()
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [auditFilter, setAuditFilter] = useState<AuditStatusFilter>("")
 
-  const { data: auditEvents, isPending: auditPending } = useSandboxAudit(
-    sandboxId,
-    { status: auditFilter, limit: 50 },
-  )
+  const network = useSandboxNetwork(sandboxId)
+  const networkEvents = network.data?.pages.flat()
 
   const { data: activity, isPending: activityPending } = useQuery({
     queryKey: auditLogKeys.bySandbox(sandboxId),
@@ -266,13 +262,14 @@ export default function SandboxDetailPage() {
         {/* Layer 6: activity (history, lower priority) */}
         <ActivitySection activity={activity} isPending={activityPending} />
 
-        {/* Layer 7: requests made with attached secrets (proxy audit) */}
-        <AuditLogTable
-          title="Secret requests"
-          events={auditEvents}
-          isPending={auditPending}
-          statusFilter={auditFilter}
-          onStatusFilterChange={setAuditFilter}
+        {/* Layer 7: unified egress log (connections + secret requests) */}
+        <NetworkLogTable
+          title="Network"
+          events={networkEvents}
+          isPending={network.isPending}
+          hasMore={network.hasNextPage}
+          isFetchingMore={network.isFetchingNextPage}
+          onLoadMore={() => network.fetchNextPage()}
         />
       </div>
     </div>

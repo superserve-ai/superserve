@@ -2,6 +2,7 @@ import { apiClient } from "./client"
 import type {
   AuditStatusFilter,
   CreateSecretRequest,
+  NetworkEvent,
   ProviderShortcut,
   ProxyAuditEvent,
   SecretResponse,
@@ -73,12 +74,16 @@ export async function getSecretSandboxes(
   return apiClient<SecretSandboxBinding[]>(`/secrets/${name}/sandboxes`)
 }
 
-export async function getSandboxAudit(
+export async function getSandboxNetwork(
   sandboxId: string,
-  params?: AuditQueryParams,
-): Promise<ProxyAuditEvent[]> {
-  return apiClient<ProxyAuditEvent[]>(
-    `/sandboxes/${sandboxId}/audit${auditQueryString(params)}`,
+  params?: { before?: string; limit?: number },
+): Promise<NetworkEvent[]> {
+  const usp = new URLSearchParams()
+  if (params?.before) usp.set("before", params.before)
+  if (params?.limit != null) usp.set("limit", String(params.limit))
+  const qs = usp.toString()
+  return apiClient<NetworkEvent[]>(
+    `/sandboxes/${sandboxId}/network${qs ? `?${qs}` : ""}`,
   )
 }
 

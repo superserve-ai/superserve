@@ -52,9 +52,9 @@ export const providerKeys = {
   all: ["providers"] as const,
 }
 
-export const proxyAuditKeys = {
-  sandbox: (sandboxId: string | undefined, filters?: { status?: string }) =>
-    ["proxy-audit", "sandbox", sandboxId, filters ?? {}] as const,
+export const networkKeys = {
+  sandbox: (sandboxId: string | undefined) =>
+    ["network", "sandbox", sandboxId] as const,
 }
 
 export const templateKeys = {
