@@ -1,23 +1,18 @@
 "use client"
 
-import { useInfiniteQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 
 import { networkKeys } from "@/lib/api/query-keys"
 import { getSandboxNetwork } from "@/lib/api/secrets"
 
-const PAGE_SIZE = 50
+export const NETWORK_PAGE_SIZE = 50
 
-/** The unified per-sandbox network log, paginated by the `ts` cursor. */
+/** The most recent per-sandbox network events. The dashboard shows a recent
+ *  window; the full log is available via the API. */
 export function useSandboxNetwork(sandboxId: string | undefined) {
-  return useInfiniteQuery({
+  return useQuery({
     queryKey: networkKeys.sandbox(sandboxId),
-    queryFn: ({ pageParam }) =>
-      getSandboxNetwork(sandboxId!, { before: pageParam, limit: PAGE_SIZE }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) =>
-      lastPage.length === PAGE_SIZE
-        ? lastPage[lastPage.length - 1].ts
-        : undefined,
+    queryFn: () => getSandboxNetwork(sandboxId!, { limit: NETWORK_PAGE_SIZE }),
     enabled: Boolean(sandboxId),
   })
 }

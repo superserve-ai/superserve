@@ -4,7 +4,6 @@ import { ShieldCheckIcon } from "@phosphor-icons/react"
 import type { BadgeVariant } from "@superserve/ui"
 import {
   Badge,
-  Button,
   Select,
   SelectItem,
   SelectPopup,
@@ -23,6 +22,7 @@ import Link from "next/link"
 
 import { EmptyState } from "@/components/empty-state"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
+import { AUDIT_PAGE_SIZE } from "@/hooks/use-secrets"
 import type { AuditStatusFilter, ProxyAuditEvent } from "@/lib/api/types"
 import { formatTime } from "@/lib/format"
 
@@ -50,9 +50,6 @@ interface AuditLogTableProps {
   onStatusFilterChange: (filter: AuditStatusFilter) => void
   showSandboxColumn?: boolean
   emptyDescription?: string
-  hasMore?: boolean
-  isFetchingMore?: boolean
-  onLoadMore?: () => void
 }
 
 export function AuditLogTable({
@@ -63,9 +60,6 @@ export function AuditLogTable({
   onStatusFilterChange,
   showSandboxColumn,
   emptyDescription = "Requests made with an attached secret appear here.",
-  hasMore,
-  isFetchingMore,
-  onLoadMore,
 }: AuditLogTableProps) {
   return (
     <>
@@ -203,17 +197,11 @@ export function AuditLogTable({
               })}
             </StickyHoverTableBody>
           </Table>
-          {hasMore && onLoadMore && (
-            <div className="flex justify-center border-t border-border py-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onLoadMore}
-                disabled={isFetchingMore}
-              >
-                {isFetchingMore ? "Loading…" : "Load more"}
-              </Button>
-            </div>
+          {events.length >= AUDIT_PAGE_SIZE && (
+            <p className="border-t border-border px-4 py-2 text-xs text-muted">
+              Showing the {AUDIT_PAGE_SIZE} most recent events. Use the API for
+              the full log.
+            </p>
           )}
         </div>
       )}

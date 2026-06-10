@@ -142,7 +142,6 @@ export default function SandboxDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false)
 
   const network = useSandboxNetwork(sandboxId)
-  const networkEvents = network.data?.pages.flat()
 
   const { data: activity, isPending: activityPending } = useQuery({
     queryKey: auditLogKeys.bySandbox(sandboxId),
@@ -265,11 +264,8 @@ export default function SandboxDetailPage() {
         {/* Layer 7: unified egress log (connections + secret requests) */}
         <NetworkLogTable
           title="Network"
-          events={networkEvents}
+          events={network.data}
           isPending={network.isPending}
-          hasMore={network.hasNextPage}
-          isFetchingMore={network.isFetchingNextPage}
-          onLoadMore={() => network.fetchNextPage()}
         />
       </div>
     </div>

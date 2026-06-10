@@ -149,15 +149,12 @@ export default function SecretDetailPage() {
 
         <AuditLogTable
           title="Activity"
-          events={audit.data?.pages.flat()}
+          events={audit.data}
           isPending={audit.isPending}
           statusFilter={auditFilter}
           onStatusFilterChange={setAuditFilter}
           showSandboxColumn
           emptyDescription="Every request authenticated with this secret appears here."
-          hasMore={audit.hasNextPage}
-          isFetchingMore={audit.isFetchingNextPage}
-          onLoadMore={() => audit.fetchNextPage()}
         />
       </div>
     </div>

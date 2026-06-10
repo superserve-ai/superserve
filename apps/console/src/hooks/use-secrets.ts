@@ -1,12 +1,7 @@
 "use client"
 
 import { useToast } from "@superserve/ui"
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { ApiError } from "@/lib/api/client"
 import { secretKeys } from "@/lib/api/query-keys"
@@ -26,7 +21,7 @@ import type {
   UpdateSecretRequest,
 } from "@/lib/api/types"
 
-const AUDIT_PAGE_SIZE = 50
+export const AUDIT_PAGE_SIZE = 50
 
 export function useSecrets() {
   return useQuery({
@@ -123,19 +118,13 @@ export function useSecretAudit(
   name: string | undefined,
   params?: { status?: AuditStatusFilter },
 ) {
-  return useInfiniteQuery({
+  return useQuery({
     queryKey: secretKeys.audit(name, { status: params?.status }),
-    queryFn: ({ pageParam }) =>
+    queryFn: () =>
       getSecretAudit(name!, {
         limit: AUDIT_PAGE_SIZE,
-        before: pageParam,
         status: params?.status,
       }),
-    initialPageParam: undefined as number | undefined,
-    getNextPageParam: (lastPage) =>
-      lastPage.length === AUDIT_PAGE_SIZE
-        ? lastPage[lastPage.length - 1].id
-        : undefined,
     enabled: Boolean(name),
   })
 }

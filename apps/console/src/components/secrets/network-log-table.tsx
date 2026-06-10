@@ -4,7 +4,6 @@ import { GlobeIcon } from "@phosphor-icons/react"
 import type { BadgeVariant } from "@superserve/ui"
 import {
   Badge,
-  Button,
   Table,
   TableCell,
   TableHead,
@@ -17,6 +16,7 @@ import {
 
 import { EmptyState } from "@/components/empty-state"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
+import { NETWORK_PAGE_SIZE } from "@/hooks/use-network"
 import type { NetworkEvent } from "@/lib/api/types"
 import { formatTime } from "@/lib/format"
 import { formatBytes } from "@/lib/sandbox-utils"
@@ -38,18 +38,12 @@ interface NetworkLogTableProps {
   title: string
   events: NetworkEvent[] | undefined
   isPending: boolean
-  hasMore?: boolean
-  isFetchingMore?: boolean
-  onLoadMore?: () => void
 }
 
 export function NetworkLogTable({
   title,
   events,
   isPending,
-  hasMore,
-  isFetchingMore,
-  onLoadMore,
 }: NetworkLogTableProps) {
   return (
     <>
@@ -115,17 +109,11 @@ export function NetworkLogTable({
               ))}
             </StickyHoverTableBody>
           </Table>
-          {hasMore && onLoadMore && (
-            <div className="flex justify-center border-t border-border py-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onLoadMore}
-                disabled={isFetchingMore}
-              >
-                {isFetchingMore ? "Loading…" : "Load more"}
-              </Button>
-            </div>
+          {events.length >= NETWORK_PAGE_SIZE && (
+            <p className="border-t border-border px-4 py-2 text-xs text-muted">
+              Showing the {NETWORK_PAGE_SIZE} most recent events. Use the API
+              for the full log.
+            </p>
           )}
         </div>
       )}
