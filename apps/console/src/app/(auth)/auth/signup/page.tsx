@@ -62,7 +62,9 @@ function SignUpContent() {
           method: "email",
           reason: result.error,
         })
-        if (result.error === "Database error saving new user") {
+        if (
+          result.error?.toLowerCase().includes("database error saving new user")
+        ) {
           router.push("/auth/auth-code-error")
           return
         }
