@@ -62,10 +62,8 @@ function SignUpContent() {
           method: "email",
           reason: result.error,
         })
-        if (
-          result.error?.toLowerCase().includes("database error saving new user")
-        ) {
-          router.push("/auth/auth-code-error")
+        if ("errorCode" in result && result.errorCode === "blocked_email") {
+          router.push("/auth/auth-code-error?reason=signup_blocked")
           return
         }
         setErrors({ form: result.error || "Error creating account." })

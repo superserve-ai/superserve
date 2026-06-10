@@ -3,6 +3,7 @@
 import { z } from "zod"
 
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
+import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
 import { sendEmail } from "@/lib/email/send"
 import { ConfirmationEmail } from "@/lib/email/templates/confirmation"
 import { WelcomeEmail } from "@/lib/email/templates/welcome"
@@ -46,6 +47,14 @@ export const signUpWithEmail = async (
         return {
           success: false,
           error: "An account with this email already exists.",
+        }
+      }
+      if (error.message.toLowerCase().includes(BLOCKED_TRIGGER_MESSAGE)) {
+        console.warn("Signup blocked by trigger", { email: parsed.data.email })
+        return {
+          success: false,
+          error: "Signup is not available for this email address.",
+          errorCode: "blocked_email" as const,
         }
       }
       return { success: false, error: error.message }

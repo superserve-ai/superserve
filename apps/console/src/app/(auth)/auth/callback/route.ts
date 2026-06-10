@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { sendWelcomeEmail } from "@/app/(auth)/auth/signup/action"
+import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createServerClient } from "@/lib/supabase/server"
@@ -50,6 +51,18 @@ export async function GET(request: Request) {
     }
 
     if (error) {
+      const blocked = error.message
+        .toLowerCase()
+        .includes(BLOCKED_TRIGGER_MESSAGE)
+      if (blocked) {
+        console.warn("OAuth signup blocked by trigger")
+        return NextResponse.redirect(
+          buildRedirectUrl(
+            origin,
+            "/auth/auth-code-error?reason=signup_blocked",
+          ),
+        )
+      }
       console.error("Auth callback error:", error.message, {
         code: !!code,
         tokenHash: !!tokenHash,

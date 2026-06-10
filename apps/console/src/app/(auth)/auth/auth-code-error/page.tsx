@@ -1,12 +1,20 @@
-import { WarningIcon } from "@phosphor-icons/react/dist/ssr"
+"use client"
+
+import { WarningIcon } from "@phosphor-icons/react"
 import { Button } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
+import { Suspense } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 
-export default function AuthCodeErrorPage() {
+function AuthCodeErrorContent() {
+  const searchParams = useSearchParams()
+  const isSignupContext = searchParams.get("reason") === "signup_blocked"
+  const retryHref = isSignupContext ? "/auth/signup" : "/auth/signin"
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
       <DitherBackground />
@@ -31,17 +39,27 @@ export default function AuthCodeErrorPage() {
             Authentication Error
           </h1>
           <p className="mt-2 text-center text-xs text-muted">
-            Something went wrong during sign in. Please try again.
+            Something went wrong. Please try again.
           </p>
-          <Button
-            render={<Link href="/auth/signin" />}
-            size="sm"
-            className="mt-5"
-          >
+          <Button render={<Link href={retryHref} />} size="sm" className="mt-5">
             Try Again
           </Button>
         </div>
       </div>
     </div>
+  )
+}
+
+export default function AuthCodeErrorPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="h-5 w-5 animate-spin border-2 border-primary border-t-transparent" />
+        </div>
+      }
+    >
+      <AuthCodeErrorContent />
+    </Suspense>
   )
 }
