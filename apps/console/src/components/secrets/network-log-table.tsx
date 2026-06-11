@@ -92,9 +92,9 @@ export function NetworkLogTable({
                   </TableCell>
                   <TableCell
                     className="max-w-0 truncate font-mono text-xs text-muted"
-                    title={event.host}
+                    title={event.host || event.dst_ip || undefined}
                   >
-                    {event.host ?? "—"}
+                    {event.host || event.dst_ip || "—"}
                   </TableCell>
                   <TableCell className="max-w-0 truncate font-mono text-xs">
                     <NetworkDetail event={event} />
