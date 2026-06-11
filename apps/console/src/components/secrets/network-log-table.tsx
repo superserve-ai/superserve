@@ -38,12 +38,14 @@ interface NetworkLogTableProps {
   title: string
   events: NetworkEvent[] | undefined
   isPending: boolean
+  hasMore?: boolean
 }
 
 export function NetworkLogTable({
   title,
   events,
   isPending,
+  hasMore,
 }: NetworkLogTableProps) {
   return (
     <>
@@ -109,7 +111,7 @@ export function NetworkLogTable({
               ))}
             </StickyHoverTableBody>
           </Table>
-          {events.length >= NETWORK_PAGE_SIZE && (
+          {hasMore && (
             <p className="border-t border-border px-4 py-2 text-xs text-muted">
               Showing the {NETWORK_PAGE_SIZE} most recent events. Use the API
               for the full log.

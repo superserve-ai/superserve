@@ -264,8 +264,9 @@ export default function SandboxDetailPage() {
         {/* Layer 7: unified egress log (connections + secret requests) */}
         <NetworkLogTable
           title="Network"
-          events={network.data}
+          events={network.data?.data}
           isPending={network.isPending}
+          hasMore={network.data?.has_more}
         />
       </div>
     </div>
