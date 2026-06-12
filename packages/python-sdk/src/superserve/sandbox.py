@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins
 import threading
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlencode
 
 import httpx
 
@@ -13,7 +14,15 @@ from ._http import api_request
 from .commands import Commands, CommandsDeps
 from .errors import NotFoundError, SandboxError
 from .files import Files
-from .types import NetworkConfig, SandboxInfo, SandboxStatus, to_sandbox_info
+from .types import (
+    NetworkConfig,
+    NetworkLogPage,
+    NetworkVerdict,
+    SandboxInfo,
+    SandboxStatus,
+    to_network_log_page,
+    to_sandbox_info,
+)
 
 if TYPE_CHECKING:
     from .async_template import AsyncTemplate
@@ -96,11 +105,17 @@ class Sandbox:
         timeout_seconds: int | None = None,
         metadata: dict[str, str] | None = None,
         env_vars: dict[str, str] | None = None,
+        secrets: dict[str, str] | None = None,
         network: NetworkConfig | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> Sandbox:
-        """Create a new sandbox. Returns once the sandbox is ready."""
+        """Create a new sandbox. Returns once the sandbox is ready.
+
+        ``secrets`` binds team-stored secrets to environment variables as
+        ``{ENV_VAR: secret_name}``: the agent sees a proxy token under each env
+        var; the in-host daemon swaps it for the real credential at egress.
+        """
         config = resolve_config(api_key=api_key, base_url=base_url)
 
         body: dict[str, Any] = {"name": name}
@@ -120,6 +135,8 @@ class Sandbox:
             body["metadata"] = metadata
         if env_vars is not None:
             body["env_vars"] = env_vars
+        if secrets is not None:
+            body["secrets"] = secrets
         if network:
             body["network"] = {
                 "allow_out": network.allow_out,
@@ -292,6 +309,44 @@ class Sandbox:
             json_body=body,
             client=self._http_client,
         )
+
+    def get_network_log(
+        self,
+        *,
+        limit: int | None = None,
+        before: str | None = None,
+        since: str | None = None,
+        verdict: "NetworkVerdict | str | None" = None,
+    ) -> NetworkLogPage:
+        """The sandbox's network log: every outbound connection it made, newest
+        first. ``connection`` rows are raw egress (host, bytes, allow/deny
+        verdict); ``request`` rows are credential-injected requests (method,
+        path, status, secret used).
+
+        Filter by time window (``since``/``before``) and ``verdict``. Paginate
+        by passing the returned ``next_cursor`` as ``before`` while ``has_more``.
+        """
+        params: dict[str, Any] = {}
+        if limit is not None:
+            params["limit"] = limit
+        if before is not None:
+            params["before"] = before
+        if since is not None:
+            params["since"] = since
+        if verdict is not None:
+            params["verdict"] = (
+                verdict.value if isinstance(verdict, NetworkVerdict) else verdict
+            )
+        url = f"{self._config.base_url}/sandboxes/{self.id}/network"
+        if params:
+            url += "?" + urlencode(params)
+        raw = api_request(
+            "GET",
+            url,
+            headers={"X-API-Key": self._config.api_key},
+            client=self._http_client,
+        )
+        return to_network_log_page(raw)
 
     def __repr__(self) -> str:
         return (

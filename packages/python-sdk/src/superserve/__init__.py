@@ -1,6 +1,7 @@
 """Superserve SDK — sandbox infrastructure for running code in isolated cloud environments."""
 
 from .async_sandbox import AsyncSandbox
+from .async_secrets import AsyncSecret
 from .async_template import AsyncTemplate
 from .command_session import AsyncCommandSession
 from .errors import (
@@ -14,7 +15,9 @@ from .errors import (
     ServerError,
     ValidationError,
 )
+from .providers import AsyncProvider, Provider
 from .sandbox import Sandbox
+from .secrets import Secret
 from .template import Template
 from .types import (
     BuildLogEvent,
@@ -24,9 +27,17 @@ from .types import (
     EnvStep,
     EnvStepValue,
     NetworkConfig,
+    NetworkEvent,
+    NetworkLogPage,
+    NetworkVerdict,
+    ProviderShortcut,
+    ProxyAuditEvent,
     RunStep,
     SandboxInfo,
     SandboxStatus,
+    SecretAuthType,
+    SecretInfo,
+    SecretSandboxBinding,
     TemplateBuildInfo,
     TemplateBuildStatus,
     TemplateInfo,
@@ -40,7 +51,9 @@ __version__ = "0.7.4"
 
 __all__ = [
     "AsyncCommandSession",
+    "AsyncProvider",
     "AsyncSandbox",
+    "AsyncSecret",
     "AsyncTemplate",
     "AuthenticationError",
     "BuildError",
@@ -52,7 +65,13 @@ __all__ = [
     "EnvStep",
     "EnvStepValue",
     "NetworkConfig",
+    "NetworkEvent",
+    "NetworkLogPage",
+    "NetworkVerdict",
     "NotFoundError",
+    "Provider",
+    "ProviderShortcut",
+    "ProxyAuditEvent",
     "RateLimitError",
     "RunStep",
     "Sandbox",
@@ -60,6 +79,10 @@ __all__ = [
     "SandboxInfo",
     "SandboxStatus",
     "SandboxTimeoutError",
+    "Secret",
+    "SecretAuthType",
+    "SecretInfo",
+    "SecretSandboxBinding",
     "ServerError",
     "Template",
     "TemplateBuildInfo",
