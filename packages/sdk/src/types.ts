@@ -49,6 +49,12 @@ export interface SandboxCreateOptions extends ConnectionOptions {
   timeoutSeconds?: number
   metadata?: Record<string, string>
   envVars?: Record<string, string>
+  /**
+   * Bind team-stored secrets to environment variables: `{ ENV_VAR: secretName }`.
+   * The agent sees a proxy token under each env var; the in-host daemon swaps it
+   * for the real credential at egress. Create secrets with `Secret.create()`.
+   */
+  secrets?: Record<string, string>
   network?: NetworkConfig
 }
 
@@ -435,4 +441,406 @@ export function toBuildLogEvent(raw: ApiBuildLogEvent): BuildLogEvent {
  */
 export function buildStepsToApi(steps: BuildStep[]): unknown[] {
   return [...steps]
+}
+
+// ---------------------------------------------------------------------------
+// Secrets
+// ---------------------------------------------------------------------------
+
+export type SecretAuthType =
+  | "bearer"
+  | "basic"
+  | "api-key"
+  | "custom"
+  | "per_host"
+
+/**
+ * One auth rule — how the credential is attached to an outbound request:
+ * - `bearer`  → `Authorization: Bearer <value>`
+ * - `basic`   → HTTP Basic, `<username>:<value>`
+ * - `api-key` → a named header, `<header>: <prefix><value>`
+ * - `custom`  → arbitrary header templates referencing `{{ value }}`
+ */
+export interface SecretAuthRule {
+  type: "bearer" | "basic" | "api-key" | "custom"
+  /** Header name for `api-key` (e.g. `"x-api-key"`). */
+  header?: string
+  /** Value prefix for `api-key` (e.g. `"Token "`). */
+  prefix?: string
+  /** Username for `basic`; the secret value is the password. */
+  username?: string
+  /** Header templates for `custom`; each value may reference `{{ value }}`. */
+  headers?: Record<string, string>
+}
+
+/** Per-host auth — pick a rule by upstream host at egress. */
+export interface SecretAuthPerHost {
+  perHost: Array<SecretAuthRule & { hosts: string[] }>
+}
+
+/** Custom auth config: a single rule applied to every host, or per-host rules. */
+export type SecretAuth = SecretAuthRule | SecretAuthPerHost
+
+export interface SecretInfo {
+  id: string
+  name: string
+  authType: SecretAuthType
+  authConfig: Record<string, unknown>
+  /** Set when created from a provider shortcut (e.g. `"anthropic"`). */
+  providerShortcut?: string
+  hosts: string[]
+  createdAt: Date
+  updatedAt: Date
+  lastUsedAt?: Date
+}
+
+export interface SecretCreateOptions extends ConnectionOptions {
+  name: string
+  /** The credential to protect. It never leaves the platform in cleartext. */
+  value: string
+  /**
+   * A built-in provider shortcut (e.g. `"anthropic"`) — see `Provider.list()`.
+   * Mutually exclusive with `auth` + `hosts`.
+   */
+  provider?: string
+  /** Custom auth config. Requires `hosts`. Mutually exclusive with `provider`. */
+  auth?: SecretAuth
+  /** Upstream hosts the credential may be used with. Required with `auth`. */
+  hosts?: string[]
+}
+
+export type SecretListOptions = ConnectionOptions
+
+export type AuditStatusFilter = "2xx" | "3xx" | "4xx" | "5xx" | "errors"
+
+export interface SecretAuditOptions extends ConnectionOptions {
+  limit?: number
+  /** Cursor — return events older than this event id. */
+  before?: number
+  /** Filter by HTTP status class, or `"errors"` for proxy-level failures. */
+  status?: AuditStatusFilter
+}
+
+/** One request made with a secret attached (`Secret.getAudit()`). */
+export interface ProxyAuditEvent {
+  id: number
+  ts: Date
+  sandboxId: string
+  /** Null when the referenced sandbox has been deleted. */
+  sandboxName?: string
+  secretId?: string
+  method: string
+  host: string
+  path: string
+  status: number
+  upstreamStatus?: number
+  latencyMs?: number
+  errorCode?: string
+}
+
+/** A sandbox a secret is bound to (`Secret.getSandboxes()`). */
+export interface SecretSandboxBinding {
+  sandboxId: string
+  sandboxName: string
+  envKey: string
+  status: SandboxStatus
+}
+
+// ---------------------------------------------------------------------------
+// Providers
+// ---------------------------------------------------------------------------
+
+/** A built-in provider shortcut (`Provider.list()`). */
+export interface ProviderShortcut {
+  /** Stable identifier passed as `provider` to `Secret.create()`. */
+  name: string
+  /** Human-readable label. */
+  display: string
+  authType: SecretAuthType
+  authConfig: Record<string, unknown>
+  hosts: string[]
+  /** Prefix-shaped sample of the proxy token issued (e.g. `"sk-ant-api03-..."`). */
+  tokenShape: string
+}
+
+// ---------------------------------------------------------------------------
+// Network log
+// ---------------------------------------------------------------------------
+
+export type NetworkVerdict = "allowed" | "blocked" | "failed"
+
+/**
+ * One row in a sandbox's network log (`sandbox.getNetworkLog()`). `kind`
+ * selects which fields are present: `connection` rows carry
+ * `dstIp`/`verdict`/byte counts; `request` rows carry `method`/`path`/`status`
+ * and the `secretId` injected (when a secret was used).
+ */
+export interface NetworkEvent {
+  kind: "connection" | "request"
+  id: number
+  ts: Date
+  host?: string
+
+  // connection
+  dstIp?: string
+  dstPort?: number
+  verdict?: NetworkVerdict
+  matchRule?: string
+  bytesSent?: number
+  bytesRecv?: number
+
+  // request
+  method?: string
+  path?: string
+  status?: number
+  upstreamStatus?: number
+  latencyMs?: number
+  secretId?: string
+  errorCode?: string
+}
+
+/** A page of network events plus its pagination cursor. */
+export interface NetworkLogPage {
+  events: NetworkEvent[]
+  /** Pass as `before` to fetch the next page; undefined when `hasMore` is false. */
+  nextCursor?: string
+  hasMore: boolean
+}
+
+export interface NetworkLogOptions {
+  limit?: number
+  /** Return rows strictly older than this RFC3339 timestamp. Also the page cursor. */
+  before?: string
+  /** Return rows at or newer than this RFC3339 timestamp. */
+  since?: string
+  /** Filter to connections with this verdict (excludes request rows). */
+  verdict?: NetworkVerdict
+  signal?: AbortSignal
+}
+
+/** One env-var → secret binding on a sandbox. */
+export interface SandboxSecretBinding {
+  envKey: string
+  secretName: string
+  /** True when the underlying secret was deleted; the proxy token no longer resolves. */
+  revoked?: boolean
+}
+
+// ---------------------------------------------------------------------------
+// Internal: Secrets / Providers / Network API shapes
+// ---------------------------------------------------------------------------
+
+/** @internal */
+export interface ApiSecretResponse {
+  id?: string
+  name?: string
+  auth_type?: string
+  auth_config?: Record<string, unknown>
+  provider_shortcut?: string | null
+  hosts?: string[]
+  created_at?: string
+  updated_at?: string
+  last_used_at?: string | null
+}
+
+/** @internal */
+export interface ApiProviderShortcut {
+  name?: string
+  display?: string
+  auth_type?: string
+  auth_config?: Record<string, unknown>
+  hosts?: string[]
+  token_shape?: string
+}
+
+/** @internal */
+export interface ApiProxyAuditEvent {
+  id?: number
+  ts?: string
+  sandbox_id?: string
+  sandbox_name?: string | null
+  secret_id?: string
+  method?: string
+  host?: string
+  path?: string
+  status?: number
+  upstream_status?: number
+  latency_ms?: number
+  error_code?: string
+}
+
+/** @internal */
+export interface ApiSecretSandbox {
+  sandbox_id?: string
+  sandbox_name?: string
+  env_key?: string
+  status?: string
+}
+
+/** @internal */
+export interface ApiNetworkEvent {
+  kind?: string
+  id?: number
+  ts?: string
+  host?: string
+  dst_ip?: string
+  dst_port?: number
+  verdict?: string
+  match_rule?: string
+  bytes_sent?: number
+  bytes_recv?: number
+  method?: string
+  path?: string
+  status?: number
+  upstream_status?: number
+  latency_ms?: number
+  secret_id?: string
+  error_code?: string
+}
+
+/** @internal */
+export interface ApiNetworkPage {
+  data?: ApiNetworkEvent[]
+  next_cursor?: string | null
+  has_more?: boolean
+}
+
+// ---------------------------------------------------------------------------
+// Secrets / Providers / Network converters
+// ---------------------------------------------------------------------------
+
+export function toSecretInfo(raw: ApiSecretResponse): SecretInfo {
+  if (!raw.id) {
+    throw new SandboxError("Invalid API response: missing secret id")
+  }
+  if (!raw.name) {
+    throw new SandboxError("Invalid API response: missing secret name")
+  }
+  if (!raw.auth_type) {
+    throw new SandboxError("Invalid API response: missing auth_type")
+  }
+  if (!raw.created_at) {
+    throw new SandboxError("Invalid API response: missing created_at")
+  }
+  return {
+    id: raw.id,
+    name: raw.name,
+    authType: raw.auth_type as SecretAuthType,
+    authConfig: raw.auth_config ?? {},
+    providerShortcut: raw.provider_shortcut ?? undefined,
+    hosts: raw.hosts ?? [],
+    createdAt: new Date(raw.created_at),
+    updatedAt: new Date(raw.updated_at ?? raw.created_at),
+    lastUsedAt: raw.last_used_at ? new Date(raw.last_used_at) : undefined,
+  }
+}
+
+/** @internal Build the POST /secrets body from create options. */
+export function secretCreateBody(
+  options: SecretCreateOptions,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    name: options.name,
+    value: options.value,
+  }
+  if (options.provider !== undefined) {
+    body.provider = options.provider
+  }
+  if (options.auth !== undefined) {
+    body.auth =
+      "perHost" in options.auth
+        ? { per_host: options.auth.perHost }
+        : options.auth
+  }
+  if (options.hosts !== undefined) {
+    body.hosts = options.hosts
+  }
+  return body
+}
+
+export function toProviderShortcut(raw: ApiProviderShortcut): ProviderShortcut {
+  if (!raw.name) {
+    throw new SandboxError("Invalid API response: missing provider name")
+  }
+  return {
+    name: raw.name,
+    display: raw.display ?? raw.name,
+    authType: (raw.auth_type ?? "bearer") as SecretAuthType,
+    authConfig: raw.auth_config ?? {},
+    hosts: raw.hosts ?? [],
+    tokenShape: raw.token_shape ?? "",
+  }
+}
+
+export function toProxyAuditEvent(raw: ApiProxyAuditEvent): ProxyAuditEvent {
+  if (raw.id === undefined) {
+    throw new SandboxError("Invalid audit event: missing id")
+  }
+  if (!raw.ts) {
+    throw new SandboxError("Invalid audit event: missing ts")
+  }
+  return {
+    id: raw.id,
+    ts: new Date(raw.ts),
+    sandboxId: raw.sandbox_id ?? "",
+    sandboxName: raw.sandbox_name ?? undefined,
+    secretId: raw.secret_id,
+    method: raw.method ?? "",
+    host: raw.host ?? "",
+    path: raw.path ?? "",
+    status: raw.status ?? 0,
+    upstreamStatus: raw.upstream_status,
+    latencyMs: raw.latency_ms,
+    errorCode: raw.error_code,
+  }
+}
+
+export function toSecretSandboxBinding(
+  raw: ApiSecretSandbox,
+): SecretSandboxBinding {
+  return {
+    sandboxId: raw.sandbox_id ?? "",
+    sandboxName: raw.sandbox_name ?? "",
+    envKey: raw.env_key ?? "",
+    status: (raw.status ?? "active") as SandboxStatus,
+  }
+}
+
+export function toNetworkEvent(raw: ApiNetworkEvent): NetworkEvent {
+  if (raw.id === undefined) {
+    throw new SandboxError("Invalid network event: missing id")
+  }
+  if (!raw.kind) {
+    throw new SandboxError("Invalid network event: missing kind")
+  }
+  if (!raw.ts) {
+    throw new SandboxError("Invalid network event: missing ts")
+  }
+  return {
+    kind: raw.kind as NetworkEvent["kind"],
+    id: raw.id,
+    ts: new Date(raw.ts),
+    host: raw.host,
+    dstIp: raw.dst_ip,
+    dstPort: raw.dst_port,
+    verdict: raw.verdict as NetworkVerdict | undefined,
+    matchRule: raw.match_rule,
+    bytesSent: raw.bytes_sent,
+    bytesRecv: raw.bytes_recv,
+    method: raw.method,
+    path: raw.path,
+    status: raw.status,
+    upstreamStatus: raw.upstream_status,
+    latencyMs: raw.latency_ms,
+    secretId: raw.secret_id,
+    errorCode: raw.error_code,
+  }
+}
+
+export function toNetworkLogPage(raw: ApiNetworkPage): NetworkLogPage {
+  return {
+    events: (raw.data ?? []).map(toNetworkEvent),
+    nextCursor: raw.next_cursor ?? undefined,
+    hasMore: raw.has_more ?? false,
+  }
 }
