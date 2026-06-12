@@ -69,7 +69,17 @@
               "sandbox/lifecycle",
               "sandbox/metadata",
               "sandbox/networking",
-              "sandbox/environment-variables"
+              "sandbox/network-log"
+            ]
+          },
+          {
+            "group": "Secrets & env vars",
+            "pages": [
+              "sandbox/environment-variables",
+              "secrets/overview",
+              "secrets/create",
+              "secrets/binding",
+              "secrets/audit"
             ]
           },
           {
@@ -106,6 +116,7 @@
             "group": "Reference",
             "pages": [
               "sdk-reference/sandbox",
+              "sdk-reference/secret",
               "sdk-reference/template",
               "sdk-reference/commands",
               "sdk-reference/files"

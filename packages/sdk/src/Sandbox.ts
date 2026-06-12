@@ -20,15 +20,19 @@ import { NotFoundError, SandboxError } from "./errors.js"
 import { Files } from "./files.js"
 import { request, requestVoid } from "./http.js"
 import type {
+  ApiNetworkPage,
   ApiSandboxResponse,
   ConnectionOptions,
+  NetworkLogOptions,
+  NetworkLogPage,
   SandboxCreateOptions,
   SandboxInfo,
   SandboxListOptions,
+  SandboxSecretBinding,
   SandboxStatus,
   SandboxUpdateOptions,
 } from "./types.js"
-import { toSandboxInfo } from "./types.js"
+import { toNetworkLogPage, toSandboxInfo } from "./types.js"
 
 export class Sandbox {
   /** Unique sandbox ID (UUID). */
@@ -42,6 +46,12 @@ export class Sandbox {
 
   /** User-supplied metadata tags at construction time. Call getInfo() to refresh. */
   readonly metadata: Record<string, string>
+
+  /**
+   * Secrets bound to this sandbox (env-var → secret) at construction time,
+   * when any were attached. Call getInfo() to refresh.
+   */
+  readonly secrets?: SandboxSecretBinding[]
 
   /** Execute shell commands inside this sandbox. */
   readonly commands: Commands
@@ -67,6 +77,7 @@ export class Sandbox {
     this.name = info.name
     this.status = info.status
     this.metadata = info.metadata
+    this.secrets = info.secrets
     this._accessToken = accessToken
     this._config = config
 
@@ -148,6 +159,7 @@ export class Sandbox {
     }
     if (options.metadata !== undefined) body.metadata = options.metadata
     if (options.envVars !== undefined) body.env_vars = options.envVars
+    if (options.secrets !== undefined) body.secrets = options.secrets
     if (options.network) {
       body.network = {
         allow_out: options.network.allowOut,
@@ -336,5 +348,32 @@ export class Sandbox {
       headers: { "X-API-Key": this._config.apiKey },
       body,
     })
+  }
+
+  /**
+   * The sandbox's network log: every outbound connection it made, newest first.
+   * `connection` rows are raw egress (host, bytes, allow/deny verdict); `request`
+   * rows are credential-injected requests (method, path, status, secret used).
+   *
+   * Filter by time window (`since`/`before`) and `verdict`. Paginate by passing
+   * the returned `nextCursor` as `before` while `hasMore` is true.
+   */
+  async getNetworkLog(
+    options: NetworkLogOptions = {},
+  ): Promise<NetworkLogPage> {
+    const qs = new URLSearchParams()
+    if (options.limit !== undefined) qs.set("limit", String(options.limit))
+    if (options.before !== undefined) qs.set("before", options.before)
+    if (options.since !== undefined) qs.set("since", options.since)
+    if (options.verdict !== undefined) qs.set("verdict", options.verdict)
+    const suffix = qs.toString() ? `?${qs.toString()}` : ""
+
+    const raw = await request<ApiNetworkPage>({
+      method: "GET",
+      url: `${this._config.baseUrl}/sandboxes/${this.id}/network${suffix}`,
+      headers: { "X-API-Key": this._config.apiKey },
+      signal: options.signal,
+    })
+    return toNetworkLogPage(raw)
   }
 }

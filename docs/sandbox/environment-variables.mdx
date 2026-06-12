@@ -6,6 +6,10 @@ description: Inject environment variables at sandbox creation - applied to every
 
 Env vars set at creation time are applied to **every** process the sandbox runs: `commands.run()`, shells, and anything those spawn. They persist across `pause()` / `resume()` cycles.
 
+<Warning>
+Env var values are delivered **in plain text** — any process in the sandbox can read them. For API keys and other credentials, use [secrets](/secrets/overview) instead: the sandbox only ever holds a stand-in token, and the real value is attached to outbound requests.
+</Warning>
+
 <CodeGroup>
 ```typescript TypeScript
 const sandbox = await Sandbox.create({
