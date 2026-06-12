@@ -53,6 +53,32 @@ describe("Sandbox.create with secrets", () => {
     const { body } = await createSandbox()
     expect(body.secrets).toBeUndefined()
   })
+
+  it("surfaces bound secrets from the create response", async () => {
+    const mock = vi.fn(async () =>
+      jsonResponse({
+        ...baseSandbox,
+        secrets: [
+          { env_key: "ANTHROPIC_API_KEY", secret_name: "anthropic-prod" },
+          { env_key: "OLD_KEY", secret_name: "gone", revoked: true },
+        ],
+      }),
+    )
+    vi.stubGlobal("fetch", mock)
+    const sandbox = await Sandbox.create({
+      ...commonOpts,
+      name: "agent-1",
+      secrets: { ANTHROPIC_API_KEY: "anthropic-prod" },
+    })
+    expect(sandbox.secrets).toEqual([
+      {
+        envKey: "ANTHROPIC_API_KEY",
+        secretName: "anthropic-prod",
+        revoked: undefined,
+      },
+      { envKey: "OLD_KEY", secretName: "gone", revoked: true },
+    ])
+  })
 })
 
 describe("sandbox.getNetworkLog", () => {

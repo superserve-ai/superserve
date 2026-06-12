@@ -28,6 +28,8 @@ export interface SandboxInfo {
   timeoutSeconds?: number
   network?: NetworkConfig
   metadata: Record<string, string>
+  /** Secrets bound to this sandbox (env-var → secret), when any are attached. */
+  secrets?: SandboxSecretBinding[]
 }
 
 // ---------------------------------------------------------------------------
@@ -150,6 +152,11 @@ export interface ApiSandboxResponse {
   timeout_seconds?: number
   network?: { allow_out?: string[]; deny_out?: string[] }
   metadata?: Record<string, string>
+  secrets?: Array<{
+    env_key?: string
+    secret_name?: string
+    revoked?: boolean
+  }>
 }
 
 /** @internal Response shape from POST /sandboxes/{id}/resume. */
@@ -210,6 +217,11 @@ export function toSandboxInfo(raw: ApiSandboxResponse): SandboxInfo {
       ? { allowOut: raw.network.allow_out, denyOut: raw.network.deny_out }
       : undefined,
     metadata: raw.metadata ?? {},
+    secrets: raw.secrets?.map((s) => ({
+      envKey: s.env_key ?? "",
+      secretName: s.secret_name ?? "",
+      revoked: s.revoked,
+    })),
   }
 }
 
@@ -607,7 +619,7 @@ export interface NetworkLogPage {
   hasMore: boolean
 }
 
-export interface NetworkLogOptions {
+export interface NetworkLogOptions extends ConnectionOptions {
   limit?: number
   /** Return rows strictly older than this RFC3339 timestamp. Also the page cursor. */
   before?: string
@@ -615,7 +627,6 @@ export interface NetworkLogOptions {
   since?: string
   /** Filter to connections with this verdict (excludes request rows). */
   verdict?: NetworkVerdict
-  signal?: AbortSignal
 }
 
 /** One env-var → secret binding on a sandbox. */

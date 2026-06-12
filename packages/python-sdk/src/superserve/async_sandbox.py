@@ -19,6 +19,7 @@ from .types import (
     NetworkLogPage,
     NetworkVerdict,
     SandboxInfo,
+    SandboxSecretBinding,
     SandboxStatus,
     to_network_log_page,
     to_sandbox_info,
@@ -42,6 +43,8 @@ class AsyncSandbox:
         self.name: str = info.name
         self.status: SandboxStatus = info.status
         self.metadata: dict[str, str] = info.metadata
+        # Secrets bound at construction time; call get_info() to refresh.
+        self.secrets: list[SandboxSecretBinding] | None = info.secrets
         self._access_token: str = access_token
         self._config = config
         self._http_client: httpx.AsyncClient = httpx.AsyncClient(timeout=30.0)

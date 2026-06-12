@@ -229,6 +229,32 @@ class TestSandboxSecretsAndNetwork:
             )
             assert body["secrets"] == {"ANTHROPIC_API_KEY": "anthropic-prod"}
 
+    def test_surfaces_bound_secrets(self) -> None:
+        with respx.mock() as router:
+            router.post(f"{API}/sandboxes").mock(
+                return_value=httpx.Response(
+                    200,
+                    json={
+                        "id": "sb-1",
+                        "name": "agent-1",
+                        "status": "active",
+                        "created_at": "2026-01-01T00:00:00Z",
+                        "access_token": "tok",
+                        "secrets": [
+                            {
+                                "env_key": "ANTHROPIC_API_KEY",
+                                "secret_name": "anthropic-prod",
+                            },
+                            {"env_key": "OLD", "secret_name": "gone", "revoked": True},
+                        ],
+                    },
+                )
+            )
+            sandbox = Sandbox.create(name="agent-1")
+            assert sandbox.secrets is not None
+            assert sandbox.secrets[0].env_key == "ANTHROPIC_API_KEY"
+            assert sandbox.secrets[1].revoked is True
+
     def test_get_network_log(self) -> None:
         with respx.mock() as router:
             sandbox, _ = self._sandbox(router)

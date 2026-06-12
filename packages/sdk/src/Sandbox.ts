@@ -28,6 +28,7 @@ import type {
   SandboxCreateOptions,
   SandboxInfo,
   SandboxListOptions,
+  SandboxSecretBinding,
   SandboxStatus,
   SandboxUpdateOptions,
 } from "./types.js"
@@ -45,6 +46,12 @@ export class Sandbox {
 
   /** User-supplied metadata tags at construction time. Call getInfo() to refresh. */
   readonly metadata: Record<string, string>
+
+  /**
+   * Secrets bound to this sandbox (env-var → secret) at construction time,
+   * when any were attached. Call getInfo() to refresh.
+   */
+  readonly secrets?: SandboxSecretBinding[]
 
   /** Execute shell commands inside this sandbox. */
   readonly commands: Commands
@@ -70,6 +77,7 @@ export class Sandbox {
     this.name = info.name
     this.status = info.status
     this.metadata = info.metadata
+    this.secrets = info.secrets
     this._accessToken = accessToken
     this._config = config
 

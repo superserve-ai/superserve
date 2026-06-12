@@ -23,6 +23,15 @@ class NetworkConfig(BaseModel):
     deny_out: Optional[list[str]] = None
 
 
+class SandboxSecretBinding(BaseModel):
+    """One env-var → secret binding on a sandbox."""
+
+    env_key: str
+    secret_name: str
+    # True when the underlying secret was deleted; the proxy token no longer resolves.
+    revoked: Optional[bool] = None
+
+
 class SandboxInfo(BaseModel):
     id: str
     name: str
@@ -33,6 +42,8 @@ class SandboxInfo(BaseModel):
     timeout_seconds: Optional[int] = None
     network: Optional[NetworkConfig] = None
     metadata: dict[str, str] = Field(default_factory=dict)
+    # Secrets bound to this sandbox, when any are attached.
+    secrets: Optional[list[SandboxSecretBinding]] = None
 
 
 class CommandResult(BaseModel):
@@ -64,6 +75,17 @@ def to_sandbox_info(raw: dict[str, Any]) -> SandboxInfo:
             deny_out=raw["network"].get("deny_out"),
         )
 
+    secrets = None
+    if raw.get("secrets"):
+        secrets = [
+            SandboxSecretBinding(
+                env_key=s.get("env_key", ""),
+                secret_name=s.get("secret_name", ""),
+                revoked=s.get("revoked"),
+            )
+            for s in raw["secrets"]
+        ]
+
     return SandboxInfo(
         id=raw["id"],
         name=raw.get("name", ""),
@@ -74,6 +96,7 @@ def to_sandbox_info(raw: dict[str, Any]) -> SandboxInfo:
         timeout_seconds=raw.get("timeout_seconds"),
         network=network,
         metadata=raw.get("metadata", {}),
+        secrets=secrets,
     )
 
 
