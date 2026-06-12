@@ -32,7 +32,8 @@ const sandbox = await Sandbox.create({
   name: "data-analyzer",
   timeoutSeconds: 3600,
   metadata: { env: "prod", owner: "agent-7" },
-  envVars: { OPENAI_API_KEY: "sk-..." },
+  envVars: { LOG_LEVEL: "debug" },
+  secrets: { OPENAI_API_KEY: "openai-prod" },
   network: {
     allowOut: ["api.openai.com", "*.github.com"],
     denyOut: ["0.0.0.0/0"],
@@ -47,7 +48,8 @@ sandbox = Sandbox.create(
     name="data-analyzer",
     timeout_seconds=3600,
     metadata={"env": "prod", "owner": "agent-7"},
-    env_vars={"OPENAI_API_KEY": "sk-..."},
+    env_vars={"LOG_LEVEL": "debug"},
+    secrets={"OPENAI_API_KEY": "openai-prod"},
     network=NetworkConfig(
         allow_out=["api.openai.com", "*.github.com"],
         deny_out=["0.0.0.0/0"],
@@ -55,6 +57,10 @@ sandbox = Sandbox.create(
 )
 ```
 </CodeGroup>
+
+<Note>
+Use **`secrets`** for credentials, not `envVars`. A secret binds an env var to a stored credential and attaches the real value to outbound requests — the real credential never enters the sandbox. See [Secrets](/secrets/overview).
+</Note>
 
 ## Common options
 
