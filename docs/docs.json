@@ -172,6 +172,7 @@
               "GET /sandboxes/{sandbox_id}",
               "PATCH /sandboxes/{sandbox_id}",
               "DELETE /sandboxes/{sandbox_id}",
+              "GET /sandboxes/{sandbox_id}/network",
               "POST /sandboxes/{sandbox_id}/pause",
               "POST /sandboxes/{sandbox_id}/resume",
               "POST /sandboxes/{sandbox_id}/activate",
@@ -190,6 +191,22 @@
           {
             "group": "Files",
             "pages": ["GET /files", "POST /files"]
+          },
+          {
+            "group": "Providers",
+            "pages": ["GET /providers"]
+          },
+          {
+            "group": "Secrets",
+            "pages": [
+              "GET /secrets",
+              "POST /secrets",
+              "GET /secrets/{name}",
+              "PATCH /secrets/{name}",
+              "DELETE /secrets/{name}",
+              "GET /secrets/{name}/audit",
+              "GET /secrets/{name}/sandboxes"
+            ]
           },
           {
             "group": "Templates",
