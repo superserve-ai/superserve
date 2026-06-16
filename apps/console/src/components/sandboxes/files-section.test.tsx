@@ -373,6 +373,31 @@ describe("FilesSection — download", () => {
     )
   })
 
+  it("sanitizes a path-traversal filename from Content-Disposition to its basename", async () => {
+    // The data plane runs untrusted user code, so its Content-Disposition is an
+    // untrusted boundary input — a traversal name must not steer the save.
+    fetchSpy.mockResolvedValue(
+      new Response(new Blob([new Uint8Array([1])]), {
+        status: 200,
+        headers: {
+          "content-type": "application/zip",
+          "content-disposition": 'attachment; filename="../../etc/passwd"',
+        },
+      }),
+    )
+    render(<FilesSection sandbox={activeSandbox} />)
+
+    const downloadPathInput = screen.getAllByPlaceholderText(
+      "/home/user/file.txt",
+    )[1]
+    await user.clear(downloadPathInput)
+    await user.type(downloadPathInput, "/home/user/research")
+
+    await user.click(screen.getByRole("button", { name: /Download/ }))
+
+    expect(mockAddToast).toHaveBeenCalledWith("Downloaded passwd", "success")
+  })
+
   it("shows a friendly message when the file is missing (404)", async () => {
     fetchSpy.mockResolvedValue(
       new Response(JSON.stringify({ error: "file not found" }), {

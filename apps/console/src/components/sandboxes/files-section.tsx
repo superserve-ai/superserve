@@ -45,13 +45,21 @@ function fileNameFromPath(path: string): string {
 
 // Pull the filename out of a Content-Disposition header. boxd controls the
 // format (`attachment; filename="<name>"`), so a simple match is enough — no
-// RFC 5987 `filename*` handling is needed. Returns null when the header is
-// absent or unparseable.
+// RFC 5987 `filename*` handling is needed. The data plane runs untrusted user
+// code, so treat its filename as an untrusted boundary value: reduce it to a
+// basename and reject `.`/`..` so it can't steer the saved path (defense in
+// depth — browsers also sanitize the download attribute). Returns null when the
+// header is absent, unparseable, or not a usable basename.
 function filenameFromContentDisposition(header: string | null): string | null {
   if (!header) return null
   const match = /filename=(?:"([^"]*)"|([^;]+))/i.exec(header)
-  const raw = match?.[1] ?? match?.[2]
-  return raw?.trim() || null
+  const trimmed = (match?.[1] ?? match?.[2])?.trim()
+  if (!trimmed) return null
+  const base = trimmed.slice(
+    Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\")) + 1,
+  )
+  if (!base || base === "." || base === "..") return null
+  return base
 }
 
 function isValidAbsolutePath(path: string): boolean {
