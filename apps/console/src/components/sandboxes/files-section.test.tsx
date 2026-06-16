@@ -221,16 +221,35 @@ describe("FilesSection — download", () => {
     mockCapture.mockReset()
   })
 
-  it("rejects paths ending in '/'", async () => {
+  it("downloads a directory path (default trailing slash) as a zip", async () => {
+    // PK\x03\x04 — a zip magic-number stub for the response body.
+    const body = new Blob([new Uint8Array([0x50, 0x4b, 0x03, 0x04])])
+    fetchSpy.mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: {
+          "content-type": "application/zip",
+          "content-disposition": 'attachment; filename="user.zip"',
+        },
+      }),
+    )
     render(<FilesSection sandbox={activeSandbox} />)
-    // Default download path is /home/user/ — click should surface a
-    // validation error without hitting fetch.
-    const downloadBtn = screen.getByRole("button", { name: /Download/ })
-    await user.click(downloadBtn)
-    expect(fetchSpy).not.toHaveBeenCalled()
+
+    // Default download path is /home/user/ (a directory). It must no longer be
+    // rejected client-side — the server decides and a folder comes back zipped.
+    await user.click(screen.getByRole("button", { name: /Download/ }))
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchSpy.mock.calls[0]
+    expect(url).toContain("format=zip")
+    expect(init.headers["X-Access-Token"]).toBe("tok-abc")
     expect(mockAddToast).toHaveBeenCalledWith(
-      expect.stringContaining("directory"),
-      "error",
+      expect.stringContaining("user.zip"),
+      "success",
+    )
+    expect(mockCapture).toHaveBeenCalledWith(
+      "file_download_succeeded",
+      expect.objectContaining({ sandbox_id: "sbx-1" }),
     )
   })
 
@@ -258,6 +277,9 @@ describe("FilesSection — download", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1)
     const [url, init] = fetchSpy.mock.calls[0]
     expect(url).toContain("/files?path=%2Fhome%2Fuser%2Ffile.txt")
+    // The console always opts in to the archive flag; the server returns a
+    // single file as-is, so this stays a plain file download.
+    expect(url).toContain("format=zip")
     expect(init.method).toBe("GET")
     expect(init.headers["X-Access-Token"]).toBe("tok-abc")
 
@@ -319,14 +341,15 @@ describe("FilesSection — download", () => {
     )
   })
 
-  it("shows a friendly message for a directory path, not the raw backend error", async () => {
+  it("downloads a directory as <name>.zip using the Content-Disposition filename", async () => {
     fetchSpy.mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          error: "use FilesystemService.ListDir for directories",
-        }),
-        { status: 400 },
-      ),
+      new Response(new Blob([new Uint8Array([1])]), {
+        status: 200,
+        headers: {
+          "content-type": "application/zip",
+          "content-disposition": 'attachment; filename="research.zip"',
+        },
+      }),
     )
     render(<FilesSection sandbox={activeSandbox} />)
 
@@ -338,9 +361,11 @@ describe("FilesSection — download", () => {
 
     await user.click(screen.getByRole("button", { name: /Download/ }))
 
+    // The folder comes back as research.zip; the success toast reflects the
+    // archive name from Content-Disposition, not the bare directory name.
     expect(mockAddToast).toHaveBeenCalledWith(
-      expect.stringContaining("directory"),
-      "error",
+      expect.stringContaining("research.zip"),
+      "success",
     )
     expect(mockAddToast).not.toHaveBeenCalledWith(
       expect.stringContaining("FilesystemService"),

@@ -25,14 +25,33 @@ import { formatBytes } from "@/lib/sandbox-utils"
 const SANDBOX_HOST =
   process.env.NEXT_PUBLIC_SANDBOX_HOST ?? "sandbox.superserve.ai"
 
-function filesUrl(sandboxId: string, path: string): string {
-  return `https://boxd-${sandboxId}.${SANDBOX_HOST}/files?path=${encodeURIComponent(path)}`
+function filesUrl(
+  sandboxId: string,
+  path: string,
+  params?: Record<string, string>,
+): string {
+  let url = `https://boxd-${sandboxId}.${SANDBOX_HOST}/files?path=${encodeURIComponent(path)}`
+  for (const [key, value] of Object.entries(params ?? {})) {
+    url += `&${encodeURIComponent(key)}=${encodeURIComponent(value)}`
+  }
+  return url
 }
 
 function fileNameFromPath(path: string): string {
   const clean = path.split(/[?#]/)[0]
   const parts = clean.split("/").filter(Boolean)
   return parts[parts.length - 1] || "download"
+}
+
+// Pull the filename out of a Content-Disposition header. boxd controls the
+// format (`attachment; filename="<name>"`), so a simple match is enough — no
+// RFC 5987 `filename*` handling is needed. Returns null when the header is
+// absent or unparseable.
+function filenameFromContentDisposition(header: string | null): string | null {
+  if (!header) return null
+  const match = /filename=(?:"([^"]*)"|([^;]+))/i.exec(header)
+  const raw = match?.[1] ?? match?.[2]
+  return raw?.trim() || null
 }
 
 function isValidAbsolutePath(path: string): boolean {
@@ -342,13 +361,6 @@ function DownloadPanel({ sandbox, disabled, reason }: PanelProps) {
 
   const handleDownload = async () => {
     const target = path.trim()
-    if (target.endsWith("/")) {
-      addToast(
-        "That's a directory — enter a path to a specific file inside it.",
-        "error",
-      )
-      return
-    }
     if (!isValidAbsolutePath(target)) {
       addToast(
         "Path must be an absolute file path without '..' segments",
@@ -360,7 +372,10 @@ function DownloadPanel({ sandbox, disabled, reason }: PanelProps) {
     setProgress({ loaded: 0, total: null })
     const startedAt = performance.now()
     try {
-      const res = await fetch(filesUrl(sandbox.id, target), {
+      // Always opt in to the archive flag: the server returns a file as-is and
+      // a directory as a zip. The flag is what lets a folder download work
+      // without changing the SDK's plain GET (which never sends it).
+      const res = await fetch(filesUrl(sandbox.id, target, { format: "zip" }), {
         method: "GET",
         headers: { "X-Access-Token": sandbox.access_token },
       })
@@ -369,9 +384,9 @@ function DownloadPanel({ sandbox, disabled, reason }: PanelProps) {
           res,
           `Download failed (${res.status})`,
         )
-        // Downloads are single-file only; a directory path is rejected by the
-        // data plane. Surface something the user can act on instead of the raw
-        // backend error.
+        // A directory now downloads as a zip (format=zip above), so this 400 is
+        // a defensive guard for any genuine directory-rejection the data plane
+        // might still return — surface something actionable, not the raw error.
         if (res.status === 400 && /director/i.test(detail)) {
           throw new Error(
             `"${target}" is a directory — enter a path to a specific file inside it.`,
@@ -407,10 +422,17 @@ function DownloadPanel({ sandbox, disabled, reason }: PanelProps) {
       }
 
       const blob = new Blob(chunks)
+      // Prefer the server's filename — a folder comes back as "<dir>.zip", a
+      // file keeps its own name — and fall back to the path's basename when the
+      // header is missing or unreadable.
+      const filename =
+        filenameFromContentDisposition(
+          res.headers.get("content-disposition"),
+        ) ?? fileNameFromPath(target)
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = fileNameFromPath(target)
+      a.download = filename
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -420,7 +442,7 @@ function DownloadPanel({ sandbox, disabled, reason }: PanelProps) {
         file_size: blob.size,
         duration_ms: Math.round(performance.now() - startedAt),
       })
-      addToast(`Downloaded ${fileNameFromPath(target)}`, "success")
+      addToast(`Downloaded ${filename}`, "success")
     } catch (err) {
       const message = err instanceof Error ? err.message : "Download failed"
       posthog.capture(FILE_EVENTS.DOWNLOAD_FAILED, {
