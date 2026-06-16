@@ -55,8 +55,10 @@ export async function revokeImpersonationKeyRow(
 ): Promise<void> {
   const rawKey = deriveImpersonationKey(adminId, teamId)
   const admin = createAdminClient()
-  await admin
+  const { error } = await admin
     .from("api_key")
     .update({ revoked_at: new Date().toISOString() })
     .eq("key_hash", hashKey(rawKey))
+  if (error)
+    throw new Error(`Failed to revoke impersonation key: ${error.message}`)
 }
