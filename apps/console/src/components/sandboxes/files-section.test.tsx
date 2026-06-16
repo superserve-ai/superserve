@@ -398,6 +398,43 @@ describe("FilesSection — download", () => {
     expect(mockAddToast).toHaveBeenCalledWith("Downloaded passwd", "success")
   })
 
+  it("shows a deploy-aware message when the data plane rejects a directory (pre-rollout)", async () => {
+    // An old data plane (before format=zip) still 400s a directory. The message
+    // must read as "not yet", not as "directories are unsupported" — that's
+    // what lets the console ship independently of the boxd/proxy rollout.
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: "use FilesystemService.ListDir for directories",
+        }),
+        { status: 400 },
+      ),
+    )
+    render(<FilesSection sandbox={activeSandbox} />)
+
+    const downloadPathInput = screen.getAllByPlaceholderText(
+      "/home/user/file.txt",
+    )[1]
+    await user.clear(downloadPathInput)
+    await user.type(downloadPathInput, "/home/user/research")
+
+    await user.click(screen.getByRole("button", { name: /Download/ }))
+
+    expect(mockAddToast).toHaveBeenCalledWith(
+      expect.stringContaining("not available"),
+      "error",
+    )
+    // Not the old message that implied directory download is unsupported.
+    expect(mockAddToast).not.toHaveBeenCalledWith(
+      expect.stringContaining("enter a path to a specific file"),
+      "error",
+    )
+    expect(mockAddToast).not.toHaveBeenCalledWith(
+      expect.stringContaining("FilesystemService"),
+      "error",
+    )
+  })
+
   it("shows a friendly message when the file is missing (404)", async () => {
     fetchSpy.mockResolvedValue(
       new Response(JSON.stringify({ error: "file not found" }), {

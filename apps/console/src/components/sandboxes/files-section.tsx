@@ -392,12 +392,13 @@ function DownloadPanel({ sandbox, disabled, reason }: PanelProps) {
           res,
           `Download failed (${res.status})`,
         )
-        // A directory now downloads as a zip (format=zip above), so this 400 is
-        // a defensive guard for any genuine directory-rejection the data plane
-        // might still return — surface something actionable, not the raw error.
+        // A directory downloads as a zip (format=zip above). A 400 here only
+        // happens when the data plane predates that support (deploy gap), so
+        // frame it as "not yet" rather than "directories aren't supported" —
+        // that lets the console ship independently of the boxd/proxy rollout.
         if (res.status === 400 && /director/i.test(detail)) {
           throw new Error(
-            `"${target}" is a directory — enter a path to a specific file inside it.`,
+            "Directory download is not available for this sandbox yet. Try again later or download individual files.",
           )
         }
         if (res.status === 404) {
