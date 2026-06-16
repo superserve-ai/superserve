@@ -1,5 +1,9 @@
 import crypto from "node:crypto"
 
+import type { User } from "@supabase/supabase-js"
+import { cookies } from "next/headers"
+
+import { isStaff } from "@/lib/admin/staff"
 import { getProxySecret } from "@/lib/api/proxy-auth"
 
 export const IMPERSONATION_COOKIE = "ss_impersonate"
@@ -43,4 +47,43 @@ export function verifyImpersonationToken(
   const exp = Number(expRaw)
   if (!Number.isFinite(exp) || exp < now) return null
   return teamId
+}
+
+export async function readImpersonationTeamId(): Promise<string | null> {
+  const store = await cookies()
+  return verifyImpersonationToken(store.get(IMPERSONATION_COOKIE)?.value)
+}
+
+/**
+ * The team the current request should act as: the target team only when the
+ * user is staff AND a valid impersonation cookie is present; otherwise null
+ * (callers fall back to the user's own team).
+ */
+export async function getImpersonationTeamId(
+  user: User | null | undefined,
+): Promise<string | null> {
+  if (!isStaff(user)) return null
+  return readImpersonationTeamId()
+}
+
+export async function setImpersonationCookie(teamId: string): Promise<void> {
+  const store = await cookies()
+  const token = signImpersonationToken(
+    teamId,
+    Date.now() + impersonationTtlMs(),
+  )
+  const cookieDomain = process.env.NEXT_PUBLIC_COOKIE_DOMAIN
+  store.set(IMPERSONATION_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: Math.floor(impersonationTtlMs() / 1000),
+    ...(cookieDomain ? { domain: cookieDomain } : {}),
+  })
+}
+
+export async function clearImpersonationCookie(): Promise<void> {
+  const store = await cookies()
+  store.delete(IMPERSONATION_COOKIE)
 }
