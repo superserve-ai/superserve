@@ -7,14 +7,21 @@
  *  - Header allowlist: cookie, x-api-key from client are stripped
  *  - 204/205/304 null-body handling
  *  - 401 when not authenticated
+ *  - 403 for write methods while impersonating
  */
 
 import { NextRequest } from "next/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mocks declared BEFORE the module under test is imported.
+vi.mock("@/lib/supabase/server", () => ({
+  createServerClient: vi.fn(),
+}))
+vi.mock("@/lib/admin/impersonation", () => ({
+  getImpersonationTeamId: vi.fn(),
+}))
 vi.mock("@/lib/api/proxy-auth", () => ({
-  getAuthApiKey: vi.fn(),
+  getAuthApiKeyForUser: vi.fn(),
 }))
 
 // Global fetch spy — upstream responses are crafted per test.
@@ -24,11 +31,15 @@ vi.stubGlobal("fetch", fetchSpy)
 // SANDBOX_API_URL is pre-stubbed in src/test/setup.ts before the route
 // module is imported (route reads it at module load).
 
-import { getAuthApiKey } from "@/lib/api/proxy-auth"
+import { getImpersonationTeamId } from "@/lib/admin/impersonation"
+import { getAuthApiKeyForUser } from "@/lib/api/proxy-auth"
+import { createServerClient } from "@/lib/supabase/server"
 
 import { DELETE, GET, POST, PUT } from "./route"
 
 type AnyParams = { params: Promise<{ path: string[] }> }
+
+const mockUser = { id: "u1", email: "user@test.com", app_metadata: {} }
 
 function req(
   method: string,
@@ -50,8 +61,12 @@ function params(pathSegments: string[]): AnyParams {
 describe("api proxy /api/[...path]", () => {
   beforeEach(() => {
     fetchSpy.mockReset()
-    vi.mocked(getAuthApiKey).mockReset()
-    vi.mocked(getAuthApiKey).mockResolvedValue("ss_live_test_key")
+    vi.mocked(createServerClient).mockResolvedValue({
+      auth: { getUser: async () => ({ data: { user: mockUser } }) },
+    } as never)
+    vi.mocked(getImpersonationTeamId).mockResolvedValue(null)
+    vi.mocked(getAuthApiKeyForUser).mockReset()
+    vi.mocked(getAuthApiKeyForUser).mockResolvedValue("ss_live_test_key")
   })
 
   it("returns 404 for a path outside the allowed prefixes", async () => {
@@ -60,7 +75,7 @@ describe("api proxy /api/[...path]", () => {
   })
 
   it("returns 401 when the user is not authenticated", async () => {
-    vi.mocked(getAuthApiKey).mockResolvedValue(null)
+    vi.mocked(getAuthApiKeyForUser).mockResolvedValue(null)
     const res = await GET(req("GET", ["sandboxes"]), params(["sandboxes"]))
     expect(res.status).toBe(401)
     expect(fetchSpy).not.toHaveBeenCalled()
@@ -185,5 +200,33 @@ describe("api proxy /api/[...path]", () => {
     expect(res.status).toBe(200)
     expect(res.headers.get("content-type")).toBe("application/json")
     expect(await res.json()).toEqual({ id: "abc" })
+  })
+})
+
+describe("proxy read-only impersonation gate", () => {
+  it("rejects a POST with 403 while impersonating", async () => {
+    vi.mocked(createServerClient).mockResolvedValue({
+      auth: {
+        getUser: async () => ({
+          data: {
+            user: {
+              id: "a1",
+              email: "amit@superserve.ai",
+              app_metadata: { provider: "google" },
+            },
+          },
+        }),
+      },
+    } as never)
+    vi.mocked(getImpersonationTeamId).mockResolvedValue("team-1")
+    vi.mocked(getAuthApiKeyForUser).mockResolvedValue("ss_live_x")
+
+    const request = new Request("http://localhost/api/sandboxes", {
+      method: "POST",
+    }) as never
+    const res = await POST(request, {
+      params: Promise.resolve({ path: ["sandboxes"] }),
+    })
+    expect(res.status).toBe(403)
   })
 })

@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-import { getAuthApiKey } from "@/lib/api/proxy-auth"
+import { getImpersonationTeamId } from "@/lib/admin/impersonation"
+import { getAuthApiKeyForUser } from "@/lib/api/proxy-auth"
+import { createServerClient } from "@/lib/supabase/server"
 
 const SANDBOX_API_URL =
   process.env.SANDBOX_API_URL ?? "https://api.superserve.ai"
@@ -48,6 +50,24 @@ async function proxyRequest(
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 
+  const supabase = await createServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const impersonating = (await getImpersonationTeamId(user)) !== null
+  const isReadMethod = request.method === "GET" || request.method === "HEAD"
+  if (impersonating && !isReadMethod) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "read_only_impersonation",
+          message: "Write operations are disabled while viewing another team.",
+        },
+      },
+      { status: 403 },
+    )
+  }
+
   const url = new URL(`${SANDBOX_API_URL}/${joinedPath}`)
   url.search = request.nextUrl.search
 
@@ -60,7 +80,7 @@ async function proxyRequest(
 
   // Inject server-side API key for authenticated requests
   if (!shouldSkipKeyInjection(joinedPath)) {
-    const apiKey = await getAuthApiKey()
+    const apiKey = await getAuthApiKeyForUser(user)
     if (!apiKey) {
       return NextResponse.json(
         { error: { code: "unauthorized", message: "Not authenticated" } },
