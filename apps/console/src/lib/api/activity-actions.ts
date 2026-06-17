@@ -1,5 +1,6 @@
 "use server"
 
+import { getImpersonationTeamId } from "@/lib/admin/impersonation"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -24,7 +25,8 @@ export async function listActivityBySandboxAction(
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
-  const teamId = await getTeamId(user.id)
+  const teamId =
+    (await getImpersonationTeamId(user)) ?? (await getTeamId(user.id))
   if (!teamId) return []
 
   const admin = createAdminClient()
@@ -61,7 +63,8 @@ export async function listActivityAction(limit = 100) {
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
-  const teamId = await getTeamId(user.id)
+  const teamId =
+    (await getImpersonationTeamId(user)) ?? (await getTeamId(user.id))
   if (!teamId) return []
 
   const admin = createAdminClient()
