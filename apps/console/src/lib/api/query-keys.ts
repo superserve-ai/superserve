@@ -32,6 +32,31 @@ export const auditLogKeys = {
     [...auditLogKeys.all, "sandbox", sandboxId] as const,
 }
 
+export const secretKeys = {
+  all: ["secrets"] as const,
+  lists: () => [...secretKeys.all, "list"] as const,
+  list: (filters?: { search?: string }) =>
+    [...secretKeys.lists(), filters ?? {}] as const,
+  details: () => [...secretKeys.all, "detail"] as const,
+  // Accepts undefined so disabled hooks (e.g. useSecret(undefined)) keep a
+  // distinct cache key per call site instead of all aliasing to details().
+  detail: (name: string | undefined) =>
+    [...secretKeys.details(), name] as const,
+  audit: (name: string | undefined, filters?: { status?: string }) =>
+    [...secretKeys.detail(name), "audit", filters ?? {}] as const,
+  sandboxes: (name: string | undefined) =>
+    [...secretKeys.detail(name), "sandboxes"] as const,
+}
+
+export const providerKeys = {
+  all: ["providers"] as const,
+}
+
+export const networkKeys = {
+  sandbox: (sandboxId: string | undefined) =>
+    ["network", "sandbox", sandboxId] as const,
+}
+
 export const templateKeys = {
   all: ["templates"] as const,
   lists: () => [...templateKeys.all, "list"] as const,

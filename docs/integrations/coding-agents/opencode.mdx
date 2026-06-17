@@ -9,10 +9,11 @@ Opencode is an open-source terminal coding agent. Run it in a Superserve sandbox
 
 ## Via the console
 
-1. Go to [console.superserve.ai](https://console.superserve.ai?utm_source=docs&utm_medium=link) and click **Create sandbox**.
-2. Pick the **`superserve/node-22`** template.
-3. Open **Advanced Options** and add `ANTHROPIC_API_KEY` under **Environment Variables**.
-4. Create the sandbox, open its **Terminal**, and run:
+1. On the [Secrets page](https://console.superserve.ai/secrets?utm_source=docs&utm_medium=link), create a secret with the **Anthropic** provider and paste your API key — you only do this once, and the key never enters the sandbox.
+2. Go to [console.superserve.ai](https://console.superserve.ai?utm_source=docs&utm_medium=link) and click **Create sandbox**.
+3. Pick the **`superserve/node-22`** template.
+4. Under **Advanced Options → Secrets**, bind that secret to `ANTHROPIC_API_KEY`.
+5. Create the sandbox, open its **Terminal**, and run:
 
    ```bash
    curl -fsSL https://opencode.ai/install | bash && opencode
@@ -28,12 +29,19 @@ export SUPERSERVE_API_KEY=ss_live_...
 
 <CodeGroup>
 ```typescript TypeScript
-import { Sandbox } from "@superserve/sdk"
+import { Sandbox, Secret } from "@superserve/sdk"
+
+// One-time: store your key as a secret. It never enters the sandbox.
+await Secret.create({
+  name: "anthropic-key",
+  value: "sk-ant-...",
+  provider: "anthropic",
+})
 
 const sandbox = await Sandbox.create({
   name: "opencode",
   fromTemplate: "superserve/node-22",
-  envVars: { ANTHROPIC_API_KEY: "sk-ant-..." },
+  secrets: { ANTHROPIC_API_KEY: "anthropic-key" },
 })
 
 await sandbox.commands.run("curl -fsSL https://opencode.ai/install | bash")
@@ -41,18 +49,23 @@ await sandbox.commands.run("echo 'export PATH=/home/user/.opencode/bin:$PATH' >>
 ```
 
 ```python Python
-from superserve import Sandbox
+from superserve import Sandbox, Secret
+
+# One-time: store your key as a secret. It never enters the sandbox.
+Secret.create(name="anthropic-key", value="sk-ant-...", provider="anthropic")
 
 sandbox = Sandbox.create(
     name="opencode",
     from_template="superserve/node-22",
-    env_vars={"ANTHROPIC_API_KEY": "sk-ant-..."},
+    secrets={"ANTHROPIC_API_KEY": "anthropic-key"},
 )
 
 sandbox.commands.run("curl -fsSL https://opencode.ai/install | bash")
 sandbox.commands.run("echo 'export PATH=/home/user/.opencode/bin:$PATH' >> ~/.bashrc")
 ```
 </CodeGroup>
+
+Opencode reads `ANTHROPIC_API_KEY` as usual, but its value is a [stand-in token](/secrets/overview) — the real key is attached only on requests to Anthropic, never exposed to the agent.
 
 Open the sandbox in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), launch the terminal, and run `opencode`.
 

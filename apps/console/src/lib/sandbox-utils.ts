@@ -18,6 +18,7 @@ export const STATUS_LABEL: Record<SandboxStatus, string> = {
 
 export const ACTIVITY_STATUS_VARIANT: Record<string, BadgeVariant> = {
   success: "success",
+  ok: "success",
   error: "destructive",
 }
 

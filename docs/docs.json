@@ -69,7 +69,17 @@
               "sandbox/lifecycle",
               "sandbox/metadata",
               "sandbox/networking",
-              "sandbox/environment-variables"
+              "sandbox/network-log"
+            ]
+          },
+          {
+            "group": "Secrets & env vars",
+            "pages": [
+              "sandbox/environment-variables",
+              "secrets/overview",
+              "secrets/create",
+              "secrets/binding",
+              "secrets/audit"
             ]
           },
           {
@@ -106,6 +116,7 @@
             "group": "Reference",
             "pages": [
               "sdk-reference/sandbox",
+              "sdk-reference/secret",
               "sdk-reference/template",
               "sdk-reference/commands",
               "sdk-reference/files"
@@ -163,7 +174,8 @@
               "DELETE /sandboxes/{sandbox_id}",
               "POST /sandboxes/{sandbox_id}/pause",
               "POST /sandboxes/{sandbox_id}/resume",
-              "POST /sandboxes/{sandbox_id}/activate"
+              "POST /sandboxes/{sandbox_id}/activate",
+              "GET /sandboxes/{sandbox_id}/network"
             ]
           },
           {
@@ -191,6 +203,19 @@
               "GET /templates/{template_id}/builds/{build_id}",
               "DELETE /templates/{template_id}/builds/{build_id}",
               "GET /templates/{template_id}/builds/{build_id}/logs"
+            ]
+          },
+          {
+            "group": "Secrets",
+            "pages": [
+              "POST /secrets",
+              "GET /secrets",
+              "GET /secrets/{name}",
+              "PATCH /secrets/{name}",
+              "DELETE /secrets/{name}",
+              "GET /secrets/{name}/audit",
+              "GET /secrets/{name}/sandboxes",
+              "GET /providers"
             ]
           }
         ]

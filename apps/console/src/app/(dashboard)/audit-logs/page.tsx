@@ -22,6 +22,7 @@ const CATEGORY_TABS = [
   { label: "Sandbox", value: "sandbox" },
   { label: "Template", value: "template" },
   { label: "Exec", value: "exec" },
+  { label: "Secret", value: "secret" },
   { label: "Errors", value: "_errors" },
 ]
 
@@ -53,6 +54,7 @@ export default function AuditLogsPage() {
         const q = search.toLowerCase()
         if (
           !a.sandbox_name?.toLowerCase().includes(q) &&
+          !a.secret_name?.toLowerCase().includes(q) &&
           !a.action.toLowerCase().includes(q) &&
           !a.category.toLowerCase().includes(q)
         )
@@ -112,7 +114,7 @@ export default function AuditLogsPage() {
             filters={
               <DateRangeFilter value={dateRange} onChange={setDateRange} />
             }
-            searchPlaceholder="Search by sandbox or action..."
+            searchPlaceholder="Search by sandbox, secret, or action..."
             searchValue={search}
             onSearchChange={setSearch}
           />
@@ -122,7 +124,7 @@ export default function AuditLogsPage() {
               <TableHeader className="sticky top-0 z-10 bg-background/70 backdrop-blur-md">
                 <TableRow>
                   <TableHead className="w-[20%]">Time</TableHead>
-                  <TableHead className="w-[20%]">Sandbox</TableHead>
+                  <TableHead className="w-[20%]">Resource</TableHead>
                   <TableHead className="w-[12%]">Category</TableHead>
                   <TableHead className="w-[15%]">Action</TableHead>
                   <TableHead className="w-[10%]">Duration</TableHead>
