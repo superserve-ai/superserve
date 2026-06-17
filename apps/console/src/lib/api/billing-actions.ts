@@ -73,10 +73,23 @@ async function getFeatureEnabled(
   return Boolean(enabled)
 }
 
-function numericToNumber(value: unknown): number {
-  if (typeof value === "number") return value
-  if (typeof value === "string") return Number(value)
-  return 0
+function numericToNumber(value: unknown, field: string): number {
+  if (value === null || value === undefined || value === "") {
+    throw new Error(`Missing billing usage metric: ${field}`)
+  }
+
+  const numberValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : Number.NaN
+
+  if (!Number.isFinite(numberValue)) {
+    throw new Error(`Invalid billing usage metric: ${field}`)
+  }
+
+  return numberValue
 }
 
 export async function getBillingUsageAction(
@@ -113,10 +126,10 @@ export async function getBillingUsageAction(
     }
   }
 
-  const metricsWriteEnabled = await getFeatureEnabled(
-    teamId,
-    BILLING_METRICS_WRITE_FLAG,
-  )
+  const [metricsWriteEnabled, billingExportEnabled] = await Promise.all([
+    getFeatureEnabled(teamId, BILLING_METRICS_WRITE_FLAG),
+    getFeatureEnabled(teamId, BILLING_EXPORT_FLAG),
+  ])
   if (!metricsWriteEnabled) {
     return {
       enabled: false,
@@ -126,11 +139,6 @@ export async function getBillingUsageAction(
       rows: [],
     }
   }
-
-  const billingExportEnabled = await getFeatureEnabled(
-    teamId,
-    BILLING_EXPORT_FLAG,
-  )
   const billingMode: BillingUsageMode = billingExportEnabled
     ? "active"
     : "preview"
@@ -156,9 +164,15 @@ export async function getBillingUsageAction(
     rows: (data ?? []).map((row) => ({
       hour_start: row.hour_start as string,
       hour_end: row.hour_end as string,
-      vcpu_seconds: numericToNumber(row.vcpu_seconds),
-      memory_mib_seconds: numericToNumber(row.memory_mib_seconds),
-      storage_mib_seconds: numericToNumber(row.storage_mib_seconds),
+      vcpu_seconds: numericToNumber(row.vcpu_seconds, "vcpu_seconds"),
+      memory_mib_seconds: numericToNumber(
+        row.memory_mib_seconds,
+        "memory_mib_seconds",
+      ),
+      storage_mib_seconds: numericToNumber(
+        row.storage_mib_seconds,
+        "storage_mib_seconds",
+      ),
       updated_at: row.updated_at as string,
     })),
   }
