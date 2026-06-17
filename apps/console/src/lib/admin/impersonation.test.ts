@@ -13,7 +13,39 @@ vi.mock("next/headers", () => ({
   }),
 }))
 
+vi.mock("@/lib/supabase/server", () => ({
+  createServerClient: vi.fn(async () => ({
+    auth: {
+      getUser: vi.fn(async () => ({
+        data: {
+          user: {
+            id: "a1",
+            email: "amit@superserve.ai",
+            app_metadata: { provider: "google" },
+          } as User,
+        },
+      })),
+    },
+  })),
+}))
+
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: vi.fn(() => ({
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          single: vi.fn(async () => ({
+            data: { name: "Acme Corp" },
+            error: null,
+          })),
+        })),
+      })),
+    })),
+  })),
+}))
+
 import {
+  getImpersonationContext,
   getImpersonationTeamId,
   signImpersonationToken,
   verifyImpersonationToken,
@@ -67,5 +99,12 @@ describe("getImpersonationTeamId", () => {
   })
   it("returns null when no cookie is present", async () => {
     expect(await getImpersonationTeamId(staff)).toBeNull()
+  })
+})
+
+describe("getImpersonationContext", () => {
+  it("returns null when no impersonation cookie is present", async () => {
+    // cookieStore.value is undefined (no cookie) — the user is staff (mocked as amit@superserve.ai)
+    expect(await getImpersonationContext()).toBeNull()
   })
 })

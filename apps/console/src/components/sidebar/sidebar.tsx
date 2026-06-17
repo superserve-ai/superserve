@@ -11,7 +11,7 @@ import {
 } from "@superserve/ui"
 import Image from "next/image"
 
-import { bottomNavItems, mainNavItems } from "./nav-config"
+import { adminNavItem, bottomNavItems, mainNavItems } from "./nav-config"
 import { useSidebar } from "./sidebar-context"
 import { SidebarNav } from "./sidebar-nav"
 import { SidebarUserMenu } from "./sidebar-user-menu"
@@ -22,8 +22,13 @@ function openCommandPalette() {
   )
 }
 
-export function Sidebar() {
+interface SidebarProps {
+  isStaff: boolean
+}
+
+export function Sidebar({ isStaff }: SidebarProps) {
   const { isCollapsed, toggle } = useSidebar()
+  const navItems = isStaff ? [...mainNavItems, adminNavItem] : mainNavItems
 
   return (
     <aside
@@ -95,7 +100,7 @@ export function Sidebar() {
       </div>
 
       {/* Main Nav */}
-      <SidebarNav items={mainNavItems} groupId="main" />
+      <SidebarNav items={navItems} groupId="main" />
 
       {/* Spacer */}
       <div className="flex-1" />

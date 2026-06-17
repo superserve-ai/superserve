@@ -11,14 +11,19 @@ import {
 import { useFaviconStatus } from "@/hooks/use-favicon-status"
 import { usePostHogIdentify } from "@/hooks/use-posthog-identify"
 
-function DashboardContent({ children }: { children: React.ReactNode }) {
+interface DashboardContentProps {
+  children: React.ReactNode
+  isStaff: boolean
+}
+
+function DashboardContent({ children, isStaff }: DashboardContentProps) {
   const { isCollapsed } = useSidebar()
   usePostHogIdentify()
   useFaviconStatus()
 
   return (
     <div className="flex h-screen">
-      <Sidebar />
+      <Sidebar isStaff={isStaff} />
       <CommandPalette />
       <main
         className={cn(
@@ -32,11 +37,16 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function DashboardShell({ children }: { children: React.ReactNode }) {
+interface DashboardShellProps {
+  children: React.ReactNode
+  isStaff: boolean
+}
+
+export function DashboardShell({ children, isStaff }: DashboardShellProps) {
   return (
     <SidebarProvider>
       <TooltipProvider>
-        <DashboardContent>{children}</DashboardContent>
+        <DashboardContent isStaff={isStaff}>{children}</DashboardContent>
       </TooltipProvider>
     </SidebarProvider>
   )

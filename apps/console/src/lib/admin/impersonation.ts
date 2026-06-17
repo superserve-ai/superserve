@@ -5,6 +5,8 @@ import { cookies } from "next/headers"
 
 import { isStaff } from "@/lib/admin/staff"
 import { getProxySecret } from "@/lib/api/proxy-auth"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { createServerClient } from "@/lib/supabase/server"
 
 export const IMPERSONATION_COOKIE = "ss_impersonate"
 
@@ -86,4 +88,33 @@ export async function setImpersonationCookie(teamId: string): Promise<void> {
 export async function clearImpersonationCookie(): Promise<void> {
   const store = await cookies()
   store.delete(IMPERSONATION_COOKIE)
+}
+
+export interface ImpersonationContext {
+  teamId: string
+  teamName: string
+}
+
+/**
+ * Returns the active impersonation context for the current request, or null if
+ * the user is not staff or no valid impersonation cookie is present.
+ */
+export async function getImpersonationContext(): Promise<ImpersonationContext | null> {
+  const supabase = await createServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  const teamId = await getImpersonationTeamId(user)
+  if (!teamId) return null
+
+  const admin = createAdminClient()
+  const { data: team, error } = await admin
+    .from("team")
+    .select("name")
+    .eq("id", teamId)
+    .single()
+
+  if (error || !team) return null
+  return { teamId, teamName: team.name as string }
 }
