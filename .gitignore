@@ -53,3 +53,6 @@ devcontainer.json
 
 # Visual brainstorming companion
 .superpowers/
+
+# misc WSL files
+*:Zone.Identifier

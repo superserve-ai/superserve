@@ -57,6 +57,12 @@ export const networkKeys = {
     ["network", "sandbox", sandboxId] as const,
 }
 
+export const billingKeys = {
+  all: ["billing"] as const,
+  usage: (filters: { periodStart: string; periodEnd: string }) =>
+    [...billingKeys.all, "usage", filters] as const,
+}
+
 export const templateKeys = {
   all: ["templates"] as const,
   lists: () => [...templateKeys.all, "list"] as const,
