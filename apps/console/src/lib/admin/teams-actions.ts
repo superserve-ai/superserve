@@ -31,11 +31,14 @@ export async function startImpersonationAction(teamId: string) {
   if (!UUID_RE.test(teamId)) throw new Error("Invalid team id")
 
   const admin = createAdminClient()
-  const { data: team } = await admin
+  const { data: team, error: teamError } = await admin
     .from("team")
     .select("id, name")
     .eq("id", teamId)
     .single()
+  if (teamError && teamError.code !== "PGRST116") {
+    throw new Error(`Failed to look up team: ${teamError.message}`)
+  }
   if (!team) throw new Error("Team not found")
 
   await setImpersonationCookie(teamId)
