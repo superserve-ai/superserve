@@ -56,10 +56,12 @@ export function AdminTeamsTable({ teams, onActAs }: Props) {
                     {team.active_sandbox_count} / {team.max_sandboxes}
                   </TableCell>
                   <TableCell className="text-muted tabular-nums">
-                    {formatDate(new Date(team.created_at))}
+                    {team.created_at
+                      ? formatDate(new Date(team.created_at))
+                      : "—"}
                   </TableCell>
                   <TableCell className="text-right">
-                    <form action={() => onActAs(team.id)}>
+                    <form action={onActAs.bind(null, team.id)}>
                       <Button type="submit" variant="outline" size="sm">
                         Act as
                       </Button>
