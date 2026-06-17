@@ -46,7 +46,7 @@
     "primary": {
       "type": "button",
       "label": "Get Started",
-      "href": "https://console.superserve.ai?utm_source=docs&utm_medium=navbar"
+      "href": "https://console.superserve.ai/auth/signup/?utm_source=docs&utm_medium=navbar"
     }
   },
   "contextual": {
