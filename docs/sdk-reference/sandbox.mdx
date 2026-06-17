@@ -224,7 +224,7 @@ for e in page.events:
 | Option | Type | Description |
 |---|---|---|
 | `limit` | `number` | Max events per page. |
-| `before` | `string` | RFC3339 cursor — rows strictly older than this. Pass the previous page's `nextCursor`. |
+| `before` | `string` | Opaque pagination cursor — pass the previous page's `nextCursor` to page through results. Also accepts an RFC3339 timestamp as a time filter (rows strictly older than it). |
 | `since` | `string` | RFC3339 — rows at or newer than this. |
 | `verdict` | `"allowed" \| "blocked" \| "failed"` | Filter to connections with this verdict (excludes request rows). |
 
