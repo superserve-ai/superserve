@@ -35,7 +35,7 @@ import { getImpersonationTeamId } from "@/lib/admin/impersonation"
 import { getAuthApiKeyForUser } from "@/lib/api/proxy-auth"
 import { createServerClient } from "@/lib/supabase/server"
 
-import { DELETE, GET, POST, PUT } from "./route"
+import { DELETE, GET, PATCH, POST, PUT } from "./route"
 
 type AnyParams = { params: Promise<{ path: string[] }> }
 
@@ -204,7 +204,8 @@ describe("api proxy /api/[...path]", () => {
 })
 
 describe("proxy read-only impersonation gate", () => {
-  it("rejects a POST with 403 while impersonating", async () => {
+  beforeEach(() => {
+    fetchSpy.mockReset()
     vi.mocked(createServerClient).mockResolvedValue({
       auth: {
         getUser: async () => ({
@@ -220,13 +221,52 @@ describe("proxy read-only impersonation gate", () => {
     } as never)
     vi.mocked(getImpersonationTeamId).mockResolvedValue("team-1")
     vi.mocked(getAuthApiKeyForUser).mockResolvedValue("ss_live_x")
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    )
+  })
 
+  it("rejects a POST with 403 while impersonating", async () => {
     const request = new Request("http://localhost/api/sandboxes", {
       method: "POST",
     }) as never
     const res = await POST(request, {
       params: Promise.resolve({ path: ["sandboxes"] }),
     })
+    expect(res.status).toBe(403)
+    const body = await res.json()
+    expect(body.error.code).toBe("read_only_impersonation")
+  })
+
+  it("forwards GET while impersonating (reads are allowed)", async () => {
+    const res = await GET(req("GET", ["sandboxes"]), params(["sandboxes"]))
+    expect(res.status).toBe(200)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it("forwards HEAD while impersonating (reads are allowed)", async () => {
+    fetchSpy.mockResolvedValue(new Response(null, { status: 200 }))
+    const res = await GET(req("HEAD", ["sandboxes"]), params(["sandboxes"]))
+    expect(res.status).toBe(200)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it("rejects a DELETE with 403 while impersonating", async () => {
+    const res = await DELETE(
+      req("DELETE", ["sandboxes", "abc"]),
+      params(["sandboxes", "abc"]),
+    )
+    expect(res.status).toBe(403)
+  })
+
+  it("rejects a PATCH with 403 while impersonating", async () => {
+    const res = await PATCH(
+      req("PATCH", ["sandboxes", "abc"]),
+      params(["sandboxes", "abc"]),
+    )
     expect(res.status).toBe(403)
   })
 })
