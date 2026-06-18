@@ -175,7 +175,9 @@
               "POST /sandboxes/{sandbox_id}/pause",
               "POST /sandboxes/{sandbox_id}/resume",
               "POST /sandboxes/{sandbox_id}/activate",
-              "GET /sandboxes/{sandbox_id}/network"
+              "GET /sandboxes/{sandbox_id}/network",
+              "POST /sandboxes/{sandbox_id}/secrets",
+              "DELETE /sandboxes/{sandbox_id}/secrets/{env_key}"
             ]
           },
           {
