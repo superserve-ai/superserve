@@ -370,9 +370,9 @@ class Sandbox:
     def detach_secret(self, env_key: str) -> None:
         """Remove a secret binding from this sandbox by its env-var key.
 
-        New processes no longer see the stand-in token, and a process already
-        running loses the credential's access within about a minute. A paused
-        sandbox applies the change on resume.
+        The stand-in token is revoked, so requests using it are refused — within
+        about a minute for a process already running. A paused sandbox applies
+        the change on resume.
         """
         self._require_live()
         api_request(
