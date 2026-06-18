@@ -204,6 +204,34 @@ sandbox.update(
 ```
 </CodeGroup>
 
+### `attachSecret` / `attach_secret`
+
+Bind a team secret to a live or paused sandbox under an environment variable. The sandbox sees a stand-in token; the real credential is swapped in for outbound requests to the secret's allowed hosts. Takes effect for processes started after the call; a paused sandbox applies it on resume.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.attachSecret("ANTHROPIC_API_KEY", "anthropic-prod")
+```
+
+```python Python
+sandbox.attach_secret("ANTHROPIC_API_KEY", "anthropic-prod")
+```
+</CodeGroup>
+
+### `detachSecret` / `detach_secret`
+
+Remove a secret binding by its environment-variable key. New processes no longer see the stand-in token, and a process already running loses the credential's access within about a minute. A paused sandbox applies the change on resume.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.detachSecret("ANTHROPIC_API_KEY")
+```
+
+```python Python
+sandbox.detach_secret("ANTHROPIC_API_KEY")
+```
+</CodeGroup>
+
 ### `getNetworkLog` / `get_network_log`
 
 The sandbox's network log — every outbound connection and secret-bearing request, newest first. Returns a `NetworkLogPage`. See the [Network log](/sandbox/network-log) guide for the full model.
