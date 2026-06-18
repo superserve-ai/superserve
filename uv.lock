@@ -492,7 +492,7 @@ wheels = [
 
 [[package]]
 name = "superserve"
-version = "0.7.4"
+version = "0.7.6"
 source = { editable = "packages/python-sdk" }
 dependencies = [
     { name = "httpx" },
