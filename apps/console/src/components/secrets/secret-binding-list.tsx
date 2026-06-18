@@ -120,7 +120,13 @@ export function SecretBindingList({
       )}
 
       {editable && adding && (
-        <div className="space-y-2 border-t border-border px-4 py-3">
+        <form
+          className="space-y-2 border-t border-border px-4 py-3"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (canSubmit) submit()
+          }}
+        >
           <div className="flex items-start gap-2">
             <Input
               placeholder="OPENAI_API_KEY"
@@ -146,14 +152,14 @@ export function SecretBindingList({
             applies it on resume.
           </p>
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={reset}>
+            <Button type="button" variant="ghost" size="sm" onClick={reset}>
               Cancel
             </Button>
-            <Button size="sm" disabled={!canSubmit} onClick={submit}>
+            <Button type="submit" size="sm" disabled={!canSubmit}>
               Attach
             </Button>
           </div>
-        </div>
+        </form>
       )}
     </div>
   )
