@@ -4,6 +4,7 @@ import { PlusIcon, TrashIcon } from "@phosphor-icons/react"
 import {
   Badge,
   Button,
+  ConfirmDialog,
   Input,
   Tooltip,
   TooltipPopup,
@@ -17,7 +18,10 @@ import {
   useDetachSandboxSecret,
 } from "@/hooks/use-sandboxes"
 import { useSecrets } from "@/hooks/use-secrets"
-import type { SandboxSecretBindingSummary } from "@/lib/api/types"
+import type {
+  SandboxSecretBindingSummary,
+  SandboxStatus,
+} from "@/lib/api/types"
 
 import { SecretPicker } from "./secret-binding-editor"
 import { validateEnvKey } from "./validate"
@@ -25,19 +29,26 @@ import { validateEnvKey } from "./validate"
 export function SecretBindingList({
   sandboxId,
   secrets,
-  editable,
+  status,
 }: {
   sandboxId: string
   secrets: SandboxSecretBindingSummary[] | undefined
-  editable: boolean
+  status: SandboxStatus
 }) {
   const attach = useAttachSandboxSecret(sandboxId)
   const detach = useDetachSandboxSecret(sandboxId)
   const { data: available } = useSecrets()
 
+  const editable = status === "active" || status === "paused"
+  // On an active sandbox, detach can break a running process, so confirm first.
+  // A paused sandbox has nothing running, so detach directly.
+  const confirmOnDetach = status === "active"
+
   const [adding, setAdding] = useState(false)
   const [envKey, setEnvKey] = useState("")
   const [secretName, setSecretName] = useState("")
+  const [pendingDetach, setPendingDetach] =
+    useState<SandboxSecretBindingSummary | null>(null)
 
   const boundKeys = new Set((secrets ?? []).map((b) => b.env_key))
   const options = (available ?? []).map((s) => s.name)
@@ -109,7 +120,11 @@ export function SecretBindingList({
                   className="ml-auto shrink-0"
                   aria-label={`Detach ${binding.env_key}`}
                   disabled={detach.isPending}
-                  onClick={() => detach.mutate(binding.env_key)}
+                  onClick={() =>
+                    confirmOnDetach
+                      ? setPendingDetach(binding)
+                      : detach.mutate(binding.env_key)
+                  }
                 >
                   <TrashIcon className="size-3.5 text-muted" weight="light" />
                 </Button>
@@ -161,6 +176,29 @@ export function SecretBindingList({
           </div>
         </form>
       )}
+
+      <ConfirmDialog
+        open={pendingDetach !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDetach(null)
+        }}
+        title={pendingDetach ? `Detach ${pendingDetach.env_key}?` : ""}
+        description={
+          pendingDetach
+            ? `The sandbox loses access to ${pendingDetach.secret_name}. Requests using it are refused within about a minute, so a running process may start failing. You can re-attach it later.`
+            : ""
+        }
+        confirmLabel="Detach"
+        variant="danger"
+        onConfirm={async () => {
+          if (!pendingDetach) return
+          try {
+            await detach.mutateAsync(pendingDetach.env_key)
+          } catch {
+            // success/error toasts are surfaced by the mutation hook
+          }
+        }}
+      />
     </div>
   )
 }

@@ -256,7 +256,7 @@ export default function SandboxDetailPage() {
         <SecretBindingList
           sandboxId={sandbox.id}
           secrets={sandbox.secrets}
-          editable={sandbox.status === "active" || sandbox.status === "paused"}
+          status={sandbox.status}
         />
 
         {/* Layer 5: files (state-aware) */}
