@@ -33,7 +33,7 @@ export function Sidebar({ isStaff }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "fixed top-0 left-0 z-40 flex h-screen flex-col border-r border-border bg-background/80 backdrop-blur-sm transition-all duration-200",
+        "absolute top-0 left-0 z-40 flex h-full flex-col border-r border-border bg-background/80 backdrop-blur-sm transition-all duration-200",
         isCollapsed ? "w-16" : "w-64",
       )}
     >
