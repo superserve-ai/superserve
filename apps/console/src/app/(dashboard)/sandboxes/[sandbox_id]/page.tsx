@@ -253,7 +253,11 @@ export default function SandboxDetailPage() {
         </div>
 
         {/* Layer 4: bound secrets */}
-        <SecretBindingList secrets={sandbox.secrets} />
+        <SecretBindingList
+          sandboxId={sandbox.id}
+          secrets={sandbox.secrets}
+          editable={sandbox.status === "active" || sandbox.status === "paused"}
+        />
 
         {/* Layer 5: files (state-aware) */}
         <FilesSection sandbox={sandbox} onStart={handleStart} />

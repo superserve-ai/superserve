@@ -1,18 +1,74 @@
-import { Badge, Tooltip, TooltipPopup, TooltipTrigger } from "@superserve/ui"
-import Link from "next/link"
+"use client"
 
+import { PlusIcon, TrashIcon } from "@phosphor-icons/react"
+import {
+  Badge,
+  Button,
+  Input,
+  Tooltip,
+  TooltipPopup,
+  TooltipTrigger,
+} from "@superserve/ui"
+import Link from "next/link"
+import { useState } from "react"
+
+import {
+  useAttachSandboxSecret,
+  useDetachSandboxSecret,
+} from "@/hooks/use-sandboxes"
+import { useSecrets } from "@/hooks/use-secrets"
 import type { SandboxSecretBindingSummary } from "@/lib/api/types"
 
+import { SecretPicker } from "./secret-binding-editor"
+import { validateEnvKey } from "./validate"
+
 export function SecretBindingList({
+  sandboxId,
   secrets,
+  editable,
 }: {
+  sandboxId: string
   secrets: SandboxSecretBindingSummary[] | undefined
+  editable: boolean
 }) {
+  const attach = useAttachSandboxSecret(sandboxId)
+  const detach = useDetachSandboxSecret(sandboxId)
+  const { data: available } = useSecrets()
+
+  const [adding, setAdding] = useState(false)
+  const [envKey, setEnvKey] = useState("")
+  const [secretName, setSecretName] = useState("")
+
+  const boundKeys = new Set((secrets ?? []).map((b) => b.env_key))
+  const options = (available ?? []).map((s) => s.name)
+  const trimmedKey = envKey.trim()
+  const keyError = trimmedKey ? validateEnvKey(trimmedKey) : null
+  const duplicate = boundKeys.has(trimmedKey)
+  const canSubmit =
+    !!trimmedKey && !keyError && !duplicate && !!secretName && !attach.isPending
+
+  function reset() {
+    setEnvKey("")
+    setSecretName("")
+    setAdding(false)
+  }
+
+  function submit() {
+    attach.mutate({ envKey: trimmedKey, secretName }, { onSuccess: reset })
+  }
+
   return (
     <div className="border-b border-border">
-      <div className="flex h-10 items-center border-b border-border px-4">
+      <div className="flex h-10 items-center justify-between border-b border-border px-4">
         <h2 className="text-sm font-semibold text-foreground">Secrets</h2>
+        {editable && !adding && options.length > 0 && (
+          <Button variant="ghost" size="sm" onClick={() => setAdding(true)}>
+            <PlusIcon className="size-3.5" weight="light" />
+            Attach
+          </Button>
+        )}
       </div>
+
       {!secrets || secrets.length === 0 ? (
         <p className="px-4 py-4 text-xs text-muted">
           No secrets attached to this sandbox.
@@ -46,8 +102,57 @@ export function SecretBindingList({
                   </TooltipPopup>
                 </Tooltip>
               )}
+              {editable && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="ml-auto shrink-0"
+                  aria-label={`Detach ${binding.env_key}`}
+                  disabled={detach.isPending}
+                  onClick={() => detach.mutate(binding.env_key)}
+                >
+                  <TrashIcon className="size-3.5 text-muted" weight="light" />
+                </Button>
+              )}
             </div>
           ))}
+        </div>
+      )}
+
+      {editable && adding && (
+        <div className="space-y-2 border-t border-border px-4 py-3">
+          <div className="flex items-start gap-2">
+            <Input
+              placeholder="OPENAI_API_KEY"
+              value={envKey}
+              wrapperClassName="flex-1"
+              className="font-mono text-xs"
+              error={
+                keyError ??
+                (duplicate ? "Already bound on this sandbox" : undefined)
+              }
+              onChange={(e) => setEnvKey(e.target.value)}
+            />
+            <div className="flex-1">
+              <SecretPicker
+                value={secretName}
+                options={options}
+                onChange={setSecretName}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted">
+            Applies to processes started after attaching; a paused sandbox
+            applies it on resume.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={reset}>
+              Cancel
+            </Button>
+            <Button size="sm" disabled={!canSubmit} onClick={submit}>
+              Attach
+            </Button>
+          </div>
         </div>
       )}
     </div>

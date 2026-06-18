@@ -17,7 +17,7 @@ export interface SecretBindingEntry {
 // Base UI Select doesn't open inside the dialog's focus trap, so this is a
 // portalled, fixed-positioned picker like the template picker in
 // create-sandbox-dialog.
-function SecretPicker({
+export function SecretPicker({
   value,
   options,
   onChange,
