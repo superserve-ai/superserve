@@ -51,3 +51,24 @@ export async function resumeSandbox(id: string): Promise<ResumeResponse> {
     method: "POST",
   })
 }
+
+export async function attachSandboxSecret(
+  id: string,
+  envKey: string,
+  secretName: string,
+): Promise<void> {
+  return apiClient<void>(`/sandboxes/${id}/secrets`, {
+    method: "POST",
+    body: JSON.stringify({ env_key: envKey, secret_name: secretName }),
+  })
+}
+
+export async function detachSandboxSecret(
+  id: string,
+  envKey: string,
+): Promise<void> {
+  return apiClient<void>(
+    `/sandboxes/${id}/secrets/${encodeURIComponent(envKey)}`,
+    { method: "DELETE" },
+  )
+}

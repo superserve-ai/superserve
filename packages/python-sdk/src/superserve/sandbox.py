@@ -5,7 +5,7 @@ from __future__ import annotations
 import builtins
 import threading
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import httpx
 
@@ -350,6 +350,37 @@ class Sandbox:
             client=self._http_client,
         )
         return to_network_log_page(raw)
+
+    def attach_secret(self, env_key: str, secret_name: str) -> None:
+        """Bind a team secret to this sandbox under an environment variable.
+
+        The sandbox sees a stand-in token; the real credential is swapped in for
+        outbound requests to the secret's allowed hosts. Takes effect for
+        processes started after this call; a paused sandbox applies it on resume.
+        """
+        self._require_live()
+        api_request(
+            "POST",
+            f"{self._config.base_url}/sandboxes/{self.id}/secrets",
+            headers={"X-API-Key": self._config.api_key},
+            json_body={"env_key": env_key, "secret_name": secret_name},
+            client=self._http_client,
+        )
+
+    def detach_secret(self, env_key: str) -> None:
+        """Remove a secret binding from this sandbox by its env-var key.
+
+        The stand-in token is revoked, so requests using it are refused — within
+        about a minute for a process already running. A paused sandbox applies
+        the change on resume.
+        """
+        self._require_live()
+        api_request(
+            "DELETE",
+            f"{self._config.base_url}/sandboxes/{self.id}/secrets/{quote(env_key, safe='')}",
+            headers={"X-API-Key": self._config.api_key},
+            client=self._http_client,
+        )
 
     def __repr__(self) -> str:
         return (
