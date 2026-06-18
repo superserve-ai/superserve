@@ -19,6 +19,7 @@ export const SANDBOX_EVENTS = {
   BULK_DELETED: "sandbox_bulk_deleted",
   CONNECT_OPENED: "sandbox_connect_opened",
   TERMINAL_OPENED: "sandbox_terminal_opened",
+  PREVIEW_OPENED: "sandbox_preview_opened",
 } as const
 
 export const TERMINAL_EVENTS = {

@@ -11,6 +11,7 @@ import { ErrorState } from "@/components/error-state"
 import { ActivitySection } from "@/components/sandboxes/activity-section"
 import { DeleteSandboxDialog } from "@/components/sandboxes/delete-sandbox-dialog"
 import { FilesSection } from "@/components/sandboxes/files-section"
+import { PreviewSection } from "@/components/sandboxes/preview-section"
 import {
   MetadataSection,
   NetworkSection,
@@ -250,7 +251,10 @@ export default function SandboxDetailPage() {
         {/* Layer 4: files (state-aware) */}
         <FilesSection sandbox={sandbox} onStart={handleStart} />
 
-        {/* Layer 5: activity (history, lower priority) */}
+        {/* Layer 5: preview (state-aware) */}
+        <PreviewSection sandbox={sandbox} onStart={handleStart} />
+
+        {/* Layer 6: activity (history, lower priority) */}
         <ActivitySection activity={activity} isPending={activityPending} />
       </div>
     </div>

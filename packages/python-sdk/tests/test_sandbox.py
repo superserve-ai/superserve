@@ -5,7 +5,7 @@ from __future__ import annotations
 import httpx
 import pytest
 import respx
-from superserve import Sandbox, SandboxError, SandboxStatus
+from superserve import Sandbox, SandboxError, SandboxStatus, ValidationError
 
 API = "https://api.example.com"
 
@@ -30,6 +30,49 @@ def _raw(
 def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SUPERSERVE_API_KEY", "ss_live_key")
     monkeypatch.setenv("SUPERSERVE_BASE_URL", API)
+
+
+class TestGetPreviewUrl:
+    def _make(self, router: respx.MockRouter) -> Sandbox:
+        router.post(f"{API}/sandboxes").mock(
+            return_value=httpx.Response(200, json=_raw())
+        )
+        return Sandbox.create(name="my-box")
+
+    def test_builds_preview_url(self) -> None:
+        with respx.mock() as router:
+            sandbox = self._make(router)
+            try:
+                assert (
+                    sandbox.get_preview_url(3000)
+                    == "https://3000-sbx-1.sandbox.superserve.ai"
+                )
+            finally:
+                sandbox._close_http_client()
+
+    def test_distinct_urls_per_port(self) -> None:
+        with respx.mock() as router:
+            sandbox = self._make(router)
+            try:
+                assert (
+                    sandbox.get_preview_url(3000)
+                    == "https://3000-sbx-1.sandbox.superserve.ai"
+                )
+                assert (
+                    sandbox.get_preview_url(8080)
+                    == "https://8080-sbx-1.sandbox.superserve.ai"
+                )
+            finally:
+                sandbox._close_http_client()
+
+    def test_invalid_port_raises(self) -> None:
+        with respx.mock() as router:
+            sandbox = self._make(router)
+            try:
+                with pytest.raises(ValidationError):
+                    sandbox.get_preview_url(80)
+            finally:
+                sandbox._close_http_client()
 
 
 class TestCreate:

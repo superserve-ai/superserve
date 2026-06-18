@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
-from ._config import ResolvedConfig, resolve_config
+from ._config import ResolvedConfig, preview_url, resolve_config
 from ._http import api_request
 from .commands import Commands, CommandsDeps
 from .errors import NotFoundError, SandboxError
@@ -232,6 +232,20 @@ class Sandbox:
             client=self._http_client,
         )
         return to_sandbox_info(raw)
+
+    def get_preview_url(self, port: int) -> str:
+        """Build the public preview URL for a port running inside this sandbox.
+
+        The edge proxy exposes any user-app port at
+        ``https://{port}-{id}.{host}``, so this is pure string construction —
+        no network call. The sandbox must be running and a server must be
+        listening on ``port`` for the URL to resolve. Call once per port to
+        preview several services at once.
+
+        Raises:
+            ValidationError: if ``port`` is not an integer in [1024, 65535].
+        """
+        return preview_url(self.id, self._config.sandbox_host, port)
 
     def pause(self) -> None:
         """Pause this sandbox. The sandbox transitions to ``paused``."""

@@ -7,7 +7,7 @@ import inspect
 import httpx
 import pytest
 import respx
-from superserve import AsyncSandbox, SandboxError, SandboxStatus
+from superserve import AsyncSandbox, SandboxError, SandboxStatus, ValidationError
 
 API = "https://api.example.com"
 
@@ -59,6 +59,26 @@ class TestAsyncSandboxSmoke:
                 assert sbx.id == "sbx-1"
                 assert sbx.status == SandboxStatus.ACTIVE
                 assert sbx._access_token == "tok"
+            finally:
+                await sbx._close_http_client()
+
+    async def test_get_preview_url(self) -> None:
+        with respx.mock() as router:
+            router.post(f"{API}/sandboxes").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            sbx = await AsyncSandbox.create(name="x")
+            try:
+                assert (
+                    sbx.get_preview_url(3000)
+                    == "https://3000-sbx-1.sandbox.superserve.ai"
+                )
+                assert (
+                    sbx.get_preview_url(8080)
+                    == "https://8080-sbx-1.sandbox.superserve.ai"
+                )
+                with pytest.raises(ValidationError):
+                    sbx.get_preview_url(80)
             finally:
                 await sbx._close_http_client()
 
