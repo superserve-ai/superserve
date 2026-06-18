@@ -16,7 +16,10 @@ export default async function DashboardLayout({
 
   return (
     <QueryProvider>
-      <DashboardShell isStaff={isStaff(user)} banner={<ImpersonationBanner />}>
+      <DashboardShell
+        isStaff={isStaff(user)}
+        banner={<ImpersonationBanner user={user} />}
+      >
         {children}
       </DashboardShell>
     </QueryProvider>

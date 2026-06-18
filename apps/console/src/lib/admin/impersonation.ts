@@ -4,7 +4,7 @@ import type { User } from "@supabase/supabase-js"
 import { cookies } from "next/headers"
 
 import { isStaff } from "@/lib/admin/staff"
-import { getProxySecret } from "@/lib/api/proxy-auth"
+import { getProxySecret } from "@/lib/api/proxy-secret"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -99,13 +99,19 @@ export interface ImpersonationContext {
  * Returns the active impersonation context for the current request, or null if
  * the user is not staff or no valid impersonation cookie is present.
  */
-export async function getImpersonationContext(): Promise<ImpersonationContext | null> {
-  const supabase = await createServerClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+export async function getImpersonationContext(
+  user?: User | null,
+): Promise<ImpersonationContext | null> {
+  let resolvedUser = user
+  if (resolvedUser === undefined) {
+    const supabase = await createServerClient()
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser()
+    resolvedUser = authUser
+  }
 
-  const teamId = await getImpersonationTeamId(user)
+  const teamId = await getImpersonationTeamId(resolvedUser)
   if (!teamId) return null
 
   const admin = createAdminClient()
