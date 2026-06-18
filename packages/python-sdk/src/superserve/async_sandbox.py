@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import builtins
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import httpx
 
@@ -344,6 +344,37 @@ class AsyncSandbox:
             client=self._http_client,
         )
         return to_network_log_page(raw)
+
+    async def attach_secret(self, env_key: str, secret_name: str) -> None:
+        """Bind a team secret to this sandbox under an environment variable.
+
+        The sandbox sees a stand-in token; the real credential is swapped in for
+        outbound requests to the secret's allowed hosts. Takes effect for
+        processes started after this call; a paused sandbox applies it on resume.
+        """
+        self._require_live()
+        await async_api_request(
+            "POST",
+            f"{self._config.base_url}/sandboxes/{self.id}/secrets",
+            headers={"X-API-Key": self._config.api_key},
+            json_body={"env_key": env_key, "secret_name": secret_name},
+            client=self._http_client,
+        )
+
+    async def detach_secret(self, env_key: str) -> None:
+        """Remove a secret binding from this sandbox by its env-var key.
+
+        New processes no longer see the stand-in token, and a process already
+        running loses the credential's access within about a minute. A paused
+        sandbox applies the change on resume.
+        """
+        self._require_live()
+        await async_api_request(
+            "DELETE",
+            f"{self._config.base_url}/sandboxes/{self.id}/secrets/{quote(env_key, safe='')}",
+            headers={"X-API-Key": self._config.api_key},
+            client=self._http_client,
+        )
 
     def __repr__(self) -> str:
         return (
