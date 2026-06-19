@@ -17,7 +17,6 @@ import {
   fileNameFromPath,
   filenameFromContentDisposition,
   filesUrl,
-  FileListingUnavailableError,
   joinPath,
   uploadFileTo,
   type DirEntry,
@@ -228,7 +227,11 @@ export function FileBrowser({ sandbox }: FileBrowserProps) {
   return (
     <div className="flex flex-col">
       <div className="flex h-10 items-center justify-between gap-3 border-b border-border px-4">
-        <FileBreadcrumb path={path} onNavigate={setPath} />
+        <FileBreadcrumb
+          path={path}
+          homePath={DEFAULT_PATH}
+          onNavigate={setPath}
+        />
         <div className="flex shrink-0 items-center gap-1">
           <Button
             variant="ghost"
@@ -342,14 +345,12 @@ function ListingError({
   error: Error
   onRetry: () => void
 }) {
-  const message =
-    error instanceof FileListingUnavailableError
-      ? "Directory listing isn't available for this sandbox yet."
-      : error.message
   return (
     <div className="flex min-h-[180px] flex-col items-center justify-center gap-3 px-6 py-12 text-center">
       <WarningCircleIcon className="size-8 text-destructive" weight="light" />
-      <p className="max-w-sm font-mono text-xs text-foreground/70">{message}</p>
+      <p className="max-w-sm font-mono text-xs text-foreground/70">
+        {error.message}
+      </p>
       <Button variant="outline" size="sm" onClick={onRetry}>
         Retry
       </Button>

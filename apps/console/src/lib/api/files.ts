@@ -1,43 +1,32 @@
 /**
  * files — data-plane file operations for the sandbox file manager.
  *
- * Everything here talks directly to the per-sandbox data plane
- * (`boxd-{id}.{SANDBOX_HOST}/files`) with the `X-Access-Token`, the same
- * surface the upload/download panels have always used. The control-plane proxy
- * is not involved.
+ * Byte transfer (read/write/upload/download) talks directly to the per-sandbox
+ * data plane (`boxd-{id}.{SANDBOX_HOST}/files`) with the `X-Access-Token`.
+ * Directory listing is metadata, so it goes through the control-plane API
+ * (`apiClient`) instead — see `listDir`.
  *
  * Pure helpers (path math, header parsing) live here too so the UI and tests
  * share one implementation.
  */
 
+import { apiClient } from "@/lib/api/client"
 import type { SandboxResponse } from "@/lib/api/types"
 
 const SANDBOX_HOST =
   process.env.NEXT_PUBLIC_SANDBOX_HOST ?? "sandbox.superserve.ai"
 
-/** A single entry in a directory listing (boxd `format=json` shape). */
+/** A single entry in a directory listing. */
 export interface DirEntry {
   name: string
   is_dir: boolean
   size: number
+  /** Unix seconds; 0 on sandboxes whose boxd predates the field (date hidden). */
   modified_unix: number
 }
 
 /** The subset of a sandbox a data-plane file call needs. */
 type FileSandbox = Pick<SandboxResponse, "id" | "access_token">
-
-/**
- * Thrown when the data plane can't list directories yet — an old boxd (before
- * `format=json`) 400s a directory with the legacy "use FilesystemService"
- * message. Surfaced as its own type so the UI can show "not available yet"
- * rather than a hard error, letting the console ship ahead of the boxd rollout.
- */
-export class FileListingUnavailableError extends Error {
-  constructor() {
-    super("Directory listing is not available for this sandbox yet.")
-    this.name = "FileListingUnavailableError"
-  }
-}
 
 export function filesUrl(
   sandboxId: string,
@@ -149,33 +138,22 @@ export function sortEntries(entries: DirEntry[]): DirEntry[] {
 }
 
 /**
- * List a directory's immediate children (non-recursive) via boxd's
- * `?format=json` listing, returned dirs-first then alpha.
+ * List a directory's immediate children (non-recursive), dirs-first then alpha.
+ *
+ * Unlike the byte-transfer helpers, listing is metadata, so it goes through the
+ * control-plane API (`GET /sandboxes/:id/files`) rather than the data plane. The
+ * API lists via boxd's FilesystemService.ListDir, which every sandbox supports
+ * regardless of boxd version — so existing sandboxes list without a reseed.
+ * `apiClient` throws `ApiError` (404 → "Folder not found", 400 → bad path),
+ * surfaced directly by the UI.
  */
 export async function listDir(
   sandbox: FileSandbox,
   path: string,
-  signal?: AbortSignal,
 ): Promise<DirEntry[]> {
-  const res = await fetch(filesUrl(sandbox.id, path, { format: "json" }), {
-    method: "GET",
-    headers: { "X-Access-Token": sandbox.access_token },
-    signal,
-  })
-  if (!res.ok) {
-    const detail = await errorMessage(
-      res,
-      `Could not list ${path} (${res.status})`,
-    )
-    if (res.status === 400 && /FilesystemService|director/i.test(detail)) {
-      throw new FileListingUnavailableError()
-    }
-    if (res.status === 404) {
-      throw new Error(`Folder not found: ${path}`)
-    }
-    throw new Error(detail)
-  }
-  const data = (await res.json()) as { entries?: DirEntry[] }
+  const data = await apiClient<{ entries?: DirEntry[] }>(
+    `/sandboxes/${sandbox.id}/files?path=${encodeURIComponent(path)}`,
+  )
   return sortEntries(Array.isArray(data.entries) ? data.entries : [])
 }
 

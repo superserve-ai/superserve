@@ -7,7 +7,7 @@
  *   - Descending into a folder (re-lists the subpath)
  *   - Downloading a file (format=zip, success toast + posthog)
  *   - Drag-drop upload onto the current directory and onto a folder row
- *   - Deploy-aware "listing not available yet" on the legacy 400
+ *   - Surfacing the API error message when a listing request fails
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
@@ -83,9 +83,10 @@ function listingResponse(entries: typeof ENTRIES) {
   })
 }
 
-// Route fetch by shape: listing (format=json), upload (POST), download (zip).
+// Route fetch by shape: listing (control-plane /api/.../files), upload (POST),
+// download (data-plane ?format=zip).
 function defaultFetch(url: string, init?: RequestInit) {
-  if (url.includes("format=json"))
+  if (url.includes("/api/sandboxes/") && url.includes("/files"))
     return Promise.resolve(listingResponse(ENTRIES))
   if (init?.method === "POST")
     return Promise.resolve(new Response(null, { status: 200 }))
@@ -145,10 +146,9 @@ describe("FileBrowser — listing & navigation", () => {
     expect(await screen.findByText("proj/")).toBeInTheDocument()
     expect(screen.getByText("readme.md")).toBeInTheDocument()
 
-    const [url, init] = fetchSpy.mock.calls[0]
-    expect(url).toContain("/files?path=%2Fhome%2Fuser")
-    expect(url).toContain("format=json")
-    expect(init.headers["X-Access-Token"]).toBe("tok-abc")
+    const [url] = fetchSpy.mock.calls[0]
+    expect(String(url)).toContain("/api/sandboxes/")
+    expect(String(url)).toContain("/files?path=%2Fhome%2Fuser")
   })
 
   it("descends into a folder and lists the subpath", async () => {
@@ -160,8 +160,8 @@ describe("FileBrowser — listing & navigation", () => {
       expect(
         fetchSpy.mock.calls.some(
           ([u]) =>
-            String(u).includes("path=%2Fhome%2Fuser%2Fproj") &&
-            String(u).includes("format=json"),
+            String(u).includes("/api/sandboxes/") &&
+            String(u).includes("path=%2Fhome%2Fuser%2Fproj"),
         ),
       ).toBe(true),
     )
@@ -245,21 +245,19 @@ describe("FileBrowser — drag-drop upload", () => {
   })
 })
 
-describe("FileBrowser — deploy gap", () => {
-  it("shows 'not available yet' when the data plane returns the legacy 400", async () => {
+describe("FileBrowser — listing errors", () => {
+  it("surfaces the API error message when listing fails", async () => {
     fetchSpy.mockImplementation(() =>
       Promise.resolve(
         new Response(
           JSON.stringify({
-            error: "use FilesystemService.ListDir for directories",
+            error: { code: "not_found", message: "Folder not found." },
           }),
-          { status: 400 },
+          { status: 404 },
         ),
       ),
     )
     renderSection()
-    expect(
-      await screen.findByText(/available for this sandbox yet/i),
-    ).toBeInTheDocument()
+    expect(await screen.findByText(/Folder not found/i)).toBeInTheDocument()
   })
 })

@@ -2,11 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query"
 
-import {
-  FileListingUnavailableError,
-  listDir,
-  type DirEntry,
-} from "@/lib/api/files"
+import { ApiError } from "@/lib/api/client"
+import { listDir, type DirEntry } from "@/lib/api/files"
 import { fileKeys } from "@/lib/api/query-keys"
 import type { SandboxResponse } from "@/lib/api/types"
 
@@ -19,12 +16,14 @@ import type { SandboxResponse } from "@/lib/api/types"
 export function useDirListing(sandbox: SandboxResponse, path: string) {
   return useQuery<DirEntry[]>({
     queryKey: fileKeys.listing(sandbox.id, path),
-    queryFn: ({ signal }) => listDir(sandbox, path, signal),
+    queryFn: () => listDir(sandbox, path),
     enabled: sandbox.status === "active",
     staleTime: 10_000,
-    // Listing-unavailable (old data plane) and not-found are deterministic —
-    // don't hammer the data plane retrying them; allow one retry for blips.
-    retry: (count, error) =>
-      !(error instanceof FileListingUnavailableError) && count < 1,
+    // 400 (bad path) and 404 (not found) are deterministic — don't retry them;
+    // allow one retry for 5xx / network blips.
+    retry: (count, error) => {
+      const status = error instanceof ApiError ? error.status : 0
+      return status !== 400 && status !== 404 && count < 1
+    },
   })
 }

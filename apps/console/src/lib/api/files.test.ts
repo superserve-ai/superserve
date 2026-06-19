@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
-  FileListingUnavailableError,
   filenameFromContentDisposition,
   filesUrl,
   isValidAbsolutePath,
@@ -103,7 +102,7 @@ describe("sortEntries", () => {
 describe("listDir", () => {
   beforeEach(() => fetchSpy.mockReset())
 
-  it("requests format=json with the access token and returns sorted entries", async () => {
+  it("lists via the control-plane API and returns sorted entries", async () => {
     fetchSpy.mockResolvedValue(
       jsonResponse({
         entries: [
@@ -115,11 +114,8 @@ describe("listDir", () => {
 
     const entries = await listDir(sandbox, "/home/user")
 
-    const [url, init] = fetchSpy.mock.calls[0]
-    expect(url).toContain("/files?path=%2Fhome%2Fuser")
-    expect(url).toContain("format=json")
-    expect(init.method).toBe("GET")
-    expect(init.headers["X-Access-Token"]).toBe("tok-abc")
+    const [url] = fetchSpy.mock.calls[0]
+    expect(url).toBe("/api/sandboxes/sbx-1/files?path=%2Fhome%2Fuser")
     expect(entries.map((e) => e.name)).toEqual(["sub", "b.txt"])
   })
 
@@ -128,23 +124,17 @@ describe("listDir", () => {
     expect(await listDir(sandbox, "/home/user")).toEqual([])
   })
 
-  it("maps the legacy 400 directory message to FileListingUnavailableError", async () => {
+  it("throws ApiError with the status on a non-OK response", async () => {
     fetchSpy.mockResolvedValue(
       jsonResponse(
-        { error: "use FilesystemService.ListDir for directories" },
-        400,
+        { error: { code: "not_found", message: "Folder not found." } },
+        404,
       ),
     )
-    await expect(listDir(sandbox, "/home/user")).rejects.toBeInstanceOf(
-      FileListingUnavailableError,
-    )
-  })
-
-  it("maps a 404 to a folder-not-found error", async () => {
-    fetchSpy.mockResolvedValue(jsonResponse({ error: "file not found" }, 404))
-    await expect(listDir(sandbox, "/home/user/missing")).rejects.toThrow(
-      /not found/i,
-    )
+    await expect(listDir(sandbox, "/home/user/missing")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 404,
+    })
   })
 })
 

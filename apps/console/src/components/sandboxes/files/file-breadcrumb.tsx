@@ -6,14 +6,21 @@ import { pathSegments } from "@/lib/api/files"
 
 interface FileBreadcrumbProps {
   path: string
+  homePath: string
   onNavigate: (path: string) => void
 }
 
 /**
- * Clickable path breadcrumb: root icon + each path segment. The final segment
- * is the current directory (not clickable); earlier segments navigate up.
+ * Clickable path breadcrumb: a home icon (jumps to the sandbox home) + each
+ * path segment. The final segment is the current directory (not clickable);
+ * earlier segments navigate up. The home icon points at homePath, not "/",
+ * because boxd's safePath refuses to list the filesystem root.
  */
-export function FileBreadcrumb({ path, onNavigate }: FileBreadcrumbProps) {
+export function FileBreadcrumb({
+  path,
+  homePath,
+  onNavigate,
+}: FileBreadcrumbProps) {
   const segments = pathSegments(path)
 
   return (
@@ -23,8 +30,8 @@ export function FileBreadcrumb({ path, onNavigate }: FileBreadcrumbProps) {
     >
       <button
         type="button"
-        onClick={() => onNavigate("/")}
-        aria-label="Root"
+        onClick={() => onNavigate(homePath)}
+        aria-label="Home"
         className="shrink-0 text-muted hover:text-foreground"
       >
         <HouseIcon className="size-3.5" weight="light" />
