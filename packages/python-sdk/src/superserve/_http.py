@@ -21,7 +21,7 @@ from .errors import SandboxError, SandboxTimeoutError, map_api_error
 
 DEFAULT_TIMEOUT = 30.0
 
-SDK_VERSION = "0.7.5"
+SDK_VERSION = "0.7.7"
 USER_AGENT = (
     f"superserve-python/{SDK_VERSION} "
     f"(python/{sys.version_info.major}.{sys.version_info.minor})"
