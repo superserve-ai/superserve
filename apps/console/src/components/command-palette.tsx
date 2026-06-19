@@ -12,6 +12,7 @@ import {
   PlusIcon,
   RocketLaunchIcon,
   StackIcon,
+  LockKeyIcon,
 } from "@phosphor-icons/react"
 import { Command } from "cmdk"
 import { AnimatePresence, motion } from "motion/react"
@@ -67,6 +68,11 @@ export function CommandPalette() {
     //   onSelect: () => navigate("/snapshots"),
     // },
     {
+      label: "Secrets",
+      icon: LockKeyIcon,
+      onSelect: () => navigate("/secrets"),
+    },
+    {
       label: "Audit Logs",
       icon: ClipboardTextIcon,
       onSelect: () => navigate("/audit-logs"),
@@ -103,6 +109,11 @@ export function CommandPalette() {
       label: "Create template",
       icon: PlusIcon,
       onSelect: () => navigate("/templates?create=1"),
+    },
+    {
+      label: "Add secret",
+      icon: LockKeyIcon,
+      onSelect: () => navigate("/secrets?create=1"),
     },
     {
       label: "Create API key",

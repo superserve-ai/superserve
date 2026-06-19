@@ -3,9 +3,11 @@ import {
   CubeIcon,
   StackIcon,
   TerminalIcon,
+  LockKeyIcon,
   WarningIcon,
 } from "@phosphor-icons/react"
 import { Badge, HighlightedCode, Separator } from "@superserve/ui"
+import Link from "next/link"
 
 import { CodeBlock } from "@/components/code-block"
 import type { ActivityResponse } from "@/lib/api/types"
@@ -23,6 +25,7 @@ const CATEGORY_META: Record<
   sandbox: { icon: CubeIcon, label: "Sandbox" },
   template: { icon: StackIcon, label: "Template" },
   exec: { icon: TerminalIcon, label: "Exec" },
+  secret: { icon: LockKeyIcon, label: "Secret" },
 }
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/
@@ -122,14 +125,33 @@ export function ActivityDetail({ log }: { log: ActivityResponse }) {
             {formatTime(new Date(log.created_at)).absolute}
           </span>
         </Field>
-        <Field label="Sandbox">
-          <span className="font-mono">{log.sandbox_name ?? "—"}</span>
-        </Field>
-        <Field label="Sandbox ID">
-          <span className="font-mono break-all text-foreground/70">
-            {log.sandbox_id}
-          </span>
-        </Field>
+        {log.secret_name ? (
+          <Field label="Secret">
+            {log.secret_id ? (
+              <Link
+                href={`/secrets/${log.secret_name}`}
+                className="font-mono underline-offset-2 hover:underline"
+              >
+                {log.secret_name}
+              </Link>
+            ) : (
+              <span className="font-mono">
+                {log.secret_name} <span className="text-muted">(deleted)</span>
+              </span>
+            )}
+          </Field>
+        ) : (
+          <>
+            <Field label="Sandbox">
+              <span className="font-mono">{log.sandbox_name ?? "—"}</span>
+            </Field>
+            <Field label="Sandbox ID">
+              <span className="font-mono break-all text-foreground/70">
+                {log.sandbox_id ?? "—"}
+              </span>
+            </Field>
+          </>
+        )}
         <Field label="Action">
           <span className="font-mono">{log.action}</span>
         </Field>

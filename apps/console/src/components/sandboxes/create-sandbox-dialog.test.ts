@@ -16,6 +16,7 @@ const emptyState = {
   timeout: "",
   allowRules: [] as string[],
   denyRules: [] as string[],
+  secretEntries: [] as { key: string; secret: string }[],
   envEntries: [] as { key: string; value: string }[],
   metadataEntries: [] as { key: string; value: string }[],
 }
@@ -108,6 +109,27 @@ describe("buildCreateSandboxRequest", () => {
     expect(req.env_vars).toEqual({ API_KEY: "abc", DEBUG: "" })
   })
 
+  it("omits secrets when no entry is complete", () => {
+    const req = buildCreateSandboxRequest({
+      ...emptyState,
+      name: "x",
+      secretEntries: [
+        { key: "", secret: "openai_api_key" },
+        { key: "OPENAI_API_KEY", secret: "" },
+      ],
+    })
+    expect(req.secrets).toBeUndefined()
+  })
+
+  it("includes secrets with trimmed env keys", () => {
+    const req = buildCreateSandboxRequest({
+      ...emptyState,
+      name: "x",
+      secretEntries: [{ key: " OPENAI_API_KEY ", secret: "openai_api_key" }],
+    })
+    expect(req.secrets).toEqual({ OPENAI_API_KEY: "openai_api_key" })
+  })
+
   it("includes metadata with trimmed keys/values", () => {
     const req = buildCreateSandboxRequest({
       ...emptyState,
@@ -126,6 +148,7 @@ describe("buildCreateSandboxRequest", () => {
       timeout: "600",
       allowRules: ["api.example.com"],
       denyRules: ["malicious.test"],
+      secretEntries: [{ key: "GITHUB_TOKEN", secret: "github_pat" }],
       envEntries: [{ key: "API_KEY", value: "abc" }],
       metadataEntries: [{ key: "env", value: "prod" }],
     })
@@ -136,6 +159,7 @@ describe("buildCreateSandboxRequest", () => {
         allow_out: ["api.example.com"],
         deny_out: ["malicious.test"],
       },
+      secrets: { GITHUB_TOKEN: "github_pat" },
       env_vars: { API_KEY: "abc" },
       metadata: { env: "prod" },
     })

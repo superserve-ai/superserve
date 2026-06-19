@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import builtins
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote, urlencode
 
 import httpx
 
@@ -13,7 +14,16 @@ from ._http import async_api_request
 from .commands import AsyncCommands, AsyncCommandsDeps
 from .errors import NotFoundError, SandboxError
 from .files import AsyncFiles
-from .types import NetworkConfig, SandboxInfo, SandboxStatus, to_sandbox_info
+from .types import (
+    NetworkConfig,
+    NetworkLogPage,
+    NetworkVerdict,
+    SandboxInfo,
+    SandboxSecretBinding,
+    SandboxStatus,
+    to_network_log_page,
+    to_sandbox_info,
+)
 
 if TYPE_CHECKING:
     from .async_template import AsyncTemplate
@@ -33,6 +43,8 @@ class AsyncSandbox:
         self.name: str = info.name
         self.status: SandboxStatus = info.status
         self.metadata: dict[str, str] = info.metadata
+        # Secrets bound at construction time; call get_info() to refresh.
+        self.secrets: list[SandboxSecretBinding] | None = info.secrets
         self._access_token: str = access_token
         self._config = config
         self._http_client: httpx.AsyncClient = httpx.AsyncClient(timeout=30.0)
@@ -90,11 +102,17 @@ class AsyncSandbox:
         timeout_seconds: int | None = None,
         metadata: dict[str, str] | None = None,
         env_vars: dict[str, str] | None = None,
+        secrets: dict[str, str] | None = None,
         network: NetworkConfig | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> AsyncSandbox:
-        """Create a new sandbox. Returns once the sandbox is ready."""
+        """Create a new sandbox. Returns once the sandbox is ready.
+
+        ``secrets`` binds team-stored secrets to environment variables as
+        ``{ENV_VAR: secret_name}``: the agent sees a proxy token under each env
+        var; the in-host daemon swaps it for the real credential at egress.
+        """
         config = resolve_config(api_key=api_key, base_url=base_url)
 
         body: dict[str, Any] = {"name": name}
@@ -114,6 +132,8 @@ class AsyncSandbox:
             body["metadata"] = metadata
         if env_vars is not None:
             body["env_vars"] = env_vars
+        if secrets is not None:
+            body["secrets"] = secrets
         if network:
             body["network"] = {
                 "allow_out": network.allow_out,
@@ -284,6 +304,75 @@ class AsyncSandbox:
             f"{self._config.base_url}/sandboxes/{self.id}",
             headers={"X-API-Key": self._config.api_key},
             json_body=body,
+            client=self._http_client,
+        )
+
+    async def get_network_log(
+        self,
+        *,
+        limit: int | None = None,
+        before: str | None = None,
+        since: str | None = None,
+        verdict: "NetworkVerdict | str | None" = None,
+    ) -> NetworkLogPage:
+        """The sandbox's network log: every outbound connection it made, newest
+        first. ``connection`` rows are raw egress (host, bytes, allow/deny
+        verdict); ``request`` rows are credential-injected requests (method,
+        path, status, secret used).
+
+        Filter by time window (``since``/``before``) and ``verdict``. Paginate
+        by passing the returned ``next_cursor`` as ``before`` while ``has_more``.
+        """
+        params: dict[str, Any] = {}
+        if limit is not None:
+            params["limit"] = limit
+        if before is not None:
+            params["before"] = before
+        if since is not None:
+            params["since"] = since
+        if verdict is not None:
+            params["verdict"] = (
+                verdict.value if isinstance(verdict, NetworkVerdict) else verdict
+            )
+        url = f"{self._config.base_url}/sandboxes/{self.id}/network"
+        if params:
+            url += "?" + urlencode(params)
+        raw = await async_api_request(
+            "GET",
+            url,
+            headers={"X-API-Key": self._config.api_key},
+            client=self._http_client,
+        )
+        return to_network_log_page(raw)
+
+    async def attach_secret(self, env_key: str, secret_name: str) -> None:
+        """Bind a team secret to this sandbox under an environment variable.
+
+        The sandbox sees a stand-in token; the real credential is swapped in for
+        outbound requests to the secret's allowed hosts. Takes effect for
+        processes started after this call; a paused sandbox applies it on resume.
+        """
+        self._require_live()
+        await async_api_request(
+            "POST",
+            f"{self._config.base_url}/sandboxes/{self.id}/secrets",
+            headers={"X-API-Key": self._config.api_key},
+            json_body={"env_key": env_key, "secret_name": secret_name},
+            client=self._http_client,
+        )
+
+    async def detach_secret(self, env_key: str) -> None:
+        """Remove a secret binding from this sandbox by its env-var key.
+
+        The stand-in token is revoked, so requests using it are refused — within
+        about a minute for a process already running. A paused sandbox applies
+        the change on resume.
+        """
+        self._require_live()
+        await async_api_request(
+            "DELETE",
+            f"{self._config.base_url}/sandboxes/{self.id}/secrets/{quote(env_key, safe='')}",
+            headers={"X-API-Key": self._config.api_key},
             client=self._http_client,
         )
 

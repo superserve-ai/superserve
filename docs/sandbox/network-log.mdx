@@ -1,0 +1,118 @@
+---
+title: "Network log"
+sidebarTitle: Network log
+description: See every outbound connection a sandbox made — allowed, blocked, or failed — and every secret-bearing request, in one timeline.
+---
+
+The network log answers a question you can't answer from inside an untrusted sandbox: **what did it actually reach on the network?** Every outbound connection passes through Superserve, so the log is recorded by the platform — code inside the sandbox can't see it or tamper with it.
+
+<CodeGroup>
+```typescript TypeScript
+const page = await sandbox.getNetworkLog({ limit: 50 })
+
+for (const e of page.events) {
+  if (e.kind === "connection") {
+    console.log(e.ts, e.host ?? e.dstIp, e.verdict)
+  } else {
+    console.log(e.ts, e.method, e.host + e.path, "→", e.status)
+  }
+}
+```
+
+```python Python
+page = sandbox.get_network_log(limit=50)
+
+for e in page.events:
+    if e.kind == "connection":
+        print(e.ts, e.host or e.dst_ip, e.verdict)
+    else:
+        print(e.ts, e.method, f"{e.host}{e.path}", "→", e.status)
+```
+</CodeGroup>
+
+## Two kinds of rows
+
+Each event has a `kind`:
+
+- **`connection`** — a raw outbound connection. Carries the host (or `dstIp`), a `verdict`, and byte counts. This is every connection the sandbox opened, whether or not a secret was involved.
+- **`request`** — a secret-bearing request (the sandbox used a [secret](/secrets/overview)). Carries `method`, `path`, `status`, and the `secretId` that was used.
+
+Fields that don't apply to a row's kind are omitted.
+
+### Verdicts
+
+Every `connection` row has a verdict:
+
+| Verdict | Meaning |
+|---|---|
+| `allowed` | Connected — `bytesSent` / `bytesRecv` are populated |
+| `blocked` | Denied by one of your [network rules](/sandbox/networking), or because sandboxes are limited to the public internet — private and internal addresses are always blocked. `matchRule` names the rule that stopped it |
+| `failed` | Allowed by policy, but the connection couldn't be established |
+
+`matchRule` names the rule behind a `blocked` connection — a useful signal for catching when a sandbox tried to reach somewhere you didn't expect.
+
+## Filtering
+
+Narrow by verdict, or to a time window:
+
+<CodeGroup>
+```typescript TypeScript
+// Everything that was blocked.
+const blocked = await sandbox.getNetworkLog({ verdict: "blocked" })
+
+// A specific window during an incident.
+const window = await sandbox.getNetworkLog({
+  since: "2026-06-11T14:00:00Z",
+  before: "2026-06-11T15:00:00Z",
+})
+```
+
+```python Python
+blocked = sandbox.get_network_log(verdict="blocked")
+
+window = sandbox.get_network_log(
+    since="2026-06-11T14:00:00Z",
+    before="2026-06-11T15:00:00Z",
+)
+```
+</CodeGroup>
+
+<Note>
+A `verdict` filter returns only `connection` rows — `request` rows have no verdict.
+</Note>
+
+## Pagination
+
+The log is cursor-paginated, newest first. Pass `nextCursor` as `before` while `hasMore` is true:
+
+<CodeGroup>
+```typescript TypeScript
+let cursor: string | undefined
+do {
+  const page = await sandbox.getNetworkLog({ before: cursor, limit: 100 })
+  for (const e of page.events) handle(e)
+  cursor = page.nextCursor
+} while (cursor)
+```
+
+```python Python
+cursor = None
+while True:
+    page = sandbox.get_network_log(before=cursor, limit=100)
+    for e in page.events:
+        handle(e)
+    cursor = page.next_cursor
+    if not cursor:
+        break
+```
+</CodeGroup>
+
+## What the log does and doesn't capture
+
+The log records what the **sandbox** sent. It does **not** record work a third party does on the sandbox's behalf — if an agent calls an LLM that itself runs a web search server-side, you'll see the one request to the LLM, not the searches it ran on its own infrastructure. Those packets never left your sandbox.
+
+It covers HTTP and HTTPS egress. DNS resolution and raw non-HTTP sockets aren't in this log.
+
+<Tip>
+Pair the network log (what was reached) with [network rules](/sandbox/networking) (what's allowed) and [secrets](/secrets/overview) (credentials attached to outbound requests) for end-to-end control and visibility over a sandbox's network.
+</Tip>

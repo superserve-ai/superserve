@@ -11,7 +11,7 @@ import {
 } from "@superserve/ui"
 import { useState } from "react"
 
-interface DateRange {
+export interface DateRange {
   start: Date
   end: Date
 }
