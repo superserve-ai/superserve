@@ -141,6 +141,54 @@ class TestFilesDownloadDir:
             assert req.headers["X-Access-Token"] == "tok-xyz"
 
 
+class TestFilesDownloadByteCap:
+    def test_read_over_cap_raises(self) -> None:
+        with respx.mock() as router:
+            router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+                return_value=httpx.Response(200, content=b"x" * 100)
+            )
+            with pytest.raises(ValidationError, match="maximum size of 10 bytes"):
+                _make_files().read("/home/big.bin", max_bytes=10)
+
+    def test_read_under_cap_returns_bytes(self) -> None:
+        with respx.mock() as router:
+            router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+                return_value=httpx.Response(200, content=b"small")
+            )
+            assert _make_files().read("/home/small.bin", max_bytes=1024) == b"small"
+
+    def test_read_at_cap_returns_bytes(self) -> None:
+        with respx.mock() as router:
+            router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+                return_value=httpx.Response(200, content=b"abcde")
+            )
+            assert _make_files().read("/home/exact.bin", max_bytes=5) == b"abcde"
+
+    def test_download_dir_over_cap_raises(self) -> None:
+        with respx.mock() as router:
+            router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+                return_value=httpx.Response(200, content=b"PK" + b"z" * 100)
+            )
+            with pytest.raises(ValidationError, match="maximum size"):
+                _make_files().download_dir("/home/project", max_bytes=10)
+
+    async def test_async_read_over_cap_raises(self) -> None:
+        with respx.mock() as router:
+            router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+                return_value=httpx.Response(200, content=b"y" * 100)
+            )
+            with pytest.raises(ValidationError, match="maximum size of 10 bytes"):
+                await _make_async_files().read("/home/big.bin", max_bytes=10)
+
+    async def test_async_read_under_cap_returns_bytes(self) -> None:
+        with respx.mock() as router:
+            router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+                return_value=httpx.Response(200, content=b"tiny")
+            )
+            result = await _make_async_files().read("/home/tiny.bin", max_bytes=1024)
+            assert result == b"tiny"
+
+
 class TestAsyncFilesDownloadDir:
     async def test_returns_zip_bytes(self) -> None:
         with respx.mock() as router:

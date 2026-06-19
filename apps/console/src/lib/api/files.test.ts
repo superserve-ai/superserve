@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+  downloadWithLimit,
   filenameFromContentDisposition,
   filesUrl,
   isValidAbsolutePath,
@@ -22,6 +23,27 @@ function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json" },
+  })
+}
+
+/**
+ * A streaming Response whose body emits the given chunks one read() at a time,
+ * so downloadWithLimit's byte accounting and idle-timer logic are exercised the
+ * same way a real network stream would drive them.
+ */
+function streamResponse(
+  chunks: Uint8Array[],
+  init: { status?: number; headers?: Record<string, string> } = {},
+) {
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk)
+      controller.close()
+    },
+  })
+  return new Response(body, {
+    status: init.status ?? 200,
+    headers: init.headers,
   })
 }
 
@@ -172,5 +194,101 @@ describe("uploadFileTo", () => {
     await expect(uploadFileTo(sandbox, "/home/user", file)).rejects.toThrow(
       /disk full/,
     )
+  })
+})
+
+describe("downloadWithLimit", () => {
+  beforeEach(() => fetchSpy.mockReset())
+
+  it("resolves with the blob and content-disposition for an under-cap body", async () => {
+    const chunk = new Uint8Array([1, 2, 3, 4, 5])
+    fetchSpy.mockResolvedValue(
+      streamResponse([chunk], {
+        headers: { "content-disposition": 'attachment; filename="out.zip"' },
+      }),
+    )
+
+    const { blob, contentDisposition } = await downloadWithLimit(
+      "https://boxd-sbx-1.example/files?path=%2Ffile",
+      { headers: { "X-Access-Token": "tok-abc" } },
+    )
+
+    expect(blob.size).toBe(5)
+    expect(contentDisposition).toBe('attachment; filename="out.zip"')
+    const [, init] = fetchSpy.mock.calls[0]
+    expect(init.method).toBe("GET")
+    expect(init.headers["X-Access-Token"]).toBe("tok-abc")
+    // A composed AbortController signal is always passed to fetch.
+    expect(init.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it("rejects when the streamed body exceeds maxBytes", async () => {
+    // Two 4-byte chunks (8 bytes total) against a 6-byte cap.
+    const chunks = [new Uint8Array(4), new Uint8Array(4)]
+    fetchSpy.mockResolvedValue(streamResponse(chunks))
+
+    await expect(
+      downloadWithLimit("https://boxd-sbx-1.example/files?path=%2Fbig", {
+        maxBytes: 6,
+      }),
+    ).rejects.toThrow(/exceeds the maximum size/i)
+  })
+
+  it("throws a DownloadError carrying the status on a non-OK response", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ error: "gone" }), { status: 404 }),
+    )
+
+    await expect(
+      downloadWithLimit("https://boxd-sbx-1.example/files?path=%2Fmissing"),
+    ).rejects.toMatchObject({ name: "DownloadError", status: 404 })
+  })
+
+  it("aborts the fetch when the caller's signal aborts", async () => {
+    const ac = new AbortController()
+    let fetchSignal: AbortSignal | undefined
+    // A real fetch settles on abort. The mock mirrors that: it rejects as soon
+    // as the (composed) signal aborts, and never returns an endless promise.
+    fetchSpy.mockImplementation(
+      (_url?: string, init?: RequestInit) =>
+        new Promise((resolve, reject) => {
+          const sig = init?.signal
+          fetchSignal = sig ?? undefined
+          const fail = () => reject(new DOMException("Aborted", "AbortError"))
+          if (!sig) {
+            // Stray call without a signal: settle immediately, don't hang.
+            resolve(streamResponse([new Uint8Array(1)]))
+          } else if (sig.aborted) {
+            fail()
+          } else {
+            sig.addEventListener("abort", fail, { once: true })
+          }
+        }),
+    )
+
+    const promise = downloadWithLimit(
+      "https://boxd-sbx-1.example/files?path=%2Fslow",
+      { signal: ac.signal },
+    )
+    ac.abort()
+
+    await expect(promise).rejects.toThrow(/abort/i)
+    expect(fetchSignal?.aborted).toBe(true)
+  })
+
+  it("rejects an already-aborted caller signal", async () => {
+    const ac = new AbortController()
+    ac.abort()
+    fetchSpy.mockImplementation((_url?: string, init?: RequestInit) =>
+      init?.signal?.aborted
+        ? Promise.reject(new DOMException("Aborted", "AbortError"))
+        : Promise.resolve(streamResponse([new Uint8Array(1)])),
+    )
+
+    await expect(
+      downloadWithLimit("https://boxd-sbx-1.example/files?path=%2Fx", {
+        signal: ac.signal,
+      }),
+    ).rejects.toThrow(/abort/i)
   })
 })

@@ -129,6 +129,135 @@ export async function errorMessage(
   return text || fallback
 }
 
+/** 2 GiB — matches boxd's server-side zip cap. */
+const DEFAULT_MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024
+/** Hard ceiling on a single download, regardless of progress. */
+const DEFAULT_TOTAL_TIMEOUT_MS = 300_000
+/** Abort if no chunk arrives within this window (stalled stream). */
+const DEFAULT_IDLE_TIMEOUT_MS = 60_000
+
+/**
+ * A non-OK HTTP response from a bounded download. Carries the status so callers
+ * can special-case it (e.g. 404 → "No file found") without re-parsing strings.
+ */
+export class DownloadError extends Error {
+  readonly status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = "DownloadError"
+    this.status = status
+  }
+}
+
+export interface DownloadWithLimitOptions {
+  headers?: Record<string, string>
+  signal?: AbortSignal
+  /** Reject once the streamed body exceeds this many bytes. */
+  maxBytes?: number
+  /** Hard ceiling on total elapsed time before aborting. */
+  totalTimeoutMs?: number
+  /** Abort if no chunk arrives within this window. */
+  idleTimeoutMs?: number
+}
+
+/**
+ * Stream a download from the (untrusted) data plane into a Blob under strict
+ * bounds. boxd runs user code, so a hostile sandbox can return an endless,
+ * stalled, or multi-GB body. This caps total bytes, total time, and per-chunk
+ * idle time, and stays cancellable via `opts.signal` so a navigated-away or
+ * unmounted caller stops consuming memory and network.
+ *
+ * Throws a clear `Error` on cap breach ("Download exceeds the maximum size") or
+ * timeout ("Download timed out"), a `DownloadError` (with `.status`) on a non-OK
+ * response, and the underlying `AbortError` on caller-driven abort.
+ */
+export async function downloadWithLimit(
+  url: string,
+  opts: DownloadWithLimitOptions = {},
+): Promise<{ blob: Blob; contentDisposition: string | null }> {
+  const {
+    headers,
+    signal,
+    maxBytes = DEFAULT_MAX_DOWNLOAD_BYTES,
+    totalTimeoutMs = DEFAULT_TOTAL_TIMEOUT_MS,
+    idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS,
+  } = opts
+
+  const controller = new AbortController()
+  let timedOut = false
+  let totalTimer: ReturnType<typeof setTimeout> | undefined
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
+
+  const clearTimers = () => {
+    if (totalTimer !== undefined) clearTimeout(totalTimer)
+    if (idleTimer !== undefined) clearTimeout(idleTimer)
+    totalTimer = undefined
+    idleTimer = undefined
+  }
+
+  const abortForTimeout = () => {
+    timedOut = true
+    controller.abort()
+  }
+
+  // Compose the caller's signal: if it aborts, abort our fetch too.
+  const onCallerAbort = () => controller.abort()
+  if (signal) {
+    if (signal.aborted) controller.abort()
+    else signal.addEventListener("abort", onCallerAbort, { once: true })
+  }
+
+  const resetIdleTimer = () => {
+    if (idleTimer !== undefined) clearTimeout(idleTimer)
+    idleTimer = setTimeout(abortForTimeout, idleTimeoutMs)
+  }
+
+  try {
+    totalTimer = setTimeout(abortForTimeout, totalTimeoutMs)
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers,
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const detail = await errorMessage(res, `Download failed (${res.status})`)
+      throw new DownloadError(detail, res.status)
+    }
+
+    const reader = res.body!.getReader()
+    const chunks: Uint8Array[] = []
+    let total = 0
+    resetIdleTimer()
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (value) {
+        total += value.byteLength
+        if (total > maxBytes) {
+          await reader.cancel()
+          clearTimers()
+          throw new Error("Download exceeds the maximum size")
+        }
+        chunks.push(value)
+      }
+      resetIdleTimer()
+    }
+
+    clearTimers()
+    return {
+      blob: new Blob(chunks as BlobPart[]),
+      contentDisposition: res.headers.get("content-disposition"),
+    }
+  } catch (err) {
+    if (timedOut) throw new Error("Download timed out", { cause: err })
+    throw err
+  } finally {
+    clearTimers()
+    if (signal) signal.removeEventListener("abort", onCallerAbort)
+  }
+}
+
 /** Directories first, then files; each group sorted case-insensitively. */
 export function sortEntries(entries: DirEntry[]): DirEntry[] {
   return entries.toSorted((a, b) => {

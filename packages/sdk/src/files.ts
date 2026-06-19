@@ -68,6 +68,8 @@ export class Files {
   /**
    * Read a file from the sandbox as raw bytes.
    *
+   * Downloads are capped at 2 GiB by default; override via `maxBytes`.
+   *
    * @example
    * ```typescript
    * const bytes = await sandbox.files.read("/app/config.json")
@@ -75,7 +77,11 @@ export class Files {
    */
   async read(
     path: string,
-    options: { timeoutMs?: number; signal?: AbortSignal } = {},
+    options: {
+      timeoutMs?: number
+      signal?: AbortSignal
+      maxBytes?: number
+    } = {},
   ): Promise<Uint8Array> {
     validatePath(path)
     const url = `${this._dataPlaneBaseUrl}/files?path=${encodeURIComponent(path)}`
@@ -84,6 +90,7 @@ export class Files {
       headers: { ...this._routingHeaders, "X-Access-Token": this._accessToken },
       timeoutMs: options.timeoutMs,
       signal: options.signal,
+      maxBytes: options.maxBytes,
     })
   }
 
@@ -117,6 +124,8 @@ export class Files {
    * Large directories can exceed the default 30s timeout; pass `timeoutMs`
    * to allow more time.
    *
+   * Downloads are capped at 2 GiB by default; override via `maxBytes`.
+   *
    * @example
    * ```typescript
    * import { writeFileSync } from "node:fs"
@@ -127,7 +136,11 @@ export class Files {
    */
   async downloadDir(
     path: string,
-    options: { timeoutMs?: number; signal?: AbortSignal } = {},
+    options: {
+      timeoutMs?: number
+      signal?: AbortSignal
+      maxBytes?: number
+    } = {},
   ): Promise<Uint8Array> {
     validatePath(path)
     const url = `${this._dataPlaneBaseUrl}/files?path=${encodeURIComponent(
@@ -138,6 +151,7 @@ export class Files {
       headers: { ...this._routingHeaders, "X-Access-Token": this._accessToken },
       timeoutMs: options.timeoutMs,
       signal: options.signal,
+      maxBytes: options.maxBytes,
     })
   }
 }

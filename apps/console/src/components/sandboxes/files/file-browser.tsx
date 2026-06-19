@@ -9,11 +9,12 @@ import {
 import { Button, useToast } from "@superserve/ui"
 import { useQueryClient } from "@tanstack/react-query"
 import { usePostHog } from "posthog-js/react"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { useDirListing } from "@/hooks/use-dir-listing"
 import {
-  errorMessage,
+  DownloadError,
+  downloadWithLimit,
   fileNameFromPath,
   filenameFromContentDisposition,
   filesUrl,
@@ -89,6 +90,9 @@ export function FileBrowser({ sandbox }: FileBrowserProps) {
   const posthog = usePostHog()
   const queryClient = useQueryClient()
   const uploadInputRef = useRef<HTMLInputElement>(null)
+  // The in-flight download's controller, so unmount can abort it and stop a
+  // hostile/slow data-plane response from consuming memory and network.
+  const downloadAbortRef = useRef<AbortController | null>(null)
 
   const [path, setPath] = useState(DEFAULT_PATH)
   const [downloadingPath, setDownloadingPath] = useState<string | null>(null)
@@ -97,6 +101,11 @@ export function FileBrowser({ sandbox }: FileBrowserProps) {
 
   const listing = useDirListing(sandbox, path)
   const entries = listing.data ?? []
+
+  // Abort an in-flight download if the browser unmounts (navigation away).
+  useEffect(() => {
+    return () => downloadAbortRef.current?.abort()
+  }, [])
 
   const openEntry = (entry: DirEntry) => {
     if (entry.is_dir) setPath(joinPath(path, entry.name))
@@ -157,28 +166,26 @@ export function FileBrowser({ sandbox }: FileBrowserProps) {
 
   const downloadEntry = async (entry: DirEntry) => {
     const target = joinPath(path, entry.name)
+    // Abort any prior in-flight download before starting a new one.
+    downloadAbortRef.current?.abort()
+    const controller = new AbortController()
+    downloadAbortRef.current = controller
     setDownloadingPath(target)
     const startedAt = performance.now()
     try {
       // Always opt in to format=zip: boxd returns a file as-is and a directory
-      // as a zip, so one path covers both row types.
-      const res = await fetch(filesUrl(sandbox.id, target, { format: "zip" }), {
-        method: "GET",
-        headers: { "X-Access-Token": sandbox.access_token },
-      })
-      if (!res.ok) {
-        const detail = await errorMessage(
-          res,
-          `Download failed (${res.status})`,
-        )
-        if (res.status === 404) throw new Error(`No file found at "${target}"`)
-        throw new Error(detail)
-      }
-      const blob = await res.blob()
+      // as a zip, so one path covers both row types. Bounded + abortable: a
+      // hostile data plane can't hang the UI or exhaust browser memory.
+      const { blob, contentDisposition } = await downloadWithLimit(
+        filesUrl(sandbox.id, target, { format: "zip" }),
+        {
+          headers: { "X-Access-Token": sandbox.access_token },
+          signal: controller.signal,
+        },
+      )
       const filename =
-        filenameFromContentDisposition(
-          res.headers.get("content-disposition"),
-        ) ?? fileNameFromPath(target)
+        filenameFromContentDisposition(contentDisposition) ??
+        fileNameFromPath(target)
       saveBlob(blob, filename)
       posthog.capture(FILE_EVENTS.DOWNLOAD_SUCCEEDED, {
         sandbox_id: sandbox.id,
@@ -187,14 +194,25 @@ export function FileBrowser({ sandbox }: FileBrowserProps) {
       })
       addToast(`Downloaded ${filename}`, "success")
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Download failed"
+      // Swallow caller/unmount aborts — not a user-facing failure.
+      if (err instanceof DOMException && err.name === "AbortError") return
+      const message =
+        err instanceof DownloadError && err.status === 404
+          ? `No file found at "${target}"`
+          : err instanceof Error
+            ? err.message
+            : "Download failed"
       posthog.capture(FILE_EVENTS.DOWNLOAD_FAILED, {
         sandbox_id: sandbox.id,
         error: message,
       })
       addToast(message, "error")
     } finally {
-      setDownloadingPath(null)
+      // Only clear if this download is still the active one (not superseded).
+      if (downloadAbortRef.current === controller) {
+        downloadAbortRef.current = null
+        setDownloadingPath(null)
+      }
     }
   }
 

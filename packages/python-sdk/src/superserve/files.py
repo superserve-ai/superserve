@@ -58,8 +58,17 @@ class Files:
             kwargs["timeout"] = timeout
         upload_bytes(**kwargs)
 
-    def read(self, path: str, *, timeout: float | None = None) -> bytes:
-        """Read a file from the sandbox as raw bytes."""
+    def read(
+        self,
+        path: str,
+        *,
+        timeout: float | None = None,
+        max_bytes: int | None = None,
+    ) -> bytes:
+        """Read a file from the sandbox as raw bytes.
+
+        Downloads are capped at 2 GiB by default, overridable via ``max_bytes``.
+        """
         _validate_path(path)
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
         kwargs: dict[str, Any] = {
@@ -69,6 +78,8 @@ class Files:
         }
         if timeout is not None:
             kwargs["timeout"] = timeout
+        if max_bytes is not None:
+            kwargs["max_bytes"] = max_bytes
         return download_bytes(**kwargs)
 
     def read_text(self, path: str, *, timeout: float | None = None) -> str:
@@ -76,7 +87,13 @@ class Files:
         _validate_path(path)
         return self.read(path, timeout=timeout).decode("utf-8")
 
-    def download_dir(self, path: str, *, timeout: float | None = None) -> bytes:
+    def download_dir(
+        self,
+        path: str,
+        *,
+        timeout: float | None = None,
+        max_bytes: int | None = None,
+    ) -> bytes:
         """Download a directory from the sandbox as a ZIP archive.
 
         Returns the raw bytes of a zip file whose entries are prefixed with the
@@ -86,6 +103,8 @@ class Files:
         file, its bytes are returned as-is (not zipped) -- use ``read()`` for
         files. Large directories can exceed the default timeout; pass
         ``timeout`` to allow more time.
+
+        Downloads are capped at 2 GiB by default, overridable via ``max_bytes``.
         """
         _validate_path(path)
         url = f"{self._base_url}/files?path={quote(path, safe='')}&format=zip"
@@ -96,6 +115,8 @@ class Files:
         }
         if timeout is not None:
             kwargs["timeout"] = timeout
+        if max_bytes is not None:
+            kwargs["max_bytes"] = max_bytes
         return download_bytes(**kwargs)
 
 
@@ -133,8 +154,17 @@ class AsyncFiles:
             kwargs["timeout"] = timeout
         await async_upload_bytes(**kwargs)
 
-    async def read(self, path: str, *, timeout: float | None = None) -> bytes:
-        """Read a file from the sandbox as raw bytes."""
+    async def read(
+        self,
+        path: str,
+        *,
+        timeout: float | None = None,
+        max_bytes: int | None = None,
+    ) -> bytes:
+        """Read a file from the sandbox as raw bytes.
+
+        Downloads are capped at 2 GiB by default, overridable via ``max_bytes``.
+        """
         _validate_path(path)
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
         kwargs: dict[str, Any] = {
@@ -144,6 +174,8 @@ class AsyncFiles:
         }
         if timeout is not None:
             kwargs["timeout"] = timeout
+        if max_bytes is not None:
+            kwargs["max_bytes"] = max_bytes
         return await async_download_bytes(**kwargs)
 
     async def read_text(self, path: str, *, timeout: float | None = None) -> str:
@@ -152,7 +184,13 @@ class AsyncFiles:
         raw = await self.read(path, timeout=timeout)
         return raw.decode("utf-8")
 
-    async def download_dir(self, path: str, *, timeout: float | None = None) -> bytes:
+    async def download_dir(
+        self,
+        path: str,
+        *,
+        timeout: float | None = None,
+        max_bytes: int | None = None,
+    ) -> bytes:
         """Download a directory from the sandbox as a ZIP archive.
 
         Returns the raw bytes of a zip file whose entries are prefixed with the
@@ -162,6 +200,8 @@ class AsyncFiles:
         file, its bytes are returned as-is (not zipped) -- use ``read()`` for
         files. Large directories can exceed the default timeout; pass
         ``timeout`` to allow more time.
+
+        Downloads are capped at 2 GiB by default, overridable via ``max_bytes``.
         """
         _validate_path(path)
         url = f"{self._base_url}/files?path={quote(path, safe='')}&format=zip"
@@ -172,4 +212,6 @@ class AsyncFiles:
         }
         if timeout is not None:
             kwargs["timeout"] = timeout
+        if max_bytes is not None:
+            kwargs["max_bytes"] = max_bytes
         return await async_download_bytes(**kwargs)

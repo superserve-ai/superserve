@@ -118,6 +118,39 @@ describe("Files.downloadDir", () => {
     expect(Array.from(out)).toEqual([0x50, 0x4b, 0x03, 0x04])
   })
 
+  it("rejects with ValidationError when the body exceeds maxBytes", async () => {
+    // 8-byte streamed body, cap at 4 — the cap should trip mid-stream.
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2, 3, 4]))
+        controller.enqueue(new Uint8Array([5, 6, 7, 8]))
+        controller.close()
+      },
+    })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(stream, { status: 200 })),
+    )
+
+    const files = new Files(sandboxId, sandboxHost, accessToken)
+    await expect(
+      files.downloadDir("/app/output", { maxBytes: 4 }),
+    ).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it("returns the bytes unchanged when under the maxBytes cap", async () => {
+    const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04])
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(zip, { status: 200 })),
+    )
+
+    const files = new Files(sandboxId, sandboxHost, accessToken)
+    const out = await files.downloadDir("/app/output", { maxBytes: 1024 })
+    expect(out).toBeInstanceOf(Uint8Array)
+    expect(Array.from(out)).toEqual([0x50, 0x4b, 0x03, 0x04])
+  })
+
   it("carries X-Superserve-Sandbox-Id on a shared host", async () => {
     const mock = vi
       .fn<typeof fetch>()
@@ -206,6 +239,19 @@ describe("Files.read", () => {
     const out = await files.read("/app/file.bin")
     expect(out).toBeInstanceOf(Uint8Array)
     expect(Array.from(out)).toEqual([10, 20, 30])
+  })
+
+  it("rejects with ValidationError when the body exceeds maxBytes", async () => {
+    const payload = new Uint8Array([10, 20, 30, 40, 50])
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(payload, { status: 200 })),
+    )
+
+    const files = new Files(sandboxId, sandboxHost, accessToken)
+    await expect(
+      files.read("/app/file.bin", { maxBytes: 2 }),
+    ).rejects.toBeInstanceOf(ValidationError)
   })
 })
 
