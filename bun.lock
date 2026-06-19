@@ -109,6 +109,7 @@
         "superserve": "src/index.ts",
       },
       "dependencies": {
+        "@superserve/sdk": "workspace:*",
         "boxen": "^8.0.1",
         "cli-table3": "^0.6.5",
         "commander": "^14.0.3",
@@ -130,7 +131,7 @@
     },
     "packages/sdk": {
       "name": "@superserve/sdk",
-      "version": "0.7.1",
+      "version": "0.7.5",
       "devDependencies": {
         "@superserve/typescript-config": "workspace:*",
         "@types/node": "^25.5.2",

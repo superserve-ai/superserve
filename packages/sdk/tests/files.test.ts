@@ -66,6 +66,79 @@ describe("Files path validation", () => {
       ValidationError,
     )
   })
+
+  it("downloadDir rejects relative paths", async () => {
+    await expect(files.downloadDir("relative/dir")).rejects.toBeInstanceOf(
+      ValidationError,
+    )
+  })
+
+  it("downloadDir rejects paths containing ..", async () => {
+    await expect(files.downloadDir("/foo/../etc")).rejects.toBeInstanceOf(
+      ValidationError,
+    )
+  })
+})
+
+describe("Files.downloadDir", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("GETs with format=zip and the X-Access-Token header", async () => {
+    const mock = vi.fn(
+      async () => new Response(new Uint8Array([0x50, 0x4b]), { status: 200 }),
+    )
+    vi.stubGlobal("fetch", mock)
+
+    const files = new Files(sandboxId, sandboxHost, accessToken)
+    await files.downloadDir("/app/output")
+
+    const [url, init] = mock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(
+      `https://boxd-${sandboxId}.${sandboxHost}/files?path=${encodeURIComponent(
+        "/app/output",
+      )}&format=zip`,
+    )
+    expect(init.method).toBe("GET")
+    const headers = init.headers as Record<string, string>
+    expect(headers["X-Access-Token"]).toBe(accessToken)
+  })
+
+  it("returns the zip bytes as a Uint8Array", async () => {
+    const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04])
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(zip, { status: 200 })),
+    )
+
+    const files = new Files(sandboxId, sandboxHost, accessToken)
+    const out = await files.downloadDir("/app/output")
+    expect(out).toBeInstanceOf(Uint8Array)
+    expect(Array.from(out)).toEqual([0x50, 0x4b, 0x03, 0x04])
+  })
+
+  it("carries X-Superserve-Sandbox-Id on a shared host", async () => {
+    const mock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([0x50, 0x4b]), { status: 200 }),
+      )
+    vi.stubGlobal("fetch", mock)
+
+    const files = new Files(sandboxId, "sandbox.superserve.ai", accessToken)
+    await files.downloadDir("/app/output")
+
+    const [url, init] = mock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(
+      `https://sandbox.superserve.ai/files?path=${encodeURIComponent(
+        "/app/output",
+      )}&format=zip`,
+    )
+    const headers = init.headers as Record<string, string>
+    expect(headers["X-Superserve-Sandbox-Id"]).toBe(sandboxId)
+    expect(headers["X-Access-Token"]).toBe(accessToken)
+  })
 })
 
 describe("Files.write", () => {

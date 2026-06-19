@@ -93,6 +93,38 @@ text: str = sandbox.files.read_text("/app/config.json")
 ```
 </CodeGroup>
 
+## `downloadDir` / `download_dir`
+
+Download a directory as a ZIP archive. Returns the raw zip bytes — entries are
+prefixed with the directory's base name (e.g. `output/log.txt`), and symlinks
+are skipped.
+
+<CodeGroup>
+```typescript TypeScript
+import { writeFileSync } from "node:fs"
+
+const zip: Uint8Array = await sandbox.files.downloadDir("/app/output")
+writeFileSync("output.zip", zip)
+```
+
+```python Python
+zip_bytes: bytes = sandbox.files.download_dir("/app/output")
+with open("output.zip", "wb") as f:
+    f.write(zip_bytes)
+```
+</CodeGroup>
+
+**Parameters:**
+
+| Option | Type | Description |
+|---|---|---|
+| `path` | `string` / `str` | Absolute directory path to archive. |
+| `timeoutMs` / `timeout` | `number` / `float` | Optional request timeout. Large directories can exceed the 30s default. |
+| `signal` | `AbortSignal` | TypeScript only - abort the request. |
+
+The server decides file-vs-directory: if `path` points at a regular file, its
+bytes are streamed back as-is (not zipped) — use `read` for files.
+
 ## Round-trip example
 
 <CodeGroup>
@@ -125,7 +157,7 @@ print(round_tripped == original)  # True
 
 Commonly raised:
 
-- `NotFoundError` - file does not exist (on read)
+- `NotFoundError` - file or directory does not exist (on read / downloadDir)
 - `ValidationError` - invalid path (relative, contains `..`, or malformed)
 - `AuthenticationError` - access token invalid or sandbox was deleted
 - `TimeoutError` / `SandboxTimeoutError` - the optional timeout elapsed

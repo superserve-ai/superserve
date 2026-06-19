@@ -76,6 +76,28 @@ class Files:
         _validate_path(path)
         return self.read(path, timeout=timeout).decode("utf-8")
 
+    def download_dir(self, path: str, *, timeout: float | None = None) -> bytes:
+        """Download a directory from the sandbox as a ZIP archive.
+
+        Returns the raw bytes of a zip file whose entries are prefixed with the
+        directory's base name (e.g. ``<dir>/file.txt``). Symlinks are skipped.
+
+        The server decides file-vs-directory: if ``path`` points at a regular
+        file, its bytes are returned as-is (not zipped) -- use ``read()`` for
+        files. Large directories can exceed the default timeout; pass
+        ``timeout`` to allow more time.
+        """
+        _validate_path(path)
+        url = f"{self._base_url}/files?path={quote(path, safe='')}&format=zip"
+        kwargs: dict[str, Any] = {
+            "url": url,
+            "headers": {**self._routing_headers, "X-Access-Token": self._access_token},
+            "client": self._client,
+        }
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        return download_bytes(**kwargs)
+
 
 class AsyncFiles:
     """Async file operations. Access as ``sandbox.files``."""
@@ -129,3 +151,25 @@ class AsyncFiles:
         _validate_path(path)
         raw = await self.read(path, timeout=timeout)
         return raw.decode("utf-8")
+
+    async def download_dir(self, path: str, *, timeout: float | None = None) -> bytes:
+        """Download a directory from the sandbox as a ZIP archive.
+
+        Returns the raw bytes of a zip file whose entries are prefixed with the
+        directory's base name (e.g. ``<dir>/file.txt``). Symlinks are skipped.
+
+        The server decides file-vs-directory: if ``path`` points at a regular
+        file, its bytes are returned as-is (not zipped) -- use ``read()`` for
+        files. Large directories can exceed the default timeout; pass
+        ``timeout`` to allow more time.
+        """
+        _validate_path(path)
+        url = f"{self._base_url}/files?path={quote(path, safe='')}&format=zip"
+        kwargs: dict[str, Any] = {
+            "url": url,
+            "headers": {**self._routing_headers, "X-Access-Token": self._access_token},
+            "client": self._client,
+        }
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        return await async_download_bytes(**kwargs)

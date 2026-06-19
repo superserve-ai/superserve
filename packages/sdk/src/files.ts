@@ -104,6 +104,42 @@ export class Files {
     const bytes = await this.read(path, options)
     return new TextDecoder().decode(bytes)
   }
+
+  /**
+   * Download a directory from the sandbox as a ZIP archive.
+   *
+   * Returns the raw bytes of a zip file whose entries are prefixed with the
+   * directory's base name (e.g. `<dir>/file.txt`). Symlinks are skipped.
+   *
+   * The server decides file-vs-directory: if `path` points at a regular file,
+   * its bytes are streamed back as-is (not zipped) — use `read()` for files.
+   *
+   * Large directories can exceed the default 30s timeout; pass `timeoutMs`
+   * to allow more time.
+   *
+   * @example
+   * ```typescript
+   * import { writeFileSync } from "node:fs"
+   *
+   * const zip = await sandbox.files.downloadDir("/app/output")
+   * writeFileSync("output.zip", zip)
+   * ```
+   */
+  async downloadDir(
+    path: string,
+    options: { timeoutMs?: number; signal?: AbortSignal } = {},
+  ): Promise<Uint8Array> {
+    validatePath(path)
+    const url = `${this._dataPlaneBaseUrl}/files?path=${encodeURIComponent(
+      path,
+    )}&format=zip`
+    return downloadBytes({
+      url,
+      headers: { ...this._routingHeaders, "X-Access-Token": this._accessToken },
+      timeoutMs: options.timeoutMs,
+      signal: options.signal,
+    })
+  }
 }
 
 /** Convert FileInput to a value suitable for fetch body. */
