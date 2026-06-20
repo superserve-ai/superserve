@@ -91,20 +91,6 @@ with open("results.zip", "wb") as f:
 ```
 </CodeGroup>
 
-### From the CLI
-
-The CLI can download a directory straight to disk. It authenticates with a
-Superserve API key (`--api-key` or the `SUPERSERVE_API_KEY` environment
-variable), independent of `superserve login`:
-
-```bash
-# Saves to results.zip (the directory basename)
-superserve sandbox download <sandbox-id> /app/results
-
-# Choose the output path explicitly
-superserve sandbox download <sandbox-id> /app/results -o ./out.zip
-```
-
 ## Path rules
 
 Paths passed to `files.*` methods must:
