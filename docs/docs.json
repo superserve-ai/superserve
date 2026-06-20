@@ -219,6 +219,10 @@
               "GET /secrets/{name}/sandboxes",
               "GET /providers"
             ]
+          },
+          {
+            "group": "Billing",
+            "pages": ["GET /billing/pricing", "GET /billing/pricing/public"]
           }
         ]
       }
