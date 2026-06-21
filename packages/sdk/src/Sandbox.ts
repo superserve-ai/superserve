@@ -20,7 +20,12 @@
 
 import { Commands } from "./commands.js"
 import { type ResolvedConfig, resolveConfig } from "./config.js"
-import { NotFoundError, SandboxError } from "./errors.js"
+import {
+  ImageBuildingError,
+  NotFoundError,
+  SandboxError,
+  ValidationError,
+} from "./errors.js"
 import { Files } from "./files.js"
 import { request, requestVoid } from "./http.js"
 import type {
@@ -149,6 +154,20 @@ export class Sandbox {
   static async create(options: SandboxCreateOptions): Promise<Sandbox> {
     const config = resolveConfig(options)
 
+    // Bring-your-image: route to POST /sandboxes/from-image. Mutually exclusive
+    // with the template/snapshot paths.
+    if (options.image !== undefined) {
+      if (
+        options.fromTemplate !== undefined ||
+        options.fromSnapshot !== undefined
+      ) {
+        throw new ValidationError(
+          "Sandbox.create: `image` is mutually exclusive with `fromTemplate`/`fromSnapshot`.",
+        )
+      }
+      return Sandbox.createFromImage(options, config)
+    }
+
     const body: Record<string, unknown> = { name: options.name }
     if (options.timeoutSeconds !== undefined)
       body.timeout_seconds = options.timeoutSeconds
@@ -185,6 +204,62 @@ export class Sandbox {
       )
     }
     return new Sandbox(toSandboxInfo(raw), raw.access_token, config)
+  }
+
+  /**
+   * Create from an OCI image via POST /sandboxes/from-image.
+   * - Cache hit (201): the image's template already exists → a sandbox is
+   *   returned, running the image's ENTRYPOINT/CMD.
+   * - Cache miss (202): a one-time template build was started → throws
+   *   ImageBuildingError; retry `create({ image })` once the build is ready.
+   * @internal
+   */
+  private static async createFromImage(
+    options: SandboxCreateOptions,
+    config: ResolvedConfig,
+  ): Promise<Sandbox> {
+    const body: Record<string, unknown> = {
+      image: options.image,
+      name: options.name,
+    }
+    if (options.command !== undefined) body.command = options.command
+    if (options.envVars !== undefined) body.env = options.envVars
+    if (options.vcpu !== undefined) body.vcpu = options.vcpu
+    if (options.memoryMib !== undefined) body.memory_mib = options.memoryMib
+    if (options.diskMib !== undefined) body.disk_mib = options.diskMib
+
+    const raw = await request<
+      ApiSandboxResponse & {
+        status?: string
+        build_id?: string
+        template_id?: string
+        resolved_digest?: string
+        message?: string
+      }
+    >({
+      method: "POST",
+      url: `${config.baseUrl}/sandboxes/from-image`,
+      headers: { "X-API-Key": config.apiKey },
+      body,
+      signal: options.signal,
+    })
+
+    // Cache hit: a real sandbox with an access token.
+    if (raw.access_token) {
+      return new Sandbox(toSandboxInfo(raw), raw.access_token, config)
+    }
+
+    // Cache miss (202): a build was kicked. Surface it as a typed, retryable
+    // signal rather than a generic "missing access_token" error.
+    throw new ImageBuildingError(
+      raw.message ??
+        `Image "${options.image}" is not cached yet; a template build was started. Retry create({ image }) once it is ready.`,
+      {
+        buildId: raw.build_id ?? "",
+        templateId: raw.template_id ?? "",
+        resolvedDigest: raw.resolved_digest ?? "",
+      },
+    )
   }
 
   /**
