@@ -1,10 +1,12 @@
 ---
 title: "Introduction"
 sidebarTitle: Introduction
-description: Superserve provides sandbox infrastructure to run code in isolated cloud environments powered by Firecracker MicroVMs.
+description: Superserve is open agent infrastructure — durable agents and persistent sandboxes that run any harness, powered by Firecracker MicroVMs.
 ---
 
-Each sandbox starts from a [template](/templates/overview) — a reusable base image with your dependencies baked in.
+Superserve is open agent infrastructure: a durable substrate for the long-running, stateful workloads that agents need. The platform is the durable **body** — compute, a persistent filesystem, networking, lifecycle — and any harness is the interchangeable **brain**. Bring Claude Code, Codex, the Claude Agent SDK, OpenClaw, Hermes, or your own loop; the substrate stays the same.
+
+Today that substrate is exposed as the **sandbox**: a computer that remembers. Each sandbox is an isolated MicroVM with a persistent, versioned filesystem — run commands, move files, open ports, then hibernate it and resume by id exactly where you left off. Each sandbox starts from a [template](/templates/overview) — a reusable base image with your dependencies baked in.
 
 <Tip>
   Use the menu at the top right of any page to add our docs as an MCP server
@@ -21,6 +23,12 @@ Each sandbox starts from a [template](/templates/overview) — a reusable base i
 - **Custom templates** - pre-bake team dependencies into base images and launch from them
 - **Secrets** - give a sandbox an API key without the real value ever entering it
 - **Network controls** - per-sandbox egress allow/deny rules, plus a log of every connection a sandbox made
+
+## Run any harness
+
+A sandbox is the durable body; the harness is the brain. The same persistent VM runs a terminal coding agent, an SDK-driven tool loop, or your own custom loop — whatever you point at it. Because the body outlives any single run, you can pause between turns and resume by id without losing the agent's filesystem or in-flight state.
+
+See the [integration guides](/integrations/coding-agents/claude) for drop-in setups across Claude Code, Codex, the Claude Agent SDK, the OpenAI Agents SDK, OpenClaw, Hermes, and more.
 
 ## Next steps
 

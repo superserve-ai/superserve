@@ -5,7 +5,7 @@ description: Use Superserve sandboxes as the execution runtime for agents built 
 icon: "/logos/integrations/claude-agent-sdk.svg"
 ---
 
-The Claude Agent SDK is Anthropic's framework for building agents with tool-use loops. Expose `sandbox.commands.run` as an in-process MCP tool so every command the agent generates runs in an isolated VM instead of on your machine.
+The Claude Agent SDK is Anthropic's framework for building agents with tool-use loops — the brain. A Superserve sandbox is the durable body it runs on: expose `sandbox.commands.run` as an in-process MCP tool so every command the agent generates runs in an isolated, resumable VM instead of on your machine.
 
 ## Setup
 

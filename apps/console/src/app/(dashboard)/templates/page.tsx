@@ -93,7 +93,7 @@ function TemplatesPageContent() {
         <EmptyState
           icon={StackIcon}
           title="No templates yet"
-          description="Templates are pre-baked VM images your sandboxes boot from. Create one to reuse the same environment across sandboxes."
+          description="Templates are pre-baked images your sandboxes boot from — start from a curated base or bring your own OCI image. Create one to reuse the same environment across sandboxes."
           actionLabel="Create template"
           onAction={() => setCreateOpen(true)}
         />

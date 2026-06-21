@@ -1,5 +1,10 @@
 /**
- * Superserve SDK — sandbox infrastructure for running code in isolated cloud environments.
+ * Superserve SDK — open agent infrastructure.
+ *
+ * Durable, persistent sandboxes for running code in isolated cloud
+ * environments: compute plus a versioned filesystem that you can pause and
+ * resume by id. A sandbox is a computer that remembers — the durable body for
+ * any harness you bring as the brain.
  */
 
 export {

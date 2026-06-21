@@ -1,6 +1,10 @@
 # superserve
 
-Python SDK for the Superserve sandbox API — run code in isolated Firecracker MicroVMs.
+Python SDK for Superserve — open agent infrastructure: persistent sandboxes that run any harness.
+
+A **Sandbox** is a computer that remembers: compute plus a persistent filesystem, with exec, file, and port access. Run a command, write a file, hibernate the sandbox, then resume it later by ID with its state intact — so any agent harness (Claude Code, Codex, the Claude Agent SDK, or your own loop) gets a durable place to run. Sandboxes are isolated Firecracker MicroVMs.
+
+> Superserve is heading toward two composable primitives on one substrate: the **Sandbox** documented here, and a durable **Actor** — a named, single-writer process that wakes on events and survives restarts. Actors are the platform direction; this SDK ships the Sandbox surface today.
 
 ## Installation
 

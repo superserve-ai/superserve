@@ -151,7 +151,7 @@ function SandboxesPageContent() {
         <EmptyState
           icon={CubeIcon}
           title="No Sandboxes"
-          description="Create a sandbox to run code in an isolated cloud environment."
+          description="A sandbox is a computer that remembers: compute plus a persistent, versioned filesystem you can hibernate and resume by id. Create one to run any harness or your own code."
           actionLabel="Create Sandbox"
           onAction={() => setCreateOpen(true)}
         />

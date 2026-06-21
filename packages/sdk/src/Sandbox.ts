@@ -1,6 +1,10 @@
 /**
  * Main Sandbox class — the primary entry point for the Superserve SDK.
  *
+ * A Sandbox is a durable computer that remembers: compute plus a persistent
+ * filesystem. `pause()` preserves running processes and file state; `resume()`
+ * brings it back under the same id, so long-lived work survives across restarts.
+ *
  * Static factory methods (create/connect) return a `sandbox`. Call methods on
  * it directly (`sandbox.commands.run(...)`, `sandbox.files.write(...)`, etc.).
  *
