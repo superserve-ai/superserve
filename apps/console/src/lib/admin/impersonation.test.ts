@@ -1,12 +1,23 @@
 import type { User } from "@supabase/supabase-js"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-const cookieStore = { value: undefined as string | undefined }
+const cookieStore = {
+  value: undefined as string | undefined,
+  lastSet: null as null | {
+    name: string
+    value: string
+    options: Record<string, unknown>
+  },
+}
 vi.mock("next/headers", () => ({
   cookies: async () => ({
     get: (_: string) =>
       cookieStore.value ? { value: cookieStore.value } : undefined,
-    set: () => {},
+    set: (name: string, value: string, options: Record<string, unknown>) => {
+      cookieStore.lastSet = { name, value, options }
+      // Emulate the browser: maxAge 0 expires the cookie, anything else stores it.
+      cookieStore.value = options?.maxAge === 0 ? undefined : value
+    },
     delete: () => {
       cookieStore.value = undefined
     },
@@ -49,8 +60,10 @@ vi.mock("@/lib/supabase/admin", () => ({
 }))
 
 import {
+  clearImpersonationCookie,
   getImpersonationContext,
   getImpersonationTeamId,
+  IMPERSONATION_COOKIE,
   signImpersonationToken,
   verifyImpersonationToken,
 } from "./impersonation"
@@ -69,7 +82,9 @@ const customer = {
 
 afterEach(() => {
   cookieStore.value = undefined
+  cookieStore.lastSet = null
   teamLookup.result = { data: { name: "Acme Corp" }, error: null }
+  delete process.env.NEXT_PUBLIC_COOKIE_DOMAIN
 })
 
 describe("impersonation token", () => {
@@ -129,5 +144,34 @@ describe("getImpersonationContext", () => {
       teamId: TEAM,
       teamName: "another team",
     })
+  })
+})
+
+describe("clearImpersonationCookie", () => {
+  it("expires the cookie with matching path + domain when NEXT_PUBLIC_COOKIE_DOMAIN is set", async () => {
+    // Deleting by name alone would leave a domain-scoped cookie (e.g. on
+    // `.superserve.ai`) in place, so Exit must expire it with the same options.
+    process.env.NEXT_PUBLIC_COOKIE_DOMAIN = ".superserve.ai"
+    cookieStore.value = signImpersonationToken(TEAM, Date.now() + 60_000)
+
+    await clearImpersonationCookie()
+
+    expect(cookieStore.lastSet?.name).toBe(IMPERSONATION_COOKIE)
+    expect(cookieStore.lastSet?.options).toMatchObject({
+      path: "/",
+      domain: ".superserve.ai",
+      maxAge: 0,
+    })
+    expect(cookieStore.value).toBeUndefined()
+  })
+
+  it("expires the cookie without a domain when NEXT_PUBLIC_COOKIE_DOMAIN is unset", async () => {
+    cookieStore.value = signImpersonationToken(TEAM, Date.now() + 60_000)
+
+    await clearImpersonationCookie()
+
+    expect(cookieStore.lastSet?.options).toMatchObject({ path: "/", maxAge: 0 })
+    expect(cookieStore.lastSet?.options.domain).toBeUndefined()
+    expect(cookieStore.value).toBeUndefined()
   })
 })

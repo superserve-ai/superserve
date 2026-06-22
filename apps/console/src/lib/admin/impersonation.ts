@@ -92,7 +92,19 @@ export async function setImpersonationCookie(teamId: string): Promise<void> {
 
 export async function clearImpersonationCookie(): Promise<void> {
   const store = await cookies()
-  store.delete(IMPERSONATION_COOKIE)
+  const cookieDomain = process.env.NEXT_PUBLIC_COOKIE_DOMAIN
+  // Expire the cookie with the SAME path/domain used in setImpersonationCookie.
+  // Deleting by name alone does not clear a domain-scoped cookie (e.g. on
+  // `.superserve.ai`), so "Exit" would otherwise leave the staff user
+  // impersonating on the next request.
+  store.set(IMPERSONATION_COOKIE, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+    ...(cookieDomain ? { domain: cookieDomain } : {}),
+  })
 }
 
 export interface ImpersonationContext {
