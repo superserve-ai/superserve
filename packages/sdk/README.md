@@ -1,6 +1,8 @@
 # @superserve/sdk
 
-TypeScript SDK for the Superserve sandbox API — run code in isolated Firecracker MicroVMs.
+TypeScript SDK for Superserve — **open agent infrastructure**. Run code in isolated Firecracker MicroVMs that behave like a computer that remembers: compute plus a persistent, versioned filesystem you can pause and resume by id.
+
+A Superserve sandbox is durable. Call `pause()` and every running process and the full filesystem are preserved; call `resume()` and it picks up where it left off, addressed by the same id. That makes it an ideal **body** for any agent — bring your own **brain** (Claude Code, the Claude Agent SDK, Codex, or your own loop) and let the platform handle the durable compute and state underneath.
 
 ## Installation
 

@@ -1,4 +1,13 @@
-"""Superserve SDK — sandbox infrastructure for running code in isolated cloud environments."""
+"""Superserve SDK — open agent infrastructure for running any harness.
+
+A Sandbox is a computer that remembers: compute plus a persistent filesystem,
+with exec, file, and port access, that you can hibernate and resume by ID. It
+gives any agent harness a durable, isolated place to run. Sandboxes are backed
+by Firecracker MicroVMs.
+
+This SDK ships the Sandbox surface today; durable Actors (named, single-writer
+processes that wake on events and survive restarts) are the platform direction.
+"""
 
 from .async_sandbox import AsyncSandbox
 from .async_secrets import AsyncSecret

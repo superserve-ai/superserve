@@ -167,7 +167,7 @@ export default function GetStartedPage() {
         <div className="mx-auto max-w-2xl">
           <div className="flex items-center justify-between">
             <p className="text-sm leading-none tracking-tight text-muted">
-              Install the SDK and create your first sandbox
+              Install the SDK and spin up your first persistent sandbox
             </p>
 
             {/* Language Toggle */}

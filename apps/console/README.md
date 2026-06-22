@@ -1,6 +1,6 @@
 # @superserve/console
 
-Next.js 16 App Router console for managing Superserve sandboxes.
+Next.js 16 App Router console for Superserve's open agent infrastructure — manage persistent sandboxes, templates, secrets, and API keys.
 
 ## Development
 

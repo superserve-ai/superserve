@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     template: "%s | Superserve",
   },
   description:
-    "Deploy and manage cloud sandboxes with Superserve. Run code in isolated, secure environments.",
+    "Open agent infrastructure from Superserve. Run any harness on persistent, versioned sandboxes — a computer that remembers, with hibernate and resume by id.",
   icons: {
     icon: { url: "/favicon.svg", type: "image/svg+xml" },
   },
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     type: "website",
     title: "Superserve Console",
     description:
-      "Deploy and manage cloud sandboxes with Superserve. Run code in isolated, secure environments.",
+      "Open agent infrastructure from Superserve. Run any harness on persistent, versioned sandboxes — a computer that remembers, with hibernate and resume by id.",
     siteName: "Superserve",
     images: [{ url: "/og-image.png", width: 1200, height: 630 }],
   },
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Superserve Console",
     description:
-      "Deploy and manage cloud sandboxes with Superserve. Run code in isolated, secure environments.",
+      "Open agent infrastructure from Superserve. Run any harness on persistent, versioned sandboxes — a computer that remembers, with hibernate and resume by id.",
     images: ["/og-image.png"],
   },
   other: {
