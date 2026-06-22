@@ -1,0 +1,173 @@
+---
+title: "MCP Server"
+sidebarTitle: MCP
+description: Create, run, and manage Superserve sandboxes from any MCP client.
+icon: "plug"
+---
+
+The Superserve **MCP server** (`@superserve/mcp`) exposes sandbox primitives as [Model Context Protocol](https://modelcontextprotocol.io) tools, so any MCP-capable client — Claude, Cursor, VS Code, Windsurf — can create sandboxes, run commands, and read and write files in an isolated Firecracker microVM.
+
+It runs locally over stdio via `npx`, authenticates with your `SUPERSERVE_API_KEY`, and targets a sandbox per call by id. It's a thin wrapper over the [TypeScript SDK](/sdk-reference/sandbox), so the per-sandbox data-plane token never reaches the model.
+
+## Quickstart
+
+Add the server to your client (see [Install](#install)), then ask the agent to *"create a sandbox and run `python --version` in it."* The agent calls `sandbox_create`, then `sandbox_exec`, and reports the result — no code from you.
+
+You need a Superserve API key — create one on the [API key](/api-key) page. There's no global install; `npx` fetches the server on first use.
+
+## Install
+
+<Note>
+  Set `SUPERSERVE_API_KEY` in the server's `env` — MCP clients do not inherit it from your shell. Prefer a secret-input prompt over pasting the raw key where your client supports it (see VS Code below).
+</Note>
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash
+    claude mcp add superserve \
+      --env SUPERSERVE_API_KEY=ss_live_xxxxxxxxxxxxxxxx \
+      -- npx -y @superserve/mcp
+    ```
+  </Tab>
+  <Tab title="Claude Desktop">
+    Add to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`):
+    ```json
+    {
+      "mcpServers": {
+        "superserve": {
+          "command": "npx",
+          "args": ["-y", "@superserve/mcp"],
+          "env": { "SUPERSERVE_API_KEY": "ss_live_xxxxxxxxxxxxxxxx" }
+        }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Cursor">
+    Add to `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (global):
+    ```json
+    {
+      "mcpServers": {
+        "superserve": {
+          "command": "npx",
+          "args": ["-y", "@superserve/mcp"],
+          "env": { "SUPERSERVE_API_KEY": "ss_live_xxxxxxxxxxxxxxxx" }
+        }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="VS Code">
+    Add to `.vscode/mcp.json`. The `inputs` block prompts for the key instead of storing it in plain text:
+    ```json
+    {
+      "inputs": [
+        {
+          "id": "superserve-key",
+          "type": "promptString",
+          "description": "Superserve API key",
+          "password": true
+        }
+      ],
+      "servers": {
+        "superserve": {
+          "type": "stdio",
+          "command": "npx",
+          "args": ["-y", "@superserve/mcp"],
+          "env": { "SUPERSERVE_API_KEY": "${input:superserve-key}" }
+        }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Windsurf">
+    Add to `~/.codeium/windsurf/mcp_config.json`:
+    ```json
+    {
+      "mcpServers": {
+        "superserve": {
+          "command": "npx",
+          "args": ["-y", "@superserve/mcp"],
+          "env": { "SUPERSERVE_API_KEY": "ss_live_xxxxxxxxxxxxxxxx" }
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Tools
+
+| Tool | What it does |
+| --- | --- |
+| `sandbox_create` | Create a new sandbox; returns its `id`. Active and ready immediately. |
+| `sandbox_list` | List your sandboxes (active and paused), filterable by metadata. |
+| `sandbox_info` | Get one sandbox's status, resources (vCPU/memory), and metadata. Read-only — does not resume a paused sandbox. |
+| `sandbox_exec` | Run a shell command; returns stdout, stderr, exit code. Auto-resumes a paused sandbox. |
+| `sandbox_files_read` | Read a file (UTF-8 text, or base64 for binary). |
+| `sandbox_files_write` | Create or overwrite a file. Parent directories are created automatically. |
+| `sandbox_files_list` | List a directory's entries (name, type, size, modification time). |
+| `sandbox_pause` | Pause a sandbox; state is preserved. |
+| `sandbox_resume` | Resume a paused sandbox (usually unnecessary — exec auto-resumes). |
+| `sandbox_kill` | Permanently delete a sandbox. |
+
+Every tool takes a `sandbox_id` except `sandbox_create` and `sandbox_list`. Start with one of those to get an id, then thread it into later calls. Read-only tools (`sandbox_list`, `sandbox_info`, `sandbox_files_read`, `sandbox_files_list`) are annotated so clients can skip confirmation prompts; `sandbox_kill` is annotated destructive.
+
+## Example
+
+A typical agent flow for *"spin up a sandbox, write a Python script that prints the first primes, and run it"*:
+
+```text
+sandbox_create       { name: "primes" }
+                       → { id: "a1b2c3…", name: "primes", status: "active" }
+
+sandbox_files_write  { sandbox_id: "a1b2c3…", path: "/app/primes.py", content: "…" }
+                       → { path: "/app/primes.py", bytes: 142 }
+
+sandbox_exec         { sandbox_id: "a1b2c3…", command: "python /app/primes.py" }
+                       → { exit_code: 0, stdout: "2 3 5 7 11 13 17 19 23 29", stderr: "" }
+```
+
+When it's done, the agent can `sandbox_pause` (state preserved, cheaper to keep around) or `sandbox_kill` (permanent).
+
+## Configuration
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `SUPERSERVE_API_KEY` | Yes | Your Superserve API key (starts with `ss_live_`). |
+| `SUPERSERVE_BASE_URL` | No | Override the control-plane URL (defaults to `https://api.superserve.ai`). |
+
+## Behavior & limits
+
+- **Auto-resume.** `sandbox_exec` and the file tools transparently resume a paused sandbox, so agents never need to call `sandbox_resume` first. `sandbox_resume` exists only to warm a sandbox explicitly.
+- **Output is capped for context.** `sandbox_exec` truncates stdout and stderr to 32 KiB each; `sandbox_files_read` truncates at 1 MiB. A truncated result sets `truncated: true` and reports the original byte length.
+- **Default command timeout is 60s**, overridable per call with `timeout_ms`.
+- **Errors are actionable.** A failed tool call returns a short message telling the agent what to do next — e.g. *"Sandbox quota reached. Pause or kill a sandbox, or retry later."* — rather than a raw stack trace, so the agent can self-correct.
+
+## How it works
+
+The server wraps the [TypeScript SDK](/sdk-reference/sandbox) and only ever holds your control-plane `SUPERSERVE_API_KEY`. Each tool call connects to the target sandbox by id; the SDK manages the per-sandbox **data-plane access token** internally and rotates it on resume, so it's never exposed to the model or returned in tool output. Tools are stateless — there's no hidden "current sandbox" — which keeps behavior predictable across multi-turn and parallel tool calls.
+
+## Troubleshooting
+
+- **Tools don't appear, or the server fails to start.** The API key is almost always the cause — MCP clients do **not** inherit environment variables from your shell. Set `SUPERSERVE_API_KEY` in the server's `env` block (see [Install](#install)), not just in your terminal.
+- **`Authentication failed`.** The key is missing or invalid. Production keys start with `ss_live_`; create one on the [API key](/api-key) page.
+- **First call is slow.** `npx` downloads the package on first use and caches it; later starts are fast.
+- **Requires Node 18+.** The server runs on Node via `npx`.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Sandbox lifecycle" href="/sandbox/lifecycle">
+    Pause, resume, and delete sandboxes.
+  </Card>
+  <Card title="Run commands" href="/commands/overview">
+    Exec, streaming, cwd, env, and timeouts.
+  </Card>
+  <Card title="Secrets" href="/secrets/overview">
+    Broker provider keys without exposing them to the sandbox.
+  </Card>
+  <Card title="TypeScript SDK" href="/sdk-reference/sandbox">
+    The library the MCP server wraps.
+  </Card>
+</CardGroup>

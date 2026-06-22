@@ -1,0 +1,63 @@
+{
+  "name": "@superserve/mcp",
+  "version": "0.1.0",
+  "description": "Model Context Protocol (MCP) server for Superserve sandboxes — create, exec, and manage Firecracker microVMs from any MCP client",
+  "keywords": [
+    "agents",
+    "ai",
+    "firecracker",
+    "mcp",
+    "microvm",
+    "model-context-protocol",
+    "sandbox",
+    "superserve"
+  ],
+  "homepage": "https://superserve.ai?utm_source=npm&utm_medium=package_meta",
+  "bugs": {
+    "url": "https://github.com/superserve-ai/superserve/issues"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/superserve-ai/superserve.git",
+    "directory": "packages/mcp"
+  },
+  "bin": {
+    "superserve-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "bunx oxlint",
+    "format": "bunx oxfmt --write",
+    "format:check": "bunx oxfmt --check",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "vitest run tests/e2e.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@superserve/sdk": "workspace:*",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@superserve/typescript-config": "workspace:*",
+    "@types/node": "^25.5.2",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "mcpName": "io.github.superserve-ai/mcp"
+}
