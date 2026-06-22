@@ -176,18 +176,14 @@
               "POST /sandboxes/{sandbox_id}/resume",
               "POST /sandboxes/{sandbox_id}/activate",
               "GET /sandboxes/{sandbox_id}/network",
+              "GET /sandboxes/{sandbox_id}/files",
               "POST /sandboxes/{sandbox_id}/secrets",
               "DELETE /sandboxes/{sandbox_id}/secrets/{env_key}"
             ]
           },
           {
             "group": "Exec",
-            "pages": [
-              "GET /exec/connect",
-              "POST /sandboxes/{sandbox_id}/exec",
-              "POST /sandboxes/{sandbox_id}/exec/stream",
-              "GET /exec/connect"
-            ]
+            "pages": ["GET /exec/connect"]
           },
           {
             "group": "Files",
