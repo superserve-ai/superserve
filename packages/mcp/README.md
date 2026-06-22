@@ -53,6 +53,52 @@ claude mcp add superserve \
 }
 ```
 
+## Hosted (remote)
+
+A hosted instance runs at `https://mcp.superserve.ai` (Streamable HTTP) — no local install. Send your Superserve API key as a bearer token; the server is stateless and account-scoped (the key already maps to your team).
+
+> Bearer auth works in Claude Code, Cursor, VS Code, ChatGPT developer mode, and the Anthropic Messages API connector. Claude.ai and Claude Desktop's Custom Connector UI require OAuth, which the hosted endpoint does not support yet.
+
+**Claude Code:**
+
+```bash
+claude mcp add --transport http superserve https://mcp.superserve.ai \
+  --header "Authorization: Bearer ss_live_xxxxxxxxxxxxxxxx"
+```
+
+**Cursor / VS Code** (`.cursor/mcp.json`, `.vscode/mcp.json`):
+
+```json
+{
+  "servers": {
+    "superserve": {
+      "type": "http",
+      "url": "https://mcp.superserve.ai",
+      "headers": { "Authorization": "Bearer ss_live_xxxxxxxxxxxxxxxx" }
+    }
+  }
+}
+```
+
+### Running the hosted server
+
+The same package ships the hosted server. Run it standalone (self-host / staging):
+
+```bash
+PORT=8080 SUPERSERVE_BASE_URL=https://api.superserve.ai \
+  npx -y -p @superserve/mcp superserve-mcp-http
+```
+
+Or mount the Web-standard handler in any `fetch` runtime (e.g. a Next.js route handler):
+
+```ts
+import { handleMcpRequest } from "@superserve/mcp/http"
+
+export const POST = (req: Request) => handleMcpRequest(req)
+```
+
+It serves the MCP endpoint at `/` (POST) and a `GET /health` liveness probe. Config: `PORT` (default `8080`), `SUPERSERVE_BASE_URL` (optional). The API key is read per request from the bearer header and never logged.
+
 ## Tools
 
 | Tool                  | Description                                                                            |

@@ -23,7 +23,8 @@
     "directory": "packages/mcp"
   },
   "bin": {
-    "superserve-mcp": "./dist/index.js"
+    "superserve-mcp": "./dist/index.js",
+    "superserve-mcp-http": "./dist/httpServer.js"
   },
   "files": [
     "dist"
@@ -31,11 +32,13 @@
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./http": "./dist/http.js"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && tsup --config tsup.http.config.ts",
     "dev": "tsup --watch",
+    "start:http": "node dist/httpServer.js",
     "lint": "bunx oxlint",
     "format": "bunx oxfmt --write",
     "format:check": "bunx oxfmt --check",
