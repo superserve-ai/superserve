@@ -11,14 +11,19 @@ import { createServerClient } from "@/lib/supabase/server"
 export const IMPERSONATION_COOKIE = "ss_impersonate"
 
 const DEFAULT_TTL_MINUTES = 30
+// Ceiling on a support session, so a misconfigured env var can't mint a key
+// that stays valid for days. Eight hours covers any realistic debugging window.
+const MAX_TTL_MINUTES = 8 * 60
 
 export function impersonationTtlMs(): number {
-  const mins = Number(
+  const raw = Number(
     process.env.IMPERSONATION_TTL_MINUTES ?? DEFAULT_TTL_MINUTES,
   )
-  return (
-    (Number.isFinite(mins) && mins > 0 ? mins : DEFAULT_TTL_MINUTES) * 60_000
-  )
+  const mins =
+    Number.isFinite(raw) && raw > 0
+      ? Math.min(raw, MAX_TTL_MINUTES)
+      : DEFAULT_TTL_MINUTES
+  return mins * 60_000
 }
 
 function sign(payload: string): string {
@@ -115,12 +120,18 @@ export async function getImpersonationContext(
   if (!teamId) return null
 
   const admin = createAdminClient()
-  const { data: team, error } = await admin
+  const { data: team } = await admin
     .from("team")
     .select("name")
     .eq("id", teamId)
     .single()
 
-  if (error || !team) return null
-  return { teamId, teamName: team.name as string }
+  // Fail safe: we ARE impersonating (staff + valid cookie), and the proxy is
+  // already injecting the impersonation key. If the name lookup fails, still
+  // return a context so the read-only banner shows — never silently hide the
+  // only indicator that this session is acting as another team.
+  return {
+    teamId,
+    teamName: (team?.name as string | undefined) ?? "another team",
+  }
 }

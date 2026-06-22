@@ -201,6 +201,22 @@ describe("api proxy /api/[...path]", () => {
     expect(res.headers.get("content-type")).toBe("application/json")
     expect(await res.json()).toEqual({ id: "abc" })
   })
+
+  it("preserves access_token in responses when NOT impersonating", async () => {
+    // Default beforeEach mocks getImpersonationTeamId → null. The data-plane
+    // token must still reach the browser so terminal/file transfer work.
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ id: "abc", access_token: "keep-me" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    )
+    const res = await GET(
+      req("GET", ["sandboxes", "abc"]),
+      params(["sandboxes", "abc"]),
+    )
+    expect((await res.json()).access_token).toBe("keep-me")
+  })
 })
 
 describe("proxy read-only impersonation gate", () => {
@@ -268,5 +284,52 @@ describe("proxy read-only impersonation gate", () => {
       params(["sandboxes", "abc"]),
     )
     expect(res.status).toBe(403)
+  })
+
+  // The data-plane access_token is the credential the terminal WebSocket and
+  // file upload/download use to talk DIRECTLY to boxd-… (bypassing this proxy).
+  // Leaking it to an impersonating session would let an admin exec and write
+  // files as the customer, defeating read-only. The proxy must strip it.
+  it("strips access_token from a sandbox detail response while impersonating", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "s1",
+          name: "box",
+          access_token: "secret-data-plane-token",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    )
+    const res = await GET(
+      req("GET", ["sandboxes", "s1"]),
+      params(["sandboxes", "s1"]),
+    )
+    expect(res.status).toBe(200)
+    const raw = await res.text()
+    expect(raw).not.toContain("secret-data-plane-token")
+    const body = JSON.parse(raw)
+    expect(body.id).toBe("s1")
+    expect(body.access_token).toBeUndefined()
+  })
+
+  it("strips access_token from every item in a list response while impersonating", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          { id: "s1", access_token: "tok1" },
+          { id: "s2", access_token: "tok2" },
+        ]),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    )
+    const res = await GET(req("GET", ["sandboxes"]), params(["sandboxes"]))
+    const raw = await res.text()
+    expect(raw).not.toContain("tok1")
+    expect(raw).not.toContain("tok2")
+    const body = JSON.parse(raw)
+    expect(body).toHaveLength(2)
+    expect(body[0].access_token).toBeUndefined()
+    expect(body[1].access_token).toBeUndefined()
   })
 })

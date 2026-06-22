@@ -15,6 +15,10 @@ import { createAdminClient } from "@/lib/supabase/admin"
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+// Upper bound on the admin teams list. Bounds the query instead of selecting
+// the entire table; revisit with real pagination if we ever exceed this.
+const MAX_TEAMS = 1000
+
 export async function listAllTeamsAction() {
   await requireStaff()
   const admin = createAdminClient()
@@ -22,6 +26,7 @@ export async function listAllTeamsAction() {
     .from("team")
     .select("id, name, active_sandbox_count, max_sandboxes, created_at")
     .order("created_at", { ascending: false })
+    .limit(MAX_TEAMS)
   if (error) throw new Error(error.message)
   return data ?? []
 }
@@ -57,7 +62,17 @@ export async function stopImpersonationAction() {
   const teamId = await readImpersonationTeamId()
   await clearImpersonationCookie()
   if (teamId) {
-    await revokeImpersonationKeyRow(user.id, teamId)
+    try {
+      await revokeImpersonationKeyRow(user.id, teamId)
+    } catch (err) {
+      // Best-effort: the cookie is already cleared so impersonation has stopped,
+      // and the key self-expires via expires_at. Don't block the user's exit on
+      // a transient DB error — just record it.
+      console.error(
+        "[admin-impersonation] failed to revoke key on stop",
+        err instanceof Error ? err.message : err,
+      )
+    }
     await logImpersonationEvent({
       action: "stop",
       adminId: user.id,

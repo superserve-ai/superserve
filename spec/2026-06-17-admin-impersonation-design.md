@@ -55,14 +55,17 @@ sandboxes, exec, file writes, key management).
 ## 3. Key decisions
 
 ### D1 — Console-only, no backend changes
+
 Because isolation rests on the console-written `api_key.team_id`, "act as team
 T" is achieved by forwarding an `X-API-Key` whose row points at T. The Go
 service cannot distinguish it from the customer. **No sandbox changes.**
 
 ### D2 — Read-only enforced in the console (not via scopes)
+
 `api_key.scopes` is not enforced by the backend, so a scope-based read-only key
 would require backend work. Instead we enforce read-only at the **only two
 places the browser can reach the platform**:
+
 1. **Proxy** — while impersonating, forward only `GET`/`HEAD`; reject other
    methods with `403`.
 2. **Mutating server actions** — refuse while impersonating.
@@ -73,12 +76,14 @@ browser**, the admin cannot bypass the proxy. The one escape hatch —
 blocked.
 
 ### D3 — No usage/quota impact (falls out of read-only)
+
 Every quota/activity/billing artifact is write-triggered (§2). Read-only blocks
 every write, so impersonation produces **zero** `activity` rows, **zero** quota
 movement, and **zero** metered compute under the customer's `team_id`. Nothing
 to exempt.
 
 ### D4 — Admin identity: Google-verified `@superserve.ai`, behind one seam
+
 A user is staff iff their email is on the staff domain **and** the identity is
 Google (`app_metadata.provider`/`providers` includes `google`) — never a raw
 email-string match, because email/password signup exists and `@superserve.ai`
@@ -93,6 +98,7 @@ single-function change. Staff domain is configurable via `STAFF_EMAIL_DOMAIN`
 (default `superserve.ai`).
 
 ### D5 — Impersonation context: signed, HttpOnly, short-TTL cookie
+
 "Act as team T" sets cookie `ss_impersonate` = `teamId.exp.HMAC(secret, "teamId.exp")`
 (HttpOnly, Secure in prod, SameSite=Lax, ~30-min TTL, signed with
 `CONSOLE_PROXY_SECRET`). It is tamper-proof and self-expiring. Reading it grants
@@ -100,6 +106,7 @@ the target team **only when `isStaff(user)` is also true** — the cookie alone 
 never sufficient.
 
 ### D6 — Impersonation key: ephemeral, per-(admin, team)
+
 While impersonating, the proxy injects `deriveImpersonationKey(adminId, teamId)`
 = HMAC(secret, `imp:v1:<adminId>:<teamId>`) and upserts a hidden `api_key` row
 `{ team_id: T, name: "__console_impersonation__", created_by: <admin>, scopes: [],
@@ -109,6 +116,7 @@ individual and self-expires via the backend's `expires_at` check. The row is
 hidden from the customer's key list by name, and revoked on explicit "exit".
 
 ### D7 — Audit: per-individual, console-side
+
 Every start/stop is logged with the **individual** admin's email + team:
 structured server log + Slack webhook (`sendToSlackHook`) + PostHog event. This
 is the accountability artifact a shared password would destroy. A durable
@@ -118,17 +126,20 @@ repo; no Go code reads it).
 ## 4. Mechanism / request flows
 
 **Control-plane read while impersonating** (e.g. `GET /api/sandboxes`):
+
 1. Proxy resolves `user` → `getImpersonationTeamId(user)` returns T (staff + valid cookie).
 2. Method is `GET` → allowed. (`POST`/`DELETE`/… → `403 read_only_impersonation`.)
 3. `getAuthApiKeyForUser(user)` mints/refreshes the impersonation key for T and injects it.
 4. Backend resolves the key → team T, returns T's data. No activity/quota write.
 
 **Server-action read while impersonating** (activity/snapshots/key list):
+
 - The action resolves `getImpersonationTeamId(user) ?? ownTeam` and queries
   Supabase scoped to T via the service-role client. Internal key names
   (`__console_proxy__`, `__console_impersonation__`) are filtered from the list.
 
 **Write while impersonating** (blocked):
+
 - Proxy: non-GET → `403`. Mutating server actions (`createApiKeyAction`,
   `revokeApiKeyAction`, …): throw "read-only while viewing another team".
 
@@ -137,7 +148,7 @@ repo; no Go code reads it).
 ## 5. Security model
 
 - **The console is the entire boundary** (service-role bypasses RLS). The
-  quality of `isStaff` + the signed cookie *is* the security of the feature.
+  quality of `isStaff` + the signed cookie _is_ the security of the feature.
 - **No browser-held credential:** the impersonation key is injected server-side,
   never returned; the admin's only path is the proxy, which is GET-gated.
 - **Escape hatch closed:** `createApiKeyAction` is blocked while impersonating,
@@ -145,9 +156,15 @@ repo; no Go code reads it).
 - **Cookie integrity:** HMAC-signed + expiry; tamper or expiry → ignored. Cookie
   presence without staff status → ignored.
 - **Defense in depth:** key carries `expires_at`; revoked on exit.
-- **Data-plane boundary:** v1 is control-plane + Supabase reads only. Surfacing a
-  running sandbox's files/terminal (data plane) would log to `proxy_audit` under
-  the customer's `team_id` and is **out of scope** for v1.
+- **Data-plane boundary (enforced):** the terminal WebSocket and file
+  upload/download talk **directly** to `boxd-…` using the per-sandbox
+  `access_token`, bypassing the proxy entirely. To keep impersonation read-only,
+  the proxy **redacts `access_token` from JSON responses while impersonating**
+  (`lib/api/redact.ts`), so the browser never receives a usable data-plane
+  credential; the terminal and file UI are additionally gated behind
+  `useImpersonation()`. Without this, an admin could exec and write files as the
+  customer (and log `proxy_audit`/`activity` under their `team_id`) — defeating
+  the entire read-only guarantee.
 
 ## 6. Data model
 
@@ -163,7 +180,10 @@ read by no Go code.
 - Google Group via SSO for staff membership (SAML group mapping / Directory API /
   auth hook) — the `isStaff` seam is built to swap to this.
 - Durable `admin_audit` table.
-- Data-plane viewing (sandbox files/terminal) while impersonating.
+- Read-only data-plane _viewing_ (e.g. browsing a sandbox's files/terminal
+  output) while impersonating. Data-plane access is currently **blocked**, not
+  surfaced read-only — enabling it safely needs backend support so it doesn't
+  write `proxy_audit` under the customer's `team_id`.
 
 ## 8. Verification
 

@@ -2,6 +2,10 @@
 
 import { cn, TooltipProvider } from "@superserve/ui"
 
+import {
+  type ImpersonationState,
+  ImpersonationStateProvider,
+} from "@/components/admin/impersonation-context"
 import { CommandPalette } from "@/components/command-palette"
 import { Sidebar } from "@/components/sidebar/sidebar"
 import {
@@ -48,20 +52,24 @@ function DashboardContent({
 interface DashboardShellProps {
   children: React.ReactNode
   isStaff: boolean
+  impersonation: ImpersonationState
   banner?: React.ReactNode
 }
 
 export function DashboardShell({
   children,
   isStaff,
+  impersonation,
   banner,
 }: DashboardShellProps) {
   return (
     <SidebarProvider>
       <TooltipProvider>
-        <DashboardContent isStaff={isStaff} banner={banner}>
-          {children}
-        </DashboardContent>
+        <ImpersonationStateProvider value={impersonation}>
+          <DashboardContent isStaff={isStaff} banner={banner}>
+            {children}
+          </DashboardContent>
+        </ImpersonationStateProvider>
       </TooltipProvider>
     </SidebarProvider>
   )

@@ -137,17 +137,25 @@ async function ensureProxyKeyRow(
  * When the user is staff and has an active impersonation session, returns an
  * ephemeral key scoped to the target team; otherwise returns the user's own
  * proxy key. Returns null when user is null (unauthenticated).
+ *
+ * `impersonatedTeamId` may be passed by callers that already resolved it (the
+ * proxy does, to gate writes) to avoid recomputing it; pass `undefined` to have
+ * this function resolve it.
  */
 export async function getAuthApiKeyForUser(
   user: User | null,
+  impersonatedTeamId?: string | null,
 ): Promise<string | null> {
   if (!user) return null
 
-  const impersonatedTeamId = await getImpersonationTeamId(user)
-  if (impersonatedTeamId) {
+  const teamId =
+    impersonatedTeamId === undefined
+      ? await getImpersonationTeamId(user)
+      : impersonatedTeamId
+  if (teamId) {
     return ensureImpersonationKeyRow(
       user.id,
-      impersonatedTeamId,
+      teamId,
       Math.floor(impersonationTtlMs() / 60_000),
     )
   }

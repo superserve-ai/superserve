@@ -29,19 +29,23 @@ vi.mock("@/lib/supabase/server", () => ({
   })),
 }))
 
+const teamLookup = vi.hoisted(() => ({
+  result: { data: { name: "Acme Corp" }, error: null } as {
+    data: { name: string } | null
+    error: { message: string } | null
+  },
+}))
+
 vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: vi.fn(() => ({
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn(async () => ({
-            data: { name: "Acme Corp" },
-            error: null,
-          })),
-        })),
-      })),
-    })),
-  })),
+  createAdminClient: () => ({
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          single: async () => teamLookup.result,
+        }),
+      }),
+    }),
+  }),
 }))
 
 import {
@@ -65,6 +69,7 @@ const customer = {
 
 afterEach(() => {
   cookieStore.value = undefined
+  teamLookup.result = { data: { name: "Acme Corp" }, error: null }
 })
 
 describe("impersonation token", () => {
@@ -106,5 +111,23 @@ describe("getImpersonationContext", () => {
   it("returns null when no impersonation cookie is present", async () => {
     // cookieStore.value is undefined (no cookie) — the user is staff (mocked as amit@superserve.ai)
     expect(await getImpersonationContext()).toBeNull()
+  })
+
+  it("returns the team name when the lookup succeeds", async () => {
+    cookieStore.value = signImpersonationToken(TEAM, Date.now() + 60_000)
+    expect(await getImpersonationContext(staff)).toEqual({
+      teamId: TEAM,
+      teamName: "Acme Corp",
+    })
+  })
+
+  it("fails safe to a fallback name when the team lookup errors", async () => {
+    // The banner must never silently vanish while impersonation is still active.
+    cookieStore.value = signImpersonationToken(TEAM, Date.now() + 60_000)
+    teamLookup.result = { data: null, error: { message: "db down" } }
+    expect(await getImpersonationContext(staff)).toEqual({
+      teamId: TEAM,
+      teamName: "another team",
+    })
   })
 })

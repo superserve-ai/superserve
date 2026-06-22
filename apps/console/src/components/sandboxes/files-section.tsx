@@ -18,6 +18,7 @@ import {
 import { usePostHog } from "posthog-js/react"
 import { useRef, useState } from "react"
 
+import { useImpersonation } from "@/components/admin/impersonation-context"
 import type { SandboxResponse } from "@/lib/api/types"
 import { FILE_EVENTS } from "@/lib/posthog/events"
 import { formatBytes } from "@/lib/sandbox-utils"
@@ -87,8 +88,27 @@ interface FilesSectionProps {
 }
 
 export function FilesSection({ sandbox, onStart }: FilesSectionProps) {
+  const { isImpersonating } = useImpersonation()
   const reason = disabledReason(sandbox.status)
   const isActive = sandbox.status === "active"
+
+  // File transfer talks directly to the data plane (boxd-…), bypassing the
+  // read-only proxy gate. While impersonating, the proxy also redacts the
+  // access_token these panels need, so surface a clear read-only state instead
+  // of controls that would fail.
+  if (isImpersonating) {
+    return (
+      <section className="border-b border-border">
+        <div className="flex h-10 items-center border-b border-border px-4">
+          <h2 className="text-sm font-semibold text-foreground">Files</h2>
+        </div>
+        <FilesEmptyState
+          status={sandbox.status}
+          reason="File transfer is disabled while viewing another team"
+        />
+      </section>
+    )
+  }
 
   return (
     <section className="border-b border-border">
