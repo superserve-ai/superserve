@@ -220,6 +220,55 @@ describe("Sandbox instance methods", () => {
     expect(init.method).toBe("POST")
   })
 
+  it("sandbox.attachSecret POSTs /secrets with env_key and secret_name", async () => {
+    const sandbox = await makeSandbox()
+    const mock = vi.fn(async () =>
+      jsonResponse(
+        { env_key: "ANTHROPIC_API_KEY", secret_name: "anthropic-prod" },
+        201,
+      ),
+    )
+    vi.stubGlobal("fetch", mock)
+
+    await expect(
+      sandbox.attachSecret("ANTHROPIC_API_KEY", "anthropic-prod"),
+    ).resolves.toBeUndefined()
+
+    const [url, init] = mock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe("https://api.superserve.ai/sandboxes/sbx-1/secrets")
+    expect(init.method).toBe("POST")
+    expect(JSON.parse(init.body as string)).toEqual({
+      env_key: "ANTHROPIC_API_KEY",
+      secret_name: "anthropic-prod",
+    })
+  })
+
+  it("sandbox.detachSecret DELETEs /secrets/{envKey}", async () => {
+    const sandbox = await makeSandbox()
+    const mock = vi.fn(async () => noContentResponse())
+    vi.stubGlobal("fetch", mock)
+
+    await expect(
+      sandbox.detachSecret("ANTHROPIC_API_KEY"),
+    ).resolves.toBeUndefined()
+
+    const [url, init] = mock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(
+      "https://api.superserve.ai/sandboxes/sbx-1/secrets/ANTHROPIC_API_KEY",
+    )
+    expect(init.method).toBe("DELETE")
+  })
+
+  it("sandbox.detachSecret url-encodes the env key", async () => {
+    const sandbox = await makeSandbox()
+    const mock = vi.fn(async () => noContentResponse())
+    vi.stubGlobal("fetch", mock)
+
+    await sandbox.detachSecret("A/B")
+    const [url] = mock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe("https://api.superserve.ai/sandboxes/sbx-1/secrets/A%2FB")
+  })
+
   it("sandbox.resume rotates access token and rebuilds files sub-module", async () => {
     const sandbox = await makeSandbox()
     const filesBefore = sandbox.files

@@ -18,6 +18,9 @@ import {
 } from "@/components/sandboxes/sandbox-info-grid"
 import { SandboxResourceBar } from "@/components/sandboxes/sandbox-resource-bar"
 import { SandboxStatusHero } from "@/components/sandboxes/sandbox-status-hero"
+import { NetworkLogTable } from "@/components/secrets/network-log-table"
+import { SecretBindingList } from "@/components/secrets/secret-binding-list"
+import { useSandboxNetwork } from "@/hooks/use-network"
 import {
   useDeleteSandbox,
   usePauseSandbox,
@@ -139,6 +142,8 @@ export default function SandboxDetailPage() {
   const deleteMutation = useDeleteSandbox()
   const [deleteOpen, setDeleteOpen] = useState(false)
 
+  const network = useSandboxNetwork(sandboxId)
+
   const { data: activity, isPending: activityPending } = useQuery({
     queryKey: auditLogKeys.bySandbox(sandboxId),
     queryFn: () => listActivityBySandboxAction(sandboxId),
@@ -248,14 +253,29 @@ export default function SandboxDetailPage() {
           <MetadataSection sandbox={sandbox} />
         </div>
 
-        {/* Layer 4: files (state-aware) */}
+        {/* Layer 4: bound secrets */}
+        <SecretBindingList
+          sandboxId={sandbox.id}
+          secrets={sandbox.secrets}
+          status={sandbox.status}
+        />
+
+        {/* Layer 5: files (state-aware) */}
         <FilesSection sandbox={sandbox} onStart={handleStart} />
 
-        {/* Layer 5: preview (state-aware) */}
+        {/* Layer 6: preview (state-aware) */}
         <PreviewSection sandbox={sandbox} onStart={handleStart} />
 
-        {/* Layer 6: activity (history, lower priority) */}
+        {/* Layer 7: activity (history, lower priority) */}
         <ActivitySection activity={activity} isPending={activityPending} />
+
+        {/* Layer 8: unified egress log (connections + secret requests) */}
+        <NetworkLogTable
+          title="Network"
+          events={network.data?.data}
+          isPending={network.isPending}
+          hasMore={network.data?.has_more}
+        />
       </div>
     </div>
   )

@@ -72,6 +72,7 @@ sandbox = Sandbox.create(
 | `timeoutSeconds` / `timeout_seconds` | `number` | Max active lifetime before auto-pause. API-side upper bound (subject to change). |
 | `metadata` | `Record<string, string>` | String tags. |
 | `envVars` / `env_vars` | `Record<string, string>` | Env vars injected into every process. |
+| `secrets` | `Record<string, string>` | Bind secrets to env vars (`ENV_VAR → secret name`). The agent sees a stand-in token; the real credential is attached to outbound requests. See [Secrets](/secrets/overview). |
 | `network` | `NetworkConfig` | Egress allow/deny rules. |
 | `apiKey` / `api_key` | `string` | Overrides `SUPERSERVE_API_KEY`. |
 | `baseUrl` / `base_url` | `string` | Overrides `SUPERSERVE_BASE_URL`. |
@@ -203,9 +204,63 @@ sandbox.update(
 ```
 </CodeGroup>
 
+### `attachSecret` / `attach_secret`
+
+Bind a team secret to a live or paused sandbox under an environment variable. The sandbox sees a stand-in token; the real credential is swapped in for outbound requests to the secret's allowed hosts. Takes effect for processes started after the call; a paused sandbox applies it on resume.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.attachSecret("ANTHROPIC_API_KEY", "anthropic-prod")
+```
+
+```python Python
+sandbox.attach_secret("ANTHROPIC_API_KEY", "anthropic-prod")
+```
+</CodeGroup>
+
+### `detachSecret` / `detach_secret`
+
+Remove a secret binding by its environment-variable key. The stand-in token is revoked, so requests using it are refused — within about a minute for a process already running. A paused sandbox applies the change on resume.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.detachSecret("ANTHROPIC_API_KEY")
+```
+
+```python Python
+sandbox.detach_secret("ANTHROPIC_API_KEY")
+```
+</CodeGroup>
+
+### `getNetworkLog` / `get_network_log`
+
+The sandbox's network log — every outbound connection and secret-bearing request, newest first. Returns a `NetworkLogPage`. See the [Network log](/sandbox/network-log) guide for the full model.
+
+<CodeGroup>
+```typescript TypeScript
+const page = await sandbox.getNetworkLog({ verdict: "blocked", limit: 100 })
+for (const e of page.events) console.log(e.kind, e.host, e.verdict ?? e.status)
+```
+
+```python Python
+page = sandbox.get_network_log(verdict="blocked", limit=100)
+for e in page.events:
+    print(e.kind, e.host, e.verdict or e.status)
+```
+</CodeGroup>
+
+| Option | Type | Description |
+|---|---|---|
+| `limit` | `number` | Max events per page. |
+| `before` | `string` | Opaque pagination cursor — pass the previous page's `nextCursor` to page through results. Also accepts an RFC3339 timestamp as a time filter (rows strictly older than it). |
+| `since` | `string` | RFC3339 — rows at or newer than this. |
+| `verdict` | `"allowed" \| "blocked" \| "failed"` | Filter to connections with this verdict (excludes request rows). |
+
+`NetworkLogPage` has `events` ([`NetworkEvent[]`](/sandbox/network-log#two-kinds-of-rows)), `nextCursor` / `next_cursor`, and `hasMore` / `has_more`.
+
 ## Properties on `sandbox`
 
-`id`, `name`, `status`, and `metadata` are read-only snapshots taken at construction. Call `getInfo()` / `get_info()` for fresh data.
+`id`, `name`, `status`, `metadata`, and `secrets` are read-only snapshots taken at construction. Call `getInfo()` / `get_info()` for fresh data.
 
 | Property | Type | Description |
 |---|---|---|
@@ -213,6 +268,7 @@ sandbox.update(
 | `name` | `string` | Human-readable name. |
 | `status` | `SandboxStatus` | Status at construction time. |
 | `metadata` | `Record<string, string>` | Tags at construction time. |
+| `secrets` | `SandboxSecretBinding[] \| undefined` | Bound secrets (`envKey` → `secretName`, with a `revoked` flag) at construction time. |
 | `commands` | `Commands` | See [Commands](/sdk-reference/commands). |
 | `files` | `Files` | See [Files](/sdk-reference/files). Rebuilt after `resume()`. |
 

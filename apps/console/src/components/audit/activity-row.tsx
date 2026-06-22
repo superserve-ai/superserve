@@ -58,7 +58,7 @@ export function ActivitySummaryRow({
         </div>
       </TableCell>
       <TableCell className="font-mono text-foreground/80">
-        {log.sandbox_name ?? "-"}
+        {log.sandbox_name ?? log.secret_name ?? "-"}
       </TableCell>
       <TableCell className="text-muted capitalize">{log.category}</TableCell>
       <TableCell className="text-foreground/80">{log.action}</TableCell>

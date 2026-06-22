@@ -1,15 +1,17 @@
 /**
- * files-section — the upload/download panel on the sandbox detail page.
+ * files-section — the navigable file browser on the sandbox detail page.
  *
  * Covers:
- *   - Disabled gating for non-active / non-paused sandboxes with tooltip hint
- *   - Path validation: absolute, no '..', no '.'
- *   - Upload happy path + failure path (toasts + posthog events)
- *   - Download happy path + failure path
- *   - Drop handler accepts files
+ *   - Disabled gating for non-active sandboxes (paused / resuming)
+ *   - Listing an active sandbox's directory (folders + files)
+ *   - Descending into a folder (re-lists the subpath)
+ *   - Downloading a file (format=zip, success toast + posthog)
+ *   - Drag-drop upload onto the current directory and onto a folder row
+ *   - Surfacing the API error message when a listing request fails
  */
 
-import { act, render, screen } from "@testing-library/react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -19,16 +21,8 @@ const mockAddToast = vi.fn()
 const mockCapture = vi.fn()
 
 vi.mock("@superserve/ui", () => ({
-  cn: (...c: Array<string | undefined | false>) => c.filter(Boolean).join(" "),
   Button: (props: React.JSX.IntrinsicElements["button"]) => (
     <button type="button" {...props} />
-  ),
-  Input: (props: React.JSX.IntrinsicElements["input"]) => <input {...props} />,
-  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  TooltipTrigger: ({ render: renderEl }: { render: React.ReactElement }) =>
-    renderEl,
-  TooltipPopup: ({ children }: { children: React.ReactNode }) => (
-    <span data-testid="tooltip">{children}</span>
   ),
   useToast: () => ({ addToast: mockAddToast }),
 }))
@@ -37,24 +31,30 @@ vi.mock("posthog-js/react", () => ({
   usePostHog: () => ({ capture: mockCapture }),
 }))
 
-vi.mock("@phosphor-icons/react", () => ({
-  DownloadSimpleIcon: () => <span>↓</span>,
-  FileArrowUpIcon: () => <span>f</span>,
-  FilesIcon: () => <span>📁</span>,
-  UploadSimpleIcon: () => <span>↑</span>,
-}))
+// Stub every phosphor icon we render as a no-op element.
+vi.mock("@phosphor-icons/react", () => {
+  const Icon = () => <span />
+  return {
+    ArrowClockwiseIcon: Icon,
+    CaretRightIcon: Icon,
+    DownloadSimpleIcon: Icon,
+    FileIcon: Icon,
+    FilesIcon: Icon,
+    FolderIcon: Icon,
+    FolderOpenIcon: Icon,
+    HouseIcon: Icon,
+    PlayIcon: Icon,
+    UploadSimpleIcon: Icon,
+    WarningCircleIcon: Icon,
+  }
+})
 
-// Mock formatBytes — not under test here.
 vi.mock("@/lib/sandbox-utils", () => ({
   formatBytes: (n: number) => `${n}B`,
 }))
 
-// Stub fetch — per-test behavior configured via mockResolvedValue.
 const fetchSpy = vi.fn()
 vi.stubGlobal("fetch", fetchSpy)
-
-// happy-dom doesn't expose URL.createObjectURL. Patch just these methods
-// on the existing URL constructor — don't replace URL itself.
 URL.createObjectURL = vi.fn().mockReturnValue("blob:fake")
 URL.revokeObjectURL = vi.fn()
 
@@ -71,302 +71,193 @@ const activeSandbox: SandboxResponse = {
   created_at: "2026-01-01T00:00:00.000Z",
 }
 
-function successResponse(
-  body: BodyInit | null,
-  headers: Record<string, string> = {},
-) {
-  return new Response(body, {
+const ENTRIES = [
+  { name: "proj", is_dir: true, size: 0, modified_unix: 1718800000 },
+  { name: "readme.md", is_dir: false, size: 12, modified_unix: 1718800000 },
+]
+
+function listingResponse(entries: typeof ENTRIES) {
+  return new Response(JSON.stringify({ entries }), {
     status: 200,
-    headers: { "content-type": "application/octet-stream", ...headers },
+    headers: { "content-type": "application/json" },
   })
 }
 
-describe("FilesSection — disabled gating", () => {
-  it("renders the empty state when sandbox is resuming, with reason text", () => {
-    render(<FilesSection sandbox={{ ...activeSandbox, status: "resuming" }} />)
-    expect(screen.getByText(/Sandbox is resuming/i)).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: /Upload/ })).toBeNull()
-    expect(screen.queryByRole("button", { name: /Download/ })).toBeNull()
-  })
-
-  it("renders the empty state when sandbox is paused, with hint to start", () => {
-    render(<FilesSection sandbox={{ ...activeSandbox, status: "paused" }} />)
-    expect(screen.getByText(/Start the sandbox/i)).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: /Upload/ })).toBeNull()
-  })
-
-  it("enables download input but keeps Upload button disabled with no file", () => {
-    render(<FilesSection sandbox={activeSandbox} />)
-    expect(screen.getByRole("button", { name: /Upload/ })).toBeDisabled()
-    // Download also requires a valid path by default — /home/user/ ends with /
-    // so the button should be clickable but validation fires on click.
-  })
-})
-
-describe("FilesSection — upload", () => {
-  const user = userEvent.setup()
-
-  beforeEach(() => {
-    fetchSpy.mockReset()
-    mockAddToast.mockReset()
-    mockCapture.mockReset()
-  })
-
-  it("rejects relative or traversal paths before calling fetch", async () => {
-    render(<FilesSection sandbox={activeSandbox} />)
-
-    // Type a bad path and attach a file
-    const pathInput = screen.getAllByPlaceholderText("/home/user/file.txt")[0]
-    await user.clear(pathInput)
-    await user.type(pathInput, "/home/user/../etc/passwd")
-
-    const fileInput = document.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement
-    const file = new File(["hello"], "evil.txt", { type: "text/plain" })
-    await act(async () => {
-      Object.defineProperty(fileInput, "files", {
-        value: [file],
-        configurable: true,
-      })
-      fileInput.dispatchEvent(new Event("change", { bubbles: true }))
-    })
-
-    const uploadBtn = screen.getByRole("button", { name: /Upload/ })
-    await user.click(uploadBtn)
-
-    expect(fetchSpy).not.toHaveBeenCalled()
-    expect(mockAddToast).toHaveBeenCalledWith(
-      expect.stringContaining("absolute"),
-      "error",
-    )
-  })
-
-  it("uploads, shows success toast, fires UPLOAD_SUCCEEDED event", async () => {
-    fetchSpy.mockResolvedValue(successResponse(null))
-    render(<FilesSection sandbox={activeSandbox} />)
-
-    const fileInput = document.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement
-    const file = new File(["hello"], "note.txt", { type: "text/plain" })
-    await act(async () => {
-      Object.defineProperty(fileInput, "files", {
-        value: [file],
-        configurable: true,
-      })
-      fileInput.dispatchEvent(new Event("change", { bubbles: true }))
-    })
-
-    await user.click(screen.getByRole("button", { name: /Upload/ }))
-
-    // Verify request shape
-    expect(fetchSpy).toHaveBeenCalledTimes(1)
-    const [url, init] = fetchSpy.mock.calls[0]
-    expect(url).toContain("/files?path=%2Fhome%2Fuser%2Fnote.txt")
-    expect(url).toContain("boxd-sbx-1.")
-    expect(init.method).toBe("POST")
-    expect(init.headers["X-Access-Token"]).toBe("tok-abc")
-
-    expect(mockAddToast).toHaveBeenCalledWith(
-      expect.stringContaining("Uploaded"),
-      "success",
-    )
-    expect(mockCapture).toHaveBeenCalledWith(
-      "file_upload_succeeded",
-      expect.objectContaining({
-        sandbox_id: "sbx-1",
-        file_size: 5,
-      }),
-    )
-  })
-
-  it("shows error toast + fires UPLOAD_FAILED on non-OK response", async () => {
-    fetchSpy.mockResolvedValue(
-      new Response("permission denied", { status: 403 }),
-    )
-    render(<FilesSection sandbox={activeSandbox} />)
-
-    const fileInput = document.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement
-    const file = new File(["x"], "a.txt")
-    await act(async () => {
-      Object.defineProperty(fileInput, "files", {
-        value: [file],
-        configurable: true,
-      })
-      fileInput.dispatchEvent(new Event("change", { bubbles: true }))
-    })
-
-    await user.click(screen.getByRole("button", { name: /Upload/ }))
-
-    expect(mockAddToast).toHaveBeenCalledWith(
-      expect.stringContaining("permission denied"),
-      "error",
-    )
-    expect(mockCapture).toHaveBeenCalledWith(
-      "file_upload_failed",
-      expect.objectContaining({ sandbox_id: "sbx-1" }),
-    )
-  })
-})
-
-describe("FilesSection — download", () => {
-  const user = userEvent.setup()
-
-  beforeEach(() => {
-    fetchSpy.mockReset()
-    mockAddToast.mockReset()
-    mockCapture.mockReset()
-  })
-
-  it("rejects paths ending in '/'", async () => {
-    render(<FilesSection sandbox={activeSandbox} />)
-    // Default download path is /home/user/ — click should surface a
-    // validation error without hitting fetch.
-    const downloadBtn = screen.getByRole("button", { name: /Download/ })
-    await user.click(downloadBtn)
-    expect(fetchSpy).not.toHaveBeenCalled()
-    expect(mockAddToast).toHaveBeenCalledWith(
-      expect.stringContaining("directory"),
-      "error",
-    )
-  })
-
-  it("downloads a file, fires DOWNLOAD_SUCCEEDED event", async () => {
-    // Build a streamable response body
-    const body = new Blob([new Uint8Array([1, 2, 3])])
-    fetchSpy.mockResolvedValue(
-      new Response(body, {
+// Route fetch by shape: listing (control-plane /api/.../files), upload (POST),
+// download (data-plane ?format=zip).
+function defaultFetch(url: string, init?: RequestInit) {
+  if (url.includes("/api/sandboxes/") && url.includes("/files"))
+    return Promise.resolve(listingResponse(ENTRIES))
+  if (init?.method === "POST")
+    return Promise.resolve(new Response(null, { status: 200 }))
+  if (url.includes("format=zip")) {
+    return Promise.resolve(
+      new Response(new Blob([new Uint8Array([1, 2, 3])]), {
         status: 200,
-        headers: { "content-length": "3" },
+        headers: { "content-disposition": 'attachment; filename="readme.md"' },
       }),
     )
+  }
+  return Promise.resolve(new Response(null, { status: 404 }))
+}
 
-    render(<FilesSection sandbox={activeSandbox} />)
+function renderSection(sandbox: SandboxResponse = activeSandbox) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  return render(
+    <QueryClientProvider client={client}>
+      <FilesSection sandbox={sandbox} onStart={() => {}} />
+    </QueryClientProvider>,
+  )
+}
 
-    // Fix the path to a valid file path
-    const downloadPathInput = screen.getAllByPlaceholderText(
-      "/home/user/file.txt",
-    )[1]
-    await user.clear(downloadPathInput)
-    await user.type(downloadPathInput, "/home/user/file.txt")
+function fileDataTransfer(file: File) {
+  // happy-dom has no real DataTransfer; supply the shape our handlers read.
+  return { types: ["Files"], items: [], files: [file] }
+}
 
-    await user.click(screen.getByRole("button", { name: /Download/ }))
+beforeEach(() => {
+  fetchSpy.mockReset()
+  fetchSpy.mockImplementation((url: string, init?: RequestInit) =>
+    defaultFetch(String(url), init),
+  )
+  mockAddToast.mockReset()
+  mockCapture.mockReset()
+})
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1)
-    const [url, init] = fetchSpy.mock.calls[0]
-    expect(url).toContain("/files?path=%2Fhome%2Fuser%2Ffile.txt")
-    expect(init.method).toBe("GET")
-    expect(init.headers["X-Access-Token"]).toBe("tok-abc")
+describe("FilesSection — gating", () => {
+  it("shows the start hint when paused", () => {
+    renderSection({ ...activeSandbox, status: "paused" })
+    expect(screen.getByText(/Start the sandbox/i)).toBeInTheDocument()
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
 
-    expect(mockAddToast).toHaveBeenCalledWith(
-      expect.stringContaining("Downloaded"),
-      "success",
+  it("shows a resuming message when resuming", () => {
+    renderSection({ ...activeSandbox, status: "resuming" })
+    expect(screen.getByText(/resuming/i)).toBeInTheDocument()
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe("FileBrowser — listing & navigation", () => {
+  it("lists the default directory's entries", async () => {
+    renderSection()
+    expect(await screen.findByText("proj/")).toBeInTheDocument()
+    expect(screen.getByText("readme.md")).toBeInTheDocument()
+
+    const [url] = fetchSpy.mock.calls[0]
+    expect(String(url)).toContain("/api/sandboxes/")
+    expect(String(url)).toContain("/files?path=%2Fhome%2Fuser")
+  })
+
+  it("descends into a folder and lists the subpath", async () => {
+    const user = userEvent.setup()
+    renderSection()
+    await user.click(await screen.findByText("proj/"))
+
+    await waitFor(() =>
+      expect(
+        fetchSpy.mock.calls.some(
+          ([u]) =>
+            String(u).includes("/api/sandboxes/") &&
+            String(u).includes("path=%2Fhome%2Fuser%2Fproj"),
+        ),
+      ).toBe(true),
+    )
+  })
+})
+
+describe("FileBrowser — download", () => {
+  it("downloads a file as format=zip and toasts success", async () => {
+    const user = userEvent.setup()
+    renderSection()
+    await user.click(await screen.findByText("readme.md"))
+
+    await waitFor(() =>
+      expect(
+        fetchSpy.mock.calls.some(
+          ([u]) =>
+            String(u).includes("path=%2Fhome%2Fuser%2Freadme.md") &&
+            String(u).includes("format=zip"),
+        ),
+      ).toBe(true),
+    )
+    await waitFor(() =>
+      expect(mockAddToast).toHaveBeenCalledWith(
+        expect.stringContaining("Downloaded readme.md"),
+        "success",
+      ),
     )
     expect(mockCapture).toHaveBeenCalledWith(
       "file_download_succeeded",
       expect.objectContaining({ sandbox_id: "sbx-1" }),
     )
   })
+})
 
-  it("surfaces a parsed upstream error as a toast + fires DOWNLOAD_FAILED", async () => {
-    fetchSpy.mockResolvedValue(
-      new Response(JSON.stringify({ error: "disk on fire" }), { status: 500 }),
-    )
-    render(<FilesSection sandbox={activeSandbox} />)
+describe("FileBrowser — drag-drop upload", () => {
+  it("uploads a file dropped onto the current directory", async () => {
+    renderSection()
+    const body = await screen.findByLabelText(/Files in \/home\/user/)
+    const file = new File(["hi"], "note.txt", { type: "text/plain" })
 
-    const downloadPathInput = screen.getAllByPlaceholderText(
-      "/home/user/file.txt",
-    )[1]
-    await user.clear(downloadPathInput)
-    await user.type(downloadPathInput, "/home/user/file.txt")
+    fireEvent.drop(body, { dataTransfer: fileDataTransfer(file) })
 
-    await user.click(screen.getByRole("button", { name: /Download/ }))
-
-    expect(mockAddToast).toHaveBeenCalledWith(
-      expect.stringContaining("disk on fire"),
-      "error",
-    )
-    expect(mockCapture).toHaveBeenCalledWith(
-      "file_download_failed",
-      expect.objectContaining({ sandbox_id: "sbx-1" }),
-    )
-  })
-
-  it("does not leak an unexpected JSON error body into the toast", async () => {
-    fetchSpy.mockResolvedValue(
-      new Response(JSON.stringify({ unexpected: "shape" }), { status: 500 }),
-    )
-    render(<FilesSection sandbox={activeSandbox} />)
-
-    const downloadPathInput = screen.getAllByPlaceholderText(
-      "/home/user/file.txt",
-    )[1]
-    await user.clear(downloadPathInput)
-    await user.type(downloadPathInput, "/home/user/file.txt")
-
-    await user.click(screen.getByRole("button", { name: /Download/ }))
-
-    expect(mockAddToast).toHaveBeenCalledWith(
-      expect.stringContaining("Download failed"),
-      "error",
-    )
-    expect(mockAddToast).not.toHaveBeenCalledWith(
-      expect.stringContaining("unexpected"),
-      "error",
-    )
-  })
-
-  it("shows a friendly message for a directory path, not the raw backend error", async () => {
-    fetchSpy.mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          error: "use FilesystemService.ListDir for directories",
-        }),
-        { status: 400 },
+    await waitFor(() => {
+      const post = fetchSpy.mock.calls.find(
+        ([, init]) => init?.method === "POST",
+      )
+      expect(post).toBeTruthy()
+      expect(String(post?.[0])).toContain("path=%2Fhome%2Fuser%2Fnote.txt")
+    })
+    await waitFor(() =>
+      expect(mockAddToast).toHaveBeenCalledWith(
+        expect.stringContaining("Uploaded"),
+        "success",
       ),
     )
-    render(<FilesSection sandbox={activeSandbox} />)
-
-    const downloadPathInput = screen.getAllByPlaceholderText(
-      "/home/user/file.txt",
-    )[1]
-    await user.clear(downloadPathInput)
-    await user.type(downloadPathInput, "/home/user/research")
-
-    await user.click(screen.getByRole("button", { name: /Download/ }))
-
-    expect(mockAddToast).toHaveBeenCalledWith(
-      expect.stringContaining("directory"),
-      "error",
-    )
-    expect(mockAddToast).not.toHaveBeenCalledWith(
-      expect.stringContaining("FilesystemService"),
-      "error",
+    expect(mockCapture).toHaveBeenCalledWith(
+      "file_upload_succeeded",
+      expect.objectContaining({ sandbox_id: "sbx-1", file_size: 2 }),
     )
   })
 
-  it("shows a friendly message when the file is missing (404)", async () => {
-    fetchSpy.mockResolvedValue(
-      new Response(JSON.stringify({ error: "file not found" }), {
-        status: 404,
-      }),
+  it("uploads into the folder a file is dropped onto", async () => {
+    renderSection()
+    const folderLabel = await screen.findByText("proj/")
+    const row = folderLabel.closest("div")
+    expect(row).toBeTruthy()
+    const file = new File(["x"], "inside.txt")
+
+    fireEvent.drop(row as HTMLElement, { dataTransfer: fileDataTransfer(file) })
+
+    await waitFor(() => {
+      const post = fetchSpy.mock.calls.find(
+        ([, init]) => init?.method === "POST",
+      )
+      expect(post).toBeTruthy()
+      // Uploaded into the dropped-on folder, not the current directory.
+      expect(String(post?.[0])).toContain(
+        "path=%2Fhome%2Fuser%2Fproj%2Finside.txt",
+      )
+    })
+  })
+})
+
+describe("FileBrowser — listing errors", () => {
+  it("surfaces the API error message when listing fails", async () => {
+    fetchSpy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            error: { code: "not_found", message: "Folder not found." },
+          }),
+          { status: 404 },
+        ),
+      ),
     )
-    render(<FilesSection sandbox={activeSandbox} />)
-
-    const downloadPathInput = screen.getAllByPlaceholderText(
-      "/home/user/file.txt",
-    )[1]
-    await user.clear(downloadPathInput)
-    await user.type(downloadPathInput, "/home/user/missing.txt")
-
-    await user.click(screen.getByRole("button", { name: /Download/ }))
-
-    expect(mockAddToast).toHaveBeenCalledWith(
-      expect.stringContaining("No file found"),
-      "error",
-    )
+    renderSection()
+    expect(await screen.findByText(/Folder not found/i)).toBeInTheDocument()
   })
 })

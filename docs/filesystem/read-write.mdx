@@ -67,6 +67,30 @@ text: str = sandbox.files.read_text("/app/config.json")
 ```
 </CodeGroup>
 
+## Download a directory as a zip
+
+`downloadDir()` / `download_dir()` exports a whole directory as a ZIP archive —
+useful for pulling out logs, build artifacts, or results in one call. It returns
+the raw zip bytes; large directories can exceed the default 30s timeout, so pass
+a longer `timeoutMs` / `timeout` when needed.
+
+<CodeGroup>
+```typescript TypeScript
+import { writeFileSync } from "node:fs"
+
+const zip = await sandbox.files.downloadDir("/app/results", {
+  timeoutMs: 120_000,
+})
+writeFileSync("results.zip", zip)
+```
+
+```python Python
+zip_bytes = sandbox.files.download_dir("/app/results", timeout=120)
+with open("results.zip", "wb") as f:
+    f.write(zip_bytes)
+```
+</CodeGroup>
+
 ## Path rules
 
 Paths passed to `files.*` methods must:
