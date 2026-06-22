@@ -12,7 +12,12 @@ import httpx
 from ._config import ResolvedConfig, resolve_config
 from ._http import async_api_request
 from .commands import AsyncCommands, AsyncCommandsDeps
-from .errors import NotFoundError, SandboxError
+from .errors import (
+    ImageBuildingError,
+    NotFoundError,
+    SandboxError,
+    ValidationError,
+)
 from .files import AsyncFiles
 from .types import (
     NetworkConfig,
@@ -99,6 +104,11 @@ class AsyncSandbox:
         name: str,
         from_template: "str | Template | AsyncTemplate | None" = None,
         from_snapshot: str | None = None,
+        image: str | None = None,
+        command: list[str] | None = None,
+        vcpu: int | None = None,
+        memory_mib: int | None = None,
+        disk_mib: int | None = None,
         timeout_seconds: int | None = None,
         metadata: dict[str, str] | None = None,
         env_vars: dict[str, str] | None = None,
@@ -112,8 +122,50 @@ class AsyncSandbox:
         ``secrets`` binds team-stored secrets to environment variables as
         ``{ENV_VAR: secret_name}``: the agent sees a proxy token under each env
         var; the in-host daemon swaps it for the real credential at egress.
+
+        ``image`` brings an OCI image directly (sugar over
+        ``POST /sandboxes/from-image``), mutually exclusive with
+        ``from_template``/``from_snapshot``. On a cache hit a sandbox is created
+        and the image's ENTRYPOINT/CMD runs; on a cache miss a one-time template
+        build is started and this raises :class:`ImageBuildingError` — retry once
+        the build is ready.
         """
         config = resolve_config(api_key=api_key, base_url=base_url)
+
+        if image is not None:
+            if from_template is not None or from_snapshot is not None:
+                raise ValidationError(
+                    "create: `image` is mutually exclusive with "
+                    "`from_template`/`from_snapshot`."
+                )
+            image_body: dict[str, Any] = {"image": image, "name": name}
+            if command is not None:
+                image_body["command"] = command
+            if env_vars is not None:
+                image_body["env"] = env_vars
+            if vcpu is not None:
+                image_body["vcpu"] = vcpu
+            if memory_mib is not None:
+                image_body["memory_mib"] = memory_mib
+            if disk_mib is not None:
+                image_body["disk_mib"] = disk_mib
+            raw = await async_api_request(
+                "POST",
+                f"{config.base_url}/sandboxes/from-image",
+                headers={"X-API-Key": config.api_key},
+                json_body=image_body,
+            )
+            token = raw.get("access_token") if raw else None
+            if token:
+                return cls(to_sandbox_info(raw), token, config)
+            raise ImageBuildingError(
+                (raw or {}).get("message")
+                or f'Image "{image}" is not cached yet; a template build was '
+                "started. Retry create(image=...) once it is ready.",
+                build_id=(raw or {}).get("build_id", ""),
+                template_id=(raw or {}).get("template_id", ""),
+                resolved_digest=(raw or {}).get("resolved_digest", ""),
+            )
 
         body: dict[str, Any] = {"name": name}
         if from_template is not None:

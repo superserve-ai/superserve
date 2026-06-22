@@ -66,6 +66,86 @@ describe("Sandbox statics", () => {
     expect(body).toEqual({ name: "my-sandbox", metadata: { env: "test" } })
   })
 
+  it("Sandbox.create({ image }) posts to /sandboxes/from-image and returns a sandbox on a cache hit", async () => {
+    const mock = vi.fn(async () => jsonResponse(baseSandbox, 201))
+    vi.stubGlobal("fetch", mock)
+
+    const sandbox = await Sandbox.create({
+      ...commonOpts,
+      name: "agent",
+      image: "ghcr.io/org/agent:latest",
+      command: ["python", "main.py"],
+      envVars: { FOO: "bar" },
+      vcpu: 2,
+      memoryMib: 1024,
+    })
+    expect(sandbox.id).toBe("sbx-1")
+
+    const [url, init] = mock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe("https://api.superserve.ai/sandboxes/from-image")
+    expect(init.method).toBe("POST")
+    const body = JSON.parse(init.body as string)
+    expect(body).toEqual({
+      image: "ghcr.io/org/agent:latest",
+      name: "agent",
+      command: ["python", "main.py"],
+      env: { FOO: "bar" },
+      vcpu: 2,
+      memory_mib: 1024,
+    })
+  })
+
+  it("Sandbox.create({ image }) throws ImageBuildingError on a cache miss (202)", async () => {
+    const mock = vi.fn(async () =>
+      jsonResponse(
+        {
+          status: "building",
+          template_id: "tpl-9",
+          build_id: "bld-9",
+          resolved_digest: "sha256:abc",
+          message: "build started",
+        },
+        202,
+      ),
+    )
+    vi.stubGlobal("fetch", mock)
+
+    const { ImageBuildingError } = await import("../src/errors.js")
+    await expect(
+      Sandbox.create({
+        ...commonOpts,
+        name: "agent",
+        image: "ghcr.io/org/x:1",
+      }),
+    ).rejects.toBeInstanceOf(ImageBuildingError)
+
+    // The thrown error carries the build coordinates for tracking/retry.
+    try {
+      await Sandbox.create({
+        ...commonOpts,
+        name: "agent",
+        image: "ghcr.io/org/x:1",
+      })
+    } catch (e) {
+      const err = e as InstanceType<typeof ImageBuildingError>
+      expect(err.buildId).toBe("bld-9")
+      expect(err.templateId).toBe("tpl-9")
+      expect(err.resolvedDigest).toBe("sha256:abc")
+    }
+  })
+
+  it("Sandbox.create rejects image combined with fromTemplate", async () => {
+    const { ValidationError } = await import("../src/errors.js")
+    await expect(
+      Sandbox.create({
+        ...commonOpts,
+        name: "agent",
+        image: "ghcr.io/org/x:1",
+        fromTemplate: "base",
+      }),
+    ).rejects.toBeInstanceOf(ValidationError)
+  })
+
   it("Sandbox.create throws when access_token missing", async () => {
     vi.stubGlobal(
       "fetch",

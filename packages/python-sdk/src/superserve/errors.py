@@ -108,6 +108,28 @@ class BuildError(SandboxError):
         self.template_id = template_id
 
 
+class ImageBuildingError(SandboxError):
+    """Raised by ``Sandbox.create(image=...)`` when the image is not yet cached.
+
+    A one-time template build was started (HTTP 202). This is NOT a failure —
+    retry ``create(image=...)`` once the build is ready and it becomes a
+    sub-second cache hit. ``build_id`` lets you track the build in the meantime.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        build_id: str,
+        template_id: str,
+        resolved_digest: str,
+    ) -> None:
+        super().__init__(message, status_code=202, code="image_building")
+        self.build_id = build_id
+        self.template_id = template_id
+        self.resolved_digest = resolved_digest
+
+
 def map_api_error(status_code: int, body: dict[str, Any]) -> SandboxError:
     """Map an HTTP status code and response body to a typed error."""
     error_data = body.get("error", {}) or {}

@@ -48,6 +48,25 @@ export interface SandboxCreateOptions extends ConnectionOptions {
   fromTemplate?: string | { name?: string; id: string }
   /** Snapshot UUID. */
   fromSnapshot?: string
+  /**
+   * Bring an OCI image directly — sugar over `POST /sandboxes/from-image`.
+   * Mutually exclusive with `fromTemplate`/`fromSnapshot`. On a cache hit a
+   * sandbox is created and the image's `ENTRYPOINT`/`CMD` runs (sub-second
+   * snapshot restore). On a cache miss a one-time template build is kicked and
+   * `create()` throws `ImageBuildingError` — retry once the build is ready.
+   *
+   * @example
+   * const sandbox = await Sandbox.create({ name: "agent", image: "ghcr.io/org/agent:latest" })
+   */
+  image?: string
+  /** Override the image entrypoint+cmd, like `docker run IMG CMD`. Only with `image`. */
+  command?: string[]
+  /** vCPU count for the build shape on a cache miss. Only with `image`. */
+  vcpu?: number
+  /** Guest memory (MiB) for the build shape on a cache miss. Only with `image`. */
+  memoryMib?: number
+  /** Disk size (MiB) for the build shape on a cache miss. Only with `image`. */
+  diskMib?: number
   timeoutSeconds?: number
   metadata?: Record<string, string>
   envVars?: Record<string, string>

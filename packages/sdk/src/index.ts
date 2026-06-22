@@ -11,6 +11,7 @@ export {
   AuthenticationError,
   BuildError,
   ConflictError,
+  ImageBuildingError,
   NotFoundError,
   RateLimitError,
   SandboxError,

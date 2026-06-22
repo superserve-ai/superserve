@@ -59,6 +59,66 @@ class TestCreate:
             with pytest.raises(SandboxError, match="access_token"):
                 Sandbox.create(name="my-box")
 
+    def test_image_posts_to_from_image_and_returns_on_hit(self) -> None:
+        with respx.mock() as router:
+            route = router.post(f"{API}/sandboxes/from-image").mock(
+                return_value=httpx.Response(201, json=_raw())
+            )
+            sandbox = Sandbox.create(
+                name="agent",
+                image="ghcr.io/org/agent:latest",
+                command=["python", "main.py"],
+                env_vars={"FOO": "bar"},
+                vcpu=2,
+                memory_mib=1024,
+            )
+            try:
+                assert sandbox.id == "sbx-1"
+                assert route.call_count == 1
+                import json as _json
+
+                body = _json.loads(route.calls.last.request.content)
+                assert body == {
+                    "image": "ghcr.io/org/agent:latest",
+                    "name": "agent",
+                    "command": ["python", "main.py"],
+                    "env": {"FOO": "bar"},
+                    "vcpu": 2,
+                    "memory_mib": 1024,
+                }
+            finally:
+                sandbox._close_http_client()
+
+    def test_image_cache_miss_raises_image_building(self) -> None:
+        from superserve import ImageBuildingError
+
+        with respx.mock() as router:
+            router.post(f"{API}/sandboxes/from-image").mock(
+                return_value=httpx.Response(
+                    202,
+                    json={
+                        "status": "building",
+                        "template_id": "tpl-9",
+                        "build_id": "bld-9",
+                        "resolved_digest": "sha256:abc",
+                        "message": "build started",
+                    },
+                )
+            )
+            with pytest.raises(ImageBuildingError) as ei:
+                Sandbox.create(name="agent", image="ghcr.io/org/x:1")
+            assert ei.value.build_id == "bld-9"
+            assert ei.value.template_id == "tpl-9"
+            assert ei.value.resolved_digest == "sha256:abc"
+
+    def test_image_with_from_template_rejected(self) -> None:
+        from superserve import ValidationError
+
+        with pytest.raises(ValidationError):
+            Sandbox.create(
+                name="agent", image="ghcr.io/org/x:1", from_template="base"
+            )
+
 
 class TestConnect:
     def test_gets_and_returns_instance(self) -> None:

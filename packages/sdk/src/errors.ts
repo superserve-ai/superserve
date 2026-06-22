@@ -118,6 +118,29 @@ export class BuildError extends SandboxError {
 }
 
 /**
+ * Thrown by `Sandbox.create({ image })` when the image is not yet cached: a
+ * one-time template build was started (HTTP 202). This is NOT a failure — retry
+ * `create({ image })` once the build is ready and it becomes a sub-second cache
+ * hit. `buildId` lets you track the build's progress in the meantime.
+ */
+export class ImageBuildingError extends SandboxError {
+  readonly buildId: string
+  readonly templateId: string
+  readonly resolvedDigest: string
+
+  constructor(
+    message: string,
+    opts: { buildId: string; templateId: string; resolvedDigest: string },
+  ) {
+    super(message, 202, "image_building")
+    this.name = "ImageBuildingError"
+    this.buildId = opts.buildId
+    this.templateId = opts.templateId
+    this.resolvedDigest = opts.resolvedDigest
+  }
+}
+
+/**
  * Map an HTTP status code and response body to a typed error.
  * @internal
  */
