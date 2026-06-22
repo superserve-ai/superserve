@@ -175,19 +175,20 @@
               "POST /sandboxes/{sandbox_id}/pause",
               "POST /sandboxes/{sandbox_id}/resume",
               "POST /sandboxes/{sandbox_id}/activate",
-              "GET /sandboxes/{sandbox_id}/network",
-              "GET /sandboxes/{sandbox_id}/files",
-              "POST /sandboxes/{sandbox_id}/secrets",
-              "DELETE /sandboxes/{sandbox_id}/secrets/{env_key}"
+              "GET /sandboxes/{sandbox_id}/network"
             ]
           },
           {
             "group": "Exec",
-            "pages": ["GET /exec/connect"]
+            "pages": ["POST /exec", "POST /exec/stream", "GET /exec/connect"]
           },
           {
             "group": "Files",
-            "pages": ["GET /files", "POST /files"]
+            "pages": [
+              "GET /sandboxes/{sandbox_id}/files",
+              "GET /files",
+              "POST /files"
+            ]
           },
           {
             "group": "Templates",
@@ -211,6 +212,8 @@
               "GET /secrets/{name}",
               "PATCH /secrets/{name}",
               "DELETE /secrets/{name}",
+              "POST /sandboxes/{sandbox_id}/secrets",
+              "DELETE /sandboxes/{sandbox_id}/secrets/{env_key}",
               "GET /secrets/{name}/audit",
               "GET /secrets/{name}/sandboxes",
               "GET /providers"
