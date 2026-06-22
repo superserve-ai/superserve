@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react"
 
-// Mirrors the SDK rule (packages/sdk/src/config.ts): the edge proxy only
-// reverse-proxies user-app ports in this range. Privileged ports (< 1024) are
-// refused, so we reject them up front rather than build a dead URL.
+// Shared contract with the SDK (packages/sdk/src/config.ts) and the edge proxy,
+// which only reverse-proxies user-app ports in this range; privileged ports
+// (< 1024) are refused, so we reject them up front rather than build a dead URL.
+// Keep MIN/MAX identical to the SDK constants — a test in this file pins the
+// literals so one-sided drift fails CI.
 export const MIN_PREVIEW_PORT = 1024
 export const MAX_PREVIEW_PORT = 65535
+// UI-only cap on how many ports to preview at once (not an SDK/proxy limit).
 export const MAX_PREVIEW_PORTS = 12
 
 const STORAGE_PREFIX = "superserve.preview-ports."
@@ -84,12 +87,20 @@ function savePorts(sandboxId: string, ports: number[]): void {
 export function usePreviewPorts(sandboxId: string): UsePreviewPortsApi {
   const [ports, setPorts] = useState<number[]>(() => loadPorts(sandboxId))
 
-  // Reload when the sandbox changes (the detail page can swap sandboxes
-  // without remounting this hook).
-  useEffect(() => {
+  // Reset to the new sandbox's stored ports as the id changes (the detail page
+  // can swap sandboxes without remounting this hook). Done during render —
+  // React's "adjust state on a prop change" pattern — rather than in an effect:
+  // an effect-based reset leaves a window where the persist effect below runs
+  // with the previous sandbox's `ports` but the new `sandboxId`, briefly
+  // writing one sandbox's ports under another sandbox's storage key.
+  const [loadedFor, setLoadedFor] = useState(sandboxId)
+  if (loadedFor !== sandboxId) {
+    setLoadedFor(sandboxId)
     setPorts(loadPorts(sandboxId))
-  }, [sandboxId])
+  }
 
+  // Persist on change. After the render-phase reset above, `sandboxId` and
+  // `ports` always belong to the same sandbox, so this never crosses keys.
   useEffect(() => {
     savePorts(sandboxId, ports)
   }, [sandboxId, ports])

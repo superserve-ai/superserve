@@ -79,6 +79,10 @@ def data_plane_target(sandbox_id: str, sandbox_host: str) -> DataPlaneTarget:
 
 # Lowest / highest TCP port a preview URL can target. Privileged ports
 # (< 1024) are refused by the edge proxy, so we reject them up front.
+#
+# Mirrored by the TypeScript SDK (packages/sdk/src/config.ts) and the console
+# (apps/console/src/hooks/use-preview-ports.ts); keep all three in sync. Tests
+# pin the literals on each side so one-sided drift fails CI.
 MIN_PREVIEW_PORT = 1024
 MAX_PREVIEW_PORT = 65535
 

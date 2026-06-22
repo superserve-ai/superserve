@@ -8,7 +8,7 @@ import {
   PlusIcon,
   TrashIcon,
 } from "@phosphor-icons/react"
-import { Button, cn, Input, useToast } from "@superserve/ui"
+import { Alert, Button, cn, Input, useToast } from "@superserve/ui"
 import { usePostHog } from "posthog-js/react"
 import { useState } from "react"
 
@@ -110,6 +110,12 @@ function PreviewPorts({ sandbox }: { sandbox: SandboxResponse }) {
           Add port
         </Button>
       </form>
+
+      <Alert variant="warning">
+        Preview URLs are public — anyone with the link can reach this port
+        without signing in. Don&apos;t expose services that handle sensitive
+        data.
+      </Alert>
 
       {ports.length === 0 ? (
         <p className="font-mono text-xs text-muted">
@@ -219,19 +225,36 @@ function PortRow({
           <div className="relative border border-dashed border-border bg-surface">
             <CornerBrackets size="sm" />
             {/* Only the expanded row mounts an iframe, so we never spin up N
-                heavy frames at once. No `sandbox` attribute: the framed app is
-                the user's own dev server on a cross-origin, unguessable
-                subdomain, so the embed should behave exactly like opening the
-                URL in a new tab (same-origin storage, scripts, forms all work).
-                Some apps send X-Frame-Options / CSP frame-ancestors and won't
-                embed at all — "Open in new tab" above is the escape hatch (XFO
-                blocks can't be reliably detected here). */}
-            {/* oxlint-disable-next-line react/iframe-missing-sandbox -- intentional: faithful preview of the user's own cross-origin dev server */}
+                heavy frames at once.
+
+                The framed app is an UNTRUSTED sandbox dev server on a
+                cross-origin, unguessable subdomain. `allow-same-origin` +
+                `allow-scripts` give it full fidelity (its own storage, cookies,
+                fetch, forms) — safe because it is a different origin than the
+                console, so it still can't touch console DOM/storage. We
+                deliberately omit `allow-top-navigation*`: without it, a
+                malicious previewed app can't redirect the console tab to a
+                phishing page — a real cross-tenant risk when teammates preview
+                each other's sandboxes. Apps that genuinely need top-navigation,
+                or that refuse framing via X-Frame-Options / CSP frame-ancestors
+                (not detectable here), fall back to "Open in new tab" above.
+                `referrerPolicy="no-referrer"` keeps the console URL (which
+                contains the sandbox id) out of the untrusted app's logs.
+
+                oxlint flags allow-scripts + allow-same-origin as a sandbox
+                escape, but that only applies to a frame that is SAME-origin
+                with its embedder (it could rewrite its own sandbox). This frame
+                is cross-origin to the console, so SOP keeps it out of our DOM —
+                the standard pattern for embedding a user's own app preview. */}
+            {/* oxlint-disable react/iframe-missing-sandbox -- cross-origin frame: allow-scripts+allow-same-origin cannot escape into the console origin */}
             <iframe
               src={url}
               title={`Preview of port ${port}`}
               className="h-[420px] w-full"
+              sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-downloads"
+              referrerPolicy="no-referrer"
             />
+            {/* oxlint-enable react/iframe-missing-sandbox */}
           </div>
         </div>
       )}

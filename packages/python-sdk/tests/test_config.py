@@ -6,6 +6,8 @@ import pytest
 from superserve._config import (
     DEFAULT_BASE_URL,
     DEFAULT_SANDBOX_HOST,
+    MAX_PREVIEW_PORT,
+    MIN_PREVIEW_PORT,
     _derive_sandbox_host,
     data_plane_target,
     preview_url,
@@ -96,6 +98,12 @@ class TestDataPlaneTarget:
 
 
 class TestPreviewUrl:
+    def test_pins_port_range_to_contract(self) -> None:
+        # Drift guard: the console and TypeScript SDK mirror these bounds. Keep
+        # all three in sync — this pin makes one-sided drift fail CI.
+        assert MIN_PREVIEW_PORT == 1024
+        assert MAX_PREVIEW_PORT == 65535
+
     def test_builds_subdomain_url_for_port(self) -> None:
         assert (
             preview_url("abc-123", "sandbox.superserve.ai", 3000)

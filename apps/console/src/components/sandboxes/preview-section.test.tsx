@@ -19,6 +19,9 @@ const { addToast, capture, clipboardWrite } = vi.hoisted(() => ({
 }))
 
 vi.mock("@superserve/ui", () => ({
+  Alert: ({ children }: { children?: React.ReactNode }) => (
+    <div role="alert">{children}</div>
+  ),
   cn: (...classes: Array<string | false | undefined>) =>
     classes.filter(Boolean).join(" "),
   Button: (props: React.JSX.IntrinsicElements["button"]) => (
@@ -201,10 +204,16 @@ describe("PreviewSection — active sandbox", () => {
     expect(screen.queryByTitle("Preview of port 3000")).not.toBeInTheDocument()
 
     await user.click(screen.getByRole("button", { name: "Expand preview" }))
-    expect(screen.getByTitle("Preview of port 3000")).toHaveAttribute(
-      "src",
-      url(3000),
-    )
+    const frame = screen.getByTitle("Preview of port 3000")
+    expect(frame).toHaveAttribute("src", url(3000))
+
+    // The framed app is untrusted: it must be sandboxed, and must NOT be able
+    // to navigate the console's top-level tab (phishing). This fails if anyone
+    // drops the sandbox attribute or grants top-navigation.
+    const sandboxAttr = frame.getAttribute("sandbox") ?? ""
+    expect(sandboxAttr).toContain("allow-scripts")
+    expect(sandboxAttr).not.toContain("allow-top-navigation")
+    expect(frame).toHaveAttribute("referrerpolicy", "no-referrer")
   })
 
   it("supports previewing several ports at once", async () => {

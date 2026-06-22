@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { dataPlaneTarget, previewUrl, resolveConfig } from "../src/config.js"
+import {
+  dataPlaneTarget,
+  MAX_PREVIEW_PORT,
+  MIN_PREVIEW_PORT,
+  previewUrl,
+  resolveConfig,
+} from "../src/config.js"
 import { AuthenticationError, ValidationError } from "../src/errors.js"
 
 describe("resolveConfig", () => {
@@ -111,6 +117,14 @@ describe("dataPlaneTarget", () => {
 })
 
 describe("previewUrl", () => {
+  // Drift guard: the console (apps/console/src/hooks/use-preview-ports.ts) and
+  // the Python SDK mirror these bounds. Keep all three in sync — this literal
+  // pin makes one-sided drift fail CI.
+  it("pins the port range to the edge-proxy contract", () => {
+    expect(MIN_PREVIEW_PORT).toBe(1024)
+    expect(MAX_PREVIEW_PORT).toBe(65535)
+  })
+
   it("builds the per-sandbox subdomain URL for a port", () => {
     expect(previewUrl("abc-123", "sandbox.superserve.ai", 3000)).toBe(
       "https://3000-abc-123.sandbox.superserve.ai",

@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { AddPortResult } from "./use-preview-ports"
 import {
@@ -13,6 +13,14 @@ import {
 const SANDBOX_ID = "sbx-1"
 
 describe("isValidPreviewPort", () => {
+  // Drift guard: these bounds are a shared contract with the SDK
+  // (packages/sdk/src/config.ts) and the edge proxy. If you change one side,
+  // change all three — this literal pin makes one-sided drift fail CI.
+  it("pins the port range to the SDK / edge-proxy contract", () => {
+    expect(MIN_PREVIEW_PORT).toBe(1024)
+    expect(MAX_PREVIEW_PORT).toBe(65535)
+  })
+
   it("accepts integers within [MIN, MAX]", () => {
     expect(isValidPreviewPort(MIN_PREVIEW_PORT)).toBe(true)
     expect(isValidPreviewPort(3000)).toBe(true)
@@ -147,6 +155,30 @@ describe("usePreviewPorts", () => {
 
       rerender({ id: "sbx-a" })
       expect(result.current.ports).toEqual([3000])
+    })
+
+    // Regression for the sandbox-swap write: an effect-based reset transiently
+    // persisted the previous sandbox's ports under the NEW sandbox's key before
+    // correcting itself. This fails on that code and passes on the render-phase
+    // reset, which never commits the stale (sandboxId, ports) pair.
+    it("never writes one sandbox's ports under another sandbox's key on switch", () => {
+      const setItem = vi.spyOn(window.localStorage, "setItem")
+      const { result, rerender } = renderHook(({ id }) => usePreviewPorts(id), {
+        initialProps: { id: "sbx-a" },
+      })
+      act(() => {
+        result.current.addPort(3000)
+      })
+
+      setItem.mockClear()
+      rerender({ id: "sbx-b" })
+
+      for (const [key, value] of setItem.mock.calls) {
+        if (key === "superserve.preview-ports.sbx-b") {
+          expect(value).not.toContain("3000")
+        }
+      }
+      setItem.mockRestore()
     })
   })
 })
