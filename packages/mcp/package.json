@@ -27,13 +27,17 @@
     "superserve-mcp-http": "./dist/httpServer.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "http.d.ts"
   ],
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
     ".": "./dist/index.js",
-    "./http": "./dist/http.js"
+    "./http": {
+      "types": "./http.d.ts",
+      "import": "./dist/http.js"
+    }
   },
   "scripts": {
     "build": "tsup && tsup --config tsup.http.config.ts",

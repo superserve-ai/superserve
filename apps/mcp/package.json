@@ -1,0 +1,27 @@
+{
+  "name": "@superserve/mcp-host",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3005",
+    "build": "next build",
+    "start": "next start -p 3005",
+    "lint": "bunx oxlint",
+    "format": "bunx oxfmt --write",
+    "format:check": "bunx oxfmt --check",
+    "typecheck": "tsc --pretty --noEmit"
+  },
+  "dependencies": {
+    "@superserve/mcp": "workspace:*",
+    "next": "^16.1.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@superserve/typescript-config": "workspace:*",
+    "@types/node": "^25.2.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^5.9.3"
+  }
+}
