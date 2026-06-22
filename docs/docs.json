@@ -182,16 +182,15 @@
           },
           {
             "group": "Exec",
-            "pages": [
-              "GET /exec/connect",
-              "POST /sandboxes/{sandbox_id}/exec",
-              "POST /sandboxes/{sandbox_id}/exec/stream",
-              "GET /exec/connect"
-            ]
+            "pages": ["GET /exec/connect"]
           },
           {
             "group": "Files",
-            "pages": ["GET /files", "POST /files"]
+            "pages": [
+              "GET /sandboxes/{sandbox_id}/files",
+              "GET /files",
+              "POST /files"
+            ]
           },
           {
             "group": "Templates",
