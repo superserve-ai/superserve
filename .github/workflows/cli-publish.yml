@@ -25,6 +25,18 @@ jobs:
           jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp
           mv package.json.tmp package.json
 
+      - name: Pin workspace runtime deps to published versions
+        working-directory: packages/cli
+        run: |
+          set -euo pipefail
+          # npm publish does NOT translate `workspace:*` in this bun-managed repo,
+          # so a literal "@superserve/sdk": "workspace:*" would ship and break
+          # `npm i @superserve/cli`. Rewrite it to the SDK's concrete version.
+          # The matching @superserve/sdk release must already be on npm.
+          SDK_VERSION="$(jq -r .version ../sdk/package.json)"
+          jq --arg v "^$SDK_VERSION" '.dependencies["@superserve/sdk"] = $v' package.json > package.json.tmp
+          mv package.json.tmp package.json
+
       - name: Publish
         working-directory: packages/cli
         env:

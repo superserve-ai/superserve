@@ -6,13 +6,12 @@ import type React from "react"
 
 if (typeof window !== "undefined") {
   const apiKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
-  const host =
-    process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com"
 
   if (apiKey) {
     try {
       posthog.init(apiKey, {
-        api_host: host,
+        api_host: "/ingest",
+        ui_host: "https://us.posthog.com",
         person_profiles: "always",
         capture_pageview: false,
         capture_pageleave: true,

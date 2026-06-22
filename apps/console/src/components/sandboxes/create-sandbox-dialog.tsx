@@ -26,6 +26,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 
 import { CornerBrackets } from "@/components/corner-brackets"
+import type { SecretBindingEntry } from "@/components/secrets/secret-binding-editor"
+import { SecretBindingEditor } from "@/components/secrets/secret-binding-editor"
 import { useCreateSandbox } from "@/hooks/use-sandboxes"
 import { useTemplates } from "@/hooks/use-templates"
 import type { CreateSandboxRequest } from "@/lib/api/types"
@@ -241,6 +243,7 @@ interface FormState {
   timeout: string
   allowRules: string[]
   denyRules: string[]
+  secretEntries: SecretBindingEntry[]
   envEntries: { key: string; value: string }[]
   metadataEntries: { key: string; value: string }[]
   templateRef?: string
@@ -261,6 +264,8 @@ interface FormState {
  *  - `env_vars` / `metadata` are only included when at least one entry has
  *    a non-empty key. Empty string values are allowed but empty keys are
  *    dropped.
+ *  - `secrets` is only included when at least one entry has both an env
+ *    key and a secret name.
  *  - `template_id` is only included when `templateRef` is non-empty.
  */
 export function buildCreateSandboxRequest(
@@ -269,6 +274,12 @@ export function buildCreateSandboxRequest(
   const allowList = state.allowRules.map((r) => r.trim()).filter(Boolean)
   const denyList = state.denyRules.map((r) => r.trim()).filter(Boolean)
   const hasNetwork = allowList.length > 0 || denyList.length > 0
+
+  const secrets: Record<string, string> = {}
+  for (const entry of state.secretEntries) {
+    const k = entry.key.trim()
+    if (k && entry.secret) secrets[k] = entry.secret
+  }
 
   const envVars: Record<string, string> = {}
   for (const entry of state.envEntries) {
@@ -294,6 +305,7 @@ export function buildCreateSandboxRequest(
           },
         }
       : {}),
+    ...(Object.keys(secrets).length > 0 ? { secrets } : {}),
     ...(Object.keys(envVars).length > 0 ? { env_vars: envVars } : {}),
     ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
   }
@@ -327,6 +339,7 @@ export function CreateSandboxDialog({
   const [timeout, setTimeout] = useState("")
   const [allowRules, setAllowRules] = useState<string[]>([])
   const [denyRules, setDenyRules] = useState<string[]>([])
+  const [secretEntries, setSecretEntries] = useState<SecretBindingEntry[]>([])
   const [envEntries, setEnvEntries] = useState<
     { key: string; value: string }[]
   >([])
@@ -390,6 +403,7 @@ export function CreateSandboxDialog({
     setTimeout("")
     setAllowRules([])
     setDenyRules([])
+    setSecretEntries([])
     setEnvEntries([])
     setMetadataEntries([])
     setShowAdvanced(false)
@@ -403,6 +417,7 @@ export function CreateSandboxDialog({
       timeout,
       allowRules,
       denyRules,
+      secretEntries,
       envEntries,
       metadataEntries,
       templateRef: templateRef || undefined,
@@ -413,6 +428,7 @@ export function CreateSandboxDialog({
       has_network_rules: !!payload.network,
       allow_rule_count: payload.network?.allow_out?.length ?? 0,
       deny_rule_count: payload.network?.deny_out?.length ?? 0,
+      secret_count: payload.secrets ? Object.keys(payload.secrets).length : 0,
       env_var_count: payload.env_vars
         ? Object.keys(payload.env_vars).length
         : 0,
@@ -676,6 +692,11 @@ export function CreateSandboxDialog({
                           </div>
                         </div>
                       </div>
+
+                      <SecretBindingEditor
+                        entries={secretEntries}
+                        onChange={setSecretEntries}
+                      />
 
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">

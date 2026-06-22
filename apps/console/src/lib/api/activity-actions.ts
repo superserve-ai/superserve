@@ -33,7 +33,7 @@ export async function listActivityBySandboxAction(
   const { data, error } = await admin
     .from("activity")
     .select(
-      "id, sandbox_id, category, action, status, sandbox_name, duration_ms, error, metadata, created_at",
+      "id, sandbox_id, category, action, status, sandbox_name, secret_id, secret_name, duration_ms, error, metadata, created_at",
     )
     .eq("sandbox_id", sandboxId)
     .eq("team_id", teamId)
@@ -44,11 +44,13 @@ export async function listActivityBySandboxAction(
 
   return (data ?? []).map((a) => ({
     id: a.id as string,
-    sandbox_id: a.sandbox_id as string,
+    sandbox_id: (a.sandbox_id as string | null) ?? null,
     category: a.category as string,
     action: a.action as string,
     status: (a.status as string | null) ?? null,
     sandbox_name: (a.sandbox_name as string | null) ?? null,
+    secret_id: (a.secret_id as string | null) ?? null,
+    secret_name: (a.secret_name as string | null) ?? null,
     duration_ms: (a.duration_ms as number | null) ?? null,
     error: (a.error as string | null) ?? null,
     metadata: a.metadata as Record<string, unknown>,
@@ -71,7 +73,7 @@ export async function listActivityAction(limit = 100) {
   const { data, error } = await admin
     .from("activity")
     .select(
-      "id, sandbox_id, category, action, status, sandbox_name, duration_ms, error, metadata, created_at",
+      "id, sandbox_id, category, action, status, sandbox_name, secret_id, secret_name, duration_ms, error, metadata, created_at",
     )
     .eq("team_id", teamId)
     .order("created_at", { ascending: false })
@@ -81,11 +83,13 @@ export async function listActivityAction(limit = 100) {
 
   return (data ?? []).map((a) => ({
     id: a.id as string,
-    sandbox_id: a.sandbox_id as string,
+    sandbox_id: (a.sandbox_id as string | null) ?? null,
     category: a.category as string,
     action: a.action as string,
     status: (a.status as string | null) ?? null,
     sandbox_name: (a.sandbox_name as string | null) ?? null,
+    secret_id: (a.secret_id as string | null) ?? null,
+    secret_name: (a.secret_name as string | null) ?? null,
     duration_ms: (a.duration_ms as number | null) ?? null,
     error: (a.error as string | null) ?? null,
     metadata: a.metadata as Record<string, unknown>,

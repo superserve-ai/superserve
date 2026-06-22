@@ -13,9 +13,12 @@ export {
   TimeoutError,
   ValidationError,
 } from "./errors.js"
+export { Provider } from "./Provider.js"
 export { Sandbox } from "./Sandbox.js"
+export { Secret } from "./Secret.js"
 export { Template } from "./Template.js"
 export type {
+  AuditStatusFilter,
   BuildLogEvent,
   BuildLogStream,
   BuildLogsOptions,
@@ -27,11 +30,27 @@ export type {
   ConnectionOptions,
   FileInput,
   NetworkConfig,
+  NetworkEvent,
+  NetworkLogOptions,
+  NetworkLogPage,
+  NetworkVerdict,
+  ProviderShortcut,
+  ProxyAuditEvent,
   SandboxCreateOptions,
   SandboxInfo,
   SandboxListOptions,
+  SandboxSecretBinding,
   SandboxStatus,
   SandboxUpdateOptions,
+  SecretAuth,
+  SecretAuditOptions,
+  SecretAuthPerHost,
+  SecretAuthRule,
+  SecretAuthType,
+  SecretCreateOptions,
+  SecretInfo,
+  SecretListOptions,
+  SecretSandboxBinding,
   SpawnOptions,
   TemplateBuildInfo,
   TemplateBuildStatus,

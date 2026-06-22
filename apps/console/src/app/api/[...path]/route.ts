@@ -8,7 +8,14 @@ import { createServerClient } from "@/lib/supabase/server"
 const SANDBOX_API_URL =
   process.env.SANDBOX_API_URL ?? "https://api.superserve.ai"
 
-const ALLOWED_PREFIXES = ["sandboxes", "health", "v1", "templates"]
+const ALLOWED_PREFIXES = [
+  "sandboxes",
+  "health",
+  "v1",
+  "templates",
+  "secrets",
+  "providers",
+]
 
 /** Paths that carry their own auth (e.g. Bearer token). */
 const SKIP_KEY_INJECTION = ["v1/auth/"]

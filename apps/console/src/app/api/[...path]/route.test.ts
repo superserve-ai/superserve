@@ -1,7 +1,7 @@
 /**
  * API proxy tests — exercises the catch-all that forwards browser requests
  * to the sandbox API. Covers:
- *  - Allowed prefix list (sandboxes, health, v1) vs 404
+ *  - Allowed prefix list vs 404
  *  - X-API-Key injection for authenticated requests
  *  - SKIP_KEY_INJECTION (v1/auth/ — no key, client Authorization preserved)
  *  - Header allowlist: cookie, x-api-key from client are stripped
@@ -72,6 +72,23 @@ describe("api proxy /api/[...path]", () => {
   it("returns 404 for a path outside the allowed prefixes", async () => {
     const res = await GET(req("GET", ["unknown"]), params(["unknown"]))
     expect(res.status).toBe(404)
+  })
+
+  it("forwards the secrets and providers prefixes", async () => {
+    fetchSpy.mockImplementation(() =>
+      Promise.resolve(
+        new Response("[]", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    )
+
+    for (const path of [["secrets"], ["secrets", "my_key"], ["providers"]]) {
+      const res = await GET(req("GET", path), params(path))
+      expect(res.status).toBe(200)
+    }
+    expect(fetchSpy).toHaveBeenCalledTimes(3)
   })
 
   it("returns 401 when the user is not authenticated", async () => {

@@ -7,6 +7,13 @@ export const sandboxKeys = {
   detail: (id: string) => [...sandboxKeys.details(), id] as const,
 }
 
+export const fileKeys = {
+  all: ["sandbox-files"] as const,
+  listings: (sandboxId: string) => [...fileKeys.all, sandboxId] as const,
+  listing: (sandboxId: string, path: string) =>
+    [...fileKeys.listings(sandboxId), path] as const,
+}
+
 export const apiKeyKeys = {
   all: ["api-keys"] as const,
   lists: () => [...apiKeyKeys.all, "list"] as const,
@@ -30,6 +37,37 @@ export const auditLogKeys = {
     [...auditLogKeys.lists(), filters] as const,
   bySandbox: (sandboxId: string) =>
     [...auditLogKeys.all, "sandbox", sandboxId] as const,
+}
+
+export const secretKeys = {
+  all: ["secrets"] as const,
+  lists: () => [...secretKeys.all, "list"] as const,
+  list: (filters?: { search?: string }) =>
+    [...secretKeys.lists(), filters ?? {}] as const,
+  details: () => [...secretKeys.all, "detail"] as const,
+  // Accepts undefined so disabled hooks (e.g. useSecret(undefined)) keep a
+  // distinct cache key per call site instead of all aliasing to details().
+  detail: (name: string | undefined) =>
+    [...secretKeys.details(), name] as const,
+  audit: (name: string | undefined, filters?: { status?: string }) =>
+    [...secretKeys.detail(name), "audit", filters ?? {}] as const,
+  sandboxes: (name: string | undefined) =>
+    [...secretKeys.detail(name), "sandboxes"] as const,
+}
+
+export const providerKeys = {
+  all: ["providers"] as const,
+}
+
+export const networkKeys = {
+  sandbox: (sandboxId: string | undefined) =>
+    ["network", "sandbox", sandboxId] as const,
+}
+
+export const billingKeys = {
+  all: ["billing"] as const,
+  usage: (filters: { periodStart: string; periodEnd: string }) =>
+    [...billingKeys.all, "usage", filters] as const,
 }
 
 export const templateKeys = {
