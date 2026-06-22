@@ -8,6 +8,7 @@ import { init } from "./commands/init"
 import { login } from "./commands/login"
 import { logout } from "./commands/logout"
 import { run } from "./commands/run"
+import { sandbox } from "./commands/sandbox/index"
 import { secrets } from "./commands/secrets/index"
 import { sessions } from "./commands/sessions/index"
 import { CLI_VERSION } from "./config/constants"
@@ -37,6 +38,7 @@ program.addCommand(run)
 program.addCommand(agents)
 program.addCommand(secrets)
 program.addCommand(sessions)
+program.addCommand(sandbox)
 
 registerExitHook()
 
@@ -45,7 +47,12 @@ async function main() {
   try {
     // Track which command is being invoked (e.g. "agents list", "deploy")
     const positional = process.argv.slice(2).filter((a) => !a.startsWith("-"))
-    const SUB_COMMAND_GROUPS = new Set(["agents", "secrets", "sessions"])
+    const SUB_COMMAND_GROUPS = new Set([
+      "agents",
+      "secrets",
+      "sessions",
+      "sandbox",
+    ])
     const depth = SUB_COMMAND_GROUPS.has(positional[0]) ? 2 : 1
     const command = positional.slice(0, depth).join(" ") || "help"
     await track("cli_command_invoked", { command })

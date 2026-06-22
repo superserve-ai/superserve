@@ -46,7 +46,7 @@
     "primary": {
       "type": "button",
       "label": "Get Started",
-      "href": "https://console.superserve.ai?utm_source=docs&utm_medium=navbar"
+      "href": "https://console.superserve.ai/auth/signup/?utm_source=docs&utm_medium=navbar"
     }
   },
   "contextual": {
@@ -184,16 +184,15 @@
           },
           {
             "group": "Exec",
-            "pages": [
-              "GET /exec/connect",
-              "POST /sandboxes/{sandbox_id}/exec",
-              "POST /sandboxes/{sandbox_id}/exec/stream",
-              "GET /exec/connect"
-            ]
+            "pages": ["POST /exec", "POST /exec/stream", "GET /exec/connect"]
           },
           {
             "group": "Files",
-            "pages": ["GET /files", "POST /files"]
+            "pages": [
+              "GET /sandboxes/{sandbox_id}/files",
+              "GET /files",
+              "POST /files"
+            ]
           },
           {
             "group": "Templates",
@@ -217,10 +216,16 @@
               "GET /secrets/{name}",
               "PATCH /secrets/{name}",
               "DELETE /secrets/{name}",
+              "POST /sandboxes/{sandbox_id}/secrets",
+              "DELETE /sandboxes/{sandbox_id}/secrets/{env_key}",
               "GET /secrets/{name}/audit",
               "GET /secrets/{name}/sandboxes",
               "GET /providers"
             ]
+          },
+          {
+            "group": "Billing",
+            "pages": ["GET /billing/pricing", "GET /billing/pricing/public"]
           }
         ]
       }

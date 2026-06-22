@@ -7,6 +7,13 @@ export const sandboxKeys = {
   detail: (id: string) => [...sandboxKeys.details(), id] as const,
 }
 
+export const fileKeys = {
+  all: ["sandbox-files"] as const,
+  listings: (sandboxId: string) => [...fileKeys.all, sandboxId] as const,
+  listing: (sandboxId: string, path: string) =>
+    [...fileKeys.listings(sandboxId), path] as const,
+}
+
 export const apiKeyKeys = {
   all: ["api-keys"] as const,
   lists: () => [...apiKeyKeys.all, "list"] as const,

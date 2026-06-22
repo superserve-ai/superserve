@@ -89,6 +89,46 @@ class TestAsyncSandboxSmoke:
             finally:
                 await sbx._close_http_client()
 
+    async def test_attach_secret_posts_binding(self) -> None:
+        with respx.mock() as router:
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            route = router.post(f"{API}/sandboxes/sbx-1/secrets").mock(
+                return_value=httpx.Response(
+                    201,
+                    json={
+                        "env_key": "ANTHROPIC_API_KEY",
+                        "secret_name": "anthropic-prod",
+                    },
+                )
+            )
+            sbx = await AsyncSandbox.connect("sbx-1")
+            try:
+                await sbx.attach_secret("ANTHROPIC_API_KEY", "anthropic-prod")
+                assert route.call_count == 1
+                body = route.calls.last.request.content
+                assert b"ANTHROPIC_API_KEY" in body
+                assert b"anthropic-prod" in body
+            finally:
+                await sbx._close_http_client()
+
+    async def test_detach_secret_deletes_by_env_key(self) -> None:
+        with respx.mock() as router:
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            route = router.delete(
+                f"{API}/sandboxes/sbx-1/secrets/ANTHROPIC_API_KEY"
+            ).mock(return_value=httpx.Response(204))
+            sbx = await AsyncSandbox.connect("sbx-1")
+            try:
+                result = await sbx.detach_secret("ANTHROPIC_API_KEY")
+                assert result is None
+                assert route.call_count == 1
+            finally:
+                await sbx._close_http_client()
+
     async def test_resume_rotates_token_and_rebuilds_files(self) -> None:
         with respx.mock() as router:
             router.post(f"{API}/sandboxes/sbx-1/activate").mock(

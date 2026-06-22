@@ -376,4 +376,36 @@ export class Sandbox {
     })
     return toNetworkLogPage(raw)
   }
+
+  /**
+   * Bind a team secret to this sandbox under an environment variable. The
+   * sandbox sees a stand-in token; the real credential is swapped in for
+   * outbound requests to the secret's allowed hosts. Takes effect for processes
+   * started after this call; a paused sandbox applies it on resume.
+   *
+   * The local `secrets` summary is a snapshot from when the sandbox was fetched
+   * and is not updated here — call `Sandbox.get(id)` for the current set.
+   */
+  async attachSecret(envKey: string, secretName: string): Promise<void> {
+    await requestVoid({
+      method: "POST",
+      url: `${this._config.baseUrl}/sandboxes/${this.id}/secrets`,
+      headers: { "X-API-Key": this._config.apiKey },
+      body: { env_key: envKey, secret_name: secretName },
+    })
+  }
+
+  /**
+   * Remove a secret binding from this sandbox by its environment-variable key.
+   * The stand-in token is revoked, so requests using it are refused — within
+   * about a minute for a process already running. A paused sandbox applies the
+   * change on resume.
+   */
+  async detachSecret(envKey: string): Promise<void> {
+    await requestVoid({
+      method: "DELETE",
+      url: `${this._config.baseUrl}/sandboxes/${this.id}/secrets/${encodeURIComponent(envKey)}`,
+      headers: { "X-API-Key": this._config.apiKey },
+    })
+  }
 }

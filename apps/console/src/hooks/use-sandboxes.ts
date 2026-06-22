@@ -6,8 +6,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ApiError } from "@/lib/api/client"
 import { sandboxKeys } from "@/lib/api/query-keys"
 import {
+  attachSandboxSecret,
   createSandbox,
   deleteSandbox,
+  detachSandboxSecret,
   getSandbox,
   listSandboxes,
   patchSandbox,
@@ -248,6 +250,52 @@ export function usePatchSandbox() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: sandboxKeys.all })
+    },
+  })
+}
+
+export function useAttachSandboxSecret(id: string) {
+  const queryClient = useQueryClient()
+  const { addToast } = useToast()
+
+  return useMutation({
+    mutationFn: ({
+      envKey,
+      secretName,
+    }: {
+      envKey: string
+      secretName: string
+    }) => attachSandboxSecret(id, envKey, secretName),
+    onSuccess: () => {
+      addToast("Secret attached", "success")
+    },
+    onError: (error) => {
+      const message =
+        error instanceof ApiError ? error.message : "Failed to attach secret."
+      addToast(message, "error")
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: sandboxKeys.detail(id) })
+    },
+  })
+}
+
+export function useDetachSandboxSecret(id: string) {
+  const queryClient = useQueryClient()
+  const { addToast } = useToast()
+
+  return useMutation({
+    mutationFn: (envKey: string) => detachSandboxSecret(id, envKey),
+    onSuccess: () => {
+      addToast("Secret detached", "success")
+    },
+    onError: (error) => {
+      const message =
+        error instanceof ApiError ? error.message : "Failed to detach secret."
+      addToast(message, "error")
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: sandboxKeys.detail(id) })
     },
   })
 }
