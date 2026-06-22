@@ -10,12 +10,17 @@
  * - Exponential-backoff retry on idempotent operations (GET/DELETE)
  */
 
-import { mapApiError, SandboxError, TimeoutError } from "./errors.js"
+import {
+  mapApiError,
+  SandboxError,
+  TimeoutError,
+  ValidationError,
+} from "./errors.js"
 import type { ApiExecStreamEvent } from "./types.js"
 
 const DEFAULT_TIMEOUT_MS = 30_000
 
-const SDK_VERSION = "0.7.6"
+const SDK_VERSION = "0.7.7"
 const USER_AGENT = `@superserve/sdk/${SDK_VERSION} (node/${
   typeof process !== "undefined" && process.versions?.node
     ? `v${process.versions.node}`
@@ -27,6 +32,8 @@ const DEFAULT_MAX_ATTEMPTS = 3
 const BASE_BACKOFF_MS = 100
 const MAX_BACKOFF_MS = 30_000
 const RETRYABLE_STATUSES = new Set([429, 502, 503, 504])
+
+const DEFAULT_MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024 // 2 GiB; matches boxd's server-side zip cap
 
 interface RequestOptions {
   method: "GET" | "POST" | "PATCH" | "DELETE"
@@ -332,21 +339,84 @@ export async function uploadBytes(opts: {
 }
 
 /**
+ * Read a response body into a single Uint8Array, refusing to buffer more than
+ * `maxBytes`.
+ *
+ * The data plane is untrusted: a hostile sandbox can return a multi-GB or
+ * endless response. Streaming the body lets us stop pulling bytes (and free the
+ * connection) the moment the running total exceeds the cap, instead of
+ * buffering the whole thing first.
+ */
+async function readBodyWithLimit(
+  res: Response,
+  maxBytes: number,
+): Promise<Uint8Array> {
+  // No streaming body available (e.g. mocked responses) — fall back to a full
+  // buffer read, then enforce the cap.
+  if (!res.body) {
+    const buf = new Uint8Array(await res.arrayBuffer())
+    if (buf.byteLength > maxBytes) {
+      throw new ValidationError(
+        `Download exceeds the maximum size of ${maxBytes} bytes`,
+      )
+    }
+    return buf
+  }
+
+  const reader = res.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (!value) continue
+
+      total += value.byteLength
+      if (total > maxBytes) {
+        // Stop pulling bytes from the sandbox.
+        await reader.cancel()
+        throw new ValidationError(
+          `Download exceeds the maximum size of ${maxBytes} bytes`,
+        )
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  const out = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    out.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return out
+}
+
+/**
  * Download raw bytes from a URL. Used for file download from the data plane.
  *
  * Retries on transient failures (GET is idempotent).
+ *
+ * The response body is read with a byte cap (`maxBytes`, default 2 GiB) to
+ * protect against a hostile data plane returning an unbounded response.
  */
 export async function downloadBytes(opts: {
   url: string
   headers: Record<string, string>
   timeoutMs?: number
   signal?: AbortSignal
+  maxBytes?: number
 }): Promise<Uint8Array> {
   const {
     url,
     headers,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     signal: userSignal,
+    maxBytes = DEFAULT_MAX_DOWNLOAD_BYTES,
   } = opts
 
   const mergedHeaders: Record<string, string> = {
@@ -366,7 +436,7 @@ export async function downloadBytes(opts: {
       throw mapApiError(res.status, errorBody)
     }
 
-    return new Uint8Array(await res.arrayBuffer())
+    return await readBodyWithLimit(res, maxBytes)
   } catch (err) {
     if (err instanceof SandboxError) throw err
     if (err instanceof DOMException && err.name === "AbortError") {

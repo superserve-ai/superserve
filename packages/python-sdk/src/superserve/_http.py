@@ -11,17 +11,21 @@ import json as json_module
 import random
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import AsyncIterable, Callable, Iterable
 from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
 
-from .errors import SandboxError, SandboxTimeoutError, map_api_error
+from .errors import SandboxError, SandboxTimeoutError, ValidationError, map_api_error
 
 DEFAULT_TIMEOUT = 30.0
 
-SDK_VERSION = "0.7.6"
+DEFAULT_MAX_DOWNLOAD_BYTES = (
+    2 * 1024 * 1024 * 1024
+)  # 2 GiB; matches boxd's server-side zip cap
+
+SDK_VERSION = "0.7.7"
 USER_AGENT = (
     f"superserve-python/{SDK_VERSION} "
     f"(python/{sys.version_info.major}.{sys.version_info.minor})"
@@ -104,6 +108,34 @@ def _build_error_body(response: httpx.Response) -> dict[str, Any]:
             "message": response.text[:500] or f"API error ({response.status_code})"
         }
     }
+
+
+def _read_capped(chunks: Iterable[bytes], max_bytes: int) -> bytes:
+    """Accumulate byte ``chunks`` into a buffer, enforcing a hard size cap.
+
+    Raises ``ValidationError`` as soon as the accumulated length exceeds
+    ``max_bytes`` so a hostile/unbounded response cannot exhaust memory.
+    """
+    buf = bytearray()
+    for chunk in chunks:
+        buf.extend(chunk)
+        if len(buf) > max_bytes:
+            raise ValidationError(
+                f"Download exceeds the maximum size of {max_bytes} bytes"
+            )
+    return bytes(buf)
+
+
+async def _aread_capped(achunks: AsyncIterable[bytes], max_bytes: int) -> bytes:
+    """Async variant of ``_read_capped``."""
+    buf = bytearray()
+    async for chunk in achunks:
+        buf.extend(chunk)
+        if len(buf) > max_bytes:
+            raise ValidationError(
+                f"Download exceeds the maximum size of {max_bytes} bytes"
+            )
+    return bytes(buf)
 
 
 # ---------------------------------------------------------------------------
@@ -256,21 +288,77 @@ def download_bytes(
     headers: dict[str, str],
     timeout: float = DEFAULT_TIMEOUT,
     client: httpx.Client | None = None,
+    max_bytes: int = DEFAULT_MAX_DOWNLOAD_BYTES,
 ) -> bytes:
-    """Download raw bytes from data plane. GET — retries on transient failures."""
+    """Download raw bytes from data plane. GET — retries on transient failures.
+
+    Streams the response body and enforces a ``max_bytes`` cap, raising
+    ``ValidationError`` and dropping the connection as soon as the body exceeds
+    it -- so a hostile/unbounded response cannot exhaust memory.
+    """
+    owned = client is None
+    if owned:
+        client = httpx.Client(timeout=timeout)
+    assert client is not None
+
     merged = _default_headers(headers)
-    response = _do_request_with_retry(
-        "GET",
-        url,
-        headers=merged,
-        timeout=timeout,
-        client=client,
-    )
+    last_exc: BaseException | None = None
 
-    if not response.is_success:
-        raise map_api_error(response.status_code, _build_error_body(response))
+    try:
+        for attempt in range(_MAX_ATTEMPTS):
+            try:
+                with client.stream(
+                    "GET", url, headers=merged, timeout=timeout
+                ) as response:
+                    if (
+                        _should_retry_status("GET", response.status_code)
+                        and attempt < _MAX_ATTEMPTS - 1
+                    ):
+                        delay: float
+                        if response.status_code == 429:
+                            retry_after = _parse_retry_after(
+                                response.headers.get("Retry-After")
+                            )
+                            delay = (
+                                min(retry_after, _MAX_BACKOFF)
+                                if retry_after is not None
+                                else _compute_backoff(attempt)
+                            )
+                        else:
+                            delay = _compute_backoff(attempt)
+                        # Stream closed by the context manager on continue.
+                        if delay > 0:
+                            time.sleep(delay)
+                        continue
 
-    return response.content
+                    if not response.is_success:
+                        response.read()
+                        raise map_api_error(
+                            response.status_code, _build_error_body(response)
+                        )
+
+                    # Raising inside the `with` block (cap exceeded) closes the
+                    # stream, dropping the connection to the sandbox.
+                    return _read_capped(response.iter_bytes(), max_bytes)
+            except httpx.TimeoutException as exc:
+                raise SandboxTimeoutError(
+                    f"Request timed out after {timeout}s"
+                ) from exc
+            except _RETRY_CONNECTION_EXCEPTIONS as exc:
+                last_exc = exc
+                if attempt == _MAX_ATTEMPTS - 1:
+                    raise SandboxError(f"Network error: {exc}") from exc
+                time.sleep(_compute_backoff(attempt))
+                continue
+            except httpx.HTTPError as exc:
+                raise SandboxError(f"Network error: {exc}") from exc
+
+        if last_exc is not None:
+            raise SandboxError(f"Network error: {last_exc}") from last_exc
+        raise SandboxError("Request failed after retries")
+    finally:
+        if owned:
+            client.close()
 
 
 def stream_sse(
@@ -472,21 +560,77 @@ async def async_download_bytes(
     headers: dict[str, str],
     timeout: float = DEFAULT_TIMEOUT,
     client: httpx.AsyncClient | None = None,
+    max_bytes: int = DEFAULT_MAX_DOWNLOAD_BYTES,
 ) -> bytes:
-    """Async variant of download_bytes. GET — retries on transient failures."""
+    """Async variant of download_bytes. GET — retries on transient failures.
+
+    Streams the response body and enforces a ``max_bytes`` cap, raising
+    ``ValidationError`` and dropping the connection as soon as the body exceeds
+    it -- so a hostile/unbounded response cannot exhaust memory.
+    """
+    owned = client is None
+    if owned:
+        client = httpx.AsyncClient(timeout=timeout)
+    assert client is not None
+
     merged = _default_headers(headers)
-    response = await _async_do_request_with_retry(
-        "GET",
-        url,
-        headers=merged,
-        timeout=timeout,
-        client=client,
-    )
+    last_exc: BaseException | None = None
 
-    if not response.is_success:
-        raise map_api_error(response.status_code, _build_error_body(response))
+    try:
+        for attempt in range(_MAX_ATTEMPTS):
+            try:
+                async with client.stream(
+                    "GET", url, headers=merged, timeout=timeout
+                ) as response:
+                    if (
+                        _should_retry_status("GET", response.status_code)
+                        and attempt < _MAX_ATTEMPTS - 1
+                    ):
+                        delay: float
+                        if response.status_code == 429:
+                            retry_after = _parse_retry_after(
+                                response.headers.get("Retry-After")
+                            )
+                            delay = (
+                                min(retry_after, _MAX_BACKOFF)
+                                if retry_after is not None
+                                else _compute_backoff(attempt)
+                            )
+                        else:
+                            delay = _compute_backoff(attempt)
+                        # Stream closed by the context manager on continue.
+                        if delay > 0:
+                            await asyncio.sleep(delay)
+                        continue
 
-    return response.content
+                    if not response.is_success:
+                        await response.aread()
+                        raise map_api_error(
+                            response.status_code, _build_error_body(response)
+                        )
+
+                    # Raising inside the `async with` block (cap exceeded) closes
+                    # the stream, dropping the connection to the sandbox.
+                    return await _aread_capped(response.aiter_bytes(), max_bytes)
+            except httpx.TimeoutException as exc:
+                raise SandboxTimeoutError(
+                    f"Request timed out after {timeout}s"
+                ) from exc
+            except _RETRY_CONNECTION_EXCEPTIONS as exc:
+                last_exc = exc
+                if attempt == _MAX_ATTEMPTS - 1:
+                    raise SandboxError(f"Network error: {exc}") from exc
+                await asyncio.sleep(_compute_backoff(attempt))
+                continue
+            except httpx.HTTPError as exc:
+                raise SandboxError(f"Network error: {exc}") from exc
+
+        if last_exc is not None:
+            raise SandboxError(f"Network error: {last_exc}") from last_exc
+        raise SandboxError("Request failed after retries")
+    finally:
+        if owned:
+            await client.aclose()
 
 
 async def async_stream_sse(
