@@ -17,6 +17,18 @@ describe("truncateText", () => {
     expect(r.text).toContain("bytes truncated")
     expect(r.text.length).toBeLessThan(big.length)
   })
+  it("never splits a UTF-16 surrogate pair", () => {
+    // Each emoji is one astral codepoint = a surrogate pair (2 units, 4 bytes).
+    const text = "😀".repeat(2000)
+    // Mix of even and odd char budgets so a naive slice would land mid-pair.
+    for (const cap of [200, 203, 205, 207, 333, 1001]) {
+      const r = truncateText(text, cap)
+      expect(r.truncated).toBe(true)
+      // A lone surrogate does not survive a UTF-8 round-trip (becomes U+FFFD),
+      // so equality here proves the output contains no half-pairs.
+      expect(Buffer.from(r.text, "utf8").toString("utf8")).toBe(r.text)
+    }
+  })
 })
 
 describe("tool results", () => {

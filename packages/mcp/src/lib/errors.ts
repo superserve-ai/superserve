@@ -35,6 +35,9 @@ export function formatSdkError(err: unknown): string {
     return `Rate limited: ${err.message}. Retry after a short backoff.`
   }
   if (err instanceof TimeoutError) {
+    // The SDK's TimeoutError carries only a message — no partial stdout/stderr —
+    // so there is nothing more to surface here. Returning partial captured
+    // output would require the SDK to attach it to TimeoutError first (follow-up).
     return err.message
   }
   if (err instanceof ServerError) {

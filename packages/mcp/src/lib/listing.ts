@@ -58,6 +58,34 @@ export function buildLsCommand(path: string): string {
   return `ls -la --time-style=long-iso ${shellQuote(path)}`
 }
 
+/**
+ * Pure-POSIX directory listing for images without GNU findutils/coreutils
+ * (e.g. BusyBox/Alpine, where `find -printf` and `ls --time-style` are absent).
+ * Emits the same tab-delimited `type\tsize\tmtime\tname` rows as
+ * `buildFindCommand` so `parseFindOutput` consumes it unchanged. Size and mtime
+ * are left empty — this fallback can't read them portably — so they parse as
+ * size `0` and no `modified` rather than fabricated values. Uses `printf` (not
+ * `echo`, whose `\t` handling is shell-dependent) and lists by file-type test.
+ */
+export function buildFallbackCommand(path: string): string {
+  const q = shellQuote(path)
+  return (
+    `cd ${q} && for f in * .*; do ` +
+    `[ "$f" = "." ] && continue; ` +
+    `[ "$f" = ".." ] && continue; ` +
+    `[ -e "$f" ] || [ -L "$f" ] || continue; ` +
+    `if [ -L "$f" ]; then t=l; ` +
+    `elif [ -d "$f" ]; then t=d; ` +
+    `elif [ -p "$f" ]; then t=p; ` +
+    `elif [ -S "$f" ]; then t=s; ` +
+    `elif [ -b "$f" ]; then t=b; ` +
+    `elif [ -c "$f" ]; then t=c; ` +
+    `else t=f; fi; ` +
+    `printf '%s\\t\\t\\t%s\\n' "$t" "$f"; ` +
+    `done`
+  )
+}
+
 function epochToIso(seconds: string): string | undefined {
   const n = Number.parseFloat(seconds)
   if (!Number.isFinite(n)) return undefined

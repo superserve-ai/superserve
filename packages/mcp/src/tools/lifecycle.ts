@@ -167,7 +167,7 @@ export function registerLifecycleTools(
           status: i.status,
           vcpu_count: i.vcpuCount,
           memory_mib: i.memoryMib,
-          created_at: i.createdAt.toISOString(),
+          created_at: toIsoOrUndefined(i.createdAt),
           metadata: i.metadata,
         }
         if (i.timeoutSeconds !== undefined) {
@@ -272,4 +272,13 @@ export function registerLifecycleTools(
       }
     },
   )
+}
+
+/**
+ * ISO-8601 string for a Date, or undefined when it is missing or invalid.
+ * Guards `.toISOString()`, which throws a RangeError on an Invalid Date — a case
+ * optional chaining would not catch (the value is a Date object, just NaN).
+ */
+function toIsoOrUndefined(d: Date | undefined): string | undefined {
+  return d && !Number.isNaN(d.getTime()) ? d.toISOString() : undefined
 }

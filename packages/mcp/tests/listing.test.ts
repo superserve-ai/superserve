@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  buildFallbackCommand,
   buildFindCommand,
   parseFindOutput,
   parseLsOutput,
@@ -39,6 +40,21 @@ describe("buildFindCommand", () => {
   })
 })
 
+describe("buildFallbackCommand", () => {
+  it("emits a pure-POSIX cd+loop using printf over the quoted path", () => {
+    const cmd = buildFallbackCommand("/app")
+    expect(cmd).toContain("cd '/app'")
+    expect(cmd).toContain("for f in * .*")
+    expect(cmd).toContain("printf")
+    // Must not depend on GNU find or echo's non-portable \t handling.
+    expect(cmd).not.toContain("-printf")
+    expect(cmd).not.toContain("echo")
+  })
+  it("quotes the path to prevent shell injection", () => {
+    expect(buildFallbackCommand("/a'b")).toContain("cd '/a'\\''b'")
+  })
+})
+
 describe("parseFindOutput", () => {
   it("parses type, size, mtime, and name", () => {
     const out = "f\t123\t1700000000.5\tfile.txt\nd\t4096\t1700000001\tsub\n"
@@ -63,6 +79,25 @@ describe("parseFindOutput", () => {
       "d\t4096\t1700000000\t.\nbogus-line\nf\t10\t1700000000\tok.txt\n"
     const entries = parseFindOutput(out)
     expect(entries.map((e) => e.name)).toEqual(["ok.txt"])
+  })
+  it("parses the POSIX fallback's empty size/mtime fields", () => {
+    // buildFallbackCommand emits `type\t\t\tname` (size/mtime unknown).
+    const entries = parseFindOutput(
+      "d\t\t\tsub\nl\t\t\tlink\nf\t\t\tfile.txt\n",
+    )
+    expect(entries).toHaveLength(3)
+    expect(entries[0]).toMatchObject({
+      name: "sub",
+      type: "directory",
+      size: 0,
+    })
+    expect(entries[1]).toMatchObject({ name: "link", type: "symlink", size: 0 })
+    expect(entries[2]).toMatchObject({
+      name: "file.txt",
+      type: "file",
+      size: 0,
+    })
+    expect(entries[0].modified).toBeUndefined()
   })
 })
 

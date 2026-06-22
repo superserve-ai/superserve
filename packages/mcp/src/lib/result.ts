@@ -26,14 +26,35 @@ export function truncateText(text: string, maxBytes: number): Truncation {
   // Budget characters from the byte cap (approximation is fine for a marker).
   const headChars = Math.floor(maxBytes * 0.6)
   const tailChars = Math.floor(maxBytes * 0.35)
-  const head = text.slice(0, headChars)
-  const tail = text.slice(text.length - tailChars)
+  // Keep slice boundaries off the seam of a UTF-16 surrogate pair — cutting one
+  // in half would emit a lone surrogate (a corrupt character) into the output.
+  const headEnd = surrogateSafeBoundary(text, Math.min(headChars, text.length))
+  const tailStart = Math.max(
+    headEnd,
+    surrogateSafeBoundary(text, Math.max(0, text.length - tailChars)),
+  )
+  const head = text.slice(0, headEnd)
+  const tail = text.slice(tailStart)
   const dropped = bytes - Buffer.byteLength(head + tail, "utf8")
   return {
     text: `${head}\n… [${dropped} bytes truncated] …\n${tail}`,
     truncated: true,
     bytes,
   }
+}
+
+/**
+ * Return an index at or just before `index` that does not fall between the two
+ * halves of a UTF-16 surrogate pair. If the code unit just before `index` is a
+ * high surrogate (0xD800–0xDBFF), step back one so a slice at the returned index
+ * keeps the pair whole on both sides.
+ */
+function surrogateSafeBoundary(text: string, index: number): number {
+  if (index > 0 && index < text.length) {
+    const prev = text.charCodeAt(index - 1)
+    if (prev >= 0xd800 && prev <= 0xdbff) return index - 1
+  }
+  return index
 }
 
 /** A successful tool result: text content + structured content. */

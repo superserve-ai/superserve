@@ -18,6 +18,7 @@ import type { CommandResult, SandboxInfo } from "@superserve/sdk"
 
 import type { ClientConfig } from "./config.js"
 import {
+  buildFallbackCommand,
   buildFindCommand,
   buildLsCommand,
   type DirEntry,
@@ -133,7 +134,11 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
       // `find -printf` unavailable (e.g. BusyBox) — fall back to `ls`.
       const ls = await sb.commands.run(buildLsCommand(path))
       if (ls.exitCode === 0) return parseLsOutput(ls.stdout)
-      const detail = (found.stderr || ls.stderr || "").trim()
+      // Neither GNU find nor `ls --time-style` (e.g. BusyBox/Alpine): last
+      // resort is a pure-POSIX shell loop, parsed like find's output.
+      const posix = await sb.commands.run(buildFallbackCommand(path))
+      if (posix.exitCode === 0) return parseFindOutput(posix.stdout)
+      const detail = (found.stderr || ls.stderr || posix.stderr || "").trim()
       throw new SandboxError(
         `Could not list ${path}${detail ? `: ${detail}` : ""}`,
       )
