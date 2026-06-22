@@ -20,7 +20,13 @@ const HTTP_METHODS = [
 ]
 
 // Paths defined in the spec but intentionally absent from the public nav.
-const EXEMPT_PATHS = new Set(["/health"])
+// Billing/pricing are UI endpoints (console pricing page), not part of the
+// developer sandbox API reference.
+const EXEMPT_PATHS = new Set([
+  "/health",
+  "/billing/pricing",
+  "/billing/pricing/public",
+])
 
 const OP_RE = new RegExp(`^(${HTTP_METHODS.join("|")})\\s+/`)
 
