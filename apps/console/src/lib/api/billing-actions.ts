@@ -7,6 +7,12 @@ const MAX_USAGE_RANGE_MS = 90 * 24 * 60 * 60 * 1000
 const USAGE_DASHBOARD_FLAG = "tenant_usage_dashboard"
 const BILLING_METRICS_WRITE_FLAG = "billing_metrics_write"
 const BILLING_EXPORT_FLAG = "billing_export_enabled"
+const DEFAULT_PRICING_PLAN_KEY = "payg"
+const REQUIRED_PRICING_RATE_KEYS = [
+  "vcpu:second",
+  "memory_gib:second",
+  "storage_gib:second",
+] as const
 
 export interface BillingUsageHourly {
   hour_start: string
@@ -17,25 +23,51 @@ export interface BillingUsageHourly {
   updated_at: string
 }
 
-export type BillingUsageMode = "disabled" | "preview" | "active"
+export type BillingUsageMode = "disabled" | "shadow" | "active"
+
+export interface BillingPricing {
+  cpu_vcpu_hour_usd: number
+  memory_gib_hour_usd: number
+  storage_gib_hour_usd: number
+  source: "static_pricing_page" | "api"
+}
 
 export interface BillingUsageResponse {
   enabled: boolean
   billing_mode: BillingUsageMode
+  pricing?: BillingPricing
   period_start: string
   period_end: string
   rows: BillingUsageHourly[]
 }
 
+export interface BillingSettingsResponse {
+  enabled: boolean
+  billing_mode: BillingUsageMode
+  pricing?: BillingPricing
+}
+
 async function getTeamId(userId: string): Promise<string | null> {
   const admin = createAdminClient()
-  const { data } = await admin
+  const { data, error } = await admin
     .from("team_member")
     .select("team_id")
     .eq("profile_id", userId)
-    .limit(1)
-    .single()
-  return data?.team_id ?? null
+
+  if (error) throw new Error(error.message)
+  if (!data?.length) return null
+
+  const teamIds = [
+    ...new Set(
+      data
+        .map((row) => row.team_id)
+        .filter((teamId): teamId is string => typeof teamId === "string"),
+    ),
+  ]
+  if (teamIds.length !== 1) {
+    throw new Error("Select a team before viewing billing usage")
+  }
+  return teamIds[0]
 }
 
 function normalizePeriod(periodStart: string, periodEnd: string) {
@@ -92,6 +124,123 @@ function numericToNumber(value: unknown, field: string): number {
   return numberValue
 }
 
+function compareNullableStringsDesc(left: unknown, right: unknown): number {
+  const leftString = typeof left === "string" ? left : ""
+  const rightString = typeof right === "string" ? right : ""
+  return rightString.localeCompare(leftString)
+}
+
+async function getTeamPricingPlanKey(teamId: string): Promise<string> {
+  const admin = createAdminClient()
+  const now = new Date().toISOString()
+  const { data: assignments, error: assignmentError } = await admin
+    .from("team_pricing_plan")
+    .select("plan_key, effective_from, effective_to")
+    .eq("team_id", teamId)
+    .lte("effective_from", now)
+    .order("effective_from", { ascending: false })
+    .limit(20)
+
+  if (assignmentError) throw new Error(assignmentError.message)
+  const currentAssignments = (assignments ?? []).filter((row) => {
+    const effectiveTo = row.effective_to as string | null
+    return !effectiveTo || effectiveTo > now
+  })
+  if (!currentAssignments.length) return DEFAULT_PRICING_PLAN_KEY
+
+  const planKeys = [
+    ...new Set(currentAssignments.map((row) => row.plan_key as string)),
+  ]
+  const { data: activePlans, error: planError } = await admin
+    .from("pricing_plan")
+    .select("key")
+    .in("key", planKeys)
+    .eq("active", true)
+
+  if (planError) throw new Error(planError.message)
+
+  const activePlanKeys = new Set((activePlans ?? []).map((row) => row.key))
+  return (
+    (currentAssignments.find((row) => activePlanKeys.has(row.plan_key))
+      ?.plan_key as string | undefined) ?? DEFAULT_PRICING_PLAN_KEY
+  )
+}
+
+async function getBillingPricingForPlan(
+  planKey: string,
+): Promise<BillingPricing> {
+  const admin = createAdminClient()
+  const now = new Date().toISOString()
+  const { data: rates, error } = await admin
+    .from("pricing_rate")
+    .select(
+      "resource, unit, price_usd, effective_from, effective_to, created_at, id",
+    )
+    .eq("plan_key", planKey)
+    .lte("effective_from", now)
+
+  if (error) throw new Error(error.message)
+  const currentRates = (rates ?? []).filter((row) => {
+    const effectiveTo = row.effective_to as string | null
+    return !effectiveTo || effectiveTo > now
+  })
+  if (!currentRates.length) {
+    throw new Error(`Pricing plan ${planKey} has no active rates`)
+  }
+
+  const latestRates = new Map<string, (typeof currentRates)[number]>()
+  for (const rate of currentRates) {
+    const resource = rate.resource as string
+    const unit = rate.unit as string
+    const key = `${resource}:${unit}`
+    if (!REQUIRED_PRICING_RATE_KEYS.includes(key as never)) {
+      throw new Error(`Pricing plan ${planKey} has unsupported rate ${key}`)
+    }
+
+    const existing = latestRates.get(key)
+    if (
+      !existing ||
+      compareNullableStringsDesc(rate.effective_from, existing.effective_from) <
+        0 ||
+      (rate.effective_from === existing.effective_from &&
+        compareNullableStringsDesc(rate.created_at, existing.created_at) < 0) ||
+      (rate.effective_from === existing.effective_from &&
+        rate.created_at === existing.created_at &&
+        compareNullableStringsDesc(rate.id, existing.id) < 0)
+    ) {
+      latestRates.set(key, rate)
+    }
+  }
+
+  for (const key of REQUIRED_PRICING_RATE_KEYS) {
+    if (!latestRates.has(key)) {
+      throw new Error(`Pricing plan ${planKey} is missing active rate ${key}`)
+    }
+  }
+
+  return {
+    cpu_vcpu_hour_usd:
+      numericToNumber(latestRates.get("vcpu:second")?.price_usd, "vcpu price") *
+      3600,
+    memory_gib_hour_usd:
+      numericToNumber(
+        latestRates.get("memory_gib:second")?.price_usd,
+        "memory price",
+      ) * 3600,
+    storage_gib_hour_usd:
+      numericToNumber(
+        latestRates.get("storage_gib:second")?.price_usd,
+        "storage price",
+      ) * 3600,
+    source: "api",
+  }
+}
+
+async function getTeamBillingPricing(teamId: string): Promise<BillingPricing> {
+  const planKey = await getTeamPricingPlanKey(teamId)
+  return getBillingPricingForPlan(planKey)
+}
+
 export async function getBillingUsageAction(
   periodStart: string,
   periodEnd: string,
@@ -139,9 +288,11 @@ export async function getBillingUsageAction(
       rows: [],
     }
   }
+
   const billingMode: BillingUsageMode = billingExportEnabled
     ? "active"
-    : "preview"
+    : "shadow"
+  const pricing = await getTeamBillingPricing(teamId)
 
   const admin = createAdminClient()
   const { data, error } = await admin
@@ -159,6 +310,7 @@ export async function getBillingUsageAction(
   return {
     enabled: true,
     billing_mode: billingMode,
+    pricing,
     period_start: period.periodStart,
     period_end: period.periodEnd,
     rows: (data ?? []).map((row) => ({
@@ -175,5 +327,39 @@ export async function getBillingUsageAction(
       ),
       updated_at: row.updated_at as string,
     })),
+  }
+}
+
+export async function getBillingSettingsAction(): Promise<BillingSettingsResponse> {
+  const supabase = await createServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error("Not authenticated")
+
+  const teamId = await getTeamId(user.id)
+  if (!teamId) {
+    return {
+      enabled: false,
+      billing_mode: "disabled",
+    }
+  }
+
+  const billingExportEnabled = await getFeatureEnabled(
+    teamId,
+    BILLING_EXPORT_FLAG,
+  )
+
+  if (!billingExportEnabled) {
+    return {
+      enabled: false,
+      billing_mode: "disabled",
+    }
+  }
+
+  return {
+    enabled: true,
+    billing_mode: "active",
+    pricing: await getTeamBillingPricing(teamId),
   }
 }

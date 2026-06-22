@@ -1,17 +1,29 @@
 "use client"
 
 import { Button, Field, Input, Separator, useToast } from "@superserve/ui"
+import Link from "next/link"
 import { usePostHog } from "posthog-js/react"
 import { useEffect, useState } from "react"
 
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { PageHeader } from "@/components/page-header"
+import { useBillingSettings } from "@/hooks/use-billing-usage"
 import { useUser } from "@/hooks/use-user"
 import { SETTINGS_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
+function formatRate(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: value < 0.001 ? 6 : 4,
+    maximumFractionDigits: value < 0.001 ? 6 : 4,
+  }).format(value)
+}
+
 export default function SettingsPage() {
   const { user, loading } = useUser()
+  const { data: billingSettings } = useBillingSettings()
   const posthog = usePostHog()
   const { addToast } = useToast()
 
@@ -207,6 +219,79 @@ export default function SettingsPage() {
         </div>
 
         <Separator />
+
+        {billingSettings?.enabled && (
+          <>
+            {/* Billing */}
+            <div className="grid grid-cols-[240px_1fr] gap-12 px-8 py-8">
+              <div>
+                <h2 className="text-base font-medium text-foreground">
+                  Billing
+                </h2>
+                <p className="mt-1 text-xs text-muted">
+                  Plan, pricing, and usage estimates.
+                </p>
+              </div>
+              <div className="max-w-xl space-y-5">
+                <div className="border border-border px-4 py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        Usage-based billing
+                      </p>
+                      <p className="mt-1 text-xs leading-relaxed text-muted">
+                        Your team has billing enabled. Usage is metered from
+                        active vCPU seconds, active GiB memory seconds, and GiB
+                        storage seconds.
+                      </p>
+                    </div>
+                    <span className="bg-brand/10 px-2 py-1 font-mono text-xs text-brand uppercase">
+                      Active
+                    </span>
+                  </div>
+                  <dl className="mt-4 grid gap-3 font-mono text-xs md:grid-cols-3">
+                    <div>
+                      <dt className="text-muted uppercase">Compute</dt>
+                      <dd className="mt-1 text-foreground">
+                        {formatRate(
+                          billingSettings.pricing?.cpu_vcpu_hour_usd ?? 0,
+                        )}{" "}
+                        / vCPU-hour
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted uppercase">Memory</dt>
+                      <dd className="mt-1 text-foreground">
+                        {formatRate(
+                          billingSettings.pricing?.memory_gib_hour_usd ?? 0,
+                        )}{" "}
+                        / GiB-hour
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted uppercase">Storage</dt>
+                      <dd className="mt-1 text-foreground">
+                        {formatRate(
+                          billingSettings.pricing?.storage_gib_hour_usd ?? 0,
+                        )}{" "}
+                        / GiB-hour
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  render={<Link href="/plan-usage" />}
+                >
+                  View Usage
+                </Button>
+              </div>
+            </div>
+
+            <Separator />
+          </>
+        )}
 
         {/* Danger Zone */}
         <div className="grid grid-cols-[240px_1fr] gap-12 px-8 py-8">
