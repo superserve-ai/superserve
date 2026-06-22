@@ -194,6 +194,41 @@ describe("FileBrowser — download", () => {
       expect.objectContaining({ sandbox_id: "sbx-1" }),
     )
   })
+
+  it("shows a friendly message (not boxd internals) when an old sandbox can't zip a folder", async () => {
+    const user = userEvent.setup()
+    // Old boxd on pre-existing sandboxes rejects a directory zip with a 400 and
+    // an internal "use FilesystemService.ListDir for directories" message.
+    fetchSpy.mockImplementation((url: string) => {
+      if (url.includes("/api/sandboxes/") && url.includes("/files"))
+        return Promise.resolve(listingResponse(ENTRIES))
+      if (url.includes("format=zip"))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: "use FilesystemService.ListDir for directories",
+            }),
+            { status: 400, headers: { "content-type": "application/json" } },
+          ),
+        )
+      return Promise.resolve(new Response(null, { status: 404 }))
+    })
+    renderSection()
+    await user.click(
+      await screen.findByRole("button", { name: "Download proj as zip" }),
+    )
+    await waitFor(() =>
+      expect(mockAddToast).toHaveBeenCalledWith(
+        expect.stringContaining("Folder download isn't available"),
+        "error",
+      ),
+    )
+    // boxd's internal error string must never reach the user.
+    expect(mockAddToast).not.toHaveBeenCalledWith(
+      expect.stringContaining("ListDir"),
+      "error",
+    )
+  })
 })
 
 describe("FileBrowser — drag-drop upload", () => {

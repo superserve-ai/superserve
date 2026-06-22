@@ -197,11 +197,21 @@ export function FileBrowser({ sandbox }: FileBrowserProps) {
       // Swallow caller/unmount aborts — not a user-facing failure.
       if (err instanceof DOMException && err.name === "AbortError") return
       const message =
-        err instanceof DownloadError && err.status === 404
-          ? `No file found at "${target}"`
-          : err instanceof Error
-            ? err.message
-            : "Download failed"
+        // Pre-existing sandboxes run an older boxd that can't zip a directory:
+        // only single-file download and control-plane listing work on them, so
+        // it rejects a folder zip with a 400 carrying boxd's internal
+        // "use FilesystemService.ListDir for directories". Surface actionable
+        // copy instead of leaking that string.
+        entry.is_dir &&
+        err instanceof DownloadError &&
+        err.status === 400 &&
+        err.message.includes("ListDir")
+          ? "Folder download isn't available for this sandbox — it was created before the feature shipped. Recreate the sandbox to download folders; individual files still work."
+          : err instanceof DownloadError && err.status === 404
+            ? `No file found at "${target}"`
+            : err instanceof Error
+              ? err.message
+              : "Download failed"
       posthog.capture(FILE_EVENTS.DOWNLOAD_FAILED, {
         sandbox_id: sandbox.id,
         error: message,
