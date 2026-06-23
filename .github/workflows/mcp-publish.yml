@@ -14,10 +14,10 @@ name: Publish MCP Server
 #     case an org owner must do the FIRST `npm publish` manually once, after which
 #     this workflow handles every later version. Confirm with an @superserve npm
 #     org owner before the first run.
-#   - SDK on npm: this pins @superserve/sdk (a workspace:* dep) to the workspace
-#     version, mirroring cli-publish.yml. That exact SDK version must already be
-#     published to npm or `npm i @superserve/mcp` breaks. (As of writing the
-#     workspace is ahead of npm — release the SDK first.)
+#   - SDK on npm: @superserve/sdk is an EXTERNAL runtime dep (tsup leaves it
+#     unbundled). This workflow pins it to the LATEST version published on npm,
+#     so the published package always installs even if the workspace SDK bump
+#     hasn't been released yet.
 #   - mcp.superserve.ai must be live: server.json's remotes[].url points there and
 #     the registry expects the URL to be reachable.
 #   - Public repo: required for both npm provenance and the io.github.superserve-ai
@@ -65,14 +65,18 @@ jobs:
           jq --arg v "$VERSION" '.version = $v | (.packages[] | select(.registryType=="npm") | .version) = $v' server.json > server.json.tmp && mv server.json.tmp server.json
 
       # npm publish does NOT translate `workspace:*`, so a literal
-      # "@superserve/sdk": "workspace:*" would ship and break `npm i`. Rewrite it
-      # to the SDK's concrete version (same approach as cli-publish.yml). The
-      # matching @superserve/sdk release must already be on npm.
+      # "@superserve/sdk": "workspace:*" would ship and break `npm i`. Pin it to
+      # the latest version PUBLISHED on npm (the workspace may be ahead of the
+      # registry; the MCP server only uses the SDK's stable public API, so a
+      # caret range on the latest published version is correct and decouples
+      # this release from an unreleased SDK bump).
       - name: Pin workspace runtime deps to published versions
         working-directory: packages/mcp
         run: |
           set -euo pipefail
-          SDK_VERSION="$(jq -r .version ../sdk/package.json)"
+          SDK_VERSION="$(npm view @superserve/sdk version)"
+          test -n "$SDK_VERSION"
+          echo "Pinning @superserve/sdk to ^$SDK_VERSION"
           jq --arg v "^$SDK_VERSION" '.dependencies["@superserve/sdk"] = $v' package.json > package.json.tmp && mv package.json.tmp package.json
 
       - name: Build
