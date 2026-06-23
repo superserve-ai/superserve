@@ -37,14 +37,16 @@ export const metadata: Metadata = {
     description:
       "Deploy and manage cloud sandboxes with Superserve. Run code in isolated, secure environments.",
     siteName: "Superserve",
-    images: [{ url: "/og-image.png", width: 1200, height: 630 }],
+    images: [
+      { url: "https://www.superserve.ai/cover.png", width: 1200, height: 630 },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "Superserve Console",
     description:
       "Deploy and manage cloud sandboxes with Superserve. Run code in isolated, secure environments.",
-    images: ["/og-image.png"],
+    images: ["https://www.superserve.ai/cover.png"],
   },
   other: {
     "theme-color": "#0a0a0a",
