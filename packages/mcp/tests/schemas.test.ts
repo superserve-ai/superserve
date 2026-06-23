@@ -5,6 +5,7 @@ import { type ConnectedClient, connect } from "./harness.js"
 
 const EXPECTED_TOOLS = [
   "sandbox_create",
+  "sandbox_template_list",
   "sandbox_list",
   "sandbox_info",
   "sandbox_exec",
@@ -64,8 +65,23 @@ describe("tool registration", () => {
     }
   })
 
+  it("inlines every input schema — no $ref (strict clients/models can't resolve them)", () => {
+    for (const t of tools) {
+      expect(JSON.stringify(t.inputSchema)).not.toContain('"$ref"')
+    }
+  })
+
+  it("exposes sandbox_create metadata and env_vars as inline object schemas", () => {
+    const props = byName("sandbox_create")?.inputSchema?.properties
+    expect(props?.metadata?.type).toBe("object")
+    expect(props?.env_vars?.type).toBe("object")
+  })
+
   it("declares honest read-only / destructive / idempotent hints", () => {
     expect(byName("sandbox_list")?.annotations?.readOnlyHint).toBe(true)
+    expect(byName("sandbox_template_list")?.annotations?.readOnlyHint).toBe(
+      true,
+    )
     expect(byName("sandbox_info")?.annotations?.readOnlyHint).toBe(true)
     expect(byName("sandbox_files_read")?.annotations?.readOnlyHint).toBe(true)
     expect(byName("sandbox_files_list")?.annotations?.readOnlyHint).toBe(true)

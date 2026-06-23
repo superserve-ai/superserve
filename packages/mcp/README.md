@@ -101,20 +101,21 @@ It serves the MCP endpoint at `/` (POST) and a `GET /health` liveness probe. Con
 
 ## Tools
 
-| Tool                  | Description                                                                            |
-| --------------------- | -------------------------------------------------------------------------------------- |
-| `sandbox_create`      | Create a sandbox; returns its `id`.                                                    |
-| `sandbox_list`        | List sandboxes (active and paused), filterable by metadata.                            |
-| `sandbox_info`        | Get a sandbox's status, resources, and metadata (read-only).                           |
-| `sandbox_exec`        | Run a shell command; returns stdout, stderr, exit code. Auto-resumes a paused sandbox. |
-| `sandbox_files_read`  | Read a file (UTF-8 text or base64).                                                    |
-| `sandbox_files_write` | Create or overwrite a file.                                                            |
-| `sandbox_files_list`  | List a directory.                                                                      |
-| `sandbox_pause`       | Pause a sandbox (state preserved).                                                     |
-| `sandbox_resume`      | Resume a paused sandbox (usually unnecessary — exec auto-resumes).                     |
-| `sandbox_kill`        | Delete a sandbox.                                                                      |
+| Tool                    | Description                                                                            |
+| ----------------------- | -------------------------------------------------------------------------------------- |
+| `sandbox_create`        | Create a sandbox; returns its `id`.                                                    |
+| `sandbox_template_list` | List the templates (prebuilt base images) your team can create sandboxes from.         |
+| `sandbox_list`          | List sandboxes (active and paused), filterable by metadata.                            |
+| `sandbox_info`          | Get a sandbox's status, resources, and metadata (read-only).                           |
+| `sandbox_exec`          | Run a shell command; returns stdout, stderr, exit code. Auto-resumes a paused sandbox. |
+| `sandbox_files_read`    | Read a file (UTF-8 text or base64).                                                    |
+| `sandbox_files_write`   | Create or overwrite a file.                                                            |
+| `sandbox_files_list`    | List a directory.                                                                      |
+| `sandbox_pause`         | Pause a sandbox (state preserved).                                                     |
+| `sandbox_resume`        | Resume a paused sandbox (usually unnecessary — exec auto-resumes).                     |
+| `sandbox_kill`          | Delete a sandbox.                                                                      |
 
-All tools except `sandbox_create` and `sandbox_list` take a `sandbox_id`.
+All tools except `sandbox_create`, `sandbox_template_list`, and `sandbox_list` take a `sandbox_id`.
 
 ## Configuration
 

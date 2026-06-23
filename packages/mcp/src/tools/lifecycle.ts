@@ -12,7 +12,15 @@ import { formatSdkError } from "../lib/errors.js"
 import { toolError, toolOk } from "../lib/result.js"
 import { defineTool } from "../lib/tool.js"
 
-const metadataRecord = z.record(z.string(), z.string())
+/**
+ * A `Record<string, string>` schema. A factory — not a shared constant —
+ * because reusing one Zod instance for two fields of the *same* tool makes the
+ * SDK's zod→JSON-Schema converter dedupe the second into a `$ref`
+ * (`#/properties/...`). Strict clients/models (OpenAI function-calling, Gemini)
+ * don't resolve `$ref`, so the field silently becomes uncallable. A fresh
+ * instance per field keeps every property inlined.
+ */
+const stringRecord = () => z.record(z.string(), z.string())
 
 interface CreateArgs {
   name?: string
@@ -25,6 +33,10 @@ interface CreateArgs {
 
 interface ListArgs {
   metadata?: Record<string, string>
+}
+
+interface TemplateListArgs {
+  name_prefix?: string
 }
 
 interface IdArg {
@@ -51,7 +63,10 @@ export function registerLifecycleTools(
         from_template: z
           .string()
           .optional()
-          .describe("Template name or ID to base the sandbox on."),
+          .describe(
+            "Template (prebuilt base image) name or ID to base the sandbox on. " +
+              "Call sandbox_template_list first to see what your team has — don't guess a name.",
+          ),
         from_snapshot: z
           .string()
           .optional()
@@ -62,10 +77,10 @@ export function registerLifecycleTools(
           .positive()
           .optional()
           .describe("Idle timeout before the sandbox is auto-paused."),
-        metadata: metadataRecord
+        metadata: stringRecord()
           .optional()
           .describe("Arbitrary key/value tags for filtering in sandbox_list."),
-        env_vars: metadataRecord
+        env_vars: stringRecord()
           .optional()
           .describe(
             "Environment variables available to commands in the sandbox.",
@@ -105,6 +120,52 @@ export function registerLifecycleTools(
     },
   )
 
+  defineTool<TemplateListArgs>(
+    server,
+    "sandbox_template_list",
+    {
+      title: "List templates",
+      description:
+        "List the templates (prebuilt base images) your team can launch sandboxes from. Call this " +
+        "before sandbox_create to choose a from_template instead of guessing a name. Official " +
+        "templates are curated by Superserve, available to every team, and named with the reserved " +
+        "`superserve/` prefix — e.g. `superserve/python-3.11`, `superserve/node-22`, " +
+        "`superserve/openclaw`; names without that prefix are your team's own templates. Returns " +
+        "each template's name, status, and resources; only templates whose status is ready can be used.",
+      inputSchema: {
+        name_prefix: z
+          .string()
+          .optional()
+          .describe(
+            "Only return templates whose name starts with this prefix — e.g. 'superserve/' " +
+              "for the official curated templates, or 'python'.",
+          ),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    async ({ name_prefix }) => {
+      try {
+        const templates = await client.listTemplates(name_prefix)
+        const text = templates.length
+          ? templates
+              .map(
+                (t) =>
+                  `${t.name}\t${t.status}\t${t.vcpu} vCPU / ${t.memoryMib} MiB`,
+              )
+              .join("\n")
+          : "(no templates)"
+        return toolOk(text, { templates })
+      } catch (e) {
+        return toolError(formatSdkError(e))
+      }
+    },
+  )
+
   defineTool<ListArgs>(
     server,
     "sandbox_list",
@@ -114,7 +175,7 @@ export function registerLifecycleTools(
         "List your sandboxes (active and paused), optionally filtered by metadata. " +
         "Returns ids, names, and statuses.",
       inputSchema: {
-        metadata: metadataRecord
+        metadata: stringRecord()
           .optional()
           .describe(
             "Filter to sandboxes whose metadata matches these key/values.",

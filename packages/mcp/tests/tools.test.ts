@@ -133,3 +133,77 @@ describe("tool calls (in-memory, fake client)", () => {
     expect(r.text).toMatch(/sandbox_list/)
   })
 })
+
+describe("sandbox_template_list (in-memory, fake client)", () => {
+  let fake: ReturnType<typeof createFakeClient>
+  let conn: ConnectedClient
+
+  beforeEach(async () => {
+    fake = createFakeClient()
+    fake.templates.push(
+      {
+        id: "tpl-1",
+        name: "python-3.11",
+        status: "ready",
+        vcpu: 2,
+        memoryMib: 2048,
+        diskMib: 8192,
+      },
+      {
+        id: "tpl-2",
+        name: "node-20",
+        status: "ready",
+        vcpu: 2,
+        memoryMib: 2048,
+        diskMib: 8192,
+      },
+      {
+        id: "tpl-3",
+        name: "python-2.7",
+        status: "failed",
+        vcpu: 1,
+        memoryMib: 1024,
+        diskMib: 4096,
+      },
+    )
+    conn = await connect(fake.client)
+  })
+  afterEach(async () => {
+    await conn.close()
+  })
+
+  it("lists every template with its name and status", async () => {
+    const r = await callTool(conn.client, "sandbox_template_list")
+    expect(r.isError).toBe(false)
+    const names = (r.structured.templates as Array<{ name: string }>)
+      .map((t) => t.name)
+      .toSorted()
+    expect(names).toEqual(["node-20", "python-2.7", "python-3.11"])
+    // The model needs the name (to pass as from_template) and the status.
+    expect(r.text).toContain("python-3.11")
+    expect(r.text).toContain("ready")
+    expect(r.text).toContain("failed")
+  })
+
+  it("filters by name_prefix", async () => {
+    const r = await callTool(conn.client, "sandbox_template_list", {
+      name_prefix: "python",
+    })
+    const names = (r.structured.templates as Array<{ name: string }>)
+      .map((t) => t.name)
+      .toSorted()
+    expect(names).toEqual(["python-2.7", "python-3.11"])
+  })
+
+  it("returns an empty marker when the team has no templates", async () => {
+    const empty = await connect(createFakeClient().client)
+    try {
+      const r = await callTool(empty.client, "sandbox_template_list")
+      expect(r.isError).toBe(false)
+      expect(r.text).toBe("(no templates)")
+      expect(r.structured.templates).toEqual([])
+    } finally {
+      await empty.close()
+    }
+  })
+})

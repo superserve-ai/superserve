@@ -3,7 +3,11 @@
 import { NotFoundError } from "@superserve/sdk"
 import type { CommandResult, SandboxInfo, SandboxStatus } from "@superserve/sdk"
 
-import type { SandboxClient, SandboxSummary } from "../src/client.js"
+import type {
+  SandboxClient,
+  SandboxSummary,
+  TemplateSummary,
+} from "../src/client.js"
 import type { DirEntry } from "../src/lib/listing.js"
 
 interface FakeSandbox {
@@ -17,10 +21,13 @@ interface FakeSandbox {
 export interface FakeClient {
   client: SandboxClient
   sandboxes: Map<string, FakeSandbox>
+  /** Seed-able template catalog returned by `listTemplates`. */
+  templates: TemplateSummary[]
 }
 
 export function createFakeClient(): FakeClient {
   const sandboxes = new Map<string, FakeSandbox>()
+  const templates: TemplateSummary[] = []
   let counter = 0
 
   const must = (id: string): FakeSandbox => {
@@ -58,6 +65,11 @@ export function createFakeClient(): FakeClient {
         )
       }
       return xs.map(summarize)
+    },
+
+    async listTemplates(namePrefix) {
+      if (!namePrefix) return [...templates]
+      return templates.filter((t) => t.name.startsWith(namePrefix))
     },
 
     async info(id) {
@@ -135,5 +147,5 @@ export function createFakeClient(): FakeClient {
     },
   }
 
-  return { client, sandboxes }
+  return { client, sandboxes, templates }
 }

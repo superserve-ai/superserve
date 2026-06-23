@@ -13,8 +13,8 @@
  * do not auto-retry on a stale token).
  */
 
-import { NotFoundError, Sandbox, SandboxError } from "@superserve/sdk"
-import type { CommandResult, SandboxInfo } from "@superserve/sdk"
+import { NotFoundError, Sandbox, SandboxError, Template } from "@superserve/sdk"
+import type { CommandResult, SandboxInfo, TemplateInfo } from "@superserve/sdk"
 
 import type { ClientConfig } from "./config.js"
 import {
@@ -32,6 +32,15 @@ export interface SandboxSummary {
   name: string
   status: string
   metadata: Record<string, string>
+}
+
+export interface TemplateSummary {
+  id: string
+  name: string
+  status: string
+  vcpu: number
+  memoryMib: number
+  diskMib: number
 }
 
 export interface CreateInput {
@@ -52,6 +61,7 @@ export interface ExecInput {
 export interface SandboxClient {
   create(input: CreateInput): Promise<SandboxSummary>
   list(metadata?: Record<string, string>): Promise<SandboxSummary[]>
+  listTemplates(namePrefix?: string): Promise<TemplateSummary[]>
   info(id: string): Promise<SandboxInfo>
   exec(id: string, command: string, opts: ExecInput): Promise<CommandResult>
   readFile(id: string, path: string): Promise<Uint8Array>
@@ -72,6 +82,17 @@ function defaultName(): string {
 
 function toSummary(s: SandboxInfo): SandboxSummary {
   return { id: s.id, name: s.name, status: s.status, metadata: s.metadata }
+}
+
+function toTemplateSummary(t: TemplateInfo): TemplateSummary {
+  return {
+    id: t.id,
+    name: t.name,
+    status: t.status,
+    vcpu: t.vcpu,
+    memoryMib: t.memoryMib,
+    diskMib: t.diskMib,
+  }
 }
 
 /** Real client backed by `@superserve/sdk`. */
@@ -100,6 +121,12 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
     async list(metadata) {
       const xs = await Sandbox.list({ metadata, ...conn })
       return xs.map(toSummary)
+    },
+
+    // Control-plane, team-scoped (API key) — templates are not sandbox output.
+    async listTemplates(namePrefix) {
+      const xs = await Template.list({ namePrefix, ...conn })
+      return xs.map(toTemplateSummary)
     },
 
     // Read-only: resolved via list() so it never resumes a paused sandbox
