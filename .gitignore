@@ -56,3 +56,4 @@ devcontainer.json
 
 # misc WSL files
 *:Zone.Identifier
+.vercel

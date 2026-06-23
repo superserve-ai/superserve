@@ -1,0 +1,110 @@
+name: Publish MCP Server
+
+# Tag-triggered. Use tags like `mcp-v0.1.0` so this does NOT collide with the
+# CLI/SDK release flows that listen on `v*` (cli-publish.yml, release.yml).
+#
+# What it does, in order:
+#   1. npm publish @superserve/mcp (with provenance)
+#   2. publish server.json to the official MCP Registry via GitHub OIDC
+#
+# PREREQUISITES (see spec/2026-06-23-mcp-launch-runbook.md):
+#   - NPM access: the NPM_TOKEN secret must be able to create a NEW package under
+#     the @superserve org. A granular token scoped to only the EXISTING packages
+#     (@superserve/sdk, @superserve/cli) CANNOT create @superserve/mcp — in that
+#     case an org owner must do the FIRST `npm publish` manually once, after which
+#     this workflow handles every later version. Confirm with an @superserve npm
+#     org owner before the first run.
+#   - SDK on npm: this pins @superserve/sdk (a workspace:* dep) to the workspace
+#     version, mirroring cli-publish.yml. That exact SDK version must already be
+#     published to npm or `npm i @superserve/mcp` breaks. (As of writing the
+#     workspace is ahead of npm — release the SDK first.)
+#   - mcp.superserve.ai must be live: server.json's remotes[].url points there and
+#     the registry expects the URL to be reachable.
+#   - Public repo: required for both npm provenance and the io.github.superserve-ai
+#     GitHub-namespace OIDC ownership proof.
+
+on:
+  push:
+    tags: ["mcp-v*"]
+
+jobs:
+  publish:
+    name: Publish @superserve/mcp + MCP Registry
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # GitHub OIDC for mcp-publisher AND npm provenance
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      # npm CLI (>= 9.5, for --provenance) and registry auth for the publish step.
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "lts/*"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # Derive the version from the tag (mcp-v0.1.0 -> 0.1.0) and write it into
+      # both package.json and server.json so the npm artifact and the registry
+      # metadata agree.
+      - name: Set version from tag
+        working-directory: packages/mcp
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF#refs/tags/mcp-v}"
+          jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
+          jq --arg v "$VERSION" '.version = $v | (.packages[] | select(.registryType=="npm") | .version) = $v' server.json > server.json.tmp && mv server.json.tmp server.json
+
+      # npm publish does NOT translate `workspace:*`, so a literal
+      # "@superserve/sdk": "workspace:*" would ship and break `npm i`. Rewrite it
+      # to the SDK's concrete version (same approach as cli-publish.yml). The
+      # matching @superserve/sdk release must already be on npm.
+      - name: Pin workspace runtime deps to published versions
+        working-directory: packages/mcp
+        run: |
+          set -euo pipefail
+          SDK_VERSION="$(jq -r .version ../sdk/package.json)"
+          jq --arg v "^$SDK_VERSION" '.dependencies["@superserve/sdk"] = $v' package.json > package.json.tmp && mv package.json.tmp package.json
+
+      - name: Build
+        run: bunx turbo run build --filter=@superserve/mcp
+
+      - name: Publish package to npm (with provenance)
+        working-directory: packages/mcp
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
+          npm publish --access public --provenance
+          rm .npmrc
+
+      # --- Official MCP Registry ---
+
+      - name: Install mcp-publisher
+        run: |
+          set -euo pipefail
+          OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+          curl -fL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${OS}_${ARCH}.tar.gz" | tar xz mcp-publisher
+
+      - name: Validate server.json
+        working-directory: packages/mcp
+        run: ${{ github.workspace }}/mcp-publisher validate
+
+      - name: Authenticate to MCP Registry (GitHub OIDC)
+        working-directory: packages/mcp
+        run: ${{ github.workspace }}/mcp-publisher login github-oidc
+
+      - name: Publish to MCP Registry
+        working-directory: packages/mcp
+        run: ${{ github.workspace }}/mcp-publisher publish
