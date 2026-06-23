@@ -129,6 +129,7 @@
         "groups": [
           {
             "group": "MCP",
+            "tag": "NEW",
             "pages": ["integrations/mcp"]
           },
           {

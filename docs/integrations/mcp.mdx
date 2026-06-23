@@ -7,7 +7,7 @@ icon: "plug"
 
 The Superserve **MCP server** (`@superserve/mcp`) exposes sandbox primitives as [Model Context Protocol](https://modelcontextprotocol.io) tools, so any MCP-capable client — Claude, Cursor, VS Code, Windsurf — can create sandboxes, run commands, and read and write files in an isolated Firecracker microVM.
 
-Run it two ways: **locally** over stdio via `npx`, or against the **hosted** endpoint at `https://mcp.superserve.ai` with no local install. Both authenticate with your `SUPERSERVE_API_KEY` and target a sandbox per call by id. It's a thin wrapper over the [TypeScript SDK](/sdk-reference/sandbox), so the per-sandbox data-plane token never reaches the model.
+Run it two ways: **locally** over stdio via `npx`, or against the **hosted** endpoint at `https://mcp.superserve.ai` with no local install. Both authenticate with your `SUPERSERVE_API_KEY` and target a sandbox per call by ID. It's a thin wrapper over the [TypeScript SDK](/sdk-reference/sandbox), so the per-sandbox data-plane token never reaches the model.
 
 ## Quickstart
 
@@ -186,7 +186,7 @@ Same ten tools and behavior as the local server — the only difference is trans
 | `sandbox_resume`      | Resume a paused sandbox (usually unnecessary — exec auto-resumes).                                             |
 | `sandbox_kill`        | Permanently delete a sandbox.                                                                                  |
 
-Every tool takes a `sandbox_id` except `sandbox_create` and `sandbox_list`. Start with one of those to get an id, then thread it into later calls. Read-only tools (`sandbox_list`, `sandbox_info`, `sandbox_files_read`, `sandbox_files_list`) are annotated so clients can skip confirmation prompts; `sandbox_kill` is annotated destructive.
+Every tool takes a `sandbox_id` except `sandbox_create` and `sandbox_list`. Start with one of those to get an ID, then thread it into later calls. Read-only tools (`sandbox_list`, `sandbox_info`, `sandbox_files_read`, `sandbox_files_list`) are annotated so clients can skip confirmation prompts; `sandbox_kill` is annotated destructive.
 
 ## Example
 
@@ -212,16 +212,16 @@ When it's done, the agent can `sandbox_pause` (state preserved, cheaper to keep 
 | `SUPERSERVE_API_KEY`  | Yes      | Your Superserve API key (starts with `ss_live_`).                         |
 | `SUPERSERVE_BASE_URL` | No       | Override the control-plane URL (defaults to `https://api.superserve.ai`). |
 
-## Behavior & limits
+## Behavior and limits
 
 - **Auto-resume.** `sandbox_exec` and the file tools transparently resume a paused sandbox, so agents never need to call `sandbox_resume` first. `sandbox_resume` exists only to warm a sandbox explicitly.
 - **Output is capped for context.** `sandbox_exec` truncates stdout and stderr to 32 KiB each; `sandbox_files_read` truncates at 1 MiB. A truncated result sets `truncated: true` and reports the original byte length.
-- **Default command timeout is 60s**, overridable per call with `timeout_ms`.
+- **Default command timeout is 60s.** Override it per call with `timeout_ms`.
 - **Errors are actionable.** A failed tool call returns a short message telling the agent what to do next — e.g. _"Sandbox quota reached. Pause or kill a sandbox, or retry later."_ — rather than a raw stack trace, so the agent can self-correct.
 
 ## How it works
 
-The server wraps the [TypeScript SDK](/sdk-reference/sandbox) and only ever holds your control-plane `SUPERSERVE_API_KEY`. Each tool call connects to the target sandbox by id; the SDK manages the per-sandbox **data-plane access token** internally and rotates it on resume, so it's never exposed to the model or returned in tool output. Tools are stateless — there's no hidden "current sandbox" — which keeps behavior predictable across multi-turn and parallel tool calls.
+The server wraps the [TypeScript SDK](/sdk-reference/sandbox) and only ever holds your control-plane `SUPERSERVE_API_KEY`. Each tool call connects to the target sandbox by ID; the SDK manages the per-sandbox **data-plane access token** internally and rotates it on resume, so it's never exposed to the model or returned in tool output. Tools are stateless — there's no hidden "current sandbox" — which keeps behavior predictable across multi-turn and parallel tool calls.
 
 ## Troubleshooting
 
