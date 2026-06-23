@@ -86,6 +86,13 @@ export interface CommandOptions {
   onStdout?: (data: string) => void
   onStderr?: (data: string) => void
   signal?: AbortSignal
+  /**
+   * Cap (bytes) on the response buffered by a non-streaming `run()`. Defaults to
+   * 10 MiB (`MAX_EXEC_RESPONSE_BYTES`). Exceeding it throws `ValidationError`
+   * rather than buffering unbounded output from an untrusted sandbox. For
+   * genuinely large output, stream via `onStdout`/`onStderr`.
+   */
+  maxOutputBytes?: number
 }
 
 export interface SpawnOptions {
