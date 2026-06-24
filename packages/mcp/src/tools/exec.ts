@@ -6,6 +6,7 @@ import { z } from "zod"
 import type { SandboxClient } from "../client.js"
 import {
   DEFAULT_EXEC_TIMEOUT_MS,
+  MAX_EXEC_TIMEOUT_MS,
   MAX_STDERR_BYTES,
   MAX_STDOUT_BYTES,
 } from "../constants.js"
@@ -56,7 +57,7 @@ export function registerExecTool(
           .positive()
           .optional()
           .describe(
-            `Command timeout in milliseconds (default ${DEFAULT_EXEC_TIMEOUT_MS}).`,
+            `Command timeout in milliseconds (default ${DEFAULT_EXEC_TIMEOUT_MS}, clamped to a max of ${MAX_EXEC_TIMEOUT_MS}).`,
           ),
       },
       annotations: {
@@ -68,10 +69,15 @@ export function registerExecTool(
     },
     async ({ sandbox_id, command, cwd, env, timeout_ms }) => {
       try {
+        // Clamp so a caller cannot hold a hosted invocation open indefinitely.
+        const timeoutMs = Math.min(
+          timeout_ms ?? DEFAULT_EXEC_TIMEOUT_MS,
+          MAX_EXEC_TIMEOUT_MS,
+        )
         const res = await client.exec(sandbox_id, command, {
           cwd,
           env,
-          timeoutMs: timeout_ms ?? DEFAULT_EXEC_TIMEOUT_MS,
+          timeoutMs,
         })
         const out = truncateText(res.stdout, MAX_STDOUT_BYTES)
         const err = truncateText(res.stderr, MAX_STDERR_BYTES)

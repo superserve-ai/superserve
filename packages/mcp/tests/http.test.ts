@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { SERVER_NAME } from "../src/constants.js"
+import { MAX_REQUEST_BYTES, SERVER_NAME } from "../src/constants.js"
 import { handleMcpRequest } from "../src/http.js"
 import { extractBearerToken, resolveBaseUrl } from "../src/lib/httpAuth.js"
 
@@ -64,6 +64,20 @@ describe("handleMcpRequest", () => {
     expect(res.headers.get("www-authenticate")).toMatch(/Bearer/)
     const body = (await res.json()) as { error: { message: string } }
     expect(body.error.message).toMatch(/SUPERSERVE_API_KEY/)
+  })
+
+  it("rejects an oversized request body with 413 (before any network call)", async () => {
+    const res = await handleMcpRequest(
+      new Request("https://mcp.superserve.ai/", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer ss_live_test",
+        },
+        body: "x".repeat(MAX_REQUEST_BYTES + 1),
+      }),
+    )
+    expect(res.status).toBe(413)
   })
 
   it("completes an MCP initialize handshake over HTTP (no network)", async () => {

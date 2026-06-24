@@ -1,9 +1,10 @@
 /** In-memory fake {@link SandboxClient} for tests (no network, no credentials). */
 
-import { NotFoundError } from "@superserve/sdk"
+import { NotFoundError, ValidationError } from "@superserve/sdk"
 import type { CommandResult, SandboxInfo, SandboxStatus } from "@superserve/sdk"
 
 import type {
+  ExecInput,
   SandboxClient,
   SandboxSummary,
   TemplateSummary,
@@ -23,11 +24,14 @@ export interface FakeClient {
   sandboxes: Map<string, FakeSandbox>
   /** Seed-able template catalog returned by `listTemplates`. */
   templates: TemplateSummary[]
+  /** The options the most recent `exec` call received (for asserting clamps). */
+  lastExec: { command: string; opts: ExecInput } | undefined
 }
 
 export function createFakeClient(): FakeClient {
   const sandboxes = new Map<string, FakeSandbox>()
   const templates: TemplateSummary[] = []
+  const fake: Pick<FakeClient, "lastExec"> = { lastExec: undefined }
   let counter = 0
 
   const must = (id: string): FakeSandbox => {
@@ -87,19 +91,26 @@ export function createFakeClient(): FakeClient {
       return info
     },
 
-    async exec(id, command) {
+    async exec(id, command, opts) {
       const sb = must(id)
       sb.status = "active"
+      fake.lastExec = { command, opts }
       const result: CommandResult = command.startsWith("echo ")
         ? { stdout: `${command.slice(5)}\n`, stderr: "", exitCode: 0 }
         : { stdout: `ran: ${command}\n`, stderr: "", exitCode: 0 }
       return result
     },
 
-    async readFile(id, path) {
+    async readFile(id, path, maxBytes) {
       const sb = must(id)
       const data = sb.files.get(path)
       if (!data) throw new NotFoundError(`File ${path} not found`)
+      // Mirror the SDK: a capped read throws rather than returning a partial body.
+      if (maxBytes !== undefined && data.byteLength > maxBytes) {
+        throw new ValidationError(
+          `Response body exceeds the maximum size of ${maxBytes} bytes`,
+        )
+      }
       return data
     },
 
@@ -147,5 +158,12 @@ export function createFakeClient(): FakeClient {
     },
   }
 
-  return { client, sandboxes, templates }
+  return {
+    client,
+    sandboxes,
+    templates,
+    get lastExec() {
+      return fake.lastExec
+    },
+  }
 }

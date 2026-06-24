@@ -1,13 +1,41 @@
 /** `sandbox_files_read`, `sandbox_files_write`, `sandbox_files_list`. */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import { ValidationError } from "@superserve/sdk"
 import { z } from "zod"
 
 import type { SandboxClient } from "../client.js"
-import { MAX_FILE_BYTES } from "../constants.js"
+import { MAX_FILE_BYTES, MAX_WRITE_BYTES } from "../constants.js"
 import { formatSdkError } from "../lib/errors.js"
 import { toolError, toolOk } from "../lib/result.js"
 import { defineTool } from "../lib/tool.js"
+
+const mib = (bytes: number): string =>
+  `${Math.round(bytes / (1024 * 1024))} MiB`
+
+/** Guidance returned when a read exceeds {@link MAX_FILE_BYTES}. */
+function fileTooLargeMessage(path: string): string {
+  return (
+    `${path} is larger than the ${mib(MAX_FILE_BYTES)} sandbox_files_read limit. ` +
+    `Read a slice with sandbox_exec instead — e.g. \`head -c ${MAX_FILE_BYTES} ${path}\` for text, ` +
+    `or \`base64 -w0 ${path}\` piped through \`head\` for binary — or download the whole file with the Superserve SDK/CLI.`
+  )
+}
+
+/** Guidance returned when a write exceeds {@link MAX_WRITE_BYTES}. */
+function writeTooLargeMessage(path: string, bytes: number): string {
+  return (
+    `Refusing to write ${bytes} bytes to ${path}: sandbox_files_write inline content is limited to ${mib(MAX_WRITE_BYTES)}. ` +
+    `Upload larger files with the Superserve SDK/CLI, or append in smaller chunks via sandbox_exec.`
+  )
+}
+
+/** Decoded size of `data` in bytes (text is measured as UTF-8). */
+function byteLengthOf(data: string | Uint8Array): number {
+  return typeof data === "string"
+    ? Buffer.byteLength(data, "utf8")
+    : data.byteLength
+}
 
 type Encoding = "text" | "base64"
 
@@ -49,7 +77,7 @@ export function registerFileTools(
       title: "Read a file from a sandbox",
       description:
         "Read a file from a sandbox. Returns UTF-8 text by default, or base64 when encoding is set to base64 " +
-        "(use it for binary files). Large files are truncated.",
+        "(use it for binary files). Files larger than 1 MiB are rejected — read a slice with sandbox_exec instead.",
       inputSchema: {
         sandbox_id: z.string().describe("ID of the sandbox."),
         path: absolutePath,
@@ -64,26 +92,29 @@ export function registerFileTools(
     },
     async ({ sandbox_id, path, encoding: enc }) => {
       try {
-        const bytes = await client.readFile(sandbox_id, path)
-        const truncated = bytes.byteLength > MAX_FILE_BYTES
-        const slice = truncated ? bytes.subarray(0, MAX_FILE_BYTES) : bytes
+        // Cap the download at the SDK boundary so a hostile/accidental large
+        // file never buffers up to the SDK's 2 GiB default in this process.
+        const bytes = await client.readFile(sandbox_id, path, MAX_FILE_BYTES)
         const content =
           enc === "base64"
-            ? Buffer.from(slice).toString("base64")
-            : new TextDecoder().decode(slice)
+            ? Buffer.from(bytes).toString("base64")
+            : new TextDecoder().decode(bytes)
         const structured = {
           path,
           content,
           encoding: enc,
           bytes: bytes.byteLength,
-          truncated,
         }
-        const note = truncated ? " (truncated)" : ""
         return toolOk(
-          `read ${bytes.byteLength} bytes from ${path}${note}\n${content}`,
+          `read ${bytes.byteLength} bytes from ${path}\n${content}`,
           structured,
         )
       } catch (e) {
+        // The SDK rejects an over-cap download with ValidationError; turn that
+        // into actionable guidance rather than a generic "invalid request".
+        if (e instanceof ValidationError && /maximum size/i.test(e.message)) {
+          return toolError(fileTooLargeMessage(path))
+        }
         return toolError(formatSdkError(e))
       }
     },
@@ -96,7 +127,7 @@ export function registerFileTools(
       title: "Write a file to a sandbox",
       description:
         "Write a file to a sandbox, creating or overwriting it. Parent directories are created automatically. " +
-        "Set encoding to base64 to write binary content.",
+        "Set encoding to base64 to write binary content. Inline content is limited to 8 MiB; upload larger files with the SDK/CLI.",
       inputSchema: {
         sandbox_id: z.string().describe("ID of the sandbox."),
         path: absolutePath,
@@ -120,11 +151,13 @@ export function registerFileTools(
           enc === "base64"
             ? new Uint8Array(Buffer.from(content, "base64"))
             : content
+        const bytes = byteLengthOf(data)
+        // Bound the write before touching the network so a large (post-decode)
+        // payload cannot pin host memory on the hosted server.
+        if (bytes > MAX_WRITE_BYTES) {
+          return toolError(writeTooLargeMessage(path, bytes))
+        }
         await client.writeFile(sandbox_id, path, data)
-        const bytes =
-          typeof data === "string"
-            ? Buffer.byteLength(data, "utf8")
-            : data.byteLength
         return toolOk(`wrote ${bytes} bytes to ${path}`, { path, bytes })
       } catch (e) {
         return toolError(formatSdkError(e))

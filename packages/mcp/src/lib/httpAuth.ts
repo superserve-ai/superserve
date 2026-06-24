@@ -59,6 +59,10 @@ export const JSON_RPC = {
   SERVER_ERROR: -32000,
   /** Unauthenticated — missing or malformed bearer token. */
   UNAUTHORIZED: -32001,
+  /** Request body exceeded the size cap. */
+  PAYLOAD_TOO_LARGE: -32002,
+  /** Malformed JSON body (standard JSON-RPC parse error code). */
+  PARSE_ERROR: -32700,
   /** Internal error. */
   INTERNAL: -32603,
 } as const

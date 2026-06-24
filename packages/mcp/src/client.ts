@@ -64,7 +64,12 @@ export interface SandboxClient {
   listTemplates(namePrefix?: string): Promise<TemplateSummary[]>
   info(id: string): Promise<SandboxInfo>
   exec(id: string, command: string, opts: ExecInput): Promise<CommandResult>
-  readFile(id: string, path: string): Promise<Uint8Array>
+  /**
+   * Read a file as raw bytes. `maxBytes`, when set, is passed to the SDK so the
+   * download is capped at the source instead of after fully buffering it — the
+   * SDK throws `ValidationError` rather than returning a partial body.
+   */
+  readFile(id: string, path: string, maxBytes?: number): Promise<Uint8Array>
   writeFile(
     id: string,
     path: string,
@@ -143,9 +148,9 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
       return sb.commands.run(command, opts)
     },
 
-    async readFile(id, path) {
+    async readFile(id, path, maxBytes) {
       const sb = await Sandbox.connect(id, conn)
-      return sb.files.read(path)
+      return sb.files.read(path, maxBytes !== undefined ? { maxBytes } : {})
     },
 
     async writeFile(id, path, content) {

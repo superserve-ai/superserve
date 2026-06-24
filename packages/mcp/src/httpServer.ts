@@ -18,7 +18,7 @@ import type { IncomingMessage, ServerResponse } from "node:http"
 
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
 
-import { SERVER_NAME, SERVER_VERSION } from "./constants.js"
+import { MAX_REQUEST_BYTES, SERVER_NAME, SERVER_VERSION } from "./constants.js"
 import {
   buildServerForKey,
   extractBearerToken,
@@ -26,6 +26,11 @@ import {
   resolveBaseUrl,
   UNAUTHORIZED_MESSAGE,
 } from "./lib/httpAuth.js"
+import {
+  parseJsonBody,
+  PAYLOAD_TOO_LARGE_MESSAGE,
+  readNodeRequestBody,
+} from "./lib/httpBody.js"
 
 const DEFAULT_PORT = 8080
 
@@ -54,6 +59,29 @@ async function handleMcp(
     return
   }
 
+  // Bound and parse the body before the transport touches it: a hostile caller
+  // must not be able to exhaust memory with a giant JSON-RPC payload.
+  const buffered = await readNodeRequestBody(req, MAX_REQUEST_BYTES)
+  if (!buffered.ok) {
+    writeJsonRpcError(
+      res,
+      413,
+      JSON_RPC.PAYLOAD_TOO_LARGE,
+      PAYLOAD_TOO_LARGE_MESSAGE,
+    )
+    return
+  }
+  const parsed = parseJsonBody(buffered.bytes)
+  if (!parsed) {
+    writeJsonRpcError(
+      res,
+      400,
+      JSON_RPC.PARSE_ERROR,
+      "Parse error: invalid JSON body.",
+    )
+    return
+  }
+
   const server = buildServerForKey(apiKey, resolveBaseUrl())
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // stateless
@@ -65,7 +93,7 @@ async function handleMcp(
     void server.close()
   })
   await server.connect(transport)
-  await transport.handleRequest(req, res)
+  await transport.handleRequest(req, res, parsed.value)
 }
 
 function listener(req: IncomingMessage, res: ServerResponse): void {
