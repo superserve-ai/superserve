@@ -118,6 +118,13 @@ class TestMapApiError:
         assert "file not found" in str(err)
         assert err.code is None
 
+    def test_unexpected_error_type_does_not_raise(self) -> None:
+        # A malformed body (e.g. a list under "error") must not crash the
+        # mapper -- it runs precisely when a request already failed.
+        err = map_api_error(500, {"error": ["a", "b"]})
+        assert isinstance(err, ServerError)
+        assert err.code is None
+
 
 class TestErrorHierarchy:
     def test_all_extend_sandbox_error(self) -> None:
