@@ -236,8 +236,8 @@
   },
   "integrations": {
     "posthog": {
-      "apiKey": "phc_gjpDKKQJAnkxkqLrPGrAhoariKsaHNuTpI5rVhkYre",
-      "apiHost": "https://us.i.posthog.com"
+      "apiKey": "phc_gjpDKKKQJAnkxkqLrPGrAhoariKsaHNuTpI5rVhkYre",
+      "apiHost": "https://p.superserve.ai"
     }
   }
 }
