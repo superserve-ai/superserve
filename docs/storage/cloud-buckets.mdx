@@ -1,0 +1,204 @@
+---
+title: "Cloud buckets"
+sidebarTitle: Cloud buckets
+description: Mount an S3, GCS, or R2 bucket inside a Superserve sandbox with a FUSE driver to read and write object storage as ordinary files.
+---
+
+Mount a cloud storage bucket inside a sandbox with a FUSE driver so your code reads and writes objects as ordinary files. This talks to the bucket directly, with no caching layer in between, which is the simplest option when a sandbox just needs to reach an existing S3, GCS, or R2 bucket. For a faster, cache-backed filesystem over object storage, use [Archil](/storage/archil); for a versioned, branchable workspace, use [Mesa](/storage/mesa).
+
+The setup has two parts: bake the FUSE driver into a [template](/templates/overview), then mount at runtime with `sandbox.commands.run`.
+
+<Note>
+These commands run as root (the template's default user, unless a [`user` build step](/templates/build-spec#user-switch-user) changed it), so none of them use `sudo`.
+</Note>
+
+## Amazon S3
+
+Install [`s3fs`](https://github.com/s3fs-fuse/s3fs-fuse) in a template.
+
+<CodeGroup>
+```typescript TypeScript
+import { Template } from "@superserve/sdk"
+
+const template = await Template.create({
+  name: "s3-base",
+  from: "ubuntu:22.04",
+  steps: [{ run: "apt-get update && apt-get install -y s3fs" }],
+})
+
+await template.waitUntilReady()
+```
+
+```python Python
+from superserve import Template, RunStep
+
+template = Template.create(
+    name="s3-base",
+    from_="ubuntu:22.04",
+    steps=[RunStep(run="apt-get update && apt-get install -y s3fs")],
+)
+
+template.wait_until_ready()
+```
+</CodeGroup>
+
+At runtime, write the credentials file `s3fs` expects (`ACCESS_KEY_ID:SECRET_ACCESS_KEY`), then mount the bucket.
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({ name: "s3-workspace", fromTemplate: "s3-base" })
+
+await sandbox.commands.run("mkdir -p /mnt/bucket")
+await sandbox.files.write(
+  "/root/.passwd-s3fs",
+  `${process.env.AWS_ACCESS_KEY_ID}:${process.env.AWS_SECRET_ACCESS_KEY}`,
+)
+await sandbox.commands.run("chmod 600 /root/.passwd-s3fs")
+await sandbox.commands.run(
+  "s3fs my-bucket /mnt/bucket -o allow_other -o passwd_file=/root/.passwd-s3fs -o endpoint=us-east-1 -o url=https://s3.us-east-1.amazonaws.com",
+)
+```
+
+```python Python
+import os
+from superserve import Sandbox
+
+sandbox = Sandbox.create(name="s3-workspace", from_template="s3-base")
+
+sandbox.commands.run("mkdir -p /mnt/bucket")
+sandbox.files.write(
+    "/root/.passwd-s3fs",
+    f"{os.environ['AWS_ACCESS_KEY_ID']}:{os.environ['AWS_SECRET_ACCESS_KEY']}",
+)
+sandbox.commands.run("chmod 600 /root/.passwd-s3fs")
+sandbox.commands.run(
+    "s3fs my-bucket /mnt/bucket -o allow_other -o passwd_file=/root/.passwd-s3fs -o endpoint=us-east-1 -o url=https://s3.us-east-1.amazonaws.com"
+)
+```
+</CodeGroup>
+
+`-o allow_other` lets every process in the sandbox read the mount. Set `endpoint` and `url` to your bucket's region: the example shows `us-east-1`, but `s3fs` needs them set explicitly for any other region (e.g. `us-east-2`). For the full option list, see the [`s3fs` flags](https://manpages.ubuntu.com/manpages/jammy/man1/s3fs.1.html).
+
+## Google Cloud Storage
+
+Google Cloud Storage uses [`gcsfuse`](https://cloud.google.com/storage/docs/gcsfuse-cli). You'll need a bucket and a service account with the **Storage Object User** role on it, plus a [service account key](https://cloud.google.com/iam/docs/keys-create-delete).
+
+Install `gcsfuse` from Google's apt repository in a template.
+
+<CodeGroup>
+```typescript TypeScript
+import { Template } from "@superserve/sdk"
+
+const template = await Template.create({
+  name: "gcs-base",
+  from: "ubuntu:22.04",
+  steps: [
+    { run: "apt-get update && apt-get install -y curl gnupg lsb-release" },
+    {
+      run: 'echo "deb [signed-by=/usr/share/keyrings/cloud.google.asc] https://packages.cloud.google.com/apt gcsfuse-$(lsb_release -c -s) main" > /etc/apt/sources.list.d/gcsfuse.list',
+    },
+    {
+      run: "curl https://packages.cloud.google.com/apt/doc/apt-key.gpg > /usr/share/keyrings/cloud.google.asc",
+    },
+    { run: "apt-get update && apt-get install -y gcsfuse" },
+  ],
+})
+
+await template.waitUntilReady()
+```
+
+```python Python
+from superserve import Template, RunStep
+
+template = Template.create(
+    name="gcs-base",
+    from_="ubuntu:22.04",
+    steps=[
+        RunStep(run="apt-get update && apt-get install -y curl gnupg lsb-release"),
+        RunStep(
+            run='echo "deb [signed-by=/usr/share/keyrings/cloud.google.asc] https://packages.cloud.google.com/apt gcsfuse-$(lsb_release -c -s) main" > /etc/apt/sources.list.d/gcsfuse.list'
+        ),
+        RunStep(
+            run="curl https://packages.cloud.google.com/apt/doc/apt-key.gpg > /usr/share/keyrings/cloud.google.asc"
+        ),
+        RunStep(run="apt-get update && apt-get install -y gcsfuse"),
+    ],
+)
+
+template.wait_until_ready()
+```
+</CodeGroup>
+
+At runtime, write the service account key into the sandbox and mount with `--key-file`.
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({ name: "gcs-workspace", fromTemplate: "gcs-base" })
+
+await sandbox.commands.run("mkdir -p /mnt/bucket")
+await sandbox.files.write("/root/gcs-key.json", process.env.GCP_SERVICE_ACCOUNT_KEY!)
+await sandbox.commands.run("chmod 600 /root/gcs-key.json")
+await sandbox.commands.run(
+  "gcsfuse --key-file /root/gcs-key.json -o allow_other --file-mode=777 --dir-mode=777 my-bucket /mnt/bucket",
+)
+```
+
+```python Python
+import os
+from superserve import Sandbox
+
+sandbox = Sandbox.create(name="gcs-workspace", from_template="gcs-base")
+
+sandbox.commands.run("mkdir -p /mnt/bucket")
+sandbox.files.write("/root/gcs-key.json", os.environ["GCP_SERVICE_ACCOUNT_KEY"])
+sandbox.commands.run("chmod 600 /root/gcs-key.json")
+sandbox.commands.run(
+    "gcsfuse --key-file /root/gcs-key.json -o allow_other --file-mode=777 --dir-mode=777 my-bucket /mnt/bucket"
+)
+```
+</CodeGroup>
+
+For the full option list, see the [`gcsfuse` flags](https://cloud.google.com/storage/docs/gcsfuse-cli#options).
+
+## Cloudflare R2
+
+R2 is S3-compatible, so it reuses the same `s3fs` template. The only difference is the mount command, which points `s3fs` at your R2 endpoint.
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({ name: "r2-workspace", fromTemplate: "s3-base" })
+
+await sandbox.commands.run("mkdir -p /mnt/bucket")
+await sandbox.files.write(
+  "/root/.passwd-s3fs",
+  `${process.env.R2_ACCESS_KEY_ID}:${process.env.R2_SECRET_ACCESS_KEY}`,
+)
+await sandbox.commands.run("chmod 600 /root/.passwd-s3fs")
+await sandbox.commands.run(
+  "s3fs my-bucket /mnt/bucket -o allow_other -o passwd_file=/root/.passwd-s3fs -o url=https://<account-id>.r2.cloudflarestorage.com -o use_path_request_style",
+)
+```
+
+```python Python
+import os
+from superserve import Sandbox
+
+sandbox = Sandbox.create(name="r2-workspace", from_template="s3-base")
+
+sandbox.commands.run("mkdir -p /mnt/bucket")
+sandbox.files.write(
+    "/root/.passwd-s3fs",
+    f"{os.environ['R2_ACCESS_KEY_ID']}:{os.environ['R2_SECRET_ACCESS_KEY']}",
+)
+sandbox.commands.run("chmod 600 /root/.passwd-s3fs")
+sandbox.commands.run(
+    "s3fs my-bucket /mnt/bucket -o allow_other -o passwd_file=/root/.passwd-s3fs -o url=https://<account-id>.r2.cloudflarestorage.com -o use_path_request_style"
+)
+```
+</CodeGroup>
