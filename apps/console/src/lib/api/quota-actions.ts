@@ -40,7 +40,9 @@ export async function getQuotaUsageAction(): Promise<QuotaUsageResponse | null> 
   const supabase = await createServerClient()
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser()
+  if (authError) throw authError
   if (!user) throw new Error("Not authenticated")
 
   const teamId = await getTeamId(user.id)
