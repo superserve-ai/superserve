@@ -5,7 +5,7 @@
  * variables. Constructs the data-plane URL for per-sandbox file operations.
  */
 
-import { AuthenticationError } from "./errors.js"
+import { AuthenticationError, ValidationError } from "./errors.js"
 
 const DEFAULT_BASE_URL = "https://api.superserve.ai"
 const DEFAULT_SANDBOX_HOST = "sandbox.superserve.ai"
@@ -75,6 +75,47 @@ export function dataPlaneTarget(
     url: `https://boxd-${sandboxId}.${host}`,
     headers: {},
   }
+}
+
+/**
+ * Lowest / highest TCP port a preview URL can target. Privileged ports
+ * (< 1024) are refused by the edge proxy, so we reject them up front.
+ *
+ * Mirrored by the console (apps/console/src/hooks/use-preview-ports.ts) and the
+ * Python SDK; keep all three in sync. Tests pin the literals on each side so
+ * one-sided drift fails CI.
+ */
+export const MIN_PREVIEW_PORT = 1024
+export const MAX_PREVIEW_PORT = 65535
+
+/**
+ * Build the public preview URL for a port running inside a sandbox.
+ *
+ * The edge proxy routes `https://{port}-{id}.{host}` straight to that port
+ * on the VM, so this is pure string construction — no network call. The
+ * sandbox must be running and a server must be listening on `port` for the
+ * URL to resolve.
+ *
+ * Always uses the per-sandbox subdomain form (never the shared-host mode):
+ * a browser opening the URL can't send the `X-Superserve-Sandbox-Id` header.
+ *
+ * @throws {ValidationError} if `port` is not an integer in [1024, 65535].
+ */
+export function previewUrl(
+  sandboxId: string,
+  sandboxHost: string,
+  port: number,
+): string {
+  if (
+    !Number.isInteger(port) ||
+    port < MIN_PREVIEW_PORT ||
+    port > MAX_PREVIEW_PORT
+  ) {
+    throw new ValidationError(
+      `Invalid preview port ${port}: must be an integer between ${MIN_PREVIEW_PORT} and ${MAX_PREVIEW_PORT}. Privileged ports (< ${MIN_PREVIEW_PORT}) are not proxied.`,
+    )
+  }
+  return `https://${port}-${sandboxId}.${sandboxHost}`
 }
 
 /**

@@ -1,5 +1,6 @@
 """Superserve SDK — sandbox infrastructure for running code in isolated cloud environments."""
 
+from ._config import MAX_PREVIEW_PORT, MIN_PREVIEW_PORT, preview_url
 from .async_sandbox import AsyncSandbox
 from .async_secrets import AsyncSecret
 from .async_template import AsyncTemplate
@@ -65,6 +66,8 @@ __all__ = [
     "ConflictError",
     "EnvStep",
     "EnvStepValue",
+    "MAX_PREVIEW_PORT",
+    "MIN_PREVIEW_PORT",
     "NetworkConfig",
     "NetworkEvent",
     "NetworkLogPage",
@@ -95,4 +98,5 @@ __all__ = [
     "UserStepValue",
     "ValidationError",
     "WorkdirStep",
+    "preview_url",
 ]

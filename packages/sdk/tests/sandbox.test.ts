@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { ValidationError } from "../src/errors.js"
 import { Sandbox } from "../src/Sandbox.js"
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -39,6 +40,42 @@ const commonOpts = {
   apiKey: "ss_live_test",
   baseUrl: "https://api.superserve.ai",
 }
+
+describe("Sandbox#getPreviewUrl", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  async function makeSandbox(): Promise<Sandbox> {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse(baseSandbox)),
+    )
+    return Sandbox.create({ ...commonOpts, name: "my-sandbox" })
+  }
+
+  it("builds a preview URL for a port", async () => {
+    const sandbox = await makeSandbox()
+    expect(sandbox.getPreviewUrl(3000)).toBe(
+      "https://3000-sbx-1.sandbox.superserve.ai",
+    )
+  })
+
+  it("returns distinct URLs for multiple ports", async () => {
+    const sandbox = await makeSandbox()
+    expect(sandbox.getPreviewUrl(3000)).toBe(
+      "https://3000-sbx-1.sandbox.superserve.ai",
+    )
+    expect(sandbox.getPreviewUrl(8080)).toBe(
+      "https://8080-sbx-1.sandbox.superserve.ai",
+    )
+  })
+
+  it("throws ValidationError for an invalid port", async () => {
+    const sandbox = await makeSandbox()
+    expect(() => sandbox.getPreviewUrl(80)).toThrow(ValidationError)
+  })
+})
 
 describe("Sandbox statics", () => {
   afterEach(() => {

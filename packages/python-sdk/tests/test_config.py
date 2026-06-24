@@ -6,11 +6,14 @@ import pytest
 from superserve._config import (
     DEFAULT_BASE_URL,
     DEFAULT_SANDBOX_HOST,
+    MAX_PREVIEW_PORT,
+    MIN_PREVIEW_PORT,
     _derive_sandbox_host,
     data_plane_target,
+    preview_url,
     resolve_config,
 )
-from superserve.errors import AuthenticationError
+from superserve.errors import AuthenticationError, ValidationError
 
 
 class TestResolveConfig:
@@ -92,3 +95,43 @@ class TestDataPlaneTarget:
         target = data_plane_target("abc", "Sandbox.SuperServe.AI")
         assert target.url == "https://sandbox.superserve.ai"
         assert target.headers["X-Superserve-Sandbox-Id"] == "abc"
+
+
+class TestPreviewUrl:
+    def test_pins_port_range_to_contract(self) -> None:
+        # Drift guard: the console and TypeScript SDK mirror these bounds. Keep
+        # all three in sync — this pin makes one-sided drift fail CI.
+        assert MIN_PREVIEW_PORT == 1024
+        assert MAX_PREVIEW_PORT == 65535
+
+    def test_builds_subdomain_url_for_port(self) -> None:
+        assert (
+            preview_url("abc-123", "sandbox.superserve.ai", 3000)
+            == "https://3000-abc-123.sandbox.superserve.ai"
+        )
+
+    def test_uses_subdomain_form_even_on_shared_hosts(self) -> None:
+        # A browser opening the URL can't send the routing header, so preview
+        # URLs never use the shared-host origin.
+        assert (
+            preview_url("xyz", "staging-sandbox.superserve.ai", 8080)
+            == "https://8080-xyz.staging-sandbox.superserve.ai"
+        )
+
+    def test_accepts_boundary_ports(self) -> None:
+        assert preview_url("a", "h", 1024) == "https://1024-a.h"
+        assert preview_url("a", "h", 65535) == "https://65535-a.h"
+
+    @pytest.mark.parametrize("port", [80, 0, 1023])
+    def test_rejects_privileged_ports(self, port: int) -> None:
+        with pytest.raises(ValidationError):
+            preview_url("a", "h", port)
+
+    def test_rejects_out_of_range_ports(self) -> None:
+        with pytest.raises(ValidationError):
+            preview_url("a", "h", 70000)
+
+    @pytest.mark.parametrize("port", [3000.5, True, "3000"])
+    def test_rejects_non_integer_ports(self, port: object) -> None:
+        with pytest.raises(ValidationError):
+            preview_url("a", "h", port)  # type: ignore[arg-type]

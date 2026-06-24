@@ -15,7 +15,7 @@
  */
 
 import { Commands } from "./commands.js"
-import { type ResolvedConfig, resolveConfig } from "./config.js"
+import { previewUrl, type ResolvedConfig, resolveConfig } from "./config.js"
 import { NotFoundError, SandboxError } from "./errors.js"
 import { Files } from "./files.js"
 import { request, requestVoid } from "./http.js"
@@ -348,6 +348,26 @@ export class Sandbox {
       headers: { "X-API-Key": this._config.apiKey },
       body,
     })
+  }
+
+  /**
+   * Build the public preview URL for a port running inside this sandbox.
+   *
+   * The edge proxy exposes any user-app port at `https://{port}-{id}.{host}`,
+   * so this is pure string construction — no network call. The sandbox must
+   * be running and a server must be listening on `port` for the URL to
+   * resolve. Call once per port to preview several services at once.
+   *
+   * @throws {ValidationError} if `port` is not an integer in [1024, 65535].
+   *
+   * @example
+   * ```typescript
+   * await sandbox.commands.spawn("python3 -m http.server 8000")
+   * const url = sandbox.getPreviewUrl(8000)
+   * ```
+   */
+  getPreviewUrl(port: number): string {
+    return previewUrl(this.id, this._config.sandboxHost, port)
   }
 
   /**

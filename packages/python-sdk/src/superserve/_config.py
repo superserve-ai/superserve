@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
-from .errors import AuthenticationError
+from .errors import AuthenticationError, ValidationError
 
 DEFAULT_BASE_URL = "https://api.superserve.ai"
 DEFAULT_SANDBOX_HOST = "sandbox.superserve.ai"
@@ -75,6 +75,45 @@ def data_plane_target(sandbox_id: str, sandbox_host: str) -> DataPlaneTarget:
         url=f"https://boxd-{sandbox_id}.{host}",
         headers={},
     )
+
+
+# Lowest / highest TCP port a preview URL can target. Privileged ports
+# (< 1024) are refused by the edge proxy, so we reject them up front.
+#
+# Mirrored by the TypeScript SDK (packages/sdk/src/config.ts) and the console
+# (apps/console/src/hooks/use-preview-ports.ts); keep all three in sync. Tests
+# pin the literals on each side so one-sided drift fails CI.
+MIN_PREVIEW_PORT = 1024
+MAX_PREVIEW_PORT = 65535
+
+
+def preview_url(sandbox_id: str, host: str, port: int) -> str:
+    """Build the public preview URL for a port running inside a sandbox.
+
+    The edge proxy routes ``https://{port}-{id}.{host}`` straight to that
+    port on the VM, so this is pure string construction — no network call.
+    The sandbox must be running and a server must be listening on ``port``
+    for the URL to resolve.
+
+    Always uses the per-sandbox subdomain form (never the shared-host mode):
+    a browser opening the URL can't send the ``X-Superserve-Sandbox-Id``
+    header.
+
+    Raises:
+        ValidationError: if ``port`` is not an integer in [1024, 65535].
+    """
+    if (
+        not isinstance(port, int)
+        or isinstance(port, bool)
+        or port < MIN_PREVIEW_PORT
+        or port > MAX_PREVIEW_PORT
+    ):
+        raise ValidationError(
+            f"Invalid preview port {port!r}: must be an integer between "
+            f"{MIN_PREVIEW_PORT} and {MAX_PREVIEW_PORT}. Privileged ports "
+            f"(< {MIN_PREVIEW_PORT}) are not proxied."
+        )
+    return f"https://{port}-{sandbox_id}.{host}"
 
 
 def _derive_sandbox_host(base_url: str) -> str:

@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { dataPlaneTarget, resolveConfig } from "../src/config.js"
-import { AuthenticationError } from "../src/errors.js"
+import {
+  dataPlaneTarget,
+  MAX_PREVIEW_PORT,
+  MIN_PREVIEW_PORT,
+  previewUrl,
+  resolveConfig,
+} from "../src/config.js"
+import { AuthenticationError, ValidationError } from "../src/errors.js"
 
 describe("resolveConfig", () => {
   let savedApiKey: string | undefined
@@ -107,5 +113,48 @@ describe("dataPlaneTarget", () => {
     const target = dataPlaneTarget("abc", "Sandbox.SuperServe.AI")
     expect(target.url).toBe("https://sandbox.superserve.ai")
     expect(target.headers["X-Superserve-Sandbox-Id"]).toBe("abc")
+  })
+})
+
+describe("previewUrl", () => {
+  // Drift guard: the console (apps/console/src/hooks/use-preview-ports.ts) and
+  // the Python SDK mirror these bounds. Keep all three in sync — this literal
+  // pin makes one-sided drift fail CI.
+  it("pins the port range to the edge-proxy contract", () => {
+    expect(MIN_PREVIEW_PORT).toBe(1024)
+    expect(MAX_PREVIEW_PORT).toBe(65535)
+  })
+
+  it("builds the per-sandbox subdomain URL for a port", () => {
+    expect(previewUrl("abc-123", "sandbox.superserve.ai", 3000)).toBe(
+      "https://3000-abc-123.sandbox.superserve.ai",
+    )
+  })
+
+  it("uses the subdomain form even on shared hosts", () => {
+    // A browser opening the URL can't send the routing header, so preview
+    // URLs never use the shared-host origin.
+    expect(previewUrl("xyz", "staging-sandbox.superserve.ai", 8080)).toBe(
+      "https://8080-xyz.staging-sandbox.superserve.ai",
+    )
+  })
+
+  it("accepts the boundary ports 1024 and 65535", () => {
+    expect(previewUrl("a", "h", 1024)).toBe("https://1024-a.h")
+    expect(previewUrl("a", "h", 65535)).toBe("https://65535-a.h")
+  })
+
+  it("throws ValidationError for privileged ports (< 1024)", () => {
+    expect(() => previewUrl("a", "h", 80)).toThrow(ValidationError)
+    expect(() => previewUrl("a", "h", 0)).toThrow(ValidationError)
+  })
+
+  it("throws ValidationError for out-of-range ports (> 65535)", () => {
+    expect(() => previewUrl("a", "h", 70000)).toThrow(ValidationError)
+  })
+
+  it("throws ValidationError for non-integer ports", () => {
+    expect(() => previewUrl("a", "h", 3000.5)).toThrow(ValidationError)
+    expect(() => previewUrl("a", "h", Number.NaN)).toThrow(ValidationError)
   })
 })
