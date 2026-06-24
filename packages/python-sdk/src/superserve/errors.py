@@ -111,8 +111,14 @@ class BuildError(SandboxError):
 def map_api_error(status_code: int, body: dict[str, Any]) -> SandboxError:
     """Map an HTTP status code and response body to a typed error."""
     error_data = body.get("error", {}) or {}
-    message = error_data.get("message", f"API error ({status_code})")
-    code = error_data.get("code")
+    if isinstance(error_data, str):
+        # Data-plane (boxd) errors use a bare string: ``{"error": "..."}``.
+        message = error_data
+        code = None
+    else:
+        # Control-plane errors use ``{"error": {"message": ..., "code": ...}}``.
+        message = error_data.get("message", f"API error ({status_code})")
+        code = error_data.get("code")
 
     if status_code == 400:
         return ValidationError(message, code=code)

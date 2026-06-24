@@ -110,6 +110,14 @@ class TestMapApiError:
         assert isinstance(err, ServerError)
         assert "500" in str(err) or "error" in str(err).lower()
 
+    def test_string_error_body_maps_to_typed_error(self) -> None:
+        # Data-plane (boxd) returns a bare string body: ``{"error": "..."}``,
+        # unlike the control plane's ``{"error": {"message": ...}}``.
+        err = map_api_error(404, {"error": "file not found"})
+        assert isinstance(err, NotFoundError)
+        assert "file not found" in str(err)
+        assert err.code is None
+
 
 class TestErrorHierarchy:
     def test_all_extend_sandbox_error(self) -> None:
