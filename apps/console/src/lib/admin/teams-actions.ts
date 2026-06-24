@@ -73,11 +73,21 @@ export async function stopImpersonationAction() {
         err instanceof Error ? err.message : err,
       )
     }
+    // Resolve the team name so the audit log/Slack shows the same friendly
+    // label as "started impersonating" instead of the bare team UUID.
+    // Best-effort: fall back to the id if the lookup fails.
+    const admin = createAdminClient()
+    const { data: team } = await admin
+      .from("team")
+      .select("name")
+      .eq("id", teamId)
+      .single()
     await logImpersonationEvent({
       action: "stop",
       adminId: user.id,
       adminEmail: user.email ?? user.id,
       teamId,
+      teamName: (team?.name as string | undefined) ?? undefined,
     })
   }
   redirect("/admin")
