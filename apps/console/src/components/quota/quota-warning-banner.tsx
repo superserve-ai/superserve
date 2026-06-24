@@ -6,8 +6,8 @@ import { useState } from "react"
 
 import { QUOTA_WARNING_PCT, useQuotaUsage } from "@/hooks/use-quota-usage"
 
-const MEETING_HREF =
-  "https://www.superserve.ai/meet/?utm_source=console&utm_medium=quota_banner"
+const CONTACT_HREF =
+  "mailto:support@superserve.ai?subject=Increase%20sandbox%20limit"
 
 // Warns once a team reaches QUOTA_WARNING_PCT of its sandbox limit. Reads live
 // usage (self-clears on delete); dismiss is per-session so it returns next visit.
@@ -36,16 +36,14 @@ export function QuotaWarningBanner() {
         <div className="flex items-start justify-between gap-3">
           <p>
             You're using {data.activeSandboxes} of {data.maxSandboxes}{" "}
-            sandboxes.{" "}
+            sandboxes. Contact us at{" "}
             <a
-              href={MEETING_HREF}
-              target="_blank"
-              rel="noreferrer"
+              href={CONTACT_HREF}
               className="text-foreground underline underline-offset-4 hover:text-primary"
             >
-              Reach out
+              support@superserve.ai
             </a>{" "}
-            to raise your limit.
+            to increase your limit.
           </p>
           <Button
             variant="ghost"
