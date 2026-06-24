@@ -28,11 +28,15 @@ export function QuotaWarningBanner() {
 
   return (
     <div className="px-4 pt-4">
-      <Alert variant="warning" title="You're approaching your sandbox limit">
+      <Alert
+        variant="warning"
+        title="You're approaching your sandbox limit"
+        className="max-w-3xl"
+      >
         <div className="flex items-start justify-between gap-3">
           <p>
             You're using {data.activeSandboxes} of {data.maxSandboxes} sandboxes
-            ({data.pct}%). Contact the team at{" "}
+            ({data.pct}%). Free up room by pausing or deleting some, or contact{" "}
             <a
               href={CONTACT_HREF}
               className="text-foreground underline underline-offset-4 hover:text-primary"
