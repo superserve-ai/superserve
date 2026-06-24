@@ -31,7 +31,7 @@ export function QuotaWarningBanner() {
       <Alert
         variant="warning"
         title="You're approaching your sandbox limit"
-        className="max-w-3xl"
+        className="ml-auto max-w-3xl"
       >
         <div className="flex items-start justify-between gap-3">
           <p>
