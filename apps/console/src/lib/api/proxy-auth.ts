@@ -101,6 +101,10 @@ async function getTeamForUser(userId: string, email: string): Promise<string> {
   return team.id as string
 }
 
+export async function getTeamIdForUser(user: User): Promise<string> {
+  return getTeamForUser(user.id, user.email ?? user.id)
+}
+
 /**
  * Ensure the derived proxy key's hash exists in the api_key table.
  * Idempotent: does an INSERT ... ON CONFLICT (key_hash) DO NOTHING, so
