@@ -52,6 +52,16 @@
   "contextual": {
     "options": ["copy", "view", "claude", "mcp", "add-mcp", "cursor", "vscode"]
   },
+  "redirects": [
+    {
+      "source": "/integrations/virtual-filesystems/mesa",
+      "destination": "/storage/mesa"
+    },
+    {
+      "source": "/integrations/virtual-filesystems/archil",
+      "destination": "/storage/archil"
+    }
+  ],
   "navigation": {
     "tabs": [
       {
@@ -104,6 +114,10 @@
             "pages": ["filesystem/read-write"]
           },
           {
+            "group": "Storage",
+            "pages": ["storage/mesa", "storage/archil", "storage/cloud-buckets"]
+          },
+          {
             "group": "Errors",
             "pages": ["errors"]
           }
@@ -153,10 +167,6 @@
               "integrations/agent-harnesses/claude-agent-sdk",
               "integrations/agent-harnesses/openai-agents-sdk"
             ]
-          },
-          {
-            "group": "Virtual Filesystems",
-            "pages": ["integrations/virtual-filesystems/mesa"]
           }
         ]
       },

@@ -1,0 +1,213 @@
+---
+title: "Mesa"
+sidebarTitle: Mesa
+description: Mount Mesa versioned virtual filesystems inside a Superserve sandbox to persist and branch agent workspaces across runs.
+icon: "/logos/integrations/mesa.svg"
+---
+
+[Mesa](https://mesa.dev/) is a versioned virtual filesystem you can mount inside a Superserve sandbox. Where a [cloud bucket](/storage/cloud-buckets) gives a sandbox flat object storage, Mesa adds version history and branches, so every edit is committed back and each sandbox can fork its own workspace. This guide covers the full flow: use the Mesa SDK outside the sandbox to set up resources, then the Superserve SDK to mount Mesa inside.
+
+Mounting Mesa in a Superserve sandbox takes three steps:
+
+1. **Outside the sandbox:** use the Mesa SDK (TypeScript or Python) to create repos, sign a short-lived access token, and orchestrate your workflow.
+2. **Inside the sandbox:** install the `mesa` CLI, configure it with a short-lived access token, and run `mesa mount --daemonize` to mount your repos as local directories.
+3. **Run your agent:** `cd` into the mount path and launch your agent (e.g. Claude Code, Codex, or a custom agent). Any file edits are automatically persisted back to Mesa.
+
+For details on FUSE setup, system dependencies, and container configuration, see Mesa's [POSIX Mount guide](https://docs.mesa.dev/content/mesafs/posix-mount).
+
+## Sandbox setup
+
+Superserve sandboxes run on a FUSE-enabled kernel, and the Mesa installer apt-installs `fuse3` as a dependency, so the standard Mesa install script works on every Superserve template out of the box. Because Superserve sandboxes are full Firecracker microVMs, you don't need `user_allow_other` or `chmod 666 /dev/fuse`.
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk";
+import { Mesa } from "@mesadev/sdk";
+
+const mesa = new Mesa({ apiKey: process.env.MESA_API_KEY });
+
+// --- Outside the sandbox: set up Mesa resources ---
+
+// Create a repo (or use an existing one)
+const repo = await mesa.repos.create({ name: "agent-workspace" });
+
+// Sign a scoped, self-expiring access token for the sandbox. Signed locally
+// from your API key with no network call, so your API key never enters the sandbox.
+const { token } = await mesa.tokens.create({
+  scopes: ["read", "write"],
+  repos: ["my-org/agent-workspace"],
+  ttl_seconds: 3600, // 1 hour
+});
+
+// --- Inside the sandbox: install and mount Mesa ---
+
+const sandbox = await Sandbox.create({ fromTemplate: "superserve/base" });
+
+// Install the Mesa CLI. The installer apt-installs fuse3 as a dependency.
+await sandbox.commands.run(
+  "curl -fsSL https://mesa.dev/install.sh | sh -s -- --yes",
+);
+
+// Start Mesa as a background daemon. MESA_ORG and MESA_API_KEY are read
+// from the environment, never persisted to disk.
+await sandbox.commands.run("mesa mount -d", {
+  env: {
+    MESA_ORG: "my-org",
+    MESA_API_KEY: token,
+  },
+});
+
+// --- Run your agent ---
+
+await sandbox.commands.run(
+  'cd ~/.local/share/mesa/mnt/my-org/agent-workspace && claude "Implement the feature described in TODO.md"',
+);
+```
+
+```python Python
+import asyncio
+import os
+
+from mesa_sdk import Mesa
+from superserve import Sandbox
+
+
+async def main():
+    # --- Outside the sandbox: set up Mesa resources (the Mesa SDK is async) ---
+    mesa = Mesa(api_key=os.environ["MESA_API_KEY"])
+
+    # Create a repo (or use an existing one)
+    repo = await mesa.repos.create(name="agent-workspace")
+
+    # Sign a scoped, self-expiring access token for the sandbox. Signed locally
+    # from your API key with no network call, so your API key never enters the sandbox.
+    minted = await mesa.tokens.create(
+        scopes=["read", "write"],
+        repos=["my-org/agent-workspace"],
+        ttl_seconds=3600,  # 1 hour
+    )
+
+    # --- Inside the sandbox: install and mount Mesa ---
+    sandbox = Sandbox.create(from_template="superserve/base")
+
+    # Install the Mesa CLI. The installer apt-installs fuse3 as a dependency.
+    sandbox.commands.run("curl -fsSL https://mesa.dev/install.sh | sh -s -- --yes")
+
+    # Start Mesa as a background daemon. MESA_ORG and MESA_API_KEY are read
+    # from the environment, never persisted to disk.
+    sandbox.commands.run(
+        "mesa mount -d",
+        env={"MESA_ORG": "my-org", "MESA_API_KEY": minted.token},
+    )
+
+    # --- Run your agent ---
+    sandbox.commands.run(
+        'cd ~/.local/share/mesa/mnt/my-org/agent-workspace '
+        '&& claude "Implement the feature described in TODO.md"'
+    )
+
+
+asyncio.run(main())
+```
+
+```bash CLI
+# Install the Mesa CLI. The installer apt-installs fuse3 as a dependency.
+curl -fsSL https://mesa.dev/install.sh | sh -s -- --yes
+
+# Start Mesa as a background daemon. MESA_ORG and MESA_API_KEY are read
+# from the environment, never persisted to disk.
+MESA_ORG="my-org" MESA_API_KEY="$MESA_TOKEN" mesa mount -d
+
+# Run your agent
+cd ~/.local/share/mesa/mnt/my-org/agent-workspace
+claude "Implement the feature described in TODO.md"
+```
+</CodeGroup>
+
+## Custom template
+
+For faster startup, pre-install the Mesa CLI into a [custom Superserve template](/templates/create) so each sandbox boots with the Mesa CLI already installed:
+
+<CodeGroup>
+```typescript TypeScript
+import { Template } from "@superserve/sdk";
+
+const template = await Template.create({
+  name: "agent-with-mesa",
+  vcpu: 2,
+  memoryMib: 2048,
+  diskMib: 4096,
+  from: "ubuntu:24.04",
+  steps: [
+    {
+      run: "apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git && rm -rf /var/lib/apt/lists/*",
+    },
+    { run: "curl -fsSL https://mesa.dev/install.sh | sh -s -- --yes" },
+  ],
+});
+
+await template.waitUntilReady();
+```
+
+```python Python
+from superserve import Template, RunStep
+
+template = Template.create(
+    name="agent-with-mesa",
+    vcpu=2,
+    memory_mib=2048,
+    disk_mib=4096,
+    from_="ubuntu:24.04",
+    steps=[
+        RunStep(
+            run="apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git && rm -rf /var/lib/apt/lists/*"
+        ),
+        RunStep(run="curl -fsSL https://mesa.dev/install.sh | sh -s -- --yes"),
+    ],
+)
+
+template.wait_until_ready()
+```
+
+```dockerfile Dockerfile
+FROM ubuntu:24.04
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL https://mesa.dev/install.sh | sh -s -- --yes
+```
+</CodeGroup>
+
+Reference it on sandbox creation and skip the runtime install step:
+
+<CodeGroup>
+```typescript TypeScript
+const sandbox = await Sandbox.create({ fromTemplate: "agent-with-mesa" });
+
+await sandbox.commands.run("mesa mount -d", {
+  env: {
+    MESA_ORG: "my-org",
+    MESA_API_KEY: token,
+  },
+});
+```
+
+```python Python
+sandbox = Sandbox.create(from_template="agent-with-mesa")
+
+sandbox.commands.run(
+    "mesa mount -d",
+    env={"MESA_ORG": "my-org", "MESA_API_KEY": minted.token},
+)
+```
+
+```bash CLI
+MESA_ORG="my-org" MESA_API_KEY="$MESA_TOKEN" mesa mount -d
+```
+</CodeGroup>
+
+## Tips
+
+- **Use scoped, short-lived access tokens.** Sign a dedicated token for each sandbox session with only the scopes it needs. It's signed locally from your API key (which never enters the sandbox) and expires on its own. See Mesa's [Authentication](https://docs.mesa.dev/content/concepts/authentication) docs for details.
+- **Use `--daemonize`.** Always run `mesa mount --daemonize` in sandbox environments so Mesa runs as a background process and doesn't block your agent's terminal.
+- **Build a custom template** for production use. Pre-installing the Mesa CLI avoids the install overhead on every sandbox creation.
+- **Mount path follows `$HOME`.** Superserve's guest agent sets `HOME=/home/user`, so the mount lands at `/home/user/.local/share/mesa/mnt/<org>/<repo>`. Use `~/.local/share/mesa/mnt/...` and it resolves correctly.

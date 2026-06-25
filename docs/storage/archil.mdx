@@ -1,0 +1,145 @@
+---
+title: "Archil"
+sidebarTitle: Archil
+description: Mount an Archil elastic filesystem in a Superserve sandbox to share and persist workspaces, caches, and datasets across runs.
+icon: "/logos/integrations/archil.svg"
+---
+
+Archil is an elastic, POSIX-compliant filesystem backed by object storage, with optional sync to your own S3, GCS, R2, or any S3-compatible bucket. Mount an Archil **disk** inside a Superserve sandbox to give it a fast workspace whose data persists across runs, survives the sandbox, and can be mounted by several sandboxes at once with `--shared`.
+
+Because every Superserve sandbox is a full Firecracker microVM, FUSE works **inside** the sandbox with no privileged-host workarounds, so you mount the disk with the same `archil mount` command you'd run on any Linux box.
+
+<Note>
+Create a disk and a disk-scoped **mount token** in the [Archil console](https://console.archil.com) first. Keep its region (e.g. `aws-us-east-1`) and disk reference handy: an owner-qualified name (`myorg/my-disk`) or ID (`dsk-0123456789abcdef`). See [Archil's docs](https://docs.archil.com/getting-started/introduction) for disk setup.
+</Note>
+
+## 1. Bake the Archil client into a template
+
+Install the Archil CLI and its `libfuse2` dependency at build time so every sandbox starts ready to mount. [Templates](/templates/overview) snapshot this, so each sandbox launches fast with nothing to reinstall.
+
+<CodeGroup>
+```typescript TypeScript
+import { Template } from "@superserve/sdk"
+
+const template = await Template.create({
+  name: "archil-base",
+  from: "ubuntu:22.04",
+  steps: [
+    { run: "apt-get update && apt-get install -y curl libfuse2" },
+    { run: "curl -fsSL https://archil.com/install | sh" },
+  ],
+})
+
+await template.waitUntilReady()
+```
+
+```python Python
+from superserve import Template, RunStep
+
+template = Template.create(
+    name="archil-base",
+    from_="ubuntu:22.04",
+    steps=[
+        RunStep(run="apt-get update && apt-get install -y curl libfuse2"),
+        RunStep(run="curl -fsSL https://archil.com/install | sh"),
+    ],
+)
+
+template.wait_until_ready()
+```
+</CodeGroup>
+
+## 2. Mount the disk at runtime
+
+Create a sandbox from the template, then run `archil mount`. Pass the disk-scoped token as a **per-command** env var so it's present only for the mount itself, not for every process in the sandbox.
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({
+  name: "archil-workspace",
+  fromTemplate: "archil-base",
+})
+
+await sandbox.commands.run("mkdir -p /mnt/archil")
+await sandbox.commands.run(
+  "archil mount myorg/my-disk /mnt/archil --region aws-us-east-1",
+  { env: { ARCHIL_MOUNT_TOKEN: process.env.ARCHIL_MOUNT_TOKEN! } },
+)
+
+// /mnt/archil is now a live, persistent Archil filesystem
+await sandbox.files.write("/mnt/archil/notes.txt", "written from a sandbox")
+const listing = await sandbox.commands.run("ls -la /mnt/archil")
+console.log(listing.stdout)
+```
+
+```python Python
+import os
+from superserve import Sandbox
+
+sandbox = Sandbox.create(
+    name="archil-workspace",
+    from_template="archil-base",
+)
+
+sandbox.commands.run("mkdir -p /mnt/archil")
+sandbox.commands.run(
+    "archil mount myorg/my-disk /mnt/archil --region aws-us-east-1",
+    env={"ARCHIL_MOUNT_TOKEN": os.environ["ARCHIL_MOUNT_TOKEN"]},
+)
+
+# /mnt/archil is now a live, persistent Archil filesystem
+sandbox.files.write("/mnt/archil/notes.txt", "written from a sandbox")
+listing = sandbox.commands.run("ls -la /mnt/archil")
+print(listing.stdout)
+```
+</CodeGroup>
+
+<Note>
+Mounting needs root. Superserve runs commands as the template's default user (`root` unless a [`user` build step](/templates/build-spec#user-switch-user) changed it), so the default template above mounts cleanly.
+</Note>
+
+## 3. Flush and unmount before you kill
+
+Archil replicates writes across availability zones before they return, and (when the disk is connected to your own bucket) syncs them there within a few minutes. Unmount before killing the sandbox to flush any in-flight writes cleanly.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.run("archil unmount /mnt/archil")
+await sandbox.kill()
+```
+
+```python Python
+sandbox.commands.run("archil unmount /mnt/archil")
+sandbox.kill()
+```
+</CodeGroup>
+
+## Share one disk across many sandboxes
+
+Add `--shared` to mount the same disk from several sandboxes at once. Every mount is strongly read-after-write consistent, so a write from one sandbox is immediately visible to the others. That makes it a fit for parallel-agent setups that build on shared state.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.run(
+  "archil mount myorg/my-disk /mnt/archil --region aws-us-east-1 --shared",
+  { env: { ARCHIL_MOUNT_TOKEN: process.env.ARCHIL_MOUNT_TOKEN! } },
+)
+```
+
+```python Python
+sandbox.commands.run(
+    "archil mount myorg/my-disk /mnt/archil --region aws-us-east-1 --shared",
+    env={"ARCHIL_MOUNT_TOKEN": os.environ["ARCHIL_MOUNT_TOKEN"]},
+)
+```
+</CodeGroup>
+
+## How it complements pause and resume
+
+[Pause and resume](/sandbox/lifecycle) checkpoint one sandbox's full VM state: memory, processes, and local disk. An Archil mount adds storage that lives **outside** any single sandbox: it survives `kill()`, can sync to your own object store, and can be mounted by other sandboxes concurrently. Use pause/resume to suspend a long-running job cheaply; use Archil for workspaces, caches, and datasets you want to share or keep beyond a sandbox's life.
+
+<Warning>
+The mount token is a credential scoped to a single disk, so mint a dedicated one for sandbox use and pass it per-command, as shown above. For credentials your sandbox code uses to authenticate *outbound* requests, such as API keys, prefer [secrets](/secrets/overview) so the real value never enters the VM.
+</Warning>
