@@ -16,7 +16,7 @@ function buildRedirectUrl(origin: string, path: string): string {
       ? origin
       : process.env.NEXT_PUBLIC_APP_URL || origin
 
-  return `${base}${path}`
+  return new URL(path, base).toString()
 }
 
 function sanitizeNext(raw: string | null): string {
