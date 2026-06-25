@@ -11,7 +11,11 @@ const TRUSTED_REDIRECT_PATTERN =
   /^https:\/\/([a-z0-9-]+\.)?superserve\.ai(\/.*)?$/
 
 function buildRedirectUrl(origin: string, path: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL || origin
+  const base =
+    process.env.VERCEL_ENV === "preview"
+      ? origin
+      : process.env.NEXT_PUBLIC_APP_URL || origin
+
   return `${base}${path}`
 }
 
