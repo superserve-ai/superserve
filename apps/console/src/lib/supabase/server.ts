@@ -1,8 +1,13 @@
 import { createServerClient as _createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
+import { cookies, headers } from "next/headers"
+
+function isVercelPreviewHost(hostname: string): boolean {
+  return hostname.endsWith(".vercel.app")
+}
 
 export async function createServerClient() {
   const cookieStore = await cookies()
+  const headerStore = await headers()
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -14,7 +19,11 @@ export async function createServerClient() {
   }
 
   const cookieDomain = process.env.NEXT_PUBLIC_COOKIE_DOMAIN
-  const domainOpts = cookieDomain ? { domain: cookieDomain } : {}
+  const hostname = (headerStore.get("host") ?? "").split(":")[0]
+  const domainOpts =
+    cookieDomain && !isVercelPreviewHost(hostname)
+      ? { domain: cookieDomain }
+      : {}
 
   return _createServerClient(url, anonKey, {
     cookies: {
