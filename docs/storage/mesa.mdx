@@ -5,9 +5,9 @@ description: Mount Mesa versioned virtual filesystems inside a Superserve sandbo
 icon: "/logos/integrations/mesa.svg"
 ---
 
-[Mesa](https://mesa.dev/) provides versioned virtual filesystems you can mount inside a Superserve sandbox to persist and branch agent workspaces across runs. This guide covers the full end-to-end flow: use the Mesa SDK outside the sandbox to set up resources, then use the Superserve SDK to configure and mount Mesa inside the sandbox.
+[Mesa](https://mesa.dev/) is a versioned virtual filesystem you can mount inside a Superserve sandbox. Where a [cloud bucket](/storage/cloud-buckets) gives a sandbox flat object storage, Mesa adds version history and branches, so every edit is committed back and each sandbox can fork its own workspace. This guide covers the full flow: use the Mesa SDK outside the sandbox to set up resources, then the Superserve SDK to mount Mesa inside.
 
-The general flow for any sandbox integration is:
+Mounting Mesa in a Superserve sandbox takes three steps:
 
 1. **Outside the sandbox:** use the Mesa SDK (TypeScript or Python) to create repos, sign a short-lived access token, and orchestrate your workflow.
 2. **Inside the sandbox:** install the `mesa` CLI, configure it with a short-lived access token, and run `mesa mount --daemonize` to mount your repos as local directories.
