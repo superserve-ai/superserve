@@ -14,7 +14,10 @@ export async function createServerClient() {
   }
 
   const cookieDomain = process.env.NEXT_PUBLIC_COOKIE_DOMAIN
-  const domainOpts = cookieDomain ? { domain: cookieDomain } : {}
+  const domainOpts =
+    cookieDomain && process.env.VERCEL_ENV !== "preview"
+      ? { domain: cookieDomain }
+      : {}
 
   return _createServerClient(url, anonKey, {
     cookies: {
