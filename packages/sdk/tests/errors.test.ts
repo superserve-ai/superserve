@@ -127,6 +127,15 @@ describe("mapApiError", () => {
     expect(err).toBeInstanceOf(ServerError)
   })
 
+  it("maps 503 to ServerError preserving the 503 status", () => {
+    const err = mapApiError(
+      503,
+      withError("sandbox_paused", "sandbox is paused"),
+    )
+    expect(err).toBeInstanceOf(ServerError)
+    expect(err.statusCode).toBe(503)
+  })
+
   it("unknown 4xx status falls back to base SandboxError", () => {
     const err = mapApiError(418, withError("teapot", "short and stout"))
     expect(err).toBeInstanceOf(SandboxError)

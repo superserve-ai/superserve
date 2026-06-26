@@ -64,8 +64,9 @@ class ServerError(SandboxError):
         self,
         message: str = "Internal server error",
         code: str | None = None,
+        status_code: int = 500,
     ) -> None:
-        super().__init__(message, status_code=500, code=code)
+        super().__init__(message, status_code=status_code, code=code)
 
 
 class RateLimitError(SandboxError):
@@ -133,5 +134,5 @@ def map_api_error(status_code: int, body: dict[str, Any]) -> SandboxError:
     elif status_code == 429:
         return RateLimitError(message, code=code)
     elif status_code >= 500:
-        return ServerError(message, code=code)
+        return ServerError(message, code=code, status_code=status_code)
     return SandboxError(message, status_code=status_code, code=code)

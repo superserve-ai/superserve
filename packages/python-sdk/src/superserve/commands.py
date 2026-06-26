@@ -1,24 +1,24 @@
 """``sandbox.commands`` - run shell commands inside a sandbox.
 
-Hits the per-sandbox data plane with the access token. On 401 the SDK
-auto-refreshes via ``POST /activate`` and retries once.
+Hits the per-sandbox data plane with the access token. A paused sandbox (401
+stale token, or 503 because the VM isn't running) is transparently resumed via
+``POST /activate`` and the call is retried once — see ``_token_retry``.
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, NoReturn, TypeVar
+from typing import Any, NoReturn
 
 import httpx
 
 from ._config import data_plane_target
 from ._http import api_request, async_api_request, async_stream_sse, stream_sse
+from ._token_retry import async_with_token_retry, with_token_retry
 from .command_session import AsyncCommandSession, AsyncSpawnDeps, spawn_command
-from .errors import AuthenticationError, SandboxError
+from .errors import SandboxError
 from .types import CommandResult
-
-T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -111,7 +111,9 @@ class Commands:
                 client=self._client,
             )
 
-        raw: dict[str, Any] = self._with_token_retry(send)
+        raw: dict[str, Any] = with_token_retry(
+            self._deps.get_access_token, self._deps.refresh_activate, send
+        )
         return CommandResult(
             stdout=raw.get("stdout", ""),
             stderr=raw.get("stderr", ""),
@@ -135,18 +137,11 @@ class Commands:
                 timeout_seconds,
             )
 
-        return self._with_token_retry(send)
-
-    # Safe for streaming: 401 is returned in the HTTP status code before
-    # any SSE data is written, so the retry can't double-emit callbacks.
-    # The try/except wraps `send` only — if `refresh_activate` itself 401s
-    # (bad API key), it propagates uncaught, so no recursion is possible.
-    def _with_token_retry(self, send: Callable[[str], T]) -> T:
-        try:
-            return send(self._deps.get_access_token())
-        except AuthenticationError:
-            fresh = self._deps.refresh_activate()
-            return send(fresh)
+        # Safe for streaming: the resumable status (401/503) arrives before any
+        # SSE data is written, so a retry can't double-emit callbacks.
+        return with_token_retry(
+            self._deps.get_access_token, self._deps.refresh_activate, send
+        )
 
     def _consume_stream(
         self,
@@ -304,7 +299,9 @@ class AsyncCommands:
                 client=self._client,
             )
 
-        raw: dict[str, Any] = await self._with_token_retry(send)
+        raw: dict[str, Any] = await async_with_token_retry(
+            self._deps.get_access_token, self._deps.refresh_activate, send
+        )
         return CommandResult(
             stdout=raw.get("stdout", ""),
             stderr=raw.get("stderr", ""),
@@ -328,14 +325,9 @@ class AsyncCommands:
                 timeout_seconds,
             )
 
-        return await self._with_token_retry(send)
-
-    async def _with_token_retry(self, send: Callable[[str], Awaitable[T]]) -> T:
-        try:
-            return await send(self._deps.get_access_token())
-        except AuthenticationError:
-            fresh = await self._deps.refresh_activate()
-            return await send(fresh)
+        return await async_with_token_retry(
+            self._deps.get_access_token, self._deps.refresh_activate, send
+        )
 
     async def _consume_stream(
         self,

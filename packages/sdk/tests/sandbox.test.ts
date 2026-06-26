@@ -269,7 +269,7 @@ describe("Sandbox instance methods", () => {
     expect(url).toBe("https://api.superserve.ai/sandboxes/sbx-1/secrets/A%2FB")
   })
 
-  it("sandbox.resume rotates access token and rebuilds files sub-module", async () => {
+  it("sandbox.resume rotates access token; files uses it transparently", async () => {
     const sandbox = await makeSandbox()
     const filesBefore = sandbox.files
 
@@ -290,8 +290,9 @@ describe("Sandbox instance methods", () => {
     expect(url).toBe("https://api.superserve.ai/sandboxes/sbx-1/resume")
     expect(init.method).toBe("POST")
 
-    // Files sub-module was rebuilt (new instance)
-    expect(sandbox.files).not.toBe(filesBefore)
+    // Files sub-module is the same stable instance (it reads the token live,
+    // so there's no rebuild to swap the token in)
+    expect(sandbox.files).toBe(filesBefore)
 
     // Verify subsequent file ops use the rotated token
     vi.unstubAllGlobals()

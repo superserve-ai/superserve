@@ -1,11 +1,32 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { ValidationError } from "../src/errors.js"
-import { Files } from "../src/files.js"
+import { Files, type FilesDeps } from "../src/files.js"
 
 const sandboxId = "sbx-1"
 const sandboxHost = "sandbox.example.com"
 const accessToken = "tok-abc"
+
+/** Build Files deps with a static token, overridable per test. */
+function deps(
+  token = accessToken,
+  overrides: Partial<FilesDeps> = {},
+): FilesDeps {
+  return {
+    sandboxId,
+    sandboxHost,
+    getAccessToken: () => token,
+    refreshActivate: async () => token,
+    ...overrides,
+  }
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  })
+}
 
 async function readBodyAsBytes(
   body: BodyInit | null | undefined,
@@ -29,7 +50,7 @@ async function readBodyAsBytes(
 }
 
 describe("Files path validation", () => {
-  const files = new Files(sandboxId, sandboxHost, accessToken)
+  const files = new Files(deps())
 
   it("write rejects relative paths", async () => {
     await expect(files.write("relative/path", "x")).rejects.toBeInstanceOf(
@@ -91,7 +112,7 @@ describe("Files.downloadDir", () => {
     )
     vi.stubGlobal("fetch", mock)
 
-    const files = new Files(sandboxId, sandboxHost, accessToken)
+    const files = new Files(deps())
     await files.downloadDir("/app/output")
 
     const [url, init] = mock.mock.calls[0] as [string, RequestInit]
@@ -112,7 +133,7 @@ describe("Files.downloadDir", () => {
       vi.fn(async () => new Response(zip, { status: 200 })),
     )
 
-    const files = new Files(sandboxId, sandboxHost, accessToken)
+    const files = new Files(deps())
     const out = await files.downloadDir("/app/output")
     expect(out).toBeInstanceOf(Uint8Array)
     expect(Array.from(out)).toEqual([0x50, 0x4b, 0x03, 0x04])
@@ -132,7 +153,7 @@ describe("Files.downloadDir", () => {
       vi.fn(async () => new Response(stream, { status: 200 })),
     )
 
-    const files = new Files(sandboxId, sandboxHost, accessToken)
+    const files = new Files(deps())
     await expect(
       files.downloadDir("/app/output", { maxBytes: 4 }),
     ).rejects.toBeInstanceOf(ValidationError)
@@ -145,7 +166,7 @@ describe("Files.downloadDir", () => {
       vi.fn(async () => new Response(zip, { status: 200 })),
     )
 
-    const files = new Files(sandboxId, sandboxHost, accessToken)
+    const files = new Files(deps())
     const out = await files.downloadDir("/app/output", { maxBytes: 1024 })
     expect(out).toBeInstanceOf(Uint8Array)
     expect(Array.from(out)).toEqual([0x50, 0x4b, 0x03, 0x04])
@@ -159,7 +180,9 @@ describe("Files.downloadDir", () => {
       )
     vi.stubGlobal("fetch", mock)
 
-    const files = new Files(sandboxId, "sandbox.superserve.ai", accessToken)
+    const files = new Files(
+      deps(accessToken, { sandboxHost: "sandbox.superserve.ai" }),
+    )
     await files.downloadDir("/app/output")
 
     const [url, init] = mock.mock.calls[0] as [string, RequestInit]
@@ -183,7 +206,7 @@ describe("Files.write", () => {
     const mock = vi.fn(async () => new Response(null, { status: 200 }))
     vi.stubGlobal("fetch", mock)
 
-    const files = new Files(sandboxId, sandboxHost, accessToken)
+    const files = new Files(deps())
     await files.write("/app/file.txt", "hello")
 
     const [url, init] = mock.mock.calls[0] as [string, RequestInit]
@@ -201,7 +224,7 @@ describe("Files.write", () => {
     const mock = vi.fn(async () => new Response(null, { status: 200 }))
     vi.stubGlobal("fetch", mock)
 
-    const files = new Files(sandboxId, sandboxHost, accessToken)
+    const files = new Files(deps())
     await files.write("/app/file.txt", "héllo")
 
     const init = mock.mock.calls[0]?.[1] as RequestInit
@@ -213,7 +236,7 @@ describe("Files.write", () => {
     const mock = vi.fn(async () => new Response(null, { status: 200 }))
     vi.stubGlobal("fetch", mock)
 
-    const files = new Files(sandboxId, sandboxHost, accessToken)
+    const files = new Files(deps())
     const data = new Uint8Array([1, 2, 3, 4, 5])
     await files.write("/app/binary.dat", data)
 
@@ -235,7 +258,7 @@ describe("Files.read", () => {
       vi.fn(async () => new Response(payload, { status: 200 })),
     )
 
-    const files = new Files(sandboxId, sandboxHost, accessToken)
+    const files = new Files(deps())
     const out = await files.read("/app/file.bin")
     expect(out).toBeInstanceOf(Uint8Array)
     expect(Array.from(out)).toEqual([10, 20, 30])
@@ -248,7 +271,7 @@ describe("Files.read", () => {
       vi.fn(async () => new Response(payload, { status: 200 })),
     )
 
-    const files = new Files(sandboxId, sandboxHost, accessToken)
+    const files = new Files(deps())
     await expect(
       files.read("/app/file.bin", { maxBytes: 2 }),
     ).rejects.toBeInstanceOf(ValidationError)
@@ -267,9 +290,125 @@ describe("Files.readText", () => {
       vi.fn(async () => new Response(bytes, { status: 200 })),
     )
 
-    const files = new Files(sandboxId, sandboxHost, accessToken)
+    const files = new Files(deps())
     const out = await files.readText("/app/file.txt")
     expect(out).toBe("héllo world")
+  })
+})
+
+describe("Files auto-resume (paused sandbox)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("write resumes + retries on 503, using the rotated token", async () => {
+    let refreshCalled = 0
+    let token = "tok-stale"
+    const mock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({ error: { message: "sandbox is paused" } }, 503),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+    vi.stubGlobal("fetch", mock)
+
+    const files = new Files({
+      sandboxId,
+      sandboxHost,
+      getAccessToken: () => token,
+      refreshActivate: async () => {
+        refreshCalled += 1
+        token = "tok-fresh"
+        return token
+      },
+    })
+    await files.write("/app/f.txt", "hello")
+
+    expect(refreshCalled).toBe(1)
+    expect(mock).toHaveBeenCalledTimes(2)
+    const [, secondInit] = mock.mock.calls[1] as [string, RequestInit]
+    expect(
+      (secondInit.headers as Record<string, string>)["X-Access-Token"],
+    ).toBe("tok-fresh")
+  })
+
+  it("read resumes + retries on 503, using the rotated token", async () => {
+    let refreshCalled = 0
+    let token = "tok-stale"
+    const mock = vi.fn<typeof fetch>(async (_url, init) => {
+      const tok = (init?.headers as Record<string, string>)?.["X-Access-Token"]
+      if (tok === "tok-fresh") {
+        return new Response(new Uint8Array([1, 2, 3]), { status: 200 })
+      }
+      return jsonResponse({ error: { message: "sandbox is paused" } }, 503)
+    })
+    vi.stubGlobal("fetch", mock)
+
+    const files = new Files({
+      sandboxId,
+      sandboxHost,
+      getAccessToken: () => token,
+      refreshActivate: async () => {
+        refreshCalled += 1
+        token = "tok-fresh"
+        return token
+      },
+    })
+    const out = await files.read("/app/f.bin")
+
+    expect(Array.from(out)).toEqual([1, 2, 3])
+    expect(refreshCalled).toBe(1)
+  })
+
+  it("downloadDir resumes + retries on 503, using the rotated token", async () => {
+    let refreshCalled = 0
+    let token = "tok-stale"
+    const mock = vi.fn<typeof fetch>(async (_url, init) => {
+      const tok = (init?.headers as Record<string, string>)?.["X-Access-Token"]
+      if (tok === "tok-fresh") {
+        return new Response(new Uint8Array([0x50, 0x4b]), { status: 200 })
+      }
+      return jsonResponse({ error: { message: "sandbox is paused" } }, 503)
+    })
+    vi.stubGlobal("fetch", mock)
+
+    const files = new Files({
+      sandboxId,
+      sandboxHost,
+      getAccessToken: () => token,
+      refreshActivate: async () => {
+        refreshCalled += 1
+        token = "tok-fresh"
+        return token
+      },
+    })
+    const out = await files.downloadDir("/app/output")
+
+    expect(Array.from(out)).toEqual([0x50, 0x4b])
+    expect(refreshCalled).toBe(1)
+  })
+
+  it("does NOT resume on a 404 (path not found)", async () => {
+    let refreshCalled = 0
+    const mock = vi.fn(async () =>
+      jsonResponse(
+        { error: { code: "not_found", message: "no such file" } },
+        404,
+      ),
+    )
+    vi.stubGlobal("fetch", mock)
+
+    const files = new Files({
+      sandboxId,
+      sandboxHost,
+      getAccessToken: () => "tok-stale",
+      refreshActivate: async () => {
+        refreshCalled += 1
+        return "tok-fresh"
+      },
+    })
+    await expect(files.read("/missing")).rejects.toBeInstanceOf(Error)
+    expect(refreshCalled).toBe(0)
   })
 })
 
@@ -284,7 +423,9 @@ describe("Files shared-host routing", () => {
       .mockResolvedValueOnce(new Response("ok", { status: 200 }))
     vi.stubGlobal("fetch", mock)
 
-    const files = new Files(sandboxId, "sandbox.superserve.ai", accessToken)
+    const files = new Files(
+      deps(accessToken, { sandboxHost: "sandbox.superserve.ai" }),
+    )
     await files.write("/tmp/f.txt", "data")
 
     const [url, init] = mock.mock.calls[0] as [string, RequestInit]
@@ -304,7 +445,9 @@ describe("Files shared-host routing", () => {
       )
     vi.stubGlobal("fetch", mock)
 
-    const files = new Files(sandboxId, "sandbox.superserve.ai", accessToken)
+    const files = new Files(
+      deps(accessToken, { sandboxHost: "sandbox.superserve.ai" }),
+    )
     await files.read("/tmp/f.bin")
 
     const [url, init] = mock.mock.calls[0] as [string, RequestInit]

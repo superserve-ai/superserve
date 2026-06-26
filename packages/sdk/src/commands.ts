@@ -1,16 +1,19 @@
 /**
  * `sandbox.commands` - run shell commands inside a sandbox.
  *
- * Hits the per-sandbox data plane with the access token. On 401 the
- * SDK auto-refreshes via `POST /activate` and retries once.
+ * Hits the per-sandbox data plane with the access token. A paused sandbox
+ * (401 stale token, or 503 because the VM isn't running) is transparently
+ * resumed via `POST /activate` and the call is retried once — see
+ * `tokenRetry.ts`.
  *
  * Accessed as `sandbox.commands.run(...)`.
  */
 
 import { spawnCommand } from "./commandSession.js"
 import { dataPlaneTarget } from "./config.js"
-import { AuthenticationError, SandboxError } from "./errors.js"
+import { SandboxError } from "./errors.js"
 import { request, streamSSE } from "./http.js"
+import { withTokenRetry } from "./tokenRetry.js"
 import type {
   ApiExecResult,
   ApiExecStreamEvent,
@@ -125,7 +128,7 @@ export class Commands {
         signal: options.signal,
       })
 
-    const raw = await this._withTokenRetry(send)
+    const raw = await withTokenRetry(this._deps, send)
     return {
       stdout: raw.stdout ?? "",
       stderr: raw.stderr ?? "",
@@ -144,23 +147,9 @@ export class Commands {
         body,
         options,
       )
-    return this._withTokenRetry(send)
-  }
-
-  // Safe for streaming: 401 is returned in the HTTP status code before
-  // any SSE data is written, so the retry can't double-emit callbacks.
-  // The try/catch wraps `send` only — if `refreshActivate` itself 401s
-  // (bad API key), it propagates uncaught, so no recursion is possible.
-  private async _withTokenRetry<T>(
-    send: (token: string) => Promise<T>,
-  ): Promise<T> {
-    try {
-      return await send(this._deps.getAccessToken())
-    } catch (err) {
-      if (!(err instanceof AuthenticationError)) throw err
-      const fresh = await this._deps.refreshActivate()
-      return send(fresh)
-    }
+    // Safe for streaming: the resumable status (401/503) is returned before any
+    // SSE data is written, so a retry can't double-emit callbacks.
+    return withTokenRetry(this._deps, send)
   }
 
   private async _consumeStream(

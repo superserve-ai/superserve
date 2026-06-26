@@ -83,8 +83,12 @@ export class RateLimitError extends SandboxError {
 }
 
 export class ServerError extends SandboxError {
-  constructor(message = "Internal server error", code?: string) {
-    super(message, 500, code)
+  constructor(
+    message = "Internal server error",
+    code?: string,
+    statusCode = 500,
+  ) {
+    super(message, statusCode, code)
     this.name = "ServerError"
   }
 }
@@ -141,7 +145,7 @@ export function mapApiError(
     case 429:
       return new RateLimitError(message, code)
     default:
-      if (status >= 500) return new ServerError(message, code)
+      if (status >= 500) return new ServerError(message, code, status)
       return new SandboxError(message, status, code)
   }
 }

@@ -2,27 +2,56 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 import httpx
 import pytest
 import respx
-from superserve.errors import ValidationError
-from superserve.files import AsyncFiles, Files
+from superserve.errors import SandboxError, ValidationError
+from superserve.files import AsyncFiles, AsyncFilesDeps, Files, FilesDeps
+
+HOST = "sandbox.example.com"
+SBX = "abc-123"
+DATA_PLANE = f"https://boxd-{SBX}.{HOST}"
+
+
+def _deps(
+    token: str = "tok-xyz",
+    *,
+    host: str = HOST,
+    refresh: Callable[[], str] | None = None,
+) -> FilesDeps:
+    return FilesDeps(
+        sandbox_id=SBX,
+        sandbox_host=host,
+        get_access_token=lambda: token,
+        refresh_activate=refresh if refresh is not None else (lambda: token),
+    )
+
+
+def _async_deps(
+    token: str = "tok-xyz",
+    *,
+    host: str = HOST,
+    refresh: Callable[[], Awaitable[str]] | None = None,
+) -> AsyncFilesDeps:
+    async def _noop() -> str:
+        return token
+
+    return AsyncFilesDeps(
+        sandbox_id=SBX,
+        sandbox_host=host,
+        get_access_token=lambda: token,
+        refresh_activate=refresh if refresh is not None else _noop,
+    )
 
 
 def _make_files() -> Files:
-    return Files(
-        sandbox_id="abc-123",
-        sandbox_host="sandbox.example.com",
-        access_token="tok-xyz",
-    )
+    return Files(_deps())
 
 
 def _make_async_files() -> AsyncFiles:
-    return AsyncFiles(
-        sandbox_id="abc-123",
-        sandbox_host="sandbox.example.com",
-        access_token="tok-xyz",
-    )
+    return AsyncFiles(_async_deps())
 
 
 class TestPathValidation:
@@ -62,7 +91,7 @@ class TestPathValidation:
 class TestFilesWrite:
     def test_sends_access_token_header(self) -> None:
         with respx.mock() as router:
-            route = router.post("https://boxd-abc-123.sandbox.example.com/files").mock(
+            route = router.post(f"{DATA_PLANE}/files").mock(
                 return_value=httpx.Response(200)
             )
             _make_files().write("/home/x.txt", "hello")
@@ -71,7 +100,7 @@ class TestFilesWrite:
 
     def test_accepts_bytes_content(self) -> None:
         with respx.mock() as router:
-            route = router.post("https://boxd-abc-123.sandbox.example.com/files").mock(
+            route = router.post(f"{DATA_PLANE}/files").mock(
                 return_value=httpx.Response(200)
             )
             _make_files().write("/home/x.bin", b"\x00\x01\x02")
@@ -79,7 +108,7 @@ class TestFilesWrite:
 
     def test_encodes_str_as_utf8(self) -> None:
         with respx.mock() as router:
-            route = router.post("https://boxd-abc-123.sandbox.example.com/files").mock(
+            route = router.post(f"{DATA_PLANE}/files").mock(
                 return_value=httpx.Response(200)
             )
             _make_files().write("/home/x.txt", "héllo")
@@ -89,7 +118,7 @@ class TestFilesWrite:
 class TestFilesRead:
     def test_returns_bytes(self) -> None:
         with respx.mock() as router:
-            router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+            router.get(f"{DATA_PLANE}/files").mock(
                 return_value=httpx.Response(200, content=b"\x00raw bytes\x00")
             )
             result = _make_files().read("/home/x.bin")
@@ -97,7 +126,7 @@ class TestFilesRead:
 
     def test_sends_access_token_header(self) -> None:
         with respx.mock() as router:
-            route = router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+            route = router.get(f"{DATA_PLANE}/files").mock(
                 return_value=httpx.Response(200, content=b"ok")
             )
             _make_files().read("/home/x.txt")
@@ -107,14 +136,14 @@ class TestFilesRead:
 class TestFilesReadText:
     def test_returns_string(self) -> None:
         with respx.mock() as router:
-            router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+            router.get(f"{DATA_PLANE}/files").mock(
                 return_value=httpx.Response(200, content=b"hello world")
             )
             assert _make_files().read_text("/home/x.txt") == "hello world"
 
     def test_handles_utf8(self) -> None:
         with respx.mock() as router:
-            router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+            router.get(f"{DATA_PLANE}/files").mock(
                 return_value=httpx.Response(200, content="héllo".encode())
             )
             assert _make_files().read_text("/home/x.txt") == "héllo"
@@ -123,7 +152,7 @@ class TestFilesReadText:
 class TestFilesDownloadDir:
     def test_returns_zip_bytes(self) -> None:
         with respx.mock() as router:
-            router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+            router.get(f"{DATA_PLANE}/files").mock(
                 return_value=httpx.Response(200, content=b"PK\x03\x04zip")
             )
             result = _make_files().download_dir("/home/project")
@@ -131,7 +160,7 @@ class TestFilesDownloadDir:
 
     def test_sends_format_zip_and_access_token(self) -> None:
         with respx.mock() as router:
-            route = router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+            route = router.get(f"{DATA_PLANE}/files").mock(
                 return_value=httpx.Response(200, content=b"PK")
             )
             _make_files().download_dir("/home/project")
@@ -144,7 +173,7 @@ class TestFilesDownloadDir:
 class TestFilesDownloadByteCap:
     def test_read_over_cap_raises(self) -> None:
         with respx.mock() as router:
-            router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+            router.get(f"{DATA_PLANE}/files").mock(
                 return_value=httpx.Response(200, content=b"x" * 100)
             )
             with pytest.raises(ValidationError, match="maximum size of 10 bytes"):
@@ -152,21 +181,21 @@ class TestFilesDownloadByteCap:
 
     def test_read_under_cap_returns_bytes(self) -> None:
         with respx.mock() as router:
-            router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+            router.get(f"{DATA_PLANE}/files").mock(
                 return_value=httpx.Response(200, content=b"small")
             )
             assert _make_files().read("/home/small.bin", max_bytes=1024) == b"small"
 
     def test_read_at_cap_returns_bytes(self) -> None:
         with respx.mock() as router:
-            router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+            router.get(f"{DATA_PLANE}/files").mock(
                 return_value=httpx.Response(200, content=b"abcde")
             )
             assert _make_files().read("/home/exact.bin", max_bytes=5) == b"abcde"
 
     def test_download_dir_over_cap_raises(self) -> None:
         with respx.mock() as router:
-            router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+            router.get(f"{DATA_PLANE}/files").mock(
                 return_value=httpx.Response(200, content=b"PK" + b"z" * 100)
             )
             with pytest.raises(ValidationError, match="maximum size"):
@@ -174,7 +203,7 @@ class TestFilesDownloadByteCap:
 
     async def test_async_read_over_cap_raises(self) -> None:
         with respx.mock() as router:
-            router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+            router.get(f"{DATA_PLANE}/files").mock(
                 return_value=httpx.Response(200, content=b"y" * 100)
             )
             with pytest.raises(ValidationError, match="maximum size of 10 bytes"):
@@ -182,7 +211,7 @@ class TestFilesDownloadByteCap:
 
     async def test_async_read_under_cap_returns_bytes(self) -> None:
         with respx.mock() as router:
-            router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+            router.get(f"{DATA_PLANE}/files").mock(
                 return_value=httpx.Response(200, content=b"tiny")
             )
             result = await _make_async_files().read("/home/tiny.bin", max_bytes=1024)
@@ -192,7 +221,7 @@ class TestFilesDownloadByteCap:
 class TestAsyncFilesDownloadDir:
     async def test_returns_zip_bytes(self) -> None:
         with respx.mock() as router:
-            router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+            router.get(f"{DATA_PLANE}/files").mock(
                 return_value=httpx.Response(200, content=b"PK\x03\x04zip")
             )
             result = await _make_async_files().download_dir("/home/project")
@@ -200,7 +229,7 @@ class TestAsyncFilesDownloadDir:
 
     async def test_sends_format_zip_and_access_token(self) -> None:
         with respx.mock() as router:
-            route = router.get("https://boxd-abc-123.sandbox.example.com/files").mock(
+            route = router.get(f"{DATA_PLANE}/files").mock(
                 return_value=httpx.Response(200, content=b"PK")
             )
             await _make_async_files().download_dir("/home/project")
@@ -209,13 +238,166 @@ class TestAsyncFilesDownloadDir:
             assert req.headers["X-Access-Token"] == "tok-xyz"
 
 
+class TestFilesAutoResume:
+    """A paused sandbox answers file ops with 503; the op should resume."""
+
+    def test_write_resumes_and_retries_on_503(self) -> None:
+        state = {"token": "tok-stale", "refreshes": 0}
+
+        def refresh() -> str:
+            state["refreshes"] += 1
+            state["token"] = "tok-fresh"
+            return state["token"]
+
+        deps = FilesDeps(
+            sandbox_id=SBX,
+            sandbox_host=HOST,
+            get_access_token=lambda: state["token"],
+            refresh_activate=refresh,
+        )
+        with respx.mock() as router:
+            route = router.post(f"{DATA_PLANE}/files").mock(
+                side_effect=[
+                    httpx.Response(
+                        503, json={"error": {"message": "sandbox is paused"}}
+                    ),
+                    httpx.Response(200),
+                ]
+            )
+            Files(deps).write("/app/f.txt", "hello")
+            assert state["refreshes"] == 1
+            assert route.call_count == 2
+            assert route.calls.last.request.headers["x-access-token"] == "tok-fresh"
+
+    def test_read_resumes_and_retries_on_503(self) -> None:
+        state = {"token": "tok-stale", "refreshes": 0}
+
+        def refresh() -> str:
+            state["refreshes"] += 1
+            state["token"] = "tok-fresh"
+            return state["token"]
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.headers.get("x-access-token") == "tok-fresh":
+                return httpx.Response(200, content=b"data")
+            return httpx.Response(503, json={"error": {"message": "sandbox is paused"}})
+
+        deps = FilesDeps(
+            sandbox_id=SBX,
+            sandbox_host=HOST,
+            get_access_token=lambda: state["token"],
+            refresh_activate=refresh,
+        )
+        with respx.mock() as router:
+            router.get(f"{DATA_PLANE}/files").mock(side_effect=handler)
+            result = Files(deps).read("/app/f.bin")
+            assert result == b"data"
+            assert state["refreshes"] == 1
+
+    def test_download_dir_resumes_and_retries_on_503(self) -> None:
+        state = {"token": "tok-stale", "refreshes": 0}
+
+        def refresh() -> str:
+            state["refreshes"] += 1
+            state["token"] = "tok-fresh"
+            return state["token"]
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.headers.get("x-access-token") == "tok-fresh":
+                return httpx.Response(200, content=b"PK")
+            return httpx.Response(503, json={"error": {"message": "sandbox is paused"}})
+
+        deps = FilesDeps(
+            sandbox_id=SBX,
+            sandbox_host=HOST,
+            get_access_token=lambda: state["token"],
+            refresh_activate=refresh,
+        )
+        with respx.mock() as router:
+            router.get(f"{DATA_PLANE}/files").mock(side_effect=handler)
+            result = Files(deps).download_dir("/app/output")
+            assert result == b"PK"
+            assert state["refreshes"] == 1
+
+    def test_does_not_resume_on_404(self) -> None:
+        state = {"refreshes": 0}
+
+        def refresh() -> str:
+            state["refreshes"] += 1
+            return "tok-fresh"
+
+        deps = FilesDeps(
+            sandbox_id=SBX,
+            sandbox_host=HOST,
+            get_access_token=lambda: "tok-stale",
+            refresh_activate=refresh,
+        )
+        with respx.mock() as router:
+            router.get(f"{DATA_PLANE}/files").mock(
+                return_value=httpx.Response(404, json={"error": {"code": "not_found"}})
+            )
+            with pytest.raises(SandboxError):
+                Files(deps).read("/missing")
+            assert state["refreshes"] == 0
+
+
+class TestAsyncFilesAutoResume:
+    async def test_write_resumes_and_retries_on_503(self) -> None:
+        state = {"token": "tok-stale", "refreshes": 0}
+
+        async def refresh() -> str:
+            state["refreshes"] += 1
+            state["token"] = "tok-fresh"
+            return state["token"]
+
+        deps = AsyncFilesDeps(
+            sandbox_id=SBX,
+            sandbox_host=HOST,
+            get_access_token=lambda: state["token"],
+            refresh_activate=refresh,
+        )
+        with respx.mock() as router:
+            route = router.post(f"{DATA_PLANE}/files").mock(
+                side_effect=[
+                    httpx.Response(
+                        503, json={"error": {"message": "sandbox is paused"}}
+                    ),
+                    httpx.Response(200),
+                ]
+            )
+            await AsyncFiles(deps).write("/app/f.txt", "hello")
+            assert state["refreshes"] == 1
+            assert route.calls.last.request.headers["x-access-token"] == "tok-fresh"
+
+    async def test_read_resumes_and_retries_on_503(self) -> None:
+        state = {"token": "tok-stale", "refreshes": 0}
+
+        async def refresh() -> str:
+            state["refreshes"] += 1
+            state["token"] = "tok-fresh"
+            return state["token"]
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.headers.get("x-access-token") == "tok-fresh":
+                return httpx.Response(200, content=b"data")
+            return httpx.Response(503, json={"error": {"message": "sandbox is paused"}})
+
+        deps = AsyncFilesDeps(
+            sandbox_id=SBX,
+            sandbox_host=HOST,
+            get_access_token=lambda: state["token"],
+            refresh_activate=refresh,
+        )
+        with respx.mock() as router:
+            router.get(f"{DATA_PLANE}/files").mock(side_effect=handler)
+            result = await AsyncFiles(deps).read("/app/f.bin")
+            assert result == b"data"
+            assert state["refreshes"] == 1
+
+
 class TestFilesSharedHostRouting:
     def test_uses_shared_host_when_supported(self) -> None:
-        files = Files(
-            sandbox_id="abc-123",
-            sandbox_host="sandbox.superserve.ai",
-            access_token="tok-xyz",
-        )
+        files = Files(_deps(host="sandbox.superserve.ai"))
         with respx.mock() as router:
             route = router.post("https://sandbox.superserve.ai/files").mock(
                 return_value=httpx.Response(200)
@@ -226,11 +408,7 @@ class TestFilesSharedHostRouting:
             assert req.headers.get("x-access-token") == "tok-xyz"
 
     def test_read_also_carries_sandbox_id_header_on_shared_host(self) -> None:
-        files = Files(
-            sandbox_id="abc-123",
-            sandbox_host="sandbox.superserve.ai",
-            access_token="tok-xyz",
-        )
+        files = Files(_deps(host="sandbox.superserve.ai"))
         with respx.mock() as router:
             route = router.get("https://sandbox.superserve.ai/files").mock(
                 return_value=httpx.Response(200, content=b"hello")
