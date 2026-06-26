@@ -1,15 +1,25 @@
 /** In-memory fake {@link SandboxClient} for tests (no network, no credentials). */
 
 import { NotFoundError, ValidationError } from "@superserve/sdk"
-import type { CommandResult, SandboxInfo, SandboxStatus } from "@superserve/sdk"
+import type {
+  CommandResult,
+  NetworkConfig,
+  NetworkEvent,
+  NetworkLogPage,
+  SandboxInfo,
+  SandboxSecretBinding,
+  SandboxStatus,
+} from "@superserve/sdk"
 
 import type {
   ExecInput,
   SandboxClient,
   SandboxSummary,
+  SecretSummary,
   TemplateSummary,
 } from "../src/client.js"
 import type { DirEntry } from "../src/lib/listing.js"
+import { buildPreviewUrl } from "../src/lib/previewUrl.js"
 
 interface FakeSandbox {
   id: string
@@ -17,6 +27,8 @@ interface FakeSandbox {
   status: SandboxStatus
   metadata: Record<string, string>
   files: Map<string, Uint8Array>
+  network?: NetworkConfig
+  secrets: SandboxSecretBinding[]
 }
 
 export interface FakeClient {
@@ -24,6 +36,10 @@ export interface FakeClient {
   sandboxes: Map<string, FakeSandbox>
   /** Seed-able template catalog returned by `listTemplates`. */
   templates: TemplateSummary[]
+  /** Seed-able secret catalog returned by `listSecrets`. */
+  secrets: SecretSummary[]
+  /** Seed-able egress rows returned by `networkLog`. */
+  networkEvents: NetworkEvent[]
   /** The options the most recent `exec` call received (for asserting clamps). */
   lastExec: { command: string; opts: ExecInput } | undefined
 }
@@ -31,6 +47,8 @@ export interface FakeClient {
 export function createFakeClient(): FakeClient {
   const sandboxes = new Map<string, FakeSandbox>()
   const templates: TemplateSummary[] = []
+  const secrets: SecretSummary[] = []
+  const networkEvents: NetworkEvent[] = []
   const fake: Pick<FakeClient, "lastExec"> = { lastExec: undefined }
   let counter = 0
 
@@ -56,9 +74,19 @@ export function createFakeClient(): FakeClient {
         status: "active",
         metadata: input.metadata ?? {},
         files: new Map(),
+        network: input.network,
+        secrets: Object.entries(input.secrets ?? {}).map(
+          ([envKey, secretName]) => ({ envKey, secretName, revoked: false }),
+        ),
       }
       sandboxes.set(id, sb)
       return summarize(sb)
+    },
+
+    async update(id, input) {
+      const sb = must(id)
+      if (input.metadata !== undefined) sb.metadata = input.metadata
+      if (input.network !== undefined) sb.network = input.network
     },
 
     async list(metadata) {
@@ -76,6 +104,19 @@ export function createFakeClient(): FakeClient {
       return templates.filter((t) => t.name.startsWith(namePrefix))
     },
 
+    async createTemplate(input) {
+      const summary: TemplateSummary = {
+        id: `tpl-${++counter}`,
+        name: input.name,
+        status: "building",
+        vcpu: input.vcpu ?? 2,
+        memoryMib: input.memoryMib ?? 2048,
+        diskMib: input.diskMib ?? 8192,
+      }
+      templates.push(summary)
+      return summary
+    },
+
     async info(id) {
       const sb = must(id)
       const info: SandboxInfo = {
@@ -86,9 +127,42 @@ export function createFakeClient(): FakeClient {
         memoryMib: 2048,
         createdAt: new Date(0),
         timeoutSeconds: 3600,
+        network: sb.network,
         metadata: sb.metadata,
+        secrets: sb.secrets.length ? sb.secrets : undefined,
       }
       return info
+    },
+
+    previewUrl(id, port) {
+      return buildPreviewUrl(id, port)
+    },
+
+    async networkLog(id, opts) {
+      must(id)
+      const limit = opts.limit ?? 50
+      const page: NetworkLogPage = {
+        events: networkEvents.slice(0, limit),
+        hasMore: networkEvents.length > limit,
+      }
+      return page
+    },
+
+    async listSecrets() {
+      return [...secrets]
+    },
+
+    async attachSecret(id, envKey, secretName) {
+      const sb = must(id)
+      sb.secrets = [
+        ...sb.secrets.filter((b) => b.envKey !== envKey),
+        { envKey, secretName, revoked: false },
+      ]
+    },
+
+    async detachSecret(id, envKey) {
+      const sb = must(id)
+      sb.secrets = sb.secrets.filter((b) => b.envKey !== envKey)
     },
 
     async exec(id, command, opts) {
@@ -162,6 +236,8 @@ export function createFakeClient(): FakeClient {
     client,
     sandboxes,
     templates,
+    secrets,
+    networkEvents,
     get lastExec() {
       return fake.lastExec
     },

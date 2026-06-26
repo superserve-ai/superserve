@@ -1,6 +1,6 @@
 # @superserve/mcp
 
-[Model Context Protocol](https://modelcontextprotocol.io) server for [Superserve](https://superserve.ai) sandboxes. Create, run commands in, and manage isolated Firecracker microVMs from any MCP client — Claude, Cursor, VS Code, Windsurf.
+[Model Context Protocol](https://modelcontextprotocol.io) server for [Superserve](https://superserve.ai) sandboxes. Create, run commands in, and manage isolated Firecracker microVMs from any MCP client — Claude, Cursor, VS Code, Windsurf, Codex.
 
 Runs locally over stdio via `npx`. Authenticates with your Superserve API key. Targets a sandbox per call by id.
 
@@ -53,6 +53,15 @@ claude mcp add superserve \
 }
 ```
 
+**Codex** (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.superserve]
+command = "npx"
+args = ["-y", "@superserve/mcp"]
+env = { SUPERSERVE_API_KEY = "ss_live_xxxxxxxxxxxxxxxx" }
+```
+
 ## Hosted (remote)
 
 A hosted instance runs at `https://mcp.superserve.ai` (Streamable HTTP) — no local install. Send your Superserve API key as a bearer token; the server is stateless and account-scoped (the key already maps to your team).
@@ -101,21 +110,28 @@ It serves the MCP endpoint at `/` (POST) and a `GET /health` liveness probe. Con
 
 ## Tools
 
-| Tool                    | Description                                                                            |
-| ----------------------- | -------------------------------------------------------------------------------------- |
-| `sandbox_create`        | Create a sandbox; returns its `id`.                                                    |
-| `sandbox_template_list` | List the templates (prebuilt base images) your team can create sandboxes from.         |
-| `sandbox_list`          | List sandboxes (active and paused), filterable by metadata.                            |
-| `sandbox_info`          | Get a sandbox's status, resources, and metadata (read-only).                           |
-| `sandbox_exec`          | Run a shell command; returns stdout, stderr, exit code. Auto-resumes a paused sandbox. |
-| `sandbox_files_read`    | Read a file (UTF-8 text or base64).                                                    |
-| `sandbox_files_write`   | Create or overwrite a file.                                                            |
-| `sandbox_files_list`    | List a directory.                                                                      |
-| `sandbox_pause`         | Pause a sandbox (state preserved).                                                     |
-| `sandbox_resume`        | Resume a paused sandbox (usually unnecessary — exec auto-resumes).                     |
-| `sandbox_kill`          | Delete a sandbox.                                                                      |
+| Tool                      | Description                                                                            |
+| ------------------------- | -------------------------------------------------------------------------------------- |
+| `sandbox_create`          | Create a sandbox; returns its `id`. Accepts `secrets` bindings and egress rules.       |
+| `sandbox_update`          | Change a sandbox's metadata or egress (`allow_out`/`deny_out`) rules after creation.   |
+| `sandbox_list`            | List sandboxes (active and paused), filterable by metadata.                            |
+| `sandbox_info`            | Get a sandbox's status, resources, metadata, network rules, and secret bindings.       |
+| `sandbox_exec`            | Run a shell command; returns stdout, stderr, exit code. Auto-resumes a paused sandbox. |
+| `sandbox_files_read`      | Read a file (UTF-8 text or base64). Rejects files over 1 MiB.                          |
+| `sandbox_files_write`     | Create or overwrite a file (inline content capped at 8 MiB).                           |
+| `sandbox_files_list`      | List a directory.                                                                      |
+| `sandbox_pause`           | Pause a sandbox (state preserved).                                                     |
+| `sandbox_resume`          | Resume a paused sandbox (usually unnecessary — exec auto-resumes).                     |
+| `sandbox_kill`            | Delete a sandbox.                                                                      |
+| `sandbox_preview_url`     | Build the public URL for a listening port (unauthenticated).                           |
+| `sandbox_network_log`     | Audit a sandbox's outbound connections.                                                |
+| `sandbox_template_list`   | List the templates (prebuilt base images) your team can create sandboxes from.         |
+| `sandbox_template_create` | Build a custom template (vCPU/memory/disk shape, preinstalled software). Async.        |
+| `secret_list`             | List bindable team secrets (metadata only — never values).                             |
+| `sandbox_attach_secret`   | Bind a stored secret to a sandbox under an env var.                                    |
+| `sandbox_detach_secret`   | Remove a secret binding from a sandbox.                                                |
 
-All tools except `sandbox_create`, `sandbox_template_list`, and `sandbox_list` take a `sandbox_id`.
+All tools take a `sandbox_id` except `sandbox_create`, `sandbox_list`, `sandbox_template_list`, `sandbox_template_create`, and `secret_list`. Secret _creation_ is intentionally not exposed (the raw value belongs on the SDK/console, not an agent transcript); the server only binds existing secrets.
 
 ## Configuration
 

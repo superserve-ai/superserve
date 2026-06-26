@@ -6,6 +6,28 @@
 export const SERVER_NAME = "superserve"
 
 /**
+ * Server-level `instructions` returned in the initialize handshake. Codex (and
+ * other clients) surface this as server-wide guidance, so the cross-tool rules
+ * that are easy to miss from individual tool descriptions live here. The first
+ * paragraph is kept self-contained (~the first 512 chars) so a client that only
+ * reads the head still gets the core workflow and the file-read limit.
+ */
+export const SERVER_INSTRUCTIONS =
+  "Superserve runs code in isolated Firecracker microVMs. Get a sandbox id first — call " +
+  "sandbox_create (or sandbox_list for existing ones), then pass sandbox_id to every other tool. " +
+  "sandbox_exec and the file tools auto-resume a paused sandbox, so never call sandbox_resume first. " +
+  "Use sandbox_pause to keep state cheaply; sandbox_kill deletes permanently. sandbox_files_read " +
+  "rejects files over 1 MiB — read a slice with sandbox_exec (e.g. `head -c`) instead of a full read.\n" +
+  "\n" +
+  "Templates: call sandbox_template_list before passing from_template to sandbox_create; build a custom " +
+  "base image with sandbox_template_create, then poll sandbox_template_list until its status is ready. " +
+  "Secrets: bind stored credentials via the secrets argument on sandbox_create or sandbox_attach_secret " +
+  "instead of putting raw keys in env_vars; discover them with secret_list. Network: restrict egress with " +
+  "allow_out/deny_out on sandbox_create or sandbox_update, and audit it with sandbox_network_log. Get a " +
+  "public URL for a listening port with sandbox_preview_url (the URL is unauthenticated — anything bound " +
+  "to that port is internet-exposed)."
+
+/**
  * Server version. Kept in sync with `package.json` `version`
  * (enforced by `tests/version.test.ts`).
  */
@@ -50,3 +72,9 @@ export const MAX_WRITE_BYTES = 8 * 1024 * 1024
  * memory with a giant body before tool validation runs.
  */
 export const MAX_REQUEST_BYTES = 16 * 1024 * 1024
+
+/** Default number of egress rows returned by `sandbox_network_log`. */
+export const DEFAULT_NETWORK_LOG_LIMIT = 50
+
+/** Hard cap on `sandbox_network_log` rows per call (bounds output + API load). */
+export const MAX_NETWORK_LOG_LIMIT = 200

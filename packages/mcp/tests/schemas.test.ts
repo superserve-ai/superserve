@@ -5,7 +5,9 @@ import { type ConnectedClient, connect } from "./harness.js"
 
 const EXPECTED_TOOLS = [
   "sandbox_create",
+  "sandbox_update",
   "sandbox_template_list",
+  "sandbox_template_create",
   "sandbox_list",
   "sandbox_info",
   "sandbox_exec",
@@ -15,9 +17,15 @@ const EXPECTED_TOOLS = [
   "sandbox_pause",
   "sandbox_resume",
   "sandbox_kill",
+  "sandbox_preview_url",
+  "sandbox_network_log",
+  "secret_list",
+  "sandbox_attach_secret",
+  "sandbox_detach_secret",
 ]
 
 const PER_SANDBOX_TOOLS = [
+  "sandbox_update",
   "sandbox_info",
   "sandbox_exec",
   "sandbox_files_read",
@@ -26,6 +34,10 @@ const PER_SANDBOX_TOOLS = [
   "sandbox_pause",
   "sandbox_resume",
   "sandbox_kill",
+  "sandbox_preview_url",
+  "sandbox_network_log",
+  "sandbox_attach_secret",
+  "sandbox_detach_secret",
 ]
 
 describe("tool registration", () => {
@@ -95,5 +107,21 @@ describe("tool registration", () => {
     expect(byName("sandbox_files_write")?.annotations?.idempotentHint).toBe(
       true,
     )
+  })
+
+  it("advertises server-level instructions covering cross-tool workflow + limits", () => {
+    const instructions = conn.client.getInstructions()
+    expect(instructions).toBeTruthy()
+    expect(instructions).toContain("sandbox_create")
+    expect(instructions).toContain("secrets")
+    // The first ~512 chars stay self-contained: core workflow + file-read limit.
+    expect((instructions ?? "").slice(0, 512)).toMatch(/1 MiB/)
+  })
+
+  it("exposes sandbox_create secrets + egress rules as inline schemas", () => {
+    const props = byName("sandbox_create")?.inputSchema?.properties
+    expect(props?.secrets?.type).toBe("object")
+    expect(props?.allow_out?.type).toBe("array")
+    expect(props?.deny_out?.type).toBe("array")
   })
 })

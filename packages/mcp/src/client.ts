@@ -13,8 +13,22 @@
  * do not auto-retry on a stale token).
  */
 
-import { NotFoundError, Sandbox, SandboxError, Template } from "@superserve/sdk"
-import type { CommandResult, SandboxInfo, TemplateInfo } from "@superserve/sdk"
+import {
+  NotFoundError,
+  Sandbox,
+  SandboxError,
+  Secret,
+  Template,
+} from "@superserve/sdk"
+import type {
+  BuildStep,
+  CommandResult,
+  NetworkConfig,
+  NetworkLogPage,
+  SandboxInfo,
+  SecretInfo,
+  TemplateInfo,
+} from "@superserve/sdk"
 
 import type { ClientConfig } from "./config.js"
 import {
@@ -26,6 +40,7 @@ import {
   parseLsOutput,
   validateAbsolutePath,
 } from "./lib/listing.js"
+import { buildPreviewUrl } from "./lib/previewUrl.js"
 
 export interface SandboxSummary {
   id: string
@@ -50,6 +65,15 @@ export interface CreateInput {
   timeoutSeconds?: number
   metadata?: Record<string, string>
   envVars?: Record<string, string>
+  /** Bind team-stored secrets to env vars: `{ ENV_VAR: secretName }`. */
+  secrets?: Record<string, string>
+  /** Egress allow/deny rules (host patterns). */
+  network?: NetworkConfig
+}
+
+export interface UpdateInput {
+  metadata?: Record<string, string>
+  network?: NetworkConfig
 }
 
 export interface ExecInput {
@@ -58,11 +82,51 @@ export interface ExecInput {
   timeoutMs?: number
 }
 
+export interface TemplateCreateInput {
+  name: string
+  from: string
+  vcpu?: number
+  memoryMib?: number
+  diskMib?: number
+  steps?: BuildStep[]
+  startCmd?: string
+  readyCmd?: string
+}
+
+export interface NetworkLogInput {
+  limit?: number
+  before?: string
+  since?: string
+  verdict?: "allowed" | "blocked" | "failed"
+}
+
+/**
+ * A team secret as exposed to the model: identifying metadata only. The secret
+ * **value is never included** — it never leaves the platform in cleartext.
+ */
+export interface SecretSummary {
+  name: string
+  authType: string
+  hosts: string[]
+  providerShortcut?: string
+  lastUsedAt?: string
+}
+
 export interface SandboxClient {
   create(input: CreateInput): Promise<SandboxSummary>
+  update(id: string, input: UpdateInput): Promise<void>
   list(metadata?: Record<string, string>): Promise<SandboxSummary[]>
   listTemplates(namePrefix?: string): Promise<TemplateSummary[]>
+  createTemplate(input: TemplateCreateInput): Promise<TemplateSummary>
   info(id: string): Promise<SandboxInfo>
+  /** Public URL for a listening port. Pure construction — no network call. */
+  previewUrl(id: string, port: number): string
+  /** Recent egress events for a sandbox (newest first). Control-plane audit. */
+  networkLog(id: string, opts: NetworkLogInput): Promise<NetworkLogPage>
+  /** Team secrets (metadata only — never values). */
+  listSecrets(): Promise<SecretSummary[]>
+  attachSecret(id: string, envKey: string, secretName: string): Promise<void>
+  detachSecret(id: string, envKey: string): Promise<void>
   exec(id: string, command: string, opts: ExecInput): Promise<CommandResult>
   /**
    * Read a file as raw bytes. `maxBytes`, when set, is passed to the SDK so the
@@ -100,6 +164,17 @@ function toTemplateSummary(t: TemplateInfo): TemplateSummary {
   }
 }
 
+/** Metadata-only projection of a secret — deliberately omits the value. */
+function toSecretSummary(s: SecretInfo): SecretSummary {
+  return {
+    name: s.name,
+    authType: s.authType,
+    hosts: s.hosts,
+    providerShortcut: s.providerShortcut,
+    lastUsedAt: s.lastUsedAt?.toISOString(),
+  }
+}
+
 /** Real client backed by `@superserve/sdk`. */
 export function createSdkClient(config: ClientConfig): SandboxClient {
   const conn = { apiKey: config.apiKey, baseUrl: config.baseUrl }
@@ -113,6 +188,8 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         timeoutSeconds: input.timeoutSeconds,
         metadata: input.metadata,
         envVars: input.envVars,
+        secrets: input.secrets,
+        network: input.network,
         ...conn,
       })
       return {
@@ -121,6 +198,11 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         status: sb.status,
         metadata: sb.metadata,
       }
+    },
+
+    async update(id, input) {
+      const sb = await Sandbox.connect(id, conn)
+      await sb.update({ metadata: input.metadata, network: input.network })
     },
 
     async list(metadata) {
@@ -134,6 +216,33 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
       return xs.map(toTemplateSummary)
     },
 
+    // Kicks off a build and returns immediately; the caller polls
+    // listTemplates() for `ready`. We don't block the tool call on a
+    // multi-minute build (it would tie up hosted concurrency).
+    async createTemplate(input) {
+      const t = await Template.create({
+        name: input.name,
+        from: input.from,
+        vcpu: input.vcpu,
+        memoryMib: input.memoryMib,
+        diskMib: input.diskMib,
+        steps: input.steps,
+        startCmd: input.startCmd,
+        readyCmd: input.readyCmd,
+        ...conn,
+      })
+      return toTemplateSummary({
+        id: t.id,
+        name: t.name,
+        teamId: t.teamId,
+        status: t.status,
+        vcpu: t.vcpu,
+        memoryMib: t.memoryMib,
+        diskMib: t.diskMib,
+        createdAt: t.createdAt,
+      })
+    },
+
     // Read-only: resolved via list() so it never resumes a paused sandbox
     // (the SDK has no static single-sandbox get, and connect() would activate).
     async info(id) {
@@ -141,6 +250,33 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
       const found = xs.find((s) => s.id === id)
       if (!found) throw new NotFoundError(`Sandbox ${id} not found`)
       return found
+    },
+
+    // Pure string construction; no resume, no network call.
+    previewUrl(id, port) {
+      return buildPreviewUrl(id, port, config.baseUrl)
+    },
+
+    // Control-plane audit log (not hostile sandbox output); bounded by `limit`.
+    async networkLog(id, opts) {
+      const sb = await Sandbox.connect(id, conn)
+      return sb.getNetworkLog(opts)
+    },
+
+    // Team-scoped; metadata only — values never leave the platform.
+    async listSecrets() {
+      const xs = await Secret.list({ ...conn })
+      return xs.map(toSecretSummary)
+    },
+
+    async attachSecret(id, envKey, secretName) {
+      const sb = await Sandbox.connect(id, conn)
+      await sb.attachSecret(envKey, secretName)
+    },
+
+    async detachSecret(id, envKey) {
+      const sb = await Sandbox.connect(id, conn)
+      await sb.detachSecret(envKey)
     },
 
     async exec(id, command, opts) {
