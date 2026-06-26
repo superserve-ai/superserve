@@ -188,6 +188,30 @@ export function createFakeClient(): FakeClient {
       return data
     },
 
+    async downloadDir(id, path, maxBytes) {
+      const sb = must(id)
+      const prefix = path.endsWith("/") ? path : `${path}/`
+      // Synthetic "zip": concatenate the bytes of files under the dir. The
+      // bytes need not be a real archive — the tool only base64-encodes them.
+      const parts = [...sb.files.entries()]
+        .filter(([p]) => p === path || p.startsWith(prefix))
+        .map(([, data]) => data)
+      const total = parts.reduce((n, p) => n + p.byteLength, 0)
+      // Mirror the SDK: an over-cap download throws mid-stream, never buffers.
+      if (maxBytes !== undefined && total > maxBytes) {
+        throw new ValidationError(
+          `Response body exceeds the maximum size of ${maxBytes} bytes`,
+        )
+      }
+      const out = new Uint8Array(total)
+      let offset = 0
+      for (const p of parts) {
+        out.set(p, offset)
+        offset += p.byteLength
+      }
+      return out
+    },
+
     async writeFile(id, path, content) {
       const sb = must(id)
       sb.files.set(

@@ -67,6 +67,15 @@ export const MAX_FILE_BYTES = 1024 * 1024
 export const MAX_WRITE_BYTES = 8 * 1024 * 1024
 
 /**
+ * Hard cap on a `sandbox_files_download_dir` zip (bytes). Like {@link MAX_FILE_BYTES},
+ * the cap is pushed to the SDK so a hostile/large directory is rejected mid-stream
+ * rather than buffered (the zip is base64-encoded into the response, so the host
+ * holds ~1.33× this in memory). Directories larger than this must use the SDK/CLI
+ * `files.downloadDir`.
+ */
+export const MAX_DOWNLOAD_DIR_BYTES = 10 * 1024 * 1024
+
+/**
  * Max JSON-RPC request body the hosted HTTP server will buffer (bytes). Sized
  * above {@link MAX_WRITE_BYTES} (base64 expands ~4/3) so a legitimate max-size
  * write still fits, while an authenticated-but-untrusted caller cannot exhaust

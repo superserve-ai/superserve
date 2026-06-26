@@ -5,7 +5,11 @@ import { ValidationError } from "@superserve/sdk"
 import { z } from "zod"
 
 import type { SandboxClient } from "../client.js"
-import { MAX_FILE_BYTES, MAX_WRITE_BYTES } from "../constants.js"
+import {
+  MAX_DOWNLOAD_DIR_BYTES,
+  MAX_FILE_BYTES,
+  MAX_WRITE_BYTES,
+} from "../constants.js"
 import { formatSdkError } from "../lib/errors.js"
 import { toolError, toolOk } from "../lib/result.js"
 import { defineTool } from "../lib/tool.js"
@@ -19,6 +23,15 @@ function fileTooLargeMessage(path: string): string {
     `${path} is larger than the ${mib(MAX_FILE_BYTES)} sandbox_files_read limit. ` +
     `Read a slice with sandbox_exec instead — e.g. \`head -c ${MAX_FILE_BYTES} ${path}\` for text, ` +
     `or \`base64 -w0 ${path}\` piped through \`head\` for binary — or download the whole file with the Superserve SDK/CLI.`
+  )
+}
+
+/** Guidance returned when a directory zip exceeds {@link MAX_DOWNLOAD_DIR_BYTES}. */
+function dirTooLargeMessage(path: string): string {
+  return (
+    `${path} zips to more than the ${mib(MAX_DOWNLOAD_DIR_BYTES)} sandbox_files_download_dir limit. ` +
+    `Download a smaller subdirectory, pull individual files with sandbox_files_read, ` +
+    `or use the Superserve SDK/CLI (files.downloadDir) for the full archive.`
   )
 }
 
@@ -53,6 +66,11 @@ interface WriteArgs {
 }
 
 interface ListArgs {
+  sandbox_id: string
+  path: string
+}
+
+interface DownloadDirArgs {
   sandbox_id: string
   path: string
 }
@@ -199,6 +217,60 @@ export function registerFileTools(
           : "(empty directory)"
         return toolOk(`${path}\n${text}`, { path, entries })
       } catch (e) {
+        return toolError(formatSdkError(e))
+      }
+    },
+  )
+
+  defineTool<DownloadDirArgs>(
+    server,
+    "sandbox_files_download_dir",
+    {
+      title: "Download a directory as a zip",
+      description:
+        "Download a directory from a sandbox as a ZIP archive, returned base64-encoded in the result's structured " +
+        "content (symlinks are skipped). Use this to pull a whole folder — build output, results, a small project — " +
+        `in one call. Directories that zip to more than ${mib(MAX_DOWNLOAD_DIR_BYTES)} are rejected: grab a ` +
+        "subdirectory, pull individual files with sandbox_files_read, or use the Superserve SDK/CLI for the full archive.",
+      inputSchema: {
+        sandbox_id: z.string().describe("ID of the sandbox."),
+        path: absolutePath.describe(
+          'Absolute directory path to download, e.g. "/app/output".',
+        ),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    async ({ sandbox_id, path }) => {
+      try {
+        // Cap pushed to the SDK so an over-cap directory is rejected mid-stream,
+        // never fully buffered (the zip is base64'd into the response).
+        const bytes = await client.downloadDir(
+          sandbox_id,
+          path,
+          MAX_DOWNLOAD_DIR_BYTES,
+        )
+        const content = Buffer.from(bytes).toString("base64")
+        // base64 (large) goes in structuredContent for the client to save; the
+        // text block stays a short summary so it doesn't flood the model context.
+        return toolOk(
+          `downloaded ${path} as a zip (${bytes.byteLength} bytes; base64 in structured content)`,
+          {
+            path,
+            format: "zip",
+            encoding: "base64",
+            bytes: bytes.byteLength,
+            content,
+          },
+        )
+      } catch (e) {
+        if (e instanceof ValidationError && /maximum size/i.test(e.message)) {
+          return toolError(dirTooLargeMessage(path))
+        }
         return toolError(formatSdkError(e))
       }
     },

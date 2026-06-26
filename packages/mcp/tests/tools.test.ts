@@ -90,6 +90,37 @@ describe("tool calls (in-memory, fake client)", () => {
     expect(entries.map((e) => e.name).toSorted()).toEqual(["a.txt", "b.txt"])
   })
 
+  it("download_dir returns a base64 zip and keeps it out of the text block", async () => {
+    const id = await createSandbox()
+    await callTool(conn.client, "sandbox_files_write", {
+      sandbox_id: id,
+      path: "/app/a.txt",
+      content: "alpha",
+    })
+    await callTool(conn.client, "sandbox_files_write", {
+      sandbox_id: id,
+      path: "/app/b.txt",
+      content: "beta",
+    })
+    const r = await callTool(conn.client, "sandbox_files_download_dir", {
+      sandbox_id: id,
+      path: "/app",
+    })
+    expect(r.isError).toBe(false)
+    expect(r.structured.format).toBe("zip")
+    expect(r.structured.encoding).toBe("base64")
+    expect(r.structured.bytes).toBe(9) // "alpha" (5) + "beta" (4)
+    const decoded = Buffer.from(
+      r.structured.content as string,
+      "base64",
+    ).toString("utf8")
+    expect(decoded).toContain("alpha")
+    expect(decoded).toContain("beta")
+    // The (potentially large) base64 stays in structured content, not the text.
+    expect(r.text).toMatch(/downloaded \/app as a zip/)
+    expect(r.text).not.toContain(r.structured.content as string)
+  })
+
   it("info is read-only and returns details", async () => {
     const id = await createSandbox()
     const r = await callTool(conn.client, "sandbox_info", { sandbox_id: id })

@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import {
+  MAX_DOWNLOAD_DIR_BYTES,
   MAX_EXEC_TIMEOUT_MS,
   MAX_FILE_BYTES,
   MAX_WRITE_BYTES,
@@ -82,6 +83,22 @@ describe("resource bounds (in-memory, fake client)", () => {
       (e) => e.name,
     )
     expect(names).not.toContain("huge")
+  })
+
+  it("sandbox_files_download_dir refuses a directory over the zip cap", async () => {
+    const id = await createSandbox()
+    // Seed an oversized file directly — the write tool's 8 MiB cap would block
+    // it, and the SDK throws mid-stream rather than buffering the whole zip.
+    fake.sandboxes
+      .get(id)
+      ?.files.set("/app/big.bin", new Uint8Array(MAX_DOWNLOAD_DIR_BYTES + 1))
+    const r = await callTool(conn.client, "sandbox_files_download_dir", {
+      sandbox_id: id,
+      path: "/app",
+    })
+    expect(r.isError).toBe(true)
+    expect(r.text).toMatch(/more than|limit/i)
+    expect(r.text).toContain("sandbox_files_read")
   })
 
   it("sandbox_exec clamps an oversized timeout_ms to the ceiling", async () => {

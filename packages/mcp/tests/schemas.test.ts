@@ -14,6 +14,7 @@ const EXPECTED_TOOLS = [
   "sandbox_files_read",
   "sandbox_files_write",
   "sandbox_files_list",
+  "sandbox_files_download_dir",
   "sandbox_pause",
   "sandbox_resume",
   "sandbox_kill",
@@ -31,6 +32,7 @@ const PER_SANDBOX_TOOLS = [
   "sandbox_files_read",
   "sandbox_files_write",
   "sandbox_files_list",
+  "sandbox_files_download_dir",
   "sandbox_pause",
   "sandbox_resume",
   "sandbox_kill",
@@ -97,6 +99,9 @@ describe("tool registration", () => {
     expect(byName("sandbox_info")?.annotations?.readOnlyHint).toBe(true)
     expect(byName("sandbox_files_read")?.annotations?.readOnlyHint).toBe(true)
     expect(byName("sandbox_files_list")?.annotations?.readOnlyHint).toBe(true)
+    expect(
+      byName("sandbox_files_download_dir")?.annotations?.readOnlyHint,
+    ).toBe(true)
     expect(byName("sandbox_preview_url")?.annotations?.readOnlyHint).toBe(true)
     // Audit read must not resume a paused sandbox → honestly read-only.
     expect(byName("sandbox_network_log")?.annotations?.readOnlyHint).toBe(true)

@@ -197,6 +197,11 @@ export interface SandboxClient {
    * SDK throws `ValidationError` rather than returning a partial body.
    */
   readFile(id: string, path: string, maxBytes?: number): Promise<Uint8Array>
+  /**
+   * Download a directory as a ZIP archive (raw bytes). `maxBytes` is pushed to
+   * the SDK so an over-cap directory is rejected mid-stream, not buffered.
+   */
+  downloadDir(id: string, path: string, maxBytes?: number): Promise<Uint8Array>
   writeFile(
     id: string,
     path: string,
@@ -380,6 +385,17 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
     async readFile(id, path, maxBytes) {
       const sb = await Sandbox.connect(id, conn)
       return sb.files.read(path, maxBytes !== undefined ? { maxBytes } : {})
+    },
+
+    // Zips + streams the dir from the data plane (VM must be up, so connect's
+    // resume is intrinsic, like readFile). Requires @superserve/sdk >= 0.7.7
+    // (downloadDir landed in #221); the hosted build must pin to >= 0.7.7.
+    async downloadDir(id, path, maxBytes) {
+      const sb = await Sandbox.connect(id, conn)
+      return sb.files.downloadDir(
+        path,
+        maxBytes !== undefined ? { maxBytes } : {},
+      )
     },
 
     async writeFile(id, path, content) {
