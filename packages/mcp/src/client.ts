@@ -389,7 +389,8 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
 
     // Zips + streams the dir from the data plane (VM must be up, so connect's
     // resume is intrinsic, like readFile). Requires @superserve/sdk >= 0.7.7
-    // (downloadDir landed in #221); the hosted build must pin to >= 0.7.7.
+    // (downloadDir landed in #221). The publish workflow enforces this floor via
+    // MIN_SDK_VERSION in .github/workflows/mcp-publish.yml — bump both together.
     async downloadDir(id, path, maxBytes) {
       const sb = await Sandbox.connect(id, conn)
       return sb.files.downloadDir(

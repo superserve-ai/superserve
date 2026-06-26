@@ -15,9 +15,13 @@ name: Publish MCP Server
 #     this workflow handles every later version. Confirm with an @superserve npm
 #     org owner before the first run.
 #   - SDK on npm: @superserve/sdk is an EXTERNAL runtime dep (tsup leaves it
-#     unbundled). This workflow pins it to the LATEST version published on npm,
-#     so the published package always installs even if the workspace SDK bump
-#     hasn't been released yet.
+#     unbundled). This workflow pins it to the LATEST version published on npm.
+#     That version MUST be >= the minimum the MCP server actually calls (currently
+#     0.7.7, which introduced Sandbox.files.downloadDir — see packages/mcp/src/client.ts).
+#     The "Pin workspace runtime deps" step enforces this floor and FAILS the
+#     release if the latest published SDK is older, so a tag can never ship an
+#     @superserve/mcp whose pinned SDK lacks an API it depends on. If the guard
+#     trips, publish @superserve/sdk (>= the floor) first, then re-tag.
 #   - mcp.superserve.ai must be live: server.json's remotes[].url points there and
 #     the registry expects the URL to be reachable.
 #   - Public repo: required for both npm provenance and the io.github.superserve-ai
@@ -67,16 +71,31 @@ jobs:
       # npm publish does NOT translate `workspace:*`, so a literal
       # "@superserve/sdk": "workspace:*" would ship and break `npm i`. Pin it to
       # the latest version PUBLISHED on npm (the workspace may be ahead of the
-      # registry; the MCP server only uses the SDK's stable public API, so a
-      # caret range on the latest published version is correct and decouples
-      # this release from an unreleased SDK bump).
+      # registry).
+      #
+      # The MCP server is NOT fully decoupled from the SDK version: it calls APIs
+      # that exist only past a known floor (e.g. Sandbox.files.downloadDir, added
+      # in @superserve/sdk 0.7.7 — see packages/mcp/src/client.ts). So before
+      # pinning, FAIL FAST if the latest published SDK is older than that floor;
+      # otherwise the package builds against the workspace SDK but publishes a
+      # runtime dep that lacks downloadDir, breaking sandbox_files_download_dir for
+      # users. If this trips, publish @superserve/sdk (>= the floor) first, then
+      # re-tag. Keep MIN_SDK_VERSION in sync with the requirement in client.ts.
       - name: Pin workspace runtime deps to published versions
         working-directory: packages/mcp
         run: |
           set -euo pipefail
+          MIN_SDK_VERSION="0.7.7" # floor: Sandbox.files.downloadDir (see src/client.ts)
           SDK_VERSION="$(npm view @superserve/sdk version)"
           test -n "$SDK_VERSION"
-          echo "Pinning @superserve/sdk to ^$SDK_VERSION"
+          # `sort -V` orders the pair; if the floor sorts first (or they're equal)
+          # the resolved version satisfies `>= MIN`. npm's `latest` tag is always a
+          # stable x.y.z, so version-sort matches semver here.
+          if [ "$(printf '%s\n%s\n' "$MIN_SDK_VERSION" "$SDK_VERSION" | sort -V | head -n1)" != "$MIN_SDK_VERSION" ]; then
+            echo "::error::Latest published @superserve/sdk is $SDK_VERSION but @superserve/mcp requires >= $MIN_SDK_VERSION (Sandbox.files.downloadDir). Publish @superserve/sdk >= $MIN_SDK_VERSION before tagging mcp-v*, then re-tag." >&2
+            exit 1
+          fi
+          echo "Pinning @superserve/sdk to ^$SDK_VERSION (>= $MIN_SDK_VERSION required)"
           jq --arg v "^$SDK_VERSION" '.dependencies["@superserve/sdk"] = $v' package.json > package.json.tmp && mv package.json.tmp package.json
 
       - name: Build
