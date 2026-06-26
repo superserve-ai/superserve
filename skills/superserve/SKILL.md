@@ -33,7 +33,7 @@ plane** (rotating access token) — you never build data-plane URLs or manage to
 
 ## Hand off elsewhere
 
-- Long-running production hosting or web services → use a real deploy target
+- Long-running production web services → use a web app hosting provider
 - GPU clusters / heavy model training → not a sandbox use case
 - Plain LLM calls with no code execution → no sandbox needed
 
@@ -418,7 +418,7 @@ Sandbox.create(name="restricted", network=NetworkConfig(
 ## Preview URLs — expose a port publicly
 
 Run a server in the box (a dev server, the agent's web UI, an API) and hand out a **public
-URL** that routes to it. `getPreviewUrl(port)` / `get_preview_url(port)` is pure string
+URL** (also called a *tunnel URL*) that routes to it. `getPreviewUrl(port)` / `get_preview_url(port)` is pure string
 construction — no network call — returning `https://{port}-{id}.{host}`; the edge proxy
 forwards that subdomain straight to the port on the VM.
 
@@ -498,10 +498,9 @@ try {
 
 ## More integrations
 
-Ready-made guides (TS + Python) for running or wiring agents — **Claude Agent SDK**, **OpenAI
-Agents SDK**, coding agents (**Claude Code, Codex, OpenCode, KiloCode**), personal agents
-(**OpenClaw, Hermes**), managed agents, and the **Mesa** virtual filesystem — live at
-`docs.superserve.ai/integrations`.
+Ready-made guides (TS + Python) for running an agent inside a sandbox or backing a hosted
+agent's tools with one — agent harnesses, coding agents, personal agents, managed agents,
+and virtual filesystems — live at `docs.superserve.ai/integrations`.
 
 ## Reference
 
