@@ -46,6 +46,9 @@ htmlcov/
 notes/
 blog_draft*.md
 
+# Internal planning / spec docs — keep local, do not commit
+spec/
+
 # Claude
 .claude/
 devcontainer.json
