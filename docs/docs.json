@@ -142,6 +142,11 @@
         "tab": "Integration Guides",
         "groups": [
           {
+            "group": "MCP",
+            "tag": "NEW",
+            "pages": ["integrations/mcp"]
+          },
+          {
             "group": "Coding Agents",
             "pages": [
               "integrations/coding-agents/claude",

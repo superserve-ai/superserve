@@ -1,0 +1,74 @@
+{
+  "name": "@superserve/mcp",
+  "version": "0.1.0",
+  "description": "Model Context Protocol (MCP) server for Superserve sandboxes — create, exec, and manage Firecracker microVMs from any MCP client",
+  "keywords": [
+    "agents",
+    "ai",
+    "firecracker",
+    "mcp",
+    "microvm",
+    "model-context-protocol",
+    "sandbox",
+    "superserve"
+  ],
+  "homepage": "https://superserve.ai?utm_source=npm&utm_medium=package_meta",
+  "bugs": {
+    "url": "https://github.com/superserve-ai/superserve/issues"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/superserve-ai/superserve.git",
+    "directory": "packages/mcp"
+  },
+  "bin": {
+    "superserve-mcp": "./dist/index.js",
+    "superserve-mcp-http": "./dist/httpServer.js"
+  },
+  "files": [
+    "dist",
+    "http.d.ts"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./http": {
+      "types": "./http.d.ts",
+      "import": "./dist/http.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup && tsup --config tsup.http.config.ts",
+    "dev": "tsup --watch",
+    "start:http": "node dist/httpServer.js",
+    "lint": "bunx oxlint",
+    "format": "bunx oxfmt --write",
+    "format:check": "bunx oxfmt --check",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "vitest run tests/e2e.test.ts",
+    "inspect": "npx -y @mcpjam/inspector@latest",
+    "mcp:validate": "mcpjam server validate --command node --args dist/index.js -e SUPERSERVE_API_KEY=${SUPERSERVE_API_KEY:-ss_live_dummy}",
+    "mcp:tools": "mcpjam tools list --command node --args dist/index.js -e SUPERSERVE_API_KEY=${SUPERSERVE_API_KEY:-ss_live_dummy}"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@superserve/sdk": "workspace:*",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@mcpjam/cli": "^3.10.0",
+    "@superserve/typescript-config": "workspace:*",
+    "@types/node": "^25.5.2",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "mcpName": "io.github.superserve-ai/mcp"
+}

@@ -31,6 +31,19 @@ export interface CommandsDeps {
   refreshActivate: () => Promise<string>
 }
 
+/**
+ * Max bytes read from a non-streaming `/exec` response before the SDK aborts
+ * the read and throws `ValidationError`.
+ *
+ * The data plane is untrusted: `boxd`'s sync exec handler buffers the command's
+ * full stdout/stderr in the VM and returns it in one JSON body, and neither the
+ * data-plane proxy nor `fetch` caps that body — so a command can stream back as
+ * much output as the sandbox has RAM. Buffering it unbounded into memory is a
+ * DoS vector for any shared host (e.g. the hosted MCP server). Callers that
+ * genuinely need large output should stream via `onStdout`/`onStderr` instead.
+ */
+export const MAX_EXEC_RESPONSE_BYTES = 10 * 1024 * 1024 // 10 MiB
+
 export class Commands {
   private readonly _dataPlaneBaseUrl: string
   private readonly _routingHeaders: Record<string, string>
@@ -126,6 +139,9 @@ export class Commands {
             ? options.timeoutMs + 5_000
             : undefined,
         signal: options.signal,
+        // The data plane is untrusted — bound the buffered response so a
+        // command's runaway stdout/stderr can't exhaust the caller's memory.
+        maxBytes: options.maxOutputBytes ?? MAX_EXEC_RESPONSE_BYTES,
       })
 
     const raw = await withTokenRetry(this._deps, send)

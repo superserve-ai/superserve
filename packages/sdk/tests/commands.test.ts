@@ -1,7 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { Commands, type CommandsDeps } from "../src/commands.js"
-import { AuthenticationError, SandboxError } from "../src/errors.js"
+import {
+  Commands,
+  MAX_EXEC_RESPONSE_BYTES,
+  type CommandsDeps,
+} from "../src/commands.js"
+import {
+  AuthenticationError,
+  SandboxError,
+  ValidationError,
+} from "../src/errors.js"
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -43,6 +51,71 @@ function makeDeps(overrides: Partial<CommandsDeps> = {}): CommandsDeps {
     ...overrides,
   }
 }
+
+describe("Commands.run (sync) output cap", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function streamedResponse(body: Uint8Array): Response {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(body)
+        controller.close()
+      },
+    })
+    return new Response(stream, {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
+  // The data plane is untrusted: boxd buffers the command's full stdout/stderr
+  // in the VM and returns it in one JSON body, and neither the proxy nor fetch
+  // caps it — so a command can stream back as much output as the sandbox has
+  // RAM. The sync read must abort at the cap instead of buffering it all.
+  it("aborts a /exec body larger than MAX_EXEC_RESPONSE_BYTES", async () => {
+    const oversized = new Uint8Array(MAX_EXEC_RESPONSE_BYTES + 64)
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => streamedResponse(oversized)),
+    )
+
+    const commands = new Commands(makeDeps())
+    await expect(commands.run("cat /dev/zero")).rejects.toBeInstanceOf(
+      ValidationError,
+    )
+  })
+
+  it("honors a smaller maxOutputBytes override", async () => {
+    const body = new TextEncoder().encode(
+      JSON.stringify({ stdout: "x".repeat(4096), stderr: "", exit_code: 0 }),
+    )
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => streamedResponse(body)),
+    )
+
+    const commands = new Commands(makeDeps())
+    await expect(
+      commands.run("echo big", { maxOutputBytes: 512 }),
+    ).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it("returns output unchanged when under the cap", async () => {
+    const body = new TextEncoder().encode(
+      JSON.stringify({ stdout: "hi\n", stderr: "", exit_code: 0 }),
+    )
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => streamedResponse(body)),
+    )
+
+    const commands = new Commands(makeDeps())
+    const result = await commands.run("echo hi", { maxOutputBytes: 1024 })
+    expect(result).toEqual({ stdout: "hi\n", stderr: "", exitCode: 0 })
+  })
+})
 
 describe("Commands.run (sync)", () => {
   afterEach(() => {

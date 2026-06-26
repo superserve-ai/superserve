@@ -1,0 +1,51 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.superserve-ai/mcp",
+  "title": "Superserve",
+  "description": "Model Context Protocol server for Superserve sandboxes — create, exec, and manage Firecracker microVMs from any MCP client",
+  "version": "0.1.0",
+  "websiteUrl": "https://superserve.ai",
+  "repository": {
+    "url": "https://github.com/superserve-ai/superserve",
+    "source": "github",
+    "subfolder": "packages/mcp"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@superserve/mcp",
+      "version": "0.1.0",
+      "runtimeHint": "npx",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        {
+          "name": "SUPERSERVE_API_KEY",
+          "description": "Superserve API key (starts with ss_live_). Create one at https://console.superserve.ai.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "SUPERSERVE_BASE_URL",
+          "description": "Override the Superserve control-plane API base URL. Defaults to https://api.superserve.ai.",
+          "isRequired": false,
+          "default": "https://api.superserve.ai"
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.superserve.ai",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer token — your Superserve API key, e.g. 'Bearer ss_live_...'.",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

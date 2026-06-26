@@ -42,6 +42,15 @@ interface RequestOptions {
   body?: unknown
   timeoutMs?: number
   signal?: AbortSignal
+  /**
+   * Cap the JSON response body read at this many bytes. Set it for endpoints
+   * whose body is backed by untrusted sandbox output (e.g. the data-plane
+   * `/exec`), which can be as large as the sandbox's RAM: the body is read with
+   * a streaming cap and a `ValidationError` is thrown the moment it is exceeded,
+   * instead of buffering the whole thing first. Omit for trusted, bounded
+   * control-plane responses (the default — unchanged `res.text()` behavior).
+   */
+  maxBytes?: number
 }
 
 /**
@@ -229,6 +238,7 @@ export async function request<T>(opts: RequestOptions): Promise<T> {
     body,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     signal: userSignal,
+    maxBytes,
   } = opts
 
   const retryable = method === "GET" || method === "DELETE"
@@ -257,6 +267,14 @@ export async function request<T>(opts: RequestOptions): Promise<T> {
     // 204 No Content
     if (res.status === 204) {
       return undefined as T
+    }
+
+    // Untrusted (data-plane) endpoints: read the JSON body with a streaming
+    // byte cap so a hostile sandbox can't make us buffer an unbounded response.
+    if (maxBytes !== undefined) {
+      const bytes = await readBodyWithLimit(res, maxBytes, "Response body")
+      if (bytes.byteLength === 0) return undefined as T
+      return JSON.parse(new TextDecoder().decode(bytes)) as T
     }
 
     // Some endpoints legally return 2xx with an empty body.
@@ -350,6 +368,7 @@ export async function uploadBytes(opts: {
 async function readBodyWithLimit(
   res: Response,
   maxBytes: number,
+  what = "Download",
 ): Promise<Uint8Array> {
   // No streaming body available (e.g. mocked responses) — fall back to a full
   // buffer read, then enforce the cap.
@@ -357,7 +376,7 @@ async function readBodyWithLimit(
     const buf = new Uint8Array(await res.arrayBuffer())
     if (buf.byteLength > maxBytes) {
       throw new ValidationError(
-        `Download exceeds the maximum size of ${maxBytes} bytes`,
+        `${what} exceeds the maximum size of ${maxBytes} bytes`,
       )
     }
     return buf
@@ -378,7 +397,7 @@ async function readBodyWithLimit(
         // Stop pulling bytes from the sandbox.
         await reader.cancel()
         throw new ValidationError(
-          `Download exceeds the maximum size of ${maxBytes} bytes`,
+          `${what} exceeds the maximum size of ${maxBytes} bytes`,
         )
       }
       chunks.push(value)
