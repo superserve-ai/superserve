@@ -424,7 +424,9 @@ function UsageChartCard({
           viewBox={`0 0 ${width} ${height}`}
           aria-label={`${title} ${bucket.label} line graph`}
         >
-          <title>{`${title} ${bucket.label} line graph`}</title>
+          <title
+            suppressHydrationWarning
+          >{`${title} ${bucket.label} line graph`}</title>
           {yTicks.map((tick) => {
             const y = padding.top + (1 - tick / yMax) * plotHeight
             return (
