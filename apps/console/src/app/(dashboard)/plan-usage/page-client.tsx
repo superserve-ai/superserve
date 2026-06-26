@@ -406,7 +406,6 @@ function UsageChartCard({
   const path = points
     .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
     .join(" ")
-  const latestPoint = points[points.length - 1]
 
   return (
     <Card>
@@ -415,10 +414,7 @@ function UsageChartCard({
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="pt-4">
-        <div className="mb-3 flex items-baseline justify-between gap-3">
-          <p className="font-mono text-2xl text-foreground">
-            {formatNumber(latestPoint?.value ?? 0)}
-          </p>
+        <div className="mb-3 flex justify-end">
           <p className="font-mono text-xs text-muted uppercase">
             Latest {valueLabel}
           </p>
