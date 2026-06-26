@@ -149,13 +149,15 @@ export function registerLifecycleTools(
         allow_out: stringArray()
           .optional()
           .describe(
-            "Egress allowlist (host patterns, e.g. 'api.github.com'). When set, only these hosts " +
-              "are reachable; everything else is denied.",
+            "Egress allow rules — domain patterns (e.g. 'api.github.com', '*.github.com') or CIDRs to permit. " +
+              "This ADDS allowed destinations; on its own it does NOT block anything else. For a strict allowlist " +
+              "(deny everything except these), also pass deny_out: ['0.0.0.0/0'].",
           ),
         deny_out: stringArray()
           .optional()
           .describe(
-            "Egress denylist (host patterns). Blocks these hosts; everything else is allowed.",
+            "Egress deny rules — CIDRs only (use '0.0.0.0/0' to deny all egress). Combine deny_out: ['0.0.0.0/0'] " +
+              "with allow_out to lock the sandbox down to just the allowed destinations.",
           ),
       },
       annotations: {
@@ -544,12 +546,14 @@ export function registerLifecycleTools(
         allow_out: stringArray()
           .optional()
           .describe(
-            "Egress allowlist (host patterns). When set, only these hosts are reachable. " +
-              "Pass an empty array to deny all egress.",
+            "Egress allow rules — domain patterns or CIDRs to permit. Adds allowed destinations; does NOT by " +
+              "itself block other egress. For a strict allowlist, also pass deny_out: ['0.0.0.0/0'].",
           ),
         deny_out: stringArray()
           .optional()
-          .describe("Egress denylist (host patterns). Blocks these hosts."),
+          .describe(
+            "Egress deny rules — CIDRs only ('0.0.0.0/0' denies all egress). Combine with allow_out to lock down egress.",
+          ),
       },
       annotations: {
         readOnlyHint: false,
@@ -615,7 +619,7 @@ export function registerLifecycleTools(
       description:
         "List the outbound network connections a sandbox made (newest first) — host, verdict (allowed/blocked), " +
         "bytes, and credential-injected requests. Use it to audit what a sandbox actually reached and to verify " +
-        "allow_out/deny_out rules. Auto-resumes a paused sandbox (like sandbox_exec).",
+        "allow_out/deny_out rules. Read-only — does not resume a paused sandbox.",
       inputSchema: {
         sandbox_id: z.string().describe("ID of the sandbox."),
         limit: z
@@ -632,7 +636,7 @@ export function registerLifecycleTools(
           .describe("Filter to connections with this verdict."),
       },
       annotations: {
-        readOnlyHint: false,
+        readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
         openWorldHint: true,

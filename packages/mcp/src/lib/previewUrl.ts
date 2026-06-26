@@ -12,7 +12,8 @@
  * the two in sync if the platform host mapping ever changes.
  */
 
-const DEFAULT_BASE_URL = "https://api.superserve.ai"
+/** Default control-plane base URL (mirrors the SDK). */
+export const DEFAULT_BASE_URL = "https://api.superserve.ai"
 const DEFAULT_SANDBOX_HOST = "sandbox.superserve.ai"
 
 /** Sandbox ids are UUIDs; refuse anything that could escape the hostname. */

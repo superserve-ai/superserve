@@ -53,13 +53,13 @@ claude mcp add superserve \
 }
 ```
 
-**Codex** (`~/.codex/config.toml`):
+**Codex** (`~/.codex/config.toml`) — `env_vars` forwards the key from your environment instead of storing it in the file:
 
 ```toml
 [mcp_servers.superserve]
 command = "npx"
 args = ["-y", "@superserve/mcp"]
-env = { SUPERSERVE_API_KEY = "ss_live_xxxxxxxxxxxxxxxx" }
+env_vars = ["SUPERSERVE_API_KEY"]
 ```
 
 ## Hosted (remote)

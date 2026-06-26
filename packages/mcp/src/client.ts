@@ -14,6 +14,7 @@
  */
 
 import {
+  AuthenticationError,
   NotFoundError,
   Sandbox,
   SandboxError,
@@ -24,6 +25,7 @@ import type {
   BuildStep,
   CommandResult,
   NetworkConfig,
+  NetworkEvent,
   NetworkLogPage,
   SandboxInfo,
   SecretInfo,
@@ -40,7 +42,65 @@ import {
   parseLsOutput,
   validateAbsolutePath,
 } from "./lib/listing.js"
-import { buildPreviewUrl } from "./lib/previewUrl.js"
+import { buildPreviewUrl, DEFAULT_BASE_URL } from "./lib/previewUrl.js"
+
+/** Hang guard for the direct control-plane network-log GET. */
+const NETWORK_LOG_TIMEOUT_MS = 30_000
+
+/**
+ * Raw `GET /sandboxes/{id}/network` shape. The SDK's snake→camel converters
+ * (`toNetworkLogPage`) are internal and not exported from the package, so the
+ * non-resuming read below maps the fields it needs here. Mirror the SDK's
+ * `toNetworkEvent` if either side changes.
+ */
+interface RawNetworkEvent {
+  kind?: string
+  id?: number
+  ts?: string
+  host?: string
+  dst_ip?: string
+  dst_port?: number
+  verdict?: string
+  match_rule?: string
+  bytes_sent?: number
+  bytes_recv?: number
+  method?: string
+  path?: string
+  status?: number
+  upstream_status?: number
+  latency_ms?: number
+  secret_id?: string
+  error_code?: string
+}
+
+interface RawNetworkPage {
+  data?: RawNetworkEvent[]
+  next_cursor?: string | null
+  has_more?: boolean
+}
+
+function toNetworkEvent(raw: RawNetworkEvent): NetworkEvent {
+  return {
+    kind: (raw.kind ?? "connection") as NetworkEvent["kind"],
+    id: raw.id ?? 0,
+    // Always a valid Date — callers format with `.toISOString()`.
+    ts: raw.ts ? new Date(raw.ts) : new Date(0),
+    host: raw.host,
+    dstIp: raw.dst_ip,
+    dstPort: raw.dst_port,
+    verdict: raw.verdict as NetworkEvent["verdict"],
+    matchRule: raw.match_rule,
+    bytesSent: raw.bytes_sent,
+    bytesRecv: raw.bytes_recv,
+    method: raw.method,
+    path: raw.path,
+    status: raw.status,
+    upstreamStatus: raw.upstream_status,
+    latencyMs: raw.latency_ms,
+    secretId: raw.secret_id,
+    errorCode: raw.error_code,
+  }
+}
 
 export interface SandboxSummary {
   id: string
@@ -121,7 +181,10 @@ export interface SandboxClient {
   info(id: string): Promise<SandboxInfo>
   /** Public URL for a listening port. Pure construction — no network call. */
   previewUrl(id: string, port: number): string
-  /** Recent egress events for a sandbox (newest first). Control-plane audit. */
+  /**
+   * Recent egress events for a sandbox (newest first). Read-only control-plane
+   * audit — must NOT resume a paused sandbox.
+   */
   networkLog(id: string, opts: NetworkLogInput): Promise<NetworkLogPage>
   /** Team secrets (metadata only — never values). */
   listSecrets(): Promise<SecretSummary[]>
@@ -257,10 +320,40 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
       return buildPreviewUrl(id, port, config.baseUrl)
     },
 
-    // Control-plane audit log (not hostile sandbox output); bounded by `limit`.
+    // Direct control-plane GET so reading the audit log never activates
+    // (resumes) a paused sandbox. The SDK's getNetworkLog is instance-only and
+    // would require Sandbox.connect (which resumes); the published SDK has no
+    // non-resuming static equivalent. Trusted control-plane endpoint, API-key
+    // auth, bounded by `limit` and a request timeout.
     async networkLog(id, opts) {
-      const sb = await Sandbox.connect(id, conn)
-      return sb.getNetworkLog(opts)
+      const base = config.baseUrl ?? DEFAULT_BASE_URL
+      const url = new URL(`${base}/sandboxes/${encodeURIComponent(id)}/network`)
+      if (opts.limit !== undefined)
+        url.searchParams.set("limit", String(opts.limit))
+      if (opts.verdict !== undefined)
+        url.searchParams.set("verdict", opts.verdict)
+
+      const res = await fetch(url, {
+        method: "GET",
+        headers: { "X-API-Key": config.apiKey },
+        signal: AbortSignal.timeout(NETWORK_LOG_TIMEOUT_MS),
+      })
+      if (!res.ok) {
+        if (res.status === 404)
+          throw new NotFoundError(`Sandbox ${id} not found`)
+        if (res.status === 401 || res.status === 403) {
+          throw new AuthenticationError("Authentication failed")
+        }
+        throw new SandboxError(
+          `Network log request failed (HTTP ${res.status})`,
+        )
+      }
+      const raw = (await res.json()) as RawNetworkPage
+      return {
+        events: (raw.data ?? []).map(toNetworkEvent),
+        nextCursor: raw.next_cursor ?? undefined,
+        hasMore: raw.has_more ?? false,
+      }
     },
 
     // Team-scoped; metadata only — values never leave the platform.

@@ -203,4 +203,27 @@ describe("sandbox_network_log (in-memory, fake client)", () => {
       await conn.close()
     }
   })
+
+  it("does not resume a paused sandbox (read-only audit)", async () => {
+    const conn = await connect(createFakeClient().client)
+    try {
+      const created = await callTool(conn.client, "sandbox_create", {
+        name: "np",
+      })
+      const id = created.structured.id as string
+      await callTool(conn.client, "sandbox_pause", { sandbox_id: id })
+
+      const r = await callTool(conn.client, "sandbox_network_log", {
+        sandbox_id: id,
+      })
+      expect(r.isError).toBe(false)
+
+      const info = await callTool(conn.client, "sandbox_info", {
+        sandbox_id: id,
+      })
+      expect(info.structured.status).toBe("paused")
+    } finally {
+      await conn.close()
+    }
+  })
 })
