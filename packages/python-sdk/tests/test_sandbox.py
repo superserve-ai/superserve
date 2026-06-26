@@ -230,7 +230,7 @@ class TestInstanceMethods:
             finally:
                 sbx._close_http_client()
 
-    def test_resume_rotates_token_and_rebuilds_files(self) -> None:
+    def test_resume_rotates_token_files_reads_it_live(self) -> None:
         with respx.mock() as router:
             router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw())
@@ -251,8 +251,8 @@ class TestInstanceMethods:
                 result = sbx.resume()
                 assert result is None
                 assert sbx._access_token == "rotated-tok"
-                # files sub-module rebuilt
-                assert sbx.files is not old_files
+                # files reads the token live — same instance, picks up rotation
+                assert sbx.files is old_files
             finally:
                 sbx._close_http_client()
 
@@ -415,9 +415,7 @@ class TestConcurrentRefresh:
                 this_call = exec_call_count
             # First two calls (one per thread) 401; subsequent succeed
             if this_call <= 2:
-                return httpx.Response(
-                    401, json={"error": {"code": "auth_failed"}}
-                )
+                return httpx.Response(401, json={"error": {"code": "auth_failed"}})
             return httpx.Response(
                 200, json={"stdout": "ok", "stderr": "", "exit_code": 0}
             )
@@ -441,17 +439,13 @@ class TestConcurrentRefresh:
                 },
             )
 
-        with respx.mock(
-            base_url=API, assert_all_called=False
-        ) as router:
+        with respx.mock(base_url=API, assert_all_called=False) as router:
             router.post(f"{API}/sandboxes/{sbx_id}/activate").mock(
                 side_effect=activate_response
             )
             router.post(f"{data_plane}/exec").mock(side_effect=exec_response)
 
-            sbx = Sandbox.connect(
-                sbx_id, api_key="ss_live_x", base_url=API
-            )
+            sbx = Sandbox.connect(sbx_id, api_key="ss_live_x", base_url=API)
             try:
                 # Override sandbox_host so the data-plane URL matches our mock
                 sbx._config = sbx._config.__class__(
@@ -479,9 +473,7 @@ class TestConcurrentRefresh:
 
                 # Both must succeed (no 409 from lost-race second refresh)
                 for r in results:
-                    assert not isinstance(
-                        r, Exception
-                    ), f"expected success, got {r!r}"
+                    assert not isinstance(r, Exception), f"expected success, got {r!r}"
                 assert results[0] == "ok"
                 assert results[1] == "ok"
 

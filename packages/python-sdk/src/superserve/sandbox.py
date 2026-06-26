@@ -13,7 +13,7 @@ from ._config import ResolvedConfig, preview_url, resolve_config
 from ._http import api_request
 from .commands import Commands, CommandsDeps
 from .errors import NotFoundError, SandboxError
-from .files import Files
+from .files import Files, FilesDeps
 from .types import (
     NetworkConfig,
     NetworkLogPage,
@@ -61,13 +61,19 @@ class Sandbox:
             client=self._http_client,
         )
         self.files = Files(
-            self.id, config.sandbox_host, self._access_token, client=self._http_client
+            FilesDeps(
+                sandbox_id=self.id,
+                sandbox_host=config.sandbox_host,
+                get_access_token=lambda: self._access_token,
+                refresh_activate=self._refresh_activate,
+            ),
+            client=self._http_client,
         )
 
     def _post_and_rotate_token(self, endpoint: str) -> str:
-        """POST a token-rotating endpoint (``resume`` or ``activate``), update
-        the cached token, rebuild ``self.files`` with the fresh token.
-        Returns the new token.
+        """POST a token-rotating endpoint (``resume`` or ``activate``) and
+        update the cached token. ``commands`` and ``files`` read the token
+        live, so they pick up the rotation. Returns the new token.
         """
         raw = api_request(
             "POST",
@@ -82,12 +88,6 @@ class Sandbox:
                 "missing access_token"
             )
         self._access_token = token
-        self.files = Files(
-            self.id,
-            self._config.sandbox_host,
-            self._access_token,
-            client=self._http_client,
-        )
         return token
 
     def _refresh_activate(self) -> str:
@@ -280,8 +280,8 @@ class Sandbox:
     def resume(self) -> None:
         """Resume a paused sandbox.
 
-        The access token is rotated; the SDK rebuilds ``sandbox.files`` with
-        the fresh token transparently.
+        The access token is rotated; ``sandbox.commands`` and ``sandbox.files``
+        pick up the fresh token transparently.
         """
         self._require_live()
         self._post_and_rotate_token("resume")

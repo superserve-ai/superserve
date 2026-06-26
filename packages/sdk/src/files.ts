@@ -1,8 +1,10 @@
 /**
  * `sandbox.files` - read and write files inside a sandbox.
  *
- * Hits the data plane with the per-sandbox access token. The
- * control-plane API key is not used for file operations.
+ * Hits the data plane with the per-sandbox access token. The control-plane API
+ * key is not used for file operations. A paused sandbox (401 stale token, or
+ * 503 because the VM isn't running) is transparently resumed via
+ * `POST /activate` and the op is retried once — see `tokenRetry.ts`.
  *
  * Accessed as `sandbox.files.write(...)` / `sandbox.files.read(...)`.
  */
@@ -10,6 +12,7 @@
 import { dataPlaneTarget } from "./config.js"
 import { ValidationError } from "./errors.js"
 import { downloadBytes, uploadBytes } from "./http.js"
+import { withTokenRetry } from "./tokenRetry.js"
 import type { FileInput } from "./types.js"
 
 function validatePath(path: string): void {
@@ -21,17 +24,21 @@ function validatePath(path: string): void {
   }
 }
 
+/** @internal Live token accessor + slow-path resume, supplied by Sandbox. */
+export interface FilesDeps {
+  sandboxId: string
+  sandboxHost: string
+  getAccessToken: () => string
+  refreshActivate: () => Promise<string>
+}
+
 export class Files {
   private readonly _dataPlaneBaseUrl: string
   private readonly _routingHeaders: Record<string, string>
 
   /** @internal */
-  constructor(
-    sandboxId: string,
-    sandboxHost: string,
-    private readonly _accessToken: string,
-  ) {
-    const target = dataPlaneTarget(sandboxId, sandboxHost)
+  constructor(private readonly _deps: FilesDeps) {
+    const target = dataPlaneTarget(_deps.sandboxId, _deps.sandboxHost)
     this._dataPlaneBaseUrl = target.url
     this._routingHeaders = target.headers
   }
@@ -56,13 +63,15 @@ export class Files {
     validatePath(path)
     const body = toBody(content)
     const url = `${this._dataPlaneBaseUrl}/files?path=${encodeURIComponent(path)}`
-    await uploadBytes({
-      url,
-      headers: { ...this._routingHeaders, "X-Access-Token": this._accessToken },
-      body,
-      timeoutMs: options.timeoutMs,
-      signal: options.signal,
-    })
+    await withTokenRetry(this._deps, (token) =>
+      uploadBytes({
+        url,
+        headers: { ...this._routingHeaders, "X-Access-Token": token },
+        body,
+        timeoutMs: options.timeoutMs,
+        signal: options.signal,
+      }),
+    )
   }
 
   /**
@@ -85,13 +94,15 @@ export class Files {
   ): Promise<Uint8Array> {
     validatePath(path)
     const url = `${this._dataPlaneBaseUrl}/files?path=${encodeURIComponent(path)}`
-    return downloadBytes({
-      url,
-      headers: { ...this._routingHeaders, "X-Access-Token": this._accessToken },
-      timeoutMs: options.timeoutMs,
-      signal: options.signal,
-      maxBytes: options.maxBytes,
-    })
+    return withTokenRetry(this._deps, (token) =>
+      downloadBytes({
+        url,
+        headers: { ...this._routingHeaders, "X-Access-Token": token },
+        timeoutMs: options.timeoutMs,
+        signal: options.signal,
+        maxBytes: options.maxBytes,
+      }),
+    )
   }
 
   /**
@@ -107,7 +118,6 @@ export class Files {
     path: string,
     options: { timeoutMs?: number; signal?: AbortSignal } = {},
   ): Promise<string> {
-    validatePath(path)
     const bytes = await this.read(path, options)
     return new TextDecoder().decode(bytes)
   }
@@ -146,13 +156,15 @@ export class Files {
     const url = `${this._dataPlaneBaseUrl}/files?path=${encodeURIComponent(
       path,
     )}&format=zip`
-    return downloadBytes({
-      url,
-      headers: { ...this._routingHeaders, "X-Access-Token": this._accessToken },
-      timeoutMs: options.timeoutMs,
-      signal: options.signal,
-      maxBytes: options.maxBytes,
-    })
+    return withTokenRetry(this._deps, (token) =>
+      downloadBytes({
+        url,
+        headers: { ...this._routingHeaders, "X-Access-Token": token },
+        timeoutMs: options.timeoutMs,
+        signal: options.signal,
+        maxBytes: options.maxBytes,
+      }),
+    )
   }
 }
 

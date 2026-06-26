@@ -13,7 +13,7 @@ from ._config import ResolvedConfig, preview_url, resolve_config
 from ._http import async_api_request
 from .commands import AsyncCommands, AsyncCommandsDeps
 from .errors import NotFoundError, SandboxError
-from .files import AsyncFiles
+from .files import AsyncFiles, AsyncFilesDeps
 from .types import (
     NetworkConfig,
     NetworkLogPage,
@@ -61,7 +61,13 @@ class AsyncSandbox:
             client=self._http_client,
         )
         self.files = AsyncFiles(
-            self.id, config.sandbox_host, self._access_token, client=self._http_client
+            AsyncFilesDeps(
+                sandbox_id=self.id,
+                sandbox_host=config.sandbox_host,
+                get_access_token=lambda: self._access_token,
+                refresh_activate=self._refresh_activate,
+            ),
+            client=self._http_client,
         )
 
     async def _post_and_rotate_token(self, endpoint: str) -> str:
@@ -79,12 +85,6 @@ class AsyncSandbox:
                 "missing access_token"
             )
         self._access_token = token
-        self.files = AsyncFiles(
-            self.id,
-            self._config.sandbox_host,
-            self._access_token,
-            client=self._http_client,
-        )
         return token
 
     async def _refresh_activate(self) -> str:
@@ -274,8 +274,8 @@ class AsyncSandbox:
     async def resume(self) -> None:
         """Resume a paused sandbox.
 
-        The access token is rotated; the SDK rebuilds ``sandbox.files`` with
-        the fresh token transparently.
+        The access token is rotated; ``sandbox.commands`` and ``sandbox.files``
+        pick up the fresh token transparently.
         """
         self._require_live()
         await self._post_and_rotate_token("resume")

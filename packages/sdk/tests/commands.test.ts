@@ -130,6 +130,59 @@ describe("Commands.run (sync)", () => {
     await expect(commands.run("echo")).rejects.toBeInstanceOf(SandboxError)
   })
 
+  it("resumes + retries on 503 (paused sandbox), then succeeds", async () => {
+    let refreshCalled = 0
+    const deps = makeDeps({
+      refreshActivate: async () => {
+        refreshCalled += 1
+        return "tok-refreshed"
+      },
+    })
+
+    const mock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { error: { code: "sandbox_paused", message: "sandbox is paused" } },
+          503,
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ stdout: "ok\n", stderr: "", exit_code: 0 }),
+      )
+    vi.stubGlobal("fetch", mock)
+
+    const result = await new Commands(deps).run("echo")
+
+    expect(result.stdout).toBe("ok\n")
+    expect(refreshCalled).toBe(1)
+    expect(mock).toHaveBeenCalledTimes(2)
+    const [, secondInit] = mock.mock.calls[1] as [string, RequestInit]
+    expect(
+      (secondInit.headers as Record<string, string>)["X-Access-Token"],
+    ).toBe("tok-refreshed")
+  })
+
+  it("does NOT resume on a genuine 500 (only 503 means paused)", async () => {
+    let refreshCalled = 0
+    const deps = makeDeps({
+      refreshActivate: async () => {
+        refreshCalled += 1
+        return "tok-refreshed"
+      },
+    })
+    const mock = vi.fn(async () =>
+      jsonResponse({ error: { code: "server_error" } }, 500),
+    )
+    vi.stubGlobal("fetch", mock)
+
+    await expect(new Commands(deps).run("echo")).rejects.toBeInstanceOf(
+      SandboxError,
+    )
+    expect(refreshCalled).toBe(0)
+    expect(mock).toHaveBeenCalledTimes(1)
+  })
+
   it("propagates AuthenticationError if refresh also fails", async () => {
     const deps = makeDeps({
       refreshActivate: async () => "tok-refreshed",

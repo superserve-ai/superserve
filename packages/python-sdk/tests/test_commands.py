@@ -109,6 +109,30 @@ class TestCommandsRun:
                 Commands(deps).run("echo")
         assert state["refreshes"] == 0
 
+    def test_resumes_and_retries_on_503(self) -> None:
+        deps, state = _make_deps()
+        with respx.mock() as router:
+            router.post(f"{DATA_PLANE}/exec").mock(
+                side_effect=[
+                    httpx.Response(
+                        503,
+                        json={
+                            "error": {
+                                "code": "sandbox_paused",
+                                "message": "sandbox is paused",
+                            }
+                        },
+                    ),
+                    httpx.Response(
+                        200,
+                        json={"stdout": "ok\n", "stderr": "", "exit_code": 0},
+                    ),
+                ]
+            )
+            result = Commands(deps).run("echo")
+            assert result.stdout == "ok\n"
+            assert state["refreshes"] == 1
+
     def test_propagates_auth_error_when_refresh_also_fails(self) -> None:
         deps, _ = _make_deps()
         with respx.mock() as router:
@@ -164,9 +188,7 @@ class TestCommandsStreaming:
                 )
             )
             with pytest.raises(SandboxError, match="finished"):
-                _make_commands().run(
-                    "echo partial", on_stdout=lambda _c: None
-                )
+                _make_commands().run("echo partial", on_stdout=lambda _c: None)
 
     def test_streaming_with_nonzero_exit_code(self) -> None:
         sse_body = (
@@ -192,8 +214,7 @@ class TestCommandsStreaming:
     ) -> None:
         deps, state = _make_deps()
         sse_body = (
-            'data: {"stdout": "one"}\n\n'
-            'data: {"finished": true, "exit_code": 0}\n\n'
+            'data: {"stdout": "one"}\n\ndata: {"finished": true, "exit_code": 0}\n\n'
         )
         with respx.mock() as router:
             router.post(f"{DATA_PLANE}/exec/stream").mock(
@@ -263,8 +284,7 @@ class TestCommandsSharedHostRouting:
             refresh_activate=lambda: "tok",
         )
         sse_body = (
-            'data: {"stdout": "x"}\n\n'
-            'data: {"finished": true, "exit_code": 0}\n\n'
+            'data: {"stdout": "x"}\n\ndata: {"finished": true, "exit_code": 0}\n\n'
         )
         with respx.mock() as router:
             route = router.post("https://sandbox.superserve.ai/exec/stream").mock(

@@ -59,9 +59,10 @@ export class Sandbox {
   /**
    * Upload and download files to/from this sandbox.
    *
-   * Rebuilt transparently after `resume()` to pick up the rotated token.
+   * Reads the per-sandbox access token live, so a `resume()` or an auto-resume
+   * (rotating the token) is picked up transparently.
    */
-  files: Files
+  readonly files: Files
 
   private _accessToken: string
   private _refreshInFlight: Promise<string> | null = null
@@ -87,13 +88,18 @@ export class Sandbox {
       getAccessToken: () => this._accessToken,
       refreshActivate: () => this._refreshActivate(),
     })
-    this.files = new Files(this.id, config.sandboxHost, this._accessToken)
+    this.files = new Files({
+      sandboxId: this.id,
+      sandboxHost: config.sandboxHost,
+      getAccessToken: () => this._accessToken,
+      refreshActivate: () => this._refreshActivate(),
+    })
   }
 
   /**
-   * POST a token-rotating endpoint (`/resume` or `/activate`), update the
-   * cached token, and rebuild `this.files` with the fresh token. Returns
-   * the new token. @internal
+   * POST a token-rotating endpoint (`/resume` or `/activate`) and update the
+   * cached token. `commands` and `files` read the token live, so they pick up
+   * the rotation transparently. Returns the new token. @internal
    */
   private async _postAndRotateToken(
     endpoint: "resume" | "activate",
@@ -109,7 +115,6 @@ export class Sandbox {
       )
     }
     this._accessToken = raw.access_token
-    this.files = new Files(this.id, this._config.sandboxHost, this._accessToken)
     return this._accessToken
   }
 
@@ -304,8 +309,8 @@ export class Sandbox {
 
   /**
    * Resume a paused sandbox. Status transitions back to `active`.
-   * The access token is rotated; the SDK rebuilds `sandbox.files` with the
-   * fresh token transparently.
+   * The access token is rotated; `sandbox.commands` and `sandbox.files` pick
+   * up the fresh token transparently.
    */
   async resume(): Promise<void> {
     await this._postAndRotateToken("resume")

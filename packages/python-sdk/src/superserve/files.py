@@ -1,7 +1,14 @@
-"""`sandbox.files` - read and write files inside a sandbox."""
+"""``sandbox.files`` - read and write files inside a sandbox.
+
+Hits the data plane with the per-sandbox access token. A paused sandbox (401
+stale token, or 503 because the VM isn't running) is transparently resumed via
+``POST /activate`` and the op is retried once — see ``_token_retry``.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
 
@@ -14,6 +21,7 @@ from ._http import (
     download_bytes,
     upload_bytes,
 )
+from ._token_retry import async_with_token_retry, with_token_retry
 from .errors import ValidationError
 
 
@@ -24,20 +32,38 @@ def _validate_path(path: str) -> None:
         raise ValidationError(f'Path must not contain ".." segments: {path}')
 
 
+@dataclass(frozen=True)
+class FilesDeps:
+    """Internal deps from Sandbox. ``refresh_activate`` resumes + rotates."""
+
+    sandbox_id: str
+    sandbox_host: str
+    get_access_token: Callable[[], str]
+    refresh_activate: Callable[[], str]
+
+
+@dataclass(frozen=True)
+class AsyncFilesDeps:
+    """Async variant of FilesDeps."""
+
+    sandbox_id: str
+    sandbox_host: str
+    get_access_token: Callable[[], str]
+    refresh_activate: Callable[[], Awaitable[str]]
+
+
 class Files:
     """Sync file operations. Access as ``sandbox.files``."""
 
     def __init__(
         self,
-        sandbox_id: str,
-        sandbox_host: str,
-        access_token: str,
+        deps: FilesDeps,
         client: httpx.Client | None = None,
     ) -> None:
-        target = data_plane_target(sandbox_id, sandbox_host)
+        self._deps = deps
+        target = data_plane_target(deps.sandbox_id, deps.sandbox_host)
         self._base_url = target.url
         self._routing_headers = target.headers
-        self._access_token = access_token
         self._client = client
 
     def write(
@@ -48,15 +74,19 @@ class Files:
         if isinstance(content, str):
             content = content.encode("utf-8")
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
-        kwargs: dict[str, Any] = {
-            "url": url,
-            "headers": {**self._routing_headers, "X-Access-Token": self._access_token},
-            "content": content,
-            "client": self._client,
-        }
-        if timeout is not None:
-            kwargs["timeout"] = timeout
-        upload_bytes(**kwargs)
+
+        def send(token: str) -> None:
+            kwargs: dict[str, Any] = {
+                "url": url,
+                "headers": {**self._routing_headers, "X-Access-Token": token},
+                "content": content,
+                "client": self._client,
+            }
+            if timeout is not None:
+                kwargs["timeout"] = timeout
+            upload_bytes(**kwargs)
+
+        with_token_retry(self._deps.get_access_token, self._deps.refresh_activate, send)
 
     def read(
         self,
@@ -71,20 +101,25 @@ class Files:
         """
         _validate_path(path)
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
-        kwargs: dict[str, Any] = {
-            "url": url,
-            "headers": {**self._routing_headers, "X-Access-Token": self._access_token},
-            "client": self._client,
-        }
-        if timeout is not None:
-            kwargs["timeout"] = timeout
-        if max_bytes is not None:
-            kwargs["max_bytes"] = max_bytes
-        return download_bytes(**kwargs)
+
+        def send(token: str) -> bytes:
+            kwargs: dict[str, Any] = {
+                "url": url,
+                "headers": {**self._routing_headers, "X-Access-Token": token},
+                "client": self._client,
+            }
+            if timeout is not None:
+                kwargs["timeout"] = timeout
+            if max_bytes is not None:
+                kwargs["max_bytes"] = max_bytes
+            return download_bytes(**kwargs)
+
+        return with_token_retry(
+            self._deps.get_access_token, self._deps.refresh_activate, send
+        )
 
     def read_text(self, path: str, *, timeout: float | None = None) -> str:
         """Read a file from the sandbox as a UTF-8 string."""
-        _validate_path(path)
         return self.read(path, timeout=timeout).decode("utf-8")
 
     def download_dir(
@@ -108,16 +143,22 @@ class Files:
         """
         _validate_path(path)
         url = f"{self._base_url}/files?path={quote(path, safe='')}&format=zip"
-        kwargs: dict[str, Any] = {
-            "url": url,
-            "headers": {**self._routing_headers, "X-Access-Token": self._access_token},
-            "client": self._client,
-        }
-        if timeout is not None:
-            kwargs["timeout"] = timeout
-        if max_bytes is not None:
-            kwargs["max_bytes"] = max_bytes
-        return download_bytes(**kwargs)
+
+        def send(token: str) -> bytes:
+            kwargs: dict[str, Any] = {
+                "url": url,
+                "headers": {**self._routing_headers, "X-Access-Token": token},
+                "client": self._client,
+            }
+            if timeout is not None:
+                kwargs["timeout"] = timeout
+            if max_bytes is not None:
+                kwargs["max_bytes"] = max_bytes
+            return download_bytes(**kwargs)
+
+        return with_token_retry(
+            self._deps.get_access_token, self._deps.refresh_activate, send
+        )
 
 
 class AsyncFiles:
@@ -125,15 +166,13 @@ class AsyncFiles:
 
     def __init__(
         self,
-        sandbox_id: str,
-        sandbox_host: str,
-        access_token: str,
+        deps: AsyncFilesDeps,
         client: httpx.AsyncClient | None = None,
     ) -> None:
-        target = data_plane_target(sandbox_id, sandbox_host)
+        self._deps = deps
+        target = data_plane_target(deps.sandbox_id, deps.sandbox_host)
         self._base_url = target.url
         self._routing_headers = target.headers
-        self._access_token = access_token
         self._client = client
 
     async def write(
@@ -144,15 +183,21 @@ class AsyncFiles:
         if isinstance(content, str):
             content = content.encode("utf-8")
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
-        kwargs: dict[str, Any] = {
-            "url": url,
-            "headers": {**self._routing_headers, "X-Access-Token": self._access_token},
-            "content": content,
-            "client": self._client,
-        }
-        if timeout is not None:
-            kwargs["timeout"] = timeout
-        await async_upload_bytes(**kwargs)
+
+        async def send(token: str) -> None:
+            kwargs: dict[str, Any] = {
+                "url": url,
+                "headers": {**self._routing_headers, "X-Access-Token": token},
+                "content": content,
+                "client": self._client,
+            }
+            if timeout is not None:
+                kwargs["timeout"] = timeout
+            await async_upload_bytes(**kwargs)
+
+        await async_with_token_retry(
+            self._deps.get_access_token, self._deps.refresh_activate, send
+        )
 
     async def read(
         self,
@@ -167,20 +212,25 @@ class AsyncFiles:
         """
         _validate_path(path)
         url = f"{self._base_url}/files?path={quote(path, safe='')}"
-        kwargs: dict[str, Any] = {
-            "url": url,
-            "headers": {**self._routing_headers, "X-Access-Token": self._access_token},
-            "client": self._client,
-        }
-        if timeout is not None:
-            kwargs["timeout"] = timeout
-        if max_bytes is not None:
-            kwargs["max_bytes"] = max_bytes
-        return await async_download_bytes(**kwargs)
+
+        async def send(token: str) -> bytes:
+            kwargs: dict[str, Any] = {
+                "url": url,
+                "headers": {**self._routing_headers, "X-Access-Token": token},
+                "client": self._client,
+            }
+            if timeout is not None:
+                kwargs["timeout"] = timeout
+            if max_bytes is not None:
+                kwargs["max_bytes"] = max_bytes
+            return await async_download_bytes(**kwargs)
+
+        return await async_with_token_retry(
+            self._deps.get_access_token, self._deps.refresh_activate, send
+        )
 
     async def read_text(self, path: str, *, timeout: float | None = None) -> str:
         """Read a file from the sandbox as a UTF-8 string."""
-        _validate_path(path)
         raw = await self.read(path, timeout=timeout)
         return raw.decode("utf-8")
 
@@ -205,13 +255,19 @@ class AsyncFiles:
         """
         _validate_path(path)
         url = f"{self._base_url}/files?path={quote(path, safe='')}&format=zip"
-        kwargs: dict[str, Any] = {
-            "url": url,
-            "headers": {**self._routing_headers, "X-Access-Token": self._access_token},
-            "client": self._client,
-        }
-        if timeout is not None:
-            kwargs["timeout"] = timeout
-        if max_bytes is not None:
-            kwargs["max_bytes"] = max_bytes
-        return await async_download_bytes(**kwargs)
+
+        async def send(token: str) -> bytes:
+            kwargs: dict[str, Any] = {
+                "url": url,
+                "headers": {**self._routing_headers, "X-Access-Token": token},
+                "client": self._client,
+            }
+            if timeout is not None:
+                kwargs["timeout"] = timeout
+            if max_bytes is not None:
+                kwargs["max_bytes"] = max_bytes
+            return await async_download_bytes(**kwargs)
+
+        return await async_with_token_retry(
+            self._deps.get_access_token, self._deps.refresh_activate, send
+        )

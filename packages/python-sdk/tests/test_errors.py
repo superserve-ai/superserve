@@ -98,6 +98,14 @@ class TestMapApiError:
         err = map_api_error(502, {"error": {"message": "gateway"}})
         assert isinstance(err, ServerError)
 
+    def test_503_returns_server_error_preserving_status(self) -> None:
+        err = map_api_error(
+            503,
+            {"error": {"code": "sandbox_paused", "message": "sandbox is paused"}},
+        )
+        assert isinstance(err, ServerError)
+        assert err.status_code == 503
+
     def test_code_preserved_on_unknown(self) -> None:
         err = map_api_error(
             418, {"error": {"message": "teapot", "code": "teapot_error"}}

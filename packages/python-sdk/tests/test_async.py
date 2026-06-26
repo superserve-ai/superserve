@@ -149,7 +149,7 @@ class TestAsyncSandboxSmoke:
             finally:
                 await sbx._close_http_client()
 
-    async def test_resume_rotates_token_and_rebuilds_files(self) -> None:
+    async def test_resume_rotates_token_files_reads_it_live(self) -> None:
         with respx.mock() as router:
             router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw())
@@ -170,7 +170,8 @@ class TestAsyncSandboxSmoke:
                 result = await sbx.resume()
                 assert result is None
                 assert sbx._access_token == "rotated-tok"
-                assert sbx.files is not old_files
+                # files reads the token live — same instance, picks up rotation
+                assert sbx.files is old_files
             finally:
                 await sbx._close_http_client()
 
@@ -271,9 +272,7 @@ class TestAsyncConcurrentRefresh:
             nonlocal exec_call_count
             exec_call_count += 1
             if exec_call_count <= 2:
-                return httpx.Response(
-                    401, json={"error": {"code": "auth_failed"}}
-                )
+                return httpx.Response(401, json={"error": {"code": "auth_failed"}})
             return httpx.Response(
                 200, json={"stdout": "ok", "stderr": "", "exit_code": 0}
             )
@@ -301,9 +300,7 @@ class TestAsyncConcurrentRefresh:
             )
             router.post(f"{data_plane}/exec").mock(side_effect=exec_response)
 
-            sbx = await AsyncSandbox.connect(
-                sbx_id, api_key="ss_live_x", base_url=API
-            )
+            sbx = await AsyncSandbox.connect(sbx_id, api_key="ss_live_x", base_url=API)
             try:
                 sbx._config = sbx._config.__class__(
                     api_key=sbx._config.api_key,
@@ -323,3 +320,71 @@ class TestAsyncConcurrentRefresh:
                 assert exec_call_count == 4
             finally:
                 await sbx._close_http_client()
+
+
+class TestAsyncAutoResumeOn503:
+    """A paused sandbox answers the data plane with 503; async ops resume."""
+
+    async def test_commands_resumes_and_retries_on_503(self) -> None:
+        from superserve.commands import AsyncCommands, AsyncCommandsDeps
+
+        host = "sandbox.example.com"
+        data_plane = f"https://boxd-sbx-1.{host}"
+        state = {"token": "tok-stale", "refreshes": 0}
+
+        async def refresh() -> str:
+            state["refreshes"] += 1
+            state["token"] = "tok-fresh"
+            return state["token"]
+
+        deps = AsyncCommandsDeps(
+            sandbox_id="sbx-1",
+            sandbox_host=host,
+            get_access_token=lambda: state["token"],
+            refresh_activate=refresh,
+        )
+        with respx.mock() as router:
+            router.post(f"{data_plane}/exec").mock(
+                side_effect=[
+                    httpx.Response(
+                        503, json={"error": {"message": "sandbox is paused"}}
+                    ),
+                    httpx.Response(
+                        200, json={"stdout": "ok\n", "stderr": "", "exit_code": 0}
+                    ),
+                ]
+            )
+            result = await AsyncCommands(deps).run("echo")
+            assert result.stdout == "ok\n"
+            assert state["refreshes"] == 1
+
+    async def test_files_write_resumes_and_retries_on_503(self) -> None:
+        from superserve.files import AsyncFiles, AsyncFilesDeps
+
+        host = "sandbox.example.com"
+        data_plane = f"https://boxd-sbx-1.{host}"
+        state = {"token": "tok-stale", "refreshes": 0}
+
+        async def refresh() -> str:
+            state["refreshes"] += 1
+            state["token"] = "tok-fresh"
+            return state["token"]
+
+        deps = AsyncFilesDeps(
+            sandbox_id="sbx-1",
+            sandbox_host=host,
+            get_access_token=lambda: state["token"],
+            refresh_activate=refresh,
+        )
+        with respx.mock() as router:
+            route = router.post(f"{data_plane}/files").mock(
+                side_effect=[
+                    httpx.Response(
+                        503, json={"error": {"message": "sandbox is paused"}}
+                    ),
+                    httpx.Response(200),
+                ]
+            )
+            await AsyncFiles(deps).write("/app/f.txt", "hello")
+            assert state["refreshes"] == 1
+            assert route.calls.last.request.headers["x-access-token"] == "tok-fresh"
