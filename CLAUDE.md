@@ -26,7 +26,6 @@ superserve/
 │   ├── sdk-e2e-ts/              # TypeScript SDK end-to-end tests (Vitest)
 │   └── sdk-e2e-py/              # Python SDK end-to-end tests (pytest)
 ├── docs/                        # Mintlify docs site (docs.json, MDX pages)
-├── spec/                        # Planning and implementation documents
 └── examples/                    # Example projects
 ```
 
@@ -267,7 +266,3 @@ The console has a deliberate austere, technical aesthetic. Follow these patterns
 
 - Single-line commit messages
 - Do not include "Co-Authored-By" or AI attribution in commits
-
-## Planning
-
-- Save all planning and implementation documents to `spec/` (not `docs/plans/`)
