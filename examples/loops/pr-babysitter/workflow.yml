@@ -1,0 +1,45 @@
+# PR Babysitter — GitHub Actions cron heartbeat.
+#
+# Copy this into `.github/workflows/` of the repo you want babysat. It wakes on a
+# schedule, runs ONE tick against a warm Superserve sandbox, and exits in seconds.
+# The sandbox (not this runner) holds all state between ticks.
+#
+# One-time setup:
+#   1. `claude setup-token`  → generates a Claude subscription OAuth token (Pro/Max/Team/Enterprise).
+#   2. Create two Superserve secrets (console at https://console.superserve.ai/secrets, or
+#      `Secret.create(...)`):
+#        - "claude-oauth"        → the token from step 1   (auth: Authorization Bearer → Anthropic)
+#        - "loop-github-token"   → a GitHub PAT (repo scope) (provider: github)
+#   3. Add `SUPERSERVE_API_KEY` as a GitHub Actions secret.
+#
+# Only SUPERSERVE_API_KEY is sensitive here — the Superserve secret *names* are not, so they
+# live in plain env. The real OAuth token / PAT never enter the sandbox (swapped in at egress).
+#
+# NOTE: this assumes you vendored `examples/loops` into your repo at `./loops`. Adjust
+# `working-directory`, and change `@superserve/sdk` from `workspace:*` to a published version
+# (`bun add @superserve/sdk`) when running outside this monorepo.
+
+name: loop-pr-babysitter
+on:
+  schedule:
+    - cron: "*/15 * * * 1-5" # every 15 min on weekdays (GitHub's reliable floor)
+  workflow_dispatch: {}
+
+concurrency:
+  group: loop-pr-babysitter
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+        working-directory: loops
+      - run: bun run pr-babysitter/loop.ts --repo "${{ github.repository }}" --once
+        working-directory: loops
+        env:
+          SUPERSERVE_API_KEY: ${{ secrets.SUPERSERVE_API_KEY }}
+          SUPERSERVE_CLAUDE_SECRET: claude-oauth
+          SUPERSERVE_GITHUB_SECRET: loop-github-token

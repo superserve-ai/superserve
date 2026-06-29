@@ -1,0 +1,184 @@
+import { describe, expect, it } from "vitest"
+
+import { runLoop } from "../lib/run-loop"
+import type { LoopSpec, SandboxHandle, SandboxOps } from "../lib/run-loop"
+import { buildSpec, resolveAuth } from "../pr-babysitter/loop"
+
+// Loop code always passes the same metadata object (stable key order), so a
+// plain stringify is a sufficient and deterministic map key here.
+function metaKey(m: Record<string, string>): string {
+  return JSON.stringify(m)
+}
+
+/** In-memory stand-in for a live Superserve sandbox. */
+class FakeBox implements SandboxHandle {
+  readonly id: string
+  writes: Array<{ path: string; content: string }> = []
+  runs: string[] = []
+  paused = false
+
+  constructor(id: string) {
+    this.id = id
+  }
+
+  files = {
+    write: async (path: string, content: string): Promise<void> => {
+      this.writes.push({ path, content })
+    },
+  }
+
+  commands = {
+    run: async (
+      command: string,
+    ): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
+      this.runs.push(command)
+      return { stdout: "", stderr: "", exitCode: 0 }
+    },
+  }
+
+  pause = async (): Promise<void> => {
+    this.paused = true
+  }
+}
+
+/** In-memory `SandboxOps` that persists boxes by metadata, like the real platform. */
+class FakeOps implements SandboxOps {
+  boxesByMeta = new Map<string, FakeBox>()
+  boxesById = new Map<string, FakeBox>()
+  createCount = 0
+  connectCount = 0
+  private seq = 0
+
+  /** Pretend a prior tick already created this loop's box. */
+  seed(metadata: Record<string, string>): FakeBox {
+    const box = new FakeBox(`box-${++this.seq}`)
+    this.boxesByMeta.set(metaKey(metadata), box)
+    this.boxesById.set(box.id, box)
+    return box
+  }
+
+  list = async (
+    metadata: Record<string, string>,
+  ): Promise<Array<{ id: string }>> => {
+    const box = this.boxesByMeta.get(metaKey(metadata))
+    return box ? [{ id: box.id }] : []
+  }
+
+  connect = async (id: string): Promise<SandboxHandle> => {
+    this.connectCount++
+    const box = this.boxesById.get(id)
+    if (!box) throw new Error(`no box ${id}`)
+    return box
+  }
+
+  create = async (options: {
+    name: string
+    metadata: Record<string, string>
+  }): Promise<SandboxHandle> => {
+    this.createCount++
+    const box = new FakeBox(`box-${++this.seq}`)
+    this.boxesByMeta.set(metaKey(options.metadata), box)
+    this.boxesById.set(box.id, box)
+    return box
+  }
+}
+
+const spec: LoopSpec = {
+  name: "t",
+  metadata: { loop: "t", repo: "o/r" },
+  uploads: { "/x": "data" },
+  setup: "SETUP",
+  iterate: "ITERATE",
+}
+
+const noop = (): void => {}
+
+describe("runLoop", () => {
+  it("cold start: creates, uploads, runs setup then iterate, pauses", async () => {
+    const ops = new FakeOps()
+    const result = await runLoop(spec, ops, noop)
+
+    expect(result.bootstrapped).toBe(true)
+    expect(ops.createCount).toBe(1)
+    expect(ops.connectCount).toBe(0)
+
+    const box = ops.boxesById.get(result.sandboxId)
+    expect(box?.writes).toEqual([{ path: "/x", content: "data" }])
+    expect(box?.runs).toEqual(["SETUP", "ITERATE"])
+    expect(box?.paused).toBe(true)
+  })
+
+  it("warm tick: resumes the existing box, runs iterate only (no setup, no uploads)", async () => {
+    const ops = new FakeOps()
+    ops.seed(spec.metadata)
+    const result = await runLoop(spec, ops, noop)
+
+    expect(result.bootstrapped).toBe(false)
+    expect(ops.createCount).toBe(0)
+    expect(ops.connectCount).toBe(1)
+
+    const box = ops.boxesById.get(result.sandboxId)
+    expect(box?.writes).toEqual([])
+    expect(box?.runs).toEqual(["ITERATE"])
+    expect(box?.paused).toBe(true)
+  })
+
+  it("respects pauseWhenDone: false", async () => {
+    const ops = new FakeOps()
+    const result = await runLoop({ ...spec, pauseWhenDone: false }, ops, noop)
+    expect(ops.boxesById.get(result.sandboxId)?.paused).toBe(false)
+  })
+})
+
+describe("pr-babysitter buildSpec / resolveAuth", () => {
+  it("binds the subscription + github secrets by name", () => {
+    const auth = resolveAuth({
+      SUPERSERVE_CLAUDE_SECRET: "claude-oauth",
+      SUPERSERVE_GITHUB_SECRET: "loop-github-token",
+    } as NodeJS.ProcessEnv)
+
+    expect(auth.secrets).toEqual({
+      CLAUDE_CODE_OAUTH_TOKEN: "claude-oauth",
+      GITHUB_TOKEN: "loop-github-token",
+    })
+    expect(auth.envVars).toEqual({})
+  })
+
+  it("falls back to raw tokens in env vars (dev path)", () => {
+    const auth = resolveAuth({
+      CLAUDE_CODE_OAUTH_TOKEN: "tok",
+      GITHUB_TOKEN: "ght",
+    } as NodeJS.ProcessEnv)
+
+    expect(auth.envVars).toEqual({
+      CLAUDE_CODE_OAUTH_TOKEN: "tok",
+      GITHUB_TOKEN: "ght",
+    })
+    expect(auth.secrets).toEqual({})
+  })
+
+  it("throws a helpful error when credentials are missing", () => {
+    expect(() => resolveAuth({} as NodeJS.ProcessEnv)).toThrow(
+      /Missing credentials/,
+    )
+  })
+
+  it("builds a claude-code loop spec wired for subscription auth", () => {
+    const auth = resolveAuth({
+      SUPERSERVE_CLAUDE_SECRET: "claude-oauth",
+      SUPERSERVE_GITHUB_SECRET: "loop-github-token",
+    } as NodeJS.ProcessEnv)
+    const built = buildSpec({ repo: "acme/widget", skill: "SKILL-BODY", auth })
+
+    expect(built.template).toBe("superserve/claude-code")
+    expect(built.metadata).toEqual({
+      loop: "pr-babysitter",
+      repo: "acme/widget",
+    })
+    expect(built.envVars?.TARGET_REPO).toBe("acme/widget")
+    expect(Object.values(built.uploads ?? {})).toContain("SKILL-BODY")
+    expect(built.iterate).toContain("claude -p")
+    expect(built.iterate).toContain("unset ANTHROPIC_API_KEY")
+    expect(built.setup).toContain("gh repo clone")
+  })
+})
