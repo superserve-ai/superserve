@@ -56,6 +56,9 @@ export interface SandboxHandle {
     ): Promise<{ stdout: string; stderr: string; exitCode: number }>
   }
   pause(): Promise<void>
+  /** Destroy the box. Used to tear down a half-built box when `setup` fails, so
+   *  the next tick re-bootstraps from scratch instead of resuming it broken. */
+  kill(): Promise<void>
 }
 
 /** The sandbox operations the spine needs. Injectable so tests can fake them. */
@@ -110,13 +113,32 @@ export async function runLoop(
       })
     : await ops.connect(existing.id)
 
+  let destroyed = false
   try {
     if (bootstrapped) {
       for (const [path, contents] of Object.entries(spec.uploads ?? {})) {
         await box.files.write(path, contents)
       }
       // The expensive step — runs once, every warm tick skips it.
-      await box.commands.run(spec.setup, { onStdout: log, onStderr: log })
+      const setup = await box.commands.run(spec.setup, {
+        onStdout: log,
+        onStderr: log,
+      })
+      // A failed bootstrap must not be ignored: the box already exists, so the
+      // next tick would rediscover it, skip setup, and run `iterate` forever
+      // against a broken, half-built box. Tear it down so the loop self-heals.
+      if (setup.exitCode !== 0) {
+        destroyed = true
+        await box.kill().catch((err: unknown) => {
+          log(
+            `[runLoop] warning: failed to destroy ${box.id}: ${String(err)}\n`,
+          )
+        })
+        throw new Error(
+          `loop "${spec.name}" setup failed (exit ${setup.exitCode}); ` +
+            `destroyed sandbox ${box.id} so the next tick re-bootstraps`,
+        )
+      }
     }
 
     const result = await box.commands.run(spec.iterate, {
@@ -132,8 +154,12 @@ export async function runLoop(
       stdout: result.stdout,
     }
   } finally {
-    if (spec.pauseWhenDone ?? true) {
-      await box.pause()
+    // Pause is best-effort: a dead/unreachable box must not throw here and mask
+    // the real error escaping the try block. Skip it entirely if we tore down.
+    if (!destroyed && (spec.pauseWhenDone ?? true)) {
+      await box.pause().catch((err: unknown) => {
+        log(`[runLoop] warning: failed to pause ${box.id}: ${String(err)}\n`)
+      })
     }
   }
 }

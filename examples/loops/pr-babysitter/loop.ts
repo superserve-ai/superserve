@@ -54,13 +54,16 @@ export function resolveAuth(env: NodeJS.ProcessEnv): ResolvedAuth {
     )
   }
 
+  // `gh` exports GH_TOKEN; raw PATs are usually GITHUB_TOKEN. Accept either, to
+  // match the installer CLI's credential resolution.
+  const githubToken = env.GITHUB_TOKEN || env.GH_TOKEN
   if (env.SUPERSERVE_GITHUB_SECRET) {
     secrets.GITHUB_TOKEN = env.SUPERSERVE_GITHUB_SECRET
-  } else if (env.GITHUB_TOKEN) {
-    envVars.GITHUB_TOKEN = env.GITHUB_TOKEN
+  } else if (githubToken) {
+    envVars.GITHUB_TOKEN = githubToken
   } else {
     missing.push(
-      "GitHub: set SUPERSERVE_GITHUB_SECRET (name of a Superserve secret) or GITHUB_TOKEN (a raw PAT).",
+      "GitHub: set SUPERSERVE_GITHUB_SECRET (name of a Superserve secret) or GITHUB_TOKEN / GH_TOKEN (a raw PAT).",
     )
   }
 
@@ -96,6 +99,8 @@ function setupScript(): string {
 /** Per-tick: refresh the warm checkout, run Claude Code headlessly on the skill. */
 function iterateScript(): string {
   return [
+    // Fail the tick if cd/fetch fail, instead of running claude in the wrong dir.
+    "set -e",
     "# Subscription billing: ensure no metered API key out-ranks CLAUDE_CODE_OAUTH_TOKEN.",
     "unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN",
     'export PATH="$HOME/.local/bin:$PATH"',
@@ -220,12 +225,18 @@ async function main(): Promise<void> {
   console.log(
     `[pr-babysitter] watching ${repo} every ${intervalMs / 1000}s — Ctrl-C to stop`,
   )
+  // Recursive setTimeout, NOT setInterval: schedule the next tick only after the
+  // current one settles. Ticks share one persistent box, so an overlapping run
+  // (a slow tick outlasting the interval) would race on the same git checkout.
   await tick()
-  setInterval(() => {
-    void tick().catch((err) =>
-      console.error(`[pr-babysitter] tick failed: ${err}`),
-    )
-  }, intervalMs)
+  const scheduleNext = (): void => {
+    setTimeout(() => {
+      void tick()
+        .catch((err) => console.error(`[pr-babysitter] tick failed: ${err}`))
+        .finally(scheduleNext)
+    }, intervalMs)
+  }
+  scheduleNext()
 }
 
 // Only run when executed directly (so tests can import buildSpec/resolveAuth).

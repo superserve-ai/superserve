@@ -16,6 +16,9 @@ class FakeBox implements SandboxHandle {
   writes: Array<{ path: string; content: string }> = []
   runs: string[] = []
   paused = false
+  killed = false
+  /** Per-command exit codes; any command not listed exits 0 (clean). */
+  exitCodes: Record<string, number> = {}
 
   constructor(id: string) {
     this.id = id
@@ -32,12 +35,16 @@ class FakeBox implements SandboxHandle {
       command: string,
     ): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
       this.runs.push(command)
-      return { stdout: "", stderr: "", exitCode: 0 }
+      return { stdout: "", stderr: "", exitCode: this.exitCodes[command] ?? 0 }
     },
   }
 
   pause = async (): Promise<void> => {
     this.paused = true
+  }
+
+  kill = async (): Promise<void> => {
+    this.killed = true
   }
 }
 
@@ -47,6 +54,8 @@ class FakeOps implements SandboxOps {
   boxesById = new Map<string, FakeBox>()
   createCount = 0
   connectCount = 0
+  /** Hook to configure each freshly created box (e.g. make its setup fail). */
+  onCreate?: (box: FakeBox) => void
   private seq = 0
 
   /** Pretend a prior tick already created this loop's box. */
@@ -61,7 +70,8 @@ class FakeOps implements SandboxOps {
     metadata: Record<string, string>,
   ): Promise<Array<{ id: string }>> => {
     const box = this.boxesByMeta.get(metaKey(metadata))
-    return box ? [{ id: box.id }] : []
+    // A killed box is gone from the platform — the next tick won't rediscover it.
+    return box && !box.killed ? [{ id: box.id }] : []
   }
 
   connect = async (id: string): Promise<SandboxHandle> => {
@@ -79,6 +89,7 @@ class FakeOps implements SandboxOps {
     const box = new FakeBox(`box-${++this.seq}`)
     this.boxesByMeta.set(metaKey(options.metadata), box)
     this.boxesById.set(box.id, box)
+    this.onCreate?.(box)
     return box
   }
 }
@@ -128,6 +139,22 @@ describe("runLoop", () => {
     const result = await runLoop({ ...spec, pauseWhenDone: false }, ops, noop)
     expect(ops.boxesById.get(result.sandboxId)?.paused).toBe(false)
   })
+
+  it("setup failure: tears the box down, skips iterate + pause, and rethrows", async () => {
+    const ops = new FakeOps()
+    ops.onCreate = (box) => {
+      box.exitCodes.SETUP = 1
+    }
+
+    await expect(runLoop(spec, ops, noop)).rejects.toThrow(/setup failed/)
+
+    const box = [...ops.boxesById.values()][0]
+    expect(box?.runs).toEqual(["SETUP"]) // never advanced to iterate
+    expect(box?.killed).toBe(true) // half-built box destroyed
+    expect(box?.paused).toBe(false) // don't pause a torn-down box
+    // The platform no longer lists it, so the next tick re-bootstraps cleanly.
+    expect(await ops.list(spec.metadata)).toEqual([])
+  })
 })
 
 describe("pr-babysitter buildSpec / resolveAuth", () => {
@@ -157,6 +184,16 @@ describe("pr-babysitter buildSpec / resolveAuth", () => {
     expect(auth.secrets).toEqual({})
   })
 
+  it("accepts GH_TOKEN as a GitHub fallback (the gh CLI's variable)", () => {
+    const auth = resolveAuth({
+      CLAUDE_CODE_OAUTH_TOKEN: "tok",
+      GH_TOKEN: "gh-cli-token",
+    } as NodeJS.ProcessEnv)
+
+    expect(auth.envVars.GITHUB_TOKEN).toBe("gh-cli-token")
+    expect(auth.secrets).toEqual({})
+  })
+
   it("throws a helpful error when credentials are missing", () => {
     expect(() => resolveAuth({} as NodeJS.ProcessEnv)).toThrow(
       /Missing credentials/,
@@ -179,6 +216,7 @@ describe("pr-babysitter buildSpec / resolveAuth", () => {
     expect(Object.values(built.uploads ?? {})).toContain("SKILL-BODY")
     expect(built.iterate).toContain("claude -p")
     expect(built.iterate).toContain("unset ANTHROPIC_API_KEY")
+    expect(built.iterate).toContain("set -e")
     expect(built.setup).toContain("gh repo clone")
   })
 })

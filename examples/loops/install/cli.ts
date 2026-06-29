@@ -51,7 +51,7 @@ function detectRepo(flag: string | undefined): string {
   if (flag) return flag
   const url = tryExec("git", ["config", "--get", "remote.origin.url"])
   const m = url
-    ? /github\.com[:/]([^/]+)\/([^/.]+?)(?:\.git)?$/.exec(url)
+    ? /github\.com[:/]([^/]+)\/([^/.]+?)(?:\.git)?\/?$/.exec(url)
     : null
   if (!m) {
     fail(
