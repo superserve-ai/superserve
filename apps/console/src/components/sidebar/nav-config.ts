@@ -8,7 +8,6 @@ import {
   GearIcon,
   KeyIcon,
   LifebuoyIcon,
-  ShieldCheckIcon,
   StackIcon,
   LockKeyIcon,
   UsersIcon,
@@ -37,12 +36,6 @@ export const mainNavItems: NavItem[] = [
   { label: "Plan & Usage", href: "/plan-usage", icon: ChartBarIcon },
   { label: "Settings", href: "/settings", icon: GearIcon },
 ]
-
-export const adminNavItem: NavItem = {
-  label: "Admin",
-  href: "/admin",
-  icon: ShieldCheckIcon,
-}
 
 export const bottomNavItems: NavItem[] = [
   {
