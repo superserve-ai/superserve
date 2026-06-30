@@ -27,10 +27,6 @@ export function isStaff(user: User | null | undefined): boolean {
   return user.email.toLowerCase().endsWith(`@${staffDomain()}`)
 }
 
-export function canImpersonateUsers(user: User | null | undefined): boolean {
-  return isStaff(user) && canViewOtherUsersAccount(user)
-}
-
 /** Guard for admin server actions and pages. Throws if not staff. */
 export async function requireStaff(): Promise<User> {
   const supabase = await createServerClient()
@@ -38,17 +34,5 @@ export async function requireStaff(): Promise<User> {
     data: { user },
   } = await supabase.auth.getUser()
   if (!isStaff(user)) throw new Error("Forbidden: staff access required")
-  return user as User
-}
-
-/** Guard for impersonation admin surfaces. Throws unless staff with platform team read access. */
-export async function requireImpersonationAccess(): Promise<User> {
-  const supabase = await createServerClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!canImpersonateUsers(user)) {
-    throw new Error("Forbidden: platform:teams:read access required")
-  }
   return user as User
 }
