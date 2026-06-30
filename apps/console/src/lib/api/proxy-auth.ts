@@ -2,11 +2,6 @@ import crypto from "node:crypto"
 
 import type { User } from "@supabase/supabase-js"
 
-import {
-  getImpersonationTeamId,
-  impersonationTtlMs,
-} from "@/lib/admin/impersonation"
-import { ensureImpersonationKeyRow } from "@/lib/admin/impersonation-key"
 import { getProxySecret, hashKey } from "@/lib/api/proxy-secret"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createServerClient } from "@/lib/supabase/server"
@@ -17,13 +12,6 @@ const PROXY_KEY_NAME = "__console_proxy__"
 // Bump this when you want to force-rotate every user's proxy key.
 const PROXY_KEY_VERSION = "v1"
 
-/**
- * Per-user proxy keys are deterministically derived from
- * HMAC(CONSOLE_PROXY_SECRET, version:user_id). This means every console
- * instance computes the same key for a given user without any shared cache
- * or coordination — fixing the multi-instance race where one instance would
- * delete another's proxy-key row from the api_key table.
- */
 /** @internal — exported for tests. Deterministic per-user key derivation. */
 export function deriveRawKey(userId: string): string {
   const mac = crypto
@@ -137,39 +125,6 @@ async function ensureProxyKeyRow(
 }
 
 /**
- * Resolve the API key to inject for the given user.
- * When the user is staff and has an active impersonation session, returns an
- * ephemeral key scoped to the target team; otherwise returns the user's own
- * proxy key. Returns null when user is null (unauthenticated).
- *
- * `impersonatedTeamId` may be passed by callers that already resolved it (the
- * proxy does, to gate writes) to avoid recomputing it; pass `undefined` to have
- * this function resolve it.
- */
-export async function getAuthApiKeyForUser(
-  user: User | null,
-  impersonatedTeamId?: string | null,
-): Promise<string | null> {
-  if (!user) return null
-
-  const teamId =
-    impersonatedTeamId === undefined
-      ? await getImpersonationTeamId(user)
-      : impersonatedTeamId
-  if (teamId) {
-    return ensureImpersonationKeyRow(
-      user.id,
-      teamId,
-      Math.floor(impersonationTtlMs() / 60_000),
-    )
-  }
-
-  const rawKey = deriveRawKey(user.id)
-  await ensureProxyKeyRow(user.id, user.email ?? user.id, hashKey(rawKey))
-  return rawKey
-}
-
-/**
  * Authenticate the current request and return the API key to inject.
  * Returns null if the user is not authenticated.
  */
@@ -178,5 +133,9 @@ export async function getAuthApiKey(): Promise<string | null> {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  return getAuthApiKeyForUser(user)
+  if (!user) return null
+
+  const rawKey = deriveRawKey(user.id)
+  await ensureProxyKeyRow(user.id, user.email ?? user.id, hashKey(rawKey))
+  return rawKey
 }
