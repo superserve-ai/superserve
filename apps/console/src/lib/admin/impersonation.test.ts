@@ -33,7 +33,7 @@ vi.mock("@/lib/supabase/server", () => ({
             id: "a1",
             email: "amit@superserve.ai",
             app_metadata: { provider: "google" },
-          } as User,
+          } as unknown as User,
         },
       })),
     },
@@ -74,17 +74,17 @@ const staff = {
   id: "a1",
   email: "amit@superserve.ai",
   app_metadata: { provider: "google", permissions: ["users:read"] },
-} as User
+} as unknown as User
 const customer = {
   id: "c1",
   email: "joe@gmail.com",
   app_metadata: { provider: "google", permissions: ["users:read"] },
-} as User
+} as unknown as User
 const staffWithoutPermission = {
   id: "a2",
   email: "anya@superserve.ai",
   app_metadata: { provider: "google", permissions: [] },
-} as User
+} as unknown as User
 
 afterEach(() => {
   cookieStore.value = undefined
