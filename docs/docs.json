@@ -241,6 +241,7 @@
           {
             "group": "Team Management",
             "pages": [
+              "GET /teams/{team_id}/management",
               "GET /teams/{team_id}/members",
               "POST /teams/{team_id}/members",
               "DELETE /teams/{team_id}/members/{user_id}",
