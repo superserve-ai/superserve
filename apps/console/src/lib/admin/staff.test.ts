@@ -36,19 +36,29 @@ describe("isStaff", () => {
   })
 })
 
-describe("users:read permission", () => {
-  it("detects users:read on the auth claim", () => {
+describe("platform team read permission", () => {
+  it("detects platform:teams:read on the auth claim", () => {
     expect(
       canViewOtherUsersAccount(
-        user("a@superserve.ai", "google", ["google"], ["users:read"]),
+        user(
+          "a@superserve.ai",
+          "google",
+          ["google"],
+          ["platform:teams:read"],
+        ),
       ),
     ).toBe(true)
   })
 
-  it("requires both staff and users:read for impersonation", () => {
+  it("requires both staff and platform:teams:read for impersonation", () => {
     expect(
       canImpersonateUsers(
-        user("a@superserve.ai", "google", ["google"], ["users:read"]),
+        user(
+          "a@superserve.ai",
+          "google",
+          ["google"],
+          ["platform:teams:read"],
+        ),
       ),
     ).toBe(true)
     expect(
@@ -56,7 +66,7 @@ describe("users:read permission", () => {
     ).toBe(false)
     expect(
       canImpersonateUsers(
-        user("a@gmail.com", "google", ["google"], ["users:read"]),
+        user("a@gmail.com", "google", ["google"], ["platform:teams:read"]),
       ),
     ).toBe(false)
   })
