@@ -37,7 +37,7 @@ describe("isStaff", () => {
 })
 
 describe("platform team read permission", () => {
-  it("detects platform:teams:read on the auth claim", () => {
+  it("requires staff identity and platform:teams:read on the auth claim", () => {
     expect(
       canViewOtherUsersAccount(
         user(
@@ -53,6 +53,14 @@ describe("platform team read permission", () => {
   it("does not grant platform access without the permission", () => {
     expect(
       canViewOtherUsersAccount(user("a@superserve.ai", "google", ["google"], [])),
+    ).toBe(false)
+  })
+
+  it("does not grant platform access to non-staff even with the permission", () => {
+    expect(
+      canViewOtherUsersAccount(
+        user("a@gmail.com", "google", ["google"], ["platform:teams:read"]),
+      ),
     ).toBe(false)
   })
 })
