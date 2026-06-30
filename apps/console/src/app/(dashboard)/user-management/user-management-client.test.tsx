@@ -93,7 +93,7 @@ describe("UserManagementClient", () => {
       screen.queryByRole("button", { name: /send invitation/i }),
     ).not.toBeInTheDocument()
     expect(
-      screen.queryByRole("button", { name: /deactivate/i }),
+      screen.queryByRole("button", { name: /manage roles/i }),
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole("button", { name: /update role/i }),
@@ -128,14 +128,19 @@ describe("UserManagementClient", () => {
       screen.getByRole("button", { name: /send invitation/i }),
     ).toBeDisabled()
     expect(
-      screen.getByRole("button", { name: /add member/i }),
-    ).toBeInTheDocument()
-    expect(
       screen.getByRole("button", { name: /update role/i }),
     ).toBeInTheDocument()
-    expect(screen.getAllByRole("button", { name: /deactivate/i })).toHaveLength(
-      1,
-    )
+    expect(
+      screen.getAllByRole("button", { name: /manage roles/i }),
+    ).toHaveLength(1)
+    expect(
+      screen.getByRole("button", { name: /manage roles/i }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: /manage roles/i }))
+    expect(screen.getAllByRole("combobox")[1]).toHaveValue("user-1")
+    expect(
+      screen.getAllByRole("button", { name: /manage roles/i }),
+    ).toHaveLength(1)
     fireEvent.click(screen.getByRole("tab", { name: /^invitations\s+1$/i }))
     expect(screen.getByText("invited@example.com")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /revoke/i })).toBeInTheDocument()

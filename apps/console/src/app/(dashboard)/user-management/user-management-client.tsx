@@ -4,7 +4,7 @@ import {
   ArrowSquareOutIcon,
   PlusIcon,
   ShieldCheckIcon,
-  TrashIcon,
+  UserMinusIcon,
   UsersIcon,
 } from "@phosphor-icons/react"
 import {
@@ -31,9 +31,7 @@ import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
 import { TableSkeleton } from "@/components/table-skeleton"
 import {
-  useAddTeamMember,
   useAssignTeamRole,
-  useDeactivateTeamMember,
   useRevokeTeamRole,
   useTeamManagement,
 } from "@/hooks/use-team-management"
@@ -170,106 +168,21 @@ function InviteMemberCard() {
   )
 }
 
-function AddMemberByUuidForm({
-  statuses,
-}: {
-  statuses: Array<"active" | "invited">
-}) {
-  const addMember = useAddTeamMember()
-  const [userId, setUserId] = useState("")
-  const [status, setStatus] = useState<"active" | "invited">(
-    statuses.includes("invited") ? "invited" : "active",
-  )
-
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const trimmed = userId.trim()
-    if (!trimmed) {
-      return
-    }
-    addMember.mutate(
-      { user_id: trimmed, status },
-      {
-        onSuccess: () => {
-          setUserId("")
-          setStatus(statuses.includes("invited") ? "invited" : "active")
-        },
-      },
-    )
-  }
-
-  return (
-    <div className="rounded-2xl border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
-      <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <div>
-          <p className="text-lg font-medium text-foreground">Add by UUID</p>
-          <p className="mt-2 text-sm leading-relaxed text-muted">
-            Use this fallback while email invites are still offline.
-          </p>
-          <div className="mt-4 rounded-xl border border-border bg-muted/20 px-4 py-3 text-xs text-muted">
-            This action updates the team directly with the provided user UUID.
-          </div>
-        </div>
-
-        <form
-          onSubmit={onSubmit}
-          className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_160px_auto]"
-        >
-          <Field label="Member UUID">
-            <Input
-              value={userId}
-              onChange={(event) => setUserId(event.target.value)}
-              placeholder="00000000-0000-0000-0000-000000000000"
-            />
-          </Field>
-          <Field label="Status">
-            <select
-              value={status}
-              onChange={(event) =>
-                setStatus(event.target.value as "active" | "invited")
-              }
-              className="h-9 w-full border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-foreground"
-            >
-              {statuses.map((option) => (
-                <option key={option} value={option}>
-                  {option === "active" ? "Active" : "Invited"}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <div className="flex items-end">
-            <Button
-              type="submit"
-              size="sm"
-              disabled={!userId.trim() || addMember.isPending}
-            >
-              <PlusIcon className="size-3.5" weight="light" />
-              {addMember.isPending ? "Adding..." : "Add member"}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
 function AssignRoleForm({
   members,
   roles,
+  selectedUserId,
+  onSelectedUserIdChange,
 }: {
   members: TeamMember[]
   roles: string[]
+  selectedUserId: string
+  onSelectedUserIdChange: (userId: string) => void
 }) {
   const assignRole = useAssignTeamRole()
   const activeMembers = members.filter((member) => member.status === "active")
-  const [userId, setUserId] = useState("")
   const [roleName, setRoleName] = useState("")
 
-  const selectedUserId = activeMembers.some(
-    (member) => member.user_id === userId,
-  )
-    ? userId
-    : (activeMembers[0]?.user_id ?? "")
   const selectedRoleName = roles.includes(roleName)
     ? roleName
     : (roles[0] ?? "")
@@ -298,7 +211,7 @@ function AssignRoleForm({
       <Field label="Select member">
         <select
           value={selectedUserId}
-          onChange={(event) => setUserId(event.target.value)}
+          onChange={(event) => onSelectedUserIdChange(event.target.value)}
           className="h-9 w-full border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-foreground"
         >
           {activeMembers.map((member) => (
@@ -337,30 +250,34 @@ function AssignRoleForm({
   )
 }
 
-function MemberActions({ member }: { member: TeamMember }) {
-  const deactivate = useDeactivateTeamMember()
-  const disabled = member.status !== "active" || deactivate.isPending
-
+function MemberActions({
+  member,
+  onManageRoles,
+}: {
+  member: TeamMember
+  onManageRoles: (userId: string) => void
+}) {
   return (
     <Button
       size="sm"
       variant="outline"
-      disabled={disabled}
-      onClick={() => deactivate.mutate(member.user_id)}
+      onClick={() => onManageRoles(member.user_id)}
     >
-      <TrashIcon className="size-3.5" weight="light" />
-      Deactivate
+      <ShieldCheckIcon className="size-3.5" weight="light" />
+      Manage roles
     </Button>
   )
 }
 
 function MemberTable({
   members,
-  canDeactivate,
+  onManageRoles,
+  showManageRoles,
   emptyLabel,
 }: {
   members: TeamMember[]
-  canDeactivate: boolean
+  onManageRoles: (userId: string) => void
+  showManageRoles: boolean
   emptyLabel: string
 }) {
   if (members.length === 0) {
@@ -380,7 +297,7 @@ function MemberTable({
             <TableHead>Status</TableHead>
             <TableHead>Active roles</TableHead>
             <TableHead>Updated</TableHead>
-            {canDeactivate && <TableHead className="w-36" />}
+            {showManageRoles && <TableHead className="w-40" />}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -409,9 +326,12 @@ function MemberTable({
               >
                 {new Date(member.updated_at).toLocaleDateString()}
               </TableCell>
-              {canDeactivate && (
+              {showManageRoles && (
                 <TableCell>
-                  <MemberActions member={member} />
+                  <MemberActions
+                    member={member}
+                    onManageRoles={onManageRoles}
+                  />
                 </TableCell>
               )}
             </TableRow>
@@ -493,11 +413,13 @@ function ActiveAssignmentRows({
 
 function MemberTabs({
   members,
-  canDeactivate,
+  onManageRoles,
+  showManageRoles,
   search,
 }: {
   members: TeamMember[]
-  canDeactivate: boolean
+  onManageRoles: (userId: string) => void
+  showManageRoles: boolean
   search: string
 }) {
   const normalize = (value: string) => value.toLowerCase().trim()
@@ -561,21 +483,24 @@ function MemberTabs({
       <TabsPanel value="active">
         <MemberTable
           members={filteredMembers.active}
-          canDeactivate={canDeactivate}
+          onManageRoles={onManageRoles}
+          showManageRoles={showManageRoles}
           emptyLabel="No active members match this search."
         />
       </TabsPanel>
       <TabsPanel value="invited">
         <MemberTable
           members={filteredMembers.invited}
-          canDeactivate={false}
+          onManageRoles={onManageRoles}
+          showManageRoles={showManageRoles}
           emptyLabel="No invitations match this search."
         />
       </TabsPanel>
       <TabsPanel value="inactive">
         <MemberTable
           members={filteredMembers.inactive}
-          canDeactivate={false}
+          onManageRoles={onManageRoles}
+          showManageRoles={showManageRoles}
           emptyLabel="No inactive members match this search."
         />
       </TabsPanel>
@@ -586,6 +511,7 @@ function MemberTabs({
 export function UserManagementClient() {
   const { data, isPending, error, refetch } = useTeamManagement()
   const [memberSearch, setMemberSearch] = useState("")
+  const [selectedUserId, setSelectedUserId] = useState("")
 
   const counts = useMemo(() => {
     const members = data?.members ?? []
@@ -632,15 +558,17 @@ export function UserManagementClient() {
   }
 
   const capabilities = data.capabilities
-  const memberStatuses = data.mutation_options?.member_statuses ?? [
-    "active",
-    "invited",
-  ]
   const assignableRoles = data.mutation_options?.assignable_roles ?? []
-  const canMutateMembers =
-    capabilities.can_invite_members || capabilities.can_deactivate_members
   const canMutateRoles =
     capabilities.can_assign_roles || capabilities.can_revoke_roles
+  const activeMembers = data.members.filter(
+    (member) => member.status === "active",
+  )
+  const selectedManageRoleUserId = activeMembers.some(
+    (member) => member.user_id === selectedUserId,
+  )
+    ? selectedUserId
+    : (activeMembers[0]?.user_id ?? "")
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(178,250,180,0.08),transparent_28%),radial-gradient(circle_at_top_right,rgba(178,250,180,0.05),transparent_22%)]">
@@ -683,7 +611,7 @@ export function UserManagementClient() {
               iconTone="bg-amber-500/10 text-amber-300"
             />
             <SummaryCard
-              icon={TrashIcon}
+              icon={UserMinusIcon}
               value={counts.inactive}
               label="Inactive"
               description={`${counts.inactive} deactivated member${counts.inactive === 1 ? "" : "s"}`}
@@ -691,12 +619,7 @@ export function UserManagementClient() {
             />
           </div>
 
-          {capabilities.can_invite_members && (
-            <div className="grid gap-4">
-              <InviteMemberCard />
-              <AddMemberByUuidForm statuses={memberStatuses} />
-            </div>
-          )}
+          {capabilities.can_invite_members && <InviteMemberCard />}
 
           <section className="rounded-2xl border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -722,11 +645,12 @@ export function UserManagementClient() {
 
             <MemberTabs
               members={data.members}
-              canDeactivate={capabilities.can_deactivate_members}
+              onManageRoles={setSelectedUserId}
+              showManageRoles={capabilities.can_view_role_assignments}
               search={memberSearch}
             />
 
-            {!canMutateMembers && (
+            {!capabilities.can_invite_members && (
               <p className="mt-4 text-sm text-muted">
                 You have read-only access to team membership.
               </p>
@@ -759,6 +683,8 @@ export function UserManagementClient() {
                     <AssignRoleForm
                       members={data.members}
                       roles={assignableRoles}
+                      selectedUserId={selectedManageRoleUserId}
+                      onSelectedUserIdChange={setSelectedUserId}
                     />
                   )}
                   <ActiveAssignmentRows
