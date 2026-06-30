@@ -1,7 +1,7 @@
 import type { User } from "@supabase/supabase-js"
 import { describe, expect, it } from "vitest"
 
-import { canImpersonateUsers, canViewOtherUsersAccount, isStaff } from "./staff"
+import { canViewOtherUsersAccount, isStaff } from "./staff"
 
 function user(
   email: string,
@@ -50,24 +50,9 @@ describe("platform team read permission", () => {
     ).toBe(true)
   })
 
-  it("requires both staff and platform:teams:read for impersonation", () => {
+  it("does not grant platform access without the permission", () => {
     expect(
-      canImpersonateUsers(
-        user(
-          "a@superserve.ai",
-          "google",
-          ["google"],
-          ["platform:teams:read"],
-        ),
-      ),
-    ).toBe(true)
-    expect(
-      canImpersonateUsers(user("a@superserve.ai", "google", ["google"], [])),
-    ).toBe(false)
-    expect(
-      canImpersonateUsers(
-        user("a@gmail.com", "google", ["google"], ["platform:teams:read"]),
-      ),
+      canViewOtherUsersAccount(user("a@superserve.ai", "google", ["google"], [])),
     ).toBe(false)
   })
 })
