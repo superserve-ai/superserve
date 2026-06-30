@@ -30,7 +30,7 @@ The UI treats `capabilities` from `GET /teams/:team_id/management` as display hi
 
 ## Internal separation
 
-The console route does not call `/internal/...` endpoints. Staff impersonation remains read-only for this surface: `GET /api/team-management` may be proxied to the impersonated team, but writes return 403 before reaching the sandbox API.
+The console route does not call `/internal/...` endpoints and does not forward platform actor headers from the browser.
 
 ## Error handling
 
