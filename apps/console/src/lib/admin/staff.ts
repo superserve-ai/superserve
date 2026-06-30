@@ -41,14 +41,14 @@ export async function requireStaff(): Promise<User> {
   return user as User
 }
 
-/** Guard for impersonation admin surfaces. Throws unless staff with users:read. */
+/** Guard for impersonation admin surfaces. Throws unless staff with platform team read access. */
 export async function requireImpersonationAccess(): Promise<User> {
   const supabase = await createServerClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
   if (!canImpersonateUsers(user)) {
-    throw new Error("Forbidden: users:read access required")
+    throw new Error("Forbidden: platform:teams:read access required")
   }
   return user as User
 }
