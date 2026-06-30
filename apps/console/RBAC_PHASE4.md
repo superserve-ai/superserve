@@ -2,8 +2,8 @@
 
 ## Permission gate
 
-The customer-facing User Management UI is shown only to users whose auth claim
-includes `users:read`.
+The customer-facing User Management UI is shown only to staff users whose auth
+claim includes `platform:teams:read`.
 
 The console navigation item, `/user-management`, and `/api/team-management` all
 fail closed with a 404-style response when the user lacks that permission.
