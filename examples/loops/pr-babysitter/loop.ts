@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 
 import { runLoop } from "../lib/run-loop"
-import type { LoopSpec } from "../lib/run-loop"
+import type { LoopSpec, RunResult } from "../lib/run-loop"
 
 /**
  * PR Babysitter — orchestrator (runs on the cron host, NOT in a sandbox).
@@ -198,6 +198,29 @@ function printDryRun(spec: LoopSpec): void {
   console.log(`\n  --- iterate (runs every tick) ---\n${spec.iterate}`)
 }
 
+/**
+ * Run ONE tick: drive the loop spine once, log the outcome, and return the
+ * iterate exit code. Returning the code (rather than swallowing it) lets the
+ * one-shot caller surface a failed tick as a non-zero process exit — without
+ * that, a broken `--once` run still resolves and the GitHub Action step exits 0,
+ * so a failing tick looks operationally healthy. `run`/`log` are injected so
+ * this stays unit-testable; the defaults are the real spine and console.
+ */
+export async function runTick(
+  spec: LoopSpec,
+  run: (spec: LoopSpec) => Promise<RunResult> = runLoop,
+  log: (message: string) => void = (message) => {
+    console.log(message)
+  },
+): Promise<number> {
+  const result = await run(spec)
+  const mode = result.bootstrapped ? "cold start (bootstrapped)" : "warm resume"
+  log(
+    `\n[pr-babysitter] tick done — sandbox ${result.sandboxId}, ${mode}, exit ${result.exitCode}`,
+  )
+  return result.exitCode
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
   const dryRun = args.includes("--dry-run")
@@ -232,18 +255,14 @@ async function main(): Promise<void> {
     return
   }
 
-  const tick = async (): Promise<void> => {
-    const result = await runLoop(spec)
-    const mode = result.bootstrapped
-      ? "cold start (bootstrapped)"
-      : "warm resume"
-    console.log(
-      `\n[pr-babysitter] tick done — sandbox ${result.sandboxId}, ${mode}, exit ${result.exitCode}`,
-    )
-  }
-
   if (!watch) {
-    await tick()
+    // One-shot (the `--once` GitHub Action path): surface a failed iterate as a
+    // non-zero process exit so a scheduled run shows red instead of silently
+    // green. Prefer process.exitCode over throwing — a throw reaches the
+    // main().catch() below, which exits 1 and *loses* the real code (and dumps a
+    // stack trace for an expected failure).
+    const code = await runTick(spec)
+    if (code !== 0) process.exitCode = code
     return
   }
 
@@ -254,10 +273,14 @@ async function main(): Promise<void> {
   // Recursive setTimeout, NOT setInterval: schedule the next tick only after the
   // current one settles. Ticks share one persistent box, so an overlapping run
   // (a slow tick outlasting the interval) would race on the same git checkout.
-  await tick()
+  //
+  // Watch mode logs-and-continues: one bad tick must not kill a long-running
+  // watcher, so the exit code is intentionally ignored here (the .catch below
+  // handles a thrown tick). Only the one-shot path above maps it to the exit.
+  await runTick(spec)
   const scheduleNext = (): void => {
     setTimeout(() => {
-      void tick()
+      void runTick(spec)
         .catch((err) => console.error(`[pr-babysitter] tick failed: ${err}`))
         .finally(scheduleNext)
     }, intervalMs)

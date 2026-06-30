@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest"
 
 import { runLoop } from "../lib/run-loop"
-import type { LoopSpec, SandboxHandle, SandboxOps } from "../lib/run-loop"
-import { buildSpec, resolveAuth } from "../pr-babysitter/loop"
+import type {
+  LoopSpec,
+  RunResult,
+  SandboxHandle,
+  SandboxOps,
+} from "../lib/run-loop"
+import { buildSpec, resolveAuth, runTick } from "../pr-babysitter/loop"
 
 // Loop code always passes the same metadata object (stable key order), so a
 // plain stringify is a sufficient and deterministic map key here.
@@ -155,6 +160,24 @@ describe("runLoop", () => {
     // The platform no longer lists it, so the next tick re-bootstraps cleanly.
     expect(await ops.list(spec.metadata)).toEqual([])
   })
+
+  it("surfaces a non-zero iterate exit code instead of swallowing or throwing it", async () => {
+    const ops = new FakeOps()
+    ops.onCreate = (box) => {
+      box.exitCodes.ITERATE = 1
+    }
+
+    // A failed *iterate* (unlike a failed *setup*) is a return value, not a
+    // throw: the box is healthy, so the orchestrator — not the spine — decides
+    // what to do with the code. The one-shot path turns it into a non-zero
+    // process exit so a scheduled `--once` run goes red, not silently green.
+    const result = await runLoop(spec, ops, noop)
+
+    expect(result.exitCode).toBe(1)
+    const box = ops.boxesById.get(result.sandboxId)
+    expect(box?.runs).toEqual(["SETUP", "ITERATE"]) // ran iterate, didn't bail
+    expect(box?.paused).toBe(true) // a failed tick still pauses (stops billing)
+  })
 })
 
 describe("pr-babysitter buildSpec / resolveAuth", () => {
@@ -235,5 +258,24 @@ describe("pr-babysitter buildSpec / resolveAuth", () => {
 
     const built = buildSpec({ repo: "a/b", skill: "S", auth })
     expect(built.iterate).not.toContain("unset ANTHROPIC_API_KEY")
+  })
+})
+
+describe("pr-babysitter one-shot exit propagation", () => {
+  const fakeResult = (exitCode: number): RunResult => ({
+    sandboxId: "box-1",
+    bootstrapped: false,
+    exitCode,
+    stdout: "",
+  })
+
+  it("returns the iterate exit code so a failed --once tick can exit non-zero", async () => {
+    const code = await runTick(spec, async () => fakeResult(1), noop)
+    expect(code).toBe(1)
+  })
+
+  it("returns 0 when the tick succeeds", async () => {
+    const code = await runTick(spec, async () => fakeResult(0), noop)
+    expect(code).toBe(0)
   })
 })
