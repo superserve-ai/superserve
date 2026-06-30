@@ -7,9 +7,6 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/admin/permissions", () => ({
   canViewOtherUsersAccount: vi.fn(),
 }))
-vi.mock("@/lib/admin/impersonation", () => ({
-  getImpersonationTeamId: vi.fn(),
-}))
 vi.mock("@/lib/api/proxy-auth", () => ({
   getAuthApiKeyForUser: vi.fn(),
   getTeamIdForUser: vi.fn(),
@@ -18,7 +15,6 @@ vi.mock("@/lib/api/proxy-auth", () => ({
 const fetchSpy = vi.fn()
 vi.stubGlobal("fetch", fetchSpy)
 
-import { getImpersonationTeamId } from "@/lib/admin/impersonation"
 import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
 import { getAuthApiKeyForUser, getTeamIdForUser } from "@/lib/api/proxy-auth"
 import { createServerClient } from "@/lib/supabase/server"
@@ -58,7 +54,6 @@ describe("api proxy /api/team-management", () => {
       auth: { getUser: async () => ({ data: { user: mockUser } }) },
     } as never)
     vi.mocked(canViewOtherUsersAccount).mockReturnValue(true)
-    vi.mocked(getImpersonationTeamId).mockResolvedValue(null)
     vi.mocked(getTeamIdForUser).mockResolvedValue("team-1")
     vi.mocked(getAuthApiKeyForUser).mockResolvedValue("ss_live_test_key")
     fetchSpy.mockResolvedValue(
@@ -69,7 +64,7 @@ describe("api proxy /api/team-management", () => {
     )
   })
 
-  it("returns 404 when the user lacks users:read", async () => {
+  it("returns 404 when the user lacks platform team read access", async () => {
     vi.mocked(canViewOtherUsersAccount).mockReturnValue(false)
 
     const res = await GET(req("GET"), params())
@@ -122,14 +117,5 @@ describe("api proxy /api/team-management", () => {
     expect(url).toBe(
       "https://api.test.superserve.ai/teams/team-1/roles/assignment-1",
     )
-  })
-
-  it("blocks writes while impersonating", async () => {
-    vi.mocked(getImpersonationTeamId).mockResolvedValue("team-impersonated")
-
-    const res = await POST(req("POST", ["roles"]), params(["roles"]))
-
-    expect(res.status).toBe(403)
-    expect(fetchSpy).not.toHaveBeenCalled()
   })
 })

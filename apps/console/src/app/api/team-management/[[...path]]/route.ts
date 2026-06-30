@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-import { getImpersonationTeamId } from "@/lib/admin/impersonation"
 import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
 import { getAuthApiKeyForUser, getTeamIdForUser } from "@/lib/api/proxy-auth"
 import { createServerClient } from "@/lib/supabase/server"
@@ -22,13 +21,6 @@ type RouteContext = { params: Promise<{ path?: string[] }> }
 
 function notFound(): NextResponse {
   return NextResponse.json({ error: "Not found" }, { status: 404 })
-}
-
-function forbidden(message: string): NextResponse {
-  return NextResponse.json(
-    { error: { code: "forbidden", message } },
-    { status: 403 },
-  )
 }
 
 function upstreamPath(
@@ -77,22 +69,14 @@ async function proxyTeamManagementRequest(
     return notFound()
   }
 
-  const impersonatedTeamId = await getImpersonationTeamId(user)
-  const isReadMethod = request.method === "GET" || request.method === "HEAD"
-  if (impersonatedTeamId && !isReadMethod) {
-    return forbidden(
-      "Write operations are disabled while viewing another team.",
-    )
-  }
-
-  const teamId = impersonatedTeamId ?? (await getTeamIdForUser(user))
+  const teamId = await getTeamIdForUser(user)
   const { path = [] } = await params
   const targetPath = upstreamPath(request.method, teamId, path)
   if (!targetPath) {
     return notFound()
   }
 
-  const apiKey = await getAuthApiKeyForUser(user, impersonatedTeamId)
+  const apiKey = await getAuthApiKeyForUser(user)
   if (!apiKey) {
     return NextResponse.json(
       { error: { code: "unauthorized", message: "Not authenticated" } },

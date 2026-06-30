@@ -124,6 +124,16 @@ async function ensureProxyKeyRow(
   ensuredUsers.add(userId)
 }
 
+export async function getAuthApiKeyForUser(
+  user: User | null,
+): Promise<string | null> {
+  if (!user) return null
+
+  const rawKey = deriveRawKey(user.id)
+  await ensureProxyKeyRow(user.id, user.email ?? user.id, hashKey(rawKey))
+  return rawKey
+}
+
 /**
  * Authenticate the current request and return the API key to inject.
  * Returns null if the user is not authenticated.
@@ -133,9 +143,5 @@ export async function getAuthApiKey(): Promise<string | null> {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return null
-
-  const rawKey = deriveRawKey(user.id)
-  await ensureProxyKeyRow(user.id, user.email ?? user.id, hashKey(rawKey))
-  return rawKey
+  return getAuthApiKeyForUser(user)
 }
