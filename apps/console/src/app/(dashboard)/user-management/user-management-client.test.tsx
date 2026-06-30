@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { TeamManagementResponse } from "@/lib/api/team-management"
@@ -73,19 +73,30 @@ describe("UserManagementClient", () => {
   it("shows members but hides mutation controls for viewers", () => {
     render(<UserManagementClient />)
 
+    expect(screen.getByRole("link", { name: /audit log/i })).toBeInTheDocument()
     expect(screen.getByText("owner@example.com")).toBeInTheDocument()
-    expect(screen.getByText("invited@example.com")).toBeInTheDocument()
     expect(
       screen.getByText("You have read-only access to team membership."),
     ).toBeInTheDocument()
     expect(
-      screen.queryByRole("button", { name: /add member/i }),
+      screen.getByRole("tab", { name: /^active members\s+1$/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("tab", { name: /^invitations\s+1$/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("tab", { name: /^inactive members\s+0$/i }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("tab", { name: /^invitations\s+1$/i }))
+    expect(screen.getByText("invited@example.com")).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /send invitation/i }),
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole("button", { name: /deactivate/i }),
     ).not.toBeInTheDocument()
     expect(
-      screen.queryByRole("button", { name: /assign role/i }),
+      screen.queryByRole("button", { name: /update role/i }),
     ).not.toBeInTheDocument()
   })
 
@@ -112,15 +123,21 @@ describe("UserManagementClient", () => {
 
     render(<UserManagementClient />)
 
+    expect(screen.getByLabelText(/email address/i)).toBeDisabled()
+    expect(
+      screen.getByRole("button", { name: /send invitation/i }),
+    ).toBeDisabled()
     expect(
       screen.getByRole("button", { name: /add member/i }),
     ).toBeInTheDocument()
-    expect(screen.getAllByRole("button", { name: /deactivate/i })).toHaveLength(
-      2,
-    )
     expect(
-      screen.getByRole("button", { name: /assign role/i }),
+      screen.getByRole("button", { name: /update role/i }),
     ).toBeInTheDocument()
+    expect(screen.getAllByRole("button", { name: /deactivate/i })).toHaveLength(
+      1,
+    )
+    fireEvent.click(screen.getByRole("tab", { name: /^invitations\s+1$/i }))
+    expect(screen.getByText("invited@example.com")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /revoke/i })).toBeInTheDocument()
   })
 })

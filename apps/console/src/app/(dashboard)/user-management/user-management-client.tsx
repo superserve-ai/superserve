@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  ArrowSquareOutIcon,
   PlusIcon,
   ShieldCheckIcon,
   TrashIcon,
@@ -10,16 +11,20 @@ import {
   Button,
   Field,
   Input,
-  Separator,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
+  Tabs,
+  TabsList,
+  TabsPanel,
+  TabsTab,
 } from "@superserve/ui"
+import Link from "next/link"
 import { useMemo, useState } from "react"
-import type { FormEvent } from "react"
+import type { ComponentType, FormEvent } from "react"
 
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
@@ -54,11 +59,21 @@ function statusTone(status: TeamMember["status"]): string {
 function StatusBadge({ status }: { status: TeamMember["status"] }) {
   return (
     <span
-      className={`border px-2 py-1 font-mono text-xs uppercase ${statusTone(status)}`}
+      className={`inline-flex items-center border px-2 py-1 font-mono text-[11px] tracking-[0.12em] uppercase ${statusTone(status)}`}
     >
       {status}
     </span>
   )
+}
+
+function roleChipTone(role: string): string {
+  if (role === "team_owner") {
+    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+  }
+  if (role === "admin") {
+    return "border-amber-500/30 bg-amber-500/10 text-amber-200"
+  }
+  return "border-border bg-background text-foreground"
 }
 
 function RolePills({ roles }: { roles?: string[] }) {
@@ -71,7 +86,7 @@ function RolePills({ roles }: { roles?: string[] }) {
       {roles.map((role) => (
         <span
           key={role}
-          className="border border-border bg-background px-2 py-1 text-xs text-foreground"
+          className={`inline-flex items-center border px-2 py-1 text-xs ${roleChipTone(role)}`}
         >
           {roleLabel(role)}
         </span>
@@ -80,7 +95,82 @@ function RolePills({ roles }: { roles?: string[] }) {
   )
 }
 
-function AddMemberForm({
+function SummaryCard({
+  icon: IconComponent,
+  value,
+  label,
+  description,
+  iconTone,
+}: {
+  icon: ComponentType<{ className?: string; weight?: "light" | "regular" }>
+  value: number
+  label: string
+  description: string
+  iconTone: string
+}) {
+  return (
+    <div className="rounded-2xl border border-border/80 bg-background/75 p-5 shadow-[0_1px_0_rgba(255,255,255,0.02)] backdrop-blur-sm">
+      <div className="flex items-center gap-4">
+        <div
+          className={`flex size-14 shrink-0 items-center justify-center rounded-2xl border border-border/80 ${iconTone}`}
+        >
+          <IconComponent className="size-6" weight="light" />
+        </div>
+        <div className="min-w-0">
+          <div className="font-mono text-4xl leading-none text-foreground">
+            {value}
+          </div>
+          <div className="mt-1 text-sm font-medium text-foreground">
+            {label}
+          </div>
+          <div className="mt-1 text-xs text-muted">{description}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function InviteMemberCard() {
+  return (
+    <div className="rounded-2xl border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
+      <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <div>
+          <p className="text-lg font-medium text-foreground">Invite member</p>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            Invite new members to join your team.
+          </p>
+          <div className="mt-4 rounded-xl border border-border bg-muted/20 px-4 py-3 text-sm text-muted">
+            Email invitations are not wired up yet, so this control stays
+            disabled until the backend email flow exists.
+          </div>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_220px_auto]">
+          <Field label="Email address">
+            <Input disabled placeholder="name@company.com" value="" />
+          </Field>
+          <Field label="Role">
+            <select
+              disabled
+              className="h-9 w-full border border-border bg-background px-3 text-sm text-muted outline-none"
+              value="member"
+            >
+              <option value="member">Member</option>
+            </select>
+          </Field>
+          <div className="flex items-end">
+            <Button type="button" size="sm" disabled>
+              <PlusIcon className="size-3.5" weight="light" />
+              Send invitation
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AddMemberByUuidForm({
   statuses,
 }: {
   statuses: Array<"active" | "invited">
@@ -109,43 +199,57 @@ function AddMemberForm({
   }
 
   return (
-    <form
-      onSubmit={onSubmit}
-      className="grid gap-3 md:grid-cols-[1fr_160px_auto]"
-    >
-      <Field label="User UUID">
-        <Input
-          value={userId}
-          onChange={(event) => setUserId(event.target.value)}
-          placeholder="00000000-0000-0000-0000-000000000000"
-        />
-      </Field>
-      <Field label="Status">
-        <select
-          value={status}
-          onChange={(event) =>
-            setStatus(event.target.value as "active" | "invited")
-          }
-          className="h-9 w-full border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-foreground"
+    <div className="rounded-2xl border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
+      <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <div>
+          <p className="text-lg font-medium text-foreground">Add by UUID</p>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            Use this fallback while email invites are still offline.
+          </p>
+          <div className="mt-4 rounded-xl border border-border bg-muted/20 px-4 py-3 text-xs text-muted">
+            This action updates the team directly with the provided user UUID.
+          </div>
+        </div>
+
+        <form
+          onSubmit={onSubmit}
+          className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_160px_auto]"
         >
-          {statuses.map((option) => (
-            <option key={option} value={option}>
-              {option === "active" ? "Active" : "Invited"}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <div className="flex items-end">
-        <Button
-          type="submit"
-          size="sm"
-          disabled={!userId.trim() || addMember.isPending}
-        >
-          <PlusIcon className="size-3.5" weight="light" />
-          {addMember.isPending ? "Adding..." : "Add member"}
-        </Button>
+          <Field label="Member UUID">
+            <Input
+              value={userId}
+              onChange={(event) => setUserId(event.target.value)}
+              placeholder="00000000-0000-0000-0000-000000000000"
+            />
+          </Field>
+          <Field label="Status">
+            <select
+              value={status}
+              onChange={(event) =>
+                setStatus(event.target.value as "active" | "invited")
+              }
+              className="h-9 w-full border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-foreground"
+            >
+              {statuses.map((option) => (
+                <option key={option} value={option}>
+                  {option === "active" ? "Active" : "Invited"}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <div className="flex items-end">
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!userId.trim() || addMember.isPending}
+            >
+              <PlusIcon className="size-3.5" weight="light" />
+              {addMember.isPending ? "Adding..." : "Add member"}
+            </Button>
+          </div>
+        </form>
       </div>
-    </form>
+    </div>
   )
 }
 
@@ -189,9 +293,9 @@ function AssignRoleForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="grid gap-3 md:grid-cols-[1fr_200px_auto]"
+      className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_220px_auto]"
     >
-      <Field label="Member">
+      <Field label="Select member">
         <select
           value={selectedUserId}
           onChange={(event) => setUserId(event.target.value)}
@@ -204,7 +308,7 @@ function AssignRoleForm({
           ))}
         </select>
       </Field>
-      <Field label="Role">
+      <Field label="Assign role">
         <select
           value={selectedRoleName}
           onChange={(event) => setRoleName(event.target.value)}
@@ -226,7 +330,7 @@ function AssignRoleForm({
           }
         >
           <ShieldCheckIcon className="size-3.5" weight="light" />
-          {assignRole.isPending ? "Assigning..." : "Assign role"}
+          {assignRole.isPending ? "Assigning..." : "Update role"}
         </Button>
       </div>
     </form>
@@ -250,6 +354,74 @@ function MemberActions({ member }: { member: TeamMember }) {
   )
 }
 
+function MemberTable({
+  members,
+  canDeactivate,
+  emptyLabel,
+}: {
+  members: TeamMember[]
+  canDeactivate: boolean
+  emptyLabel: string
+}) {
+  if (members.length === 0) {
+    return (
+      <div className="rounded-2xl border border-border bg-background/60 px-4 py-6 text-sm text-muted">
+        {emptyLabel}
+      </div>
+    )
+  }
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border bg-background/60">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Member</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Active roles</TableHead>
+            <TableHead>Updated</TableHead>
+            {canDeactivate && <TableHead className="w-36" />}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {members.map((member) => (
+            <TableRow key={member.user_id}>
+              <TableCell>
+                <div className="font-medium text-foreground">
+                  {member.email}
+                </div>
+                <div className="font-mono text-xs text-muted">
+                  {member.user_id}
+                </div>
+                {member.full_name && (
+                  <div className="text-xs text-muted">{member.full_name}</div>
+                )}
+              </TableCell>
+              <TableCell>
+                <StatusBadge status={member.status} />
+              </TableCell>
+              <TableCell>
+                <RolePills roles={member.roles} />
+              </TableCell>
+              <TableCell
+                className="text-muted tabular-nums"
+                suppressHydrationWarning
+              >
+                {new Date(member.updated_at).toLocaleDateString()}
+              </TableCell>
+              {canDeactivate && (
+                <TableCell>
+                  <MemberActions member={member} />
+                </TableCell>
+              )}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
 function ActiveAssignmentRows({
   assignments,
   canRevoke,
@@ -264,61 +436,156 @@ function ActiveAssignmentRows({
 
   if (activeAssignments.length === 0) {
     return (
-      <div className="px-4 py-6 text-sm text-muted">
+      <div className="rounded-2xl border border-border bg-background/60 px-4 py-6 text-sm text-muted">
         No active role assignments.
       </div>
     )
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Member</TableHead>
-          <TableHead>Role</TableHead>
-          <TableHead>Granted</TableHead>
-          {canRevoke && <TableHead className="w-32" />}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {activeAssignments.map((assignment) => (
-          <TableRow key={assignment.assignment_id}>
-            <TableCell>
-              <div className="font-medium text-foreground">
-                {assignment.email}
-              </div>
-              <div className="font-mono text-xs text-muted">
-                {assignment.user_id}
-              </div>
-            </TableCell>
-            <TableCell>{roleLabel(assignment.role_name)}</TableCell>
-            <TableCell
-              className="text-muted tabular-nums"
-              suppressHydrationWarning
-            >
-              {new Date(assignment.granted_at).toLocaleDateString()}
-            </TableCell>
-            {canRevoke && (
-              <TableCell>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={revokeRole.isPending}
-                  onClick={() => revokeRole.mutate(assignment.assignment_id)}
-                >
-                  Revoke
-                </Button>
-              </TableCell>
-            )}
+    <div className="overflow-hidden rounded-2xl border border-border bg-background/60">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Member</TableHead>
+            <TableHead>Role</TableHead>
+            <TableHead>Granted</TableHead>
+            {canRevoke && <TableHead className="w-32" />}
           </TableRow>
+        </TableHeader>
+        <TableBody>
+          {activeAssignments.map((assignment) => (
+            <TableRow key={assignment.assignment_id}>
+              <TableCell>
+                <div className="font-medium text-foreground">
+                  {assignment.email}
+                </div>
+                <div className="font-mono text-xs text-muted">
+                  {assignment.user_id}
+                </div>
+              </TableCell>
+              <TableCell>{roleLabel(assignment.role_name)}</TableCell>
+              <TableCell
+                className="text-muted tabular-nums"
+                suppressHydrationWarning
+              >
+                {new Date(assignment.granted_at).toLocaleDateString()}
+              </TableCell>
+              {canRevoke && (
+                <TableCell>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={revokeRole.isPending}
+                    onClick={() => revokeRole.mutate(assignment.assignment_id)}
+                  >
+                    Revoke
+                  </Button>
+                </TableCell>
+              )}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
+function MemberTabs({
+  members,
+  canDeactivate,
+  search,
+}: {
+  members: TeamMember[]
+  canDeactivate: boolean
+  search: string
+}) {
+  const normalize = (value: string) => value.toLowerCase().trim()
+  const query = normalize(search)
+
+  const filteredMembers = useMemo(() => {
+    const matchesQuery = (member: TeamMember) => {
+      if (!query) return true
+      const haystack = [member.email, member.full_name ?? "", member.user_id]
+        .join(" ")
+        .toLowerCase()
+      return haystack.includes(query)
+    }
+
+    return {
+      active: members.filter(
+        (member) => member.status === "active" && matchesQuery(member),
+      ),
+      invited: members.filter(
+        (member) => member.status === "invited" && matchesQuery(member),
+      ),
+      inactive: members.filter(
+        (member) => member.status === "inactive" && matchesQuery(member),
+      ),
+    }
+  }, [members, query])
+
+  const tabs = [
+    {
+      value: "active",
+      label: "Active members",
+      count: filteredMembers.active.length,
+    },
+    {
+      value: "invited",
+      label: "Invitations",
+      count: filteredMembers.invited.length,
+    },
+    {
+      value: "inactive",
+      label: "Inactive members",
+      count: filteredMembers.inactive.length,
+    },
+  ] as const
+
+  return (
+    <Tabs defaultValue="active" className="w-full">
+      <TabsList className="gap-2 border-b border-border">
+        {tabs.map((tab) => (
+          <TabsTab key={tab.value} value={tab.value} className="px-2 pt-2 pb-3">
+            <span className="inline-flex items-center gap-2">
+              {tab.label}
+              <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[11px] text-muted">
+                {tab.count}
+              </span>
+            </span>
+          </TabsTab>
         ))}
-      </TableBody>
-    </Table>
+      </TabsList>
+
+      <TabsPanel value="active">
+        <MemberTable
+          members={filteredMembers.active}
+          canDeactivate={canDeactivate}
+          emptyLabel="No active members match this search."
+        />
+      </TabsPanel>
+      <TabsPanel value="invited">
+        <MemberTable
+          members={filteredMembers.invited}
+          canDeactivate={false}
+          emptyLabel="No invitations match this search."
+        />
+      </TabsPanel>
+      <TabsPanel value="inactive">
+        <MemberTable
+          members={filteredMembers.inactive}
+          canDeactivate={false}
+          emptyLabel="No inactive members match this search."
+        />
+      </TabsPanel>
+    </Tabs>
   )
 }
 
 export function UserManagementClient() {
   const { data, isPending, error, refetch } = useTeamManagement()
+  const [memberSearch, setMemberSearch] = useState("")
 
   const counts = useMemo(() => {
     const members = data?.members ?? []
@@ -332,8 +599,12 @@ export function UserManagementClient() {
   if (isPending) {
     return (
       <div className="flex h-full flex-col">
-        <PageHeader title="User Management" />
-        <TableSkeleton columns={5} />
+        <PageHeader title="User Management">
+          <div className="h-9 w-28 rounded border border-border bg-muted/30" />
+        </PageHeader>
+        <div className="flex-1 overflow-y-auto px-6 py-8">
+          <TableSkeleton columns={5} />
+        </div>
       </div>
     )
   }
@@ -372,141 +643,124 @@ export function UserManagementClient() {
     capabilities.can_assign_roles || capabilities.can_revoke_roles
 
   return (
-    <div className="flex h-full flex-col">
-      <PageHeader title="User Management" />
+    <div className="relative flex h-full flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(178,250,180,0.08),transparent_28%),radial-gradient(circle_at_top_right,rgba(178,250,180,0.05),transparent_22%)]">
+      <PageHeader title="User Management">
+        <Link
+          href="/audit-logs"
+          className="inline-flex h-9 items-center gap-2 border border-border px-3 text-sm text-foreground transition-colors hover:bg-brand/10"
+        >
+          <ArrowSquareOutIcon className="size-3.5" weight="light" />
+          Audit log
+        </Link>
+      </PageHeader>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="grid grid-cols-3 border-b border-border text-sm">
-          <div className="px-6 py-4">
-            <div className="font-mono text-2xl text-foreground">
-              {counts.active}
-            </div>
-            <div className="text-muted">Active</div>
+      <div className="flex-1 overflow-y-auto px-6 py-8">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+          <div className="flex flex-col gap-2">
+            <p className="text-2xl font-medium tracking-tight text-foreground">
+              Manage team members, invitations, and role assignments.
+            </p>
+            <p className="max-w-2xl text-sm leading-relaxed text-muted">
+              The page keeps email invites visible but disabled until the email
+              workflow is connected. UUID-based membership changes remain
+              available for administrators.
+            </p>
           </div>
-          <div className="border-x border-border px-6 py-4">
-            <div className="font-mono text-2xl text-foreground">
-              {counts.invited}
-            </div>
-            <div className="text-muted">Invited</div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <SummaryCard
+              icon={UsersIcon}
+              value={counts.active}
+              label="Active member"
+              description={`${counts.active} seat${counts.active === 1 ? "" : "s"} in use`}
+              iconTone="bg-emerald-500/10 text-emerald-300"
+            />
+            <SummaryCard
+              icon={ShieldCheckIcon}
+              value={counts.invited}
+              label="Invited"
+              description={`${counts.invited} pending invite${counts.invited === 1 ? "" : "s"}`}
+              iconTone="bg-amber-500/10 text-amber-300"
+            />
+            <SummaryCard
+              icon={TrashIcon}
+              value={counts.inactive}
+              label="Inactive"
+              description={`${counts.inactive} deactivated member${counts.inactive === 1 ? "" : "s"}`}
+              iconTone="bg-muted/30 text-muted"
+            />
           </div>
-          <div className="px-6 py-4">
-            <div className="font-mono text-2xl text-foreground">
-              {counts.inactive}
-            </div>
-            <div className="text-muted">Inactive</div>
-          </div>
-        </div>
 
-        {capabilities.can_invite_members && (
-          <section className="grid grid-cols-[240px_1fr] gap-12 px-8 py-8">
-            <div>
-              <h2 className="text-base font-medium text-foreground">
-                Add member
-              </h2>
-              <p className="mt-1 text-xs leading-relaxed text-muted">
-                Add an existing profile as active or invited. Privileged
-                reactivation remains enforced by the backend.
-              </p>
+          {capabilities.can_invite_members && (
+            <div className="grid gap-4">
+              <InviteMemberCard />
+              <AddMemberByUuidForm statuses={memberStatuses} />
             </div>
-            <AddMemberForm statuses={memberStatuses} />
-          </section>
-        )}
+          )}
 
-        {capabilities.can_invite_members && <Separator />}
-
-        <section className="px-8 py-8">
-          <div className="mb-4 flex items-end justify-between gap-4">
-            <div>
-              <h2 className="text-base font-medium text-foreground">Members</h2>
-              <p className="mt-1 text-xs text-muted">
-                Inactive and invited members are shown separately from active
-                members.
-              </p>
+          <section className="rounded-2xl border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
+            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-lg font-medium text-foreground">
+                  Team members
+                </p>
+                <p className="mt-1 text-sm text-muted">
+                  Search members and switch between active, invitation, and
+                  inactive views.
+                </p>
+              </div>
+              <div className="w-full lg:w-96">
+                <Field label="Search by name or email">
+                  <Input
+                    value={memberSearch}
+                    onChange={(event) => setMemberSearch(event.target.value)}
+                    placeholder="Search by name or email..."
+                  />
+                </Field>
+              </div>
             </div>
+
+            <MemberTabs
+              members={data.members}
+              canDeactivate={capabilities.can_deactivate_members}
+              search={memberSearch}
+            />
+
             {!canMutateMembers && (
-              <p className="text-xs text-muted">
+              <p className="mt-4 text-sm text-muted">
                 You have read-only access to team membership.
               </p>
             )}
-          </div>
+          </section>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Member</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Active roles</TableHead>
-                <TableHead>Updated</TableHead>
-                {capabilities.can_deactivate_members && (
-                  <TableHead className="w-36" />
-                )}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.members.map((member) => (
-                <TableRow key={member.user_id}>
-                  <TableCell>
-                    <div className="font-medium text-foreground">
-                      {member.email}
-                    </div>
-                    <div className="font-mono text-xs text-muted">
-                      {member.user_id}
-                    </div>
-                    {member.full_name && (
-                      <div className="text-xs text-muted">
-                        {member.full_name}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={member.status} />
-                  </TableCell>
-                  <TableCell>
-                    <RolePills roles={member.roles} />
-                  </TableCell>
-                  <TableCell
-                    className="text-muted tabular-nums"
-                    suppressHydrationWarning
-                  >
-                    {new Date(member.updated_at).toLocaleDateString()}
-                  </TableCell>
-                  {capabilities.can_deactivate_members && (
-                    <TableCell>
-                      <MemberActions member={member} />
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </section>
-
-        {capabilities.can_view_role_assignments && (
-          <>
-            <Separator />
-            <section className="grid grid-cols-[240px_1fr] gap-12 px-8 py-8">
-              <div>
-                <h2 className="text-base font-medium text-foreground">
-                  Role assignment
-                </h2>
-                <p className="mt-1 text-xs leading-relaxed text-muted">
-                  Role changes are submitted to the customer RBAC endpoints and
-                  may be rejected by backend policy.
-                </p>
-              </div>
-              <div className="space-y-6">
-                {capabilities.can_assign_roles && (
-                  <AssignRoleForm
-                    members={data.members}
-                    roles={assignableRoles}
-                  />
-                )}
-                {!canMutateRoles && (
-                  <p className="text-sm text-muted">
-                    You can view role assignments, but cannot change them.
+          {capabilities.can_view_role_assignments && (
+            <section className="rounded-2xl border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
+              <div className="grid gap-6 xl:grid-cols-[260px_minmax(0,1fr)]">
+                <div className="space-y-3">
+                  <p className="text-lg font-medium text-foreground">
+                    Role assignments
                   </p>
-                )}
-                <div className="border border-border">
+                  <p className="text-sm leading-relaxed text-muted">
+                    Manage roles and permissions for team members. Changes are
+                    enforced by backend policy.
+                  </p>
+                  <div className="rounded-xl border border-border bg-muted/20 px-4 py-3 text-sm text-muted">
+                    Changes take effect immediately.
+                  </div>
+                  {!canMutateRoles && (
+                    <p className="text-sm text-muted">
+                      You can view role assignments, but cannot change them.
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-5">
+                  {capabilities.can_assign_roles && (
+                    <AssignRoleForm
+                      members={data.members}
+                      roles={assignableRoles}
+                    />
+                  )}
                   <ActiveAssignmentRows
                     assignments={data.assignments}
                     canRevoke={capabilities.can_revoke_roles}
@@ -514,8 +768,8 @@ export function UserManagementClient() {
                 </div>
               </div>
             </section>
-          </>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )
