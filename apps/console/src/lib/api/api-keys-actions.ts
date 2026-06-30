@@ -99,7 +99,6 @@ export async function listApiKeysAction() {
     .eq("team_id", teamId)
     .is("revoked_at", null)
     .neq("name", "__console_proxy__")
-    .neq("name", "__console_impersonation__")
     .order("created_at", { ascending: false })
 
   if (error) throw new Error(error.message)
