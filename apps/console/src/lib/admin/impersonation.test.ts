@@ -73,12 +73,12 @@ const TEAM = "11111111-1111-1111-1111-111111111111"
 const staff = {
   id: "a1",
   email: "amit@superserve.ai",
-  app_metadata: { provider: "google", permissions: ["users:read"] },
+  app_metadata: { provider: "google", permissions: ["platform:teams:read"] },
 } as unknown as User
 const customer = {
   id: "c1",
   email: "joe@gmail.com",
-  app_metadata: { provider: "google", permissions: ["users:read"] },
+  app_metadata: { provider: "google", permissions: ["platform:teams:read"] },
 } as unknown as User
 const staffWithoutPermission = {
   id: "a2",
@@ -123,7 +123,7 @@ describe("getImpersonationTeamId", () => {
     cookieStore.value = signImpersonationToken(TEAM, Date.now() + 60_000)
     expect(await getImpersonationTeamId(customer)).toBeNull()
   })
-  it("returns null for staff without users:read even with a valid cookie", async () => {
+  it("returns null for staff without platform:teams:read even with a valid cookie", async () => {
     cookieStore.value = signImpersonationToken(TEAM, Date.now() + 60_000)
     expect(await getImpersonationTeamId(staffWithoutPermission)).toBeNull()
   })
