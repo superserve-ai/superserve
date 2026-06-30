@@ -11,6 +11,7 @@
     }
   },
   "include": [
+    "e2e/**/*.ts",
     "install/**/*.ts",
     "lib/**/*.ts",
     "pr-babysitter/**/*.ts",

@@ -217,6 +217,23 @@ describe("pr-babysitter buildSpec / resolveAuth", () => {
     expect(built.iterate).toContain("claude -p")
     expect(built.iterate).toContain("unset ANTHROPIC_API_KEY")
     expect(built.iterate).toContain("set -e")
-    expect(built.setup).toContain("gh repo clone")
+    expect(built.setup).toContain("git clone")
+    expect(built.setup).toContain("credential.helper")
+    expect(built.iterate).toContain("--disallowedTools")
+  })
+
+  it("supports a metered Anthropic key (keeps ANTHROPIC_API_KEY in the box)", () => {
+    const auth = resolveAuth({
+      ANTHROPIC_API_KEY: "sk-ant",
+      GITHUB_TOKEN: "ght",
+    } as NodeJS.ProcessEnv)
+    expect(auth.claudeMode).toBe("metered")
+    expect(auth.envVars).toEqual({
+      ANTHROPIC_API_KEY: "sk-ant",
+      GITHUB_TOKEN: "ght",
+    })
+
+    const built = buildSpec({ repo: "a/b", skill: "S", auth })
+    expect(built.iterate).not.toContain("unset ANTHROPIC_API_KEY")
   })
 })

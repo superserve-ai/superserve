@@ -10,6 +10,7 @@
   "scripts": {
     "add": "bun run install/cli.ts",
     "babysit": "bun run pr-babysitter/loop.ts",
+    "e2e": "bun run e2e/scenario.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "bunx oxlint",

@@ -25,11 +25,16 @@ const TEMPLATE = "superserve/claude-code"
 const REPO_DIR = "/home/user/repo"
 const SKILL_UPLOAD_PATH = "/home/user/pr-babysitter.SKILL.md"
 
+export type ClaudeMode = "subscription" | "metered"
+
 export interface ResolvedAuth {
   /** Superserve secret bindings: `{ ENV_VAR: secretName }`. */
   secrets: Record<string, string>
   /** Raw env vars passed through (dev path — value lives in the box). */
   envVars: Record<string, string>
+  /** Which Claude credential the box uses. Subscription unsets any stray
+   *  `ANTHROPIC_API_KEY`; metered keeps it (it IS the credential). */
+  claudeMode: ClaudeMode
 }
 
 /**
@@ -43,14 +48,23 @@ export function resolveAuth(env: NodeJS.ProcessEnv): ResolvedAuth {
   const envVars: Record<string, string> = {}
   const missing: string[] = []
 
+  // Claude: subscription (OAuth token from `claude setup-token`) is the default;
+  // a metered `ANTHROPIC_API_KEY` also works (handy for quick tests).
+  let claudeMode: ClaudeMode = "subscription"
   if (env.SUPERSERVE_CLAUDE_SECRET) {
     secrets.CLAUDE_CODE_OAUTH_TOKEN = env.SUPERSERVE_CLAUDE_SECRET
   } else if (env.CLAUDE_CODE_OAUTH_TOKEN) {
     envVars.CLAUDE_CODE_OAUTH_TOKEN = env.CLAUDE_CODE_OAUTH_TOKEN
+  } else if (env.SUPERSERVE_ANTHROPIC_SECRET) {
+    secrets.ANTHROPIC_API_KEY = env.SUPERSERVE_ANTHROPIC_SECRET
+    claudeMode = "metered"
+  } else if (env.ANTHROPIC_API_KEY) {
+    envVars.ANTHROPIC_API_KEY = env.ANTHROPIC_API_KEY
+    claudeMode = "metered"
   } else {
     missing.push(
-      "Claude: set SUPERSERVE_CLAUDE_SECRET (name of a Superserve secret holding the OAuth token) " +
-        "or CLAUDE_CODE_OAUTH_TOKEN (the raw token from `claude setup-token`).",
+      "Claude: set CLAUDE_CODE_OAUTH_TOKEN (subscription, from `claude setup-token`) " +
+        "or ANTHROPIC_API_KEY (metered) — or a SUPERSERVE_CLAUDE_SECRET / SUPERSERVE_ANTHROPIC_SECRET secret name.",
     )
   }
 
@@ -70,7 +84,7 @@ export function resolveAuth(env: NodeJS.ProcessEnv): ResolvedAuth {
   if (missing.length > 0) {
     throw new Error(`Missing credentials:\n  - ${missing.join("\n  - ")}`)
   }
-  return { secrets, envVars }
+  return { secrets, envVars, claudeMode }
 }
 
 /** One-time bootstrap: install `gh` (root-free), place the skill, clone the repo. */
@@ -89,25 +103,37 @@ function setupScript(): string {
     "# Make the PR-babysitter skill discoverable by Claude Code.",
     'mkdir -p "$HOME/.claude/skills/pr-babysitter"',
     `cp ${SKILL_UPLOAD_PATH} "$HOME/.claude/skills/pr-babysitter/SKILL.md"`,
-    "# Clone the target repo ONCE. Every later tick resumes this warm checkout.",
+    "# Authenticate git to github.com via the bound GITHUB_TOKEN. A credential",
+    "# helper reads it at call time, so the token never lands in .gitconfig (works",
+    "# for a raw PAT and for a Superserve proxy token swapped at egress). `gh` API",
+    "# calls authenticate separately from the GITHUB_TOKEN env var.",
     'git config --global user.name "loop-engineering[bot]"',
     'git config --global user.email "loops@superserve.ai"',
-    `gh repo clone "$TARGET_REPO" ${REPO_DIR}`,
+    "git config --global credential.helper '!f() { echo username=x-access-token; echo \"password=$GITHUB_TOKEN\"; }; f'",
+    "# Clone the target repo ONCE. Every later tick resumes this warm checkout.",
+    `git clone "https://github.com/$TARGET_REPO" ${REPO_DIR}`,
   ].join("\n")
 }
 
 /** Per-tick: refresh the warm checkout, run Claude Code headlessly on the skill. */
-function iterateScript(): string {
+function iterateScript(claudeMode: ClaudeMode): string {
   return [
     // Fail the tick if cd/fetch fail, instead of running claude in the wrong dir.
     "set -e",
-    "# Subscription billing: ensure no metered API key out-ranks CLAUDE_CODE_OAUTH_TOKEN.",
-    "unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN",
+    // Subscription billing: drop any stray metered key so the OAuth token wins.
+    // Metered mode keeps ANTHROPIC_API_KEY — it IS the credential.
+    ...(claudeMode === "subscription"
+      ? ["unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN"]
+      : []),
     'export PATH="$HOME/.local/bin:$PATH"',
     `cd ${REPO_DIR} && git fetch --all --prune --quiet`,
     'claude -p "/pr-babysitter Babysit the open PRs in $TARGET_REPO." \\',
     "  --permission-mode dontAsk \\",
-    '  --allowedTools "Bash(gh *),Bash(git *),Read,Edit,Write,Glob,Grep" \\',
+    // Allow gh/git + the common test runners so the verifier can actually run the
+    // project's checks inside the microVM (safe — it's an isolated box).
+    '  --allowedTools "Bash(gh *),Bash(git *),Bash(npm *),Bash(npx *),Bash(node *),Bash(bun *),Bash(pnpm *),Bash(yarn *),Bash(make *),Bash(pytest *),Bash(python3 *),Bash(go *),Bash(cargo *),Read,Edit,Write,Glob,Grep" \\',
+    // Hard-block the dangerous ops at the tool layer, beyond the skill's rules.
+    '  --disallowedTools "Bash(gh pr merge*),Bash(git push*)" \\',
     "  --output-format json \\",
     "  --max-turns 50",
   ].join("\n")
@@ -127,7 +153,7 @@ export function buildSpec(config: {
     envVars: { ...config.auth.envVars, TARGET_REPO: config.repo },
     uploads: { [SKILL_UPLOAD_PATH]: config.skill },
     setup: setupScript(),
-    iterate: iterateScript(),
+    iterate: iterateScript(config.auth.claudeMode),
     pauseWhenDone: true,
   }
 }
@@ -196,7 +222,7 @@ async function main(): Promise<void> {
       console.error(`error: ${(err as Error).message}`)
       process.exit(1)
     }
-    auth = { secrets: {}, envVars: {} }
+    auth = { secrets: {}, envVars: {}, claudeMode: "subscription" }
   }
 
   const spec = buildSpec({ repo, skill, auth })
