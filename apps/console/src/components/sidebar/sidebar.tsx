@@ -15,7 +15,6 @@ import { useUser } from "@/hooks/use-user"
 import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
 
 import {
-  adminNavItem,
   bottomNavItems,
   mainNavItems,
   userManagementNavItem,
@@ -30,17 +29,12 @@ function openCommandPalette() {
   )
 }
 
-interface SidebarProps {
-  canImpersonateUsers: boolean
-}
-
-export function Sidebar({ canImpersonateUsers }: SidebarProps) {
+export function Sidebar() {
   const { isCollapsed, toggle } = useSidebar()
   const { user } = useUser()
   const navItems = [
     ...mainNavItems,
     ...(canViewOtherUsersAccount(user) ? [userManagementNavItem] : []),
-    ...(canImpersonateUsers ? [adminNavItem] : []),
   ]
 
   return (
