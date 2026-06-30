@@ -1,11 +1,17 @@
 import { notFound } from "next/navigation"
 
-import { isTeamManagementServerEnabled } from "@/lib/feature-flags"
+import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
+import { createServerClient } from "@/lib/supabase/server"
 
 import { UserManagementClient } from "./user-management-client"
 
-export default function UserManagementPage() {
-  if (!isTeamManagementServerEnabled()) {
+export default async function UserManagementPage() {
+  const supabase = await createServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!canViewOtherUsersAccount(user)) {
     notFound()
   }
 

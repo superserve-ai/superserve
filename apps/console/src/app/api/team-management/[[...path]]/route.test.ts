@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: vi.fn(),
 }))
+vi.mock("@/lib/admin/permissions", () => ({
+  canViewOtherUsersAccount: vi.fn(),
+}))
 vi.mock("@/lib/admin/impersonation", () => ({
   getImpersonationTeamId: vi.fn(),
 }))
@@ -16,6 +19,7 @@ const fetchSpy = vi.fn()
 vi.stubGlobal("fetch", fetchSpy)
 
 import { getImpersonationTeamId } from "@/lib/admin/impersonation"
+import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
 import { getAuthApiKeyForUser, getTeamIdForUser } from "@/lib/api/proxy-auth"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -23,7 +27,11 @@ import { DELETE, GET, POST } from "./route"
 
 type AnyParams = { params: Promise<{ path?: string[] }> }
 
-const mockUser = { id: "u1", email: "user@test.com", app_metadata: {} }
+const mockUser = {
+  id: "u1",
+  email: "user@test.com",
+  app_metadata: { permissions: ["users:read"] },
+}
 
 function req(
   method: string,
@@ -45,11 +53,11 @@ function params(pathSegments: string[] = []): AnyParams {
 
 describe("api proxy /api/team-management", () => {
   beforeEach(() => {
-    process.env.NEXT_PUBLIC_ENABLE_TEAM_MANAGEMENT = "true"
     fetchSpy.mockReset()
     vi.mocked(createServerClient).mockResolvedValue({
       auth: { getUser: async () => ({ data: { user: mockUser } }) },
     } as never)
+    vi.mocked(canViewOtherUsersAccount).mockReturnValue(true)
     vi.mocked(getImpersonationTeamId).mockResolvedValue(null)
     vi.mocked(getTeamIdForUser).mockResolvedValue("team-1")
     vi.mocked(getAuthApiKeyForUser).mockResolvedValue("ss_live_test_key")
@@ -61,8 +69,8 @@ describe("api proxy /api/team-management", () => {
     )
   })
 
-  it("returns 404 when the feature flag is disabled", async () => {
-    process.env.NEXT_PUBLIC_ENABLE_TEAM_MANAGEMENT = "false"
+  it("returns 404 when the user lacks users:read", async () => {
+    vi.mocked(canViewOtherUsersAccount).mockReturnValue(false)
 
     const res = await GET(req("GET"), params())
 

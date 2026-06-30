@@ -3,7 +3,7 @@ import crypto from "node:crypto"
 import type { User } from "@supabase/supabase-js"
 import { cookies } from "next/headers"
 
-import { isStaff } from "@/lib/admin/staff"
+import { canImpersonateUsers, isStaff } from "@/lib/admin/staff"
 import { getProxySecret } from "@/lib/api/proxy-secret"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createServerClient } from "@/lib/supabase/server"
@@ -69,7 +69,7 @@ export async function readImpersonationTeamId(): Promise<string | null> {
 export async function getImpersonationTeamId(
   user: User | null | undefined,
 ): Promise<string | null> {
-  if (!isStaff(user)) return null
+  if (!isStaff(user) || !canImpersonateUsers(user)) return null
   return readImpersonationTeamId()
 }
 

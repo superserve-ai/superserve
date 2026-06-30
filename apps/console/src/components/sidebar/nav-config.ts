@@ -14,8 +14,6 @@ import {
   UsersIcon,
 } from "@phosphor-icons/react"
 
-import { isTeamManagementEnabled } from "@/lib/feature-flags"
-
 export interface NavItem {
   label: string
   href: string
@@ -23,9 +21,11 @@ export interface NavItem {
   external?: boolean
 }
 
-const teamManagementNavItems: NavItem[] = isTeamManagementEnabled()
-  ? [{ label: "User Management", href: "/user-management", icon: UsersIcon }]
-  : []
+export const userManagementNavItem: NavItem = {
+  label: "User Management",
+  href: "/user-management",
+  icon: UsersIcon,
+}
 
 export const mainNavItems: NavItem[] = [
   { label: "Sandboxes", href: "/sandboxes", icon: CubeIcon },
@@ -34,7 +34,6 @@ export const mainNavItems: NavItem[] = [
   // { label: "Snapshots", href: "/snapshots", icon: CameraIcon }, // TODO: re-enable when Snapshots ships
   { label: "Audit Logs", href: "/audit-logs", icon: ClipboardTextIcon },
   { label: "API Keys", href: "/api-keys", icon: KeyIcon },
-  ...teamManagementNavItems,
   { label: "Plan & Usage", href: "/plan-usage", icon: ChartBarIcon },
   { label: "Settings", href: "/settings", icon: GearIcon },
 ]

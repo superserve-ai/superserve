@@ -40,19 +40,20 @@ vi.mock("@/lib/supabase/server", () => ({
   })),
 }))
 
-const teamLookup = vi.hoisted(() => ({
-  result: { data: { name: "Acme Corp" }, error: null } as {
-    data: { name: string } | null
-    error: { message: string } | null
-  },
-}))
+let teamLookupResult = {
+  data: { name: "Acme Corp" },
+  error: null,
+} as {
+  data: { name: string } | null
+  error: { message: string } | null
+}
 
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: () => ({
       select: () => ({
         eq: () => ({
-          single: async () => teamLookup.result,
+          single: async () => teamLookupResult,
         }),
       }),
     }),
@@ -72,18 +73,23 @@ const TEAM = "11111111-1111-1111-1111-111111111111"
 const staff = {
   id: "a1",
   email: "amit@superserve.ai",
-  app_metadata: { provider: "google" },
+  app_metadata: { provider: "google", permissions: ["users:read"] },
 } as User
 const customer = {
   id: "c1",
   email: "joe@gmail.com",
-  app_metadata: { provider: "google" },
+  app_metadata: { provider: "google", permissions: ["users:read"] },
+} as User
+const staffWithoutPermission = {
+  id: "a2",
+  email: "anya@superserve.ai",
+  app_metadata: { provider: "google", permissions: [] },
 } as User
 
 afterEach(() => {
   cookieStore.value = undefined
   cookieStore.lastSet = null
-  teamLookup.result = { data: { name: "Acme Corp" }, error: null }
+  teamLookupResult = { data: { name: "Acme Corp" }, error: null }
   delete process.env.NEXT_PUBLIC_COOKIE_DOMAIN
 })
 
@@ -117,6 +123,10 @@ describe("getImpersonationTeamId", () => {
     cookieStore.value = signImpersonationToken(TEAM, Date.now() + 60_000)
     expect(await getImpersonationTeamId(customer)).toBeNull()
   })
+  it("returns null for staff without users:read even with a valid cookie", async () => {
+    cookieStore.value = signImpersonationToken(TEAM, Date.now() + 60_000)
+    expect(await getImpersonationTeamId(staffWithoutPermission)).toBeNull()
+  })
   it("returns null when no cookie is present", async () => {
     expect(await getImpersonationTeamId(staff)).toBeNull()
   })
@@ -139,7 +149,7 @@ describe("getImpersonationContext", () => {
   it("fails safe to a fallback name when the team lookup errors", async () => {
     // The banner must never silently vanish while impersonation is still active.
     cookieStore.value = signImpersonationToken(TEAM, Date.now() + 60_000)
-    teamLookup.result = { data: null, error: { message: "db down" } }
+    teamLookupResult = { data: null, error: { message: "db down" } }
     expect(await getImpersonationContext(staff)).toEqual({
       teamId: TEAM,
       teamName: "another team",

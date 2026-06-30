@@ -9,7 +9,7 @@ import {
   setImpersonationCookie,
 } from "@/lib/admin/impersonation"
 import { revokeImpersonationKeyRow } from "@/lib/admin/impersonation-key"
-import { requireStaff } from "@/lib/admin/staff"
+import { requireImpersonationAccess, requireStaff } from "@/lib/admin/staff"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 const UUID_RE =
@@ -20,7 +20,7 @@ const UUID_RE =
 const MAX_TEAMS = 1000
 
 export async function listAllTeamsAction() {
-  await requireStaff()
+  await requireImpersonationAccess()
   const admin = createAdminClient()
   const { data, error } = await admin
     .from("team")
@@ -32,7 +32,7 @@ export async function listAllTeamsAction() {
 }
 
 export async function startImpersonationAction(teamId: string) {
-  const user = await requireStaff()
+  const user = await requireImpersonationAccess()
   if (!UUID_RE.test(teamId)) throw new Error("Invalid team id")
 
   const admin = createAdminClient()

@@ -1,6 +1,5 @@
 import { trackEvent } from "@/lib/posthog/actions"
 import { ADMIN_EVENTS } from "@/lib/posthog/events"
-import sendToSlackHook from "@/lib/slack/send-to-webhook"
 
 type ImpersonationEvent = {
   action: "start" | "stop"
@@ -30,15 +29,5 @@ export async function logImpersonationEvent(
     )
   } catch {
     // PostHog is best-effort; the structured log above is the source of truth.
-  }
-
-  try {
-    const verb =
-      e.action === "start" ? "started impersonating" : "stopped impersonating"
-    await sendToSlackHook({
-      text: `:detective: ${e.adminEmail} ${verb} team ${e.teamName ?? e.teamId}`,
-    })
-  } catch {
-    // Slack is best-effort; the structured log above is the source of truth.
   }
 }

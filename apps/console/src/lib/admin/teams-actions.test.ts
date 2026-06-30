@@ -1,15 +1,15 @@
 import { describe, expect, it, vi } from "vitest"
 
 vi.mock("@/lib/admin/staff", () => ({
-  requireStaff: async () => {
-    throw new Error("Forbidden: staff access required")
+  requireImpersonationAccess: async () => {
+    throw new Error("Forbidden: users:read access required")
   },
 }))
 
 import { listAllTeamsAction } from "./teams-actions"
 
 describe("listAllTeamsAction", () => {
-  it("requires staff", async () => {
-    await expect(listAllTeamsAction()).rejects.toThrow(/staff/)
+  it("requires users:read", async () => {
+    await expect(listAllTeamsAction()).rejects.toThrow(/users:read/)
   })
 })

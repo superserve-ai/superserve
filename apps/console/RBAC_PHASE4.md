@@ -1,13 +1,12 @@
 # RBAC Phase 4 Console UI
 
-## Feature flag
+## Permission gate
 
-The customer-facing User Management UI is disabled by default. Enable it with either environment variable:
+The customer-facing User Management UI is shown only to users whose auth claim
+includes `users:read`.
 
-- `NEXT_PUBLIC_ENABLE_TEAM_MANAGEMENT=true` to show the console navigation item and render `/user-management`.
-- `ENABLE_TEAM_MANAGEMENT=true` for server-side route checks in environments where the public flag is not set separately.
-
-When the flag is off, `/user-management` and `/api/team-management` fail closed with a 404-style response.
+The console navigation item, `/user-management`, and `/api/team-management` all
+fail closed with a 404-style response when the user lacks that permission.
 
 ## Customer behavior
 

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation"
 
-import { isStaff } from "@/lib/admin/staff"
+import { canImpersonateUsers } from "@/lib/admin/staff"
 import {
   listAllTeamsAction,
   startImpersonationAction,
@@ -14,7 +14,7 @@ export default async function AdminPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!isStaff(user)) notFound()
+  if (!canImpersonateUsers(user)) notFound()
 
   const teams = await listAllTeamsAction()
   return <AdminTeamsTable teams={teams} onActAs={startImpersonationAction} />

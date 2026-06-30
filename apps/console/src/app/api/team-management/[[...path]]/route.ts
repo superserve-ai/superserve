@@ -1,8 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 import { getImpersonationTeamId } from "@/lib/admin/impersonation"
+import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
 import { getAuthApiKeyForUser, getTeamIdForUser } from "@/lib/api/proxy-auth"
-import { isTeamManagementServerEnabled } from "@/lib/feature-flags"
 import { createServerClient } from "@/lib/supabase/server"
 
 const SANDBOX_API_URL =
@@ -63,10 +63,6 @@ async function proxyTeamManagementRequest(
   request: NextRequest,
   { params }: RouteContext,
 ): Promise<NextResponse> {
-  if (!isTeamManagementServerEnabled()) {
-    return notFound()
-  }
-
   const supabase = await createServerClient()
   const {
     data: { user },
@@ -76,6 +72,9 @@ async function proxyTeamManagementRequest(
       { error: { code: "unauthorized", message: "Not authenticated" } },
       { status: 401 },
     )
+  }
+  if (!canViewOtherUsersAccount(user)) {
+    return notFound()
   }
 
   const impersonatedTeamId = await getImpersonationTeamId(user)
