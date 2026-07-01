@@ -21,6 +21,10 @@ ported from [`reviewd`](https://github.com/simion/reviewd), MIT). State lives in
 
 ## Install into a repo (one command)
 
+> **Full step-by-step guide** — trying it locally, the branded-bot avatar, and adding your
+> own skills / MCP servers, with each step tagged required / optional / personalization /
+> advanced — lives in **[INSTALL.md](./INSTALL.md)**. The quick version:
+
 ```bash
 # run inside the repo you want reviewed
 bunx @superserve/loops add pr-superloop
