@@ -26,18 +26,21 @@ ported from [`reviewd`](https://github.com/simion/reviewd), MIT). State lives in
 bunx @superserve/loops add pr-babysitter
 ```
 
-It detects the repo and prompts for three credentials (entered without echo) — your Superserve API
-key, a Claude subscription token (`claude setup-token`), and a GitHub PAT — then does everything:
-creates the two Superserve secrets, vendors the runtime into `.superserve/loops/`, writes
-`.github/workflows/loop-pr-babysitter.yml`, and sets the `SUPERSERVE_API_KEY` Actions secret. Push,
-and it runs every 15 minutes.
+It detects the repo and prompts for two credentials (entered without echo) — your Superserve API
+key and a Claude subscription token (`claude setup-token`) — then does everything: creates the
+Superserve secret, vendors the runtime into `.superserve/loops/`, writes
+`.github/workflows/loop-pr-babysitter.yml`, and sets the `SUPERSERVE_API_KEY` Actions secret.
+Reviews post as **`github-actions[bot]`** (the workflow's built-in token — no GitHub PAT needed).
+Push a commit to any PR and it reviews that PR within seconds — no idle cron.
 
 ```bash
 # non-interactive (CI): pass tokens via env
-SUPERSERVE_API_KEY=… CLAUDE_CODE_OAUTH_TOKEN=… GITHUB_TOKEN=… \
+SUPERSERVE_API_KEY=… CLAUDE_CODE_OAUTH_TOKEN=… \
   bunx @superserve/loops add pr-babysitter --yes
 # preview without changing anything
 bunx @superserve/loops add pr-babysitter --dry-run
+# babysit a DIFFERENT repo, or post under a branded account → opt into a PAT identity
+bunx @superserve/loops add pr-babysitter --github-token <PAT>
 ```
 
 > In this monorepo (pre-publish), run it as `bun run examples/loops/install/cli.ts add pr-babysitter`.
@@ -50,7 +53,7 @@ The rest of this page is the **manual** setup the installer automates, plus how 
    ```bash
    claude setup-token        # requires a Pro/Max/Team/Enterprise plan; prints a ~1-year token
    ```
-2. **Create two Superserve secrets** (console → https://console.superserve.ai/secrets, or the SDK):
+2. **Create one Superserve secret** (console → https://console.superserve.ai/secrets, or the SDK):
    ```ts
    import { Secret } from "@superserve/sdk"
    // The OAuth token is sent as `Authorization: Bearer` to Anthropic — bind it with a custom
@@ -61,13 +64,23 @@ The rest of this page is the **manual** setup the installer automates, plus how 
      auth: { type: "bearer" }, // Authorization: Bearer <token>
      hosts: ["api.anthropic.com", "claude.ai"],
    })
-   await Secret.create({
-     name: "loop-github-token",
-     value: process.env.GH_PAT!,
-     provider: "github",
-   })
    ```
 3. **Set `SUPERSERVE_API_KEY`** in your environment (and as a GitHub Actions secret for the cron).
+
+GitHub auth needs no setup: the workflow posts as **`github-actions[bot]`** via the built-in
+`GITHUB_TOKEN`, so there's no PAT to create. **Cross-repo / branded identity** (babysit a different
+repo, or post under your own bot account) is the opt-in fallback — create a GitHub PAT as a Superserve
+secret and point the workflow at it:
+
+```ts
+await Secret.create({
+  name: "loop-github-token",
+  value: process.env.GH_PAT!,
+  provider: "github",
+})
+// then in the workflow, replace `GITHUB_TOKEN: ${{ github.token }}` with:
+//   SUPERSERVE_GITHUB_SECRET: loop-github-token
+```
 
 ## Run
 
@@ -75,7 +88,8 @@ The rest of this page is the **manual** setup the installer automates, plus how 
 # Inspect the resolved plan without creating a sandbox (no keys needed):
 bun run pr-babysitter/loop.ts --repo owner/name --dry-run
 
-# One live tick (needs SUPERSERVE_API_KEY + the two secret names below):
+# One live tick locally. In GitHub Actions the built-in token is supplied automatically; a
+# local run is not in Actions, so point at a PAT secret (or pass a raw GITHUB_TOKEN, below):
 SUPERSERVE_API_KEY=ss_live_… \
 SUPERSERVE_CLAUDE_SECRET=claude-oauth \
 SUPERSERVE_GITHUB_SECRET=loop-github-token \
@@ -88,12 +102,19 @@ bun run pr-babysitter/loop.ts --repo owner/name --watch=15m
 For dev without Superserve secrets, you can pass raw tokens instead (they then live in the box):
 `CLAUDE_CODE_OAUTH_TOKEN=… GITHUB_TOKEN=… bun run pr-babysitter/loop.ts --repo owner/name`.
 
-## Schedule it
+## How it triggers
 
 Copy [`workflow.yml`](./workflow.yml) into `.github/workflows/` of the repo you want babysat — it
-wakes every 15 min, runs one tick, and exits. Only `SUPERSERVE_API_KEY` is a GitHub secret; the
-Superserve secret _names_ are plain env. For tighter than ~15-min cadence, run the same orchestrator
-on Cloudflare Workers Cron instead (the SDK is `fetch`-based and runs at the edge).
+fires on `pull_request` (`opened`, `synchronize`, `reopened`), so it reviews a PR the moment a commit
+is pushed, runs one tick, and exits. **No idle cron.** It runs under a least-privilege `permissions:`
+block (`contents: read`, `pull-requests: write`) and posts as `github-actions[bot]` via the built-in
+token, so `SUPERSERVE_API_KEY` is the only GitHub secret to add; the Superserve secret _names_ are
+plain env.
+
+> Fork PRs get a read-only token (can't post) — review those via the PAT path, or
+> `pull_request_target` (safe here: PR code only runs in the sandbox, never on the runner). Want a
+> safety-net sweep too? Add a `schedule:` trigger back. For a non-GitHub heartbeat, the same
+> orchestrator runs on Cloudflare Workers Cron (the SDK is `fetch`-based and runs at the edge).
 
 ## Safety
 
@@ -103,14 +124,16 @@ on Cloudflare Workers Cron instead (the SDK is `fetch`-based and runs at the edg
   stuck across several runs → `@`-mention + `needs-human` label, no auto-action.
 - **Prompt-injection firewall:** PR content is treated as data; the skill refuses instructions
   embedded in code/comments and only runs the project's own checks (read from the default branch).
-- **Secrets** are bound via Superserve secret-binding — the real OAuth token / PAT never enter the
-  box; a proxy token is swapped in at egress.
+- **Secrets:** the Claude OAuth token is bound via Superserve secret-binding — it never enters the
+  box; a proxy token is swapped in at egress. The default GitHub identity uses the workflow's
+  short-lived, repo-scoped `GITHUB_TOKEN` (it does enter the box, but expires with the run); the
+  cross-repo PAT path keeps the same egress-swap as Claude.
 
 ## How it maps to the loop-engineering primitives
 
 | Primitive      | Here                                                                       |
 | -------------- | -------------------------------------------------------------------------- |
-| Scheduling     | GitHub Actions cron (the heartbeat)                                        |
+| Scheduling     | GitHub Actions `pull_request` events (the heartbeat)                       |
 | Memory / State | `.pr-babysitter-state.md` in the warm box, deduped by head SHA             |
 | Worktrees      | `git worktree` **inside** the microVM (branch + host isolation)            |
 | Sub-agents     | maker (review) / checker (run the project's tests) split                   |

@@ -7,7 +7,12 @@ import type {
   SandboxHandle,
   SandboxOps,
 } from "../lib/run-loop"
-import { buildSpec, resolveAuth, runTick } from "../pr-babysitter/loop"
+import {
+  buildSpec,
+  parsePrFlag,
+  resolveAuth,
+  runTick,
+} from "../pr-babysitter/loop"
 
 // Loop code always passes the same metadata object (stable key order), so a
 // plain stringify is a sufficient and deterministic map key here.
@@ -243,6 +248,24 @@ describe("pr-babysitter buildSpec / resolveAuth", () => {
     expect(built.setup).toContain("git clone")
     expect(built.setup).toContain("credential.helper")
     expect(built.iterate).toContain("--disallowedTools")
+    // No --pr → sweep every open PR.
+    expect(built.iterate).toContain("Babysit the open PRs in $TARGET_REPO")
+  })
+
+  it("focuses the tick on one PR when given --pr", () => {
+    const auth = resolveAuth({
+      CLAUDE_CODE_OAUTH_TOKEN: "tok",
+      GITHUB_TOKEN: "ght",
+    } as NodeJS.ProcessEnv)
+    const built = buildSpec({ repo: "acme/widget", skill: "S", auth, pr: 42 })
+
+    expect(built.iterate).toContain("Review pull request #42 in $TARGET_REPO")
+    expect(built.iterate).not.toContain("Babysit the open PRs")
+    // One box per repo regardless of which PR fired — the metadata key omits the PR.
+    expect(built.metadata).toEqual({
+      loop: "pr-babysitter",
+      repo: "acme/widget",
+    })
   })
 
   it("supports a metered Anthropic key (keeps ANTHROPIC_API_KEY in the box)", () => {
@@ -277,5 +300,32 @@ describe("pr-babysitter one-shot exit propagation", () => {
   it("returns 0 when the tick succeeds", async () => {
     const code = await runTick(spec, async () => fakeResult(0), noop)
     expect(code).toBe(0)
+  })
+})
+
+describe("parsePrFlag", () => {
+  it("accepts a positive integer", () => {
+    expect(parsePrFlag("42")).toBe(42)
+  })
+
+  it("treats empty / missing as sweep-all (undefined)", () => {
+    // Manual `workflow_dispatch` passes `--pr ""`; local runs omit it entirely.
+    expect(parsePrFlag("")).toBeUndefined()
+    expect(parsePrFlag(undefined)).toBeUndefined()
+  })
+
+  it("rejects non-positive and non-numeric values", () => {
+    expect(parsePrFlag("0")).toBeUndefined()
+    expect(parsePrFlag("-1")).toBeUndefined()
+    expect(parsePrFlag("12.5")).toBeUndefined()
+    expect(parsePrFlag("abc")).toBeUndefined()
+  })
+
+  it("rejects shell-injection attempts (digits-only guard)", () => {
+    // The value is interpolated into the claude prompt, so anything but digits
+    // must be refused rather than reaching the shell.
+    expect(parsePrFlag("42; rm -rf /")).toBeUndefined()
+    expect(parsePrFlag("$(whoami)")).toBeUndefined()
+    expect(parsePrFlag("1 || true")).toBeUndefined()
   })
 })

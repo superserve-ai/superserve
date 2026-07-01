@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import { execFileSync } from "node:child_process"
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
@@ -205,40 +206,75 @@ function vendorRuntime(repoRoot: string, dryRun: boolean): string {
   return dest
 }
 
-const WORKFLOW = `# Installed by \`superserve-loops add pr-babysitter\`. Wakes every 15 min, runs one
-# PR Babysitter tick against a warm Superserve sandbox, and exits. Tune the cron freely.
+/**
+ * The GitHub Actions workflow, as a string. Event-driven: it runs on every PR
+ * code change (a commit pushed to a PR), not on a clock.
+ *
+ * Default (no `githubSecret`): the loop posts as `github-actions[bot]` using the
+ * workflow's built-in `GITHUB_TOKEN` — no PAT to create, nothing extra to store.
+ * This is the fast path, and it works because the workflow babysits the SAME repo it
+ * lives in (`--repo "${{ github.repository }}"`), which that token already covers.
+ *
+ * Pass `githubSecret` for the cross-repo / custom-identity fallback: the loop then
+ * authenticates with a GitHub PAT stored under that Superserve secret name instead
+ * (swapped in at egress), so it can reach other repos or post under a branded account.
+ */
+export function buildWorkflow(opts: { githubSecret?: string } = {}): string {
+  const githubAuth = opts.githubSecret
+    ? `          # Cross-repo / custom bot identity: authenticate with a PAT stored as a Superserve secret.
+          SUPERSERVE_GITHUB_SECRET: ${opts.githubSecret}`
+    : `          # Reviews post as github-actions[bot] via the workflow's built-in token.
+          GITHUB_TOKEN: \${{ github.token }}`
+  return `# Installed by \`superserve-loops add pr-babysitter\`. Runs on every PR code change
+# (a commit pushed to a PR) — no idle cron. One warm-sandbox tick per event, then it sleeps.
+# Note: \`pull_request\` from a forked repo gets a read-only token, so reviews on fork PRs need
+# the cross-repo PAT path (see below) or \`pull_request_target\` (the loop runs PR code only in
+# the sandbox, never on the runner). Add \`schedule:\` back if you also want a safety-net sweep.
 name: loop-pr-babysitter
 on:
-  schedule:
-    - cron: "*/15 * * * 1-5"
+  pull_request:
+    types: [opened, synchronize, reopened] # synchronize = new commits pushed to the PR
   workflow_dispatch: {}
 concurrency:
+  # Serialize per repo: all PR reviews share one warm sandbox, so don't run two at once.
   group: loop-pr-babysitter
   cancel-in-progress: false
+# Least privilege: clone the repo + post the review and ready-to-merge / needs-human labels.
+permissions:
+  contents: read
+  pull-requests: write
 jobs:
   tick:
+    # Fork PRs can't read repo secrets or write with the built-in token — skip them.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install
         working-directory: .superserve/loops
-      - run: bun run pr-babysitter/loop.ts --repo "\${{ github.repository }}" --once
+      # --pr focuses the tick on the changed PR; empty on manual dispatch → sweep all.
+      - run: bun run pr-babysitter/loop.ts --repo "\${{ github.repository }}" --pr "\${{ github.event.pull_request.number }}" --once
         working-directory: .superserve/loops
         env:
           SUPERSERVE_API_KEY: \${{ secrets.SUPERSERVE_API_KEY }}
           SUPERSERVE_CLAUDE_SECRET: ${CLAUDE_SECRET}
-          SUPERSERVE_GITHUB_SECRET: ${GITHUB_SECRET}
+${githubAuth}
 `
+}
 
-function writeWorkflow(repoRoot: string, dryRun: boolean): string {
+function writeWorkflow(
+  repoRoot: string,
+  opts: { githubSecret?: string },
+  dryRun: boolean,
+): string {
   const path = join(repoRoot, ".github", "workflows", "loop-pr-babysitter.yml")
   if (dryRun) {
     c.ok(`would write ${path}`)
     return path
   }
   mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, WORKFLOW)
+  writeFileSync(path, buildWorkflow(opts))
   c.ok(`wrote ${path}`)
   return path
 }
@@ -246,7 +282,7 @@ function writeWorkflow(repoRoot: string, dryRun: boolean): string {
 function setActionsSecret(
   repo: string,
   apiKey: string,
-  githubToken: string,
+  ghToken: string | undefined,
   dryRun: boolean,
 ): void {
   if (dryRun) {
@@ -261,13 +297,15 @@ function setActionsSecret(
     return
   }
   try {
-    // Value comes via stdin so it never lands on the process argv list.
+    // Value comes via stdin so it never lands on the process argv list. Auth uses an
+    // explicit token when given, else the user's ambient `gh` login — this is a one-time
+    // local/CI action to store the secret, NOT the bot identity (that's the workflow token).
     execFileSync(
       "gh",
       ["secret", "set", "SUPERSERVE_API_KEY", "--repo", repo],
       {
         input: apiKey,
-        env: { ...process.env, GH_TOKEN: githubToken },
+        env: ghToken ? { ...process.env, GH_TOKEN: ghToken } : process.env,
         stdio: ["pipe", "ignore", "pipe"],
       },
     )
@@ -293,7 +331,8 @@ Options:
   --repo owner/name      Target repo (default: detected from the git remote)
   --api-key <key>        Superserve API key (or env SUPERSERVE_API_KEY)
   --claude-token <tok>   Claude subscription token from \`claude setup-token\` (or env CLAUDE_CODE_OAUTH_TOKEN)
-  --github-token <tok>   GitHub PAT, repo scope (or env GITHUB_TOKEN / \`gh auth token\`)
+  --github-token <tok>   GitHub PAT for cross-repo babysitting or a custom bot identity
+                         (optional — by default reviews post as github-actions[bot])
   --yes                  Non-interactive (fail instead of prompting)
   --dry-run              Show what would happen; change nothing
 `
@@ -346,16 +385,18 @@ async function main(): Promise<void> {
         yes: flags.yes,
         hint: "Generate it with `claude setup-token` (needs a Pro/Max/Team/Enterprise plan).",
       })
-  const githubToken = flags.dryRun
-    ? "<github-token>"
-    : await resolveCred({
-        label: "GitHub token (repo scope)",
-        envNames: ["GITHUB_TOKEN", "GH_TOKEN"],
-        flag: flags.githubToken,
-        fallback: () => tryExec("gh", ["auth", "token"]),
-        yes: flags.yes,
-        hint: "Create a PAT with repo scope, or run `gh auth login`.",
-      })
+  // GitHub identity is OPTIONAL. Default: the loop posts as github-actions[bot] using
+  // the workflow's built-in token (no PAT). Pass --github-token to opt into a PAT
+  // identity — needed to babysit a different repo or to post under a branded account.
+  const patToken = flags.githubToken
+  // Auth for the one-time `gh secret set` below: the explicit PAT if given, else the
+  // user's ambient `gh` login / CI token. This only stores SUPERSERVE_API_KEY — it is
+  // NOT the bot identity (that's the workflow token at runtime).
+  const ghAuthToken =
+    patToken ??
+    process.env.GH_TOKEN ??
+    process.env.GITHUB_TOKEN ??
+    tryExec("gh", ["auth", "token"])
 
   c.step("1/4  Superserve secrets")
   process.env.SUPERSERVE_API_KEY = apiKey // used by the SDK for Secret.* calls
@@ -371,26 +412,36 @@ async function main(): Promise<void> {
       }),
     flags.dryRun,
   )
-  await upsertSecret(
-    GITHUB_SECRET,
-    githubToken,
-    () =>
-      Secret.create({
-        name: GITHUB_SECRET,
-        value: githubToken,
-        provider: "github",
-      }),
-    flags.dryRun,
-  )
+  if (patToken) {
+    await upsertSecret(
+      GITHUB_SECRET,
+      patToken,
+      () =>
+        Secret.create({
+          name: GITHUB_SECRET,
+          value: patToken,
+          provider: "github",
+        }),
+      flags.dryRun,
+    )
+  } else {
+    c.ok(
+      "GitHub: reviews post as github-actions[bot] (workflow token) — no secret needed",
+    )
+  }
 
   c.step("2/4  Vendor the loop runtime")
   vendorRuntime(repoRoot, flags.dryRun)
 
   c.step("3/4  GitHub Actions workflow")
-  writeWorkflow(repoRoot, flags.dryRun)
+  writeWorkflow(
+    repoRoot,
+    { githubSecret: patToken ? GITHUB_SECRET : undefined },
+    flags.dryRun,
+  )
 
   c.step("4/4  GitHub Actions secret")
-  setActionsSecret(repo, apiKey, githubToken, flags.dryRun)
+  setActionsSecret(repo, apiKey, ghAuthToken, flags.dryRun)
 
   c.step(
     flags.dryRun
@@ -404,7 +455,11 @@ async function main(): Promise<void> {
     c.info(
       `gh workflow run loop-pr-babysitter.yml --repo ${repo}   # trigger the first run now`,
     )
-    c.info("Your PRs will then be babysat every 15 minutes.")
+    c.info(
+      patToken
+        ? "Each new commit to a PR is reviewed within seconds (reviews post under your PAT identity)."
+        : "Each new commit to a PR is reviewed within seconds — reviews post as github-actions[bot].",
+    )
   }
 }
 

@@ -120,8 +120,11 @@
       },
     },
     "examples/loops": {
-      "name": "@superserve/example-loops",
-      "version": "0.0.0",
+      "name": "@superserve/loops",
+      "version": "0.1.0",
+      "bin": {
+        "superserve-loops": "install/cli.ts",
+      },
       "dependencies": {
         "@superserve/sdk": "workspace:*",
       },
@@ -933,7 +936,7 @@
 
     "@superserve/console": ["@superserve/console@workspace:apps/console"],
 
-    "@superserve/example-loops": ["@superserve/example-loops@workspace:examples/loops"],
+    "@superserve/loops": ["@superserve/loops@workspace:examples/loops"],
 
     "@superserve/mcp": ["@superserve/mcp@workspace:packages/mcp"],
 

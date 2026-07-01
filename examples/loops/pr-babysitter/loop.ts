@@ -4,7 +4,7 @@ import { runLoop } from "../lib/run-loop"
 import type { LoopSpec, RunResult } from "../lib/run-loop"
 
 /**
- * PR Babysitter — orchestrator (runs on the cron host, NOT in a sandbox).
+ * PR Babysitter — orchestrator (runs on the CI runner, NOT in a sandbox).
  *
  * This script is pure scheduling + lifecycle: find this repo's warm sandbox,
  * run ONE Claude Code tick inside it, pause. All the actual PR work — discover,
@@ -16,8 +16,13 @@ import type { LoopSpec, RunResult } from "../lib/run-loop"
  * (from `claude setup-token`) bound as a Superserve secret, so the token is
  * swapped in at egress and never lives in the box.
  *
- *   bun run pr-babysitter/loop.ts --repo owner/name            # one tick
- *   bun run pr-babysitter/loop.ts --repo owner/name --watch=15m
+ * Event-driven: the shipped workflow passes `--pr <n>` from the `pull_request`
+ * event so a tick reviews just the changed PR. With no `--pr` (manual dispatch or
+ * a local run) it sweeps every open PR.
+ *
+ *   bun run pr-babysitter/loop.ts --repo owner/name --pr 42    # review just PR #42
+ *   bun run pr-babysitter/loop.ts --repo owner/name            # sweep all open PRs (one tick)
+ *   bun run pr-babysitter/loop.ts --repo owner/name --watch    # local dev: re-tick on an interval
  *   bun run pr-babysitter/loop.ts --repo owner/name --dry-run  # no keys needed
  */
 
@@ -115,8 +120,14 @@ function setupScript(): string {
   ].join("\n")
 }
 
-/** Per-tick: refresh the warm checkout, run Claude Code headlessly on the skill. */
-function iterateScript(claudeMode: ClaudeMode): string {
+/** Per-tick: refresh the warm checkout, run Claude Code headlessly on the skill.
+ *  With a `pr` number the tick reviews just that PR; without one it sweeps every
+ *  open PR. `pr` is a validated integer (see `parsePrFlag`), so interpolating it
+ *  into the prompt cannot inject shell. */
+function iterateScript(claudeMode: ClaudeMode, pr?: number): string {
+  const task = pr
+    ? `Review pull request #${pr} in $TARGET_REPO.`
+    : "Babysit the open PRs in $TARGET_REPO."
   return [
     // Fail the tick if cd/fetch fail, instead of running claude in the wrong dir.
     "set -e",
@@ -127,7 +138,7 @@ function iterateScript(claudeMode: ClaudeMode): string {
       : []),
     'export PATH="$HOME/.local/bin:$PATH"',
     `cd ${REPO_DIR} && git fetch --all --prune --quiet`,
-    'claude -p "/pr-babysitter Babysit the open PRs in $TARGET_REPO." \\',
+    `claude -p "/pr-babysitter ${task}" \\`,
     "  --permission-mode dontAsk \\",
     // Allow gh/git + the common test runners so the verifier can actually run the
     // project's checks inside the microVM (safe — it's an isolated box).
@@ -144,16 +155,20 @@ export function buildSpec(config: {
   repo: string
   skill: string
   auth: ResolvedAuth
+  /** Focus the tick on one PR (from the `pull_request` event). Omit to sweep all. */
+  pr?: number
 }): LoopSpec {
   return {
     name: "pr-babysitter",
+    // Keyed by repo only (not PR) on purpose: one warm box babysits the whole
+    // repo, and the concurrency group serializes each PR's events onto it.
     metadata: { loop: "pr-babysitter", repo: config.repo },
     template: TEMPLATE,
     secrets: config.auth.secrets,
     envVars: { ...config.auth.envVars, TARGET_REPO: config.repo },
     uploads: { [SKILL_UPLOAD_PATH]: config.skill },
     setup: setupScript(),
-    iterate: iterateScript(config.auth.claudeMode),
+    iterate: iterateScript(config.auth.claudeMode, config.pr),
     pauseWhenDone: true,
   }
 }
@@ -175,6 +190,18 @@ function parseDuration(value: string | undefined, fallbackMs: number): number {
   const n = Number(m[1])
   const unit = m[2] ?? "m"
   return n * (unit === "s" ? 1_000 : unit === "h" ? 3_600_000 : 60_000)
+}
+
+/**
+ * The PR number to focus this tick on, or `undefined` to sweep all open PRs.
+ * Digits-only so a hostile `--pr` value can't inject into the shell prompt built
+ * in `iterateScript`. Empty (manual `workflow_dispatch` passes `--pr ""`) or
+ * absent → `undefined` → sweep.
+ */
+export function parsePrFlag(raw: string | undefined): number | undefined {
+  if (raw === undefined || !/^\d+$/.test(raw)) return undefined
+  const n = Number(raw)
+  return n > 0 ? n : undefined
 }
 
 function printDryRun(spec: LoopSpec): void {
@@ -248,14 +275,18 @@ async function main(): Promise<void> {
     auth = { secrets: {}, envVars: {}, claudeMode: "subscription" }
   }
 
-  const spec = buildSpec({ repo, skill, auth })
+  const pr = parsePrFlag(getFlag(args, "--pr"))
+  const spec = buildSpec({ repo, skill, auth, pr })
 
   if (dryRun) {
     printDryRun(spec)
     return
   }
 
+  const scope = pr ? `PR #${pr}` : "all open PRs"
+
   if (!watch) {
+    console.log(`[pr-babysitter] reviewing ${scope} in ${repo}`)
     // One-shot (the `--once` GitHub Action path): surface a failed iterate as a
     // non-zero process exit so a scheduled run shows red instead of silently
     // green. Prefer process.exitCode over throwing — a throw reaches the

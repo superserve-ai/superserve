@@ -16,16 +16,17 @@ Agent **loops** that run on Superserve sandboxes — a warm, isolated runtime fo
 Three roles, **only one is a sandbox**:
 
 ```
-  CRON HOST (GitHub Actions, ephemeral)        SUPERSERVE CLOUD (Firecracker)
+  CI HOST (GitHub Actions, ephemeral)          SUPERSERVE CLOUD (Firecracker)
   ┌──────────────────────────────┐             ┌──────────────────────────────┐
-  │ cron fires → runs loop.ts     │  ── SDK ──▶ │ WORKER SANDBOX (persistent)  │
+  │ a PR event → runs loop.ts     │  ── SDK ──▶ │ WORKER SANDBOX (persistent)  │
   │ (orchestrator: lifecycle only)│   resume    │  Claude Code + warm repo      │
   │   list → resume → run → pause │   run        │  does the actual work        │
   │ runner destroyed after tick   │   pause     │  (paused between ticks ⇒ $0)  │
   └──────────────────────────────┘             └──────────────────────────────┘
 ```
 
-- **Heartbeat** — a cheap external cron (GitHub Actions ships by default).
+- **Trigger** — a repo event or a cron (the shipped PR Babysitter workflow is **event-driven**:
+  GitHub Actions `pull_request`, so it runs on every PR code change — no idle cron).
 - **Orchestrator** (`loop.ts`) — a stateless script using [`@superserve/sdk`](../../packages/sdk).
   It finds the loop's box by `metadata`, runs one tick inside, pauses. Holds no state.
 - **Worker sandbox** — boots from the `superserve/claude-code` template, so **Claude Code** is the
@@ -36,9 +37,9 @@ The reusable spine is [`lib/run-loop.ts`](./lib/run-loop.ts): `setup` (clone + i
 
 ## Loops
 
-| Loop                               | What it does                                                                                                                                  | Cadence  |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| [`pr-babysitter`](./pr-babysitter) | Shepherd open PRs: review each new commit, run the project's checks, post one signed review, escalate risky PRs to a human. **Never merges.** | 5–15 min |
+| Loop                               | What it does                                                                                                                                  | Cadence    |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| [`pr-babysitter`](./pr-babysitter) | Shepherd open PRs: review each new commit, run the project's checks, post one signed review, escalate risky PRs to a human. **Never merges.** | on PR push |
 
 ## Auth — headless Claude subscription
 
@@ -67,7 +68,7 @@ bun run examples/loops/pr-babysitter/loop.ts --repo owner/name             # one
 Unit tests use an in-memory fake sandbox (no credentials, no network):
 
 ```bash
-bunx turbo run test --filter=@superserve/example-loops
+bunx turbo run test --filter=@superserve/loops
 ```
 
 > Using this outside the monorepo? Change `@superserve/sdk` in `package.json` from `workspace:*` to

@@ -1,19 +1,23 @@
-# PR Babysitter — GitHub Actions cron heartbeat.
+# PR Babysitter — GitHub Actions workflow (event-driven).
 #
-# Copy this into `.github/workflows/` of the repo you want babysat. It wakes on a
-# schedule, runs ONE tick against a warm Superserve sandbox, and exits in seconds.
-# The sandbox (not this runner) holds all state between ticks.
+# Copy this into `.github/workflows/` of the repo you want babysat. On every PR code change
+# (a commit pushed to a PR) it runs ONE tick against a warm Superserve sandbox to review just
+# that PR, then exits in seconds — no idle cron. The sandbox (not this runner) holds state.
 #
 # One-time setup:
-#   1. `claude setup-token`  → generates a Claude subscription OAuth token (Pro/Max/Team/Enterprise).
-#   2. Create two Superserve secrets (console at https://console.superserve.ai/secrets, or
+#   1. `claude setup-token`  → a Claude subscription OAuth token (Pro/Max/Team/Enterprise).
+#   2. Create one Superserve secret (console at https://console.superserve.ai/secrets, or
 #      `Secret.create(...)`):
-#        - "claude-oauth"        → the token from step 1   (auth: Authorization Bearer → Anthropic)
-#        - "loop-github-token"   → a GitHub PAT (repo scope) (provider: github)
+#        - "claude-oauth"  → the token from step 1   (auth: Authorization Bearer → Anthropic)
 #   3. Add `SUPERSERVE_API_KEY` as a GitHub Actions secret.
 #
-# Only SUPERSERVE_API_KEY is sensitive here — the Superserve secret *names* are not, so they
-# live in plain env. The real OAuth token / PAT never enter the sandbox (swapped in at egress).
+# Reviews post as `github-actions[bot]` using the workflow's built-in GITHUB_TOKEN — no
+# GitHub PAT to create or store. The `permissions:` block below is the least privilege the
+# loop needs: clone the repo and post its review + labels. Only SUPERSERVE_API_KEY is a
+# secret you add; the Superserve secret *name* is not sensitive, so it lives in plain env.
+#
+# Babysitting a DIFFERENT repo, or want a branded bot identity? See the commented
+# "cross-repo" lines at the end of the env block.
 #
 # NOTE: this assumes you vendored `examples/loops` into your repo at `./loops`. Adjust
 # `working-directory`, and change `@superserve/sdk` from `workspace:*` to a published version
@@ -21,25 +25,39 @@
 
 name: loop-pr-babysitter
 on:
-  schedule:
-    - cron: "*/15 * * * 1-5" # every 15 min on weekdays (GitHub's reliable floor)
+  pull_request:
+    types: [opened, synchronize, reopened] # synchronize = new commits pushed to the PR
   workflow_dispatch: {}
 
 concurrency:
   group: loop-pr-babysitter
   cancel-in-progress: false
 
+# Least privilege: clone the repo + post the review and ready-to-merge / needs-human labels.
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   tick:
+    # Fork PRs can't read repo secrets (SUPERSERVE_API_KEY) or write with the built-in
+    # token — skip them. Same-repo PRs and manual dispatch run normally.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install
         working-directory: loops
-      - run: bun run pr-babysitter/loop.ts --repo "${{ github.repository }}" --once
+      # --pr focuses the tick on the changed PR; on manual dispatch it's empty → sweep all.
+      - run: bun run pr-babysitter/loop.ts --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
         working-directory: loops
         env:
           SUPERSERVE_API_KEY: ${{ secrets.SUPERSERVE_API_KEY }}
           SUPERSERVE_CLAUDE_SECRET: claude-oauth
-          SUPERSERVE_GITHUB_SECRET: loop-github-token
+          # Default: reviews post as github-actions[bot] via the workflow's built-in token.
+          GITHUB_TOKEN: ${{ github.token }}
+          # Cross-repo / branded identity instead? Store a GitHub PAT as the Superserve
+          # secret "loop-github-token", then DELETE the GITHUB_TOKEN line above and
+          # uncomment the next line:
+          # SUPERSERVE_GITHUB_SECRET: loop-github-token
