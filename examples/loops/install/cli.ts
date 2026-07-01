@@ -1,25 +1,36 @@
 #!/usr/bin/env bun
 import { execFileSync, spawn } from "node:child_process"
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 
 import { Secret } from "@superserve/sdk"
 
+import { runLoopCli } from "../pr-superloop/loop"
+
 /**
  * `superserve-loops add pr-superloop` — one-command install of a loop into the
- * current repo. Creates the Superserve secrets, vendors the runtime, writes the
- * GitHub Actions workflow, and sets the `SUPERSERVE_API_KEY` repo secret.
+ * current repo. Creates the Superserve secrets, writes the GitHub Actions
+ * workflow, and sets the `SUPERSERVE_API_KEY` repo secret.
  *
  *   bunx @superserve/loops add pr-superloop            # interactive
  *   SUPERSERVE_API_KEY=… CLAUDE_CODE_OAUTH_TOKEN=… GITHUB_TOKEN=… \
  *     bunx @superserve/loops add pr-superloop --yes    # non-interactive
+ *
+ * The workflow it writes does NOT vendor any loop source into the repo — it runs
+ * the published package (`bunx @superserve/loops run pr-superloop …`), so the only
+ * thing that touches the repo is one workflow file. `run` is the CI-facing verb the
+ * workflow invokes; it drives ../pr-superloop/loop.ts from inside the package.
  *
  * Tokens you provide are turned into Superserve secrets (swapped in at egress,
  * never committed, never seen by the box). Only the workflow file and the
  * encrypted `SUPERSERVE_API_KEY` Actions secret touch your repo.
  */
 
-const SDK_VERSION = "^0.7.7"
+// The workflow pins a Superserve-gated dist-tag, NOT a semver range or `@latest`:
+// `@stable` moves only when the release pipeline promotes it (see loops-publish.yml),
+// so installed workflows auto-get blessed updates and can be rolled back centrally —
+// the user never edits the committed file again.
+const PACKAGE_SPEC = "@superserve/loops@stable"
 const CLAUDE_SECRET = "claude-oauth"
 const GITHUB_SECRET = "loop-github-token"
 
@@ -234,41 +245,6 @@ async function upsertSecret(
   }
 }
 
-/** Copy the loop runtime into `<repo>/.superserve/loops/`. */
-function vendorRuntime(repoRoot: string, dryRun: boolean): string {
-  const dest = join(repoRoot, ".superserve", "loops")
-  const files: Array<[string, string]> = [
-    ["../lib/run-loop.ts", "lib/run-loop.ts"],
-    ["../pr-superloop/loop.ts", "pr-superloop/loop.ts"],
-    ["../pr-superloop/skill/SKILL.md", "pr-superloop/skill/SKILL.md"],
-  ]
-  const pkg = JSON.stringify(
-    {
-      name: "superserve-loops-vendored",
-      private: true,
-      type: "module",
-      dependencies: { "@superserve/sdk": SDK_VERSION },
-    },
-    null,
-    2,
-  )
-  if (dryRun) {
-    c.ok(
-      `would vendor runtime into ${dest}/ (${files.length} files + package.json)`,
-    )
-    return dest
-  }
-  for (const [from, to] of files) {
-    const body = readFileSync(new URL(from, import.meta.url), "utf8")
-    const target = join(dest, to)
-    mkdirSync(dirname(target), { recursive: true })
-    writeFileSync(target, body)
-  }
-  writeFileSync(join(dest, "package.json"), `${pkg}\n`)
-  c.ok(`vendored runtime into ${dest}/`)
-  return dest
-}
-
 /**
  * The GitHub Actions workflow, as a string. Event-driven: it runs on every PR
  * code change (a commit pushed to a PR), not on a clock.
@@ -312,13 +288,12 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
-      - run: bun install
-        working-directory: .superserve/loops
+      # Runs the PUBLISHED loop — no loop source is vendored into this repo, and no repo
+      # checkout is needed (the sandbox clones the target repo itself). \`@stable\` is a
+      # Superserve-gated channel, so blessed updates roll out here without editing this file.
       # --pr focuses the tick on the changed PR; empty on manual dispatch → sweep all.
-      - run: bun run pr-superloop/loop.ts --repo "\${{ github.repository }}" --pr "\${{ github.event.pull_request.number }}" --once
-        working-directory: .superserve/loops
+      - run: bunx ${PACKAGE_SPEC} run pr-superloop --repo "\${{ github.repository }}" --pr "\${{ github.event.pull_request.number }}" --once
         env:
           SUPERSERVE_API_KEY: \${{ secrets.SUPERSERVE_API_KEY }}
           SUPERSERVE_CLAUDE_SECRET: ${CLAUDE_SECRET}
@@ -389,6 +364,8 @@ const HELP = `superserve-loops — install agent loops into a repo
 
 Usage:
   superserve-loops add pr-superloop [options]
+  superserve-loops run pr-superloop [--repo owner/name] [--pr N] [--once]
+                                    (CI-facing — the installed workflow invokes this)
 
 Options:
   --repo owner/name      Target repo (default: detected from the git remote)
@@ -407,8 +384,20 @@ async function main(): Promise<void> {
     return
   }
   const [command, loop] = argv
+  if (command === "run") {
+    // The CI-facing verb the generated workflow invokes (`bunx @superserve/loops run
+    // pr-superloop …`). Drive the loop from inside the published package — everything
+    // after `run pr-superloop` is the loop's own argv (--repo, --pr, --once, …).
+    if (loop !== "pr-superloop") {
+      fail(`unknown loop "${loop ?? ""}". Available: pr-superloop`)
+    }
+    await runLoopCli(argv.slice(2))
+    return
+  }
   if (command !== "add") {
-    fail(`unknown command "${command}". Try: superserve-loops add pr-superloop`)
+    fail(
+      `unknown command "${command}". Try: superserve-loops add pr-superloop (or: run pr-superloop …)`,
+    )
   }
   if (loop !== "pr-superloop") {
     fail(`unknown loop "${loop ?? ""}". Available: pr-superloop`)
@@ -453,7 +442,7 @@ async function main(): Promise<void> {
     process.env.GITHUB_TOKEN ??
     tryExec("gh", ["auth", "token"])
 
-  c.step("1/4  Superserve secrets")
+  c.step("1/3  Superserve secrets")
   process.env.SUPERSERVE_API_KEY = apiKey // used by the SDK for Secret.* calls
   await upsertSecret(
     CLAUDE_SECRET,
@@ -485,17 +474,14 @@ async function main(): Promise<void> {
     )
   }
 
-  c.step("2/4  Vendor the loop runtime")
-  vendorRuntime(repoRoot, flags.dryRun)
-
-  c.step("3/4  GitHub Actions workflow")
+  c.step("2/3  GitHub Actions workflow")
   writeWorkflow(
     repoRoot,
     { githubSecret: patToken ? GITHUB_SECRET : undefined },
     flags.dryRun,
   )
 
-  c.step("4/4  GitHub Actions secret")
+  c.step("3/3  GitHub Actions secret")
   setActionsSecret(repo, apiKey, ghAuthToken, flags.dryRun)
 
   c.step(
@@ -505,7 +491,7 @@ async function main(): Promise<void> {
   )
   if (!flags.dryRun) {
     c.info(
-      "git add .github .superserve && git commit -m 'add pr-superloop loop' && git push",
+      "git add .github/workflows/loop-pr-superloop.yml && git commit -m 'add pr-superloop loop' && git push",
     )
     c.info(
       `gh workflow run loop-pr-superloop.yml --repo ${repo}   # trigger the first run now`,

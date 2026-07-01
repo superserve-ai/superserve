@@ -11,6 +11,16 @@ describe("buildWorkflow", () => {
     expect(wf).toContain("synchronize")
     expect(wf).not.toContain("cron:")
 
+    // Runs the PUBLISHED package on the Superserve-gated `@stable` channel — the whole
+    // point of this workflow. No loop source is vendored into the repo, so there is no
+    // repo checkout, no local `bun install`, and no `.superserve/loops` working dir.
+    expect(wf).toContain("bunx @superserve/loops@stable run pr-superloop")
+    expect(wf).not.toContain(".superserve/loops")
+    expect(wf).not.toContain("working-directory")
+    expect(wf).not.toContain("actions/checkout")
+    expect(wf).not.toContain("bun install")
+    expect(wf).not.toContain("bun run pr-superloop/loop.ts")
+
     // Per-PR focus: pass the triggering PR number (empty on manual dispatch → sweep).
     expect(wf).toContain('--pr "${{ github.event.pull_request.number }}"')
     // Skip fork PRs (no secrets / read-only token); same-repo PRs + dispatch still run.

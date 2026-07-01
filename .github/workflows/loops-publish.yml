@@ -59,6 +59,18 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
+          VERSION="${GITHUB_REF#refs/tags/loops-v}"
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc
-          npm publish --access=public
+          # Installed workflows pin `@superserve/loops@stable` (see install/cli.ts), so what
+          # `stable` points at is what every consumer runs on its next tick. A release tag
+          # (loops-v1.2.0) moves BOTH latest and stable → rolls out everywhere. A prerelease
+          # tag (loops-v1.2.0-beta.1) publishes to `beta` only and leaves stable untouched, so
+          # `@stable` advances ONLY to blessed releases — and a bad one can be rolled back
+          # centrally, no consumer repo edits, via: npm dist-tag add @superserve/loops@<prev> stable
+          if [[ "$VERSION" == *-* ]]; then
+            npm publish --access=public --tag beta
+          else
+            npm publish --access=public
+            npm dist-tag add "@superserve/loops@$VERSION" stable
+          fi
           rm .npmrc

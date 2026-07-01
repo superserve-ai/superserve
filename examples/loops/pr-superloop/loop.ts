@@ -277,8 +277,15 @@ export async function runTick(
   return result.exitCode
 }
 
-async function main(): Promise<void> {
-  const args = process.argv.slice(2)
+/**
+ * Run the loop from an explicit argv. Exported so the package's `superserve-loops
+ * run pr-superloop …` verb (see ../install/cli.ts) drives the exact same code path
+ * the CI workflow does via `bunx @superserve/loops run pr-superloop`, without a
+ * vendored copy. The `import.meta.main` guard below passes `process.argv.slice(2)`
+ * so the local `bun run pr-superloop/loop.ts …` dev path is unchanged.
+ */
+export async function runLoopCli(argv: string[]): Promise<void> {
+  const args = argv
   const dryRun = args.includes("--dry-run")
   const watch = args.some((a) => a === "--watch" || a.startsWith("--watch="))
 
@@ -354,7 +361,7 @@ async function main(): Promise<void> {
 
 // Only run when executed directly (so tests can import buildSpec/resolveAuth).
 if ((import.meta as { main?: boolean }).main) {
-  void main().catch((err) => {
+  void runLoopCli(process.argv.slice(2)).catch((err) => {
     console.error(err)
     process.exit(1)
   })

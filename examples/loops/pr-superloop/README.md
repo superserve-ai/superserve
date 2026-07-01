@@ -28,9 +28,12 @@ bunx @superserve/loops add pr-superloop
 
 It detects the repo, prompts (without echo) for your Superserve API key, and — when `claude` is
 installed — **runs `claude setup-token` for you** to mint the long-lived Claude token (otherwise it
-prompts you to paste one). Then it does everything: creates the Superserve secret, vendors the runtime
-into `.superserve/loops/`, writes `.github/workflows/loop-pr-superloop.yml`, and sets the
-`SUPERSERVE_API_KEY` Actions secret.
+prompts you to paste one). Then it does everything: creates the Superserve secret, writes
+`.github/workflows/loop-pr-superloop.yml`, and sets the `SUPERSERVE_API_KEY` Actions secret.
+The workflow runs the **published** `@superserve/loops` package (`bunx @superserve/loops@stable run
+pr-superloop …`), so the only thing added to your repo is that one workflow file — **no loop source
+is vendored in**. It pins the `@stable` channel, so improvements to the loop roll out automatically;
+you never edit the file again.
 Reviews post as **`github-actions[bot]`** (the workflow's built-in token — no GitHub PAT needed).
 Push a commit to any PR and it reviews that PR within seconds — no idle cron.
 

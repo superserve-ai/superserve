@@ -4,6 +4,11 @@
 # (a commit pushed to a PR) it runs ONE tick against a warm Superserve sandbox to review just
 # that PR, then exits in seconds — no idle cron. The sandbox (not this runner) holds state.
 #
+# It runs the PUBLISHED `@superserve/loops` package via `bunx` — no loop source is vendored into
+# your repo, and no repo checkout is needed (the sandbox clones the target repo itself). `@stable`
+# is a Superserve-gated channel, so blessed loop updates roll out here without you editing this
+# file. `superserve-loops add pr-superloop` writes this file for you.
+#
 # One-time setup:
 #   1. `claude setup-token`  → a Claude subscription OAuth token (Pro/Max/Team/Enterprise).
 #   2. Create one Superserve secret (console at https://console.superserve.ai/secrets, or
@@ -18,10 +23,6 @@
 #
 # Reviewing a DIFFERENT repo, or want a branded bot identity? See the commented
 # "cross-repo" lines at the end of the env block.
-#
-# NOTE: this assumes you vendored `examples/loops` into your repo at `./loops`. Adjust
-# `working-directory`, and change `@superserve/sdk` from `workspace:*` to a published version
-# (`bun add @superserve/sdk`) when running outside this monorepo.
 
 name: loop-pr-superloop
 on:
@@ -45,13 +46,10 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
-      - run: bun install
-        working-directory: loops
-      # --pr focuses the tick on the changed PR; on manual dispatch it's empty → sweep all.
-      - run: bun run pr-superloop/loop.ts --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
-        working-directory: loops
+      # Runs the published loop; --pr focuses the tick on the changed PR (empty on manual
+      # dispatch → sweep all). `@stable` is the Superserve-gated update channel.
+      - run: bunx @superserve/loops@stable run pr-superloop --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
         env:
           SUPERSERVE_API_KEY: ${{ secrets.SUPERSERVE_API_KEY }}
           SUPERSERVE_CLAUDE_SECRET: claude-oauth
