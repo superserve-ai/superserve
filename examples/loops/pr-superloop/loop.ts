@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 
 import { runLoop } from "../lib/run-loop"
@@ -20,10 +21,14 @@ import type { LoopSpec, RunResult } from "../lib/run-loop"
  * event so a tick reviews just the changed PR. With no `--pr` (manual dispatch or
  * a local run) it sweeps every open PR.
  *
- *   bun run pr-superloop/loop.ts --repo owner/name --pr 42    # review just PR #42
- *   bun run pr-superloop/loop.ts --repo owner/name            # sweep all open PRs (one tick)
- *   bun run pr-superloop/loop.ts --repo owner/name --watch    # local dev: re-tick on an interval
- *   bun run pr-superloop/loop.ts --repo owner/name --dry-run  # no keys needed
+ * The repo defaults to the current git checkout's `github.com` remote, so `--repo`
+ * is optional when you run inside the repo you want reviewed.
+ *
+ *   bun run pr-superloop/loop.ts --pr 42              # review PR #42 in the current repo
+ *   bun run pr-superloop/loop.ts                      # sweep all open PRs (one tick)
+ *   bun run pr-superloop/loop.ts --watch              # local dev: re-tick on an interval
+ *   bun run pr-superloop/loop.ts --dry-run            # no keys needed
+ *   bun run pr-superloop/loop.ts --repo owner/name    # or target another repo explicitly
  */
 
 const TEMPLATE = "superserve/claude-code"
@@ -204,6 +209,30 @@ export function parsePrFlag(raw: string | undefined): number | undefined {
   return n > 0 ? n : undefined
 }
 
+/**
+ * Parse `owner/name` from a git remote URL (https or ssh, with or without a
+ * `.git` suffix or trailing slash), or undefined if it isn't a github.com remote.
+ */
+export function parseRepoUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined
+  const m = /github\.com[:/]([^/]+)\/([^/.]+?)(?:\.git)?\/?$/.exec(url.trim())
+  return m ? `${m[1]}/${m[2]}` : undefined
+}
+
+/** `owner/name` from the current checkout's `origin` remote, so running inside
+ *  the target repo needs no `--repo`. Undefined outside a git repo / no remote. */
+function detectRepoFromGit(): string | undefined {
+  try {
+    const url = execFileSync("git", ["config", "--get", "remote.origin.url"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+    return parseRepoUrl(url)
+  } catch {
+    return undefined
+  }
+}
+
 function printDryRun(spec: LoopSpec): void {
   const redactedEnv = Object.fromEntries(
     Object.keys(spec.envVars ?? {}).map((k) => [
@@ -253,9 +282,13 @@ async function main(): Promise<void> {
   const dryRun = args.includes("--dry-run")
   const watch = args.some((a) => a === "--watch" || a.startsWith("--watch="))
 
-  const repo = getFlag(args, "--repo") ?? process.env.REPO
+  const repo =
+    getFlag(args, "--repo") ?? process.env.REPO ?? detectRepoFromGit()
   if (!repo) {
-    console.error("error: pass --repo owner/name (or set REPO).")
+    console.error(
+      "error: no repo given and none detected. Run inside a repo with a " +
+        "github.com remote, or pass --repo owner/name (or set REPO).",
+    )
     process.exit(1)
   }
 

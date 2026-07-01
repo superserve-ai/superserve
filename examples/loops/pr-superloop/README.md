@@ -84,23 +84,26 @@ await Secret.create({
 
 ## Run
 
+`--repo` is **optional** — it defaults to the current checkout's `github.com` remote, so run these
+from inside the repo you want reviewed. Pass `--repo owner/name` only to target a different repo.
+
 ```bash
 # Inspect the resolved plan without creating a sandbox (no keys needed):
-bun run pr-superloop/loop.ts --repo owner/name --dry-run
+bun run pr-superloop/loop.ts --dry-run
 
 # One live tick locally. In GitHub Actions the built-in token is supplied automatically; a
 # local run is not in Actions, so point at a PAT secret (or pass a raw GITHUB_TOKEN, below):
 SUPERSERVE_API_KEY=ss_live_… \
 SUPERSERVE_CLAUDE_SECRET=claude-oauth \
 SUPERSERVE_GITHUB_SECRET=loop-github-token \
-  bun run pr-superloop/loop.ts --repo owner/name
+  bun run pr-superloop/loop.ts
 
 # Local watch loop (dev): every 15 min
-bun run pr-superloop/loop.ts --repo owner/name --watch=15m
+bun run pr-superloop/loop.ts --watch=15m
 ```
 
 For dev without Superserve secrets, you can pass raw tokens instead (they then live in the box):
-`CLAUDE_CODE_OAUTH_TOKEN=… GITHUB_TOKEN=… bun run pr-superloop/loop.ts --repo owner/name`.
+`CLAUDE_CODE_OAUTH_TOKEN=… GITHUB_TOKEN=… bun run pr-superloop/loop.ts`.
 
 ## How it triggers
 

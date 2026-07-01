@@ -10,6 +10,7 @@ import type {
 import {
   buildSpec,
   parsePrFlag,
+  parseRepoUrl,
   resolveAuth,
   runTick,
 } from "../pr-superloop/loop"
@@ -327,5 +328,25 @@ describe("parsePrFlag", () => {
     expect(parsePrFlag("42; rm -rf /")).toBeUndefined()
     expect(parsePrFlag("$(whoami)")).toBeUndefined()
     expect(parsePrFlag("1 || true")).toBeUndefined()
+  })
+})
+
+describe("parseRepoUrl", () => {
+  it("parses https, ssh, .git, and trailing-slash remotes to owner/name", () => {
+    for (const url of [
+      "https://github.com/acme/widget",
+      "https://github.com/acme/widget.git",
+      "https://github.com/acme/widget/",
+      "git@github.com:acme/widget.git",
+      "git@github.com:acme/widget/",
+    ]) {
+      expect(parseRepoUrl(url)).toBe("acme/widget")
+    }
+  })
+
+  it("returns undefined for empty or non-github remotes (fall back to --repo)", () => {
+    expect(parseRepoUrl(undefined)).toBeUndefined()
+    expect(parseRepoUrl("")).toBeUndefined()
+    expect(parseRepoUrl("https://gitlab.com/acme/widget.git")).toBeUndefined()
   })
 })
