@@ -1,12 +1,17 @@
 "use client"
 
-import { useQuery } from "@tanstack/react-query"
+import { type UseQueryResult, useQuery } from "@tanstack/react-query"
 
-import { getBillingSummary } from "@/lib/api/billing"
+import {
+  getBillingSummary,
+  type BillingSummaryResponse,
+} from "@/lib/api/billing"
 import { billingKeys } from "@/lib/api/query-keys"
 
-export function useBillingSummary(enabled = true) {
-  return useQuery({
+export function useBillingSummary(
+  enabled = true,
+): UseQueryResult<BillingSummaryResponse, Error> {
+  return useQuery<BillingSummaryResponse, Error>({
     queryKey: billingKeys.summary(),
     queryFn: getBillingSummary,
     enabled,

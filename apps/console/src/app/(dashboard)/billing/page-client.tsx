@@ -114,9 +114,11 @@ function billingErrorMessage(error: unknown): {
 export function BillingPageClient() {
   const router = useRouter()
   const { user, loading: userLoading } = useUser()
-  const { data, isPending, error, refetch } = useBillingSummary(
-    !userLoading && !!user,
-  )
+  const billingQuery = useBillingSummary(!userLoading && !!user)
+  const { data, isPending, error } = billingQuery
+  const handleRetry = () => {
+    void billingQuery.refetch()
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -146,14 +148,14 @@ export function BillingPageClient() {
       ) : isPending ? (
         <BillingSkeleton />
       ) : error ? (
-        <BillingError error={error} onRetry={() => refetch()} />
+        <BillingError error={error} onRetry={handleRetry} />
       ) : data ? (
         <BillingSummary summary={data} />
       ) : (
         <ErrorState
           title="Billing Summary Unavailable"
           message="The billing summary could not be loaded."
-          onRetry={() => refetch()}
+          onRetry={handleRetry}
         />
       )}
     </div>
