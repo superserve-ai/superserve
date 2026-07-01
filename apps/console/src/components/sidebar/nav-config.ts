@@ -4,13 +4,14 @@ import {
   // CameraIcon, // TODO: re-enable when Snapshots ships
   ChartBarIcon,
   ClipboardTextIcon,
+  CreditCardIcon,
   CubeIcon,
   GearIcon,
   KeyIcon,
   LifebuoyIcon,
-  ShieldCheckIcon,
   StackIcon,
   LockKeyIcon,
+  UsersIcon,
 } from "@phosphor-icons/react"
 
 export interface NavItem {
@@ -18,6 +19,12 @@ export interface NavItem {
   href: string
   icon: Icon
   external?: boolean
+}
+
+export const userManagementNavItem: NavItem = {
+  label: "User Management",
+  href: "/user-management",
+  icon: UsersIcon,
 }
 
 export const mainNavItems: NavItem[] = [
@@ -28,14 +35,9 @@ export const mainNavItems: NavItem[] = [
   { label: "Audit Logs", href: "/audit-logs", icon: ClipboardTextIcon },
   { label: "API Keys", href: "/api-keys", icon: KeyIcon },
   { label: "Plan & Usage", href: "/plan-usage", icon: ChartBarIcon },
+  { label: "Billing", href: "/billing", icon: CreditCardIcon },
   { label: "Settings", href: "/settings", icon: GearIcon },
 ]
-
-export const adminNavItem: NavItem = {
-  label: "Admin",
-  href: "/admin",
-  icon: ShieldCheckIcon,
-}
 
 export const bottomNavItems: NavItem[] = [
   {

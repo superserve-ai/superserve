@@ -237,6 +237,18 @@
           {
             "group": "Billing",
             "pages": ["GET /billing/pricing", "GET /billing/pricing/public"]
+          },
+          {
+            "group": "Team Management",
+            "pages": [
+              "GET /teams/{team_id}/management",
+              "GET /teams/{team_id}/members",
+              "POST /teams/{team_id}/members",
+              "DELETE /teams/{team_id}/members/{user_id}",
+              "GET /teams/{team_id}/roles",
+              "POST /teams/{team_id}/roles",
+              "DELETE /teams/{team_id}/roles/{assignment_id}"
+            ]
           }
         ]
       }

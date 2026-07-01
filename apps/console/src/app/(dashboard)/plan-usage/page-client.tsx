@@ -3,9 +3,11 @@
 import {
   ChartBarIcon,
   ClockCounterClockwiseIcon,
+  CreditCardIcon,
   LightningIcon,
 } from "@phosphor-icons/react"
 import {
+  Button,
   Card,
   CardContent,
   CardDescription,
@@ -13,6 +15,7 @@ import {
   CardTitle,
   Spinner,
 } from "@superserve/ui"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
 
@@ -140,7 +143,12 @@ export function PlanUsagePageClient() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Plan & Usage" />
+      <PageHeader title="Plan & Usage">
+        <Button render={<Link href="/billing" />} size="sm" variant="outline">
+          <CreditCardIcon className="size-3.5" weight="light" />
+          Billing
+        </Button>
+      </PageHeader>
 
       <div className="flex items-center justify-between border-b border-border px-6 py-3">
         <p className="text-sm text-muted">

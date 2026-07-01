@@ -5,6 +5,7 @@ import {
   // CameraIcon, // TODO: re-enable when Snapshots ships
   ChartBarIcon,
   ClipboardTextIcon,
+  CreditCardIcon,
   CubeIcon,
   GearIcon,
   KeyIcon,
@@ -86,6 +87,11 @@ export function CommandPalette() {
       label: "Plan & Usage",
       icon: ChartBarIcon,
       onSelect: () => navigate("/plan-usage"),
+    },
+    {
+      label: "Billing",
+      icon: CreditCardIcon,
+      onSelect: () => navigate("/billing"),
     },
     {
       label: "Settings",

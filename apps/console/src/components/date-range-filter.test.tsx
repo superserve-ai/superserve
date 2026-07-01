@@ -1,10 +1,19 @@
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { DateRangeFilter, parseDateInput } from "./date-range-filter"
 
 describe("DateRangeFilter", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2026-06-15T12:00:00.000Z"))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it("rejects invalid calendar dates", () => {
     expect(parseDateInput("2026-02-30")).toBeNull()
     expect(parseDateInput("2026-13-01")).toBeNull()

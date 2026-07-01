@@ -1,6 +1,9 @@
 import type { User } from "@supabase/supabase-js"
 
+import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
 import { createServerClient } from "@/lib/supabase/server"
+
+export { canViewOtherUsersAccount }
 
 const DEFAULT_STAFF_DOMAIN = "superserve.ai"
 
