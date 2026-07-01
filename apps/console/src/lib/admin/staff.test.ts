@@ -1,7 +1,8 @@
 import type { User } from "@supabase/supabase-js"
 import { describe, expect, it } from "vitest"
 
-import { canViewOtherUsersAccount, isStaff } from "./staff"
+import { canViewOtherUsersAccount } from "./permissions"
+import { isStaff } from "./staff"
 
 function user(
   email: string,

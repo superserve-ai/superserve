@@ -5,12 +5,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { ApiError } from "@/lib/api/client"
 import {
-  addTeamMember,
   assignTeamRole,
-  deactivateTeamMember,
   getTeamManagement,
   revokeTeamRole,
-  type AddTeamMemberRequest,
   type AssignTeamRoleRequest,
 } from "@/lib/api/team-management"
 
@@ -40,48 +37,6 @@ export function useTeamManagement() {
   return useQuery({
     queryKey: teamManagementKeys.all,
     queryFn: getTeamManagement,
-  })
-}
-
-export function useAddTeamMember() {
-  const queryClient = useQueryClient()
-  const { addToast } = useToast()
-
-  return useMutation({
-    mutationFn: (data: AddTeamMemberRequest) => addTeamMember(data),
-    onSuccess: () => {
-      addToast("Member updated", "success")
-    },
-    onError: (error) => {
-      addToast(
-        friendlyRbacMessage(error, "Failed to add team member."),
-        "error",
-      )
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: teamManagementKeys.all })
-    },
-  })
-}
-
-export function useDeactivateTeamMember() {
-  const queryClient = useQueryClient()
-  const { addToast } = useToast()
-
-  return useMutation({
-    mutationFn: (userId: string) => deactivateTeamMember(userId),
-    onSuccess: () => {
-      addToast("Member deactivated", "success")
-    },
-    onError: (error) => {
-      addToast(
-        friendlyRbacMessage(error, "Failed to deactivate team member."),
-        "error",
-      )
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: teamManagementKeys.all })
-    },
   })
 }
 

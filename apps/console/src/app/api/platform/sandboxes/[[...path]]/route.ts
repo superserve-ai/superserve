@@ -5,8 +5,10 @@ import { createServerClient } from "@/lib/supabase/server"
 
 const SANDBOX_API_URL =
   process.env.SANDBOX_API_URL ?? "https://api.superserve.ai"
-const INTERNAL_API_TOKEN =
-  process.env.SANDBOX_INTERNAL_API_TOKEN ?? process.env.INTERNAL_API_TOKEN
+
+function internalApiToken(): string | undefined {
+  return process.env.SANDBOX_INTERNAL_API_TOKEN
+}
 
 type RouteContext = { params: Promise<{ path?: string[] }> }
 
@@ -38,7 +40,8 @@ async function proxyPlatformSandboxRead(
   if (request.method !== "GET" && request.method !== "HEAD") {
     return notFound()
   }
-  if (!INTERNAL_API_TOKEN) {
+  const token = internalApiToken()
+  if (!token) {
     return NextResponse.json(
       {
         error: {
@@ -79,7 +82,7 @@ async function proxyPlatformSandboxRead(
   const response = await fetch(url.toString(), {
     method: request.method,
     headers: {
-      Authorization: `Bearer ${INTERNAL_API_TOKEN}`,
+      Authorization: `Bearer ${token}`,
       "X-Actor-User-Id": user.id,
       Accept: request.headers.get("accept") ?? "application/json",
     },

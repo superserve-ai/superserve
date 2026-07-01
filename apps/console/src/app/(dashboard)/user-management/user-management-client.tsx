@@ -107,10 +107,10 @@ function SummaryCard({
   iconTone: string
 }) {
   return (
-    <div className="rounded-2xl border border-border/80 bg-background/75 p-5 shadow-[0_1px_0_rgba(255,255,255,0.02)] backdrop-blur-sm">
+    <div className="border border-border/80 bg-background/75 p-5 shadow-[0_1px_0_rgba(255,255,255,0.02)] backdrop-blur-sm">
       <div className="flex items-center gap-4">
         <div
-          className={`flex size-14 shrink-0 items-center justify-center rounded-2xl border border-border/80 ${iconTone}`}
+          className={`flex size-14 shrink-0 items-center justify-center border border-border/80 ${iconTone}`}
         >
           <IconComponent className="size-6" weight="light" />
         </div>
@@ -130,16 +130,15 @@ function SummaryCard({
 
 function InviteMemberCard() {
   return (
-    <div className="rounded-2xl border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
+    <div className="border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
       <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
         <div>
           <p className="text-lg font-medium text-foreground">Invite member</p>
           <p className="mt-2 text-sm leading-relaxed text-muted">
             Invite new members to join your team.
           </p>
-          <div className="mt-4 rounded-xl border border-border bg-muted/20 px-4 py-3 text-sm text-muted">
-            Email invitations are not wired up yet, so this control stays
-            disabled until the backend email flow exists.
+          <div className="mt-4 border border-border bg-muted/20 px-4 py-3 text-sm text-muted">
+            Email invitations coming soon.
           </div>
         </div>
 
@@ -282,14 +281,14 @@ function MemberTable({
 }) {
   if (members.length === 0) {
     return (
-      <div className="rounded-2xl border border-border bg-background/60 px-4 py-6 text-sm text-muted">
+      <div className="border border-border bg-background/60 px-4 py-6 text-sm text-muted">
         {emptyLabel}
       </div>
     )
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-background/60">
+    <div className="overflow-hidden border border-border bg-background/60">
       <Table>
         <TableHeader>
           <TableRow>
@@ -356,14 +355,14 @@ function ActiveAssignmentRows({
 
   if (activeAssignments.length === 0) {
     return (
-      <div className="rounded-2xl border border-border bg-background/60 px-4 py-6 text-sm text-muted">
+      <div className="border border-border bg-background/60 px-4 py-6 text-sm text-muted">
         No active role assignments.
       </div>
     )
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-background/60">
+    <div className="overflow-hidden border border-border bg-background/60">
       <Table>
         <TableHeader>
           <TableRow>
@@ -472,7 +471,7 @@ function MemberTabs({
           <TabsTab key={tab.value} value={tab.value} className="px-2 pt-2 pb-3">
             <span className="inline-flex items-center gap-2">
               {tab.label}
-              <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[11px] text-muted">
+              <span className="border border-border bg-background px-2 py-0.5 text-[11px] text-muted">
                 {tab.count}
               </span>
             </span>
@@ -526,7 +525,7 @@ export function UserManagementClient() {
     return (
       <div className="flex h-full flex-col">
         <PageHeader title="User Management">
-          <div className="h-9 w-28 rounded border border-border bg-muted/30" />
+          <div className="h-9 w-28 border border-border bg-muted/30" />
         </PageHeader>
         <div className="flex-1 overflow-y-auto px-6 py-8">
           <TableSkeleton columns={5} />
@@ -588,18 +587,13 @@ export function UserManagementClient() {
             <p className="text-2xl font-medium tracking-tight text-foreground">
               Manage team members, invitations, and role assignments.
             </p>
-            <p className="max-w-2xl text-sm leading-relaxed text-muted">
-              The page keeps email invites visible but disabled until the email
-              workflow is connected. UUID-based membership changes remain
-              available for administrators.
-            </p>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
             <SummaryCard
               icon={UsersIcon}
               value={counts.active}
-              label="Active member"
+              label="Active members"
               description={`${counts.active} seat${counts.active === 1 ? "" : "s"} in use`}
               iconTone="bg-emerald-500/10 text-emerald-300"
             />
@@ -621,7 +615,7 @@ export function UserManagementClient() {
 
           {capabilities.can_invite_members && <InviteMemberCard />}
 
-          <section className="rounded-2xl border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
+          <section className="border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <p className="text-lg font-medium text-foreground">
@@ -658,7 +652,7 @@ export function UserManagementClient() {
           </section>
 
           {capabilities.can_view_role_assignments && (
-            <section className="rounded-2xl border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
+            <section className="border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
               <div className="grid gap-6 xl:grid-cols-[260px_minmax(0,1fr)]">
                 <div className="space-y-3">
                   <p className="text-lg font-medium text-foreground">
@@ -668,7 +662,7 @@ export function UserManagementClient() {
                     Manage roles and permissions for team members. Changes are
                     enforced by backend policy.
                   </p>
-                  <div className="rounded-xl border border-border bg-muted/20 px-4 py-3 text-sm text-muted">
+                  <div className="border border-border bg-muted/20 px-4 py-3 text-sm text-muted">
                     Changes take effect immediately.
                   </div>
                   {!canMutateRoles && (

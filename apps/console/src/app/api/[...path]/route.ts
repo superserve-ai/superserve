@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-import { getAuthApiKey } from "@/lib/api/proxy-auth"
+import { getAuthApiKeyForUser } from "@/lib/api/proxy-auth"
+import { createServerClient } from "@/lib/supabase/server"
 
 const SANDBOX_API_URL =
   process.env.SANDBOX_API_URL ?? "https://api.superserve.ai"
@@ -67,7 +68,12 @@ async function proxyRequest(
 
   // Inject server-side API key for authenticated requests
   if (!shouldSkipKeyInjection(joinedPath)) {
-    const apiKey = await getAuthApiKey()
+    const supabase = await createServerClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    const apiKey = await getAuthApiKeyForUser(user)
+
     if (!apiKey) {
       return NextResponse.json(
         { error: { code: "unauthorized", message: "Not authenticated" } },

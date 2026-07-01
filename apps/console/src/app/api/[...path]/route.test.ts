@@ -14,7 +14,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mocks declared BEFORE the module under test is imported.
 vi.mock("@/lib/api/proxy-auth", () => ({
-  getAuthApiKey: vi.fn(),
+  getAuthApiKeyForUser: vi.fn(),
+}))
+vi.mock("@/lib/supabase/server", () => ({
+  createServerClient: vi.fn(),
 }))
 
 // Global fetch spy — upstream responses are crafted per test.
@@ -24,7 +27,8 @@ vi.stubGlobal("fetch", fetchSpy)
 // SANDBOX_API_URL is pre-stubbed in src/test/setup.ts before the route
 // module is imported (route reads it at module load).
 
-import { getAuthApiKey } from "@/lib/api/proxy-auth"
+import { getAuthApiKeyForUser } from "@/lib/api/proxy-auth"
+import { createServerClient } from "@/lib/supabase/server"
 
 import { DELETE, GET, POST, PUT } from "./route"
 
@@ -50,8 +54,11 @@ function params(pathSegments: string[]): AnyParams {
 describe("api proxy /api/[...path]", () => {
   beforeEach(() => {
     fetchSpy.mockReset()
-    vi.mocked(getAuthApiKey).mockReset()
-    vi.mocked(getAuthApiKey).mockResolvedValue("ss_live_test_key")
+    vi.mocked(createServerClient).mockResolvedValue({
+      auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) },
+    } as never)
+    vi.mocked(getAuthApiKeyForUser).mockReset()
+    vi.mocked(getAuthApiKeyForUser).mockResolvedValue("ss_live_test_key")
   })
 
   it("returns 404 for a path outside the allowed prefixes", async () => {
@@ -77,7 +84,7 @@ describe("api proxy /api/[...path]", () => {
   })
 
   it("returns 401 when the user is not authenticated", async () => {
-    vi.mocked(getAuthApiKey).mockResolvedValue(null)
+    vi.mocked(getAuthApiKeyForUser).mockResolvedValue(null)
     const res = await GET(req("GET", ["sandboxes"]), params(["sandboxes"]))
     expect(res.status).toBe(401)
     expect(fetchSpy).not.toHaveBeenCalled()

@@ -29,23 +29,23 @@ function upstreamPath(
   path: string[],
 ): string | null {
   if (method === "GET" && path.length === 0) {
-    return `/teams/${teamId}/management`
+    return `/teams/${encodeURIComponent(teamId)}/management`
   }
 
   if (method === "POST" && path.length === 1 && path[0] === "members") {
-    return `/teams/${teamId}/members`
+    return `/teams/${encodeURIComponent(teamId)}/members`
   }
 
   if (method === "DELETE" && path.length === 2 && path[0] === "members") {
-    return `/teams/${teamId}/members/${encodeURIComponent(path[1])}`
+    return `/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(path[1])}`
   }
 
   if (method === "POST" && path.length === 1 && path[0] === "roles") {
-    return `/teams/${teamId}/roles`
+    return `/teams/${encodeURIComponent(teamId)}/roles`
   }
 
   if (method === "DELETE" && path.length === 2 && path[0] === "roles") {
-    return `/teams/${teamId}/roles/${encodeURIComponent(path[1])}`
+    return `/teams/${encodeURIComponent(teamId)}/roles/${encodeURIComponent(path[1])}`
   }
 
   return null
@@ -85,7 +85,9 @@ async function proxyTeamManagementRequest(
   }
 
   const url = new URL(`${SANDBOX_API_URL}${targetPath}`)
-  url.search = request.nextUrl.search
+  if (request.method === "GET" || request.method === "HEAD") {
+    url.search = request.nextUrl.search
+  }
 
   const headers = new Headers()
   for (const [key, value] of request.headers.entries()) {

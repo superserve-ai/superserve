@@ -56,11 +56,13 @@ describe("api proxy /api/team-management", () => {
     vi.mocked(canViewOtherUsersAccount).mockReturnValue(true)
     vi.mocked(getTeamIdForUser).mockResolvedValue("team-1")
     vi.mocked(getAuthApiKeyForUser).mockResolvedValue("ss_live_test_key")
-    fetchSpy.mockResolvedValue(
-      new Response(JSON.stringify({ members: [] }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+    fetchSpy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ members: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
     )
   })
 
@@ -82,6 +84,32 @@ describe("api proxy /api/team-management", () => {
     expect(url).toBe("https://api.test.superserve.ai/teams/team-1/management")
     const headers = fetchInit.headers as Headers
     expect(headers.get("x-api-key")).toBe("ss_live_test_key")
+  })
+
+  it("encodes team ids and only forwards query strings for reads", async () => {
+    vi.mocked(getTeamIdForUser).mockResolvedValue("team 1")
+
+    await GET(
+      new NextRequest(
+        new URL("https://console.test/api/team-management?include=roles"),
+        { method: "GET" },
+      ),
+      params(),
+    )
+    await POST(
+      new NextRequest(
+        new URL("https://console.test/api/team-management/members?ignored=1"),
+        { method: "POST", body: JSON.stringify({ user_id: "u2" }) },
+      ),
+      params(["members"]),
+    )
+
+    expect(fetchSpy.mock.calls[0][0]).toBe(
+      "https://api.test.superserve.ai/teams/team%201/management?include=roles",
+    )
+    expect(fetchSpy.mock.calls[1][0]).toBe(
+      "https://api.test.superserve.ai/teams/team%201/members",
+    )
   })
 
   it("strips client-supplied actor and API key headers", async () => {

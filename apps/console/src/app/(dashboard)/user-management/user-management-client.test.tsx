@@ -9,9 +9,7 @@ const { mockUseTeamManagement } = vi.hoisted(() => ({
 
 vi.mock("@/hooks/use-team-management", () => ({
   useTeamManagement: () => mockUseTeamManagement(),
-  useAddTeamMember: () => ({ mutate: vi.fn(), isPending: false }),
   useAssignTeamRole: () => ({ mutate: vi.fn(), isPending: false }),
-  useDeactivateTeamMember: () => ({ mutate: vi.fn(), isPending: false }),
   useRevokeTeamRole: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
