@@ -11,19 +11,13 @@ Agent **loops** that run on Superserve sandboxes — a warm, isolated runtime fo
 > isolated spine: **bootstrap once**, then every tick `resume()`s warm (repo, deps, the agent
 > harness all still there), runs the work inside a Firecracker microVM, and `pause()`s for ~$0 idle.
 
+![Prompt versus loop. On the left, a prompt: every step runs through you, and the moment you stop, it stops. On the right, a loop: you set the goal once, and the cycle of discover, plan, execute, and verify runs itself, iterating until the check passes](./assets/prompt-vs-loop.png)
+
 ## How a loop is wired
 
 Three roles, **only one is a sandbox**:
 
-```
-  CI HOST (GitHub Actions, ephemeral)          SUPERSERVE CLOUD (Firecracker)
-  ┌──────────────────────────────┐             ┌──────────────────────────────┐
-  │ a PR event → runs loop.ts     │  ── SDK ──▶ │ WORKER SANDBOX (persistent)  │
-  │ (orchestrator: lifecycle only)│   resume    │  Claude Code + warm repo      │
-  │   list → resume → run → pause │   run        │  does the actual work        │
-  │ runner destroyed after tick   │   pause     │  (paused between ticks ⇒ $0)  │
-  └──────────────────────────────┘             └──────────────────────────────┘
-```
+![A Superserve loop, ticking: a trigger fires a stateless orchestrator, which resumes a warm Firecracker microVM, runs one tick while the box flips from paused to resumed, then pauses it again for near-zero idle cost](./assets/loop-wiring.gif)
 
 - **Trigger** — a repo event or a cron (the shipped PR Superloop workflow is **event-driven**:
   GitHub Actions `pull_request`, so it runs on every PR code change — no idle cron).

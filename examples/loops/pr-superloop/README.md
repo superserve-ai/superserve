@@ -7,6 +7,8 @@ Each tick the loop discovers open PRs, reviews every new commit against a calibr
 the project's own checks as a verifier, posts **one** concise signed review, and **escalates** risky
 PRs to a human. It **proposes**; a human merges. It never merges, force-pushes, or edits CI.
 
+![One PR Superloop tick end to end: a pushed commit resumes the warm box, which reads context, reviews the diff, and runs the project's own tests as the verifier, then branches three ways — a clean PR gets a ready-to-merge label, a real bug gets a needs-author verdict, and a security or injection or stuck case escalates to a human. All three converge on updating state and pausing to near-zero idle. A hard-limits band notes it never merges, force-pushes, or edits CI](../assets/pr-superloop-tick.png)
+
 ## Why a sandbox (and not just a GitHub Action)
 
 - **Warm checkout at high cadence.** A 15-min Action re-clones + re-installs every run. Here the
