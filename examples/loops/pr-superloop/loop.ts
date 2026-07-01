@@ -4,12 +4,12 @@ import { runLoop } from "../lib/run-loop"
 import type { LoopSpec, RunResult } from "../lib/run-loop"
 
 /**
- * PR Babysitter — orchestrator (runs on the CI runner, NOT in a sandbox).
+ * PR Superloop — orchestrator (runs on the CI runner, NOT in a sandbox).
  *
  * This script is pure scheduling + lifecycle: find this repo's warm sandbox,
  * run ONE Claude Code tick inside it, pause. All the actual PR work — discover,
  * triage, fix, verify, comment, escalate — happens inside the box, driven by the
- * `pr-babysitter` skill (see ./skill/SKILL.md). The box boots from the
+ * `pr-superloop` skill (see ./skill/SKILL.md). The box boots from the
  * `superserve/claude-code` template, so the `claude` CLI is already installed.
  *
  * Auth is the headless Claude subscription path: a `CLAUDE_CODE_OAUTH_TOKEN`
@@ -20,15 +20,15 @@ import type { LoopSpec, RunResult } from "../lib/run-loop"
  * event so a tick reviews just the changed PR. With no `--pr` (manual dispatch or
  * a local run) it sweeps every open PR.
  *
- *   bun run pr-babysitter/loop.ts --repo owner/name --pr 42    # review just PR #42
- *   bun run pr-babysitter/loop.ts --repo owner/name            # sweep all open PRs (one tick)
- *   bun run pr-babysitter/loop.ts --repo owner/name --watch    # local dev: re-tick on an interval
- *   bun run pr-babysitter/loop.ts --repo owner/name --dry-run  # no keys needed
+ *   bun run pr-superloop/loop.ts --repo owner/name --pr 42    # review just PR #42
+ *   bun run pr-superloop/loop.ts --repo owner/name            # sweep all open PRs (one tick)
+ *   bun run pr-superloop/loop.ts --repo owner/name --watch    # local dev: re-tick on an interval
+ *   bun run pr-superloop/loop.ts --repo owner/name --dry-run  # no keys needed
  */
 
 const TEMPLATE = "superserve/claude-code"
 const REPO_DIR = "/home/user/repo"
-const SKILL_UPLOAD_PATH = "/home/user/pr-babysitter.SKILL.md"
+const SKILL_UPLOAD_PATH = "/home/user/pr-superloop.SKILL.md"
 
 export type ClaudeMode = "subscription" | "metered"
 
@@ -105,9 +105,9 @@ function setupScript(): string {
     "  tar -xzf /tmp/gh.tgz -C /tmp",
     '  cp "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" "$HOME/.local/bin/gh"',
     "fi",
-    "# Make the PR-babysitter skill discoverable by Claude Code.",
-    'mkdir -p "$HOME/.claude/skills/pr-babysitter"',
-    `cp ${SKILL_UPLOAD_PATH} "$HOME/.claude/skills/pr-babysitter/SKILL.md"`,
+    "# Make the pr-superloop skill discoverable by Claude Code.",
+    'mkdir -p "$HOME/.claude/skills/pr-superloop"',
+    `cp ${SKILL_UPLOAD_PATH} "$HOME/.claude/skills/pr-superloop/SKILL.md"`,
     "# Authenticate git to github.com via the bound GITHUB_TOKEN. A credential",
     "# helper reads it at call time, so the token never lands in .gitconfig (works",
     "# for a raw PAT and for a Superserve proxy token swapped at egress). `gh` API",
@@ -127,7 +127,7 @@ function setupScript(): string {
 function iterateScript(claudeMode: ClaudeMode, pr?: number): string {
   const task = pr
     ? `Review pull request #${pr} in $TARGET_REPO.`
-    : "Babysit the open PRs in $TARGET_REPO."
+    : "Review the open PRs in $TARGET_REPO."
   return [
     // Fail the tick if cd/fetch fail, instead of running claude in the wrong dir.
     "set -e",
@@ -138,7 +138,7 @@ function iterateScript(claudeMode: ClaudeMode, pr?: number): string {
       : []),
     'export PATH="$HOME/.local/bin:$PATH"',
     `cd ${REPO_DIR} && git fetch --all --prune --quiet`,
-    `claude -p "/pr-babysitter ${task}" \\`,
+    `claude -p "/pr-superloop ${task}" \\`,
     "  --permission-mode dontAsk \\",
     // Allow gh/git + the common test runners so the verifier can actually run the
     // project's checks inside the microVM (safe — it's an isolated box).
@@ -159,10 +159,10 @@ export function buildSpec(config: {
   pr?: number
 }): LoopSpec {
   return {
-    name: "pr-babysitter",
-    // Keyed by repo only (not PR) on purpose: one warm box babysits the whole
+    name: "pr-superloop",
+    // Keyed by repo only (not PR) on purpose: one warm box reviews the whole
     // repo, and the concurrency group serializes each PR's events onto it.
-    metadata: { loop: "pr-babysitter", repo: config.repo },
+    metadata: { loop: "pr-superloop", repo: config.repo },
     template: TEMPLATE,
     secrets: config.auth.secrets,
     envVars: { ...config.auth.envVars, TARGET_REPO: config.repo },
@@ -212,7 +212,7 @@ function printDryRun(spec: LoopSpec): void {
     ]),
   )
   console.log(
-    "[pr-babysitter] dry run — resolved loop spec (no sandbox created):\n",
+    "[pr-superloop] dry run — resolved loop spec (no sandbox created):\n",
   )
   console.log(`  template:  ${spec.template}`)
   console.log(`  metadata:  ${JSON.stringify(spec.metadata)}`)
@@ -243,7 +243,7 @@ export async function runTick(
   const result = await run(spec)
   const mode = result.bootstrapped ? "cold start (bootstrapped)" : "warm resume"
   log(
-    `\n[pr-babysitter] tick done — sandbox ${result.sandboxId}, ${mode}, exit ${result.exitCode}`,
+    `\n[pr-superloop] tick done — sandbox ${result.sandboxId}, ${mode}, exit ${result.exitCode}`,
   )
   return result.exitCode
 }
@@ -286,7 +286,7 @@ async function main(): Promise<void> {
   const scope = pr ? `PR #${pr}` : "all open PRs"
 
   if (!watch) {
-    console.log(`[pr-babysitter] reviewing ${scope} in ${repo}`)
+    console.log(`[pr-superloop] reviewing ${scope} in ${repo}`)
     // One-shot (the `--once` GitHub Action path): surface a failed iterate as a
     // non-zero process exit so a scheduled run shows red instead of silently
     // green. Prefer process.exitCode over throwing — a throw reaches the
@@ -299,7 +299,7 @@ async function main(): Promise<void> {
 
   const intervalMs = parseDuration(getFlag(args, "--watch"), 15 * 60_000)
   console.log(
-    `[pr-babysitter] watching ${repo} every ${intervalMs / 1000}s — Ctrl-C to stop`,
+    `[pr-superloop] watching ${repo} every ${intervalMs / 1000}s — Ctrl-C to stop`,
   )
   // Recursive setTimeout, NOT setInterval: schedule the next tick only after the
   // current one settles. Ticks share one persistent box, so an overlapping run
@@ -312,7 +312,7 @@ async function main(): Promise<void> {
   const scheduleNext = (): void => {
     setTimeout(() => {
       void runTick(spec)
-        .catch((err) => console.error(`[pr-babysitter] tick failed: ${err}`))
+        .catch((err) => console.error(`[pr-superloop] tick failed: ${err}`))
         .finally(scheduleNext)
     }, intervalMs)
   }

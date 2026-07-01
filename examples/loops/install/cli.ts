@@ -6,13 +6,13 @@ import { dirname, join } from "node:path"
 import { Secret } from "@superserve/sdk"
 
 /**
- * `superserve-loops add pr-babysitter` — one-command install of a loop into the
+ * `superserve-loops add pr-superloop` — one-command install of a loop into the
  * current repo. Creates the Superserve secrets, vendors the runtime, writes the
  * GitHub Actions workflow, and sets the `SUPERSERVE_API_KEY` repo secret.
  *
- *   bunx @superserve/loops add pr-babysitter            # interactive
+ *   bunx @superserve/loops add pr-superloop            # interactive
  *   SUPERSERVE_API_KEY=… CLAUDE_CODE_OAUTH_TOKEN=… GITHUB_TOKEN=… \
- *     bunx @superserve/loops add pr-babysitter --yes    # non-interactive
+ *     bunx @superserve/loops add pr-superloop --yes    # non-interactive
  *
  * Tokens you provide are turned into Superserve secrets (swapped in at egress,
  * never committed, never seen by the box). Only the workflow file and the
@@ -176,8 +176,8 @@ function vendorRuntime(repoRoot: string, dryRun: boolean): string {
   const dest = join(repoRoot, ".superserve", "loops")
   const files: Array<[string, string]> = [
     ["../lib/run-loop.ts", "lib/run-loop.ts"],
-    ["../pr-babysitter/loop.ts", "pr-babysitter/loop.ts"],
-    ["../pr-babysitter/skill/SKILL.md", "pr-babysitter/skill/SKILL.md"],
+    ["../pr-superloop/loop.ts", "pr-superloop/loop.ts"],
+    ["../pr-superloop/skill/SKILL.md", "pr-superloop/skill/SKILL.md"],
   ]
   const pkg = JSON.stringify(
     {
@@ -212,7 +212,7 @@ function vendorRuntime(repoRoot: string, dryRun: boolean): string {
  *
  * Default (no `githubSecret`): the loop posts as `github-actions[bot]` using the
  * workflow's built-in `GITHUB_TOKEN` — no PAT to create, nothing extra to store.
- * This is the fast path, and it works because the workflow babysits the SAME repo it
+ * This is the fast path, and it works because the workflow reviews the SAME repo it
  * lives in (`--repo "${{ github.repository }}"`), which that token already covers.
  *
  * Pass `githubSecret` for the cross-repo / custom-identity fallback: the loop then
@@ -225,19 +225,19 @@ export function buildWorkflow(opts: { githubSecret?: string } = {}): string {
           SUPERSERVE_GITHUB_SECRET: ${opts.githubSecret}`
     : `          # Reviews post as github-actions[bot] via the workflow's built-in token.
           GITHUB_TOKEN: \${{ github.token }}`
-  return `# Installed by \`superserve-loops add pr-babysitter\`. Runs on every PR code change
+  return `# Installed by \`superserve-loops add pr-superloop\`. Runs on every PR code change
 # (a commit pushed to a PR) — no idle cron. One warm-sandbox tick per event, then it sleeps.
 # Note: \`pull_request\` from a forked repo gets a read-only token, so reviews on fork PRs need
 # the cross-repo PAT path (see below) or \`pull_request_target\` (the loop runs PR code only in
 # the sandbox, never on the runner). Add \`schedule:\` back if you also want a safety-net sweep.
-name: loop-pr-babysitter
+name: loop-pr-superloop
 on:
   pull_request:
     types: [opened, synchronize, reopened] # synchronize = new commits pushed to the PR
   workflow_dispatch: {}
 concurrency:
   # Serialize per repo: all PR reviews share one warm sandbox, so don't run two at once.
-  group: loop-pr-babysitter
+  group: loop-pr-superloop
   cancel-in-progress: false
 # Least privilege: clone the repo + post the review and ready-to-merge / needs-human labels.
 permissions:
@@ -254,7 +254,7 @@ jobs:
       - run: bun install
         working-directory: .superserve/loops
       # --pr focuses the tick on the changed PR; empty on manual dispatch → sweep all.
-      - run: bun run pr-babysitter/loop.ts --repo "\${{ github.repository }}" --pr "\${{ github.event.pull_request.number }}" --once
+      - run: bun run pr-superloop/loop.ts --repo "\${{ github.repository }}" --pr "\${{ github.event.pull_request.number }}" --once
         working-directory: .superserve/loops
         env:
           SUPERSERVE_API_KEY: \${{ secrets.SUPERSERVE_API_KEY }}
@@ -268,7 +268,7 @@ function writeWorkflow(
   opts: { githubSecret?: string },
   dryRun: boolean,
 ): string {
-  const path = join(repoRoot, ".github", "workflows", "loop-pr-babysitter.yml")
+  const path = join(repoRoot, ".github", "workflows", "loop-pr-superloop.yml")
   if (dryRun) {
     c.ok(`would write ${path}`)
     return path
@@ -325,13 +325,13 @@ function setActionsSecret(
 const HELP = `superserve-loops — install agent loops into a repo
 
 Usage:
-  superserve-loops add pr-babysitter [options]
+  superserve-loops add pr-superloop [options]
 
 Options:
   --repo owner/name      Target repo (default: detected from the git remote)
   --api-key <key>        Superserve API key (or env SUPERSERVE_API_KEY)
   --claude-token <tok>   Claude subscription token from \`claude setup-token\` (or env CLAUDE_CODE_OAUTH_TOKEN)
-  --github-token <tok>   GitHub PAT for cross-repo babysitting or a custom bot identity
+  --github-token <tok>   GitHub PAT for cross-repo reviews or a custom bot identity
                          (optional — by default reviews post as github-actions[bot])
   --yes                  Non-interactive (fail instead of prompting)
   --dry-run              Show what would happen; change nothing
@@ -345,12 +345,10 @@ async function main(): Promise<void> {
   }
   const [command, loop] = argv
   if (command !== "add") {
-    fail(
-      `unknown command "${command}". Try: superserve-loops add pr-babysitter`,
-    )
+    fail(`unknown command "${command}". Try: superserve-loops add pr-superloop`)
   }
-  if (loop !== "pr-babysitter") {
-    fail(`unknown loop "${loop ?? ""}". Available: pr-babysitter`)
+  if (loop !== "pr-superloop") {
+    fail(`unknown loop "${loop ?? ""}". Available: pr-superloop`)
   }
 
   const flags = parseFlags(argv)
@@ -359,7 +357,7 @@ async function main(): Promise<void> {
     tryExec("git", ["rev-parse", "--show-toplevel"]) ?? process.cwd()
 
   console.log(
-    `\nInstalling \x1b[1mpr-babysitter\x1b[0m into \x1b[1m${repo}\x1b[0m${flags.dryRun ? " (dry run)" : ""}\n`,
+    `\nInstalling \x1b[1mpr-superloop\x1b[0m into \x1b[1m${repo}\x1b[0m${flags.dryRun ? " (dry run)" : ""}\n`,
   )
   if (!flags.dryRun) {
     console.log(
@@ -387,7 +385,7 @@ async function main(): Promise<void> {
       })
   // GitHub identity is OPTIONAL. Default: the loop posts as github-actions[bot] using
   // the workflow's built-in token (no PAT). Pass --github-token to opt into a PAT
-  // identity — needed to babysit a different repo or to post under a branded account.
+  // identity — needed to review a different repo or to post under a branded account.
   const patToken = flags.githubToken
   // Auth for the one-time `gh secret set` below: the explicit PAT if given, else the
   // user's ambient `gh` login / CI token. This only stores SUPERSERVE_API_KEY — it is
@@ -450,10 +448,10 @@ async function main(): Promise<void> {
   )
   if (!flags.dryRun) {
     c.info(
-      "git add .github .superserve && git commit -m 'add pr-babysitter loop' && git push",
+      "git add .github .superserve && git commit -m 'add pr-superloop loop' && git push",
     )
     c.info(
-      `gh workflow run loop-pr-babysitter.yml --repo ${repo}   # trigger the first run now`,
+      `gh workflow run loop-pr-superloop.yml --repo ${repo}   # trigger the first run now`,
     )
     c.info(
       patToken

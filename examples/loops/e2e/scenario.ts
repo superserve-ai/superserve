@@ -6,10 +6,10 @@ import { dirname, join } from "node:path"
 import { Sandbox } from "@superserve/sdk"
 
 import { runLoop } from "../lib/run-loop"
-import { buildSpec, resolveAuth } from "../pr-babysitter/loop"
+import { buildSpec, resolveAuth } from "../pr-superloop/loop"
 
 /**
- * End-to-end scenario for the PR Babysitter loop. Spins up a throwaway GitHub
+ * End-to-end scenario for the PR Superloop loop. Spins up a throwaway GitHub
  * repo, ships a baseline, opens a PR that plants a logic bug AND a shell
  * injection, runs the REAL loop against it, then prints the review the loop
  * posted. Tears the repo + sandbox down afterward.
@@ -63,7 +63,7 @@ const SEED_FILES: Record<string, string> = {
   "CLAUDE.md":
     "# Conventions\n\nRun `npm test` to verify changes. Keep functions pure and side-effect free.\n",
   "README.md":
-    "# discount-demo\n\nA tiny fixture repo for the PR Babysitter e2e.\n",
+    "# discount-demo\n\nA tiny fixture repo for the PR Superloop e2e.\n",
 }
 
 interface Flags {
@@ -137,7 +137,7 @@ function printPlan(owner: string, repoName: string): void {
 
 async function killLoopBoxes(repo: string): Promise<void> {
   const boxes = await Sandbox.list({
-    metadata: { loop: "pr-babysitter", repo },
+    metadata: { loop: "pr-superloop", repo },
   })
   for (const b of boxes) await Sandbox.killById(b.id)
 }
@@ -245,7 +245,7 @@ async function main(): Promise<void> {
     "[3] running the loop (cold start → Claude Code reviews the PR) ...",
   )
   const skill = readFileSync(
-    new URL("../pr-babysitter/skill/SKILL.md", import.meta.url),
+    new URL("../pr-superloop/skill/SKILL.md", import.meta.url),
     "utf8",
   )
   const result = await runLoop(
@@ -271,7 +271,7 @@ async function main(): Promise<void> {
     .map((x) => x.body)
     .filter((b) => b.trim().length > 0)
   const lastBody = bodies.length > 0 ? bodies[bodies.length - 1] : undefined
-  const review = bodies.find((b) => b.includes("pr-babysitter")) ?? lastBody
+  const review = bodies.find((b) => b.includes("pr-superloop")) ?? lastBody
 
   console.log("\n========== REVIEW ==========")
   console.log(review ?? "(no review/comment found — see the loop output above)")

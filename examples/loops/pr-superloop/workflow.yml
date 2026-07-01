@@ -1,4 +1,4 @@
-# PR Babysitter — GitHub Actions workflow (event-driven).
+# PR Superloop — GitHub Actions workflow (event-driven).
 #
 # Copy this into `.github/workflows/` of the repo you want babysat. On every PR code change
 # (a commit pushed to a PR) it runs ONE tick against a warm Superserve sandbox to review just
@@ -16,21 +16,21 @@
 # loop needs: clone the repo and post its review + labels. Only SUPERSERVE_API_KEY is a
 # secret you add; the Superserve secret *name* is not sensitive, so it lives in plain env.
 #
-# Babysitting a DIFFERENT repo, or want a branded bot identity? See the commented
+# Reviewing a DIFFERENT repo, or want a branded bot identity? See the commented
 # "cross-repo" lines at the end of the env block.
 #
 # NOTE: this assumes you vendored `examples/loops` into your repo at `./loops`. Adjust
 # `working-directory`, and change `@superserve/sdk` from `workspace:*` to a published version
 # (`bun add @superserve/sdk`) when running outside this monorepo.
 
-name: loop-pr-babysitter
+name: loop-pr-superloop
 on:
   pull_request:
     types: [opened, synchronize, reopened] # synchronize = new commits pushed to the PR
   workflow_dispatch: {}
 
 concurrency:
-  group: loop-pr-babysitter
+  group: loop-pr-superloop
   cancel-in-progress: false
 
 # Least privilege: clone the repo + post the review and ready-to-merge / needs-human labels.
@@ -50,7 +50,7 @@ jobs:
       - run: bun install
         working-directory: loops
       # --pr focuses the tick on the changed PR; on manual dispatch it's empty → sweep all.
-      - run: bun run pr-babysitter/loop.ts --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
+      - run: bun run pr-superloop/loop.ts --repo "${{ github.repository }}" --pr "${{ github.event.pull_request.number }}" --once
         working-directory: loops
         env:
           SUPERSERVE_API_KEY: ${{ secrets.SUPERSERVE_API_KEY }}

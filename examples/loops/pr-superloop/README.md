@@ -1,6 +1,6 @@
-# PR Babysitter
+# PR Superloop
 
-Shepherd open pull requests toward merge — without a human babysitting them — by running
+Shepherd open pull requests toward merge — without a human watching them — by running
 **Claude Code headless inside a warm Superserve sandbox** on a schedule.
 
 Each tick the loop discovers open PRs, reviews every new commit against a calibrated rubric, runs
@@ -15,35 +15,35 @@ PRs to a human. It **proposes**; a human merges. It never merges, force-pushes, 
   inside a Firecracker microVM with `git worktree` isolation — never on your host or CI runner.
 - **~$0 idle.** The box is paused between ticks.
 
-The brain is Claude Code, driven by the [`pr-babysitter` skill](./skill/SKILL.md) (review rubric
+The brain is Claude Code, driven by the [`pr-superloop` skill](./skill/SKILL.md) (review rubric
 ported from [`reviewd`](https://github.com/simion/reviewd), MIT). State lives in the box at
-`/home/user/repo/.pr-babysitter-state.md`, deduped by PR head SHA.
+`/home/user/repo/.pr-superloop-state.md`, deduped by PR head SHA.
 
 ## Install into a repo (one command)
 
 ```bash
 # run inside the repo you want babysat
-bunx @superserve/loops add pr-babysitter
+bunx @superserve/loops add pr-superloop
 ```
 
 It detects the repo and prompts for two credentials (entered without echo) — your Superserve API
 key and a Claude subscription token (`claude setup-token`) — then does everything: creates the
 Superserve secret, vendors the runtime into `.superserve/loops/`, writes
-`.github/workflows/loop-pr-babysitter.yml`, and sets the `SUPERSERVE_API_KEY` Actions secret.
+`.github/workflows/loop-pr-superloop.yml`, and sets the `SUPERSERVE_API_KEY` Actions secret.
 Reviews post as **`github-actions[bot]`** (the workflow's built-in token — no GitHub PAT needed).
 Push a commit to any PR and it reviews that PR within seconds — no idle cron.
 
 ```bash
 # non-interactive (CI): pass tokens via env
 SUPERSERVE_API_KEY=… CLAUDE_CODE_OAUTH_TOKEN=… \
-  bunx @superserve/loops add pr-babysitter --yes
+  bunx @superserve/loops add pr-superloop --yes
 # preview without changing anything
-bunx @superserve/loops add pr-babysitter --dry-run
-# babysit a DIFFERENT repo, or post under a branded account → opt into a PAT identity
-bunx @superserve/loops add pr-babysitter --github-token <PAT>
+bunx @superserve/loops add pr-superloop --dry-run
+# review a DIFFERENT repo, or post under a branded account → opt into a PAT identity
+bunx @superserve/loops add pr-superloop --github-token <PAT>
 ```
 
-> In this monorepo (pre-publish), run it as `bun run examples/loops/install/cli.ts add pr-babysitter`.
+> In this monorepo (pre-publish), run it as `bun run examples/loops/install/cli.ts add pr-superloop`.
 
 The rest of this page is the **manual** setup the installer automates, plus how to run a tick locally.
 
@@ -68,7 +68,7 @@ The rest of this page is the **manual** setup the installer automates, plus how 
 3. **Set `SUPERSERVE_API_KEY`** in your environment (and as a GitHub Actions secret for the cron).
 
 GitHub auth needs no setup: the workflow posts as **`github-actions[bot]`** via the built-in
-`GITHUB_TOKEN`, so there's no PAT to create. **Cross-repo / branded identity** (babysit a different
+`GITHUB_TOKEN`, so there's no PAT to create. **Cross-repo / branded identity** (review a different
 repo, or post under your own bot account) is the opt-in fallback — create a GitHub PAT as a Superserve
 secret and point the workflow at it:
 
@@ -86,21 +86,21 @@ await Secret.create({
 
 ```bash
 # Inspect the resolved plan without creating a sandbox (no keys needed):
-bun run pr-babysitter/loop.ts --repo owner/name --dry-run
+bun run pr-superloop/loop.ts --repo owner/name --dry-run
 
 # One live tick locally. In GitHub Actions the built-in token is supplied automatically; a
 # local run is not in Actions, so point at a PAT secret (or pass a raw GITHUB_TOKEN, below):
 SUPERSERVE_API_KEY=ss_live_… \
 SUPERSERVE_CLAUDE_SECRET=claude-oauth \
 SUPERSERVE_GITHUB_SECRET=loop-github-token \
-  bun run pr-babysitter/loop.ts --repo owner/name
+  bun run pr-superloop/loop.ts --repo owner/name
 
 # Local watch loop (dev): every 15 min
-bun run pr-babysitter/loop.ts --repo owner/name --watch=15m
+bun run pr-superloop/loop.ts --repo owner/name --watch=15m
 ```
 
 For dev without Superserve secrets, you can pass raw tokens instead (they then live in the box):
-`CLAUDE_CODE_OAUTH_TOKEN=… GITHUB_TOKEN=… bun run pr-babysitter/loop.ts --repo owner/name`.
+`CLAUDE_CODE_OAUTH_TOKEN=… GITHUB_TOKEN=… bun run pr-superloop/loop.ts --repo owner/name`.
 
 ## How it triggers
 
@@ -134,7 +134,7 @@ plain env.
 | Primitive      | Here                                                                       |
 | -------------- | -------------------------------------------------------------------------- |
 | Scheduling     | GitHub Actions `pull_request` events (the heartbeat)                       |
-| Memory / State | `.pr-babysitter-state.md` in the warm box, deduped by head SHA             |
+| Memory / State | `.pr-superloop-state.md` in the warm box, deduped by head SHA              |
 | Worktrees      | `git worktree` **inside** the microVM (branch + host isolation)            |
 | Sub-agents     | maker (review) / checker (run the project's tests) split                   |
 | Skills         | [`skill/SKILL.md`](./skill/SKILL.md), discovered by Claude Code in the box |

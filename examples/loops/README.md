@@ -25,7 +25,7 @@ Three roles, **only one is a sandbox**:
   └──────────────────────────────┘             └──────────────────────────────┘
 ```
 
-- **Trigger** — a repo event or a cron (the shipped PR Babysitter workflow is **event-driven**:
+- **Trigger** — a repo event or a cron (the shipped PR Superloop workflow is **event-driven**:
   GitHub Actions `pull_request`, so it runs on every PR code change — no idle cron).
 - **Orchestrator** (`loop.ts`) — a stateless script using [`@superserve/sdk`](../../packages/sdk).
   It finds the loop's box by `metadata`, runs one tick inside, pauses. Holds no state.
@@ -37,9 +37,9 @@ The reusable spine is [`lib/run-loop.ts`](./lib/run-loop.ts): `setup` (clone + i
 
 ## Loops
 
-| Loop                               | What it does                                                                                                                                  | Cadence    |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| [`pr-babysitter`](./pr-babysitter) | Shepherd open PRs: review each new commit, run the project's checks, post one signed review, escalate risky PRs to a human. **Never merges.** | on PR push |
+| Loop                             | What it does                                                                                                                                  | Cadence    |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| [`pr-superloop`](./pr-superloop) | Shepherd open PRs: review each new commit, run the project's checks, post one signed review, escalate risky PRs to a human. **Never merges.** | on PR push |
 
 ## Auth — headless Claude subscription
 
@@ -61,8 +61,8 @@ can also use a metered `ANTHROPIC_API_KEY`, or Bedrock/Vertex — the loop code 
 ```bash
 # from the repo root
 bun install
-bun run examples/loops/pr-babysitter/loop.ts --repo owner/name --dry-run   # no keys needed
-bun run examples/loops/pr-babysitter/loop.ts --repo owner/name             # one live tick
+bun run examples/loops/pr-superloop/loop.ts --repo owner/name --dry-run   # no keys needed
+bun run examples/loops/pr-superloop/loop.ts --repo owner/name             # one live tick
 ```
 
 Unit tests use an in-memory fake sandbox (no credentials, no network):

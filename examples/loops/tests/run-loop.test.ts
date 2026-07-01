@@ -12,7 +12,7 @@ import {
   parsePrFlag,
   resolveAuth,
   runTick,
-} from "../pr-babysitter/loop"
+} from "../pr-superloop/loop"
 
 // Loop code always passes the same metadata object (stable key order), so a
 // plain stringify is a sufficient and deterministic map key here.
@@ -185,7 +185,7 @@ describe("runLoop", () => {
   })
 })
 
-describe("pr-babysitter buildSpec / resolveAuth", () => {
+describe("pr-superloop buildSpec / resolveAuth", () => {
   it("binds the subscription + github secrets by name", () => {
     const auth = resolveAuth({
       SUPERSERVE_CLAUDE_SECRET: "claude-oauth",
@@ -237,7 +237,7 @@ describe("pr-babysitter buildSpec / resolveAuth", () => {
 
     expect(built.template).toBe("superserve/claude-code")
     expect(built.metadata).toEqual({
-      loop: "pr-babysitter",
+      loop: "pr-superloop",
       repo: "acme/widget",
     })
     expect(built.envVars?.TARGET_REPO).toBe("acme/widget")
@@ -249,7 +249,7 @@ describe("pr-babysitter buildSpec / resolveAuth", () => {
     expect(built.setup).toContain("credential.helper")
     expect(built.iterate).toContain("--disallowedTools")
     // No --pr → sweep every open PR.
-    expect(built.iterate).toContain("Babysit the open PRs in $TARGET_REPO")
+    expect(built.iterate).toContain("Review the open PRs in $TARGET_REPO")
   })
 
   it("focuses the tick on one PR when given --pr", () => {
@@ -260,10 +260,10 @@ describe("pr-babysitter buildSpec / resolveAuth", () => {
     const built = buildSpec({ repo: "acme/widget", skill: "S", auth, pr: 42 })
 
     expect(built.iterate).toContain("Review pull request #42 in $TARGET_REPO")
-    expect(built.iterate).not.toContain("Babysit the open PRs")
+    expect(built.iterate).not.toContain("Review the open PRs")
     // One box per repo regardless of which PR fired — the metadata key omits the PR.
     expect(built.metadata).toEqual({
-      loop: "pr-babysitter",
+      loop: "pr-superloop",
       repo: "acme/widget",
     })
   })
@@ -284,7 +284,7 @@ describe("pr-babysitter buildSpec / resolveAuth", () => {
   })
 })
 
-describe("pr-babysitter one-shot exit propagation", () => {
+describe("pr-superloop one-shot exit propagation", () => {
   const fakeResult = (exitCode: number): RunResult => ({
     sandboxId: "box-1",
     bootstrapped: false,
