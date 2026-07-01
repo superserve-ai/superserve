@@ -22,14 +22,15 @@ ported from [`reviewd`](https://github.com/simion/reviewd), MIT). State lives in
 ## Install into a repo (one command)
 
 ```bash
-# run inside the repo you want babysat
+# run inside the repo you want reviewed
 bunx @superserve/loops add pr-superloop
 ```
 
-It detects the repo and prompts for two credentials (entered without echo) — your Superserve API
-key and a Claude subscription token (`claude setup-token`) — then does everything: creates the
-Superserve secret, vendors the runtime into `.superserve/loops/`, writes
-`.github/workflows/loop-pr-superloop.yml`, and sets the `SUPERSERVE_API_KEY` Actions secret.
+It detects the repo, prompts (without echo) for your Superserve API key, and — when `claude` is
+installed — **runs `claude setup-token` for you** to mint the long-lived Claude token (otherwise it
+prompts you to paste one). Then it does everything: creates the Superserve secret, vendors the runtime
+into `.superserve/loops/`, writes `.github/workflows/loop-pr-superloop.yml`, and sets the
+`SUPERSERVE_API_KEY` Actions secret.
 Reviews post as **`github-actions[bot]`** (the workflow's built-in token — no GitHub PAT needed).
 Push a commit to any PR and it reviews that PR within seconds — no idle cron.
 
@@ -107,7 +108,7 @@ For dev without Superserve secrets, you can pass raw tokens instead (they then l
 
 ## How it triggers
 
-Copy [`workflow.yml`](./workflow.yml) into `.github/workflows/` of the repo you want babysat — it
+Copy [`workflow.yml`](./workflow.yml) into `.github/workflows/` of the repo you want reviewed — it
 fires on `pull_request` (`opened`, `synchronize`, `reopened`), so it reviews a PR the moment a commit
 is pushed, runs one tick, and exits. **No idle cron.** It runs under a least-privilege `permissions:`
 block (`contents: read`, `pull-requests: write`) and posts as `github-actions[bot]` via the built-in

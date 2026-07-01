@@ -1,6 +1,6 @@
 # PR Superloop — GitHub Actions workflow (event-driven).
 #
-# Copy this into `.github/workflows/` of the repo you want babysat. On every PR code change
+# Copy this into `.github/workflows/` of the repo you want reviewed. On every PR code change
 # (a commit pushed to a PR) it runs ONE tick against a warm Superserve sandbox to review just
 # that PR, then exits in seconds — no idle cron. The sandbox (not this runner) holds state.
 #

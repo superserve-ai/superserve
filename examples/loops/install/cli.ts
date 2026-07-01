@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawn } from "node:child_process"
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 
@@ -146,6 +146,69 @@ async function resolveCred(opts: {
     )
   }
   return promptHidden(`  ${opts.label}: `)
+}
+
+/** Pull the `sk-ant-oat01-…` token out of `claude setup-token` output. */
+export function extractOAuthToken(output: string): string | undefined {
+  return /sk-ant-oat01-[A-Za-z0-9_-]+/.exec(output)?.[0]
+}
+
+/**
+ * Run `claude setup-token` interactively and capture the long-lived token it
+ * prints. stdin + stderr are inherited so the browser sign-in / any prompts work
+ * normally; stdout is captured AND echoed (tee) so the user still sees the flow.
+ * Resolves undefined if `claude` can't run or prints no token (caller falls back
+ * to a manual paste).
+ */
+function runClaudeSetupToken(): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    let out = ""
+    const child = spawn("claude", ["setup-token"], {
+      stdio: ["inherit", "pipe", "inherit"],
+    })
+    child.stdout?.on("data", (chunk: Buffer) => {
+      const text = chunk.toString()
+      out += text
+      process.stdout.write(text)
+    })
+    child.on("error", () => resolve(undefined))
+    child.on("close", () => resolve(extractOAuthToken(out)))
+  })
+}
+
+/**
+ * Resolve the loop's Claude credential. Order: explicit --claude-token, then
+ * CLAUDE_CODE_OAUTH_TOKEN, then — interactively, when `claude` is installed — run
+ * `claude setup-token` FOR the user and capture its output, and finally fall back
+ * to a manual paste. `claude setup-token` (not the local session login) is
+ * required because the loop needs a ~1-year token that won't expire mid-run.
+ */
+async function resolveClaudeToken(flags: Flags): Promise<string> {
+  if (flags.claudeToken) return flags.claudeToken
+  if (process.env.CLAUDE_CODE_OAUTH_TOKEN)
+    return process.env.CLAUDE_CODE_OAUTH_TOKEN
+
+  if (!flags.yes && process.stdout.isTTY && tryExec("claude", ["--version"])) {
+    c.info(
+      "No Claude token set — running `claude setup-token` for you (opens your browser to sign in)…",
+    )
+    const token = await runClaudeSetupToken()
+    if (token) {
+      c.ok("captured a long-lived Claude subscription token")
+      return token
+    }
+    c.warn(
+      "couldn't auto-capture the token — paste it below (from the `claude setup-token` output).",
+    )
+  }
+
+  return resolveCred({
+    label: "Claude subscription token",
+    envNames: ["CLAUDE_CODE_OAUTH_TOKEN"],
+    flag: undefined,
+    yes: flags.yes,
+    hint: "Generate it with `claude setup-token` (needs a Pro/Max/Team/Enterprise plan).",
+  })
 }
 
 // --- steps -----------------------------------------------------------------
@@ -376,13 +439,7 @@ async function main(): Promise<void> {
       })
   const claudeToken = flags.dryRun
     ? "<claude-token>"
-    : await resolveCred({
-        label: "Claude subscription token (run `claude setup-token`)",
-        envNames: ["CLAUDE_CODE_OAUTH_TOKEN"],
-        flag: flags.claudeToken,
-        yes: flags.yes,
-        hint: "Generate it with `claude setup-token` (needs a Pro/Max/Team/Enterprise plan).",
-      })
+    : await resolveClaudeToken(flags)
   // GitHub identity is OPTIONAL. Default: the loop posts as github-actions[bot] using
   // the workflow's built-in token (no PAT). Pass --github-token to opt into a PAT
   // identity — needed to review a different repo or to post under a branded account.

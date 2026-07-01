@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { buildWorkflow } from "../install/cli"
+import { buildWorkflow, extractOAuthToken } from "../install/cli"
 
 describe("buildWorkflow", () => {
   it("defaults to the github-actions[bot] built-in token — no PAT, least-privilege perms", () => {
@@ -35,5 +35,19 @@ describe("buildWorkflow", () => {
     expect(wf).not.toContain("github.token")
     // Permissions block is still least-privilege regardless of identity path.
     expect(wf).toContain("pull-requests: write")
+  })
+})
+
+describe("extractOAuthToken", () => {
+  it("pulls the sk-ant-oat01 token out of `claude setup-token` output", () => {
+    const out =
+      "Opened browser to sign in.\nYour long-lived token:\n" +
+      "sk-ant-oat01-AbC_dEf-123xyz\nStore it as CLAUDE_CODE_OAUTH_TOKEN.\n"
+    expect(extractOAuthToken(out)).toBe("sk-ant-oat01-AbC_dEf-123xyz")
+  })
+
+  it("returns undefined when no token is present (caller falls back to a paste)", () => {
+    expect(extractOAuthToken("no token here")).toBeUndefined()
+    expect(extractOAuthToken("")).toBeUndefined()
   })
 })
