@@ -119,6 +119,23 @@
         "vite": "^7.3.1",
       },
     },
+    "examples/loops": {
+      "name": "@superserve/loops",
+      "version": "0.1.0",
+      "bin": {
+        "superserve-loops": "install/cli.ts",
+      },
+      "dependencies": {
+        "@superserve/sdk": "workspace:*",
+      },
+      "devDependencies": {
+        "@superserve/typescript-config": "workspace:*",
+        "@types/node": "^25.5.2",
+        "typescript": "^5.7.0",
+        "vite-tsconfig-paths": "^5.1.4",
+        "vitest": "^4.0.18",
+      },
+    },
     "packages/cli": {
       "name": "@superserve/cli",
       "version": "1.1.0",
@@ -918,6 +935,8 @@
     "@superserve/cli": ["@superserve/cli@workspace:packages/cli"],
 
     "@superserve/console": ["@superserve/console@workspace:apps/console"],
+
+    "@superserve/loops": ["@superserve/loops@workspace:examples/loops"],
 
     "@superserve/mcp": ["@superserve/mcp@workspace:packages/mcp"],
 
