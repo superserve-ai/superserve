@@ -7,6 +7,13 @@ export const sandboxKeys = {
   detail: (id: string) => [...sandboxKeys.details(), id] as const,
 }
 
+export const platformSandboxKeys = {
+  all: ["platform-sandboxes"] as const,
+  byTeam: (teamId: string) => [...platformSandboxKeys.all, teamId] as const,
+  detail: (teamId: string, sandboxId: string) =>
+    [...platformSandboxKeys.byTeam(teamId), sandboxId] as const,
+}
+
 export const fileKeys = {
   all: ["sandbox-files"] as const,
   listings: (sandboxId: string) => [...fileKeys.all, sandboxId] as const,
