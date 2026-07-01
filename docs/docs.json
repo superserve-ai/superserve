@@ -172,6 +172,11 @@
               "integrations/agent-harnesses/claude-agent-sdk",
               "integrations/agent-harnesses/openai-agents-sdk"
             ]
+          },
+          {
+            "group": "Loops",
+            "tag": "NEW",
+            "pages": ["integrations/loops/pr-superloop"]
           }
         ]
       },
