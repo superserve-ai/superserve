@@ -12,6 +12,7 @@ const ALLOWED_PREFIXES = [
   "templates",
   "secrets",
   "providers",
+  "billing/summary",
 ]
 
 /** Paths that carry their own auth (e.g. Bearer token). */

@@ -73,6 +73,7 @@ export const networkKeys = {
 
 export const billingKeys = {
   all: ["billing"] as const,
+  summary: () => [...billingKeys.all, "summary"] as const,
   settings: () => [...billingKeys.all, "settings"] as const,
   usage: (filters: { periodStart: string; periodEnd: string }) =>
     [...billingKeys.all, "usage", filters] as const,

@@ -4,6 +4,7 @@ import {
   // CameraIcon, // TODO: re-enable when Snapshots ships
   ChartBarIcon,
   ClipboardTextIcon,
+  CreditCardIcon,
   CubeIcon,
   GearIcon,
   KeyIcon,
@@ -34,6 +35,7 @@ export const mainNavItems: NavItem[] = [
   { label: "Audit Logs", href: "/audit-logs", icon: ClipboardTextIcon },
   { label: "API Keys", href: "/api-keys", icon: KeyIcon },
   { label: "Plan & Usage", href: "/plan-usage", icon: ChartBarIcon },
+  { label: "Billing", href: "/billing", icon: CreditCardIcon },
   { label: "Settings", href: "/settings", icon: GearIcon },
 ]
 
