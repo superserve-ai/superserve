@@ -17,6 +17,10 @@ interface ProofPayload {
   signup_attempt_id?: string
 }
 
+function cookieName(signupAttemptId?: string): string {
+  return signupAttemptId ? `${COOKIE_NAME}-${signupAttemptId}` : COOKIE_NAME
+}
+
 function signingSecret(): string {
   const secret = process.env.GOOGLE_SIGNUP_PROOF_SECRET
   if (!secret || secret.length < 32) {
@@ -90,7 +94,7 @@ export async function issueGoogleSignupProof(
   signupAttemptId?: string,
 ): Promise<void> {
   const store = await cookies()
-  store.set(COOKIE_NAME, encodeProof(signupAttemptId), {
+  store.set(cookieName(signupAttemptId), encodeProof(signupAttemptId), {
     httpOnly: true,
     secure: true,
     sameSite: "lax",
@@ -104,7 +108,13 @@ export async function hasValidGoogleSignupProof(
 ): Promise<boolean> {
   try {
     const store = await cookies()
-    return validProof(store.get(COOKIE_NAME)?.value, expectedSignupAttemptId)
+    const attemptProof = expectedSignupAttemptId
+      ? store.get(cookieName(expectedSignupAttemptId))?.value
+      : undefined
+    return (
+      validProof(attemptProof, expectedSignupAttemptId) ||
+      validProof(store.get(COOKIE_NAME)?.value, expectedSignupAttemptId)
+    )
   } catch (error) {
     console.error("Google signup proof validation failed", error)
     return false
@@ -127,7 +137,15 @@ export async function consumeGoogleSignupProof(
   distinctId: string = crypto.randomUUID(),
 ): Promise<void> {
   const store = await cookies()
-  store.delete(COOKIE_NAME)
+  const allCookies = "getAll" in store ? store.getAll() : []
+  const proofCookies = allCookies.filter(
+    ({ name }) => name === COOKIE_NAME || name.startsWith(`${COOKIE_NAME}-`),
+  )
+  if (proofCookies.length > 0) {
+    for (const { name } of proofCookies) store.delete(name)
+  } else {
+    store.delete(COOKIE_NAME)
+  }
   await trackEvent(AUTH_EVENTS.GOOGLE_SIGNUP_PROOF_CONSUMED, distinctId, {
     scope: "first_team_provisioning",
   })
