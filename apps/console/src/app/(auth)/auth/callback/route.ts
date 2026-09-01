@@ -132,7 +132,7 @@ export async function GET(request: Request) {
           isNewUser = directory.kind === "first_time"
 
           if (isNewUser) {
-            const proofValid = await hasValidGoogleSignupProof()
+            const proofValid = await hasValidGoogleSignupProof(signupAttemptId)
             if (!proofValid) {
               await trackEvent(
                 AUTH_EVENTS.GOOGLE_SIGNUP_BYPASS_BLOCKED,
@@ -164,11 +164,23 @@ export async function GET(request: Request) {
               signupAttemptId,
             )
             if (signupAttemptId) {
+              const clientContext = {
+                userAgent: request.headers.get("user-agent"),
+                ip:
+                  request.headers.get("cf-connecting-ip") ||
+                  request.headers.get("x-forwarded-for"),
+                ray: request.headers.get("cf-ray"),
+              }
+              const contextArgs =
+                clientContext.userAgent || clientContext.ip || clientContext.ray
+                  ? [clientContext]
+                  : []
               scheduleCloudflareObservation(
                 signupAttemptId,
                 "google",
                 user.id,
                 null,
+                ...contextArgs,
               )
               await trackEvent(AUTH_EVENTS.SIGNUP_ATTEMPT_ASSOCIATED, user.id, {
                 signup_attempt_id: signupAttemptId,

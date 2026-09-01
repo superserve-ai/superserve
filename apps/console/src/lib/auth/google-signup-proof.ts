@@ -14,6 +14,7 @@ interface ProofPayload {
   v: number
   purpose: string
   exp: number
+  signup_attempt_id?: string
 }
 
 function signingSecret(): string {
@@ -28,17 +29,21 @@ function signature(payload: string): Buffer {
   return crypto.createHmac("sha256", signingSecret()).update(payload).digest()
 }
 
-function encodeProof(): string {
+function encodeProof(signupAttemptId?: string): string {
   const payload: ProofPayload = {
     v: VERSION,
     purpose: PURPOSE,
     exp: Math.floor(Date.now() / 1000) + TTL_SECONDS,
+    ...(signupAttemptId ? { signup_attempt_id: signupAttemptId } : {}),
   }
   const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url")
   return `${encoded}.${signature(encoded).toString("base64url")}`
 }
 
-function validProof(value: string | undefined): boolean {
+function validProof(
+  value: string | undefined,
+  expectedSignupAttemptId?: string,
+): boolean {
   if (!value) return false
   const [encoded, supplied, extra] = value.split(".")
   if (!encoded || !supplied || extra) return false
@@ -70,16 +75,20 @@ function validProof(value: string | undefined): boolean {
       payload.v === VERSION &&
       payload.purpose === PURPOSE &&
       typeof payload.exp === "number" &&
-      payload.exp >= Math.floor(Date.now() / 1000)
+      payload.exp >= Math.floor(Date.now() / 1000) &&
+      (!expectedSignupAttemptId ||
+        payload.signup_attempt_id === expectedSignupAttemptId)
     )
   } catch {
     return false
   }
 }
 
-export async function issueGoogleSignupProof(): Promise<void> {
+export async function issueGoogleSignupProof(
+  signupAttemptId?: string,
+): Promise<void> {
   const store = await cookies()
-  store.set(COOKIE_NAME, encodeProof(), {
+  store.set(COOKIE_NAME, encodeProof(signupAttemptId), {
     httpOnly: true,
     secure: true,
     sameSite: "lax",
@@ -88,10 +97,12 @@ export async function issueGoogleSignupProof(): Promise<void> {
   })
 }
 
-export async function hasValidGoogleSignupProof(): Promise<boolean> {
+export async function hasValidGoogleSignupProof(
+  expectedSignupAttemptId?: string,
+): Promise<boolean> {
   try {
     const store = await cookies()
-    return validProof(store.get(COOKIE_NAME)?.value)
+    return validProof(store.get(COOKIE_NAME)?.value, expectedSignupAttemptId)
   } catch (error) {
     console.error("Google signup proof validation failed", error)
     return false

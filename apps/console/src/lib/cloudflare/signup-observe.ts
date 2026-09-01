@@ -10,6 +10,11 @@ export type CloudflareSignupObservation = {
   signupMethod: "email" | "google"
   userId?: string | null
   teamId?: string | null
+  clientContext?: {
+    userAgent?: string | null
+    ip?: string | null
+    ray?: string | null
+  }
 }
 
 const record = (value: unknown): value is Record<string, unknown> =>
@@ -73,6 +78,7 @@ export async function observeCloudflareSignup({
   signupMethod,
   userId = null,
   teamId = null,
+  clientContext,
 }: CloudflareSignupObservation): Promise<void> {
   const endpoint = process.env.CLOUDFLARE_SIGNUP_OBSERVATION_URL
   const secret = process.env.CLOUDFLARE_SIGNUP_OBSERVATION_SECRET
@@ -100,6 +106,11 @@ export async function observeCloudflareSignup({
       body: JSON.stringify({
         signup_attempt_id: signupAttemptId,
         signup_method: signupMethod,
+        client_context: {
+          user_agent: clientContext?.userAgent || null,
+          ip: clientContext?.ip || null,
+          ray: clientContext?.ray || null,
+        },
       }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
       cache: "no-store",

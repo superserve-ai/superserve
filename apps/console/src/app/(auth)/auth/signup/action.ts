@@ -3,6 +3,7 @@
 import crypto from "node:crypto"
 
 import { cookies } from "next/headers"
+import { headers } from "next/headers"
 import { after } from "next/server"
 import * as z from "zod"
 
@@ -31,6 +32,11 @@ export async function scheduleCloudflareObservation(
   signupMethod: "email" | "google",
   userId?: string | null,
   teamId?: string | null,
+  clientContext?: {
+    userAgent?: string | null
+    ip?: string | null
+    ray?: string | null
+  },
 ) {
   try {
     after(() =>
@@ -39,10 +45,26 @@ export async function scheduleCloudflareObservation(
         signupMethod,
         userId,
         teamId,
+        clientContext,
       }),
     )
   } catch {
     // Cloudflare is strictly telemetry-only.
+  }
+}
+
+async function readCloudflareClientContext() {
+  try {
+    const requestHeaders = await headers()
+    return {
+      userAgent: requestHeaders.get("user-agent"),
+      ip:
+        requestHeaders.get("cf-connecting-ip") ||
+        requestHeaders.get("x-forwarded-for"),
+      ray: requestHeaders.get("cf-ray"),
+    }
+  } catch {
+    return undefined
   }
 }
 
@@ -116,8 +138,15 @@ export const beginGoogleSignup = async (
     }
 > => {
   const signupAttemptId = crypto.randomUUID()
+  const clientContext = await readCloudflareClientContext()
   const fingerprintEventId = await readFingerprintSignupEventId()
-  scheduleCloudflareObservation(signupAttemptId, "google")
+  scheduleCloudflareObservation(
+    signupAttemptId,
+    "google",
+    undefined,
+    undefined,
+    clientContext,
+  )
   const recaptcha = await verifyRecaptcha(recaptchaToken, "signup_google")
   await trackEvent(AUTH_EVENTS.SIGNUP_RECAPTCHA_OBSERVED, signupAttemptId, {
     provider: "recaptcha",
@@ -154,7 +183,7 @@ export const beginGoogleSignup = async (
   }
 
   try {
-    await issueGoogleSignupProof()
+    await issueGoogleSignupProof(signupAttemptId)
     await trackEvent(
       AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_VERIFIED,
       signupAttemptId,
@@ -194,8 +223,15 @@ export const signUpWithEmail = async (
     return { success: false, error: parsed.error.issues[0].message }
 
   const signupAttemptId = crypto.randomUUID()
+  const clientContext = await readCloudflareClientContext()
   const fingerprintEventId = await readFingerprintSignupEventId()
-  scheduleCloudflareObservation(signupAttemptId, "email")
+  scheduleCloudflareObservation(
+    signupAttemptId,
+    "email",
+    undefined,
+    undefined,
+    clientContext,
+  )
   let fingerprintObservationScheduled = false
   const emitFingerprintObservation = (userId?: string | null) => {
     if (!fingerprintEventId || fingerprintObservationScheduled) return
@@ -269,6 +305,7 @@ export const signUpWithEmail = async (
         "email",
         data.user.id,
         null,
+        clientContext,
       )
     await trackEvent(
       AUTH_EVENTS.SIGNUP_ATTEMPT_ASSOCIATED,
