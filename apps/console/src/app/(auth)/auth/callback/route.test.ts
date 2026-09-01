@@ -30,15 +30,12 @@ vi.mock("@/app/(auth)/auth/signin/action", () => ({
 const mockSendWelcomeEmail = vi.fn()
 const mockConsumeFingerprintSignupEventId = vi.fn()
 const mockScheduleFingerprintObservation = vi.fn()
-const mockScheduleCloudflareObservation = vi.fn()
 vi.mock("@/app/(auth)/auth/signup/action", () => ({
   sendWelcomeEmail: (...args: unknown[]) => mockSendWelcomeEmail(...args),
   consumeFingerprintSignupEventId: (...args: unknown[]) =>
     mockConsumeFingerprintSignupEventId(...args),
   scheduleFingerprintObservation: (...args: unknown[]) =>
     mockScheduleFingerprintObservation(...args),
-  scheduleCloudflareObservation: (...args: unknown[]) =>
-    mockScheduleCloudflareObservation(...args),
 }))
 
 const mockHasValidGoogleSignupProof = vi.fn()
@@ -131,7 +128,6 @@ describe("auth callback", () => {
     mockConsumeFingerprintSignupEventId.mockReset()
     mockConsumeFingerprintSignupEventId.mockResolvedValue(undefined)
     mockScheduleFingerprintObservation.mockReset()
-    mockScheduleCloudflareObservation.mockReset()
     mockListTeamMembershipsForUserDetailed
       .mockReset()
       .mockImplementation(async () => directoryState)
@@ -257,12 +253,6 @@ describe("auth callback", () => {
       "google",
       "u1",
       "attempt-1",
-    )
-    expect(mockScheduleCloudflareObservation).toHaveBeenCalledWith(
-      "attempt-1",
-      "google",
-      "u1",
-      null,
     )
     expect(mockTrackEvent).toHaveBeenCalledWith(
       "auth_signup_attempt_associated",

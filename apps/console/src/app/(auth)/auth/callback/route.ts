@@ -3,7 +3,6 @@ import { NextResponse } from "next/server"
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import {
   consumeFingerprintSignupEventId,
-  scheduleCloudflareObservation,
   scheduleFingerprintObservation,
   sendWelcomeEmail,
 } from "@/app/(auth)/auth/signup/action"
@@ -166,24 +165,6 @@ export async function GET(request: Request) {
               signupAttemptId,
             )
             if (signupAttemptId) {
-              const clientContext = {
-                userAgent: request.headers.get("user-agent"),
-                ip:
-                  request.headers.get("cf-connecting-ip") ||
-                  request.headers.get("x-forwarded-for"),
-                ray: request.headers.get("cf-ray"),
-              }
-              const contextArgs =
-                clientContext.userAgent || clientContext.ip || clientContext.ray
-                  ? [clientContext]
-                  : []
-              scheduleCloudflareObservation(
-                signupAttemptId,
-                "google",
-                user.id,
-                null,
-                ...contextArgs,
-              )
               await trackEvent(AUTH_EVENTS.SIGNUP_ATTEMPT_ASSOCIATED, user.id, {
                 signup_attempt_id: signupAttemptId,
                 superserve_user_id: user.id,

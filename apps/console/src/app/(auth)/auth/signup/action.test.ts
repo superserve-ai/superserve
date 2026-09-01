@@ -226,7 +226,7 @@ describe("signUpWithEmail", () => {
       userId: "user-1",
       signupAttemptId: expect.any(String),
     })
-    expect(mockObserveCloudflareSignup).toHaveBeenCalledTimes(4)
+    expect(mockObserveCloudflareSignup).toHaveBeenCalledTimes(2)
     const cloudflareCalls = mockObserveCloudflareSignup.mock.calls.map(
       ([args]) =>
         args as {
@@ -243,10 +243,10 @@ describe("signUpWithEmail", () => {
     })
     expect(cloudflareCalls[1]).toMatchObject({
       signupMethod: "email",
-      userId: "user-1",
-      teamId: null,
+      userId: undefined,
+      teamId: undefined,
     })
-    expect(cloudflareCalls[0].signupAttemptId).toBe(
+    expect(cloudflareCalls[0].signupAttemptId).not.toBe(
       cloudflareCalls[1].signupAttemptId,
     )
   })

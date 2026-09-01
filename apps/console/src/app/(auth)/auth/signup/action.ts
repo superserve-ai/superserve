@@ -299,14 +299,6 @@ export const signUpWithEmail = async (
     }
 
     emitFingerprintObservation(data?.user?.id ?? null)
-    if (data?.user?.id)
-      scheduleCloudflareObservation(
-        signupAttemptId,
-        "email",
-        data.user.id,
-        null,
-        clientContext,
-      )
     await trackEvent(
       AUTH_EVENTS.SIGNUP_ATTEMPT_ASSOCIATED,
       data?.user?.id || signupAttemptId,
