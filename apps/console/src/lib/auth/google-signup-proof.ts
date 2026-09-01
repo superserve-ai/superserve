@@ -146,16 +146,35 @@ export async function requireGoogleSignupProof(): Promise<void> {
 
 export async function consumeGoogleSignupProof(
   distinctId: string = crypto.randomUUID(),
+  signupAttemptId?: string,
 ): Promise<void> {
   const store = await cookies()
-  const allCookies = "getAll" in store ? store.getAll() : []
-  const proofCookies = allCookies.filter(
-    ({ name }) => name === COOKIE_NAME || name.startsWith(`${COOKIE_NAME}-`),
-  )
-  if (proofCookies.length > 0) {
-    for (const { name } of proofCookies) store.delete(name)
+  if (signupAttemptId) {
+    store.delete(cookieName(signupAttemptId))
+  } else if ("getAll" in store) {
+    const allCookies = store.getAll()
+    // Legacy, unscoped proofs have no attempt ID; consume only that proof.
+    if (allCookies.some(({ name }) => name === COOKIE_NAME)) {
+      store.delete(COOKIE_NAME)
+    } else {
+      // Preserve other concurrent attempts. For legacy callers without an ID,
+      // consume at most one valid attempt-scoped proof rather than all of them.
+      const proofCookie = allCookies.find(({ name, value }) => {
+        if (!name.startsWith(`${COOKIE_NAME}-`)) return false
+        const attemptId = name.slice(`${COOKIE_NAME}-`.length)
+        return validProof(value, attemptId)
+      })
+      if (proofCookie) store.delete(proofCookie.name)
+    }
   } else {
-    store.delete(COOKIE_NAME)
+    // Keep compatibility with cookie-store implementations that predate getAll.
+    const legacyStore = store as unknown as {
+      get(name: string): { value: string } | undefined
+      delete(name: string): void
+    }
+    if (legacyStore.get(COOKIE_NAME)) {
+      legacyStore.delete(COOKIE_NAME)
+    }
   }
   await trackEvent(AUTH_EVENTS.GOOGLE_SIGNUP_PROOF_CONSUMED, distinctId, {
     scope: "first_team_provisioning",

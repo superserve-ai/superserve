@@ -142,6 +142,30 @@ describe("google-signup-proof", () => {
     expect(cookieValue).toBeUndefined()
   })
 
+  it("consumes only the completed attempt proof", async () => {
+    await issueGoogleSignupProof("attempt-a")
+    await issueGoogleSignupProof("attempt-b")
+
+    await consumeGoogleSignupProof("user-123", "attempt-a")
+
+    expect(cookieEntries.map(({ name }) => name)).toEqual([
+      "__Host-superserve-google-signup-attempt-b",
+    ])
+    expect(await hasValidGoogleSignupProof("attempt-b")).toBe(true)
+  })
+
+  it("preserves concurrent attempt proofs for legacy consumers without an ID", async () => {
+    await issueGoogleSignupProof("attempt-a")
+    await issueGoogleSignupProof("attempt-b")
+
+    await consumeGoogleSignupProof("user-123")
+
+    expect(cookieEntries).toHaveLength(1)
+    expect(cookieEntries[0].name).toBe(
+      "__Host-superserve-google-signup-attempt-b",
+    )
+  })
+
   it("treats an expired proof as invalid", async () => {
     await issueGoogleSignupProof()
     expect(await hasValidGoogleSignupProof()).toBe(true)
