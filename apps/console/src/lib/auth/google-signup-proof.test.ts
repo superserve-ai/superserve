@@ -10,6 +10,7 @@ type CookieSet = {
 
 let cookieValue: string | undefined
 const cookieSets: CookieSet[] = []
+let cookieEntries: Array<{ name: string; value: string }> = []
 
 const mockTrackEvent = vi.fn()
 vi.mock("@/lib/posthog/actions", () => ({
@@ -24,14 +25,28 @@ vi.mock("@/lib/posthog/events", () => ({
 
 vi.mock("next/headers", () => ({
   cookies: async () => ({
-    get: (name: string) =>
-      cookieValue === undefined ? undefined : { name, value: cookieValue },
+    get: (name: string) => {
+      const entry = cookieEntries.find((cookie) => cookie.name === name)
+      if (entry) return entry
+      return name === "__Host-superserve-google-signup" &&
+        cookieValue !== undefined
+        ? { name, value: cookieValue }
+        : undefined
+    },
+    getAll: () => cookieEntries,
     set: (name: string, value: string, options: Record<string, unknown>) => {
       cookieValue = value
+      cookieEntries = [
+        ...cookieEntries.filter((cookie) => cookie.name !== name),
+        { name, value },
+      ]
       cookieSets.push({ name, value, options })
     },
-    delete: () => {
+    delete: (name?: string) => {
       cookieValue = undefined
+      cookieEntries = name
+        ? cookieEntries.filter((cookie) => cookie.name !== name)
+        : []
     },
   }),
 }))
@@ -56,6 +71,7 @@ describe("google-signup-proof", () => {
   beforeEach(() => {
     cookieValue = undefined
     cookieSets.length = 0
+    cookieEntries = []
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
     process.env.GOOGLE_SIGNUP_PROOF_SECRET = "g".repeat(32)
   })
@@ -90,8 +106,15 @@ describe("google-signup-proof", () => {
     expect(await hasValidGoogleSignupProof("attempt-2")).toBe(false)
     expect(await hasValidGoogleSignupProof("")).toBe(false)
 
+    cookieEntries = []
     await issueGoogleSignupProof()
     expect(await hasValidGoogleSignupProof("attempt-1")).toBe(false)
+  })
+
+  it("validates an active attempt-scoped proof for provisioning without an ID", async () => {
+    await issueGoogleSignupProof("attempt-1")
+
+    expect(await hasValidGoogleSignupProof()).toBe(true)
   })
 
   it("tracks proof consumption when the cookie is cleared", async () => {
@@ -140,6 +163,9 @@ describe("google-signup-proof", () => {
     const [payload, signature] = cookieValue!.split(".")
     const replacement = signature[0] === "A" ? "B" : "A"
     cookieValue = `${payload}.${replacement}${signature.slice(1)}`
+    cookieEntries = [
+      { name: "__Host-superserve-google-signup", value: cookieValue },
+    ]
 
     expect(await hasValidGoogleSignupProof()).toBe(false)
   })

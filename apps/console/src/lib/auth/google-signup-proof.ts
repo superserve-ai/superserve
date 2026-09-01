@@ -108,12 +108,23 @@ export async function hasValidGoogleSignupProof(
 ): Promise<boolean> {
   try {
     const store = await cookies()
-    const attemptProof = expectedSignupAttemptId
-      ? store.get(cookieName(expectedSignupAttemptId))?.value
-      : undefined
+    if (expectedSignupAttemptId !== undefined) {
+      return (
+        validProof(
+          store.get(cookieName(expectedSignupAttemptId))?.value,
+          expectedSignupAttemptId,
+        ) || validProof(store.get(COOKIE_NAME)?.value, expectedSignupAttemptId)
+      )
+    }
+
+    const allCookies = "getAll" in store ? store.getAll() : []
     return (
-      validProof(attemptProof, expectedSignupAttemptId) ||
-      validProof(store.get(COOKIE_NAME)?.value, expectedSignupAttemptId)
+      validProof(store.get(COOKIE_NAME)?.value) ||
+      allCookies.some(({ name, value }) => {
+        if (!name.startsWith(`${COOKIE_NAME}-`)) return false
+        const signupAttemptId = name.slice(`${COOKIE_NAME}-`.length)
+        return validProof(value, signupAttemptId)
+      })
     )
   } catch (error) {
     console.error("Google signup proof validation failed", error)
