@@ -132,7 +132,9 @@ export async function GET(request: Request) {
           isNewUser = directory.kind === "first_time"
 
           if (isNewUser) {
-            const proofValid = await hasValidGoogleSignupProof(signupAttemptId)
+            const proofValid =
+              Boolean(signupAttemptId) &&
+              (await hasValidGoogleSignupProof(signupAttemptId))
             if (!proofValid) {
               await trackEvent(
                 AUTH_EVENTS.GOOGLE_SIGNUP_BYPASS_BLOCKED,

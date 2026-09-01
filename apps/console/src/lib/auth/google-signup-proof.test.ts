@@ -82,6 +82,18 @@ describe("google-signup-proof", () => {
     expect(await hasValidGoogleSignupProof()).toBe(true)
   })
 
+  it("matches the signed attempt ID when validating callback correlation", async () => {
+    await issueGoogleSignupProof("attempt-1")
+
+    expect(await hasValidGoogleSignupProof("attempt-1")).toBe(true)
+    expect(await hasValidGoogleSignupProof()).toBe(true)
+    expect(await hasValidGoogleSignupProof("attempt-2")).toBe(false)
+    expect(await hasValidGoogleSignupProof("")).toBe(false)
+
+    await issueGoogleSignupProof()
+    expect(await hasValidGoogleSignupProof("attempt-1")).toBe(false)
+  })
+
   it("tracks proof consumption when the cookie is cleared", async () => {
     await issueGoogleSignupProof()
     mockTrackEvent.mockReset().mockResolvedValue(undefined)

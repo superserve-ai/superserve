@@ -76,8 +76,10 @@ function validProof(
       payload.purpose === PURPOSE &&
       typeof payload.exp === "number" &&
       payload.exp >= Math.floor(Date.now() / 1000) &&
-      (!expectedSignupAttemptId ||
-        payload.signup_attempt_id === expectedSignupAttemptId)
+      (expectedSignupAttemptId === undefined ||
+        (typeof expectedSignupAttemptId === "string" &&
+          expectedSignupAttemptId.length > 0 &&
+          payload.signup_attempt_id === expectedSignupAttemptId))
     )
   } catch {
     return false

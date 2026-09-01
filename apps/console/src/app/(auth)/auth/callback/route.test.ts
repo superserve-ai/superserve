@@ -167,15 +167,15 @@ describe("auth callback", () => {
     expect(mockConsumeGoogleSignupProof).not.toHaveBeenCalled()
   })
 
-  it("blocks a first-time Google user without a valid proof", async () => {
+  it("blocks a first-time Google callback without an attempt ID", async () => {
     googleMembershipState = { kind: "first_time" }
-    mockHasValidGoogleSignupProof.mockResolvedValue(false)
+    mockHasValidGoogleSignupProof.mockResolvedValue(true)
 
     const response = await GET(
       new Request("https://console.superserve.ai/auth/callback?code=abc"),
     )
 
-    expect(mockHasValidGoogleSignupProof).toHaveBeenCalled()
+    expect(mockHasValidGoogleSignupProof).not.toHaveBeenCalled()
     expect(response.headers.get("location")).toContain(
       "/auth/auth-code-error?reason=signup_verification_required",
     )
@@ -216,10 +216,12 @@ describe("auth callback", () => {
     mockHasValidGoogleSignupProof.mockResolvedValue(true)
 
     const response = await GET(
-      new Request("https://console.superserve.ai/auth/callback?code=abc"),
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+      ),
     )
 
-    expect(mockHasValidGoogleSignupProof).toHaveBeenCalled()
+    expect(mockHasValidGoogleSignupProof).toHaveBeenCalledWith("attempt-1")
     expect(response.headers.get("location")).toContain("/sandboxes")
     expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
       "user@example.com",
