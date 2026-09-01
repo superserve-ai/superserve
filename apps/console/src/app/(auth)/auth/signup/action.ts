@@ -9,6 +9,7 @@ import * as z from "zod"
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
 import { issueGoogleSignupProof } from "@/lib/auth/google-signup-proof"
+import { observeCloudflareSignup } from "@/lib/cloudflare/signup-observe"
 import { sendEmail } from "@/lib/email/send"
 import { ConfirmationEmail } from "@/lib/email/templates/confirmation"
 import { WelcomeEmail } from "@/lib/email/templates/welcome"
@@ -24,6 +25,26 @@ const signUpSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters."),
   fullName: z.string().min(1, "Name is required.").max(200),
 })
+
+export async function scheduleCloudflareObservation(
+  signupAttemptId: string,
+  signupMethod: "email" | "google",
+  userId?: string | null,
+  teamId?: string | null,
+) {
+  try {
+    after(() =>
+      observeCloudflareSignup({
+        signupAttemptId,
+        signupMethod,
+        userId,
+        teamId,
+      }),
+    )
+  } catch {
+    // Cloudflare is strictly telemetry-only.
+  }
+}
 
 export async function readFingerprintSignupEventId(): Promise<
   string | undefined
@@ -62,10 +83,18 @@ export async function scheduleFingerprintObservation(
   eventId: string | undefined,
   signupMethod: "email" | "google",
   userId?: string | null,
+  signupAttemptId?: string,
 ) {
   if (!eventId) return
   try {
-    after(() => observeFingerprintSignup({ eventId, signupMethod, userId }))
+    after(() =>
+      observeFingerprintSignup({
+        eventId,
+        signupMethod,
+        ...(userId !== undefined ? { userId } : {}),
+        ...(signupAttemptId ? { signupAttemptId } : {}),
+      }),
+    )
   } catch (error) {
     // Scheduling is telemetry-only; an unavailable request lifecycle hook
     // must never change signup behavior.
@@ -76,16 +105,44 @@ export async function scheduleFingerprintObservation(
   }
 }
 
-export const beginGoogleSignup = async (recaptchaToken?: string) => {
-  const distinctId = crypto.randomUUID()
+export const beginGoogleSignup = async (
+  recaptchaToken?: string,
+): Promise<
+  | { success: true; signupAttemptId: string }
+  | {
+      success: false
+      error: string
+      errorCode: "captcha_failed" | "proof_unavailable"
+    }
+> => {
+  const signupAttemptId = crypto.randomUUID()
   const fingerprintEventId = await readFingerprintSignupEventId()
+  scheduleCloudflareObservation(signupAttemptId, "google")
   const recaptcha = await verifyRecaptcha(recaptchaToken, "signup_google")
+  await trackEvent(AUTH_EVENTS.SIGNUP_RECAPTCHA_OBSERVED, signupAttemptId, {
+    provider: "recaptcha",
+    signup_attempt_id: signupAttemptId,
+    signup_method: "google",
+    verified: recaptcha.verified,
+    reason: "reason" in recaptcha ? recaptcha.reason : null,
+    score: recaptcha.score,
+    observed_at: new Date().toISOString(),
+  })
   if (!recaptcha.verified) {
-    await scheduleFingerprintObservation(fingerprintEventId, "google")
-    await trackEvent(AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_FAILED, distinctId, {
-      reason: recaptcha.reason,
-      stage: "captcha_verification",
-    })
+    await scheduleFingerprintObservation(
+      fingerprintEventId,
+      "google",
+      null,
+      signupAttemptId,
+    )
+    await trackEvent(
+      AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_FAILED,
+      signupAttemptId,
+      {
+        reason: recaptcha.reason,
+        stage: "captcha_verification",
+      },
+    )
     console.warn("Google signup blocked by reCAPTCHA", {
       reason: recaptcha.reason,
     })
@@ -98,16 +155,25 @@ export const beginGoogleSignup = async (recaptchaToken?: string) => {
 
   try {
     await issueGoogleSignupProof()
-    await trackEvent(AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_VERIFIED, distinctId, {
-      stage: "captcha_verification",
-    })
+    await trackEvent(
+      AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_VERIFIED,
+      signupAttemptId,
+      {
+        stage: "captcha_verification",
+      },
+    )
     console.info("Google signup CAPTCHA verified; pre-auth proof issued")
-    return { success: true }
+    return { success: true, signupAttemptId }
   } catch (error) {
-    await trackEvent(AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_FAILED, distinctId, {
-      reason: error instanceof Error ? error.message : "proof_issuance_failed",
-      stage: "proof_issuance",
-    })
+    await trackEvent(
+      AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_FAILED,
+      signupAttemptId,
+      {
+        reason:
+          error instanceof Error ? error.message : "proof_issuance_failed",
+        stage: "proof_issuance",
+      },
+    )
     console.error("Google signup proof issuance failed", error)
     return {
       success: false,
@@ -127,15 +193,31 @@ export const signUpWithEmail = async (
   if (!parsed.success)
     return { success: false, error: parsed.error.issues[0].message }
 
+  const signupAttemptId = crypto.randomUUID()
   const fingerprintEventId = await readFingerprintSignupEventId()
+  scheduleCloudflareObservation(signupAttemptId, "email")
   let fingerprintObservationScheduled = false
   const emitFingerprintObservation = (userId?: string | null) => {
     if (!fingerprintEventId || fingerprintObservationScheduled) return
     fingerprintObservationScheduled = true
-    scheduleFingerprintObservation(fingerprintEventId, "email", userId)
+    scheduleFingerprintObservation(
+      fingerprintEventId,
+      "email",
+      userId,
+      signupAttemptId,
+    )
   }
 
   const recaptcha = await verifyRecaptcha(recaptchaToken, "signup")
+  await trackEvent(AUTH_EVENTS.SIGNUP_RECAPTCHA_OBSERVED, signupAttemptId, {
+    provider: "recaptcha",
+    signup_attempt_id: signupAttemptId,
+    signup_method: "email",
+    verified: recaptcha.verified,
+    reason: "reason" in recaptcha ? recaptcha.reason : null,
+    score: recaptcha.score,
+    observed_at: new Date().toISOString(),
+  })
   if (!recaptcha.verified) {
     emitFingerprintObservation()
     console.warn("Signup blocked by reCAPTCHA", {
@@ -181,6 +263,23 @@ export const signUpWithEmail = async (
     }
 
     emitFingerprintObservation(data?.user?.id ?? null)
+    if (data?.user?.id)
+      scheduleCloudflareObservation(
+        signupAttemptId,
+        "email",
+        data.user.id,
+        null,
+      )
+    await trackEvent(
+      AUTH_EVENTS.SIGNUP_ATTEMPT_ASSOCIATED,
+      data?.user?.id || signupAttemptId,
+      {
+        signup_attempt_id: signupAttemptId,
+        superserve_user_id: data?.user?.id ?? null,
+        signup_method: "email",
+        observed_at: new Date().toISOString(),
+      },
+    )
 
     const tokenHash = data?.properties?.hashed_token
     if (!tokenHash)

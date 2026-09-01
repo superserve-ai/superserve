@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import {
   consumeFingerprintSignupEventId,
+  scheduleCloudflareObservation,
   scheduleFingerprintObservation,
   sendWelcomeEmail,
 } from "@/app/(auth)/auth/signup/action"
@@ -94,6 +95,8 @@ export async function GET(request: Request) {
       } = await supabase.auth.getUser()
 
       if (user) {
+        const signupAttemptId =
+          searchParams.get("signup_attempt_id") || undefined
         const provider = code
           ? user.app_metadata?.provider || "google"
           : "email"
@@ -158,7 +161,22 @@ export async function GET(request: Request) {
               fingerprintEventId,
               "google",
               user.id,
+              signupAttemptId,
             )
+            if (signupAttemptId) {
+              scheduleCloudflareObservation(
+                signupAttemptId,
+                "google",
+                user.id,
+                null,
+              )
+              await trackEvent(AUTH_EVENTS.SIGNUP_ATTEMPT_ASSOCIATED, user.id, {
+                signup_attempt_id: signupAttemptId,
+                superserve_user_id: user.id,
+                signup_method: "google",
+                observed_at: new Date().toISOString(),
+              })
+            }
           }
         } else {
           const createdAt = new Date(user.created_at)

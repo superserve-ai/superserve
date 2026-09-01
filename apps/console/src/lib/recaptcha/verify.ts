@@ -16,6 +16,16 @@ const ASSESSMENT_TIMEOUT_MS = 5000
 // before it reaches Google (rather than relying on their 4xx for that).
 const MAX_TOKEN_LENGTH = 4096
 
+function withScore<T extends { verified: boolean }>(
+  result: T,
+  score: number | undefined,
+): T & { score?: number } {
+  if (typeof score === "number") {
+    Object.defineProperty(result, "score", { value: score, enumerable: false })
+  }
+  return result as T & { score?: number }
+}
+
 const getScoreThreshold = (): number => {
   const raw = process.env.RECAPTCHA_SCORE_THRESHOLD?.trim()
   if (!raw) return DEFAULT_SCORE_THRESHOLD
@@ -35,7 +45,10 @@ export const verifyRecaptcha = async (
   // a caller can send any JSON, not just what the TS signature promises.
   token: unknown,
   expectedAction: string,
-): Promise<{ verified: true } | { verified: false; reason: string }> => {
+): Promise<
+  | { verified: true; score?: number }
+  | { verified: false; reason: string; score?: number }
+> => {
   const apiKey = process.env.RECAPTCHA_API_KEY
   const projectId = process.env.RECAPTCHA_PROJECT_ID
   const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
@@ -106,14 +119,17 @@ export const verifyRecaptcha = async (
     // as the lowest possible score rather than skipping the check.
     const score = data.riskAnalysis?.score
     if (typeof score !== "number" || score < getScoreThreshold()) {
-      return {
-        verified: false,
-        reason:
-          typeof score === "number" ? `low_score:${score}` : "missing_score",
-      }
+      return withScore(
+        {
+          verified: false,
+          reason:
+            typeof score === "number" ? `low_score:${score}` : "missing_score",
+        },
+        score,
+      )
     }
 
-    return { verified: true }
+    return withScore({ verified: true }, score)
   } catch (err) {
     console.error("reCAPTCHA verification error", err)
     return { verified: true }

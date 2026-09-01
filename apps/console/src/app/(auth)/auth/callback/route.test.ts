@@ -30,12 +30,15 @@ vi.mock("@/app/(auth)/auth/signin/action", () => ({
 const mockSendWelcomeEmail = vi.fn()
 const mockConsumeFingerprintSignupEventId = vi.fn()
 const mockScheduleFingerprintObservation = vi.fn()
+const mockScheduleCloudflareObservation = vi.fn()
 vi.mock("@/app/(auth)/auth/signup/action", () => ({
   sendWelcomeEmail: (...args: unknown[]) => mockSendWelcomeEmail(...args),
   consumeFingerprintSignupEventId: (...args: unknown[]) =>
     mockConsumeFingerprintSignupEventId(...args),
   scheduleFingerprintObservation: (...args: unknown[]) =>
     mockScheduleFingerprintObservation(...args),
+  scheduleCloudflareObservation: (...args: unknown[]) =>
+    mockScheduleCloudflareObservation(...args),
 }))
 
 const mockHasValidGoogleSignupProof = vi.fn()
@@ -88,6 +91,7 @@ vi.mock("@/lib/posthog/actions", () => ({
 vi.mock("@/lib/posthog/events", () => ({
   AUTH_EVENTS: {
     GOOGLE_SIGNUP_BYPASS_BLOCKED: "auth_google_signup_bypass_blocked",
+    SIGNUP_ATTEMPT_ASSOCIATED: "auth_signup_attempt_associated",
     SIGN_IN_FAILED: "sign_in_failed",
     SIGN_UP_COMPLETED: "sign_up_completed",
     SIGN_IN_COMPLETED: "sign_in_completed",
@@ -127,6 +131,7 @@ describe("auth callback", () => {
     mockConsumeFingerprintSignupEventId.mockReset()
     mockConsumeFingerprintSignupEventId.mockResolvedValue(undefined)
     mockScheduleFingerprintObservation.mockReset()
+    mockScheduleCloudflareObservation.mockReset()
     mockListTeamMembershipsForUserDetailed
       .mockReset()
       .mockImplementation(async () => directoryState)
@@ -239,7 +244,9 @@ describe("auth callback", () => {
     mockConsumeFingerprintSignupEventId.mockResolvedValue("event-1")
 
     await GET(
-      new Request("https://console.superserve.ai/auth/callback?code=abc"),
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+      ),
     )
 
     expect(mockConsumeFingerprintSignupEventId).toHaveBeenCalled()
@@ -247,6 +254,23 @@ describe("auth callback", () => {
       "event-1",
       "google",
       "u1",
+      "attempt-1",
+    )
+    expect(mockScheduleCloudflareObservation).toHaveBeenCalledWith(
+      "attempt-1",
+      "google",
+      "u1",
+      null,
+    )
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_signup_attempt_associated",
+      "u1",
+      {
+        signup_attempt_id: "attempt-1",
+        superserve_user_id: "u1",
+        signup_method: "google",
+        observed_at: expect.any(String),
+      },
     )
   })
 })

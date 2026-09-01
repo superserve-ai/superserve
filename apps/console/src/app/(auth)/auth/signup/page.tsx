@@ -168,6 +168,7 @@ function SignUpContent() {
 
       const supabase = createBrowserClient()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
+      callbackUrl.searchParams.set("signup_attempt_id", proof.signupAttemptId)
       if (nextUrl && nextUrl !== "/") {
         callbackUrl.searchParams.set("next", nextUrl)
       }

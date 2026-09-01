@@ -76,8 +76,18 @@ vi.mock("@/lib/fingerprint/client", () => ({
 
 const mockSignUpWithEmail = vi.fn()
 const mockBeginGoogleSignup = vi.fn<
-  (token?: string) => Promise<{ success: boolean; error?: string }>
->(() => Promise.resolve({ success: true }))
+  (
+    token?: string,
+  ) => Promise<
+    | { success: true; signupAttemptId: string }
+    | { success: false; error?: string }
+  >
+>(() =>
+  Promise.resolve({
+    success: true,
+    signupAttemptId: "attempt-default",
+  }),
+)
 vi.mock("./action", () => ({
   signUpWithEmail: (...args: unknown[]) => mockSignUpWithEmail(...args),
   beginGoogleSignup: (token?: string) => mockBeginGoogleSignup(token),
@@ -118,7 +128,7 @@ function restoreRecaptchaSiteKey() {
 }
 
 describe("SignUpPage", () => {
-  const user = userEvent.setup()
+  let user: ReturnType<typeof userEvent.setup>
   // RECAPTCHA_SITE_KEY is read from process.env at module load. A static
   // top-level `import SignUpPage from "./page"` would resolve before any
   // beforeEach runs, so clearing the env var here wouldn't matter if a
@@ -129,7 +139,10 @@ describe("SignUpPage", () => {
   beforeEach(async () => {
     mockSignUpWithEmail.mockReset()
     mockBeginGoogleSignup.mockReset()
-    mockBeginGoogleSignup.mockResolvedValue({ success: true })
+    mockBeginGoogleSignup.mockResolvedValue({
+      success: true,
+      signupAttemptId: "attempt-default",
+    })
     mockSignInWithOAuth.mockReset()
     mockEnsureFingerprintSignupEventId.mockReset()
     mockEnsureFingerprintSignupEventId.mockResolvedValue(undefined)
@@ -138,6 +151,7 @@ describe("SignUpPage", () => {
     delete process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
     vi.resetModules()
     ;({ default: SignUpPage } = await import("./page"))
+    user = userEvent.setup()
   })
 
   afterEach(() => {
@@ -338,6 +352,10 @@ describe("SignUpPage", () => {
   })
 
   it("triggers Google OAuth on button click", async () => {
+    mockBeginGoogleSignup.mockResolvedValue({
+      success: true,
+      signupAttemptId: "attempt-123",
+    })
     mockSignInWithOAuth.mockResolvedValue({ error: null })
     render(<SignUpPage />)
 
@@ -349,7 +367,11 @@ describe("SignUpPage", () => {
       expect(mockBeginGoogleSignup).toHaveBeenCalledWith(undefined)
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
-        options: { redirectTo: expect.stringContaining("/auth/callback") },
+        options: {
+          redirectTo: expect.stringContaining(
+            "/auth/callback?signup_attempt_id=attempt-123",
+          ),
+        },
       })
     })
   })
@@ -357,7 +379,10 @@ describe("SignUpPage", () => {
   it("does not wait for the fingerprint observation handoff before starting Google signup", async () => {
     const fingerprintPromise = new Promise<string | undefined>(() => {})
     mockEnsureFingerprintSignupEventId.mockReturnValueOnce(fingerprintPromise)
-    mockBeginGoogleSignup.mockResolvedValue({ success: true })
+    mockBeginGoogleSignup.mockResolvedValue({
+      success: true,
+      signupAttemptId: "attempt-456",
+    })
     render(<SignUpPage />)
 
     await user.click(
@@ -370,7 +395,11 @@ describe("SignUpPage", () => {
       expect(mockBeginGoogleSignup).toHaveBeenCalledWith(undefined)
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
-        options: { redirectTo: expect.stringContaining("/auth/callback") },
+        options: {
+          redirectTo: expect.stringContaining(
+            "/auth/callback?signup_attempt_id=attempt-456",
+          ),
+        },
       })
     })
   })
@@ -387,16 +416,20 @@ describe("SignUpPage", () => {
 // the "configured" path needs a fresh module instance per test — same
 // reasoning as the dynamic import in the describe block above.
 describe("SignUpPage with reCAPTCHA configured", () => {
-  const user = userEvent.setup()
+  let user: ReturnType<typeof userEvent.setup>
 
   beforeEach(() => {
     mockSignUpWithEmail.mockReset()
     mockBeginGoogleSignup.mockReset()
-    mockBeginGoogleSignup.mockResolvedValue({ success: true })
+    mockBeginGoogleSignup.mockResolvedValue({
+      success: true,
+      signupAttemptId: "attempt-configured",
+    })
     mockEnsureFingerprintSignupEventId.mockReset()
     mockEnsureFingerprintSignupEventId.mockResolvedValue(undefined)
     process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = "test-site-key"
     vi.resetModules()
+    user = userEvent.setup()
   })
 
   afterEach(() => {
@@ -459,8 +492,12 @@ describe("SignUpPage with reCAPTCHA configured", () => {
   it("requests signup_google reCAPTCHA before Google OAuth", async () => {
     const execute = vi.fn().mockResolvedValue("google-token")
     let resolveBeginSignup!: () => void
-    const beginSignupPromise = new Promise<{ success: boolean }>((resolve) => {
-      resolveBeginSignup = () => resolve({ success: true })
+    const beginSignupPromise = new Promise<{
+      success: true
+      signupAttemptId: string
+    }>((resolve) => {
+      resolveBeginSignup = () =>
+        resolve({ success: true, signupAttemptId: "attempt-test" })
     })
     mockBeginGoogleSignup.mockReturnValue(beginSignupPromise)
     ;(window as { grecaptcha?: unknown }).grecaptcha = {
