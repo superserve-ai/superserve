@@ -19,6 +19,7 @@ import { createBrowserClient } from "@/lib/supabase/client"
 import { beginGoogleSignup, signUpWithEmail } from "./action"
 
 const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY
 
 declare global {
   interface Window {
@@ -31,7 +32,41 @@ declare global {
         ) => Promise<string>
       }
     }
+    turnstile?: {
+      render: (element: HTMLElement, options: Record<string, unknown>) => string
+      remove: (widgetId: string) => void
+    }
   }
+}
+
+const getTurnstileToken = async (): Promise<string | undefined> => {
+  if (!TURNSTILE_SITE_KEY || !window.turnstile) return undefined
+  return new Promise((resolve) => {
+    const container = document.createElement("div")
+    container.hidden = true
+    document.body.appendChild(container)
+    let widgetId = ""
+    const cleanup = () => {
+      if (widgetId) window.turnstile?.remove(widgetId)
+      container.remove()
+    }
+    widgetId = window.turnstile!.render(container, {
+      sitekey: TURNSTILE_SITE_KEY,
+      size: "invisible",
+      callback: (token: string) => {
+        cleanup()
+        resolve(token)
+      },
+      "error-callback": () => {
+        cleanup()
+        resolve(undefined)
+      },
+      "timeout-callback": () => {
+        cleanup()
+        resolve(undefined)
+      },
+    })
+  })
 }
 
 const waitForGrecaptcha = async (timeoutMs = 8000): Promise<boolean> => {
@@ -114,18 +149,22 @@ function SignUpContent() {
     try {
       void ensureFingerprintSignupEventId()
       const recaptchaToken = await getRecaptchaToken("signup")
+      const turnstileToken = await getTurnstileToken()
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
         setErrors({
           form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
         })
         return
       }
-      const result = await signUpWithEmail(
-        email,
-        password,
-        fullName,
-        recaptchaToken,
-      )
+      const result = turnstileToken
+        ? await signUpWithEmail(
+            email,
+            password,
+            fullName,
+            recaptchaToken,
+            turnstileToken,
+          )
+        : await signUpWithEmail(email, password, fullName, recaptchaToken)
       if (!result.success) {
         posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
           method: "email",
@@ -153,6 +192,7 @@ function SignUpContent() {
     try {
       void ensureFingerprintSignupEventId()
       const recaptchaToken = await getRecaptchaToken("signup_google")
+      const turnstileToken = await getTurnstileToken()
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
         setErrors({
           form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
@@ -160,7 +200,9 @@ function SignUpContent() {
         return
       }
 
-      const proof = await beginGoogleSignup(recaptchaToken)
+      const proof = turnstileToken
+        ? await beginGoogleSignup(recaptchaToken, turnstileToken)
+        : await beginGoogleSignup(recaptchaToken)
       if (!proof.success) {
         setErrors({ form: proof.error || "Google signup verification failed." })
         return
@@ -168,6 +210,7 @@ function SignUpContent() {
 
       const supabase = createBrowserClient()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
+      callbackUrl.searchParams.set("signup_attempt_id", proof.signupAttemptId)
       if (nextUrl && nextUrl !== "/") {
         callbackUrl.searchParams.set("next", nextUrl)
       }
@@ -190,6 +233,12 @@ function SignUpContent() {
       {RECAPTCHA_SITE_KEY && (
         <Script
           src={`https://www.google.com/recaptcha/enterprise.js?render=${RECAPTCHA_SITE_KEY}`}
+          strategy="afterInteractive"
+        />
+      )}
+      {TURNSTILE_SITE_KEY && (
+        <Script
+          src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
           strategy="afterInteractive"
         />
       )}

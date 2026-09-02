@@ -9,12 +9,29 @@ type AssessmentResponse = {
   }
 }
 
+type RecaptchaProviderOutcome =
+  | "success"
+  | "rejected"
+  | "unconfigured"
+  | "configuration_error"
+  | "unavailable"
+
 const DEFAULT_SCORE_THRESHOLD = 0.5
 const ASSESSMENT_TIMEOUT_MS = 5000
 // reCAPTCHA Enterprise tokens are a few hundred to ~2000 chars in practice;
 // this is a generous cap that still rejects a deliberately oversized string
 // before it reaches Google (rather than relying on their 4xx for that).
 const MAX_TOKEN_LENGTH = 4096
+
+function withScore<T extends { verified: boolean }>(
+  result: T,
+  score: number | undefined,
+): T & { score?: number } {
+  if (typeof score === "number") {
+    Object.defineProperty(result, "score", { value: score, enumerable: false })
+  }
+  return result as T & { score?: number }
+}
 
 const getScoreThreshold = (): number => {
   const raw = process.env.RECAPTCHA_SCORE_THRESHOLD?.trim()
@@ -35,24 +52,48 @@ export const verifyRecaptcha = async (
   // a caller can send any JSON, not just what the TS signature promises.
   token: unknown,
   expectedAction: string,
-): Promise<{ verified: true } | { verified: false; reason: string }> => {
+): Promise<
+  | {
+      verified: true
+      providerOutcome: RecaptchaProviderOutcome
+      score?: number
+    }
+  | {
+      verified: false
+      providerOutcome: RecaptchaProviderOutcome
+      reason: string
+      score?: number
+    }
+> => {
   const apiKey = process.env.RECAPTCHA_API_KEY
   const projectId = process.env.RECAPTCHA_PROJECT_ID
   const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
 
   const configuredValues = [apiKey, projectId, siteKey].filter(Boolean).length
   if (configuredValues === 0) {
-    return { verified: true }
+    return { verified: true, providerOutcome: "unconfigured" }
   }
   if (configuredValues < 3) {
-    return { verified: false, reason: "configuration_error" }
+    return {
+      verified: false,
+      providerOutcome: "configuration_error",
+      reason: "configuration_error",
+    }
   }
 
   if (typeof token !== "string" || !token) {
-    return { verified: false, reason: "missing_token" }
+    return {
+      verified: false,
+      providerOutcome: "rejected",
+      reason: "missing_token",
+    }
   }
   if (token.length > MAX_TOKEN_LENGTH) {
-    return { verified: false, reason: "token_too_long" }
+    return {
+      verified: false,
+      providerOutcome: "rejected",
+      reason: "token_too_long",
+    }
   }
 
   const controller = new AbortController()
@@ -79,6 +120,7 @@ export const verifyRecaptcha = async (
       if (response.status >= 400 && response.status < 500) {
         return {
           verified: false,
+          providerOutcome: "rejected" as const,
           reason:
             response.status === 429
               ? "quota_exhausted"
@@ -87,18 +129,23 @@ export const verifyRecaptcha = async (
       }
       // 5xx responses are transient provider availability failures; network
       // errors and timeouts below follow the same fail-open availability policy.
-      return { verified: true }
+      return { verified: true, providerOutcome: "unavailable" }
     }
 
     const data: AssessmentResponse = await response.json()
     if (!data.tokenProperties?.valid) {
       return {
         verified: false,
+        providerOutcome: "rejected",
         reason: data.tokenProperties?.invalidReason || "invalid_token",
       }
     }
     if (data.tokenProperties.action !== expectedAction) {
-      return { verified: false, reason: "action_mismatch" }
+      return {
+        verified: false,
+        providerOutcome: "rejected",
+        reason: "action_mismatch",
+      }
     }
 
     // riskAnalysis.score is a proto3 float: a genuine 0.0 (worst score) can
@@ -106,17 +153,24 @@ export const verifyRecaptcha = async (
     // as the lowest possible score rather than skipping the check.
     const score = data.riskAnalysis?.score
     if (typeof score !== "number" || score < getScoreThreshold()) {
-      return {
-        verified: false,
-        reason:
-          typeof score === "number" ? `low_score:${score}` : "missing_score",
-      }
+      return withScore(
+        {
+          verified: false,
+          providerOutcome: "rejected" as const,
+          reason:
+            typeof score === "number" ? `low_score:${score}` : "missing_score",
+        },
+        score,
+      )
     }
 
-    return { verified: true }
+    return withScore(
+      { verified: true, providerOutcome: "success" as const },
+      score,
+    )
   } catch (err) {
     console.error("reCAPTCHA verification error", err)
-    return { verified: true }
+    return { verified: true, providerOutcome: "unavailable" }
   } finally {
     clearTimeout(timeout)
   }
