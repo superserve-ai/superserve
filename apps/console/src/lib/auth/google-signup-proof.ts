@@ -166,7 +166,6 @@ export async function requireGoogleSignupProof(
         return expectedSignupAttemptId
       // Do not let an abandoned callback pin future provisioning to a stale attempt.
       store.delete(PENDING_ATTEMPT_COOKIE)
-      await trackGoogleSignupBypass()
       throw new Error("Google signup verification required")
     }
 
