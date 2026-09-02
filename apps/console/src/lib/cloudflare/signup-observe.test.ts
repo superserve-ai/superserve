@@ -115,4 +115,27 @@ describe("observeCloudflareSignup", () => {
       }),
     )
   })
+
+  it("separates provider/configuration errors from visitor rejection", async () => {
+    process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY = "secret"
+    mockRpc.mockResolvedValue({ data: true, error: null })
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: false,
+          "error-codes": ["invalid-input-secret"],
+        }),
+      ),
+    )
+    await observeCloudflareSignup({
+      signupAttemptId: "a",
+      signupMethod: "email",
+      turnstileToken: "t",
+    })
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_cloudflare_signup_observed",
+      "a",
+      expect.objectContaining({ provider_outcome: "provider_error" }),
+    )
+  })
 })

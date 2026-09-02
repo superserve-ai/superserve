@@ -1,4 +1,5 @@
 type AssessmentResponse = {
+  name?: string
   tokenProperties?: {
     valid?: boolean
     invalidReason?: string
@@ -6,6 +7,7 @@ type AssessmentResponse = {
   }
   riskAnalysis?: {
     score?: number
+    reasons?: string[]
   }
 }
 
@@ -57,12 +59,16 @@ export const verifyRecaptcha = async (
       verified: true
       providerOutcome: RecaptchaProviderOutcome
       score?: number
+      assessmentId?: string
+      riskReasons?: string[]
     }
   | {
       verified: false
       providerOutcome: RecaptchaProviderOutcome
       reason: string
       score?: number
+      assessmentId?: string
+      riskReasons?: string[]
     }
 > => {
   const apiKey = process.env.RECAPTCHA_API_KEY
@@ -133,11 +139,15 @@ export const verifyRecaptcha = async (
     }
 
     const data: AssessmentResponse = await response.json()
+    const assessmentId = data.name
+    const riskReasons = data.riskAnalysis?.reasons
     if (!data.tokenProperties?.valid) {
       return {
         verified: false,
         providerOutcome: "rejected",
         reason: data.tokenProperties?.invalidReason || "invalid_token",
+        assessmentId,
+        riskReasons,
       }
     }
     if (data.tokenProperties.action !== expectedAction) {
@@ -145,6 +155,8 @@ export const verifyRecaptcha = async (
         verified: false,
         providerOutcome: "rejected",
         reason: "action_mismatch",
+        assessmentId,
+        riskReasons,
       }
     }
 
@@ -159,13 +171,20 @@ export const verifyRecaptcha = async (
           providerOutcome: "rejected" as const,
           reason:
             typeof score === "number" ? `low_score:${score}` : "missing_score",
+          assessmentId,
+          riskReasons,
         },
         score,
       )
     }
 
     return withScore(
-      { verified: true, providerOutcome: "success" as const },
+      {
+        verified: true,
+        providerOutcome: "success" as const,
+        assessmentId,
+        riskReasons,
+      },
       score,
     )
   } catch (err) {

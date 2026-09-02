@@ -91,6 +91,7 @@ const mockBeginGoogleSignup = vi.fn<
 vi.mock("./action", () => ({
   signUpWithEmail: (...args: unknown[]) => mockSignUpWithEmail(...args),
   beginGoogleSignup: (token?: string) => mockBeginGoogleSignup(token),
+  isCloudflareSignupObservationEnabled: () => Promise.resolve(false),
 }))
 
 const mockSearchParams = new URLSearchParams()

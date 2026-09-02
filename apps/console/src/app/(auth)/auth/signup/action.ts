@@ -10,7 +10,10 @@ import * as z from "zod"
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
 import { issueGoogleSignupProof } from "@/lib/auth/google-signup-proof"
-import { observeCloudflareSignup } from "@/lib/cloudflare/signup-observe"
+import {
+  isCloudflareSignupObservationEnabled as readCloudflareObservationFlag,
+  observeCloudflareSignup,
+} from "@/lib/cloudflare/signup-observe"
 import { sendEmail } from "@/lib/email/send"
 import { ConfirmationEmail } from "@/lib/email/templates/confirmation"
 import { WelcomeEmail } from "@/lib/email/templates/welcome"
@@ -26,6 +29,10 @@ const signUpSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters."),
   fullName: z.string().min(1, "Name is required.").max(200),
 })
+
+export async function isCloudflareSignupObservationEnabled(): Promise<boolean> {
+  return readCloudflareObservationFlag()
+}
 
 export async function scheduleCloudflareObservation(
   signupAttemptId: string,
@@ -160,6 +167,8 @@ export const beginGoogleSignup = async (
     provider_outcome: recaptcha.providerOutcome,
     reason: "reason" in recaptcha ? recaptcha.reason : null,
     score: recaptcha.score,
+    recaptcha_assessment_id: recaptcha.assessmentId ?? null,
+    recaptcha_risk_reasons: recaptcha.riskReasons ?? [],
     observed_at: new Date().toISOString(),
   })
   if (!recaptcha.verified) {
@@ -260,6 +269,8 @@ export const signUpWithEmail = async (
     provider_outcome: recaptcha.providerOutcome,
     reason: "reason" in recaptcha ? recaptcha.reason : null,
     score: recaptcha.score,
+    recaptcha_assessment_id: recaptcha.assessmentId ?? null,
+    recaptcha_risk_reasons: recaptcha.riskReasons ?? [],
     observed_at: new Date().toISOString(),
   })
   if (!recaptcha.verified) {

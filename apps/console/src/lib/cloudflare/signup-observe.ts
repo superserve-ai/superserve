@@ -29,6 +29,10 @@ async function flagState(): Promise<boolean | null> {
   }
 }
 
+export async function isCloudflareSignupObservationEnabled(): Promise<boolean> {
+  return (await flagState()) === true
+}
+
 function safeSignals(value: unknown): Record<string, unknown> {
   if (!record(value)) return {}
   return Object.fromEntries(
@@ -40,6 +44,21 @@ function safeSignals(value: unknown): Record<string, unknown> {
       )
       .slice(0, 40),
   )
+}
+
+function siteverifyOutcome(data: Record<string, unknown>): string {
+  if (data.success === true) return "success"
+  const codes = Array.isArray(data["error-codes"]) ? data["error-codes"] : []
+  const providerCodes = new Set([
+    "invalid-input-secret",
+    "missing-input-secret",
+    "internal-error",
+  ])
+  return codes.some(
+    (code) => typeof code === "string" && providerCodes.has(code),
+  )
+    ? "provider_error"
+    : "rejected"
 }
 
 export async function observeCloudflareSignup({
@@ -105,7 +124,7 @@ export async function observeCloudflareSignup({
         if (!record(json)) outcome = "malformed"
         else {
           responseData = json
-          outcome = json.success === true ? "success" : "rejected"
+          outcome = siteverifyOutcome(json)
         }
       }
     } catch (error) {

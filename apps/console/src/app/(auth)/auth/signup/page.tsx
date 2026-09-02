@@ -16,7 +16,11 @@ import { ensureFingerprintSignupEventId } from "@/lib/fingerprint/client"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
-import { beginGoogleSignup, signUpWithEmail } from "./action"
+import {
+  beginGoogleSignup,
+  isCloudflareSignupObservationEnabled,
+  signUpWithEmail,
+} from "./action"
 
 const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY
@@ -39,8 +43,15 @@ declare global {
   }
 }
 
+const TURNSTILE_LOAD_TIMEOUT_MS = 1500
+const TURNSTILE_TOKEN_TIMEOUT_MS = 3000
+
 const getTurnstileToken = async (): Promise<string | undefined> => {
-  if (!TURNSTILE_SITE_KEY || !window.turnstile) return undefined
+  if (!TURNSTILE_SITE_KEY) return undefined
+  const start = Date.now()
+  while (!window.turnstile && Date.now() - start < TURNSTILE_LOAD_TIMEOUT_MS)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  if (!window.turnstile) return undefined
   return new Promise((resolve) => {
     const container = document.createElement("div")
     container.hidden = true
@@ -50,22 +61,36 @@ const getTurnstileToken = async (): Promise<string | undefined> => {
       if (widgetId) window.turnstile?.remove(widgetId)
       container.remove()
     }
-    widgetId = window.turnstile!.render(container, {
-      sitekey: TURNSTILE_SITE_KEY,
-      size: "invisible",
-      callback: (token: string) => {
-        cleanup()
-        resolve(token)
-      },
-      "error-callback": () => {
-        cleanup()
-        resolve(undefined)
-      },
-      "timeout-callback": () => {
-        cleanup()
-        resolve(undefined)
-      },
-    })
+    const deadline = setTimeout(() => {
+      cleanup()
+      resolve(undefined)
+    }, TURNSTILE_TOKEN_TIMEOUT_MS)
+    try {
+      widgetId = window.turnstile!.render(container, {
+        sitekey: TURNSTILE_SITE_KEY,
+        size: "compact",
+        appearance: "interaction-only",
+        callback: (token: string) => {
+          clearTimeout(deadline)
+          cleanup()
+          resolve(token)
+        },
+        "error-callback": () => {
+          clearTimeout(deadline)
+          cleanup()
+          resolve(undefined)
+        },
+        "timeout-callback": () => {
+          clearTimeout(deadline)
+          cleanup()
+          resolve(undefined)
+        },
+      })
+    } catch {
+      clearTimeout(deadline)
+      cleanup()
+      resolve(undefined)
+    }
   })
 }
 
@@ -149,7 +174,10 @@ function SignUpContent() {
     try {
       void ensureFingerprintSignupEventId()
       const recaptchaToken = await getRecaptchaToken("signup")
-      const turnstileToken = await getTurnstileToken()
+      const turnstileEnabled = await isCloudflareSignupObservationEnabled()
+      const turnstileToken = turnstileEnabled
+        ? await getTurnstileToken()
+        : undefined
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
         setErrors({
           form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
@@ -192,7 +220,10 @@ function SignUpContent() {
     try {
       void ensureFingerprintSignupEventId()
       const recaptchaToken = await getRecaptchaToken("signup_google")
-      const turnstileToken = await getTurnstileToken()
+      const turnstileEnabled = await isCloudflareSignupObservationEnabled()
+      const turnstileToken = turnstileEnabled
+        ? await getTurnstileToken()
+        : undefined
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
         setErrors({
           form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
