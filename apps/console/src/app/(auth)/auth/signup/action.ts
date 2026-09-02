@@ -37,6 +37,7 @@ export async function scheduleCloudflareObservation(
     ip?: string | null
     ray?: string | null
   },
+  turnstileToken?: string | null,
 ) {
   try {
     after(() =>
@@ -46,6 +47,7 @@ export async function scheduleCloudflareObservation(
         userId,
         teamId,
         clientContext,
+        turnstileToken,
       }),
     )
   } catch {
@@ -129,6 +131,7 @@ export async function scheduleFingerprintObservation(
 
 export const beginGoogleSignup = async (
   recaptchaToken?: string,
+  turnstileToken?: string,
 ): Promise<
   | { success: true; signupAttemptId: string }
   | {
@@ -146,6 +149,7 @@ export const beginGoogleSignup = async (
     undefined,
     undefined,
     clientContext,
+    turnstileToken,
   )
   const recaptcha = await verifyRecaptcha(recaptchaToken, "signup_google")
   await trackEvent(AUTH_EVENTS.SIGNUP_RECAPTCHA_OBSERVED, signupAttemptId, {
@@ -218,6 +222,7 @@ export const signUpWithEmail = async (
   password: string,
   fullName: string,
   recaptchaToken?: string,
+  turnstileToken?: string,
 ) => {
   const parsed = signUpSchema.safeParse({ email, password, fullName })
   if (!parsed.success)
@@ -232,6 +237,7 @@ export const signUpWithEmail = async (
     undefined,
     undefined,
     clientContext,
+    turnstileToken,
   )
   let fingerprintObservationScheduled = false
   const emitFingerprintObservation = (userId?: string | null) => {

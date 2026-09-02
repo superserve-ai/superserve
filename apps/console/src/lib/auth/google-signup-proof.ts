@@ -48,6 +48,7 @@ function encodeProof(signupAttemptId?: string): string {
 function validProof(
   value: string | undefined,
   expectedSignupAttemptId?: string,
+  requireUnscoped = false,
 ): boolean {
   if (!value) return false
   const [encoded, supplied, extra] = value.split(".")
@@ -84,7 +85,8 @@ function validProof(
       (expectedSignupAttemptId === undefined ||
         (typeof expectedSignupAttemptId === "string" &&
           expectedSignupAttemptId.length > 0 &&
-          payload.signup_attempt_id === expectedSignupAttemptId))
+          payload.signup_attempt_id === expectedSignupAttemptId)) &&
+      (!requireUnscoped || payload.signup_attempt_id === undefined)
     )
   } catch {
     return false
@@ -137,7 +139,7 @@ export async function hasValidGoogleSignupProof(
 export async function hasValidLegacyGoogleSignupProof(): Promise<boolean> {
   try {
     const store = await cookies()
-    return validProof(store.get(COOKIE_NAME)?.value)
+    return validProof(store.get(COOKIE_NAME)?.value, undefined, true)
   } catch {
     return false
   }

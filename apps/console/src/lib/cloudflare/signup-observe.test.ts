@@ -25,6 +25,7 @@ const original = {
   secret: process.env.CLOUDFLARE_SIGNUP_OBSERVATION_SECRET,
   configVersion: process.env.CLOUDFLARE_SIGNUP_CONFIG_VERSION,
   capabilities: process.env.CLOUDFLARE_SIGNUP_CAPABILITIES,
+  turnstileSecret: process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY,
 }
 
 afterEach(() => {
@@ -36,6 +37,7 @@ afterEach(() => {
     ["CLOUDFLARE_SIGNUP_OBSERVATION_SECRET", original.secret],
     ["CLOUDFLARE_SIGNUP_CONFIG_VERSION", original.configVersion],
     ["CLOUDFLARE_SIGNUP_CAPABILITIES", original.capabilities],
+    ["CLOUDFLARE_TURNSTILE_SECRET_KEY", original.turnstileSecret],
   ] as const) {
     if (value === undefined) delete process.env[env]
     else process.env[env] = value
@@ -134,6 +136,42 @@ describe("observeCloudflareSignup", () => {
     )
     expect(JSON.stringify(mockTrackEvent.mock.calls[0])).not.toContain(
       "do-not-store",
+    )
+  })
+
+  it("verifies an observe-only Turnstile token and records its Ephemeral ID", async () => {
+    process.env.CLOUDFLARE_SIGNUP_OBSERVATION_URL = "https://cf.test/observe"
+    process.env.CLOUDFLARE_SIGNUP_OBSERVATION_SECRET = "secret"
+    process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY = "turnstile-secret"
+    mockRpc.mockResolvedValue({ data: true, error: null })
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ event_id: "evt" })))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: true,
+            challenge_ts: "challenge-1",
+            metadata: { ephemeral_id: "eid-1" },
+          }),
+        ),
+      )
+
+    await observeCloudflareSignup({
+      signupAttemptId: "attempt-turnstile",
+      signupMethod: "email",
+      turnstileToken: "token-is-not-recorded",
+    })
+
+    expect(trackEvent).toHaveBeenCalledWith(
+      "auth_cloudflare_signup_observed",
+      "attempt-turnstile",
+      expect.objectContaining({
+        ephemeral_id: "eid-1",
+        provider_outcome: "success",
+      }),
+    )
+    expect(JSON.stringify(mockTrackEvent.mock.calls)).not.toContain(
+      "token-is-not-recorded",
     )
   })
 

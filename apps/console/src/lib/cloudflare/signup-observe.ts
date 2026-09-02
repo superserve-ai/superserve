@@ -15,6 +15,7 @@ export type CloudflareSignupObservation = {
     ip?: string | null
     ray?: string | null
   }
+  turnstileToken?: string | null
 }
 
 const record = (value: unknown): value is Record<string, unknown> =>
@@ -79,9 +80,11 @@ export async function observeCloudflareSignup({
   userId = null,
   teamId = null,
   clientContext,
+  turnstileToken,
 }: CloudflareSignupObservation): Promise<void> {
   const endpoint = process.env.CLOUDFLARE_SIGNUP_OBSERVATION_URL
   const secret = process.env.CLOUDFLARE_SIGNUP_OBSERVATION_SECRET
+  const turnstileSecret = process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY
   const configVersion = process.env.CLOUDFLARE_SIGNUP_CONFIG_VERSION || "v1"
   const configuredCapabilities = (
     process.env.CLOUDFLARE_SIGNUP_CAPABILITIES || ""
@@ -156,6 +159,45 @@ export async function observeCloudflareSignup({
       error instanceof Error && error.name === "TimeoutError"
         ? "timeout"
         : "error"
+  }
+
+  if (turnstileToken && turnstileSecret) {
+    try {
+      const verifyResponse = await fetch(
+        "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            secret: turnstileSecret,
+            response: turnstileToken,
+          }),
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+          cache: "no-store",
+        },
+      )
+      const verification = (await verifyResponse.json()) as Record<
+        string,
+        unknown
+      >
+      if (verifyResponse.ok && verification.success === true) {
+        const metadata = record(verification.metadata)
+          ? verification.metadata
+          : {}
+        payload = {
+          ...payload,
+          event_id: verification.challenge_ts ?? payload.event_id,
+          ephemeral_id: metadata.ephemeral_id ?? payload.ephemeral_id,
+          turnstile_success: true,
+          turnstile_action: verification.action ?? null,
+        }
+        outcome = "success"
+      } else {
+        outcome = "rejected"
+      }
+    } catch {
+      outcome = "unavailable"
+    }
   }
 
   const providerEventId =
