@@ -132,16 +132,43 @@ export async function hasValidGoogleSignupProof(
   }
 }
 
-export async function requireGoogleSignupProof(): Promise<void> {
-  if (!(await hasValidGoogleSignupProof())) {
-    await trackEvent(
-      AUTH_EVENTS.GOOGLE_SIGNUP_BYPASS_BLOCKED,
-      crypto.randomUUID(),
-      { reason: "missing_or_invalid_proof", scope: "first_team_provisioning" },
-    )
-    console.warn("Google signup onboarding blocked: missing or invalid proof")
-    throw new Error("Google signup verification required")
+export async function requireGoogleSignupProof(): Promise<string | undefined> {
+  try {
+    const store = await cookies()
+    let matchedAttemptId: string | undefined
+
+    // Resolve the exact proof that authorized this provisioning request so the
+    // caller can consume that same cookie. Provider attempts are independent;
+    // never discard the correlation key after validation.
+    if ("getAll" in store) {
+      const allCookies = store.getAll()
+      const scopedProof = allCookies.find(({ name, value }) => {
+        if (!name.startsWith(`${COOKIE_NAME}-`)) return false
+        const attemptId = name.slice(`${COOKIE_NAME}-`.length)
+        if (!attemptId) return false
+        if (!validProof(value, attemptId)) return false
+        matchedAttemptId = attemptId
+        return true
+      })
+      const valid = validProof(store.get(COOKIE_NAME)?.value)
+      if (valid || scopedProof) return matchedAttemptId
+    } else if (await hasValidGoogleSignupProof()) {
+      return undefined
+    }
+  } catch {
+    // Treat cookie-store/configuration failures as a missing proof below.
   }
+  await trackGoogleSignupBypass()
+  throw new Error("Google signup verification required")
+}
+
+async function trackGoogleSignupBypass(): Promise<void> {
+  await trackEvent(
+    AUTH_EVENTS.GOOGLE_SIGNUP_BYPASS_BLOCKED,
+    crypto.randomUUID(),
+    { reason: "missing_or_invalid_proof", scope: "first_team_provisioning" },
+  )
+  console.warn("Google signup onboarding blocked: missing or invalid proof")
 }
 
 export async function consumeGoogleSignupProof(
