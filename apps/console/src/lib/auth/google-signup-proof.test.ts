@@ -66,6 +66,7 @@ import {
   issueGoogleSignupProof,
   requireGoogleSignupProof,
   markGoogleSignupAttempt,
+  hasValidLegacyGoogleSignupProof,
 } from "./google-signup-proof"
 
 describe("google-signup-proof", () => {
@@ -110,6 +111,12 @@ describe("google-signup-proof", () => {
     cookieEntries = []
     await issueGoogleSignupProof()
     expect(await hasValidGoogleSignupProof("attempt-1")).toBe(false)
+  })
+
+  it("does not treat a scoped proof as a legacy callback proof", async () => {
+    await issueGoogleSignupProof("attempt-1")
+    cookieValue = undefined
+    expect(await hasValidLegacyGoogleSignupProof()).toBe(false)
   })
 
   it("validates an active attempt-scoped proof for provisioning without an ID", async () => {

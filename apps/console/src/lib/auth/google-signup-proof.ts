@@ -133,6 +133,16 @@ export async function hasValidGoogleSignupProof(
   }
 }
 
+/** Compatibility-only check for proofs issued before attempt-scoped cookies. */
+export async function hasValidLegacyGoogleSignupProof(): Promise<boolean> {
+  try {
+    const store = await cookies()
+    return validProof(store.get(COOKIE_NAME)?.value)
+  } catch {
+    return false
+  }
+}
+
 export async function markGoogleSignupAttempt(
   signupAttemptId: string,
 ): Promise<void> {

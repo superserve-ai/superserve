@@ -11,6 +11,7 @@ import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
 import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
 import {
   hasValidGoogleSignupProof,
+  hasValidLegacyGoogleSignupProof,
   isGoogleUser,
   markGoogleSignupAttempt,
 } from "@/lib/auth/google-signup-proof"
@@ -137,7 +138,7 @@ export async function GET(request: Request) {
             // attempt ID for exact cross-provider correlation.
             const proofValid = signupAttemptId
               ? await hasValidGoogleSignupProof(signupAttemptId)
-              : await hasValidGoogleSignupProof()
+              : await hasValidLegacyGoogleSignupProof()
             if (!proofValid) {
               await trackEvent(
                 AUTH_EVENTS.GOOGLE_SIGNUP_BYPASS_BLOCKED,

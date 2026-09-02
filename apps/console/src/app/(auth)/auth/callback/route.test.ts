@@ -39,6 +39,7 @@ vi.mock("@/app/(auth)/auth/signup/action", () => ({
 }))
 
 const mockHasValidGoogleSignupProof = vi.fn()
+const mockHasValidLegacyGoogleSignupProof = vi.fn()
 const mockConsumeGoogleSignupProof = vi.fn()
 const mockMarkGoogleSignupAttempt = vi.fn()
 const mockEnsureGoogleOnboardingMembership = vi.fn()
@@ -62,6 +63,8 @@ vi.mock("@/lib/api/team-directory", () => ({
 vi.mock("@/lib/auth/google-signup-proof", () => ({
   hasValidGoogleSignupProof: (...args: unknown[]) =>
     mockHasValidGoogleSignupProof(...args),
+  hasValidLegacyGoogleSignupProof: (...args: unknown[]) =>
+    mockHasValidLegacyGoogleSignupProof(...args),
   consumeGoogleSignupProof: (...args: unknown[]) =>
     mockConsumeGoogleSignupProof(...args),
   markGoogleSignupAttempt: (...args: unknown[]) =>
@@ -138,6 +141,9 @@ describe("auth callback", () => {
     mockHasValidGoogleSignupProof
       .mockReset()
       .mockImplementation(async () => proofAvailable)
+    mockHasValidLegacyGoogleSignupProof
+      .mockReset()
+      .mockImplementation(async () => proofAvailable)
     mockConsumeGoogleSignupProof.mockReset()
     mockEnsureGoogleOnboardingMembership
       .mockReset()
@@ -168,13 +174,13 @@ describe("auth callback", () => {
 
   it("accepts an in-flight legacy Google callback without an attempt ID", async () => {
     googleMembershipState = { kind: "first_time" }
-    mockHasValidGoogleSignupProof.mockResolvedValue(true)
+    mockHasValidLegacyGoogleSignupProof.mockResolvedValue(true)
 
     const response = await GET(
       new Request("https://console.superserve.ai/auth/callback?code=abc"),
     )
 
-    expect(mockHasValidGoogleSignupProof).toHaveBeenCalledWith()
+    expect(mockHasValidLegacyGoogleSignupProof).toHaveBeenCalledWith()
     expect(response.headers.get("location")).toContain("/sandboxes")
     expect(mockConsumeGoogleSignupProof).not.toHaveBeenCalled()
   })
