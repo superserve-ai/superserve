@@ -1,17 +1,15 @@
 # SS-468 Cloudflare capability status
 
-The console integration is observe-only and fail-open. It forwards bounded
-browser request context to the configured observation endpoint, but it does
-not claim to acquire a Turnstile Ephemeral ID: Cloudflare generates that ID
-for an Enterprise Turnstile interaction and returns it from Siteverify.
+The console integration runs Free Turnstile observe-only alongside reCAPTCHA.
+The browser obtains a Turnstile token, the Superserve server sends it to
+Cloudflare Siteverify, and the normalized response is stored under the shared
+`signup_attempt_id`. Turnstile never affects signup allow/deny decisions.
 
-As of this evaluation, Superserve has not established Enterprise Turnstile,
-Account Abuse Protection, or Bot Management entitlement/trial access. Those
-capabilities require account-level enablement (and may require Enterprise,
-Bot Management, or Early Access). Until Cloudflare confirms entitlement and
-provides credentials/site configuration, no duplicate browser challenge is
-run and `ephemeral_id`/account-abuse fields remain nullable. The observation
-endpoint may report `feature_not_entitled` when access is unavailable.
+Superserve is currently on Cloudflare Free. Enterprise Turnstile, Ephemeral
+IDs, Account Abuse Protection, and Bot Management are not self-serve on this
+plan. Cloudflare Enterprise POC access is being pursued in parallel; until it
+is granted, `metadata.ephemeral_id` and account-abuse fields remain nullable.
 
-Before enabling a browser collection path, confirm the account tier, trial
-duration, pricing, retention, and Siteverify response fields with Cloudflare.
+The Turnstile secret and site key must be configured in Vercel for the console
+deployment. Turbo's build allowlist includes both variables so the browser key
+and server secret reach the correct build/runtime environments.

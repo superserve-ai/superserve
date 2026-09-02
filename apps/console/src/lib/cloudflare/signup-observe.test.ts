@@ -3,11 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 const mockRpc = vi.hoisted(() => vi.fn())
 const mockTrackEvent = vi.hoisted(() => vi.fn())
 vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: vi.fn(() => ({
-    rpc: mockRpc,
-  })),
+  createAdminClient: vi.fn(() => ({ rpc: mockRpc })),
 }))
-
 vi.mock("@/lib/posthog/actions", () => ({ trackEvent: mockTrackEvent }))
 vi.mock("@/lib/posthog/events", () => ({
   AUTH_EVENTS: {
@@ -16,227 +13,105 @@ vi.mock("@/lib/posthog/events", () => ({
       "auth_cloudflare_signup_observation_failed",
   },
 }))
-import { trackEvent } from "@/lib/posthog/actions"
 
 import { observeCloudflareSignup } from "./signup-observe"
 
-const original = {
-  url: process.env.CLOUDFLARE_SIGNUP_OBSERVATION_URL,
-  secret: process.env.CLOUDFLARE_SIGNUP_OBSERVATION_SECRET,
-  configVersion: process.env.CLOUDFLARE_SIGNUP_CONFIG_VERSION,
-  capabilities: process.env.CLOUDFLARE_SIGNUP_CAPABILITIES,
-  turnstileSecret: process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY,
-}
-
 afterEach(() => {
   vi.restoreAllMocks()
-  mockTrackEvent.mockClear()
   mockRpc.mockReset()
-  for (const [env, value] of [
-    ["CLOUDFLARE_SIGNUP_OBSERVATION_URL", original.url],
-    ["CLOUDFLARE_SIGNUP_OBSERVATION_SECRET", original.secret],
-    ["CLOUDFLARE_SIGNUP_CONFIG_VERSION", original.configVersion],
-    ["CLOUDFLARE_SIGNUP_CAPABILITIES", original.capabilities],
-    ["CLOUDFLARE_TURNSTILE_SECRET_KEY", original.turnstileSecret],
-  ] as const) {
-    if (value === undefined) delete process.env[env]
-    else process.env[env] = value
-  }
+  mockTrackEvent.mockReset()
+  delete process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY
+  delete process.env.CLOUDFLARE_SIGNUP_CONFIG_VERSION
+  delete process.env.CLOUDFLARE_SIGNUP_CAPABILITIES
 })
 
 describe("observeCloudflareSignup", () => {
-  it("is disabled and fail-open when unconfigured", async () => {
+  it("fails open when disabled", async () => {
+    mockRpc.mockResolvedValue({ data: false, error: null })
+    const fetchSpy = vi.spyOn(globalThis, "fetch")
     await expect(
       observeCloudflareSignup({ signupAttemptId: "a", signupMethod: "email" }),
     ).resolves.toBeUndefined()
-    expect(mockRpc).not.toHaveBeenCalled()
-    expect(trackEvent).not.toHaveBeenCalled()
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(mockTrackEvent).not.toHaveBeenCalled()
   })
 
-  it("respects the runtime feature flag and skips fetch when disabled", async () => {
-    process.env.CLOUDFLARE_SIGNUP_OBSERVATION_URL = "https://cf.test/observe"
-    process.env.CLOUDFLARE_SIGNUP_OBSERVATION_SECRET = "secret"
-    mockRpc.mockResolvedValue({ data: false, error: null })
-    const fetchSpy = vi.spyOn(globalThis, "fetch")
-
-    await expect(
-      observeCloudflareSignup({
-        signupAttemptId: "attempt-0",
-        signupMethod: "email",
-      }),
-    ).resolves.toBeUndefined()
-
-    expect(fetchSpy).not.toHaveBeenCalled()
-    expect(trackEvent).not.toHaveBeenCalled()
-  })
-
-  it("records flag lookup failures while failing open", async () => {
-    process.env.CLOUDFLARE_SIGNUP_OBSERVATION_URL = "https://cf.test/observe"
-    process.env.CLOUDFLARE_SIGNUP_OBSERVATION_SECRET = "secret"
-    mockRpc.mockResolvedValue({ data: null, error: new Error("rpc down") })
-    const fetchSpy = vi.spyOn(globalThis, "fetch")
-
-    await expect(
-      observeCloudflareSignup({
-        signupAttemptId: "attempt-flag-error",
-        signupMethod: "email",
-      }),
-    ).resolves.toBeUndefined()
-
-    expect(fetchSpy).not.toHaveBeenCalled()
-    expect(trackEvent).toHaveBeenCalledWith(
+  it("records flag lookup failures", async () => {
+    mockRpc.mockResolvedValue({ data: null, error: new Error("down") })
+    await observeCloudflareSignup({
+      signupAttemptId: "a",
+      signupMethod: "email",
+    })
+    expect(mockTrackEvent).toHaveBeenCalledWith(
       "auth_cloudflare_signup_observation_failed",
-      "attempt-flag-error",
+      "a",
       expect.objectContaining({
         provider_outcome: "configuration_lookup_failed",
       }),
     )
   })
 
-  it("records bounded, secret-safe provider observations", async () => {
-    process.env.CLOUDFLARE_SIGNUP_OBSERVATION_URL = "https://cf.test/observe"
-    process.env.CLOUDFLARE_SIGNUP_OBSERVATION_SECRET = "secret"
-    process.env.CLOUDFLARE_SIGNUP_CONFIG_VERSION = "v2"
-    process.env.CLOUDFLARE_SIGNUP_CAPABILITIES = "ephemeral_ids,account_abuse"
+  it("verifies a Turnstile token and persists Free Siteverify fields", async () => {
+    process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY = "secret"
+    process.env.CLOUDFLARE_SIGNUP_CONFIG_VERSION = "free-v1"
     mockRpc.mockResolvedValue({ data: true, error: null })
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
-          event_id: "evt",
-          request_id: "req",
-          ephemeral_id: "ephemeral",
-          account_abuse_verdict: "suspicious",
-          secret: "do-not-store",
-          signals: { automation: true },
+          success: true,
+          challenge_ts: "2026-09-02T00:00:00Z",
+          hostname: "console.superserve.ai",
+          action: "signup",
+          cdata: "experiment",
+          metadata: { ephemeral_id: "enterprise-later" },
         }),
-        { status: 200 },
       ),
     )
-
     await observeCloudflareSignup({
       signupAttemptId: "attempt-1",
       signupMethod: "google",
-      userId: "user-1",
+      turnstileToken: "token-secret",
     })
-
-    expect(trackEvent).toHaveBeenCalledWith(
+    expect(mockTrackEvent).toHaveBeenCalledWith(
       "auth_cloudflare_signup_observed",
-      "user-1",
+      "attempt-1",
       expect.objectContaining({
-        signup_attempt_id: "attempt-1",
-        provider_event_id: "evt",
-        provider_request_id: "req",
-        ephemeral_id: "ephemeral",
-        account_abuse_verdict: "suspicious",
-        capabilities: ["ephemeral_ids", "account_abuse"],
-        config_version: "v2",
-        provider_outcome: "success",
-        signals: { automation: true },
-      }),
-    )
-    expect(JSON.stringify(mockTrackEvent.mock.calls[0])).not.toContain(
-      "do-not-store",
-    )
-  })
-
-  it("verifies an observe-only Turnstile token and records its Ephemeral ID", async () => {
-    process.env.CLOUDFLARE_SIGNUP_OBSERVATION_URL = "https://cf.test/observe"
-    process.env.CLOUDFLARE_SIGNUP_OBSERVATION_SECRET = "secret"
-    process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY = "turnstile-secret"
-    mockRpc.mockResolvedValue({ data: true, error: null })
-    vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(new Response(JSON.stringify({ event_id: "evt" })))
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            success: true,
-            challenge_ts: "challenge-1",
-            metadata: { ephemeral_id: "eid-1" },
-          }),
-        ),
-      )
-
-    await observeCloudflareSignup({
-      signupAttemptId: "attempt-turnstile",
-      signupMethod: "email",
-      turnstileToken: "token-is-not-recorded",
-    })
-
-    expect(trackEvent).toHaveBeenCalledWith(
-      "auth_cloudflare_signup_observed",
-      "attempt-turnstile",
-      expect.objectContaining({
-        ephemeral_id: "eid-1",
+        success: true,
+        action: "signup",
+        hostname: "console.superserve.ai",
+        ephemeral_id: "enterprise-later",
         provider_outcome: "success",
       }),
     )
     expect(JSON.stringify(mockTrackEvent.mock.calls)).not.toContain(
-      "token-is-not-recorded",
+      "token-secret",
     )
   })
 
-  it("marks 404 entitlement responses as feature_not_entitled", async () => {
-    process.env.CLOUDFLARE_SIGNUP_OBSERVATION_URL = "https://cf.test/observe"
-    process.env.CLOUDFLARE_SIGNUP_OBSERVATION_SECRET = "secret"
+  it("records provider rejection and error codes without blocking signup", async () => {
+    process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY = "secret"
     mockRpc.mockResolvedValue({ data: true, error: null })
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response("", { status: 404 }),
+      new Response(
+        JSON.stringify({
+          success: false,
+          "error-codes": ["timeout-or-duplicate"],
+        }),
+      ),
     )
-
-    await observeCloudflareSignup({
-      signupAttemptId: "attempt-2",
-      signupMethod: "email",
-    })
-
-    expect(trackEvent).toHaveBeenCalledWith(
-      "auth_cloudflare_signup_observed",
-      "attempt-2",
-      expect.objectContaining({
-        provider_outcome: "feature_not_entitled",
+    await expect(
+      observeCloudflareSignup({
+        signupAttemptId: "a",
+        signupMethod: "email",
+        turnstileToken: "t",
       }),
-    )
-  })
-
-  it("marks malformed payloads as malformed", async () => {
-    process.env.CLOUDFLARE_SIGNUP_OBSERVATION_URL = "https://cf.test/observe"
-    process.env.CLOUDFLARE_SIGNUP_OBSERVATION_SECRET = "secret"
-    mockRpc.mockResolvedValue({ data: true, error: null })
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response("not-json", { status: 200 }),
-    )
-
-    await observeCloudflareSignup({
-      signupAttemptId: "attempt-3",
-      signupMethod: "google",
-    })
-
-    expect(trackEvent).toHaveBeenCalledWith(
+    ).resolves.toBeUndefined()
+    expect(mockTrackEvent).toHaveBeenCalledWith(
       "auth_cloudflare_signup_observed",
-      "attempt-3",
+      "a",
       expect.objectContaining({
-        provider_outcome: "malformed",
-      }),
-    )
-  })
-
-  it("marks timeouts as timeout", async () => {
-    process.env.CLOUDFLARE_SIGNUP_OBSERVATION_URL = "https://cf.test/observe"
-    process.env.CLOUDFLARE_SIGNUP_OBSERVATION_SECRET = "secret"
-    mockRpc.mockResolvedValue({ data: true, error: null })
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(
-      Object.assign(new Error("timed out"), { name: "TimeoutError" }),
-    )
-
-    await observeCloudflareSignup({
-      signupAttemptId: "attempt-4",
-      signupMethod: "email",
-    })
-
-    expect(trackEvent).toHaveBeenCalledWith(
-      "auth_cloudflare_signup_observed",
-      "attempt-4",
-      expect.objectContaining({
-        provider_outcome: "timeout",
+        provider_outcome: "rejected",
+        error_codes: ["timeout-or-duplicate"],
       }),
     )
   })

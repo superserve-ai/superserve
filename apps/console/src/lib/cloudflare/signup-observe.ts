@@ -3,58 +3,27 @@ import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 const TIMEOUT_MS = 1500
-const MAX_SIGNAL_KEYS = 40
+const FLAG_KEY = "cloudflare_signup_observation"
 
 export type CloudflareSignupObservation = {
   signupAttemptId: string
   signupMethod: "email" | "google"
   userId?: string | null
   teamId?: string | null
-  clientContext?: {
-    userAgent?: string | null
-    ip?: string | null
-    ray?: string | null
-  }
   turnstileToken?: string | null
+  clientContext?: { ip?: string | null }
 }
 
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
-const CLOUDFLARE_SIGNUP_FLAG_KEY = "cloudflare_signup_observation"
-
-function hasMeaningfulValue(value: unknown): boolean {
-  if (value === null || value === undefined) return false
-  if (typeof value === "string") return value.length > 0
-  if (typeof value === "number" || typeof value === "boolean") return true
-  if (Array.isArray(value)) return value.length > 0
-  if (record(value)) return Object.keys(value).length > 0
-  return false
-}
-
-function hasUsefulCloudflarePayload(payload: Record<string, unknown>): boolean {
-  return [
-    "event_id",
-    "request_id",
-    "challenge_id",
-    "ephemeral_id",
-    "device_id",
-    "bot_verdict",
-    "account_abuse_verdict",
-    "capabilities",
-    "signals",
-  ].some((key) => hasMeaningfulValue(payload[key]))
-}
-
-async function isCloudflareSignupObservationEnabled(): Promise<boolean | null> {
+async function flagState(): Promise<boolean | null> {
   try {
-    const admin = createAdminClient()
-    const { data, error } = await admin.rpc("feature_enabled", {
-      flag_key: CLOUDFLARE_SIGNUP_FLAG_KEY,
+    const { data, error } = await createAdminClient().rpc("feature_enabled", {
+      flag_key: FLAG_KEY,
       flag_team_id: null,
     })
-    if (error) return null
-    return Boolean(data)
+    return error ? null : Boolean(data)
   } catch {
     return null
   }
@@ -69,32 +38,28 @@ function safeSignals(value: unknown): Record<string, unknown> {
           ? false
           : ["string", "number", "boolean"].includes(typeof val),
       )
-      .slice(0, MAX_SIGNAL_KEYS),
+      .slice(0, 40),
   )
 }
 
-/** Observe Cloudflare capabilities without ever making signup depend on them. */
 export async function observeCloudflareSignup({
   signupAttemptId,
   signupMethod,
   userId = null,
   teamId = null,
-  clientContext,
   turnstileToken,
+  clientContext,
 }: CloudflareSignupObservation): Promise<void> {
-  const endpoint = process.env.CLOUDFLARE_SIGNUP_OBSERVATION_URL
-  const secret = process.env.CLOUDFLARE_SIGNUP_OBSERVATION_SECRET
-  const turnstileSecret = process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY
+  if (!signupAttemptId) return
   const configVersion = process.env.CLOUDFLARE_SIGNUP_CONFIG_VERSION || "v1"
-  const configuredCapabilities = (
-    process.env.CLOUDFLARE_SIGNUP_CAPABILITIES || ""
+  const capabilities = (
+    process.env.CLOUDFLARE_SIGNUP_CAPABILITIES || "turnstile_free"
   )
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean)
     .slice(0, 20)
-  if (!endpoint || !secret || !signupAttemptId) return
-  const enabled = await isCloudflareSignupObservationEnabled()
+  const enabled = await flagState()
   if (enabled === null) {
     await trackEvent(
       AUTH_EVENTS.CLOUDFLARE_SIGNUP_OBSERVATION_FAILED,
@@ -108,131 +73,75 @@ export async function observeCloudflareSignup({
         observed_at: new Date().toISOString(),
       },
     )
-    console.warn(
-      "Cloudflare signup observation flag lookup failed; failing open",
-    )
     return
   }
   if (!enabled) return
 
   const started = Date.now()
+  const secret = process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY
   let outcome = "success"
-  let payload: Record<string, unknown> = {}
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${secret}`,
-      },
-      body: JSON.stringify({
-        signup_attempt_id: signupAttemptId,
-        signup_method: signupMethod,
-        client_context: {
-          user_agent: clientContext?.userAgent || null,
-          ip: clientContext?.ip || null,
-          ray: clientContext?.ray || null,
-        },
-      }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      cache: "no-store",
-    })
-    if (!response.ok)
-      outcome =
-        response.status === 404
-          ? "feature_not_entitled"
-          : `http_${response.status}`
-    else {
-      try {
-        const json: unknown = await response.json()
-        if (!record(json) || !hasUsefulCloudflarePayload(json)) {
-          outcome = "malformed"
-        } else {
-          payload = json
-        }
-      } catch {
-        outcome = "malformed"
-      }
-    }
-  } catch (error) {
-    outcome =
-      error instanceof Error && error.name === "TimeoutError"
-        ? "timeout"
-        : "error"
-  }
-
-  if (turnstileToken && turnstileSecret) {
+  let responseData: Record<string, unknown> = {}
+  if (!secret || !turnstileToken) {
+    outcome = !secret ? "unconfigured" : "missing_token"
+  } else {
     try {
-      const verifyResponse = await fetch(
+      const response = await fetch(
         "https://challenges.cloudflare.com/turnstile/v0/siteverify",
         {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
-            secret: turnstileSecret,
+            secret,
             response: turnstileToken,
+            ...(clientContext?.ip ? { remoteip: clientContext.ip } : {}),
           }),
           signal: AbortSignal.timeout(TIMEOUT_MS),
           cache: "no-store",
         },
       )
-      const verification = (await verifyResponse.json()) as Record<
-        string,
-        unknown
-      >
-      if (verifyResponse.ok && verification.success === true) {
-        const metadata = record(verification.metadata)
-          ? verification.metadata
-          : {}
-        payload = {
-          ...payload,
-          event_id: verification.challenge_ts ?? payload.event_id,
-          ephemeral_id: metadata.ephemeral_id ?? payload.ephemeral_id,
-          turnstile_success: true,
-          turnstile_action: verification.action ?? null,
+      if (!response.ok) outcome = `http_${response.status}`
+      else {
+        const json: unknown = await response.json()
+        if (!record(json)) outcome = "malformed"
+        else {
+          responseData = json
+          outcome = json.success === true ? "success" : "rejected"
         }
-        outcome = "success"
-      } else {
-        outcome = "rejected"
       }
-    } catch {
-      outcome = "unavailable"
+    } catch (error) {
+      outcome =
+        error instanceof Error && error.name === "TimeoutError"
+          ? "timeout"
+          : "error"
     }
   }
 
-  const providerEventId =
-    typeof payload.event_id === "string" ? payload.event_id : null
-  const providerRequestId =
-    typeof payload.request_id === "string" ? payload.request_id : null
-  const challengeId =
-    typeof payload.challenge_id === "string" ? payload.challenge_id : null
-  const ephemeralId =
-    typeof payload.ephemeral_id === "string" ? payload.ephemeral_id : null
-  const deviceId =
-    typeof payload.device_id === "string" ? payload.device_id : null
+  const metadata = record(responseData.metadata) ? responseData.metadata : {}
   await trackEvent(
     AUTH_EVENTS.CLOUDFLARE_SIGNUP_OBSERVED,
     userId || signupAttemptId,
     {
       provider: "cloudflare",
       signup_attempt_id: signupAttemptId,
-      provider_event_id: providerEventId,
-      provider_request_id: providerRequestId,
-      challenge_id: challengeId,
-      ephemeral_id: ephemeralId,
-      device_id: deviceId,
-      bot_verdict: payload.bot_verdict ?? null,
-      account_abuse_verdict: payload.account_abuse_verdict ?? null,
-      capabilities: Array.isArray(payload.capabilities)
-        ? payload.capabilities.slice(0, 20)
-        : configuredCapabilities,
-      signals: safeSignals(payload.signals),
+      provider_request_id:
+        responseData.request_id ?? responseData.event_id ?? null,
+      challenge_timestamp: responseData.challenge_ts ?? null,
+      action: responseData.action ?? null,
+      hostname: responseData.hostname ?? null,
+      cdata: responseData.cdata ?? null,
+      ephemeral_id: metadata.ephemeral_id ?? null,
+      success: responseData.success ?? null,
+      error_codes: Array.isArray(responseData["error-codes"])
+        ? responseData["error-codes"].slice(0, 20)
+        : [],
+      capabilities,
       config_version: configVersion,
       signup_method: signupMethod,
       superserve_user_id: userId,
       team_id: teamId,
       provider_latency_ms: Date.now() - started,
       provider_outcome: outcome,
+      provider_signals: safeSignals(responseData),
       observed_at: new Date().toISOString(),
     },
   )
