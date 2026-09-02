@@ -40,6 +40,7 @@ vi.mock("@/app/(auth)/auth/signup/action", () => ({
 
 const mockHasValidGoogleSignupProof = vi.fn()
 const mockConsumeGoogleSignupProof = vi.fn()
+const mockMarkGoogleSignupAttempt = vi.fn()
 const mockEnsureGoogleOnboardingMembership = vi.fn()
 const mockListTeamMembershipsForUserDetailed = vi.fn(
   async (_userId: string, _opts?: { maxAgeMs?: number }) => directoryState,
@@ -63,6 +64,8 @@ vi.mock("@/lib/auth/google-signup-proof", () => ({
     mockHasValidGoogleSignupProof(...args),
   consumeGoogleSignupProof: (...args: unknown[]) =>
     mockConsumeGoogleSignupProof(...args),
+  markGoogleSignupAttempt: (...args: unknown[]) =>
+    mockMarkGoogleSignupAttempt(...args),
   isGoogleUser: (user: {
     app_metadata?: { provider?: string; providers?: string[] }
   }) =>
@@ -163,7 +166,7 @@ describe("auth callback", () => {
     expect(mockConsumeGoogleSignupProof).not.toHaveBeenCalled()
   })
 
-  it("blocks a first-time Google callback without an attempt ID", async () => {
+  it("accepts an in-flight legacy Google callback without an attempt ID", async () => {
     googleMembershipState = { kind: "first_time" }
     mockHasValidGoogleSignupProof.mockResolvedValue(true)
 
@@ -171,18 +174,8 @@ describe("auth callback", () => {
       new Request("https://console.superserve.ai/auth/callback?code=abc"),
     )
 
-    expect(mockHasValidGoogleSignupProof).not.toHaveBeenCalled()
-    expect(response.headers.get("location")).toContain(
-      "/auth/auth-code-error?reason=signup_verification_required",
-    )
-    expect(mockTrackEvent).toHaveBeenCalledWith(
-      "auth_google_signup_bypass_blocked",
-      "u1",
-      {
-        reason: "missing_or_invalid_proof",
-        provider: "google",
-      },
-    )
+    expect(mockHasValidGoogleSignupProof).toHaveBeenCalledWith()
+    expect(response.headers.get("location")).toContain("/sandboxes")
     expect(mockConsumeGoogleSignupProof).not.toHaveBeenCalled()
   })
 

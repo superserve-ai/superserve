@@ -12,6 +12,8 @@ vi.mock("@/lib/posthog/actions", () => ({ trackEvent: mockTrackEvent }))
 vi.mock("@/lib/posthog/events", () => ({
   AUTH_EVENTS: {
     CLOUDFLARE_SIGNUP_OBSERVED: "auth_cloudflare_signup_observed",
+    CLOUDFLARE_SIGNUP_OBSERVATION_FAILED:
+      "auth_cloudflare_signup_observation_failed",
   },
 }))
 import { trackEvent } from "@/lib/posthog/actions"
@@ -64,6 +66,29 @@ describe("observeCloudflareSignup", () => {
 
     expect(fetchSpy).not.toHaveBeenCalled()
     expect(trackEvent).not.toHaveBeenCalled()
+  })
+
+  it("records flag lookup failures while failing open", async () => {
+    process.env.CLOUDFLARE_SIGNUP_OBSERVATION_URL = "https://cf.test/observe"
+    process.env.CLOUDFLARE_SIGNUP_OBSERVATION_SECRET = "secret"
+    mockRpc.mockResolvedValue({ data: null, error: new Error("rpc down") })
+    const fetchSpy = vi.spyOn(globalThis, "fetch")
+
+    await expect(
+      observeCloudflareSignup({
+        signupAttemptId: "attempt-flag-error",
+        signupMethod: "email",
+      }),
+    ).resolves.toBeUndefined()
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(trackEvent).toHaveBeenCalledWith(
+      "auth_cloudflare_signup_observation_failed",
+      "attempt-flag-error",
+      expect.objectContaining({
+        provider_outcome: "configuration_lookup_failed",
+      }),
+    )
   })
 
   it("records bounded, secret-safe provider observations", async () => {

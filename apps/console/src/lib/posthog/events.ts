@@ -11,6 +11,8 @@ export const AUTH_EVENTS = {
   GOOGLE_SIGNUP_PROOF_CONSUMED: "auth_google_signup_proof_consumed",
   FINGERPRINT_SIGNUP_OBSERVED: "auth_fingerprint_signup_observed",
   CLOUDFLARE_SIGNUP_OBSERVED: "auth_cloudflare_signup_observed",
+  CLOUDFLARE_SIGNUP_OBSERVATION_FAILED:
+    "auth_cloudflare_signup_observation_failed",
   SIGNUP_RECAPTCHA_OBSERVED: "auth_signup_recaptcha_observed",
   SIGNUP_ATTEMPT_ASSOCIATED: "auth_signup_attempt_associated",
   SIGN_OUT: "auth_sign_out",

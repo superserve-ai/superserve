@@ -9,6 +9,7 @@ const COOKIE_NAME = "__Host-superserve-google-signup"
 const PURPOSE = "signup_google"
 const VERSION = 1
 const TTL_SECONDS = 5 * 60
+const PENDING_ATTEMPT_COOKIE = "__Host-superserve-google-signup-attempt"
 
 interface ProofPayload {
   v: number
@@ -132,10 +133,42 @@ export async function hasValidGoogleSignupProof(
   }
 }
 
-export async function requireGoogleSignupProof(): Promise<string | undefined> {
+export async function markGoogleSignupAttempt(
+  signupAttemptId: string,
+): Promise<void> {
+  const store = await cookies()
+  store.set(PENDING_ATTEMPT_COOKIE, signupAttemptId, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: TTL_SECONDS,
+  })
+}
+
+export async function readGoogleSignupAttempt(): Promise<string | undefined> {
+  try {
+    return (await cookies()).get(PENDING_ATTEMPT_COOKIE)?.value
+  } catch {
+    return undefined
+  }
+}
+
+export async function requireGoogleSignupProof(
+  expectedSignupAttemptId?: string,
+): Promise<string | undefined> {
   try {
     const store = await cookies()
+    expectedSignupAttemptId ||= store.get(PENDING_ATTEMPT_COOKIE)?.value
     let matchedAttemptId: string | undefined
+    if (expectedSignupAttemptId) {
+      if (await hasValidGoogleSignupProof(expectedSignupAttemptId))
+        return expectedSignupAttemptId
+      // Do not let an abandoned callback pin future provisioning to a stale attempt.
+      store.delete(PENDING_ATTEMPT_COOKIE)
+      await trackGoogleSignupBypass()
+      throw new Error("Google signup verification required")
+    }
 
     // Resolve the exact proof that authorized this provisioning request so the
     // caller can consume that same cookie. Provider attempts are independent;
@@ -178,6 +211,7 @@ export async function consumeGoogleSignupProof(
   const store = await cookies()
   if (signupAttemptId) {
     store.delete(cookieName(signupAttemptId))
+    store.delete(PENDING_ATTEMPT_COOKIE)
   } else if ("getAll" in store) {
     const allCookies = store.getAll()
     // Legacy, unscoped proofs have no attempt ID; consume only that proof.

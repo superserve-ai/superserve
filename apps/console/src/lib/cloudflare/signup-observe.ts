@@ -45,17 +45,17 @@ function hasUsefulCloudflarePayload(payload: Record<string, unknown>): boolean {
   ].some((key) => hasMeaningfulValue(payload[key]))
 }
 
-async function isCloudflareSignupObservationEnabled(): Promise<boolean> {
+async function isCloudflareSignupObservationEnabled(): Promise<boolean | null> {
   try {
     const admin = createAdminClient()
     const { data, error } = await admin.rpc("feature_enabled", {
       flag_key: CLOUDFLARE_SIGNUP_FLAG_KEY,
       flag_team_id: null,
     })
-    if (error) return false
+    if (error) return null
     return Boolean(data)
   } catch {
-    return false
+    return null
   }
 }
 
@@ -91,7 +91,26 @@ export async function observeCloudflareSignup({
     .filter(Boolean)
     .slice(0, 20)
   if (!endpoint || !secret || !signupAttemptId) return
-  if (!(await isCloudflareSignupObservationEnabled())) return
+  const enabled = await isCloudflareSignupObservationEnabled()
+  if (enabled === null) {
+    await trackEvent(
+      AUTH_EVENTS.CLOUDFLARE_SIGNUP_OBSERVATION_FAILED,
+      signupAttemptId,
+      {
+        provider: "cloudflare",
+        signup_attempt_id: signupAttemptId,
+        signup_method: signupMethod,
+        provider_outcome: "configuration_lookup_failed",
+        config_version: configVersion,
+        observed_at: new Date().toISOString(),
+      },
+    )
+    console.warn(
+      "Cloudflare signup observation flag lookup failed; failing open",
+    )
+    return
+  }
+  if (!enabled) return
 
   const started = Date.now()
   let outcome = "success"

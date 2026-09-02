@@ -38,7 +38,9 @@ async function guardFirstGoogleTeam(
     })
     throw new Error("Google membership lookup degraded; please try again")
   }
-  return { signupAttemptId: await requireGoogleSignupProof() }
+  return {
+    signupAttemptId: await requireGoogleSignupProof(),
+  }
 }
 
 export async function provisionTeam(

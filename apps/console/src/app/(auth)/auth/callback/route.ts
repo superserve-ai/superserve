@@ -12,6 +12,7 @@ import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
 import {
   hasValidGoogleSignupProof,
   isGoogleUser,
+  markGoogleSignupAttempt,
 } from "@/lib/auth/google-signup-proof"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
@@ -131,9 +132,12 @@ export async function GET(request: Request) {
           isNewUser = directory.kind === "first_time"
 
           if (isNewUser) {
-            const proofValid =
-              Boolean(signupAttemptId) &&
-              (await hasValidGoogleSignupProof(signupAttemptId))
+            // Accept a legacy unscoped proof for OAuth flows that started
+            // before this rollout; new flows must carry and match the signed
+            // attempt ID for exact cross-provider correlation.
+            const proofValid = signupAttemptId
+              ? await hasValidGoogleSignupProof(signupAttemptId)
+              : await hasValidGoogleSignupProof()
             if (!proofValid) {
               await trackEvent(
                 AUTH_EVENTS.GOOGLE_SIGNUP_BYPASS_BLOCKED,
@@ -154,6 +158,7 @@ export async function GET(request: Request) {
               )
             }
             console.info("Google OAuth signup proof validated at callback")
+            if (signupAttemptId) await markGoogleSignupAttempt(signupAttemptId)
           }
 
           const fingerprintEventId = await consumeFingerprintSignupEventId()

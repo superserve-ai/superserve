@@ -65,6 +65,7 @@ import {
   consumeGoogleSignupProof,
   issueGoogleSignupProof,
   requireGoogleSignupProof,
+  markGoogleSignupAttempt,
 } from "./google-signup-proof"
 
 describe("google-signup-proof", () => {
@@ -115,6 +116,16 @@ describe("google-signup-proof", () => {
     await issueGoogleSignupProof("attempt-1")
 
     expect(await hasValidGoogleSignupProof()).toBe(true)
+  })
+
+  it("binds provisioning to the callback-selected concurrent attempt", async () => {
+    await issueGoogleSignupProof("attempt-b")
+    await issueGoogleSignupProof("attempt-a")
+    await markGoogleSignupAttempt("attempt-a")
+
+    expect(await requireGoogleSignupProof()).toBe("attempt-a")
+    await consumeGoogleSignupProof("user-123", "attempt-a")
+    expect(await hasValidGoogleSignupProof("attempt-b")).toBe(true)
   })
 
   it("tracks proof consumption when the cookie is cleared", async () => {
