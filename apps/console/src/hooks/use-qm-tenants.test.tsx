@@ -221,6 +221,33 @@ describe("useCreateQmTenant", () => {
         .map((q) => [q.queryKey, q.state]),
     )
     expect(cacheDump).not.toContain("sk-ant-secret")
+    const mutationDump = JSON.stringify(
+      queryClient
+        .getMutationCache()
+        .getAll()
+        .map((m) => m.state),
+    )
+    expect(mutationDump).not.toContain("sk-ant-secret")
+  })
+
+  it("only prepends to the active scope's list", async () => {
+    const { queryClient, wrapper } = createQueryWrapper()
+    const otherScopeKey = [...qmKeys.list(), "team:other"]
+    queryClient.setQueryData(listKey, [tenant({ id: "old" })])
+    queryClient.setQueryData(otherScopeKey, [tenant({ id: "theirs" })])
+    mockCreate.mockResolvedValue(tenant({ id: "new", slug: "acme" }))
+
+    const { result } = renderHook(() => useCreateQmTenant(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync(body)
+    })
+
+    expect(
+      queryClient.getQueryData<QmTenant[]>(listKey)?.map((t) => t.id),
+    ).toEqual(["new", "old"])
+    expect(
+      queryClient.getQueryData<QmTenant[]>(otherScopeKey)?.map((t) => t.id),
+    ).toEqual(["theirs"])
   })
 
   it("surfaces field errors from a 400 without toasting", async () => {

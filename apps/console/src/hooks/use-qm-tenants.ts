@@ -8,6 +8,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query"
+import { useCallback, useRef } from "react"
 
 import { useQueryScope } from "@/components/query-provider"
 import { ApiError } from "@/lib/api/client"
@@ -127,15 +128,22 @@ export function useQmSlugAvailability(slug: string) {
 
 export function useCreateQmTenant() {
   const queryClient = useQueryClient()
+  const queryScope = useQueryScope()
   const { addToast } = useToast()
+  // The provider key is handed to the request through a ref so it never
+  // becomes part of the mutation's stored variables.
+  const modelKeyRef = useRef<string | null>(null)
 
-  return useMutation({
-    // `data.modelKey` travels only in the request body: it is not part of
-    // any query key and is never written to the cache.
-    mutationFn: (data: CreateQmTenantRequest) => createQmTenant(data),
+  const mutation = useMutation({
+    mutationFn: (data: Omit<CreateQmTenantRequest, "modelKey">) => {
+      const modelKey = modelKeyRef.current
+      modelKeyRef.current = null
+      if (!modelKey) return Promise.reject(new Error("Model key is required."))
+      return createQmTenant({ ...data, modelKey })
+    },
     onSuccess: (tenant) => {
-      queryClient.setQueriesData<QmTenant[]>(
-        { queryKey: qmKeys.lists() },
+      queryClient.setQueryData<QmTenant[]>(
+        [...qmKeys.list(), queryScope],
         (old) =>
           old ? [tenant, ...old.filter((t) => t.id !== tenant.id)] : old,
       )
@@ -150,6 +158,27 @@ export function useCreateQmTenant() {
       )
     },
   })
+
+  const { mutate, mutateAsync } = mutation
+  const create = useCallback(
+    (
+      { modelKey, ...data }: CreateQmTenantRequest,
+      options?: Parameters<typeof mutate>[1],
+    ) => {
+      modelKeyRef.current = modelKey
+      mutate(data, options)
+    },
+    [mutate],
+  )
+  const createAsync = useCallback(
+    ({ modelKey, ...data }: CreateQmTenantRequest) => {
+      modelKeyRef.current = modelKey
+      return mutateAsync(data)
+    },
+    [mutateAsync],
+  )
+
+  return { ...mutation, mutate: create, mutateAsync: createAsync }
 }
 
 export function useDeleteQmTenant() {
