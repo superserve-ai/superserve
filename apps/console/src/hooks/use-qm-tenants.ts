@@ -72,6 +72,17 @@ function patchTenant(
   )
 }
 
+function hasFieldErrors(
+  error: unknown,
+): error is ApiError & { fields: Record<string, string> } {
+  return (
+    error instanceof ApiError &&
+    error.status === 400 &&
+    !!error.fields &&
+    Object.keys(error.fields).length > 0
+  )
+}
+
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : fallback
 }
@@ -153,10 +164,13 @@ export function useCreateQmTenant() {
           old ? [tenant, ...old.filter((t) => t.id !== tenant.id)] : old,
       )
       queryClient.invalidateQueries({ queryKey: qmKeys.lists() })
+      queryClient.invalidateQueries({
+        queryKey: qmKeys.slugAvailability(tenant.slug),
+      })
     },
     onError: (error) => {
       // Field-level 400s are rendered inline by the form; only toast the rest.
-      if (error instanceof ApiError && error.fields) return
+      if (hasFieldErrors(error)) return
       addToast(
         errorMessage(error, "Failed to create QM instance. Try again."),
         "error",
