@@ -432,10 +432,10 @@ describe("useQmAdminLink", () => {
     let first: QmAdminLink | undefined
     let second: QmAdminLink | undefined
     await act(async () => {
-      first = await result.current.mutateAsync()
+      first = await result.current.mint()
     })
     await act(async () => {
-      second = await result.current.mutateAsync()
+      second = await result.current.mint()
     })
 
     expect(first).toEqual(link)
@@ -444,6 +444,8 @@ describe("useQmAdminLink", () => {
     expect(mockAdminLink).toHaveBeenCalledWith("t1")
     expect(queryClient.getQueryData(qmKeys.adminLink("t1"))).toBeUndefined()
     expect(queryClient.getQueryCache().getAll()).toHaveLength(0)
+    expect(queryClient.getMutationCache().getAll()).toHaveLength(0)
+    expect(JSON.stringify(result.current)).not.toContain("token=once")
   })
 
   it("toasts on failure", async () => {
@@ -454,7 +456,7 @@ describe("useQmAdminLink", () => {
 
     const { result } = renderHook(() => useQmAdminLink("t1"), { wrapper })
     await act(async () => {
-      await result.current.mutateAsync().catch(() => {})
+      await result.current.mint().catch(() => {})
     })
 
     expect(mockAddToast).toHaveBeenCalledWith("Tenant is not ready", "error")

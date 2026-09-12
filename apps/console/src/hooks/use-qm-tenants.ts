@@ -8,7 +8,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query"
-import { useCallback } from "react"
+import { useCallback, useState } from "react"
 
 import { useQueryScope } from "@/components/query-provider"
 import { ApiError } from "@/lib/api/client"
@@ -241,22 +241,28 @@ export function useRetryQmTenant() {
 }
 
 /**
- * Fetches a fresh single-use admin sign-in link on demand. Modelled as a
- * mutation (not a query) so the link is never persisted in the query cache
- * and every call hits the API.
+ * Mints a single-use admin sign-in link. Deliberately not a React Query
+ * mutation: the URL is a credential and must live only in the caller's
+ * component state, never in any cache.
  */
 export function useQmAdminLink(id: string) {
   const { addToast } = useToast()
+  const [isPending, setIsPending] = useState(false)
 
-  return useMutation({
-    mutationKey: qmKeys.adminLink(id),
-    mutationFn: () => getQmAdminLink(id),
-    gcTime: 0,
-    onError: (error) => {
+  const mint = useCallback(async (): Promise<QmAdminLink> => {
+    setIsPending(true)
+    try {
+      return await getQmAdminLink(id)
+    } catch (error) {
       addToast(
         errorMessage(error, "Failed to generate admin link. Try again."),
         "error",
       )
-    },
-  })
+      throw error
+    } finally {
+      setIsPending(false)
+    }
+  }, [addToast, id])
+
+  return { mint, isPending }
 }
