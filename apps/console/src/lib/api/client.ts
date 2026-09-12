@@ -1,13 +1,31 @@
 export class ApiError extends Error {
   status: number
   code: string
+  /**
+   * Per-field validation messages, present when the upstream returned a
+   * `{ error: string, fields: { [field]: message } }` body (qm-api's 400s).
+   */
+  fields?: Record<string, string>
 
-  constructor(status: number, code: string, message: string) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    fields?: Record<string, string>,
+  ) {
     super(message)
     this.name = "ApiError"
     this.status = status
     this.code = code
+    if (fields) this.fields = fields
   }
+}
+
+function isFieldErrors(value: unknown): value is Record<string, string> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false
+  }
+  return Object.values(value).every((v) => typeof v === "string")
 }
 
 /** A page of list results plus the total row count across all pages. */
@@ -66,16 +84,24 @@ async function request<R>(
     if (!response.ok) {
       let code = "unknown_error"
       let message = response.statusText
+      let fields: Record<string, string> | undefined
 
       try {
         const body = await response.json()
-        if (body?.error?.code) code = body.error.code
-        if (body?.error?.message) message = body.error.message
+        if (typeof body?.error === "string") {
+          // qm-api shape: { error: string, fields?: { [field]: message } }
+          message = body.error
+          if (isFieldErrors(body.fields)) fields = body.fields
+        } else {
+          // Sandbox API / proxy shape: { error: { code, message } }
+          if (body?.error?.code) code = body.error.code
+          if (body?.error?.message) message = body.error.message
+        }
       } catch {
         // response body is not JSON, use defaults
       }
 
-      throw new ApiError(response.status, code, message)
+      throw new ApiError(response.status, code, message, fields)
     }
 
     return await read(response)

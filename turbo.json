@@ -31,7 +31,8 @@
         "CLOUDFLARE_SIGNUP_CONFIG_VERSION",
         "CLOUDFLARE_SIGNUP_CAPABILITIES",
         "SUPABASE_SERVICE_ROLE_KEY",
-        "SANDBOX_API_URL"
+        "SANDBOX_API_URL",
+        "QM_API_URL"
       ],
       "outputs": ["dist/**", ".next/**"]
     },

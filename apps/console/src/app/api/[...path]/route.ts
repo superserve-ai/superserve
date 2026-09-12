@@ -14,6 +14,7 @@ const SANDBOX_API_URL =
   process.env.SANDBOX_API_URL ?? "https://api.superserve.ai"
 
 const ALLOWED_PREFIXES = [
+  "qm",
   "sandboxes",
   "activity",
   "health",
@@ -42,6 +43,50 @@ function isStripeBillingPath(path: string): boolean {
 
 /** Paths that carry their own auth (e.g. Bearer token). */
 const SKIP_KEY_INJECTION = ["v1/auth/"]
+
+/**
+ * `/api/qm/*` is served by the separate qm-api service rather than the
+ * sandbox API. Its base URL is read per request (not at module load) so a
+ * missing value only degrades `/api/qm/*` and is unit-testable.
+ */
+function getQmApiUrl(): string | null {
+  const raw = process.env.QM_API_URL?.trim()
+  if (!raw) return null
+  const stripped = raw.replace(/\/+$/, "")
+  return stripped || null
+}
+
+function isQmPath(path: string[]): boolean {
+  return path[0] === "qm"
+}
+
+/**
+ * `qm/tenants/abc` → `${QM_API_URL}/v1/qm/tenants/abc`. Segments are
+ * re-encoded and dot segments rejected so a crafted path cannot escape the
+ * `/v1/qm/` prefix once `new URL()` normalizes it.
+ */
+function qmUpstreamUrl(base: string, path: string[]): URL | null {
+  const segments = path.slice(1)
+  for (const segment of segments) {
+    let decoded: string
+    try {
+      decoded = decodeURIComponent(segment)
+    } catch {
+      return null
+    }
+    if (
+      !decoded ||
+      decoded === "." ||
+      decoded === ".." ||
+      decoded.includes("/")
+    )
+      return null
+  }
+  const rest = segments
+    .map((s) => encodeURIComponent(decodeURIComponent(s)))
+    .join("/")
+  return new URL(rest ? `${base}/v1/qm/${rest}` : `${base}/v1/qm`)
+}
 
 /**
  * Only these request headers are forwarded upstream. Everything else
@@ -165,7 +210,33 @@ async function proxyRequest(
     authMode = impersonating ? "impersonation" : "self"
   }
 
-  const upstreamUrl = new URL(`${apiBaseUrl}/${joinedPath}`)
+  let upstreamUrl: URL
+  if (isQmPath(path)) {
+    // Checked after auth so an unauthenticated caller still gets 401 and
+    // never learns whether qm-api is configured.
+    const qmApiUrl = getQmApiUrl()
+    if (!qmApiUrl) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "qm_api_unavailable",
+            message: "QM API is not configured.",
+          },
+        },
+        { status: 503 },
+      )
+    }
+    const qmUrl = qmUpstreamUrl(qmApiUrl, path)
+    if (!qmUrl) {
+      return NextResponse.json(
+        { error: { code: "invalid_path", message: "Invalid QM API path." } },
+        { status: 400 },
+      )
+    }
+    upstreamUrl = qmUrl
+  } else {
+    upstreamUrl = new URL(`${apiBaseUrl}/${joinedPath}`)
+  }
   upstreamUrl.search = url.search
 
   const body =
