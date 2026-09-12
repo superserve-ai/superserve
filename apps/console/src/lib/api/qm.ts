@@ -53,10 +53,15 @@ export async function retryQmTenant(id: string): Promise<QmTenant> {
   return res.tenant
 }
 
-/** Single-use, short-lived. Fetch on demand; never store in the query cache. */
+/**
+ * Mints a single-use, short-lived admin sign-in link. A POST so the proxy's
+ * read-only impersonation guard refuses it; never store the result in the
+ * query cache.
+ */
 export async function getQmAdminLink(id: string): Promise<QmAdminLink> {
   return apiClient<QmAdminLink>(
     `/qm/tenants/${encodeURIComponent(id)}/admin-link`,
+    { method: "POST" },
   )
 }
 
