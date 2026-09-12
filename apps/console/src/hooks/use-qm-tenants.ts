@@ -248,10 +248,10 @@ export function useRetryQmTenant() {
  */
 export function useQmAdminLink(id: string) {
   const { addToast } = useToast()
-  const [isPending, setIsPending] = useState(false)
+  const [inFlight, setInFlight] = useState(0)
 
   const mint = useCallback(async (): Promise<QmAdminLink> => {
-    setIsPending(true)
+    setInFlight((n) => n + 1)
     try {
       return await getQmAdminLink(id)
     } catch (error) {
@@ -261,9 +261,9 @@ export function useQmAdminLink(id: string) {
       )
       throw error
     } finally {
-      setIsPending(false)
+      setInFlight((n) => n - 1)
     }
   }, [addToast, id])
 
-  return { mint, isPending }
+  return { mint, isPending: inFlight > 0 }
 }

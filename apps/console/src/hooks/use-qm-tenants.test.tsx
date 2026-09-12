@@ -448,6 +448,42 @@ describe("useQmAdminLink", () => {
     expect(JSON.stringify(result.current)).not.toContain("token=once")
   })
 
+  it("stays pending until every overlapping mint has settled", async () => {
+    const { wrapper } = createQueryWrapper()
+    let resolveFirst!: (link: QmAdminLink) => void
+    let resolveSecond!: (link: QmAdminLink) => void
+    mockAdminLink
+      .mockImplementationOnce(
+        () => new Promise<QmAdminLink>((r) => (resolveFirst = r)),
+      )
+      .mockImplementationOnce(
+        () => new Promise<QmAdminLink>((r) => (resolveSecond = r)),
+      )
+    const link: QmAdminLink = {
+      url: "https://acme.qm.example.com/auth?token=x",
+      expiresAt: "2026-01-01T00:05:00.000Z",
+    }
+
+    const { result } = renderHook(() => useQmAdminLink("t1"), { wrapper })
+    let first: Promise<QmAdminLink>
+    let second: Promise<QmAdminLink>
+    act(() => {
+      first = result.current.mint()
+      second = result.current.mint()
+    })
+    expect(result.current.isPending).toBe(true)
+    await act(async () => {
+      resolveFirst(link)
+      await first
+    })
+    expect(result.current.isPending).toBe(true)
+    await act(async () => {
+      resolveSecond(link)
+      await second
+    })
+    expect(result.current.isPending).toBe(false)
+  })
+
   it("toasts on failure", async () => {
     const { wrapper } = createQueryWrapper()
     mockAdminLink.mockRejectedValue(
