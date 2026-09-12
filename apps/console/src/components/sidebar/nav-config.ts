@@ -10,6 +10,7 @@ import {
   LifebuoyIcon,
   StackIcon,
   LockKeyIcon,
+  RobotIcon,
   ShieldCheckIcon,
   UsersIcon,
 } from "@phosphor-icons/react"
@@ -31,6 +32,13 @@ export const adminNavItem: NavItem = {
   label: "Admin",
   href: "/admin",
   icon: ShieldCheckIcon,
+}
+
+/** QM Cloud — only listed while the viewer is in the beta (see useQmAccess). */
+export const qmNavItem: NavItem = {
+  label: "QM",
+  href: "/qm",
+  icon: RobotIcon,
 }
 
 export const mainNavItems: NavItem[] = [

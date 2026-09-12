@@ -66,6 +66,16 @@ export const SECRET_EVENTS = {
   DELETED: "secret_deleted",
 } as const
 
+// QM events never carry the model key, admin link, or any form value.
+export const QM_EVENTS = {
+  STACK_CREATE_SUBMITTED: "qm_stack_create_submitted",
+  STACK_CREATED: "qm_stack_created",
+  STACK_CREATE_FAILED: "qm_stack_create_failed",
+  STACK_RETRIED: "qm_stack_retried",
+  STACK_DELETED: "qm_stack_deleted",
+  ADMIN_LINK_MINTED: "qm_admin_link_minted",
+} as const
+
 export const SETTINGS_EVENTS = {
   PROFILE_UPDATED: "settings_profile_updated",
   PASSWORD_CHANGED: "settings_password_changed",

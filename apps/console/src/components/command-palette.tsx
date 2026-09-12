@@ -10,6 +10,7 @@ import {
   KeyIcon,
   MagnifyingGlassIcon,
   PlusIcon,
+  RobotIcon,
   RocketLaunchIcon,
   StackIcon,
   LockKeyIcon,
@@ -19,6 +20,8 @@ import { AnimatePresence, motion } from "motion/react"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+
+import { useQmAccess } from "@/hooks/use-qm-access"
 
 interface CommandItem {
   label: string
@@ -30,6 +33,7 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false)
   const [hoveredLabel, setHoveredLabel] = useState<string | null>(null)
   const router = useRouter()
+  const qmAccess = useQmAccess()
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -97,6 +101,9 @@ export function CommandPalette() {
       icon: RocketLaunchIcon,
       onSelect: () => navigate("/get-started"),
     },
+    ...(qmAccess.enabled
+      ? [{ label: "QM", icon: RobotIcon, onSelect: () => navigate("/qm") }]
+      : []),
   ]
 
   const actionItems: CommandItem[] = [
@@ -120,6 +127,15 @@ export function CommandPalette() {
       icon: KeyIcon,
       onSelect: () => navigate("/api-keys?create=1"),
     },
+    ...(qmAccess.enabled
+      ? [
+          {
+            label: "Create QM stack",
+            icon: PlusIcon,
+            onSelect: () => navigate("/qm/new"),
+          },
+        ]
+      : []),
   ]
 
   const inputRef = useRef<HTMLInputElement>(null)
