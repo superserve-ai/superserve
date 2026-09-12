@@ -195,3 +195,16 @@ export const teamKeys = {
   all: ["teams"] as const,
   directory: () => [...teamKeys.all, "directory"] as const,
 }
+
+export const qmKeys = {
+  all: ["qm"] as const,
+  lists: () => [...qmKeys.all, "list"] as const,
+  list: () => [...qmKeys.lists(), {}] as const,
+  details: () => [...qmKeys.all, "detail"] as const,
+  detail: (id: string) => [...qmKeys.details(), id] as const,
+  slugAvailability: (slug: string) =>
+    [...qmKeys.all, "slug-availability", slug] as const,
+  // Used only as a mutationKey: admin links are single-use and must never be
+  // written to the query cache.
+  adminLink: (id: string) => [...qmKeys.all, "admin-link", id] as const,
+}

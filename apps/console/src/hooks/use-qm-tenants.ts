@@ -1,0 +1,227 @@
+"use client"
+
+import { useToast } from "@superserve/ui"
+import {
+  type QueryClient,
+  type QueryKey,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
+
+import { useQueryScope } from "@/components/query-provider"
+import { ApiError } from "@/lib/api/client"
+import {
+  checkQmSlug,
+  createQmTenant,
+  deleteQmTenant,
+  getQmAdminLink,
+  getQmTenant,
+  listQmTenants,
+  retryQmTenant,
+} from "@/lib/api/qm"
+import { qmKeys } from "@/lib/api/query-keys"
+import type {
+  CreateQmTenantRequest,
+  QmTenant,
+  QmTenantDetailResponse,
+  QmTenantStatus,
+} from "@/lib/api/types"
+
+/** Tenants in these states change on their own; poll until they settle. */
+const TRANSITIONAL_STATUSES: ReadonlySet<QmTenantStatus> = new Set([
+  "provisioning",
+  "deprovisioning",
+])
+const TRANSITIONAL_POLL_MS = 2000
+
+type ListSnapshots = [QueryKey, QmTenant[] | undefined][]
+type DetailSnapshots = [QueryKey, QmTenantDetailResponse | undefined][]
+
+// --- Cache helpers ---------------------------------------------------------
+// Lists and details are keyed with a trailing query scope (self vs. an
+// impersonated team), so mutations patch by prefix to hit every variant.
+
+function snapshotLists(qc: QueryClient): ListSnapshots {
+  return qc.getQueriesData<QmTenant[]>({ queryKey: qmKeys.lists() })
+}
+
+function snapshotDetail(qc: QueryClient, id: string): DetailSnapshots {
+  return qc.getQueriesData<QmTenantDetailResponse>({
+    queryKey: qmKeys.detail(id),
+  })
+}
+
+function restore<T>(qc: QueryClient, snapshots: [QueryKey, T | undefined][]) {
+  for (const [key, data] of snapshots) qc.setQueryData(key, data)
+}
+
+function patchTenant(
+  qc: QueryClient,
+  id: string,
+  updater: (tenant: QmTenant) => QmTenant,
+) {
+  qc.setQueriesData<QmTenant[]>({ queryKey: qmKeys.lists() }, (old) =>
+    old ? old.map((t) => (t.id === id ? updater(t) : t)) : old,
+  )
+  qc.setQueriesData<QmTenantDetailResponse>(
+    { queryKey: qmKeys.detail(id) },
+    (old) => (old ? { ...old, tenant: updater(old.tenant) } : old),
+  )
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof ApiError ? error.message : fallback
+}
+
+// --- Queries ---------------------------------------------------------------
+
+export function useQmTenants() {
+  const queryScope = useQueryScope()
+  return useQuery({
+    queryKey: [...qmKeys.list(), queryScope],
+    queryFn: listQmTenants,
+    // Lists change while any tenant is provisioning/deprovisioning.
+    refetchInterval: (query) =>
+      query.state.data?.some((t) => TRANSITIONAL_STATUSES.has(t.status))
+        ? TRANSITIONAL_POLL_MS
+        : false,
+    refetchIntervalInBackground: false,
+  })
+}
+
+export function useQmTenant(id: string | null) {
+  const queryScope = useQueryScope()
+  return useQuery({
+    queryKey: [...qmKeys.detail(id ?? ""), queryScope],
+    queryFn: () => getQmTenant(id as string),
+    enabled: !!id,
+    refetchInterval: (query) => {
+      const status = query.state.data?.tenant.status
+      return status && TRANSITIONAL_STATUSES.has(status)
+        ? TRANSITIONAL_POLL_MS
+        : false
+    },
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  })
+}
+
+/**
+ * Slug availability for the create form. Only queries when `slug` is
+ * non-empty; debouncing the input is the caller's responsibility.
+ */
+export function useQmSlugAvailability(slug: string) {
+  const queryScope = useQueryScope()
+  const trimmed = slug.trim()
+  return useQuery({
+    queryKey: [...qmKeys.slugAvailability(trimmed), queryScope],
+    queryFn: () => checkQmSlug(trimmed),
+    enabled: trimmed.length > 0,
+    staleTime: 10_000,
+    retry: false,
+  })
+}
+
+// --- Mutations -------------------------------------------------------------
+
+export function useCreateQmTenant() {
+  const queryClient = useQueryClient()
+  const { addToast } = useToast()
+
+  return useMutation({
+    // `data.modelKey` travels only in the request body: it is not part of
+    // any query key and is never written to the cache.
+    mutationFn: (data: CreateQmTenantRequest) => createQmTenant(data),
+    onSuccess: (tenant) => {
+      queryClient.setQueriesData<QmTenant[]>(
+        { queryKey: qmKeys.lists() },
+        (old) =>
+          old ? [tenant, ...old.filter((t) => t.id !== tenant.id)] : old,
+      )
+      queryClient.invalidateQueries({ queryKey: qmKeys.lists() })
+    },
+    onError: (error) => {
+      // Field-level 400s are rendered inline by the form; only toast the rest.
+      if (error instanceof ApiError && error.fields) return
+      addToast(
+        errorMessage(error, "Failed to create QM instance. Try again."),
+        "error",
+      )
+    },
+  })
+}
+
+export function useDeleteQmTenant() {
+  const queryClient = useQueryClient()
+  const { addToast } = useToast()
+
+  return useMutation({
+    mutationFn: (id: string) => deleteQmTenant(id),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: qmKeys.all })
+      const lists = snapshotLists(queryClient)
+      const details = snapshotDetail(queryClient, id)
+      patchTenant(queryClient, id, (t) => ({ ...t, status: "deprovisioning" }))
+      return { lists, details }
+    },
+    onSuccess: (tenant) => {
+      patchTenant(queryClient, tenant.id, () => tenant)
+    },
+    onError: (error, _id, context) => {
+      if (context) {
+        restore(queryClient, context.lists)
+        restore(queryClient, context.details)
+      }
+      addToast(
+        errorMessage(error, "Failed to delete QM instance. Try again."),
+        "error",
+      )
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: qmKeys.all })
+    },
+  })
+}
+
+export function useRetryQmTenant() {
+  const queryClient = useQueryClient()
+  const { addToast } = useToast()
+
+  return useMutation({
+    mutationFn: (id: string) => retryQmTenant(id),
+    onSuccess: (tenant) => {
+      patchTenant(queryClient, tenant.id, () => tenant)
+    },
+    onError: (error) => {
+      addToast(
+        errorMessage(error, "Failed to retry provisioning. Try again."),
+        "error",
+      )
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: qmKeys.all })
+    },
+  })
+}
+
+/**
+ * Fetches a fresh single-use admin sign-in link on demand. Modelled as a
+ * mutation (not a query) so the link is never persisted in the query cache
+ * and every call hits the API.
+ */
+export function useQmAdminLink(id: string) {
+  const { addToast } = useToast()
+
+  return useMutation({
+    mutationKey: qmKeys.adminLink(id),
+    mutationFn: () => getQmAdminLink(id),
+    gcTime: 0,
+    onError: (error) => {
+      addToast(
+        errorMessage(error, "Failed to generate admin link. Try again."),
+        "error",
+      )
+    },
+  })
+}
