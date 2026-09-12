@@ -60,9 +60,31 @@ function isQmPath(path: string[]): boolean {
   return path[0] === "qm"
 }
 
-/** `qm/tenants/abc` → `${QM_API_URL}/v1/qm/tenants/abc`. */
-function qmUpstreamUrl(base: string, path: string[]): URL {
-  const rest = path.slice(1).join("/")
+/**
+ * `qm/tenants/abc` → `${QM_API_URL}/v1/qm/tenants/abc`. Segments are
+ * re-encoded and dot segments rejected so a crafted path cannot escape the
+ * `/v1/qm/` prefix once `new URL()` normalizes it.
+ */
+function qmUpstreamUrl(base: string, path: string[]): URL | null {
+  const segments = path.slice(1)
+  for (const segment of segments) {
+    let decoded: string
+    try {
+      decoded = decodeURIComponent(segment)
+    } catch {
+      return null
+    }
+    if (
+      !decoded ||
+      decoded === "." ||
+      decoded === ".." ||
+      decoded.includes("/")
+    )
+      return null
+  }
+  const rest = segments
+    .map((s) => encodeURIComponent(decodeURIComponent(s)))
+    .join("/")
   return new URL(rest ? `${base}/v1/qm/${rest}` : `${base}/v1/qm`)
 }
 
@@ -204,7 +226,14 @@ async function proxyRequest(
         { status: 503 },
       )
     }
-    upstreamUrl = qmUpstreamUrl(qmApiUrl, path)
+    const qmUrl = qmUpstreamUrl(qmApiUrl, path)
+    if (!qmUrl) {
+      return NextResponse.json(
+        { error: { code: "invalid_path", message: "Invalid QM API path." } },
+        { status: 400 },
+      )
+    }
+    upstreamUrl = qmUrl
   } else {
     upstreamUrl = new URL(`${apiBaseUrl}/${joinedPath}`)
   }

@@ -230,6 +230,36 @@ describe("useCreateQmTenant", () => {
     expect(mutationDump).not.toContain("sk-ant-secret")
   })
 
+  it("keeps each concurrent create's model key with its own request", async () => {
+    const { wrapper } = createQueryWrapper()
+    mockCreate.mockImplementation(async (data: { slug: string }) =>
+      tenant({ id: data.slug, slug: data.slug }),
+    )
+
+    const { result } = renderHook(() => useCreateQmTenant(), { wrapper })
+    await act(async () => {
+      await Promise.all([
+        result.current.mutateAsync({
+          ...body,
+          slug: "one",
+          modelKey: "key-one",
+        }),
+        result.current.mutateAsync({
+          ...body,
+          slug: "two",
+          modelKey: "key-two",
+        }),
+      ])
+    })
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: "one", modelKey: "key-one" }),
+    )
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: "two", modelKey: "key-two" }),
+    )
+  })
+
   it("only prepends to the active scope's list", async () => {
     const { queryClient, wrapper } = createQueryWrapper()
     const otherScopeKey = [...qmKeys.list(), "team:other"]

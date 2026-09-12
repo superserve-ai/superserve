@@ -450,6 +450,36 @@ describe("api proxy /api/[...path]", () => {
       expect(headers.get("x-api-key")).toBe("ss_live_test_key")
     })
 
+    it("rejects dot segments so a qm path cannot escape /v1/qm/", async () => {
+      for (const path of [
+        ["qm", "..", "sandboxes"],
+        ["qm", "%2e%2e", "sandboxes"],
+        ["qm", "tenants", ".", "x"],
+        ["qm", "tenants%2F..%2Fadmin"],
+      ]) {
+        const res = await GET(req("GET", path), params(path))
+        expect(res.status).toBe(400)
+        expect((await res.json()).error.code).toBe("invalid_path")
+      }
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it("re-encodes qm path segments before forwarding", async () => {
+      fetchSpy.mockResolvedValue(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      const path = ["qm", "slugs", "acme%20co", "availability"]
+
+      await GET(req("GET", path), params(path))
+
+      expect(fetchSpy.mock.calls[0][0]).toBe(
+        "https://qm-api.test/v1/qm/slugs/acme%20co/availability",
+      )
+    })
+
     it("maps nested qm paths and passes body + status through", async () => {
       fetchSpy.mockResolvedValue(
         new Response('{"tenant":{"id":"t1"}}', {

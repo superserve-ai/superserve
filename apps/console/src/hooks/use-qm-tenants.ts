@@ -8,7 +8,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query"
-import { useCallback, useRef } from "react"
+import { useCallback } from "react"
 
 import { useQueryScope } from "@/components/query-provider"
 import { ApiError } from "@/lib/api/client"
@@ -126,18 +126,22 @@ export function useQmSlugAvailability(slug: string) {
 
 // --- Mutations -------------------------------------------------------------
 
+type CreateQmTenantVariables = Omit<CreateQmTenantRequest, "modelKey">
+
+// Each create call gets its own variables object, and the provider key is
+// held against that object alone, so it never enters the mutation's stored
+// state and concurrent creates cannot swap keys.
+const modelKeys = new WeakMap<CreateQmTenantVariables, string>()
+
 export function useCreateQmTenant() {
   const queryClient = useQueryClient()
   const queryScope = useQueryScope()
   const { addToast } = useToast()
-  // The provider key is handed to the request through a ref so it never
-  // becomes part of the mutation's stored variables.
-  const modelKeyRef = useRef<string | null>(null)
 
   const mutation = useMutation({
-    mutationFn: (data: Omit<CreateQmTenantRequest, "modelKey">) => {
-      const modelKey = modelKeyRef.current
-      modelKeyRef.current = null
+    mutationFn: (data: CreateQmTenantVariables) => {
+      const modelKey = modelKeys.get(data)
+      modelKeys.delete(data)
       if (!modelKey) return Promise.reject(new Error("Model key is required."))
       return createQmTenant({ ...data, modelKey })
     },
@@ -165,15 +169,17 @@ export function useCreateQmTenant() {
       { modelKey, ...data }: CreateQmTenantRequest,
       options?: Parameters<typeof mutate>[1],
     ) => {
-      modelKeyRef.current = modelKey
-      mutate(data, options)
+      const variables: CreateQmTenantVariables = { ...data }
+      modelKeys.set(variables, modelKey)
+      mutate(variables, options)
     },
     [mutate],
   )
   const createAsync = useCallback(
     ({ modelKey, ...data }: CreateQmTenantRequest) => {
-      modelKeyRef.current = modelKey
-      return mutateAsync(data)
+      const variables: CreateQmTenantVariables = { ...data }
+      modelKeys.set(variables, modelKey)
+      return mutateAsync(variables)
     },
     [mutateAsync],
   )
