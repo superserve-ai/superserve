@@ -24,6 +24,7 @@ import {
 import { qmKeys } from "@/lib/api/query-keys"
 import type {
   CreateQmTenantRequest,
+  QmAdminLink,
   QmTenant,
   QmTenantDetailResponse,
   QmTenantStatus,
