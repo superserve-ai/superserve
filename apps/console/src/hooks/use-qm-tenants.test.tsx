@@ -260,6 +260,36 @@ describe("useCreateQmTenant", () => {
     )
   })
 
+  it("invalidates the created slug's availability so the form cannot resubmit it", async () => {
+    const { queryClient, wrapper } = createQueryWrapper()
+    const availabilityKey = [...qmKeys.slugAvailability("acme"), "self"]
+    queryClient.setQueryData(availabilityKey, { available: true })
+    mockCreate.mockResolvedValue(tenant({ id: "new", slug: "acme" }))
+
+    const { result } = renderHook(() => useCreateQmTenant(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync(body)
+    })
+
+    expect(queryClient.getQueryState(availabilityKey)?.isInvalidated).toBe(true)
+  })
+
+  it("toasts when a 400 carries no field messages or when fields come with another status", async () => {
+    for (const error of [
+      new ApiError(400, "unknown_error", "Validation failed", {}),
+      new ApiError(409, "unknown_error", "Limit reached", { slug: "x" }),
+    ]) {
+      mockAddToast.mockClear()
+      const { wrapper } = createQueryWrapper()
+      mockCreate.mockRejectedValueOnce(error)
+      const { result } = renderHook(() => useCreateQmTenant(), { wrapper })
+      await act(async () => {
+        await result.current.mutateAsync(body).catch(() => undefined)
+      })
+      expect(mockAddToast).toHaveBeenCalledTimes(1)
+    }
+  })
+
   it("only prepends to the active scope's list", async () => {
     const { queryClient, wrapper } = createQueryWrapper()
     const otherScopeKey = [...qmKeys.list(), "team:other"]
