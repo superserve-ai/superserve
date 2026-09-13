@@ -153,6 +153,10 @@ export function useQmTenant(id: string | null) {
     queryFn: () => getQmTenant(id as string),
     enabled: !!id,
     retry: retryTenantQuery,
+    // A settled tenant doesn't poll, so a cached detail could otherwise
+    // show a stack another session has since deleted or retried for as
+    // long as the cache stays fresh. Entering the page always asks again.
+    refetchOnMount: "always",
     refetchInterval: (query) => {
       // Deprovisioning ends in `deleted`, and a deleted tenant is 404 rather
       // than a terminal status. React Query keeps the last successful

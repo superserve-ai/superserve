@@ -633,6 +633,24 @@ describe("useQmSlugAvailability", () => {
   })
 })
 
+describe("useQmTenant freshness", () => {
+  it("asks the server again on mount even when the detail is cached and fresh", async () => {
+    const { wrapper, queryClient } = createQueryWrapper()
+    const cached = detail(tenant({ id: "t1", status: "ready" }))
+    queryClient.setQueryData(detailKey("t1"), cached)
+    mockGet.mockResolvedValue(
+      detail(tenant({ id: "t1", status: "deprovisioning" })),
+    )
+
+    const { result } = renderHook(() => useQmTenant("t1"), { wrapper })
+    expect(result.current.data?.tenant.status).toBe("ready")
+    await waitFor(() =>
+      expect(result.current.data?.tenant.status).toBe("deprovisioning"),
+    )
+    expect(mockGet).toHaveBeenCalledWith("t1")
+  })
+})
+
 describe("useQmTenant retry policy", () => {
   /** A client with the app's real retry behaviour, just without the backoff. */
   function retryingWrapper() {
