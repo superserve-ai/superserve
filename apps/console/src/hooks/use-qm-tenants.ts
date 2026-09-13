@@ -36,6 +36,9 @@ const TRANSITIONAL_STATUSES: ReadonlySet<QmTenantStatus> = new Set([
 ])
 const TRANSITIONAL_POLL_MS = 2000
 
+/** Statuses a tenant read never recovers from, so retrying only adds delay. */
+const NON_RETRYABLE_STATUSES: ReadonlySet<number> = new Set([401, 404, 409])
+
 interface TenantSnapshot {
   list: QmTenant[] | undefined
   detail: QmTenantDetailResponse | undefined
@@ -129,11 +132,22 @@ export function useQmTenant(id: string | null) {
     queryFn: () => getQmTenant(id as string),
     enabled: !!id,
     refetchInterval: (query) => {
+      // Deprovisioning ends in `deleted`, and a deleted tenant is 404 rather
+      // than a terminal status. React Query keeps the last successful
+      // (transitional) data alongside the error, so poll on data alone would
+      // never stop; the error state is what says the tenant is gone.
+      if (query.state.status === "error") return false
       const status = query.state.data?.tenant.status
       return status && TRANSITIONAL_STATUSES.has(status)
         ? TRANSITIONAL_POLL_MS
         : false
     },
+    // The shared default already gives up on 401 and 409; 404 is equally
+    // final here, since a tenant only stops existing by being deleted.
+    retry: (failureCount, error) =>
+      error instanceof ApiError && NON_RETRYABLE_STATUSES.has(error.status)
+        ? false
+        : failureCount < 3,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   })

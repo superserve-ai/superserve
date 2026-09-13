@@ -165,6 +165,27 @@ describe("useQmTenant", () => {
     },
   )
 
+  it("stops polling and retrying once the deleted tenant 404s", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const { wrapper } = createQueryWrapper()
+    mockGet
+      .mockResolvedValueOnce(detail(tenant({ status: "deprovisioning" })))
+      .mockRejectedValue(new ApiError(404, "not_found", "Tenant not found"))
+
+    const { result } = renderHook(() => useQmTenant("t1"), { wrapper })
+    await waitFor(() =>
+      expect(result.current.data?.tenant.status).toBe("deprovisioning"),
+    )
+
+    await advance(2100)
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2))
+
+    // The 404 is neither retried nor polled again, even though the last
+    // successful read is still cached as `deprovisioning`.
+    await advance(10_000)
+    expect(mockGet).toHaveBeenCalledTimes(2)
+  })
+
   it("is disabled without an id", () => {
     const { wrapper } = createQueryWrapper()
     const { result } = renderHook(() => useQmTenant(null), { wrapper })
