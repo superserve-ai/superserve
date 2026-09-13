@@ -57,9 +57,10 @@ export interface TenantRun {
    */
   failureMessage: string | null
   /**
-   * False when the provider key was never stored: qm-api refuses to retry
-   * such a tenant (there is nothing to provision with), so the only way
-   * forward is to delete it and create the stack again.
+   * False when the provider key is known to be missing: qm-api refuses to
+   * retry such a tenant (there is nothing to provision with), so the only
+   * way forward is to delete it and create the stack again. An ambiguous
+   * key write (qm-api could not confirm it) stays retryable.
    */
   canRetry: boolean
 }
@@ -180,8 +181,17 @@ export function latestRun(events: QmTenantEvent[]): TenantRun {
       BOOKKEEPING_STEPS.has(e.step) && e.status === "failed" && !!e.message,
   )
   const stepFailure = steps.findLast((s) => s.status === "failed")
+  // qm-api records three model-key outcomes: the key could not be stored,
+  // its reference could not be recorded (both: delete and recreate), and
+  // the reference could not be *confirmed* — the write may have landed, so
+  // that message invites a retry and the retry endpoint re-checks it. The
+  // message text is the only signal the API exposes; its 409 remains the
+  // authority if the wording ever drifts.
   const keyMissing = scoped.some(
-    (e) => e.step === MODEL_KEY_STEP && e.status === "failed",
+    (e) =>
+      e.step === MODEL_KEY_STEP &&
+      e.status === "failed" &&
+      !/\bretry\b/i.test(e.message ?? ""),
   )
   return {
     mode,

@@ -234,6 +234,19 @@ describe("latestRun", () => {
     expect(latestRun(failedAtStep4Events()).canRetry).toBe(true)
   })
 
+  it("keeps retry when the model-key write was merely unconfirmed", () => {
+    const { canRetry, failureMessage } = latestRun([
+      qmEvent(
+        "model_key",
+        "failed",
+        T(0),
+        "The model key reference could not be confirmed. Retry the tenant, or delete it and create it again.",
+      ),
+    ])
+    expect(canRetry).toBe(true)
+    expect(failureMessage).toMatch(/could not be confirmed/)
+  })
+
   it("treats a stream without run markers as one provisioning attempt", () => {
     const { mode, steps } = latestRun([
       qmEvent("database", "started", T(0)),
