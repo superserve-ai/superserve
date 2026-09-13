@@ -58,22 +58,29 @@ export function useCreateTeam() {
       // stays pending until the client's active team matches the cookie the
       // server now holds. The patch is what guarantees they agree: the
       // refetch that follows fills in the new row but swallows its own
-      // failure, so it cannot be the only thing keeping the two in step.
+      // failure, and a degraded regional read can come back a successful but
+      // partial directory that names the previous team — so the patch is
+      // applied on both sides of it.
+      const selectCreated = (old: TeamDirectoryResponse | undefined) =>
+        old
+          ? {
+              ...old,
+              teams: old.teams.some((t) => t.id === team.id)
+                ? old.teams
+                : [...old.teams, team],
+              activeTeamId: team.id,
+              activeRegion: team.region,
+            }
+          : old
       queryClient.setQueryData<TeamDirectoryResponse>(
         teamKeys.directory(),
-        (old) =>
-          old
-            ? {
-                ...old,
-                teams: old.teams.some((t) => t.id === team.id)
-                  ? old.teams
-                  : [...old.teams, team],
-                activeTeamId: team.id,
-                activeRegion: team.region,
-              }
-            : old,
+        selectCreated,
       )
       await queryClient.refetchQueries({ queryKey: teamKeys.directory() })
+      queryClient.setQueryData<TeamDirectoryResponse>(
+        teamKeys.directory(),
+        selectCreated,
+      )
       return team
     },
     onSuccess: () => {

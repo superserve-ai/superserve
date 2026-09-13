@@ -388,11 +388,21 @@ export function useQmAdminLink(id: string) {
   const [inFlight, setInFlight] = useState(0)
 
   // A mint already in flight closes over the scope it started in, so the
-  // scope it should be compared against on return is tracked separately.
+  // scope to compare it against on return is tracked separately. Written
+  // during render, not in an effect: a request that resolves between the
+  // render and a passive effect would otherwise still see the old scope.
   const currentScope = useRef(scope)
+  currentScope.current = scope
+
+  // After unmount the component can no longer say which scope is active, so
+  // a completion arriving then is discarded rather than trusted.
+  const mounted = useRef(true)
   useEffect(() => {
-    currentScope.current = scope
-  }, [scope])
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
 
   const mint = useCallback(async (): Promise<QmAdminLink> => {
     setInFlight((n) => n + 1)
@@ -406,7 +416,9 @@ export function useQmAdminLink(id: string) {
       // And the scope can move while the request is out: a link minted for
       // the team that was active at the click must not be handed to a session
       // that has since moved somewhere else.
-      if (currentScope.current !== startedIn) throw scopeMoved()
+      if (!mounted.current || currentScope.current !== startedIn) {
+        throw scopeMoved()
+      }
       return link
     } catch (error) {
       addToast(
