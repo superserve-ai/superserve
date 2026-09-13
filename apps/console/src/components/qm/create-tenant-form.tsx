@@ -151,9 +151,16 @@ export function CreateTenantForm({ defaultAdminEmail }: CreateTenantFormProps) {
   }
 
   const handleProvider = (value: QmModelProvider) => {
+    if (value === provider) return
     setProvider(value)
     clearServerError("modelProvider")
     if (!harnessAllowed(harness, value)) setHarness(DEFAULT_HARNESS)
+    // Keys are provider-specific: never carry one over to a different
+    // provider, where it would only fail validation after a round-trip.
+    if (keyRef.current) keyRef.current.value = ""
+    setHasKey(false)
+    clearServerError("modelKey")
+    setTouched((t) => ({ ...t, modelKey: false }))
   }
 
   const canSubmit =

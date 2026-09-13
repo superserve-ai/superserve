@@ -200,6 +200,24 @@ describe("CreateTenantForm", () => {
     ).toBe(true)
   })
 
+  it("clears the key when the provider changes", async () => {
+    const user = userEvent.setup()
+    renderForm()
+    await user.type(keyField(), KEY)
+    expect(keyField().value).toBe(KEY)
+    expect(screen.getByText("••••••••")).toBeInTheDocument()
+
+    const [provider] = screen.getAllByRole("combobox")
+    await user.selectOptions(provider, "openai")
+
+    expect(keyField().value).toBe("")
+    expect(screen.queryByText("••••••••")).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/openai api key/i)).toBeInTheDocument()
+    await user.click(submit())
+    expect(screen.getByText(/enter your provider api key/i)).toBeInTheDocument()
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
+
   it("submits the full request and navigates to the new stack", async () => {
     mockCreate.mockResolvedValue(qmTenant({ id: "t-new" }))
     const user = userEvent.setup()
