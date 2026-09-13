@@ -71,9 +71,13 @@ const detail = (t: QmTenant): QmTenantDetailResponse => ({
   events: [],
 })
 
-// Hooks append the query scope ("self" without a provider) to every key.
-const listKey = [...qmKeys.list(), "self"]
-const detailKey = (id: string) => [...qmKeys.detail(id), "self"]
+// Every QM key carries the query scope, which is "self" without a provider.
+const SCOPE = "self"
+const OTHER_SCOPE = "team:other"
+const listKey = qmKeys.list(SCOPE)
+const detailKey = (id: string) => qmKeys.detail(id, SCOPE)
+const otherListKey = qmKeys.list(OTHER_SCOPE)
+const otherDetailKey = (id: string) => qmKeys.detail(id, OTHER_SCOPE)
 
 // React Query only re-renders when a property read during render changes, so
 // polling tests must read `data` (as any real consumer would) before asserting
@@ -262,7 +266,7 @@ describe("useCreateQmTenant", () => {
 
   it("invalidates the created slug's availability so the form cannot resubmit it", async () => {
     const { queryClient, wrapper } = createQueryWrapper()
-    const availabilityKey = [...qmKeys.slugAvailability("acme"), "self"]
+    const availabilityKey = qmKeys.slugAvailability("acme", SCOPE)
     queryClient.setQueryData(availabilityKey, { available: true })
     mockCreate.mockResolvedValue(tenant({ id: "new", slug: "acme" }))
 
@@ -292,9 +296,8 @@ describe("useCreateQmTenant", () => {
 
   it("only prepends to the active scope's list", async () => {
     const { queryClient, wrapper } = createQueryWrapper()
-    const otherScopeKey = [...qmKeys.list(), "team:other"]
     queryClient.setQueryData(listKey, [tenant({ id: "old" })])
-    queryClient.setQueryData(otherScopeKey, [tenant({ id: "theirs" })])
+    queryClient.setQueryData(otherListKey, [tenant({ id: "theirs" })])
     mockCreate.mockResolvedValue(tenant({ id: "new", slug: "acme" }))
 
     const { result } = renderHook(() => useCreateQmTenant(), { wrapper })
@@ -306,7 +309,7 @@ describe("useCreateQmTenant", () => {
       queryClient.getQueryData<QmTenant[]>(listKey)?.map((t) => t.id),
     ).toEqual(["new", "old"])
     expect(
-      queryClient.getQueryData<QmTenant[]>(otherScopeKey)?.map((t) => t.id),
+      queryClient.getQueryData<QmTenant[]>(otherListKey)?.map((t) => t.id),
     ).toEqual(["theirs"])
   })
 
@@ -408,6 +411,37 @@ describe("useDeleteQmTenant", () => {
       "error",
     )
   })
+
+  it("patches and invalidates only the active scope", async () => {
+    const { queryClient, wrapper } = createQueryWrapper()
+    queryClient.setQueryData(listKey, [tenant({ id: "a" })])
+    queryClient.setQueryData(detailKey("a"), detail(tenant({ id: "a" })))
+    // Same tenant id cached under another scope: it must not be touched.
+    queryClient.setQueryData(otherListKey, [tenant({ id: "a" })])
+    queryClient.setQueryData(otherDetailKey("a"), detail(tenant({ id: "a" })))
+    mockDelete.mockResolvedValue(tenant({ id: "a", status: "deprovisioning" }))
+
+    const { result } = renderHook(() => useDeleteQmTenant(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync("a")
+    })
+
+    expect(queryClient.getQueryData<QmTenant[]>(listKey)?.[0].status).toBe(
+      "deprovisioning",
+    )
+    expect(queryClient.getQueryData<QmTenant[]>(otherListKey)?.[0].status).toBe(
+      "ready",
+    )
+    expect(
+      queryClient.getQueryData<QmTenantDetailResponse>(otherDetailKey("a"))
+        ?.tenant.status,
+    ).toBe("ready")
+    expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(true)
+    expect(queryClient.getQueryState(otherListKey)?.isInvalidated).toBe(false)
+    expect(queryClient.getQueryState(otherDetailKey("a"))?.isInvalidated).toBe(
+      false,
+    )
+  })
 })
 
 describe("useRetryQmTenant", () => {
@@ -445,6 +479,28 @@ describe("useRetryQmTenant", () => {
     })
 
     expect(mockAddToast).toHaveBeenCalledWith(expect.any(String), "error")
+  })
+
+  it("patches and invalidates only the active scope", async () => {
+    const { queryClient, wrapper } = createQueryWrapper()
+    queryClient.setQueryData(listKey, [tenant({ id: "a", status: "failed" })])
+    queryClient.setQueryData(otherListKey, [
+      tenant({ id: "a", status: "failed" }),
+    ])
+    mockRetry.mockResolvedValue(tenant({ id: "a", status: "provisioning" }))
+
+    const { result } = renderHook(() => useRetryQmTenant(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync("a")
+    })
+
+    expect(queryClient.getQueryData<QmTenant[]>(listKey)?.[0].status).toBe(
+      "provisioning",
+    )
+    expect(queryClient.getQueryData<QmTenant[]>(otherListKey)?.[0].status).toBe(
+      "failed",
+    )
+    expect(queryClient.getQueryState(otherListKey)?.isInvalidated).toBe(false)
   })
 })
 

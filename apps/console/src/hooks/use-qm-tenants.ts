@@ -3,7 +3,6 @@
 import { useToast } from "@superserve/ui"
 import {
   type QueryClient,
-  type QueryKey,
   useMutation,
   useQuery,
   useQueryClient,
@@ -37,39 +36,59 @@ const TRANSITIONAL_STATUSES: ReadonlySet<QmTenantStatus> = new Set([
 ])
 const TRANSITIONAL_POLL_MS = 2000
 
-type ListSnapshots = [QueryKey, QmTenant[] | undefined][]
-type DetailSnapshots = [QueryKey, QmTenantDetailResponse | undefined][]
+interface TenantSnapshot {
+  list: QmTenant[] | undefined
+  detail: QmTenantDetailResponse | undefined
+}
 
 // --- Cache helpers ---------------------------------------------------------
-// Lists and details are keyed with a trailing query scope (self vs. an
-// impersonated team), so mutations patch by prefix to hit every variant.
+// Lists and details are keyed by query scope (self vs. an impersonated team).
+// Every helper below takes the scope the mutation was issued in and touches
+// only that scope's two exact keys: a write in one scope says nothing about
+// what another scope's cache holds, so patching or invalidating by a bare
+// `qm` prefix would discard data the mutation never affected.
 
-function snapshotLists(qc: QueryClient): ListSnapshots {
-  return qc.getQueriesData<QmTenant[]>({ queryKey: qmKeys.lists() })
+function snapshotTenant(
+  qc: QueryClient,
+  id: string,
+  scope: string,
+): TenantSnapshot {
+  return {
+    list: qc.getQueryData<QmTenant[]>(qmKeys.list(scope)),
+    detail: qc.getQueryData<QmTenantDetailResponse>(qmKeys.detail(id, scope)),
+  }
 }
 
-function snapshotDetail(qc: QueryClient, id: string): DetailSnapshots {
-  return qc.getQueriesData<QmTenantDetailResponse>({
-    queryKey: qmKeys.detail(id),
-  })
-}
-
-function restore<T>(qc: QueryClient, snapshots: [QueryKey, T | undefined][]) {
-  for (const [key, data] of snapshots) qc.setQueryData(key, data)
+// React Query ignores an `undefined` value, so a key that held nothing before
+// the mutation is left alone rather than resurrected — which matches
+// `patchTenant`, whose updaters also decline to create entries.
+function restoreTenant(
+  qc: QueryClient,
+  id: string,
+  scope: string,
+  snapshot: TenantSnapshot,
+) {
+  qc.setQueryData(qmKeys.list(scope), snapshot.list)
+  qc.setQueryData(qmKeys.detail(id, scope), snapshot.detail)
 }
 
 function patchTenant(
   qc: QueryClient,
   id: string,
+  scope: string,
   updater: (tenant: QmTenant) => QmTenant,
 ) {
-  qc.setQueriesData<QmTenant[]>({ queryKey: qmKeys.lists() }, (old) =>
+  qc.setQueryData<QmTenant[]>(qmKeys.list(scope), (old) =>
     old ? old.map((t) => (t.id === id ? updater(t) : t)) : old,
   )
-  qc.setQueriesData<QmTenantDetailResponse>(
-    { queryKey: qmKeys.detail(id) },
-    (old) => (old ? { ...old, tenant: updater(old.tenant) } : old),
+  qc.setQueryData<QmTenantDetailResponse>(qmKeys.detail(id, scope), (old) =>
+    old ? { ...old, tenant: updater(old.tenant) } : old,
   )
+}
+
+function invalidateTenant(qc: QueryClient, id: string, scope: string) {
+  qc.invalidateQueries({ queryKey: qmKeys.list(scope), exact: true })
+  qc.invalidateQueries({ queryKey: qmKeys.detail(id, scope), exact: true })
 }
 
 function hasFieldErrors(
@@ -92,7 +111,7 @@ function errorMessage(error: unknown, fallback: string): string {
 export function useQmTenants() {
   const queryScope = useQueryScope()
   return useQuery({
-    queryKey: [...qmKeys.list(), queryScope],
+    queryKey: qmKeys.list(queryScope),
     queryFn: listQmTenants,
     // Lists change while any tenant is provisioning/deprovisioning.
     refetchInterval: (query) =>
@@ -106,7 +125,7 @@ export function useQmTenants() {
 export function useQmTenant(id: string | null) {
   const queryScope = useQueryScope()
   return useQuery({
-    queryKey: [...qmKeys.detail(id ?? ""), queryScope],
+    queryKey: qmKeys.detail(id ?? "", queryScope),
     queryFn: () => getQmTenant(id as string),
     enabled: !!id,
     refetchInterval: (query) => {
@@ -128,7 +147,7 @@ export function useQmSlugAvailability(slug: string) {
   const queryScope = useQueryScope()
   const trimmed = slug.trim()
   return useQuery({
-    queryKey: [...qmKeys.slugAvailability(trimmed), queryScope],
+    queryKey: qmKeys.slugAvailability(trimmed, queryScope),
     queryFn: () => checkQmSlug(trimmed),
     enabled: trimmed.length > 0,
     staleTime: 10_000,
@@ -158,14 +177,18 @@ export function useCreateQmTenant() {
       return createQmTenant({ ...data, modelKey })
     },
     onSuccess: (tenant) => {
-      queryClient.setQueryData<QmTenant[]>(
-        [...qmKeys.list(), queryScope],
-        (old) =>
-          old ? [tenant, ...old.filter((t) => t.id !== tenant.id)] : old,
+      queryClient.setQueryData<QmTenant[]>(qmKeys.list(queryScope), (old) =>
+        old ? [tenant, ...old.filter((t) => t.id !== tenant.id)] : old,
       )
-      queryClient.invalidateQueries({ queryKey: qmKeys.lists() })
       queryClient.invalidateQueries({
-        queryKey: qmKeys.slugAvailability(tenant.slug),
+        queryKey: qmKeys.list(queryScope),
+        exact: true,
+      })
+      // Deliberately broad: qm-api answers slug availability across every
+      // team, so a slug claimed here makes the cached answer wrong in every
+      // scope, not just the active one.
+      queryClient.invalidateQueries({
+        queryKey: qmKeys.slugAvailabilities(tenant.slug),
       })
     },
     onError: (error) => {
@@ -204,44 +227,52 @@ export function useCreateQmTenant() {
 
 export function useDeleteQmTenant() {
   const queryClient = useQueryClient()
+  const queryScope = useQueryScope()
   const { addToast } = useToast()
 
   return useMutation({
     mutationFn: (id: string) => deleteQmTenant(id),
     onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: qmKeys.all })
-      const lists = snapshotLists(queryClient)
-      const details = snapshotDetail(queryClient, id)
-      patchTenant(queryClient, id, (t) => ({ ...t, status: "deprovisioning" }))
-      return { lists, details }
+      await queryClient.cancelQueries({
+        queryKey: qmKeys.list(queryScope),
+        exact: true,
+      })
+      await queryClient.cancelQueries({
+        queryKey: qmKeys.detail(id, queryScope),
+        exact: true,
+      })
+      const snapshot = snapshotTenant(queryClient, id, queryScope)
+      patchTenant(queryClient, id, queryScope, (t) => ({
+        ...t,
+        status: "deprovisioning",
+      }))
+      return snapshot
     },
     onSuccess: (tenant) => {
-      patchTenant(queryClient, tenant.id, () => tenant)
+      patchTenant(queryClient, tenant.id, queryScope, () => tenant)
     },
-    onError: (error, _id, context) => {
-      if (context) {
-        restore(queryClient, context.lists)
-        restore(queryClient, context.details)
-      }
+    onError: (error, id, snapshot) => {
+      if (snapshot) restoreTenant(queryClient, id, queryScope, snapshot)
       addToast(
         errorMessage(error, "Failed to delete QM instance. Try again."),
         "error",
       )
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: qmKeys.all })
+    onSettled: (_tenant, _error, id) => {
+      invalidateTenant(queryClient, id, queryScope)
     },
   })
 }
 
 export function useRetryQmTenant() {
   const queryClient = useQueryClient()
+  const queryScope = useQueryScope()
   const { addToast } = useToast()
 
   return useMutation({
     mutationFn: (id: string) => retryQmTenant(id),
     onSuccess: (tenant) => {
-      patchTenant(queryClient, tenant.id, () => tenant)
+      patchTenant(queryClient, tenant.id, queryScope, () => tenant)
     },
     onError: (error) => {
       addToast(
@@ -249,8 +280,8 @@ export function useRetryQmTenant() {
         "error",
       )
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: qmKeys.all })
+    onSettled: (_tenant, _error, id) => {
+      invalidateTenant(queryClient, id, queryScope)
     },
   })
 }
