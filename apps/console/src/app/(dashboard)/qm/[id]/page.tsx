@@ -157,7 +157,15 @@ export default function QmTenantDetailPage() {
                 </span>
               )}
             </div>
-            <ProvisioningSteps run={run} live={transitional} />
+            <ProvisioningSteps
+              run={run}
+              live={transitional}
+              emptyMessage={
+                transitional
+                  ? "Waiting for the first step to start…"
+                  : "No steps ran."
+              }
+            />
           </section>
         )}
 

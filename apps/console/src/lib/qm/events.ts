@@ -1,13 +1,32 @@
 import type { QmTenantEvent, QmTenantEventStatus } from "@/lib/api/types"
 
 /**
- * qm-api records every attempt under a pseudo-step, `run`: a `started` event
- * (with `detail.mode`) opens it, and an `ok` or `failed` event with a
- * user-safe message closes it. Real steps sit in between. A retry opens a
- * new run, and a teardown replays the same step names in reverse — so the
- * step list is always built from the latest run only.
+ * qm-api records bookkeeping under pseudo-steps that are not part of the
+ * plan: `model_key` (storing the provider key at create time), `trigger`
+ * (queuing a run; carries `detail.mode`) and `run` (the worker's attempt:
+ * `started` with `detail.mode`, then `ok`/`failed` with a user-safe
+ * message). Real steps sit inside a run. A retry queues a new attempt and a
+ * teardown replays the same step names in reverse, so the step list is
+ * always built from the latest attempt only — bounded by the most recent
+ * `trigger started` or `run started`, whichever came last.
  */
 export const RUN_STEP = "run"
+export const TRIGGER_STEP = "trigger"
+export const MODEL_KEY_STEP = "model_key"
+
+const BOOKKEEPING_STEPS: ReadonlySet<string> = new Set([
+  RUN_STEP,
+  TRIGGER_STEP,
+  MODEL_KEY_STEP,
+])
+
+/** Events that open a new attempt. */
+function isAttemptStart(event: QmTenantEvent): boolean {
+  return (
+    (event.step === RUN_STEP || event.step === TRIGGER_STEP) &&
+    event.status === "started"
+  )
+}
 
 export type RunMode = "provision" | "deprovision"
 
@@ -22,10 +41,13 @@ export interface TenantStep {
 }
 
 export interface TenantRun {
-  /** Which plan the latest run executes; null before any run has started. */
+  /** Which plan the latest attempt executes; null before any attempt. */
   mode: RunMode | null
   steps: TenantStep[]
-  /** The run's user-safe failure message, or the failed step's message. */
+  /**
+   * The user-safe message from the attempt's bookkeeping failure (run,
+   * trigger or model-key), falling back to the failed step's message.
+   */
   failureMessage: string | null
 }
 
@@ -90,7 +112,8 @@ function parseMode(event: QmTenantEvent): RunMode | null {
 /**
  * Group an event stream by `step`, in order of first appearance. The latest
  * event decides the step's status; the last `started` and the latest
- * terminal event after it bound the duration. `run` events are not steps.
+ * terminal event after it bound the duration. Bookkeeping pseudo-steps are
+ * never listed.
  */
 export function groupTenantEvents(
   events: QmTenantEvent[],
@@ -98,7 +121,7 @@ export function groupTenantEvents(
 ): TenantStep[] {
   const steps = new Map<string, TenantStep>()
   for (const event of chronological(events)) {
-    if (event.step === RUN_STEP) continue
+    if (BOOKKEEPING_STEPS.has(event.step)) continue
     const existing = steps.get(event.step)
     if (!existing) {
       steps.set(event.step, {
@@ -125,27 +148,29 @@ export function groupTenantEvents(
 }
 
 /**
- * The latest attempt: everything from the most recent `run started` event
- * onward. Streams without a run marker (older records) are treated as one
- * provisioning run.
+ * The latest attempt: everything from the most recent attempt-opening event
+ * onward. A queued retry or deletion is therefore its own (still empty)
+ * attempt even before the worker's `run started` arrives, and a trigger
+ * that failed to start is reported as that attempt's failure. Streams with
+ * no marker at all (a tenant whose key storage failed, or older records)
+ * are treated as a single provisioning attempt.
  */
 export function latestRun(events: QmTenantEvent[]): TenantRun {
   const ordered = chronological(events)
-  const start = ordered.findLastIndex(
-    (e) => e.step === RUN_STEP && e.status === "started",
-  )
+  const start = ordered.findLastIndex(isAttemptStart)
   const scoped = start === -1 ? ordered : ordered.slice(start)
   const mode = start === -1 ? null : parseMode(ordered[start])
   const steps = groupTenantEvents(scoped, mode)
 
-  const runFailure = scoped.findLast(
-    (e) => e.step === RUN_STEP && e.status === "failed" && e.message,
+  const bookkeepingFailure = scoped.findLast(
+    (e) =>
+      BOOKKEEPING_STEPS.has(e.step) && e.status === "failed" && !!e.message,
   )
   const stepFailure = steps.findLast((s) => s.status === "failed")
   return {
     mode,
     steps,
-    failureMessage: runFailure?.message ?? stepFailure?.message ?? null,
+    failureMessage: bookkeepingFailure?.message ?? stepFailure?.message ?? null,
   }
 }
 

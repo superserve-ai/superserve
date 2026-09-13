@@ -132,6 +132,80 @@ describe("latestRun", () => {
     expect(latestRun(events).mode).toBe("deprovision")
   })
 
+  it("never lists bookkeeping pseudo-steps", () => {
+    const { steps } = latestRun([
+      qmEvent("model_key", "ok", T(0), "anthropic key stored"),
+      {
+        ...qmEvent("trigger", "started", T(1), "provision run requested"),
+        detail: { mode: "provision" },
+      },
+      {
+        ...qmEvent("trigger", "ok", T(1), "provision run queued"),
+        detail: { mode: "provision" },
+      },
+      run("started", T(2), "provision", "provision started"),
+      qmEvent("database", "started", T(3)),
+    ])
+    expect(steps.map((s) => s.step)).toEqual(["database"])
+  })
+
+  it("treats a queued trigger as a fresh attempt before its run starts", () => {
+    const events = [
+      ...successEvents(),
+      {
+        ...qmEvent("trigger", "started", T(200), "deprovision run requested"),
+        detail: { mode: "deprovision" },
+      },
+      {
+        ...qmEvent("trigger", "ok", T(200), "deprovision run queued"),
+        detail: { mode: "deprovision" },
+      },
+    ]
+    const { mode, steps, failureMessage } = latestRun(events)
+    expect(mode).toBe("deprovision")
+    expect(steps).toEqual([])
+    expect(failureMessage).toBeNull()
+  })
+
+  it("reports a trigger that could not start as that attempt's failure", () => {
+    const events = [
+      ...successEvents(),
+      {
+        ...qmEvent("trigger", "started", T(200), "deprovision run requested"),
+        detail: { mode: "deprovision" },
+      },
+      {
+        ...qmEvent(
+          "trigger",
+          "failed",
+          T(201),
+          "The deprovision run could not be started. Retry the tenant.",
+        ),
+        detail: { mode: "deprovision" },
+      },
+    ]
+    const { mode, steps, failureMessage } = latestRun(events)
+    expect(mode).toBe("deprovision")
+    expect(steps).toEqual([])
+    expect(failureMessage).toBe(
+      "The deprovision run could not be started. Retry the tenant.",
+    )
+  })
+
+  it("surfaces a model-key storage failure that happened before any run", () => {
+    const { mode, steps, failureMessage } = latestRun([
+      qmEvent(
+        "model_key",
+        "failed",
+        T(0),
+        "The model key could not be stored. Delete this tenant and create it again.",
+      ),
+    ])
+    expect(mode).toBeNull()
+    expect(steps).toEqual([])
+    expect(failureMessage).toMatch(/^The model key could not be stored/)
+  })
+
   it("treats a stream without run markers as one provisioning attempt", () => {
     const { mode, steps } = latestRun([
       qmEvent("database", "started", T(0)),
