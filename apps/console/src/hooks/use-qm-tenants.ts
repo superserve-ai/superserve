@@ -194,10 +194,6 @@ export function useCreateQmTenant() {
       queryClient.setQueryData<QmTenant[]>(qmKeys.list(queryScope), (old) =>
         old ? [tenant, ...old.filter((t) => t.id !== tenant.id)] : old,
       )
-      queryClient.invalidateQueries({
-        queryKey: qmKeys.list(queryScope),
-        exact: true,
-      })
       // Deliberately broad: qm-api answers slug availability across every
       // team, so a slug claimed here makes the cached answer wrong in every
       // scope, not just the active one.
@@ -212,6 +208,16 @@ export function useCreateQmTenant() {
         errorMessage(error, "Failed to create QM instance. Try again."),
         "error",
       )
+    },
+    onSettled: () => {
+      // A create can fail with the tenant already committed — the documented
+      // 502, or a timeout after the server wrote it — so refresh the list on
+      // every outcome rather than only on success, or the page can keep
+      // showing no tenant while every retry answers 409.
+      queryClient.invalidateQueries({
+        queryKey: qmKeys.list(queryScope),
+        exact: true,
+      })
     },
   })
 

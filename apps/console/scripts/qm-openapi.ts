@@ -27,6 +27,11 @@
  * slice. It additionally re-vendors and compares when the upstream spec is
  * reachable; `--allow-missing-spec` (or `QM_OPENAPI_ALLOW_MISSING_SPEC=1`)
  * downgrades an unreachable spec from an error to a warning.
+ *
+ * That switch expires on its own: once the upstream spec *is* reachable,
+ * leaving it on is itself an error, so wiring CI to the real spec and
+ * removing the switch is a build failure rather than a follow-up someone
+ * has to remember.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
@@ -297,9 +302,14 @@ async function main(): Promise<void> {
 
   const { path: upstream, requested } = resolveUpstreamSpec(specFlag)
   if (upstream) {
+    if (allowMissingSpec) {
+      problems.push(
+        `the upstream spec is reachable at ${upstream}, so the allow-missing-spec escape hatch is obsolete: drop --allow-missing-spec / QM_OPENAPI_ALLOW_MISSING_SPEC (and the comment beside it in ci.yml)`,
+      )
+    }
     if (read(VENDORED_SPEC) !== renderVendored(upstream)) {
       problems.push(
-        `openapi/qm.openapi.yaml no longer matches ${PATH_PREFIX}* in ${upstream}`,
+        `openapi/qm.openapi.yaml no longer matches ${PATH_PREFIX}* in ${upstream}; run \`bun run --cwd apps/console qm:openapi\` and commit the result`,
       )
     }
   } else if (allowMissingSpec) {
@@ -314,13 +324,13 @@ async function main(): Promise<void> {
 
   if (read(GENERATED_TYPES) !== (await renderGenerated())) {
     problems.push(
-      "src/lib/api/qm.generated.ts no longer matches openapi/qm.openapi.yaml",
+      "src/lib/api/qm.generated.ts no longer matches openapi/qm.openapi.yaml; run `bun run --cwd apps/console qm:openapi:generate` and commit the result",
     )
   }
 
   if (problems.length > 0) {
     for (const problem of problems) console.error(`qm-openapi: ${problem}`)
-    fail("run `bun run --cwd apps/console qm:openapi` and commit the result")
+    process.exit(1)
   }
   console.log("qm-openapi: committed slice and generated types are in sync")
 }

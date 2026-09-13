@@ -299,6 +299,25 @@ describe("useCreateQmTenant", () => {
     expect(queryClient.getQueryState(availabilityKey)?.isInvalidated).toBe(true)
   })
 
+  it("refreshes the active list even when the create fails, since the tenant may exist", async () => {
+    const { queryClient, wrapper } = createQueryWrapper()
+    queryClient.setQueryData(listKey, [])
+    queryClient.setQueryData(otherListKey, [])
+    // The documented 502: the tenant was created but provisioning could not
+    // be started, so the list the page shows is already stale.
+    mockCreate.mockRejectedValue(
+      new ApiError(502, "unknown_error", "Provisioning run not started"),
+    )
+
+    const { result } = renderHook(() => useCreateQmTenant(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync(body).catch(() => {})
+    })
+
+    expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(true)
+    expect(queryClient.getQueryState(otherListKey)?.isInvalidated).toBe(false)
+  })
+
   it("toasts when a 400 carries no field messages or when fields come with another status", async () => {
     for (const error of [
       new ApiError(400, "unknown_error", "Validation failed", {}),
