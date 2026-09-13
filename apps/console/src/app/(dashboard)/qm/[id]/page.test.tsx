@@ -10,6 +10,7 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/lib/api/client"
+import { qmKeys } from "@/lib/api/query-keys"
 import {
   failedAtStep4Events,
   failedTeardownEvents,
@@ -490,5 +491,25 @@ describe("QmTenantDetailPage", () => {
     mockGet.mockRejectedValue(new ApiError(404, "not_found", "Not found"))
     renderPage()
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith("/qm"))
+  })
+
+  it("drops a vanished tenant from the cached list before leaving, so the list cannot bounce back", async () => {
+    mockGet.mockRejectedValue(new ApiError(404, "not_found", "Not found"))
+    const listKey = [...qmKeys.list(), "self"]
+    const queryClient = createQueryClient()
+    // A fresh list from moments ago still names this tenant as the only one.
+    queryClient.setQueryData(listKey, [
+      qmTenant({ id: "t1" }),
+      qmTenant({ id: "t2" }),
+    ])
+    render(
+      <QueryClientProvider client={queryClient}>
+        <QmTenantDetailPage />
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith("/qm"))
+    expect(queryClient.getQueryData(listKey)).toEqual([qmTenant({ id: "t2" })])
+    expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(true)
   })
 })

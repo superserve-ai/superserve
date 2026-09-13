@@ -9,6 +9,7 @@ import {
   TrashIcon,
 } from "@phosphor-icons/react"
 import { Button, buttonVariants, cn, useToast } from "@superserve/ui"
+import { useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
@@ -26,6 +27,7 @@ import {
   useRetryQmTenant,
 } from "@/hooks/use-qm-tenants"
 import { ApiError } from "@/lib/api/client"
+import { qmKeys } from "@/lib/api/query-keys"
 import type { QmTenant } from "@/lib/api/types"
 import { formatDate, formatTime } from "@/lib/format"
 import { QM_EVENTS } from "@/lib/posthog/events"
@@ -56,6 +58,7 @@ export default function QmTenantDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const posthog = usePostHog()
+  const queryClient = useQueryClient()
   const { addToast } = useToast()
   const tenantId = params.id
 
@@ -76,10 +79,19 @@ export default function QmTenantDetailPage() {
     status === "deleted" || (error instanceof ApiError && error.status === 404)
 
   // Once the stack is gone there is nothing to show here; go back to the
-  // list, which will either be empty or show the remaining stacks.
+  // list, which will either be empty or show the remaining stacks. The
+  // cached list may still carry this tenant (it is fresh for 30s), and the
+  // list page would send a sole tenant straight back here — so drop it
+  // from every cached list first, then let the list refetch.
   useEffect(() => {
-    if (gone) router.replace("/qm")
-  }, [gone, router])
+    if (!gone) return
+    queryClient.setQueriesData<QmTenant[]>(
+      { queryKey: qmKeys.lists() },
+      (old) => old?.filter((t) => t.id !== tenantId),
+    )
+    queryClient.invalidateQueries({ queryKey: qmKeys.lists() })
+    router.replace("/qm")
+  }, [gone, queryClient, router, tenantId])
 
   if (isPending || gone) return <DetailSkeleton />
 
