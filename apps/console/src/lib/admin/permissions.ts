@@ -7,11 +7,16 @@ export const PLATFORM_TEMPLATE_READ_PERMISSION = "platform:template:read"
 export const PLATFORM_ACTIVITY_READ_PERMISSION = "platform:activity:read"
 export const PLATFORM_BILLING_READ_PERMISSION = "platform:billing:read"
 export const PLATFORM_TEAMS_READ_PERMISSION = "platform:teams:read"
+// qm-api keys impersonated reads of hosted-QM tenants to their own scope: a
+// key scoped to sandboxes or templates does not see tenants, so an
+// impersonation key without this one gets a 403 from every /api/qm/* read.
+export const PLATFORM_QM_READ_PERMISSION = "platform:qm:read"
 export type PlatformImpersonationReadScope =
   | typeof PLATFORM_SANDBOX_READ_PERMISSION
   | typeof PLATFORM_TEMPLATE_READ_PERMISSION
   | typeof PLATFORM_ACTIVITY_READ_PERMISSION
   | typeof PLATFORM_BILLING_READ_PERMISSION
+  | typeof PLATFORM_QM_READ_PERMISSION
 
 function asPermissions(value: unknown): string[] {
   return Array.isArray(value)
@@ -64,6 +69,10 @@ export function canReadPlatformBilling(user: User | null | undefined): boolean {
   return hasPermission(user, PLATFORM_BILLING_READ_PERMISSION)
 }
 
+export function canReadPlatformQm(user: User | null | undefined): boolean {
+  return hasPermission(user, PLATFORM_QM_READ_PERMISSION)
+}
+
 export function canReadPlatformTeams(user: User | null | undefined): boolean {
   return isStaff(user) && hasPermission(user, PLATFORM_TEAMS_READ_PERMISSION)
 }
@@ -84,6 +93,9 @@ export function platformImpersonationReadScopes(
   }
   if (canReadPlatformBilling(user)) {
     scopes.push(PLATFORM_BILLING_READ_PERMISSION)
+  }
+  if (canReadPlatformQm(user)) {
+    scopes.push(PLATFORM_QM_READ_PERMISSION)
   }
 
   return scopes
