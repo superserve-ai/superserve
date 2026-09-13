@@ -36,7 +36,7 @@ import {
   formatElapsed,
   lastActivityAt,
   latestRun,
-  RUN_STALE_AFTER_MS,
+  runStaleAfterMs,
   type TenantRun,
 } from "@/lib/qm/events"
 import {
@@ -111,7 +111,7 @@ export default function QmTenantDetailPage() {
   // is called. Offer both once the run has gone quiet for as long as the
   // API's own threshold.
   const quietMs = now - lastActivityAt(events, tenant.updatedAt)
-  const stalled = transitional && quietMs >= RUN_STALE_AFTER_MS
+  const stalled = transitional && quietMs >= runStaleAfterMs()
   const canRetry =
     !readOnly && ((tenant.status === "failed" && run.canRetry) || stalled)
   const canDelete =

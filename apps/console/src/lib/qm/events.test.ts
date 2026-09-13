@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { QmTenantEvent } from "@/lib/api/types"
 import {
@@ -11,11 +11,13 @@ import {
 } from "@/test/qm-fixtures"
 
 import {
+  DEFAULT_RUN_STALE_AFTER_MS,
   formatElapsed,
   groupTenantEvents,
   lastActivityAt,
   latestRun,
-  RUN_STALE_AFTER_MS,
+  parseDuration,
+  runStaleAfterMs,
   stepElapsedMs,
   stepLabel,
 } from "./events"
@@ -279,9 +281,34 @@ describe("stepLabel", () => {
 })
 
 describe("lastActivityAt", () => {
-  it("uses the newest event, falling back to the tenant timestamp", () => {
-    expect(lastActivityAt(inProgressEvents(), T(500))).toBe(Date.parse(T(7)))
+  it("takes the later of the newest event and the tenant's updatedAt", () => {
+    expect(lastActivityAt(inProgressEvents(), T(5))).toBe(Date.parse(T(7)))
+    expect(lastActivityAt(inProgressEvents(), T(500))).toBe(Date.parse(T(500)))
     expect(lastActivityAt([], T(500))).toBe(Date.parse(T(500)))
-    expect(RUN_STALE_AFTER_MS).toBe(30 * 60_000)
+  })
+})
+
+describe("runStaleAfterMs", () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  it("parses Go-style durations", () => {
+    expect(parseDuration("30m")).toBe(30 * 60_000)
+    expect(parseDuration("1h30m")).toBe(90 * 60_000)
+    expect(parseDuration("90s")).toBe(90_000)
+    expect(parseDuration("1500ms")).toBe(1_500)
+    expect(parseDuration("2.5m")).toBe(150_000)
+    expect(parseDuration("")).toBeNull()
+    expect(parseDuration("30")).toBeNull()
+    expect(parseDuration("30 minutes")).toBeNull()
+    expect(parseDuration("0m")).toBeNull()
+  })
+
+  it("defaults to qm-api's default and honours the shared setting", () => {
+    vi.stubEnv("NEXT_PUBLIC_QM_RUN_STALE_AFTER", "")
+    expect(runStaleAfterMs()).toBe(DEFAULT_RUN_STALE_AFTER_MS)
+    vi.stubEnv("NEXT_PUBLIC_QM_RUN_STALE_AFTER", "10m")
+    expect(runStaleAfterMs()).toBe(10 * 60_000)
+    vi.stubEnv("NEXT_PUBLIC_QM_RUN_STALE_AFTER", "nonsense")
+    expect(runStaleAfterMs()).toBe(DEFAULT_RUN_STALE_AFTER_MS)
   })
 })

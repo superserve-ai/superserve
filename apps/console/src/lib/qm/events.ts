@@ -209,17 +209,52 @@ export function formatElapsed(ms: number): string {
 }
 
 /**
- * Mirrors qm-api's default `RunStaleAfter`: an in-flight run whose newest
- * event is older than this is treated as lost — but only when Delete or
- * Retry is called, so the console has to offer those once a run goes quiet.
+ * qm-api treats an in-flight run whose last activity is older than its
+ * `RunStaleAfter` (env `QM_RUN_STALE_AFTER`, default 30m) as lost — but only
+ * when Delete or Retry is called, so the console has to offer those once a
+ * run goes quiet. There is no endpoint exposing the value, so deployments
+ * that change it must set `NEXT_PUBLIC_QM_RUN_STALE_AFTER` to the same
+ * duration; the API's own 409 remains the authority if the two drift.
  */
-export const RUN_STALE_AFTER_MS = 30 * 60_000
+export const DEFAULT_RUN_STALE_AFTER_MS = 30 * 60_000
 
-/** When the tenant last reported anything: its newest event, else its own updatedAt. */
+const DURATION_UNIT_MS: Record<string, number> = {
+  ms: 1,
+  s: 1_000,
+  m: 60_000,
+  h: 3_600_000,
+}
+
+/** Parse a Go-style duration ("30m", "1h30m", "90s", "1500ms"); null if malformed. */
+export function parseDuration(raw: string): number | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  const pattern = /(\d+(?:\.\d+)?)(ms|s|m|h)/gy
+  let total = 0
+  let consumed = 0
+  for (const match of trimmed.matchAll(pattern)) {
+    total += Number(match[1]) * DURATION_UNIT_MS[match[2]]
+    consumed = match.index + match[0].length
+  }
+  return consumed === trimmed.length && total > 0 ? total : null
+}
+
+/** Read at call time; the env name must stay a literal for Next.js to inline it. */
+export function runStaleAfterMs(): number {
+  const raw = process.env.NEXT_PUBLIC_QM_RUN_STALE_AFTER
+  return (raw && parseDuration(raw)) || DEFAULT_RUN_STALE_AFTER_MS
+}
+
+/**
+ * When the tenant last showed signs of life: the later of its newest event
+ * and its own `updatedAt` (a status write without an event still counts),
+ * which is exactly what qm-api's stale check compares against.
+ */
 export function lastActivityAt(
   events: QmTenantEvent[],
-  fallback: string,
+  updatedAt: string,
 ): number {
   const newest = chronological(events).at(-1)
-  return Date.parse(newest?.at ?? fallback)
+  const eventAt = newest ? Date.parse(newest.at) : Number.NEGATIVE_INFINITY
+  return Math.max(eventAt, Date.parse(updatedAt))
 }
