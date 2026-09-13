@@ -47,17 +47,13 @@ export function refreshTeamScopedQueries(
 }
 
 /**
- * How many team switches the client has seen. Compared across an await to
- * tell whether the user picked a different team in the meantime — a pending
- * check is not enough, because a switch can start and finish inside the
- * window. Finished mutations are eventually collected, so a count that has
- * not grown is what counts as "nothing else happened".
+ * Everything that changes the active team runs in this scope, so React Query
+ * serialises it. Creating a team and switching teams both write the same
+ * cookie and the same cached selection; interleaving them leaves the client
+ * naming one team while requests authenticate as another, and no amount of
+ * patching after the fact can recover an order that was never defined.
  */
-function switchCount(queryClient: ReturnType<typeof useQueryClient>): number {
-  return queryClient
-    .getMutationCache()
-    .findAll({ mutationKey: teamKeys.switching() }).length
-}
+const TEAM_SELECTION_SCOPE = { id: "team-selection" } as const
 
 export function useCreateTeam() {
   const queryClient = useQueryClient()
@@ -65,8 +61,8 @@ export function useCreateTeam() {
     // Creating a team also switches to it, so it carries the same key as an
     // explicit switch and team-scoped hooks hold off for both.
     mutationKey: teamKeys.switching(),
+    scope: TEAM_SELECTION_SCOPE,
     mutationFn: async ({ name, region }: { name: string; region: string }) => {
-      const switchesAtStart = switchCount(queryClient)
       const team = await createTeamAction(name, region)
       // Reconcile the directory here, inside the mutation, so the switch
       // stays pending until the client's active team matches the cookie the
@@ -91,16 +87,10 @@ export function useCreateTeam() {
         selectCreated,
       )
       await queryClient.refetchQueries({ queryKey: teamKeys.directory() })
-      // Unless the user switched teams in the meantime: that switch owns the
-      // selection now, whether or not it has finished, and reapplying here
-      // would put the created team back while the cookie names the one the
-      // user just picked.
-      if (switchCount(queryClient) <= switchesAtStart) {
-        queryClient.setQueryData<TeamDirectoryResponse>(
-          teamKeys.directory(),
-          selectCreated,
-        )
-      }
+      queryClient.setQueryData<TeamDirectoryResponse>(
+        teamKeys.directory(),
+        selectCreated,
+      )
       return team
     },
     onSuccess: () => {
@@ -114,6 +104,7 @@ export function useSwitchTeam() {
   return useMutation({
     // Named so team-scoped hooks can hold off while the switch is in flight.
     mutationKey: teamKeys.switching(),
+    scope: TEAM_SELECTION_SCOPE,
     mutationFn: ({ teamId, region }: { teamId: string; region: string }) =>
       setActiveTeamAction(teamId, region),
     // Flip the switcher immediately; the server action only validates and
