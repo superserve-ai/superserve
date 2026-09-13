@@ -16,6 +16,7 @@ import {
   Spinner,
   useToast,
 } from "@superserve/ui"
+import { useQueryClient } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "motion/react"
 import { useRouter } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
@@ -28,6 +29,7 @@ import {
   useQmSlugAvailability,
 } from "@/hooks/use-qm-tenants"
 import { ApiError } from "@/lib/api/client"
+import { qmKeys } from "@/lib/api/query-keys"
 import type { QmHarness, QmModelProvider, QmSignIn } from "@/lib/api/types"
 import { QM_EVENTS } from "@/lib/posthog/events"
 import { adminEmailError } from "@/lib/qm/email"
@@ -68,6 +70,7 @@ export function CreateTenantForm({ defaultAdminEmail }: CreateTenantFormProps) {
   const posthog = usePostHog()
   const { addToast } = useToast()
   const create = useCreateQmTenant()
+  const queryClient = useQueryClient()
   const idPrefix = useId()
 
   const [orgName, setOrgName] = useState("")
@@ -204,7 +207,12 @@ export function CreateTenantForm({ defaultAdminEmail }: CreateTenantFormProps) {
           if (error instanceof ApiError && error.status === 409) {
             setSubmitError(error.message)
           }
-          // Everything else was already toasted by the hook.
+          // Everything else was already toasted by the hook. Any of these
+          // may have left a tenant behind (a 409 because one exists, or a
+          // 5xx after the row was inserted but before its key or run was
+          // recorded), so refresh the list: the page redirects to whatever
+          // tenant now exists rather than letting the form be resubmitted.
+          queryClient.invalidateQueries({ queryKey: qmKeys.lists() })
         },
         onSettled: () => {
           submittingRef.current = false

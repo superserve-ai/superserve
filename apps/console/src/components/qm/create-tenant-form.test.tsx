@@ -10,6 +10,7 @@ import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/lib/api/client"
+import { qmKeys } from "@/lib/api/query-keys"
 import { qmTenant } from "@/test/qm-fixtures"
 import { createQueryClient } from "@/test/react-query"
 
@@ -252,6 +253,40 @@ describe("CreateTenantForm", () => {
     expect(
       screen.queryByText("Domain is not verified for this team."),
     ).not.toBeInTheDocument()
+  })
+
+  it("refreshes the tenant list after a failure that may have left a tenant behind", async () => {
+    mockCreate.mockRejectedValue(
+      new ApiError(
+        502,
+        "bad_gateway",
+        "The provision run could not be started.",
+      ),
+    )
+    const user = userEvent.setup()
+    const { queryClient } = renderForm()
+    const listKey = [...qmKeys.list(), "self"]
+    queryClient.setQueryData(listKey, [])
+    await fillValid(user)
+    await user.click(submit())
+
+    await waitFor(() =>
+      expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(true),
+    )
+    expect(addToast).toHaveBeenCalledWith(
+      "The provision run could not be started.",
+      "error",
+    )
+    // Validation failures leave the list alone: nothing was created.
+    queryClient.setQueryData(listKey, [])
+    mockCreate.mockRejectedValue(
+      new ApiError(400, "validation_failed", "Validation failed", {
+        slug: "Bad slug.",
+      }),
+    )
+    await user.click(submit())
+    await screen.findByText("Bad slug.")
+    expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(false)
   })
 
   it("shows a 409 near the submit button", async () => {
