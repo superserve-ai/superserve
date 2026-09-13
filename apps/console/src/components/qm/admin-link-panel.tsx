@@ -96,10 +96,16 @@ export function AdminLinkPanel({ tenantId, adminEmail }: AdminLinkPanelProps) {
       <div className="flex flex-col gap-3 px-4 pb-4">
         {link ? (
           <>
-            <div className="flex items-center gap-2">
+            {/* ph-no-capture keeps the whole row (text and href) out of
+                PostHog session replay and autocapture; data-mask is the
+                text-masking belt to that braces. */}
+            <div
+              className="ph-no-capture flex items-center gap-2"
+              data-mask
+              data-testid="admin-link-row"
+            >
               <code
                 className="min-w-0 flex-1 truncate border border-dashed border-border bg-background px-3 py-2 font-mono text-xs text-foreground"
-                title={link.url}
                 data-testid="admin-link-url"
               >
                 {link.url}
