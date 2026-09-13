@@ -22,6 +22,7 @@ import {
 } from "@/components/qm/delete-tenant-dialog"
 import { ProvisioningSteps } from "@/components/qm/provisioning-steps"
 import { TenantStatusBadge } from "@/components/qm/tenant-status-badge"
+import { useDashboardTeamContext } from "@/components/query-provider"
 import {
   useDeleteQmTenant,
   useQmTenant,
@@ -54,6 +55,9 @@ export default function QmTenantDetailPage() {
   const { addToast } = useToast()
   const tenantId = params.id
 
+  // Viewing another team is read-only at the proxy, so no mutation is
+  // offered — an operator should not be invited into a guaranteed 403.
+  const readOnly = useDashboardTeamContext() !== null
   const { data, isPending, error, refetch } = useQmTenant(tenantId)
   const deleteMutation = useDeleteQmTenant()
   const retryMutation = useRetryQmTenant()
@@ -92,6 +96,9 @@ export default function QmTenantDetailPage() {
   const teardown =
     tenant.status === "deprovisioning" ||
     (tenant.status === "failed" && run.mode === "deprovision")
+  const canRetry = !readOnly && tenant.status === "failed" && run.canRetry
+  const canDelete =
+    !readOnly && (tenant.status === "ready" || tenant.status === "failed")
 
   const handleRetry = () => {
     posthog.capture(QM_EVENTS.STACK_RETRIED, {
@@ -126,22 +133,19 @@ export default function QmTenantDetailPage() {
       <div className="flex-1 overflow-y-auto">
         <StatusHero
           tenant={tenant}
-          onRetry={tenant.status === "failed" ? handleRetry : undefined}
+          onRetry={canRetry ? handleRetry : undefined}
           retrying={retryMutation.isPending}
-          onDelete={
-            tenant.status === "ready" || tenant.status === "failed"
-              ? () => setDeleteOpen(true)
-              : undefined
-          }
+          onDelete={canDelete ? () => setDeleteOpen(true) : undefined}
+          readOnly={readOnly}
         />
 
         {tenant.status === "failed" && (
           <FailurePanel
             run={run}
             teardown={teardown}
-            onRetry={handleRetry}
+            onRetry={canRetry ? handleRetry : undefined}
             retrying={retryMutation.isPending}
-            onDelete={() => setDeleteOpen(true)}
+            onDelete={canDelete ? () => setDeleteOpen(true) : undefined}
           />
         )}
 
@@ -169,15 +173,13 @@ export default function QmTenantDetailPage() {
           </section>
         )}
 
-        {tenant.status === "ready" && (
+        {tenant.status === "ready" && !readOnly && (
           <AdminLinkPanel tenantId={tenant.id} adminEmail={tenant.adminEmail} />
         )}
 
         <InfoGrid tenant={tenant} />
 
-        {(tenant.status === "ready" || tenant.status === "failed") && (
-          <DangerZone onDelete={() => setDeleteOpen(true)} />
-        )}
+        {canDelete && <DangerZone onDelete={() => setDeleteOpen(true)} />}
       </div>
 
       <DeleteTenantDialog
@@ -230,11 +232,13 @@ function StatusHero({
   onRetry,
   retrying,
   onDelete,
+  readOnly,
 }: {
   tenant: QmTenant
   onRetry?: () => void
   retrying: boolean
   onDelete?: () => void
+  readOnly: boolean
 }) {
   const style = HERO_STYLE[tenant.status]
   const url = tenant.publicUrl ?? tenantUrl(tenant.slug)
@@ -313,6 +317,11 @@ function StatusHero({
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          {readOnly && (
+            <span className="font-mono text-xs text-muted uppercase">
+              Read-only
+            </span>
+          )}
           {onRetry && (
             <Button size="sm" onClick={onRetry} disabled={retrying}>
               <ArrowClockwiseIcon className="size-3.5" weight="light" />
@@ -356,9 +365,9 @@ function FailurePanel({
 }: {
   run: TenantRun
   teardown: boolean
-  onRetry: () => void
+  onRetry?: () => void
   retrying: boolean
-  onDelete: () => void
+  onDelete?: () => void
 }) {
   return (
     <section
@@ -372,21 +381,27 @@ function FailurePanel({
         {run.failureMessage ??
           GENERIC_FAILURE[teardown ? "deprovision" : "provision"]}
       </p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button size="sm" onClick={onRetry} disabled={retrying}>
-          <ArrowClockwiseIcon className="size-3.5" weight="light" />
-          {retrying ? "Retrying…" : "Retry"}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-destructive hover:text-destructive"
-          onClick={onDelete}
-        >
-          <TrashIcon className="size-3.5" weight="light" />
-          Delete
-        </Button>
-      </div>
+      {(onRetry || onDelete) && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {onRetry && (
+            <Button size="sm" onClick={onRetry} disabled={retrying}>
+              <ArrowClockwiseIcon className="size-3.5" weight="light" />
+              {retrying ? "Retrying…" : "Retry"}
+            </Button>
+          )}
+          {onDelete && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={onDelete}
+            >
+              <TrashIcon className="size-3.5" weight="light" />
+              Delete
+            </Button>
+          )}
+        </div>
+      )}
     </section>
   )
 }

@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 
+import { useDashboardTeamContext } from "@/components/query-provider"
 import { useQmAccess } from "@/hooks/use-qm-access"
 import { useQmTenants } from "@/hooks/use-qm-tenants"
 
@@ -35,10 +36,17 @@ export function CommandPalette() {
   const [hoveredLabel, setHoveredLabel] = useState<string | null>(null)
   const router = useRouter()
   const qmAccess = useQmAccess()
-  // qm-api allows one stack per team, so "create" only exists before that.
-  const qmTenants = useQmTenants({ enabled: qmAccess.enabled })
+  // qm-api allows one stack per team, so "create" only exists before that,
+  // and never while viewing another team (writes are refused). The list is
+  // only queried while the palette is open so it never polls in the
+  // background from unrelated pages.
+  const qmReadOnly = useDashboardTeamContext() !== null
+  const qmTenants = useQmTenants({
+    enabled: open && qmAccess.enabled && !qmReadOnly,
+  })
   const canCreateQmStack =
     qmAccess.enabled &&
+    !qmReadOnly &&
     qmTenants.data !== undefined &&
     !qmTenants.data.some((t) => t.status !== "deleted")
 

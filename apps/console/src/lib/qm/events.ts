@@ -49,6 +49,12 @@ export interface TenantRun {
    * trigger or model-key), falling back to the failed step's message.
    */
   failureMessage: string | null
+  /**
+   * False when the provider key was never stored: qm-api refuses to retry
+   * such a tenant (there is nothing to provision with), so the only way
+   * forward is to delete it and create the stack again.
+   */
+  canRetry: boolean
 }
 
 const PROVISION_LABELS: Record<string, string> = {
@@ -167,10 +173,14 @@ export function latestRun(events: QmTenantEvent[]): TenantRun {
       BOOKKEEPING_STEPS.has(e.step) && e.status === "failed" && !!e.message,
   )
   const stepFailure = steps.findLast((s) => s.status === "failed")
+  const keyMissing = scoped.some(
+    (e) => e.step === MODEL_KEY_STEP && e.status === "failed",
+  )
   return {
     mode,
     steps,
     failureMessage: bookkeepingFailure?.message ?? stepFailure?.message ?? null,
+    canRetry: !keyMissing,
   }
 }
 

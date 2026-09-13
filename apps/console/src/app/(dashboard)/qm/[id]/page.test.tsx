@@ -68,6 +68,11 @@ vi.mock("next/navigation", () => ({
   useRouter: () => nav,
   useParams: () => ({ id: "t1" }),
 }))
+const teamContext = vi.hoisted(() => ({ value: null as object | null }))
+vi.mock("@/components/query-provider", () => ({
+  useQueryScope: () => "self",
+  useDashboardTeamContext: () => teamContext.value,
+}))
 vi.mock("next/link", () => ({
   default: ({
     children,
@@ -108,6 +113,7 @@ describe("QmTenantDetailPage", () => {
     mockAdminLink.mockReset()
     addToast.mockClear()
     nav.replace.mockClear()
+    teamContext.value = null
   })
 
   it("renders the live step list while provisioning", async () => {
@@ -240,6 +246,59 @@ describe("QmTenantDetailPage", () => {
     )
   })
 
+  it("offers only deletion when the provider key was never stored", async () => {
+    mockGet.mockResolvedValue(
+      qmDetail(
+        qmTenant({ status: "failed", publicUrl: null, imageTag: null }),
+        [
+          qmEvent(
+            "model_key",
+            "failed",
+            T(0),
+            "The model key could not be stored. Delete this tenant and create it again.",
+          ),
+        ],
+      ),
+    )
+    renderPage()
+
+    const alert = await screen.findByRole("alert")
+    expect(alert).toHaveTextContent(/model key could not be stored/)
+    expect(
+      screen.queryByRole("button", { name: /retry/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getAllByRole("button", { name: /delete/i }).length,
+    ).toBeGreaterThan(0)
+    expect(screen.getByText("No steps ran.")).toBeInTheDocument()
+  })
+
+  it("hides every mutation while viewing another team", async () => {
+    teamContext.value = { teamId: "team-b", region: "use", name: "Other" }
+    mockGet.mockResolvedValue(
+      qmDetail(qmTenant({ status: "failed" }), failedAtStep4Events()),
+    )
+    const { unmount } = renderPage()
+
+    await screen.findByRole("alert")
+    expect(screen.getByText("Read-only")).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /retry/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /delete/i }),
+    ).not.toBeInTheDocument()
+    unmount()
+
+    mockGet.mockResolvedValue(qmDetail(qmTenant(), successEvents()))
+    renderPage()
+    await screen.findByRole("heading", { name: "acme" })
+    expect(
+      screen.queryByRole("button", { name: /open admin sign-in/i }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/danger zone/i)).not.toBeInTheDocument()
+  })
+
   it("mints the admin link once, shows a countdown, and never caches it", async () => {
     mockGet.mockResolvedValue(qmDetail(qmTenant(), successEvents()))
     const url = "https://acme.qm.superserve.ai/auth/one-time/abc123"
@@ -255,6 +314,10 @@ describe("QmTenantDetailPage", () => {
     await userEvent.click(button)
 
     expect(await screen.findByTestId("admin-link-url")).toHaveTextContent(url)
+    // Kept out of session replay and autocapture.
+    const row = screen.getByTestId("admin-link-row")
+    expect(row).toHaveClass("ph-no-capture")
+    expect(row).toHaveAttribute("data-mask")
     expect(screen.getByText(/expires in 1:/i)).toBeInTheDocument()
     expect(screen.getByText(/single-use/i)).toBeInTheDocument()
     expect(

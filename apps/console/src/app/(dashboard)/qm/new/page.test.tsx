@@ -24,6 +24,11 @@ vi.mock("@/components/qm/create-tenant-form", () => ({
 }))
 const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }))
 vi.mock("next/navigation", () => ({ useRouter: () => nav }))
+const teamContext = vi.hoisted(() => ({ value: null as object | null }))
+vi.mock("@/components/query-provider", () => ({
+  useQueryScope: () => "self",
+  useDashboardTeamContext: () => teamContext.value,
+}))
 vi.mock("next/link", () => ({
   default: ({
     children,
@@ -48,6 +53,17 @@ describe("NewQmTenantPage", () => {
   beforeEach(() => {
     mockList.mockReset()
     nav.replace.mockClear()
+    teamContext.value = null
+  })
+
+  it("does not offer the form while viewing another team", async () => {
+    teamContext.value = { teamId: "team-b", region: "use", name: "Other" }
+    mockList.mockResolvedValue([])
+    renderPage()
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      /can't be created while viewing another team/,
+    )
+    expect(screen.queryByRole("form")).not.toBeInTheDocument()
   })
 
   it("shows the form, pre-filled with the user's email, when the team has no stack", async () => {

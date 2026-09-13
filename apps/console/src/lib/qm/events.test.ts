@@ -193,7 +193,7 @@ describe("latestRun", () => {
   })
 
   it("surfaces a model-key storage failure that happened before any run", () => {
-    const { mode, steps, failureMessage } = latestRun([
+    const { mode, steps, failureMessage, canRetry } = latestRun([
       qmEvent(
         "model_key",
         "failed",
@@ -204,6 +204,8 @@ describe("latestRun", () => {
     expect(mode).toBeNull()
     expect(steps).toEqual([])
     expect(failureMessage).toMatch(/^The model key could not be stored/)
+    expect(canRetry).toBe(false)
+    expect(latestRun(failedAtStep4Events()).canRetry).toBe(true)
   })
 
   it("treats a stream without run markers as one provisioning attempt", () => {

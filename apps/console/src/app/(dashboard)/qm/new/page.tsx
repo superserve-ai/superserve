@@ -7,6 +7,7 @@ import { useEffect } from "react"
 
 import { PageHeader } from "@/components/page-header"
 import { CreateTenantForm } from "@/components/qm/create-tenant-form"
+import { useDashboardTeamContext } from "@/components/query-provider"
 import { useQmTenants } from "@/hooks/use-qm-tenants"
 import { useUser } from "@/hooks/use-user"
 
@@ -14,6 +15,9 @@ export default function NewQmTenantPage() {
   const router = useRouter()
   const { user } = useUser()
   const tenants = useQmTenants()
+  // Viewing another team is read-only at the proxy: don't invite an
+  // operator to paste a provider key into a form that cannot submit.
+  const readOnly = useDashboardTeamContext() !== null
 
   // qm-api allows one live stack per team. Rather than let someone fill in
   // the form (and paste a provider key) only to hit a 409, send them to the
@@ -36,7 +40,11 @@ export default function NewQmTenantPage() {
         </Link>
       </PageHeader>
       <div className="flex-1 overflow-y-auto">
-        {tenants.isPending || existing ? (
+        {readOnly ? (
+          <output className="mx-auto block w-full max-w-2xl px-4 py-6 text-sm text-muted">
+            Stacks can&apos;t be created while viewing another team.
+          </output>
+        ) : tenants.isPending || existing ? (
           <FormSkeleton />
         ) : (
           <CreateTenantForm defaultAdminEmail={user?.email ?? null} />
