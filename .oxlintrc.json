@@ -39,7 +39,14 @@
     "nextjs/no-img-element": "off",
     "nextjs/no-page-custom-font": "off",
     "no-unreachable": "warn",
-    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_", "caughtErrorsIgnorePattern": "^_" }],
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }
+    ],
     "unicorn/no-useless-fallback-in-spread": "warn",
     "jsx-a11y/heading-has-content": "warn",
     "jsx-a11y/prefer-tag-over-role": "warn",
@@ -52,7 +59,8 @@
     ".next",
     ".turbo",
     "coverage",
-    "**/next-env.d.ts"
+    "**/next-env.d.ts",
+    "**/*.generated.ts"
   ],
   "overrides": [
     {

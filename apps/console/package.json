@@ -13,7 +13,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "email:dev": "email dev --dir src/lib/email/templates --port 3002"
+    "email:dev": "email dev --dir src/lib/email/templates --port 3002",
+    "qm:openapi": "bun run scripts/qm-openapi.ts vendor",
+    "qm:openapi:check": "bun run scripts/qm-openapi.ts check",
+    "qm:openapi:generate": "bun run scripts/qm-openapi.ts generate"
   },
   "dependencies": {
     "@fingerprint/react": "^3.1.0",
@@ -57,10 +60,12 @@
     "@vitest/coverage-v8": "^4.1.4",
     "babel-plugin-react-compiler": "^1.0.0",
     "happy-dom": "^20.6.1",
+    "openapi-typescript": "^7.13.0",
     "postcss": "^8.5",
     "react-email": "^5.2.10",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "yaml": "^2.9.1"
   }
 }
