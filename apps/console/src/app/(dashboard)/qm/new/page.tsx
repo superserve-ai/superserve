@@ -14,7 +14,9 @@ import { useUser } from "@/hooks/use-user"
 export default function NewQmTenantPage() {
   const router = useRouter()
   const { user } = useUser()
-  const tenants = useQmTenants()
+  // Always hit the server: a stack created in another tab or session must
+  // be seen even when /qm left a fresh, empty list in the cache.
+  const tenants = useQmTenants({ refetchOnMount: "always" })
   // Viewing another team is read-only at the proxy: don't invite an
   // operator to paste a provider key into a form that cannot submit.
   const readOnly = useDashboardTeamContext() !== null
@@ -24,6 +26,9 @@ export default function NewQmTenantPage() {
   // stack they already have. A failed list still shows the form; the
   // server remains the authority.
   const existing = tenants.data?.find((t) => t.status !== "deleted") ?? null
+  // Hold the form until this mount's own fetch has answered; a failed
+  // fetch still shows it, since the server remains the authority.
+  const verified = tenants.isFetchedAfterMount || tenants.isError
   useEffect(() => {
     if (existing) router.replace(`/qm/${existing.id}`)
   }, [existing, router])
@@ -44,7 +49,7 @@ export default function NewQmTenantPage() {
           <output className="mx-auto block w-full max-w-2xl px-4 py-6 text-sm text-muted">
             Stacks can&apos;t be created while viewing another team.
           </output>
-        ) : tenants.isPending || existing ? (
+        ) : !verified || existing ? (
           <FormSkeleton />
         ) : (
           <CreateTenantForm defaultAdminEmail={user?.email ?? null} />

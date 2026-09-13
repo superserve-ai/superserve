@@ -7,6 +7,7 @@ import { QueryClientProvider } from "@tanstack/react-query"
 import { render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { qmKeys } from "@/lib/api/query-keys"
 import { qmTenant } from "@/test/qm-fixtures"
 import { createQueryClient } from "@/test/react-query"
 
@@ -41,13 +42,15 @@ vi.mock("next/link", () => ({
 
 import NewQmTenantPage from "./page"
 
-function renderPage() {
+function renderPage(queryClient = createQueryClient()) {
   return render(
-    <QueryClientProvider client={createQueryClient()}>
+    <QueryClientProvider client={queryClient}>
       <NewQmTenantPage />
     </QueryClientProvider>,
   )
 }
+
+const listKey = [...qmKeys.list(), "self"]
 
 describe("NewQmTenantPage", () => {
   beforeEach(() => {
@@ -80,6 +83,37 @@ describe("NewQmTenantPage", () => {
     renderPage()
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith("/qm/t1"))
     expect(screen.queryByRole("form")).not.toBeInTheDocument()
+  })
+
+  it("refetches on mount and redirects when the server knows a stack the cache does not", async () => {
+    const queryClient = createQueryClient()
+    // /qm just cached an empty, still-fresh list …
+    queryClient.setQueryData(listKey, [])
+    // … but another session has since created a stack.
+    mockList.mockResolvedValue([qmTenant({ id: "t-elsewhere" })])
+    renderPage(queryClient)
+
+    expect(screen.queryByRole("form")).not.toBeInTheDocument()
+    await waitFor(() => expect(mockList).toHaveBeenCalledTimes(1))
+    await waitFor(() =>
+      expect(nav.replace).toHaveBeenCalledWith("/qm/t-elsewhere"),
+    )
+    expect(screen.queryByRole("form")).not.toBeInTheDocument()
+  })
+
+  it("shows the form only after this mount's fetch confirms the cache", async () => {
+    const queryClient = createQueryClient()
+    queryClient.setQueryData(listKey, [])
+    let resolve!: (v: unknown) => void
+    mockList.mockReturnValue(new Promise((r) => (resolve = r)))
+    renderPage(queryClient)
+
+    expect(screen.queryByRole("form")).not.toBeInTheDocument()
+    resolve([])
+    expect(
+      await screen.findByRole("form", { name: "create form" }),
+    ).toBeInTheDocument()
+    expect(nav.replace).not.toHaveBeenCalled()
   })
 
   it("still shows the form when the list cannot be loaded", async () => {

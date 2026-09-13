@@ -111,12 +111,19 @@ function errorMessage(error: unknown, fallback: string): string {
 
 // --- Queries ---------------------------------------------------------------
 
-export function useQmTenants(options: { enabled?: boolean } = {}) {
+export function useQmTenants(
+  options: { enabled?: boolean; refetchOnMount?: boolean | "always" } = {},
+) {
   const queryScope = useQueryScope()
   return useQuery({
     queryKey: qmKeys.list(queryScope),
     queryFn: listQmTenants,
     enabled: options.enabled ?? true,
+    // "always" for surfaces that must not trust a cached list (e.g. before
+    // offering to create a stack, which qm-api allows once per team).
+    ...(options.refetchOnMount !== undefined && {
+      refetchOnMount: options.refetchOnMount,
+    }),
     // Lists change while any tenant is provisioning/deprovisioning.
     refetchInterval: (query) =>
       query.state.data?.some((t) => TRANSITIONAL_STATUSES.has(t.status))
