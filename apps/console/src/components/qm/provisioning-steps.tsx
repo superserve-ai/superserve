@@ -8,11 +8,10 @@ import {
 import { cn, Spinner } from "@superserve/ui"
 import { useEffect, useState } from "react"
 
-import type { QmTenantEvent } from "@/lib/api/types"
 import {
   formatElapsed,
-  groupTenantEvents,
   stepElapsedMs,
+  type TenantRun,
   type TenantStep,
 } from "@/lib/qm/events"
 
@@ -28,18 +27,18 @@ function useNow(active: boolean): number {
 }
 
 interface ProvisioningStepsProps {
-  events: QmTenantEvent[]
+  run: TenantRun
   /** True while the tenant is still transitioning (drives the live clock). */
   live: boolean
   emptyMessage?: string
 }
 
 export function ProvisioningSteps({
-  events,
+  run,
   live,
   emptyMessage = "Waiting for the first step to start…",
 }: ProvisioningStepsProps) {
-  const steps = groupTenantEvents(events)
+  const { steps } = run
   const now = useNow(live && steps.some((s) => s.status === "started"))
 
   if (steps.length === 0) {

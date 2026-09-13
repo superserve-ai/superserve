@@ -40,37 +40,93 @@ export const qmEvent = (
 export const T = (s: number) =>
   new Date(Date.UTC(2026, 0, 1, 0, 0, s)).toISOString()
 
-/** All six steps succeeded. */
-export const successEvents = (): QmTenantEvent[] => [
-  qmEvent("validate_model_key", "started", T(0)),
-  qmEvent("validate_model_key", "ok", T(1)),
-  qmEvent("reserve_slug", "started", T(1)),
-  qmEvent("reserve_slug", "ok", T(2)),
-  qmEvent("create_database", "started", T(2)),
-  qmEvent("create_database", "ok", T(20)),
-  qmEvent("deploy", "started", T(20)),
-  qmEvent("deploy", "ok", T(80)),
-  qmEvent("configure_dns", "started", T(80)),
-  qmEvent("configure_dns", "ok", T(95)),
-  qmEvent("health_check", "started", T(95)),
-  qmEvent("health_check", "ok", T(100)),
+const run = (
+  status: QmTenantEvent["status"],
+  at: string,
+  mode: "provision" | "deprovision",
+  message: string,
+): QmTenantEvent => ({
+  ...qmEvent("run", status, at, message),
+  detail: { mode },
+})
+
+/** The provision plan in qm-api's order. */
+export const PROVISION_STEPS = [
+  "database",
+  "service_account",
+  "bucket",
+  "secrets",
+  "cloud_run",
+  "load_balancer",
+  "health_check",
+  "smoke",
+  "admin_link",
+] as const
+
+/** Every provisioning step succeeded and the run closed ready. */
+export const successEvents = (): QmTenantEvent[] => {
+  const out = [run("started", T(0), "provision", "provision started")]
+  PROVISION_STEPS.forEach((step, i) => {
+    out.push(qmEvent(step, "started", T(i * 10 + 1)))
+    out.push(qmEvent(step, "ok", T(i * 10 + 1 + (i === 4 ? 9 : 2))))
+  })
+  out.push(run("ok", T(100), "provision", "provision complete; tenant ready"))
+  return out
+}
+
+/** Steps 1–3 succeeded, step 4 (secrets) failed; the rest were skipped. */
+export const failedAtStep4Events = (): QmTenantEvent[] => [
+  run("started", T(0), "provision", "provision started"),
+  qmEvent("database", "started", T(1)),
+  qmEvent("database", "ok", T(3)),
+  qmEvent("service_account", "started", T(3)),
+  qmEvent("service_account", "ok", T(5)),
+  qmEvent("bucket", "started", T(5)),
+  qmEvent("bucket", "ok", T(7)),
+  qmEvent("secrets", "started", T(7)),
+  qmEvent("secrets", "failed", T(37), "secrets failed"),
+  qmEvent("cloud_run", "skipped", T(37), "not run: secrets failed"),
+  qmEvent("load_balancer", "skipped", T(37), "not run: secrets failed"),
+  qmEvent("health_check", "skipped", T(37), "not run: secrets failed"),
+  qmEvent("smoke", "skipped", T(37), "not run: secrets failed"),
+  qmEvent("admin_link", "skipped", T(37), "not run: secrets failed"),
+  run(
+    "failed",
+    T(37),
+    "provision",
+    "Provisioning stopped at secrets. Retry to continue from where it left off, or delete the tenant.",
+  ),
 ]
 
-/** Steps 1–3 succeeded, step 4 (deploy) failed. */
-export const failedAtDeployEvents = (): QmTenantEvent[] => [
-  qmEvent("validate_model_key", "started", T(0)),
-  qmEvent("validate_model_key", "ok", T(1)),
-  qmEvent("reserve_slug", "started", T(1)),
-  qmEvent("reserve_slug", "ok", T(2)),
-  qmEvent("create_database", "started", T(2)),
-  qmEvent("create_database", "ok", T(20)),
-  qmEvent("deploy", "started", T(20)),
-  qmEvent("deploy", "failed", T(50), "Image pull timed out after 30s"),
-]
-
-/** Still running: three done, deploy in progress. */
+/** Still running: three done, the fourth in progress. */
 export const inProgressEvents = (): QmTenantEvent[] =>
-  failedAtDeployEvents().slice(0, -1)
+  failedAtStep4Events().slice(0, 8)
+
+/** A ready stack whose teardown stalled on the second rollback step. */
+export const failedTeardownEvents = (): QmTenantEvent[] => [
+  ...successEvents(),
+  run("started", T(200), "deprovision", "deprovision started"),
+  qmEvent("admin_link", "started", T(201)),
+  qmEvent("admin_link", "skipped", T(201), "nothing to roll back"),
+  qmEvent("smoke", "started", T(201)),
+  qmEvent("smoke", "skipped", T(201), "nothing to roll back"),
+  qmEvent("health_check", "started", T(201)),
+  qmEvent("health_check", "skipped", T(201), "nothing to roll back"),
+  qmEvent("load_balancer", "started", T(202)),
+  qmEvent("load_balancer", "ok", T(210)),
+  qmEvent("cloud_run", "started", T(210)),
+  qmEvent("cloud_run", "failed", T(240), "cloud_run failed"),
+  qmEvent("secrets", "skipped", T(240), "not run: cloud_run failed"),
+  qmEvent("bucket", "skipped", T(240), "not run: cloud_run failed"),
+  qmEvent("service_account", "skipped", T(240), "not run: cloud_run failed"),
+  qmEvent("database", "skipped", T(240), "not run: cloud_run failed"),
+  run(
+    "failed",
+    T(240),
+    "deprovision",
+    "Deprovisioning stopped at cloud_run. Retry to continue the teardown.",
+  ),
+]
 
 export const qmDetail = (
   tenant: QmTenant,

@@ -28,10 +28,10 @@ import {
   useRetryQmTenant,
 } from "@/hooks/use-qm-tenants"
 import { ApiError } from "@/lib/api/client"
-import type { QmTenant, QmTenantEvent } from "@/lib/api/types"
+import type { QmTenant } from "@/lib/api/types"
 import { formatDate, formatTime } from "@/lib/format"
 import { QM_EVENTS } from "@/lib/posthog/events"
-import { latestFailureMessage } from "@/lib/qm/events"
+import { latestRun, type TenantRun } from "@/lib/qm/events"
 import {
   HARNESS_LABEL,
   PROVIDER_LABEL,
@@ -40,8 +40,12 @@ import {
 } from "@/lib/qm/options"
 import { tenantUrl } from "@/lib/qm/slug"
 
-const GENERIC_FAILURE =
-  "Provisioning didn't complete. Nothing is left running — retry to start again from the failed step, or delete the stack."
+const GENERIC_FAILURE: Record<"provision" | "deprovision", string> = {
+  provision:
+    "Provisioning stopped before the stack was ready. Retry to continue from where it left off, or delete the stack.",
+  deprovision:
+    "Teardown stopped before everything was removed. Retry to continue the teardown.",
+}
 
 export default function QmTenantDetailPage() {
   const params = useParams<{ id: string }>()
@@ -82,11 +86,24 @@ export default function QmTenantDetailPage() {
   const { tenant, events } = data
   const transitional =
     tenant.status === "provisioning" || tenant.status === "deprovisioning"
+  const run = latestRun(events)
+  // A failed tenant keeps the mode of the run that failed; retrying resumes
+  // that same plan, so the UI must say "teardown" when that is what stalled.
+  const teardown =
+    tenant.status === "deprovisioning" ||
+    (tenant.status === "failed" && run.mode === "deprovision")
 
   const handleRetry = () => {
-    posthog.capture(QM_EVENTS.STACK_RETRIED, { tenant_id: tenant.id })
+    posthog.capture(QM_EVENTS.STACK_RETRIED, {
+      tenant_id: tenant.id,
+      mode: teardown ? "deprovision" : "provision",
+    })
     retryMutation.mutate(tenant.id, {
-      onSuccess: () => addToast("Retrying provisioning", "success"),
+      onSuccess: () =>
+        addToast(
+          teardown ? "Retrying teardown" : "Retrying provisioning",
+          "success",
+        ),
     })
   }
 
@@ -120,7 +137,8 @@ export default function QmTenantDetailPage() {
 
         {tenant.status === "failed" && (
           <FailurePanel
-            events={events}
+            run={run}
+            teardown={teardown}
             onRetry={handleRetry}
             retrying={retryMutation.isPending}
             onDelete={() => setDeleteOpen(true)}
@@ -131,17 +149,15 @@ export default function QmTenantDetailPage() {
           <section className="border-b border-border">
             <div className="flex h-10 items-center justify-between px-4">
               <h2 className="text-sm font-semibold text-foreground">
-                {tenant.status === "deprovisioning"
-                  ? "Teardown"
-                  : "Provisioning"}
+                {teardown ? "Teardown" : "Provisioning"}
               </h2>
-              {tenant.status === "deprovisioning" && (
+              {teardown && (
                 <span className="font-mono text-xs text-muted uppercase">
                   Data kept {QM_RETENTION_DAYS} days
                 </span>
               )}
             </div>
-            <ProvisioningSteps events={events} live={transitional} />
+            <ProvisioningSteps run={run} live={transitional} />
           </section>
         )}
 
@@ -324,25 +340,29 @@ function StatusHero({
 }
 
 function FailurePanel({
-  events,
+  run,
+  teardown,
   onRetry,
   retrying,
   onDelete,
 }: {
-  events: QmTenantEvent[]
+  run: TenantRun
+  teardown: boolean
   onRetry: () => void
   retrying: boolean
   onDelete: () => void
 }) {
-  const message = latestFailureMessage(events)
   return (
     <section
       role="alert"
       className="border-b border-border bg-destructive/[0.04] px-4 py-4"
     >
-      <p className="text-sm text-foreground">Provisioning failed</p>
+      <p className="text-sm text-foreground">
+        {teardown ? "Teardown failed" : "Provisioning failed"}
+      </p>
       <p className="mt-1 text-xs leading-relaxed text-muted">
-        {message ?? GENERIC_FAILURE}
+        {run.failureMessage ??
+          GENERIC_FAILURE[teardown ? "deprovision" : "provision"]}
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         <Button size="sm" onClick={onRetry} disabled={retrying}>

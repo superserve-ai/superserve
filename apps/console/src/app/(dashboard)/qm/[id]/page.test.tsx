@@ -11,7 +11,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/lib/api/client"
 import {
-  failedAtDeployEvents,
+  failedAtStep4Events,
+  failedTeardownEvents,
   inProgressEvents,
   qmDetail,
   qmEvent,
@@ -123,12 +124,11 @@ describe("QmTenantDetailPage", () => {
     )
     const rows = steps()
     expect(rows).toHaveLength(4)
-    expect(rows[0]).toHaveTextContent("Validate model key")
+    expect(rows[0]).toHaveTextContent("Create database")
     expect(rows[0]).toHaveAttribute("data-status", "ok")
-    expect(rows[0]).toHaveTextContent("1s")
-    expect(rows[2]).toHaveTextContent("Create database")
-    expect(rows[2]).toHaveTextContent("18s")
-    expect(rows[3]).toHaveTextContent("Deploy QM")
+    expect(rows[0]).toHaveTextContent("2s")
+    expect(rows[2]).toHaveTextContent("Create storage bucket")
+    expect(rows[3]).toHaveTextContent("Store secrets")
     expect(rows[3]).toHaveAttribute("data-status", "started")
     expect(rows[3]).toHaveTextContent("Running")
     // Nothing to sign in to yet, and no danger zone mid-flight.
@@ -162,7 +162,7 @@ describe("QmTenantDetailPage", () => {
     mockGet.mockResolvedValue(
       qmDetail(
         qmTenant({ status: "failed", publicUrl: null, imageTag: null }),
-        failedAtDeployEvents(),
+        failedAtStep4Events(),
       ),
     )
     mockRetry.mockResolvedValue(
@@ -172,20 +172,31 @@ describe("QmTenantDetailPage", () => {
 
     const alert = await screen.findByRole("alert")
     expect(alert).toHaveTextContent("Provisioning failed")
-    expect(alert).toHaveTextContent("Image pull timed out after 30s")
+    // The run's user-safe message, not the step's raw "secrets failed".
+    expect(alert).toHaveTextContent(/Provisioning stopped at secrets/)
 
     const rows = steps()
-    expect(rows).toHaveLength(4)
+    expect(rows).toHaveLength(9)
     expect(rows[3]).toHaveAttribute("data-status", "failed")
-    expect(rows[3]).toHaveTextContent("Deploy QM")
+    expect(rows[3]).toHaveTextContent("Store secrets")
     expect(rows[3]).toHaveTextContent("30s")
     expect(rows.slice(0, 3).every((r) => r.dataset.status === "ok")).toBe(true)
+    expect(rows.slice(4).every((r) => r.dataset.status === "skipped")).toBe(
+      true,
+    )
 
-    // Once retried, the poll sees the stack provisioning again.
+    // Once retried, a new run starts and the poll sees it provisioning.
     mockGet.mockResolvedValue(
       qmDetail(
         qmTenant({ status: "provisioning", publicUrl: null, imageTag: null }),
-        [...failedAtDeployEvents(), qmEvent("deploy", "started", T(60))],
+        [
+          ...failedAtStep4Events(),
+          {
+            ...qmEvent("run", "started", T(60), "provision started"),
+            detail: { mode: "provision" },
+          },
+          qmEvent("database", "started", T(61)),
+        ],
       ),
     )
     await userEvent.click(within(alert).getByRole("button", { name: /retry/i }))
@@ -195,8 +206,37 @@ describe("QmTenantDetailPage", () => {
       expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
     )
     expect(screen.getAllByText("Provisioning").length).toBeGreaterThan(0)
+    // The list is rebuilt from the new run: one step, running.
+    await waitFor(() => expect(steps()).toHaveLength(1))
+    expect(steps()[0]).toHaveAttribute("data-status", "started")
+  })
+
+  it("labels a failed teardown as such and retries it", async () => {
+    mockGet.mockResolvedValue(
+      qmDetail(qmTenant({ status: "failed" }), failedTeardownEvents()),
+    )
+    mockRetry.mockResolvedValue(qmTenant({ status: "deprovisioning" }))
+    renderPage()
+
+    const alert = await screen.findByRole("alert")
+    expect(alert).toHaveTextContent("Teardown failed")
+    expect(alert).toHaveTextContent(/Deprovisioning stopped at cloud_run/)
+    expect(
+      screen.getByRole("heading", { name: "Teardown" }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/data kept 7 days/i)).toBeInTheDocument()
+    const rows = steps()
+    expect(rows[0]).toHaveTextContent("Admin sign-in")
+    expect(rows[4]).toHaveTextContent("Remove QM deployment")
+    expect(rows[4]).toHaveAttribute("data-status", "failed")
+
+    mockGet.mockResolvedValue(
+      qmDetail(qmTenant({ status: "deprovisioning" }), failedTeardownEvents()),
+    )
+    await userEvent.click(within(alert).getByRole("button", { name: /retry/i }))
+    await waitFor(() => expect(mockRetry).toHaveBeenCalledWith("t1"))
     await waitFor(() =>
-      expect(steps()[3]).toHaveAttribute("data-status", "started"),
+      expect(addToast).toHaveBeenCalledWith("Retrying teardown", "success"),
     )
   })
 
