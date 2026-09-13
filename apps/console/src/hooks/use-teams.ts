@@ -77,10 +77,16 @@ export function useCreateTeam() {
         selectCreated,
       )
       await queryClient.refetchQueries({ queryKey: teamKeys.directory() })
-      queryClient.setQueryData<TeamDirectoryResponse>(
-        teamKeys.directory(),
-        selectCreated,
-      )
+      // Unless a switch started while the refetch was out: that switch owns
+      // the selection now, and reapplying here would put the created team
+      // back while the cookie names the one the user just picked. This
+      // mutation is itself counted, hence > 1.
+      if (queryClient.isMutating({ mutationKey: teamKeys.switching() }) <= 1) {
+        queryClient.setQueryData<TeamDirectoryResponse>(
+          teamKeys.directory(),
+          selectCreated,
+        )
+      }
       return team
     },
     onSuccess: () => {
