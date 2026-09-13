@@ -130,24 +130,25 @@ export default function QmTenantDetailPage() {
     (tenant.status === "ready" || tenant.status === "failed" || stalled)
 
   const handleRetry = () => {
-    posthog.capture(QM_EVENTS.STACK_RETRIED, {
-      tenant_id: tenant.id,
-      mode: teardown ? "deprovision" : "provision",
-    })
     retryMutation.mutate(tenant.id, {
-      onSuccess: () =>
+      onSuccess: () => {
+        posthog.capture(QM_EVENTS.STACK_RETRIED, {
+          tenant_id: tenant.id,
+          mode: teardown ? "deprovision" : "provision",
+        })
         addToast(
           teardown ? "Retrying teardown" : "Retrying provisioning",
           "success",
-        ),
+        )
+      },
     })
   }
 
   const handleDelete = () =>
     new Promise<void>((resolve, reject) => {
-      posthog.capture(QM_EVENTS.STACK_DELETED, { tenant_id: tenant.id })
       deleteMutation.mutate(tenant.id, {
         onSuccess: () => {
+          posthog.capture(QM_EVENTS.STACK_DELETED, { tenant_id: tenant.id })
           addToast("Deleting the stack", "success")
           resolve()
         },
