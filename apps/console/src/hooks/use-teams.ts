@@ -46,6 +46,19 @@ export function refreshTeamScopedQueries(
   resetTeamScopedQueries(queryClient)
 }
 
+/**
+ * How many team switches the client has seen. Compared across an await to
+ * tell whether the user picked a different team in the meantime — a pending
+ * check is not enough, because a switch can start and finish inside the
+ * window. Finished mutations are eventually collected, so a count that has
+ * not grown is what counts as "nothing else happened".
+ */
+function switchCount(queryClient: ReturnType<typeof useQueryClient>): number {
+  return queryClient
+    .getMutationCache()
+    .findAll({ mutationKey: teamKeys.switching() }).length
+}
+
 export function useCreateTeam() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -53,6 +66,7 @@ export function useCreateTeam() {
     // explicit switch and team-scoped hooks hold off for both.
     mutationKey: teamKeys.switching(),
     mutationFn: async ({ name, region }: { name: string; region: string }) => {
+      const switchesAtStart = switchCount(queryClient)
       const team = await createTeamAction(name, region)
       // Reconcile the directory here, inside the mutation, so the switch
       // stays pending until the client's active team matches the cookie the
@@ -77,11 +91,11 @@ export function useCreateTeam() {
         selectCreated,
       )
       await queryClient.refetchQueries({ queryKey: teamKeys.directory() })
-      // Unless a switch started while the refetch was out: that switch owns
-      // the selection now, and reapplying here would put the created team
-      // back while the cookie names the one the user just picked. This
-      // mutation is itself counted, hence > 1.
-      if (queryClient.isMutating({ mutationKey: teamKeys.switching() }) <= 1) {
+      // Unless the user switched teams in the meantime: that switch owns the
+      // selection now, whether or not it has finished, and reapplying here
+      // would put the created team back while the cookie names the one the
+      // user just picked.
+      if (switchCount(queryClient) <= switchesAtStart) {
         queryClient.setQueryData<TeamDirectoryResponse>(
           teamKeys.directory(),
           selectCreated,
