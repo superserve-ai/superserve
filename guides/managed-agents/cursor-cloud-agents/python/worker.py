@@ -61,10 +61,10 @@ HIBERNATE = _flag("CURSOR_WORKER_HIBERNATE", False)
 AUTO_DELETE_SECONDS = int(os.environ.get("SANDBOX_AUTO_DELETE_SECONDS", "86400"))
 # Sandboxes resolve DNS through these public resolvers. A strict allowlist has
 # to include them or nothing resolves. Single IPs are written as /32.
+# A strict allowlist still needs the sandbox's resolvers, or nothing resolves.
+# The SDK reaches the sandbox through the platform, not through its network,
+# so no Superserve host needs to be allowed.
 DNS_RESOLVERS = ["1.1.1.1/32", "8.8.8.8/32"]
-# The platform's own hosts must stay reachable under a deny-all rule; the
-# networking docs list this as a hard requirement for SDK connectivity.
-PLATFORM_HOSTS = ["*.superserve.ai"]
 _IPV4_RE = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
 
 
@@ -73,7 +73,7 @@ def egress_allowlist(raw: str) -> list[str]:
     entries = [f"{e}/32" if _IPV4_RE.match(e) else e for e in entries]
     if not entries:
         return []
-    return list(dict.fromkeys(DNS_RESOLVERS + PLATFORM_HOSTS + entries))
+    return list(dict.fromkeys(DNS_RESOLVERS + entries))
 
 
 ALLOW_OUT = egress_allowlist(os.environ.get("CURSOR_WORKER_ALLOW_OUT", ""))
@@ -291,7 +291,11 @@ def launch_worker(
     try:
         pid = int(result.stdout.strip().splitlines()[-1])
     except (IndexError, ValueError):
-        return {"ok": False, "state": {"state": "no_pidfile"}, "log": read_log(sandbox)}
+        return {
+            "ok": False,
+            "state": {"state": "no_pidfile", "pid": None, "exit_code": None},
+            "log": read_log(sandbox),
+        }
 
     time.sleep(STARTUP_GRACE_SECONDS)
     state = worker_state(sandbox)

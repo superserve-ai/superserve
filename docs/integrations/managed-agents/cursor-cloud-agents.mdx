@@ -318,7 +318,7 @@ Sandboxes can reach any public IP by default. A worker needs outbound HTTPS to:
 - `cloud-agent-artifacts.s3.us-east-1.amazonaws.com` - screenshot and recording uploads
 - The git host, package registries, and any internal services the agent's work touches
 
-To restrict egress, set `CURSOR_WORKER_ALLOW_OUT` to a comma-separated list of hosts and CIDRs. The spawn hook creates sandboxes that allow those, plus the sandbox's DNS resolvers (`1.1.1.1/32` and `8.8.8.8/32`, without which nothing resolves) and `*.superserve.ai` (which the SDK needs to reach the sandbox), and deny everything else. Write single IPs as `/32`; the hook does this for you if you leave the suffix off. See [Network rules](/sandbox/networking) for the format and the [network log](/sandbox/network-log) for every HTTP and HTTPS connection a worker attempted, allowed or blocked.
+To restrict egress, set `CURSOR_WORKER_ALLOW_OUT` to a comma-separated list of hosts and CIDRs. The spawn hook creates sandboxes that allow those, plus the sandbox's DNS resolvers (`1.1.1.1/32` and `8.8.8.8/32`, without which nothing resolves), and deny everything else. No Superserve host needs to be on the list: the SDK reaches the sandbox through the platform, not through its network. Write single IPs as `/32`; the hook does this for you if you leave the suffix off. See [Network rules](/sandbox/networking) for the format and the [network log](/sandbox/network-log) for every HTTP and HTTPS connection a worker attempted, allowed or blocked.
 
 No inbound ports are required. The worker connects out to Cursor, and Superserve reaches the sandbox through its own control plane.
 

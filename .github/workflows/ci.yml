@@ -7,18 +7,25 @@ on:
       - "apps/**"
       - "packages/**"
       - "docs/**"
+      - "guides/**"
       - "scripts/**"
+      - "tests/**"
       - "package.json"
       - "bun.lock"
       - "turbo.json"
       - ".github/workflows/**"
+  # No `branches` filter: a stacked PR targets its parent branch, not main, and
+  # a filtered trigger would leave it with no lint, typecheck, test or build run
+  # until it retargets. GitHub tests the merge of the PR into its own base, so a
+  # stacked run covers the parent's changes too.
   pull_request:
-    branches: [main]
     paths:
       - "apps/**"
       - "packages/**"
       - "docs/**"
+      - "guides/**"
       - "scripts/**"
+      - "tests/**"
       - "package.json"
       - "bun.lock"
       - "turbo.json"

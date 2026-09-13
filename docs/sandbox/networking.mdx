@@ -94,7 +94,8 @@ sandbox.update(
 
 </CodeGroup>
 
-<Warning>
-  Blocking `*.superserve.ai` will break the SDK's ability to communicate with
-  the sandbox.
-</Warning>
+<Note>
+  Rules only filter traffic the sandbox itself initiates. The SDK reaches the
+  sandbox through the platform rather than through its network, so commands
+  and file operations keep working under a deny-all policy.
+</Note>
