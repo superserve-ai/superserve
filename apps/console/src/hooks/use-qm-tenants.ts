@@ -29,6 +29,8 @@ import type {
   QmTenantStatus,
 } from "@/lib/api/types"
 
+import { useTeams } from "./use-teams"
+
 /** Tenants in these states change on their own; poll until they settle. */
 const TRANSITIONAL_STATUSES: ReadonlySet<QmTenantStatus> = new Set([
   "provisioning",
@@ -114,13 +116,41 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : fallback
 }
 
+// --- Scope -----------------------------------------------------------------
+
+/**
+ * The cache scope a QM query or mutation belongs to.
+ *
+ * `useQueryScope()` alone is not enough: it is the impersonated team id while
+ * impersonating, but the literal `"self"` for every team the user owns, and
+ * switching teams keeps the same QueryClient. Pairing it with the active team
+ * — the way the billing hooks do — is what keeps one team's tenants out of
+ * another's list when a switch lands mid-request.
+ *
+ * `ready` is false until the team directory resolves; queries wait rather than
+ * cache themselves under a placeholder and re-key a moment later.
+ */
+function useQmScope(): { scope: string; ready: boolean } {
+  const cacheScope = useQueryScope()
+  const { data: teams } = useTeams()
+  const teamKey =
+    teams?.activeTeamId && teams.activeRegion
+      ? `${teams.activeRegion}:${teams.activeTeamId}`
+      : null
+  return {
+    scope: `${cacheScope}|${teamKey ?? "unresolved"}`,
+    ready: teamKey !== null,
+  }
+}
+
 // --- Queries ---------------------------------------------------------------
 
 export function useQmTenants() {
-  const queryScope = useQueryScope()
+  const { scope, ready } = useQmScope()
   return useQuery({
-    queryKey: qmKeys.list(queryScope),
+    queryKey: qmKeys.list(scope),
     queryFn: listQmTenants,
+    enabled: ready,
     // Lists change while any tenant is provisioning/deprovisioning.
     refetchInterval: (query) =>
       query.state.data?.some((t) => TRANSITIONAL_STATUSES.has(t.status))
@@ -131,11 +161,11 @@ export function useQmTenants() {
 }
 
 export function useQmTenant(id: string | null) {
-  const queryScope = useQueryScope()
+  const { scope, ready } = useQmScope()
   return useQuery({
-    queryKey: qmKeys.detail(id ?? "", queryScope),
+    queryKey: qmKeys.detail(id ?? "", scope),
     queryFn: () => getQmTenant(id as string),
-    enabled: !!id,
+    enabled: !!id && ready,
     refetchInterval: (query) => {
       // Deprovisioning ends in `deleted`, and a deleted tenant is 404 rather
       // than a terminal status. React Query keeps the last successful
@@ -164,12 +194,12 @@ export function useQmTenant(id: string | null) {
  * non-empty; debouncing the input is the caller's responsibility.
  */
 export function useQmSlugAvailability(slug: string) {
-  const queryScope = useQueryScope()
+  const { scope, ready } = useQmScope()
   const trimmed = slug.trim()
   return useQuery({
-    queryKey: qmKeys.slugAvailability(trimmed, queryScope),
+    queryKey: qmKeys.slugAvailability(trimmed, scope),
     queryFn: () => checkQmSlug(trimmed),
-    enabled: trimmed.length > 0,
+    enabled: trimmed.length > 0 && ready,
     staleTime: 10_000,
     retry: false,
   })
@@ -186,7 +216,7 @@ const modelKeys = new WeakMap<CreateQmTenantVariables, string>()
 
 export function useCreateQmTenant() {
   const queryClient = useQueryClient()
-  const queryScope = useQueryScope()
+  const { scope: queryScope } = useQmScope()
   const { addToast } = useToast()
 
   const mutation = useMutation({
@@ -259,7 +289,7 @@ export function useCreateQmTenant() {
 
 export function useDeleteQmTenant() {
   const queryClient = useQueryClient()
-  const queryScope = useQueryScope()
+  const { scope: queryScope } = useQmScope()
   const { addToast } = useToast()
 
   return useMutation({
@@ -304,7 +334,7 @@ export function useDeleteQmTenant() {
 
 export function useRetryQmTenant() {
   const queryClient = useQueryClient()
-  const queryScope = useQueryScope()
+  const { scope: queryScope } = useQmScope()
   const { addToast } = useToast()
 
   return useMutation({

@@ -42,6 +42,15 @@ vi.mock("@superserve/ui", () => ({
   useToast: () => ({ addToast: mockAddToast }),
 }))
 
+// QM keys pair the query scope with the active team, so the directory has to
+// resolve before anything queries.
+const activeTeam = { region: "use", id: "team-a" }
+vi.mock("./use-teams", () => ({
+  useTeams: () => ({
+    data: { activeTeamId: activeTeam.id, activeRegion: activeTeam.region },
+  }),
+}))
+
 import {
   useCreateQmTenant,
   useDeleteQmTenant,
@@ -74,9 +83,13 @@ const detail = (t: QmTenant): QmTenantDetailResponse => ({
   events: [],
 })
 
-// Every QM key carries the query scope, which is "self" without a provider.
-const SCOPE = "self"
-const OTHER_SCOPE = "team:other"
+// Every QM key carries the query scope: the cache scope ("self" without a
+// provider) paired with the active team.
+const CACHE_SCOPE = "self"
+const OTHER_CACHE_SCOPE = "team:other"
+const SCOPE = `${CACHE_SCOPE}|use:team-a`
+const OTHER_SCOPE = `${OTHER_CACHE_SCOPE}|use:team-a`
+const OTHER_TEAM_SCOPE = `${CACHE_SCOPE}|use:team-b`
 const listKey = qmKeys.list(SCOPE)
 const detailKey = (id: string) => qmKeys.detail(id, SCOPE)
 const otherListKey = qmKeys.list(OTHER_SCOPE)
@@ -92,6 +105,7 @@ async function advance(ms: number) {
 }
 
 beforeEach(() => {
+  activeTeam.id = "team-a"
   mockList.mockReset()
   mockGet.mockReset()
   mockCreate.mockReset()
@@ -107,6 +121,8 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
+type ScopeSwitchHarness = ReturnType<typeof createScopeSwitchWrapper>
+
 /**
  * A wrapper whose query scope can change between renders, so a mutation can
  * be started in one scope and settle after impersonation has moved to
@@ -114,17 +130,17 @@ afterEach(() => {
  */
 function createScopeSwitchWrapper() {
   const { queryClient } = createQueryWrapper()
-  let scope = SCOPE
+  let cacheScope = CACHE_SCOPE
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryProvider cacheScope={scope}>
+    <QueryProvider cacheScope={cacheScope}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </QueryProvider>
   )
   return {
     queryClient,
     wrapper,
-    setScope: (next: string) => {
-      scope = next
+    setCacheScope: (next: string) => {
+      cacheScope = next
     },
   }
 }
@@ -540,41 +556,57 @@ describe("useDeleteQmTenant", () => {
     )
   })
 
-  it("writes back to the scope the delete started in, not the one it settles in", async () => {
-    const { queryClient, wrapper, setScope } = createScopeSwitchWrapper()
-    queryClient.setQueryData(listKey, [tenant({ id: "a" })])
-    queryClient.setQueryData(otherListKey, [tenant({ id: "a" })])
-    let resolveDelete: (t: QmTenant) => void = () => {}
-    mockDelete.mockReturnValue(
-      new Promise<QmTenant>((resolve) => {
-        resolveDelete = resolve
-      }),
-    )
+  it.each([
+    [
+      "impersonation starts",
+      otherListKey,
+      (h: ScopeSwitchHarness) => h.setCacheScope(OTHER_CACHE_SCOPE),
+    ],
+    [
+      "the active team changes",
+      qmKeys.list(OTHER_TEAM_SCOPE),
+      () => {
+        activeTeam.id = "team-b"
+      },
+    ],
+  ])(
+    "writes back to the scope the delete started in when %s mid-request",
+    async (_case, movedToKey, moveScope) => {
+      const harness = createScopeSwitchWrapper()
+      const { queryClient, wrapper } = harness
+      queryClient.setQueryData(listKey, [tenant({ id: "a" })])
+      queryClient.setQueryData(movedToKey, [tenant({ id: "a" })])
+      let resolveDelete: (t: QmTenant) => void = () => {}
+      mockDelete.mockReturnValue(
+        new Promise<QmTenant>((resolve) => {
+          resolveDelete = resolve
+        }),
+      )
 
-    const { result, rerender } = renderHook(() => useDeleteQmTenant(), {
-      wrapper,
-    })
-    act(() => {
-      result.current.mutate("a")
-    })
+      const { result, rerender } = renderHook(() => useDeleteQmTenant(), {
+        wrapper,
+      })
+      act(() => {
+        result.current.mutate("a")
+      })
 
-    // Impersonation changes while the request is still in flight.
-    setScope(OTHER_SCOPE)
-    rerender()
+      moveScope(harness)
+      rerender()
 
-    await act(async () => {
-      resolveDelete(tenant({ id: "a", status: "deprovisioning" }))
-    })
-    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+      await act(async () => {
+        resolveDelete(tenant({ id: "a", status: "deprovisioning" }))
+      })
+      await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
-    expect(queryClient.getQueryData<QmTenant[]>(listKey)?.[0].status).toBe(
-      "deprovisioning",
-    )
-    expect(queryClient.getQueryData<QmTenant[]>(otherListKey)?.[0].status).toBe(
-      "ready",
-    )
-    expect(queryClient.getQueryState(otherListKey)?.isInvalidated).toBe(false)
-  })
+      expect(queryClient.getQueryData<QmTenant[]>(listKey)?.[0].status).toBe(
+        "deprovisioning",
+      )
+      expect(queryClient.getQueryData<QmTenant[]>(movedToKey)?.[0].status).toBe(
+        "ready",
+      )
+      expect(queryClient.getQueryState(movedToKey)?.isInvalidated).toBe(false)
+    },
+  )
 })
 
 describe("useRetryQmTenant", () => {
