@@ -141,7 +141,8 @@ describe("QmTenantDetailPage", () => {
       (await screen.findAllByRole("button", { name: /delete stack/i }))[0],
     )
     const dialog = screen.getByRole("dialog")
-    expect(dialog).toHaveTextContent(/permanently erased/)
+    expect(dialog).toHaveTextContent(/cannot be restored/)
+    expect(dialog).not.toHaveTextContent(/permanently erased/)
     expect(dialog).not.toHaveTextContent(/kept for/)
     expect(screen.queryByText(/kept for/)).not.toBeInTheDocument()
   })

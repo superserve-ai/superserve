@@ -71,7 +71,7 @@ export function DeleteTenantDialog({
                 goes offline immediately and everyone is signed out.{" "}
                 {retentionDays
                   ? `Its data is kept for ${retentionDays} days in case you need it restored, then permanently erased.`
-                  : "Its data is permanently erased."}
+                  : "Its data is deleted with it and the stack cannot be restored."}
               </DialogDescription>
             </div>
           </div>

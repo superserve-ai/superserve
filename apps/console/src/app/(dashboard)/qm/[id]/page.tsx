@@ -573,7 +573,7 @@ function DangerZone({
               Takes the stack offline immediately.{" "}
               {retentionDays
                 ? `Data is kept for ${retentionDays} days, then permanently erased.`
-                : "Its data is permanently erased."}
+                : "Its data is deleted with it and the stack cannot be restored."}
             </p>
           </div>
           <Button

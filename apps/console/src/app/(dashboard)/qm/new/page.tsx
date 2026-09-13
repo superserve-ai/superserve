@@ -23,13 +23,11 @@ export default function NewQmTenantPage() {
 
   // qm-api allows one live stack per team. Rather than let someone fill in
   // the form (and paste a provider key) only to hit a 409, send them to the
-  // stack they already have. A failed list still shows the form; the
-  // server remains the authority.
-  // Nothing is decided from the cache alone: both the redirect and the
-  // form wait for this mount's own fetch, so a stack deleted elsewhere
-  // doesn't send us to its stale page and one created elsewhere isn't
-  // missed. A failed fetch still shows the form; the server is the
-  // authority either way.
+  // stack they already have. Nothing is decided from the cache alone: both
+  // the redirect and the form wait for this mount's own fetch, so a stack
+  // deleted elsewhere doesn't send us to its stale page and one created
+  // elsewhere isn't missed. A failed fetch still shows the form; the server
+  // is the authority either way.
   const verified = tenants.isFetchedAfterMount || tenants.isError
   // A failed refetch still counts as "fetched after mount" while keeping
   // the old data, so the redirect additionally requires that it succeeded.
