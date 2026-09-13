@@ -378,12 +378,17 @@ export function useRetryQmTenant() {
  * component state, never in any cache.
  */
 export function useQmAdminLink(id: string) {
+  const { ready } = useQmScope()
   const { addToast } = useToast()
   const [inFlight, setInFlight] = useState(0)
 
   const mint = useCallback(async (): Promise<QmAdminLink> => {
     setInFlight((n) => n + 1)
     try {
+      // Minting is a write like any other: an unsettled active team would
+      // hand back a credential for whichever team the server still thinks is
+      // current, which for a sign-in link is the worst version of that bug.
+      if (!ready) throw teamUnsettled()
       return await getQmAdminLink(id)
     } catch (error) {
       addToast(
@@ -394,7 +399,7 @@ export function useQmAdminLink(id: string) {
     } finally {
       setInFlight((n) => n - 1)
     }
-  }, [addToast, id])
+  }, [addToast, id, ready])
 
   return { mint, isPending: inFlight > 0 }
 }

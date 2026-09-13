@@ -49,12 +49,18 @@ export function refreshTeamScopedQueries(
 export function useCreateTeam() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ name, region }: { name: string; region: string }) =>
-      createTeamAction(name, region),
+    // Creating a team also switches to it, so it carries the same key as an
+    // explicit switch and team-scoped hooks hold off for both.
+    mutationKey: teamKeys.switching(),
+    mutationFn: async ({ name, region }: { name: string; region: string }) => {
+      const team = await createTeamAction(name, region)
+      // The directory gained a row and a new active team; refetch it here,
+      // inside the mutation, so the switch stays pending until the client's
+      // idea of the active team matches the cookie the server now has.
+      await queryClient.refetchQueries({ queryKey: teamKeys.directory() })
+      return team
+    },
     onSuccess: () => {
-      // Creating a team also switches to it, and the directory itself gained
-      // a row — refetch it rather than patching it.
-      void queryClient.invalidateQueries({ queryKey: teamKeys.directory() })
       refreshTeamScopedQueries(queryClient)
     },
   })

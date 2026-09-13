@@ -765,6 +765,7 @@ describe("team switching", () => {
         }),
         tenants: useQmTenants(),
         create: useCreateQmTenant(),
+        adminLink: useQmAdminLink("t1"),
       }),
       { wrapper },
     )
@@ -788,6 +789,14 @@ describe("team switching", () => {
       ).rejects.toThrow(/Switching teams/)
     })
     expect(mockCreate).not.toHaveBeenCalled()
+
+    // A sign-in link is the worst thing to mint for the wrong team.
+    await act(async () => {
+      await expect(result.current.adminLink.mint()).rejects.toThrow(
+        /Switching teams/,
+      )
+    })
+    expect(mockAdminLink).not.toHaveBeenCalled()
   })
 })
 
