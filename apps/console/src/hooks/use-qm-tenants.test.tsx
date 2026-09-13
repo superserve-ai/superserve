@@ -735,6 +735,36 @@ describe("useQmAdminLink", () => {
     expect(result.current.isPending).toBe(false)
   })
 
+  it("discards a link whose scope the session has left", async () => {
+    const { wrapper, setCacheScope } = createScopeSwitchWrapper()
+    let resolveMint!: (link: QmAdminLink) => void
+    mockAdminLink.mockReturnValue(
+      new Promise<QmAdminLink>((resolve) => {
+        resolveMint = resolve
+      }),
+    )
+
+    const { result, rerender } = renderHook(() => useQmAdminLink("t1"), {
+      wrapper,
+    })
+    let pending!: Promise<QmAdminLink>
+    act(() => {
+      pending = result.current.mint()
+    })
+
+    // Impersonation starts while the link is still being minted.
+    setCacheScope(OTHER_CACHE_SCOPE)
+    rerender()
+
+    await act(async () => {
+      resolveMint({
+        url: "https://acme.qm.example.com/auth?token=stale",
+        expiresAt: "2026-01-01T00:05:00.000Z",
+      })
+      await expect(pending).rejects.toThrow(/active team changed/)
+    })
+  })
+
   it("toasts on failure", async () => {
     const { wrapper } = createQueryWrapper()
     mockAdminLink.mockRejectedValue(

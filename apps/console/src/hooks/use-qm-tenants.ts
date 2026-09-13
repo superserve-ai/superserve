@@ -8,7 +8,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query"
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 import { useQueryScope } from "@/components/query-provider"
 import { ApiError } from "@/lib/api/client"
@@ -124,6 +124,11 @@ function errorMessage(error: unknown, fallback: string): string {
  */
 function teamUnsettled(): Error {
   return new Error("Switching teams. Try again in a moment.")
+}
+
+/** Discards a result that belongs to a scope the session has left. */
+function scopeMoved(): Error {
+  return new Error("The active team changed. Try again.")
 }
 
 // --- Scope -----------------------------------------------------------------
@@ -378,9 +383,16 @@ export function useRetryQmTenant() {
  * component state, never in any cache.
  */
 export function useQmAdminLink(id: string) {
-  const { ready } = useQmScope()
+  const { scope, ready } = useQmScope()
   const { addToast } = useToast()
   const [inFlight, setInFlight] = useState(0)
+
+  // A mint already in flight closes over the scope it started in, so the
+  // scope it should be compared against on return is tracked separately.
+  const currentScope = useRef(scope)
+  useEffect(() => {
+    currentScope.current = scope
+  }, [scope])
 
   const mint = useCallback(async (): Promise<QmAdminLink> => {
     setInFlight((n) => n + 1)
@@ -389,7 +401,13 @@ export function useQmAdminLink(id: string) {
       // hand back a credential for whichever team the server still thinks is
       // current, which for a sign-in link is the worst version of that bug.
       if (!ready) throw teamUnsettled()
-      return await getQmAdminLink(id)
+      const startedIn = currentScope.current
+      const link = await getQmAdminLink(id)
+      // And the scope can move while the request is out: a link minted for
+      // the team that was active at the click must not be handed to a session
+      // that has since moved somewhere else.
+      if (currentScope.current !== startedIn) throw scopeMoved()
+      return link
     } catch (error) {
       addToast(
         errorMessage(error, "Failed to generate admin link. Try again."),
