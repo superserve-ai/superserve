@@ -4,9 +4,12 @@
  * admin-link mutation never touching the query cache.
  */
 
+import { QueryClientProvider } from "@tanstack/react-query"
 import { act, renderHook, waitFor } from "@testing-library/react"
+import type { ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { QueryProvider } from "@/components/query-provider"
 import { ApiError } from "@/lib/api/client"
 import { qmKeys } from "@/lib/api/query-keys"
 import type {
@@ -104,6 +107,28 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
+/**
+ * A wrapper whose query scope can change between renders, so a mutation can
+ * be started in one scope and settle after impersonation has moved to
+ * another. The inner client provider wins, so the test keeps its own cache.
+ */
+function createScopeSwitchWrapper() {
+  const { queryClient } = createQueryWrapper()
+  let scope = SCOPE
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryProvider cacheScope={scope}>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </QueryProvider>
+  )
+  return {
+    queryClient,
+    wrapper,
+    setScope: (next: string) => {
+      scope = next
+    },
+  }
+}
+
 describe("useQmTenant", () => {
   it("polls every 2s while provisioning and stops once ready", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
@@ -184,6 +209,38 @@ describe("useQmTenant", () => {
     // successful read is still cached as `deprovisioning`.
     await advance(10_000)
     expect(mockGet).toHaveBeenCalledTimes(2)
+  })
+
+  it("keeps polling after a transient failure", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const { wrapper } = createQueryWrapper()
+    const upstream = new ApiError(500, "unknown_error", "Upstream")
+    mockGet
+      .mockResolvedValueOnce(detail(tenant({ status: "provisioning" })))
+      // The poll and all three of its retries fail, so the query really does
+      // settle into an error state before recovering.
+      .mockRejectedValueOnce(upstream)
+      .mockRejectedValueOnce(upstream)
+      .mockRejectedValueOnce(upstream)
+      .mockRejectedValueOnce(upstream)
+      .mockResolvedValue(detail(tenant({ status: "provisioning" })))
+
+    const { result } = renderHook(() => useQmTenant("t1"), { wrapper })
+    await waitFor(() =>
+      expect(result.current.data?.tenant.status).toBe("provisioning"),
+    )
+
+    // The poll plus three backed-off retries.
+    await advance(2100)
+    await advance(8000)
+    await waitFor(() =>
+      expect(mockGet.mock.calls.length).toBeGreaterThanOrEqual(5),
+    )
+
+    // A 500 is not the end of the tenant, so the interval survives it.
+    const afterFailure = mockGet.mock.calls.length
+    await advance(10_000)
+    expect(mockGet.mock.calls.length).toBeGreaterThan(afterFailure)
   })
 
   it("is disabled without an id", () => {
@@ -481,6 +538,42 @@ describe("useDeleteQmTenant", () => {
     expect(queryClient.getQueryState(otherDetailKey("a"))?.isInvalidated).toBe(
       false,
     )
+  })
+
+  it("writes back to the scope the delete started in, not the one it settles in", async () => {
+    const { queryClient, wrapper, setScope } = createScopeSwitchWrapper()
+    queryClient.setQueryData(listKey, [tenant({ id: "a" })])
+    queryClient.setQueryData(otherListKey, [tenant({ id: "a" })])
+    let resolveDelete: (t: QmTenant) => void = () => {}
+    mockDelete.mockReturnValue(
+      new Promise<QmTenant>((resolve) => {
+        resolveDelete = resolve
+      }),
+    )
+
+    const { result, rerender } = renderHook(() => useDeleteQmTenant(), {
+      wrapper,
+    })
+    act(() => {
+      result.current.mutate("a")
+    })
+
+    // Impersonation changes while the request is still in flight.
+    setScope(OTHER_SCOPE)
+    rerender()
+
+    await act(async () => {
+      resolveDelete(tenant({ id: "a", status: "deprovisioning" }))
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(queryClient.getQueryData<QmTenant[]>(listKey)?.[0].status).toBe(
+      "deprovisioning",
+    )
+    expect(queryClient.getQueryData<QmTenant[]>(otherListKey)?.[0].status).toBe(
+      "ready",
+    )
+    expect(queryClient.getQueryState(otherListKey)?.isInvalidated).toBe(false)
   })
 })
 

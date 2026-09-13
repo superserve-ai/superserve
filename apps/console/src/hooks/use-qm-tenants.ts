@@ -39,6 +39,11 @@ const TRANSITIONAL_POLL_MS = 2000
 /** Statuses a tenant read never recovers from, so retrying only adds delay. */
 const NON_RETRYABLE_STATUSES: ReadonlySet<number> = new Set([401, 404, 409])
 
+/** A tenant only stops existing by being deleted, so 404 is permanent. */
+function isGone(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404
+}
+
 interface TenantSnapshot {
   list: QmTenant[] | undefined
   detail: QmTenantDetailResponse | undefined
@@ -134,9 +139,10 @@ export function useQmTenant(id: string | null) {
     refetchInterval: (query) => {
       // Deprovisioning ends in `deleted`, and a deleted tenant is 404 rather
       // than a terminal status. React Query keeps the last successful
-      // (transitional) data alongside the error, so poll on data alone would
-      // never stop; the error state is what says the tenant is gone.
-      if (query.state.status === "error") return false
+      // (transitional) data alongside the error, so polling on data alone
+      // would never stop. Only the 404 ends it: any other failure is
+      // transient, and polling is how the tenant recovers from it.
+      if (isGone(query.state.error)) return false
       const status = query.state.data?.tenant.status
       return status && TRANSITIONAL_STATUSES.has(status)
         ? TRANSITIONAL_POLL_MS
@@ -190,8 +196,14 @@ export function useCreateQmTenant() {
       if (!modelKey) return Promise.reject(new Error("Model key is required."))
       return createQmTenant({ ...data, modelKey })
     },
-    onSuccess: (tenant) => {
-      queryClient.setQueryData<QmTenant[]>(qmKeys.list(queryScope), (old) =>
+    // React Query re-reads a pending mutation's options on every render, so
+    // the scope is captured here, when the request starts. Otherwise a staff
+    // user who starts or stops impersonation mid-request would have the
+    // response written into whichever scope happens to be active when it
+    // lands.
+    onMutate: () => ({ scope: queryScope }),
+    onSuccess: (tenant, _data, context) => {
+      queryClient.setQueryData<QmTenant[]>(qmKeys.list(context.scope), (old) =>
         old ? [tenant, ...old.filter((t) => t.id !== tenant.id)] : old,
       )
       // Deliberately broad: qm-api answers slug availability across every
@@ -209,13 +221,13 @@ export function useCreateQmTenant() {
         "error",
       )
     },
-    onSettled: () => {
+    onSettled: (_tenant, _error, _data, context) => {
       // A create can fail with the tenant already committed — the documented
       // 502, or a timeout after the server wrote it — so refresh the list on
       // every outcome rather than only on success, or the page can keep
       // showing no tenant while every retry answers 409.
       queryClient.invalidateQueries({
-        queryKey: qmKeys.list(queryScope),
+        queryKey: qmKeys.list(context?.scope ?? queryScope),
         exact: true,
       })
     },
@@ -252,34 +264,40 @@ export function useDeleteQmTenant() {
 
   return useMutation({
     mutationFn: (id: string) => deleteQmTenant(id),
+    // The scope is captured with the snapshot, so the rollback and every
+    // later write land in the scope the delete was issued from even if
+    // impersonation changes while the request is in flight.
     onMutate: async (id) => {
+      const scope = queryScope
       await queryClient.cancelQueries({
-        queryKey: qmKeys.list(queryScope),
+        queryKey: qmKeys.list(scope),
         exact: true,
       })
       await queryClient.cancelQueries({
-        queryKey: qmKeys.detail(id, queryScope),
+        queryKey: qmKeys.detail(id, scope),
         exact: true,
       })
-      const snapshot = snapshotTenant(queryClient, id, queryScope)
-      patchTenant(queryClient, id, queryScope, (t) => ({
+      const snapshot = snapshotTenant(queryClient, id, scope)
+      patchTenant(queryClient, id, scope, (t) => ({
         ...t,
         status: "deprovisioning",
       }))
-      return snapshot
+      return { scope, snapshot }
     },
-    onSuccess: (tenant) => {
-      patchTenant(queryClient, tenant.id, queryScope, () => tenant)
+    onSuccess: (tenant, _id, context) => {
+      patchTenant(queryClient, tenant.id, context.scope, () => tenant)
     },
-    onError: (error, id, snapshot) => {
-      if (snapshot) restoreTenant(queryClient, id, queryScope, snapshot)
+    onError: (error, id, context) => {
+      if (context) {
+        restoreTenant(queryClient, id, context.scope, context.snapshot)
+      }
       addToast(
         errorMessage(error, "Failed to delete QM instance. Try again."),
         "error",
       )
     },
-    onSettled: (_tenant, _error, id) => {
-      invalidateTenant(queryClient, id, queryScope)
+    onSettled: (_tenant, _error, id, context) => {
+      invalidateTenant(queryClient, id, context?.scope ?? queryScope)
     },
   })
 }
@@ -291,8 +309,9 @@ export function useRetryQmTenant() {
 
   return useMutation({
     mutationFn: (id: string) => retryQmTenant(id),
-    onSuccess: (tenant) => {
-      patchTenant(queryClient, tenant.id, queryScope, () => tenant)
+    onMutate: () => ({ scope: queryScope }),
+    onSuccess: (tenant, _id, context) => {
+      patchTenant(queryClient, tenant.id, context.scope, () => tenant)
     },
     onError: (error) => {
       addToast(
@@ -300,8 +319,8 @@ export function useRetryQmTenant() {
         "error",
       )
     },
-    onSettled: (_tenant, _error, id) => {
-      invalidateTenant(queryClient, id, queryScope)
+    onSettled: (_tenant, _error, id, context) => {
+      invalidateTenant(queryClient, id, context?.scope ?? queryScope)
     },
   })
 }
