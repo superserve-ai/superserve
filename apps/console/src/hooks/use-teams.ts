@@ -126,7 +126,17 @@ export function useSwitchTeam() {
         queryClient.setQueryData(teamKeys.directory(), context.previous)
       }
     },
-    onSuccess: () => {
+    onSuccess: (_data, { teamId, region }) => {
+      // Reassert the selection now that the cookie is definitely this team's.
+      // The scope serialises the requests but not `onMutate`, so a team
+      // creation settling in between can have overwritten the optimistic
+      // selection with its own; whichever request ran last should be the one
+      // the directory names.
+      queryClient.setQueryData<TeamDirectoryResponse>(
+        teamKeys.directory(),
+        (old) =>
+          old ? { ...old, activeTeamId: teamId, activeRegion: region } : old,
+      )
       // No router.refresh(): the dashboard shell is a pure client layout, so
       // a refresh would only re-render RSC payloads that carry no team data —
       // and it invalidates the router cache, re-fetching every prefetched
