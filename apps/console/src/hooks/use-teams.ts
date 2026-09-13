@@ -108,22 +108,33 @@ export function useSwitchTeam() {
     mutationFn: ({ teamId, region }: { teamId: string; region: string }) =>
       setActiveTeamAction(teamId, region),
     // Flip the switcher immediately; the server action only validates and
-    // stores the cookie. Rolled back on error.
+    // stores the cookie.
     onMutate: async ({ teamId, region }) => {
       await queryClient.cancelQueries({ queryKey: teamKeys.directory() })
-      const previous = queryClient.getQueryData<TeamDirectoryResponse>(
-        teamKeys.directory(),
-      )
       queryClient.setQueryData<TeamDirectoryResponse>(
         teamKeys.directory(),
         (old) =>
           old ? { ...old, activeTeamId: teamId, activeRegion: region } : old,
       )
-      return { previous }
     },
-    onError: (_error, _vars, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(teamKeys.directory(), context.previous)
+    onError: async () => {
+      // Not rolled back to a pre-mutate snapshot: the scope only serialises
+      // `mutationFn` calls, so a team creation queued behind this switch can
+      // have committed its own selection to the cookie between when the
+      // snapshot was taken and when this switch failed. Restoring it would
+      // put the client back on a selection the server no longer holds.
+      // Refetching instead names whichever team the cookie actually holds.
+      //
+      // Awaited, not fire-and-forget: `teamKeys.switching()` is how the QM
+      // hooks tell a switch is still in flight, so the mutation has to stay
+      // pending until the directory is reconciled — otherwise a read or
+      // write could land while the cache still names the rejected team.
+      await queryClient.invalidateQueries({ queryKey: teamKeys.directory() })
+      if (queryClient.getQueryState(teamKeys.directory())?.status === "error") {
+        // A failed fetch leaves the last-known data in place, which here is
+        // the rejected optimistic selection. Reset instead of trusting it:
+        // that drops the stale team and retries for anything still watching.
+        await queryClient.resetQueries({ queryKey: teamKeys.directory() })
       }
     },
     onSuccess: (_data, { teamId, region }) => {
