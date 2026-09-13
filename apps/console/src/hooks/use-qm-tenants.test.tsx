@@ -4,14 +4,14 @@
  * admin-link mutation never touching the query cache.
  */
 
-import { QueryClientProvider } from "@tanstack/react-query"
+import { QueryClientProvider, useMutation } from "@tanstack/react-query"
 import { act, renderHook, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { QueryProvider } from "@/components/query-provider"
 import { ApiError } from "@/lib/api/client"
-import { qmKeys } from "@/lib/api/query-keys"
+import { qmKeys, teamKeys } from "@/lib/api/query-keys"
 import type {
   QmAdminLink,
   QmTenant,
@@ -747,6 +747,47 @@ describe("useQmAdminLink", () => {
     })
 
     expect(mockAddToast).toHaveBeenCalledWith("Tenant is not ready", "error")
+  })
+})
+
+describe("team switching", () => {
+  it("holds QM reads and writes until the switch commits", async () => {
+    const { wrapper } = createQueryWrapper()
+    mockList.mockResolvedValue([tenant()])
+
+    const { result } = renderHook(
+      () => ({
+        // The switcher flips the directory optimistically, so while this is
+        // pending the client's active team and the server cookie disagree.
+        switchTeam: useMutation({
+          mutationKey: teamKeys.switching(),
+          mutationFn: () => new Promise<void>(() => {}),
+        }),
+        tenants: useQmTenants(),
+        create: useCreateQmTenant(),
+      }),
+      { wrapper },
+    )
+    await waitFor(() => expect(mockList).toHaveBeenCalledTimes(1))
+
+    act(() => {
+      result.current.switchTeam.mutate()
+    })
+    await waitFor(() => expect(result.current.tenants.fetchStatus).toBe("idle"))
+
+    await act(async () => {
+      await expect(
+        result.current.create.mutateAsync({
+          slug: "acme",
+          orgName: "Acme",
+          adminEmail: "admin@example.com",
+          signIn: "magic_link",
+          modelProvider: "anthropic",
+          modelKey: "sk-ant-secret",
+        }),
+      ).rejects.toThrow(/Switching teams/)
+    })
+    expect(mockCreate).not.toHaveBeenCalled()
   })
 })
 

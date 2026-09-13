@@ -194,6 +194,9 @@ export const quotaKeys = {
 export const teamKeys = {
   all: ["teams"] as const,
   directory: () => [...teamKeys.all, "directory"] as const,
+  // Mutation key only. Team-scoped data can watch it to tell when the active
+  // team the client shows and the one the server authenticates with disagree.
+  switching: () => [...teamKeys.all, "switch"] as const,
 }
 
 // Every cached QM query belongs to exactly one query scope — the team's own

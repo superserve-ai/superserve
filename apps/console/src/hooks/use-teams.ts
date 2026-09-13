@@ -63,6 +63,8 @@ export function useCreateTeam() {
 export function useSwitchTeam() {
   const queryClient = useQueryClient()
   return useMutation({
+    // Named so team-scoped hooks can hold off while the switch is in flight.
+    mutationKey: teamKeys.switching(),
     mutationFn: ({ teamId, region }: { teamId: string; region: string }) =>
       setActiveTeamAction(teamId, region),
     // Flip the switcher immediately; the server action only validates and

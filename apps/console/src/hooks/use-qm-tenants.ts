@@ -3,6 +3,7 @@
 import { useToast } from "@superserve/ui"
 import {
   type QueryClient,
+  useIsMutating,
   useMutation,
   useQuery,
   useQueryClient,
@@ -20,7 +21,7 @@ import {
   listQmTenants,
   retryQmTenant,
 } from "@/lib/api/qm"
-import { qmKeys } from "@/lib/api/query-keys"
+import { qmKeys, teamKeys } from "@/lib/api/query-keys"
 import type {
   CreateQmTenantRequest,
   QmAdminLink,
@@ -116,6 +117,15 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : fallback
 }
 
+/**
+ * Refuses a write while the active team is unsettled. The alternative is
+ * acting on whichever team the server happens to think is active, which for
+ * a create means provisioning a tenant for the wrong one.
+ */
+function teamUnsettled(): Error {
+  return new Error("Switching teams. Try again in a moment.")
+}
+
 // --- Scope -----------------------------------------------------------------
 
 /**
@@ -127,19 +137,23 @@ function errorMessage(error: unknown, fallback: string): string {
  * — the way the billing hooks do — is what keeps one team's tenants out of
  * another's list when a switch lands mid-request.
  *
- * `ready` is false until the team directory resolves; queries wait rather than
- * cache themselves under a placeholder and re-key a moment later.
+ * `ready` is false until the team directory resolves, and again while a team
+ * switch is in flight: the switcher flips the directory optimistically, before
+ * the cookie the proxy authenticates with has changed, so a request issued in
+ * that window would be keyed to the new team and executed as the old one.
+ * Waiting is cheaper than reconciling that afterwards.
  */
 function useQmScope(): { scope: string; ready: boolean } {
   const cacheScope = useQueryScope()
   const { data: teams } = useTeams()
+  const switching = useIsMutating({ mutationKey: teamKeys.switching() }) > 0
   const teamKey =
     teams?.activeTeamId && teams.activeRegion
       ? `${teams.activeRegion}:${teams.activeTeamId}`
       : null
   return {
     scope: `${cacheScope}|${teamKey ?? "unresolved"}`,
-    ready: teamKey !== null,
+    ready: teamKey !== null && !switching,
   }
 }
 
@@ -216,7 +230,7 @@ const modelKeys = new WeakMap<CreateQmTenantVariables, string>()
 
 export function useCreateQmTenant() {
   const queryClient = useQueryClient()
-  const { scope: queryScope } = useQmScope()
+  const { scope: queryScope, ready } = useQmScope()
   const { addToast } = useToast()
 
   const mutation = useMutation({
@@ -224,6 +238,7 @@ export function useCreateQmTenant() {
       const modelKey = modelKeys.get(data)
       modelKeys.delete(data)
       if (!modelKey) return Promise.reject(new Error("Model key is required."))
+      if (!ready) return Promise.reject(teamUnsettled())
       return createQmTenant({ ...data, modelKey })
     },
     // React Query re-reads a pending mutation's options on every render, so
@@ -289,11 +304,12 @@ export function useCreateQmTenant() {
 
 export function useDeleteQmTenant() {
   const queryClient = useQueryClient()
-  const { scope: queryScope } = useQmScope()
+  const { scope: queryScope, ready } = useQmScope()
   const { addToast } = useToast()
 
   return useMutation({
-    mutationFn: (id: string) => deleteQmTenant(id),
+    mutationFn: (id: string) =>
+      ready ? deleteQmTenant(id) : Promise.reject(teamUnsettled()),
     // The scope is captured with the snapshot, so the rollback and every
     // later write land in the scope the delete was issued from even if
     // impersonation changes while the request is in flight.
@@ -334,11 +350,12 @@ export function useDeleteQmTenant() {
 
 export function useRetryQmTenant() {
   const queryClient = useQueryClient()
-  const { scope: queryScope } = useQmScope()
+  const { scope: queryScope, ready } = useQmScope()
   const { addToast } = useToast()
 
   return useMutation({
-    mutationFn: (id: string) => retryQmTenant(id),
+    mutationFn: (id: string) =>
+      ready ? retryQmTenant(id) : Promise.reject(teamUnsettled()),
     onMutate: () => ({ scope: queryScope }),
     onSuccess: (tenant, _id, context) => {
       patchTenant(queryClient, tenant.id, context.scope, () => tenant)
