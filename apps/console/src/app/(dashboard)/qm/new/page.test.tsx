@@ -101,6 +101,19 @@ describe("NewQmTenantPage", () => {
     expect(screen.queryByRole("form")).not.toBeInTheDocument()
   })
 
+  it("does not redirect to a cached stack the server says is gone", async () => {
+    const queryClient = createQueryClient()
+    // The cache still lists a stack that another session has since deleted.
+    queryClient.setQueryData(listKey, [qmTenant({ id: "t-stale" })])
+    mockList.mockResolvedValue([])
+    renderPage(queryClient)
+
+    expect(
+      await screen.findByRole("form", { name: "create form" }),
+    ).toBeInTheDocument()
+    expect(nav.replace).not.toHaveBeenCalled()
+  })
+
   it("shows the form only after this mount's fetch confirms the cache", async () => {
     const queryClient = createQueryClient()
     queryClient.setQueryData(listKey, [])
