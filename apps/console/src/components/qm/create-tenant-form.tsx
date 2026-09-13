@@ -96,6 +96,14 @@ export function CreateTenantForm({ defaultAdminEmail }: CreateTenantFormProps) {
   // Belt and braces with the disabled button: a second click during the
   // same tick (before React re-renders) must not fire a second request.
   const submittingRef = useRef(false)
+  // Set only while a failed submit's recovery refetch (see onError below)
+  // is still in flight, so onSettled can wait for it before unlocking the
+  // form: resubmitting before it resolves could re-create or re-conflict
+  // with a tenant this same attempt already left behind.
+  const recoveryRef = useRef<Promise<unknown> | null>(null)
+  // Mirrors recoveryRef for rendering: keeps the button disabled and busy
+  // for the same window rather than only guarding the click handler.
+  const [recovering, setRecovering] = useState(false)
 
   // Adopt the signed-in user's email once it loads, unless already edited.
   useEffect(() => {
@@ -164,7 +172,10 @@ export function CreateTenantForm({ defaultAdminEmail }: CreateTenantFormProps) {
   }
 
   const canSubmit =
-    Object.keys(clientErrors).length === 0 && slugSettled && !create.isPending
+    Object.keys(clientErrors).length === 0 &&
+    slugSettled &&
+    !create.isPending &&
+    !recovering
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -219,10 +230,24 @@ export function CreateTenantForm({ defaultAdminEmail }: CreateTenantFormProps) {
           // 5xx after the row was inserted but before its key or run was
           // recorded), so refresh the list: the page redirects to whatever
           // tenant now exists rather than letting the form be resubmitted.
-          queryClient.invalidateQueries({ queryKey: qmKeys.lists() })
+          // A 409 can also mean this slug was just claimed by someone else,
+          // so drop the cached availability too rather than leave it green.
+          setRecovering(true)
+          recoveryRef.current = Promise.all([
+            queryClient.invalidateQueries({ queryKey: qmKeys.lists() }),
+            queryClient.invalidateQueries({
+              queryKey: qmKeys.slugAvailabilities(slug),
+            }),
+          ]).finally(() => setRecovering(false))
         },
         onSettled: () => {
-          submittingRef.current = false
+          // Keep the form locked until any recovery refetch above settles,
+          // so it can't be resubmitted before a tenant it may have left
+          // behind is discovered.
+          Promise.resolve(recoveryRef.current).finally(() => {
+            recoveryRef.current = null
+            submittingRef.current = false
+          })
         },
       },
     )
@@ -500,11 +525,11 @@ export function CreateTenantForm({ defaultAdminEmail }: CreateTenantFormProps) {
           </p>
           <Button
             type="submit"
-            disabled={create.isPending}
-            aria-busy={create.isPending}
+            disabled={create.isPending || recovering}
+            aria-busy={create.isPending || recovering}
             className="w-full sm:w-auto"
           >
-            {create.isPending ? (
+            {create.isPending || recovering ? (
               <>
                 <Spinner size="sm" />
                 Creating…
