@@ -219,7 +219,7 @@ async function proxyRequest(
     // section cannot be reached by calling the proxy by hand.
     const qmTeamId =
       impersonationContext?.teamId ?? (await getTeamIdForUser(user as User))
-    if (!canAccessQm(user, qmTeamId)) {
+    if (!canAccessQm(qmTeamId)) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
     // Checked after auth so an unauthenticated caller still gets 401 and

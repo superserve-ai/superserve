@@ -18,6 +18,7 @@ import { CornerBrackets } from "@/components/corner-brackets"
 import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
 import { TenantStatusBadge } from "@/components/qm/tenant-status-badge"
+import { useDashboardTeamContext } from "@/components/query-provider"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableSkeleton } from "@/components/table-skeleton"
 import { TableToolbar } from "@/components/table-toolbar"
@@ -35,6 +36,8 @@ import { tenantUrl } from "@/lib/qm/slug"
  */
 export default function QmPage() {
   const router = useRouter()
+  // Viewing another team is read-only, so creation is never offered there.
+  const readOnly = useDashboardTeamContext() !== null
   const { data, isPending, error, refetch } = useQmTenants()
 
   // Deleted tenants may linger in the list for the retention window; they
@@ -71,7 +74,7 @@ export default function QmPage() {
     return (
       <div className="flex h-full flex-col">
         <PageHeader title="QM" />
-        <QmEmptyState />
+        <QmEmptyState readOnly={readOnly} />
       </div>
     )
   }
@@ -79,7 +82,7 @@ export default function QmPage() {
   return <QmTenantTable tenants={tenants} />
 }
 
-function QmEmptyState() {
+function QmEmptyState({ readOnly }: { readOnly: boolean }) {
   return (
     <div className="flex min-h-full flex-1 items-center justify-center px-4 py-16">
       <div className="relative flex w-full max-w-sm flex-col items-center px-8 py-10 text-center sm:px-10">
@@ -97,11 +100,17 @@ function QmEmptyState() {
           with its own database, sign-in, and model provider. Superserve runs
           and upgrades it; your team just uses it.
         </p>
-        <div className="mt-5">
-          <Button size="sm" render={<Link href="/qm/new" />}>
-            Create your QM stack
-          </Button>
-        </div>
+        {readOnly ? (
+          <p className="mt-5 font-mono text-xs text-muted uppercase">
+            Read-only while viewing another team
+          </p>
+        ) : (
+          <div className="mt-5">
+            <Button size="sm" render={<Link href="/qm/new" />}>
+              Create your QM stack
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -29,6 +29,11 @@ vi.mock("next/navigation", () => ({
   useRouter: () => nav,
   usePathname: () => "/qm",
 }))
+const teamContext = vi.hoisted(() => ({ value: null as object | null }))
+vi.mock("@/components/query-provider", () => ({
+  useQueryScope: () => "self",
+  useDashboardTeamContext: () => teamContext.value,
+}))
 vi.mock("next/link", () => ({
   default: ({
     children,
@@ -57,6 +62,19 @@ describe("QmPage", () => {
     mockList.mockReset()
     nav.push.mockClear()
     nav.replace.mockClear()
+    teamContext.value = null
+  })
+
+  it("shows a read-only empty state while viewing another team", async () => {
+    teamContext.value = { teamId: "team-b", region: "use", name: "Other" }
+    mockList.mockResolvedValue([])
+    renderPage()
+
+    expect(await screen.findByText("No QM stack yet")).toBeInTheDocument()
+    expect(
+      screen.queryByRole("link", { name: /create your qm stack/i }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText(/read-only while viewing/i)).toBeInTheDocument()
   })
 
   it("shows the empty state with a create CTA when the team has no stack", async () => {

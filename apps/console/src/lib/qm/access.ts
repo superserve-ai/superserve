@@ -1,12 +1,9 @@
-import type { User } from "@supabase/supabase-js"
-
-import { isStaff } from "@/lib/admin/staff"
-
 /**
  * QM Cloud beta gate. `NEXT_PUBLIC_QM_BETA_TEAMS` is a comma-separated list
- * of team ids allowed into the beta, or `*` to open it to every team. Staff
- * always pass so the section can be dogfooded before any team is enrolled.
- * Unset (the default) hides the section entirely — nav item and routes.
+ * of team ids allowed into the beta, or `*` to open it to every team. Unset
+ * (the default) hides the section entirely — nav item, routes and the API
+ * proxy alike. The same rule runs in the browser and in the proxy so the
+ * two can never disagree; staff dogfood by allowlisting their own team.
  */
 export interface QmBetaAllowlist {
   everyone: boolean
@@ -31,11 +28,9 @@ export function qmBetaAllowlist(): QmBetaAllowlist {
 }
 
 export function canAccessQm(
-  user: User | null | undefined,
   teamId: string | null | undefined,
   allowlist: QmBetaAllowlist = qmBetaAllowlist(),
 ): boolean {
-  if (isStaff(user)) return true
   if (allowlist.everyone) return true
   return !!teamId && allowlist.teamIds.has(teamId)
 }
