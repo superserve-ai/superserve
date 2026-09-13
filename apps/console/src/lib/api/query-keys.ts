@@ -195,3 +195,27 @@ export const teamKeys = {
   all: ["teams"] as const,
   directory: () => [...teamKeys.all, "directory"] as const,
 }
+
+// Every cached QM query belongs to exactly one query scope — the team's own
+// data, or an impersonated team's — so the builders below take the scope and
+// put it in the key. Taking it as an argument rather than appending it at the
+// call site is what makes a scope-crossing read or write hard to write by
+// accident: there is no builder that returns an unscoped tenant key.
+export const qmKeys = {
+  all: ["qm"] as const,
+  lists: () => [...qmKeys.all, "list"] as const,
+  list: (scope: string) => [...qmKeys.lists(), {}, scope] as const,
+  details: () => [...qmKeys.all, "detail"] as const,
+  detail: (id: string, scope: string) =>
+    [...qmKeys.details(), id, scope] as const,
+  // Slug availability is answered across every team, not per scope, so the
+  // all-scopes prefix is kept as its own builder for the one place that
+  // deliberately invalidates every scope (see use-qm-tenants.ts).
+  slugAvailabilities: (slug: string) =>
+    [...qmKeys.all, "slug-availability", slug] as const,
+  slugAvailability: (slug: string, scope: string) =>
+    [...qmKeys.slugAvailabilities(slug), scope] as const,
+  // Used only as a mutationKey: admin links are single-use and must never be
+  // written to the query cache.
+  adminLink: (id: string) => [...qmKeys.all, "admin-link", id] as const,
+}

@@ -41,10 +41,12 @@ bun run docs:dev                                    # Mintlify preview
 ## Releasing SDKs
 
 Keep TS and Python version numbers in sync:
+
 - TS: `packages/sdk/package.json` → `version`
 - Python: `packages/python-sdk/pyproject.toml` → `version` AND `packages/python-sdk/src/superserve/__init__.py` → `__version__`
 
 Prefer the **Release SDKs** GitHub Actions workflow (`workflow_dispatch`). For manual publish:
+
 - TS: `bunx turbo run build --filter=@superserve/sdk && cd packages/sdk && bun publish --access public`
 - Python: run `uv build --package superserve && uv publish dist/superserve-*` from repo root (uv workspaces put artifacts there)
 
@@ -57,6 +59,8 @@ Prefer the **Release SDKs** GitHub Actions workflow (`workflow_dispatch`). For m
 **Data fetching:** React Query with hooks in `src/hooks/`. Query keys in `src/lib/api/query-keys.ts`. Mutations use optimistic updates.
 
 **API types:** `apps/console/src/lib/api/types.ts` — must match the OpenAPI spec.
+
+**Hosted QM contract:** `apps/console/openapi/qm.openapi.yaml` is a committed slice of the sandbox repo's `api/openapi.yaml` (`/v1/qm/*` only); `src/lib/api/qm.generated.ts` is generated from it and `src/lib/api/qm.contract.ts` asserts the hand-written types match. Refresh with `bun run --cwd apps/console qm:openapi` (`--spec <path>` or `QM_OPENAPI_SPEC` points at the upstream spec). `bun run qm:check-openapi` is the CI drift check.
 
 ## Coding style
 

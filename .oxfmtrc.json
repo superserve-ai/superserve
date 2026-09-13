@@ -24,6 +24,7 @@
     "coverage",
     "**/next-env.d.ts",
     "**/*.min.js",
-    "**/*.min.css"
+    "**/*.min.css",
+    "**/*.generated.ts"
   ]
 }
