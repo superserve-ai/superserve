@@ -4,7 +4,9 @@
  * admin-link mutation never touching the query cache.
  */
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, renderHook, waitFor } from "@testing-library/react"
+import type { ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/lib/api/client"
@@ -40,6 +42,7 @@ vi.mock("@superserve/ui", () => ({
 }))
 
 import {
+  retryTenantQuery,
   useCreateQmTenant,
   useDeleteQmTenant,
   useQmAdminLink,
@@ -627,5 +630,71 @@ describe("useQmSlugAvailability", () => {
 
     expect(mockCheckSlug).toHaveBeenCalledWith("acme")
     expect(result.current.data).toEqual({ available: false, reason: "taken" })
+  })
+})
+
+describe("useQmTenant freshness", () => {
+  it("asks the server again on mount even when the detail is cached and fresh", async () => {
+    const { wrapper, queryClient } = createQueryWrapper()
+    const cached = detail(tenant({ id: "t1", status: "ready" }))
+    queryClient.setQueryData(detailKey("t1"), cached)
+    mockGet.mockResolvedValue(
+      detail(tenant({ id: "t1", status: "deprovisioning" })),
+    )
+
+    const { result } = renderHook(() => useQmTenant("t1"), { wrapper })
+    expect(result.current.data?.tenant.status).toBe("ready")
+    await waitFor(() =>
+      expect(result.current.data?.tenant.status).toBe("deprovisioning"),
+    )
+    expect(mockGet).toHaveBeenCalledWith("t1")
+  })
+})
+
+describe("useQmTenant retry policy", () => {
+  /** A client with the app's real retry behaviour, just without the backoff. */
+  function retryingWrapper() {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: 3,
+          retryDelay: 0,
+          refetchOnWindowFocus: false,
+        },
+      },
+    })
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    )
+    return wrapper
+  }
+
+  it("fails a 404 at once so a vanished stack redirects without waiting", async () => {
+    mockGet.mockRejectedValue(new ApiError(404, "not_found", "Not found"))
+    const { result } = renderHook(() => useQmTenant("gone"), {
+      wrapper: retryingWrapper(),
+    })
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(mockGet).toHaveBeenCalledTimes(1)
+  })
+
+  it("still retries transient failures", async () => {
+    mockGet.mockRejectedValue(new ApiError(502, "bad_gateway", "Upstream"))
+    const { result } = renderHook(() => useQmTenant("t1"), {
+      wrapper: retryingWrapper(),
+    })
+    await waitFor(() => expect(result.current.isError).toBe(true), {
+      timeout: 4000,
+    })
+    expect(mockGet.mock.calls.length).toBeGreaterThan(1)
+  })
+
+  it("keeps the app-wide exclusions and ceiling", () => {
+    expect(retryTenantQuery(0, new ApiError(404, "x", "x"))).toBe(false)
+    expect(retryTenantQuery(0, new ApiError(401, "x", "x"))).toBe(false)
+    expect(retryTenantQuery(0, new ApiError(409, "x", "x"))).toBe(false)
+    expect(retryTenantQuery(2, new ApiError(500, "x", "x"))).toBe(true)
+    expect(retryTenantQuery(3, new ApiError(500, "x", "x"))).toBe(false)
+    expect(retryTenantQuery(0, new Error("network"))).toBe(true)
   })
 })

@@ -11,6 +11,7 @@ import {
 } from "@superserve/ui"
 import Image from "next/image"
 
+import { useQmAccess } from "@/hooks/use-qm-access"
 import { useUser } from "@/hooks/use-user"
 import {
   canReadPlatformTeams,
@@ -21,6 +22,7 @@ import {
   adminNavItem,
   bottomNavItems,
   mainNavItems,
+  qmNavItem,
   userManagementNavItem,
 } from "./nav-config"
 import { useSidebar } from "./sidebar-context"
@@ -37,8 +39,14 @@ function openCommandPalette() {
 export function Sidebar() {
   const { isCollapsed, toggle } = useSidebar()
   const { user } = useUser()
+  const qmAccess = useQmAccess()
   const navItems = [
-    ...mainNavItems,
+    ...mainNavItems.flatMap((item) =>
+      // QM sits after Templates: it is a product surface, not an account one.
+      item.href === "/templates" && qmAccess.enabled
+        ? [item, qmNavItem]
+        : [item],
+    ),
     ...(canReadPlatformTeams(user) ? [adminNavItem] : []),
     ...(canViewOtherUsersAccount(user) ? [userManagementNavItem] : []),
   ]

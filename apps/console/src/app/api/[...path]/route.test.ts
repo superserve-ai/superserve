@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("@/lib/api/proxy-auth", () => ({
   getApiBaseUrlForUser: vi.fn(),
   getAuthApiKeyForUser: vi.fn(),
+  getTeamIdForUser: vi.fn(),
 }))
 vi.mock("@/lib/admin/impersonation", () => ({
   getImpersonationContext: vi.fn(),
@@ -42,6 +43,7 @@ import { getImpersonationContext } from "@/lib/admin/impersonation"
 import {
   getApiBaseUrlForUser,
   getAuthApiKeyForUser,
+  getTeamIdForUser,
 } from "@/lib/api/proxy-auth"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -84,6 +86,8 @@ describe("api proxy /api/[...path]", () => {
     )
     vi.mocked(getImpersonationContext).mockReset()
     vi.mocked(getImpersonationContext).mockResolvedValue(null)
+    vi.mocked(getTeamIdForUser).mockReset()
+    vi.mocked(getTeamIdForUser).mockResolvedValue("team-a")
   })
 
   it("returns 404 for a path outside the allowed prefixes", async () => {
@@ -424,6 +428,62 @@ describe("api proxy /api/[...path]", () => {
 
     beforeEach(() => {
       vi.stubEnv("QM_API_URL", "https://qm-api.test/")
+      vi.stubEnv("NEXT_PUBLIC_QM_BETA_TEAMS", "*")
+    })
+
+    describe("beta allowlist", () => {
+      it("returns 404 without contacting qm-api when the team is not in the beta", async () => {
+        vi.stubEnv("NEXT_PUBLIC_QM_BETA_TEAMS", "team-z")
+
+        const res = await GET(req("GET", QM_PATH), params(QM_PATH))
+
+        expect(res.status).toBe(404)
+        expect(fetchSpy).not.toHaveBeenCalled()
+      })
+
+      it("is closed when the allowlist is unset", async () => {
+        vi.stubEnv("NEXT_PUBLIC_QM_BETA_TEAMS", "")
+        const res = await POST(req("POST", QM_PATH), params(QM_PATH))
+        expect(res.status).toBe(404)
+        expect(fetchSpy).not.toHaveBeenCalled()
+      })
+
+      it("admits an allowlisted team", async () => {
+        vi.stubEnv("NEXT_PUBLIC_QM_BETA_TEAMS", "team-z, team-a")
+        fetchSpy.mockResolvedValue(new Response("{}", { status: 200 }))
+
+        const res = await GET(req("GET", QM_PATH), params(QM_PATH))
+
+        expect(res.status).toBe(200)
+        expect(getTeamIdForUser).toHaveBeenCalledWith({ id: "u1" })
+      })
+
+      it("judges the impersonated team while viewing another team", async () => {
+        vi.stubEnv("NEXT_PUBLIC_QM_BETA_TEAMS", "team-imp")
+        vi.mocked(getImpersonationContext).mockResolvedValue({
+          teamId: "team-imp",
+          region: "use",
+          teamName: "Impersonated",
+        })
+        fetchSpy.mockResolvedValue(new Response("{}", { status: 200 }))
+
+        const res = await GET(req("GET", QM_PATH), params(QM_PATH))
+
+        expect(res.status).toBe(200)
+        expect(getTeamIdForUser).not.toHaveBeenCalled()
+      })
+
+      it("still answers 401 before the gate for anonymous callers", async () => {
+        vi.stubEnv("NEXT_PUBLIC_QM_BETA_TEAMS", "")
+        vi.mocked(createServerClient).mockResolvedValue({
+          auth: { getUser: async () => ({ data: { user: null } }) },
+        } as never)
+        vi.mocked(getAuthApiKeyForUser).mockResolvedValue(null)
+
+        const res = await GET(req("GET", QM_PATH), params(QM_PATH))
+
+        expect(res.status).toBe(401)
+      })
     })
 
     it("forwards /api/qm/* to ${QM_API_URL}/v1/qm/* with the query string preserved", async () => {

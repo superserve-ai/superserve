@@ -111,11 +111,19 @@ function errorMessage(error: unknown, fallback: string): string {
 
 // --- Queries ---------------------------------------------------------------
 
-export function useQmTenants() {
+export function useQmTenants(
+  options: { enabled?: boolean; refetchOnMount?: boolean | "always" } = {},
+) {
   const queryScope = useQueryScope()
   return useQuery({
     queryKey: qmKeys.list(queryScope),
     queryFn: listQmTenants,
+    enabled: options.enabled ?? true,
+    // "always" for surfaces that must not trust a cached list (e.g. before
+    // offering to create a stack, which qm-api allows once per team).
+    ...(options.refetchOnMount !== undefined && {
+      refetchOnMount: options.refetchOnMount,
+    }),
     // Lists change while any tenant is provisioning/deprovisioning.
     refetchInterval: (query) =>
       query.state.data?.some((t) => TRANSITIONAL_STATUSES.has(t.status))
@@ -125,12 +133,30 @@ export function useQmTenants() {
   })
 }
 
+/**
+ * Mirrors the app's default retry policy except that a 404 fails at once:
+ * a stack deleted from another session (or a stale bookmark) should send
+ * the page away immediately, not after several backed-off attempts.
+ */
+export function retryTenantQuery(failureCount: number, error: Error) {
+  if (error instanceof ApiError) {
+    if (error.status === 404 || error.status === 401 || error.status === 409)
+      return false
+  }
+  return failureCount < 3
+}
+
 export function useQmTenant(id: string | null) {
   const queryScope = useQueryScope()
   return useQuery({
     queryKey: qmKeys.detail(id ?? "", queryScope),
     queryFn: () => getQmTenant(id as string),
     enabled: !!id,
+    retry: retryTenantQuery,
+    // A settled tenant doesn't poll, so a cached detail could otherwise
+    // show a stack another session has since deleted or retried for as
+    // long as the cache stays fresh. Entering the page always asks again.
+    refetchOnMount: "always",
     refetchInterval: (query) => {
       // Deprovisioning ends in `deleted`, and a deleted tenant is 404 rather
       // than a terminal status. React Query keeps the last successful

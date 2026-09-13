@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen } from "@testing-library/react"
 import type { ReactNode } from "react"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("next/image", () => ({
   default: (props: Record<string, unknown>) => <img {...props} />,
@@ -10,7 +10,12 @@ vi.mock("next/image", () => ({
 vi.mock("@/hooks/use-user", () => ({
   useUser: () => ({
     user: { id: "user-1" },
+    loading: false,
   }),
+}))
+
+vi.mock("@/hooks/use-teams", () => ({
+  useTeams: () => ({ data: { activeTeamId: "team-a" }, isPending: false }),
 }))
 
 vi.mock("@/hooks/use-favicon-status", () => ({
@@ -46,6 +51,28 @@ vi.mock("./sidebar-nav", () => ({
 import { Sidebar } from "./sidebar"
 
 describe("Sidebar", () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  it("hides the QM nav item unless the team is in the beta", () => {
+    vi.stubEnv("NEXT_PUBLIC_QM_BETA_TEAMS", "team-z")
+    const queryClient = new QueryClient()
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar />
+      </QueryClientProvider>,
+    )
+    expect(screen.queryByText(/\bQM\b/)).not.toBeInTheDocument()
+    unmount()
+
+    vi.stubEnv("NEXT_PUBLIC_QM_BETA_TEAMS", "team-z,team-a")
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByText(/Templates \| QM \| Secrets/)).toBeInTheDocument()
+  })
+
   it("does not show the billing nav item", () => {
     const queryClient = new QueryClient({
       defaultOptions: {
