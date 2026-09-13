@@ -2,13 +2,27 @@
 
 import { ArrowLeftIcon } from "@phosphor-icons/react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useEffect } from "react"
 
 import { PageHeader } from "@/components/page-header"
 import { CreateTenantForm } from "@/components/qm/create-tenant-form"
+import { useQmTenants } from "@/hooks/use-qm-tenants"
 import { useUser } from "@/hooks/use-user"
 
 export default function NewQmTenantPage() {
+  const router = useRouter()
   const { user } = useUser()
+  const tenants = useQmTenants()
+
+  // qm-api allows one live stack per team. Rather than let someone fill in
+  // the form (and paste a provider key) only to hit a 409, send them to the
+  // stack they already have. A failed list still shows the form; the
+  // server remains the authority.
+  const existing = tenants.data?.find((t) => t.status !== "deleted") ?? null
+  useEffect(() => {
+    if (existing) router.replace(`/qm/${existing.id}`)
+  }, [existing, router])
 
   return (
     <div className="flex h-full flex-col">
@@ -22,8 +36,30 @@ export default function NewQmTenantPage() {
         </Link>
       </PageHeader>
       <div className="flex-1 overflow-y-auto">
-        <CreateTenantForm defaultAdminEmail={user?.email ?? null} />
+        {tenants.isPending || existing ? (
+          <FormSkeleton />
+        ) : (
+          <CreateTenantForm defaultAdminEmail={user?.email ?? null} />
+        )}
       </div>
+    </div>
+  )
+}
+
+function FormSkeleton() {
+  return (
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-6">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="border border-dashed border-border">
+          <div className="flex h-10 items-center border-b border-dashed border-border px-4">
+            <div className="h-2.5 w-24 animate-pulse bg-muted/20" />
+          </div>
+          <div className="flex flex-col gap-4 px-4 py-4">
+            <div className="h-3 w-32 animate-pulse bg-muted/20" />
+            <div className="h-9 animate-pulse bg-muted/10" />
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

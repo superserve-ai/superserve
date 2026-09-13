@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowSquareOutIcon, PlusIcon, RobotIcon } from "@phosphor-icons/react"
+import { ArrowSquareOutIcon, RobotIcon } from "@phosphor-icons/react"
 import {
   Button,
   Table,
@@ -27,9 +27,11 @@ import { formatDate } from "@/lib/format"
 import { tenantUrl } from "@/lib/qm/slug"
 
 /**
- * Entry point for QM Cloud. Most teams run exactly one stack, so a single
- * tenant sends them straight to its detail page; the table only appears once
- * a team has several.
+ * Entry point for QM Cloud. qm-api allows one live stack per team, so the
+ * common case is exactly one tenant, which sends you straight to its detail
+ * page. The table exists for the defensive case of several live tenants
+ * (e.g. the limit is lifted later); creation is only offered when there is
+ * none, since it cannot succeed otherwise.
  */
 export default function QmPage() {
   const router = useRouter()
@@ -128,12 +130,6 @@ function QmTenantTable({ tenants }: { tenants: QmTenant[] }) {
         searchPlaceholder="Search stacks..."
         searchValue={search}
         onSearchChange={setSearch}
-        filters={
-          <Button size="sm" render={<Link href="/qm/new" />}>
-            <PlusIcon className="size-3.5" weight="light" />
-            New stack
-          </Button>
-        }
       />
 
       <div className="flex-1 overflow-y-auto">

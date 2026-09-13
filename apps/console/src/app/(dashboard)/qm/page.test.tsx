@@ -117,10 +117,10 @@ describe("QmPage", () => {
     expect(
       screen.getByRole("link", { name: /pilot-team\.qm\.superserve\.ai/ }),
     ).toHaveAttribute("href", "https://pilot-team.qm.superserve.ai")
-    expect(screen.getByRole("link", { name: /new stack/i })).toHaveAttribute(
-      "href",
-      "/qm/new",
-    )
+    // One live stack per team: creation is not offered alongside a table.
+    expect(
+      screen.queryByRole("link", { name: /new stack/i }),
+    ).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByText("pilot-team"))
     expect(nav.push).toHaveBeenCalledWith("/qm/t2")

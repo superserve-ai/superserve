@@ -111,11 +111,12 @@ function errorMessage(error: unknown, fallback: string): string {
 
 // --- Queries ---------------------------------------------------------------
 
-export function useQmTenants() {
+export function useQmTenants(options: { enabled?: boolean } = {}) {
   const queryScope = useQueryScope()
   return useQuery({
     queryKey: qmKeys.list(queryScope),
     queryFn: listQmTenants,
+    enabled: options.enabled ?? true,
     // Lists change while any tenant is provisioning/deprovisioning.
     refetchInterval: (query) =>
       query.state.data?.some((t) => TRANSITIONAL_STATUSES.has(t.status))

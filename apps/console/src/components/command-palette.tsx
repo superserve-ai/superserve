@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 
 import { useQmAccess } from "@/hooks/use-qm-access"
+import { useQmTenants } from "@/hooks/use-qm-tenants"
 
 interface CommandItem {
   label: string
@@ -34,6 +35,12 @@ export function CommandPalette() {
   const [hoveredLabel, setHoveredLabel] = useState<string | null>(null)
   const router = useRouter()
   const qmAccess = useQmAccess()
+  // qm-api allows one stack per team, so "create" only exists before that.
+  const qmTenants = useQmTenants({ enabled: qmAccess.enabled })
+  const canCreateQmStack =
+    qmAccess.enabled &&
+    qmTenants.data !== undefined &&
+    !qmTenants.data.some((t) => t.status !== "deleted")
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -127,7 +134,7 @@ export function CommandPalette() {
       icon: KeyIcon,
       onSelect: () => navigate("/api-keys?create=1"),
     },
-    ...(qmAccess.enabled
+    ...(canCreateQmStack
       ? [
           {
             label: "Create QM stack",
