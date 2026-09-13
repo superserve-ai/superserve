@@ -14,15 +14,14 @@ import {
 } from "@superserve/ui"
 import { useState } from "react"
 
+import { qmRetentionDays } from "@/lib/qm/retention"
+
 interface DeleteTenantDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   slug: string
   onConfirm: () => void | Promise<void>
 }
-
-/** Retention window quoted to the user; the backend owns the real value. */
-export const QM_RETENTION_DAYS = 7
 
 export function DeleteTenantDialog({
   open,
@@ -33,6 +32,7 @@ export function DeleteTenantDialog({
   const [input, setInput] = useState("")
   const [isPending, setIsPending] = useState(false)
   const isMatch = input === slug
+  const retentionDays = qmRetentionDays()
 
   const handleConfirm = async () => {
     if (!isMatch || isPending) return
@@ -68,9 +68,10 @@ export function DeleteTenantDialog({
               <DialogTitle>Delete QM stack</DialogTitle>
               <DialogDescription className="mt-2">
                 <span className="font-mono text-foreground/80">{slug}</span>{" "}
-                goes offline immediately and everyone is signed out. Its data is
-                kept for {QM_RETENTION_DAYS} days in case you need it restored,
-                then permanently erased.
+                goes offline immediately and everyone is signed out.{" "}
+                {retentionDays
+                  ? `Its data is kept for ${retentionDays} days in case you need it restored, then permanently erased.`
+                  : "Its data is permanently erased."}
               </DialogDescription>
             </div>
           </div>

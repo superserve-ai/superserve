@@ -129,6 +129,20 @@ describe("QmTenantDetailPage", () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.unstubAllEnvs()
+  })
+
+  it("promises no retention window unless one is configured", async () => {
+    vi.stubEnv("NEXT_PUBLIC_QM_RETENTION_DAYS", "")
+    mockGet.mockResolvedValue(qmDetail(qmTenant(), successEvents()))
+    renderPage()
+    await userEvent.click(
+      (await screen.findAllByRole("button", { name: /delete stack/i }))[0],
+    )
+    const dialog = screen.getByRole("dialog")
+    expect(dialog).toHaveTextContent(/permanently erased/)
+    expect(dialog).not.toHaveTextContent(/kept for/)
+    expect(screen.queryByText(/kept for/)).not.toBeInTheDocument()
   })
 
   it("renders the live step list while provisioning", async () => {
@@ -280,6 +294,7 @@ describe("QmTenantDetailPage", () => {
   })
 
   it("labels a failed teardown as such and retries it", async () => {
+    vi.stubEnv("NEXT_PUBLIC_QM_RETENTION_DAYS", "7")
     mockGet.mockResolvedValue(
       qmDetail(qmTenant({ status: "failed" }), failedTeardownEvents()),
     )
@@ -435,6 +450,7 @@ describe("QmTenantDetailPage", () => {
   })
 
   it("deletes after the slug is typed and leaves once the stack is gone", async () => {
+    vi.stubEnv("NEXT_PUBLIC_QM_RETENTION_DAYS", "7")
     freezeClockAt(T(210))
     mockGet.mockResolvedValue(qmDetail(qmTenant(), successEvents()))
     mockDelete.mockResolvedValue(qmTenant({ status: "deprovisioning" }))

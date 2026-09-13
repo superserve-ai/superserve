@@ -16,10 +16,7 @@ import { useEffect, useState } from "react"
 
 import { ErrorState } from "@/components/error-state"
 import { AdminLinkPanel } from "@/components/qm/admin-link-panel"
-import {
-  DeleteTenantDialog,
-  QM_RETENTION_DAYS,
-} from "@/components/qm/delete-tenant-dialog"
+import { DeleteTenantDialog } from "@/components/qm/delete-tenant-dialog"
 import { ProvisioningSteps } from "@/components/qm/provisioning-steps"
 import { TenantStatusBadge } from "@/components/qm/tenant-status-badge"
 import { useDashboardTeamContext } from "@/components/query-provider"
@@ -45,6 +42,7 @@ import {
   QM_STATUS_LABEL,
   SIGN_IN_LABEL,
 } from "@/lib/qm/options"
+import { qmRetentionDays } from "@/lib/qm/retention"
 import { tenantUrl } from "@/lib/qm/slug"
 
 const GENERIC_FAILURE: Record<"provision" | "deprovision", string> = {
@@ -101,6 +99,7 @@ export default function QmTenantDetailPage() {
   const transitional =
     tenant.status === "provisioning" || tenant.status === "deprovisioning"
   const run = latestRun(events)
+  const retentionDays = qmRetentionDays()
   // A failed tenant keeps the mode of the run that failed; retrying resumes
   // that same plan, so the UI must say "teardown" when that is what stalled.
   const teardown =
@@ -183,9 +182,9 @@ export default function QmTenantDetailPage() {
               <h2 className="text-sm font-semibold text-foreground">
                 {teardown ? "Teardown" : "Provisioning"}
               </h2>
-              {teardown && (
+              {teardown && retentionDays && (
                 <span className="font-mono text-xs text-muted uppercase">
-                  Data kept {QM_RETENTION_DAYS} days
+                  Data kept {retentionDays} days
                 </span>
               )}
             </div>
@@ -207,7 +206,12 @@ export default function QmTenantDetailPage() {
 
         <InfoGrid tenant={tenant} />
 
-        {canDelete && <DangerZone onDelete={() => setDeleteOpen(true)} />}
+        {canDelete && (
+          <DangerZone
+            onDelete={() => setDeleteOpen(true)}
+            retentionDays={retentionDays}
+          />
+        )}
       </div>
 
       <DeleteTenantDialog
@@ -537,7 +541,13 @@ function InfoGrid({ tenant }: { tenant: QmTenant }) {
   )
 }
 
-function DangerZone({ onDelete }: { onDelete: () => void }) {
+function DangerZone({
+  onDelete,
+  retentionDays,
+}: {
+  onDelete: () => void
+  retentionDays: number | null
+}) {
   return (
     <section className="px-4 py-6">
       <div className="border border-dashed border-destructive/40">
@@ -548,8 +558,10 @@ function DangerZone({ onDelete }: { onDelete: () => void }) {
           <div>
             <p className="text-sm text-foreground">Delete this stack</p>
             <p className="mt-1 text-xs leading-relaxed text-muted">
-              Takes the stack offline immediately. Data is kept for{" "}
-              {QM_RETENTION_DAYS} days, then permanently erased.
+              Takes the stack offline immediately.{" "}
+              {retentionDays
+                ? `Data is kept for ${retentionDays} days, then permanently erased.`
+                : "Its data is permanently erased."}
             </p>
           </div>
           <Button
