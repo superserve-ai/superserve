@@ -5,9 +5,11 @@ import { getImpersonationContext } from "@/lib/admin/impersonation"
 import {
   getApiBaseUrlForUser,
   getAuthApiKeyForUser,
+  getTeamIdForUser,
 } from "@/lib/api/proxy-auth"
 import { redactAccessTokens } from "@/lib/api/redact"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
+import { canAccessQm } from "@/lib/qm/access"
 import { createServerClient } from "@/lib/supabase/server"
 
 const SANDBOX_API_URL =
@@ -212,6 +214,14 @@ async function proxyRequest(
 
   let upstreamUrl: URL
   if (isQmPath(path)) {
+    // The QM beta gate is enforced here, not just in the UI: a team outside
+    // the allowlist gets the same 404 a direct visit to /qm gets, so the
+    // section cannot be reached by calling the proxy by hand.
+    const qmTeamId =
+      impersonationContext?.teamId ?? (await getTeamIdForUser(user as User))
+    if (!canAccessQm(user, qmTeamId)) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
     // Checked after auth so an unauthenticated caller still gets 401 and
     // never learns whether qm-api is configured.
     const qmApiUrl = getQmApiUrl()
