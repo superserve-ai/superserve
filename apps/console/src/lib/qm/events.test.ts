@@ -4,6 +4,7 @@ import type { QmTenantEvent } from "@/lib/api/types"
 import {
   failedAtStep4Events,
   failedTeardownEvents,
+  inProgressEvents,
   qmEvent,
   successEvents,
   T,
@@ -12,7 +13,9 @@ import {
 import {
   formatElapsed,
   groupTenantEvents,
+  lastActivityAt,
   latestRun,
+  RUN_STALE_AFTER_MS,
   stepElapsedMs,
   stepLabel,
 } from "./events"
@@ -192,6 +195,27 @@ describe("latestRun", () => {
     )
   })
 
+  it("opens an attempt from a failed trigger even when its start was never recorded", () => {
+    const events = [
+      ...successEvents(),
+      {
+        ...qmEvent(
+          "trigger",
+          "failed",
+          T(201),
+          "The deprovision request could not be recorded. Retry the tenant.",
+        ),
+        detail: { mode: "deprovision" },
+      },
+    ]
+    const { mode, steps, failureMessage } = latestRun(events)
+    expect(mode).toBe("deprovision")
+    expect(steps).toEqual([])
+    expect(failureMessage).toMatch(
+      /^The deprovision request could not be recorded/,
+    )
+  })
+
   it("surfaces a model-key storage failure that happened before any run", () => {
     const { mode, steps, failureMessage, canRetry } = latestRun([
       qmEvent(
@@ -251,5 +275,13 @@ describe("stepLabel", () => {
       "Remove load balancer",
     )
     expect(stepLabel("warm_cache")).toBe("Warm cache")
+  })
+})
+
+describe("lastActivityAt", () => {
+  it("uses the newest event, falling back to the tenant timestamp", () => {
+    expect(lastActivityAt(inProgressEvents(), T(500))).toBe(Date.parse(T(7)))
+    expect(lastActivityAt([], T(500))).toBe(Date.parse(T(500)))
+    expect(RUN_STALE_AFTER_MS).toBe(30 * 60_000)
   })
 })

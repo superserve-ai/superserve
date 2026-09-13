@@ -20,11 +20,18 @@ const BOOKKEEPING_STEPS: ReadonlySet<string> = new Set([
   MODEL_KEY_STEP,
 ])
 
-/** Events that open a new attempt. */
+/**
+ * Events that open a new attempt. A `trigger failed` counts too: qm-api
+ * records it (with the attempt's mode) even when the matching `trigger
+ * started` write was lost, and a retry resumes that mode.
+ */
 function isAttemptStart(event: QmTenantEvent): boolean {
+  if (event.status === "started")
+    return event.step === RUN_STEP || event.step === TRIGGER_STEP
   return (
-    (event.step === RUN_STEP || event.step === TRIGGER_STEP) &&
-    event.status === "started"
+    event.step === TRIGGER_STEP &&
+    event.status === "failed" &&
+    parseMode(event) !== null
   )
 }
 
@@ -199,4 +206,20 @@ export function formatElapsed(ms: number): string {
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
   return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`
+}
+
+/**
+ * Mirrors qm-api's default `RunStaleAfter`: an in-flight run whose newest
+ * event is older than this is treated as lost — but only when Delete or
+ * Retry is called, so the console has to offer those once a run goes quiet.
+ */
+export const RUN_STALE_AFTER_MS = 30 * 60_000
+
+/** When the tenant last reported anything: its newest event, else its own updatedAt. */
+export function lastActivityAt(
+  events: QmTenantEvent[],
+  fallback: string,
+): number {
+  const newest = chronological(events).at(-1)
+  return Date.parse(newest?.at ?? fallback)
 }

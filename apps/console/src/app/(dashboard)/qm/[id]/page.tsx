@@ -32,7 +32,13 @@ import { ApiError } from "@/lib/api/client"
 import type { QmTenant } from "@/lib/api/types"
 import { formatDate, formatTime } from "@/lib/format"
 import { QM_EVENTS } from "@/lib/posthog/events"
-import { latestRun, type TenantRun } from "@/lib/qm/events"
+import {
+  formatElapsed,
+  lastActivityAt,
+  latestRun,
+  RUN_STALE_AFTER_MS,
+  type TenantRun,
+} from "@/lib/qm/events"
 import {
   HARNESS_LABEL,
   PROVIDER_LABEL,
@@ -59,6 +65,10 @@ export default function QmTenantDetailPage() {
   // offered — an operator should not be invited into a guaranteed 403.
   const readOnly = useDashboardTeamContext() !== null
   const { data, isPending, error, refetch } = useQmTenant(tenantId)
+  const transitionalStatus =
+    data?.tenant.status === "provisioning" ||
+    data?.tenant.status === "deprovisioning"
+  const now = useClock(transitionalStatus ? 30_000 : null)
   const deleteMutation = useDeleteQmTenant()
   const retryMutation = useRetryQmTenant()
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -96,9 +106,17 @@ export default function QmTenantDetailPage() {
   const teardown =
     tenant.status === "deprovisioning" ||
     (tenant.status === "failed" && run.mode === "deprovision")
-  const canRetry = !readOnly && tenant.status === "failed" && run.canRetry
+  // A run that dies without a terminal event stays "in flight" forever from
+  // the poll's point of view; qm-api only reclaims it when Retry or Delete
+  // is called. Offer both once the run has gone quiet for as long as the
+  // API's own threshold.
+  const quietMs = now - lastActivityAt(events, tenant.updatedAt)
+  const stalled = transitional && quietMs >= RUN_STALE_AFTER_MS
+  const canRetry =
+    !readOnly && ((tenant.status === "failed" && run.canRetry) || stalled)
   const canDelete =
-    !readOnly && (tenant.status === "ready" || tenant.status === "failed")
+    !readOnly &&
+    (tenant.status === "ready" || tenant.status === "failed" || stalled)
 
   const handleRetry = () => {
     posthog.capture(QM_EVENTS.STACK_RETRIED, {
@@ -138,6 +156,16 @@ export default function QmTenantDetailPage() {
           onDelete={canDelete ? () => setDeleteOpen(true) : undefined}
           readOnly={readOnly}
         />
+
+        {stalled && (
+          <StalledPanel
+            teardown={teardown}
+            quietMs={quietMs}
+            onRetry={canRetry ? handleRetry : undefined}
+            retrying={retryMutation.isPending}
+            onDelete={canDelete ? () => setDeleteOpen(true) : undefined}
+          />
+        )}
 
         {tenant.status === "failed" && (
           <FailurePanel
@@ -193,6 +221,69 @@ export default function QmTenantDetailPage() {
 }
 
 // --- Pieces ----------------------------------------------------------------
+
+/** Re-renders every `intervalMs` (null pauses); returns the current time. */
+function useClock(intervalMs: number | null): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (intervalMs === null) return
+    setNow(Date.now())
+    const id = setInterval(() => setNow(Date.now()), intervalMs)
+    return () => clearInterval(id)
+  }, [intervalMs])
+  return now
+}
+
+function StalledPanel({
+  teardown,
+  quietMs,
+  onRetry,
+  retrying,
+  onDelete,
+}: {
+  teardown: boolean
+  quietMs: number
+  onRetry?: () => void
+  retrying: boolean
+  onDelete?: () => void
+}) {
+  return (
+    <section
+      role="alert"
+      className="border-b border-border bg-warning/[0.04] px-4 py-4"
+    >
+      <p className="text-sm text-foreground">
+        {teardown ? "Teardown" : "Provisioning"} hasn&apos;t reported progress
+        for {formatElapsed(quietMs)}
+      </p>
+      <p className="mt-1 text-xs leading-relaxed text-muted">
+        The run may have been lost. Retry re-queues it from where it stopped;
+        delete tears the stack down instead.
+      </p>
+      {(onRetry || onDelete) && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {onRetry && (
+            <Button size="sm" onClick={onRetry} disabled={retrying}>
+              <ArrowClockwiseIcon className="size-3.5" weight="light" />
+              {retrying ? "Retrying…" : "Retry"}
+            </Button>
+          )}
+          {onDelete && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={onDelete}
+            >
+              <TrashIcon className="size-3.5" weight="light" />
+              Delete
+            </Button>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
 
 function Breadcrumb({ slug }: { slug?: string }) {
   return (

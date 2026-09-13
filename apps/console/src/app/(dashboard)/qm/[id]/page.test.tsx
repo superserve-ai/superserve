@@ -7,7 +7,7 @@
 import { QueryClientProvider } from "@tanstack/react-query"
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/lib/api/client"
 import {
@@ -100,6 +100,17 @@ function renderPage() {
   return { ...utils, queryClient }
 }
 
+/**
+ * Fixture streams are dated 2026-01-01. Tests that render them as still in
+ * flight pin the clock just after the newest event so the run doesn't read
+ * as stalled. Only `Date` is faked: timers stay real for React Query and
+ * the countdown interval.
+ */
+function freezeClockAt(iso: string) {
+  vi.useFakeTimers({ toFake: ["Date"] })
+  vi.setSystemTime(new Date(iso))
+}
+
 const steps = () =>
   within(
     screen.getByRole("list", { name: /provisioning steps/i }),
@@ -116,7 +127,12 @@ describe("QmTenantDetailPage", () => {
     teamContext.value = null
   })
 
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it("renders the live step list while provisioning", async () => {
+    freezeClockAt(T(10))
     mockGet.mockResolvedValue(
       qmDetail(
         qmTenant({ status: "provisioning", publicUrl: null, imageTag: null }),
@@ -144,6 +160,51 @@ describe("QmTenantDetailPage", () => {
     expect(screen.queryByText(/danger zone/i)).not.toBeInTheDocument()
   })
 
+  it("offers retry and delete once an in-flight run has gone quiet", async () => {
+    // Fixture timestamps are in 2026-01-01; "now" is far later, so the run
+    // has been silent for well over the stale threshold.
+    mockGet.mockResolvedValue(
+      qmDetail(
+        qmTenant({ status: "provisioning", publicUrl: null, imageTag: null }),
+        inProgressEvents(),
+      ),
+    )
+    mockRetry.mockResolvedValue(
+      qmTenant({ status: "provisioning", publicUrl: null, imageTag: null }),
+    )
+    renderPage()
+
+    const alert = await screen.findByRole("alert")
+    expect(alert).toHaveTextContent(/hasn't reported progress for/)
+    await userEvent.click(within(alert).getByRole("button", { name: /retry/i }))
+    await waitFor(() => expect(mockRetry).toHaveBeenCalledWith("t1"))
+    expect(
+      within(alert).getByRole("button", { name: /delete/i }),
+    ).toBeInTheDocument()
+  })
+
+  it("does not call a fresh in-flight run stalled", async () => {
+    const recent = new Date().toISOString()
+    mockGet.mockResolvedValue(
+      qmDetail(
+        qmTenant({ status: "provisioning", publicUrl: null, imageTag: null }),
+        [
+          {
+            ...qmEvent("run", "started", recent, "provision started"),
+            detail: { mode: "provision" },
+          },
+          qmEvent("database", "started", recent),
+        ],
+      ),
+    )
+    renderPage()
+    await screen.findByRole("list", { name: /provisioning steps/i })
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /retry/i }),
+    ).not.toBeInTheDocument()
+  })
+
   it("shows a ready stack with its details and no step list", async () => {
     mockGet.mockResolvedValue(qmDetail(qmTenant(), successEvents()))
     renderPage()
@@ -165,6 +226,7 @@ describe("QmTenantDetailPage", () => {
   })
 
   it("surfaces the failure at step 4 with retry and delete", async () => {
+    freezeClockAt(T(70))
     mockGet.mockResolvedValue(
       qmDetail(
         qmTenant({ status: "failed", publicUrl: null, imageTag: null }),
@@ -373,6 +435,7 @@ describe("QmTenantDetailPage", () => {
   })
 
   it("deletes after the slug is typed and leaves once the stack is gone", async () => {
+    freezeClockAt(T(210))
     mockGet.mockResolvedValue(qmDetail(qmTenant(), successEvents()))
     mockDelete.mockResolvedValue(qmTenant({ status: "deprovisioning" }))
     renderPage()
