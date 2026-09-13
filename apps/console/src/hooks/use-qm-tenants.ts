@@ -42,9 +42,13 @@ const TRANSITIONAL_POLL_MS = 2000
 /** Statuses a tenant read never recovers from, so retrying only adds delay. */
 const NON_RETRYABLE_STATUSES: ReadonlySet<number> = new Set([401, 404, 409])
 
-/** A tenant only stops existing by being deleted, so 404 is permanent. */
-function isGone(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 404
+/**
+ * Errors polling cannot get past. `retry` governs the immediate attempts;
+ * `refetchInterval` has to be told separately, or a tenant left cached in a
+ * transitional state would be re-requested every two seconds forever.
+ */
+function isTerminalRead(error: unknown): boolean {
+  return error instanceof ApiError && NON_RETRYABLE_STATUSES.has(error.status)
 }
 
 interface TenantSnapshot {
@@ -171,10 +175,12 @@ export function useQmTenants() {
     queryFn: listQmTenants,
     enabled: ready,
     // Lists change while any tenant is provisioning/deprovisioning.
-    refetchInterval: (query) =>
-      query.state.data?.some((t) => TRANSITIONAL_STATUSES.has(t.status))
+    refetchInterval: (query) => {
+      if (isTerminalRead(query.state.error)) return false
+      return query.state.data?.some((t) => TRANSITIONAL_STATUSES.has(t.status))
         ? TRANSITIONAL_POLL_MS
-        : false,
+        : false
+    },
     refetchIntervalInBackground: false,
   })
 }
@@ -189,9 +195,9 @@ export function useQmTenant(id: string | null) {
       // Deprovisioning ends in `deleted`, and a deleted tenant is 404 rather
       // than a terminal status. React Query keeps the last successful
       // (transitional) data alongside the error, so polling on data alone
-      // would never stop. Only the 404 ends it: any other failure is
-      // transient, and polling is how the tenant recovers from it.
-      if (isGone(query.state.error)) return false
+      // would never stop. A transient failure is different: polling is how
+      // the tenant recovers from it.
+      if (isTerminalRead(query.state.error)) return false
       const status = query.state.data?.tenant.status
       return status && TRANSITIONAL_STATUSES.has(status)
         ? TRANSITIONAL_POLL_MS

@@ -285,6 +285,23 @@ describe("useQmTenants", () => {
     await advance(6000)
     expect(mockList).toHaveBeenCalledTimes(2)
   })
+
+  it("stops polling the list after an error it cannot get past", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const { wrapper } = createQueryWrapper()
+    mockList
+      .mockResolvedValueOnce([tenant({ id: "a", status: "provisioning" })])
+      .mockRejectedValue(new ApiError(401, "unauthorized", "Signed out"))
+
+    const { result } = renderHook(() => useQmTenants(), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    await advance(2100)
+    await waitFor(() => expect(mockList).toHaveBeenCalledTimes(2))
+
+    await advance(10_000)
+    expect(mockList).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe("useCreateQmTenant", () => {
