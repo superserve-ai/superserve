@@ -31,8 +31,11 @@ export default function NewQmTenantPage() {
   // missed. A failed fetch still shows the form; the server is the
   // authority either way.
   const verified = tenants.isFetchedAfterMount || tenants.isError
+  // A failed refetch still counts as "fetched after mount" while keeping
+  // the old data, so the redirect additionally requires that it succeeded.
   const existing =
     (tenants.isFetchedAfterMount &&
+      !tenants.isError &&
       tenants.data?.find((t) => t.status !== "deleted")) ||
     null
   useEffect(() => {

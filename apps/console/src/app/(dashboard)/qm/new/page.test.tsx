@@ -114,6 +114,18 @@ describe("NewQmTenantPage", () => {
     expect(nav.replace).not.toHaveBeenCalled()
   })
 
+  it("ignores a cached stack when the verifying refetch fails", async () => {
+    const queryClient = createQueryClient()
+    queryClient.setQueryData(listKey, [qmTenant({ id: "t-stale" })])
+    mockList.mockRejectedValue(new Error("boom"))
+    renderPage(queryClient)
+
+    expect(
+      await screen.findByRole("form", { name: "create form" }),
+    ).toBeInTheDocument()
+    expect(nav.replace).not.toHaveBeenCalled()
+  })
+
   it("shows the form only after this mount's fetch confirms the cache", async () => {
     const queryClient = createQueryClient()
     queryClient.setQueryData(listKey, [])
