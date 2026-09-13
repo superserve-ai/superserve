@@ -54,9 +54,25 @@ export function useCreateTeam() {
     mutationKey: teamKeys.switching(),
     mutationFn: async ({ name, region }: { name: string; region: string }) => {
       const team = await createTeamAction(name, region)
-      // The directory gained a row and a new active team; refetch it here,
-      // inside the mutation, so the switch stays pending until the client's
-      // idea of the active team matches the cookie the server now has.
+      // Reconcile the directory here, inside the mutation, so the switch
+      // stays pending until the client's active team matches the cookie the
+      // server now holds. The patch is what guarantees they agree: the
+      // refetch that follows fills in the new row but swallows its own
+      // failure, so it cannot be the only thing keeping the two in step.
+      queryClient.setQueryData<TeamDirectoryResponse>(
+        teamKeys.directory(),
+        (old) =>
+          old
+            ? {
+                ...old,
+                teams: old.teams.some((t) => t.id === team.id)
+                  ? old.teams
+                  : [...old.teams, team],
+                activeTeamId: team.id,
+                activeRegion: team.region,
+              }
+            : old,
+      )
       await queryClient.refetchQueries({ queryKey: teamKeys.directory() })
       return team
     },
