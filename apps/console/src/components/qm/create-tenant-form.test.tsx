@@ -283,7 +283,7 @@ describe("CreateTenantForm", () => {
     )
     const user = userEvent.setup()
     const { queryClient } = renderForm()
-    const listKey = [...qmKeys.list(), "self"]
+    const listKey = qmKeys.list("self")
     queryClient.setQueryData(listKey, [])
     await fillValid(user)
     await user.click(submit())

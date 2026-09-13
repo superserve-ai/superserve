@@ -496,7 +496,7 @@ describe("QmTenantDetailPage", () => {
 
   it("drops a vanished tenant from the cached list before leaving, so the list cannot bounce back", async () => {
     mockGet.mockRejectedValue(new ApiError(404, "not_found", "Not found"))
-    const listKey = [...qmKeys.list(), "self"]
+    const listKey = qmKeys.list("self")
     const queryClient = createQueryClient()
     // A fresh list from moments ago still names this tenant as the only one.
     queryClient.setQueryData(listKey, [

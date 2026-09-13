@@ -50,7 +50,7 @@ function renderPage(queryClient = createQueryClient()) {
   )
 }
 
-const listKey = [...qmKeys.list(), "self"]
+const listKey = qmKeys.list("self")
 
 describe("NewQmTenantPage", () => {
   beforeEach(() => {

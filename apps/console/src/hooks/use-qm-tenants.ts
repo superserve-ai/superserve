@@ -139,10 +139,8 @@ export function useQmTenants(
  * the page away immediately, not after several backed-off attempts.
  */
 export function retryTenantQuery(failureCount: number, error: Error) {
-  if (error instanceof ApiError) {
-    if (error.status === 404 || error.status === 401 || error.status === 409)
-      return false
-  }
+  if (error instanceof ApiError && NON_RETRYABLE_STATUSES.has(error.status))
+    return false
   return failureCount < 3
 }
 
@@ -168,12 +166,6 @@ export function useQmTenant(id: string | null) {
         ? TRANSITIONAL_POLL_MS
         : false
     },
-    // The shared default already gives up on 401 and 409; 404 is equally
-    // final here, since a tenant only stops existing by being deleted.
-    retry: (failureCount, error) =>
-      error instanceof ApiError && NON_RETRYABLE_STATUSES.has(error.status)
-        ? false
-        : failureCount < 3,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   })
