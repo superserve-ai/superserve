@@ -186,11 +186,12 @@ print(info.status.value)  # e.g. "active" — see SandboxStatus
 
 Checkpoint the VM state to disk. Returns once the pause is accepted; the sandbox transitions to `pausing` and then `paused` on its own. Pass `wait` to return once it is `paused`.
 
-| Option                                  | Type      | Description                                                                              |
-| --------------------------------------- | --------- | ---------------------------------------------------------------------------------------- |
-| `wait`                                  | `boolean` | Return once the sandbox is `paused` rather than once the pause is accepted. Default `false`. |
-| `timeoutMs` / `timeout`                 | `number`  | With `wait`, how long to wait for `paused` before raising a timeout. Default 5 minutes.  |
-| `pollIntervalMs` / `poll_interval_s`    | `number`  | With `wait`, how often to check the status. Default 1 second.                            |
+| Option                               | Type          | Description                                                                                                        |
+| ------------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `wait`                               | `boolean`     | Return once the sandbox is `paused` rather than once the pause is accepted. Default `false`.                       |
+| `timeoutMs` / `timeout`              | `number`      | With `wait`, how long to wait for `paused` before raising a timeout. TypeScript in milliseconds, Python in seconds. Default 5 minutes. |
+| `pollIntervalMs` / `poll_interval_s` | `number`      | With `wait`, how often to check the status. TypeScript in milliseconds, Python in seconds. Default 1 second.        |
+| `signal` (TypeScript only)           | `AbortSignal` | Cancels the request, and the polling when `wait` is set.                                                           |
 
 <CodeGroup>
 ```typescript TypeScript
