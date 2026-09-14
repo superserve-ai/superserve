@@ -8,6 +8,7 @@
  *   - Normal 200 JSON parses and returns
  *   - Non-OK with JSON error body → ApiError with code/message
  *   - Non-OK with non-JSON body → ApiError with statusText
+ *   - Non-OK with qm-api's `{ error: string, fields? }` body → message + fields
  *   - Timeout aborts the request (30s default, override-able via signal)
  */
 
@@ -118,6 +119,53 @@ describe("apiClient", () => {
         code: "quota_exceeded",
         message: "Plan limit reached",
       })
+    }
+  })
+
+  it("parses qm-api's { error: string, fields } body into message + fields", async () => {
+    fetchSpy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            error: "Validation failed",
+            fields: { slug: "Slug is taken", adminEmail: "Invalid email" },
+          }),
+          { status: 400, headers: { "content-type": "application/json" } },
+        ),
+      ),
+    )
+
+    try {
+      await apiClient("/qm/tenants", { method: "POST", body: "{}" })
+      expect.fail("expected apiClient to throw")
+    } catch (err) {
+      expect(err).toBeInstanceOf(ApiError)
+      const apiErr = err as ApiError
+      expect(apiErr.status).toBe(400)
+      expect(apiErr.message).toBe("Validation failed")
+      expect(apiErr.fields).toEqual({
+        slug: "Slug is taken",
+        adminEmail: "Invalid email",
+      })
+    }
+  })
+
+  it("parses qm-api's { error: string } body without fields", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ error: "Slug already in use" }), {
+        status: 409,
+        headers: { "content-type": "application/json" },
+      }),
+    )
+
+    try {
+      await apiClient("/qm/tenants", { method: "POST", body: "{}" })
+      expect.fail("expected apiClient to throw")
+    } catch (err) {
+      const apiErr = err as ApiError
+      expect(apiErr.status).toBe(409)
+      expect(apiErr.message).toBe("Slug already in use")
+      expect(apiErr.fields).toBeUndefined()
     }
   })
 

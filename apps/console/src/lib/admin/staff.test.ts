@@ -270,6 +270,7 @@ describe("platform impersonation access", () => {
             "platform:template:read",
             "platform:activity:read",
             "platform:billing:read",
+            "platform:qm:read",
           ],
         ),
       ),
@@ -278,6 +279,7 @@ describe("platform impersonation access", () => {
       "platform:template:read",
       "platform:activity:read",
       "platform:billing:read",
+      "platform:qm:read",
     ])
   })
 
@@ -322,6 +324,11 @@ describe("platform impersonation access", () => {
         ),
       ),
     ).toEqual(["platform:billing:read"])
+    expect(
+      platformImpersonationReadScopes(
+        user("person@example.com", "google", ["google"], ["platform:qm:read"]),
+      ),
+    ).toEqual(["platform:qm:read"])
   })
 
   it("does not include teams read", () => {

@@ -428,3 +428,82 @@ export interface ProviderShortcut {
   /** Prefix-shaped sample of the proxy token issued (e.g. "sk-ant-api03-..."). */
   token_shape: string
 }
+
+// --- QM Cloud ---------------------------------------------------------------
+// These mirror qm-api's OpenAPI (/v1/qm/*) and must stay in sync with it.
+
+export type QmSignIn = "magic_link" | "slack"
+export type QmModelProvider = "anthropic" | "openai" | "openrouter"
+export type QmHarness = "pi" | "claude" | "codex" | "opencode"
+export type QmTenantStatus =
+  | "provisioning"
+  | "ready"
+  | "failed"
+  | "deprovisioning"
+  | "deleted"
+
+export interface QmTenant {
+  id: string
+  teamId: string
+  slug: string
+  orgName: string
+  adminEmail: string
+  signIn: QmSignIn
+  modelProvider: QmModelProvider
+  harness: QmHarness
+  status: QmTenantStatus
+  publicUrl: string | null
+  imageTag: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type QmTenantEventStatus = "started" | "ok" | "failed" | "skipped"
+
+export interface QmTenantEvent {
+  id: string
+  step: string
+  status: QmTenantEventStatus
+  message: string | null
+  detail: Record<string, unknown> | null
+  at: string
+}
+
+/**
+ * Body for POST /qm/tenants. `modelKey` is the customer's model provider API
+ * key: it is sent once in this request body and must never be cached, logged,
+ * or placed in a URL.
+ */
+export interface CreateQmTenantRequest {
+  slug: string
+  orgName: string
+  adminEmail: string
+  signIn: QmSignIn
+  modelProvider: QmModelProvider
+  modelKey: string
+  harness?: QmHarness
+}
+
+export interface QmTenantListResponse {
+  tenants: QmTenant[]
+}
+
+export interface QmTenantResponse {
+  tenant: QmTenant
+}
+
+export interface QmTenantDetailResponse {
+  tenant: QmTenant
+  events: QmTenantEvent[]
+}
+
+/** Single-use admin sign-in link, valid for ~5 minutes. Never cache. */
+export interface QmAdminLink {
+  url: string
+  expiresAt: string
+}
+
+export interface QmSlugAvailability {
+  available: boolean
+  reason?: string
+}

@@ -7,10 +7,11 @@
  *  - Header allowlist: cookie, x-api-key from client are stripped
  *  - 204/205/304 null-body handling
  *  - 401 when not authenticated
+ *  - /api/qm/* routing to the qm-api service (QM_API_URL, read per request)
  */
 
 import { NextRequest } from "next/server"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mocks declared BEFORE the module under test is imported.
 vi.mock("@/lib/api/proxy-auth", () => ({
@@ -66,6 +67,10 @@ function params(pathSegments: string[]): AnyParams {
 }
 
 describe("api proxy /api/[...path]", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   beforeEach(() => {
     fetchSpy.mockReset()
     vi.mocked(createServerClient).mockResolvedValue({
@@ -413,5 +418,210 @@ describe("api proxy /api/[...path]", () => {
     )
 
     expect((await res.json()).access_token).toBeUndefined()
+  })
+  describe("qm-api routing (/api/qm/*)", () => {
+    const QM_PATH = ["qm", "tenants"]
+
+    beforeEach(() => {
+      vi.stubEnv("QM_API_URL", "https://qm-api.test/")
+    })
+
+    it("forwards /api/qm/* to ${QM_API_URL}/v1/qm/* with the query string preserved", async () => {
+      fetchSpy.mockResolvedValue(
+        new Response('{"tenants":[]}', {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      const request = new NextRequest(
+        new URL("https://console.test/api/qm/tenants?limit=10&cursor=abc"),
+        { method: "GET" },
+      )
+
+      const res = await GET(request, params(QM_PATH))
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ tenants: [] })
+      expect(fetchSpy).toHaveBeenCalledTimes(1)
+      const [url, fetchInit] = fetchSpy.mock.calls[0]
+      // Trailing slash on QM_API_URL is stripped; sandbox cell host is not used.
+      expect(url).toBe("https://qm-api.test/v1/qm/tenants?limit=10&cursor=abc")
+      const headers = fetchInit.headers as Headers
+      expect(headers.get("x-api-key")).toBe("ss_live_test_key")
+    })
+
+    it("rejects dot segments so a qm path cannot escape /v1/qm/", async () => {
+      for (const path of [
+        ["qm", "..", "sandboxes"],
+        ["qm", "%2e%2e", "sandboxes"],
+        ["qm", "tenants", ".", "x"],
+        ["qm", "tenants%2F..%2Fadmin"],
+      ]) {
+        const res = await GET(req("GET", path), params(path))
+        expect(res.status).toBe(400)
+        expect((await res.json()).error.code).toBe("invalid_path")
+      }
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it("re-encodes qm path segments before forwarding", async () => {
+      fetchSpy.mockResolvedValue(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      const path = ["qm", "slugs", "acme%20co", "availability"]
+
+      await GET(req("GET", path), params(path))
+
+      expect(fetchSpy.mock.calls[0][0]).toBe(
+        "https://qm-api.test/v1/qm/slugs/acme%20co/availability",
+      )
+    })
+
+    it("maps nested qm paths and passes body + status through", async () => {
+      fetchSpy.mockResolvedValue(
+        new Response('{"tenant":{"id":"t1"}}', {
+          status: 202,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      const path = ["qm", "tenants", "t1", "retry"]
+
+      const res = await POST(
+        req("POST", path, {
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ reason: "x" }),
+        }),
+        params(path),
+      )
+
+      expect(res.status).toBe(202)
+      expect(await res.json()).toEqual({ tenant: { id: "t1" } })
+      const [url, fetchInit] = fetchSpy.mock.calls[0]
+      expect(url).toBe("https://qm-api.test/v1/qm/tenants/t1/retry")
+      expect(fetchInit.method).toBe("POST")
+      expect((fetchInit.body as ArrayBuffer).byteLength).toBeGreaterThan(0)
+    })
+
+    it("applies the same forwarded-header allowlist as other routes", async () => {
+      fetchSpy.mockResolvedValue(new Response("{}", { status: 200 }))
+
+      await GET(
+        req("GET", QM_PATH, {
+          headers: {
+            cookie: "sb-access-token=leaked",
+            "x-api-key": "ss_live_attacker",
+            authorization: "Bearer user-token",
+            "x-forwarded-for": "1.2.3.4",
+            "content-type": "application/json",
+          },
+        }),
+        params(QM_PATH),
+      )
+
+      const [, fetchInit] = fetchSpy.mock.calls[0]
+      const headers = fetchInit.headers as Headers
+      expect(headers.get("cookie")).toBeNull()
+      expect(headers.get("authorization")).toBeNull()
+      expect(headers.get("x-forwarded-for")).toBeNull()
+      expect(headers.get("x-api-key")).toBe("ss_live_test_key")
+      expect(headers.get("content-type")).toBe("application/json")
+    })
+
+    it("overrides team_id while impersonating and routes to qm-api", async () => {
+      vi.mocked(getImpersonationContext).mockResolvedValue({
+        teamId: "impersonated-team",
+        region: "usw",
+        teamName: "Impersonated Team",
+      })
+      fetchSpy.mockResolvedValue(new Response("{}", { status: 200 }))
+      const request = new NextRequest(
+        new URL("https://console.test/api/qm/tenants?team_id=admin-team"),
+        { method: "GET" },
+      )
+
+      await GET(request, params(QM_PATH))
+
+      const [url] = fetchSpy.mock.calls[0]
+      expect(url).toBe(
+        "https://qm-api.test/v1/qm/tenants?team_id=impersonated-team",
+      )
+    })
+
+    it("blocks writes while impersonating", async () => {
+      vi.mocked(getImpersonationContext).mockResolvedValue({
+        teamId: "impersonated-team",
+        region: "usw",
+        teamName: "Impersonated Team",
+      })
+
+      const res = await POST(
+        req("POST", QM_PATH, {
+          headers: { "content-type": "application/json" },
+          body: "{}",
+        }),
+        params(QM_PATH),
+      )
+
+      expect(res.status).toBe(403)
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it("returns 503 with the error envelope when QM_API_URL is unset", async () => {
+      vi.stubEnv("QM_API_URL", undefined)
+
+      const res = await GET(req("GET", QM_PATH), params(QM_PATH))
+
+      expect(res.status).toBe(503)
+      await expect(res.json()).resolves.toEqual({
+        error: {
+          code: "qm_api_unavailable",
+          message: expect.any(String),
+        },
+      })
+      // Never falls through to the sandbox API.
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it("treats a blank QM_API_URL as unset", async () => {
+      vi.stubEnv("QM_API_URL", "   ")
+
+      const res = await GET(req("GET", QM_PATH), params(QM_PATH))
+
+      expect(res.status).toBe(503)
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it("401 wins over 503 when the caller is not authenticated", async () => {
+      vi.stubEnv("QM_API_URL", undefined)
+      vi.mocked(getAuthApiKeyForUser).mockResolvedValue(null)
+
+      const res = await GET(req("GET", QM_PATH), params(QM_PATH))
+
+      expect(res.status).toBe(401)
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it("leaves non-qm paths on the sandbox API even when QM_API_URL is unset", async () => {
+      vi.stubEnv("QM_API_URL", undefined)
+      fetchSpy.mockResolvedValue(new Response("[]", { status: 200 }))
+
+      const res = await GET(req("GET", ["sandboxes"]), params(["sandboxes"]))
+
+      expect(res.status).toBe(200)
+      const [url] = fetchSpy.mock.calls[0]
+      expect(url).toBe("https://api.test.superserve.ai/sandboxes")
+    })
+
+    it("does not send non-qm paths to qm-api when it is configured", async () => {
+      fetchSpy.mockResolvedValue(new Response("[]", { status: 200 }))
+
+      await GET(req("GET", ["templates"]), params(["templates"]))
+
+      const [url] = fetchSpy.mock.calls[0]
+      expect(url).toBe("https://api.test.superserve.ai/templates")
+    })
   })
 })

@@ -1,0 +1,872 @@
+/**
+ * use-qm-tenants hook tests — polling on transitional states, optimistic
+ * delete, error surfacing (including field errors from a 400), and the
+ * admin-link mutation never touching the query cache.
+ */
+
+import { QueryClientProvider, useMutation } from "@tanstack/react-query"
+import { act, renderHook, waitFor } from "@testing-library/react"
+import type { ReactNode } from "react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+import { QueryProvider } from "@/components/query-provider"
+import { ApiError } from "@/lib/api/client"
+import { qmKeys, teamKeys } from "@/lib/api/query-keys"
+import type {
+  QmAdminLink,
+  QmTenant,
+  QmTenantDetailResponse,
+} from "@/lib/api/types"
+import { createQueryWrapper } from "@/test/react-query"
+
+const mockList = vi.fn()
+const mockGet = vi.fn()
+const mockCreate = vi.fn()
+const mockDelete = vi.fn()
+const mockRetry = vi.fn()
+const mockAdminLink = vi.fn()
+const mockCheckSlug = vi.fn()
+
+vi.mock("@/lib/api/qm", () => ({
+  listQmTenants: (...a: unknown[]) => mockList(...a),
+  getQmTenant: (...a: unknown[]) => mockGet(...a),
+  createQmTenant: (...a: unknown[]) => mockCreate(...a),
+  deleteQmTenant: (...a: unknown[]) => mockDelete(...a),
+  retryQmTenant: (...a: unknown[]) => mockRetry(...a),
+  getQmAdminLink: (...a: unknown[]) => mockAdminLink(...a),
+  checkQmSlug: (...a: unknown[]) => mockCheckSlug(...a),
+}))
+
+const mockAddToast = vi.fn()
+vi.mock("@superserve/ui", () => ({
+  useToast: () => ({ addToast: mockAddToast }),
+}))
+
+// QM keys pair the query scope with the active team, so the directory has to
+// resolve before anything queries.
+const activeTeam = { region: "use", id: "team-a" }
+vi.mock("./use-teams", () => ({
+  useTeams: () => ({
+    data: { activeTeamId: activeTeam.id, activeRegion: activeTeam.region },
+  }),
+}))
+
+import {
+  useCreateQmTenant,
+  useDeleteQmTenant,
+  useQmAdminLink,
+  useQmSlugAvailability,
+  useQmTenant,
+  useQmTenants,
+  useRetryQmTenant,
+} from "./use-qm-tenants"
+
+const tenant = (overrides: Partial<QmTenant> = {}): QmTenant => ({
+  id: "t1",
+  teamId: "team-a",
+  slug: "acme",
+  orgName: "Acme",
+  adminEmail: "admin@example.com",
+  signIn: "magic_link",
+  modelProvider: "anthropic",
+  harness: "pi",
+  status: "ready",
+  publicUrl: "https://acme.qm.example.com",
+  imageTag: "v1",
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  ...overrides,
+})
+
+const detail = (t: QmTenant): QmTenantDetailResponse => ({
+  tenant: t,
+  events: [],
+})
+
+// Every QM key carries the query scope: the cache scope ("self" without a
+// provider) paired with the active team.
+const CACHE_SCOPE = "self"
+const OTHER_CACHE_SCOPE = "team:other"
+const SCOPE = `${CACHE_SCOPE}|use:team-a`
+const OTHER_SCOPE = `${OTHER_CACHE_SCOPE}|use:team-a`
+const OTHER_TEAM_SCOPE = `${CACHE_SCOPE}|use:team-b`
+const listKey = qmKeys.list(SCOPE)
+const detailKey = (id: string) => qmKeys.detail(id, SCOPE)
+const otherListKey = qmKeys.list(OTHER_SCOPE)
+const otherDetailKey = (id: string) => qmKeys.detail(id, OTHER_SCOPE)
+
+// React Query only re-renders when a property read during render changes, so
+// polling tests must read `data` (as any real consumer would) before asserting
+// on later fetches; otherwise `result.current` stays stale after a refetch.
+async function advance(ms: number) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms)
+  })
+}
+
+beforeEach(() => {
+  activeTeam.id = "team-a"
+  mockList.mockReset()
+  mockGet.mockReset()
+  mockCreate.mockReset()
+  mockDelete.mockReset()
+  mockRetry.mockReset()
+  mockAdminLink.mockReset()
+  mockCheckSlug.mockReset()
+  mockAddToast.mockReset()
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+  vi.clearAllMocks()
+})
+
+type ScopeSwitchHarness = ReturnType<typeof createScopeSwitchWrapper>
+
+/**
+ * A wrapper whose query scope can change between renders, so a mutation can
+ * be started in one scope and settle after impersonation has moved to
+ * another. The inner client provider wins, so the test keeps its own cache.
+ */
+function createScopeSwitchWrapper() {
+  const { queryClient } = createQueryWrapper()
+  let cacheScope = CACHE_SCOPE
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryProvider cacheScope={cacheScope}>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </QueryProvider>
+  )
+  return {
+    queryClient,
+    wrapper,
+    setCacheScope: (next: string) => {
+      cacheScope = next
+    },
+  }
+}
+
+describe("useQmTenant", () => {
+  it("polls every 2s while provisioning and stops once ready", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const { wrapper } = createQueryWrapper()
+    mockGet
+      .mockResolvedValueOnce(detail(tenant({ status: "provisioning" })))
+      .mockResolvedValueOnce(detail(tenant({ status: "provisioning" })))
+      .mockResolvedValue(detail(tenant({ status: "ready" })))
+
+    const { result } = renderHook(() => useQmTenant("t1"), { wrapper })
+    await waitFor(() =>
+      expect(result.current.data?.tenant.status).toBe("provisioning"),
+    )
+    expect(mockGet).toHaveBeenCalledTimes(1)
+
+    await advance(2100)
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2))
+    expect(result.current.data?.tenant.status).toBe("provisioning")
+
+    await advance(2100)
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(3))
+    await waitFor(() =>
+      expect(result.current.data?.tenant.status).toBe("ready"),
+    )
+
+    // Terminal state: no further polling.
+    await advance(6000)
+    expect(mockGet).toHaveBeenCalledTimes(3)
+  })
+
+  it("polls while deprovisioning", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const { wrapper } = createQueryWrapper()
+    mockGet.mockResolvedValue(detail(tenant({ status: "deprovisioning" })))
+
+    const { result } = renderHook(() => useQmTenant("t1"), { wrapper })
+    await waitFor(() =>
+      expect(result.current.data?.tenant.status).toBe("deprovisioning"),
+    )
+
+    await advance(2100)
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2))
+  })
+
+  it.each(["ready", "failed", "deleted"] as const)(
+    "does not poll on terminal status %s",
+    async (status) => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      const { wrapper } = createQueryWrapper()
+      mockGet.mockResolvedValue(detail(tenant({ status })))
+
+      const { result } = renderHook(() => useQmTenant("t1"), { wrapper })
+      await waitFor(() =>
+        expect(result.current.data?.tenant.status).toBe(status),
+      )
+
+      await advance(6000)
+      expect(mockGet).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it("stops polling and retrying once the deleted tenant 404s", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const { wrapper } = createQueryWrapper()
+    mockGet
+      .mockResolvedValueOnce(detail(tenant({ status: "deprovisioning" })))
+      .mockRejectedValue(new ApiError(404, "not_found", "Tenant not found"))
+
+    const { result } = renderHook(() => useQmTenant("t1"), { wrapper })
+    await waitFor(() =>
+      expect(result.current.data?.tenant.status).toBe("deprovisioning"),
+    )
+
+    await advance(2100)
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2))
+
+    // The 404 is neither retried nor polled again, even though the last
+    // successful read is still cached as `deprovisioning`.
+    await advance(10_000)
+    expect(mockGet).toHaveBeenCalledTimes(2)
+  })
+
+  it("keeps polling after a transient failure", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const { wrapper } = createQueryWrapper()
+    const upstream = new ApiError(500, "unknown_error", "Upstream")
+    mockGet
+      .mockResolvedValueOnce(detail(tenant({ status: "provisioning" })))
+      // The poll and all three of its retries fail, so the query really does
+      // settle into an error state before recovering.
+      .mockRejectedValueOnce(upstream)
+      .mockRejectedValueOnce(upstream)
+      .mockRejectedValueOnce(upstream)
+      .mockRejectedValueOnce(upstream)
+      .mockResolvedValue(detail(tenant({ status: "provisioning" })))
+
+    const { result } = renderHook(() => useQmTenant("t1"), { wrapper })
+    await waitFor(() =>
+      expect(result.current.data?.tenant.status).toBe("provisioning"),
+    )
+
+    // The poll plus three backed-off retries.
+    await advance(2100)
+    await advance(8000)
+    await waitFor(() =>
+      expect(mockGet.mock.calls.length).toBeGreaterThanOrEqual(5),
+    )
+
+    // A 500 is not the end of the tenant, so the interval survives it.
+    const afterFailure = mockGet.mock.calls.length
+    await advance(10_000)
+    expect(mockGet.mock.calls.length).toBeGreaterThan(afterFailure)
+  })
+
+  it("is disabled without an id", () => {
+    const { wrapper } = createQueryWrapper()
+    const { result } = renderHook(() => useQmTenant(null), { wrapper })
+    expect(result.current.fetchStatus).toBe("idle")
+    expect(mockGet).not.toHaveBeenCalled()
+  })
+})
+
+describe("useQmTenants", () => {
+  it("lists tenants and polls while any tenant is transitional", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const { wrapper } = createQueryWrapper()
+    mockList
+      .mockResolvedValueOnce([tenant({ id: "a", status: "provisioning" })])
+      .mockResolvedValue([tenant({ id: "a", status: "ready" })])
+
+    const { result } = renderHook(() => useQmTenants(), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data?.[0].status).toBe("provisioning")
+
+    await advance(2100)
+    await waitFor(() => expect(mockList).toHaveBeenCalledTimes(2))
+
+    await advance(6000)
+    expect(mockList).toHaveBeenCalledTimes(2)
+  })
+
+  it("stops polling the list after an error it cannot get past", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const { wrapper } = createQueryWrapper()
+    mockList
+      .mockResolvedValueOnce([tenant({ id: "a", status: "provisioning" })])
+      .mockRejectedValue(new ApiError(401, "unauthorized", "Signed out"))
+
+    const { result } = renderHook(() => useQmTenants(), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    await advance(2100)
+    await waitFor(() => expect(mockList).toHaveBeenCalledTimes(2))
+
+    await advance(10_000)
+    expect(mockList).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe("useCreateQmTenant", () => {
+  const body = {
+    slug: "acme",
+    orgName: "Acme",
+    adminEmail: "admin@example.com",
+    signIn: "magic_link" as const,
+    modelProvider: "anthropic" as const,
+    modelKey: "sk-ant-secret",
+  }
+
+  it("prepends the created tenant to cached lists without caching the model key", async () => {
+    const { queryClient, wrapper } = createQueryWrapper()
+    queryClient.setQueryData(listKey, [tenant({ id: "old" })])
+    const created = tenant({ id: "new", slug: "acme", status: "provisioning" })
+    mockCreate.mockResolvedValue(created)
+
+    const { result } = renderHook(() => useCreateQmTenant(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync(body)
+    })
+
+    expect(mockCreate).toHaveBeenCalledWith(body)
+    const list = queryClient.getQueryData<QmTenant[]>(listKey)
+    expect(list?.map((t) => t.id)).toEqual(["new", "old"])
+    // The model key must never land anywhere in the cache.
+    const cacheDump = JSON.stringify(
+      queryClient
+        .getQueryCache()
+        .getAll()
+        .map((q) => [q.queryKey, q.state]),
+    )
+    expect(cacheDump).not.toContain("sk-ant-secret")
+    const mutationDump = JSON.stringify(
+      queryClient
+        .getMutationCache()
+        .getAll()
+        .map((m) => m.state),
+    )
+    expect(mutationDump).not.toContain("sk-ant-secret")
+  })
+
+  it("keeps each concurrent create's model key with its own request", async () => {
+    const { wrapper } = createQueryWrapper()
+    mockCreate.mockImplementation(async (data: { slug: string }) =>
+      tenant({ id: data.slug, slug: data.slug }),
+    )
+
+    const { result } = renderHook(() => useCreateQmTenant(), { wrapper })
+    await act(async () => {
+      await Promise.all([
+        result.current.mutateAsync({
+          ...body,
+          slug: "one",
+          modelKey: "key-one",
+        }),
+        result.current.mutateAsync({
+          ...body,
+          slug: "two",
+          modelKey: "key-two",
+        }),
+      ])
+    })
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: "one", modelKey: "key-one" }),
+    )
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: "two", modelKey: "key-two" }),
+    )
+  })
+
+  it("invalidates the created slug's availability so the form cannot resubmit it", async () => {
+    const { queryClient, wrapper } = createQueryWrapper()
+    const availabilityKey = qmKeys.slugAvailability("acme", SCOPE)
+    queryClient.setQueryData(availabilityKey, { available: true })
+    mockCreate.mockResolvedValue(tenant({ id: "new", slug: "acme" }))
+
+    const { result } = renderHook(() => useCreateQmTenant(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync(body)
+    })
+
+    expect(queryClient.getQueryState(availabilityKey)?.isInvalidated).toBe(true)
+  })
+
+  it("refreshes the active list even when the create fails, since the tenant may exist", async () => {
+    const { queryClient, wrapper } = createQueryWrapper()
+    queryClient.setQueryData(listKey, [])
+    queryClient.setQueryData(otherListKey, [])
+    // The documented 502: the tenant was created but provisioning could not
+    // be started, so the list the page shows is already stale.
+    mockCreate.mockRejectedValue(
+      new ApiError(502, "unknown_error", "Provisioning run not started"),
+    )
+
+    const { result } = renderHook(() => useCreateQmTenant(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync(body).catch(() => {})
+    })
+
+    expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(true)
+    expect(queryClient.getQueryState(otherListKey)?.isInvalidated).toBe(false)
+  })
+
+  it("toasts when a 400 carries no field messages or when fields come with another status", async () => {
+    for (const error of [
+      new ApiError(400, "unknown_error", "Validation failed", {}),
+      new ApiError(409, "unknown_error", "Limit reached", { slug: "x" }),
+    ]) {
+      mockAddToast.mockClear()
+      const { wrapper } = createQueryWrapper()
+      mockCreate.mockRejectedValueOnce(error)
+      const { result } = renderHook(() => useCreateQmTenant(), { wrapper })
+      await act(async () => {
+        await result.current.mutateAsync(body).catch(() => undefined)
+      })
+      expect(mockAddToast).toHaveBeenCalledTimes(1)
+    }
+  })
+
+  it("only prepends to the active scope's list", async () => {
+    const { queryClient, wrapper } = createQueryWrapper()
+    queryClient.setQueryData(listKey, [tenant({ id: "old" })])
+    queryClient.setQueryData(otherListKey, [tenant({ id: "theirs" })])
+    mockCreate.mockResolvedValue(tenant({ id: "new", slug: "acme" }))
+
+    const { result } = renderHook(() => useCreateQmTenant(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync(body)
+    })
+
+    expect(
+      queryClient.getQueryData<QmTenant[]>(listKey)?.map((t) => t.id),
+    ).toEqual(["new", "old"])
+    expect(
+      queryClient.getQueryData<QmTenant[]>(otherListKey)?.map((t) => t.id),
+    ).toEqual(["theirs"])
+  })
+
+  it("surfaces field errors from a 400 without toasting", async () => {
+    const { wrapper } = createQueryWrapper()
+    mockCreate.mockRejectedValue(
+      new ApiError(400, "unknown_error", "Validation failed", {
+        slug: "Slug is taken",
+      }),
+    )
+
+    const { result } = renderHook(() => useCreateQmTenant(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync(body).catch(() => {})
+    })
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    const err = result.current.error as ApiError
+    expect(err.status).toBe(400)
+    expect(err.fields).toEqual({ slug: "Slug is taken" })
+    expect(mockAddToast).not.toHaveBeenCalled()
+  })
+
+  it("toasts conflict errors (409) that carry no fields", async () => {
+    const { wrapper } = createQueryWrapper()
+    mockCreate.mockRejectedValue(
+      new ApiError(409, "unknown_error", "Slug already in use"),
+    )
+
+    const { result } = renderHook(() => useCreateQmTenant(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync(body).catch(() => {})
+    })
+
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith("Slug already in use", "error")
+    })
+  })
+})
+
+describe("useDeleteQmTenant", () => {
+  it("optimistically marks the tenant deprovisioning in every list and the detail", async () => {
+    const { queryClient, wrapper } = createQueryWrapper()
+    queryClient.setQueryData(listKey, [
+      tenant({ id: "a" }),
+      tenant({ id: "b" }),
+    ])
+    queryClient.setQueryData(detailKey("a"), detail(tenant({ id: "a" })))
+    // Resolve slowly so we can observe the optimistic state.
+    let resolveDelete: (t: QmTenant) => void = () => {}
+    mockDelete.mockReturnValue(
+      new Promise<QmTenant>((resolve) => {
+        resolveDelete = resolve
+      }),
+    )
+
+    const { result } = renderHook(() => useDeleteQmTenant(), { wrapper })
+    act(() => {
+      result.current.mutate("a")
+    })
+
+    await waitFor(() => {
+      const list = queryClient.getQueryData<QmTenant[]>(listKey)
+      expect(list?.find((t) => t.id === "a")?.status).toBe("deprovisioning")
+      expect(list?.find((t) => t.id === "b")?.status).toBe("ready")
+      expect(
+        queryClient.getQueryData<QmTenantDetailResponse>(detailKey("a"))?.tenant
+          .status,
+      ).toBe("deprovisioning")
+    })
+
+    await act(async () => {
+      resolveDelete(tenant({ id: "a", status: "deprovisioning" }))
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+  })
+
+  it("rolls back on failure and toasts the ApiError message", async () => {
+    const { queryClient, wrapper } = createQueryWrapper()
+    const before = [tenant({ id: "a" })]
+    const beforeDetail = detail(tenant({ id: "a" }))
+    queryClient.setQueryData(listKey, before)
+    queryClient.setQueryData(detailKey("a"), beforeDetail)
+    mockDelete.mockRejectedValue(
+      new ApiError(409, "unknown_error", "Tenant is still provisioning"),
+    )
+
+    const { result } = renderHook(() => useDeleteQmTenant(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync("a").catch(() => {})
+    })
+
+    await waitFor(() => {
+      expect(queryClient.getQueryData(listKey)).toEqual(before)
+      expect(queryClient.getQueryData(detailKey("a"))).toEqual(beforeDetail)
+    })
+    expect(mockAddToast).toHaveBeenCalledWith(
+      "Tenant is still provisioning",
+      "error",
+    )
+  })
+
+  it("patches and invalidates only the active scope", async () => {
+    const { queryClient, wrapper } = createQueryWrapper()
+    queryClient.setQueryData(listKey, [tenant({ id: "a" })])
+    queryClient.setQueryData(detailKey("a"), detail(tenant({ id: "a" })))
+    // Same tenant id cached under another scope: it must not be touched.
+    queryClient.setQueryData(otherListKey, [tenant({ id: "a" })])
+    queryClient.setQueryData(otherDetailKey("a"), detail(tenant({ id: "a" })))
+    mockDelete.mockResolvedValue(tenant({ id: "a", status: "deprovisioning" }))
+
+    const { result } = renderHook(() => useDeleteQmTenant(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync("a")
+    })
+
+    expect(queryClient.getQueryData<QmTenant[]>(listKey)?.[0].status).toBe(
+      "deprovisioning",
+    )
+    expect(queryClient.getQueryData<QmTenant[]>(otherListKey)?.[0].status).toBe(
+      "ready",
+    )
+    expect(
+      queryClient.getQueryData<QmTenantDetailResponse>(otherDetailKey("a"))
+        ?.tenant.status,
+    ).toBe("ready")
+    expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(true)
+    expect(queryClient.getQueryState(otherListKey)?.isInvalidated).toBe(false)
+    expect(queryClient.getQueryState(otherDetailKey("a"))?.isInvalidated).toBe(
+      false,
+    )
+  })
+
+  it.each([
+    [
+      "impersonation starts",
+      otherListKey,
+      (h: ScopeSwitchHarness) => h.setCacheScope(OTHER_CACHE_SCOPE),
+    ],
+    [
+      "the active team changes",
+      qmKeys.list(OTHER_TEAM_SCOPE),
+      () => {
+        activeTeam.id = "team-b"
+      },
+    ],
+  ])(
+    "writes back to the scope the delete started in when %s mid-request",
+    async (_case, movedToKey, moveScope) => {
+      const harness = createScopeSwitchWrapper()
+      const { queryClient, wrapper } = harness
+      queryClient.setQueryData(listKey, [tenant({ id: "a" })])
+      queryClient.setQueryData(movedToKey, [tenant({ id: "a" })])
+      let resolveDelete: (t: QmTenant) => void = () => {}
+      mockDelete.mockReturnValue(
+        new Promise<QmTenant>((resolve) => {
+          resolveDelete = resolve
+        }),
+      )
+
+      const { result, rerender } = renderHook(() => useDeleteQmTenant(), {
+        wrapper,
+      })
+      act(() => {
+        result.current.mutate("a")
+      })
+
+      moveScope(harness)
+      rerender()
+
+      await act(async () => {
+        resolveDelete(tenant({ id: "a", status: "deprovisioning" }))
+      })
+      await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+      expect(queryClient.getQueryData<QmTenant[]>(listKey)?.[0].status).toBe(
+        "deprovisioning",
+      )
+      expect(queryClient.getQueryData<QmTenant[]>(movedToKey)?.[0].status).toBe(
+        "ready",
+      )
+      expect(queryClient.getQueryState(movedToKey)?.isInvalidated).toBe(false)
+    },
+  )
+})
+
+describe("useRetryQmTenant", () => {
+  it("patches the cached tenant with the returned (provisioning) tenant", async () => {
+    const { queryClient, wrapper } = createQueryWrapper()
+    queryClient.setQueryData(listKey, [tenant({ id: "a", status: "failed" })])
+    queryClient.setQueryData(
+      detailKey("a"),
+      detail(tenant({ id: "a", status: "failed" })),
+    )
+    mockRetry.mockResolvedValue(tenant({ id: "a", status: "provisioning" }))
+
+    const { result } = renderHook(() => useRetryQmTenant(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync("a")
+    })
+
+    expect(mockRetry).toHaveBeenCalledWith("a")
+    expect(queryClient.getQueryData<QmTenant[]>(listKey)?.[0].status).toBe(
+      "provisioning",
+    )
+    expect(
+      queryClient.getQueryData<QmTenantDetailResponse>(detailKey("a"))?.tenant
+        .status,
+    ).toBe("provisioning")
+  })
+
+  it("toasts on failure", async () => {
+    const { wrapper } = createQueryWrapper()
+    mockRetry.mockRejectedValue(new Error("boom"))
+
+    const { result } = renderHook(() => useRetryQmTenant(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync("a").catch(() => {})
+    })
+
+    expect(mockAddToast).toHaveBeenCalledWith(expect.any(String), "error")
+  })
+
+  it("patches and invalidates only the active scope", async () => {
+    const { queryClient, wrapper } = createQueryWrapper()
+    queryClient.setQueryData(listKey, [tenant({ id: "a", status: "failed" })])
+    queryClient.setQueryData(otherListKey, [
+      tenant({ id: "a", status: "failed" }),
+    ])
+    mockRetry.mockResolvedValue(tenant({ id: "a", status: "provisioning" }))
+
+    const { result } = renderHook(() => useRetryQmTenant(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync("a")
+    })
+
+    expect(queryClient.getQueryData<QmTenant[]>(listKey)?.[0].status).toBe(
+      "provisioning",
+    )
+    expect(queryClient.getQueryData<QmTenant[]>(otherListKey)?.[0].status).toBe(
+      "failed",
+    )
+    expect(queryClient.getQueryState(otherListKey)?.isInvalidated).toBe(false)
+  })
+})
+
+describe("useQmAdminLink", () => {
+  it("calls the fetcher on every invocation and never writes to the query cache", async () => {
+    const { queryClient, wrapper } = createQueryWrapper()
+    const link: QmAdminLink = {
+      url: "https://acme.qm.example.com/auth?token=once",
+      expiresAt: "2026-01-01T00:05:00.000Z",
+    }
+    mockAdminLink.mockResolvedValue(link)
+
+    const { result } = renderHook(() => useQmAdminLink("t1"), { wrapper })
+
+    let first: QmAdminLink | undefined
+    let second: QmAdminLink | undefined
+    await act(async () => {
+      first = await result.current.mint()
+    })
+    await act(async () => {
+      second = await result.current.mint()
+    })
+
+    expect(first).toEqual(link)
+    expect(second).toEqual(link)
+    expect(mockAdminLink).toHaveBeenCalledTimes(2)
+    expect(mockAdminLink).toHaveBeenCalledWith("t1")
+    expect(queryClient.getQueryData(qmKeys.adminLink("t1"))).toBeUndefined()
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(0)
+    expect(queryClient.getMutationCache().getAll()).toHaveLength(0)
+    expect(JSON.stringify(result.current)).not.toContain("token=once")
+  })
+
+  it("stays pending until every overlapping mint has settled", async () => {
+    const { wrapper } = createQueryWrapper()
+    let resolveFirst!: (link: QmAdminLink) => void
+    let resolveSecond!: (link: QmAdminLink) => void
+    mockAdminLink
+      .mockImplementationOnce(
+        () => new Promise<QmAdminLink>((r) => (resolveFirst = r)),
+      )
+      .mockImplementationOnce(
+        () => new Promise<QmAdminLink>((r) => (resolveSecond = r)),
+      )
+    const link: QmAdminLink = {
+      url: "https://acme.qm.example.com/auth?token=x",
+      expiresAt: "2026-01-01T00:05:00.000Z",
+    }
+
+    const { result } = renderHook(() => useQmAdminLink("t1"), { wrapper })
+    let first: Promise<QmAdminLink>
+    let second: Promise<QmAdminLink>
+    act(() => {
+      first = result.current.mint()
+      second = result.current.mint()
+    })
+    expect(result.current.isPending).toBe(true)
+    await act(async () => {
+      resolveFirst(link)
+      await first
+    })
+    expect(result.current.isPending).toBe(true)
+    await act(async () => {
+      resolveSecond(link)
+      await second
+    })
+    expect(result.current.isPending).toBe(false)
+  })
+
+  it("discards a link whose scope the session has left", async () => {
+    const { wrapper, setCacheScope } = createScopeSwitchWrapper()
+    let resolveMint!: (link: QmAdminLink) => void
+    mockAdminLink.mockReturnValue(
+      new Promise<QmAdminLink>((resolve) => {
+        resolveMint = resolve
+      }),
+    )
+
+    const { result, rerender } = renderHook(() => useQmAdminLink("t1"), {
+      wrapper,
+    })
+    let pending!: Promise<QmAdminLink>
+    act(() => {
+      pending = result.current.mint()
+    })
+
+    // Impersonation starts while the link is still being minted.
+    setCacheScope(OTHER_CACHE_SCOPE)
+    rerender()
+
+    await act(async () => {
+      resolveMint({
+        url: "https://acme.qm.example.com/auth?token=stale",
+        expiresAt: "2026-01-01T00:05:00.000Z",
+      })
+      await expect(pending).rejects.toThrow(/active team changed/)
+    })
+  })
+
+  it("toasts on failure", async () => {
+    const { wrapper } = createQueryWrapper()
+    mockAdminLink.mockRejectedValue(
+      new ApiError(409, "unknown_error", "Tenant is not ready"),
+    )
+
+    const { result } = renderHook(() => useQmAdminLink("t1"), { wrapper })
+    await act(async () => {
+      await result.current.mint().catch(() => {})
+    })
+
+    expect(mockAddToast).toHaveBeenCalledWith("Tenant is not ready", "error")
+  })
+})
+
+describe("team switching", () => {
+  it("holds QM reads and writes until the switch commits", async () => {
+    const { wrapper } = createQueryWrapper()
+    mockList.mockResolvedValue([tenant()])
+
+    const { result } = renderHook(
+      () => ({
+        // The switcher flips the directory optimistically, so while this is
+        // pending the client's active team and the server cookie disagree.
+        switchTeam: useMutation({
+          mutationKey: teamKeys.switching(),
+          mutationFn: () => new Promise<void>(() => {}),
+        }),
+        tenants: useQmTenants(),
+        create: useCreateQmTenant(),
+        adminLink: useQmAdminLink("t1"),
+      }),
+      { wrapper },
+    )
+    await waitFor(() => expect(mockList).toHaveBeenCalledTimes(1))
+
+    act(() => {
+      result.current.switchTeam.mutate()
+    })
+    await waitFor(() => expect(result.current.tenants.fetchStatus).toBe("idle"))
+
+    await act(async () => {
+      await expect(
+        result.current.create.mutateAsync({
+          slug: "acme",
+          orgName: "Acme",
+          adminEmail: "admin@example.com",
+          signIn: "magic_link",
+          modelProvider: "anthropic",
+          modelKey: "sk-ant-secret",
+        }),
+      ).rejects.toThrow(/Switching teams/)
+    })
+    expect(mockCreate).not.toHaveBeenCalled()
+
+    // A sign-in link is the worst thing to mint for the wrong team.
+    await act(async () => {
+      await expect(result.current.adminLink.mint()).rejects.toThrow(
+        /Switching teams/,
+      )
+    })
+    expect(mockAdminLink).not.toHaveBeenCalled()
+  })
+})
+
+describe("useQmSlugAvailability", () => {
+  it("does not query for an empty slug", () => {
+    const { wrapper } = createQueryWrapper()
+    const { result } = renderHook(() => useQmSlugAvailability("  "), {
+      wrapper,
+    })
+    expect(result.current.fetchStatus).toBe("idle")
+    expect(mockCheckSlug).not.toHaveBeenCalled()
+  })
+
+  it("queries the trimmed slug once non-empty", async () => {
+    const { wrapper } = createQueryWrapper()
+    mockCheckSlug.mockResolvedValue({ available: false, reason: "taken" })
+
+    const { result } = renderHook(() => useQmSlugAvailability(" acme "), {
+      wrapper,
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(mockCheckSlug).toHaveBeenCalledWith("acme")
+    expect(result.current.data).toEqual({ available: false, reason: "taken" })
+  })
+})

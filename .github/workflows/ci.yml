@@ -49,6 +49,18 @@ jobs:
       - name: Check docs nav matches OpenAPI spec
         run: bun run docs:check-nav
 
+      # Regenerates the console's hosted-QM types from the vendored /v1/qm/*
+      # OpenAPI slice and fails on any diff. The qm-api spec change is not on
+      # main yet, so the upstream spec is not reachable here and only the
+      # committed slice is verified. Once it lands, check out the sandbox
+      # repo's spec, point QM_OPENAPI_SPEC at it, and drop
+      # QM_OPENAPI_ALLOW_MISSING_SPEC — the check fails while the switch is
+      # set and the spec is reachable, so this cannot be left half-done.
+      - name: Check QM types match the vendored qm-api OpenAPI slice
+        env:
+          QM_OPENAPI_ALLOW_MISSING_SPEC: "1"
+        run: bun run qm:check-openapi
+
       - name: Test
         run: bun run test
 
