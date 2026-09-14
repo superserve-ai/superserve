@@ -29,10 +29,10 @@ function flag(name, fallback) {
 
 // Sandboxes resolve DNS through these public resolvers. A strict allowlist has
 // to include them or nothing resolves. Single IPs are written as /32.
+// A strict allowlist still needs the sandbox's resolvers, or nothing resolves.
+// The SDK reaches the sandbox through the platform, not through its network,
+// so no Superserve host needs to be allowed.
 const DNS_RESOLVERS = ["1.1.1.1/32", "8.8.8.8/32"]
-// The platform's own hosts must stay reachable under a deny-all rule; the
-// networking docs list this as a hard requirement for SDK connectivity.
-const PLATFORM_HOSTS = ["*.superserve.ai"]
 const IPV4_RE = /^\d{1,3}(\.\d{1,3}){3}$/
 
 function egressAllowlist(raw) {
@@ -42,7 +42,7 @@ function egressAllowlist(raw) {
     .filter(Boolean)
     .map((e) => (IPV4_RE.test(e) ? `${e}/32` : e))
   if (entries.length === 0) return []
-  return [...new Set([...DNS_RESOLVERS, ...PLATFORM_HOSTS, ...entries])]
+  return [...new Set([...DNS_RESOLVERS, ...entries])]
 }
 
 export const config = {
@@ -239,7 +239,7 @@ export async function launchWorker(sandbox, { pool, env, command }) {
   if (Number.isNaN(pid)) {
     return {
       ok: false,
-      state: { state: "no_pidfile" },
+      state: { state: "no_pidfile", pid: null, exit_code: null },
       log: await readLog(sandbox),
     }
   }

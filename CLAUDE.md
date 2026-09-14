@@ -34,9 +34,11 @@ bun run docs:dev                                    # Mintlify preview
 
 **CLI locally:** `bun packages/cli/src/index.ts deploy --help`
 
-**Python SDK:** `uv run pytest packages/python-sdk/tests/` · `uv run ruff check --fix` · `uv run mypy packages/python-sdk/src/superserve/`
+**Python SDK:** `uv run pytest packages/python-sdk/tests/` · `uv run ruff check --fix packages/python-sdk tests/sdk-e2e-py` · `uv run ruff format packages/python-sdk tests/sdk-e2e-py` · `uv run mypy packages/python-sdk/src/superserve/`
 
-**Lint/format fix:** `bunx oxlint --fix && bunx oxfmt --write` (pre-commit hook also runs this)
+**Lint/format fix:** `bun run format` runs `oxfmt --write` inside each workspace that defines a `format` script, which is the same scope CI's `format:check` enforces. `packages/tailwind-config`, `packages/typescript-config` and `tests/sdk-e2e-ts` define neither it nor `format:check`, so give oxfmt explicit paths there; the two Python workspaces are ruff's (above — `check --fix` lints, `format` formats), and nothing formats their Markdown or JSON. `bun run lint` only reports; for autofixes run `bunx oxlint --fix` against the paths you changed.
+
+Don't run `bunx oxfmt --write` from the repo root with no path argument: `docs/`, `guides/`, and the root config files sit outside every workspace, so it reformats ~65 files that `turbo run format:check` never looks at and CI never enforces. The pre-commit hook formats whatever is staged wherever it lives, so staging those files introduces the same drift.
 
 ## Releasing SDKs
 

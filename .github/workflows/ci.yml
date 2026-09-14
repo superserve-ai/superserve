@@ -7,22 +7,19 @@ on:
       - "apps/**"
       - "packages/**"
       - "docs/**"
+      - "guides/**"
       - "scripts/**"
+      - "tests/**"
       - "package.json"
       - "bun.lock"
       - "turbo.json"
       - ".github/workflows/**"
+  # No `branches` or `paths` filter. A stacked PR targets its parent branch, not
+  # main, and a PR that only edits a root file matches no path filter; either way
+  # a filtered trigger reports no status at all, so the required check stays at
+  # "Expected" and the PR can never merge. GitHub tests the merge of the PR into
+  # its own base, so a stacked run covers the parent's changes too.
   pull_request:
-    branches: [main]
-    paths:
-      - "apps/**"
-      - "packages/**"
-      - "docs/**"
-      - "scripts/**"
-      - "package.json"
-      - "bun.lock"
-      - "turbo.json"
-      - ".github/workflows/**"
 
 jobs:
   ci:
