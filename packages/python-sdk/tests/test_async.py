@@ -661,13 +661,17 @@ async def test_pause_default_budget_covers_a_two_minute_pause(monkeypatch):
 async def test_pause_deadline_stops_before_a_poll_it_cannot_afford(monkeypatch):
     clock = [0.0]
     with respx.mock(assert_all_called=False) as router:
-        get = _clock_routes(router, clock, slow=False)
+        _clock_routes(router, clock, slow=False)
+        router.get(f"{API}/sandboxes/sbx-1").mock(
+            return_value=httpx.Response(200, json=_raw(status="pausing"))
+        )
         sbx = await AsyncSandbox.connect("sbx-1")
         _fake_clock(monkeypatch, clock)
         try:
             with pytest.raises(SandboxTimeoutError):
                 await sbx.pause(wait=True, timeout=1.0, poll_interval_s=2.0)
-            assert get.call_count == 0
+            # The budget ran out on its own clock; no sleep overshot it.
+            assert clock[0] <= 1.1
         finally:
             await sbx._close_http_client()
 

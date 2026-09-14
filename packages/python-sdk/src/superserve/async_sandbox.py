@@ -11,7 +11,12 @@ from urllib.parse import quote, urlencode
 import httpx
 
 from ._config import ResolvedConfig, preview_url, resolve_config
-from ._http import DEFAULT_PAUSE_TIMEOUT, DeadlineExceeded, async_api_request
+from ._http import (
+    async_api_request,
+    DeadlineExceeded,
+    DEFAULT_PAUSE_TIMEOUT,
+    pause_poll_delay,
+)
 from .commands import AsyncCommands, AsyncCommandsDeps
 from .errors import ConflictError, NotFoundError, SandboxError, SandboxTimeoutError
 from .files import AsyncFiles, AsyncFilesDeps
@@ -443,11 +448,22 @@ class AsyncSandbox:
         """Poll until the sandbox is ``paused``. A sandbox deleted meanwhile
         (delete on pause) counts as done; ``failed`` raises."""
         headers = {"X-API-Key": self._config.api_key}
+        started = time.monotonic()
+        first = True
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise self._still_pausing(timeout)
-            await asyncio.sleep(min(poll_interval_s, remaining))
+            # Most pauses finish within a second or two: check at once, then
+            # closely for a short while, then at the caller's interval.
+            if not first:
+                await asyncio.sleep(
+                    min(
+                        pause_poll_delay(time.monotonic() - started, poll_interval_s),
+                        remaining,
+                    )
+                )
+            first = False
             try:
                 raw = await async_api_request(
                     "GET",

@@ -53,6 +53,11 @@ import { toNetworkLogPage, toSandboxInfo } from "./types.js"
 
 /** How long `pause()` waits for the host across every request it makes. */
 const DEFAULT_PAUSE_TIMEOUT_MS = 300_000
+// Status checks while a waited pause is young: most pauses finish within a
+// second or two, so the first checks are close together; after this window
+// the caller's poll interval applies.
+const PAUSE_FAST_POLL_MS = 50
+const PAUSE_FAST_POLL_WINDOW_MS = 2_000
 
 type PauseWait = {
   signal: AbortSignal
@@ -489,8 +494,17 @@ export class Sandbox {
     ctx: PauseWait,
     pollMs: number,
   ): Promise<void> {
+    const started = Date.now()
+    let first = true
     while (true) {
-      await sleep(pollMs, ctx.signal)
+      if (!first) {
+        const young = Date.now() - started < PAUSE_FAST_POLL_WINDOW_MS
+        await sleep(
+          young ? Math.min(PAUSE_FAST_POLL_MS, pollMs) : pollMs,
+          ctx.signal,
+        )
+      }
+      first = false
       let info: ApiSandboxResponse
       try {
         info = await request<ApiSandboxResponse>({
