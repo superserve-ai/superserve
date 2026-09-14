@@ -7,7 +7,7 @@
     "monitor": "node monitor.mjs"
   },
   "dependencies": {
-    "@superserve/sdk": "^0.8.4",
+    "@superserve/sdk": "^0.9.0",
     "dotenv": "^17.0.0"
   }
 }

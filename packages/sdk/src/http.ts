@@ -20,7 +20,7 @@ import type { ApiExecStreamEvent } from "./types.js"
 
 export const DEFAULT_TIMEOUT_MS = 30_000
 
-const SDK_VERSION = "0.8.4"
+const SDK_VERSION = "0.9.0"
 const USER_AGENT = `@superserve/sdk/${SDK_VERSION} (node/${
   typeof process !== "undefined" && process.versions?.node
     ? `v${process.versions.node}`
