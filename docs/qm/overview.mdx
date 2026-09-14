@@ -1,0 +1,49 @@
+---
+title: "Host QM on Superserve"
+sidebarTitle: Overview
+description: Run Y Combinator's open-source QM agent harness as a hosted stack on Superserve, with agent computers backed by Firecracker microVM sandboxes.
+noindex: true
+---
+
+{/*
+  Unlinked on purpose: QM on Superserve is not announced yet, so these pages ship
+  live at their real URLs but are absent from the docs.json navigation and carry
+  `noindex: true`.
+
+  To announce: add the "QM on Superserve" group to docs/docs.json with the pages
+  qm/overview, qm/get-started, qm/sign-in-and-slack, qm/architecture,
+  qm/export-and-leave, qm/limits-and-support, and delete the `noindex: true` line
+  from the frontmatter of all six. That is the whole flip.
+*/}
+
+[QM](https://github.com/yc-software/qm) is Y Combinator's open-source, multiplayer agent harness for work. Your team talks to an agent in Slack and on the web; the agent works on a real computer with files, tools, and memory that persist between conversations. QM is designed to be self-hosted, and its [README](https://github.com/yc-software/qm#readme) walks through deploying it into your own cloud account.
+
+**QM on Superserve** is the hosted option. Superserve runs QM for your team and gives the agent a Superserve sandbox as its computer, so you get a working stack in minutes without standing up a database, object storage, identity, or a sandbox backend yourself.
+
+## What you get
+
+- **A stack of your own.** Every team gets its own QM service, its own Postgres database, its own object-storage bucket, and its own service identity. Nothing is shared between teams except the cloud infrastructure underneath.
+- **Sandboxes as agent computers.** The agent's computer is a durable Firecracker microVM. It is checkpointed between bouts of work and resumes with its disk intact, so the agent picks up where it left off.
+- **Your model, your key.** Bring an Anthropic, OpenAI, or OpenRouter API key. It is stored in a secret manager and used only by your stack.
+- **Your data stays yours.** The stack is a Postgres database plus object-storage bytes. You can export both and run QM yourself at any time. See [Export and leave](/qm/export-and-leave).
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Get started" href="/qm/get-started">
+    Provision a stack from the console in a few minutes.
+  </Card>
+  <Card title="Sign-in and Slack" href="/qm/sign-in-and-slack">
+    Magic links, Slack SSO, the Slack bot, and inviting teammates.
+  </Card>
+  <Card title="Architecture" href="/qm/architecture">
+    What runs where, how sandboxes are managed, and how data is backed up.
+  </Card>
+  <Card title="Limits and support" href="/qm/limits-and-support">
+    Beta caveats, pricing, and how to reach us.
+  </Card>
+</CardGroup>
+
+<Note>
+QM on Superserve is in private beta. The QM screens in the console are enabled per team, so ask us to turn them on for yours. Details on these pages will change while the beta runs.
+</Note>
