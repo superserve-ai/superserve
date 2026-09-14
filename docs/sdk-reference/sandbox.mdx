@@ -184,22 +184,30 @@ print(info.status.value)  # e.g. "active" — see SandboxStatus
 
 ### `pause`
 
-Checkpoint the VM state to disk. The sandbox transitions to `paused`. Returns nothing.
+Checkpoint the VM state to disk. Returns once the pause is accepted; the sandbox transitions to `pausing` and then `paused` on its own. Pass `wait` to return once it is `paused`.
+
+| Option                                  | Type      | Description                                                                              |
+| --------------------------------------- | --------- | ---------------------------------------------------------------------------------------- |
+| `wait`                                  | `boolean` | Return once the sandbox is `paused` rather than once the pause is accepted. Default `false`. |
+| `timeoutMs` / `timeout`                 | `number`  | With `wait`, how long to wait for `paused` before raising a timeout. Default 5 minutes.  |
+| `pollIntervalMs` / `poll_interval_s`    | `number`  | With `wait`, how often to check the status. Default 1 second.                            |
 
 <CodeGroup>
 ```typescript TypeScript
 await sandbox.pause()
+await sandbox.pause({ wait: true })
 ```
 
 ```python Python
 sandbox.pause()
+sandbox.pause(wait=True)
 ```
 
 </CodeGroup>
 
 ### `resume`
 
-Restore a paused sandbox. The backend rotates the per-sandbox access token; the SDK re-injects it into `sandbox.files` transparently.
+Restore a paused sandbox. A pause still in progress is waited out first. The backend rotates the per-sandbox access token; the SDK re-injects it into `sandbox.files` transparently.
 
 <CodeGroup>
 ```typescript TypeScript
