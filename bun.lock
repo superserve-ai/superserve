@@ -182,6 +182,10 @@
         "vitest": "^4.0.0",
       },
     },
+    "packages/python-agents-openai": {
+      "name": "@superserve/python-agents-openai",
+      "version": "0.1.0",
+    },
     "packages/python-sdk": {
       "name": "@superserve/python-sdk",
       "version": "0.6.0",
@@ -947,6 +951,8 @@
     "@superserve/mcp": ["@superserve/mcp@workspace:packages/mcp"],
 
     "@superserve/mcp-host": ["@superserve/mcp-host@workspace:apps/mcp"],
+
+    "@superserve/python-agents-openai": ["@superserve/python-agents-openai@workspace:packages/python-agents-openai"],
 
     "@superserve/python-sdk": ["@superserve/python-sdk@workspace:packages/python-sdk"],
 
