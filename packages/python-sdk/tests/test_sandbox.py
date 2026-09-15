@@ -1145,3 +1145,25 @@ def test_resume_retries_at_once_when_the_conflict_check_sees_paused() -> None:
             assert resume.call_count == 2
         finally:
             sbx._close_http_client()
+
+
+def test_pause_with_wait_tolerates_an_early_active_reading_after_a_timeout() -> None:
+    with respx.mock() as router:
+        router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+            return_value=httpx.Response(200, json=_raw())
+        )
+        router.post(f"{API}/sandboxes/sbx-1/pause").mock(
+            side_effect=httpx.ReadTimeout("slow")
+        )
+        router.get(f"{API}/sandboxes/sbx-1").mock(
+            side_effect=[
+                httpx.Response(200, json=_raw(status="active")),
+                httpx.Response(200, json=_raw(status="pausing")),
+                httpx.Response(200, json=_raw(status="paused")),
+            ]
+        )
+        sbx = Sandbox.connect("sbx-1")
+        try:
+            assert sbx.pause(wait=True, poll_interval_s=0.001) is None
+        finally:
+            sbx._close_http_client()

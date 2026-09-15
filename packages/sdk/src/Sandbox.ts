@@ -523,6 +523,14 @@ export class Sandbox {
       if (ctx.deadline.aborted) throw ctx.stillPausing()
       const { status } = toSandboxInfo(info)
       if (status === "paused" || status === "deleted") return
+      // A request that timed out may be accepted only after this first
+      // look; 'active' this early is not yet an answer.
+      if (
+        status === "active" &&
+        performance.now() - started < PAUSE_FAST_POLL_WINDOW_MS
+      ) {
+        continue
+      }
       if (status !== "pausing") {
         throw new SandboxError(
           `Sandbox ${this.id} did not pause: status is ${status}`,

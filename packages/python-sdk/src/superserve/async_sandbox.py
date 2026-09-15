@@ -16,6 +16,7 @@ from ._http import (
     DeadlineExceeded,
     DEFAULT_PAUSE_TIMEOUT,
     pause_poll_delay,
+    PAUSE_FAST_POLL_WINDOW_S,
 )
 from .commands import AsyncCommands, AsyncCommandsDeps
 from .errors import ConflictError, NotFoundError, SandboxError, SandboxTimeoutError
@@ -482,6 +483,13 @@ class AsyncSandbox:
             status = to_sandbox_info(raw).status
             if status in (SandboxStatus.PAUSED, SandboxStatus.DELETED):
                 return
+            # A request that timed out may be accepted only after this first
+            # look; 'active' this early is not yet an answer.
+            if (
+                status == SandboxStatus.ACTIVE
+                and time.monotonic() - started < PAUSE_FAST_POLL_WINDOW_S
+            ):
+                continue
             if status != SandboxStatus.PAUSING:
                 raise SandboxError(
                     f"Sandbox {self.id} did not pause: status is {SandboxStatus(status).value}"

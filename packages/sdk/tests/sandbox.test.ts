@@ -1018,6 +1018,50 @@ describe("Sandbox instance methods", () => {
     }
   })
 
+  it("sandbox.pause with wait tolerates an early active reading after an ambiguous timeout", async () => {
+    const sandbox = await makeSandbox()
+    vi.useFakeTimers()
+    try {
+      const statuses = ["active", "active", "pausing", "paused"]
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          (_url: string, init: RequestInit) =>
+            new Promise<Response>((resolve, reject) => {
+              if (init.method === "POST") {
+                init.signal?.addEventListener(
+                  "abort",
+                  () => reject(new DOMException("aborted", "AbortError")),
+                  { once: true },
+                )
+                return
+              }
+              resolve(
+                jsonResponse({
+                  ...baseSandbox,
+                  status: statuses.shift() ?? "paused",
+                }),
+              )
+            }),
+        ),
+      )
+      let outcome: unknown = "pending"
+      const pending = sandbox.pause({ wait: true }).then(
+        () => {
+          outcome = "paused"
+        },
+        (e: unknown) => {
+          outcome = e
+        },
+      )
+      await vi.advanceTimersByTimeAsync(31_000)
+      await pending
+      expect(outcome).toBe("paused")
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("sandbox.pause without wait surfaces a request timeout", async () => {
     const sandbox = await makeSandbox()
     vi.useFakeTimers()
