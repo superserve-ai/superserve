@@ -7,6 +7,7 @@ import pytest
 import respx
 from superserve._http import (
     SDK_VERSION,
+    pause_poll_delay,
     USER_AGENT,
     api_request,
     async_api_request,
@@ -396,3 +397,11 @@ class TestStreamSSEGet:
             assert len(events) == 2
             assert route.call_count == 1
             assert route.calls.last.request.content == b""
+
+
+def test_pause_poll_delay_is_fast_while_young_then_the_callers_interval() -> None:
+    assert pause_poll_delay(0.0, 1.0) == 0.05
+    assert pause_poll_delay(1.9, 1.0) == 0.05
+    assert pause_poll_delay(2.0, 1.0) == 1.0
+    # A caller asking for something faster than the fast cadence keeps it.
+    assert pause_poll_delay(0.0, 0.01) == 0.01
