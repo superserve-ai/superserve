@@ -494,11 +494,12 @@ export class Sandbox {
     ctx: PauseWait,
     pollMs: number,
   ): Promise<void> {
-    const started = Date.now()
+    // Monotonic: a wall-clock step must not hold the fast cadence open.
+    const started = performance.now()
     let first = true
     while (true) {
       if (!first) {
-        const young = Date.now() - started < PAUSE_FAST_POLL_WINDOW_MS
+        const young = performance.now() - started < PAUSE_FAST_POLL_WINDOW_MS
         await sleep(
           young ? Math.min(PAUSE_FAST_POLL_MS, pollMs) : pollMs,
           ctx.signal,
