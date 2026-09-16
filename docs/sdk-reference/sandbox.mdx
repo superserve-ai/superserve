@@ -184,22 +184,39 @@ print(info.status.value)  # e.g. "active" — see SandboxStatus
 
 ### `pause`
 
-Checkpoint the VM state to disk. The sandbox transitions to `paused`. Returns nothing.
+Checkpoint the VM state to disk. Returns once the pause is accepted; the sandbox transitions to `pausing` and then `paused` on its own. Pass `wait` to return once it is `paused`.
+
+| Option                               | Type          | Description                                                                                                        |
+| ------------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `wait`                               | `boolean`     | Return once the sandbox is `paused` rather than once the pause is accepted. A sandbox configured to delete on pause counts as done once it is deleted. Default `false`. |
+| `timeoutMs` / `timeout`              | `number`      | With `wait`, how long to wait for `paused` before raising a timeout. TypeScript in milliseconds, Python in seconds. Default 5 minutes. |
+| `pollIntervalMs` / `poll_interval_s` | `number`      | With `wait`, how often to check the status. TypeScript in milliseconds, Python in seconds. Default 1 second.        |
+| `signal` (TypeScript only)           | `AbortSignal` | Cancels the request, and the polling when `wait` is set.                                                           |
 
 <CodeGroup>
 ```typescript TypeScript
 await sandbox.pause()
+// or, to return only once the sandbox is paused:
+// await sandbox.pause({ wait: true })
 ```
 
 ```python Python
 sandbox.pause()
+# or, to return only once the sandbox is paused:
+# sandbox.pause(wait=True)
 ```
 
 </CodeGroup>
 
 ### `resume`
 
-Restore a paused sandbox. The backend rotates the per-sandbox access token; the SDK re-injects it into `sandbox.files` transparently.
+Restore a paused sandbox. A pause still in progress is waited out first, under the same controls as `pause` with `wait`. The backend rotates the per-sandbox access token; the SDK re-injects it into `sandbox.files` transparently.
+
+| Option                               | Type          | Description                                                                                                        |
+| ------------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `timeoutMs` / `timeout`              | `number`      | How long to wait out a pause in progress before raising a timeout. TypeScript in milliseconds, Python in seconds. Default 5 minutes. |
+| `pollIntervalMs` / `poll_interval_s` | `number`      | How often to check the status while waiting. TypeScript in milliseconds, Python in seconds. Default 1 second.      |
+| `signal` (TypeScript only)           | `AbortSignal` | Cancels the resume request and any waiting.                                                                        |
 
 <CodeGroup>
 ```typescript TypeScript
