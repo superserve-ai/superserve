@@ -43,6 +43,7 @@ Thank you for your interest in contributing to Superserve! We welcome contributi
 apps/console/              # Sandbox dashboard (Next.js 16, App Router)
 apps/ui-docs/              # UI component documentation (Vite)
 packages/cli/              # TypeScript CLI (@superserve/cli)
+packages/python-agents-openai/ # OpenAI Agents SDK adapter (superserve-agents-openai on PyPI)
 packages/python-sdk/       # Python SDK (superserve on PyPI)
 packages/sdk/              # TypeScript SDK (@superserve/sdk)
 packages/ui/               # Shared UI components (@superserve/ui)

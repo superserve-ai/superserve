@@ -1,0 +1,11 @@
+{
+  "name": "@superserve/python-agents-openai",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "uv build --package superserve-agents-openai",
+    "test": "uv run pytest tests/",
+    "lint": "uv run ruff check src/ tests/",
+    "typecheck": "uv run mypy src/ tests/"
+  }
+}
