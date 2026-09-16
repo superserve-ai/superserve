@@ -355,11 +355,19 @@ def _do_request_with_retry(
             except httpx.HTTPError as exc:
                 raise SandboxError(f"Network error: {exc}") from exc
 
-            if response.status_code == 409 and retry_conflict:
+            # A self-clearing 409 is retried only on an idempotent method, like
+            # every other retry here; the flag never overrides that.
+            retry_this_conflict = (
+                retry_conflict
+                and response.status_code == 409
+                and method_upper in _IDEMPOTENT_METHODS
+            )
+            if retry_this_conflict:
                 max_attempts = _CONFLICT_MAX_ATTEMPTS
 
-            is_retryable = _should_retry_status(method_upper, response.status_code) or (
-                response.status_code == 409 and retry_conflict
+            is_retryable = (
+                _should_retry_status(method_upper, response.status_code)
+                or retry_this_conflict
             )
 
             if is_retryable and attempt < max_attempts - 1:
@@ -644,11 +652,19 @@ async def _async_do_request_with_retry(
             except httpx.HTTPError as exc:
                 raise SandboxError(f"Network error: {exc}") from exc
 
-            if response.status_code == 409 and retry_conflict:
+            # A self-clearing 409 is retried only on an idempotent method, like
+            # every other retry here; the flag never overrides that.
+            retry_this_conflict = (
+                retry_conflict
+                and response.status_code == 409
+                and method_upper in _IDEMPOTENT_METHODS
+            )
+            if retry_this_conflict:
                 max_attempts = _CONFLICT_MAX_ATTEMPTS
 
-            is_retryable = _should_retry_status(method_upper, response.status_code) or (
-                response.status_code == 409 and retry_conflict
+            is_retryable = (
+                _should_retry_status(method_upper, response.status_code)
+                or retry_this_conflict
             )
 
             if is_retryable and attempt < max_attempts - 1:

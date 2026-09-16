@@ -254,6 +254,24 @@ class TestRetriesSync:
                 )
             assert route.call_count == 1
 
+    def test_post_409_is_not_retried_even_with_retry_conflict(
+        self, zero_sleep: None
+    ) -> None:
+        from superserve.errors import ConflictError
+
+        with respx.mock() as router:
+            route = router.post("https://api.example.com/foo").mock(
+                return_value=httpx.Response(409, json={"error": {"code": "conflict"}})
+            )
+            with pytest.raises(ConflictError):
+                api_request(
+                    "POST",
+                    "https://api.example.com/foo",
+                    headers={"X-API-Key": "k"},
+                    retry_conflict=True,
+                )
+            assert route.call_count == 1
+
     def test_connect_error_retries_on_get(self, zero_sleep: None) -> None:
         with respx.mock() as router:
             route = router.get("https://api.example.com/foo").mock(
