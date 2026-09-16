@@ -7,6 +7,7 @@ import pytest
 import respx
 from superserve._http import (
     SDK_VERSION,
+    pause_poll_delay,
     USER_AGENT,
     api_request,
     async_api_request,
@@ -451,3 +452,12 @@ class TestStreamSSEGet:
             assert len(events) == 2
             assert route.call_count == 1
             assert route.calls.last.request.content == b""
+
+
+def test_pause_poll_delay_ramps_only_when_the_caller_set_no_interval() -> None:
+    assert pause_poll_delay(0.0, None) == 0.05
+    assert pause_poll_delay(1.9, None) == 0.05
+    assert pause_poll_delay(2.0, None) == 1.0
+    # An explicit interval is used as given, from the first check on.
+    assert pause_poll_delay(0.0, 5.0) == 5.0
+    assert pause_poll_delay(0.0, 0.01) == 0.01

@@ -26,12 +26,31 @@ DEFAULT_TIMEOUT = 30.0
 # How long pause() waits, across every request it makes; each request still
 # gets the ordinary timeout.
 DEFAULT_PAUSE_TIMEOUT = 300.0
+# Status checks while a waited pause is young: most pauses finish within a
+# second or two, so the first checks are close together; after this window the
+# caller's poll interval applies.
+PAUSE_FAST_POLL_S = 0.05
+PAUSE_FAST_POLL_WINDOW_S = 2.0
+
+
+DEFAULT_PAUSE_POLL_S = 1.0
+
+
+def pause_poll_delay(elapsed: float, poll_interval_s: float | None) -> float:
+    """The SDK's own cadence when the caller set no interval: fast checks while
+    the pause is young, then every second. A caller's interval is used as given."""
+    if poll_interval_s is not None:
+        return poll_interval_s
+    if elapsed < PAUSE_FAST_POLL_WINDOW_S:
+        return PAUSE_FAST_POLL_S
+    return DEFAULT_PAUSE_POLL_S
+
 
 DEFAULT_MAX_DOWNLOAD_BYTES = (
     2 * 1024 * 1024 * 1024
 )  # 2 GiB; matches boxd's server-side zip cap
 
-SDK_VERSION = "0.9.0"
+SDK_VERSION = "0.9.1"
 USER_AGENT = (
     f"superserve-python/{SDK_VERSION} "
     f"(python/{sys.version_info.major}.{sys.version_info.minor})"

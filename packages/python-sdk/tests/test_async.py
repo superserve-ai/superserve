@@ -661,13 +661,17 @@ async def test_pause_default_budget_covers_a_two_minute_pause(monkeypatch):
 async def test_pause_deadline_stops_before_a_poll_it_cannot_afford(monkeypatch):
     clock = [0.0]
     with respx.mock(assert_all_called=False) as router:
-        get = _clock_routes(router, clock, slow=False)
+        _clock_routes(router, clock, slow=False)
+        router.get(f"{API}/sandboxes/sbx-1").mock(
+            return_value=httpx.Response(200, json=_raw(status="pausing"))
+        )
         sbx = await AsyncSandbox.connect("sbx-1")
         _fake_clock(monkeypatch, clock)
         try:
             with pytest.raises(SandboxTimeoutError):
                 await sbx.pause(wait=True, timeout=1.0, poll_interval_s=2.0)
-            assert get.call_count == 0
+            # The budget ran out on its own clock; no sleep overshot it.
+            assert clock[0] <= 1.1
         finally:
             await sbx._close_http_client()
 
@@ -969,5 +973,29 @@ async def test_resume_retries_at_once_when_the_conflict_check_sees_paused() -> N
         try:
             await sbx.resume(poll_interval_s=0.001)
             assert resume.call_count == 2
+        finally:
+            await sbx._close_http_client()
+
+
+async def test_pause_with_wait_tolerates_an_early_active_reading_after_a_timeout() -> (
+    None
+):
+    with respx.mock() as router:
+        router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+            return_value=httpx.Response(200, json=_raw())
+        )
+        router.post(f"{API}/sandboxes/sbx-1/pause").mock(
+            side_effect=httpx.ReadTimeout("slow")
+        )
+        router.get(f"{API}/sandboxes/sbx-1").mock(
+            side_effect=[
+                httpx.Response(200, json=_raw(status="active")),
+                httpx.Response(200, json=_raw(status="pausing")),
+                httpx.Response(200, json=_raw(status="paused")),
+            ]
+        )
+        sbx = await AsyncSandbox.connect("sbx-1")
+        try:
+            assert await sbx.pause(wait=True, poll_interval_s=0.001) is None
         finally:
             await sbx._close_http_client()

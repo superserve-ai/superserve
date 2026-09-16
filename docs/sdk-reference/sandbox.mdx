@@ -190,7 +190,7 @@ Checkpoint the VM state to disk. Returns once the pause is accepted; the sandbox
 | ------------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `wait`                               | `boolean`     | Return once the sandbox is `paused` rather than once the pause is accepted. A sandbox configured to delete on pause counts as done once it is deleted. Default `false`. |
 | `timeoutMs` / `timeout`              | `number`      | With `wait`, how long to wait for `paused` before raising a timeout. TypeScript in milliseconds, Python in seconds. Default 5 minutes. |
-| `pollIntervalMs` / `poll_interval_s` | `number`      | With `wait`, how often to check the status. TypeScript in milliseconds, Python in seconds. Default 1 second.        |
+| `pollIntervalMs` / `poll_interval_s` | `number`      | With `wait`, how often to check the status. When unset, the SDK checks every 50 ms for the pause's first two seconds, then every second. TypeScript in milliseconds, Python in seconds. |
 | `signal` (TypeScript only)           | `AbortSignal` | Cancels the request, and the polling when `wait` is set.                                                           |
 
 <CodeGroup>
@@ -215,7 +215,7 @@ Restore a paused sandbox. A pause still in progress is waited out first, under t
 | Option                               | Type          | Description                                                                                                        |
 | ------------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `timeoutMs` / `timeout`              | `number`      | How long to wait out a pause in progress before raising a timeout. TypeScript in milliseconds, Python in seconds. Default 5 minutes. |
-| `pollIntervalMs` / `poll_interval_s` | `number`      | How often to check the status while waiting. TypeScript in milliseconds, Python in seconds. Default 1 second.      |
+| `pollIntervalMs` / `poll_interval_s` | `number`      | How often to check the status while waiting. When unset, the SDK checks every 50 ms for the first two seconds, then every second. TypeScript in milliseconds, Python in seconds. |
 | `signal` (TypeScript only)           | `AbortSignal` | Cancels the resume request and any waiting.                                                                        |
 
 <CodeGroup>
