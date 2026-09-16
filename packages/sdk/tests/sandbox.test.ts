@@ -344,6 +344,27 @@ describe("Sandbox instance methods", () => {
     return sandbox
   }
 
+  it("sandbox.kill passes its signal so conflict retries can be cancelled", async () => {
+    const sandbox = await makeSandbox()
+    const controller = new AbortController()
+    let calls = 0
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        calls++
+        if (init.signal?.aborted)
+          throw new DOMException("aborted", "AbortError")
+        controller.abort()
+        return jsonResponse({ error: { message: "transitioning" } }, 409)
+      }),
+    )
+
+    await expect(
+      sandbox.kill({ signal: controller.signal }),
+    ).rejects.toBeInstanceOf(SandboxError)
+    expect(calls).toBe(1)
+  })
+
   it("sandbox.kill swallows 404", async () => {
     const sandbox = await makeSandbox()
     vi.stubGlobal(
