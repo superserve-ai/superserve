@@ -58,6 +58,7 @@ const DEFAULT_PAUSE_TIMEOUT_MS = 300_000
 // the caller's poll interval applies.
 const PAUSE_FAST_POLL_MS = 50
 const PAUSE_FAST_POLL_WINDOW_MS = 2_000
+const DEFAULT_PAUSE_POLL_MS = 1_000
 
 type PauseWait = {
   signal: AbortSignal
@@ -417,7 +418,7 @@ export class Sandbox {
         }
       }
       if (raw?.status !== "pausing") return
-      await this._pollUntilPaused(ctx, options.pollIntervalMs ?? 1000)
+      await this._pollUntilPaused(ctx, options.pollIntervalMs)
     })
   }
 
@@ -449,7 +450,7 @@ export class Sandbox {
       if (status !== "pausing" && status !== "paused") throw err
       if (status === "pausing") {
         await this._underPauseDeadline(options, (ctx) =>
-          this._pollUntilPaused(ctx, options.pollIntervalMs ?? 1000),
+          this._pollUntilPaused(ctx, options.pollIntervalMs),
         )
       }
       await this._postAndRotateToken("resume", options.signal)
@@ -492,18 +493,22 @@ export class Sandbox {
    */
   private async _pollUntilPaused(
     ctx: PauseWait,
-    pollMs: number,
+    pollMs: number | undefined,
   ): Promise<void> {
     // Monotonic: a wall-clock step must not hold the fast cadence open.
     const started = performance.now()
     let first = true
     while (true) {
       if (!first) {
-        const young = performance.now() - started < PAUSE_FAST_POLL_WINDOW_MS
-        await sleep(
-          young ? Math.min(PAUSE_FAST_POLL_MS, pollMs) : pollMs,
-          ctx.signal,
-        )
+        // The SDK's own cadence when the caller set no interval: fast checks
+        // while the pause is young, then every second. A caller's interval
+        // is used as given.
+        let delay = pollMs
+        if (delay === undefined) {
+          const young = performance.now() - started < PAUSE_FAST_POLL_WINDOW_MS
+          delay = young ? PAUSE_FAST_POLL_MS : DEFAULT_PAUSE_POLL_MS
+        }
+        await sleep(delay, ctx.signal)
       }
       first = false
       let info: ApiSandboxResponse

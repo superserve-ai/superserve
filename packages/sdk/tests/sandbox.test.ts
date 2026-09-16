@@ -989,6 +989,35 @@ describe("Sandbox instance methods", () => {
     }
   })
 
+  it("sandbox.pause with wait honors an explicit poll interval from the first check", async () => {
+    const sandbox = await makeSandbox()
+    vi.useFakeTimers()
+    try {
+      const start = Date.now()
+      const at: number[] = []
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: RequestInit) => {
+          if (init.method === "POST")
+            return jsonResponse({ status: "pausing" }, 202)
+          at.push(Date.now() - start)
+          return jsonResponse({
+            ...baseSandbox,
+            status: at.length >= 4 ? "paused" : "pausing",
+          })
+        }),
+      )
+      const pending = sandbox.pause({ wait: true, pollIntervalMs: 500 })
+      await vi.advanceTimersByTimeAsync(5_000)
+      await pending
+      const gaps = at.slice(1).map((t, i) => t - at[i])
+      expect(at.length).toBe(4)
+      expect(Math.min(...gaps)).toBeGreaterThanOrEqual(500)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("sandbox.pause with wait falls back to the poll interval after the fast window", async () => {
     const sandbox = await makeSandbox()
     vi.useFakeTimers()
@@ -1007,7 +1036,7 @@ describe("Sandbox instance methods", () => {
           })
         }),
       )
-      const pending = sandbox.pause({ wait: true, pollIntervalMs: 1_000 })
+      const pending = sandbox.pause({ wait: true })
       await vi.advanceTimersByTimeAsync(30_000)
       await pending
       const late = at.filter((t) => t > 2_000)

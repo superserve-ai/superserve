@@ -414,7 +414,7 @@ class AsyncSandbox:
         *,
         wait: bool = False,
         timeout: float = DEFAULT_PAUSE_TIMEOUT,
-        poll_interval_s: float = 1.0,
+        poll_interval_s: float | None = None,
     ) -> None:
         """Pause this sandbox. The sandbox transitions to ``paused``.
 
@@ -444,7 +444,7 @@ class AsyncSandbox:
             await self._wait_until_paused(deadline, timeout, poll_interval_s)
 
     async def _wait_until_paused(
-        self, deadline: float, timeout: float, poll_interval_s: float
+        self, deadline: float, timeout: float, poll_interval_s: float | None
     ) -> None:
         """Poll until the sandbox is ``paused``. A sandbox deleted meanwhile
         (delete on pause) counts as done; ``failed`` raises."""
@@ -501,7 +501,10 @@ class AsyncSandbox:
         )
 
     async def resume(
-        self, *, timeout: float = DEFAULT_PAUSE_TIMEOUT, poll_interval_s: float = 1.0
+        self,
+        *,
+        timeout: float = DEFAULT_PAUSE_TIMEOUT,
+        poll_interval_s: float | None = None,
     ) -> None:
         """Resume a paused sandbox.
 
