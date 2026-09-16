@@ -18,9 +18,9 @@ import {
 } from "./errors.js"
 import type { ApiExecStreamEvent } from "./types.js"
 
-const DEFAULT_TIMEOUT_MS = 30_000
+export const DEFAULT_TIMEOUT_MS = 30_000
 
-const SDK_VERSION = "0.8.3"
+const SDK_VERSION = "0.9.0"
 const USER_AGENT = `@superserve/sdk/${SDK_VERSION} (node/${
   typeof process !== "undefined" && process.versions?.node
     ? `v${process.versions.node}`
@@ -74,21 +74,48 @@ interface RequestOptions {
  * Compose an internal controller signal with an optional user signal.
  * Uses AbortSignal.any when available.
  */
-function composeSignals(
+export function composeSignals(
   internal: AbortSignal,
   user?: AbortSignal,
-): AbortSignal {
-  if (!user) return internal
-  return AbortSignal.any([internal, user])
+): { signal: AbortSignal; release: () => void } {
+  if (!user) return { signal: internal, release: () => {} }
+  if (typeof AbortSignal.any === "function") {
+    return { signal: AbortSignal.any([internal, user]), release: () => {} }
+  }
+  // Older runtimes (Node before 18.17): forward whichever aborts first. The
+  // listeners sit on signals that may outlive this request, so the caller
+  // releases them once the composed signal is no longer needed.
+  const controller = new AbortController()
+  const onInternal = () => {
+    release()
+    controller.abort(internal.reason)
+  }
+  const onUser = () => {
+    release()
+    controller.abort(user.reason)
+  }
+  const release = () => {
+    internal.removeEventListener("abort", onInternal)
+    user.removeEventListener("abort", onUser)
+  }
+  if (internal.aborted) {
+    controller.abort(internal.reason)
+  } else if (user.aborted) {
+    controller.abort(user.reason)
+  } else {
+    internal.addEventListener("abort", onInternal)
+    user.addEventListener("abort", onUser)
+  }
+  return { signal: controller.signal, release }
 }
 
-// Backoff sleep that settles early (rejecting with the abort reason) if the
-// caller's signal fires — without this, cancelling mid-backoff would silently
-// wait out the full delay before the abort is noticed on the next attempt.
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+// Sleep that ends early, rejecting with the abort reason, if signal aborts:
+// without this, cancelling mid-backoff would silently wait out the full delay
+// before the abort is noticed on the next attempt.
+export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const abortErr = () =>
-      signal?.reason ?? new DOMException("Aborted", "AbortError")
+      signal?.reason ?? new DOMException("aborted", "AbortError")
     if (signal?.aborted) {
       reject(abortErr())
       return
@@ -172,8 +199,10 @@ async function retryableFetch(
     retryable: boolean
     retryConflict?: boolean
     userSignal?: AbortSignal
+    /** Keep the attempt timer running until the caller releases the response. */
+    timeoutCoversBody?: boolean
   },
-): Promise<Response> {
+): Promise<{ res: Response; release: () => void }> {
   // Extends to the conflict budget only after an actual 409 (below), so
   // transient 5xx/429/network keep their default bound.
   let maxAttempts = opts.retryable
@@ -189,7 +218,18 @@ async function retryableFetch(
       controller.abort()
     }, opts.timeoutMs)
 
-    const signal = composeSignals(controller.signal, opts.userSignal)
+    const { signal, release } = composeSignals(
+      controller.signal,
+      opts.userSignal,
+    )
+    // On the fallback path the caller keeps the forwarding alive through
+    // the body read and releases it afterwards; a retried attempt releases
+    // its own here.
+    let handedOff = false
+    const done = () => {
+      clearTimeout(timer)
+      release()
+    }
 
     try {
       const res = await fetch(input, { ...init, signal })
@@ -206,7 +246,8 @@ async function retryableFetch(
           maxAttempts = CONFLICT_MAX_ATTEMPTS
         }
         if (attempt >= maxAttempts) {
-          return res
+          handedOff = true
+          return { res, release: done }
         }
         let delay: number | null = null
         if (res.status === 429) {
@@ -226,7 +267,8 @@ async function retryableFetch(
         continue
       }
 
-      return res
+      handedOff = true
+      return { res, release: done }
     } catch (err) {
       lastError = err
 
@@ -253,7 +295,8 @@ async function retryableFetch(
 
       throw err
     } finally {
-      clearTimeout(timer)
+      if (!handedOff) done()
+      else if (!opts.timeoutCoversBody) clearTimeout(timer)
     }
   }
 
@@ -300,40 +343,53 @@ export async function request<T>(opts: RequestOptions): Promise<T> {
   }
 
   try {
-    const res = await retryableFetch(
+    const { res, release } = await retryableFetch(
       url,
       {
         method,
         headers: mergedHeaders,
         body: body !== undefined ? JSON.stringify(body) : undefined,
       },
-      { timeoutMs, retryable, retryConflict, userSignal },
+      {
+        timeoutMs,
+        retryable,
+        retryConflict,
+        userSignal,
+        timeoutCoversBody: true,
+      },
     )
+    try {
+      if (!res.ok) {
+        const errorBody = await readErrorBody(res)
+        throw mapApiError(res.status, errorBody)
+      }
 
-    if (!res.ok) {
-      const errorBody = await readErrorBody(res)
-      throw mapApiError(res.status, errorBody)
+      // 204 No Content
+      if (res.status === 204) {
+        return undefined as T
+      }
+
+      // Untrusted (data-plane) endpoints: read the JSON body with a streaming
+      // byte cap so a hostile sandbox can't make us buffer an unbounded response.
+      if (maxBytes !== undefined) {
+        const bytes = await readBodyWithLimit(res, maxBytes, "Response body")
+        if (bytes.byteLength === 0) return undefined as T
+        return JSON.parse(new TextDecoder().decode(bytes)) as T
+      }
+
+      // Some endpoints legally return 2xx with an empty body.
+      const text = await res.text()
+      return text ? (JSON.parse(text) as T) : (undefined as T)
+    } finally {
+      release()
     }
-
-    // 204 No Content
-    if (res.status === 204) {
-      return undefined as T
-    }
-
-    // Untrusted (data-plane) endpoints: read the JSON body with a streaming
-    // byte cap so a hostile sandbox can't make us buffer an unbounded response.
-    if (maxBytes !== undefined) {
-      const bytes = await readBodyWithLimit(res, maxBytes, "Response body")
-      if (bytes.byteLength === 0) return undefined as T
-      return JSON.parse(new TextDecoder().decode(bytes)) as T
-    }
-
-    // Some endpoints legally return 2xx with an empty body.
-    const text = await res.text()
-    return text ? (JSON.parse(text) as T) : (undefined as T)
   } catch (err) {
     if (err instanceof SandboxError) throw err
     if (err instanceof DOMException && err.name === "AbortError") {
+      // Past the headers only the attempt timer and the caller can abort.
+      if (!userSignal?.aborted) {
+        throw new TimeoutError(`Request timed out after ${timeoutMs}ms`)
+      }
       throw new SandboxError("Request aborted", undefined, undefined, {
         cause: err,
       })
@@ -381,15 +437,18 @@ export async function uploadBytes(opts: {
   }
 
   try {
-    const res = await retryableFetch(
+    const { res, release } = await retryableFetch(
       url,
       { method: "POST", headers: mergedHeaders, body },
       { timeoutMs, retryable: false, userSignal },
     )
-
-    if (!res.ok) {
-      const errorBody = await readErrorBody(res)
-      throw mapApiError(res.status, errorBody)
+    try {
+      if (!res.ok) {
+        const errorBody = await readErrorBody(res)
+        throw mapApiError(res.status, errorBody)
+      }
+    } finally {
+      release()
     }
   } catch (err) {
     if (err instanceof SandboxError) throw err
@@ -495,18 +554,21 @@ export async function downloadBytes(opts: {
   }
 
   try {
-    const res = await retryableFetch(
+    const { res, release } = await retryableFetch(
       url,
       { method: "GET", headers: mergedHeaders },
       { timeoutMs, retryable: true, userSignal },
     )
+    try {
+      if (!res.ok) {
+        const errorBody = await readErrorBody(res)
+        throw mapApiError(res.status, errorBody)
+      }
 
-    if (!res.ok) {
-      const errorBody = await readErrorBody(res)
-      throw mapApiError(res.status, errorBody)
+      return await readBodyWithLimit(res, maxBytes)
+    } finally {
+      release()
     }
-
-    return await readBodyWithLimit(res, maxBytes)
   } catch (err) {
     if (err instanceof SandboxError) throw err
     if (err instanceof DOMException && err.name === "AbortError") {
@@ -559,7 +621,7 @@ export async function streamSSE<TEvent = ApiExecStreamEvent>(opts: {
     controller.abort()
   }, timeoutMs)
 
-  const signal = composeSignals(controller.signal, userSignal)
+  const { signal, release } = composeSignals(controller.signal, userSignal)
 
   try {
     const init: RequestInit = {
@@ -636,6 +698,7 @@ export async function streamSSE<TEvent = ApiExecStreamEvent>(opts: {
       { cause: err },
     )
   } finally {
+    release()
     if (timer) clearTimeout(timer)
   }
 }

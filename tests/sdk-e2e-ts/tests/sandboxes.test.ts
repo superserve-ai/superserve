@@ -45,7 +45,7 @@ describe.skipIf(!hasCredentials())("sandboxes", () => {
   })
 
   it("pause → resume lifecycle", async () => {
-    await sandbox.pause()
+    await sandbox.pause({ wait: true })
     expect((await sandbox.getInfo()).status).toBe("paused")
 
     await sandbox.resume()

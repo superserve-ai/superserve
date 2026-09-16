@@ -208,7 +208,7 @@ def recycle(info: SandboxInfo) -> None:
         return
     if HIBERNATE:
         log.info("pausing sandbox=%s %s", info.id, detail)
-        sandbox.pause()
+        sandbox.pause(wait=True)
         # The paused sandbox is reusable again; drop the ownership marker.
         # Merge into the metadata as it is now, not the pre-pause snapshot: a
         # spawn that overlapped the pause may have retagged this sandbox.

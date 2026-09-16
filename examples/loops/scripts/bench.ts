@@ -64,7 +64,7 @@ async function main(): Promise<void> {
     console.log(`    setup exit ${setupRes.exitCode} in ${secs(tSetup)}s`)
 
     console.log("[3] pausing ...")
-    await box.pause()
+    await box.pause({ wait: true })
 
     console.log("[4] warm resume (list by metadata + connect) ...")
     const t2 = now()

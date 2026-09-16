@@ -40,7 +40,7 @@ def test_update_writes_back_metadata(sandbox, run_id):
 
 
 def test_pause_and_resume_lifecycle(sandbox):
-    sandbox.pause()
+    sandbox.pause(wait=True)
     assert sandbox.get_info().status.value == "paused"
 
     sandbox.resume()

@@ -557,7 +557,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
 
     async pause(id) {
       const sb = await Sandbox.connect(id, conn)
-      await sb.pause()
+      await sb.pause({ wait: true })
     },
 
     // connect() performs the activate/resume; that alone guarantees active.

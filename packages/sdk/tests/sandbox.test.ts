@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { ValidationError } from "../src/errors.js"
+import {
+  ConflictError,
+  SandboxError,
+  TimeoutError,
+  ValidationError,
+} from "../src/errors.js"
 import { Sandbox } from "../src/Sandbox.js"
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -359,6 +364,679 @@ describe("Sandbox instance methods", () => {
     const [url, init] = mock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe("https://api.superserve.ai/sandboxes/sbx-1/pause")
     expect(init.method).toBe("POST")
+  })
+
+  it("sandbox.pause sends Prefer: respond-async and follows a 202 until paused", async () => {
+    const sandbox = await makeSandbox()
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ status: "pausing" }, 202))
+      .mockResolvedValueOnce(
+        jsonResponse({ ...baseSandbox, status: "pausing" }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ ...baseSandbox, status: "paused" }))
+    vi.stubGlobal("fetch", mock)
+
+    await expect(
+      sandbox.pause({ wait: true, pollIntervalMs: 1 }),
+    ).resolves.toBeUndefined()
+
+    const [, init] = mock.mock.calls[0] as [string, RequestInit]
+    expect((init.headers as Record<string, string>).Prefer).toBe(
+      "respond-async",
+    )
+    expect(mock).toHaveBeenCalledTimes(3)
+    expect((mock.mock.calls[2] as [string])[0]).toBe(
+      "https://api.superserve.ai/sandboxes/sbx-1",
+    )
+  })
+
+  it("sandbox.pause rejects when the sandbox fails while pausing", async () => {
+    const sandbox = await makeSandbox()
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ status: "pausing" }, 202))
+      .mockImplementation(async () =>
+        jsonResponse({ ...baseSandbox, status: "failed" }),
+      )
+    vi.stubGlobal("fetch", mock)
+
+    await expect(
+      sandbox.pause({ wait: true, pollIntervalMs: 1 }),
+    ).rejects.toThrow(/did not pause/)
+  })
+
+  it("sandbox.pause times out while the sandbox is still pausing", async () => {
+    const sandbox = await makeSandbox()
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ status: "pausing" }, 202))
+      .mockImplementation(async () =>
+        jsonResponse({ ...baseSandbox, status: "pausing" }),
+      )
+    vi.stubGlobal("fetch", mock)
+
+    await expect(
+      sandbox.pause({ wait: true, timeoutMs: 30, pollIntervalMs: 1 }),
+    ).rejects.toBeInstanceOf(TimeoutError)
+  })
+
+  it("sandbox.pause waits out a two-minute pause under the default budget", async () => {
+    const sandbox = await makeSandbox()
+    vi.useFakeTimers()
+    try {
+      const start = Date.now()
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: RequestInit) => {
+          if (init.method === "POST") {
+            await new Promise((r) => setTimeout(r, 20_000))
+            return jsonResponse({ status: "pausing" }, 202)
+          }
+          return jsonResponse({
+            ...baseSandbox,
+            status: Date.now() - start >= 120_000 ? "paused" : "pausing",
+          })
+        }),
+      )
+      let outcome: unknown = "pending"
+      const pending = sandbox.pause({ wait: true }).then(
+        () => {
+          outcome = "paused"
+        },
+        (e: unknown) => {
+          outcome = e
+        },
+      )
+      await vi.advanceTimersByTimeAsync(120_000)
+      await pending
+      expect(outcome).toBe("paused")
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("sandbox.pause deadline cuts off a poll still in flight", async () => {
+    const sandbox = await makeSandbox()
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: RequestInit) => {
+          if (init.method === "POST")
+            return jsonResponse({ status: "pausing" }, 202)
+          await new Promise<void>((resolve, reject) => {
+            setTimeout(resolve, 80)
+            init.signal?.addEventListener(
+              "abort",
+              () => reject(new DOMException("aborted", "AbortError")),
+              { once: true },
+            )
+          })
+          return jsonResponse({ ...baseSandbox, status: "paused" })
+        }),
+      )
+      let outcome: unknown = "pending"
+      const pending = sandbox
+        .pause({ wait: true, timeoutMs: 40, pollIntervalMs: 10 })
+        .then(
+          () => {
+            outcome = "paused"
+          },
+          (e: unknown) => {
+            outcome = e
+          },
+        )
+      await vi.advanceTimersByTimeAsync(41)
+      const atDeadline = outcome
+      await vi.advanceTimersByTimeAsync(100)
+      await pending
+      expect(atDeadline).toBeInstanceOf(TimeoutError)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("sandbox.pause abort stops a poll without waiting for its answer", async () => {
+    const sandbox = await makeSandbox()
+    vi.useFakeTimers()
+    try {
+      let finishGet: (() => void) | undefined
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: RequestInit) => {
+          if (init.method === "POST")
+            return jsonResponse({ status: "pausing" }, 202)
+          return new Promise<Response>((resolve, reject) => {
+            finishGet = () =>
+              resolve(jsonResponse({ ...baseSandbox, status: "paused" }))
+            init.signal?.addEventListener(
+              "abort",
+              () => reject(new DOMException("aborted", "AbortError")),
+              { once: true },
+            )
+          })
+        }),
+      )
+      const controller = new AbortController()
+      let outcome: unknown = "pending"
+      const pending = sandbox
+        .pause({
+          wait: true,
+          timeoutMs: 120_000,
+          pollIntervalMs: 10,
+          signal: controller.signal,
+        })
+        .then(
+          () => {
+            outcome = "paused"
+          },
+          (e: unknown) => {
+            outcome = e
+          },
+        )
+      await vi.advanceTimersByTimeAsync(10)
+      expect(finishGet).toBeDefined()
+      controller.abort()
+      await vi.advanceTimersByTimeAsync(0)
+      const afterAbort = outcome
+      finishGet?.()
+      await pending
+      expect(afterAbort).toBeInstanceOf(SandboxError)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("sandbox.pause deadline covers a Retry-After wait inside a poll", async () => {
+    const sandbox = await makeSandbox()
+    vi.useFakeTimers()
+    try {
+      let gets = 0
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: RequestInit) => {
+          if (init.signal?.aborted)
+            throw new DOMException("aborted", "AbortError")
+          if (init.method === "POST")
+            return jsonResponse({ status: "pausing" }, 202)
+          if (++gets === 1) {
+            return new Response(
+              JSON.stringify({ error: { message: "retry later" } }),
+              {
+                status: 429,
+                headers: {
+                  "Content-Type": "application/json",
+                  "Retry-After": "1",
+                },
+              },
+            )
+          }
+          return jsonResponse({ ...baseSandbox, status: "paused" })
+        }),
+      )
+      let outcome: unknown = "pending"
+      const pending = sandbox
+        .pause({ wait: true, timeoutMs: 40, pollIntervalMs: 10 })
+        .then(
+          () => {
+            outcome = "paused"
+          },
+          (e: unknown) => {
+            outcome = e
+          },
+        )
+      await vi.advanceTimersByTimeAsync(41)
+      const atDeadline = outcome
+      await vi.advanceTimersByTimeAsync(1100)
+      await pending
+      expect(atDeadline).toBeInstanceOf(TimeoutError)
+      expect(gets).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("sandbox.pause abort interrupts a retry backoff inside a poll", async () => {
+    const sandbox = await makeSandbox()
+    vi.useFakeTimers()
+    try {
+      const controller = new AbortController()
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: RequestInit) => {
+          if (init.signal?.aborted)
+            throw new DOMException("aborted", "AbortError")
+          if (init.method === "POST")
+            return jsonResponse({ status: "pausing" }, 202)
+          return new Response(
+            JSON.stringify({ error: { message: "retry later" } }),
+            {
+              status: 429,
+              headers: {
+                "Content-Type": "application/json",
+                "Retry-After": "1",
+              },
+            },
+          )
+        }),
+      )
+      let outcome: unknown = "pending"
+      const pending = sandbox
+        .pause({
+          wait: true,
+          timeoutMs: 120_000,
+          pollIntervalMs: 10,
+          signal: controller.signal,
+        })
+        .then(
+          () => {
+            outcome = "paused"
+          },
+          (e: unknown) => {
+            outcome = e
+          },
+        )
+      await vi.advanceTimersByTimeAsync(10)
+      controller.abort()
+      await vi.advanceTimersByTimeAsync(0)
+      const atAbort = outcome
+      await vi.advanceTimersByTimeAsync(1100)
+      await pending
+      expect(atAbort).toBeInstanceOf(SandboxError)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("sandbox.pause deadline still applies while a poll body is being read", async () => {
+    const sandbox = await makeSandbox()
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: RequestInit) => {
+          if (init.method === "POST")
+            return jsonResponse({ status: "pausing" }, 202)
+          const body = new ReadableStream<Uint8Array>({
+            start(stream) {
+              const timer = setTimeout(() => {
+                stream.enqueue(
+                  new TextEncoder().encode(
+                    JSON.stringify({ ...baseSandbox, status: "paused" }),
+                  ),
+                )
+                stream.close()
+              }, 80)
+              init.signal?.addEventListener(
+                "abort",
+                () => {
+                  clearTimeout(timer)
+                  stream.error(new DOMException("aborted", "AbortError"))
+                },
+                { once: true },
+              )
+            },
+          })
+          return new Response(body, {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        }),
+      )
+      let outcome: unknown = "pending"
+      const pending = sandbox
+        .pause({ wait: true, timeoutMs: 40, pollIntervalMs: 10 })
+        .then(
+          () => {
+            outcome = "paused"
+          },
+          (e: unknown) => {
+            outcome = e
+          },
+        )
+      await vi.advanceTimersByTimeAsync(41)
+      const atDeadline = outcome
+      await vi.advanceTimersByTimeAsync(100)
+      await pending
+      expect(atDeadline).toBeInstanceOf(TimeoutError)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("sandbox.pause cuts a stalled poll body at the request timeout and polls again", async () => {
+    const sandbox = await makeSandbox()
+    vi.useFakeTimers()
+    try {
+      let gets = 0
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: RequestInit) => {
+          if (init.method === "POST")
+            return jsonResponse({ status: "pausing" }, 202)
+          if (++gets > 1)
+            return jsonResponse({ ...baseSandbox, status: "paused" })
+          const body = new ReadableStream<Uint8Array>({
+            start(stream) {
+              init.signal?.addEventListener(
+                "abort",
+                () => stream.error(new DOMException("aborted", "AbortError")),
+                { once: true },
+              )
+            },
+          })
+          return new Response(body, {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        }),
+      )
+      let outcome: unknown = "pending"
+      const pending = sandbox
+        .pause({ wait: true, timeoutMs: 120_000, pollIntervalMs: 10 })
+        .then(
+          () => {
+            outcome = "paused"
+          },
+          (e: unknown) => {
+            outcome = e
+          },
+        )
+      await vi.advanceTimersByTimeAsync(30_100)
+      await pending
+      expect(outcome).toBe("paused")
+      expect(gets).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("sandbox.pause treats a sandbox deleted on pause as completed", async () => {
+    const sandbox = await makeSandbox()
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ status: "pausing" }, 202))
+      .mockImplementation(async () => errorResponse(404, "not_found", "gone"))
+    vi.stubGlobal("fetch", mock)
+
+    await expect(
+      sandbox.pause({ wait: true, pollIntervalMs: 1 }),
+    ).resolves.toBeUndefined()
+  })
+
+  it("sandbox.pause deadline still cuts a poll body read without AbortSignal.any", async () => {
+    const sandbox = await makeSandbox()
+    const anySignal = AbortSignal.any
+    vi.useFakeTimers()
+    try {
+      // @ts-expect-error simulate a runtime without AbortSignal.any
+      AbortSignal.any = undefined
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: RequestInit) => {
+          if (init.method === "POST")
+            return jsonResponse({ status: "pausing" }, 202)
+          const body = new ReadableStream<Uint8Array>({
+            start(stream) {
+              const timer = setTimeout(() => {
+                stream.enqueue(
+                  new TextEncoder().encode(
+                    JSON.stringify({ ...baseSandbox, status: "paused" }),
+                  ),
+                )
+                stream.close()
+              }, 80)
+              init.signal?.addEventListener(
+                "abort",
+                () => {
+                  clearTimeout(timer)
+                  stream.error(new DOMException("aborted", "AbortError"))
+                },
+                { once: true },
+              )
+            },
+          })
+          return new Response(body, {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        }),
+      )
+      let outcome: unknown = "pending"
+      const pending = sandbox
+        .pause({ wait: true, timeoutMs: 40, pollIntervalMs: 10 })
+        .then(
+          () => {
+            outcome = "paused"
+          },
+          (e: unknown) => {
+            outcome = e
+          },
+        )
+      await vi.advanceTimersByTimeAsync(41)
+      const atDeadline = outcome
+      await vi.advanceTimersByTimeAsync(100)
+      await pending
+      expect(atDeadline).toBeInstanceOf(TimeoutError)
+    } finally {
+      AbortSignal.any = anySignal
+      vi.useRealTimers()
+    }
+  })
+
+  it("sandbox.pause keeps polling after one status request times out", async () => {
+    const sandbox = await makeSandbox()
+    vi.useFakeTimers()
+    try {
+      let gets = 0
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: RequestInit) => {
+          if (init.method === "POST")
+            return jsonResponse({ status: "pausing" }, 202)
+          if (++gets === 1) {
+            return new Promise<Response>((_resolve, reject) => {
+              init.signal?.addEventListener(
+                "abort",
+                () => reject(new DOMException("aborted", "AbortError")),
+                { once: true },
+              )
+            })
+          }
+          return jsonResponse({ ...baseSandbox, status: "paused" })
+        }),
+      )
+      let outcome: unknown = "pending"
+      const pending = sandbox
+        .pause({ wait: true, timeoutMs: 120_000, pollIntervalMs: 10 })
+        .then(
+          () => {
+            outcome = "paused"
+          },
+          (e: unknown) => {
+            outcome = e
+          },
+        )
+      await vi.advanceTimersByTimeAsync(30_100)
+      await vi.advanceTimersByTimeAsync(100)
+      await pending
+      expect(outcome).toBe("paused")
+      expect(gets).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("sandbox.pause follows a request that outlived its own timeout by polling", async () => {
+    const sandbox = await makeSandbox()
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: RequestInit) => {
+          if (init.method === "POST") {
+            return new Promise<Response>((_resolve, reject) => {
+              init.signal?.addEventListener(
+                "abort",
+                () => reject(new DOMException("aborted", "AbortError")),
+                { once: true },
+              )
+            })
+          }
+          return jsonResponse({ ...baseSandbox, status: "paused" })
+        }),
+      )
+      let outcome: unknown = "pending"
+      const pending = sandbox
+        .pause({ wait: true, timeoutMs: 120_000, pollIntervalMs: 10 })
+        .then(
+          () => {
+            outcome = "paused"
+          },
+          (e: unknown) => {
+            outcome = e
+          },
+        )
+      await vi.advanceTimersByTimeAsync(30_100)
+      await vi.advanceTimersByTimeAsync(100)
+      await pending
+      expect(outcome).toBe("paused")
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("sandbox.pause returns once the pause is accepted, without polling", async () => {
+    const sandbox = await makeSandbox()
+    const mock = vi.fn(async () => jsonResponse({ status: "pausing" }, 202))
+    vi.stubGlobal("fetch", mock)
+
+    await expect(sandbox.pause()).resolves.toBeUndefined()
+    expect(mock).toHaveBeenCalledTimes(1)
+  })
+
+  it("sandbox.resume waits out a pause in progress", async () => {
+    const sandbox = await makeSandbox()
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        errorResponse(409, "conflict", "not in a valid state"),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ ...baseSandbox, status: "pausing" }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ ...baseSandbox, status: "pausing" }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ ...baseSandbox, status: "paused" }))
+      .mockResolvedValueOnce(
+        jsonResponse({ ...baseSandbox, access_token: "tok-2" }),
+      )
+    vi.stubGlobal("fetch", mock)
+
+    await expect(sandbox.resume({ pollIntervalMs: 1 })).resolves.toBeUndefined()
+    expect(mock).toHaveBeenCalledTimes(5)
+    expect((mock.mock.calls[4] as [string, RequestInit])[1].method).toBe("POST")
+  })
+
+  it("sandbox.resume rethrows a conflict that is not a pause in progress", async () => {
+    const sandbox = await makeSandbox()
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        errorResponse(409, "conflict", "not in a valid state"),
+      )
+      .mockResolvedValueOnce(jsonResponse({ ...baseSandbox, status: "active" }))
+    vi.stubGlobal("fetch", mock)
+
+    await expect(sandbox.resume({ pollIntervalMs: 1 })).rejects.toBeInstanceOf(
+      ConflictError,
+    )
+  })
+
+  it("sandbox.pause without wait surfaces a request timeout", async () => {
+    const sandbox = await makeSandbox()
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          (_url: string, init: RequestInit) =>
+            new Promise<Response>((_resolve, reject) => {
+              init.signal?.addEventListener(
+                "abort",
+                () => reject(new DOMException("aborted", "AbortError")),
+                { once: true },
+              )
+            }),
+        ),
+      )
+      let outcome: unknown = "pending"
+      const pending = sandbox.pause().then(
+        () => {
+          outcome = "accepted"
+        },
+        (e: unknown) => {
+          outcome = e
+        },
+      )
+      await vi.advanceTimersByTimeAsync(30_100)
+      await pending
+      expect(outcome).toBeInstanceOf(TimeoutError)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("sandbox.resume retries at once when the conflict check already sees paused", async () => {
+    const sandbox = await makeSandbox()
+    const seen: string[] = []
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        seen.push(`${init.method} ${new URL(url).pathname}`)
+        if (init.method === "GET")
+          return jsonResponse({ ...baseSandbox, status: "paused" })
+        if (seen.length === 1)
+          return jsonResponse({ error: { message: "pausing" } }, 409)
+        return jsonResponse({ ...baseSandbox, access_token: "tok-2" })
+      }),
+    )
+
+    await sandbox.resume({ pollIntervalMs: 1 })
+    expect(seen).toEqual([
+      "POST /sandboxes/sbx-1/resume",
+      "GET /sandboxes/sbx-1",
+      "POST /sandboxes/sbx-1/resume",
+    ])
+  })
+
+  it("sandbox.resume passes its signal to the resume POST and the conflict check", async () => {
+    const sandbox = await makeSandbox()
+    const controller = new AbortController()
+    const seen: string[] = []
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        seen.push(`${init.method} ${new URL(url).pathname}`)
+        if (init.signal?.aborted)
+          throw new DOMException("aborted", "AbortError")
+        if (init.method === "POST") {
+          controller.abort()
+          return jsonResponse({ error: { message: "pausing" } }, 409)
+        }
+        return jsonResponse(baseSandbox)
+      }),
+    )
+
+    await expect(
+      sandbox.resume({ signal: controller.signal }),
+    ).rejects.toBeInstanceOf(SandboxError)
+    expect(seen).toEqual([
+      "POST /sandboxes/sbx-1/resume",
+      "GET /sandboxes/sbx-1",
+    ])
   })
 
   it("sandbox.attachSecret POSTs /secrets with env_key and secret_name", async () => {

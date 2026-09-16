@@ -235,7 +235,9 @@ class TestRetriesSync:
             assert result is None
             assert route.call_count == 3
 
-    def test_delete_409_without_retry_conflict_fails_fast(self, zero_sleep: None) -> None:
+    def test_delete_409_without_retry_conflict_fails_fast(
+        self, zero_sleep: None
+    ) -> None:
         from superserve.errors import ConflictError
 
         with respx.mock() as router:
@@ -394,7 +396,9 @@ class TestAsyncApiRequest:
             assert result == {"ok": True}
             assert route.call_count == 2
 
-    async def test_delete_retries_on_409_with_retry_conflict(self, zero_sleep: None) -> None:
+    async def test_delete_retries_on_409_with_retry_conflict(
+        self, zero_sleep: None
+    ) -> None:
         with respx.mock() as router:
             route = router.delete("https://api.example.com/foo").mock(
                 side_effect=[

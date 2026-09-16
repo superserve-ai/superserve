@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
+import time
+
+import threading
+
+
+from types import SimpleNamespace
+
 import json
 
 import httpx
 import pytest
 import respx
 from superserve import Sandbox, SandboxError, SandboxStatus, ValidationError
+from superserve.errors import ConflictError, SandboxTimeoutError
+import superserve.sandbox as sync_module
+import superserve._http as http_module
 
 API = "https://api.example.com"
 
@@ -414,6 +424,81 @@ class TestInstanceMethods:
             # kill() itself stays safe (no-op on already-killed)
             sbx.kill()
 
+    def test_pause_sends_prefer_respond_async(self) -> None:
+        with respx.mock() as router:
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            pause_route = router.post(f"{API}/sandboxes/sbx-1/pause").mock(
+                return_value=httpx.Response(204)
+            )
+            sbx = Sandbox.connect("sbx-1")
+            try:
+                sbx.pause()
+                assert (
+                    pause_route.calls.last.request.headers["Prefer"] == "respond-async"
+                )
+            finally:
+                sbx._close_http_client()
+
+    def test_pause_follows_202_until_paused(self) -> None:
+        with respx.mock() as router:
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            pause_route = router.post(f"{API}/sandboxes/sbx-1/pause").mock(
+                return_value=httpx.Response(202, json={"status": "pausing"})
+            )
+            info_route = router.get(f"{API}/sandboxes/sbx-1").mock(
+                side_effect=[
+                    httpx.Response(200, json=_raw(status="pausing")),
+                    httpx.Response(200, json=_raw(status="paused")),
+                ]
+            )
+            sbx = Sandbox.connect("sbx-1")
+            try:
+                assert sbx.pause(wait=True, poll_interval_s=0.001) is None
+                assert pause_route.call_count == 1
+                assert info_route.call_count == 2
+            finally:
+                sbx._close_http_client()
+
+    def test_pause_raises_when_sandbox_fails_while_pausing(self) -> None:
+        with respx.mock() as router:
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            router.post(f"{API}/sandboxes/sbx-1/pause").mock(
+                return_value=httpx.Response(202, json={"status": "pausing"})
+            )
+            router.get(f"{API}/sandboxes/sbx-1").mock(
+                return_value=httpx.Response(200, json=_raw(status="failed"))
+            )
+            sbx = Sandbox.connect("sbx-1")
+            try:
+                with pytest.raises(SandboxError, match="did not pause"):
+                    sbx.pause(wait=True, poll_interval_s=0.001)
+            finally:
+                sbx._close_http_client()
+
+    def test_pause_times_out_while_still_pausing(self) -> None:
+        with respx.mock() as router:
+            router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            router.post(f"{API}/sandboxes/sbx-1/pause").mock(
+                return_value=httpx.Response(202, json={"status": "pausing"})
+            )
+            router.get(f"{API}/sandboxes/sbx-1").mock(
+                return_value=httpx.Response(200, json=_raw(status="pausing"))
+            )
+            sbx = Sandbox.connect("sbx-1")
+            try:
+                with pytest.raises(SandboxTimeoutError, match="still pausing"):
+                    sbx.pause(wait=True, timeout=0.05, poll_interval_s=0.001)
+            finally:
+                sbx._close_http_client()
+
     def test_pause_returns_none(self) -> None:
         with respx.mock() as router:
             router.post(f"{API}/sandboxes/sbx-1/activate").mock(
@@ -651,8 +736,6 @@ class TestCreateFromTemplate:
 
 class TestConcurrentRefresh:
     def test_serialized_refresh_under_concurrent_401(self) -> None:
-        import threading
-
         sbx_id = "sbx-conc"
         sandbox_host = "sandbox.example.com"
         data_plane = f"https://boxd-{sbx_id}.{sandbox_host}"
@@ -736,3 +819,325 @@ class TestConcurrentRefresh:
                 assert exec_call_count == 4  # 2 initial 401s + 2 retries
             finally:
                 sbx._close_http_client()
+
+
+# Clock-controlled: the wall clock the pause loop reads is replaced so a
+# two-minute pause plays out instantly.
+def _clock_routes(router, clock, *, slow):
+    router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+        return_value=httpx.Response(200, json=_raw())
+    )
+
+    def post(request):
+        if slow:
+            clock[0] += 20.0  # the API holds the request before answering 202
+        return httpx.Response(202, json={"status": "pausing"})
+
+    router.post(f"{API}/sandboxes/sbx-1/pause").mock(side_effect=post)
+    return router.get(f"{API}/sandboxes/sbx-1").mock(
+        side_effect=lambda request: httpx.Response(
+            200,
+            json=_raw(status="paused" if not slow or clock[0] >= 120 else "pausing"),
+        )
+    )
+
+
+def _fake_clock(monkeypatch, clock):
+    monkeypatch.setattr(
+        sync_module,
+        "time",
+        SimpleNamespace(
+            monotonic=lambda: clock[0],
+            sleep=lambda n: clock.__setitem__(0, clock[0] + n),
+        ),
+    )
+
+
+def test_pause_default_budget_covers_a_two_minute_pause(monkeypatch):
+    clock = [0.0]
+    with respx.mock() as router:
+        _clock_routes(router, clock, slow=True)
+        sbx = Sandbox.connect("sbx-1")
+        _fake_clock(monkeypatch, clock)
+        try:
+            sbx.pause(wait=True)
+            assert clock[0] >= 120
+        finally:
+            sbx._close_http_client()
+
+
+def test_pause_deadline_stops_before_a_poll_it_cannot_afford(monkeypatch):
+    clock = [0.0]
+    with respx.mock(assert_all_called=False) as router:
+        get = _clock_routes(router, clock, slow=False)
+        sbx = Sandbox.connect("sbx-1")
+        _fake_clock(monkeypatch, clock)
+        try:
+            with pytest.raises(SandboxTimeoutError):
+                sbx.pause(wait=True, timeout=1.0, poll_interval_s=2.0)
+            assert get.call_count == 0
+        finally:
+            sbx._close_http_client()
+
+
+def test_pause_deadline_covers_a_retry_after_wait(monkeypatch):
+    clock = [0.0]
+    fake = SimpleNamespace(
+        monotonic=lambda: clock[0], sleep=lambda n: clock.__setitem__(0, clock[0] + n)
+    )
+    with respx.mock() as router:
+        router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+            return_value=httpx.Response(200, json=_raw())
+        )
+        router.post(f"{API}/sandboxes/sbx-1/pause").mock(
+            return_value=httpx.Response(202, json={"status": "pausing"})
+        )
+        get = router.get(f"{API}/sandboxes/sbx-1").mock(
+            side_effect=[
+                httpx.Response(
+                    429,
+                    json={"error": {"message": "retry later"}},
+                    headers={"Retry-After": "2"},
+                ),
+                httpx.Response(200, json=_raw(status="paused")),
+            ]
+        )
+        sbx = Sandbox.connect("sbx-1")
+        monkeypatch.setattr(sync_module, "time", fake)
+        monkeypatch.setattr(http_module, "time", fake)
+        try:
+            with pytest.raises(SandboxTimeoutError):
+                sbx.pause(wait=True, timeout=1.0, poll_interval_s=0.01)
+            assert clock[0] <= 1.0
+            assert get.call_count == 1
+        finally:
+            sbx._close_http_client()
+
+
+def test_pause_treats_a_sandbox_deleted_on_pause_as_completed() -> None:
+    with respx.mock() as router:
+        router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+            return_value=httpx.Response(200, json=_raw())
+        )
+        router.post(f"{API}/sandboxes/sbx-1/pause").mock(
+            return_value=httpx.Response(202, json={"status": "pausing"})
+        )
+        router.get(f"{API}/sandboxes/sbx-1").mock(
+            return_value=httpx.Response(404, json={"error": {"message": "gone"}})
+        )
+        sbx = Sandbox.connect("sbx-1")
+        try:
+            assert sbx.pause(wait=True, poll_interval_s=0.001) is None
+        finally:
+            sbx._close_http_client()
+
+
+def test_pause_deadline_bounds_a_slowly_dripped_poll_body(monkeypatch):
+    clock = [0.0]
+    fake = SimpleNamespace(
+        monotonic=lambda: clock[0], sleep=lambda n: clock.__setitem__(0, clock[0] + n)
+    )
+    body = json.dumps(_raw(status="paused")).encode()
+
+    def drip():
+        # Each chunk lands inside the read timeout but eats the budget.
+        for i in range(0, len(body), 8):
+            clock[0] += 0.4
+            yield body[i : i + 8]
+
+    with respx.mock() as router:
+        router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+            return_value=httpx.Response(200, json=_raw())
+        )
+        router.post(f"{API}/sandboxes/sbx-1/pause").mock(
+            return_value=httpx.Response(202, json={"status": "pausing"})
+        )
+        router.get(f"{API}/sandboxes/sbx-1").mock(
+            side_effect=lambda request: httpx.Response(200, content=drip())
+        )
+        sbx = Sandbox.connect("sbx-1")
+        monkeypatch.setattr(sync_module, "time", fake)
+        monkeypatch.setattr(http_module, "time", fake)
+        try:
+            with pytest.raises(SandboxTimeoutError):
+                sbx.pause(wait=True, timeout=1.0, poll_interval_s=0.01)
+            assert clock[0] < 2.0
+        finally:
+            sbx._close_http_client()
+
+
+@pytest.mark.parametrize("stall_in", ["body", "headers"])
+def test_sync_read_deadline_cuts_a_stalled_response(
+    stalling_server, stall_in: str
+) -> None:
+    server = stalling_server(stall_in)
+    client = httpx.Client()
+    before = set(threading.enumerate())
+    try:
+        started = time.monotonic()
+        with pytest.raises(SandboxTimeoutError):
+            http_module._read_within(
+                client,
+                "GET",
+                f"http://127.0.0.1:{server.server_port}/sandboxes/sbx-1",
+                headers={},
+                json_body=None,
+                timeout=30.0,
+                deadline=time.monotonic() + 0.2,
+            )
+        assert time.monotonic() - started < 1.5
+        # The abandoned exchange must not be able to pin the process.
+        assert all(t.daemon for t in threading.enumerate() if t not in before)
+    finally:
+        client.close()
+
+
+def test_pause_follows_a_request_that_outlived_its_timeout_by_polling() -> None:
+    with respx.mock() as router:
+        router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+            return_value=httpx.Response(200, json=_raw())
+        )
+        router.post(f"{API}/sandboxes/sbx-1/pause").mock(
+            side_effect=httpx.ReadTimeout("slow")
+        )
+        router.get(f"{API}/sandboxes/sbx-1").mock(
+            return_value=httpx.Response(200, json=_raw(status="paused"))
+        )
+        sbx = Sandbox.connect("sbx-1")
+        try:
+            assert sbx.pause(wait=True, poll_interval_s=0.001) is None
+        finally:
+            sbx._close_http_client()
+
+
+def test_pause_returns_once_accepted_without_polling() -> None:
+    with respx.mock(assert_all_called=False) as router:
+        router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+            return_value=httpx.Response(200, json=_raw())
+        )
+        router.post(f"{API}/sandboxes/sbx-1/pause").mock(
+            return_value=httpx.Response(202, json={"status": "pausing"})
+        )
+        get = router.get(f"{API}/sandboxes/sbx-1").mock(
+            return_value=httpx.Response(200, json=_raw(status="paused"))
+        )
+        sbx = Sandbox.connect("sbx-1")
+        try:
+            assert sbx.pause() is None
+            assert get.call_count == 0
+        finally:
+            sbx._close_http_client()
+
+
+def test_resume_waits_out_a_pause_in_progress() -> None:
+    with respx.mock() as router:
+        router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+            return_value=httpx.Response(200, json=_raw())
+        )
+        resume = router.post(f"{API}/sandboxes/sbx-1/resume").mock(
+            side_effect=[
+                httpx.Response(
+                    409,
+                    json={
+                        "error": {"code": "conflict", "message": "not in a valid state"}
+                    },
+                ),
+                httpx.Response(200, json=_raw(access_token="tok-2")),
+            ]
+        )
+        router.get(f"{API}/sandboxes/sbx-1").mock(
+            side_effect=[
+                httpx.Response(200, json=_raw(status="pausing")),
+                httpx.Response(200, json=_raw(status="pausing")),
+                httpx.Response(200, json=_raw(status="paused")),
+            ]
+        )
+        sbx = Sandbox.connect("sbx-1")
+        try:
+            sbx.resume(poll_interval_s=0.001)
+            assert resume.call_count == 2
+        finally:
+            sbx._close_http_client()
+
+
+def test_resume_conflict_not_from_a_pause_in_progress_is_raised() -> None:
+    with respx.mock() as router:
+        router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+            return_value=httpx.Response(200, json=_raw())
+        )
+        router.post(f"{API}/sandboxes/sbx-1/resume").mock(
+            return_value=httpx.Response(
+                409,
+                json={"error": {"code": "conflict", "message": "not in a valid state"}},
+            )
+        )
+        router.get(f"{API}/sandboxes/sbx-1").mock(
+            return_value=httpx.Response(200, json=_raw(status="active"))
+        )
+        sbx = Sandbox.connect("sbx-1")
+        try:
+            with pytest.raises(ConflictError):
+                sbx.resume(poll_interval_s=0.001)
+        finally:
+            sbx._close_http_client()
+
+
+def test_pause_without_wait_surfaces_a_request_timeout() -> None:
+    with respx.mock(assert_all_called=False) as router:
+        router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+            return_value=httpx.Response(200, json=_raw())
+        )
+        router.post(f"{API}/sandboxes/sbx-1/pause").mock(
+            side_effect=httpx.ReadTimeout("slow")
+        )
+        get = router.get(f"{API}/sandboxes/sbx-1").mock(
+            return_value=httpx.Response(200, json=_raw(status="paused"))
+        )
+        sbx = Sandbox.connect("sbx-1")
+        try:
+            with pytest.raises(SandboxTimeoutError):
+                sbx.pause()
+            assert get.call_count == 0
+        finally:
+            sbx._close_http_client()
+
+
+def test_pause_with_wait_returns_at_once_on_a_synchronous_204() -> None:
+    with respx.mock(assert_all_called=False) as router:
+        router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+            return_value=httpx.Response(200, json=_raw())
+        )
+        router.post(f"{API}/sandboxes/sbx-1/pause").mock(
+            return_value=httpx.Response(204)
+        )
+        get = router.get(f"{API}/sandboxes/sbx-1").mock(
+            return_value=httpx.Response(200, json=_raw(status="paused"))
+        )
+        sbx = Sandbox.connect("sbx-1")
+        try:
+            sbx.pause(wait=True)
+            assert get.call_count == 0
+        finally:
+            sbx._close_http_client()
+
+
+def test_resume_retries_at_once_when_the_conflict_check_sees_paused() -> None:
+    with respx.mock() as router:
+        router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+            return_value=httpx.Response(200, json=_raw())
+        )
+        resume = router.post(f"{API}/sandboxes/sbx-1/resume").mock(
+            side_effect=[
+                httpx.Response(409, json={"error": {"message": "pausing"}}),
+                httpx.Response(200, json=_raw(access_token="tok-2")),
+            ]
+        )
+        router.get(f"{API}/sandboxes/sbx-1").mock(
+            return_value=httpx.Response(200, json=_raw(status="paused"))
+        )
+        sbx = Sandbox.connect("sbx-1")
+        try:
+            sbx.resume(poll_interval_s=0.001)
+            assert resume.call_count == 2
+        finally:
+            sbx._close_http_client()

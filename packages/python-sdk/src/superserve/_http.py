@@ -7,9 +7,12 @@ connection pooling and retry logic for idempotent methods (GET, DELETE).
 from __future__ import annotations
 
 import asyncio
+from asyncio import TimeoutError as _AsyncTimeout
+from asyncio import wait_for as _wait_for
 import json as json_module
 import random
 import sys
+import threading
 import time
 from collections.abc import AsyncIterable, Callable, Iterable
 from email.utils import parsedate_to_datetime
@@ -20,12 +23,15 @@ import httpx
 from .errors import SandboxError, SandboxTimeoutError, ValidationError, map_api_error
 
 DEFAULT_TIMEOUT = 30.0
+# How long pause() waits, across every request it makes; each request still
+# gets the ordinary timeout.
+DEFAULT_PAUSE_TIMEOUT = 300.0
 
 DEFAULT_MAX_DOWNLOAD_BYTES = (
     2 * 1024 * 1024 * 1024
 )  # 2 GiB; matches boxd's server-side zip cap
 
-SDK_VERSION = "0.8.3"
+SDK_VERSION = "0.9.0"
 USER_AGENT = (
     f"superserve-python/{SDK_VERSION} "
     f"(python/{sys.version_info.major}.{sys.version_info.minor})"
@@ -144,6 +150,132 @@ async def _aread_capped(achunks: AsyncIterable[bytes], max_bytes: int) -> bytes:
 # ---------------------------------------------------------------------------
 
 
+class DeadlineExceeded(SandboxTimeoutError):
+    """The operation deadline passed while a request, retry wait, or response
+    was still in progress."""
+
+
+def _attempt_timeout(timeout: float, deadline: float | None) -> float:
+    """Per-attempt timeout that also stops at the operation deadline."""
+    if deadline is None:
+        return timeout
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise DeadlineExceeded("Operation deadline exceeded")
+    return min(timeout, remaining)
+
+
+def _retry_delay(delay: float, deadline: float | None) -> float:
+    """A retry wait that would end past the deadline is not worth starting."""
+    if deadline is not None and time.monotonic() + delay >= deadline:
+        raise DeadlineExceeded("Operation deadline exceeded")
+    return delay
+
+
+def _check_deadline(deadline: float | None) -> None:
+    if deadline is not None and time.monotonic() >= deadline:
+        raise DeadlineExceeded("Operation deadline exceeded")
+
+
+def _read_within(
+    client: httpx.Client,
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str],
+    json_body: Any | None,
+    timeout: float,
+    deadline: float | None,
+) -> httpx.Response:
+    """One attempt. With a deadline the whole exchange, headers and body, runs
+    on a worker and the caller waits only for what is left of the deadline:
+    the HTTP timeout bounds inactivity, not wall time, and a blocking read
+    cannot be interrupted. The worker is a daemon thread, so one that outlives
+    the deadline never pins the process; it winds down on its own read
+    timeout."""
+    if deadline is None:
+        return client.request(
+            method, url, headers=headers, json=json_body, timeout=timeout
+        )
+
+    def exchange() -> httpx.Response:
+        with client.stream(
+            method, url, headers=headers, json=json_body, timeout=timeout
+        ) as streamed:
+            parts: list[bytes] = []
+            for chunk in streamed.iter_bytes():
+                parts.append(chunk)
+                _check_deadline(deadline)
+            return httpx.Response(
+                streamed.status_code,
+                headers=streamed.headers,
+                content=b"".join(parts),
+                request=streamed.request,
+            )
+
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise DeadlineExceeded("Operation deadline exceeded")
+    outcome: list[httpx.Response | Exception] = []
+
+    def run() -> None:
+        try:
+            outcome.append(exchange())
+        except Exception as exc:
+            outcome.append(exc)
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    worker.join(remaining)
+    if not outcome:
+        raise DeadlineExceeded("Operation deadline exceeded")
+    result = outcome[0]
+    if isinstance(result, Exception):
+        raise result
+    return result
+
+
+async def _async_read_within(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str],
+    json_body: Any | None,
+    timeout: float,
+    deadline: float | None,
+) -> httpx.Response:
+    """Async variant of ``_read_within``: the whole exchange runs under one
+    wall-clock wait and is cancelled at the deadline."""
+    if deadline is None:
+        return await client.request(
+            method, url, headers=headers, json=json_body, timeout=timeout
+        )
+
+    async def exchange() -> httpx.Response:
+        async with client.stream(
+            method, url, headers=headers, json=json_body, timeout=timeout
+        ) as streamed:
+            parts: list[bytes] = []
+            async for chunk in streamed.aiter_bytes():
+                parts.append(chunk)
+                _check_deadline(deadline)
+            return httpx.Response(
+                streamed.status_code,
+                headers=streamed.headers,
+                content=b"".join(parts),
+                request=streamed.request,
+            )
+
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise DeadlineExceeded("Operation deadline exceeded")
+    try:
+        return await _wait_for(exchange(), remaining)
+    except _AsyncTimeout as exc:
+        raise DeadlineExceeded("Operation deadline exceeded") from exc
+
+
 def _do_request_with_retry(
     method: str,
     url: str,
@@ -151,15 +283,20 @@ def _do_request_with_retry(
     headers: dict[str, str],
     json_body: Any | None = None,
     timeout: float = DEFAULT_TIMEOUT,
+    budget: float | None = None,
     client: httpx.Client | None = None,
     retry_conflict: bool = False,
 ) -> httpx.Response:
     """Perform an HTTP request with retry for idempotent methods.
 
+    ``budget`` (seconds) bounds the whole call: every attempt, every retry
+    wait, and the response itself.
+
     Retries on 429/502/503/504 and on transient connection errors
     (``httpx.ConnectError``, ``httpx.ReadError``, ``httpx.RemoteProtocolError``).
     Never retries non-idempotent methods.
     """
+    deadline = None if budget is None else time.monotonic() + budget
     owned = client is None
     if owned:
         client = httpx.Client(timeout=timeout)
@@ -171,17 +308,21 @@ def _do_request_with_retry(
     try:
         max_attempts = _MAX_ATTEMPTS
         for attempt in range(_CONFLICT_MAX_ATTEMPTS):
+            attempt_timeout = _attempt_timeout(timeout, deadline)
             try:
-                response = client.request(
+                response = _read_within(
+                    client,
                     method_upper,
                     url,
                     headers=headers,
-                    json=json_body,
-                    timeout=timeout,
+                    json_body=json_body,
+                    timeout=attempt_timeout,
+                    deadline=deadline,
                 )
             except httpx.TimeoutException as exc:
+                _check_deadline(deadline)
                 raise SandboxTimeoutError(
-                    f"Request timed out after {timeout}s"
+                    f"Request timed out after {attempt_timeout}s"
                 ) from exc
             except _RETRY_CONNECTION_EXCEPTIONS as exc:
                 last_exc = exc
@@ -190,7 +331,7 @@ def _do_request_with_retry(
                     or attempt >= max_attempts - 1
                 ):
                     raise SandboxError(f"Network error: {exc}") from exc
-                time.sleep(_compute_backoff(attempt))
+                time.sleep(_retry_delay(_compute_backoff(attempt), deadline))
                 continue
             except httpx.HTTPError as exc:
                 raise SandboxError(f"Network error: {exc}") from exc
@@ -198,9 +339,9 @@ def _do_request_with_retry(
             if response.status_code == 409 and retry_conflict:
                 max_attempts = _CONFLICT_MAX_ATTEMPTS
 
-            is_retryable = _should_retry_status(
-                method_upper, response.status_code
-            ) or (response.status_code == 409 and retry_conflict)
+            is_retryable = _should_retry_status(method_upper, response.status_code) or (
+                response.status_code == 409 and retry_conflict
+            )
 
             if is_retryable and attempt < max_attempts - 1:
                 delay: float
@@ -216,10 +357,12 @@ def _do_request_with_retry(
                 else:
                     delay = _compute_backoff(attempt)
                 response.close()
+                delay = _retry_delay(delay, deadline)
                 if delay > 0:
                     time.sleep(delay)
                 continue
 
+            _check_deadline(deadline)
             return response
 
         # Should not reach here unless all attempts failed to a connection error
@@ -238,6 +381,7 @@ def api_request(
     headers: dict[str, str],
     json_body: Any | None = None,
     timeout: float = DEFAULT_TIMEOUT,
+    budget: float | None = None,
     client: httpx.Client | None = None,
     retry_conflict: bool = False,
 ) -> Any:
@@ -249,6 +393,7 @@ def api_request(
         headers=merged,
         json_body=json_body,
         timeout=timeout,
+        budget=budget,
         client=client,
         retry_conflict=retry_conflict,
     )
@@ -435,10 +580,12 @@ async def _async_do_request_with_retry(
     headers: dict[str, str],
     json_body: Any | None = None,
     timeout: float = DEFAULT_TIMEOUT,
+    budget: float | None = None,
     client: httpx.AsyncClient | None = None,
     retry_conflict: bool = False,
 ) -> httpx.Response:
     """Async variant of ``_do_request_with_retry``."""
+    deadline = None if budget is None else time.monotonic() + budget
     owned = client is None
     if owned:
         client = httpx.AsyncClient(timeout=timeout)
@@ -450,17 +597,21 @@ async def _async_do_request_with_retry(
     try:
         max_attempts = _MAX_ATTEMPTS
         for attempt in range(_CONFLICT_MAX_ATTEMPTS):
+            attempt_timeout = _attempt_timeout(timeout, deadline)
             try:
-                response = await client.request(
+                response = await _async_read_within(
+                    client,
                     method_upper,
                     url,
                     headers=headers,
-                    json=json_body,
-                    timeout=timeout,
+                    json_body=json_body,
+                    timeout=attempt_timeout,
+                    deadline=deadline,
                 )
             except httpx.TimeoutException as exc:
+                _check_deadline(deadline)
                 raise SandboxTimeoutError(
-                    f"Request timed out after {timeout}s"
+                    f"Request timed out after {attempt_timeout}s"
                 ) from exc
             except _RETRY_CONNECTION_EXCEPTIONS as exc:
                 last_exc = exc
@@ -469,7 +620,7 @@ async def _async_do_request_with_retry(
                     or attempt >= max_attempts - 1
                 ):
                     raise SandboxError(f"Network error: {exc}") from exc
-                await asyncio.sleep(_compute_backoff(attempt))
+                await asyncio.sleep(_retry_delay(_compute_backoff(attempt), deadline))
                 continue
             except httpx.HTTPError as exc:
                 raise SandboxError(f"Network error: {exc}") from exc
@@ -477,9 +628,9 @@ async def _async_do_request_with_retry(
             if response.status_code == 409 and retry_conflict:
                 max_attempts = _CONFLICT_MAX_ATTEMPTS
 
-            is_retryable = _should_retry_status(
-                method_upper, response.status_code
-            ) or (response.status_code == 409 and retry_conflict)
+            is_retryable = _should_retry_status(method_upper, response.status_code) or (
+                response.status_code == 409 and retry_conflict
+            )
 
             if is_retryable and attempt < max_attempts - 1:
                 delay: float
@@ -495,10 +646,12 @@ async def _async_do_request_with_retry(
                 else:
                     delay = _compute_backoff(attempt)
                 await response.aclose()
+                delay = _retry_delay(delay, deadline)
                 if delay > 0:
                     await asyncio.sleep(delay)
                 continue
 
+            _check_deadline(deadline)
             return response
 
         if last_exc is not None:
@@ -516,6 +669,7 @@ async def async_api_request(
     headers: dict[str, str],
     json_body: Any | None = None,
     timeout: float = DEFAULT_TIMEOUT,
+    budget: float | None = None,
     client: httpx.AsyncClient | None = None,
     retry_conflict: bool = False,
 ) -> Any:
@@ -527,6 +681,7 @@ async def async_api_request(
         headers=merged,
         json_body=json_body,
         timeout=timeout,
+        budget=budget,
         client=client,
         retry_conflict=retry_conflict,
     )

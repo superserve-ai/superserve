@@ -209,7 +209,7 @@ async function recycle(info) {
   }
   if (config.hibernate) {
     console.log(`monitor: pausing sandbox=${info.id} ${detail}`)
-    await sandbox.pause()
+    await sandbox.pause({ wait: true })
     // The paused sandbox is reusable again; drop the ownership marker. Merge
     // into the metadata as it is now, not the pre-pause snapshot: a spawn
     // that overlapped the pause may have retagged this sandbox meanwhile.
