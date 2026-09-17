@@ -4,7 +4,7 @@ import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react"
 import { Button, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useState } from "react"
 
@@ -21,13 +21,16 @@ function SignInContent() {
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const router = useRouter()
   const searchParams = useSearchParams()
   const posthog = usePostHog()
 
   const rawNext = searchParams.get("next") || "/"
   const nextUrl =
-    rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/"
+    rawNext.startsWith("/") &&
+    !rawNext.startsWith("//") &&
+    !/[\\\u0000-\u0020\u007f]/.test(rawNext)
+      ? rawNext
+      : "/"
 
   useEffect(() => {
     const checkUser = async () => {
@@ -44,13 +47,13 @@ function SignInContent() {
           await supabase.auth.signOut()
           return
         }
-        if (user) router.push(nextUrl)
+        if (user) window.location.replace(nextUrl)
       } catch {
         // Network error: leave the session alone.
       }
     }
     checkUser()
-  }, [router, nextUrl])
+  }, [nextUrl])
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -85,7 +88,8 @@ function SignInContent() {
         return
       }
       posthog.capture(AUTH_EVENTS.SIGN_IN_COMPLETED, { method: "email" })
-      router.push(nextUrl)
+      // Discard routes prefetched before the session cookies were set.
+      window.location.replace(nextUrl)
     } catch {
       setErrors({ form: "Error signing in. Please try again." })
     } finally {

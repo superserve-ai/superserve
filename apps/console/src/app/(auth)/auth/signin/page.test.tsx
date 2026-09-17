@@ -64,11 +64,10 @@ vi.mock("next/image", () => ({
   }) => <img alt={alt} src={src} />,
 }))
 
-const mockPush = vi.fn()
+let mockReplace: ReturnType<typeof vi.spyOn>
 let searchParamsMap: Record<string, string> = {}
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
   useSearchParams: () => ({
     get: (key: string) => searchParamsMap[key] ?? null,
   }),
@@ -111,7 +110,9 @@ describe("SignInPage", () => {
   const user = userEvent.setup()
 
   beforeEach(() => {
-    mockPush.mockReset()
+    mockReplace = vi
+      .spyOn(window.location, "replace")
+      .mockImplementation(() => {})
     mockSignInWithPassword.mockReset()
     mockSignInWithOAuth.mockReset()
     mockSignOut.mockReset()
@@ -174,12 +175,12 @@ describe("SignInPage", () => {
         email: "test@test.com",
         password: "password123",
       })
-      expect(mockPush).toHaveBeenCalledWith("/")
+      expect(mockReplace).toHaveBeenCalledWith("/")
     })
   })
 
   it("redirects to next URL after successful login", async () => {
-    searchParamsMap = { next: "/sandboxes" }
+    searchParamsMap = { next: "/sandboxes?view=active#list" }
     mockSignInWithPassword.mockResolvedValue({ error: null })
     render(<SignInPage />)
 
@@ -191,8 +192,27 @@ describe("SignInPage", () => {
     await user.click(screen.getByRole("button", { name: "Sign In" }))
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith("/sandboxes")
+      expect(mockReplace).toHaveBeenCalledWith("/sandboxes?view=active#list")
     })
+  })
+
+  it.each([
+    "https://example.com/",
+    "//example.com/",
+    "/\\example.com/",
+    "/\t/example.com/",
+    "javascript:alert(1)",
+  ])("rejects unsafe next destination %j", async (next) => {
+    searchParamsMap = { next }
+    mockSignInWithPassword.mockResolvedValue({ error: null })
+    render(<SignInPage />)
+    await user.type(
+      await screen.findByPlaceholderText("Email"),
+      "test@test.com",
+    )
+    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.click(screen.getByRole("button", { name: "Sign In" }))
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"))
   })
 
   it("shows invalid-credentials inline error on wrong password", async () => {
@@ -211,6 +231,7 @@ describe("SignInPage", () => {
     expect(
       await screen.findByText("Invalid email or password."),
     ).toBeInTheDocument()
+    expect(mockReplace).not.toHaveBeenCalled()
   })
 
   it("shows email-not-confirmed inline error", async () => {
@@ -283,7 +304,7 @@ describe("SignInPage", () => {
     render(<SignInPage />)
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith("/")
+      expect(mockReplace).toHaveBeenCalledWith("/")
     })
   })
 
