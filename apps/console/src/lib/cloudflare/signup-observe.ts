@@ -43,20 +43,11 @@ export async function isCloudflareSignupObservationEnabled(): Promise<boolean> {
   return (await flagState()) === true
 }
 
-function safeSignals(value: unknown): Record<string, unknown> {
-  if (!record(value)) return {}
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([key, val]) =>
-        /token|secret|cookie|authorization|password|credential/i.test(key)
-          ? false
-          : ["string", "number", "boolean"].includes(typeof val),
-      )
-      .slice(0, 40),
-  )
-}
+const stringValue = (value: unknown): string | null =>
+  typeof value === "string" && value.trim().length > 0 ? value : null
 
 function siteverifyOutcome(data: Record<string, unknown>): string {
+  if (typeof data.success !== "boolean") return "malformed"
   if (data.success === true) return "success"
   const codes = Array.isArray(data["error-codes"]) ? data["error-codes"] : []
   const providerCodes = new Set([
@@ -71,7 +62,18 @@ function siteverifyOutcome(data: Record<string, unknown>): string {
     : "rejected"
 }
 
-export async function observeCloudflareSignup({
+export async function observeCloudflareSignup(
+  observation: CloudflareSignupObservation,
+): Promise<void> {
+  try {
+    await collectCloudflareSignup(observation)
+  } catch {
+    // Telemetry failures must not escape the deferred signup callback.
+    // Do not log thrown errors: provider/transport errors may contain secrets.
+  }
+}
+
+async function collectCloudflareSignup({
   signupAttemptId,
   signupMethod,
   userId = null,
@@ -88,6 +90,9 @@ export async function observeCloudflareSignup({
     .map((value) => value.trim())
     .filter(Boolean)
     .slice(0, 20)
+  // Activation is an operator declaration for this version, never inferred
+  // from a response containing an ID.
+  const ephemeralIdExpected = capabilities.includes("ephemeral_id")
   const enabled = await flagState()
   if (enabled === null) {
     await trackEvent(
@@ -98,6 +103,8 @@ export async function observeCloudflareSignup({
         signup_attempt_id: signupAttemptId,
         signup_method: signupMethod,
         provider_outcome: "configuration_lookup_failed",
+        capabilities,
+        ephemeral_id_expected: ephemeralIdExpected,
         config_version: configVersion,
         observed_at: new Date().toISOString(),
       },
@@ -141,18 +148,33 @@ export async function observeCloudflareSignup({
       outcome =
         error instanceof Error && error.name === "TimeoutError"
           ? "timeout"
-          : "error"
+          : error instanceof SyntaxError
+            ? "malformed"
+            : "error"
     }
   }
 
   const metadata = record(responseData.metadata) ? responseData.metadata : {}
+  const invalidMetadata =
+    responseData.metadata !== undefined && !record(responseData.metadata)
+  const ephemeralId = stringValue(metadata.ephemeral_id)
+  const signalStatus =
+    outcome !== "success"
+      ? "unavailable"
+      : invalidMetadata ||
+          (metadata.ephemeral_id != null && ephemeralId === null)
+        ? "malformed_response"
+        : ephemeralId !== null
+          ? "success"
+          : ephemeralIdExpected
+            ? "missing_expected_signal"
+            : "not_active"
   console.info("Cloudflare signup observation outcome", {
     signup_attempt_id: signupAttemptId,
     provider_outcome: outcome,
     success:
       typeof responseData.success === "boolean" ? responseData.success : null,
-    hostname:
-      typeof responseData.hostname === "string" ? responseData.hostname : null,
+    ephemeral_id_status: signalStatus,
     provider_latency_ms: Date.now() - started,
   })
   await trackEvent(
@@ -162,15 +184,22 @@ export async function observeCloudflareSignup({
       provider: "cloudflare",
       signup_attempt_id: signupAttemptId,
       provider_request_id:
-        responseData.request_id ?? responseData.event_id ?? null,
-      challenge_timestamp: responseData.challenge_ts ?? null,
-      action: responseData.action ?? null,
-      hostname: responseData.hostname ?? null,
-      cdata: responseData.cdata ?? null,
-      ephemeral_id: metadata.ephemeral_id ?? null,
-      success: responseData.success ?? null,
+        stringValue(responseData.request_id) ??
+        stringValue(responseData.event_id),
+      challenge_timestamp: stringValue(responseData.challenge_ts),
+      action: stringValue(responseData.action),
+      hostname: stringValue(responseData.hostname),
+      cdata: stringValue(responseData.cdata),
+      ephemeral_id: ephemeralId,
+      ephemeral_id_present: ephemeralId !== null,
+      ephemeral_id_expected: ephemeralIdExpected,
+      ephemeral_id_status: signalStatus,
+      success:
+        typeof responseData.success === "boolean" ? responseData.success : null,
       error_codes: Array.isArray(responseData["error-codes"])
-        ? responseData["error-codes"].slice(0, 20)
+        ? responseData["error-codes"]
+            .filter((code) => typeof code === "string")
+            .slice(0, 20)
         : [],
       capabilities,
       config_version: configVersion,
@@ -179,7 +208,18 @@ export async function observeCloudflareSignup({
       team_id: teamId,
       provider_latency_ms: Date.now() - started,
       provider_outcome: outcome,
-      provider_signals: safeSignals(responseData),
+      // Only retain known Siteverify fields; arbitrary response properties can
+      // contain sensitive data even when their names look innocuous.
+      provider_signals: {
+        success:
+          typeof responseData.success === "boolean"
+            ? responseData.success
+            : null,
+        challenge_ts: stringValue(responseData.challenge_ts),
+        action: stringValue(responseData.action),
+        hostname: stringValue(responseData.hostname),
+        cdata: stringValue(responseData.cdata),
+      },
       observed_at: new Date().toISOString(),
     },
   )

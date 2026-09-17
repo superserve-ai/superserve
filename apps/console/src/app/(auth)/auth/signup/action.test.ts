@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mock dependencies before importing the action
 const mockGenerateLink = vi.fn()
+const mockCloudflareFlagRpc = vi.fn()
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
+    rpc: mockCloudflareFlagRpc,
     auth: {
       admin: {
         generateLink: mockGenerateLink,
@@ -65,6 +67,9 @@ vi.mock("@/lib/posthog/events", () => ({
     GOOGLE_SIGNUP_CAPTCHA_VERIFIED: "auth_google_signup_captcha_verified",
     SIGNUP_ATTEMPT_ASSOCIATED: "auth_signup_attempt_associated",
     SIGNUP_RECAPTCHA_OBSERVED: "auth_signup_recaptcha_observed",
+    CLOUDFLARE_SIGNUP_OBSERVED: "auth_cloudflare_signup_observed",
+    CLOUDFLARE_SIGNUP_OBSERVATION_FAILED:
+      "auth_cloudflare_signup_observation_failed",
   },
 }))
 
@@ -85,8 +90,9 @@ vi.mock("next/headers", () => ({
   }),
 }))
 
+const mockAfter = vi.fn()
 vi.mock("next/server", () => ({
-  after: (callback: () => void | Promise<void>) => callback(),
+  after: (callback: () => void | Promise<void>) => mockAfter(callback),
 }))
 
 import { beginGoogleSignup, signUpWithEmail } from "./action"
@@ -102,8 +108,118 @@ const ORIGINAL_RECAPTCHA_ENV = {
   NEXT_PUBLIC_RECAPTCHA_SITE_KEY: process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY,
 }
 
+describe("post-trial signup with the real Cloudflare observer", () => {
+  beforeEach(async () => {
+    const { observeCloudflareSignup } = await vi.importActual<
+      typeof import("@/lib/cloudflare/signup-observe")
+    >("@/lib/cloudflare/signup-observe")
+    mockObserveCloudflareSignup
+      .mockReset()
+      .mockImplementation(observeCloudflareSignup)
+    mockCloudflareFlagRpc
+      .mockReset()
+      .mockResolvedValue({ data: true, error: null })
+    mockGenerateLink.mockReset().mockResolvedValue({
+      data: { properties: { hashed_token: "abc123" } },
+      error: null,
+    })
+    mockSendEmail.mockReset().mockResolvedValue({ success: true })
+    mockSlack.mockReset().mockResolvedValue(undefined)
+    mockVerifyRecaptcha.mockReset().mockResolvedValue({ verified: true })
+    mockIssueGoogleSignupProof.mockReset().mockResolvedValue(undefined)
+    mockTrackEvent.mockReset().mockResolvedValue(undefined)
+    fingerprintSignupEventId = undefined
+    vi.stubEnv("CLOUDFLARE_TURNSTILE_SECRET_KEY", "fixture-secret")
+    vi.stubEnv("CLOUDFLARE_SIGNUP_CAPABILITIES", "turnstile_free,ephemeral_id")
+    vi.stubEnv("CLOUDFLARE_SIGNUP_CONFIG_VERSION", "ss-560-expiry-simulation")
+    vi.spyOn(console, "info").mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.restoreAllMocks()
+  })
+
+  describe.each(["email", "google"] as const)("%s", (method) => {
+    it.each([
+      ["missing field", 200, "success", "missing_expected_signal"],
+      ["entitlement rejected", 403, "http_403", "unavailable"],
+    ] as const)(
+      "preserves signup after %s without changing active configuration",
+      async (_scenario, status, outcome, signalStatus) => {
+        const callbacks: Array<() => void | Promise<void>> = []
+        mockAfter.mockReset().mockImplementation((callback) => {
+          callbacks.push(callback)
+        })
+        const fetchSpy = vi
+          .spyOn(globalThis, "fetch")
+          .mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                success: true,
+                metadata: { ephemeral_id: "fixture-native-id" },
+              }),
+            ),
+          )
+          .mockResolvedValueOnce(
+            new Response(JSON.stringify({ success: true }), { status }),
+          )
+
+        for (const expired of [false, true]) {
+          const result =
+            method === "email"
+              ? await signUpWithEmail(
+                  "user@test.com",
+                  "password123",
+                  "Test User",
+                  "recaptcha-token",
+                  "turnstile-token",
+                )
+              : await beginGoogleSignup("recaptcha-token", "turnstile-token")
+          expect(result.success).toBe(true)
+          expect(callbacks).toHaveLength(1)
+          await expect(
+            Promise.resolve(callbacks.shift()!()),
+          ).resolves.toBeUndefined()
+          const attemptId =
+            mockObserveCloudflareSignup.mock.lastCall![0].signupAttemptId
+          expect(mockTrackEvent).toHaveBeenCalledWith(
+            "auth_signup_recaptcha_observed",
+            attemptId,
+            expect.objectContaining({ signup_attempt_id: attemptId }),
+          )
+          expect(mockTrackEvent).toHaveBeenCalledWith(
+            "auth_cloudflare_signup_observed",
+            expect.any(String),
+            expect.objectContaining({
+              signup_attempt_id: attemptId,
+              signup_method: method,
+              config_version: "ss-560-expiry-simulation",
+              capabilities: ["turnstile_free", "ephemeral_id"],
+              ephemeral_id_expected: true,
+              ephemeral_id: expired ? null : "fixture-native-id",
+              ephemeral_id_status: expired ? signalStatus : "success",
+              provider_outcome: expired ? outcome : "success",
+            }),
+          )
+        }
+        expect(fetchSpy).toHaveBeenCalledTimes(2)
+        expect(mockVerifyRecaptcha).toHaveBeenCalledTimes(2)
+        expect(mockGenerateLink).toHaveBeenCalledTimes(
+          method === "email" ? 2 : 0,
+        )
+        expect(mockSendEmail).toHaveBeenCalledTimes(method === "email" ? 2 : 0)
+        expect(mockIssueGoogleSignupProof).toHaveBeenCalledTimes(
+          method === "google" ? 2 : 0,
+        )
+      },
+    )
+  })
+})
+
 describe("signUpWithEmail", () => {
   beforeEach(() => {
+    mockAfter.mockReset().mockImplementation((callback) => callback())
     mockGenerateLink.mockReset()
     mockSendEmail.mockReset()
     mockSlack.mockReset().mockResolvedValue(undefined)
@@ -249,7 +365,59 @@ describe("signUpWithEmail", () => {
     expect(cloudflareCalls[0].signupAttemptId).not.toBe(
       cloudflareCalls[1].signupAttemptId,
     )
+    for (const [index, { signupAttemptId }] of cloudflareCalls.entries()) {
+      expect(mockObserveFingerprintSignup).toHaveBeenNthCalledWith(
+        index + 1,
+        expect.objectContaining({ signupAttemptId }),
+      )
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        "auth_signup_recaptcha_observed",
+        signupAttemptId,
+        expect.objectContaining({ signup_attempt_id: signupAttemptId }),
+      )
+    }
   })
+
+  it.each([true, false])(
+    "preserves email signup with reCAPTCHA verified=%s when Cloudflare scheduling throws",
+    async (verified) => {
+      mockAfter.mockImplementationOnce(() => {
+        throw new Error("Request lifecycle unavailable")
+      })
+      mockVerifyRecaptcha.mockResolvedValue({ verified, reason: "low_score" })
+      mockGenerateLink.mockResolvedValue({
+        data: { properties: { hashed_token: "abc123" } },
+        error: null,
+      })
+      mockSendEmail.mockResolvedValue({ success: true })
+
+      const result = await signUpWithEmail(
+        "user@test.com",
+        "password123",
+        "Test User",
+        "recaptcha-token",
+        "turnstile-token",
+      )
+
+      expect(mockAfter).toHaveBeenCalledTimes(1)
+      expect(mockObserveCloudflareSignup).not.toHaveBeenCalled()
+      expect(mockVerifyRecaptcha).toHaveBeenCalledWith(
+        "recaptcha-token",
+        "signup",
+      )
+      expect(result).toEqual(
+        verified
+          ? { success: true }
+          : {
+              success: false,
+              error: "We couldn't verify you're human. Please try again.",
+              errorCode: "captcha_failed",
+            },
+      )
+      expect(mockGenerateLink).toHaveBeenCalledTimes(verified ? 1 : 0)
+      expect(mockSendEmail).toHaveBeenCalledTimes(verified ? 1 : 0)
+    },
+  )
 
   it("returns error when email is already registered", async () => {
     mockGenerateLink.mockResolvedValue({
@@ -339,6 +507,8 @@ describe("signUpWithEmail", () => {
 
 describe("beginGoogleSignup", () => {
   beforeEach(() => {
+    mockAfter.mockReset().mockImplementation((callback) => callback())
+    mockObserveCloudflareSignup.mockReset().mockResolvedValue(undefined)
     mockVerifyRecaptcha.mockReset().mockResolvedValue({ verified: true })
     mockIssueGoogleSignupProof.mockReset().mockResolvedValue(undefined)
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
@@ -348,7 +518,7 @@ describe("beginGoogleSignup", () => {
   })
 
   it("verifies signup_google before issuing a proof", async () => {
-    const result = await beginGoogleSignup("google-token")
+    const result = await beginGoogleSignup("google-token", "turnstile-token")
 
     expect(result).toEqual({
       success: true,
@@ -359,12 +529,55 @@ describe("beginGoogleSignup", () => {
       "signup_google",
     )
     expect(mockIssueGoogleSignupProof).toHaveBeenCalled()
+    if (!result.success) throw new Error("Expected Google signup to succeed")
+    expect(mockAfter).toHaveBeenCalledTimes(1)
+    expect(mockObserveCloudflareSignup).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        signupAttemptId: result.signupAttemptId,
+        signupMethod: "google",
+        turnstileToken: "turnstile-token",
+      }),
+    )
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_signup_recaptcha_observed",
+      result.signupAttemptId,
+      expect.objectContaining({ signup_attempt_id: result.signupAttemptId }),
+    )
     expect(mockTrackEvent).toHaveBeenCalledWith(
       "auth_google_signup_captcha_verified",
       expect.any(String),
       { stage: "captcha_verification" },
     )
   })
+
+  it.each([true, false])(
+    "preserves Google signup with reCAPTCHA verified=%s when Cloudflare scheduling throws",
+    async (verified) => {
+      mockAfter.mockImplementationOnce(() => {
+        throw new Error("Request lifecycle unavailable")
+      })
+      mockVerifyRecaptcha.mockResolvedValue({ verified, reason: "low_score" })
+
+      const result = await beginGoogleSignup("google-token", "turnstile-token")
+
+      expect(mockAfter).toHaveBeenCalledTimes(1)
+      expect(mockObserveCloudflareSignup).not.toHaveBeenCalled()
+      expect(mockVerifyRecaptcha).toHaveBeenCalledWith(
+        "google-token",
+        "signup_google",
+      )
+      expect(result).toEqual(
+        verified
+          ? { success: true, signupAttemptId: expect.any(String) }
+          : {
+              success: false,
+              error: "We couldn't verify you're human. Please try again.",
+              errorCode: "captcha_failed",
+            },
+      )
+      expect(mockIssueGoogleSignupProof).toHaveBeenCalledTimes(verified ? 1 : 0)
+    },
+  )
 
   it("retains the fingerprint cookie for callback-side observation", async () => {
     fingerprintSignupEventId = encodeURIComponent("event-456")
