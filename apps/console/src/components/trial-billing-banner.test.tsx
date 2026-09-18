@@ -10,6 +10,11 @@ const mocks = vi.hoisted(() => ({
   summary: vi.fn(),
   payment: vi.fn(),
   context: vi.fn(),
+  toast: vi.fn(),
+}))
+vi.mock("@superserve/ui", async () => ({
+  ...(await vi.importActual<typeof import("@superserve/ui")>("@superserve/ui")),
+  useToast: () => ({ addToast: mocks.toast }),
 }))
 vi.mock("@/hooks/use-billing-summary", () => ({
   useBillingSummary: mocks.summary,
@@ -20,7 +25,9 @@ vi.mock("@/hooks/use-billing-payment", () => ({
 vi.mock("@/hooks/use-billing-context", () => ({
   useBillingContext: mocks.context,
 }))
-vi.mock("next/navigation", () => ({ usePathname: () => "/sandboxes/" }))
+vi.mock("next/navigation", () => ({
+  usePathname: () => window.location.pathname,
+}))
 
 function summary(overrides: Partial<BillingSummaryResponse> = {}) {
   return {
@@ -43,6 +50,7 @@ function mount() {
 }
 
 beforeEach(() => {
+  mocks.toast.mockClear()
   mocks.summary.mockReturnValue({ data: summary(), isError: false })
   mocks.context.mockReturnValue({ teamKey: "use:a", ready: true })
   mocks.payment.mockReturnValue({
@@ -237,6 +245,62 @@ describe("TrialBillingBanner", () => {
     )
     expect(screen.queryByRole("status")).not.toBeInTheDocument()
   })
+
+  it.each([
+    [
+      "success",
+      "Returned from Stripe. Billing status is refreshing against the latest server state.",
+      "info",
+    ],
+    [
+      "cancel",
+      "Billing flow canceled. You can reopen billing setup any time.",
+      "warning",
+    ],
+    [
+      "portal-return",
+      "Billing portal closed. Billing status is refreshing against the latest server state.",
+      "info",
+    ],
+  ])(
+    "consumes %s outside billing once even when the trial is hidden",
+    (state, message, variant) => {
+      mocks.summary.mockReturnValue({
+        data: summary({ trial: { state: "ended_by_billing_activation" } }),
+      })
+      window.history.replaceState(
+        { navigation: "preserved" },
+        "",
+        `/sandboxes/?tab=one&billing=${state}#details`,
+      )
+      const first = mount()
+      expect(first.invalidate).toHaveBeenCalledTimes(1)
+      expect(first.invalidate).toHaveBeenCalledWith({ queryKey: ["billing"] })
+      expect(mocks.toast).toHaveBeenCalledTimes(1)
+      expect(mocks.toast).toHaveBeenCalledWith(message, variant)
+      expect(
+        window.location.pathname +
+          window.location.search +
+          window.location.hash,
+      ).toBe("/sandboxes/?tab=one#details")
+      expect(window.history.state).toEqual({ navigation: "preserved" })
+      first.unmount()
+      const second = mount()
+      expect(second.invalidate).not.toHaveBeenCalled()
+      expect(mocks.toast).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it.each(["/plan-usage", "/plan-usage/"])(
+    "leaves return handling to the billing page on %s",
+    (path) => {
+      window.history.replaceState({}, "", `${path}?billing=cancel`)
+      const { invalidate } = mount()
+      expect(window.location.search).toBe("?billing=cancel")
+      expect(invalidate).not.toHaveBeenCalled()
+      expect(mocks.toast).not.toHaveBeenCalled()
+    },
+  )
 
   it("hides cached data while the team switch is pending", () => {
     mocks.context.mockReturnValue({ teamKey: "use:b", ready: false })
