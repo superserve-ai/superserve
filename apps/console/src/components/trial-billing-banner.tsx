@@ -134,13 +134,14 @@ export function TrialBillingBanner() {
         {exhausted ? (
           <>
             Your free trial credit has run out. Add a payment method to unlock{" "}
-            <strong>$95 in credits</strong> and restore sandbox access.
+            <strong>$95 in credits</strong> and continue running sandboxes.
           </>
         ) : urgent ? (
           <>
             Based on your recent usage, your trial credit may run out within the
-            next 24 hours. Add a payment method to unlock{" "}
-            <strong>$95 in credits</strong> and keep your sandboxes running.
+            next 24 hours, and any running sandboxes will automatically be
+            stopped. Add a payment method to unlock{" "}
+            <strong>$95 in credits</strong> and continue running sandboxes.
           </>
         ) : (
           <>

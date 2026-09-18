@@ -125,7 +125,7 @@ describe("TrialBillingBanner", () => {
     mount()
     expect(screen.getByRole("status")).toHaveClass("bg-red-100")
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Your free trial credit has run out. Add a payment method to unlock $95 in credits and restore sandbox access.",
+      "Your free trial credit has run out. Add a payment method to unlock $95 in credits and continue running sandboxes.",
     )
     expect(screen.getByRole("status")).not.toHaveTextContent(
       /paused|delet|7.day/i,
@@ -193,7 +193,7 @@ describe("TrialBillingBanner", () => {
     const { client, rerender } = mount()
     expect(screen.getByRole("status")).toHaveClass("bg-red-100")
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Based on your recent usage, your trial credit may run out within the next 24 hours. Add a payment method to unlock $95 in credits and keep your sandboxes running.",
+      "Based on your recent usage, your trial credit may run out within the next 24 hours, and any running sandboxes will automatically be stopped. Add a payment method to unlock $95 in credits and continue running sandboxes.",
     )
 
     mocks.summary.mockReturnValue({
