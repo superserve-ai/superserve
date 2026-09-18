@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { BillingSummaryResponse } from "@/lib/api/billing"
@@ -100,7 +100,7 @@ vi.mock("@superserve/ui", async () => {
   }
 })
 
-function renderSection() {
+function renderSection(summary = baseSummary) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -113,7 +113,7 @@ function renderSection() {
         teamId="team-1"
         teamRegion="use"
         teamName="Pilot Team"
-        summary={baseSummary}
+        summary={summary}
       />
     </QueryClientProvider>,
   )
@@ -183,6 +183,58 @@ describe("CustomerBillingSection", () => {
 
     expect(screen.getByRole("button", { name: /loading/i })).toBeDisabled()
   })
+
+  it.each([
+    { portalAvailable: false, label: "Set Up Billing" },
+    { portalAvailable: true, label: "Open Customer Portal" },
+  ])(
+    "opens the shared payment flow from $label",
+    async ({ portalAvailable, label }) => {
+      const request = portalAvailable
+        ? createStripeCustomerPortalSession
+        : createStripeCheckoutSession
+      let reject!: (reason: Error) => void
+      request.mockReturnValueOnce(
+        new Promise((_resolve, rej) => {
+          reject = rej
+        }),
+      )
+      renderSection({ ...baseSummary, portal_available: portalAvailable })
+
+      const button = screen.getByRole("button", { name: label })
+      expect(button).toBeEnabled()
+      fireEvent.click(button)
+      expect(request).toHaveBeenCalledTimes(1)
+      const returnUrl = new URL(window.location.href)
+      if (portalAvailable) {
+        returnUrl.searchParams.set("billing", "portal-return")
+        expect(request).toHaveBeenCalledWith({
+          returnUrl: returnUrl.toString(),
+        })
+        expect(createStripeCheckoutSession).not.toHaveBeenCalled()
+      } else {
+        const cancelUrl = new URL(returnUrl)
+        returnUrl.searchParams.set("billing", "success")
+        cancelUrl.searchParams.set("billing", "cancel")
+        expect(request).toHaveBeenCalledWith({
+          successUrl: returnUrl.toString(),
+          cancelUrl: cancelUrl.toString(),
+        })
+        expect(createStripeCustomerPortalSession).not.toHaveBeenCalled()
+      }
+      expect(screen.getByRole("button", { name: /loading/i })).toBeDisabled()
+      fireEvent.click(button)
+      expect(request).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        reject(new Error("Stripe unavailable"))
+      })
+      await waitFor(() => {
+        expect(addToast).toHaveBeenCalledWith("Stripe unavailable", "error")
+        expect(screen.getByRole("button", { name: label })).toBeEnabled()
+      })
+    },
+  )
 
   it("shows shadow mode messaging and blocks billing actions", () => {
     const shadowSummary = {

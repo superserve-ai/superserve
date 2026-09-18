@@ -35,7 +35,19 @@ export interface BillingSummaryPricingTier {
   currency: string
 }
 
+export interface BillingTrialBalance {
+  grant_usd?: number | null
+  consumed_usd?: number | null
+  remaining_usd?: number | null
+  state: string
+  eligible?: boolean
+  // Optional during the SS-484 rollout; the server downgrades stale runway to unknown.
+  runway_state?: "over_24h" | "under_24h" | "unknown" | null
+  runway_observed_at?: string | null
+}
+
 export interface BillingSummaryResponse {
+  trial?: BillingTrialBalance | null
   billing_mode: "shadow" | "live"
   checkout_available: boolean
   portal_available: boolean

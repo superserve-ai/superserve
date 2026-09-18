@@ -49,12 +49,30 @@ export function refreshTeamScopedQueries(
 export function useCreateTeam() {
   const queryClient = useQueryClient()
   return useMutation({
+    // Creation also changes the active-team cookie; share billing's switch guard.
+    mutationKey: ["switch-team", "create"],
     mutationFn: ({ name, region }: { name: string; region: string }) =>
       createTeamAction(name, region),
-    onSuccess: () => {
-      // Creating a team also switches to it, and the directory itself gained
-      // a row — refetch it rather than patching it.
-      void queryClient.invalidateQueries({ queryKey: teamKeys.directory() })
+    onSuccess: async (team) => {
+      // Cancel any directory read that started before the cookie changed.
+      await queryClient.cancelQueries({ queryKey: teamKeys.directory() })
+      queryClient.setQueryData<TeamDirectoryResponse>(
+        teamKeys.directory(),
+        (old) => ({
+          teams: [
+            ...(old?.teams ?? []).filter(
+              (item) => item.id !== team.id || item.region !== team.region,
+            ),
+            team,
+          ],
+          regions: old?.regions ?? [team.region],
+          activeTeamId: team.id,
+          activeRegion: team.region,
+        }),
+      )
+      // Keep billing guarded through reconciliation. The returned selection
+      // remains correct even if the directory refresh fails.
+      await queryClient.invalidateQueries({ queryKey: teamKeys.directory() })
       refreshTeamScopedQueries(queryClient)
     },
   })
@@ -63,6 +81,7 @@ export function useCreateTeam() {
 export function useSwitchTeam() {
   const queryClient = useQueryClient()
   return useMutation({
+    mutationKey: ["switch-team"],
     mutationFn: ({ teamId, region }: { teamId: string; region: string }) =>
       setActiveTeamAction(teamId, region),
     // Flip the switcher immediately; the server action only validates and

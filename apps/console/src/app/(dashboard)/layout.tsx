@@ -1,6 +1,7 @@
 import { ImpersonationBanner } from "@/components/admin/impersonation-banner"
 import { DashboardShell } from "@/components/layout/dashboard-shell"
 import { QueryProvider } from "@/components/query-provider"
+import { TrialBillingBanner } from "@/components/trial-billing-banner"
 import {
   getImpersonationContext,
   hasImpersonationCookie,
@@ -30,6 +31,7 @@ export default async function DashboardLayout({
       }
     >
       <DashboardShell
+        globalBanner={<TrialBillingBanner />}
         banner={<ImpersonationBanner context={impersonationContext} />}
       >
         {children}

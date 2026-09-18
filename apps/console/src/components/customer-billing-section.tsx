@@ -14,21 +14,17 @@ import {
   CardContent,
   Skeleton,
   cn,
-  useToast,
 } from "@superserve/ui"
 import { useQueryClient } from "@tanstack/react-query"
 import { useEffect, useMemo, useState } from "react"
 
 import { formatCurrency, formatPeriodDate } from "@/components/billing-summary"
+import { useBillingPayment } from "@/hooks/use-billing-payment"
 import { useCustomerBillingPeriods } from "@/hooks/use-customer-billing"
 import type {
   BillingSummaryResponse,
   BillingSummaryResource,
 } from "@/lib/api/billing"
-import {
-  createStripeCheckoutSession,
-  createStripeCustomerPortalSession,
-} from "@/lib/api/billing-stripe"
 import { billingKeys } from "@/lib/api/query-keys"
 
 interface CustomerBillingSectionProps {
@@ -251,14 +247,14 @@ export function CustomerBillingSection({
   teamName,
   summary,
 }: CustomerBillingSectionProps) {
-  const { addToast } = useToast()
   const queryClient = useQueryClient()
-  const [submitting, setSubmitting] = useState<"checkout" | "portal" | null>(
-    null,
-  )
   const [notice, setNotice] = useState<ReturnType<typeof noticeFromQuery>>()
 
   const teamKey = `${teamRegion}:${teamId}`
+  const { submitting, available, openSession } = useBillingPayment(
+    summary,
+    teamKey,
+  )
   const periodsQuery = useCustomerBillingPeriods(teamId, teamKey)
   const latestPeriod = useMemo(() => {
     return (
@@ -320,47 +316,8 @@ export function CustomerBillingSection({
     periodsQuery.isPending ||
     periodsQuery.isFetching ||
     !canManageBilling ||
-    !billingActionAvailable
-
-  const openSession = async () => {
-    if (submitting) return
-
-    const currentUrl = new URL(window.location.href)
-    setSubmitting(canOpenPortal ? "portal" : "checkout")
-
-    try {
-      if (canOpenPortal) {
-        const returnUrl = new URL(currentUrl)
-        returnUrl.searchParams.set("billing", "portal-return")
-        const session = await createStripeCustomerPortalSession({
-          returnUrl: returnUrl.toString(),
-        })
-        window.location.assign(session.url)
-        return
-      }
-
-      if (!canStartCheckout) {
-        return
-      }
-
-      const successUrl = new URL(currentUrl)
-      successUrl.searchParams.set("billing", "success")
-      const cancelUrl = new URL(currentUrl)
-      cancelUrl.searchParams.set("billing", "cancel")
-      const session = await createStripeCheckoutSession({
-        successUrl: successUrl.toString(),
-        cancelUrl: cancelUrl.toString(),
-      })
-      window.location.assign(session.url)
-    } catch (error) {
-      addToast(
-        error instanceof Error ? error.message : "Failed to open Stripe",
-        "error",
-      )
-    } finally {
-      setSubmitting(null)
-    }
-  }
+    !billingActionAvailable ||
+    !available
 
   return (
     <section
