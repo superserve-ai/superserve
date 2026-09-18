@@ -212,6 +212,46 @@ describe("TrialBillingBanner", () => {
     expect(screen.getByRole("status")).not.toHaveTextContent("recent usage")
   })
 
+  it.each([1, 60_000, 5 * 60_000])(
+    "shows and expires urgent runway with the browser clock %s ms behind",
+    (skew) => {
+      vi.useFakeTimers()
+      const now = Date.parse("2026-09-17T12:00:00Z")
+      vi.setSystemTime(now)
+      mocks.summary.mockReturnValue({
+        data: summary({
+          trial: {
+            state: "active",
+            runway_state: "under_24h",
+            runway_observed_at: new Date(now + skew).toISOString(),
+          },
+        }),
+      })
+      mount()
+      expect(screen.getByRole("status")).toHaveClass("bg-red-100")
+      act(() => vi.advanceTimersByTime(15 * 60_000 + skew - 1))
+      expect(screen.getByRole("status")).toHaveClass("bg-red-100")
+      act(() => vi.advanceTimersByTime(1))
+      expect(screen.getByRole("status")).toHaveClass("bg-yellow-100")
+    },
+  )
+
+  it("rejects observations beyond the clock skew allowance", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-09-17T12:00:00Z"))
+    mocks.summary.mockReturnValue({
+      data: summary({
+        trial: {
+          state: "active",
+          runway_state: "under_24h",
+          runway_observed_at: "2026-09-17T12:05:00.001Z",
+        },
+      }),
+    })
+    mount()
+    expect(screen.getByRole("status")).toHaveClass("bg-yellow-100")
+  })
+
   it("expires cached urgency at the backend freshness boundary", () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-09-17T12:00:00Z"))

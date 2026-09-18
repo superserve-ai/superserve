@@ -14,6 +14,8 @@ import { billingKeys } from "@/lib/api/query-keys"
 // SS-484 billingTrialRunway accepts observations strictly newer than 15 minutes.
 // Expire cached observations too, including when background polling is suspended.
 const RUNWAY_FRESHNESS_MS = 15 * 60_000
+// The API has checked freshness using its clock; allow browsers slightly behind it.
+const RUNWAY_CLOCK_SKEW_MS = 5 * 60_000
 
 export function hasCurrentUrgentRunway(
   trial: Pick<BillingTrialBalance, "runway_state" | "runway_observed_at">,
@@ -22,7 +24,7 @@ export function hasCurrentUrgentRunway(
   const observed = Date.parse(trial.runway_observed_at ?? "")
   return (
     trial.runway_state === "under_24h" &&
-    observed <= now &&
+    observed <= now + RUNWAY_CLOCK_SKEW_MS &&
     observed > now - RUNWAY_FRESHNESS_MS
   )
 }
@@ -36,7 +38,11 @@ function useCurrentUrgentRunway(trial: BillingTrialBalance | null | undefined) {
     (notify: () => void) => {
       const delay =
         Date.parse(observedAt ?? "") + RUNWAY_FRESHNESS_MS - Date.now()
-      if (!Number.isFinite(delay) || delay <= 0 || delay > RUNWAY_FRESHNESS_MS)
+      if (
+        !Number.isFinite(delay) ||
+        delay <= 0 ||
+        delay > RUNWAY_FRESHNESS_MS + RUNWAY_CLOCK_SKEW_MS
+      )
         return () => {}
       const timer = window.setTimeout(notify, delay)
       return () => window.clearTimeout(timer)

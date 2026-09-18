@@ -3,7 +3,13 @@ import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 import type { BillingSummaryResponse } from "@/lib/api/billing"
-import { billingKeys, teamKeys } from "@/lib/api/query-keys"
+import {
+  apiKeyKeys,
+  billingKeys,
+  sandboxKeys,
+  snapshotKeys,
+  teamKeys,
+} from "@/lib/api/query-keys"
 import type {
   TeamDirectoryResponse,
   TeamSummary,
@@ -97,11 +103,24 @@ function setup() {
 }
 
 it.each([false, true])(
-  "keeps billing isolated through directory reconciliation (failure: %s)",
+  "clears old team data immediately and keeps billing guarded through directory reconciliation (failure: %s)",
   async (failDirectory) => {
     const creation = deferred<TeamSummary>()
     const refresh = deferred<TeamDirectoryResponse>()
     const staleDirectory = deferred<TeamDirectoryResponse>()
+    const scopedKeys = [
+      sandboxKeys.list({
+        page: 1,
+        pageSize: 20,
+        sort: "created_at",
+        order: "desc",
+      }),
+      apiKeyKeys.list(),
+      snapshotKeys.list(),
+    ]
+    for (const key of scopedKeys) {
+      client.setQueryData(key, [{ id: "team-a-resource" }])
+    }
     mocks.create.mockReturnValue(creation.promise)
     mocks.directory
       .mockReturnValueOnce(staleDirectory.promise)
@@ -120,6 +139,14 @@ it.each([false, true])(
     expect(mocks.checkout).not.toHaveBeenCalled()
     await act(async () => creation.resolve(teamB))
     await waitFor(() => expect(mocks.directory).toHaveBeenCalledTimes(2))
+    expect(
+      client.getQueryData<TeamDirectoryResponse>(teamKeys.directory())
+        ?.activeTeamId,
+    ).toBe("b")
+    // Navigation must not reuse the old team's rows during the pending refresh.
+    for (const key of scopedKeys) {
+      expect(client.getQueryData(key)).toBeUndefined()
+    }
     expect(result.current.create.isPending).toBe(true)
     expect(result.current.context.ready).toBe(false)
     expect(mocks.summary).not.toHaveBeenCalled()

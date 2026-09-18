@@ -70,10 +70,11 @@ export function useCreateTeam() {
           activeRegion: team.region,
         }),
       )
+      // Clear the previous team's data as soon as the selection changes.
+      refreshTeamScopedQueries(queryClient)
       // Keep billing guarded through reconciliation. The returned selection
       // remains correct even if the directory refresh fails.
       await queryClient.invalidateQueries({ queryKey: teamKeys.directory() })
-      refreshTeamScopedQueries(queryClient)
     },
   })
 }
