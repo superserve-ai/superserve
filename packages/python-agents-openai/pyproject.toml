@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "superserve-agents-openai"
+version = "0.1.0"
+description = "OpenAI Agents SDK sandbox adapter for Superserve"
+license = "Apache-2.0"
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["superserve", "sandbox", "openai", "agents", "firecracker", "microvm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "superserve>=0.8.0",
+    "openai-agents>=0.22.0",
+]
+
+[project.urls]
+Homepage = "https://superserve.ai?utm_source=pypi&utm_medium=package_meta"
+Repository = "https://github.com/superserve-ai/superserve"
+Issues = "https://github.com/superserve-ai/superserve/issues"
+
+[tool.uv.sources]
+superserve = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "respx>=0.21",
+    "ruff>=0.8",
+    "mypy>=1.11",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/superserve_agents_openai"]
