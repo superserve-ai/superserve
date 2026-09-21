@@ -119,6 +119,8 @@ The log records what the **sandbox** sent. It does **not** record work a third p
 
 It covers HTTP and HTTPS egress on ports 80 and 443. DNS resolution, raw non-HTTP sockets, other ports, and the platform's own drops of private, link-local, and loopback addresses happen below this log and aren't recorded in it.
 
+The log keeps the last **7 days**. Older rows are dropped on a rolling basis; page the API if you want to keep a longer history elsewhere.
+
 <Tip>
   Pair the network log (what was reached) with [network
   rules](/sandbox/networking) (what's allowed) and [secrets](/secrets/overview)

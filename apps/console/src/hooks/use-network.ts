@@ -8,7 +8,7 @@ import { getSandboxNetwork } from "@/lib/api/secrets"
 export const NETWORK_PAGE_SIZE = 50
 
 /** The most recent per-sandbox network events. The dashboard shows a recent
- *  window; the full log is available via the API. */
+ *  window; the last 7 days are available via the API. */
 export function useSandboxNetwork(sandboxId: string | undefined) {
   return useQuery({
     queryKey: networkKeys.sandbox(sandboxId),
