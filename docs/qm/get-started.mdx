@@ -1,0 +1,65 @@
+---
+title: "Get started"
+sidebarTitle: Get started
+description: Provision a hosted QM stack from the Superserve console and sign in as the first admin.
+noindex: true
+---
+
+Provisioning a stack takes a few minutes and needs three things from you: an organization name, a work email for the first admin, and a model provider API key.
+
+<Note>
+QM is in private beta and the console screens are enabled per team. If you do not see QM in the console, ask us to enable it for your team (see [Limits and support](/qm/limits-and-support)).
+</Note>
+
+<Steps>
+  <Step title="Open QM in the console">
+    Go to [QM in the Superserve console](https://console.superserve.ai/qm?utm_source=docs&utm_medium=link). If you do not have a Superserve account yet, you will be asked to create one first.
+  </Step>
+  <Step title="Name your organization">
+    Enter an **organization name**. A **subdomain** is derived from it and shown as `<slug>.qm.superserve.ai`; edit it if you want something else. A subdomain is 3 to 40 characters of lowercase letters, digits, and hyphens, a handful of names are reserved, and the console checks availability as you type. It becomes your stack's address, so pick something your team will recognize.
+  </Step>
+  <Step title="Set the admin email and sign-in method">
+    The **admin email** is pre-filled with the address you signed in with. This is the first admin account on the stack. On a magic-link stack its domain also sets who can sign in by default; on a Slack SSO stack, access follows membership of the Slack workspace instead (see [Sign-in and Slack](/qm/sign-in-and-slack)).
+
+    Choose a **sign-in method**. **Magic link** is the default and needs no extra setup. **Slack SSO** signs your team in with their Slack identities instead, and you create the Slack app for it once the stack is up. During the beta the choice is fixed at provisioning, so make it here. See [Sign-in and Slack](/qm/sign-in-and-slack).
+  </Step>
+  <Step title="Choose a model provider and paste its API key">
+    Pick **Anthropic**, **OpenAI**, or **OpenRouter**, then paste the corresponding **API key**. It goes straight into a secret manager and is never shown again; the field is write-only and cannot be edited later.
+
+    A malformed key is rejected inline when you submit, before anything is created. A well-formed key the provider rejects — revoked, or from the wrong account — surfaces during provisioning instead, as a run that fails rather than a stack that comes up broken; fix it at the provider and retry the run, or delete the stack and create it again. Once a stack is up, QM's own admin setup page is where you replace the key: it checks a new one against the provider as you save it, and what you save there takes precedence.
+
+    Under **Advanced**, the **harness** defaults to `pi`. The options offered there depend on the provider you picked. Leave it alone unless you have a reason to change it.
+  </Step>
+  <Step title="Provision">
+    Click through to **Create** and the console shows each step as it completes:
+
+    | Step | What happens |
+    | --- | --- |
+    | Store secrets | Generates the stack's secrets and stores them alongside your model API key |
+    | Create service account | Creates the identity the stack runs as |
+    | Create database | Creates your Postgres database and role |
+    | Create storage bucket | Creates the stack's bucket |
+    | Deploy QM | Deploys QM's core, web UI, and portal |
+    | Configure load balancer | Routes `<slug>.qm.superserve.ai` to the stack |
+    | Health check | Waits for the stack to report healthy |
+    | Smoke test | Exercises the deployed stack end to end: the sign-in page renders and the admin API answers |
+    | Prepare admin sign-in | Mints the first admin sign-in link |
+
+    Provisioning takes a few minutes. You can leave the page and come back. If a run fails or goes quiet, the console offers **Retry**, and deleting the stack rolls the same steps back in reverse.
+  </Step>
+  <Step title="Sign in as the admin">
+    When the stack is ready, click **Open admin sign-in**. That mints the link and reveals it; click **Open** next to it to sign in as the admin. The link is **valid for five minutes and redeemable once**, so if it expires or you lose it, mint another one from the same panel.
+  </Step>
+</Steps>
+
+## After sign-in
+
+You land in your stack's web UI at `https://<slug>.qm.superserve.ai`. From here:
+
+- Start a conversation with the agent. Its computer is a Superserve sandbox, created on first use.
+- Invite teammates from QM's admin users page, or ask the agent to invite them. See [Sign-in and Slack](/qm/sign-in-and-slack).
+- Install the Slack bot from QM's admin page if your team works there.
+
+<Note>
+The console only provisions and manages the stack. Day-to-day administration of QM itself (users, Slack, agent configuration) happens inside QM, on your stack's admin pages. QM's own documentation lives in the [QM repository](https://github.com/yc-software/qm).
+</Note>
