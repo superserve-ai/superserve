@@ -11,10 +11,13 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const mockPublishPromotionIdentity = vi.fn(async (..._args: unknown[]) => {})
 let clients: Record<string, ReturnType<typeof recordingClient>> = {}
 let currentUser: {
   id: string
   email: string
+  updated_at?: string
+  email_confirmed_at?: string
   app_metadata?: { provider?: string; providers?: string[] }
 } | null = null
 let googleUser = false
@@ -66,6 +69,11 @@ const mockListTeamMembershipsForUserDetailed = vi.fn(
 function recordingClient(failTable?: string) {
   const writes: Record<string, Array<Record<string, unknown>>> = {}
   const deletes: string[] = []
+  const rpcCalls: Array<{
+    name: string
+    args: Record<string, unknown>
+    teamWriteCount: number
+  }> = []
   const record = (table: string, row: Record<string, unknown>) => {
     writes[table] = [...(writes[table] ?? []), row]
   }
@@ -105,9 +113,20 @@ function recordingClient(failTable?: string) {
       },
     }),
   })
-  return { from, writes, deletes }
+  const rpc = async (name: string, args: Record<string, unknown>) => {
+    rpcCalls.push({ name, args, teamWriteCount: writes.team?.length ?? 0 })
+    return {
+      data: [{ outcome: "applied", evidence_version: "evidence-id" }],
+      error: null,
+    }
+  }
+  return { from, rpc, rpcCalls, writes, deletes }
 }
 
+vi.mock("@/lib/api/promotion-identity", () => ({
+  publishPromotionIdentity: (...args: unknown[]) =>
+    mockPublishPromotionIdentity(...args),
+}))
 vi.mock("@/lib/cells", () => ({
   cellFor: (region: string) => ({
     region,
@@ -156,12 +175,20 @@ vi.mock("@/lib/auth/google-onboarding", () => ({
     mockReadVerifiedGoogleOnboardingMembership(...args),
 }))
 
+import { createServerClient } from "@/lib/supabase/server"
+
 import { provisionTeam } from "./team-provisioning"
 
 describe("provisionTeam", () => {
   beforeEach(() => {
     clients = { use: recordingClient(), usw: recordingClient() }
-    currentUser = null
+    currentUser = {
+      id: "u1",
+      email: "user@example.com",
+      updated_at: "2026-09-24T00:00:00Z",
+      email_confirmed_at: "2026-09-24T00:00:00Z",
+    }
+    mockPublishPromotionIdentity.mockReset().mockResolvedValue(undefined)
     googleUser = false
     directoryState = { memberships: [], degradedRegions: [] }
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
@@ -218,7 +245,12 @@ describe("provisionTeam", () => {
     expect(team).toEqual({ id: "team-new", name: "west pilot", region: "usw" })
 
     const { writes } = clients.usw
-    expect(writes.profile).toEqual([{ id: "u1", email: "user@example.com" }])
+    expect(mockPublishPromotionIdentity).toHaveBeenCalledWith(
+      "usw",
+      "u1",
+      currentUser,
+      expect.any(String),
+    )
     expect(writes.team).toEqual([{ name: "west pilot", home_region: "usw" }])
     expect(writes.team_member).toEqual([
       { team_id: "team-new", profile_id: "u1", role: "owner" },
@@ -238,6 +270,112 @@ describe("provisionTeam", () => {
 
     // Nothing touched a cell other than the target.
     expect(clients.use.writes).toEqual({})
+  })
+
+  it("reuses a supplied Auth observation without another fetch", async () => {
+    vi.mocked(createServerClient).mockClear()
+    const observedAt = new Date().toISOString()
+    await provisionTeam("usw", "u1", "ignored@example.com", "west pilot", {
+      user: currentUser as never,
+      observedAt,
+    })
+    expect(createServerClient).not.toHaveBeenCalled()
+    expect(mockPublishPromotionIdentity).toHaveBeenCalledWith(
+      "usw",
+      "u1",
+      currentUser,
+      observedAt,
+    )
+  })
+
+  it.each([false, true])(
+    "rejects a mismatched Auth user before publication or team writes (supplied observation: %s)",
+    async (suppliedObservation) => {
+      currentUser = { ...currentUser!, id: "another-user" }
+      const observation = suppliedObservation
+        ? { user: currentUser as never, observedAt: new Date().toISOString() }
+        : undefined
+
+      await expect(
+        provisionTeam(
+          "usw",
+          "u1",
+          "user@example.com",
+          "west pilot",
+          observation,
+        ),
+      ).rejects.toThrow("Authenticated user mismatch")
+
+      expect(mockPublishPromotionIdentity).not.toHaveBeenCalled()
+      expect(clients.usw.writes).toEqual({})
+      expect(clients.use.writes).toEqual({})
+    },
+  )
+
+  it("does not create a team when identity publication fails", async () => {
+    mockPublishPromotionIdentity.mockRejectedValueOnce(
+      new Error("publication unavailable"),
+    )
+    await expect(
+      provisionTeam("usw", "u1", "ignored@example.com", "west pilot"),
+    ).rejects.toThrow("publication unavailable")
+    expect(clients.usw.writes).toEqual({})
+  })
+
+  it("uses the authenticated raw email rather than the caller email", async () => {
+    await provisionTeam("usw", "u1", "caller@example.com", "west pilot")
+    expect(mockPublishPromotionIdentity).toHaveBeenCalledWith(
+      "usw",
+      "u1",
+      expect.objectContaining({ email: "user@example.com" }),
+      expect.any(String),
+    )
+  })
+
+  it("refreshes an existing account with the latest Auth evidence before another team claim", async () => {
+    const { publishPromotionIdentity } = await vi.importActual<
+      typeof import("./promotion-identity")
+    >("./promotion-identity")
+    mockPublishPromotionIdentity.mockImplementation((...args) =>
+      publishPromotionIdentity(
+        args[0] as string,
+        args[1] as string,
+        args[2] as Parameters<typeof publishPromotionIdentity>[2],
+        args[3] as string,
+      ),
+    )
+
+    await provisionTeam("usw", "u1", "caller@example.com", "first team")
+    currentUser = {
+      id: "u1",
+      email: "Changed+Tag@Example.COM",
+      email_confirmed_at: undefined,
+      updated_at: "2026-09-25T12:00:00Z",
+    }
+    await provisionTeam("usw", "u1", "stale@example.com", "second team")
+
+    expect(clients.usw.rpcCalls).toHaveLength(2)
+    expect(clients.usw.rpcCalls[0]).toMatchObject({
+      name: "upsert_profile_with_promotion_identity",
+      teamWriteCount: 0,
+      args: {
+        p_email: "user@example.com",
+        p_email_verified: true,
+        p_auth_updated_at: "2026-09-24T00:00:00Z",
+      },
+    })
+    expect(clients.usw.rpcCalls[1]).toMatchObject({
+      name: "upsert_profile_with_promotion_identity",
+      teamWriteCount: 1,
+      args: {
+        p_user_id: "u1",
+        p_email: "Changed+Tag@Example.COM",
+        p_email_verified: false,
+        p_auth_updated_at: "2026-09-25T12:00:00Z",
+        p_observed_at: expect.any(String),
+      },
+    })
+    expect(clients.usw.writes.team).toHaveLength(2)
   })
 
   it("unwinds in reverse dependency order when a chain write fails", async () => {

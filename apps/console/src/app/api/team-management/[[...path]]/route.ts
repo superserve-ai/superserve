@@ -60,6 +60,7 @@ async function proxyTeamManagementRequest(
   const {
     data: { user },
   } = await supabase.auth.getUser()
+  const observedAt = new Date().toISOString()
   if (!user) {
     return NextResponse.json(
       { error: { code: "unauthorized", message: "Not authenticated" } },
@@ -70,14 +71,14 @@ async function proxyTeamManagementRequest(
     return notFound()
   }
 
-  const teamId = await getTeamIdForUser(user)
+  const teamId = await getTeamIdForUser(user, observedAt)
   const { path = [] } = await params
   const targetPath = upstreamPath(request.method, teamId, path)
   if (!targetPath) {
     return notFound()
   }
 
-  const apiKey = await getAuthApiKeyForUser(user)
+  const apiKey = await getAuthApiKeyForUser(user, undefined, observedAt)
   if (!apiKey) {
     return NextResponse.json(
       { error: { code: "unauthorized", message: "Not authenticated" } },

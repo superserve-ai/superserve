@@ -2,11 +2,15 @@ import type { User } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
 
 import { getImpersonationContext } from "@/lib/admin/impersonation"
+import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
 import {
-  getApiBaseUrlForUser,
+  ensureAuthApiKeyForTeam,
+  getAuthApiKeyAndTeamForRecovery,
+  getAuthApiKeyAndTeamForUser,
   getAuthApiKeyForUser,
 } from "@/lib/api/proxy-auth"
 import { redactAccessTokens } from "@/lib/api/redact"
+import type { TeamMembership } from "@/lib/api/team-directory"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -68,6 +72,28 @@ function isAllowedPath(path: string): boolean {
   )
 }
 
+function hasUnsafePathSegment(path: string[]): boolean {
+  return path.some((segment) => {
+    let decoded = segment
+    for (let depth = 0; depth < 8; depth++) {
+      if (
+        decoded === "." ||
+        decoded === ".." ||
+        /[\\?#/\u0000-\u001f\u007f]/.test(decoded)
+      ) {
+        return true
+      }
+      if (!decoded.includes("%")) return false
+      try {
+        decoded = decodeURIComponent(decoded)
+      } catch {
+        return true
+      }
+    }
+    return true
+  })
+}
+
 function shouldSkipKeyInjection(path: string): boolean {
   return SKIP_KEY_INJECTION.some((prefix) => path.startsWith(prefix))
 }
@@ -91,14 +117,17 @@ async function proxyRequest(
   const { path } = await params
   const joinedPath = path.join("/")
 
-  if (!isAllowedPath(joinedPath)) {
+  if (hasUnsafePathSegment(path) || !isAllowedPath(joinedPath)) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 
   const skipKeyInjection = shouldSkipKeyInjection(joinedPath)
+  const checkoutRequest =
+    joinedPath === "stripe/checkout-session" && request.method === "POST"
   const debugImpersonation =
     request.nextUrl.searchParams.get("__debug_impersonation") === "1"
   let user: User | null = null
+  let authObservedAt: string | null = null
   let impersonationContext: { teamId: string; region: string } | null = null
   let impersonating = false
 
@@ -108,6 +137,7 @@ async function proxyRequest(
       data: { user: authUser },
     } = await supabase.auth.getUser()
     user = authUser
+    authObservedAt = new Date().toISOString()
     impersonationContext = await getImpersonationContext(user)
     impersonating = impersonationContext !== null
     const isReadMethod = request.method === "GET" || request.method === "HEAD"
@@ -146,22 +176,45 @@ async function proxyRequest(
   // Paths that carry their own auth (no key injection) go to the default
   // cell; authenticated requests go to the user's team's home cell.
   let apiBaseUrl = cellFor(DEFAULT_REGION).apiBaseUrl
+  let teamRegion: string | null = null
+  let checkoutTeam: TeamMembership | null = null
 
   // Inject server-side API key for authenticated requests
   let authMode = skipKeyInjection ? "skipped" : "none"
   if (!skipKeyInjection) {
-    const apiKey = await getAuthApiKeyForUser(user, impersonationContext)
-
-    if (!apiKey || !user) {
+    if (!user) {
+      return NextResponse.json(
+        { error: { code: "unauthorized", message: "Not authenticated" } },
+        { status: 401 },
+      )
+    }
+    const selfContext = impersonationContext
+      ? null
+      : checkoutRequest
+        ? await getAuthApiKeyAndTeamForRecovery(
+            user,
+            authObservedAt ?? undefined,
+          )
+        : await getAuthApiKeyAndTeamForUser(user, authObservedAt ?? undefined)
+    if (checkoutRequest) checkoutTeam = selfContext?.team ?? null
+    const apiKey = impersonationContext
+      ? await getAuthApiKeyForUser(
+          user,
+          impersonationContext,
+          authObservedAt ?? undefined,
+        )
+      : selfContext?.apiKey
+    if (!apiKey) {
       return NextResponse.json(
         { error: { code: "unauthorized", message: "Not authenticated" } },
         { status: 401 },
       )
     }
     headers.set("X-API-Key", apiKey)
-    apiBaseUrl = impersonationContext
-      ? cellFor(impersonationContext.region).apiBaseUrl
-      : await getApiBaseUrlForUser(user)
+    teamRegion =
+      impersonationContext?.region ?? selfContext?.team.region ?? null
+    if (!teamRegion) throw new Error("Proxy team region unavailable")
+    apiBaseUrl = cellFor(teamRegion).apiBaseUrl
     authMode = impersonating ? "impersonation" : "self"
   }
 
@@ -173,12 +226,130 @@ async function proxyRequest(
       ? await request.arrayBuffer()
       : undefined
 
+  // Recovery is checked first. Only its specific unavailable outcome can
+  // proceed to fresh publication and a new Checkout generation.
+  if (checkoutRequest) {
+    if (!user || !authObservedAt) {
+      return NextResponse.json(
+        { error: { code: "unauthorized", message: "Not authenticated" } },
+        { status: 401 },
+      )
+    }
+    const checkoutUser = user
+    const checkoutObservedAt = authObservedAt
+    const recoveryHeaders = new Headers(headers)
+    recoveryHeaders.delete("content-length")
+    recoveryHeaders.set("content-type", "application/json")
+    const recoveryUrl = new URL(
+      `${apiBaseUrl}/stripe/checkout-session/recover`,
+    ).toString()
+    const attemptRecovery = () =>
+      fetch(recoveryUrl, {
+        method: "POST",
+        headers: recoveryHeaders,
+        body: "{}",
+      })
+    const ensureCheckoutKey = async () => {
+      if (!checkoutTeam) throw new Error("Billing team unavailable")
+      const ensuredKey = await ensureAuthApiKeyForTeam(
+        checkoutUser,
+        checkoutTeam,
+        checkoutObservedAt,
+      )
+      if (ensuredKey !== headers.get("X-API-Key")) {
+        throw new Error("Billing team changed during Checkout preflight")
+      }
+    }
+    let recovery: Response
+    try {
+      recovery = await attemptRecovery()
+    } catch {
+      return NextResponse.json(
+        {
+          error: {
+            code: "service_unavailable",
+            message: "Checkout recovery unavailable",
+          },
+        },
+        { status: 503 },
+      )
+    }
+    try {
+      // A missing key row can produce 401 before the backend can inspect a
+      // Checkout. Repair it, then retry recovery before considering creation.
+      if (recovery.status === 401) {
+        await ensureCheckoutKey()
+        recovery = await attemptRecovery()
+      }
+      const recoveryUnavailable =
+        recovery.status === 409 &&
+        (
+          await recovery
+            .clone()
+            .json()
+            .catch(() => null)
+        )?.error?.code === "checkout_recovery_unavailable"
+      if (!recoveryUnavailable) {
+        return forwardResponse(
+          recovery,
+          joinedPath,
+          impersonating,
+          debugImpersonation,
+          authMode,
+          impersonationContext?.teamId ?? null,
+        )
+      }
+      if (!teamRegion) throw new Error("Billing team region unavailable")
+      await publishPromotionIdentity(
+        teamRegion,
+        checkoutUser.id,
+        checkoutUser,
+        checkoutObservedAt,
+      )
+      await ensureCheckoutKey()
+    } catch {
+      console.error("Promotion identity publication failed", {
+        operation: "upsert_profile_with_promotion_identity",
+        cell:
+          teamRegion === "use" || teamRegion === "usw" ? teamRegion : "unknown",
+        error: "checkout_publication_unavailable",
+      })
+      return NextResponse.json(
+        {
+          error: {
+            code: "service_unavailable",
+            message: "Promotion identity unavailable; please retry",
+          },
+        },
+        { status: 503 },
+      )
+    }
+  }
+
   const response = await fetch(upstreamUrl.toString(), {
     method: request.method,
     headers,
     body,
   })
 
+  return forwardResponse(
+    response,
+    joinedPath,
+    impersonating,
+    debugImpersonation,
+    authMode,
+    impersonationContext?.teamId ?? null,
+  )
+}
+
+async function forwardResponse(
+  response: Response,
+  joinedPath: string,
+  impersonating: boolean,
+  debugImpersonation: boolean,
+  authMode: string,
+  impersonatedTeamId: string | null,
+): Promise<NextResponse> {
   const responseHeaders = new Headers()
   for (const [key, value] of response.headers.entries()) {
     if (key === "transfer-encoding" || key === "content-encoding") {
@@ -193,7 +364,7 @@ async function proxyRequest(
     responseHeaders,
     debugImpersonation,
     authMode,
-    impersonationContext?.teamId ?? null,
+    impersonatedTeamId,
   )
 
   // Per the Fetch spec, 204/205/304 responses must not have a body.

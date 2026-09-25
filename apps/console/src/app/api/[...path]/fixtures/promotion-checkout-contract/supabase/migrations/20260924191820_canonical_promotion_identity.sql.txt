@@ -1,0 +1,41 @@
+CREATE FUNCTION upsert_profile_with_promotion_identity(p_user_id uuid, p_email text,
+    p_email_verified boolean, p_auth_updated_at timestamptz, p_observed_at timestamptz)
+RETURNS TABLE(outcome text, evidence_version uuid)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, extensions AS $$
+DECLARE previous promotion_identity_evidence; v_version uuid; v_now timestamptz := clock_timestamp();
+BEGIN
+    IF p_user_id IS NULL OR p_email_verified IS NULL OR p_auth_updated_at IS NULL OR p_observed_at IS NULL
+       OR NOT isfinite(p_auth_updated_at) OR NOT isfinite(p_observed_at) THEN
+        RAISE EXCEPTION 'invalid or stale promotion identity observation' USING ERRCODE = '22023';
+    END IF;
+    PERFORM pg_advisory_xact_lock(hashtext('stripe-promo-user:' || p_user_id::text)::bigint);
+    v_now := clock_timestamp();
+    IF p_observed_at < v_now - interval '5 minutes' OR p_observed_at > v_now + interval '30 seconds'
+       OR p_auth_updated_at > v_now + interval '30 seconds'
+       OR p_auth_updated_at > p_observed_at + interval '30 seconds' THEN
+        RAISE EXCEPTION 'invalid or stale promotion identity observation' USING ERRCODE = '22023';
+    END IF;
+    SELECT e.* INTO previous FROM promotion_identity_current c
+    JOIN promotion_identity_evidence e USING(evidence_version) WHERE c.user_id = p_user_id;
+    IF FOUND THEN
+        IF p_auth_updated_at < previous.auth_updated_at
+           OR (p_auth_updated_at = previous.auth_updated_at
+               AND (p_email IS DISTINCT FROM previous.email OR p_email_verified <> previous.email_verified)) THEN
+            RAISE EXCEPTION 'promotion identity source revision regressed or conflicted' USING ERRCODE = '22023';
+        END IF;
+        IF p_auth_updated_at = previous.auth_updated_at AND p_observed_at <= previous.observed_at THEN
+            INSERT INTO profile(id, email) VALUES(p_user_id, COALESCE(p_email, ''))
+            ON CONFLICT(id) DO UPDATE SET email = COALESCE(p_email, profile.email), updated_at = now();
+            RETURN QUERY SELECT 'replayed'::text, previous.evidence_version;
+            RETURN;
+        END IF;
+    END IF;
+    INSERT INTO profile(id, email) VALUES(p_user_id, COALESCE(p_email, ''))
+    ON CONFLICT(id) DO UPDATE SET email = COALESCE(p_email, profile.email), updated_at = now();
+    INSERT INTO promotion_identity_evidence(user_id, email, email_verified, auth_updated_at, observed_at)
+    VALUES(p_user_id, p_email, p_email_verified, p_auth_updated_at, p_observed_at)
+    RETURNING promotion_identity_evidence.evidence_version INTO v_version;
+    INSERT INTO promotion_identity_current(user_id, evidence_version) VALUES(p_user_id, v_version)
+    ON CONFLICT(user_id) DO UPDATE SET evidence_version = EXCLUDED.evidence_version;
+    RETURN QUERY SELECT 'applied'::text, v_version;
+END $$;

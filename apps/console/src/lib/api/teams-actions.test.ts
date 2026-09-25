@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const mockPublishPromotionIdentity = vi.fn(async (..._args: unknown[]) => {})
 let currentUser: {
   id: string
   email: string
@@ -129,6 +130,10 @@ function recordingCellClient() {
   return { from, writes }
 }
 
+vi.mock("@/lib/api/promotion-identity", () => ({
+  publishPromotionIdentity: (...args: unknown[]) =>
+    mockPublishPromotionIdentity(...args),
+}))
 vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
   configuredRegions: () => regions,
@@ -206,6 +211,7 @@ describe("createTeamAction", () => {
     regions = ["use", "usw"]
     directoryTeams = []
     currentUser = { id: "u1", email: "pavitra@superserve.ai" }
+    mockPublishPromotionIdentity.mockClear()
     googleUser = false
     directoryState = { memberships: [], degradedRegions: [] }
     cookieValue = undefined
@@ -264,9 +270,12 @@ describe("createTeamAction", () => {
     expect(team).toEqual({ id: "team-new", name: "west pilot", region: "usw" })
 
     const writes = cellClients.usw.writes
-    expect(writes.profile).toEqual([
-      { id: "u1", email: "pavitra@superserve.ai" },
-    ])
+    expect(mockPublishPromotionIdentity).toHaveBeenCalledWith(
+      "usw",
+      "u1",
+      currentUser,
+      expect.any(String),
+    )
     expect(writes.team).toEqual([{ name: "west pilot", home_region: "usw" }])
     expect(writes.team_member).toEqual([
       { team_id: "team-new", profile_id: "u1", role: "owner" },

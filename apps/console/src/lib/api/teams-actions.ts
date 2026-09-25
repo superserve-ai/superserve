@@ -93,6 +93,7 @@ export async function createTeamAction(
   const {
     data: { user },
   } = await supabase.auth.getUser()
+  const observedAt = new Date().toISOString()
   if (!user) throw new Error("Not authenticated")
 
   const trimmed = name.trim()
@@ -108,6 +109,7 @@ export async function createTeamAction(
     user.id,
     user.email ?? user.id,
     trimmed,
+    { user, observedAt },
   )
 
   invalidateMembershipDirectory(user.id)
