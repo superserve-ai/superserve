@@ -14,6 +14,7 @@ import {
   readTeamSelection,
   serializeTeamSelection,
 } from "@/lib/api/active-team"
+import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
 import { getProxySecret, hashKey } from "@/lib/api/proxy-secret"
 import {
   invalidateMembershipDirectory,
@@ -84,37 +85,17 @@ const ensuredKeys = new Map<string, Expiring<true>>()
 // switch takes effect immediately instead of after the TTL.
 const teamCache = new Map<string, Expiring<TeamMembership>>()
 
-async function ensureProfile(userId: string, email: string): Promise<void> {
-  const admin = cellFor(DEFAULT_REGION).createAdminClient()
-  const { data: existing } = await admin
-    .from("profile")
-    .select("id")
-    .eq("id", userId)
-    .single()
-
-  if (existing) return
-
-  const { error } = await admin.from("profile").insert({
-    id: userId,
-    email,
-  })
-
-  if (error && !error.message.includes("duplicate key")) {
-    throw new Error(`Failed to create profile: ${error.message}`)
-  }
-}
-
 async function getTeamForUser(
-  userId: string,
-  email: string,
-  googleUser = false,
+  user: User,
+  observedAt?: string,
 ): Promise<TeamMembership> {
+  const userId = user.id
+  const email = user.email ?? user.id
+  const googleUser = isGoogleUser(user)
   const selection = await readTeamSelection()
   const cacheKey = `${userId}|${selection ? serializeTeamSelection(selection) : ""}`
   const cached = getFresh(teamCache, cacheKey)
   if (cached) return cached
-
-  await ensureProfile(userId, email)
 
   let detailedLookup: {
     memberships: TeamMembership[]
@@ -135,8 +116,6 @@ async function getTeamForUser(
       const activeMembership =
         pickActiveTeam(detailedLookup.memberships, selection) ??
         state.membership
-      if (googleUser) {
-      }
       setFresh(teamCache, cacheKey, activeMembership)
       return activeMembership
     } else if (state.kind === "indeterminate") {
@@ -150,8 +129,6 @@ async function getTeamForUser(
   }
   const membership = pickActiveTeam(memberships, selection)
   if (membership) {
-    if (googleUser) {
-    }
     setFresh(teamCache, cacheKey, membership)
     return membership
   }
@@ -160,7 +137,13 @@ async function getTeamForUser(
   // RBAC chain the create-team action uses — a legacy-only team (team +
   // team_member, no team_memberships/role assignment) is one the console
   // lists but the control plane 403s, so the user's first request fails.
-  const team = await provisionTeam(DEFAULT_REGION, userId, email, email)
+  const team = await provisionTeam(
+    DEFAULT_REGION,
+    userId,
+    email,
+    email,
+    observedAt ? { user, observedAt } : undefined,
+  )
 
   // The empty membership list we just read may be cached; drop it so other
   // surfaces (billing, quota, directory) see the new team immediately.
@@ -171,27 +154,21 @@ async function getTeamForUser(
   return created
 }
 
-export async function getTeamIdForUser(user: User): Promise<string> {
-  const { teamId } = await getTeamForUser(
-    user.id,
-    user.email ?? user.id,
-    isGoogleUser(user),
-  )
+export async function getTeamIdForUser(
+  user: User,
+  observedAt?: string,
+): Promise<string> {
+  const { teamId } = await getTeamForUser(user, observedAt)
   return teamId
 }
 
 /**
- * Base URL of the control-plane API serving the user's team. Proxied
- * requests must go to the team's home cell — that's the only control plane
- * whose database holds the proxy key row.
+ * Home region of the user's active team. Billing publication and upstream
+ * requests must target the same cell as the proxy key row.
  */
-export async function getApiBaseUrlForUser(user: User): Promise<string> {
-  const { region } = await getTeamForUser(
-    user.id,
-    user.email ?? user.id,
-    isGoogleUser(user),
-  )
-  return cellFor(region).apiBaseUrl
+export async function getRegionForUser(user: User): Promise<string> {
+  const { region } = await getTeamForUser(user)
+  return region
 }
 
 /**
@@ -201,15 +178,30 @@ export async function getApiBaseUrlForUser(user: User): Promise<string> {
  * each other.
  */
 async function ensureProxyKeyRow(
-  userId: string,
+  user: User,
   team: TeamMembership,
   keyHash: string,
+  observedAt?: string,
 ): Promise<void> {
+  const userId = user.id
   const ensureKey = `${userId}|${team.region}:${team.teamId}`
   if (getFresh(ensuredKeys, ensureKey)) return
 
   const admin = cellFor(team.region).createAdminClient()
-
+  const { data: profile, error: profileError } = await admin
+    .from("profile")
+    .select("id")
+    .eq("id", userId)
+    .maybeSingle()
+  if (profileError) throw new Error("Failed to read regional profile")
+  if (!profile) {
+    if (!observedAt) {
+      throw new Error(
+        "Authenticated user observation unavailable; please retry",
+      )
+    }
+    await publishPromotionIdentity(team.region, userId, user, observedAt)
+  }
   const { error } = await admin.from("api_key").upsert(
     {
       team_id: team.teamId,
@@ -232,6 +224,7 @@ export async function getAuthApiKeyForUser(
     | string
     | Pick<ImpersonationDisplayContext, "teamId" | "region">
     | null,
+  observedAt?: string,
 ): Promise<string | null> {
   if (!user) return null
 
@@ -269,14 +262,37 @@ export async function getAuthApiKeyForUser(
     )
   }
 
-  const team = await getTeamForUser(
-    user.id,
-    user.email ?? user.id,
-    isGoogleUser(user),
-  )
-  const rawKey = deriveRawKey(user.id, team.teamId)
-  await ensureProxyKeyRow(user.id, team, hashKey(rawKey))
-  return rawKey
+  return (await getAuthApiKeyAndTeamForUser(user, observedAt)).apiKey
+}
+
+/** Keep the key and its resolved team together for a single proxy request. */
+export async function getAuthApiKeyAndTeamForUser(
+  user: User,
+  observedAt?: string,
+): Promise<{ apiKey: string; team: TeamMembership }> {
+  const team = await getTeamForUser(user, observedAt)
+  const apiKey = await ensureAuthApiKeyForTeam(user, team, observedAt)
+  return { apiKey, team }
+}
+
+/** Repair only the key for a team already resolved by this request. */
+export async function ensureAuthApiKeyForTeam(
+  user: User,
+  team: TeamMembership,
+  observedAt?: string,
+): Promise<string> {
+  const apiKey = deriveRawKey(user.id, team.teamId)
+  await ensureProxyKeyRow(user, team, hashKey(apiKey), observedAt)
+  return apiKey
+}
+
+/** Resolve an existing Checkout's key and cell without a profile write. */
+export async function getAuthApiKeyAndTeamForRecovery(
+  user: User,
+  observedAt?: string,
+): Promise<{ apiKey: string; team: TeamMembership }> {
+  const team = await getTeamForUser(user, observedAt)
+  return { apiKey: deriveRawKey(user.id, team.teamId), team }
 }
 
 /**
@@ -288,5 +304,9 @@ export async function getAuthApiKey(): Promise<string | null> {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  return getAuthApiKeyForUser(user)
+  return getAuthApiKeyForUser(user, undefined, new Date().toISOString())
+}
+
+export async function getApiBaseUrlForUser(user: User): Promise<string> {
+  return cellFor(await getRegionForUser(user)).apiBaseUrl
 }

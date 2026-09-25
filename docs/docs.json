@@ -177,6 +177,16 @@
             ]
           },
           {
+            "group": "Snapshots",
+            "pages": [
+              "POST /sandboxes/{sandbox_id}/snapshot",
+              "GET /sandboxes/{sandbox_id}/snapshots",
+              "GET /snapshots/{snapshot_id}",
+              "PATCH /snapshots/{snapshot_id}",
+              "DELETE /snapshots/{snapshot_id}"
+            ]
+          },
+          {
             "group": "Templates",
             "pages": [
               "GET /templates",

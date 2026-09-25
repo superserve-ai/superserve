@@ -14,8 +14,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mocks declared BEFORE the module under test is imported.
 vi.mock("@/lib/api/proxy-auth", () => ({
-  getApiBaseUrlForUser: vi.fn(),
+  ensureAuthApiKeyForTeam: vi.fn(),
+  getAuthApiKeyAndTeamForRecovery: vi.fn(),
+  getAuthApiKeyAndTeamForUser: vi.fn(),
   getAuthApiKeyForUser: vi.fn(),
+}))
+vi.mock("@/lib/api/promotion-identity", () => ({
+  publishPromotionIdentity: vi.fn(),
 }))
 vi.mock("@/lib/admin/impersonation", () => ({
   getImpersonationContext: vi.fn(),
@@ -24,7 +29,10 @@ vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
   cellFor: (region: string) => ({
     region,
-    apiBaseUrl: `https://api-${region}.test`,
+    apiBaseUrl:
+      region === "use"
+        ? "https://api.test.superserve.ai"
+        : `https://api-${region}.test`,
   }),
 }))
 vi.mock("@/lib/supabase/server", () => ({
@@ -38,8 +46,11 @@ vi.stubGlobal("fetch", fetchSpy)
 // SANDBOX_API_URL is pre-stubbed in src/test/setup.ts; the route reads it at module load.
 
 import { getImpersonationContext } from "@/lib/admin/impersonation"
+import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
 import {
-  getApiBaseUrlForUser,
+  ensureAuthApiKeyForTeam,
+  getAuthApiKeyAndTeamForRecovery,
+  getAuthApiKeyAndTeamForUser,
   getAuthApiKeyForUser,
 } from "@/lib/api/proxy-auth"
 import { createServerClient } from "@/lib/supabase/server"
@@ -68,15 +79,28 @@ function params(pathSegments: string[]): AnyParams {
 describe("api proxy /api/[...path]", () => {
   beforeEach(() => {
     fetchSpy.mockReset()
+    vi.mocked(createServerClient).mockClear()
     vi.mocked(createServerClient).mockResolvedValue({
       auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) },
     } as never)
     vi.mocked(getAuthApiKeyForUser).mockReset()
     vi.mocked(getAuthApiKeyForUser).mockResolvedValue("ss_live_test_key")
-    vi.mocked(getApiBaseUrlForUser).mockReset()
-    vi.mocked(getApiBaseUrlForUser).mockResolvedValue(
-      "https://api.test.superserve.ai",
-    )
+    vi.mocked(getAuthApiKeyAndTeamForUser)
+      .mockReset()
+      .mockResolvedValue({
+        apiKey: "ss_live_test_key",
+        team: { teamId: "team-east", region: "use" },
+      })
+    vi.mocked(getAuthApiKeyAndTeamForRecovery)
+      .mockReset()
+      .mockResolvedValue({
+        apiKey: "ss_live_test_key",
+        team: { teamId: "team-east", region: "use" },
+      })
+    vi.mocked(ensureAuthApiKeyForTeam)
+      .mockReset()
+      .mockResolvedValue("ss_live_test_key")
+    vi.mocked(publishPromotionIdentity).mockReset().mockResolvedValue()
     vi.mocked(getImpersonationContext).mockReset()
     vi.mocked(getImpersonationContext).mockResolvedValue(null)
   })
@@ -86,7 +110,63 @@ describe("api proxy /api/[...path]", () => {
     expect(res.status).toBe(404)
   })
 
+  it.each([
+    ["v1/..%2Fstripe%2Fcheckout-session", ["v1", "../stripe/checkout-session"]],
+    [
+      "sandboxes%2F..%2Fstripe%2Fcheckout-session",
+      ["sandboxes/../stripe/checkout-session"],
+    ],
+    [
+      "sandboxes/%2e%2e/stripe/checkout-session",
+      ["sandboxes", "%2e%2e", "stripe", "checkout-session"],
+    ],
+    [
+      "sandboxes/%252e%252e/stripe/checkout-session",
+      ["sandboxes", "%2e%2e", "stripe", "checkout-session"],
+    ],
+    [
+      "sandboxes/%09../stripe/checkout-session",
+      ["sandboxes", "\t..", "stripe", "checkout-session"],
+    ],
+    [
+      "v1/auth/device%5C..%5C..%5Cstripe%5Ccheckout-session",
+      ["v1", "auth", "device\\..\\..\\stripe\\checkout-session"],
+    ],
+  ])(
+    "rejects encoded path traversal before proxying: %s",
+    async (encodedPath, decodedPath) => {
+      vi.mocked(publishPromotionIdentity).mockRejectedValue(
+        new Error("publication unavailable"),
+      )
+      const res = await POST(
+        req("POST", [encodedPath], { body: "{}" }),
+        params(decodedPath),
+      )
+
+      expect(res.status).toBe(404)
+      expect(fetchSpy).not.toHaveBeenCalled()
+      expect(publishPromotionIdentity).not.toHaveBeenCalled()
+      expect(createServerClient).not.toHaveBeenCalled()
+    },
+  )
+
+  it("keeps ordinary encoded resource names routable", async () => {
+    fetchSpy.mockResolvedValue(new Response(null, { status: 204 }))
+    const res = await DELETE(
+      req("DELETE", ["sandboxes", "sbx-1", "secrets", "A%20B"]),
+      params(["sandboxes", "sbx-1", "secrets", "A B"]),
+    )
+
+    expect(res.status).toBe(204)
+    expect(fetchSpy.mock.calls[0][0]).toBe(
+      "https://api.test.superserve.ai/sandboxes/sbx-1/secrets/A%20B",
+    )
+  })
+
   it("forwards the billing usage-series endpoint", async () => {
+    vi.mocked(publishPromotionIdentity).mockRejectedValue(
+      new Error("writer unavailable"),
+    )
     fetchSpy.mockResolvedValue(new Response("{}", { status: 200 }))
 
     const request = new NextRequest(
@@ -98,6 +178,7 @@ describe("api proxy /api/[...path]", () => {
     const res = await GET(request, params(["billing", "usage-series"]))
 
     expect(res.status).toBe(200)
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
     expect(fetchSpy).toHaveBeenCalledWith(
       "https://api.test.superserve.ai/billing/usage-series?start=2026-01-01T00%3A00%3A00.000Z&end=2026-01-02T00%3A00%3A00.000Z&granularity=hour&timezone=UTC",
       expect.objectContaining({ method: "GET" }),
@@ -105,6 +186,9 @@ describe("api proxy /api/[...path]", () => {
   })
 
   it("forwards the secrets, providers, activity, and billing prefixes", async () => {
+    vi.mocked(publishPromotionIdentity).mockRejectedValue(
+      new Error("writer unavailable"),
+    )
     fetchSpy.mockImplementation(() =>
       Promise.resolve(
         new Response("[]", {
@@ -163,11 +247,28 @@ describe("api proxy /api/[...path]", () => {
       ]),
     )
     expect(exportPreviewRes.status).toBe(200)
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
     expect(fetchSpy).toHaveBeenCalledTimes(7)
     expect(fetchSpy.mock.calls[6][0]).toBe(
       "https://api.test.superserve.ai/teams/team-a/billing/periods/period-1/export-preview",
     )
 
+    vi.mocked(publishPromotionIdentity).mockResolvedValue()
+    fetchSpy.mockImplementation((url: string) =>
+      Promise.resolve(
+        url.endsWith("/stripe/checkout-session/recover")
+          ? new Response(
+              JSON.stringify({
+                error: { code: "checkout_recovery_unavailable" },
+              }),
+              { status: 409, headers: { "content-type": "application/json" } },
+            )
+          : new Response("[]", {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            }),
+      ),
+    )
     const stripeRes = await POST(
       req("POST", ["stripe", "checkout-session"], {
         headers: { "content-type": "application/json" },
@@ -179,11 +280,20 @@ describe("api proxy /api/[...path]", () => {
       params(["stripe", "checkout-session"]),
     )
     expect(stripeRes.status).toBe(200)
-    expect(fetchSpy).toHaveBeenCalledTimes(8)
-    expect(fetchSpy.mock.calls[7][0]).toBe(
+    expect(publishPromotionIdentity).toHaveBeenCalledWith(
+      "use",
+      "u1",
+      expect.objectContaining({ id: "u1" }),
+      expect.any(String),
+    )
+    expect(fetchSpy).toHaveBeenCalledTimes(9)
+    expect(fetchSpy.mock.calls[8][0]).toBe(
       "https://api.test.superserve.ai/stripe/checkout-session",
     )
 
+    vi.mocked(publishPromotionIdentity)
+      .mockClear()
+      .mockRejectedValue(new Error("writer unavailable"))
     const portalRes = await POST(
       req("POST", ["stripe", "customer-portal-session"], {
         headers: { "content-type": "application/json" },
@@ -194,20 +304,273 @@ describe("api proxy /api/[...path]", () => {
       params(["stripe", "customer-portal-session"]),
     )
     expect(portalRes.status).toBe(200)
-    expect(fetchSpy).toHaveBeenCalledTimes(9)
-    expect(fetchSpy.mock.calls[8][0]).toBe(
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
+    expect(fetchSpy).toHaveBeenCalledTimes(10)
+    expect(fetchSpy.mock.calls[9][0]).toBe(
       "https://api.test.superserve.ai/stripe/customer-portal-session",
     )
   })
 
+  it("returns pinned recovery without publishing fresh identity", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          outcome: "recovered",
+          id: "cs_1",
+          url: "https://stripe.test",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    )
+    vi.mocked(publishPromotionIdentity).mockRejectedValue(
+      new Error("unavailable"),
+    )
+    const res = await POST(
+      req("POST", ["stripe", "checkout-session"], { body: "{}" }),
+      params(["stripe", "checkout-session"]),
+    )
+    expect(res.status).toBe(200)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(fetchSpy.mock.calls[0][0]).toBe(
+      "https://api.test.superserve.ai/stripe/checkout-session/recover",
+    )
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
+    expect(getAuthApiKeyAndTeamForUser).not.toHaveBeenCalled()
+    expect(getAuthApiKeyAndTeamForRecovery).toHaveBeenCalledTimes(1)
+  })
+
+  it("recovers a pinned Checkout when regional profile repair would fail", async () => {
+    vi.mocked(getAuthApiKeyAndTeamForUser).mockRejectedValue(
+      new Error("promotion writer unavailable"),
+    )
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ outcome: "recovered", id: "cs_1" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    )
+
+    const res = await POST(
+      req("POST", ["stripe", "checkout-session"], { body: "{}" }),
+      params(["stripe", "checkout-session"]),
+    )
+
+    expect(res.status).toBe(200)
+    expect(getAuthApiKeyAndTeamForUser).not.toHaveBeenCalled()
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it("repairs a missing key after recovery auth fails and retries recovery", async () => {
+    vi.mocked(getAuthApiKeyAndTeamForUser).mockRejectedValue(
+      new Error("membership disappeared after recovery lookup"),
+    )
+    fetchSpy
+      .mockResolvedValueOnce(new Response("unauthorized", { status: 401 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ outcome: "recovered", id: "cs_1" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+
+    const res = await POST(
+      req("POST", ["stripe", "checkout-session"], { body: "{}" }),
+      params(["stripe", "checkout-session"]),
+    )
+
+    expect(res.status).toBe(200)
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
+    expect(ensureAuthApiKeyForTeam).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "u1" }),
+      { teamId: "team-east", region: "use" },
+      expect.any(String),
+    )
+    expect(getAuthApiKeyAndTeamForUser).not.toHaveBeenCalled()
+    expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
+      "https://api.test.superserve.ai/stripe/checkout-session/recover",
+      "https://api.test.superserve.ai/stripe/checkout-session/recover",
+    ])
+  })
+
+  it("stops Checkout when key repair resolves a different key", async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response("unauthorized", { status: 401 }),
+    )
+    vi.mocked(ensureAuthApiKeyForTeam).mockResolvedValueOnce(
+      "ss_live_different_key",
+    )
+
+    const res = await POST(
+      req("POST", ["stripe", "checkout-session"], { body: "{}" }),
+      params(["stripe", "checkout-session"]),
+    )
+
+    expect(res.status).toBe(503)
+    expect(ensureAuthApiKeyForTeam).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "u1" }),
+      { teamId: "team-east", region: "use" },
+      expect.any(String),
+    )
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
+    expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
+      "https://api.test.superserve.ai/stripe/checkout-session/recover",
+    ])
+  })
+
+  it("does not start Checkout when key repair publication fails", async () => {
+    fetchSpy.mockResolvedValue(new Response("unauthorized", { status: 401 }))
+    vi.mocked(ensureAuthApiKeyForTeam).mockRejectedValue(
+      new Error("writer unavailable"),
+    )
+
+    const res = await POST(
+      req("POST", ["stripe", "checkout-session"], { body: "{}" }),
+      params(["stripe", "checkout-session"]),
+    )
+
+    expect(res.status).toBe(503)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(ensureAuthApiKeyForTeam).toHaveBeenCalledTimes(1)
+    expect(getAuthApiKeyAndTeamForUser).not.toHaveBeenCalled()
+  })
+
+  it("preserves recovery authorization failure when the key is already ready", async () => {
+    fetchSpy.mockResolvedValue(new Response("unauthorized", { status: 401 }))
+
+    const res = await POST(
+      req("POST", ["stripe", "checkout-session"], { body: "{}" }),
+      params(["stripe", "checkout-session"]),
+    )
+
+    expect(res.status).toBe(401)
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
+  })
+
+  it("never starts Checkout after failed publication or an old-cell 404", async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ error: { code: "checkout_recovery_unavailable" } }),
+        { status: 409, headers: { "content-type": "application/json" } },
+      ),
+    )
+    vi.mocked(publishPromotionIdentity).mockRejectedValue(
+      new Error("unavailable"),
+    )
+    const request = req("POST", ["stripe", "checkout-session"], { body: "{}" })
+    expect(
+      (await POST(request, params(["stripe", "checkout-session"]))).status,
+    ).toBe(503)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    fetchSpy.mockResolvedValueOnce(new Response("not found", { status: 404 }))
+    expect(
+      (
+        await POST(
+          req("POST", ["stripe", "checkout-session"], { body: "{}" }),
+          params(["stripe", "checkout-session"]),
+        )
+      ).status,
+    ).toBe(404)
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it("keeps the key's original cell when membership expires during recovery", async () => {
+    vi.mocked(getAuthApiKeyAndTeamForRecovery)
+      .mockResolvedValueOnce({
+        apiKey: "ss_live_west_key",
+        team: { teamId: "team-west", region: "usw" },
+      })
+      .mockRejectedValue(new Error("secondary-cell directory degraded"))
+    vi.mocked(ensureAuthApiKeyForTeam).mockResolvedValueOnce("ss_live_west_key")
+    fetchSpy.mockImplementation((url: string) =>
+      Promise.resolve(
+        url.endsWith("/recover")
+          ? new Response(
+              JSON.stringify({
+                error: { code: "checkout_recovery_unavailable" },
+              }),
+              { status: 409, headers: { "content-type": "application/json" } },
+            )
+          : new Response("{}", { status: 200 }),
+      ),
+    )
+
+    const res = await POST(
+      req("POST", ["stripe", "checkout-session"], { body: "{}" }),
+      params(["stripe", "checkout-session"]),
+    )
+
+    expect(res.status).toBe(200)
+    expect(getAuthApiKeyAndTeamForRecovery).toHaveBeenCalledTimes(1)
+    expect(ensureAuthApiKeyForTeam).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "u1" }),
+      { teamId: "team-west", region: "usw" },
+      expect.any(String),
+    )
+    expect(getAuthApiKeyAndTeamForUser).not.toHaveBeenCalled()
+    expect(getAuthApiKeyForUser).not.toHaveBeenCalled()
+    expect(publishPromotionIdentity).toHaveBeenCalledWith(
+      "usw",
+      "u1",
+      expect.objectContaining({ id: "u1" }),
+      expect.any(String),
+    )
+    expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
+      "https://api-usw.test/stripe/checkout-session/recover",
+      "https://api-usw.test/stripe/checkout-session",
+    ])
+  })
+
+  it("logs a bounded target-cell diagnostic when Checkout publication fails", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
+    try {
+      fetchSpy.mockResolvedValue(
+        new Response(
+          JSON.stringify({ error: { code: "checkout_recovery_unavailable" } }),
+          { status: 409, headers: { "content-type": "application/json" } },
+        ),
+      )
+      vi.mocked(publishPromotionIdentity).mockRejectedValue(
+        new Error("Raw+Tag@Example.COM secret-token provider failure"),
+      )
+
+      const res = await POST(
+        req("POST", ["stripe", "checkout-session"], { body: "{}" }),
+        params(["stripe", "checkout-session"]),
+      )
+
+      expect(res.status).toBe(503)
+      expect(fetchSpy).toHaveBeenCalledTimes(1)
+      expect(log).toHaveBeenCalledWith(
+        "Promotion identity publication failed",
+        {
+          operation: "upsert_profile_with_promotion_identity",
+          cell: "use",
+          error: "checkout_publication_unavailable",
+        },
+      )
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(
+        /Raw\+Tag@Example\.COM|secret-token|provider failure/,
+      )
+    } finally {
+      log.mockRestore()
+    }
+  })
+
   it("returns 401 when the user is not authenticated", async () => {
-    vi.mocked(getAuthApiKeyForUser).mockResolvedValue(null)
+    vi.mocked(createServerClient).mockResolvedValue({
+      auth: { getUser: async () => ({ data: { user: null } }) },
+    } as never)
     const res = await GET(req("GET", ["sandboxes"]), params(["sandboxes"]))
     expect(res.status).toBe(401)
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
   it("injects X-API-Key on authenticated requests to /sandboxes", async () => {
+    vi.mocked(publishPromotionIdentity).mockRejectedValue(
+      new Error("writer unavailable"),
+    )
     fetchSpy.mockResolvedValue(
       new Response(JSON.stringify([{ id: "s1" }]), {
         status: 200,
@@ -218,6 +581,7 @@ describe("api proxy /api/[...path]", () => {
     const res = await GET(req("GET", ["sandboxes"]), params(["sandboxes"]))
 
     expect(res.status).toBe(200)
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
     expect(fetchSpy).toHaveBeenCalledTimes(1)
     const [url, fetchInit] = fetchSpy.mock.calls[0]
     expect(url).toBe("https://api.test.superserve.ai/sandboxes")
@@ -259,8 +623,9 @@ describe("api proxy /api/[...path]", () => {
         region: "usw",
         teamName: "Impersonated Team",
       },
+      expect.any(String),
     )
-    expect(getApiBaseUrlForUser).not.toHaveBeenCalled()
+    expect(getAuthApiKeyAndTeamForUser).not.toHaveBeenCalled()
     const [url] = fetchSpy.mock.calls[0]
     expect(url).toBe(
       "https://api-usw.test/templates?team_id=impersonated-team&owner=me",

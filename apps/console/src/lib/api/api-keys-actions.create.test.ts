@@ -35,6 +35,7 @@ function chain(result: { data: unknown; error: unknown }) {
     c[m] = () => c
   }
   c.single = async () => result
+  c.maybeSingle = async () => result
   return c
 }
 

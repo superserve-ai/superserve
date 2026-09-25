@@ -27,6 +27,9 @@ vi.mock("@/lib/admin/impersonation-key", () => ({
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: vi.fn(),
 }))
+vi.mock("@/lib/api/promotion-identity", () => ({
+  publishPromotionIdentity: vi.fn(),
+}))
 vi.mock("@/lib/admin/impersonation", () => ({
   getImpersonationTeamId: vi.fn(),
   impersonationTtlMs: vi.fn(() => 30 * 60_000),
@@ -110,6 +113,8 @@ vi.mock("@/lib/auth/google-onboarding", () => ({
 
 const uswApiKeyUpserts: Array<Record<string, unknown>> = []
 const useApiKeyUpserts: Array<Record<string, unknown>> = []
+const uswProfileReads: string[] = []
+let missingProfileExists = false
 vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
   configuredRegions: () => ["use", "usw"],
@@ -121,7 +126,31 @@ vi.mock("@/lib/cells", () => ({
         ? {
             // Captures the proxy key upsert.
             from: (table: string) => ({
+              select: () => ({
+                eq: (_column: string, userId: string) => ({
+                  maybeSingle: async () => {
+                    if (table === "profile") uswProfileReads.push(userId)
+                    return {
+                      data:
+                        userId.startsWith("missing-profile-") &&
+                        !missingProfileExists
+                          ? null
+                          : { id: userId },
+                      error: null,
+                    }
+                  },
+                }),
+              }),
               upsert: async (row: Record<string, unknown>) => {
+                if (
+                  table === "api_key" &&
+                  String(row.created_by).startsWith("missing-profile-") &&
+                  !missingProfileExists
+                ) {
+                  return {
+                    error: { message: "created_by violates profile FK" },
+                  }
+                }
                 uswApiKeyUpserts.push({ table, ...row })
                 return { error: null }
               },
@@ -133,7 +162,10 @@ vi.mock("@/lib/cells", () => ({
             from: (table: string) => ({
               select: () => ({
                 eq: () => ({
-                  single: async () => ({ data: { id: "u1" }, error: null }),
+                  maybeSingle: async () => ({
+                    data: { id: "u1" },
+                    error: null,
+                  }),
                 }),
               }),
               upsert: async (row: Record<string, unknown>) => {
@@ -147,6 +179,7 @@ vi.mock("@/lib/cells", () => ({
 
 import { ensureImpersonationKeyRow } from "@/lib/admin/impersonation-key"
 import { platformImpersonationReadScopes } from "@/lib/admin/permissions"
+import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
 import {
   listTeamMembershipsForUser,
   listTeamMembershipsForUserDetailed,
@@ -155,7 +188,10 @@ import { provisionTeam } from "@/lib/api/team-provisioning"
 
 import {
   deriveRawKey,
+  ensureAuthApiKeyForTeam,
   getApiBaseUrlForUser,
+  getAuthApiKeyAndTeamForRecovery,
+  getAuthApiKeyAndTeamForUser,
   getAuthApiKeyForUser,
   getProxySecret,
   hashKey,
@@ -248,11 +284,27 @@ describe("proxy-auth.hashKey", () => {
 
 describe("proxy-auth cell targeting", () => {
   const user = { id: "cell-user", email: "pavitra@superserve.ai" }
+  const originalSecret = process.env.CONSOLE_PROXY_SECRET
+
+  beforeEach(() => {
+    process.env.CONSOLE_PROXY_SECRET =
+      "test-secret-must-be-at-least-thirty-two-chars-long-abcdef"
+    missingProfileExists = false
+    vi.mocked(publishPromotionIdentity).mockReset()
+  })
+
+  afterEach(() => {
+    process.env.CONSOLE_PROXY_SECRET = originalSecret
+  })
 
   it("ensures the proxy key row in the team's home cell", async () => {
+    vi.mocked(publishPromotionIdentity).mockRejectedValue(
+      new Error("writer unavailable"),
+    )
     const key = await getAuthApiKeyForUser(user as never)
 
     expect(key).toMatch(/^ss_live_/)
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
     expect(uswApiKeyUpserts).toEqual([
       {
         table: "api_key",
@@ -265,9 +317,144 @@ describe("proxy-auth cell targeting", () => {
     ])
   })
 
+  it("returns the same team that supplies the proxy key", async () => {
+    vi.mocked(publishPromotionIdentity).mockRejectedValue(
+      new Error("writer unavailable"),
+    )
+    const { apiKey, team } = await getAuthApiKeyAndTeamForUser({
+      id: "paired-context-user",
+      email: "payer@example.com",
+    } as never)
+
+    expect(team).toEqual({ teamId: "team-west", region: "usw" })
+    expect(apiKey).toBe(deriveRawKey("paired-context-user", team.teamId))
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
+    expect(uswApiKeyUpserts).toContainEqual(
+      expect.objectContaining({
+        table: "api_key",
+        team_id: team.teamId,
+        key_hash: hashKey(apiKey),
+        created_by: "paired-context-user",
+      }),
+    )
+  })
+
   it("resolves the proxy upstream to the team's home cell API", async () => {
     expect(await getApiBaseUrlForUser(user as never)).toBe(
       "https://api-usw.test",
+    )
+  })
+
+  it("publishes a missing regional profile before inserting its proxy key", async () => {
+    uswProfileReads.length = 0
+    vi.mocked(publishPromotionIdentity).mockImplementationOnce(async () => {
+      missingProfileExists = true
+    })
+
+    const observedAt = new Date().toISOString()
+    const user = {
+      id: "missing-profile-success-user",
+      email: "user@example.com",
+      updated_at: observedAt,
+    }
+
+    const key = await getAuthApiKeyForUser(user as never, null, observedAt)
+
+    expect(key).toMatch(/^ss_live_/)
+    expect(uswProfileReads).toEqual(["missing-profile-success-user"])
+    expect(publishPromotionIdentity).toHaveBeenCalledWith(
+      "usw",
+      user.id,
+      user,
+      observedAt,
+    )
+    expect(uswApiKeyUpserts).toContainEqual(
+      expect.objectContaining({
+        table: "api_key",
+        created_by: "missing-profile-success-user",
+      }),
+    )
+
+    await getAuthApiKeyForUser(user as never, null, observedAt)
+    expect(uswProfileReads).toEqual(["missing-profile-success-user"])
+    expect(publishPromotionIdentity).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not insert a proxy key when its missing profile cannot be published", async () => {
+    vi.mocked(publishPromotionIdentity).mockRejectedValueOnce(
+      new Error("writer unavailable"),
+    )
+    const observedAt = new Date().toISOString()
+
+    await expect(
+      getAuthApiKeyForUser(
+        {
+          id: "missing-profile-user",
+          email: "user@example.com",
+          updated_at: observedAt,
+        } as never,
+        null,
+        observedAt,
+      ),
+    ).rejects.toThrow("writer unavailable")
+    expect(uswApiKeyUpserts).not.toContainEqual(
+      expect.objectContaining({ created_by: "missing-profile-user" }),
+    )
+  })
+
+  it("resolves a pinned Checkout key without repairing a missing profile", async () => {
+    uswProfileReads.length = 0
+    vi.mocked(publishPromotionIdentity).mockRejectedValue(
+      new Error("writer unavailable"),
+    )
+    const user = {
+      id: "missing-profile-recovery-user",
+      email: "user@example.com",
+    }
+
+    const result = await getAuthApiKeyAndTeamForRecovery(user as never)
+
+    expect(result).toEqual({
+      apiKey: deriveRawKey(user.id, "team-west"),
+      team: { teamId: "team-west", region: "usw" },
+    })
+    expect(uswProfileReads).toEqual([])
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
+    expect(uswApiKeyUpserts).not.toContainEqual(
+      expect.objectContaining({ created_by: user.id }),
+    )
+  })
+
+  it("repairs the originally resolved Checkout key without another membership lookup", async () => {
+    const user = { id: "checkout-repair-user", email: "payer@example.com" }
+    const observedAt = new Date().toISOString()
+    vi.mocked(listTeamMembershipsForUser).mockResolvedValueOnce([
+      { teamId: "team-west", region: "usw" },
+    ])
+    const resolved = await getAuthApiKeyAndTeamForRecovery(
+      user as never,
+      observedAt,
+    )
+    vi.mocked(listTeamMembershipsForUser).mockClear()
+    vi.mocked(listTeamMembershipsForUser).mockResolvedValueOnce([])
+    vi.mocked(provisionTeam).mockClear()
+
+    const repaired = await ensureAuthApiKeyForTeam(
+      user as never,
+      resolved.team,
+      observedAt,
+    )
+
+    expect(repaired).toBe(resolved.apiKey)
+    expect(listTeamMembershipsForUser).not.toHaveBeenCalled()
+    expect(provisionTeam).not.toHaveBeenCalled()
+    expect(uswApiKeyUpserts).toContainEqual(
+      expect.objectContaining({
+        table: "api_key",
+        team_id: "team-west",
+        key_hash: hashKey(resolved.apiKey),
+        created_by: user.id,
+      }),
     )
   })
 })
@@ -331,6 +518,7 @@ describe("proxy-auth new-user provisioning", () => {
       "brand-new",
       "new@example.com",
       "new@example.com",
+      undefined,
     )
     expect(key).toMatch(/^ss_live_/)
     // Proxy key row lands in the newly provisioned team's home (default) cell.
