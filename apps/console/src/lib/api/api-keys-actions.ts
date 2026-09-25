@@ -2,12 +2,21 @@
 
 import crypto from "node:crypto"
 
-import { resolveActiveTeam } from "@/lib/api/active-team"
+import { pickActiveTeam, readTeamSelection } from "@/lib/api/active-team"
 import {
   invalidateMembershipDirectory,
+  listTeamMembershipsForUserDetailed,
   type TeamMembership,
 } from "@/lib/api/team-directory"
-import { provisionTeam } from "@/lib/api/team-provisioning"
+import {
+  completedMemberships,
+  provisionTeam,
+} from "@/lib/api/team-provisioning"
+import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
+import {
+  SignupRestrictedError,
+  SIGNUP_RESTRICTED_MESSAGE,
+} from "@/lib/auth/signup-restrictions"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -18,6 +27,14 @@ import { createServerClient } from "@/lib/supabase/server"
 // without a region segment keep working: the control plane hashes the whole
 // string, so the format is opaque to auth.
 const REGION_CODES = new Set(["use", "usw"])
+const SIGNUP_DENIAL = {
+  code: "signup_blocked" as const,
+  message: SIGNUP_RESTRICTED_MESSAGE,
+}
+const GOOGLE_RECOVERY = {
+  code: "google_signup_recovery_required" as const,
+  message: "Complete signup with Google to continue.",
+}
 
 function generateRawKey(region: string): string {
   const bytes = crypto.randomBytes(24)
@@ -92,11 +109,21 @@ async function getOrCreateTeamForUser(
   userId: string,
   email: string,
 ): Promise<TeamMembership> {
-  // Ensure profile exists first (FK target for team_member and api_key)
-  await ensureProfile(DEFAULT_REGION, userId, email)
+  const directory = await completedMemberships(
+    userId,
+    await listTeamMembershipsForUserDetailed(userId, { maxAgeMs: 0 }),
+  )
+  const active = pickActiveTeam(
+    directory.memberships,
+    await readTeamSelection(),
+  )
+  if (active) {
+    await ensureProfile(DEFAULT_REGION, userId, email)
+    return active
+  }
 
-  const active = await resolveActiveTeam(userId)
-  if (active) return active
+  if (directory.degradedRegions.length > 0)
+    throw new Error("Membership lookup degraded; please try again")
 
   // No team yet — provision one through the full RBAC chain (same helper the
   // create-team and proxy-auth paths use), so a first API-key action can't
@@ -113,7 +140,15 @@ export async function listApiKeysAction() {
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
-  const team = await getOrCreateTeamForUser(user.id, user.email ?? user.id)
+  let team: TeamMembership
+  try {
+    team = await getOrCreateTeamForUser(user.id, user.email ?? user.id)
+  } catch (error) {
+    if (error instanceof SignupRestrictedError) return SIGNUP_DENIAL
+    if (error instanceof GoogleSignupRecoveryRequiredError)
+      return GOOGLE_RECOVERY
+    throw error
+  }
 
   const admin = cellFor(team.region).createAdminClient()
   const { data, error } = await admin
@@ -142,7 +177,15 @@ export async function createApiKeyAction(name: string) {
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
-  const team = await getOrCreateTeamForUser(user.id, user.email ?? user.id)
+  let team: TeamMembership
+  try {
+    team = await getOrCreateTeamForUser(user.id, user.email ?? user.id)
+  } catch (error) {
+    if (error instanceof SignupRestrictedError) return SIGNUP_DENIAL
+    if (error instanceof GoogleSignupRecoveryRequiredError)
+      return GOOGLE_RECOVERY
+    throw error
+  }
 
   const region = await getTeamHomeRegion(team)
   const rawKey = generateRawKey(region)
@@ -189,7 +232,15 @@ export async function revokeApiKeyAction(id: string) {
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
-  const team = await getOrCreateTeamForUser(user.id, user.email ?? user.id)
+  let team: TeamMembership
+  try {
+    team = await getOrCreateTeamForUser(user.id, user.email ?? user.id)
+  } catch (error) {
+    if (error instanceof SignupRestrictedError) return SIGNUP_DENIAL
+    if (error instanceof GoogleSignupRecoveryRequiredError)
+      return GOOGLE_RECOVERY
+    throw error
+  }
 
   const admin = cellFor(team.region).createAdminClient()
   const { error } = await admin

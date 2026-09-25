@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { ApiError } from "@/lib/api/client"
 import { billingKeys, teamKeys } from "@/lib/api/query-keys"
 import {
   createTeamAction,
@@ -51,8 +52,11 @@ export function useCreateTeam() {
   return useMutation({
     // Creation also changes the active-team cookie; share billing's switch guard.
     mutationKey: ["switch-team", "create"],
-    mutationFn: ({ name, region }: { name: string; region: string }) =>
-      createTeamAction(name, region),
+    mutationFn: async ({ name, region }: { name: string; region: string }) => {
+      const result = await createTeamAction(name, region)
+      if ("code" in result) throw new ApiError(403, result.code, result.message)
+      return result
+    },
     onSuccess: async (team) => {
       // Cancel any directory read that started before the cookie changed.
       await queryClient.cancelQueries({ queryKey: teamKeys.directory() })

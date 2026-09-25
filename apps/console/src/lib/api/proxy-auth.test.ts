@@ -60,6 +60,12 @@ vi.mock("@/lib/api/team-directory", () => ({
 // new-user test asserts getTeamForUser routes through it instead of writing a
 // legacy-only team the control plane would reject.
 vi.mock("@/lib/api/team-provisioning", () => ({
+  completedMemberships: vi.fn(
+    async (
+      _userId: string,
+      directory: import("@/lib/api/team-directory").MembershipDirectory,
+    ) => directory,
+  ),
   provisionTeam: vi.fn(async () => ({
     id: "team-new",
     name: "new@example.com",
@@ -151,7 +157,11 @@ import {
   listTeamMembershipsForUser,
   listTeamMembershipsForUserDetailed,
 } from "@/lib/api/team-directory"
-import { provisionTeam } from "@/lib/api/team-provisioning"
+import {
+  completedMemberships,
+  provisionTeam,
+} from "@/lib/api/team-provisioning"
+import { SignupRestrictedError } from "@/lib/auth/signup-restrictions"
 
 import {
   deriveRawKey,
@@ -279,6 +289,14 @@ describe("proxy-auth new-user provisioning", () => {
     useApiKeyUpserts.length = 0
     activeTeamCookie = undefined
     vi.mocked(provisionTeam).mockClear()
+    vi.mocked(completedMemberships).mockImplementation(
+      async (_userId, directory) => directory,
+    )
+    vi.mocked(provisionTeam).mockResolvedValue({
+      id: "team-new",
+      name: "new@example.com",
+      region: "use",
+    })
     mockEnsureGoogleOnboardingMembership
       .mockReset()
       .mockResolvedValue(undefined)
@@ -344,6 +362,87 @@ describe("proxy-auth new-user provisioning", () => {
         created_by: "brand-new",
       },
     ])
+  })
+
+  it("does not mint a proxy key when first-team provisioning is blocked", async () => {
+    vi.mocked(listTeamMembershipsForUser).mockResolvedValueOnce([])
+    vi.mocked(listTeamMembershipsForUser).mockResolvedValueOnce([])
+    vi.mocked(provisionTeam).mockRejectedValueOnce(new SignupRestrictedError())
+
+    await expect(
+      getAuthApiKeyForUser({
+        id: "blocked-new-user",
+        email: "blocked@example.com",
+      } as never),
+    ).rejects.toThrow(SignupRestrictedError)
+
+    expect(provisionTeam).toHaveBeenCalledOnce()
+    expect(useApiKeyUpserts).toEqual([])
+
+    const retryKey = await getAuthApiKeyForUser({
+      id: "blocked-new-user",
+      email: "blocked@example.com",
+    } as never)
+    expect(retryKey).toMatch(/^ss_live_/)
+    expect(provisionTeam).toHaveBeenCalledTimes(2)
+    expect(useApiKeyUpserts).toEqual([
+      expect.objectContaining({
+        table: "api_key",
+        team_id: "team-new",
+        key_hash: hashKey(retryKey as string),
+        created_by: "blocked-new-user",
+      }),
+    ])
+
+    const key = await getAuthApiKeyForUser({
+      id: "established-user",
+      email: "existing@example.com",
+    } as never)
+    expect(key).toMatch(/^ss_live_/)
+    expect(provisionTeam).toHaveBeenCalledTimes(2)
+    expect(uswApiKeyUpserts).toContainEqual(
+      expect.objectContaining({
+        table: "api_key",
+        team_id: "team-west",
+        created_by: "established-user",
+      }),
+    )
+  })
+
+  it("routes an unfinished owner membership through provisioning on retry", async () => {
+    vi.mocked(completedMemberships).mockImplementation(
+      async (_userId, directory) => ({
+        ...directory,
+        memberships: directory.memberships.filter(
+          (membership) => membership.teamId !== "unfinished-team",
+        ),
+      }),
+    )
+    vi.mocked(listTeamMembershipsForUser).mockResolvedValueOnce([
+      { teamId: "unfinished-team", region: "use" },
+    ])
+    vi.mocked(provisionTeam).mockRejectedValueOnce(new SignupRestrictedError())
+
+    await expect(
+      getAuthApiKeyForUser({
+        id: "failed-cleanup-user",
+        email: "retry@example.com",
+      } as never),
+    ).rejects.toThrow(SignupRestrictedError)
+
+    expect(completedMemberships).toHaveBeenCalledWith(
+      "failed-cleanup-user",
+      expect.objectContaining({
+        memberships: [{ teamId: "unfinished-team", region: "use" }],
+      }),
+    )
+    expect(provisionTeam).toHaveBeenCalledWith(
+      "use",
+      "failed-cleanup-user",
+      "retry@example.com",
+      "retry@example.com",
+    )
+    expect(useApiKeyUpserts).toEqual([])
   })
 
   it("uses a detailed Google membership read when the initial lookup is empty", async () => {

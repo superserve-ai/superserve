@@ -102,6 +102,29 @@ function setup() {
   )
 }
 
+it("keeps the current team when creation returns a signup denial", async () => {
+  mocks.create.mockResolvedValue({
+    code: "signup_blocked",
+    message: "Signup is not available. Please try again later.",
+  })
+  const { result } = setup()
+
+  await act(async () => {
+    await result.current.create
+      .mutateAsync({ name: "blocked", region: "usw" })
+      .catch(() => {})
+  })
+
+  await waitFor(() =>
+    expect(result.current.create.error?.message).toBe(
+      "Signup is not available. Please try again later.",
+    ),
+  )
+  expect(
+    client.getQueryData<TeamDirectoryResponse>(teamKeys.directory()),
+  ).toEqual(directory)
+})
+
 it.each([false, true])(
   "clears old team data immediately and keeps billing guarded through directory reconciliation (failure: %s)",
   async (failDirectory) => {

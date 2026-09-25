@@ -165,6 +165,16 @@
             ]
           },
           {
+            "group": "Snapshots",
+            "pages": [
+              "POST /sandboxes/{sandbox_id}/snapshot",
+              "GET /sandboxes/{sandbox_id}/snapshots",
+              "GET /snapshots/{snapshot_id}",
+              "PATCH /snapshots/{snapshot_id}",
+              "DELETE /snapshots/{snapshot_id}"
+            ]
+          },
+          {
             "group": "Exec",
             "pages": ["POST /exec", "POST /exec/stream", "GET /exec/connect"]
           },
@@ -216,6 +226,7 @@
               "GET /teams/{team_id}/billing/periods/{period_id}/export-preview",
               "GET /teams/{team_id}/billing/usage",
               "POST /stripe/checkout-session",
+              "POST /stripe/checkout-session/recover",
               "POST /stripe/customer-portal-session",
               "POST /stripe/webhook"
             ]

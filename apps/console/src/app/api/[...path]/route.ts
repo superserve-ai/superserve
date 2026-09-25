@@ -7,6 +7,11 @@ import {
   getAuthApiKeyForUser,
 } from "@/lib/api/proxy-auth"
 import { redactAccessTokens } from "@/lib/api/redact"
+import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
+import {
+  SignupRestrictedError,
+  SIGNUP_RESTRICTED_MESSAGE,
+} from "@/lib/auth/signup-restrictions"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -150,7 +155,32 @@ async function proxyRequest(
   // Inject server-side API key for authenticated requests
   let authMode = skipKeyInjection ? "skipped" : "none"
   if (!skipKeyInjection) {
-    const apiKey = await getAuthApiKeyForUser(user, impersonationContext)
+    let apiKey: string | null
+    try {
+      apiKey = await getAuthApiKeyForUser(user, impersonationContext)
+    } catch (error) {
+      if (error instanceof GoogleSignupRecoveryRequiredError)
+        return NextResponse.json(
+          {
+            error: {
+              code: "google_signup_recovery_required",
+              message: error.message,
+            },
+          },
+          { status: 403 },
+        )
+      if (error instanceof SignupRestrictedError)
+        return NextResponse.json(
+          {
+            error: {
+              code: "signup_blocked",
+              message: SIGNUP_RESTRICTED_MESSAGE,
+            },
+          },
+          { status: 403 },
+        )
+      throw error
+    }
 
     if (!apiKey || !user) {
       return NextResponse.json(
@@ -159,9 +189,33 @@ async function proxyRequest(
       )
     }
     headers.set("X-API-Key", apiKey)
-    apiBaseUrl = impersonationContext
-      ? cellFor(impersonationContext.region).apiBaseUrl
-      : await getApiBaseUrlForUser(user)
+    try {
+      apiBaseUrl = impersonationContext
+        ? cellFor(impersonationContext.region).apiBaseUrl
+        : await getApiBaseUrlForUser(user)
+    } catch (error) {
+      if (error instanceof GoogleSignupRecoveryRequiredError)
+        return NextResponse.json(
+          {
+            error: {
+              code: "google_signup_recovery_required",
+              message: error.message,
+            },
+          },
+          { status: 403 },
+        )
+      if (error instanceof SignupRestrictedError)
+        return NextResponse.json(
+          {
+            error: {
+              code: "signup_blocked",
+              message: SIGNUP_RESTRICTED_MESSAGE,
+            },
+          },
+          { status: 403 },
+        )
+      throw error
+    }
     authMode = impersonating ? "impersonation" : "self"
   }
 

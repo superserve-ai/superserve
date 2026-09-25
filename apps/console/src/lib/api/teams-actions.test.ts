@@ -62,10 +62,19 @@ const mockListTeamMembershipsForUserDetailed = vi.fn(
   async (_userId: string, _opts?: { maxAgeMs?: number }) => directoryState,
 )
 const mockTrackEvent = vi.fn()
+const mockEvaluateSignupRestriction = vi.fn()
+
+vi.mock("@/lib/auth/signup-restrictions", () => ({
+  SIGNUP_RESTRICTED_MESSAGE: "Signup is not available. Please try again later.",
+  SignupRestrictedError: class SignupRestrictedError extends Error {},
+  evaluateSignupRestriction: (...args: unknown[]) =>
+    mockEvaluateSignupRestriction(...args),
+}))
 
 // Per-test knobs read lazily by the cells mock.
 let regions: string[] = ["use", "usw"]
 let cellClients: Record<string, ReturnType<typeof recordingCellClient>> = {}
+let existingRbacAssignment = false
 
 // Records every write per table so tests can assert the full create chain
 // landed in one cell and nowhere else.
@@ -105,10 +114,24 @@ function recordingCellClient() {
             record(table, row)
             return { error: null }
           },
-          // The directory's RBAC-authoritative lookup also selects from
-          // team_memberships; empty = legacy-discovery path.
+          // A directory entry represents an existing team only when its
+          // provisioning RBAC chain was completed.
           select: () => ({
-            eq: async () => ({ data: [], error: null }),
+            eq(_column: string, _value: string) {
+              return this
+            },
+            is(_column: string, _value: null) {
+              return this
+            },
+            async limit() {
+              return {
+                data:
+                  table === "user_role_assignments" && existingRbacAssignment
+                    ? [{ id: "assignment-old" }]
+                    : [],
+                error: null,
+              }
+            },
           }),
         }
       case "roles":
@@ -158,8 +181,10 @@ vi.mock("@/lib/api/team-directory", () => ({
   invalidateMembershipDirectory: () => {},
 }))
 vi.mock("@/lib/auth/google-signup-proof", () => ({
+  GoogleSignupRecoveryRequiredError: class GoogleSignupRecoveryRequiredError extends Error {},
   consumeGoogleSignupProof: (...args: unknown[]) =>
     mockConsumeGoogleSignupProof(...args),
+  readGoogleSignupVisitors: async () => [],
   isGoogleUser: (user: {
     app_metadata?: { provider?: string; providers?: string[] }
   }) => mockIsGoogleUser(user),
@@ -196,10 +221,21 @@ vi.mock("next/headers", () => ({
 }))
 
 import {
+  SignupRestrictedError,
+  SIGNUP_RESTRICTED_MESSAGE,
+} from "@/lib/auth/signup-restrictions"
+
+import {
   createTeamAction,
   listTeamsAction,
   setActiveTeamAction,
 } from "./teams-actions"
+
+async function createAllowedTeam(name: string, region?: string) {
+  const result = await createTeamAction(name, region)
+  if ("code" in result) throw new Error(result.message)
+  return result
+}
 
 describe("createTeamAction", () => {
   beforeEach(() => {
@@ -207,6 +243,7 @@ describe("createTeamAction", () => {
     directoryTeams = []
     currentUser = { id: "u1", email: "pavitra@superserve.ai" }
     googleUser = false
+    existingRbacAssignment = false
     directoryState = { memberships: [], degradedRegions: [] }
     cookieValue = undefined
     cookieSets.length = 0
@@ -252,6 +289,7 @@ describe("createTeamAction", () => {
       },
     )
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
+    mockEvaluateSignupRestriction.mockReset().mockResolvedValue(undefined)
     cellClients = {
       use: recordingCellClient(),
       usw: recordingCellClient(),
@@ -259,7 +297,7 @@ describe("createTeamAction", () => {
   })
 
   it("writes the full RBAC chain into the target cell", async () => {
-    const team = await createTeamAction("west pilot", "usw")
+    const team = await createAllowedTeam("west pilot", "usw")
 
     expect(team).toEqual({ id: "team-new", name: "west pilot", region: "usw" })
 
@@ -294,13 +332,26 @@ describe("createTeamAction", () => {
   })
 
   it("defaults to the default region when none is given", async () => {
-    const team = await createTeamAction("east team")
+    const team = await createAllowedTeam("east team")
 
     expect(team.region).toBe("use")
     expect(cellClients.use.writes.team).toEqual([
       { name: "east team", home_region: "use" },
     ])
     expect(cellClients.usw.from).not.toHaveBeenCalled()
+  })
+
+  it("returns a serializable denial without selecting a team", async () => {
+    mockEvaluateSignupRestriction.mockRejectedValueOnce(
+      new SignupRestrictedError(),
+    )
+
+    await expect(createTeamAction("blocked", "usw")).resolves.toEqual({
+      code: "signup_blocked",
+      message: SIGNUP_RESTRICTED_MESSAGE,
+    })
+    expect(cellClients.usw.writes.team).toBeUndefined()
+    expect(cookieSets).toEqual([])
   })
 
   it("rejects a region that is not configured", async () => {
@@ -365,8 +416,9 @@ describe("createTeamAction", () => {
       memberships: [{ teamId: "team-old", region: "use" }],
       degradedRegions: [],
     }
+    existingRbacAssignment = true
 
-    const team = await createTeamAction("west pilot", "usw")
+    const team = await createAllowedTeam("west pilot", "usw")
 
     expect(team).toEqual({ id: "team-new", name: "west pilot", region: "usw" })
     expect(mockRequireGoogleSignupProof).not.toHaveBeenCalled()

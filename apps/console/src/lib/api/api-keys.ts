@@ -3,18 +3,25 @@ import {
   listApiKeysAction,
   revokeApiKeyAction,
 } from "./api-keys-actions"
+import { ApiError } from "./client"
 import type { ApiKeyResponse, CreateApiKeyResponse } from "./types"
 
 export async function listApiKeys(): Promise<ApiKeyResponse[]> {
-  return listApiKeysAction()
+  const result = await listApiKeysAction()
+  if ("code" in result) throw new ApiError(403, result.code, result.message)
+  return result
 }
 
 export async function createApiKey(data: {
   name: string
 }): Promise<CreateApiKeyResponse> {
-  return createApiKeyAction(data.name)
+  const result = await createApiKeyAction(data.name)
+  if ("code" in result) throw new ApiError(403, result.code, result.message)
+  return result
 }
 
 export async function revokeApiKey(id: string): Promise<void> {
-  return revokeApiKeyAction(id)
+  const result = await revokeApiKeyAction(id)
+  if (result && "code" in result)
+    throw new ApiError(403, result.code, result.message)
 }

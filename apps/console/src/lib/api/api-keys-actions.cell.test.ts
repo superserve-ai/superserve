@@ -14,6 +14,13 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: () => undefined }),
 }))
+vi.mock("@/lib/api/team-provisioning", () => ({
+  completedMemberships: async (
+    _userId: string,
+    directory: import("@/lib/api/team-directory").MembershipDirectory,
+  ) => directory,
+  provisionTeam: vi.fn(),
+}))
 
 let uswProfileChecked = false
 let insertedApiKeyRow: Record<string, unknown> | null = null
@@ -121,6 +128,7 @@ import { createApiKeyAction } from "./api-keys-actions"
 describe("createApiKeyAction cell targeting", () => {
   it("writes the key row to the team's home cell", async () => {
     const res = await createApiKeyAction("test")
+    if ("code" in res) throw new Error(res.message)
 
     expect(res.key).toMatch(/^ss_live_usw_/)
     expect(uswProfileChecked).toBe(true)

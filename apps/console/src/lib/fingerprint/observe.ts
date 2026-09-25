@@ -1,3 +1,5 @@
+import { after } from "next/server"
+
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 
@@ -172,9 +174,8 @@ function normalizeFingerprintEvent(
 
 /**
  * Resolve a browser-generated Fingerprint event using the trusted Server API
- * and record an observe-only signup event. This helper is deliberately
- * fail-open: Fingerprint is evaluation telemetry and must never become a
- * signup availability dependency.
+ * and record the existing observation event. An unavailable provider yields
+ * no trusted visitor ID.
  */
 export async function observeFingerprintSignup({
   eventId,
@@ -182,8 +183,23 @@ export async function observeFingerprintSignup({
   signupMethod,
   signupAttemptId,
 }: FingerprintSignupObservation): Promise<void> {
+  await resolveFingerprintSignup({
+    eventId,
+    userId,
+    signupMethod,
+    signupAttemptId,
+  })
+}
+
+/** Return only the exact visitor ID verified by the provider's server API. */
+export async function resolveFingerprintSignup({
+  eventId,
+  userId = null,
+  signupMethod,
+  signupAttemptId,
+}: FingerprintSignupObservation): Promise<string | null> {
   const secretApiKey = process.env.FINGERPRINT_SECRET_API_KEY
-  if (!secretApiKey || !eventId) return
+  if (!secretApiKey || !eventId) return null
 
   const baseUrl =
     process.env.FINGERPRINT_SERVER_API_URL || DEFAULT_FINGERPRINT_SERVER_API
@@ -200,58 +216,59 @@ export async function observeFingerprintSignup({
 
     if (!response.ok) {
       console.warn("Fingerprint observation lookup failed", {
-        eventId,
         status: response.status,
       })
-      return
+      return null
     }
 
     const event = normalizeFingerprintEvent(await response.json(), eventId)
     if (!event) {
-      console.warn("Fingerprint observation response was malformed", {
-        eventId,
-      })
-      return
+      console.warn("Fingerprint observation response was malformed")
+      return null
     }
 
-    console.info("Fingerprint observation lookup succeeded", {
-      eventId: event.providerEventId,
-      visitorId: event.visitorId,
-    })
-
-    await trackEvent(
-      AUTH_EVENTS.FINGERPRINT_SIGNUP_OBSERVED,
-      userId || eventId,
-      {
-        provider: "fingerprint",
-        signup_attempt_id: signupAttemptId,
-        provider_event_id: event.providerEventId,
-        visitor_id: event.visitorId,
-        visitor_found: event.visitorFound,
-        confidence_score: event.confidenceScore,
-        bot_result: event.botResult,
-        bot_type: event.botType,
-        vpn: event.vpn,
-        vpn_confidence: event.vpnConfidence,
-        proxy: event.proxy,
-        proxy_confidence: event.proxyConfidence,
-        incognito: event.incognito,
-        tampering: event.tampering,
-        tampering_confidence: event.tamperingConfidence,
-        virtual_machine: event.virtualMachine,
-        developer_tools: event.developerTools,
-        high_activity_device: event.highActivityDevice,
-        suspect_score: event.suspectScore,
-        smart_signals: event.smartSignals,
-        superserve_user_id: userId,
-        signup_method: signupMethod,
-        observed_at: new Date().toISOString(),
-      },
-    )
-  } catch (error) {
-    console.warn("Fingerprint observation failed open", {
-      eventId,
-      error: error instanceof Error ? error.message : "unknown_error",
-    })
+    try {
+      after(async () => {
+        try {
+          await trackEvent(
+            AUTH_EVENTS.FINGERPRINT_SIGNUP_OBSERVED,
+            userId || eventId,
+            {
+              provider: "fingerprint",
+              signup_attempt_id: signupAttemptId,
+              provider_event_id: event.providerEventId,
+              visitor_id: event.visitorId,
+              visitor_found: event.visitorFound,
+              confidence_score: event.confidenceScore,
+              bot_result: event.botResult,
+              bot_type: event.botType,
+              vpn: event.vpn,
+              vpn_confidence: event.vpnConfidence,
+              proxy: event.proxy,
+              proxy_confidence: event.proxyConfidence,
+              incognito: event.incognito,
+              tampering: event.tampering,
+              tampering_confidence: event.tamperingConfidence,
+              virtual_machine: event.virtualMachine,
+              developer_tools: event.developerTools,
+              high_activity_device: event.highActivityDevice,
+              suspect_score: event.suspectScore,
+              smart_signals: event.smartSignals,
+              superserve_user_id: userId,
+              signup_method: signupMethod,
+              observed_at: new Date().toISOString(),
+            },
+          )
+        } catch {
+          /* Observation cannot affect signup. */
+        }
+      })
+    } catch {
+      /* Observation cannot affect signup. */
+    }
+    return event.visitorId
+  } catch {
+    console.warn("Fingerprint observation failed open")
+    return null
   }
 }

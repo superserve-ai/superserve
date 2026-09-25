@@ -56,9 +56,34 @@ vi.mock("@/lib/posthog/actions", () => ({
 }))
 
 const mockObserveFingerprintSignup = vi.fn()
+const mockResolveFingerprintSignup = vi.fn()
+const mockBeginSignupEvidenceAttempt = vi.fn()
+const mockSaveSignupEvidence = vi.fn()
+const mockIsSupersededSignupEvidenceAttempt = vi.fn()
+const mockEvaluateSignupRestriction = vi.fn()
+vi.mock("@/lib/auth/signup-restrictions", () => ({
+  SignupRestrictedError: class SignupRestrictedError extends Error {},
+  SIGNUP_RESTRICTED_MESSAGE: "Signup is not available. Please try again later.",
+  evaluateSignupRestriction: (...args: unknown[]) =>
+    mockEvaluateSignupRestriction(...args),
+}))
+vi.mock("@/lib/cells", () => ({
+  DEFAULT_REGION: "use",
+  cellFor: () => ({ apiBaseUrl: "https://backend.example.test" }),
+}))
 vi.mock("@/lib/fingerprint/observe", () => ({
   observeFingerprintSignup: (...args: unknown[]) =>
     mockObserveFingerprintSignup(...args),
+  resolveFingerprintSignup: (...args: unknown[]) =>
+    mockResolveFingerprintSignup(...args),
+}))
+vi.mock("@/lib/auth/signup-evidence", () => ({
+  beginSignupEvidenceAttempt: (...args: unknown[]) =>
+    mockBeginSignupEvidenceAttempt(...args),
+  isSupersededSignupEvidenceAttempt: (...args: unknown[]) =>
+    mockIsSupersededSignupEvidenceAttempt(...args),
+  readSignupEvidence: async () => "VisitorCase",
+  saveSignupEvidence: (...args: unknown[]) => mockSaveSignupEvidence(...args),
 }))
 
 vi.mock("@/lib/posthog/events", () => ({
@@ -94,6 +119,8 @@ const mockAfter = vi.fn()
 vi.mock("next/server", () => ({
   after: (callback: () => void | Promise<void>) => mockAfter(callback),
 }))
+
+import { SignupRestrictedError } from "@/lib/auth/signup-restrictions"
 
 import { beginGoogleSignup, signUpWithEmail } from "./action"
 
@@ -228,6 +255,11 @@ describe("signUpWithEmail", () => {
     mockObserveCloudflareSignup.mockReset().mockResolvedValue(undefined)
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
     mockObserveFingerprintSignup.mockReset().mockResolvedValue(undefined)
+    mockResolveFingerprintSignup.mockReset().mockResolvedValue("VisitorCase")
+    mockBeginSignupEvidenceAttempt.mockReset().mockResolvedValue(true)
+    mockSaveSignupEvidence.mockReset().mockResolvedValue(undefined)
+    mockEvaluateSignupRestriction.mockReset().mockResolvedValue(undefined)
+    mockIsSupersededSignupEvidenceAttempt.mockReset().mockResolvedValue(false)
     mockFingerprintCookieDelete.mockReset()
     fingerprintSignupEventId = undefined
     delete process.env.RECAPTCHA_API_KEY
@@ -292,7 +324,10 @@ describe("signUpWithEmail", () => {
       email: "user@test.com",
       password: "password123",
       options: {
-        data: { full_name: "Test User" },
+        data: {
+          full_name: "Test User",
+          signup_attempt_id: expect.any(String),
+        },
         redirectTo: expect.stringContaining("/auth/callback"),
       },
     })
@@ -330,16 +365,15 @@ describe("signUpWithEmail", () => {
     expect(secondResult).toEqual({ success: true })
     expect(mockFingerprintCookieDelete).not.toHaveBeenCalled()
     expect(fingerprintSignupEventId).toBe("event-123")
-    expect(mockObserveFingerprintSignup).toHaveBeenNthCalledWith(1, {
+    expect(mockResolveFingerprintSignup).toHaveBeenCalledTimes(2)
+    expect(mockResolveFingerprintSignup).toHaveBeenNthCalledWith(1, {
       eventId: "event-123",
       signupMethod: "email",
-      userId: "user-1",
       signupAttemptId: expect.any(String),
     })
-    expect(mockObserveFingerprintSignup).toHaveBeenNthCalledWith(2, {
+    expect(mockResolveFingerprintSignup).toHaveBeenNthCalledWith(2, {
       eventId: "event-123",
       signupMethod: "email",
-      userId: "user-1",
       signupAttemptId: expect.any(String),
     })
     expect(mockObserveCloudflareSignup).toHaveBeenCalledTimes(2)
@@ -366,9 +400,15 @@ describe("signUpWithEmail", () => {
       cloudflareCalls[1].signupAttemptId,
     )
     for (const [index, { signupAttemptId }] of cloudflareCalls.entries()) {
-      expect(mockObserveFingerprintSignup).toHaveBeenNthCalledWith(
+      expect(mockResolveFingerprintSignup).toHaveBeenNthCalledWith(
         index + 1,
         expect.objectContaining({ signupAttemptId }),
+      )
+      expect(mockSaveSignupEvidence).toHaveBeenCalledWith(
+        "user-1",
+        signupAttemptId,
+        "event-123",
+        "VisitorCase",
       )
       expect(mockTrackEvent).toHaveBeenCalledWith(
         "auth_signup_recaptcha_observed",
@@ -377,6 +417,158 @@ describe("signUpWithEmail", () => {
       )
     }
   })
+
+  it.each([new Error("Cookie write failed")])(
+    "sends confirmation after allowed policy despite evidence storage failure: %s",
+    async (failure) => {
+      fingerprintSignupEventId = "event-123"
+      mockGenerateLink.mockResolvedValue({
+        data: {
+          user: { id: "user-1" },
+          properties: { hashed_token: "abc123" },
+        },
+        error: null,
+      })
+      mockSaveSignupEvidence.mockRejectedValue(failure)
+
+      await expect(
+        signUpWithEmail("user@test.com", "password123", "Test User"),
+      ).resolves.toEqual({ success: true })
+      const signupAttemptId =
+        mockGenerateLink.mock.calls[0][0].options.data.signup_attempt_id
+      expect(mockEvaluateSignupRestriction).toHaveBeenCalledWith(
+        "use",
+        signupAttemptId,
+        "VisitorCase",
+      )
+      expect(mockSendEmail).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it("denies with unavailable evidence storage before creating an auth user and allows a later retry", async () => {
+    fingerprintSignupEventId = "event-123"
+    mockGenerateLink.mockResolvedValue({
+      data: { user: { id: "user-1" }, properties: { hashed_token: "abc123" } },
+      error: null,
+    })
+    mockEvaluateSignupRestriction
+      .mockRejectedValueOnce(new SignupRestrictedError())
+      .mockResolvedValueOnce(undefined)
+
+    await expect(
+      signUpWithEmail("user@test.com", "password123", "Test User"),
+    ).resolves.toEqual({
+      success: false,
+      error: "Signup is not available. Please try again later.",
+    })
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockIsSupersededSignupEvidenceAttempt).toHaveBeenCalledWith(
+      expect.any(String),
+    )
+    expect(mockSaveSignupEvidence).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+
+    await expect(
+      signUpWithEmail("user@test.com", "password123", "Test User"),
+    ).resolves.toEqual({ success: true })
+    expect(mockGenerateLink).toHaveBeenCalledTimes(1)
+    expect(mockEvaluateSignupRestriction).toHaveBeenCalledTimes(2)
+    expect(
+      mockEvaluateSignupRestriction.mock.invocationCallOrder[1],
+    ).toBeLessThan(mockGenerateLink.mock.invocationCallOrder[0])
+    expect(mockSaveSignupEvidence).toHaveBeenCalledWith(
+      "user-1",
+      expect.any(String),
+      "event-123",
+      "VisitorCase",
+    )
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+  })
+
+  it("skips restriction evaluation for an attempt superseded by a signed context", async () => {
+    fingerprintSignupEventId = "event-123"
+    mockIsSupersededSignupEvidenceAttempt.mockResolvedValue(true)
+    mockGenerateLink.mockResolvedValue({
+      data: { user: { id: "user-1" }, properties: { hashed_token: "abc123" } },
+      error: null,
+    })
+
+    await expect(
+      signUpWithEmail("user@test.com", "password123", "Test User"),
+    ).resolves.toEqual({ success: true })
+    expect(mockEvaluateSignupRestriction).not.toHaveBeenCalled()
+  })
+
+  it("evaluates verified evidence when a prior signed cookie remains after the new write fails", async () => {
+    fingerprintSignupEventId = "event-123"
+    mockBeginSignupEvidenceAttempt.mockResolvedValue(false)
+    mockIsSupersededSignupEvidenceAttempt.mockResolvedValue(true)
+    mockEvaluateSignupRestriction.mockRejectedValue(new SignupRestrictedError())
+
+    await expect(
+      signUpWithEmail("user@test.com", "password123", "Test User"),
+    ).resolves.toEqual({
+      success: false,
+      error: "Signup is not available. Please try again later.",
+    })
+    expect(mockEvaluateSignupRestriction).toHaveBeenCalledWith(
+      "use",
+      expect.any(String),
+      "VisitorCase",
+    )
+    expect(mockIsSupersededSignupEvidenceAttempt).not.toHaveBeenCalled()
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+  })
+
+  it.each(["off", "unavailable"] as const)(
+    "keeps email signup fail-open when policy is %s and evidence storage fails",
+    async (policy) => {
+      const { evaluateSignupRestriction } = await vi.importActual<
+        typeof import("@/lib/auth/signup-restrictions")
+      >("@/lib/auth/signup-restrictions")
+      const previousToken = process.env.INTERNAL_API_TOKEN
+      const previousFetch = globalThis.fetch
+      try {
+        if (policy === "off") process.env.INTERNAL_API_TOKEN = "test-token"
+        else delete process.env.INTERNAL_API_TOKEN
+        const fetchSpy = vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              mode: "off",
+              decision: "allowed",
+              matched_subject_type: "none",
+            }),
+            { status: 200 },
+          ),
+        )
+        globalThis.fetch = fetchSpy
+        mockEvaluateSignupRestriction.mockImplementation(
+          evaluateSignupRestriction,
+        )
+        fingerprintSignupEventId = "event-123"
+        mockGenerateLink.mockResolvedValue({
+          data: {
+            user: { id: "user-1" },
+            properties: { hashed_token: "abc123" },
+          },
+          error: null,
+        })
+        mockSaveSignupEvidence.mockRejectedValue(
+          new Error("cookie unavailable"),
+        )
+
+        await expect(
+          signUpWithEmail("user@test.com", "password123", "Test User"),
+        ).resolves.toEqual({ success: true })
+        expect(mockSendEmail).toHaveBeenCalledTimes(1)
+        expect(fetchSpy).toHaveBeenCalledTimes(policy === "off" ? 1 : 0)
+      } finally {
+        globalThis.fetch = previousFetch
+        if (previousToken === undefined) delete process.env.INTERNAL_API_TOKEN
+        else process.env.INTERNAL_API_TOKEN = previousToken
+      }
+    },
+  )
 
   it.each([true, false])(
     "preserves email signup with reCAPTCHA verified=%s when Cloudflare scheduling throws",
@@ -513,6 +705,8 @@ describe("beginGoogleSignup", () => {
     mockIssueGoogleSignupProof.mockReset().mockResolvedValue(undefined)
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
     mockObserveFingerprintSignup.mockReset().mockResolvedValue(undefined)
+    mockResolveFingerprintSignup.mockReset().mockResolvedValue("VisitorCase")
+    mockSaveSignupEvidence.mockReset().mockResolvedValue(undefined)
     mockFingerprintCookieDelete.mockReset()
     fingerprintSignupEventId = undefined
   })

@@ -4,7 +4,11 @@ import { useToast } from "@superserve/ui"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { createApiKey, listApiKeys, revokeApiKey } from "@/lib/api/api-keys"
-import { ApiError } from "@/lib/api/client"
+import {
+  ApiError,
+  GOOGLE_SIGNUP_RECOVERY_URL,
+  requiresGoogleSignupRecovery,
+} from "@/lib/api/client"
 import { apiKeyKeys } from "@/lib/api/query-keys"
 import type { ApiKeyResponse, CreateApiKeyResponse } from "@/lib/api/types"
 
@@ -34,6 +38,10 @@ export function useCreateApiKey() {
       )
     },
     onError: (error) => {
+      if (requiresGoogleSignupRecovery(error)) {
+        window.location.assign(GOOGLE_SIGNUP_RECOVERY_URL)
+        return
+      }
       const message =
         error instanceof ApiError
           ? error.message
@@ -61,6 +69,10 @@ export function useRevokeApiKey() {
     },
     onError: (error, _id, context) => {
       queryClient.setQueryData(apiKeyKeys.all, context?.previous)
+      if (requiresGoogleSignupRecovery(error)) {
+        window.location.assign(GOOGLE_SIGNUP_RECOVERY_URL)
+        return
+      }
       const message =
         error instanceof ApiError
           ? error.message
@@ -94,6 +106,10 @@ export function useBulkRevokeApiKeys() {
     },
     onError: (error, _ids, context) => {
       queryClient.setQueryData(apiKeyKeys.all, context?.previous)
+      if (requiresGoogleSignupRecovery(error)) {
+        window.location.assign(GOOGLE_SIGNUP_RECOVERY_URL)
+        return
+      }
       const message =
         error instanceof ApiError
           ? error.message

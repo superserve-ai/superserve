@@ -15,6 +15,10 @@ import {
 import { useState } from "react"
 
 import { useCreateTeam, useTeams } from "@/hooks/use-teams"
+import {
+  GOOGLE_SIGNUP_RECOVERY_URL,
+  requiresGoogleSignupRecovery,
+} from "@/lib/api/client"
 import { regionLabel } from "@/lib/format"
 
 /**
@@ -50,6 +54,10 @@ export function TeamsSection() {
           )
         },
         onError: (error) => {
+          if (requiresGoogleSignupRecovery(error)) {
+            window.location.assign(GOOGLE_SIGNUP_RECOVERY_URL)
+            return
+          }
           addToast(error.message || "Failed to create team", "error")
         },
       },
