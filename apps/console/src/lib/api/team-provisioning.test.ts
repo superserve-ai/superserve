@@ -38,6 +38,8 @@ let completionState: Record<
   }
 > = {}
 let memberInsertGate: Promise<void> | null = null
+let completionLookupGate: Promise<void> | null = null
+let completionLookups: string[] = []
 const mockTrackEvent = vi.fn()
 const mockReadSignupEvidence = vi.fn()
 const mockClearSignupEvidence = vi.fn()
@@ -168,6 +170,10 @@ function recordingClient(
           return this
         },
         limit: async () => {
+          if (table === "user_role_assignments" && !ownerAssignmentLookup) {
+            completionLookups.push(teamId)
+            if (completionLookupGate) await completionLookupGate
+          }
           if (table === failCompletionTable)
             return { data: null, error: { message: `boom ${table}` } }
           const state = completionState[teamId] ?? {
@@ -285,6 +291,8 @@ describe("provisionTeam", () => {
     directoryState = { memberships: [], degradedRegions: [] }
     completionState = {}
     memberInsertGate = null
+    completionLookupGate = null
+    completionLookups = []
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
     mockReadSignupEvidence.mockReset().mockResolvedValue(null)
     mockClearSignupEvidence.mockReset().mockResolvedValue(undefined)
@@ -560,6 +568,38 @@ describe("provisionTeam", () => {
     } finally {
       errorSpy.mockRestore()
     }
+  })
+
+  it("starts completion checks for every membership before waiting for one", async () => {
+    let release!: () => void
+    completionLookupGate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const result = completedMemberships("u1", {
+      memberships: [
+        { teamId: "team-east", region: "use" },
+        { teamId: "team-east-2", region: "use" },
+        { teamId: "team-west", region: "usw" },
+      ],
+      degradedRegions: [],
+    })
+    try {
+      expect(completionLookups).toEqual([
+        "team-east",
+        "team-east-2",
+        "team-west",
+      ])
+    } finally {
+      release()
+    }
+    expect(await result).toEqual({
+      memberships: [
+        { teamId: "team-east", region: "use" },
+        { teamId: "team-east-2", region: "use" },
+        { teamId: "team-west", region: "usw" },
+      ],
+      degradedRegions: [],
+    })
   })
 
   it("does not classify a failed west completion as a first team", async () => {

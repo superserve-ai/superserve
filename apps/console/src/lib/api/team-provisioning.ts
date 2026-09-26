@@ -27,11 +27,10 @@ export async function completedMemberships(
   userId: string,
   directory: MembershipDirectory,
 ): Promise<MembershipDirectory> {
-  const memberships: TeamMembership[] = []
   const degradedRegions = new Set(directory.degradedRegions)
-  for (const membership of directory.memberships) {
-    if (degradedRegions.has(membership.region)) continue
-    try {
+  const checked = await Promise.allSettled(
+    directory.memberships.map(async (membership) => {
+      if (degradedRegions.has(membership.region)) return false
       const admin = cellFor(membership.region).createAdminClient()
       const { data: assignments, error: assignmentError } = await admin
         .from("user_role_assignments")
@@ -42,8 +41,7 @@ export async function completedMemberships(
         .limit(1)
       if (assignmentError) throw new Error(assignmentError.message)
       if (assignments?.length) {
-        memberships.push(membership)
-        continue
+        return true
       }
 
       const { data: rbac, error: rbacError } = await admin
@@ -70,10 +68,9 @@ export async function completedMemberships(
           ownerRow.joined_at &&
           Date.parse(ownerRow.joined_at) < RBAC_PROVISIONING_START
         )
-      if (unfinishedOwner) continue
+      if (unfinishedOwner) return false
       if (legacy?.length) {
-        memberships.push(membership)
-        continue
+        return true
       }
       if (rbac?.length) {
         // A joined member may have no assignment or legacy row. A failed
@@ -96,8 +93,7 @@ export async function completedMemberships(
             .limit(1)
           if (ownerError) throw new Error(ownerError.message)
           if (owners?.length) {
-            memberships.push(membership)
-            continue
+            return true
           }
         }
         const { data: legacyOwners, error: legacyOwnerError } = await admin
@@ -107,17 +103,28 @@ export async function completedMemberships(
           .eq("role", "owner")
           .limit(1)
         if (legacyOwnerError) throw new Error(legacyOwnerError.message)
-        if (legacyOwners?.length) memberships.push(membership)
+        if (legacyOwners?.length) return true
       }
-    } catch (error) {
+      return false
+    }),
+  )
+  const memberships: TeamMembership[] = []
+  checked.forEach((result, index) => {
+    const membership = directory.memberships[index]
+    if (result.status === "rejected") {
+      const error = result.reason
       if (membership.region === DEFAULT_REGION) throw error
-      degradedRegions.add(membership.region)
-      console.error(
-        `team completion: cell ${membership.region} lookup failed, serving without it:`,
-        error,
-      )
+      if (!degradedRegions.has(membership.region)) {
+        degradedRegions.add(membership.region)
+        console.error(
+          `team completion: cell ${membership.region} lookup failed, serving without it:`,
+          error,
+        )
+      }
+    } else if (result.value) {
+      memberships.push(membership)
     }
-  }
+  })
   return {
     memberships: memberships.filter((m) => !degradedRegions.has(m.region)),
     degradedRegions: [...degradedRegions],
