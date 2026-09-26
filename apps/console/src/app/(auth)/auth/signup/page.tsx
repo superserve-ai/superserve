@@ -12,7 +12,10 @@ import { Suspense, useEffect, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
-import { ensureFingerprintSignupEventId } from "@/lib/fingerprint/client"
+import {
+  clearFingerprintSignupCapture,
+  ensureFingerprintSignupCapture,
+} from "@/lib/fingerprint/client"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
@@ -184,7 +187,7 @@ function SignUpContent() {
     }
     setIsLoading(true)
     try {
-      void ensureFingerprintSignupEventId()
+      const capture = await ensureFingerprintSignupCapture()
       const recaptchaToken = await getRecaptchaToken("signup")
       const turnstileEnabled = await isCloudflareSignupObservationEnabled()
       const turnstileToken = turnstileEnabled
@@ -197,14 +200,32 @@ function SignUpContent() {
         return
       }
       const result = turnstileToken
-        ? await signUpWithEmail(
-            email,
-            password,
-            fullName,
-            recaptchaToken,
-            turnstileToken,
-          )
-        : await signUpWithEmail(email, password, fullName, recaptchaToken)
+        ? capture
+          ? await signUpWithEmail(
+              email,
+              password,
+              fullName,
+              recaptchaToken,
+              turnstileToken,
+              capture,
+            )
+          : await signUpWithEmail(
+              email,
+              password,
+              fullName,
+              recaptchaToken,
+              turnstileToken,
+            )
+        : capture
+          ? await signUpWithEmail(
+              email,
+              password,
+              fullName,
+              recaptchaToken,
+              undefined,
+              capture,
+            )
+          : await signUpWithEmail(email, password, fullName, recaptchaToken)
       if (!result.success) {
         posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
           method: "email",
@@ -218,6 +239,7 @@ function SignUpContent() {
         return
       }
       posthog.capture(AUTH_EVENTS.SIGN_UP_COMPLETED, { method: "email" })
+      clearFingerprintSignupCapture()
       setEmailSent(true)
     } catch {
       setErrors({ form: "Error creating account. Please try again." })
@@ -230,7 +252,7 @@ function SignUpContent() {
     setIsGoogleLoading(true)
     setErrors({})
     try {
-      void ensureFingerprintSignupEventId()
+      const capture = await ensureFingerprintSignupCapture()
       const recaptchaToken = await getRecaptchaToken("signup_google")
       const turnstileEnabled = await isCloudflareSignupObservationEnabled()
       const turnstileToken = turnstileEnabled
@@ -244,8 +266,12 @@ function SignUpContent() {
       }
 
       const proof = turnstileToken
-        ? await beginGoogleSignup(recaptchaToken, turnstileToken)
-        : await beginGoogleSignup(recaptchaToken)
+        ? capture
+          ? await beginGoogleSignup(recaptchaToken, turnstileToken, capture)
+          : await beginGoogleSignup(recaptchaToken, turnstileToken)
+        : capture
+          ? await beginGoogleSignup(recaptchaToken, undefined, capture)
+          : await beginGoogleSignup(recaptchaToken)
       if (!proof.success) {
         setErrors({ form: proof.error || "Google signup verification failed." })
         return
@@ -263,6 +289,8 @@ function SignUpContent() {
       })
       if (error) {
         setErrors({ form: "Error signing in. Please try again." })
+      } else {
+        clearFingerprintSignupCapture()
       }
     } catch {
       setErrors({ form: "Error signing in. Please try again." })

@@ -114,6 +114,16 @@ vi.mock("@/lib/cells", () => ({
     createAdminClient: () => clients[region],
   }),
 }))
+const mockRegisterPromotionSignupDevice = vi.fn()
+vi.mock("@/lib/api/promotion-device-evidence", () => ({
+  PromotionEvidenceError: class PromotionEvidenceError extends Error {
+    constructor(readonly code: string) {
+      super(code)
+    }
+  },
+  registerPromotionSignupDevice: (...args: unknown[]) =>
+    mockRegisterPromotionSignupDevice(...args),
+}))
 vi.mock("@/lib/posthog/actions", () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
 }))
@@ -161,7 +171,8 @@ import { provisionTeam } from "./team-provisioning"
 describe("provisionTeam", () => {
   beforeEach(() => {
     clients = { use: recordingClient(), usw: recordingClient() }
-    currentUser = null
+    currentUser = { id: "u1", email: "user@example.com" }
+    mockRegisterPromotionSignupDevice.mockReset().mockResolvedValue("owner")
     googleUser = false
     directoryState = { memberships: [], degradedRegions: [] }
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
@@ -216,6 +227,7 @@ describe("provisionTeam", () => {
     )
 
     expect(team).toEqual({ id: "team-new", name: "west pilot", region: "usw" })
+    expect(mockRegisterPromotionSignupDevice).toHaveBeenCalledWith("usw", "u1")
 
     const { writes } = clients.usw
     expect(writes.profile).toEqual([{ id: "u1", email: "user@example.com" }])
@@ -238,6 +250,16 @@ describe("provisionTeam", () => {
 
     // Nothing touched a cell other than the target.
     expect(clients.use.writes).toEqual({})
+  })
+
+  it("does not create a team when regional promotion publication is unavailable", async () => {
+    mockRegisterPromotionSignupDevice.mockRejectedValue(
+      new Error("authority unavailable"),
+    )
+    await expect(
+      provisionTeam("use", "u1", "user@example.com", "east team"),
+    ).rejects.toThrow("Promotion authority unavailable")
+    expect(clients.use.writes.team).toBeUndefined()
   })
 
   it("unwinds in reverse dependency order when a chain write fails", async () => {

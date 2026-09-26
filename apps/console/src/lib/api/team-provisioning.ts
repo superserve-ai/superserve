@@ -1,3 +1,7 @@
+import {
+  PromotionEvidenceError,
+  registerPromotionSignupDevice,
+} from "@/lib/api/promotion-device-evidence"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
 import {
@@ -57,8 +61,10 @@ export async function provisionTeam(
     data: { user },
     error: authError,
   } = await supabase.auth.getUser()
-  if (authError)
-    throw new Error(`Unable to verify authenticated user: ${authError.message}`)
+  if (authError || !user || user.id !== userId)
+    throw new Error(
+      `Unable to verify authenticated user: ${authError?.message ?? "account mismatch"}`,
+    )
   const googleUser = !!user && user.id === userId && isGoogleUser(user)
   const googleProvisioning = googleUser
     ? await guardFirstGoogleTeam(userId, user!)
@@ -70,6 +76,22 @@ export async function provisionTeam(
     .upsert({ id: userId, email }, { onConflict: "id", ignoreDuplicates: true })
   if (profileErr) {
     throw new Error(`Failed to create profile: ${profileErr.message}`)
+  }
+
+  // This commits regional ownership independently before the initial team
+  // creation trigger can decide whether to award the signup promotion.
+  try {
+    await registerPromotionSignupDevice(region, userId)
+  } catch (error) {
+    if (
+      !(error instanceof PromotionEvidenceError) ||
+      error.code !== "evidence_missing"
+    ) {
+      throw new Error("Promotion authority unavailable; please try again", {
+        cause: error,
+      })
+    }
+    // Absence is a policy input. The regional evidence-required gate decides it.
   }
 
   const { data: team, error: teamErr } = await admin

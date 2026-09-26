@@ -16,6 +16,7 @@ interface ProofPayload {
   purpose: string
   exp: number
   signup_attempt_id?: string
+  device_attempt_id?: string
 }
 
 function cookieName(signupAttemptId?: string): string {
@@ -34,12 +35,16 @@ function signature(payload: string): Buffer {
   return crypto.createHmac("sha256", signingSecret()).update(payload).digest()
 }
 
-function encodeProof(signupAttemptId?: string): string {
+function encodeProof(
+  signupAttemptId?: string,
+  deviceAttemptId?: string,
+): string {
   const payload: ProofPayload = {
     v: VERSION,
     purpose: PURPOSE,
     exp: Math.floor(Date.now() / 1000) + TTL_SECONDS,
     ...(signupAttemptId ? { signup_attempt_id: signupAttemptId } : {}),
+    ...(deviceAttemptId ? { device_attempt_id: deviceAttemptId } : {}),
   }
   const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url")
   return `${encoded}.${signature(encoded).toString("base64url")}`
@@ -95,15 +100,40 @@ function validProof(
 
 export async function issueGoogleSignupProof(
   signupAttemptId?: string,
+  deviceAttemptId?: string,
 ): Promise<void> {
   const store = await cookies()
-  store.set(cookieName(signupAttemptId), encodeProof(signupAttemptId), {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: TTL_SECONDS,
-  })
+  store.set(
+    cookieName(signupAttemptId),
+    encodeProof(signupAttemptId, deviceAttemptId),
+    {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: TTL_SECONDS,
+    },
+  )
+}
+
+/** Only a valid signed signup proof may carry a verified device attempt to OAuth callback. */
+export async function readGoogleSignupDeviceAttempt(
+  signupAttemptId: string,
+): Promise<string | undefined> {
+  try {
+    const store = await cookies()
+    const value = store.get(cookieName(signupAttemptId))?.value
+    if (!validProof(value, signupAttemptId)) return undefined
+    const encoded = value!.split(".")[0]
+    const payload = JSON.parse(
+      Buffer.from(encoded, "base64url").toString("utf8"),
+    ) as ProofPayload
+    return typeof payload.device_attempt_id === "string"
+      ? payload.device_attempt_id
+      : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export async function hasValidGoogleSignupProof(

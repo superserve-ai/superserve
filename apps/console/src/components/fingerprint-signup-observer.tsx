@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation"
 import { useEffect } from "react"
 
 import {
+  ensureFingerprintSignupCapture,
   registerFingerprintGetData,
-  writeFingerprintSignupEventIdCookie,
 } from "@/lib/fingerprint/client"
 
 /**
@@ -32,12 +32,7 @@ function FingerprintSignupObserverEnabled() {
     const normalizedPathname = pathname.replace(/\/+$/, "")
     if (normalizedPathname !== "/auth/signup") return
 
-    void getData()
-      .then((result) => {
-        if (result.event_id)
-          writeFingerprintSignupEventIdCookie(result.event_id)
-      })
-      .catch(() => undefined)
+    void ensureFingerprintSignupCapture()
   }, [getData, pathname])
 
   return null

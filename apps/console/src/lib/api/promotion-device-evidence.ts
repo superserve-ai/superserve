@@ -26,13 +26,18 @@ function requiredString(value: unknown): string {
   return value
 }
 
-function producerToken(kind: "capture" | "account"): string {
+function producerToken(region: string, kind: "capture" | "account"): string {
   const capture = process.env.PROMOTION_CAPTURE_TOKEN
-  const account = process.env.PROMOTION_ACCOUNT_TOKEN
+  const eastAccount = process.env.PROMOTION_ACCOUNT_TOKEN
+  const account =
+    region === "usw" ? process.env.PROMOTION_ACCOUNT_TOKEN_USWEST : eastAccount
   if (
     !capture ||
+    !eastAccount ||
     !account ||
+    capture === eastAccount ||
     capture === account ||
+    (region === "usw" && account === eastAccount) ||
     capture === process.env.INTERNAL_API_TOKEN ||
     account === process.env.INTERNAL_API_TOKEN ||
     capture === process.env.SANDBOX_INTERNAL_API_TOKEN ||
@@ -49,7 +54,7 @@ async function post(
   body?: Record<string, string>,
   actorUserId?: string,
 ): Promise<Record<string, unknown>> {
-  const token = producerToken(kind)
+  const token = producerToken(region, kind)
   try {
     const response = await fetch(
       `${cellFor(region).apiBaseUrl.replace(/\/$/, "")}${path}`,

@@ -6,6 +6,7 @@ import {
   scheduleFingerprintObservation,
   sendWelcomeEmail,
 } from "@/app/(auth)/auth/signup/action"
+import { bindPromotionSignupAccount } from "@/lib/api/promotion-device-evidence"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
 import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
@@ -14,7 +15,9 @@ import {
   hasValidLegacyGoogleSignupProof,
   isGoogleUser,
   markGoogleSignupAttempt,
+  readGoogleSignupDeviceAttempt,
 } from "@/lib/auth/google-signup-proof"
+import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createServerClient } from "@/lib/supabase/server"
@@ -96,6 +99,24 @@ export async function GET(request: Request) {
       } = await supabase.auth.getUser()
 
       if (user) {
+        if (type === "signup" && tokenHash) {
+          const deviceAttemptId = searchParams.get("device_attempt_id")
+          const proof = searchParams.get("device_bind_proof")
+          if (
+            deviceAttemptId &&
+            proof &&
+            validSignupDeviceBinding(user.id, deviceAttemptId, proof)
+          ) {
+            try {
+              await bindPromotionSignupAccount(user.id, deviceAttemptId)
+            } catch (error) {
+              console.warn("Confirmation device evidence binding unavailable", {
+                reason:
+                  error instanceof Error ? error.message : "unknown_error",
+              })
+            }
+          }
+        }
         const signupAttemptId =
           searchParams.get("signup_attempt_id") || undefined
         const provider = code
@@ -162,17 +183,37 @@ export async function GET(request: Request) {
               )
             }
             console.info("Google OAuth signup proof validated at callback")
+            if (signupAttemptId) {
+              const deviceAttemptId =
+                await readGoogleSignupDeviceAttempt(signupAttemptId)
+              if (deviceAttemptId) {
+                try {
+                  await bindPromotionSignupAccount(user.id, deviceAttemptId)
+                } catch (error) {
+                  console.warn(
+                    "Google signup device evidence binding unavailable",
+                    {
+                      reason:
+                        error instanceof Error
+                          ? error.message
+                          : "unknown_error",
+                    },
+                  )
+                }
+              }
+            }
             if (signupAttemptId) await markGoogleSignupAttempt(signupAttemptId)
           }
 
           const fingerprintEventId = await consumeFingerprintSignupEventId()
           if (isNewUser) {
-            scheduleFingerprintObservation(
-              fingerprintEventId,
-              "google",
-              user.id,
-              signupAttemptId,
-            )
+            if (!signupAttemptId)
+              scheduleFingerprintObservation(
+                fingerprintEventId,
+                "google",
+                user.id,
+                signupAttemptId,
+              )
             if (signupAttemptId) {
               await trackEvent(AUTH_EVENTS.SIGNUP_ATTEMPT_ASSOCIATED, user.id, {
                 signup_attempt_id: signupAttemptId,

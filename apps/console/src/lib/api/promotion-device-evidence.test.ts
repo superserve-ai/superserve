@@ -14,6 +14,7 @@ const attemptId = "148e4dfe-e2ad-493c-b9fb-54285a2e9771"
 const challenge = "db9daf04-d5d9-495d-8e9e-ab0d7842d108"
 const originalCapture = process.env.PROMOTION_CAPTURE_TOKEN
 const originalAccount = process.env.PROMOTION_ACCOUNT_TOKEN
+const originalWestAccount = process.env.PROMOTION_ACCOUNT_TOKEN_USWEST
 const originalWest = process.env.SANDBOX_API_URL_USWEST
 const originalWestSupabase = process.env.SUPABASE_USWEST_URL
 const originalWestKey = process.env.SUPABASE_USWEST_SERVICE_ROLE_KEY
@@ -29,6 +30,7 @@ describe("SS-641 promotion evidence producer contract", () => {
   beforeEach(() => {
     process.env.PROMOTION_CAPTURE_TOKEN = "capture-test-token"
     process.env.PROMOTION_ACCOUNT_TOKEN = "account-test-token"
+    process.env.PROMOTION_ACCOUNT_TOKEN_USWEST = "west-account-test-token"
     process.env.SANDBOX_API_URL_USWEST = "https://api-usw.test.superserve.ai"
     process.env.SUPABASE_USWEST_URL = "https://supabase-usw.test"
     process.env.SUPABASE_USWEST_SERVICE_ROLE_KEY = "west-test-key"
@@ -42,6 +44,9 @@ describe("SS-641 promotion evidence producer contract", () => {
     if (originalAccount === undefined)
       delete process.env.PROMOTION_ACCOUNT_TOKEN
     else process.env.PROMOTION_ACCOUNT_TOKEN = originalAccount
+    if (originalWestAccount === undefined)
+      delete process.env.PROMOTION_ACCOUNT_TOKEN_USWEST
+    else process.env.PROMOTION_ACCOUNT_TOKEN_USWEST = originalWestAccount
     if (originalWest === undefined) delete process.env.SANDBOX_API_URL_USWEST
     else process.env.SANDBOX_API_URL_USWEST = originalWest
     if (originalWestSupabase === undefined)
@@ -127,6 +132,9 @@ describe("SS-641 promotion evidence producer contract", () => {
     expect(fetcher.mock.calls[0][0]).toBe(
       "https://api-usw.test.superserve.ai/internal/promotion/account/register",
     )
+    expect(fetcher.mock.calls[0][1].headers.Authorization).toBe(
+      "Bearer west-account-test-token",
+    )
     expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
       user_id: userId,
     })
@@ -159,6 +167,20 @@ describe("SS-641 promotion evidence producer contract", () => {
     await expect(createPromotionSignupAttempt()).rejects.toBeInstanceOf(
       PromotionEvidenceError,
     )
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it("withholds West registration when its scoped account credential is absent or reused", async () => {
+    const fetcher = vi.fn()
+    vi.stubGlobal("fetch", fetcher)
+    delete process.env.PROMOTION_ACCOUNT_TOKEN_USWEST
+    await expect(
+      registerPromotionSignupDevice("usw", userId),
+    ).rejects.toMatchObject({ code: "authority_unavailable" })
+    process.env.PROMOTION_ACCOUNT_TOKEN_USWEST = "account-test-token"
+    await expect(
+      registerPromotionSignupDevice("usw", userId),
+    ).rejects.toMatchObject({ code: "authority_unavailable" })
     expect(fetcher).not.toHaveBeenCalled()
   })
 })

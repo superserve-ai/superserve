@@ -8,6 +8,10 @@ import { after } from "next/server"
 import * as z from "zod"
 
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
+import {
+  bindPromotionSignupAccount,
+  createPromotionSignupAttempt,
+} from "@/lib/api/promotion-device-evidence"
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
 import { issueGoogleSignupProof } from "@/lib/auth/google-signup-proof"
 import {
@@ -17,8 +21,11 @@ import {
 import { sendEmail } from "@/lib/email/send"
 import { ConfirmationEmail } from "@/lib/email/templates/confirmation"
 import { WelcomeEmail } from "@/lib/email/templates/welcome"
+import { signSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
+import type { SignupFingerprintCapture } from "@/lib/fingerprint/client"
 import { FINGERPRINT_SIGNUP_COOKIE } from "@/lib/fingerprint/constants"
 import { observeFingerprintSignup } from "@/lib/fingerprint/observe"
+import { attestFingerprintSignup } from "@/lib/fingerprint/observe"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { verifyRecaptcha } from "@/lib/recaptcha/verify"
@@ -35,6 +42,10 @@ export async function isCloudflareSignupObservationEnabled(): Promise<boolean> {
     readCloudflareObservationFlag(),
     new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 750)),
   ])
+}
+
+export async function createSignupFingerprintAttempt() {
+  return createPromotionSignupAttempt()
 }
 
 export async function scheduleCloudflareObservation(
@@ -142,6 +153,7 @@ export async function scheduleFingerprintObservation(
 export const beginGoogleSignup = async (
   recaptchaToken?: string,
   turnstileToken?: string,
+  capture?: SignupFingerprintCapture,
 ): Promise<
   | { success: true; signupAttemptId: string }
   | {
@@ -200,7 +212,13 @@ export const beginGoogleSignup = async (
   }
 
   try {
-    await issueGoogleSignupProof(signupAttemptId)
+    const deviceVerified = capture
+      ? await attestFingerprintSignup(capture, "google")
+      : false
+    await issueGoogleSignupProof(
+      signupAttemptId,
+      deviceVerified ? capture?.attemptId : undefined,
+    )
     await trackEvent(
       AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_VERIFIED,
       signupAttemptId,
@@ -235,6 +253,7 @@ export const signUpWithEmail = async (
   fullName: string,
   recaptchaToken?: string,
   turnstileToken?: string,
+  capture?: SignupFingerprintCapture,
 ) => {
   const parsed = signUpSchema.safeParse({ email, password, fullName })
   if (!parsed.success)
@@ -243,6 +262,9 @@ export const signUpWithEmail = async (
   const signupAttemptId = crypto.randomUUID()
   const clientContext = await readCloudflareClientContext()
   const fingerprintEventId = await readFingerprintSignupEventId()
+  const deviceVerified = capture
+    ? await attestFingerprintSignup(capture, "email")
+    : false
   scheduleCloudflareObservation(
     signupAttemptId,
     "email",
@@ -253,7 +275,8 @@ export const signUpWithEmail = async (
   )
   let fingerprintObservationScheduled = false
   const emitFingerprintObservation = (userId?: string | null) => {
-    if (!fingerprintEventId || fingerprintObservationScheduled) return
+    if (capture || !fingerprintEventId || fingerprintObservationScheduled)
+      return
     fingerprintObservationScheduled = true
     scheduleFingerprintObservation(
       fingerprintEventId,
@@ -321,6 +344,15 @@ export const signUpWithEmail = async (
     }
 
     emitFingerprintObservation(data?.user?.id ?? null)
+    if (deviceVerified && data?.user?.id && capture) {
+      try {
+        await bindPromotionSignupAccount(data.user.id, capture.attemptId)
+      } catch (error) {
+        console.warn("Signup device evidence binding unavailable", {
+          reason: error instanceof Error ? error.message : "unknown_error",
+        })
+      }
+    }
     await trackEvent(
       AUTH_EVENTS.SIGNUP_ATTEMPT_ASSOCIATED,
       data?.user?.id || signupAttemptId,
@@ -336,7 +368,19 @@ export const signUpWithEmail = async (
     if (!tokenHash)
       return { success: false, error: "Failed to generate confirmation link." }
 
-    const confirmationUrl = `${redirectTo}?token_hash=${tokenHash}&type=signup&utm_source=email&utm_medium=signup_confirmation`
+    const confirmation = new URL(redirectTo)
+    confirmation.searchParams.set("token_hash", tokenHash)
+    confirmation.searchParams.set("type", "signup")
+    confirmation.searchParams.set("utm_source", "email")
+    confirmation.searchParams.set("utm_medium", "signup_confirmation")
+    if (deviceVerified && data?.user?.id && capture) {
+      const proof = signSignupDeviceBinding(data.user.id, capture.attemptId)
+      if (proof) {
+        confirmation.searchParams.set("device_attempt_id", capture.attemptId)
+        confirmation.searchParams.set("device_bind_proof", proof)
+      }
+    }
+    const confirmationUrl = confirmation.toString()
     await sendEmail({
       to: parsed.data.email,
       subject: "Confirm your Superserve account",

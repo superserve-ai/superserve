@@ -71,7 +71,8 @@ const mockEnsureFingerprintSignupEventId = vi.fn<
   () => Promise<string | undefined>
 >(() => Promise.resolve(undefined))
 vi.mock("@/lib/fingerprint/client", () => ({
-  ensureFingerprintSignupEventId: () => mockEnsureFingerprintSignupEventId(),
+  ensureFingerprintSignupCapture: () => mockEnsureFingerprintSignupEventId(),
+  clearFingerprintSignupCapture: vi.fn(),
 }))
 
 const mockSignUpWithEmail = vi.fn()
@@ -268,8 +269,11 @@ describe("SignUpPage", () => {
     )
   })
 
-  it("does not wait for the fingerprint observation handoff before submitting email signup", async () => {
-    const fingerprintPromise = new Promise<string | undefined>(() => {})
+  it("waits for capture to finish before submitting email signup", async () => {
+    let finishCapture!: (value: undefined) => void
+    const fingerprintPromise = new Promise<string | undefined>((resolve) => {
+      finishCapture = resolve
+    })
     mockEnsureFingerprintSignupEventId.mockReturnValueOnce(fingerprintPromise)
     mockSignUpWithEmail.mockResolvedValue({ success: true })
     render(<SignUpPage />)
@@ -287,6 +291,8 @@ describe("SignUpPage", () => {
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
     expect(mockEnsureFingerprintSignupEventId).toHaveBeenCalledTimes(1)
+    expect(mockSignUpWithEmail).not.toHaveBeenCalled()
+    finishCapture(undefined)
 
     await waitFor(() => {
       expect(mockSignUpWithEmail).toHaveBeenCalledWith(
@@ -395,8 +401,11 @@ describe("SignUpPage", () => {
     })
   })
 
-  it("does not wait for the fingerprint observation handoff before starting Google signup", async () => {
-    const fingerprintPromise = new Promise<string | undefined>(() => {})
+  it("waits for capture to finish before starting Google signup", async () => {
+    let finishCapture!: (value: undefined) => void
+    const fingerprintPromise = new Promise<string | undefined>((resolve) => {
+      finishCapture = resolve
+    })
     mockEnsureFingerprintSignupEventId.mockReturnValueOnce(fingerprintPromise)
     mockBeginGoogleSignup.mockResolvedValue({
       success: true,
@@ -409,6 +418,8 @@ describe("SignUpPage", () => {
     )
 
     expect(mockEnsureFingerprintSignupEventId).toHaveBeenCalledTimes(1)
+    expect(mockBeginGoogleSignup).not.toHaveBeenCalled()
+    finishCapture(undefined)
 
     await waitFor(() => {
       expect(mockBeginGoogleSignup).toHaveBeenCalledWith(undefined)

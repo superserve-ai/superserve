@@ -62,6 +62,7 @@ const mockListTeamMembershipsForUserDetailed = vi.fn(
   async (_userId: string, _opts?: { maxAgeMs?: number }) => directoryState,
 )
 const mockTrackEvent = vi.fn()
+const mockRegisterPromotionSignupDevice = vi.fn()
 
 // Per-test knobs read lazily by the cells mock.
 let regions: string[] = ["use", "usw"]
@@ -180,6 +181,10 @@ vi.mock("@/lib/auth/google-onboarding", () => ({
 vi.mock("@/lib/posthog/actions", () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
 }))
+vi.mock("@/lib/api/promotion-device-evidence", () => ({
+  registerPromotionSignupDevice: (...args: unknown[]) =>
+    mockRegisterPromotionSignupDevice(...args),
+}))
 
 // Cookie store stub capturing active-team writes.
 let cookieValue: string | undefined
@@ -252,6 +257,7 @@ describe("createTeamAction", () => {
       },
     )
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
+    mockRegisterPromotionSignupDevice.mockReset().mockResolvedValue("owner")
     cellClients = {
       use: recordingCellClient(),
       usw: recordingCellClient(),
@@ -283,6 +289,7 @@ describe("createTeamAction", () => {
       },
     ])
     expect(mockEnsureGoogleOnboardingMembership).not.toHaveBeenCalled()
+    expect(mockRegisterPromotionSignupDevice).toHaveBeenCalledWith("usw", "u1")
 
     // Nothing leaked into the default cell.
     expect(cellClients.use.from).not.toHaveBeenCalled()
@@ -301,6 +308,7 @@ describe("createTeamAction", () => {
       { name: "east team", home_region: "use" },
     ])
     expect(cellClients.usw.from).not.toHaveBeenCalled()
+    expect(mockRegisterPromotionSignupDevice).toHaveBeenCalledWith("use", "u1")
   })
 
   it("rejects a region that is not configured", async () => {

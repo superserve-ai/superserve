@@ -1,5 +1,8 @@
+import { verifyPromotionSignupAttempt } from "@/lib/api/promotion-device-evidence"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
+
+import type { SignupFingerprintCapture } from "./client"
 
 const FINGERPRINT_EVENT_TIMEOUT_MS = 1500
 const DEFAULT_FINGERPRINT_SERVER_API = "https://api.fpjs.io"
@@ -192,7 +195,7 @@ export async function observeFingerprintSignup({
     const response = await fetch(
       `${baseUrl.replace(/\/$/, "")}/v4/events/${encodeURIComponent(eventId)}`,
       {
-        headers: { Authorization: `Bearer ${secretApiKey}` },
+        headers: { "Auth-API-Key": secretApiKey },
         signal: AbortSignal.timeout(FINGERPRINT_EVENT_TIMEOUT_MS),
         cache: "no-store",
       },
@@ -253,5 +256,71 @@ export async function observeFingerprintSignup({
       eventId,
       error: error instanceof Error ? error.message : "unknown_error",
     })
+  }
+}
+
+/** The provider response, not browser metadata, supplies the promotion evidence. */
+export async function attestFingerprintSignup(
+  capture: SignupFingerprintCapture,
+  signupMethod: "email" | "google",
+  userId?: string,
+): Promise<boolean> {
+  const secret = process.env.FINGERPRINT_SECRET_API_KEY
+  if (!secret) return false
+  try {
+    const baseUrl =
+      process.env.FINGERPRINT_SERVER_API_URL || DEFAULT_FINGERPRINT_SERVER_API
+    const response = await fetch(
+      `${baseUrl.replace(/\/$/, "")}/v4/events/${encodeURIComponent(capture.eventId)}`,
+      {
+        headers: { "Auth-API-Key": secret },
+        signal: AbortSignal.timeout(FINGERPRINT_EVENT_TIMEOUT_MS),
+        cache: "no-store",
+      },
+    )
+    if (!response.ok) return false
+    const payload: unknown = await response.json()
+    const event = normalizeFingerprintEvent(payload, capture.eventId)
+    if (!event || !isRecord(payload)) return false
+    const tag = recordOrNull(payload.tag)
+    if (tag?.signup_challenge !== capture.challenge) return false
+    const timestamp = payload.timestamp
+    const eventAt =
+      typeof timestamp === "number" && Number.isFinite(timestamp)
+        ? new Date(timestamp).toISOString()
+        : typeof timestamp === "string" && !Number.isNaN(Date.parse(timestamp))
+          ? new Date(timestamp).toISOString()
+          : undefined
+    if (!eventAt) return false
+    await verifyPromotionSignupAttempt({
+      attemptId: capture.attemptId,
+      challenge: capture.challenge,
+      eventId: event.providerEventId,
+      fingerprint: event.visitorId,
+      eventAt,
+    })
+    try {
+      await trackEvent(
+        AUTH_EVENTS.FINGERPRINT_SIGNUP_OBSERVED,
+        userId || capture.eventId,
+        {
+          provider: "fingerprint",
+          provider_event_id: event.providerEventId,
+          visitor_id: event.visitorId,
+          visitor_found: event.visitorFound,
+          signup_method: signupMethod,
+          superserve_user_id: userId ?? null,
+          observed_at: new Date().toISOString(),
+        },
+      )
+    } catch {
+      // Telemetry cannot invalidate verified evidence.
+    }
+    return true
+  } catch (error) {
+    console.warn("Fingerprint signup attestation unavailable", {
+      reason: error instanceof Error ? error.message : "unknown_error",
+    })
+    return false
   }
 }

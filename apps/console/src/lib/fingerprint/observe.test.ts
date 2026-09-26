@@ -3,21 +3,76 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 vi.mock("@/lib/posthog/actions", () => ({
   trackEvent: vi.fn(),
 }))
+const mockVerifyPromotionSignupAttempt = vi.fn()
+vi.mock("@/lib/api/promotion-device-evidence", () => ({
+  verifyPromotionSignupAttempt: (...args: unknown[]) =>
+    mockVerifyPromotionSignupAttempt(...args),
+}))
 
 import { trackEvent } from "@/lib/posthog/actions"
 
-import { observeFingerprintSignup } from "./observe"
+import { attestFingerprintSignup, observeFingerprintSignup } from "./observe"
 
 const originalSecret = process.env.FINGERPRINT_SECRET_API_KEY
 
 afterEach(() => {
   vi.restoreAllMocks()
   vi.mocked(trackEvent).mockClear()
+  mockVerifyPromotionSignupAttempt.mockReset()
   if (originalSecret === undefined) {
     delete process.env.FINGERPRINT_SECRET_API_KEY
   } else {
     process.env.FINGERPRINT_SECRET_API_KEY = originalSecret
   }
+})
+
+describe("attestFingerprintSignup", () => {
+  const capture = {
+    attemptId: "attempt-1",
+    challenge: "challenge-1",
+    eventId: "event-1",
+  }
+
+  it("verifies only a provider event carrying the issued challenge", async () => {
+    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          event_id: "event-1",
+          timestamp: "2026-09-26T12:00:00.000Z",
+          tag: { signup_challenge: "challenge-1" },
+          identification: { visitor_id: "Exact-Visitor" },
+        }),
+      ),
+    )
+    mockVerifyPromotionSignupAttempt.mockResolvedValue("verified")
+
+    expect(await attestFingerprintSignup(capture, "email")).toBe(true)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(mockVerifyPromotionSignupAttempt).toHaveBeenCalledWith({
+      attemptId: "attempt-1",
+      challenge: "challenge-1",
+      eventId: "event-1",
+      fingerprint: "Exact-Visitor",
+      eventAt: "2026-09-26T12:00:00.000Z",
+    })
+  })
+
+  it("does not publish a mismatched challenge", async () => {
+    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          event_id: "event-1",
+          timestamp: "2026-09-26T12:00:00.000Z",
+          tag: { signup_challenge: "different" },
+          identification: { visitor_id: "Exact-Visitor" },
+        }),
+      ),
+    )
+    expect(await attestFingerprintSignup(capture, "email")).toBe(false)
+    expect(mockVerifyPromotionSignupAttempt).not.toHaveBeenCalled()
+  })
 })
 
 describe("observeFingerprintSignup", () => {
@@ -91,7 +146,7 @@ describe("observeFingerprintSignup", () => {
     expect(fetch).toHaveBeenCalledWith(
       "https://api.fpjs.io/v4/events/event-1",
       expect.objectContaining({
-        headers: { Authorization: "Bearer server-secret" },
+        headers: { "Auth-API-Key": "server-secret" },
       }),
     )
     expect(trackEvent).toHaveBeenCalledWith(

@@ -30,6 +30,11 @@ vi.mock("@/app/(auth)/auth/signin/action", () => ({
 const mockSendWelcomeEmail = vi.fn()
 const mockConsumeFingerprintSignupEventId = vi.fn()
 const mockScheduleFingerprintObservation = vi.fn()
+const mockBindPromotionSignupAccount = vi.fn()
+vi.mock("@/lib/api/promotion-device-evidence", () => ({
+  bindPromotionSignupAccount: (...args: unknown[]) =>
+    mockBindPromotionSignupAccount(...args),
+}))
 vi.mock("@/app/(auth)/auth/signup/action", () => ({
   sendWelcomeEmail: (...args: unknown[]) => mockSendWelcomeEmail(...args),
   consumeFingerprintSignupEventId: (...args: unknown[]) =>
@@ -42,6 +47,7 @@ const mockHasValidGoogleSignupProof = vi.fn()
 const mockHasValidLegacyGoogleSignupProof = vi.fn()
 const mockConsumeGoogleSignupProof = vi.fn()
 const mockMarkGoogleSignupAttempt = vi.fn()
+const mockReadGoogleSignupDeviceAttempt = vi.fn()
 const mockEnsureGoogleOnboardingMembership = vi.fn()
 const mockListTeamMembershipsForUserDetailed = vi.fn(
   async (_userId: string, _opts?: { maxAgeMs?: number }) => directoryState,
@@ -69,6 +75,8 @@ vi.mock("@/lib/auth/google-signup-proof", () => ({
     mockConsumeGoogleSignupProof(...args),
   markGoogleSignupAttempt: (...args: unknown[]) =>
     mockMarkGoogleSignupAttempt(...args),
+  readGoogleSignupDeviceAttempt: (...args: unknown[]) =>
+    mockReadGoogleSignupDeviceAttempt(...args),
   isGoogleUser: (user: {
     app_metadata?: { provider?: string; providers?: string[] }
   }) =>
@@ -134,6 +142,8 @@ describe("auth callback", () => {
     mockConsumeFingerprintSignupEventId.mockReset()
     mockConsumeFingerprintSignupEventId.mockResolvedValue(undefined)
     mockScheduleFingerprintObservation.mockReset()
+    mockBindPromotionSignupAccount.mockReset().mockResolvedValue("bound")
+    mockReadGoogleSignupDeviceAttempt.mockReset().mockResolvedValue(undefined)
     mockListTeamMembershipsForUserDetailed
       .mockReset()
       .mockImplementation(async () => directoryState)
@@ -235,10 +245,11 @@ describe("auth callback", () => {
     })
   })
 
-  it("associates a first-time Google signup observation with the callback user", async () => {
+  it("binds a first-time Google signup device attempt to the callback user", async () => {
     googleMembershipState = { kind: "first_time" }
     mockHasValidGoogleSignupProof.mockResolvedValue(true)
     mockConsumeFingerprintSignupEventId.mockResolvedValue("event-1")
+    mockReadGoogleSignupDeviceAttempt.mockResolvedValue("device-attempt-1")
 
     await GET(
       new Request(
@@ -246,13 +257,13 @@ describe("auth callback", () => {
       ),
     )
 
-    expect(mockConsumeFingerprintSignupEventId).toHaveBeenCalled()
-    expect(mockScheduleFingerprintObservation).toHaveBeenCalledWith(
-      "event-1",
-      "google",
+    expect(mockReadGoogleSignupDeviceAttempt).toHaveBeenCalledWith("attempt-1")
+    expect(mockBindPromotionSignupAccount).toHaveBeenCalledWith(
       "u1",
-      "attempt-1",
+      "device-attempt-1",
     )
+    expect(mockConsumeFingerprintSignupEventId).toHaveBeenCalled()
+    expect(mockScheduleFingerprintObservation).not.toHaveBeenCalled()
     expect(mockTrackEvent).toHaveBeenCalledWith(
       "auth_signup_attempt_associated",
       "u1",
