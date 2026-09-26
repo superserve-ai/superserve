@@ -42,6 +42,7 @@ import {
   getApiBaseUrlForUser,
   getAuthApiKeyForUser,
 } from "@/lib/api/proxy-auth"
+import { SignupRestrictedError } from "@/lib/auth/signup-restrictions"
 import { createServerClient } from "@/lib/supabase/server"
 
 import { DELETE, GET, POST, PUT } from "./route"
@@ -204,6 +205,21 @@ describe("api proxy /api/[...path]", () => {
     vi.mocked(getAuthApiKeyForUser).mockResolvedValue(null)
     const res = await GET(req("GET", ["sandboxes"]), params(["sandboxes"]))
     expect(res.status).toBe(401)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("returns a generic 403 when first-team provisioning is restricted", async () => {
+    vi.mocked(getAuthApiKeyForUser).mockRejectedValue(
+      new SignupRestrictedError(),
+    )
+    const response = await GET(req("GET", ["sandboxes"]), params(["sandboxes"]))
+    expect(response.status).toBe(403)
+    expect(await response.json()).toEqual({
+      error: {
+        code: "signup_blocked",
+        message: "Signup is not available. Please try again later.",
+      },
+    })
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 

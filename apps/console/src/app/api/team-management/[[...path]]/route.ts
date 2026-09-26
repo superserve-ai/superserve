@@ -6,6 +6,11 @@ import {
   getAuthApiKeyForUser,
   getTeamIdForUser,
 } from "@/lib/api/proxy-auth"
+import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
+import {
+  SIGNUP_RESTRICTED_MESSAGE,
+  SignupRestrictedError,
+} from "@/lib/auth/signup-restrictions"
 import { createServerClient } from "@/lib/supabase/server"
 
 const FORWARD_REQUEST_HEADERS = new Set([
@@ -22,6 +27,25 @@ type RouteContext = { params: Promise<{ path?: string[] }> }
 
 function notFound(): NextResponse {
   return NextResponse.json({ error: "Not found" }, { status: 404 })
+}
+
+function signupDenied(): NextResponse {
+  return NextResponse.json(
+    { error: { code: "signup_blocked", message: SIGNUP_RESTRICTED_MESSAGE } },
+    { status: 403 },
+  )
+}
+
+function googleRecovery(): NextResponse {
+  return NextResponse.json(
+    {
+      error: {
+        code: "google_signup_recovery_required",
+        message: "Complete signup with Google to continue.",
+      },
+    },
+    { status: 403 },
+  )
 }
 
 function upstreamPath(
@@ -70,14 +94,30 @@ async function proxyTeamManagementRequest(
     return notFound()
   }
 
-  const teamId = await getTeamIdForUser(user)
+  let teamId: string
+  try {
+    teamId = await getTeamIdForUser(user)
+  } catch (error) {
+    if (error instanceof GoogleSignupRecoveryRequiredError)
+      return googleRecovery()
+    if (error instanceof SignupRestrictedError) return signupDenied()
+    throw error
+  }
   const { path = [] } = await params
   const targetPath = upstreamPath(request.method, teamId, path)
   if (!targetPath) {
     return notFound()
   }
 
-  const apiKey = await getAuthApiKeyForUser(user)
+  let apiKey: string | null
+  try {
+    apiKey = await getAuthApiKeyForUser(user)
+  } catch (error) {
+    if (error instanceof GoogleSignupRecoveryRequiredError)
+      return googleRecovery()
+    if (error instanceof SignupRestrictedError) return signupDenied()
+    throw error
+  }
   if (!apiKey) {
     return NextResponse.json(
       { error: { code: "unauthorized", message: "Not authenticated" } },
@@ -86,7 +126,15 @@ async function proxyTeamManagementRequest(
   }
 
   // Team management lives in the team's home cell's control plane.
-  const apiBaseUrl = await getApiBaseUrlForUser(user)
+  let apiBaseUrl: string
+  try {
+    apiBaseUrl = await getApiBaseUrlForUser(user)
+  } catch (error) {
+    if (error instanceof GoogleSignupRecoveryRequiredError)
+      return googleRecovery()
+    if (error instanceof SignupRestrictedError) return signupDenied()
+    throw error
+  }
   const url = new URL(`${apiBaseUrl}${targetPath}`)
   if (request.method === "GET" || request.method === "HEAD") {
     url.search = request.nextUrl.search

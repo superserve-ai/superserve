@@ -17,12 +17,14 @@ import {
 import { getProxySecret, hashKey } from "@/lib/api/proxy-secret"
 import {
   invalidateMembershipDirectory,
-  listTeamMembershipsForUser,
   listTeamMembershipsForUserDetailed,
   findTeamById,
   type TeamMembership,
 } from "@/lib/api/team-directory"
-import { provisionTeam } from "@/lib/api/team-provisioning"
+import {
+  completedMemberships,
+  provisionTeam,
+} from "@/lib/api/team-provisioning"
 import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
 import { isGoogleUser } from "@/lib/auth/google-signup-proof"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
@@ -114,29 +116,26 @@ async function getTeamForUser(
   const cached = getFresh(teamCache, cacheKey)
   if (cached) return cached
 
-  await ensureProfile(userId, email)
-
-  let detailedLookup: {
-    memberships: TeamMembership[]
-    degradedRegions: string[]
-  } | null = null
-  let memberships = await listTeamMembershipsForUser(userId)
+  let directory = await completedMemberships(
+    userId,
+    await listTeamMembershipsForUserDetailed(userId),
+  )
+  let memberships = directory.memberships
   if (googleUser && memberships.length === 0) {
     // A fresh, complete directory read is required before deciding this is a
     // first-team Google onboarding attempt. If that read is degraded, a
     // verified onboarding marker can recover the current membership, but the
     // marker itself never counts as membership.
-    detailedLookup = await listTeamMembershipsForUserDetailed(userId, {
-      maxAgeMs: 0,
-    })
-    memberships = detailedLookup.memberships
-    const state = await classifyGoogleMembershipState(userId, detailedLookup)
+    directory = await completedMemberships(
+      userId,
+      await listTeamMembershipsForUserDetailed(userId, { maxAgeMs: 0 }),
+    )
+    memberships = directory.memberships
+    const state = await classifyGoogleMembershipState(userId, directory)
     if (state.kind === "existing") {
       const activeMembership =
-        pickActiveTeam(detailedLookup.memberships, selection) ??
-        state.membership
-      if (googleUser) {
-      }
+        pickActiveTeam(directory.memberships, selection) ?? state.membership
+      await ensureProfile(userId, email)
       setFresh(teamCache, cacheKey, activeMembership)
       return activeMembership
     } else if (state.kind === "indeterminate") {
@@ -150,11 +149,12 @@ async function getTeamForUser(
   }
   const membership = pickActiveTeam(memberships, selection)
   if (membership) {
-    if (googleUser) {
-    }
+    await ensureProfile(userId, email)
     setFresh(teamCache, cacheKey, membership)
     return membership
   }
+  if (directory.degradedRegions.length > 0)
+    throw new Error("Membership lookup degraded; please try again")
 
   // First login: no membership yet. Provision a team through the same full
   // RBAC chain the create-team action uses — a legacy-only team (team +

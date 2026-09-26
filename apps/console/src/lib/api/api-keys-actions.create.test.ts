@@ -2,6 +2,32 @@ import crypto from "node:crypto"
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+let activeTeam: { teamId: string; region: string } | null = {
+  teamId: "team-1",
+  region: "use",
+}
+vi.mock("@/lib/api/active-team", () => ({
+  readTeamSelection: async () => null,
+  pickActiveTeam: (memberships: Array<NonNullable<typeof activeTeam>>) =>
+    memberships[0] ?? null,
+}))
+vi.mock("@/lib/api/team-directory", () => ({
+  listTeamMembershipsForUserDetailed: async () => ({
+    memberships: activeTeam ? [activeTeam] : [],
+    degradedRegions: [],
+  }),
+  invalidateMembershipDirectory: vi.fn(),
+}))
+vi.mock("@/lib/api/team-provisioning", () => ({
+  completedMemberships: vi.fn(
+    async (
+      _userId: string,
+      directory: import("@/lib/api/team-directory").MembershipDirectory,
+    ) => directory,
+  ),
+  provisionTeam: vi.fn(),
+}))
+
 vi.mock("@/lib/admin/impersonation", () => ({
   getImpersonationTeamId: async () => null,
 }))
@@ -75,16 +101,99 @@ vi.mock("@/lib/supabase/admin", () => ({
   }),
 }))
 
-import { createApiKeyAction } from "./api-keys-actions"
+import {
+  completedMemberships,
+  provisionTeam,
+} from "@/lib/api/team-provisioning"
+import {
+  SignupRestrictedError,
+  SIGNUP_RESTRICTED_MESSAGE,
+} from "@/lib/auth/signup-restrictions"
+
+import {
+  createApiKeyAction,
+  listApiKeysAction,
+  revokeApiKeyAction,
+} from "./api-keys-actions"
+
+async function createAllowedKey(name: string) {
+  const result = await createApiKeyAction(name)
+  if ("code" in result) throw new Error(result.message)
+  return result
+}
 
 describe("createApiKeyAction region-prefixed keys", () => {
   beforeEach(() => {
     insertedApiKeyRow = null
+    activeTeam = { teamId: "team-1", region: "use" }
+    vi.mocked(completedMemberships).mockImplementation(
+      async (_userId, directory) => directory,
+    )
+    vi.mocked(provisionTeam).mockReset()
+  })
+
+  it("does not create a key when first-team provisioning is blocked", async () => {
+    activeTeam = null
+    vi.mocked(provisionTeam).mockRejectedValueOnce(new SignupRestrictedError())
+
+    await expect(createApiKeyAction("blocked")).resolves.toEqual({
+      code: "signup_blocked",
+      message: SIGNUP_RESTRICTED_MESSAGE,
+    })
+    expect(provisionTeam).toHaveBeenCalledOnce()
+    expect(insertedApiKeyRow).toBeNull()
+
+    activeTeam = { teamId: "team-1", region: "use" }
+    const key = await createAllowedKey("established")
+    expect(key.key).toMatch(/^ss_live_/)
+    expect(provisionTeam).toHaveBeenCalledOnce()
+    expect(insertedApiKeyRow).toMatchObject({
+      team_id: "team-1",
+      name: "established",
+      created_by: "a1",
+    })
+  })
+
+  it("returns the same denial for lazy list and revoke paths", async () => {
+    activeTeam = null
+    vi.mocked(provisionTeam).mockRejectedValue(new SignupRestrictedError())
+
+    const denial = {
+      code: "signup_blocked",
+      message: SIGNUP_RESTRICTED_MESSAGE,
+    }
+    await expect(listApiKeysAction()).resolves.toEqual(denial)
+    await expect(revokeApiKeyAction("key-1")).resolves.toEqual(denial)
+    expect(insertedApiKeyRow).toBeNull()
+  })
+
+  it("does not mint a key from an unfinished owner membership after failed cleanup", async () => {
+    activeTeam = { teamId: "unfinished-team", region: "use" }
+    vi.mocked(completedMemberships).mockImplementation(
+      async (_userId, directory) => ({ ...directory, memberships: [] }),
+    )
+    vi.mocked(provisionTeam).mockRejectedValueOnce(new SignupRestrictedError())
+
+    await expect(createApiKeyAction("retry")).resolves.toEqual({
+      code: "signup_blocked",
+      message: SIGNUP_RESTRICTED_MESSAGE,
+    })
+    expect(completedMemberships).toHaveBeenCalledWith(
+      "a1",
+      expect.objectContaining({ memberships: [activeTeam] }),
+    )
+    expect(provisionTeam).toHaveBeenCalledWith(
+      "use",
+      "a1",
+      "amit@superserve.ai",
+      "amit@superserve.ai",
+    )
+    expect(insertedApiKeyRow).toBeNull()
   })
 
   it("mints a key carrying the team's home region", async () => {
     homeRegionResult = { data: { home_region: "usw" }, error: null }
-    const res = await createApiKeyAction("test")
+    const res = await createAllowedKey("test")
 
     expect(res.key).toMatch(/^ss_live_usw_[A-Za-z0-9_-]{32}$/)
     // Exactly 8 random chars after the region segment.
@@ -101,13 +210,13 @@ describe("createApiKeyAction region-prefixed keys", () => {
       data: null,
       error: { message: "column team.home_region does not exist" },
     }
-    const res = await createApiKeyAction("test")
+    const res = await createAllowedKey("test")
     expect(res.key).toMatch(/^ss_live_use_/)
   })
 
   it("falls back to the default region on an unknown region code", async () => {
     homeRegionResult = { data: { home_region: "mars" }, error: null }
-    const res = await createApiKeyAction("test")
+    const res = await createAllowedKey("test")
     expect(res.key).toMatch(/^ss_live_use_/)
   })
 })
