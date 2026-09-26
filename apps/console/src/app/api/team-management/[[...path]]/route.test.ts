@@ -22,6 +22,10 @@ import {
   getAuthApiKeyForUser,
   getTeamIdForUser,
 } from "@/lib/api/proxy-auth"
+import {
+  SIGNUP_RESTRICTED_MESSAGE,
+  SignupRestrictedError,
+} from "@/lib/auth/signup-restrictions"
 import { createServerClient } from "@/lib/supabase/server"
 
 import { DELETE, GET, POST } from "./route"
@@ -93,6 +97,35 @@ describe("api proxy /api/team-management", () => {
     const headers = fetchInit.headers as Headers
     expect(headers.get("x-api-key")).toBe("ss_live_test_key")
   })
+
+  it.each(["team", "key", "base"])(
+    "maps signup denial from the %s lookup to a generic 403",
+    async (lookup) => {
+      if (lookup === "team")
+        vi.mocked(getTeamIdForUser).mockRejectedValueOnce(
+          new SignupRestrictedError(),
+        )
+      if (lookup === "key")
+        vi.mocked(getAuthApiKeyForUser).mockRejectedValueOnce(
+          new SignupRestrictedError(),
+        )
+      if (lookup === "base")
+        vi.mocked(getApiBaseUrlForUser).mockRejectedValueOnce(
+          new SignupRestrictedError(),
+        )
+
+      const res = await GET(req("GET"), params())
+
+      expect(res.status).toBe(403)
+      expect(await res.json()).toEqual({
+        error: {
+          code: "signup_blocked",
+          message: SIGNUP_RESTRICTED_MESSAGE,
+        },
+      })
+      expect(fetchSpy).not.toHaveBeenCalled()
+    },
+  )
 
   it("encodes team ids and only forwards query strings for reads", async () => {
     vi.mocked(getTeamIdForUser).mockResolvedValue("team 1")

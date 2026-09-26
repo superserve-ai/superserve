@@ -14,7 +14,15 @@ import {
   listTeamsForUser,
   membershipExistsInCell,
 } from "@/lib/api/team-directory"
-import { provisionTeam } from "@/lib/api/team-provisioning"
+import {
+  provisionTeam,
+  type ProvisionedTeam,
+} from "@/lib/api/team-provisioning"
+import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
+import {
+  SignupRestrictedError,
+  SIGNUP_RESTRICTED_MESSAGE,
+} from "@/lib/auth/signup-restrictions"
 import { configuredRegions, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -88,7 +96,13 @@ export async function setActiveTeamAction(
 export async function createTeamAction(
   name: string,
   region?: string,
-): Promise<TeamSummary> {
+): Promise<
+  | TeamSummary
+  | {
+      code: "signup_blocked" | "google_signup_recovery_required"
+      message: string
+    }
+> {
   const supabase = await createServerClient()
   const {
     data: { user },
@@ -103,12 +117,21 @@ export async function createTeamAction(
     throw new Error(`Region ${targetRegion} is not available`)
   }
 
-  const team = await provisionTeam(
-    targetRegion,
-    user.id,
-    user.email ?? user.id,
-    trimmed,
-  )
+  let team: ProvisionedTeam
+  try {
+    team = await provisionTeam(
+      targetRegion,
+      user.id,
+      user.email ?? user.id,
+      trimmed,
+    )
+  } catch (error) {
+    if (error instanceof SignupRestrictedError)
+      return { code: "signup_blocked", message: SIGNUP_RESTRICTED_MESSAGE }
+    if (error instanceof GoogleSignupRecoveryRequiredError)
+      return { code: "google_signup_recovery_required", message: error.message }
+    throw error
+  }
 
   invalidateMembershipDirectory(user.id)
   await storeTeamSelection({ region: targetRegion, teamId: team.id })
