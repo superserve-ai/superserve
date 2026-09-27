@@ -84,6 +84,7 @@ async function proxyTeamManagementRequest(
   const {
     data: { user },
   } = await supabase.auth.getUser()
+  const observedAt = new Date().toISOString()
   if (!user) {
     return NextResponse.json(
       { error: { code: "unauthorized", message: "Not authenticated" } },
@@ -96,7 +97,7 @@ async function proxyTeamManagementRequest(
 
   let teamId: string
   try {
-    teamId = await getTeamIdForUser(user)
+    teamId = await getTeamIdForUser(user, observedAt)
   } catch (error) {
     if (error instanceof GoogleSignupRecoveryRequiredError)
       return googleRecovery()
@@ -111,7 +112,7 @@ async function proxyTeamManagementRequest(
 
   let apiKey: string | null
   try {
-    apiKey = await getAuthApiKeyForUser(user)
+    apiKey = await getAuthApiKeyForUser(user, undefined, observedAt)
   } catch (error) {
     if (error instanceof GoogleSignupRecoveryRequiredError)
       return googleRecovery()

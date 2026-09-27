@@ -1,3 +1,6 @@
+import type { User } from "@supabase/supabase-js"
+
+import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
 import {
   listTeamMembershipsForUserDetailed,
   type MembershipDirectory,
@@ -168,23 +171,28 @@ async function guardFirstGoogleTeam(
 export async function provisionTeam(
   region: string,
   userId: string,
-  email: string,
+  _email: string,
   name: string,
+  observation?: { user: User; observedAt: string },
 ): Promise<ProvisionedTeam> {
   // This is the common value boundary for lazy onboarding and explicit team
   // creation. A direct Supabase Google OAuth session must not be able to call
   // either path and receive its first team without the pre-auth proof.
-  const supabase = await createServerClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-  if (authError)
-    throw new Error(`Unable to verify authenticated user: ${authError.message}`)
-  if (!user || user.id !== userId) throw new Error("Not authenticated")
+  let user = observation?.user
+  let observedAt = observation?.observedAt
+  if (!observation) {
+    const supabase = await createServerClient()
+    const { data, error } = await supabase.auth.getUser()
+    observedAt = new Date().toISOString()
+    if (error) throw new Error("Unable to verify authenticated user")
+    user = data.user ?? undefined
+  }
+  if (!user || !observedAt || user.id !== userId) {
+    throw new Error("Authenticated user mismatch")
+  }
   const googleUser = isGoogleUser(user)
   const googleProvisioning = googleUser
-    ? await guardFirstGoogleTeam(userId, user!)
+    ? await guardFirstGoogleTeam(userId, user)
     : null
   let firstTeam = googleProvisioning !== null
   if (!googleUser) {
@@ -212,12 +220,7 @@ export async function provisionTeam(
   }
   const admin = cellFor(region).createAdminClient()
 
-  const { error: profileErr } = await admin
-    .from("profile")
-    .upsert({ id: userId, email }, { onConflict: "id", ignoreDuplicates: true })
-  if (profileErr) {
-    throw new Error(`Failed to create profile: ${profileErr.message}`)
-  }
+  await publishPromotionIdentity(region, userId, user, observedAt)
 
   const { data: team, error: teamErr } = await admin
     .from("team")

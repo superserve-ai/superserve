@@ -2,7 +2,10 @@
 
 import crypto from "node:crypto"
 
+import type { User } from "@supabase/supabase-js"
+
 import { pickActiveTeam, readTeamSelection } from "@/lib/api/active-team"
+import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
 import {
   invalidateMembershipDirectory,
   listTeamMembershipsForUserDetailed,
@@ -69,56 +72,24 @@ function hashKey(key: string): string {
 }
 
 /**
- * Ensure a profile row exists for the authenticated user in the given cell.
- * The Go backend schema requires profile(id) to match auth.users(id), and
- * profile rows are per-cell — a row must exist in whichever cell a write
- * references it from.
- */
-async function ensureProfile(
-  region: string,
-  userId: string,
-  email: string,
-): Promise<void> {
-  const admin = cellFor(region).createAdminClient()
-  const { data: existing } = await admin
-    .from("profile")
-    .select("id")
-    .eq("id", userId)
-    .single()
-
-  if (existing) return
-
-  const { error } = await admin.from("profile").insert({
-    id: userId,
-    email,
-  })
-
-  // Ignore unique-violation (23505) — profile was created concurrently
-  if (error && !error.message.includes("duplicate key")) {
-    throw new Error(`Failed to create profile: ${error.message}`)
-  }
-}
-
-/**
  * The user's active team (their selection when it's a live membership,
  * otherwise the deterministic default). If no team exists at all,
  * auto-create one (named after their email) in the default cell and add
  * them as owner.
  */
 async function getOrCreateTeamForUser(
-  userId: string,
-  email: string,
+  user: User,
+  observedAt: string,
 ): Promise<TeamMembership> {
   const directory = await completedMemberships(
-    userId,
-    await listTeamMembershipsForUserDetailed(userId, { maxAgeMs: 0 }),
+    user.id,
+    await listTeamMembershipsForUserDetailed(user.id, { maxAgeMs: 0 }),
   )
   const active = pickActiveTeam(
     directory.memberships,
     await readTeamSelection(),
   )
   if (active) {
-    await ensureProfile(DEFAULT_REGION, userId, email)
     return active
   }
 
@@ -128,8 +99,12 @@ async function getOrCreateTeamForUser(
   // No team yet — provision one through the full RBAC chain (same helper the
   // create-team and proxy-auth paths use), so a first API-key action can't
   // leave the user with a legacy-only team the control plane rejects.
-  const team = await provisionTeam(DEFAULT_REGION, userId, email, email)
-  invalidateMembershipDirectory(userId)
+  const email = user.email ?? user.id
+  const team = await provisionTeam(DEFAULT_REGION, user.id, email, email, {
+    user,
+    observedAt,
+  })
+  invalidateMembershipDirectory(user.id)
   return { teamId: team.id, region: DEFAULT_REGION }
 }
 
@@ -138,11 +113,12 @@ export async function listApiKeysAction() {
   const {
     data: { user },
   } = await supabase.auth.getUser()
+  const observedAt = new Date().toISOString()
   if (!user) throw new Error("Not authenticated")
 
   let team: TeamMembership
   try {
-    team = await getOrCreateTeamForUser(user.id, user.email ?? user.id)
+    team = await getOrCreateTeamForUser(user, observedAt)
   } catch (error) {
     if (error instanceof SignupRestrictedError) return SIGNUP_DENIAL
     if (error instanceof GoogleSignupRecoveryRequiredError)
@@ -175,11 +151,12 @@ export async function createApiKeyAction(name: string) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
+  const observedAt = new Date().toISOString()
   if (!user) throw new Error("Not authenticated")
 
   let team: TeamMembership
   try {
-    team = await getOrCreateTeamForUser(user.id, user.email ?? user.id)
+    team = await getOrCreateTeamForUser(user, observedAt)
   } catch (error) {
     if (error instanceof SignupRestrictedError) return SIGNUP_DENIAL
     if (error instanceof GoogleSignupRecoveryRequiredError)
@@ -200,8 +177,16 @@ export async function createApiKeyAction(name: string) {
   // (created_by FK target) must exist in that same cell: today only
   // createTeamAction guarantees it, and a membership provisioned any other
   // way (seed, admin tooling, migration) would otherwise FK-violate here.
-  await ensureProfile(team.region, user.id, user.email ?? user.id)
   const admin = cellFor(team.region).createAdminClient()
+  const { data: profile, error: profileError } = await admin
+    .from("profile")
+    .select("id")
+    .eq("id", user.id)
+    .maybeSingle()
+  if (profileError) throw new Error("Failed to read regional profile")
+  if (!profile) {
+    await publishPromotionIdentity(team.region, user.id, user, observedAt)
+  }
   const { data, error } = await admin
     .from("api_key")
     .insert({
@@ -230,11 +215,12 @@ export async function revokeApiKeyAction(id: string) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
+  const observedAt = new Date().toISOString()
   if (!user) throw new Error("Not authenticated")
 
   let team: TeamMembership
   try {
-    team = await getOrCreateTeamForUser(user.id, user.email ?? user.id)
+    team = await getOrCreateTeamForUser(user, observedAt)
   } catch (error) {
     if (error instanceof SignupRestrictedError) return SIGNUP_DENIAL
     if (error instanceof GoogleSignupRecoveryRequiredError)

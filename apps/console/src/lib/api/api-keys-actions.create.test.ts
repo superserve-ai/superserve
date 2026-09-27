@@ -61,6 +61,7 @@ function chain(result: { data: unknown; error: unknown }) {
     c[m] = () => c
   }
   c.single = async () => result
+  c.maybeSingle = async () => result
   return c
 }
 
@@ -187,6 +188,10 @@ describe("createApiKeyAction region-prefixed keys", () => {
       "a1",
       "amit@superserve.ai",
       "amit@superserve.ai",
+      {
+        user: expect.objectContaining({ id: "a1" }),
+        observedAt: expect.any(String),
+      },
     )
     expect(insertedApiKeyRow).toBeNull()
   })
