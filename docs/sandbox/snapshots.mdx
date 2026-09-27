@@ -1,0 +1,101 @@
+---
+title: "Snapshots and forks"
+sidebarTitle: Snapshots
+description: Save a sandbox's memory and disk, then create new sandboxes that continue from it with their processes running.
+---
+
+A snapshot is a saved copy of a sandbox's memory and disk, taken when you ask for one and kept until you delete it. A sandbox created from a snapshot, a fork, continues from that moment: files, installed packages and running processes are all there.
+
+Pause and resume are unchanged. Pausing keeps one sandbox's state so it can carry on later; a snapshot keeps a copy you can start any number of new sandboxes from, and it outlives the sandbox it came from.
+
+## Take a snapshot
+
+The sandbox must be `active` or `paused`. A running sandbox is paused for the capture and resumed straight after, usually for under a second; the first snapshot of a large sandbox can take longer.
+
+<CodeGroup>
+```typescript TypeScript {5}
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({ name: "dev-env" })
+await sandbox.commands.run("pip install pandas")
+const snapshot = await sandbox.snapshot({ name: "with-pandas" })
+```
+
+```python Python {5}
+from superserve import Sandbox
+
+sandbox = Sandbox.create(name="dev-env")
+sandbox.commands.run("pip install pandas")
+snapshot = sandbox.snapshot(name="with-pandas")
+```
+</CodeGroup>
+
+`snapshot()` returns once the snapshot is `ready`. Every request carries an idempotency key, generated when you don't pass one; pass your own `idempotencyKey` / `idempotency_key` to make a retry of your call return the same snapshot instead of taking another.
+
+## Create a sandbox from a snapshot
+
+Pass the snapshot, or its ID, as `fromSnapshot` / `from_snapshot`. It is mutually exclusive with `fromTemplate`.
+
+<CodeGroup>
+```typescript TypeScript {3}
+const fork = await Sandbox.create({
+  name: "experiment-1",
+  fromSnapshot: snapshot,
+})
+await fork.commands.run("python -c 'import pandas'")
+```
+
+```python Python {3}
+fork = Sandbox.create(
+    name="experiment-1",
+    from_snapshot=snapshot,
+)
+fork.commands.run("python -c 'import pandas'")
+```
+</CodeGroup>
+
+Each fork is an independent copy: what one fork writes, the snapshot, the source and other forks never see.
+
+### What a fork starts with
+
+- **Machine:** the snapshot's vCPU, memory and disk size, and the template it was built on.
+- **Network rules:** the source's, unless you pass `network`. They are in place before anything in the fork runs.
+- **Timeout:** the source's auto-pause timeout, unless you pass `timeoutSeconds` / `timeout_seconds`.
+- **Secrets:** the source's bindings, bound again with fresh proxy tokens. Secrets deleted since are left out. Secrets you pass bind as usual.
+- **Environment:** commands you run in the fork see the environment the source had, with your `envVars` / `env_vars` and secrets set on top.
+
+<Warning>
+Processes that were running when the snapshot was taken keep the environment they started with, including the source's secret proxy tokens, which do not work in the fork. Restart a process that uses secrets to give it the fork's.
+</Warning>
+
+A fork runs in the same region, on the machine that holds the snapshot. The sandbox's `sourceSnapshotId` / `source_snapshot_id` names the snapshot it came from.
+
+## List, rename and delete
+
+<CodeGroup>
+```typescript TypeScript
+import { Snapshot } from "@superserve/sdk"
+
+const snapshots = await sandbox.snapshots() // newest first
+const same = await Snapshot.get(snapshots[0].id)
+const renamed = await same.rename("golden")
+await renamed.delete()
+```
+
+```python Python
+from superserve import Snapshot
+
+snapshots = sandbox.snapshots()  # newest first
+same = Snapshot.get(snapshots[0].id)
+renamed = same.rename("golden")
+renamed.delete()
+```
+</CodeGroup>
+
+Snapshots outlive their sandbox: list them with `Snapshot.list(sandboxId)` / `Snapshot.list(sandbox_id)` after the sandbox is deleted. Deleting a snapshot is immediate and never affects sandboxes already created from it.
+
+## Limits
+
+A team can keep up to 100 snapshots, up to 20 of any one sandbox, and have up to 4 being taken at once; past a limit, `snapshot()` fails with `too_many_snapshots` or `too_many_snapshots_in_flight`. Contact support@superserve.ai to raise them.
+
+While a snapshot of a sandbox is being taken, attaching or detaching that sandbox's secrets returns `409 snapshot_in_progress`; retry once the snapshot is ready.

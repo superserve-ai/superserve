@@ -30,6 +30,11 @@ import {
   requestVoid,
   sleep,
 } from "./http.js"
+import {
+  DEFAULT_SNAPSHOT_TIMEOUT_MS,
+  Snapshot,
+  waitForSnapshot,
+} from "./Snapshot.js"
 import type {
   ApiNetworkPage,
   ApiSandboxResponse,
@@ -48,8 +53,12 @@ import type {
   SandboxStatus,
   SandboxUpdateOptions,
   SignedPreviewUrlOptions,
+  SnapshotCreateOptions,
+  SnapshotInfo,
+  SnapshotListOptions,
+  ApiSnapshotResponse,
 } from "./types.js"
-import { toNetworkLogPage, toSandboxInfo } from "./types.js"
+import { toNetworkLogPage, toSandboxInfo, toSnapshotInfo } from "./types.js"
 
 /** How long `pause()` waits for the host across every request it makes. */
 const DEFAULT_PAUSE_TIMEOUT_MS = 300_000
@@ -201,7 +210,10 @@ export class Sandbox {
           : (options.fromTemplate.name ?? options.fromTemplate.id)
     }
     if (options.fromSnapshot !== undefined) {
-      body.from_snapshot = options.fromSnapshot
+      body.from_snapshot =
+        typeof options.fromSnapshot === "string"
+          ? options.fromSnapshot
+          : options.fromSnapshot.id
     }
     if (options.metadata !== undefined) body.metadata = options.metadata
     if (options.envVars !== undefined) body.env_vars = options.envVars
@@ -367,6 +379,57 @@ export class Sandbox {
       headers: { "X-API-Key": this._config.apiKey },
     })
     return toSandboxInfo(raw)
+  }
+
+  /**
+   * Take a snapshot of this sandbox's memory and disk, kept until deleted.
+   * The sandbox must be active or paused; a running one is paused for the
+   * capture and resumed after, typically for under a second.
+   *
+   * Create sandboxes from it with `Sandbox.create({ fromSnapshot })`. They
+   * continue with the processes that were running.
+   *
+   * @example
+   * ```typescript
+   * const snapshot = await sandbox.snapshot({ name: "before-upgrade" })
+   * const fork = await Sandbox.create({ name: "fork", fromSnapshot: snapshot })
+   * ```
+   */
+  async snapshot(options: SnapshotCreateOptions = {}): Promise<Snapshot> {
+    const timeoutMs = options.timeoutMs ?? DEFAULT_SNAPSHOT_TIMEOUT_MS
+    const started = Date.now()
+    const body: Record<string, unknown> = {
+      kind: options.kind ?? "mem+fs",
+      idempotency_key:
+        options.idempotencyKey ?? globalThis.crypto?.randomUUID?.(),
+    }
+    if (options.name !== undefined) body.name = options.name
+    const raw = await request<ApiSnapshotResponse>({
+      method: "POST",
+      url: `${this._config.baseUrl}/sandboxes/${this.id}/snapshot`,
+      headers: { "X-API-Key": this._config.apiKey },
+      body,
+      timeoutMs,
+      signal: options.signal,
+    })
+    const snapshot = new Snapshot(toSnapshotInfo(raw), this._config)
+    if (options.wait === false) return snapshot
+    return waitForSnapshot(this._config, snapshot, {
+      timeoutMs: Math.max(timeoutMs - (Date.now() - started), 1),
+      pollIntervalMs: options.pollIntervalMs,
+      signal: options.signal,
+    })
+  }
+
+  /** This sandbox's snapshots, newest first. */
+  async snapshots(
+    options: Omit<SnapshotListOptions, "apiKey" | "baseUrl"> = {},
+  ): Promise<SnapshotInfo[]> {
+    return Snapshot.list(this.id, {
+      ...options,
+      apiKey: this._config.apiKey,
+      baseUrl: this._config.baseUrl,
+    })
   }
 
   /**

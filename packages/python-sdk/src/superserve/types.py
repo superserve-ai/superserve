@@ -62,6 +62,8 @@ class SandboxInfo(BaseModel):
     preview_access: PreviewAccess = PreviewAccess.LEGACY_PUBLIC
     # Secrets bound to this sandbox, when any are attached.
     secrets: Optional[list[SandboxSecretBinding]] = None
+    # The snapshot this sandbox was created from, when it was.
+    source_snapshot_id: Optional[str] = None
 
 
 class PublishedPreviewPort(BaseModel):
@@ -198,6 +200,75 @@ def to_sandbox_info(raw: dict[str, Any]) -> SandboxInfo:
         metadata=raw.get("metadata", {}),
         preview_access=PreviewAccess(raw.get("preview_access", "legacy_public")),
         secrets=secrets,
+        source_snapshot_id=raw.get("source_snapshot_id"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Snapshots
+# ---------------------------------------------------------------------------
+
+# What a snapshot holds. ``mem+fs`` is memory and disk.
+SnapshotKind = Literal["mem+fs"]
+
+
+class SnapshotStatus(str, Enum):
+    CREATING = "creating"
+    READY = "ready"
+    FAILED = "failed"
+    DELETING = "deleting"
+
+
+class SnapshotResources(BaseModel):
+    """vCPU, memory and disk a sandbox created from the snapshot gets."""
+
+    vcpu_count: int = 0
+    memory_mib: int = 0
+    disk_mib: int = 0
+
+
+class SnapshotInfo(BaseModel):
+    id: str
+    # The sandbox the snapshot was taken from. It may since have been deleted.
+    sandbox_id: str
+    # The template the captured sandbox was created from.
+    template_id: Optional[str] = None
+    kind: SnapshotKind = "mem+fs"
+    status: SnapshotStatus
+    name: Optional[str] = None
+    # Bytes the snapshot holds on disk; 0 until ready.
+    size_bytes: int = 0
+    resources: SnapshotResources = Field(default_factory=SnapshotResources)
+    created_at: datetime
+    ready_at: Optional[datetime] = None
+
+
+def to_snapshot_info(raw: dict[str, Any]) -> SnapshotInfo:
+    if (
+        not raw.get("id")
+        or not raw.get("sandbox_id")
+        or not raw.get("status")
+        or not raw.get("created_at")
+    ):
+        raise SandboxError(
+            "Invalid API response: snapshot missing id, sandbox_id, status or created_at"
+        )
+    resources = raw.get("resources") or {}
+    return SnapshotInfo(
+        id=raw["id"],
+        sandbox_id=raw["sandbox_id"],
+        template_id=raw.get("template_id"),
+        kind=raw.get("kind") or "mem+fs",
+        status=SnapshotStatus(raw["status"]),
+        name=raw.get("name"),
+        size_bytes=raw.get("size_bytes") or 0,
+        resources=SnapshotResources(
+            vcpu_count=resources.get("vcpu_count") or 0,
+            memory_mib=resources.get("memory_mib") or 0,
+            disk_mib=resources.get("disk_mib") or 0,
+        ),
+        created_at=_parse_iso8601(raw["created_at"]),
+        ready_at=_parse_iso8601(raw["ready_at"]) if raw.get("ready_at") else None,
     )
 
 

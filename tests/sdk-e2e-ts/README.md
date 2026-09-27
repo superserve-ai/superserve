@@ -21,6 +21,7 @@ tests/sdk-e2e-ts/
     ├── sandboxes.test.ts     # create, get, list, patch, pause, resume, delete
     ├── exec.test.ts          # command (sync + failing), commandStream (SSE)
     ├── network.test.ts       # strict allowlists, bare-IP rules, network log, update-while-paused
+    ├── snapshots.test.ts     # snapshot running + paused, fork each twice, rename, list, delete
     └── cursor-worker.test.ts # the Cursor Self-Hosted Machines guide's template + worker helpers
 ```
 

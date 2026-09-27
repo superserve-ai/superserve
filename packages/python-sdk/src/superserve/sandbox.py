@@ -20,6 +20,12 @@ from ._http import (
 )
 from .commands import Commands, CommandsDeps
 from .errors import ConflictError, NotFoundError, SandboxError, SandboxTimeoutError
+from .snapshots import (
+    DEFAULT_SNAPSHOT_POLL_S,
+    DEFAULT_SNAPSHOT_TIMEOUT,
+    Snapshot,
+    _snapshot_create_body,
+)
 from .files import Files, FilesDeps
 from .types import (
     UNSET,
@@ -36,11 +42,15 @@ from .types import (
     SandboxInfo,
     SandboxSecretBinding,
     SandboxStatus,
+    SnapshotInfo,
+    SnapshotKind,
     to_network_log_page,
     to_sandbox_info,
+    to_snapshot_info,
 )
 
 if TYPE_CHECKING:
+    from .async_snapshots import AsyncSnapshot
     from .async_template import AsyncTemplate
     from .template import Template
 
@@ -120,7 +130,7 @@ class Sandbox:
         *,
         name: str,
         from_template: "str | Template | AsyncTemplate | None" = None,
-        from_snapshot: str | None = None,
+        from_snapshot: "str | Snapshot | AsyncSnapshot | None" = None,
         timeout_seconds: int | None = None,
         auto_delete_seconds: int | None = None,
         metadata: dict[str, str] | None = None,
@@ -149,7 +159,9 @@ class Sandbox:
                     getattr(from_template, "name", None) or from_template.id
                 )
         if from_snapshot is not None:
-            body["from_snapshot"] = from_snapshot
+            body["from_snapshot"] = (
+                from_snapshot if isinstance(from_snapshot, str) else from_snapshot.id
+            )
         if timeout_seconds is not None:
             body["timeout_seconds"] = timeout_seconds
         if auto_delete_seconds is not None:
@@ -315,6 +327,55 @@ class Sandbox:
             client=self._http_client,
         )
         return to_sandbox_info(raw)
+
+    def snapshot(
+        self,
+        *,
+        name: str | None = None,
+        kind: SnapshotKind = "mem+fs",
+        idempotency_key: str | None = None,
+        wait: bool = True,
+        timeout: float = DEFAULT_SNAPSHOT_TIMEOUT,
+        poll_interval_s: float = DEFAULT_SNAPSHOT_POLL_S,
+    ) -> Snapshot:
+        """Take a snapshot of this sandbox's memory and disk, kept until deleted.
+
+        A running sandbox is paused for the capture and resumed after. Create
+        sandboxes from it with ``Sandbox.create(from_snapshot=...)``; they continue
+        with the processes that were running. ``timeout`` covers capture and
+        wait together.
+        """
+        self._require_not_deleted()
+        started = time.monotonic()
+        raw = api_request(
+            "POST",
+            f"{self._config.base_url}/sandboxes/{self.id}/snapshot",
+            headers={"X-API-Key": self._config.api_key},
+            json_body=_snapshot_create_body(kind, name, idempotency_key),
+            timeout=timeout,
+            budget=timeout,
+            client=self._http_client,
+        )
+        snapshot = Snapshot(to_snapshot_info(raw), self._config)
+        if not wait:
+            return snapshot
+        # A 202 answer is still creating; the platform settles it shortly.
+        return snapshot.wait_until_ready(
+            timeout=max(timeout - (time.monotonic() - started), 0.0),
+            poll_interval_s=poll_interval_s,
+        )
+
+    def snapshots(
+        self, *, limit: int | None = None, offset: int | None = None
+    ) -> builtins.list[SnapshotInfo]:
+        """This sandbox's snapshots, newest first."""
+        return Snapshot.list(
+            self.id,
+            limit=limit,
+            offset=offset,
+            api_key=self._config.api_key,
+            base_url=self._config.base_url,
+        )
 
     def get_preview_url(self, port: int) -> str:
         """Build the preview URL for a port running inside this sandbox.

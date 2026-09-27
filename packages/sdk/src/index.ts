@@ -24,6 +24,7 @@ export {
 export { Provider } from "./Provider.js"
 export { Sandbox } from "./Sandbox.js"
 export { Secret } from "./Secret.js"
+export { Snapshot } from "./Snapshot.js"
 export { Template } from "./Template.js"
 export type {
   AuditStatusFilter,
@@ -67,6 +68,13 @@ export type {
   SecretListOptions,
   SecretSandboxBinding,
   SignedPreviewUrlOptions,
+  SnapshotCreateOptions,
+  SnapshotInfo,
+  SnapshotKind,
+  SnapshotListOptions,
+  SnapshotResources,
+  SnapshotStatus,
+  SnapshotWaitOptions,
   SpawnOptions,
   TemplateBuildInfo,
   TemplateBuildStatus,

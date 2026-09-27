@@ -19,6 +19,7 @@ tests/sdk-e2e-py/
 ├── test_system.py       # client.system.health()
 ├── test_sandboxes.py    # create, get, list, patch, pause, resume, delete
 ├── test_exec.py         # command (sync + failing), command_stream
+├── test_snapshots.py    # snapshot running + paused, fork each twice, rename, list, delete
 └── test_async.py        # async smoke: AsyncSuperserve create → exec → delete
 ```
 
@@ -65,20 +66,22 @@ Every test file has `pytestmark = SKIP_IF_NO_CREDS` at the top, which uses `pyte
 
 ## Coverage
 
-| Resource    | Method               | Test file              |
-|-------------|----------------------|------------------------|
-| `system`    | `health()`           | `test_system.py`       |
-| `sandboxes` | `create_sandbox()`   | both fixtures          |
-| `sandboxes` | `get_sandbox()`      | `test_sandboxes.py`    |
-| `sandboxes` | `list_sandboxes()`   | `test_sandboxes.py`    |
-| `sandboxes` | `patch_sandbox()`    | `test_sandboxes.py`    |
-| `sandboxes` | `pause_sandbox()`    | `test_sandboxes.py`    |
-| `sandboxes` | `resume_sandbox()`   | `test_sandboxes.py`    |
-| `sandboxes` | `delete_sandbox()`   | both fixture teardowns |
-| `exec`      | `command()` (pass)   | `test_exec.py`         |
-| `exec`      | `command()` (fail)   | `test_exec.py`         |
-| `exec`      | `command_stream()`   | `test_exec.py`         |
-| `AsyncSuperserve` | smoke flow     | `test_async.py`        |
+| Resource          | Method                                              | Test file              |
+| ----------------- | --------------------------------------------------- | ---------------------- |
+| `system`          | `health()`                                          | `test_system.py`       |
+| `sandboxes`       | `create_sandbox()`                                  | both fixtures          |
+| `sandboxes`       | `get_sandbox()`                                     | `test_sandboxes.py`    |
+| `sandboxes`       | `list_sandboxes()`                                  | `test_sandboxes.py`    |
+| `sandboxes`       | `patch_sandbox()`                                   | `test_sandboxes.py`    |
+| `sandboxes`       | `pause_sandbox()`                                   | `test_sandboxes.py`    |
+| `sandboxes`       | `resume_sandbox()`                                  | `test_sandboxes.py`    |
+| `sandboxes`       | `delete_sandbox()`                                  | both fixture teardowns |
+| `exec`            | `command()` (pass)                                  | `test_exec.py`         |
+| `exec`            | `command()` (fail)                                  | `test_exec.py`         |
+| `exec`            | `command_stream()`                                  | `test_exec.py`         |
+| `snapshots`       | `snapshot()`, `snapshots()`, `rename()`, `delete()` | `test_snapshots.py`    |
+| `sandboxes`       | `create(from_snapshot=...)`                         | `test_snapshots.py`    |
+| `AsyncSuperserve` | smoke flow                                          | `test_async.py`        |
 
 The Python SDK does not currently expose a `files` resource — the backend's `openapi.yaml` doesn't include file upload/download endpoints. When they land, add a `test_files.py` following the same pattern.
 
