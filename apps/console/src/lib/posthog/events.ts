@@ -56,8 +56,9 @@ export const API_KEY_EVENTS = {
 } as const
 
 export const SNAPSHOT_EVENTS = {
+  TAKEN: "snapshot_taken",
+  RENAMED: "snapshot_renamed",
   DELETED: "snapshot_deleted",
-  BULK_DELETED: "snapshot_bulk_deleted",
 } as const
 
 export const SECRET_EVENTS = {

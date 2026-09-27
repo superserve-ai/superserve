@@ -1,6 +1,5 @@
 import { CameraIcon } from "@phosphor-icons/react"
 import {
-  Badge,
   Table,
   TableCell,
   TableHead,
@@ -8,25 +7,29 @@ import {
   TableRow,
 } from "@superserve/ui"
 
+import { AnimatedTableRow } from "@/components/animated-table-row"
 import { EmptyState } from "@/components/empty-state"
+import { SnapshotRowActions } from "@/components/snapshots/snapshot-row-actions"
+import {
+  SnapshotStatusBadge,
+  snapshotLabel,
+} from "@/components/snapshots/snapshot-status-badge"
+import { TakeSnapshotDialog } from "@/components/snapshots/take-snapshot-dialog"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
-import type { SnapshotResponse } from "@/lib/api/types"
-import { formatDate } from "@/lib/format"
+import { TemplateResources } from "@/components/templates/template-resources"
+import { useSandboxSnapshots } from "@/hooks/use-snapshots"
+import type { SandboxResponse } from "@/lib/api/types"
+import { formatTime } from "@/lib/format"
 import { formatBytes } from "@/lib/sandbox-utils"
 
-interface SnapshotsSectionProps {
-  snapshots: SnapshotResponse[] | undefined
-  isPending: boolean
-}
+export function SnapshotsSection({ sandbox }: { sandbox: SandboxResponse }) {
+  const { data: snapshots, isPending } = useSandboxSnapshots(sandbox.id)
 
-export function SnapshotsSection({
-  snapshots,
-  isPending,
-}: SnapshotsSectionProps) {
   return (
-    <>
-      <div className="flex h-10 items-center border-b border-border px-4">
-        <h2 className="text-sm font-medium text-foreground">Snapshots</h2>
+    <div className="border-b border-border">
+      <div className="flex h-10 items-center justify-between border-b border-border px-4">
+        <h2 className="text-sm font-semibold text-foreground">Snapshots</h2>
+        <TakeSnapshotDialog sandboxId={sandbox.id} status={sandbox.status} />
       </div>
       {isPending ? (
         <div>
@@ -47,45 +50,62 @@ export function SnapshotsSection({
           <EmptyState
             icon={CameraIcon}
             title="No Snapshots"
-            description="Snapshots are created when you pause this sandbox to preserve its state."
+            description="Take a snapshot of this sandbox to save its memory and disk; new sandboxes created from it continue with its processes running."
           />
         </div>
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[35%]">Name</TableHead>
-              <TableHead className="w-[15%]">Size</TableHead>
-              <TableHead className="w-[15%]">Trigger</TableHead>
-              <TableHead className="w-[10%]">Saved</TableHead>
-              <TableHead className="w-[25%]">Created</TableHead>
+              <TableHead className="w-[30%]">Name</TableHead>
+              <TableHead className="w-[14%]">Status</TableHead>
+              <TableHead className="w-[14%]">Size</TableHead>
+              <TableHead className="w-[24%]">Resources</TableHead>
+              <TableHead className="w-[14%]">Created</TableHead>
+              <TableHead className="w-12" />
             </TableRow>
           </TableHeader>
           <StickyHoverTableBody>
-            {snapshots.map((snapshot) => (
-              <TableRow key={snapshot.id}>
-                <TableCell className="font-mono text-foreground/80">
-                  {snapshot.name ?? `${snapshot.id.slice(0, 12)}...`}
-                </TableCell>
-                <TableCell className="font-mono text-xs text-muted tabular-nums">
-                  {formatBytes(snapshot.size_bytes)}
-                </TableCell>
-                <TableCell className="text-foreground/80 capitalize">
-                  {snapshot.trigger}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={snapshot.saved ? "success" : "muted"} dot>
-                    {snapshot.saved ? "Yes" : "No"}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-muted tabular-nums">
-                  {formatDate(new Date(snapshot.created_at))}
-                </TableCell>
-              </TableRow>
-            ))}
+            {snapshots.map((snapshot) => {
+              const created = formatTime(new Date(snapshot.created_at))
+              return (
+                <AnimatedTableRow key={snapshot.id}>
+                  <TableCell
+                    className="font-mono text-foreground/80"
+                    title={snapshot.id}
+                  >
+                    {snapshotLabel(snapshot)}
+                  </TableCell>
+                  <TableCell>
+                    <SnapshotStatusBadge status={snapshot.status} />
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-muted tabular-nums">
+                    {formatBytes(snapshot.size_bytes)}
+                  </TableCell>
+                  <TableCell>
+                    <TemplateResources
+                      vcpu={snapshot.resources.vcpu_count}
+                      memoryMib={snapshot.resources.memory_mib}
+                      diskMib={snapshot.resources.disk_mib}
+                    />
+                  </TableCell>
+                  <TableCell
+                    className="text-xs text-muted tabular-nums"
+                    title={created.absolute}
+                  >
+                    {created.relative}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex justify-end">
+                      <SnapshotRowActions snapshot={snapshot} />
+                    </div>
+                  </TableCell>
+                </AnimatedTableRow>
+              )
+            })}
           </StickyHoverTableBody>
         </Table>
       )}
-    </>
+    </div>
   )
 }
