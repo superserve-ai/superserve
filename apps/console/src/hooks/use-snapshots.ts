@@ -1,7 +1,12 @@
 "use client"
 
 import { useToast } from "@superserve/ui"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  useIsMutating,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 
 import { ApiError } from "@/lib/api/client"
 import { sandboxKeys, snapshotKeys } from "@/lib/api/query-keys"
@@ -17,42 +22,49 @@ import type { SnapshotResponse } from "@/lib/api/types"
 export const STILL_TAKING_MESSAGE =
   "The snapshot is still being taken; it will appear here shortly"
 
-// Keep polling while the platform settles a snapshot.
-function pollWhileSettling(query: {
-  state: { data?: SnapshotResponse[] }
-}): number | false {
-  const settling = query.state.data?.some(
-    (s) => s.status === "creating" || s.status === "deleting",
-  )
-  return settling ? 2000 : false
+export const UNCONFIRMED_MESSAGE =
+  "Couldn't reach Superserve, so the snapshot may not have started. Check the list before relying on it."
+
+const CREATE_SNAPSHOT_KEY = ["snapshots", "create"] as const
+
+// Keep polling while a snapshot is being taken or deleted, and for as long as
+// a take-snapshot request is in flight: its row may not exist yet.
+function usePollWhileSettling() {
+  const taking = useIsMutating({ mutationKey: CREATE_SNAPSHOT_KEY }) > 0
+  return (query: { state: { data?: SnapshotResponse[] } }): number | false => {
+    const settling = query.state.data?.some(
+      (s) => s.status === "creating" || s.status === "deleting",
+    )
+    return taking || settling ? 2000 : false
+  }
 }
 
 /**
- * A capture that outlives the request (client timeout, dropped connection,
- * gateway timeout) keeps running on the platform, so it is not a failure.
+ * A capture that outlives the request (our timeout, a gateway timeout) keeps
+ * running on the platform, so it is not a failure. A network error is not
+ * counted: it can mean the request never reached the platform at all.
  */
 export function isSnapshotStillBeingTaken(error: unknown): boolean {
   if (error instanceof ApiError) return error.status === 504
-  return (
-    error instanceof TypeError ||
-    (error instanceof DOMException && error.name === "AbortError")
-  )
+  return error instanceof DOMException && error.name === "AbortError"
 }
 
 export function useSnapshots({ enabled = true }: { enabled?: boolean } = {}) {
+  const refetchInterval = usePollWhileSettling()
   return useQuery({
     queryKey: snapshotKeys.lists(),
     queryFn: () => listSnapshotsAction(),
-    refetchInterval: pollWhileSettling,
+    refetchInterval,
     enabled,
   })
 }
 
 export function useSandboxSnapshots(sandboxId: string) {
+  const refetchInterval = usePollWhileSettling()
   return useQuery({
     queryKey: snapshotKeys.bySandbox(sandboxId),
     queryFn: () => listSandboxSnapshots(sandboxId),
-    refetchInterval: pollWhileSettling,
+    refetchInterval,
   })
 }
 
@@ -61,16 +73,9 @@ export function useCreateSnapshot() {
   const { addToast } = useToast()
 
   return useMutation({
+    mutationKey: CREATE_SNAPSHOT_KEY,
     mutationFn: ({ sandboxId, name }: { sandboxId: string; name?: string }) =>
       createSnapshot(sandboxId, { name }),
-    onMutate: () => {
-      // The platform records the snapshot as `creating` before the capture
-      // finishes; refetch once it has, so the row shows (and polls) meanwhile.
-      setTimeout(
-        () => queryClient.invalidateQueries({ queryKey: snapshotKeys.all }),
-        1500,
-      )
-    },
     onSuccess: (snapshot) => {
       if (snapshot.status === "ready") addToast("Snapshot saved", "success")
       else addToast(STILL_TAKING_MESSAGE, "info")
@@ -78,6 +83,10 @@ export function useCreateSnapshot() {
     onError: (error) => {
       if (isSnapshotStillBeingTaken(error)) {
         addToast(STILL_TAKING_MESSAGE, "info")
+        return
+      }
+      if (error instanceof TypeError) {
+        addToast(UNCONFIRMED_MESSAGE, "error")
         return
       }
       const message =
