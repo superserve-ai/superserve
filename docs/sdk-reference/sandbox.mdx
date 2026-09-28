@@ -77,7 +77,7 @@ sandbox = Sandbox.create(
 | ------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `name`                                      | `string`                 | **Required.** Human-readable sandbox name.                                                                                                                                                                                                         |
 | `fromTemplate` / `from_template`            | `string \| Template`     | Template name, UUID, or `Template` instance to boot from. Defaults to `superserve/base`.                                                                                                                                                           |
-| `fromSnapshot` / `from_snapshot`            | `string \| Snapshot`     | Snapshot UUID or `Snapshot` instance to create the sandbox from; it continues with the snapshot's processes. See [Snapshots and forks](/sandbox/snapshots).                                                                                        |
+| `fromSnapshot` / `from_snapshot`            | `string \| Snapshot`     | Snapshot ID or `Snapshot` to create the sandbox from. It starts with the snapshot's files and running processes. See [Snapshots and forks](/sandbox/snapshots).                                                                                        |
 | `timeoutSeconds` / `timeout_seconds`        | `number`                 | Auto-pause after this many seconds of active time (per session; re-armed on resume). See [Lifecycle](/sandbox/lifecycle#auto-pause).                                                                                                               |
 | `autoDeleteSeconds` / `auto_delete_seconds` | `number`                 | Delete the sandbox once continuously paused for this many seconds (max 30 days, `0` = delete on pause). See [Lifecycle](/sandbox/lifecycle#auto-delete).                                                                                           |
 | `metadata`                                  | `Record<string, string>` | String tags.                                                                                                                                                                                                                                       |
@@ -210,14 +210,14 @@ sandbox.pause()
 
 ### `snapshot`
 
-Save the sandbox's memory and disk as a [`Snapshot`](/sdk-reference/snapshot), kept until deleted. A running sandbox is paused for the capture and resumed after. Returns once the snapshot is `ready`.
+Save the sandbox's memory and disk as a [`Snapshot`](/sdk-reference/snapshot), which is kept until you delete it. A running sandbox pauses briefly while the snapshot is taken. Returns once the snapshot is `ready`.
 
 | Option                               | Type          | Description |
 | ------------------------------------ | ------------- | ----------- |
 | `name`                               | `string`      | Label, 1 to 64 characters. |
-| `idempotencyKey` / `idempotency_key` | `string`      | A retry with the same key returns the snapshot the first call made. Generated when omitted. |
+| `idempotencyKey` / `idempotency_key` | `string`      | Retrying with the same key returns the same snapshot instead of taking a new one. Generated if you don't pass one. |
 | `wait`                               | `boolean`     | Wait until the snapshot is `ready`. Default `true`. |
-| `timeoutMs` / `timeout`              | `number`      | How long the capture and the wait may take together. TypeScript in milliseconds, Python in seconds. Default 15 minutes. |
+| `timeoutMs` / `timeout`              | `number`      | Maximum time for taking the snapshot and waiting for it. TypeScript in milliseconds, Python in seconds. Default 15 minutes. |
 | `pollIntervalMs` / `poll_interval_s` | `number`      | How often to check while waiting. TypeScript in milliseconds, Python in seconds. Default 2 seconds. |
 | `signal` (TypeScript only)           | `AbortSignal` | Cancels the request and the wait. |
 
@@ -234,7 +234,7 @@ snapshot = sandbox.snapshot(name="before-upgrade")
 
 ### `snapshots`
 
-This sandbox's snapshots, newest first. Takes `limit` and `offset`. Returns `SnapshotInfo[]`.
+List this sandbox's snapshots, newest first. Takes `limit` and `offset`. Returns `SnapshotInfo[]`.
 
 ### `resume`
 
@@ -470,7 +470,7 @@ interface SandboxInfo {
   network?: NetworkConfig
   metadata: Record<string, string>
   previewAccess: "legacy_public" | "public" | "private"
-  sourceSnapshotId?: string // the snapshot it was created from, when it was
+  sourceSnapshotId?: string // set when the sandbox was created from a snapshot
 }
 ```
 
@@ -492,7 +492,7 @@ class SandboxInfo(BaseModel):
     network: NetworkConfig | None = None
     metadata: dict[str, str]
     preview_access: PreviewAccess
-    # The snapshot it was created from, when it was.
+    # Set when the sandbox was created from a snapshot.
     source_snapshot_id: str | None = None
 ```
 

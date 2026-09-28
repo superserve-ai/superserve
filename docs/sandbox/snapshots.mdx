@@ -1,16 +1,22 @@
 ---
 title: "Snapshots and forks"
 sidebarTitle: Snapshots
-description: Save a sandbox's memory and disk, then create new sandboxes that continue from it with their processes running.
+description: Save a sandbox's memory and disk, then start new sandboxes from that exact point.
 ---
 
-A snapshot is a saved copy of a sandbox's memory and disk, taken when you ask for one and kept until you delete it. A sandbox created from a snapshot, a fork, continues from that moment: files, installed packages and running processes are all there.
+A snapshot saves a sandbox's memory and disk at a point in time. Sandboxes you create from a snapshot are called forks. A fork starts exactly where the snapshot left off, with its files, installed packages and running processes in place.
 
-Pause and resume are unchanged. Pausing keeps one sandbox's state so it can carry on later; a snapshot keeps a copy you can start any number of new sandboxes from, and it outlives the sandbox it came from.
+Pausing saves one sandbox so it can continue later. A snapshot is a copy you can start any number of new sandboxes from, and it stays until you delete it, even after the original sandbox is gone.
+
+Use snapshots to:
+
+- **Skip setup:** install dependencies once, snapshot, and start every new sandbox ready to go.
+- **Branch from one state:** run several experiments in parallel from the same starting point.
+- **Keep a known-good point:** snapshot before a risky change and start fresh from it if something breaks.
 
 ## Take a snapshot
 
-The sandbox must be `active` or `paused`. A running sandbox is paused for the capture and resumed straight after, usually for under a second; the first snapshot of a large sandbox can take longer.
+You can snapshot an `active` or `paused` sandbox. A running sandbox is paused briefly while the snapshot is taken, usually for under a second, and then continues. The first snapshot of a large sandbox can take longer.
 
 <CodeGroup>
 ```typescript TypeScript {5}
@@ -30,11 +36,13 @@ snapshot = sandbox.snapshot(name="with-pandas")
 ```
 </CodeGroup>
 
-`snapshot()` returns once the snapshot is `ready`. Every request carries an idempotency key, generated when you don't pass one; pass your own `idempotencyKey` / `idempotency_key` to make a retry of your call return the same snapshot instead of taking another.
+`snapshot()` returns once the snapshot is `ready`.
+
+Each request is sent with an idempotency key, so it is safe to retry. The SDK generates one for you. If your own code might retry the call, pass the same `idempotencyKey` / `idempotency_key` each time and you'll get back the same snapshot rather than a second one.
 
 ## Create a sandbox from a snapshot
 
-Pass the snapshot, or its ID, as `fromSnapshot` / `from_snapshot`. It is mutually exclusive with `fromTemplate`.
+Pass the snapshot, or its ID, as `fromSnapshot` / `from_snapshot`. You can't combine it with `fromTemplate`.
 
 <CodeGroup>
 ```typescript TypeScript {3}
@@ -54,21 +62,21 @@ fork.commands.run("python -c 'import pandas'")
 ```
 </CodeGroup>
 
-Each fork is an independent copy: what one fork writes, the snapshot, the source and other forks never see.
+Each fork is independent. Changes in one fork don't affect the snapshot, the original sandbox or other forks.
 
 ### What a fork starts with
 
 - **Machine:** the snapshot's vCPU, memory and disk size, and the template it was built on.
-- **Network rules:** the source's, unless you pass `network`. They are in place before anything in the fork runs.
-- **Timeout:** the source's auto-pause timeout, unless you pass `timeoutSeconds` / `timeout_seconds`.
-- **Secrets:** the source's bindings, bound again with fresh proxy tokens. Secrets deleted since are left out. Secrets you pass bind as usual.
-- **Environment:** commands you run in the fork see the environment the source had, with your `envVars` / `env_vars` and secrets set on top.
+- **Network rules:** the original sandbox's rules, unless you pass `network`. They apply before anything in the fork runs.
+- **Timeout:** the original sandbox's auto-pause timeout, unless you pass `timeoutSeconds` / `timeout_seconds`.
+- **Secrets:** the original sandbox's secrets are attached again. Secrets deleted since the snapshot are left out, and any secrets you pass are attached as usual.
+- **Environment:** commands you run in the fork see the original sandbox's environment, with your `envVars` / `env_vars` and secrets added on top.
 
 <Warning>
-Processes that were running when the snapshot was taken keep the environment they started with, including the source's secret proxy tokens, which do not work in the fork. Restart a process that uses secrets to give it the fork's.
+Processes that were already running when the snapshot was taken keep the environment they started with. Their secret values only work in the original sandbox, so restart any process that uses secrets.
 </Warning>
 
-A fork runs in the same region, on the machine that holds the snapshot. The sandbox's `sourceSnapshotId` / `source_snapshot_id` names the snapshot it came from.
+A fork runs in the same region as its snapshot. Its `sourceSnapshotId` / `source_snapshot_id` tells you which snapshot it came from.
 
 ## List, rename and delete
 
@@ -92,10 +100,16 @@ renamed.delete()
 ```
 </CodeGroup>
 
-Snapshots outlive their sandbox: list them with `Snapshot.list(sandboxId)` / `Snapshot.list(sandbox_id)` after the sandbox is deleted. Deleting a snapshot is immediate and never affects sandboxes already created from it.
+Snapshots stay after their sandbox is deleted. To list them then, use `Snapshot.list(sandboxId)` / `Snapshot.list(sandbox_id)`.
+
+Deleting a snapshot takes effect immediately and doesn't affect sandboxes already created from it.
 
 ## Limits
 
-A team can keep up to 100 snapshots, up to 20 of any one sandbox, and have up to 4 being taken at once; past a limit, `snapshot()` fails with `too_many_snapshots` or `too_many_snapshots_in_flight`. Contact support@superserve.ai to raise them.
+- **100 snapshots** per team.
+- **20 snapshots** per sandbox.
+- **4 snapshots** being taken at once per team.
 
-While a snapshot of a sandbox is being taken, attaching or detaching that sandbox's secrets returns `409 snapshot_in_progress`; retry once the snapshot is ready.
+Past a limit, `snapshot()` fails with `too_many_snapshots` or `too_many_snapshots_in_flight`. Delete snapshots you no longer need to free up room, or contact support@superserve.ai to raise a limit.
+
+While a snapshot is being taken, you can't attach or detach that sandbox's secrets. Those calls return `409 snapshot_in_progress`; retry once the snapshot is ready.
