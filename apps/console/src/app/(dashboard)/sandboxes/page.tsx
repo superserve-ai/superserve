@@ -33,6 +33,7 @@ import { ConnectSandboxDialog } from "@/components/sandboxes/connect-sandbox-dia
 import { CreateSandboxDialog } from "@/components/sandboxes/create-sandbox-dialog"
 import { DeleteSandboxDialog } from "@/components/sandboxes/delete-sandbox-dialog"
 import { SandboxTableRow } from "@/components/sandboxes/sandbox-table-row"
+import { TakeSnapshotDialog } from "@/components/snapshots/take-snapshot-dialog"
 import { SortableTableHead } from "@/components/sortable-table-head"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableToolbar } from "@/components/table-toolbar"
@@ -102,6 +103,7 @@ function SandboxesPageContent() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [templateRef, setTemplateRef] = useState<string | null>(null)
   const [snapshotId, setSnapshotId] = useState<string | null>(null)
+  const [snapshotTarget, setSnapshotTarget] = useState<string | null>(null)
 
   // Launching from a template or a snapshot navigates here with
   // ?from_template=<name> or ?from_snapshot=<id>. Open the dialog with the
@@ -291,6 +293,7 @@ function SandboxesPageContent() {
                           source: "list_menu",
                         })
                       }
+                      onTakeSnapshot={() => setSnapshotTarget(sandbox.id)}
                     />
                   ))}
                 </StickyHoverTableBody>
@@ -317,6 +320,16 @@ function SandboxesPageContent() {
           onOpenChange={(v) => {
             if (!v) setConnectSandboxId(null)
           }}
+        />
+      )}
+
+      {snapshotTarget && (
+        <TakeSnapshotDialog
+          open={!!snapshotTarget}
+          onOpenChange={(v) => {
+            if (!v) setSnapshotTarget(null)
+          }}
+          sandboxId={snapshotTarget}
         />
       )}
 

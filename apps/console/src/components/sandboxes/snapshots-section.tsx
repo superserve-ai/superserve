@@ -16,7 +16,7 @@ import {
   snapshotLabel,
   snapshotSize,
 } from "@/components/snapshots/snapshot-status-badge"
-import { TakeSnapshotDialog } from "@/components/snapshots/take-snapshot-dialog"
+import { TakeSnapshotButton } from "@/components/snapshots/take-snapshot-dialog"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TemplateResources } from "@/components/templates/template-resources"
 import { useSandboxSnapshots } from "@/hooks/use-snapshots"
@@ -35,7 +35,7 @@ export function SnapshotsSection({ sandbox }: { sandbox: SandboxResponse }) {
     <div className="border-b border-border">
       <div className="flex h-10 items-center justify-between border-b border-border px-4">
         <h2 className="text-sm font-semibold text-foreground">Snapshots</h2>
-        <TakeSnapshotDialog sandboxId={sandbox.id} status={sandbox.status} />
+        <TakeSnapshotButton sandboxId={sandbox.id} status={sandbox.status} />
       </div>
       {isPending ? (
         <div>

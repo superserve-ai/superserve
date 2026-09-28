@@ -22,6 +22,7 @@ import {
   snapshotLabel,
   snapshotSize,
 } from "@/components/snapshots/snapshot-status-badge"
+import { TakeSnapshotButton } from "@/components/snapshots/take-snapshot-dialog"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableSkeleton } from "@/components/table-skeleton"
 import { TableToolbar } from "@/components/table-toolbar"
@@ -76,7 +77,9 @@ function SnapshotsPageContent() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Snapshots" />
+      <PageHeader title="Snapshots">
+        <TakeSnapshotButton />
+      </PageHeader>
 
       {snapshots.length === 0 ? (
         <EmptyState

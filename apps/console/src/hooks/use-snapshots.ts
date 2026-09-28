@@ -39,6 +39,18 @@ function usePollWhileSettling() {
   }
 }
 
+/** Whether a take-snapshot request for this sandbox is in flight. */
+export function useIsTakingSnapshot(sandboxId?: string): boolean {
+  return (
+    useIsMutating({
+      mutationKey: CREATE_SNAPSHOT_KEY,
+      predicate: (m) =>
+        (m.state.variables as { sandboxId?: string } | undefined)?.sandboxId ===
+        sandboxId,
+    }) > 0
+  )
+}
+
 /**
  * A capture that outlives the request (our timeout, a gateway timeout) keeps
  * running on the platform, so it is not a failure. A network error is not
