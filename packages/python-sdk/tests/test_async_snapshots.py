@@ -74,6 +74,22 @@ async def test_failed_while_waiting_raises() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ready_by_the_deadline_is_seen() -> None:
+    # Less than one interval left: the wait still checks at the deadline.
+    with respx.mock() as router:
+        sbx = await _sandbox(router)
+        router.post(f"{API}/sandboxes/{SBX}/snapshot").mock(
+            return_value=httpx.Response(202, json=_snap("creating"))
+        )
+        route = router.get(f"{API}/snapshots/{SNAP}").mock(
+            return_value=httpx.Response(200, json=_snap("ready"))
+        )
+        snap = await sbx.snapshot(timeout=0.05, poll_interval_s=2)
+        assert snap.status == SnapshotStatus.READY
+        assert route.call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_list_get_rename_delete() -> None:
     with respx.mock() as router:
         sbx = await _sandbox(router)

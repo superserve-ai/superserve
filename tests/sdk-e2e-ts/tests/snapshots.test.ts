@@ -3,6 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 import { connectionOptions, hasCredentials, RUN_ID } from "../src/client.js"
 
+// Below the tests' own 300 s limit, so a slow capture fails with the SDK's
+// timeout rather than the test runner's.
+const CAPTURE_TIMEOUT_MS = 240_000
+
 // A counter the forks must carry on from, not start over.
 const START_COUNTER =
   "nohup sh -c 'i=0; while true; do i=$((i+1)); echo $i > /tmp/counter; sleep 0.2; done' >/dev/null 2>&1 &"
@@ -61,7 +65,10 @@ describe.skipIf(!hasCredentials())("snapshots", () => {
 
   it("forks a running sandbox with its files and processes", async () => {
     const atCapture = await counter(source)
-    const snapshot = await source.snapshot({ name: `running-${RUN_ID}` })
+    const snapshot = await source.snapshot({
+      name: `running-${RUN_ID}`,
+      timeoutMs: CAPTURE_TIMEOUT_MS,
+    })
     snapshots.push(snapshot)
     expect(snapshot.status).toBe("ready")
     expect(snapshot.sandboxId).toBe(source.id)
@@ -70,7 +77,10 @@ describe.skipIf(!hasCredentials())("snapshots", () => {
 
   it("forks a paused sandbox", async () => {
     await source.pause({ wait: true })
-    const snapshot = await source.snapshot({ name: `paused-${RUN_ID}` })
+    const snapshot = await source.snapshot({
+      name: `paused-${RUN_ID}`,
+      timeoutMs: CAPTURE_TIMEOUT_MS,
+    })
     snapshots.push(snapshot)
     await forkAndCheck(snapshot, "paused", 0)
   }, 300_000)

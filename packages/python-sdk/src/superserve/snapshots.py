@@ -64,6 +64,11 @@ def _is_settled(snapshot_id: str, status: SnapshotStatus) -> bool:
     return status == SnapshotStatus.READY
 
 
+# The check that lands on the deadline still gets a request's worth of time, so
+# a snapshot that became ready in the last interval is seen.
+_FINAL_CHECK_S = 5.0
+
+
 def _still_settling(
     snapshot_id: str, status: SnapshotStatus, timeout: float
 ) -> SandboxTimeoutError:
@@ -190,11 +195,15 @@ class Snapshot:
         status: SnapshotStatus = self.status
         while True:
             remaining = deadline - time.monotonic()
-            if remaining < poll_interval_s:
+            if remaining <= 0:
                 raise _still_settling(self.id, status, timeout)
-            time.sleep(poll_interval_s)
+            time.sleep(min(poll_interval_s, remaining))
             try:
-                info = _fetch(self._config, self.id, budget=deadline - time.monotonic())
+                info = _fetch(
+                    self._config,
+                    self.id,
+                    budget=max(deadline - time.monotonic(), _FINAL_CHECK_S),
+                )
             except DeadlineExceeded as exc:
                 raise _still_settling(self.id, status, timeout) from exc
             except NotFoundError as exc:

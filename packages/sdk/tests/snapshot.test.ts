@@ -154,6 +154,34 @@ describe("Sandbox#snapshot", () => {
     )
   })
 
+  it("checks once more at the deadline instead of giving up an interval early", async () => {
+    const sandbox = await makeSandbox()
+    const { calls } = routeFetch((call) =>
+      call.method === "POST"
+        ? jsonResponse(snapshotBody("creating"), 202)
+        : jsonResponse(snapshotBody("ready")),
+    )
+    const snap = await sandbox.snapshot({
+      timeoutMs: 50,
+      pollIntervalMs: 2_000,
+    })
+    expect(snap.status).toBe("ready")
+    expect(calls.filter((c) => c.method === "GET")).toHaveLength(1)
+  })
+
+  it("still sends an idempotency key where crypto.randomUUID is missing", async () => {
+    const sandbox = await makeSandbox()
+    vi.stubGlobal("crypto", {})
+    const { calls } = routeFetch(() => jsonResponse(snapshotBody("ready"), 201))
+    await sandbox.snapshot()
+    await sandbox.snapshot()
+    const keys = calls.map(
+      (c) => (c.body as Record<string, unknown>).idempotency_key,
+    )
+    expect(keys.every((k) => typeof k === "string" && k.length > 0)).toBe(true)
+    expect(keys[0]).not.toBe(keys[1])
+  })
+
   it("times out when the snapshot is still settling", async () => {
     const sandbox = await makeSandbox()
     routeFetch((call) =>

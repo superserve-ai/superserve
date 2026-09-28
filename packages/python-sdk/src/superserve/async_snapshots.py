@@ -23,6 +23,7 @@ from .snapshots import (
     DEFAULT_SNAPSHOT_TIMEOUT,
     _is_settled,
     _list_url,
+    _FINAL_CHECK_S,
     _still_settling,
 )
 from .types import SnapshotInfo, SnapshotStatus, to_snapshot_info
@@ -148,12 +149,14 @@ class AsyncSnapshot:
         status: SnapshotStatus = self.status
         while True:
             remaining = deadline - time.monotonic()
-            if remaining < poll_interval_s:
+            if remaining <= 0:
                 raise _still_settling(self.id, status, timeout)
-            await asyncio.sleep(poll_interval_s)
+            await asyncio.sleep(min(poll_interval_s, remaining))
             try:
                 info = await _fetch(
-                    self._config, self.id, budget=deadline - time.monotonic()
+                    self._config,
+                    self.id,
+                    budget=max(deadline - time.monotonic(), _FINAL_CHECK_S),
                 )
             except DeadlineExceeded as exc:
                 raise _still_settling(self.id, status, timeout) from exc

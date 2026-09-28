@@ -61,6 +61,17 @@ import type {
 import { toNetworkLogPage, toSandboxInfo, toSnapshotInfo } from "./types.js"
 
 /** How long `pause()` waits for the host across every request it makes. */
+/**
+ * A key for one capture request. `crypto.randomUUID` is missing on Node 18 and
+ * on pages served over plain HTTP; a key only has to be unique, not secret.
+ */
+function newIdempotencyKey(): string {
+  const uuid = globalThis.crypto?.randomUUID?.()
+  if (uuid) return uuid
+  const rand = () => Math.random().toString(36).slice(2)
+  return `${Date.now().toString(36)}-${rand()}${rand()}`
+}
+
 const DEFAULT_PAUSE_TIMEOUT_MS = 300_000
 // Status checks while a waited pause is young: most pauses finish within a
 // second or two, so the first checks are close together; after this window
@@ -400,8 +411,7 @@ export class Sandbox {
     const started = Date.now()
     const body: Record<string, unknown> = {
       kind: options.kind ?? "mem+fs",
-      idempotency_key:
-        options.idempotencyKey ?? globalThis.crypto?.randomUUID?.(),
+      idempotency_key: options.idempotencyKey ?? newIdempotencyKey(),
     }
     if (options.name !== undefined) body.name = options.name
     const raw = await request<ApiSnapshotResponse>({

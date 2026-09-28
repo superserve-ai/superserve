@@ -189,6 +189,10 @@ async function deleteSnapshot(
   }
 }
 
+// The check that lands on the deadline still gets a request's worth of time,
+// so a snapshot that became ready in the last interval is seen.
+const FINAL_CHECK_MS = 5_000
+
 /** @internal Polls a snapshot until it settles. */
 export async function waitForSnapshot(
   config: ResolvedConfig,
@@ -198,35 +202,40 @@ export async function waitForSnapshot(
   if (snapshot.status === "ready") return snapshot
   const timeoutMs = options.timeoutMs ?? DEFAULT_SNAPSHOT_TIMEOUT_MS
   const pollMs = options.pollIntervalMs ?? DEFAULT_SNAPSHOT_POLL_MS
-  const deadline = AbortSignal.timeout(timeoutMs)
-  const { signal, release } = composeSignals(deadline, options.signal)
-  try {
-    let current: SnapshotInfo = snapshot
-    for (;;) {
-      switch (current.status) {
-        case "ready":
-          return new Snapshot(current, config)
-        case "failed":
-          throw new SandboxError(`Snapshot ${snapshot.id} failed`)
-        case "deleting":
-          throw new SandboxError(`Snapshot ${snapshot.id} was deleted`)
-      }
-      try {
-        await sleep(pollMs, signal)
-        current = await fetchSnapshot(config, snapshot.id, signal)
-      } catch (err) {
-        if (deadline.aborted) {
-          throw new TimeoutError(
-            `Snapshot ${snapshot.id} still ${current.status} after ${timeoutMs}ms`,
-          )
-        }
-        if (err instanceof NotFoundError) {
-          throw new SandboxError(`Snapshot ${snapshot.id} was deleted`)
-        }
-        throw err
-      }
+  const deadlineAt = Date.now() + timeoutMs
+  const stillSettling = (status: string) =>
+    new TimeoutError(
+      `Snapshot ${snapshot.id} still ${status} after ${timeoutMs}ms`,
+    )
+  let current: SnapshotInfo = snapshot
+  for (;;) {
+    switch (current.status) {
+      case "ready":
+        return new Snapshot(current, config)
+      case "failed":
+        throw new SandboxError(`Snapshot ${snapshot.id} failed`)
+      case "deleting":
+        throw new SandboxError(`Snapshot ${snapshot.id} was deleted`)
     }
-  } finally {
-    release()
+    const left = deadlineAt - Date.now()
+    if (left <= 0) throw stillSettling(current.status)
+    await sleep(Math.min(pollMs, left), options.signal)
+    const budget = AbortSignal.timeout(
+      Math.max(deadlineAt - Date.now(), FINAL_CHECK_MS),
+    )
+    const { signal, release } = composeSignals(budget, options.signal)
+    try {
+      current = await fetchSnapshot(config, snapshot.id, signal)
+    } catch (err) {
+      if (budget.aborted && !options.signal?.aborted) {
+        throw stillSettling(current.status)
+      }
+      if (err instanceof NotFoundError) {
+        throw new SandboxError(`Snapshot ${snapshot.id} was deleted`)
+      }
+      throw err
+    } finally {
+      release()
+    }
   }
 }

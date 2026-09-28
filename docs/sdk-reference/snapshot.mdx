@@ -67,7 +67,7 @@ Delete the snapshot. Sandboxes already created from it are unaffected. Idempoten
 
 ### `waitUntilReady` / `wait_until_ready`
 
-Return once the snapshot is `ready`. Raises `SandboxError` if it failed or was deleted, and `TimeoutError` if it is still settling after the timeout. `sandbox.snapshot()` already does this unless you pass `wait: false` / `wait=False`.
+Return once the snapshot is `ready`. Raises `SandboxError` if it failed or was deleted. If it is still settling after the timeout, TypeScript throws `TimeoutError` and Python raises `SandboxTimeoutError`. `sandbox.snapshot()` already does this unless you pass `wait: false` / `wait=False`.
 
 | Option | Type | Description |
 |---|---|---|

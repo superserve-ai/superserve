@@ -157,8 +157,23 @@ class TestWaitUntilReady:
 
     def test_timeout_while_settling(self) -> None:
         snap = self._creating()
-        with pytest.raises(SandboxTimeoutError, match="still creating"):
-            snap.wait_until_ready(timeout=0.01, poll_interval_s=1)
+        with respx.mock() as router:
+            router.get(f"{API}/snapshots/{SNAP}").mock(
+                return_value=httpx.Response(200, json=_snap("creating"))
+            )
+            with pytest.raises(SandboxTimeoutError, match="still creating"):
+                snap.wait_until_ready(timeout=0.01, poll_interval_s=1)
+
+    def test_ready_by_the_deadline_is_seen(self) -> None:
+        # Less than one interval left: the wait still checks at the deadline.
+        snap = self._creating()
+        with respx.mock() as router:
+            route = router.get(f"{API}/snapshots/{SNAP}").mock(
+                return_value=httpx.Response(200, json=_snap("ready"))
+            )
+            ready = snap.wait_until_ready(timeout=0.05, poll_interval_s=2)
+            assert ready.status == SnapshotStatus.READY
+            assert route.call_count == 1
 
 
 class TestSnapshotCrud:
