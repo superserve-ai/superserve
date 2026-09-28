@@ -38,8 +38,6 @@ snapshot = sandbox.snapshot(name="with-pandas")
 
 `snapshot()` returns once the snapshot is `ready`.
 
-Each request is sent with an idempotency key, so it is safe to retry. The SDK generates one for you. If your own code might retry the call, pass the same `idempotencyKey` / `idempotency_key` each time and you'll get back the same snapshot rather than a second one.
-
 ## Create a sandbox from a snapshot
 
 Pass the snapshot, or its ID, as `fromSnapshot` / `from_snapshot`. You can't combine it with `fromTemplate`.
