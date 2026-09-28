@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 // Cookie store stub — swapped per test via cookieValue.
 let cookieValue: string | undefined
@@ -12,8 +12,23 @@ vi.mock("next/headers", () => ({
 }))
 
 let memberships: Array<{ teamId: string; region: string }> = []
+let unfinishedTeamId: string | null = null
 vi.mock("@/lib/api/team-directory", () => ({
   listTeamMembershipsForUser: vi.fn(async () => memberships),
+}))
+vi.mock("@/lib/api/team-provisioning", () => ({
+  completedMemberships: async (
+    _userId: string,
+    directory: {
+      memberships: Array<{ teamId: string; region: string }>
+      degradedRegions: string[]
+    },
+  ) => ({
+    ...directory,
+    memberships: directory.memberships.filter(
+      (membership) => membership.teamId !== unfinishedTeamId,
+    ),
+  }),
 }))
 
 import {
@@ -91,6 +106,10 @@ describe("pickActiveTeam", () => {
 })
 
 describe("resolveActiveTeam", () => {
+  afterEach(() => {
+    unfinishedTeamId = null
+  })
+
   it("honors the cookie when it matches a membership", async () => {
     memberships = [
       { teamId: "team-a", region: "use" },
@@ -123,4 +142,20 @@ describe("resolveActiveTeam", () => {
       region: "use",
     })
   })
+
+  it.each(["use:team-a", undefined])(
+    "ignores an orphaned membership with selection %s",
+    async (selection) => {
+      memberships = [
+        { teamId: "team-a", region: "use" },
+        { teamId: "team-b", region: "use" },
+      ]
+      unfinishedTeamId = "team-a"
+      cookieValue = selection
+      expect(await resolveActiveTeam("u1")).toEqual({
+        teamId: "team-b",
+        region: "use",
+      })
+    },
+  )
 })

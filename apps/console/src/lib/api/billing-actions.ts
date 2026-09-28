@@ -7,6 +7,7 @@ import {
   listTeamMembershipsForUserDetailed,
   type TeamMembership,
 } from "@/lib/api/team-directory"
+import { completedMemberships } from "@/lib/api/team-provisioning"
 import { cellFor } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -58,8 +59,13 @@ async function getTeam(userId: string): Promise<TeamMembership | null> {
   // maxAgeMs 0: billing's fail-closed check below reasons about the
   // freshness of the read itself, so it must not be served from the
   // directory cache.
-  const { memberships, degradedRegions } =
-    await listTeamMembershipsForUserDetailed(userId, { maxAgeMs: 0 })
+  const directory = await listTeamMembershipsForUserDetailed(userId, {
+    maxAgeMs: 0,
+  })
+  const { memberships, degradedRegions } = await completedMemberships(
+    userId,
+    directory,
+  )
 
   // Fail closed on a partial directory read: with a cell unreachable,
   // "exactly one membership" may just mean the other team's cell is down —

@@ -8,6 +8,7 @@ from ._config import (
 )
 from .async_sandbox import AsyncSandbox
 from .async_secrets import AsyncSecret
+from .async_snapshots import AsyncSnapshot
 from .async_template import AsyncTemplate
 from .command_session import AsyncCommandSession
 from .errors import (
@@ -24,6 +25,7 @@ from .errors import (
 from .providers import AsyncProvider, Provider
 from .sandbox import Sandbox
 from .secrets import Secret
+from .snapshots import Snapshot
 from .template import Template
 from .types import (
     BuildLogEvent,
@@ -50,6 +52,10 @@ from .types import (
     SecretAuthType,
     SecretInfo,
     SecretSandboxBinding,
+    SnapshotInfo,
+    SnapshotKind,
+    SnapshotResources,
+    SnapshotStatus,
     TemplateBuildInfo,
     TemplateBuildStatus,
     TemplateInfo,
@@ -66,6 +72,7 @@ __all__ = [
     "AsyncProvider",
     "AsyncSandbox",
     "AsyncSecret",
+    "AsyncSnapshot",
     "AsyncTemplate",
     "AuthenticationError",
     "BuildError",
@@ -105,6 +112,11 @@ __all__ = [
     "SecretInfo",
     "SecretSandboxBinding",
     "ServerError",
+    "Snapshot",
+    "SnapshotInfo",
+    "SnapshotKind",
+    "SnapshotResources",
+    "SnapshotStatus",
     "Template",
     "TemplateBuildInfo",
     "TemplateBuildStatus",

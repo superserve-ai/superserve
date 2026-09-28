@@ -425,7 +425,8 @@ def api_request(
         retry_conflict=retry_conflict,
     )
 
-    if response.status_code == 204:
+    # A 202 may carry no body either.
+    if response.status_code == 204 or (response.is_success and not response.content):
         return None
 
     if not response.is_success:
@@ -721,7 +722,8 @@ async def async_api_request(
         retry_conflict=retry_conflict,
     )
 
-    if response.status_code == 204:
+    # A 202 may carry no body either.
+    if response.status_code == 204 or (response.is_success and not response.content):
         return None
 
     if not response.is_success:
