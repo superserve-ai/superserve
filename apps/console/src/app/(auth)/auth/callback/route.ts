@@ -3,10 +3,11 @@ import { NextResponse } from "next/server"
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import {
   consumeFingerprintSignupEventId,
-  scheduleFingerprintObservation,
+  readFingerprintSignupEventId,
   sendWelcomeEmail,
 } from "@/app/(auth)/auth/signup/action"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
+import { completedMemberships } from "@/lib/api/team-provisioning"
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
 import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
 import {
@@ -15,6 +16,18 @@ import {
   isGoogleUser,
   markGoogleSignupAttempt,
 } from "@/lib/auth/google-signup-proof"
+import {
+  isActiveSignupEvidenceAttempt,
+  readSignupEvidence,
+  readSignupEvidenceEntries,
+  saveSignupEvidence,
+} from "@/lib/auth/signup-evidence"
+import {
+  evaluateSignupRestriction,
+  SignupRestrictedError,
+} from "@/lib/auth/signup-restrictions"
+import { DEFAULT_REGION } from "@/lib/cells"
+import { resolveFingerprintSignup } from "@/lib/fingerprint/observe"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createServerClient } from "@/lib/supabase/server"
@@ -106,9 +119,12 @@ export async function GET(request: Request) {
         if (code && isGoogleUser(user)) {
           const directory = await classifyGoogleMembershipState(
             user.id,
-            await listTeamMembershipsForUserDetailed(user.id, {
-              maxAgeMs: 0,
-            }),
+            await completedMemberships(
+              user.id,
+              await listTeamMembershipsForUserDetailed(user.id, {
+                maxAgeMs: 0,
+              }),
+            ),
           )
 
           if (directory.kind === "indeterminate") {
@@ -162,17 +178,46 @@ export async function GET(request: Request) {
               )
             }
             console.info("Google OAuth signup proof validated at callback")
-            if (signupAttemptId) await markGoogleSignupAttempt(signupAttemptId)
+            await markGoogleSignupAttempt(signupAttemptId, user.id)
           }
 
-          const fingerprintEventId = await consumeFingerprintSignupEventId()
           if (isNewUser) {
-            scheduleFingerprintObservation(
-              fingerprintEventId,
-              "google",
-              user.id,
-              signupAttemptId,
-            )
+            const activeAttempt =
+              signupAttemptId &&
+              (await isActiveSignupEvidenceAttempt(signupAttemptId))
+            const fingerprintEventId = activeAttempt
+              ? await readFingerprintSignupEventId()
+              : undefined
+            const existingVisitor = signupAttemptId
+              ? await readSignupEvidence(user.id, signupAttemptId)
+              : null
+            if (fingerprintEventId && !existingVisitor && signupAttemptId) {
+              let visitor: string | null = null
+              try {
+                visitor = await resolveFingerprintSignup({
+                  eventId: fingerprintEventId,
+                  userId: user.id,
+                  signupMethod: "google",
+                  signupAttemptId,
+                })
+              } finally {
+                await consumeFingerprintSignupEventId(fingerprintEventId)
+              }
+              if (visitor) {
+                try {
+                  await saveSignupEvidence(
+                    user.id,
+                    signupAttemptId,
+                    fingerprintEventId,
+                    visitor,
+                  )
+                } catch {
+                  console.warn("Signup evidence retention unavailable", {
+                    stage: "google_callback",
+                  })
+                }
+              }
+            }
             if (signupAttemptId) {
               await trackEvent(AUTH_EVENTS.SIGNUP_ATTEMPT_ASSOCIATED, user.id, {
                 signup_attempt_id: signupAttemptId,
@@ -185,6 +230,55 @@ export async function GET(request: Request) {
         } else {
           const createdAt = new Date(user.created_at)
           isNewUser = Date.now() - createdAt.getTime() < 30000
+        }
+
+        if (type !== "invite" && (type === "signup" || (code && isNewUser))) {
+          const directory = await completedMemberships(
+            user.id,
+            await listTeamMembershipsForUserDetailed(user.id, {
+              maxAgeMs: 0,
+            }),
+          )
+          if (
+            directory.memberships.length === 0 &&
+            directory.degradedRegions.length > 0
+          )
+            return NextResponse.redirect(
+              buildRedirectUrl(
+                origin,
+                "/auth/auth-code-error?reason=membership_lookup_degraded",
+              ),
+            )
+          if (
+            directory.memberships.length === 0 &&
+            directory.degradedRegions.length === 0
+          ) {
+            try {
+              const entries = signupAttemptId
+                ? await readSignupEvidenceEntries(user.id, signupAttemptId)
+                : []
+              if (entries.length === 0)
+                await evaluateSignupRestriction(DEFAULT_REGION, user.id, null)
+              for (const visitor of new Set(
+                entries.map(({ visitor }) => visitor),
+              ))
+                await evaluateSignupRestriction(
+                  DEFAULT_REGION,
+                  user.id,
+                  visitor,
+                )
+            } catch (error) {
+              if (error instanceof SignupRestrictedError) {
+                return NextResponse.redirect(
+                  buildRedirectUrl(
+                    origin,
+                    "/auth/auth-code-error?reason=signup_blocked",
+                  ),
+                )
+              }
+              throw error
+            }
+          }
         }
 
         if (isNewUser) {

@@ -10,6 +10,15 @@ export class ApiError extends Error {
   }
 }
 
+export const GOOGLE_SIGNUP_RECOVERY_URL = "/auth/signup?complete_google=1"
+
+export function requiresGoogleSignupRecovery(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.code === "google_signup_recovery_required"
+  )
+}
+
 /** A page of list results plus the total row count across all pages. */
 export interface PagedResult<T> {
   items: T[]
@@ -74,6 +83,12 @@ async function request<R>(
       } catch {
         // response body is not JSON, use defaults
       }
+
+      if (
+        code === "google_signup_recovery_required" &&
+        typeof window !== "undefined"
+      )
+        window.location.assign(GOOGLE_SIGNUP_RECOVERY_URL)
 
       throw new ApiError(response.status, code, message)
     }

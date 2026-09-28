@@ -14,7 +14,16 @@ import {
   listTeamsForUser,
   membershipExistsInCell,
 } from "@/lib/api/team-directory"
-import { provisionTeam } from "@/lib/api/team-provisioning"
+import {
+  completedMemberships,
+  provisionTeam,
+  type ProvisionedTeam,
+} from "@/lib/api/team-provisioning"
+import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
+import {
+  SignupRestrictedError,
+  SIGNUP_RESTRICTED_MESSAGE,
+} from "@/lib/auth/signup-restrictions"
 import { configuredRegions, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -42,12 +51,17 @@ export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
     listTeamsForUser(user.id),
     readTeamSelection(),
   ])
-  const active = pickActiveTeam(
-    teams.map((t) => ({ teamId: t.id, region: t.region })),
-    selection,
+  const { memberships } = await completedMemberships(user.id, {
+    memberships: teams.map((t) => ({ teamId: t.id, region: t.region })),
+    degradedRegions: [],
+  })
+  const selectable = new Set(memberships.map((m) => `${m.region}:${m.teamId}`))
+  const completedTeams = teams.filter((t) =>
+    selectable.has(`${t.region}:${t.id}`),
   )
+  const active = pickActiveTeam(memberships, selection)
   return {
-    teams,
+    teams: completedTeams,
     regions: configuredRegions(),
     activeTeamId: active?.teamId ?? null,
     activeRegion: active?.region ?? null,
@@ -77,7 +91,13 @@ export async function setActiveTeamAction(
 
   if (
     !configuredRegions().includes(region) ||
-    !(await membershipExistsInCell(region, user.id, teamId))
+    !(await membershipExistsInCell(region, user.id, teamId)) ||
+    !(
+      await completedMemberships(user.id, {
+        memberships: [{ region, teamId }],
+        degradedRegions: [],
+      })
+    ).memberships.length
   ) {
     throw new Error("You are not a member of that team")
   }
@@ -88,11 +108,18 @@ export async function setActiveTeamAction(
 export async function createTeamAction(
   name: string,
   region?: string,
-): Promise<TeamSummary> {
+): Promise<
+  | TeamSummary
+  | {
+      code: "signup_blocked" | "google_signup_recovery_required"
+      message: string
+    }
+> {
   const supabase = await createServerClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
+  const observedAt = new Date().toISOString()
   if (!user) throw new Error("Not authenticated")
 
   const trimmed = name.trim()
@@ -103,12 +130,22 @@ export async function createTeamAction(
     throw new Error(`Region ${targetRegion} is not available`)
   }
 
-  const team = await provisionTeam(
-    targetRegion,
-    user.id,
-    user.email ?? user.id,
-    trimmed,
-  )
+  let team: ProvisionedTeam
+  try {
+    team = await provisionTeam(
+      targetRegion,
+      user.id,
+      user.email ?? user.id,
+      trimmed,
+      { user, observedAt },
+    )
+  } catch (error) {
+    if (error instanceof SignupRestrictedError)
+      return { code: "signup_blocked", message: SIGNUP_RESTRICTED_MESSAGE }
+    if (error instanceof GoogleSignupRecoveryRequiredError)
+      return { code: "google_signup_recovery_required", message: error.message }
+    throw error
+  }
 
   invalidateMembershipDirectory(user.id)
   await storeTeamSelection({ region: targetRegion, teamId: team.id })

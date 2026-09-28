@@ -11,6 +11,17 @@ import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
 import { issueGoogleSignupProof } from "@/lib/auth/google-signup-proof"
 import {
+  beginSignupEvidenceAttempt,
+  isSupersededSignupEvidenceAttempt,
+  saveSignupEvidence,
+} from "@/lib/auth/signup-evidence"
+import {
+  evaluateSignupRestriction,
+  SignupRestrictedError,
+  SIGNUP_RESTRICTED_MESSAGE,
+} from "@/lib/auth/signup-restrictions"
+import { DEFAULT_REGION } from "@/lib/cells"
+import {
   isCloudflareSignupObservationEnabled as readCloudflareObservationFlag,
   observeCloudflareSignup,
 } from "@/lib/cloudflare/signup-observe"
@@ -18,7 +29,10 @@ import { sendEmail } from "@/lib/email/send"
 import { ConfirmationEmail } from "@/lib/email/templates/confirmation"
 import { WelcomeEmail } from "@/lib/email/templates/welcome"
 import { FINGERPRINT_SIGNUP_COOKIE } from "@/lib/fingerprint/constants"
-import { observeFingerprintSignup } from "@/lib/fingerprint/observe"
+import {
+  observeFingerprintSignup,
+  resolveFingerprintSignup,
+} from "@/lib/fingerprint/observe"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { verifyRecaptcha } from "@/lib/recaptcha/verify"
@@ -98,19 +112,15 @@ export async function readFingerprintSignupEventId(): Promise<
   }
 }
 
-export async function consumeFingerprintSignupEventId(): Promise<
-  string | undefined
-> {
-  const eventId = await readFingerprintSignupEventId()
-  if (!eventId) return undefined
-
+export async function consumeFingerprintSignupEventId(eventId: string) {
   try {
     const store = await cookies()
-    store.delete(FINGERPRINT_SIGNUP_COOKIE)
+    const current = store.get(FINGERPRINT_SIGNUP_COOKIE)?.value
+    if (current && decodeURIComponent(current) === eventId)
+      store.delete(FINGERPRINT_SIGNUP_COOKIE)
   } catch {
-    // Cookie cleanup is telemetry-only and must remain fail open.
+    // The event cookie is optional; cleanup must not interrupt signup.
   }
-  return eventId
 }
 
 export async function scheduleFingerprintObservation(
@@ -151,6 +161,7 @@ export const beginGoogleSignup = async (
     }
 > => {
   const signupAttemptId = crypto.randomUUID()
+  await beginSignupEvidenceAttempt(signupAttemptId)
   const clientContext = await readCloudflareClientContext()
   const fingerprintEventId = await readFingerprintSignupEventId()
   scheduleCloudflareObservation(
@@ -175,6 +186,8 @@ export const beginGoogleSignup = async (
     observed_at: new Date().toISOString(),
   })
   if (!recaptcha.verified) {
+    if (fingerprintEventId)
+      await consumeFingerprintSignupEventId(fingerprintEventId)
     await scheduleFingerprintObservation(
       fingerprintEventId,
       "google",
@@ -211,6 +224,8 @@ export const beginGoogleSignup = async (
     console.info("Google signup CAPTCHA verified; pre-auth proof issued")
     return { success: true, signupAttemptId }
   } catch (error) {
+    if (fingerprintEventId)
+      await consumeFingerprintSignupEventId(fingerprintEventId)
     await trackEvent(
       AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_FAILED,
       signupAttemptId,
@@ -241,6 +256,8 @@ export const signUpWithEmail = async (
     return { success: false, error: parsed.error.issues[0].message }
 
   const signupAttemptId = crypto.randomUUID()
+  const evidenceAttemptStarted =
+    await beginSignupEvidenceAttempt(signupAttemptId)
   const clientContext = await readCloudflareClientContext()
   const fingerprintEventId = await readFingerprintSignupEventId()
   scheduleCloudflareObservation(
@@ -252,6 +269,7 @@ export const signUpWithEmail = async (
     turnstileToken,
   )
   let fingerprintObservationScheduled = false
+  let observationUserId: string | null = null
   const emitFingerprintObservation = (userId?: string | null) => {
     if (!fingerprintEventId || fingerprintObservationScheduled) return
     fingerprintObservationScheduled = true
@@ -277,6 +295,8 @@ export const signUpWithEmail = async (
     observed_at: new Date().toISOString(),
   })
   if (!recaptcha.verified) {
+    if (fingerprintEventId)
+      await consumeFingerprintSignupEventId(fingerprintEventId)
     emitFingerprintObservation()
     console.warn("Signup blocked by reCAPTCHA", {
       email: parsed.data.email,
@@ -290,6 +310,38 @@ export const signUpWithEmail = async (
   }
 
   try {
+    let visitor: string | null = null
+    if (fingerprintEventId) {
+      try {
+        visitor = await resolveFingerprintSignup({
+          eventId: fingerprintEventId,
+          signupMethod: "email",
+          signupAttemptId,
+          getObservationUserId: () => observationUserId,
+        })
+      } finally {
+        await consumeFingerprintSignupEventId(fingerprintEventId)
+      }
+    }
+    if (fingerprintEventId) fingerprintObservationScheduled = true
+    if (
+      visitor &&
+      (!evidenceAttemptStarted ||
+        !(await isSupersededSignupEvidenceAttempt(signupAttemptId)))
+    ) {
+      try {
+        await evaluateSignupRestriction(
+          DEFAULT_REGION,
+          signupAttemptId,
+          visitor,
+        )
+      } catch (error) {
+        if (error instanceof SignupRestrictedError)
+          return { success: false, error: SIGNUP_RESTRICTED_MESSAGE }
+        throw error
+      }
+    }
+
     const supabase = createAdminClient()
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai"
@@ -298,8 +350,15 @@ export const signUpWithEmail = async (
       type: "signup",
       email: parsed.data.email,
       password: parsed.data.password,
-      options: { data: { full_name: parsed.data.fullName }, redirectTo },
+      options: {
+        data: {
+          full_name: parsed.data.fullName,
+          signup_attempt_id: signupAttemptId,
+        },
+        redirectTo,
+      },
     })
+    observationUserId = data?.user?.id ?? null
 
     if (error) {
       emitFingerprintObservation()
@@ -320,7 +379,20 @@ export const signUpWithEmail = async (
       return { success: false, error: error.message }
     }
 
-    emitFingerprintObservation(data?.user?.id ?? null)
+    if (fingerprintEventId && visitor && data?.user?.id) {
+      try {
+        await saveSignupEvidence(
+          data.user.id,
+          signupAttemptId,
+          fingerprintEventId,
+          visitor,
+        )
+      } catch {
+        console.warn("Signup evidence retention unavailable", {
+          stage: "email_signup",
+        })
+      }
+    }
     await trackEvent(
       AUTH_EVENTS.SIGNUP_ATTEMPT_ASSOCIATED,
       data?.user?.id || signupAttemptId,
@@ -336,7 +408,7 @@ export const signUpWithEmail = async (
     if (!tokenHash)
       return { success: false, error: "Failed to generate confirmation link." }
 
-    const confirmationUrl = `${redirectTo}?token_hash=${tokenHash}&type=signup&utm_source=email&utm_medium=signup_confirmation`
+    const confirmationUrl = `${redirectTo}?token_hash=${tokenHash}&type=signup&signup_attempt_id=${signupAttemptId}&utm_source=email&utm_medium=signup_confirmation`
     await sendEmail({
       to: parsed.data.email,
       subject: "Confirm your Superserve account",

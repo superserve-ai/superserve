@@ -31,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@superserve/ui"
+import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { useMemo, useState } from "react"
@@ -49,6 +50,10 @@ import {
 } from "@/hooks/use-api-keys"
 import { useCreateParam } from "@/hooks/use-create-param"
 import { useSelection } from "@/hooks/use-selection"
+import {
+  GOOGLE_SIGNUP_RECOVERY_URL,
+  requiresGoogleSignupRecovery,
+} from "@/lib/api/client"
 import { formatDate } from "@/lib/format"
 import { API_KEY_EVENTS } from "@/lib/posthog/events"
 
@@ -108,6 +113,22 @@ function ApiKeysPageContent() {
   }
 
   if (error) {
+    if (requiresGoogleSignupRecovery(error)) {
+      return (
+        <div className="flex h-full flex-col">
+          <PageHeader title="API Keys" />
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 text-sm">
+            <p>{error.message}</p>
+            <Link
+              href={GOOGLE_SIGNUP_RECOVERY_URL}
+              className="text-brand underline"
+            >
+              Complete signup with Google
+            </Link>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="flex h-full flex-col">
         <PageHeader title="API Keys" />
