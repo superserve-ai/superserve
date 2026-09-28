@@ -76,7 +76,9 @@ export function SnapshotRowActions({
           </MenuItem>
           <MenuSeparator />
           <MenuItem
-            disabled={snapshot.status === "deleting"}
+            disabled={
+              snapshot.status === "creating" || snapshot.status === "deleting"
+            }
             onClick={() => setDeleteOpen(true)}
             className="text-destructive hover:bg-destructive/5 focus:bg-destructive/5"
           >

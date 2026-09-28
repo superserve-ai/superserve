@@ -2,6 +2,7 @@ import type { BadgeVariant } from "@superserve/ui"
 import { Badge } from "@superserve/ui"
 
 import type { SnapshotStatus } from "@/lib/api/types"
+import { formatBytes } from "@/lib/sandbox-utils"
 
 const VARIANT: Record<SnapshotStatus, BadgeVariant> = {
   creating: "warning",
@@ -23,6 +24,14 @@ export function SnapshotStatusBadge({ status }: { status: SnapshotStatus }) {
       {LABEL[status]}
     </Badge>
   )
+}
+
+/** The snapshot's size, or a dash until it is ready and the size is known. */
+export function snapshotSize(snapshot: {
+  status: SnapshotStatus
+  size_bytes: number
+}): string {
+  return snapshot.status === "ready" ? formatBytes(snapshot.size_bytes) : "—"
 }
 
 /** The snapshot's name, or its short id when unnamed. */

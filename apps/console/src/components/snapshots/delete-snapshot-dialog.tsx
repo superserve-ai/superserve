@@ -45,7 +45,7 @@ export function DeleteSnapshotDialog({
   }
 
   const handleConfirm = () => {
-    if (!isMatch) return
+    if (!isMatch || mutation.isPending) return
     posthog.capture(SNAPSHOT_EVENTS.DELETED, { id: snapshot.id })
     mutation.mutate(snapshot.id, {
       onSuccess: () => handleOpenChange(false),

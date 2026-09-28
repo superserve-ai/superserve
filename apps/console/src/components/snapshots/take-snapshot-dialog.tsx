@@ -69,7 +69,7 @@ export function TakeSnapshotDialog({
         <div className="space-y-4 px-6 pb-2">
           <p className="text-sm text-muted">
             Saves the sandbox&apos;s memory and disk. A running sandbox pauses
-            briefly while it is captured.
+            briefly while the snapshot is taken.
           </p>
           <Field label="Name" description="Optional, up to 64 characters.">
             <Input

@@ -9,10 +9,12 @@ import {
 
 import { AnimatedTableRow } from "@/components/animated-table-row"
 import { EmptyState } from "@/components/empty-state"
+import { ErrorState } from "@/components/error-state"
 import { SnapshotRowActions } from "@/components/snapshots/snapshot-row-actions"
 import {
   SnapshotStatusBadge,
   snapshotLabel,
+  snapshotSize,
 } from "@/components/snapshots/snapshot-status-badge"
 import { TakeSnapshotDialog } from "@/components/snapshots/take-snapshot-dialog"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
@@ -20,10 +22,14 @@ import { TemplateResources } from "@/components/templates/template-resources"
 import { useSandboxSnapshots } from "@/hooks/use-snapshots"
 import type { SandboxResponse } from "@/lib/api/types"
 import { formatTime } from "@/lib/format"
-import { formatBytes } from "@/lib/sandbox-utils"
 
 export function SnapshotsSection({ sandbox }: { sandbox: SandboxResponse }) {
-  const { data: snapshots, isPending } = useSandboxSnapshots(sandbox.id)
+  const {
+    data: snapshots,
+    isPending,
+    error,
+    refetch,
+  } = useSandboxSnapshots(sandbox.id)
 
   return (
     <div className="border-b border-border">
@@ -45,12 +51,14 @@ export function SnapshotsSection({ sandbox }: { sandbox: SandboxResponse }) {
             </div>
           ))}
         </div>
+      ) : error ? (
+        <ErrorState message={error.message} onRetry={() => refetch()} />
       ) : !snapshots || snapshots.length === 0 ? (
         <div className="flex min-h-60 items-center justify-center py-10">
           <EmptyState
             icon={CameraIcon}
             title="No Snapshots"
-            description="Take a snapshot of this sandbox to save its memory and disk; new sandboxes created from it continue with its processes running."
+            description="Take a snapshot to save this sandbox's memory and disk. New sandboxes created from it start right where it left off."
           />
         </div>
       ) : (
@@ -80,7 +88,7 @@ export function SnapshotsSection({ sandbox }: { sandbox: SandboxResponse }) {
                     <SnapshotStatusBadge status={snapshot.status} />
                   </TableCell>
                   <TableCell className="font-mono text-xs text-muted tabular-nums">
-                    {formatBytes(snapshot.size_bytes)}
+                    {snapshotSize(snapshot)}
                   </TableCell>
                   <TableCell>
                     <TemplateResources

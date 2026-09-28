@@ -700,8 +700,8 @@ export function CreateSandboxDialog({
                   required
                   description={
                     selectedSnapshot
-                      ? `Continues with the snapshot's processes running, on ${selectedSnapshot.resources.vcpu_count} vCPU, ${selectedSnapshot.resources.memory_mib} MiB memory and ${selectedSnapshot.resources.disk_mib} MiB disk.`
-                      : "Continues with the snapshot's processes running. The snapshot sets vCPU, memory and disk."
+                      ? `Starts where the snapshot left off, with ${selectedSnapshot.resources.vcpu_count} vCPU, ${selectedSnapshot.resources.memory_mib} MiB memory and ${selectedSnapshot.resources.disk_mib} MiB disk.`
+                      : "Starts where the snapshot left off. The snapshot sets vCPU, memory and disk."
                   }
                 >
                   <SourcePicker

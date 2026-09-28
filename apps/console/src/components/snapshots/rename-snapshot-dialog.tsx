@@ -40,7 +40,7 @@ export function RenameSnapshotDialog({
   const valid = trimmed.length >= 1 && trimmed.length <= 64
 
   const handleRename = () => {
-    if (!valid) return
+    if (!valid || mutation.isPending) return
     posthog.capture(SNAPSHOT_EVENTS.RENAMED)
     mutation.mutate(
       { id: snapshot.id, name: trimmed },

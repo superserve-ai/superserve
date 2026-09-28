@@ -20,6 +20,7 @@ import { SnapshotRowActions } from "@/components/snapshots/snapshot-row-actions"
 import {
   SnapshotStatusBadge,
   snapshotLabel,
+  snapshotSize,
 } from "@/components/snapshots/snapshot-status-badge"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableSkeleton } from "@/components/table-skeleton"
@@ -27,7 +28,6 @@ import { TableToolbar } from "@/components/table-toolbar"
 import { TemplateResources } from "@/components/templates/template-resources"
 import { useSnapshots } from "@/hooks/use-snapshots"
 import { formatTime } from "@/lib/format"
-import { formatBytes } from "@/lib/sandbox-utils"
 
 export default function SnapshotsPage() {
   return (
@@ -82,7 +82,7 @@ function SnapshotsPageContent() {
         <EmptyState
           icon={CameraIcon}
           title="No Snapshots"
-          description="Take a snapshot of a sandbox to save its memory and disk; new sandboxes created from it continue with its processes running."
+          description="Take a snapshot to save a sandbox's memory and disk. New sandboxes created from it start right where it left off."
         />
       ) : (
         <>
@@ -152,7 +152,7 @@ function SnapshotsPageContent() {
                           <SnapshotStatusBadge status={snapshot.status} />
                         </TableCell>
                         <TableCell className="font-mono text-xs text-muted tabular-nums">
-                          {formatBytes(snapshot.size_bytes)}
+                          {snapshotSize(snapshot)}
                         </TableCell>
                         <TableCell>
                           <TemplateResources
