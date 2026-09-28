@@ -74,8 +74,6 @@ Each fork is independent. Changes in one fork don't affect the snapshot, the ori
 Processes that were already running when the snapshot was taken keep the environment they started with. Their secret values only work in the original sandbox, so restart any process that uses secrets.
 </Warning>
 
-A fork runs in the same region as its snapshot. Its `sourceSnapshotId` / `source_snapshot_id` tells you which snapshot it came from.
-
 ## List, rename and delete
 
 <CodeGroup>
