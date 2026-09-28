@@ -8,6 +8,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query"
 
+import { useQueryScope } from "@/components/query-provider"
 import { ApiError } from "@/lib/api/client"
 import { sandboxKeys, snapshotKeys } from "@/lib/api/query-keys"
 import {
@@ -63,8 +64,9 @@ export function isSnapshotStillBeingTaken(error: unknown): boolean {
 
 export function useSnapshots({ enabled = true }: { enabled?: boolean } = {}) {
   const refetchInterval = usePollWhileSettling()
+  const queryScope = useQueryScope()
   return useQuery({
-    queryKey: snapshotKeys.lists(),
+    queryKey: [...snapshotKeys.lists(), queryScope],
     queryFn: () => listSnapshotsAction(),
     refetchInterval,
     enabled,
@@ -73,8 +75,9 @@ export function useSnapshots({ enabled = true }: { enabled?: boolean } = {}) {
 
 export function useSandboxSnapshots(sandboxId: string) {
   const refetchInterval = usePollWhileSettling()
+  const queryScope = useQueryScope()
   return useQuery({
-    queryKey: snapshotKeys.bySandbox(sandboxId),
+    queryKey: [...snapshotKeys.bySandbox(sandboxId), queryScope],
     queryFn: () => listSandboxSnapshots(sandboxId),
     refetchInterval,
   })
