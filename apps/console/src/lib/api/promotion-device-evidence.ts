@@ -1,6 +1,41 @@
+import "server-only"
+import crypto from "node:crypto"
+
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
+import { createServerClient } from "@/lib/supabase/server"
+
+type AccountOperation =
+  | "bind"
+  | "evidence"
+  | "register"
+  | "signup-eligibility"
+  | "create-team"
+
+/** Server-owned binding, retained by the caller before the first creation call. */
+export interface PromotionTeamCreationAttempt {
+  readonly userId: string
+  readonly attemptId: string
+  readonly teamId: string
+  readonly name: string
+  readonly region: string
+  readonly authorityUnavailable: boolean
+}
+
+export interface PromotionTeamCreationResult {
+  teamId: string
+  outcome: "granted" | "already_claimed" | "promotion_ineligible"
+  reason: string
+}
+
+export interface PromotionSignupEligibility {
+  ownership: "owner" | "another_owner" | "evidence_missing"
+  deviceDecision: string
+  eligibility: "unknown" | "ineligible"
+  reason: string
+}
 
 type PromotionEvidenceErrorCode =
+  | "forbidden"
   | "evidence_missing"
   | "evidence_conflict"
   | "invalid_evidence"
@@ -47,12 +82,77 @@ function producerToken(region: string, kind: "capture" | "account"): string {
   return kind === "capture" ? capture : account
 }
 
+async function verifiedAccountId(expectedUserId?: string): Promise<string> {
+  try {
+    const supabase = await createServerClient()
+    const { data, error } = await supabase.auth.getUser()
+    if (
+      error ||
+      !data.user?.id ||
+      (expectedUserId !== undefined && data.user.id !== expectedUserId)
+    )
+      throw new PromotionEvidenceError("forbidden", 403)
+    return data.user.id
+  } catch {
+    throw new PromotionEvidenceError("forbidden", 403)
+  }
+}
+
+// Only the server-owned signup flow may supply bind provenance. Account reuse
+// reaches this signer only after the current Auth credential has been verified.
+function accountAssertion(
+  userId: string,
+  operation: AccountOperation,
+  attemptId?: string,
+  creation?: PromotionTeamCreationAttempt,
+): string {
+  try {
+    const key = crypto.createPrivateKey(
+      requiredString(process.env.PROMOTION_ACCOUNT_PRIVATE_KEY),
+    )
+    if (key.asymmetricKeyType !== "ed25519")
+      throw new PromotionEvidenceError("authority_unavailable")
+    const now = Math.floor(Date.now() / 1000)
+    const header = Buffer.from(
+      JSON.stringify({ alg: "EdDSA", typ: "JWT" }),
+    ).toString("base64url")
+    const payload = Buffer.from(
+      JSON.stringify({
+        iss: "promotion-auth-adapter",
+        aud: "promotion-account",
+        sub: userId,
+        iat: now,
+        exp: now + 300,
+        operation,
+        ...(operation === "bind" ? { attempt_id: attemptId } : {}),
+        ...(operation === "create-team" && creation
+          ? {
+              attempt_id: creation.attemptId,
+              team_id: creation.teamId,
+              home_region: creation.region,
+              authority_unavailable: creation.authorityUnavailable,
+            }
+          : {}),
+      }),
+    ).toString("base64url")
+    const input = `${header}.${payload}`
+    return `${input}.${crypto.sign(null, Buffer.from(input), key).toString("base64url")}`
+  } catch {
+    throw new PromotionEvidenceError("authority_unavailable")
+  }
+}
+
 async function post(
   region: string,
   path: string,
   kind: "capture" | "account",
-  body?: Record<string, string>,
-  actorUserId?: string,
+  body?: Record<string, string | boolean>,
+  account?: {
+    userId: string
+    operation: AccountOperation
+    attemptId?: string
+    creation?: PromotionTeamCreationAttempt
+  },
 ): Promise<Record<string, unknown>> {
   const token = producerToken(region, kind)
   try {
@@ -63,7 +163,17 @@ async function post(
         headers: {
           Authorization: `Bearer ${token}`,
           ...(body ? { "Content-Type": "application/json" } : {}),
-          ...(actorUserId ? { "X-Actor-User-Id": actorUserId } : {}),
+          ...(account
+            ? {
+                "X-Actor-User-Id": account.userId,
+                "X-Promotion-Account-Assertion": accountAssertion(
+                  account.userId,
+                  account.operation,
+                  account.attemptId,
+                  account.creation,
+                ),
+              }
+            : {}),
         },
         ...(body ? { body: JSON.stringify(body) } : {}),
         signal: AbortSignal.timeout(4000),
@@ -142,7 +252,7 @@ export async function bindPromotionSignupAccount(
     "/internal/promotion/account/bind",
     "account",
     { user_id: userId, attempt_id: attemptId },
-    userId,
+    { userId, operation: "bind", attemptId },
   )
   if (
     result.outcome !== "bound" &&
@@ -161,16 +271,17 @@ export interface OriginalPromotionSignupEvidence {
   boundAt: string
 }
 
-/** The caller must first establish that userId is the authenticated principal. */
+/** Retrieve only the current verified account, even if a caller supplies a target. */
 export async function getPromotionSignupAccountEvidence(
-  userId: string,
+  expectedUserId?: string,
 ): Promise<OriginalPromotionSignupEvidence> {
+  const userId = await verifiedAccountId(expectedUserId)
   const result = await post(
     DEFAULT_REGION,
     "/internal/promotion/account/evidence",
     "account",
     { user_id: userId },
-    userId,
+    { userId, operation: "evidence" },
   )
   return {
     attemptId: requiredString(result.attempt_id),
@@ -184,16 +295,91 @@ export async function getPromotionSignupAccountEvidence(
 /** The selected region independently records ownership from shared evidence. */
 export async function registerPromotionSignupDevice(
   region: string,
-  userId: string,
+  expectedUserId?: string,
 ): Promise<"owner" | "owner_conflict"> {
+  const userId = await verifiedAccountId(expectedUserId)
   const result = await post(
     region,
     "/internal/promotion/account/register",
     "account",
     { user_id: userId },
-    userId,
+    { userId, operation: "register" },
   )
   if (result.outcome !== "owner" && result.outcome !== "owner_conflict")
     throw new PromotionEvidenceError("authority_unavailable")
   return result.outcome
+}
+
+/** A non-issuing East snapshot; it cannot prove that a team received credit. */
+export async function getPromotionSignupEligibility(
+  expectedUserId?: string,
+): Promise<PromotionSignupEligibility> {
+  const userId = await verifiedAccountId(expectedUserId)
+  const result = await post(
+    DEFAULT_REGION,
+    "/internal/promotion/account/signup-eligibility",
+    "account",
+    { user_id: userId },
+    { userId, operation: "signup-eligibility" },
+  )
+  if (
+    (result.ownership !== "owner" &&
+      result.ownership !== "another_owner" &&
+      result.ownership !== "evidence_missing") ||
+    (result.eligibility !== "unknown" && result.eligibility !== "ineligible")
+  )
+    throw new PromotionEvidenceError("authority_unavailable")
+  return {
+    ownership: result.ownership,
+    deviceDecision: requiredString(result.device_decision),
+    eligibility: result.eligibility,
+    reason: requiredString(result.reason),
+  }
+}
+
+/**
+ * Submit only a persisted server-owned creation binding. The caller derives
+ * authorityUnavailable from publication results, never browser input, and must
+ * replay every field unchanged after uncertainty, including after recovery.
+ * The backend retains the original outcome even if the team has been deleted.
+ */
+export async function createTeamWithPromotionAttempt(
+  attempt: PromotionTeamCreationAttempt,
+): Promise<PromotionTeamCreationResult> {
+  // Snapshot before awaiting Auth, so mutation by a caller cannot split the
+  // signed fields, request body, response check or selected regional endpoint.
+  const binding = { ...attempt }
+  const userId = await verifiedAccountId(binding.userId)
+  if (
+    typeof binding.authorityUnavailable !== "boolean" ||
+    (binding.region !== "use" && binding.region !== "usw")
+  )
+    throw new PromotionEvidenceError("invalid_evidence")
+  const result = await post(
+    binding.region,
+    "/internal/promotion/account/create-team",
+    "account",
+    {
+      user_id: userId,
+      attempt_id: binding.attemptId,
+      team_id: binding.teamId,
+      name: binding.name,
+      home_region: binding.region,
+      authority_unavailable: binding.authorityUnavailable,
+    },
+    { userId, operation: "create-team", creation: binding },
+  )
+  if (
+    result.team_id !== binding.teamId ||
+    (result.outcome !== "granted" &&
+      result.outcome !== "already_claimed" &&
+      result.outcome !== "promotion_ineligible") ||
+    typeof result.reason !== "string"
+  )
+    throw new PromotionEvidenceError("authority_unavailable")
+  return {
+    teamId: binding.teamId,
+    outcome: result.outcome,
+    reason: result.reason,
+  }
 }

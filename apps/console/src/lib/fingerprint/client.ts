@@ -14,6 +14,8 @@ type FingerprintGetData = (options?: {
 }) => Promise<{ event_id?: string }>
 let fingerprintGetData: FingerprintGetData | undefined
 let capturePromise: Promise<SignupFingerprintCapture | undefined> | undefined
+let completedCapture: SignupFingerprintCapture | undefined
+let captureStarted = false
 
 export function registerFingerprintGetData(getData: FingerprintGetData) {
   fingerprintGetData = getData
@@ -50,8 +52,7 @@ function pendingAttempt():
     if (
       typeof attempt.attemptId !== "string" ||
       typeof attempt.challenge !== "string" ||
-      typeof attempt.startedAt !== "number" ||
-      Date.now() - attempt.startedAt > 30 * 60 * 1000
+      typeof attempt.startedAt !== "number"
     )
       return undefined
     return {
@@ -90,16 +91,20 @@ export function ensureFingerprintSignupCapture(): Promise<
   SignupFingerprintCapture | undefined
 > {
   if (typeof window === "undefined") return Promise.resolve(undefined)
-  const existing = storedCapture()
+  const existing = completedCapture ?? storedCapture()
   if (existing) return Promise.resolve(existing)
   if (capturePromise) return capturePromise
+  // A reload or rejected provider response cannot prove capture did not occur.
+  // Keep that attempt instead of creating a different event for its challenge.
+  if (captureStarted || pendingAttempt()) return Promise.resolve(undefined)
   if (!fingerprintGetData) return Promise.resolve(undefined)
   capturePromise = (async () => {
-    const attempt = pendingAttempt() ?? {
+    const attempt = {
       ...(await createSignupFingerprintAttempt()),
       startedAt: Date.now(),
     }
     sessionStorage.setItem(CAPTURE_KEY, JSON.stringify(attempt))
+    captureStarted = true
     const result = await fingerprintGetData!({
       tag: { signup_challenge: attempt.challenge },
     })
@@ -109,6 +114,7 @@ export function ensureFingerprintSignupCapture(): Promise<
       challenge: attempt.challenge,
       eventId: result.event_id,
     }
+    completedCapture = capture
     sessionStorage.setItem(CAPTURE_KEY, JSON.stringify(capture))
     writeFingerprintSignupEventIdCookie(result.event_id)
     return capture
@@ -125,6 +131,10 @@ export function ensureFingerprintSignupEventId(): Promise<string | undefined> {
 }
 
 export function clearFingerprintSignupCapture(): void {
+  // Submission clears only a completed capture, never an in-flight pairing.
+  if (capturePromise) return
+  completedCapture = undefined
+  captureStarted = false
   try {
     sessionStorage.removeItem(CAPTURE_KEY)
   } catch {
