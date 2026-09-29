@@ -4,6 +4,11 @@ import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { Suspense } from "react"
 
+import ProductionSignUpPage from "../../../../../app/(auth)/auth/signup/page"
+import {
+  productionSignupCases,
+  SyntheticBrowserDependencies,
+} from "../../browser-dependencies"
 import { scenarios } from "../../scenarios"
 
 function SignUp({ scenario }: { scenario: (typeof scenarios)[string] }) {
@@ -119,6 +124,13 @@ function FixturePage() {
   const scenario = scenarios[caseId] ?? scenarios["ss640-email-idle"]
 
   if (pathname.startsWith("/auth/signup")) {
+    if (productionSignupCases.has(caseId)) {
+      return (
+        <SyntheticBrowserDependencies>
+          <ProductionSignUpPage />
+        </SyntheticBrowserDependencies>
+      )
+    }
     if (params.get("complete_google") === "1")
       return <Dashboard scenario={scenario} />
     if (scenario.kind === "dashboard") return <Dashboard scenario={scenario} />
