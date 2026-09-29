@@ -9,6 +9,15 @@ const callbackRoot = resolve(sourceRoot, "app/(auth)/auth/callback")
 const serverDependencies = resolve(__dirname, "server-dependencies.ts")
 const browserDependencies = resolve(__dirname, "browser-dependencies.tsx")
 
+function isSignupSource(context: string, resource?: string): boolean {
+  const prefix = `${signupRoot}/`
+  return (
+    context === signupRoot ||
+    context.startsWith(prefix) ||
+    resource?.startsWith(prefix) === true
+  )
+}
+
 const nextConfig: NextConfig = {
   // Match Console routing and the runner's exact declared case URLs.
   trailingSlash: true,
@@ -41,9 +50,9 @@ const nextConfig: NextConfig = {
       ),
       new webpack.NormalModuleReplacementPlugin(
         /^(\.\/action|@\/app\/\(auth\)\/auth\/signup\/action|@superserve\/ui|posthog-js\/react|next\/script|@\/lib\/supabase\/client)$/,
-        (resource: { context: string; request: string }) => {
+        (resource: { context: string; request: string; resource?: string }) => {
           if (
-            resource.context === signupRoot ||
+            isSignupSource(resource.context, resource.resource) ||
             resource.request === "@/app/(auth)/auth/signup/action"
           ) {
             resource.request = browserDependencies

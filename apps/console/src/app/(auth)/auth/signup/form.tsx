@@ -163,12 +163,20 @@ export default function SignUpContent({
 } = {}) {
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
-  const [fullName, setFullName] = useState(initialValues?.fullName ?? "")
-  const [email, setEmail] = useState(initialValues?.email ?? "")
-  const [password, setPassword] = useState(initialValues?.password ?? "")
-  const [confirmPassword, setConfirmPassword] = useState(
-    initialValues?.confirmPassword ?? "",
-  )
+  // Keep the fixture's private values in one synchronous initializer. The
+  // browser review intentionally renders inert controls, so child effects
+  // cannot be used to seed this state after the submit boundary.
+  const [formValues, setFormValues] = useState<SignupFormValues>(() => ({
+    fullName: initialValues?.fullName ?? "",
+    email: initialValues?.email ?? "",
+    password: initialValues?.password ?? "",
+    confirmPassword: initialValues?.confirmPassword ?? "",
+  }))
+  const { fullName, email, password, confirmPassword } = formValues
+  const setFormValue = <K extends keyof SignupFormValues>(
+    key: K,
+    value: SignupFormValues[K],
+  ) => setFormValues((current) => ({ ...current, [key]: value }))
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
@@ -417,21 +425,21 @@ export default function SignUpContent({
                 type="text"
                 placeholder="Full Name"
                 value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
+                onChange={(e) => setFormValue("fullName", e.target.value)}
                 error={errors.fullName}
               />
               <Input
                 type="email"
                 placeholder="Email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => setFormValue("email", e.target.value)}
                 error={errors.email}
               />
               <Input
                 type={showPassword ? "text" : "password"}
                 placeholder="Password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => setFormValue("password", e.target.value)}
                 error={errors.password}
                 suffix={
                   <button
@@ -451,7 +459,9 @@ export default function SignUpContent({
                 type={showConfirmPassword ? "text" : "password"}
                 placeholder="Confirm Password"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={(e) =>
+                  setFormValue("confirmPassword", e.target.value)
+                }
                 error={errors.confirmPassword}
                 suffix={
                   <button
