@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { StrictMode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // --- Mocks ---
@@ -267,6 +268,26 @@ describe("SignUpPage", () => {
       "Test User",
       undefined,
     )
+  })
+
+  it("submits initialized form state without input events under StrictMode", async () => {
+    const { default: SignUpContent } = await import("./form")
+    const { signUpWithEmail, syntheticSignupValues, signupTrace } =
+      await import("@/test/ui/ss640/browser-dependencies")
+    signupTrace.submissions = []
+    mockSignUpWithEmail.mockImplementation(signUpWithEmail)
+    render(
+      <StrictMode>
+        <SignUpContent initialValues={syntheticSignupValues} />
+      </StrictMode>,
+    )
+
+    await user.click(await screen.findByRole("button", { name: "Sign Up" }))
+
+    expect(await screen.findByText("Check Your Email")).toBeInTheDocument()
+    expect(signupTrace.submissions).toHaveLength(1)
+    expect(screen.queryByRole("button", { name: "Sign Up" })).toBeNull()
+    expect(screen.getByRole("link", { name: "Sign in" })).toBeInTheDocument()
   })
 
   it("waits for capture to finish before submitting email signup", async () => {

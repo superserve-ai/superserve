@@ -1,15 +1,7 @@
 "use client"
 
 import { Button, Input as ConsoleInput } from "@superserve/ui"
-import {
-  type ChangeEvent,
-  type ComponentProps,
-  type ReactNode,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react"
+import { type ComponentProps, type ReactNode, useEffect, useState } from "react"
 
 import {
   clearFingerprintSignupCapture,
@@ -18,6 +10,13 @@ import {
 } from "../../../lib/fingerprint/client"
 
 export { Button }
+
+export const syntheticSignupValues = {
+  fullName: "Synthetic account",
+  email: "fixture@example.test",
+  password: "synthetic-form-value",
+  confirmPassword: "synthetic-form-value",
+}
 
 export const productionSignupCases = new Set([
   "ss640-email-idle",
@@ -29,6 +28,9 @@ export const productionSignupCases = new Set([
   "ss640-email-missing-capture",
   "ss640-email-failed-capture",
   "ss640-google-loading",
+  "ss640-google-first-team",
+  "ss640-google-recovery",
+  "ss640-google-recovery-complete",
 ])
 
 // Private diagnostics contain no form values and are not financial evidence.
@@ -44,7 +46,14 @@ const attempt = {
 }
 
 function caseId() {
-  return new URLSearchParams(window.location.search).get("ui_case")
+  return (
+    new URLSearchParams(window.location.search).get("ui_case") ??
+    document.cookie
+      .split("; ")
+      .find((entry) => entry.startsWith("ss640-ui-case="))
+      ?.slice("ss640-ui-case=".length) ??
+    sessionStorage.getItem("ss640-ui-case")
+  )
 }
 
 export async function createSignupFingerprintAttempt() {
@@ -57,13 +66,19 @@ export async function isCloudflareSignupObservationEnabled() {
 }
 
 export async function signUpWithEmail(
-  _email: string,
-  _password: string,
-  _name: string,
+  email: string,
+  password: string,
+  name: string,
   _recaptcha?: string,
   _turnstile?: string,
   capture?: SignupFingerprintCapture,
 ) {
+  if (
+    email !== syntheticSignupValues.email ||
+    password !== syntheticSignupValues.password ||
+    name !== syntheticSignupValues.fullName
+  )
+    throw new Error("synthetic_form_state_not_initialized")
   signupTrace.submissions.push(capture ? { ...capture } : undefined)
   if (
     caseId() === "ss640-email-auth-error" ||
@@ -86,18 +101,29 @@ export async function beginGoogleSignup(): Promise<{
   signupAttemptId?: string
 }> {
   if (caseId() === "ss640-google-loading") return new Promise(() => {})
-  return {
-    success: false,
-    error: "Synthetic OAuth is not configured for this case.",
-  }
+  return { success: true, signupAttemptId: "synthetic-oauth-attempt" }
 }
 
 export function createBrowserClient() {
   return {
     auth: {
-      signInWithOAuth: async () => ({
-        error: { message: "Synthetic OAuth only" },
-      }),
+      signInWithOAuth: async ({
+        options,
+      }: {
+        options: { redirectTo: string }
+      }) => {
+        const url = new URL(options.redirectTo)
+        if (
+          url.origin !== window.location.origin ||
+          url.pathname !== "/auth/callback"
+        )
+          throw new Error("Synthetic OAuth must remain local")
+        // The approved redirect contains no fixture query. Keep the case in
+        // private session transport and use a same-origin cookie for the route.
+        document.cookie = `ss640-ui-case=${encodeURIComponent(caseId() ?? "")}; Path=/; SameSite=Lax`
+        window.location.assign(url.pathname + "/")
+        return { error: null }
+      },
     },
   }
 }
@@ -112,19 +138,8 @@ export default function SyntheticScript() {
 }
 
 export function Input(props: ComponentProps<typeof ConsoleInput>) {
-  const seeded = useRef(false)
-  const { onChange, placeholder } = props
-  useLayoutEffect(() => {
-    if (seeded.current) return
-    seeded.current = true
-    const value = placeholder?.includes("Password")
-      ? "synthetic-form-value"
-      : "Synthetic account"
-    onChange?.({ target: { value } } as ChangeEvent<HTMLInputElement>)
-  }, [onChange, placeholder])
-
-  // Seed React state through the original callbacks, never through DOM edits.
-  // The real control preserves its styles/errors; credential values stay private.
+  // Initial values belong to the form's state initializer. These inert controls
+  // never seed parent state from child effects or expose credentials in the DOM.
   return (
     <ConsoleInput
       {...props}
@@ -146,6 +161,10 @@ export function SyntheticBrowserDependencies({
   useEffect(() => {
     // Each declared case is entered with a full navigation. StrictMode may
     // repeat this effect before interaction, which must not create an attempt.
+    const requestedCase = new URLSearchParams(window.location.search).get(
+      "ui_case",
+    )
+    if (requestedCase) sessionStorage.setItem("ss640-ui-case", requestedCase)
     clearFingerprintSignupCapture()
     signupTrace.attempts = 0
     signupTrace.captures = 0

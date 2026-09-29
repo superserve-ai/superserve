@@ -4,9 +4,11 @@ import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { Suspense } from "react"
 
-import ProductionSignUpPage from "../../../../../app/(auth)/auth/signup/page"
+import AuthCodeErrorPage from "../../../../../app/(auth)/auth/auth-code-error/page"
+import SignUpContent from "../../../../../app/(auth)/auth/signup/form"
 import {
   productionSignupCases,
+  syntheticSignupValues,
   SyntheticBrowserDependencies,
 } from "../../browser-dependencies"
 import { scenarios } from "../../scenarios"
@@ -123,11 +125,18 @@ function FixturePage() {
   const caseId = params.get("ui_case") ?? "ss640-email-idle"
   const scenario = scenarios[caseId] ?? scenarios["ss640-email-idle"]
 
+  if (pathname.startsWith("/auth/auth-code-error")) return <AuthCodeErrorPage />
   if (pathname.startsWith("/auth/signup")) {
-    if (productionSignupCases.has(caseId)) {
+    if (
+      productionSignupCases.has(caseId) ||
+      params.get("complete_google") === "1"
+    ) {
       return (
         <SyntheticBrowserDependencies>
-          <ProductionSignUpPage />
+          <SignUpContent
+            initialValues={syntheticSignupValues}
+            confirmationRecipient="Synthetic account"
+          />
         </SyntheticBrowserDependencies>
       )
     }
