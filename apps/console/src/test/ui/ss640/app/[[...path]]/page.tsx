@@ -122,7 +122,17 @@ function Login({ scenario }: { scenario: (typeof scenarios)[string] }) {
 function FixturePage() {
   const pathname = usePathname()
   const params = useSearchParams()
-  const caseId = params.get("ui_case") ?? "ss640-email-idle"
+  // The browser procedure enters every case with a query string. During the
+  // first client render Next can briefly expose an empty search-param object
+  // while the App Router hydrates; reading the URL as the same-render fallback
+  // keeps the approved production fixture mounted instead of falling back to
+  // the inert scenario screen.
+  const caseId =
+    (typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("ui_case")
+      : null) ??
+    params.get("ui_case") ??
+    "ss640-email-idle"
   const scenario = scenarios[caseId] ?? scenarios["ss640-email-idle"]
 
   if (pathname.startsWith("/auth/auth-code-error")) return <AuthCodeErrorPage />
