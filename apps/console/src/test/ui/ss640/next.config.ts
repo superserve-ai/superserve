@@ -25,7 +25,10 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@superserve/ui"],
   env: {
     NEXT_PUBLIC_APP_URL: "http://127.0.0.1:4173",
-    NEXT_PUBLIC_RECAPTCHA_SITE_KEY: "synthetic-site-key",
+    // The isolated browser runtime has no third-party script access. CAPTCHA
+    // success/failure is supplied by the synthetic signup action below, so
+    // the production form must not wait for a script that cannot load.
+    NEXT_PUBLIC_RECAPTCHA_SITE_KEY: "",
     NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY: "",
     NEXT_PUBLIC_WEBSITE_URL: "http://127.0.0.1:4173",
     SS640_FIXTURE_LOGO_SVG: readFileSync(

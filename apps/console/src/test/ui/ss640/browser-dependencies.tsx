@@ -80,6 +80,13 @@ export async function signUpWithEmail(
   )
     throw new Error("synthetic_form_state_not_initialized")
   signupTrace.submissions.push(capture ? { ...capture } : undefined)
+  if (caseId() === "ss640-email-captcha-error") {
+    return {
+      success: false,
+      error:
+        "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
+    }
+  }
   if (
     caseId() === "ss640-email-auth-error" ||
     (caseId() === "ss640-email-error-retry" &&
