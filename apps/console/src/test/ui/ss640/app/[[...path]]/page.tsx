@@ -33,7 +33,7 @@ function SignUp({ scenario }: { scenario: (typeof scenarios)[string] }) {
         </label>
         <label>
           Password
-          <input aria-label="Password" type="password" />
+          <input aria-label="Password" type="text" autoComplete="off" />
         </label>
         <button disabled={scenario.state === "loading"} type="submit">
           {scenario.state === "loading"
