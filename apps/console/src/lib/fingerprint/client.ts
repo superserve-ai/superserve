@@ -17,7 +17,7 @@ let capturePromise: Promise<SignupFingerprintCapture | undefined> | undefined
 let completedCapture: SignupFingerprintCapture | undefined
 let captureStarted = false
 
-export function registerFingerprintGetData(getData: FingerprintGetData) {
+export function registerFingerprintGetData(getData?: FingerprintGetData) {
   fingerprintGetData = getData
 }
 

@@ -1,5 +1,8 @@
+import crypto from "node:crypto"
+
 import {
   PromotionEvidenceError,
+  createTeamWithPromotionAttempt,
   registerPromotionSignupDevice,
 } from "@/lib/api/promotion-device-evidence"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
@@ -52,6 +55,10 @@ export async function provisionTeam(
   userId: string,
   email: string,
   name: string,
+  creation?: {
+    attemptId: string
+    teamId: string
+  },
 ): Promise<ProvisionedTeam> {
   // This is the common value boundary for lazy onboarding and explicit team
   // creation. A direct Supabase Google OAuth session must not be able to call
@@ -78,28 +85,36 @@ export async function provisionTeam(
     throw new Error(`Failed to create profile: ${profileErr.message}`)
   }
 
-  // This commits regional ownership independently before the initial team
-  // creation trigger can decide whether to award the signup promotion.
+  // The promotion boundary must be told about registration failure before it
+  // creates the team. The signed unavailable bit is intentionally derived
+  // here from the server-side result; it is never a browser input.
+  const creationBinding = {
+    attemptId: creation?.attemptId ?? crypto.randomUUID(),
+    teamId: creation?.teamId ?? crypto.randomUUID(),
+  }
+  let authorityUnavailable = false
   try {
     await registerPromotionSignupDevice(region, userId)
   } catch (error) {
-    if (
-      !(error instanceof PromotionEvidenceError) ||
-      error.code !== "evidence_missing"
-    ) {
+    if (!(error instanceof PromotionEvidenceError)) {
       throw new Error("Promotion authority unavailable; please try again", {
         cause: error,
       })
     }
-    // Absence is a policy input. The regional evidence-required gate decides it.
+    if (error.code !== "evidence_missing") authorityUnavailable = true
+    // Missing evidence is a policy input. The regional evidence-required gate
+    // decides it, while a true authority failure must be pinned as no-credit.
   }
 
-  const { data: team, error: teamErr } = await admin
-    .from("team")
-    .insert({ name, home_region: region })
-    .select("id, name")
-    .single()
-  if (teamErr) throw new Error(`Failed to create team: ${teamErr.message}`)
+  const creationResult = await createTeamWithPromotionAttempt({
+    userId,
+    attemptId: creationBinding.attemptId,
+    teamId: creationBinding.teamId,
+    name,
+    region,
+    authorityUnavailable,
+  })
+  const team = { id: creationResult.teamId, name }
 
   try {
     const { error: memberErr } = await admin.from("team_member").insert({
@@ -149,7 +164,6 @@ export async function provisionTeam(
       ["user_role_assignments", "team_id"],
       ["team_memberships", "team_id"],
       ["team_member", "team_id"],
-      ["team", "id"],
     ] as const) {
       const { error: unwindErr } = await admin
         .from(table)

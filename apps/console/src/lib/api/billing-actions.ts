@@ -4,6 +4,10 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { pickActiveTeam, readTeamSelection } from "@/lib/api/active-team"
 import {
+  PromotionEvidenceError,
+  registerPromotionSignupDevice,
+} from "@/lib/api/promotion-device-evidence"
+import {
   listTeamMembershipsForUserDetailed,
   type TeamMembership,
 } from "@/lib/api/team-directory"
@@ -72,6 +76,43 @@ async function getTeam(userId: string): Promise<TeamMembership | null> {
   }
 
   return pickActiveTeam(memberships, await readTeamSelection())
+}
+
+/**
+ * Publish the account's original signup evidence to the active billing
+ * region before Checkout. The regional backend remains the grant authority;
+ * this action is deliberately best-effort so unavailable evidence never
+ * blocks paid access or changes the Checkout request/recovery identity.
+ */
+export async function publishBillingPromotionEvidence(): Promise<
+  "published" | "missing" | "unavailable"
+> {
+  const supabase = await createServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) throw new Error("Not authenticated")
+
+  let team: TeamMembership | null
+  try {
+    team = await getTeam(user.id)
+  } catch {
+    return "unavailable"
+  }
+  if (!team) return "missing"
+
+  try {
+    await registerPromotionSignupDevice(team.region, user.id)
+    return "published"
+  } catch (error) {
+    if (
+      error instanceof PromotionEvidenceError &&
+      error.code === "evidence_missing"
+    )
+      return "missing"
+    // Do not turn a promotion-authority outage into a paid-access outage.
+    return "unavailable"
+  }
 }
 
 function normalizePeriod(periodStart: string, periodEnd: string) {

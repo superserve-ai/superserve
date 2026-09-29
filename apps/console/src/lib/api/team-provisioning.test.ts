@@ -11,6 +11,8 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import type { PromotionTeamCreationAttempt } from "@/lib/api/promotion-device-evidence"
+
 let clients: Record<string, ReturnType<typeof recordingClient>> = {}
 let currentUser: {
   id: string
@@ -115,14 +117,26 @@ vi.mock("@/lib/cells", () => ({
   }),
 }))
 const mockRegisterPromotionSignupDevice = vi.fn()
+const mockCreateTeamWithPromotionAttempt = vi.fn(
+  async (_binding: PromotionTeamCreationAttempt) => ({
+    teamId: "team-new",
+    outcome: "granted" as const,
+    reason: "eligible",
+  }),
+)
 vi.mock("@/lib/api/promotion-device-evidence", () => ({
   PromotionEvidenceError: class PromotionEvidenceError extends Error {
-    constructor(readonly code: string) {
+    readonly code: string
+
+    constructor(code: string) {
       super(code)
+      this.code = code
     }
   },
   registerPromotionSignupDevice: (...args: unknown[]) =>
     mockRegisterPromotionSignupDevice(...args),
+  createTeamWithPromotionAttempt: (binding: PromotionTeamCreationAttempt) =>
+    mockCreateTeamWithPromotionAttempt(binding),
 }))
 vi.mock("@/lib/posthog/actions", () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
@@ -173,6 +187,13 @@ describe("provisionTeam", () => {
     clients = { use: recordingClient(), usw: recordingClient() }
     currentUser = { id: "u1", email: "user@example.com" }
     mockRegisterPromotionSignupDevice.mockReset().mockResolvedValue("owner")
+    mockCreateTeamWithPromotionAttempt
+      .mockReset()
+      .mockImplementation(async (_binding: { name: string }) => ({
+        teamId: "team-new",
+        outcome: "granted" as const,
+        reason: "eligible",
+      }))
     googleUser = false
     directoryState = { memberships: [], degradedRegions: [] }
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
@@ -231,7 +252,15 @@ describe("provisionTeam", () => {
 
     const { writes } = clients.usw
     expect(writes.profile).toEqual([{ id: "u1", email: "user@example.com" }])
-    expect(writes.team).toEqual([{ name: "west pilot", home_region: "usw" }])
+    expect(writes.team).toBeUndefined()
+    expect(mockCreateTeamWithPromotionAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "u1",
+        name: "west pilot",
+        region: "usw",
+        authorityUnavailable: false,
+      }),
+    )
     expect(writes.team_member).toEqual([
       { team_id: "team-new", profile_id: "u1", role: "owner" },
     ])
@@ -274,7 +303,6 @@ describe("provisionTeam", () => {
       "user_role_assignments",
       "team_memberships",
       "team_member",
-      "team",
     ])
     expect(mockConsumeGoogleSignupProof).not.toHaveBeenCalled()
   })

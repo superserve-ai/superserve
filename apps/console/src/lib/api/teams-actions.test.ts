@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import type { PromotionTeamCreationAttempt } from "@/lib/api/promotion-device-evidence"
+
 let currentUser: {
   id: string
   email: string
@@ -63,6 +65,13 @@ const mockListTeamMembershipsForUserDetailed = vi.fn(
 )
 const mockTrackEvent = vi.fn()
 const mockRegisterPromotionSignupDevice = vi.fn()
+const mockCreateTeamWithPromotionAttempt = vi.fn(
+  async (_binding: PromotionTeamCreationAttempt) => ({
+    teamId: "team-new",
+    outcome: "granted" as const,
+    reason: "eligible",
+  }),
+)
 
 // Per-test knobs read lazily by the cells mock.
 let regions: string[] = ["use", "usw"]
@@ -184,6 +193,8 @@ vi.mock("@/lib/posthog/actions", () => ({
 vi.mock("@/lib/api/promotion-device-evidence", () => ({
   registerPromotionSignupDevice: (...args: unknown[]) =>
     mockRegisterPromotionSignupDevice(...args),
+  createTeamWithPromotionAttempt: (binding: PromotionTeamCreationAttempt) =>
+    mockCreateTeamWithPromotionAttempt(binding),
 }))
 
 // Cookie store stub capturing active-team writes.
@@ -258,6 +269,11 @@ describe("createTeamAction", () => {
     )
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
     mockRegisterPromotionSignupDevice.mockReset().mockResolvedValue("owner")
+    mockCreateTeamWithPromotionAttempt.mockReset().mockResolvedValue({
+      teamId: "team-new",
+      outcome: "granted",
+      reason: "eligible",
+    })
     cellClients = {
       use: recordingCellClient(),
       usw: recordingCellClient(),
@@ -273,7 +289,15 @@ describe("createTeamAction", () => {
     expect(writes.profile).toEqual([
       { id: "u1", email: "pavitra@superserve.ai" },
     ])
-    expect(writes.team).toEqual([{ name: "west pilot", home_region: "usw" }])
+    expect(writes.team).toBeUndefined()
+    expect(mockCreateTeamWithPromotionAttempt).toHaveBeenCalledExactlyOnceWith({
+      userId: "u1",
+      attemptId: expect.any(String),
+      teamId: expect.any(String),
+      name: "west pilot",
+      region: "usw",
+      authorityUnavailable: false,
+    })
     expect(writes.team_member).toEqual([
       { team_id: "team-new", profile_id: "u1", role: "owner" },
     ])
@@ -304,9 +328,15 @@ describe("createTeamAction", () => {
     const team = await createTeamAction("east team")
 
     expect(team.region).toBe("use")
-    expect(cellClients.use.writes.team).toEqual([
-      { name: "east team", home_region: "use" },
-    ])
+    expect(cellClients.use.writes.team).toBeUndefined()
+    expect(mockCreateTeamWithPromotionAttempt).toHaveBeenCalledExactlyOnceWith({
+      userId: "u1",
+      attemptId: expect.any(String),
+      teamId: expect.any(String),
+      name: "east team",
+      region: "use",
+      authorityUnavailable: false,
+    })
     expect(cellClients.usw.from).not.toHaveBeenCalled()
     expect(mockRegisterPromotionSignupDevice).toHaveBeenCalledWith("use", "u1")
   })
@@ -378,9 +408,15 @@ describe("createTeamAction", () => {
 
     expect(team).toEqual({ id: "team-new", name: "west pilot", region: "usw" })
     expect(mockRequireGoogleSignupProof).not.toHaveBeenCalled()
-    expect(cellClients.usw.writes.team).toEqual([
-      { name: "west pilot", home_region: "usw" },
-    ])
+    expect(cellClients.usw.writes.team).toBeUndefined()
+    expect(mockCreateTeamWithPromotionAttempt).toHaveBeenCalledExactlyOnceWith({
+      userId: "u1",
+      attemptId: expect.any(String),
+      teamId: expect.any(String),
+      name: "west pilot",
+      region: "usw",
+      authorityUnavailable: false,
+    })
   })
 
   it("fails transiently when a degraded empty lookup cannot be recovered", async () => {

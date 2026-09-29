@@ -6,6 +6,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react"
 
 import { useQueryScope } from "@/components/query-provider"
 import type { BillingSummaryResponse } from "@/lib/api/billing"
+import { publishBillingPromotionEvidence } from "@/lib/api/billing-actions"
 import {
   createStripeCheckoutSession,
   createStripeCustomerPortalSession,
@@ -87,6 +88,18 @@ export function useBillingPayment(
           returnUrl: returnUrl.toString(),
         })
       } else {
+        // Publication is intentionally before Checkout creation so the
+        // regional backend can pin the account's original signup evidence.
+        // The action is best-effort: missing/unavailable evidence must still
+        // allow ordinary paid access and the backend withholds only the
+        // promotion when its independent gate requires evidence.
+        try {
+          await publishBillingPromotionEvidence()
+        } catch {
+          // The promotion publication is advisory to Checkout. Auth and
+          // billing independently enforce access; an unavailable evidence
+          // writer must not prevent a paid subscription from starting.
+        }
         const successUrl = new URL(currentUrl)
         successUrl.searchParams.set("billing", "success")
         const cancelUrl = new URL(currentUrl)

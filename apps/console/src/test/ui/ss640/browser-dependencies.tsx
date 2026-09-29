@@ -159,12 +159,18 @@ export function SyntheticBrowserDependencies({
 }) {
   const [ready, setReady] = useState(false)
   useEffect(() => {
+    let cancelPendingCapture: (() => void) | undefined
     // Each declared case is entered with a full navigation. StrictMode may
     // repeat this effect before interaction, which must not create an attempt.
     const requestedCase = new URLSearchParams(window.location.search).get(
       "ui_case",
     )
     if (requestedCase) sessionStorage.setItem("ss640-ui-case", requestedCase)
+    // The production client keeps the provider callback module-scoped so a
+    // retry can reuse one capture. Reset that fixture seam at each isolated
+    // navigation; otherwise a missing-capture case could inherit the prior
+    // case's synthetic provider.
+    registerFingerprintGetData(undefined)
     clearFingerprintSignupCapture()
     signupTrace.attempts = 0
     signupTrace.captures = 0
@@ -186,8 +192,15 @@ export function SyntheticBrowserDependencies({
         if (options?.tag.signup_challenge !== attempt.challenge) {
           throw new Error("synthetic_challenge_mismatch")
         }
-        if (caseId() === "ss640-email-loading")
-          return new Promise<{ event_id?: string }>(() => {})
+        if (caseId() === "ss640-email-loading") {
+          // Keep the approved loading case pending while it is mounted, but
+          // settle the synthetic provider when the runner navigates to the
+          // next isolated case. Without this cleanup, the production capture
+          // singleton would retain a never-ending promise across cases.
+          return new Promise<{ event_id?: string }>((resolve) => {
+            cancelPendingCapture = () => resolve({})
+          })
+        }
         if (caseId() === "ss640-email-failed-capture") {
           throw new Error("synthetic_provider_failure")
         }
@@ -196,6 +209,8 @@ export function SyntheticBrowserDependencies({
     }
     setReady(true)
     return () => {
+      cancelPendingCapture?.()
+      registerFingerprintGetData(undefined)
       delete window.grecaptcha
     }
   }, [])

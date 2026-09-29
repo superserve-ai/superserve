@@ -10,12 +10,16 @@ import { useBillingPayment } from "./use-billing-payment"
 const mocks = vi.hoisted(() => ({
   checkout: vi.fn(),
   portal: vi.fn(),
+  publishEvidence: vi.fn(),
   toast: vi.fn(),
   scope: vi.fn(),
 }))
 vi.mock("@/lib/api/billing-stripe", () => ({
   createStripeCheckoutSession: mocks.checkout,
   createStripeCustomerPortalSession: mocks.portal,
+}))
+vi.mock("@/lib/api/billing-actions", () => ({
+  publishBillingPromotionEvidence: mocks.publishEvidence,
 }))
 vi.mock("@/components/query-provider", () => ({ useQueryScope: mocks.scope }))
 vi.mock("@superserve/ui", () => ({
@@ -44,10 +48,17 @@ function setup(value = summary) {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.scope.mockReturnValue("self")
+  mocks.publishEvidence.mockResolvedValue("published")
   window.history.replaceState({}, "", "/sandboxes/?tab=one")
 })
 
 it("keeps checkout return conventions and blocks duplicate submission", async () => {
+  let finishPublication!: () => void
+  mocks.publishEvidence.mockReturnValueOnce(
+    new Promise<void>((resolve) => {
+      finishPublication = resolve
+    }),
+  )
   let reject!: (reason: Error) => void
   mocks.checkout.mockReturnValue(
     new Promise((_resolve, rej) => {
@@ -59,6 +70,12 @@ it("keeps checkout return conventions and blocks duplicate submission", async ()
   act(() => {
     pending = result.current.openSession()
     void result.current.openSession()
+  })
+  expect(mocks.publishEvidence).toHaveBeenCalledTimes(1)
+  expect(mocks.checkout).not.toHaveBeenCalled()
+  expect(result.current.submitting).toBe("checkout")
+  await act(async () => {
+    finishPublication()
   })
   expect(mocks.checkout).toHaveBeenCalledTimes(1)
   const params = mocks.checkout.mock.calls[0][0]
@@ -113,7 +130,7 @@ it.each([false, true])(
       },
     )
     let pending!: Promise<void>
-    act(() => {
+    await act(async () => {
       pending = result.current.banner.openSession()
       void result.current.billingPage.openSession()
     })
