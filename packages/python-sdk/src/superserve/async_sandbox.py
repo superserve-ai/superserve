@@ -17,6 +17,7 @@ from ._http import (
     DEFAULT_PAUSE_TIMEOUT,
     pause_poll_delay,
     PAUSE_FAST_POLL_WINDOW_S,
+    shared_async_client,
 )
 from .commands import AsyncCommands, AsyncCommandsDeps
 from .errors import ConflictError, NotFoundError, SandboxError, SandboxTimeoutError
@@ -73,7 +74,6 @@ class AsyncSandbox:
         self.secrets: list[SandboxSecretBinding] | None = info.secrets
         self._access_token: str = access_token
         self._config = config
-        self._http_client: httpx.AsyncClient = httpx.AsyncClient(timeout=30.0)
         self._closed = False
         self._refresh_lock = asyncio.Lock()
 
@@ -296,13 +296,12 @@ class AsyncSandbox:
 
     # Methods on sandbox
 
+    @property
+    def _http_client(self) -> httpx.AsyncClient:
+        return shared_async_client()
+
     async def _close_http_client(self) -> None:
-        if not self._closed:
-            self._closed = True
-            try:
-                await self._http_client.aclose()
-            except Exception:
-                pass
+        self._closed = True
 
     def _require_not_deleted(self) -> None:
         """Reject calls on a deleted handle without requiring an active VM."""
