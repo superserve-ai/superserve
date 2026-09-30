@@ -17,7 +17,7 @@ import random
 import sys
 import threading
 import time
-from collections.abc import AsyncIterable, AsyncIterator, Callable, Iterable
+from collections.abc import AsyncIterable, AsyncIterator, Callable, Iterable, Iterator
 from email.utils import parsedate_to_datetime
 from typing import Any
 
@@ -59,6 +59,20 @@ if hasattr(os, "register_at_fork"):
 _async_pool: contextvars.ContextVar[httpx.AsyncClient | None] = contextvars.ContextVar(
     "superserve_async_pool", default=None
 )
+
+
+@contextlib.contextmanager
+def using_async_client(client: httpx.AsyncClient) -> Iterator[None]:
+    """Serve the calls a sandbox hands to other classes from the sandbox's own
+    client, unless a pool is already open."""
+    if _async_pool.get() is not None:
+        yield
+        return
+    token = _async_pool.set(client)
+    try:
+        yield
+    finally:
+        _async_pool.reset(token)
 
 
 @contextlib.asynccontextmanager

@@ -1,9 +1,9 @@
 import httpx
 import pytest
 import respx
-from superserve import AsyncSnapshot, _http, async_connection_pool
+from superserve import AsyncSandbox, AsyncSnapshot, _http, async_connection_pool
 
-from .test_snapshots import API, SNAP, _sandbox, _snap
+from .test_snapshots import API, SBX, SNAP, _sandbox, _sandbox_raw, _snap
 
 
 def test_calls_share_one_client_per_process(monkeypatch):
@@ -66,3 +66,39 @@ async def test_async_calls_share_the_pool_inside_the_block_only(
         for _ in range(2):
             await AsyncSnapshot.get(SNAP)
         assert len(made) == 3
+
+
+@pytest.mark.asyncio
+async def test_a_sandboxs_snapshot_calls_reuse_its_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SUPERSERVE_API_KEY", "ss_live_key")
+    monkeypatch.setenv("SUPERSERVE_BASE_URL", API)
+    made: list[httpx.AsyncClient] = []
+    real = httpx.AsyncClient
+
+    def counting(*args: object, **kwargs: object) -> httpx.AsyncClient:
+        client = real(*args, **kwargs)  # type: ignore[arg-type]
+        made.append(client)
+        return client
+
+    monkeypatch.setattr(_http.httpx, "AsyncClient", counting)
+    with respx.mock() as router:
+        router.post(f"{API}/sandboxes").mock(
+            return_value=httpx.Response(201, json=_sandbox_raw())
+        )
+        sandbox = await AsyncSandbox.create(name="test")
+        before = len(made)
+        router.post(f"{API}/sandboxes/{SBX}/snapshot").mock(
+            return_value=httpx.Response(202, json=_snap("creating"))
+        )
+        router.get(f"{API}/snapshots/{SNAP}").mock(
+            return_value=httpx.Response(200, json=_snap())
+        )
+        router.get(f"{API}/sandboxes/{SBX}/snapshots").mock(
+            return_value=httpx.Response(200, json=[_snap()])
+        )
+        await sandbox.snapshot(poll_interval_s=0.01)
+        await sandbox.snapshots()
+        await sandbox.snapshots()
+        assert len(made) == before
