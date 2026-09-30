@@ -5,6 +5,7 @@ import type { NextConfig } from "next"
 
 const sourceRoot = resolve(__dirname, "../../..")
 const signupRoot = resolve(sourceRoot, "app/(auth)/auth/signup")
+const signinRoot = resolve(sourceRoot, "app/(auth)/auth/signin")
 const callbackRoot = resolve(sourceRoot, "app/(auth)/auth/callback")
 const serverDependencies = resolve(__dirname, "server-dependencies.ts")
 const browserDependencies = resolve(__dirname, "browser-dependencies.tsx")
@@ -15,6 +16,15 @@ function isSignupSource(context: string, resource?: string): boolean {
     context === signupRoot ||
     context.startsWith(prefix) ||
     resource?.startsWith(prefix) === true
+  )
+}
+
+function isAuthSource(context: string, resource?: string): boolean {
+  return (
+    isSignupSource(context, resource) ||
+    context === signinRoot ||
+    context.startsWith(`${signinRoot}/`) ||
+    resource?.startsWith(`${signinRoot}/`) === true
   )
 }
 
@@ -61,7 +71,7 @@ const nextConfig: NextConfig = {
         /^(\.\/action|@\/app\/\(auth\)\/auth\/signup\/action|@superserve\/ui|posthog-js\/react|next\/script|@\/lib\/supabase\/client)$/,
         (resource: { context: string; request: string; resource?: string }) => {
           if (
-            isSignupSource(resource.context, resource.resource) ||
+            isAuthSource(resource.context, resource.resource) ||
             resource.request === "@/app/(auth)/auth/signup/action"
           ) {
             resource.request = browserDependencies

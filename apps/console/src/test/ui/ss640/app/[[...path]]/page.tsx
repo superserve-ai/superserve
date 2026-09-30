@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation"
 import { Suspense, useState } from "react"
 
 import AuthCodeErrorPage from "../../../../../app/(auth)/auth/auth-code-error/page"
+import SignInPage from "../../../../../app/(auth)/auth/signin/page"
 import SignUpContent from "../../../../../app/(auth)/auth/signup/form"
 import {
   productionSignupCases,
@@ -60,6 +61,12 @@ function SignUp({ scenario }: { scenario: (typeof scenarios)[string] }) {
 function Dashboard({ scenario }: { scenario: (typeof scenarios)[string] }) {
   const [recoveryClicks, setRecoveryClicks] = useState(0)
   const recoveryComplete = recoveryClicks >= (scenario.recoveryClicks ?? 1)
+  const params = useSearchParams()
+  const caseId =
+    params.get("ui_case") ??
+    (typeof window !== "undefined"
+      ? sessionStorage.getItem("ss640-ui-case")
+      : null)
 
   if (scenario.state === "loading") {
     return <div className="h-8 w-48 bg-surface-hover" aria-label="Loading" />
@@ -77,16 +84,21 @@ function Dashboard({ scenario }: { scenario: (typeof scenarios)[string] }) {
       </main>
     )
   }
-  return <main className="flex min-h-screen p-12">No Sandboxes</main>
-}
-
-function Login({ scenario }: { scenario: (typeof scenarios)[string] }) {
-  if (scenario.kind === "dashboard") return <Dashboard scenario={scenario} />
   return (
     <main className="flex min-h-screen flex-col gap-4 p-12">
-      <h2>Teams</h2>
-      <input placeholder="my-team" />
+      <span>No Sandboxes</span>
+      {caseId === "ss640-existing-email-login" && (
+        <Link href="/settings">Settings</Link>
+      )}
     </main>
+  )
+}
+
+function Login() {
+  return (
+    <SyntheticBrowserDependencies>
+      <SignInPage />
+    </SyntheticBrowserDependencies>
   )
 }
 
@@ -103,6 +115,9 @@ function FixturePage() {
       ? new URLSearchParams(window.location.search).get("ui_case")
       : null) ??
     params.get("ui_case") ??
+    (typeof window !== "undefined"
+      ? sessionStorage.getItem("ss640-ui-case")
+      : null) ??
     "ss640-email-idle"
   const scenario = scenarios[caseId] ?? scenarios["ss640-email-idle"]
 
@@ -126,7 +141,7 @@ function FixturePage() {
   if (pathname.startsWith("/sandboxes"))
     return <Dashboard scenario={scenario} />
   if (pathname.startsWith("/settings")) return <West />
-  if (pathname.startsWith("/auth/signin")) return <Login scenario={scenario} />
+  if (pathname.startsWith("/auth/signin")) return <Login />
   return <Dashboard scenario={scenario} />
 }
 
