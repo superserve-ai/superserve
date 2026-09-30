@@ -2,6 +2,7 @@ export type Scenario = {
   kind: "signup" | "dashboard" | "west" | "login"
   state: "idle" | "loading" | "success" | "error" | "uncertain"
   message?: string
+  recoveryClicks?: number
 }
 
 export const scenarios: Record<string, Scenario> = {
@@ -47,7 +48,13 @@ export const scenarios: Record<string, Scenario> = {
     state: "success",
   },
   "ss640-east-uncertain": { kind: "dashboard", state: "uncertain" },
-  "ss640-east-uncertain-retry": { kind: "dashboard", state: "success" },
+  // The retry case starts after the response-loss state. The approved setup
+  // clicks the recovery control before checking the reconciled dashboard.
+  "ss640-east-uncertain-retry": {
+    kind: "dashboard",
+    state: "uncertain",
+    recoveryClicks: 1,
+  },
   "ss640-west-loading": { kind: "west", state: "loading" },
   "ss640-west-eligible": { kind: "west", state: "success" },
   "ss640-west-duplicate": { kind: "west", state: "success" },

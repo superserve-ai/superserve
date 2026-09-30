@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
-import { Suspense } from "react"
+import { Suspense, useState } from "react"
 
 import AuthCodeErrorPage from "../../../../../app/(auth)/auth/auth-code-error/page"
 import SignUpContent from "../../../../../app/(auth)/auth/signup/form"
@@ -57,14 +57,22 @@ function SignUp({ scenario }: { scenario: (typeof scenarios)[string] }) {
 }
 
 function Dashboard({ scenario }: { scenario: (typeof scenarios)[string] }) {
+  const [recoveryClicks, setRecoveryClicks] = useState(0)
+  const recoveryComplete = recoveryClicks >= (scenario.recoveryClicks ?? 1)
+
   if (scenario.state === "loading") {
     return <div className="h-8 w-48 bg-surface-hover" aria-label="Loading" />
   }
-  if (scenario.state === "uncertain") {
+  if (scenario.state === "uncertain" && !recoveryComplete) {
     return (
       <main className="flex min-h-screen flex-col gap-4 p-12">
         <p>Something went wrong</p>
-        <button type="button">Try Again</button>
+        <button
+          type="button"
+          onClick={() => setRecoveryClicks((count) => count + 1)}
+        >
+          Try Again
+        </button>
       </main>
     )
   }
