@@ -117,6 +117,10 @@ export async function listTeamMembershipsForUserDetailed(userId: string) {
   }
 }
 
+export async function listTeamMembershipsForUser(userId: string) {
+  return (await listTeamMembershipsForUserDetailed(userId)).memberships
+}
+
 export function isGoogleUser(user: User) {
   return user.app_metadata.provider === "google"
 }

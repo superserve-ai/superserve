@@ -51,22 +51,6 @@ export function GET(request: Request) {
 export function POST(request: Request) {
   const path = new URL(request.url).pathname.replace(/\/$/, "")
   if (path === "/api/stripe/checkout-session") {
-    const cookieCase = request.headers
-      .get("cookie")
-      ?.split("; ")
-      .find((entry) => entry.startsWith("ss640-ui-case="))
-      ?.slice("ss640-ui-case=".length)
-    if (cookieCase === "ss640-billing-evidence-unavailable-error") {
-      return Response.json(
-        {
-          error: {
-            code: "fixture_checkout_unavailable",
-            message: "Synthetic checkout unavailable",
-          },
-        },
-        { status: 503 },
-      )
-    }
     return Response.json({
       url: "http://127.0.0.1:4173/sandboxes/?billing=cancel",
     })

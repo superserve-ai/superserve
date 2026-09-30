@@ -10,6 +10,7 @@ const callbackRoot = resolve(sourceRoot, "app/(auth)/auth/callback")
 const billingActionsRoot = resolve(sourceRoot, "lib/api")
 const serverDependencies = resolve(__dirname, "server-dependencies.ts")
 const browserDependencies = resolve(__dirname, "browser-dependencies.tsx")
+const billingDependencies = resolve(__dirname, "billing-dependencies.ts")
 
 function isSignupSource(context: string, resource?: string): boolean {
   const prefix = `${signupRoot}/`
@@ -59,6 +60,13 @@ const nextConfig: NextConfig = {
         (resource: { context: string; request: string; resource?: string }) => {
           if (resource.context === resolve(sourceRoot, "hooks"))
             resource.request = resolve(__dirname, "team-dependencies.ts")
+        },
+      ),
+      new webpack.NormalModuleReplacementPlugin(
+        /^@\/lib\/api\/billing-stripe$/,
+        (resource: { context: string; request: string }) => {
+          if (resource.context === resolve(sourceRoot, "hooks"))
+            resource.request = billingDependencies
         },
       ),
       new webpack.NormalModuleReplacementPlugin(
