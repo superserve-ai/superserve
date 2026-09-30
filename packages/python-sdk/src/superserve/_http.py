@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 from asyncio import TimeoutError as _AsyncTimeout
-from asyncio import get_running_loop as _get_running_loop
 from asyncio import wait_for as _wait_for
 import json as json_module
 import os
@@ -16,7 +15,6 @@ import random
 import sys
 import threading
 import time
-import weakref
 from collections.abc import AsyncIterable, Callable, Iterable
 from email.utils import parsedate_to_datetime
 from typing import Any
@@ -28,33 +26,33 @@ from .errors import SandboxError, SandboxTimeoutError, ValidationError, map_api_
 DEFAULT_TIMEOUT = 30.0
 
 _shared_lock = threading.Lock()
-_shared: tuple[int, httpx.Client] | None = None
-_shared_async: weakref.WeakKeyDictionary[
-    asyncio.AbstractEventLoop, httpx.AsyncClient
-] = weakref.WeakKeyDictionary()
+_shared: httpx.Client | None = None
 
 
 def shared_client() -> httpx.Client:
     """The process's pooled client, so calls reuse open connections instead of
-    each paying a TCP and TLS handshake. A forked child builds its own: pooled
-    sockets must not cross a fork."""
+    each paying a TCP and TLS handshake. Connections are uncapped so long-lived
+    streams never starve other calls; only idle ones are capped."""
     global _shared
     with _shared_lock:
-        if _shared is None or _shared[0] != os.getpid():
-            _shared = (os.getpid(), httpx.Client(timeout=DEFAULT_TIMEOUT))
-        return _shared[1]
+        if _shared is None:
+            _shared = httpx.Client(
+                timeout=DEFAULT_TIMEOUT,
+                limits=httpx.Limits(max_connections=None, max_keepalive_connections=20),
+            )
+        return _shared
 
 
-def shared_async_client() -> httpx.AsyncClient:
-    """shared_client for the running event loop; an async client cannot be
-    used from another loop."""
-    loop = _get_running_loop()
-    client = _shared_async.get(loop)
-    if client is None:
-        client = _shared_async[loop] = httpx.AsyncClient(timeout=DEFAULT_TIMEOUT)
-    return client
+def _reset_shared_client() -> None:
+    """A forked child must not reuse the parent's pooled sockets, nor inherit
+    the lock held by a parent thread that no longer exists."""
+    global _shared, _shared_lock
+    _shared = None
+    _shared_lock = threading.Lock()
 
 
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_shared_client)
 # How long pause() waits, across every request it makes; each request still
 # gets the ordinary timeout.
 DEFAULT_PAUSE_TIMEOUT = 300.0
@@ -619,78 +617,88 @@ async def _async_do_request_with_retry(
 ) -> httpx.Response:
     """Async variant of ``_do_request_with_retry``."""
     deadline = None if budget is None else time.monotonic() + budget
-    if client is None:
-        client = shared_async_client()
+    owned = client is None
+    if owned:
+        client = httpx.AsyncClient(timeout=timeout)
     assert client is not None
 
     method_upper = method.upper()
     last_exc: BaseException | None = None
 
-    max_attempts = _MAX_ATTEMPTS
-    for attempt in range(_CONFLICT_MAX_ATTEMPTS):
-        attempt_timeout = _attempt_timeout(timeout, deadline)
-        try:
-            response = await _async_read_within(
-                client,
-                method_upper,
-                url,
-                headers=headers,
-                json_body=json_body,
-                timeout=attempt_timeout,
-                deadline=deadline,
-            )
-        except httpx.TimeoutException as exc:
-            _check_deadline(deadline)
-            raise SandboxTimeoutError(
-                f"Request timed out after {attempt_timeout}s"
-            ) from exc
-        except _RETRY_CONNECTION_EXCEPTIONS as exc:
-            last_exc = exc
-            if method_upper not in _IDEMPOTENT_METHODS or attempt >= max_attempts - 1:
-                raise SandboxError(f"Network error: {exc}") from exc
-            await asyncio.sleep(_retry_delay(_compute_backoff(attempt), deadline))
-            continue
-        except httpx.HTTPError as exc:
-            raise SandboxError(f"Network error: {exc}") from exc
-
-        # A self-clearing 409 is retried only on an idempotent method, like
-        # every other retry here; the flag never overrides that.
-        retry_this_conflict = (
-            retry_conflict
-            and response.status_code == 409
-            and method_upper in _IDEMPOTENT_METHODS
-        )
-        if retry_this_conflict:
-            max_attempts = _CONFLICT_MAX_ATTEMPTS
-
-        is_retryable = (
-            _should_retry_status(method_upper, response.status_code)
-            or retry_this_conflict
-        )
-
-        if is_retryable and attempt < max_attempts - 1:
-            delay: float
-            if response.status_code == 429:
-                retry_after = _parse_retry_after(response.headers.get("Retry-After"))
-                delay = (
-                    min(retry_after, _MAX_BACKOFF)
-                    if retry_after is not None
-                    else _compute_backoff(attempt)
+    try:
+        max_attempts = _MAX_ATTEMPTS
+        for attempt in range(_CONFLICT_MAX_ATTEMPTS):
+            attempt_timeout = _attempt_timeout(timeout, deadline)
+            try:
+                response = await _async_read_within(
+                    client,
+                    method_upper,
+                    url,
+                    headers=headers,
+                    json_body=json_body,
+                    timeout=attempt_timeout,
+                    deadline=deadline,
                 )
-            else:
-                delay = _compute_backoff(attempt)
-            await response.aclose()
-            delay = _retry_delay(delay, deadline)
-            if delay > 0:
-                await asyncio.sleep(delay)
-            continue
+            except httpx.TimeoutException as exc:
+                _check_deadline(deadline)
+                raise SandboxTimeoutError(
+                    f"Request timed out after {attempt_timeout}s"
+                ) from exc
+            except _RETRY_CONNECTION_EXCEPTIONS as exc:
+                last_exc = exc
+                if (
+                    method_upper not in _IDEMPOTENT_METHODS
+                    or attempt >= max_attempts - 1
+                ):
+                    raise SandboxError(f"Network error: {exc}") from exc
+                await asyncio.sleep(_retry_delay(_compute_backoff(attempt), deadline))
+                continue
+            except httpx.HTTPError as exc:
+                raise SandboxError(f"Network error: {exc}") from exc
 
-        _check_deadline(deadline)
-        return response
+            # A self-clearing 409 is retried only on an idempotent method, like
+            # every other retry here; the flag never overrides that.
+            retry_this_conflict = (
+                retry_conflict
+                and response.status_code == 409
+                and method_upper in _IDEMPOTENT_METHODS
+            )
+            if retry_this_conflict:
+                max_attempts = _CONFLICT_MAX_ATTEMPTS
 
-    if last_exc is not None:
-        raise SandboxError(f"Network error: {last_exc}") from last_exc
-    raise SandboxError("Request failed after retries")
+            is_retryable = (
+                _should_retry_status(method_upper, response.status_code)
+                or retry_this_conflict
+            )
+
+            if is_retryable and attempt < max_attempts - 1:
+                delay: float
+                if response.status_code == 429:
+                    retry_after = _parse_retry_after(
+                        response.headers.get("Retry-After")
+                    )
+                    delay = (
+                        min(retry_after, _MAX_BACKOFF)
+                        if retry_after is not None
+                        else _compute_backoff(attempt)
+                    )
+                else:
+                    delay = _compute_backoff(attempt)
+                await response.aclose()
+                delay = _retry_delay(delay, deadline)
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                continue
+
+            _check_deadline(deadline)
+            return response
+
+        if last_exc is not None:
+            raise SandboxError(f"Network error: {last_exc}") from last_exc
+        raise SandboxError("Request failed after retries")
+    finally:
+        if owned:
+            await client.aclose()
 
 
 async def async_api_request(
@@ -736,8 +744,9 @@ async def async_upload_bytes(
     client: httpx.AsyncClient | None = None,
 ) -> None:
     """Async variant of upload_bytes. POST — no retries."""
-    if client is None:
-        client = shared_async_client()
+    owned = client is None
+    if owned:
+        client = httpx.AsyncClient(timeout=timeout)
     assert client is not None
 
     merged = _default_headers(headers, content_type="application/octet-stream")
@@ -749,6 +758,9 @@ async def async_upload_bytes(
         raise SandboxTimeoutError(f"Upload timed out after {timeout}s") from exc
     except httpx.HTTPError as exc:
         raise SandboxError(f"Upload error: {exc}") from exc
+    finally:
+        if owned:
+            await client.aclose()
 
     if not response.is_success:
         raise map_api_error(response.status_code, _build_error_body(response))
@@ -768,62 +780,69 @@ async def async_download_bytes(
     ``ValidationError`` and dropping the connection as soon as the body exceeds
     it -- so a hostile/unbounded response cannot exhaust memory.
     """
-    if client is None:
-        client = shared_async_client()
+    owned = client is None
+    if owned:
+        client = httpx.AsyncClient(timeout=timeout)
     assert client is not None
 
     merged = _default_headers(headers)
     last_exc: BaseException | None = None
 
-    for attempt in range(_MAX_ATTEMPTS):
-        try:
-            async with client.stream(
-                "GET", url, headers=merged, timeout=timeout
-            ) as response:
-                if (
-                    _should_retry_status("GET", response.status_code)
-                    and attempt < _MAX_ATTEMPTS - 1
-                ):
-                    delay: float
-                    if response.status_code == 429:
-                        retry_after = _parse_retry_after(
-                            response.headers.get("Retry-After")
-                        )
-                        delay = (
-                            min(retry_after, _MAX_BACKOFF)
-                            if retry_after is not None
-                            else _compute_backoff(attempt)
-                        )
-                    else:
-                        delay = _compute_backoff(attempt)
-                    # Stream closed by the context manager on continue.
-                    if delay > 0:
-                        await asyncio.sleep(delay)
-                    continue
+    try:
+        for attempt in range(_MAX_ATTEMPTS):
+            try:
+                async with client.stream(
+                    "GET", url, headers=merged, timeout=timeout
+                ) as response:
+                    if (
+                        _should_retry_status("GET", response.status_code)
+                        and attempt < _MAX_ATTEMPTS - 1
+                    ):
+                        delay: float
+                        if response.status_code == 429:
+                            retry_after = _parse_retry_after(
+                                response.headers.get("Retry-After")
+                            )
+                            delay = (
+                                min(retry_after, _MAX_BACKOFF)
+                                if retry_after is not None
+                                else _compute_backoff(attempt)
+                            )
+                        else:
+                            delay = _compute_backoff(attempt)
+                        # Stream closed by the context manager on continue.
+                        if delay > 0:
+                            await asyncio.sleep(delay)
+                        continue
 
-                if not response.is_success:
-                    await response.aread()
-                    raise map_api_error(
-                        response.status_code, _build_error_body(response)
-                    )
+                    if not response.is_success:
+                        await response.aread()
+                        raise map_api_error(
+                            response.status_code, _build_error_body(response)
+                        )
 
-                # Raising inside the `async with` block (cap exceeded) closes
-                # the stream, dropping the connection to the sandbox.
-                return await _aread_capped(response.aiter_bytes(), max_bytes)
-        except httpx.TimeoutException as exc:
-            raise SandboxTimeoutError(f"Request timed out after {timeout}s") from exc
-        except _RETRY_CONNECTION_EXCEPTIONS as exc:
-            last_exc = exc
-            if attempt == _MAX_ATTEMPTS - 1:
+                    # Raising inside the `async with` block (cap exceeded) closes
+                    # the stream, dropping the connection to the sandbox.
+                    return await _aread_capped(response.aiter_bytes(), max_bytes)
+            except httpx.TimeoutException as exc:
+                raise SandboxTimeoutError(
+                    f"Request timed out after {timeout}s"
+                ) from exc
+            except _RETRY_CONNECTION_EXCEPTIONS as exc:
+                last_exc = exc
+                if attempt == _MAX_ATTEMPTS - 1:
+                    raise SandboxError(f"Network error: {exc}") from exc
+                await asyncio.sleep(_compute_backoff(attempt))
+                continue
+            except httpx.HTTPError as exc:
                 raise SandboxError(f"Network error: {exc}") from exc
-            await asyncio.sleep(_compute_backoff(attempt))
-            continue
-        except httpx.HTTPError as exc:
-            raise SandboxError(f"Network error: {exc}") from exc
 
-    if last_exc is not None:
-        raise SandboxError(f"Network error: {last_exc}") from last_exc
-    raise SandboxError("Request failed after retries")
+        if last_exc is not None:
+            raise SandboxError(f"Network error: {last_exc}") from last_exc
+        raise SandboxError("Request failed after retries")
+    finally:
+        if owned:
+            await client.aclose()
 
 
 async def async_stream_sse(
@@ -837,8 +856,9 @@ async def async_stream_sse(
     client: httpx.AsyncClient | None = None,
 ) -> None:
     """Async variant of stream_sse. Supports both POST (with body) and GET (no body). No retries."""
-    if client is None:
-        client = shared_async_client()
+    owned = client is None
+    if owned:
+        client = httpx.AsyncClient(timeout=timeout)
     assert client is not None
 
     merged = _default_headers(
@@ -873,3 +893,6 @@ async def async_stream_sse(
         raise SandboxTimeoutError(f"Stream timed out after {timeout}s") from exc
     except httpx.HTTPError as exc:
         raise SandboxError(f"Stream error: {exc}") from exc
+    finally:
+        if owned:
+            await client.aclose()

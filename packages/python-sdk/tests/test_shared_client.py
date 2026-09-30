@@ -1,5 +1,3 @@
-import asyncio
-
 from superserve import _http
 
 
@@ -7,16 +5,13 @@ def test_calls_share_one_client_per_process(monkeypatch):
     monkeypatch.setattr(_http, "_shared", None)
     first = _http.shared_client()
     assert _http.shared_client() is first
-    # A forked child must not reuse the parent's pooled sockets.
-    monkeypatch.setattr(_http.os, "getpid", lambda: -1)
-    assert _http.shared_client() is not first
 
 
-def test_async_calls_share_one_client_per_event_loop():
-    async def pair():
-        return _http.shared_async_client(), _http.shared_async_client()
-
-    a1, a2 = asyncio.run(pair())
-    b1, _ = asyncio.run(pair())
-    assert a1 is a2
-    assert b1 is not a1
+def test_a_forked_child_gets_its_own_client_and_a_free_lock(monkeypatch):
+    monkeypatch.setattr(_http, "_shared", None)
+    parent = _http.shared_client()
+    # A parent thread held the lock at the moment of the fork.
+    assert _http._shared_lock.acquire(blocking=False)
+    _http._reset_shared_client()
+    child = _http.shared_client()
+    assert child is not parent
