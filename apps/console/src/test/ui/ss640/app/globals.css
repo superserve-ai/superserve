@@ -1,0 +1,5 @@
+@import "../../../../app/globals.css";
+
+/* The isolated fixture root does not include imported Console components in
+   Tailwind's automatic source scan. Keep the real loading UI's utilities. */
+@source "../../../../components/table-skeleton.tsx";
