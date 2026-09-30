@@ -44,6 +44,10 @@ function isKnownBlockedReason(value: unknown): value is SignupBlockedReason {
   )
 }
 
+function hasOnlyKeys(value: object, allowedKeys: readonly string[]): boolean {
+  return Object.keys(value).every((key) => allowedKeys.includes(key))
+}
+
 /**
  * Render an explicit, safe signup eligibility outcome for Slack.
  *
@@ -62,21 +66,33 @@ export function formatSignupEligibility(
 
   switch (kind) {
     case "eligible":
+      if (!hasOnlyKeys(outcome, ["kind"])) {
+        return unavailableAnnotation()
+      }
       return {
         emoji: "✅",
         text: "Signup Fingerprint eligible for first account in East",
       }
     case "enforced_other_owner":
+      if (!hasOnlyKeys(outcome, ["kind"])) {
+        return unavailableAnnotation()
+      }
       return {
         emoji: "💸",
         text: "Signup Fingerprint already registered to another account in East",
       }
     case "enforced_missing_evidence":
+      if (!hasOnlyKeys(outcome, ["kind"])) {
+        return unavailableAnnotation()
+      }
       return {
         emoji: "💸",
         text: "Signup Fingerprint could not be verified",
       }
     case "blocked": {
+      if (!hasOnlyKeys(outcome, ["kind", "reason"])) {
+        return unavailableAnnotation()
+      }
       const reason = (outcome as { reason?: unknown }).reason
       return {
         emoji: "❌",
