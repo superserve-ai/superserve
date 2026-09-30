@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
-import { Suspense, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 
 import AuthCodeErrorPage from "../../../../../app/(auth)/auth/auth-code-error/page"
 import SignInPage from "../../../../../app/(auth)/auth/signin/page"
@@ -146,6 +146,11 @@ function FixturePage() {
 }
 
 export default function Page() {
+  // Session-backed scenarios are available only after hydration. Keep the
+  // server and first browser render identical across full auth redirects.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  if (!mounted) return null
   return (
     <Suspense fallback={<div className="h-8 w-48 bg-surface-hover" />}>
       <FixturePage />

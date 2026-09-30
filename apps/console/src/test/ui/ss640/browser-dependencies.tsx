@@ -154,42 +154,12 @@ export function SyntheticBrowserDependencies({
   const [ready, setReady] = useState(false)
   useEffect(() => {
     let cancelPendingCapture: (() => void) | undefined
-    let loginFillFrame: number | undefined
     // Each declared case is entered with a full navigation. StrictMode may
     // repeat this effect before interaction, which must not create an attempt.
     const requestedCase = new URLSearchParams(window.location.search).get(
       "ui_case",
     )
     if (requestedCase) sessionStorage.setItem("ss640-ui-case", requestedCase)
-    if (requestedCase === "ss640-existing-email-login") {
-      // The approved login case intentionally has no fill actions. Seed the
-      // real controlled inputs through normal DOM input events with fixed
-      // fixture values; the production submit handler remains authoritative.
-      const fill = () => {
-        const setValue = (selector: string, value: string) => {
-          const input = document.querySelector<HTMLInputElement>(selector)
-          if (!input) return false
-          const setter = Object.getOwnPropertyDescriptor(
-            HTMLInputElement.prototype,
-            "value",
-          )?.set
-          setter?.call(input, value)
-          input.dispatchEvent(new Event("input", { bubbles: true }))
-          input.dispatchEvent(new Event("change", { bubbles: true }))
-          return true
-        }
-        return (
-          setValue('input[placeholder="Email"]', syntheticSignupValues.email) &&
-          setValue(
-            'input[placeholder="Password"]',
-            syntheticSignupValues.password,
-          )
-        )
-      }
-      // SignInPage is rendered by the child of this provider. The first
-      // animation frame observes its mounted, editable controls.
-      loginFillFrame = requestAnimationFrame(fill)
-    }
     // The production client keeps the provider callback module-scoped so a
     // retry can reuse one capture. Reset that fixture seam at each isolated
     // navigation; otherwise a missing-capture case could inherit the prior
@@ -233,7 +203,6 @@ export function SyntheticBrowserDependencies({
     }
     setReady(true)
     return () => {
-      if (loginFillFrame !== undefined) cancelAnimationFrame(loginFillFrame)
       cancelPendingCapture?.()
       registerFingerprintGetData(undefined)
       delete window.grecaptcha
