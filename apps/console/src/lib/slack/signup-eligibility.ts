@@ -45,7 +45,10 @@ function isKnownBlockedReason(value: unknown): value is SignupBlockedReason {
 }
 
 function hasOnlyKeys(value: object, allowedKeys: readonly string[]): boolean {
-  return Object.keys(value).every((key) => allowedKeys.includes(key))
+  return (
+    Object.prototype.hasOwnProperty.call(value, "kind") &&
+    Object.keys(value).every((key) => allowedKeys.includes(key))
+  )
 }
 
 /**
@@ -58,51 +61,55 @@ function hasOnlyKeys(value: object, allowedKeys: readonly string[]): boolean {
 export function formatSignupEligibility(
   outcome: unknown,
 ): SignupEligibilityAnnotation {
-  if (!outcome || typeof outcome !== "object") {
-    return unavailableAnnotation()
-  }
-
-  const kind = (outcome as { kind?: unknown }).kind
-
-  switch (kind) {
-    case "eligible":
-      if (!hasOnlyKeys(outcome, ["kind"])) {
-        return unavailableAnnotation()
-      }
-      return {
-        emoji: "✅",
-        text: "Signup Fingerprint eligible for first account in East",
-      }
-    case "enforced_other_owner":
-      if (!hasOnlyKeys(outcome, ["kind"])) {
-        return unavailableAnnotation()
-      }
-      return {
-        emoji: "💸",
-        text: "Signup Fingerprint already registered to another account in East",
-      }
-    case "enforced_missing_evidence":
-      if (!hasOnlyKeys(outcome, ["kind"])) {
-        return unavailableAnnotation()
-      }
-      return {
-        emoji: "💸",
-        text: "Signup Fingerprint could not be verified",
-      }
-    case "blocked": {
-      if (!hasOnlyKeys(outcome, ["kind", "reason"])) {
-        return unavailableAnnotation()
-      }
-      const reason = (outcome as { reason?: unknown }).reason
-      return {
-        emoji: "❌",
-        text: isKnownBlockedReason(reason)
-          ? BLOCKED_REASON_TEXT[reason]
-          : "Signup blocked by signup safety policy",
-      }
-    }
-    case "unavailable":
-    default:
+  try {
+    if (!outcome || typeof outcome !== "object") {
       return unavailableAnnotation()
+    }
+
+    const kind = (outcome as { kind?: unknown }).kind
+
+    switch (kind) {
+      case "eligible":
+        if (!hasOnlyKeys(outcome, ["kind"])) {
+          return unavailableAnnotation()
+        }
+        return {
+          emoji: "✅",
+          text: "Signup Fingerprint eligible for first account in East",
+        }
+      case "enforced_other_owner":
+        if (!hasOnlyKeys(outcome, ["kind"])) {
+          return unavailableAnnotation()
+        }
+        return {
+          emoji: "💸",
+          text: "Signup Fingerprint already registered to another account in East",
+        }
+      case "enforced_missing_evidence":
+        if (!hasOnlyKeys(outcome, ["kind"])) {
+          return unavailableAnnotation()
+        }
+        return {
+          emoji: "💸",
+          text: "Signup Fingerprint could not be verified",
+        }
+      case "blocked": {
+        if (!hasOnlyKeys(outcome, ["kind", "reason"])) {
+          return unavailableAnnotation()
+        }
+        const reason = (outcome as { reason?: unknown }).reason
+        return {
+          emoji: "❌",
+          text: isKnownBlockedReason(reason)
+            ? BLOCKED_REASON_TEXT[reason]
+            : "Signup blocked by signup safety policy",
+        }
+      }
+      case "unavailable":
+      default:
+        return unavailableAnnotation()
+    }
+  } catch {
+    return unavailableAnnotation()
   }
 }

@@ -48,6 +48,7 @@ describe("formatSignupEligibility", () => {
     { kind: "unavailable" },
     { kind: "unknown" },
     { kind: "eligible", reason: "raw provider response" },
+    Object.assign(Object.create({ kind: "eligible" }), {}),
   ])(
     "uses an unemoji'd fallback for unavailable or unknown input: %o",
     (outcome) => {
@@ -57,19 +58,19 @@ describe("formatSignupEligibility", () => {
     },
   )
 
-  it("uses allowlisted blocked reasons and a safe fallback", () => {
-    expect(
-      formatSignupEligibility({ kind: "blocked", reason: "known_abuse" }),
-    ).toEqual({
+  it.each([
+    ["known_abuse", "Signup blocked by abuse policy"],
+    ["restricted_identity", "Signup blocked by identity safety policy"],
+    ["policy_restriction", "Signup blocked by signup safety policy"],
+    ["blocked_email", "Signup blocked by configured signup restriction"],
+  ])("uses the allowlisted blocked reason: %s", (reason, text) => {
+    expect(formatSignupEligibility({ kind: "blocked", reason })).toEqual({
       emoji: "❌",
-      text: "Signup blocked by abuse policy",
+      text,
     })
-    expect(
-      formatSignupEligibility({ kind: "blocked", reason: "blocked_email" }),
-    ).toEqual({
-      emoji: "❌",
-      text: "Signup blocked by configured signup restriction",
-    })
+  })
+
+  it("uses a safe fallback for an unknown blocked reason", () => {
     expect(
       formatSignupEligibility({
         kind: "blocked",
@@ -78,6 +79,18 @@ describe("formatSignupEligibility", () => {
     ).toEqual({
       emoji: "❌",
       text: "Signup blocked by signup safety policy",
+    })
+  })
+
+  it("falls back when inspecting an untrusted outcome throws", () => {
+    const outcome = Object.defineProperty({}, "kind", {
+      get() {
+        throw new Error("unexpected provider access")
+      },
+    })
+
+    expect(formatSignupEligibility(outcome)).toEqual({
+      text: "Signup eligibility unavailable",
     })
   })
 
