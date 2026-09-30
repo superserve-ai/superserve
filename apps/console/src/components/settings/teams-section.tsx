@@ -12,7 +12,7 @@ import {
   Separator,
   useToast,
 } from "@superserve/ui"
-import { useState } from "react"
+import { useRef, useState } from "react"
 
 import { useCreateTeam, useTeams } from "@/hooks/use-teams"
 import { regionLabel } from "@/lib/format"
@@ -28,10 +28,11 @@ import { regionLabel } from "@/lib/format"
 export function TeamsSection() {
   const { data } = useTeams()
   const createTeam = useCreateTeam()
-  const { addToast } = useToast()
+  const { addToast, removeToast } = useToast()
 
   const [name, setName] = useState("")
   const [region, setRegion] = useState("use")
+  const lastCreateErrorToast = useRef<string | null>(null)
 
   if (!data || (data.regions.length <= 1 && data.teams.length <= 1)) {
     return null
@@ -44,13 +45,20 @@ export function TeamsSection() {
       {
         onSuccess: (team) => {
           setName("")
+          if (lastCreateErrorToast.current) {
+            removeToast(lastCreateErrorToast.current)
+            lastCreateErrorToast.current = null
+          }
           addToast(
             `Team ${team.name} created in ${regionLabel(team.region)}`,
             "success",
           )
         },
         onError: (error) => {
-          addToast(error.message || "Failed to create team", "error")
+          lastCreateErrorToast.current = addToast(
+            error.message || "Failed to create team",
+            "error",
+          )
         },
       },
     )

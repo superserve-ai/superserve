@@ -9,6 +9,7 @@ import AuthCodeErrorPage from "../../../../../app/(auth)/auth/auth-code-error/pa
 import SignInPage from "../../../../../app/(auth)/auth/signin/page"
 import SignUpContent from "../../../../../app/(auth)/auth/signup/form"
 import { QueryProvider } from "../../../../../components/query-provider"
+import { TableSkeleton } from "../../../../../components/table-skeleton"
 import { TrialBillingBanner } from "../../../../../components/trial-billing-banner"
 import {
   productionSignupCases,
@@ -72,7 +73,11 @@ function Dashboard({ scenario }: { scenario: (typeof scenarios)[string] }) {
       : null)
 
   if (scenario.state === "loading") {
-    return <div className="h-8 w-48 bg-surface-hover" aria-label="Loading" />
+    return (
+      <main aria-label="Loading" className="min-h-screen">
+        <TableSkeleton columns={6} rows={5} tabs={3} />
+      </main>
+    )
   }
   if (scenario.state === "uncertain" && !recoveryComplete) {
     return (
@@ -182,7 +187,13 @@ export default function Page() {
   useEffect(() => setMounted(true), [])
   if (!mounted) return null
   return (
-    <Suspense fallback={<div className="h-8 w-48 bg-surface-hover" />}>
+    <Suspense
+      fallback={
+        <main aria-label="Loading" className="min-h-screen">
+          <TableSkeleton columns={6} rows={5} tabs={3} />
+        </main>
+      }
+    >
       <FixturePage />
     </Suspense>
   )
