@@ -84,7 +84,6 @@ class Sandbox:
                 get_access_token=lambda: self._access_token,
                 refresh_activate=self._refresh_activate,
             ),
-            client=self._http_client,
         )
         self.files = Files(
             FilesDeps(
@@ -93,7 +92,6 @@ class Sandbox:
                 get_access_token=lambda: self._access_token,
                 refresh_activate=self._refresh_activate,
             ),
-            client=self._http_client,
         )
 
     def _post_and_rotate_token(self, endpoint: str) -> str:

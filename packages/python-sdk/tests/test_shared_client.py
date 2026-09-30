@@ -3,7 +3,7 @@ import pytest
 import respx
 from superserve import AsyncSnapshot, _http, async_connection_pool
 
-from .test_snapshots import API, SNAP, _snap
+from .test_snapshots import API, SNAP, _sandbox, _snap
 
 
 def test_calls_share_one_client_per_process(monkeypatch):
@@ -20,6 +20,24 @@ def test_a_forked_child_gets_its_own_client_and_a_free_lock(monkeypatch):
     _http._reset_shared_client()
     child = _http.shared_client()
     assert child is not parent
+
+
+def test_a_sandbox_made_before_a_fork_uses_the_childs_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SUPERSERVE_API_KEY", "ss_live_key")
+    monkeypatch.setenv("SUPERSERVE_BASE_URL", API)
+    with respx.mock() as router:
+        sandbox = _sandbox(router)
+        parent = _http.shared_client()
+        _http._reset_shared_client()
+        router.post(f"{sandbox.commands._data_plane_base_url}/exec").mock(
+            return_value=httpx.Response(
+                200, json={"stdout": "", "stderr": "", "exit_code": 0}
+            )
+        )
+        sandbox.commands.run("true")
+        assert _http._shared is not None and _http._shared is not parent
 
 
 @pytest.mark.asyncio
