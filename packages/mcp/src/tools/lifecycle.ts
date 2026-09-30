@@ -77,6 +77,7 @@ interface PreviewUrlArgs {
 interface NetworkLogArgs {
   sandbox_id: string
   limit?: number
+  before?: string
   verdict?: "allowed" | "blocked" | "failed"
 }
 
@@ -725,7 +726,8 @@ export function registerLifecycleTools(
       description:
         "List the outbound network connections a sandbox made (newest first) — host, verdict (allowed/blocked), " +
         "bytes, and credential-injected requests. Use it to audit what a sandbox actually reached and to verify " +
-        "allow_out/deny_out rules. Read-only — does not resume a paused sandbox.",
+        "allow_out/deny_out rules. When has_more is true, pass next_cursor as before to fetch the next page. " +
+        "Read-only — does not resume a paused sandbox.",
       inputSchema: {
         sandbox_id: z.string().describe("ID of the sandbox."),
         limit: z
@@ -735,6 +737,13 @@ export function registerLifecycleTools(
           .optional()
           .describe(
             `Max rows to return (default ${DEFAULT_NETWORK_LOG_LIMIT}, capped at ${MAX_NETWORK_LOG_LIMIT}).`,
+          ),
+        before: z
+          .string()
+          .datetime({ offset: true })
+          .optional()
+          .describe(
+            "Return events older than this RFC3339 timestamp. Use next_cursor from the previous page.",
           ),
         verdict: z
           .enum(["allowed", "blocked", "failed"])
@@ -748,7 +757,7 @@ export function registerLifecycleTools(
         openWorldHint: true,
       },
     },
-    async ({ sandbox_id, limit, verdict }) => {
+    async ({ sandbox_id, limit, before, verdict }) => {
       try {
         const capped = Math.min(
           limit ?? DEFAULT_NETWORK_LOG_LIMIT,
@@ -756,6 +765,7 @@ export function registerLifecycleTools(
         )
         const page = await client.networkLog(sandbox_id, {
           limit: capped,
+          before,
           verdict,
         })
         const text = page.events.length
