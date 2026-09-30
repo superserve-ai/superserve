@@ -17,6 +17,7 @@ from ._http import (
     DEFAULT_PAUSE_TIMEOUT,
     pause_poll_delay,
     PAUSE_FAST_POLL_WINDOW_S,
+    using_async_client,
 )
 from .commands import AsyncCommands, AsyncCommandsDeps
 from .errors import ConflictError, NotFoundError, SandboxError, SandboxTimeoutError
@@ -354,22 +355,24 @@ class AsyncSandbox:
         if not wait:
             return snapshot
         # A 202 answer is still creating; the platform settles it shortly.
-        return await snapshot.wait_until_ready(
-            timeout=max(timeout - (time.monotonic() - started), 0.0),
-            poll_interval_s=poll_interval_s,
-        )
+        with using_async_client(self._http_client):
+            return await snapshot.wait_until_ready(
+                timeout=max(timeout - (time.monotonic() - started), 0.0),
+                poll_interval_s=poll_interval_s,
+            )
 
     async def snapshots(
         self, *, limit: int | None = None, offset: int | None = None
     ) -> builtins.list[SnapshotInfo]:
         """This sandbox's snapshots, newest first."""
-        return await AsyncSnapshot.list(
-            self.id,
-            limit=limit,
-            offset=offset,
-            api_key=self._config.api_key,
-            base_url=self._config.base_url,
-        )
+        with using_async_client(self._http_client):
+            return await AsyncSnapshot.list(
+                self.id,
+                limit=limit,
+                offset=offset,
+                api_key=self._config.api_key,
+                base_url=self._config.base_url,
+            )
 
     def get_preview_url(self, port: int) -> str:
         """Build the preview URL for a port running inside this sandbox.

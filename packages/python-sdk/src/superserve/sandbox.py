@@ -17,6 +17,7 @@ from ._http import (
     api_request,
     pause_poll_delay,
     PAUSE_FAST_POLL_WINDOW_S,
+    shared_client,
 )
 from .commands import Commands, CommandsDeps
 from .errors import ConflictError, NotFoundError, SandboxError, SandboxTimeoutError
@@ -73,7 +74,6 @@ class Sandbox:
         self.secrets: list[SandboxSecretBinding] | None = info.secrets
         self._access_token: str = access_token
         self._config = config
-        self._http_client: httpx.Client = httpx.Client(timeout=30.0)
         self._closed = False
         self._refresh_lock = threading.Lock()
 
@@ -84,7 +84,6 @@ class Sandbox:
                 get_access_token=lambda: self._access_token,
                 refresh_activate=self._refresh_activate,
             ),
-            client=self._http_client,
         )
         self.files = Files(
             FilesDeps(
@@ -93,7 +92,6 @@ class Sandbox:
                 get_access_token=lambda: self._access_token,
                 refresh_activate=self._refresh_activate,
             ),
-            client=self._http_client,
         )
 
     def _post_and_rotate_token(self, endpoint: str) -> str:
@@ -302,13 +300,12 @@ class Sandbox:
 
     # Methods on sandbox
 
+    @property
+    def _http_client(self) -> httpx.Client:
+        return shared_client()
+
     def _close_http_client(self) -> None:
-        if not self._closed:
-            self._closed = True
-            try:
-                self._http_client.close()
-            except Exception:
-                pass
+        self._closed = True
 
     def _require_not_deleted(self) -> None:
         """Reject calls on a deleted handle without requiring an active VM."""
