@@ -64,6 +64,15 @@ export const scenarios: Record<string, Scenario> = {
   "ss640-west-uncertain-retry": { kind: "west", state: "success" },
   "ss640-existing-email-login": { kind: "login", state: "success" },
   "ss640-existing-google-login": { kind: "dashboard", state: "success" },
+  "ss640-billing-evidence-loading": { kind: "dashboard", state: "loading" },
+  "ss640-billing-evidence-unavailable-error": {
+    kind: "dashboard",
+    state: "success",
+  },
+  "ss640-billing-missing-evidence-local-return": {
+    kind: "dashboard",
+    state: "success",
+  },
   "ss640-email-repair-submit": { kind: "signup", state: "loading" },
   "ss640-email-repair-errors": {
     kind: "signup",

@@ -1,5 +1,6 @@
 "use client"
 
+import { ToastProvider } from "@superserve/ui"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { Suspense, useEffect, useState } from "react"
@@ -7,6 +8,8 @@ import { Suspense, useEffect, useState } from "react"
 import AuthCodeErrorPage from "../../../../../app/(auth)/auth/auth-code-error/page"
 import SignInPage from "../../../../../app/(auth)/auth/signin/page"
 import SignUpContent from "../../../../../app/(auth)/auth/signup/form"
+import { QueryProvider } from "../../../../../components/query-provider"
+import { TrialBillingBanner } from "../../../../../components/trial-billing-banner"
 import {
   productionSignupCases,
   SyntheticBrowserDependencies,
@@ -102,6 +105,31 @@ function Login() {
   )
 }
 
+function BillingFixture() {
+  useEffect(() => {
+    const requestedCase = new URLSearchParams(window.location.search).get(
+      "ui_case",
+    )
+    if (requestedCase) {
+      document.cookie = `ss640-ui-case=${encodeURIComponent(requestedCase)}; Path=/; SameSite=Lax`
+      sessionStorage.setItem("ss640-ui-case", requestedCase)
+    }
+  }, [])
+
+  return (
+    <QueryProvider>
+      <ToastProvider>
+        <div className="flex min-h-screen flex-col">
+          <TrialBillingBanner />
+          <main className="flex min-h-screen flex-col gap-4 p-12">
+            <span>No Sandboxes</span>
+          </main>
+        </div>
+      </ToastProvider>
+    </QueryProvider>
+  )
+}
+
 function FixturePage() {
   const pathname = usePathname()
   const params = useSearchParams()
@@ -138,8 +166,10 @@ function FixturePage() {
     if (scenario.kind === "dashboard") return <Dashboard scenario={scenario} />
     return <SignUp scenario={scenario} />
   }
-  if (pathname.startsWith("/sandboxes"))
+  if (pathname.startsWith("/sandboxes")) {
+    if (caseId.startsWith("ss640-billing-")) return <BillingFixture />
     return <Dashboard scenario={scenario} />
+  }
   if (pathname.startsWith("/settings")) return <West />
   if (pathname.startsWith("/auth/signin")) return <Login />
   return <Dashboard scenario={scenario} />

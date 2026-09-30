@@ -7,6 +7,7 @@ const sourceRoot = resolve(__dirname, "../../..")
 const signupRoot = resolve(sourceRoot, "app/(auth)/auth/signup")
 const signinRoot = resolve(sourceRoot, "app/(auth)/auth/signin")
 const callbackRoot = resolve(sourceRoot, "app/(auth)/auth/callback")
+const billingActionsRoot = resolve(sourceRoot, "lib/api")
 const serverDependencies = resolve(__dirname, "server-dependencies.ts")
 const browserDependencies = resolve(__dirname, "browser-dependencies.tsx")
 
@@ -55,7 +56,7 @@ const nextConfig: NextConfig = {
     config.plugins.push(
       new webpack.NormalModuleReplacementPlugin(
         /^@\/lib\/api\/teams-actions$/,
-        (resource: { context: string; request: string }) => {
+        (resource: { context: string; request: string; resource?: string }) => {
           if (resource.context === resolve(sourceRoot, "hooks"))
             resource.request = resolve(__dirname, "team-dependencies.ts")
         },
@@ -63,7 +64,10 @@ const nextConfig: NextConfig = {
       new webpack.NormalModuleReplacementPlugin(
         /^@\/(app\/\(auth\)\/auth\/(signin|signup)\/action|lib\/(supabase\/server|posthog\/actions|api\/(promotion-device-evidence|team-directory)|auth\/google-signup-proof|fingerprint\/binding-proof))$/,
         (resource: { context: string; request: string }) => {
-          if (resource.context === callbackRoot)
+          if (
+            resource.context === callbackRoot ||
+            resource.context === billingActionsRoot
+          )
             resource.request = serverDependencies
         },
       ),
