@@ -9,13 +9,15 @@ from __future__ import annotations
 import asyncio
 from asyncio import TimeoutError as _AsyncTimeout
 from asyncio import wait_for as _wait_for
+import contextlib
+import contextvars
 import json as json_module
 import os
 import random
 import sys
 import threading
 import time
-from collections.abc import AsyncIterable, Callable, Iterable
+from collections.abc import AsyncIterable, AsyncIterator, Callable, Iterable
 from email.utils import parsedate_to_datetime
 from typing import Any
 
@@ -53,6 +55,35 @@ def _reset_shared_client() -> None:
 
 if hasattr(os, "register_at_fork"):
     os.register_at_fork(after_in_child=_reset_shared_client)
+
+_async_pool: contextvars.ContextVar[httpx.AsyncClient | None] = contextvars.ContextVar(
+    "superserve_async_pool", default=None
+)
+
+
+@contextlib.asynccontextmanager
+async def async_connection_pool() -> AsyncIterator[None]:
+    """Reuse connections across async SDK calls made inside the block, and
+    close them when it ends. Outside one, each call that is not made on an
+    ``AsyncSandbox`` opens its own connection.
+
+    Example::
+
+        async with superserve.async_connection_pool():
+            sandbox = await AsyncSandbox.create(name="demo")
+            snapshots = await AsyncSnapshot.list(sandbox.id)
+    """
+    async with httpx.AsyncClient(
+        timeout=DEFAULT_TIMEOUT,
+        limits=httpx.Limits(max_connections=None, max_keepalive_connections=20),
+    ) as client:
+        token = _async_pool.set(client)
+        try:
+            yield
+        finally:
+            _async_pool.reset(token)
+
+
 # How long pause() waits, across every request it makes; each request still
 # gets the ordinary timeout.
 DEFAULT_PAUSE_TIMEOUT = 300.0
@@ -617,6 +648,8 @@ async def _async_do_request_with_retry(
 ) -> httpx.Response:
     """Async variant of ``_do_request_with_retry``."""
     deadline = None if budget is None else time.monotonic() + budget
+    if client is None:
+        client = _async_pool.get()
     owned = client is None
     if owned:
         client = httpx.AsyncClient(timeout=timeout)
@@ -744,6 +777,8 @@ async def async_upload_bytes(
     client: httpx.AsyncClient | None = None,
 ) -> None:
     """Async variant of upload_bytes. POST — no retries."""
+    if client is None:
+        client = _async_pool.get()
     owned = client is None
     if owned:
         client = httpx.AsyncClient(timeout=timeout)
@@ -780,6 +815,8 @@ async def async_download_bytes(
     ``ValidationError`` and dropping the connection as soon as the body exceeds
     it -- so a hostile/unbounded response cannot exhaust memory.
     """
+    if client is None:
+        client = _async_pool.get()
     owned = client is None
     if owned:
         client = httpx.AsyncClient(timeout=timeout)
@@ -856,6 +893,8 @@ async def async_stream_sse(
     client: httpx.AsyncClient | None = None,
 ) -> None:
     """Async variant of stream_sse. Supports both POST (with body) and GET (no body). No retries."""
+    if client is None:
+        client = _async_pool.get()
     owned = client is None
     if owned:
         client = httpx.AsyncClient(timeout=timeout)

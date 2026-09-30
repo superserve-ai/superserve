@@ -6,6 +6,7 @@ from ._config import (
     RESERVED_PREVIEW_PORT,
     preview_url,
 )
+from ._http import async_connection_pool
 from .async_sandbox import AsyncSandbox
 from .async_secrets import AsyncSecret
 from .async_snapshots import AsyncSnapshot
@@ -74,6 +75,7 @@ __all__ = [
     "AsyncSecret",
     "AsyncSnapshot",
     "AsyncTemplate",
+    "async_connection_pool",
     "AuthenticationError",
     "BuildError",
     "BuildLogEvent",
