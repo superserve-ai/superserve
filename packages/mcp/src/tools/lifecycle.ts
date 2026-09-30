@@ -740,10 +740,9 @@ export function registerLifecycleTools(
           ),
         before: z
           .string()
-          .datetime({ offset: true })
           .optional()
           .describe(
-            "Return events older than this RFC3339 timestamp. Use next_cursor from the previous page.",
+            "Pagination cursor from the previous page's next_cursor, or an RFC3339 timestamp to return older events.",
           ),
         verdict: z
           .enum(["allowed", "blocked", "failed"])
