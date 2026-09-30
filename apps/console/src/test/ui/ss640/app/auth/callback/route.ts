@@ -25,18 +25,15 @@ export async function GET(request: Request) {
   const response = await withSyntheticCase(caseId, () =>
     productionCallback(new Request(url)),
   )
-  // The production callback may use its deployed APP_URL outside preview
-  // mode. This fixture must keep every declared redirect on the runner-owned
-  // loopback origin, without changing the callback's selected path/query.
+  // Next may expose localhost in Request.url even when the browser uses
+  // 127.0.0.1. A relative Location preserves the browser's actual origin.
   const location = response.headers.get("location")
   if (location) {
     const redirect = new URL(location, url)
-    if (redirect.origin !== url.origin) {
-      response.headers.set(
-        "location",
-        `${redirect.pathname}${redirect.search}${redirect.hash}`,
-      )
-    }
+    response.headers.set(
+      "location",
+      `${redirect.pathname}${redirect.search}${redirect.hash}`,
+    )
   }
   response.cookies.set("ss640-ui-case", caseId, { path: "/", sameSite: "lax" })
   return response

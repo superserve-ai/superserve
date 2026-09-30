@@ -8,7 +8,6 @@ import AuthCodeErrorPage from "../../../../../app/(auth)/auth/auth-code-error/pa
 import SignUpContent from "../../../../../app/(auth)/auth/signup/form"
 import {
   productionSignupCases,
-  syntheticSignupValues,
   SyntheticBrowserDependencies,
 } from "../../browser-dependencies"
 import { scenarios } from "../../scenarios"
@@ -143,10 +142,7 @@ function FixturePage() {
     ) {
       return (
         <SyntheticBrowserDependencies>
-          <SignUpContent
-            initialValues={syntheticSignupValues}
-            confirmationRecipient="Synthetic account"
-          />
+          <SignUpContent />
         </SyntheticBrowserDependencies>
       )
     }

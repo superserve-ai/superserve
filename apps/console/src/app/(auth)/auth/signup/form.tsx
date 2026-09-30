@@ -147,36 +147,18 @@ function sanitizeNext(raw: string | null): string {
   return "/"
 }
 
-export interface SignupFormValues {
-  fullName: string
-  email: string
-  password: string
-  confirmPassword: string
-}
-
-export default function SignUpContent({
-  initialValues,
-  confirmationRecipient,
-}: {
-  initialValues?: SignupFormValues
-  confirmationRecipient?: string
-} = {}) {
+export default function SignUpContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
-  // Keep the fixture's private values in one synchronous initializer. The
-  // browser review intentionally renders inert controls, so child effects
-  // cannot be used to seed this state after the submit boundary.
-  const [formValues, setFormValues] = useState<SignupFormValues>(() => ({
-    fullName: initialValues?.fullName ?? "",
-    email: initialValues?.email ?? "",
-    password: initialValues?.password ?? "",
-    confirmPassword: initialValues?.confirmPassword ?? "",
-  }))
+  const [formValues, setFormValues] = useState({
+    fullName: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  })
   const { fullName, email, password, confirmPassword } = formValues
-  const setFormValue = <K extends keyof SignupFormValues>(
-    key: K,
-    value: SignupFormValues[K],
-  ) => setFormValues((current) => ({ ...current, [key]: value }))
+  const setFormValue = (key: keyof typeof formValues, value: string) =>
+    setFormValues((current) => ({ ...current, [key]: value }))
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
@@ -357,10 +339,8 @@ export default function SignUpContent({
             </h1>
             <p className="mt-2 text-center text-xs leading-relaxed text-muted">
               We&apos;ve sent a verification link to{" "}
-              <strong className="text-foreground">
-                {confirmationRecipient ?? email}
-              </strong>
-              . Check your inbox and click the link to verify your account.
+              <strong className="text-foreground">{email}</strong>. Check your
+              inbox and click the link to verify your account.
             </p>
             <p className="mt-5 text-center text-xs text-muted">
               Already verified?{" "}

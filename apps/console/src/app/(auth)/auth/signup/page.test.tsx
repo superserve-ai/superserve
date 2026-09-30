@@ -270,7 +270,7 @@ describe("SignUpPage", () => {
     )
   })
 
-  it("submits initialized form state without input events under StrictMode", async () => {
+  it("submits user-entered form values under StrictMode", async () => {
     const { default: SignUpContent } = await import("./form")
     const { signUpWithEmail, syntheticSignupValues, signupTrace } =
       await import("@/test/ui/ss640/browser-dependencies")
@@ -278,10 +278,26 @@ describe("SignUpPage", () => {
     mockSignUpWithEmail.mockImplementation(signUpWithEmail)
     render(
       <StrictMode>
-        <SignUpContent initialValues={syntheticSignupValues} />
+        <SignUpContent />
       </StrictMode>,
     )
 
+    await user.type(
+      await screen.findByPlaceholderText("Full Name"),
+      syntheticSignupValues.fullName,
+    )
+    await user.type(
+      screen.getByPlaceholderText("Email"),
+      syntheticSignupValues.email,
+    )
+    await user.type(
+      screen.getByPlaceholderText("Password"),
+      syntheticSignupValues.password,
+    )
+    await user.type(
+      screen.getByPlaceholderText("Confirm Password"),
+      syntheticSignupValues.confirmPassword,
+    )
     await user.click(await screen.findByRole("button", { name: "Sign Up" }))
 
     expect(await screen.findByText("Check Your Email")).toBeInTheDocument()

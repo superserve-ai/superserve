@@ -1,7 +1,7 @@
 "use client"
 
-import { Button, Input as ConsoleInput } from "@superserve/ui"
-import { type ComponentProps, type ReactNode, useEffect, useState } from "react"
+import { Button, Input } from "@superserve/ui"
+import { type ReactNode, useEffect, useState } from "react"
 
 import {
   clearFingerprintSignupCapture,
@@ -9,7 +9,7 @@ import {
   type SignupFingerprintCapture,
 } from "../../../lib/fingerprint/client"
 
-export { Button }
+export { Button, Input }
 
 export const syntheticSignupValues = {
   fullName: "Synthetic account",
@@ -142,21 +142,6 @@ export function usePostHog() {
 // No third-party scripts may load in the isolated fixture runtime.
 export default function SyntheticScript() {
   return null
-}
-
-export function Input(props: ComponentProps<typeof ConsoleInput>) {
-  // Initial values belong to the form's state initializer. These inert controls
-  // never seed parent state from child effects or expose credentials in the DOM.
-  return (
-    <ConsoleInput
-      {...props}
-      type="text"
-      value=""
-      readOnly
-      autoComplete="off"
-      onChange={undefined}
-    />
-  )
 }
 
 export function SyntheticBrowserDependencies({
