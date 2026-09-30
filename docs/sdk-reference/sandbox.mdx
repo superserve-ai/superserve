@@ -30,6 +30,18 @@ export SUPERSERVE_API_KEY=ss_live_...
 export SUPERSERVE_BASE_URL=https://api.superserve.ai  # optional
 ```
 
+## Connection reuse (Python async)
+
+The sync SDK reuses connections across calls. In async Python, calls on an `AsyncSandbox` reuse its connection. Wrap other calls in `async_connection_pool()` to reuse connections across them. The connections close when the block ends.
+
+```python
+from superserve import AsyncSandbox, AsyncSnapshot, async_connection_pool
+
+async with async_connection_pool():
+    sandbox = await AsyncSandbox.create(name="example")
+    snapshots = await AsyncSnapshot.list(sandbox.id)
+```
+
 ## Factory methods
 
 ### `Sandbox.create`
