@@ -41,9 +41,15 @@ const nextConfig: NextConfig = {
   },
   webpack(config, { webpack }) {
     config.resolve.alias["@"] = sourceRoot
-    // Substitute only signup's service/control boundaries. The page, capture
-    // client, buttons, decorations and state transitions remain production code.
+    // Keep production UI and hooks; replace external service boundaries locally.
     config.plugins.push(
+      new webpack.NormalModuleReplacementPlugin(
+        /^@\/lib\/api\/teams-actions$/,
+        (resource: { context: string; request: string }) => {
+          if (resource.context === resolve(sourceRoot, "hooks"))
+            resource.request = resolve(__dirname, "team-dependencies.ts")
+        },
+      ),
       new webpack.NormalModuleReplacementPlugin(
         /^@\/(app\/\(auth\)\/auth\/(signin|signup)\/action|lib\/(supabase\/server|posthog\/actions|api\/(promotion-device-evidence|team-directory)|auth\/google-signup-proof|fingerprint\/binding-proof))$/,
         (resource: { context: string; request: string }) => {

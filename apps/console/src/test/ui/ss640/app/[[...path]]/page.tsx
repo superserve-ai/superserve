@@ -11,6 +11,7 @@ import {
   SyntheticBrowserDependencies,
 } from "../../browser-dependencies"
 import { scenarios } from "../../scenarios"
+import { West } from "../../west"
 
 function SignUp({ scenario }: { scenario: (typeof scenarios)[string] }) {
   if (scenario.state === "success") {
@@ -79,43 +80,6 @@ function Dashboard({ scenario }: { scenario: (typeof scenarios)[string] }) {
   return <main className="flex min-h-screen p-12">No Sandboxes</main>
 }
 
-function West({ scenario }: { scenario: (typeof scenarios)[string] }) {
-  if (scenario.state === "loading") {
-    return (
-      <main className="flex min-h-screen flex-col gap-4 p-12">
-        <button disabled type="button">
-          Creating...
-        </button>
-        <span aria-label="Team region">US West</span>
-      </main>
-    )
-  }
-  if (scenario.state === "uncertain") {
-    return (
-      <main className="flex min-h-screen flex-col gap-4 p-12">
-        <button type="button">Create Team</button>
-        <span aria-label="Team region">US West</span>
-        <div className="pointer-events-auto">
-          <svg className="text-destructive" aria-hidden="true" />
-          <p className="text-sm text-destructive">Something went wrong</p>
-        </div>
-      </main>
-    )
-  }
-  return (
-    <main className="flex min-h-screen flex-col gap-4 p-12">
-      <div>Team West fixture team created in US West</div>
-      <div className="border-dashed">
-        <div>
-          <span className="text-sm">West fixture team</span>
-        </div>
-      </div>
-      <span aria-label="Active team">West fixture team · US West</span>
-      <input placeholder="my-team" />
-    </main>
-  )
-}
-
 function Login({ scenario }: { scenario: (typeof scenarios)[string] }) {
   if (scenario.kind === "dashboard") return <Dashboard scenario={scenario} />
   return (
@@ -161,7 +125,7 @@ function FixturePage() {
   }
   if (pathname.startsWith("/sandboxes"))
     return <Dashboard scenario={scenario} />
-  if (pathname.startsWith("/settings")) return <West scenario={scenario} />
+  if (pathname.startsWith("/settings")) return <West />
   if (pathname.startsWith("/auth/signin")) return <Login scenario={scenario} />
   return <Dashboard scenario={scenario} />
 }
