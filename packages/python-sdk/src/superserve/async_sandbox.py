@@ -11,6 +11,7 @@ from urllib.parse import quote, urlencode
 import httpx
 
 from ._config import ResolvedConfig, preview_url, resolve_config
+from ._routing_hint import routing_hint_expired
 from ._http import (
     async_api_request,
     DeadlineExceeded,
@@ -64,6 +65,7 @@ class AsyncSandbox:
         info: SandboxInfo,
         access_token: str,
         config: ResolvedConfig,
+        routing_hint: str | None = None,
     ) -> None:
         self.id: str = info.id
         self.name: str = info.name
@@ -73,6 +75,9 @@ class AsyncSandbox:
         # Secrets bound at construction time; call get_info() to refresh.
         self.secrets: list[SandboxSecretBinding] | None = info.secrets
         self._access_token: str = access_token
+        self._routing_hint = routing_hint
+        self._route_revision = 0
+        self._applied_route_revision = 0
         self._config = config
         self._http_client: httpx.AsyncClient = httpx.AsyncClient(timeout=30.0)
         self._closed = False
@@ -83,7 +88,9 @@ class AsyncSandbox:
                 sandbox_id=self.id,
                 sandbox_host=config.sandbox_host,
                 get_access_token=lambda: self._access_token,
+                get_routing_hint=lambda: self._routing_hint,
                 refresh_activate=self._refresh_activate,
+                refresh_expired_hint=self._refresh_expired_hint,
             ),
             client=self._http_client,
         )
@@ -92,13 +99,17 @@ class AsyncSandbox:
                 sandbox_id=self.id,
                 sandbox_host=config.sandbox_host,
                 get_access_token=lambda: self._access_token,
+                get_routing_hint=lambda: self._routing_hint,
                 refresh_activate=self._refresh_activate,
+                refresh_expired_hint=self._refresh_expired_hint,
             ),
             client=self._http_client,
         )
 
     async def _post_and_rotate_token(self, endpoint: str) -> str:
         """Async variant of Sandbox._post_and_rotate_token."""
+        self._route_revision += 1
+        revision = self._route_revision
         raw = await async_api_request(
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/{endpoint}",
@@ -111,13 +122,25 @@ class AsyncSandbox:
                 f"Invalid API response from POST /sandboxes/{self.id}/{endpoint}: "
                 "missing access_token"
             )
-        self._access_token = token
-        return token
+        if revision > self._applied_route_revision:
+            self._applied_route_revision = revision
+            self._access_token = token
+            self._routing_hint = raw.get("routing_hint")
+        return self._access_token
 
     async def _refresh_activate(self) -> str:
         """Async variant of Sandbox._refresh_activate."""
+        revision = self._applied_route_revision
         async with self._refresh_lock:
+            if revision != self._applied_route_revision:
+                return self._access_token
             return await self._post_and_rotate_token("activate")
+
+    async def _refresh_expired_hint(self) -> str:
+        async with self._refresh_lock:
+            if routing_hint_expired(lambda: self._routing_hint):
+                return await self._post_and_rotate_token("activate")
+            return self._access_token
 
     @classmethod
     async def create(
@@ -186,7 +209,7 @@ class AsyncSandbox:
             raise SandboxError(
                 "Invalid API response from POST /sandboxes: missing access_token"
             )
-        return cls(to_sandbox_info(raw), token, config)
+        return cls(to_sandbox_info(raw), token, config, raw.get("routing_hint"))
 
     @classmethod
     async def connect(
@@ -214,7 +237,7 @@ class AsyncSandbox:
                 f"Invalid API response from POST /sandboxes/{sandbox_id}/activate: "
                 "missing access_token"
             )
-        return cls(to_sandbox_info(raw), token, config)
+        return cls(to_sandbox_info(raw), token, config, raw.get("routing_hint"))
 
     @classmethod
     async def list(

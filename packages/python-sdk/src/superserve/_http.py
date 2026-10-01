@@ -204,6 +204,16 @@ def _build_error_body(response: httpx.Response) -> dict[str, Any]:
             return parsed
     except Exception:
         pass
+    # These exact legacy proxy responses are emitted before dispatch.
+    if (
+        response.status_code == 503
+        and response.headers.get("content-type", "").startswith("text/plain")
+        and response.headers.get("x-content-type-options") == "nosniff"
+        and response.text in ("sandbox is paused\n", "sandbox is stopped\n")
+    ):
+        return {
+            "error": {"code": "sandbox_unavailable", "message": response.text.strip()}
+        }
     return {
         "error": {
             "message": response.text[:500] or f"API error ({response.status_code})"

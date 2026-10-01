@@ -21,6 +21,7 @@ from ._http import (
     download_bytes,
     upload_bytes,
 )
+from ._routing_hint import routing_hint_headers
 from ._token_retry import async_with_token_retry, with_token_retry
 from .errors import ValidationError
 
@@ -40,6 +41,8 @@ class FilesDeps:
     sandbox_host: str
     get_access_token: Callable[[], str]
     refresh_activate: Callable[[], str]
+    refresh_expired_hint: Callable[[], str] | None = None
+    get_routing_hint: Callable[[], str | None] = lambda: None
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,8 @@ class AsyncFilesDeps:
     sandbox_host: str
     get_access_token: Callable[[], str]
     refresh_activate: Callable[[], Awaitable[str]]
+    refresh_expired_hint: Callable[[], Awaitable[str]] | None = None
+    get_routing_hint: Callable[[], str | None] = lambda: None
 
 
 class Files:
@@ -78,7 +83,11 @@ class Files:
         def send(token: str) -> None:
             kwargs: dict[str, Any] = {
                 "url": url,
-                "headers": {**self._routing_headers, "X-Access-Token": token},
+                "headers": {
+                    **self._routing_headers,
+                    **routing_hint_headers(self._deps.get_routing_hint),
+                    "X-Access-Token": token,
+                },
                 "content": content,
                 "client": self._client,
             }
@@ -86,7 +95,13 @@ class Files:
                 kwargs["timeout"] = timeout
             upload_bytes(**kwargs)
 
-        with_token_retry(self._deps.get_access_token, self._deps.refresh_activate, send)
+        with_token_retry(
+            self._deps.get_access_token,
+            self._deps.refresh_activate,
+            send,
+            self._deps.get_routing_hint,
+            self._deps.refresh_expired_hint,
+        )
 
     def read(
         self,
@@ -105,7 +120,11 @@ class Files:
         def send(token: str) -> bytes:
             kwargs: dict[str, Any] = {
                 "url": url,
-                "headers": {**self._routing_headers, "X-Access-Token": token},
+                "headers": {
+                    **self._routing_headers,
+                    **routing_hint_headers(self._deps.get_routing_hint),
+                    "X-Access-Token": token,
+                },
                 "client": self._client,
             }
             if timeout is not None:
@@ -115,7 +134,11 @@ class Files:
             return download_bytes(**kwargs)
 
         return with_token_retry(
-            self._deps.get_access_token, self._deps.refresh_activate, send
+            self._deps.get_access_token,
+            self._deps.refresh_activate,
+            send,
+            self._deps.get_routing_hint,
+            self._deps.refresh_expired_hint,
         )
 
     def read_text(self, path: str, *, timeout: float | None = None) -> str:
@@ -147,7 +170,11 @@ class Files:
         def send(token: str) -> bytes:
             kwargs: dict[str, Any] = {
                 "url": url,
-                "headers": {**self._routing_headers, "X-Access-Token": token},
+                "headers": {
+                    **self._routing_headers,
+                    **routing_hint_headers(self._deps.get_routing_hint),
+                    "X-Access-Token": token,
+                },
                 "client": self._client,
             }
             if timeout is not None:
@@ -157,7 +184,11 @@ class Files:
             return download_bytes(**kwargs)
 
         return with_token_retry(
-            self._deps.get_access_token, self._deps.refresh_activate, send
+            self._deps.get_access_token,
+            self._deps.refresh_activate,
+            send,
+            self._deps.get_routing_hint,
+            self._deps.refresh_expired_hint,
         )
 
 
@@ -187,7 +218,11 @@ class AsyncFiles:
         async def send(token: str) -> None:
             kwargs: dict[str, Any] = {
                 "url": url,
-                "headers": {**self._routing_headers, "X-Access-Token": token},
+                "headers": {
+                    **self._routing_headers,
+                    **routing_hint_headers(self._deps.get_routing_hint),
+                    "X-Access-Token": token,
+                },
                 "content": content,
                 "client": self._client,
             }
@@ -196,7 +231,11 @@ class AsyncFiles:
             await async_upload_bytes(**kwargs)
 
         await async_with_token_retry(
-            self._deps.get_access_token, self._deps.refresh_activate, send
+            self._deps.get_access_token,
+            self._deps.refresh_activate,
+            send,
+            self._deps.get_routing_hint,
+            self._deps.refresh_expired_hint,
         )
 
     async def read(
@@ -216,7 +255,11 @@ class AsyncFiles:
         async def send(token: str) -> bytes:
             kwargs: dict[str, Any] = {
                 "url": url,
-                "headers": {**self._routing_headers, "X-Access-Token": token},
+                "headers": {
+                    **self._routing_headers,
+                    **routing_hint_headers(self._deps.get_routing_hint),
+                    "X-Access-Token": token,
+                },
                 "client": self._client,
             }
             if timeout is not None:
@@ -226,7 +269,11 @@ class AsyncFiles:
             return await async_download_bytes(**kwargs)
 
         return await async_with_token_retry(
-            self._deps.get_access_token, self._deps.refresh_activate, send
+            self._deps.get_access_token,
+            self._deps.refresh_activate,
+            send,
+            self._deps.get_routing_hint,
+            self._deps.refresh_expired_hint,
         )
 
     async def read_text(self, path: str, *, timeout: float | None = None) -> str:
@@ -259,7 +306,11 @@ class AsyncFiles:
         async def send(token: str) -> bytes:
             kwargs: dict[str, Any] = {
                 "url": url,
-                "headers": {**self._routing_headers, "X-Access-Token": token},
+                "headers": {
+                    **self._routing_headers,
+                    **routing_hint_headers(self._deps.get_routing_hint),
+                    "X-Access-Token": token,
+                },
                 "client": self._client,
             }
             if timeout is not None:
@@ -269,5 +320,9 @@ class AsyncFiles:
             return await async_download_bytes(**kwargs)
 
         return await async_with_token_retry(
-            self._deps.get_access_token, self._deps.refresh_activate, send
+            self._deps.get_access_token,
+            self._deps.refresh_activate,
+            send,
+            self._deps.get_routing_hint,
+            self._deps.refresh_expired_hint,
         )
