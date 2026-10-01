@@ -446,3 +446,71 @@ async def test_stdin_kill_noop_after_close(monkeypatch):
     await session.kill()
 
     assert c.sent == []
+
+
+async def test_routing_hint_refreshes_on_dial_retry(monkeypatch):
+    hint = ["old"]
+    seen = []
+    conns = []
+
+    async def refresh():
+        hint[0] = "fresh"
+        return "auth"
+
+    async def connect(uri, subprotocols=None):
+        seen.append(subprotocols)
+        if len(seen) == 1:
+            raise OSError("failed before start frame")
+        conn = FakeConnection(uri, subprotocols)
+        conns.append(conn)
+        return conn
+
+    patch_connect(monkeypatch, connect)
+    deps = AsyncSpawnDeps(
+        sandbox_id="sbx-1",
+        sandbox_host="sandbox.example.com",
+        get_access_token=lambda: "auth",
+        get_routing_hint=lambda: hint[0],
+        refresh_activate=refresh,
+    )
+    session = await spawn_command(deps, "echo once")
+    assert seen == [
+        ["superserve.exec.v1", "token.auth", "route.old"],
+        ["superserve.exec.v1", "token.auth", "route.fresh"],
+    ]
+    assert len(conns[0].sent) == 1
+    await session.close()
+
+
+async def test_expired_route_refreshes_before_first_successful_handshake(monkeypatch):
+    import base64
+
+    hint = ["v1." + base64.urlsafe_b64encode(b'{"e":1}').decode() + ".sig"]
+    conns = []
+    refreshes = []
+
+    async def refresh():
+        assert not conns
+        refreshes.append(True)
+        hint[0] = "fresh"
+        return "auth"
+
+    async def connect(uri, subprotocols=None):
+        conn = FakeConnection(uri, subprotocols)
+        conns.append(conn)
+        return conn
+
+    patch_connect(monkeypatch, connect)
+    deps = AsyncSpawnDeps(
+        sandbox_id="sbx-1",
+        sandbox_host="sandbox.example.com",
+        get_access_token=lambda: "auth",
+        get_routing_hint=lambda: hint[0],
+        refresh_activate=refresh,
+    )
+    session = await spawn_command(deps, "echo once")
+    assert len(refreshes) == 1 and len(conns) == 1
+    assert conns[0].subprotocols == ["superserve.exec.v1", "token.auth", "route.fresh"]
+    assert len(conns[0].sent) == 1
+    conns[0].feed('{"finished":true,"exit_code":0}')
+    await session.wait()

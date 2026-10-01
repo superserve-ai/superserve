@@ -335,6 +335,7 @@ export interface ApiSandboxResponse {
   vcpu_count?: number
   memory_mib?: number
   access_token?: string
+  routing_hint?: string
   created_at?: string
   timeout_seconds?: number
   auto_delete_seconds?: number
@@ -369,6 +370,7 @@ export interface ApiResumeResponse {
   id?: string
   status?: string
   access_token?: string
+  routing_hint?: string
 }
 
 /** @internal */

@@ -1,3 +1,4 @@
+import { SandboxError } from "./errors.js"
 /**
  * Full-duplex command sessions over the data-plane `/exec/connect` WebSocket.
  *
@@ -6,8 +7,7 @@
  * frames. `spawnCommand` opens the socket, sends the start frame, and returns
  * a `CommandSession` handle. Backs `sandbox.commands.spawn(...)`.
  */
-
-import { SandboxError } from "./errors.js"
+import { routingHintExpired } from "./routingHint.js"
 import type {
   CommandResult,
   CommandSession,
@@ -37,6 +37,7 @@ export interface SpawnDeps {
   sandboxId: string
   sandboxHost: string
   getAccessToken: () => string
+  getRoutingHint?: () => string | undefined
   refreshActivate: () => Promise<string>
 }
 
@@ -82,18 +83,23 @@ async function dialWithResume(
   deps: SpawnDeps,
   url: string,
 ): Promise<WebSocket> {
+  if (routingHintExpired(deps)) await deps.refreshActivate()
   try {
-    return await dial(url, deps.getAccessToken())
+    return await dial(url, deps.getAccessToken(), deps.getRoutingHint?.())
   } catch (err) {
     if (!(err instanceof SandboxError)) throw err
     const fresh = await deps.refreshActivate()
-    return await dial(url, fresh)
+    return await dial(url, fresh, deps.getRoutingHint?.())
   }
 }
 
-function dial(url: string, token: string): Promise<WebSocket> {
+function dial(url: string, token: string, hint?: string): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url, [EXEC_SUBPROTOCOL, TOKEN_PREFIX + token])
+    const ws = new WebSocket(url, [
+      EXEC_SUBPROTOCOL,
+      TOKEN_PREFIX + token,
+      ...(hint ? ["route." + hint] : []),
+    ])
     ws.binaryType = "arraybuffer"
     const cleanup = () => {
       ws.removeEventListener("open", onOpen)

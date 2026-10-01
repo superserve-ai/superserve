@@ -1,3 +1,4 @@
+import { spawnCommand } from "./commandSession.js"
 /**
  * `sandbox.commands` - run shell commands inside a sandbox.
  *
@@ -8,11 +9,10 @@
  *
  * Accessed as `sandbox.commands.run(...)`.
  */
-
-import { spawnCommand } from "./commandSession.js"
 import { dataPlaneTarget } from "./config.js"
 import { SandboxError } from "./errors.js"
 import { request, streamSSE } from "./http.js"
+import { routingHintHeaders } from "./routingHint.js"
 import { withTokenRetry } from "./tokenRetry.js"
 import type {
   ApiExecResult,
@@ -28,6 +28,7 @@ export interface CommandsDeps {
   sandboxId: string
   sandboxHost: string
   getAccessToken: () => string
+  getRoutingHint?: () => string | undefined
   refreshActivate: () => Promise<string>
 }
 
@@ -130,7 +131,11 @@ export class Commands {
       request<ApiExecResult>({
         method: "POST",
         url: `${this._dataPlaneBaseUrl}/exec`,
-        headers: { ...this._routingHeaders, "X-Access-Token": token },
+        headers: {
+          ...this._routingHeaders,
+          ...routingHintHeaders(this._deps),
+          "X-Access-Token": token,
+        },
         body,
         // Add a 5s buffer so the server-side command timeout fires first
         // and returns its proper response before the client aborts.
@@ -160,7 +165,11 @@ export class Commands {
     const send = async (token: string) =>
       this._consumeStream(
         `${this._dataPlaneBaseUrl}/exec/stream`,
-        { ...this._routingHeaders, "X-Access-Token": token },
+        {
+          ...this._routingHeaders,
+          ...routingHintHeaders(this._deps),
+          "X-Access-Token": token,
+        },
         body,
         options,
       )
