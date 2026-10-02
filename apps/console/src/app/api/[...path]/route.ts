@@ -38,6 +38,7 @@ const ALLOWED_PREFIXES = [
   "snapshots",
   "providers",
   "billing/summary",
+  "billing/pricing",
   "billing/usage-series",
 ]
 

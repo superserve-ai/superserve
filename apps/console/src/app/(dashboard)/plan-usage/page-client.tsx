@@ -103,6 +103,16 @@ export function formatUsageCost(value: number): string {
     : value.toFixed(2)
 }
 
+function storageLegend(buckets: BillingUsageSeriesBucket[]): string {
+  if (buckets.length === 0) return "Storage"
+  const billable = buckets.map((bucket) => bucket.storage.billable)
+  if (billable.every(Boolean)) return "Storage"
+  if (billable.every((value) => value === false)) {
+    return "Storage equivalent (not billed)"
+  }
+  return "Storage (mixed billing eligibility)"
+}
+
 function bucketTooltip(
   bucket: BillingUsageSeriesBucket,
   granularity: BillingUsageGranularity,
@@ -430,10 +440,7 @@ export function PlanUsagePageClient() {
                     </span>
                     <span>
                       <i className="mr-1 inline-block size-2 rounded-sm bg-muted" />
-                      Storage equivalent
-                      {buckets.some((b) => b.storage.billable === false)
-                        ? " (not billed)"
-                        : ""}
+                      {storageLegend(buckets)}
                     </span>
                   </div>
                   <div

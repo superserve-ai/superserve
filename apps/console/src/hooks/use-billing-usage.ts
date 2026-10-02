@@ -4,12 +4,12 @@ import { useQuery } from "@tanstack/react-query"
 
 import { useBillingContext } from "@/hooks/use-billing-context"
 import {
+  getBillingPricing,
   getBillingUsageSeries,
   type BillingUsageGranularity,
 } from "@/lib/api/billing"
 import type { BillingUsageSeriesResponse } from "@/lib/api/billing"
 import {
-  getBillingSettingsAction,
   getBillingUsageAction,
   type BillingUsageResponse,
 } from "@/lib/api/billing-actions"
@@ -30,7 +30,7 @@ export function useBillingSettings() {
       teamKey !== null
         ? billingKeys.settings({ cacheScope, teamKey })
         : billingKeys.settings({ cacheScope, teamKey: "unresolved" }),
-    queryFn: getBillingSettingsAction,
+    queryFn: getBillingPricing,
     enabled: ready,
     staleTime: 5 * 60_000,
   })

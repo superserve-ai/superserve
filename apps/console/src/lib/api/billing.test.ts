@@ -91,6 +91,36 @@ describe("billing api", () => {
     })
   })
 
+  it("loads authenticated team pricing without deriving billability from the rate", async () => {
+    const pricing = {
+      plan_key: "payg",
+      plan_name: "Pay as you go",
+      currency: "USD",
+      rates: [
+        {
+          resource_key: "storage_gib",
+          resource: "storage",
+          display_name: "Storage",
+          sort_order: 30,
+          unit: "second",
+          display_unit: "GiB-hours",
+          price_usd: 0.00000003,
+          price_usd_hourly: 0.000108,
+          effective_from: "2026-06-01T00:00:00.000Z",
+          tracked: true,
+          billable: false,
+        },
+      ],
+    }
+    apiClient.mockResolvedValue(pricing)
+
+    const { getBillingPricing } = await import("./billing")
+    await expect(getBillingPricing()).resolves.toEqual(pricing)
+    expect(apiClient).toHaveBeenCalledWith("/billing/pricing", {
+      cache: "no-store",
+    })
+  })
+
   it.each([
     ["hourly", "hour"],
     ["daily", "day"],
