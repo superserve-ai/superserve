@@ -189,7 +189,7 @@
     },
     "packages/sdk": {
       "name": "@superserve/sdk",
-      "version": "0.9.2",
+      "version": "0.9.3",
       "devDependencies": {
         "@superserve/typescript-config": "workspace:*",
         "@types/node": "^25.5.2",
