@@ -5,6 +5,7 @@ import {
   createTeamWithPromotionAttempt,
   registerPromotionSignupDevice,
 } from "@/lib/api/promotion-device-evidence"
+import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
 import {
@@ -94,14 +95,23 @@ export async function provisionTeam(
   }
   let authorityUnavailable = false
   try {
+    await publishPromotionIdentity(
+      region,
+      userId,
+      user,
+      new Date().toISOString(),
+    )
+  } catch {
+    authorityUnavailable = true
+  }
+  try {
     await registerPromotionSignupDevice(region, userId)
   } catch (error) {
-    if (!(error instanceof PromotionEvidenceError)) {
-      throw new Error("Promotion authority unavailable; please try again", {
-        cause: error,
-      })
-    }
-    if (error.code !== "evidence_missing") authorityUnavailable = true
+    if (
+      !(error instanceof PromotionEvidenceError) ||
+      error.code !== "evidence_missing"
+    )
+      authorityUnavailable = true
     // Missing evidence is a policy input. The regional evidence-required gate
     // decides it, while a true authority failure must be pinned as no-credit.
   }

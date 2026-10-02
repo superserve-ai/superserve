@@ -152,7 +152,20 @@ export async function bindPromotionSignupAccount(
   if (!fixture.evidence) {
     fixture.evidence = { userId, attemptId }
     fixture.binds += 1
+    return "bound" as const
   }
+  return fixture.evidence.attemptId === attemptId
+    ? ("replayed" as const)
+    : ("first_evidence_retained" as const)
+}
+export async function registerPromotionSignupAccount(
+  userId: string,
+  attemptId: string,
+) {
+  const evidence = state().evidence
+  if (evidence?.userId !== userId || evidence.attemptId !== attemptId)
+    throw new Error("Synthetic signup publication without original binding")
+  return "owner" as const
 }
 export function validSignupDeviceBinding(
   userId: string,
@@ -178,6 +191,10 @@ export async function registerPromotionSignupDevice() {
   if (caseId === "ss640-billing-evidence-unavailable-error")
     throw new PromotionEvidenceError("authority_unavailable")
   return "owner" as const
+}
+export async function publishPromotionIdentity(region: string, userId: string) {
+  if (region !== "use" || userId !== syntheticAuth.userId)
+    throw new Error("Unexpected synthetic identity publication")
 }
 export function scheduleFingerprintObservation() {}
 export async function sendWelcomeEmail() {}

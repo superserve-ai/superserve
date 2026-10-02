@@ -8,8 +8,33 @@ type AccountOperation =
   | "bind"
   | "evidence"
   | "register"
+  | "register-signup"
   | "signup-eligibility"
   | "create-team"
+  | "prepare-team"
+  | "recover-team"
+  | "complete-team"
+  | "discover-team-creations"
+
+interface CreationLocator {
+  readonly userId: string
+  readonly operationId: string
+  readonly region: string
+}
+
+export interface PromotionTeamPreparation extends CreationLocator {
+  readonly name: string
+  readonly authorityUnavailable: boolean
+}
+
+export interface PreparedPromotionTeam extends PromotionTeamPreparation {
+  readonly attemptId: string
+  readonly teamId: string
+  readonly createdAt: string
+  readonly state: "prepared" | "completed" | "deleted"
+  readonly outcome: PromotionTeamCreationResult["outcome"] | null
+  readonly reason: string | null
+}
 
 /** Server-owned binding, retained by the caller before the first creation call. */
 export interface PromotionTeamCreationAttempt {
@@ -40,6 +65,8 @@ type PromotionEvidenceErrorCode =
   | "evidence_conflict"
   | "invalid_evidence"
   | "authority_unavailable"
+  | "creation_missing"
+  | "creation_conflict"
 
 export class PromotionEvidenceError extends Error {
   constructor(
@@ -105,6 +132,7 @@ function accountAssertion(
   operation: AccountOperation,
   attemptId?: string,
   creation?: PromotionTeamCreationAttempt,
+  recovery?: Record<string, string | boolean>,
 ): string {
   try {
     const key = crypto.createPrivateKey(
@@ -124,7 +152,12 @@ function accountAssertion(
         iat: now,
         exp: now + 300,
         operation,
-        ...(operation === "bind" ? { attempt_id: attemptId } : {}),
+        ...(operation === "bind" || operation === "register-signup"
+          ? { attempt_id: attemptId }
+          : {}),
+        ...(operation === "register-signup"
+          ? { home_region: DEFAULT_REGION }
+          : {}),
         ...(operation === "create-team" && creation
           ? {
               attempt_id: creation.attemptId,
@@ -133,6 +166,7 @@ function accountAssertion(
               authority_unavailable: creation.authorityUnavailable,
             }
           : {}),
+        ...recovery,
       }),
     ).toString("base64url")
     const input = `${header}.${payload}`
@@ -152,6 +186,7 @@ async function post(
     operation: AccountOperation
     attemptId?: string
     creation?: PromotionTeamCreationAttempt
+    recovery?: Record<string, string | boolean>
   },
 ): Promise<Record<string, unknown>> {
   const token = producerToken(region, kind)
@@ -171,6 +206,7 @@ async function post(
                   account.operation,
                   account.attemptId,
                   account.creation,
+                  account.recovery,
                 ),
               }
             : {}),
@@ -190,6 +226,10 @@ async function post(
         throw new PromotionEvidenceError("evidence_conflict", response.status)
       if (response.status === 400 && code === "invalid_evidence")
         throw new PromotionEvidenceError("invalid_evidence", response.status)
+      if (response.status === 404 && code === "creation_missing")
+        throw new PromotionEvidenceError("creation_missing", response.status)
+      if (response.status === 409 && code === "creation_conflict")
+        throw new PromotionEvidenceError("creation_conflict", response.status)
       throw new PromotionEvidenceError("authority_unavailable", response.status)
     }
     if (!isRecord(payload))
@@ -269,6 +309,23 @@ export interface OriginalPromotionSignupEvidence {
   fingerprint: string
   eventAt: string
   boundAt: string
+}
+
+/** Only the original trusted signup caller may publish before confirmation. */
+export async function registerPromotionSignupAccount(
+  userId: string,
+  attemptId: string,
+): Promise<"owner" | "owner_conflict"> {
+  const result = await post(
+    DEFAULT_REGION,
+    "/internal/promotion/account/register-signup",
+    "account",
+    { user_id: userId, attempt_id: attemptId, home_region: DEFAULT_REGION },
+    { userId, operation: "register-signup", attemptId },
+  )
+  if (result.outcome !== "owner" && result.outcome !== "owner_conflict")
+    throw new PromotionEvidenceError("authority_unavailable")
+  return result.outcome
 }
 
 /** Retrieve only the current verified account, even if a caller supplies a target. */
@@ -381,5 +438,220 @@ export async function createTeamWithPromotionAttempt(
     teamId: binding.teamId,
     outcome: result.outcome,
     reason: result.reason,
+  }
+}
+
+function validCreationId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+      value,
+    ) &&
+    value !== "00000000-0000-0000-0000-000000000000"
+  )
+}
+
+function validateCreationRegion(region: string): void {
+  if (region !== "use" && region !== "usw")
+    throw new PromotionEvidenceError("invalid_evidence")
+}
+
+function validateCreationLocator(locator: CreationLocator): void {
+  validateCreationRegion(locator.region)
+  if (!validCreationId(locator.operationId))
+    throw new PromotionEvidenceError("invalid_evidence")
+}
+
+function validatePreparation(input: PromotionTeamPreparation): void {
+  validateCreationLocator(input)
+  if (
+    typeof input.name !== "string" ||
+    !input.name.trim() ||
+    Buffer.byteLength(input.name, "utf8") > 256 ||
+    typeof input.authorityUnavailable !== "boolean"
+  )
+    throw new PromotionEvidenceError("invalid_evidence")
+}
+
+function readPreparedTeam(
+  value: unknown,
+  expected: Pick<CreationLocator, "userId" | "region"> &
+    Partial<Omit<PreparedPromotionTeam, "userId" | "region">>,
+): PreparedPromotionTeam {
+  if (
+    !isRecord(value) ||
+    value.user_id !== expected.userId ||
+    value.home_region !== expected.region ||
+    !validCreationId(value.operation_id) ||
+    !validCreationId(value.attempt_id) ||
+    !validCreationId(value.team_id) ||
+    typeof value.name !== "string" ||
+    !value.name.trim() ||
+    Buffer.byteLength(value.name, "utf8") > 256 ||
+    typeof value.authority_unavailable !== "boolean" ||
+    typeof value.created_at !== "string" ||
+    !Number.isFinite(Date.parse(value.created_at)) ||
+    (value.state !== "prepared" &&
+      value.state !== "completed" &&
+      value.state !== "deleted") ||
+    (value.state === "prepared"
+      ? value.outcome !== null || value.reason !== null
+      : (value.outcome !== "granted" &&
+          value.outcome !== "already_claimed" &&
+          value.outcome !== "promotion_ineligible") ||
+        typeof value.reason !== "string")
+  )
+    throw new PromotionEvidenceError("authority_unavailable")
+  const result: PreparedPromotionTeam = {
+    userId: expected.userId,
+    region: expected.region,
+    operationId: value.operation_id,
+    attemptId: value.attempt_id,
+    teamId: value.team_id,
+    name: value.name,
+    authorityUnavailable: value.authority_unavailable,
+    createdAt: value.created_at,
+    state: value.state as PreparedPromotionTeam["state"],
+    outcome: value.outcome as PreparedPromotionTeam["outcome"],
+    reason: value.reason as string | null,
+  }
+  for (const field of [
+    "operationId",
+    "attemptId",
+    "teamId",
+    "name",
+    "authorityUnavailable",
+  ] as const) {
+    if (expected[field] !== undefined && expected[field] !== result[field])
+      throw new PromotionEvidenceError("authority_unavailable")
+  }
+  return result
+}
+
+/** Persist before dispatch. The locator must already be retained by the caller. */
+export async function preparePromotionTeam(
+  input: PromotionTeamPreparation,
+): Promise<PreparedPromotionTeam> {
+  const binding = { ...input }
+  validatePreparation(binding)
+  const userId = await verifiedAccountId(binding.userId)
+  const fields = {
+    operation_id: binding.operationId,
+    name: binding.name,
+    home_region: binding.region,
+    authority_unavailable: binding.authorityUnavailable,
+  }
+  const result = await post(
+    binding.region,
+    "/internal/promotion/account/prepare-team",
+    "account",
+    { user_id: userId, ...fields },
+    { userId, operation: "prepare-team", recovery: fields },
+  )
+  return readPreparedTeam(result, binding)
+}
+
+/** Recover before republication: the stored decision is authoritative on retry. */
+export async function recoverPromotionTeam(
+  input: CreationLocator,
+): Promise<PreparedPromotionTeam | null> {
+  const binding = { ...input }
+  validateCreationLocator(binding)
+  const userId = await verifiedAccountId(binding.userId)
+  const fields = {
+    operation_id: binding.operationId,
+    home_region: binding.region,
+  }
+  try {
+    return readPreparedTeam(
+      await post(
+        binding.region,
+        "/internal/promotion/account/recover-team",
+        "account",
+        { user_id: userId, ...fields },
+        { userId, operation: "recover-team", recovery: fields },
+      ),
+      binding,
+    )
+  } catch (error) {
+    // An old cell's 404 or a failed read is not proof that preparation is absent.
+    if (
+      error instanceof PromotionEvidenceError &&
+      error.code === "creation_missing"
+    )
+      return null
+    throw error
+  }
+}
+
+/** Dispatch the recovered tuple unchanged; deleted results never recreate teams. */
+export async function completePromotionTeam(
+  input: PreparedPromotionTeam,
+): Promise<PreparedPromotionTeam> {
+  const binding = { ...input }
+  validatePreparation(binding)
+  if (!validCreationId(binding.attemptId) || !validCreationId(binding.teamId))
+    throw new PromotionEvidenceError("invalid_evidence")
+  const userId = await verifiedAccountId(binding.userId)
+  const fields = {
+    operation_id: binding.operationId,
+    attempt_id: binding.attemptId,
+    team_id: binding.teamId,
+    name: binding.name,
+    home_region: binding.region,
+    authority_unavailable: binding.authorityUnavailable,
+  }
+  const result = readPreparedTeam(
+    await post(
+      binding.region,
+      "/internal/promotion/account/complete-team",
+      "account",
+      { user_id: userId, ...fields },
+      { userId, operation: "complete-team", recovery: fields },
+    ),
+    binding,
+  )
+  if (result.state === "prepared")
+    throw new PromotionEvidenceError("authority_unavailable")
+  return result
+}
+
+/** Discovery never selects or dispatches an operation, even with one candidate. */
+export async function discoverPromotionTeams(input: {
+  userId: string
+  region: string
+  after?: string
+}): Promise<{
+  state: "selection_required"
+  operations: PreparedPromotionTeam[]
+  nextCursor: string | null
+}> {
+  const binding = { ...input }
+  validateCreationRegion(binding.region)
+  if (binding.after !== undefined && !validCreationId(binding.after))
+    throw new PromotionEvidenceError("invalid_evidence")
+  const userId = await verifiedAccountId(binding.userId)
+  const fields = {
+    home_region: binding.region,
+    ...(binding.after !== undefined ? { after: binding.after } : {}),
+  }
+  const result = await post(
+    binding.region,
+    "/internal/promotion/account/discover-team-creations",
+    "account",
+    { user_id: userId, ...fields },
+    { userId, operation: "discover-team-creations", recovery: fields },
+  )
+  if (
+    result.state !== "selection_required" ||
+    !Array.isArray(result.operations) ||
+    result.operations.length > 50 ||
+    (result.next_cursor !== null && !validCreationId(result.next_cursor))
+  )
+    throw new PromotionEvidenceError("authority_unavailable")
+  return {
+    state: "selection_required",
+    operations: result.operations.map((row) => readPreparedTeam(row, binding)),
+    nextCursor: result.next_cursor,
   }
 }

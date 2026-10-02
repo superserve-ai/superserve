@@ -7,6 +7,7 @@ import {
   PromotionEvidenceError,
   registerPromotionSignupDevice,
 } from "@/lib/api/promotion-device-evidence"
+import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
 import {
   listTeamMembershipsForUserDetailed,
   type TeamMembership,
@@ -90,8 +91,9 @@ export async function publishBillingPromotionEvidence(): Promise<
   const supabase = await createServerClient()
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
+  if (authError || !user) throw new Error("Not authenticated")
 
   let team: TeamMembership | null
   try {
@@ -102,6 +104,12 @@ export async function publishBillingPromotionEvidence(): Promise<
   if (!team) return "missing"
 
   try {
+    await publishPromotionIdentity(
+      team.region,
+      user.id,
+      user,
+      new Date().toISOString(),
+    )
     await registerPromotionSignupDevice(team.region, user.id)
     return "published"
   } catch (error) {

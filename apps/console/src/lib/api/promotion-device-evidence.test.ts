@@ -7,10 +7,15 @@ import {
   bindPromotionSignupAccount,
   createPromotionSignupAttempt,
   createTeamWithPromotionAttempt,
+  preparePromotionTeam,
+  recoverPromotionTeam,
+  completePromotionTeam,
+  discoverPromotionTeams,
   getPromotionSignupEligibility,
   getPromotionSignupAccountEvidence,
   PromotionEvidenceError,
   registerPromotionSignupDevice,
+  registerPromotionSignupAccount,
   verifyPromotionSignupAttempt,
 } from "./promotion-device-evidence"
 
@@ -143,6 +148,50 @@ describe("promotion evidence producer contract", () => {
       fingerprint: "exact-CaSe",
       event_at: "2026-09-25T10:00:00Z",
     })
+  })
+
+  it("signs the original pre-confirmation signup tuple for East without a login", async () => {
+    getUser.mockResolvedValue({ data: { user: null }, error: null })
+    const fetcher = vi.fn().mockResolvedValue(response({ outcome: "owner" }))
+    vi.stubGlobal("fetch", fetcher)
+    await expect(
+      registerPromotionSignupAccount(userId, attemptId),
+    ).resolves.toBe("owner")
+    expect(getUser).not.toHaveBeenCalled()
+    const [url, options] = fetcher.mock.calls[0]
+    expect(url).toBe(
+      "https://api.test.superserve.ai/internal/promotion/account/register-signup",
+    )
+    expect(options.headers.Authorization).toBe("Bearer account-test-token")
+    expect(options.headers["X-Actor-User-Id"]).toBe(userId)
+    expect(JSON.parse(options.body)).toEqual({
+      user_id: userId,
+      attempt_id: attemptId,
+      home_region: "use",
+    })
+    expect(
+      verifyAssertion(options.headers["X-Promotion-Account-Assertion"]),
+    ).toMatchObject({
+      sub: userId,
+      operation: "register-signup",
+      attempt_id: attemptId,
+      home_region: "use",
+    })
+  })
+
+  it("retries an uncertain signup registration with the exact original tuple", async () => {
+    const fetcher = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("response lost"))
+      .mockResolvedValueOnce(response({ outcome: "owner_conflict" }))
+    vi.stubGlobal("fetch", fetcher)
+    await expect(
+      registerPromotionSignupAccount(userId, attemptId),
+    ).rejects.toMatchObject({ code: "authority_unavailable" })
+    await expect(
+      registerPromotionSignupAccount(userId, attemptId),
+    ).resolves.toBe("owner_conflict")
+    expect(fetcher.mock.calls[0][1].body).toBe(fetcher.mock.calls[1][1].body)
   })
 
   it("binds the trusted actor and retrieves original account evidence", async () => {
@@ -356,6 +405,17 @@ describe("promotion evidence producer contract", () => {
   )
 
   it("signs interoperable assertions from verified identity and reuses original evidence in West", async () => {
+    const userId = crypto.randomUUID()
+    const attemptId = crypto.randomUUID()
+    const creation = {
+      userId,
+      attemptId: crypto.randomUUID(),
+      teamId: crypto.randomUUID(),
+      name: "interop-team",
+      region: "usw",
+      authorityUnavailable: true,
+    }
+    getUser.mockResolvedValue({ data: { user: { id: userId } }, error: null })
     const fetcher = vi
       .fn()
       .mockResolvedValueOnce(response({ outcome: "bound" }))
@@ -369,18 +429,39 @@ describe("promotion evidence producer contract", () => {
         }),
       )
       .mockResolvedValueOnce(response({ outcome: "owner" }))
+      .mockResolvedValueOnce(
+        response({
+          team_id: creation.teamId,
+          outcome: "promotion_ineligible",
+          reason: "authority_unavailable",
+        }),
+      )
     vi.stubGlobal("fetch", fetcher)
     await bindPromotionSignupAccount(userId, attemptId)
     expect(await getPromotionSignupAccountEvidence()).toMatchObject({
       fingerprint: "original-CaSe",
     })
     expect(await registerPromotionSignupDevice("usw")).toBe("owner")
-    expect(getUser).toHaveBeenCalledTimes(2)
+    expect(await createTeamWithPromotionAttempt(creation)).toMatchObject({
+      teamId: creation.teamId,
+      outcome: "promotion_ineligible",
+    })
+    expect(getUser).toHaveBeenCalledTimes(3)
+    expect(fetcher).toHaveBeenCalledTimes(4)
     expect(incomingHeaders).not.toHaveBeenCalled()
     const requests = fetcher.mock.calls.map(([url, options]) => {
       const assertion = options.headers["X-Promotion-Account-Assertion"]
       const claims = verifyAssertion(assertion)
       const operation = new URL(url).pathname.split("/").at(-1)
+      const creationBinding =
+        operation === "create-team"
+          ? {
+              attempt_id: creation.attemptId,
+              team_id: creation.teamId,
+              home_region: creation.region,
+              authority_unavailable: creation.authorityUnavailable,
+            }
+          : {}
       expect(claims).toEqual({
         iss: "promotion-auth-adapter",
         aud: "promotion-account",
@@ -389,17 +470,20 @@ describe("promotion evidence producer contract", () => {
         exp: expect.any(Number),
         operation,
         ...(operation === "bind" ? { attempt_id: attemptId } : {}),
+        ...creationBinding,
       })
       expect(claims.exp - claims.iat).toBe(300)
       expect(options.headers["X-Actor-User-Id"]).toBe(userId)
       expect(options.headers.Authorization).toBe(
-        operation === "register"
+        operation === "register" || operation === "create-team"
           ? "Bearer west-account-test-token"
           : "Bearer account-test-token",
       )
       expect(JSON.parse(options.body)).toEqual({
         user_id: userId,
         ...(operation === "bind" ? { attempt_id: attemptId } : {}),
+        ...creationBinding,
+        ...(operation === "create-team" ? { name: creation.name } : {}),
       })
       return {
         operation,
@@ -408,6 +492,12 @@ describe("promotion evidence producer contract", () => {
         actor: userId,
       }
     })
+    expect(requests.map(({ operation }) => operation)).toEqual([
+      "bind",
+      "evidence",
+      "register",
+      "create-team",
+    ])
     // The runner can pass this fresh producer output directly to the Go verifier.
     const fixturePath = process.env.PROMOTION_ASSERTION_FIXTURE_OUT
     if (fixturePath) {
@@ -430,6 +520,244 @@ describe("promotion evidence producer contract", () => {
     region: "usw",
     authorityUnavailable: true,
   }
+
+  const operationId = "185efc3c-af39-4349-b215-7d0fbf372abb"
+  const prepared = {
+    user_id: userId,
+    operation_id: operationId,
+    attempt_id: creation.attemptId,
+    team_id: creation.teamId,
+    name: creation.name,
+    home_region: "usw",
+    authority_unavailable: true,
+    created_at: "2026-10-01T00:00:00Z",
+    state: "prepared",
+    outcome: null,
+    reason: null,
+  }
+  const locator = { userId, operationId, region: "usw" }
+
+  it("recovers a lost prepare response and signs the backend's unchanged no-credit tuple", async () => {
+    const fetcher = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("lost prepare response"))
+      .mockResolvedValueOnce(response(prepared))
+      .mockRejectedValueOnce(new Error("lost completion response"))
+      .mockResolvedValueOnce(
+        response({
+          ...prepared,
+          state: "completed",
+          outcome: "promotion_ineligible",
+          reason: "authority_unavailable",
+        }),
+      )
+    vi.stubGlobal("fetch", fetcher)
+    await expect(
+      preparePromotionTeam({
+        ...locator,
+        name: creation.name,
+        authorityUnavailable: true,
+      }),
+    ).rejects.toMatchObject({ code: "authority_unavailable" })
+    const recovered = await recoverPromotionTeam(locator)
+    expect(recovered).toMatchObject({
+      ...locator,
+      authorityUnavailable: true,
+      state: "prepared",
+    })
+    await expect(completePromotionTeam(recovered!)).rejects.toMatchObject({
+      code: "authority_unavailable",
+    })
+    expect(await recoverPromotionTeam(locator)).toMatchObject({
+      state: "completed",
+      outcome: "promotion_ineligible",
+    })
+    expect(
+      fetcher.mock.calls.map(([url]) =>
+        new URL(url).pathname.split("/").at(-1),
+      ),
+    ).toEqual(["prepare-team", "recover-team", "complete-team", "recover-team"])
+    for (const [url, options] of fetcher.mock.calls) {
+      const { user_id, ...fields } = JSON.parse(options.body)
+      expect(user_id).toBe(userId)
+      expect(options.headers.Authorization).toBe(
+        "Bearer west-account-test-token",
+      )
+      expect(
+        verifyAssertion(options.headers["X-Promotion-Account-Assertion"]),
+      ).toEqual({
+        iss: "promotion-auth-adapter",
+        aud: "promotion-account",
+        sub: userId,
+        iat: expect.any(Number),
+        exp: expect.any(Number),
+        operation: new URL(url).pathname.split("/").at(-1),
+        ...fields,
+      })
+    }
+    expect(JSON.parse(fetcher.mock.calls[2][1].body)).toEqual({
+      user_id: userId,
+      operation_id: operationId,
+      attempt_id: creation.attemptId,
+      team_id: creation.teamId,
+      name: creation.name,
+      home_region: "usw",
+      authority_unavailable: true,
+    })
+  })
+
+  it.each([
+    [404, "creation_missing", null],
+    [404, "not_found", "authority_unavailable"],
+    [503, "authority_unavailable", "authority_unavailable"],
+    [409, "creation_conflict", "creation_conflict"],
+  ])(
+    "distinguishes recover status %s / %s from a missing operation",
+    async (status, code, expected) => {
+      const fetcher = vi
+        .fn()
+        .mockResolvedValue(response({ error: { code } }, status))
+      vi.stubGlobal("fetch", fetcher)
+      if (expected === null)
+        expect(await recoverPromotionTeam(locator)).toBeNull()
+      else
+        await expect(recoverPromotionTeam(locator)).rejects.toMatchObject({
+          code: expected,
+        })
+      expect(fetcher).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it("completes and replays one prepared binding, including after deletion", async () => {
+    const completed = {
+      ...prepared,
+      state: "completed",
+      outcome: "promotion_ineligible",
+      reason: "authority_unavailable",
+    }
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(response(prepared))
+      .mockResolvedValueOnce(response(completed))
+      .mockResolvedValueOnce(response(completed))
+      .mockResolvedValueOnce(response({ ...completed, state: "deleted" }))
+    vi.stubGlobal("fetch", fetcher)
+    const binding = await preparePromotionTeam({
+      ...locator,
+      name: creation.name,
+      authorityUnavailable: true,
+    })
+    expect(await completePromotionTeam(binding)).toMatchObject({
+      state: "completed",
+      authorityUnavailable: true,
+    })
+    expect(await completePromotionTeam(binding)).toMatchObject({
+      state: "completed",
+      authorityUnavailable: true,
+    })
+    expect(await completePromotionTeam(binding)).toMatchObject({
+      state: "deleted",
+      authorityUnavailable: true,
+    })
+    expect(
+      new Set(fetcher.mock.calls.slice(1).map(([, options]) => options.body))
+        .size,
+    ).toBe(1)
+  })
+
+  it.each([
+    { user_id: crypto.randomUUID() },
+    { operation_id: crypto.randomUUID() },
+    { home_region: "use" },
+    { attempt_id: "" },
+    { authority_unavailable: null },
+    { state: "prepared", outcome: "granted" },
+    { state: "completed", outcome: null },
+    { state: ["completed"], outcome: "granted", reason: "eligible" },
+    { state: "completed", outcome: ["granted"], reason: "eligible" },
+  ])(
+    "rejects mismatched or malformed recovered authority: %j",
+    async (change) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(response({ ...prepared, ...change })),
+      )
+      await expect(recoverPromotionTeam(locator)).rejects.toMatchObject({
+        code: "authority_unavailable",
+      })
+    },
+  )
+
+  it("retains deleted outcomes without recreation and requires explicit discovery selection", async () => {
+    const deleted = {
+      ...prepared,
+      state: "deleted",
+      outcome: "granted",
+      reason: "eligible",
+    }
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(response(deleted))
+      .mockResolvedValueOnce(
+        response({
+          state: "selection_required",
+          operations: [deleted],
+          next_cursor: null,
+        }),
+      )
+    vi.stubGlobal("fetch", fetcher)
+    expect(await recoverPromotionTeam(locator)).toMatchObject({
+      state: "deleted",
+      outcome: "granted",
+    })
+    const result = await discoverPromotionTeams({
+      userId,
+      region: "usw",
+      after: operationId,
+    })
+    expect(result).toMatchObject({
+      state: "selection_required",
+      operations: [{ state: "deleted" }],
+      nextCursor: null,
+    })
+    const options = fetcher.mock.calls[1][1]
+    expect(JSON.parse(options.body)).toEqual({
+      user_id: userId,
+      home_region: "usw",
+      after: operationId,
+    })
+    expect(
+      verifyAssertion(options.headers["X-Promotion-Account-Assertion"]),
+    ).toMatchObject({
+      operation: "discover-team-creations",
+      home_region: "usw",
+      after: operationId,
+    })
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+
+  it("rejects a substituted account before accessing any recovery route", async () => {
+    const fetcher = vi.fn()
+    vi.stubGlobal("fetch", fetcher)
+    getUser.mockResolvedValue({
+      data: { user: { id: crypto.randomUUID() } },
+      error: null,
+    })
+    await expect(recoverPromotionTeam(locator)).rejects.toMatchObject({
+      code: "forbidden",
+    })
+    await expect(
+      preparePromotionTeam({
+        ...locator,
+        name: creation.name,
+        authorityUnavailable: true,
+      }),
+    ).rejects.toMatchObject({ code: "forbidden" })
+    await expect(discoverPromotionTeams(locator)).rejects.toMatchObject({
+      code: "forbidden",
+    })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
 
   it("signs the complete creation binding and replays it after a lost response", async () => {
     const fetcher = vi

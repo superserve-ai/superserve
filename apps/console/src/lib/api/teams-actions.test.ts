@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { PromotionTeamCreationAttempt } from "@/lib/api/promotion-device-evidence"
 
+vi.mock("@/lib/api/promotion-identity", () => ({
+  publishPromotionIdentity: vi.fn(async () => {}),
+}))
+
 let currentUser: {
   id: string
   email: string

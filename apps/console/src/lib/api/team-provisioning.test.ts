@@ -11,7 +11,10 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { PromotionTeamCreationAttempt } from "@/lib/api/promotion-device-evidence"
+import {
+  PromotionEvidenceError,
+  type PromotionTeamCreationAttempt,
+} from "@/lib/api/promotion-device-evidence"
 
 let clients: Record<string, ReturnType<typeof recordingClient>> = {}
 let currentUser: {
@@ -117,6 +120,11 @@ vi.mock("@/lib/cells", () => ({
   }),
 }))
 const mockRegisterPromotionSignupDevice = vi.fn()
+const mockPublishPromotionIdentity = vi.fn()
+vi.mock("@/lib/api/promotion-identity", () => ({
+  publishPromotionIdentity: (...args: unknown[]) =>
+    mockPublishPromotionIdentity(...args),
+}))
 const mockCreateTeamWithPromotionAttempt = vi.fn(
   async (_binding: PromotionTeamCreationAttempt) => ({
     teamId: "team-new",
@@ -187,6 +195,7 @@ describe("provisionTeam", () => {
     clients = { use: recordingClient(), usw: recordingClient() }
     currentUser = { id: "u1", email: "user@example.com" }
     mockRegisterPromotionSignupDevice.mockReset().mockResolvedValue("owner")
+    mockPublishPromotionIdentity.mockReset().mockResolvedValue(undefined)
     mockCreateTeamWithPromotionAttempt
       .mockReset()
       .mockImplementation(async (_binding: { name: string }) => ({
@@ -239,6 +248,31 @@ describe("provisionTeam", () => {
       .mockImplementation(async () => directoryState)
   })
 
+  it("publishes canonical identity in the selected region before device registration", async () => {
+    await provisionTeam("usw", "u1", "user@example.com", "west pilot")
+    expect(mockPublishPromotionIdentity).toHaveBeenCalledWith(
+      "usw",
+      "u1",
+      currentUser,
+      expect.any(String),
+    )
+    expect(
+      mockPublishPromotionIdentity.mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      mockRegisterPromotionSignupDevice.mock.invocationCallOrder[0],
+    )
+  })
+
+  it("pins canonical publication failure as no-credit even with accepted device evidence", async () => {
+    mockPublishPromotionIdentity.mockRejectedValue(
+      new Error("identity unavailable"),
+    )
+    await provisionTeam("use", "u1", "user@example.com", "pilot")
+    expect(mockCreateTeamWithPromotionAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ authorityUnavailable: true }),
+    )
+  })
+
   it("writes the full RBAC chain into the target cell", async () => {
     const team = await provisionTeam(
       "usw",
@@ -281,14 +315,47 @@ describe("provisionTeam", () => {
     expect(clients.use.writes).toEqual({})
   })
 
-  it("does not create a team when regional promotion publication is unavailable", async () => {
+  it.each([
+    new Error("authority unavailable"),
+    new PromotionEvidenceError("authority_unavailable"),
+  ])(
+    "pins an unavailable publication as no-credit while preserving team creation (%s)",
+    async (error) => {
+      mockRegisterPromotionSignupDevice.mockRejectedValue(error)
+      await expect(
+        provisionTeam("use", "u1", "user@example.com", "east team"),
+      ).resolves.toEqual({ id: "team-new", name: "east team", region: "use" })
+      expect(
+        mockCreateTeamWithPromotionAttempt,
+      ).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ authorityUnavailable: true }),
+      )
+      expect(clients.use.writes.team).toBeUndefined()
+      expect(clients.use.writes.user_role_assignments).toHaveLength(1)
+    },
+  )
+
+  it("leaves routine missing evidence to regional policy", async () => {
     mockRegisterPromotionSignupDevice.mockRejectedValue(
-      new Error("authority unavailable"),
+      new PromotionEvidenceError("evidence_missing"),
     )
-    await expect(
-      provisionTeam("use", "u1", "user@example.com", "east team"),
-    ).rejects.toThrow("Promotion authority unavailable")
-    expect(clients.use.writes.team).toBeUndefined()
+    await provisionTeam("use", "u1", "user@example.com", "east team")
+    expect(mockCreateTeamWithPromotionAttempt).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ authorityUnavailable: false }),
+    )
+  })
+
+  it("does not downgrade canonical authority failure when device evidence is missing", async () => {
+    mockPublishPromotionIdentity.mockRejectedValue(
+      new Error("identity unavailable"),
+    )
+    mockRegisterPromotionSignupDevice.mockRejectedValue(
+      new PromotionEvidenceError("evidence_missing"),
+    )
+    await provisionTeam("use", "u1", "user@example.com", "east team")
+    expect(mockCreateTeamWithPromotionAttempt).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ authorityUnavailable: true }),
+    )
   })
 
   it("unwinds in reverse dependency order when a chain write fails", async () => {

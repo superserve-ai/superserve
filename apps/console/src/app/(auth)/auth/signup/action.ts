@@ -11,9 +11,12 @@ import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import {
   bindPromotionSignupAccount,
   createPromotionSignupAttempt,
+  registerPromotionSignupAccount,
 } from "@/lib/api/promotion-device-evidence"
+import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
 import { issueGoogleSignupProof } from "@/lib/auth/google-signup-proof"
+import { DEFAULT_REGION } from "@/lib/cells"
 import {
   isCloudflareSignupObservationEnabled as readCloudflareObservationFlag,
   observeCloudflareSignup,
@@ -346,9 +349,23 @@ export const signUpWithEmail = async (
     emitFingerprintObservation(data?.user?.id ?? null)
     if (deviceVerified && data?.user?.id && capture) {
       try {
-        await bindPromotionSignupAccount(data.user.id, capture.attemptId)
+        const binding = await bindPromotionSignupAccount(
+          data.user.id,
+          capture.attemptId,
+        )
+        // A different retained attempt cannot authorize signup publication.
+        // Later verified-login registration reads that original evidence.
+        if (binding !== "first_evidence_retained") {
+          await publishPromotionIdentity(
+            DEFAULT_REGION,
+            data.user.id,
+            data.user,
+            new Date().toISOString(),
+          )
+          await registerPromotionSignupAccount(data.user.id, capture.attemptId)
+        }
       } catch (error) {
-        console.warn("Signup device evidence binding unavailable", {
+        console.warn("Signup device evidence publication unavailable", {
           reason: error instanceof Error ? error.message : "unknown_error",
         })
       }

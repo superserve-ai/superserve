@@ -56,9 +56,26 @@ vi.mock("@/lib/posthog/actions", () => ({
 }))
 
 const mockObserveFingerprintSignup = vi.fn()
+const mockAttestFingerprintSignup = vi.fn()
 vi.mock("@/lib/fingerprint/observe", () => ({
+  attestFingerprintSignup: (...args: unknown[]) =>
+    mockAttestFingerprintSignup(...args),
   observeFingerprintSignup: (...args: unknown[]) =>
     mockObserveFingerprintSignup(...args),
+}))
+
+const mockBindPromotionSignupAccount = vi.fn()
+const mockRegisterPromotionSignupAccount = vi.fn()
+const mockPublishPromotionIdentity = vi.fn()
+vi.mock("@/lib/api/promotion-device-evidence", () => ({
+  bindPromotionSignupAccount: (...args: unknown[]) =>
+    mockBindPromotionSignupAccount(...args),
+  registerPromotionSignupAccount: (...args: unknown[]) =>
+    mockRegisterPromotionSignupAccount(...args),
+}))
+vi.mock("@/lib/api/promotion-identity", () => ({
+  publishPromotionIdentity: (...args: unknown[]) =>
+    mockPublishPromotionIdentity(...args),
 }))
 
 vi.mock("@/lib/posthog/events", () => ({
@@ -634,4 +651,138 @@ describe("beginGoogleSignup", () => {
       },
     )
   })
+})
+
+describe("trusted email signup promotion publication", () => {
+  const capture = {
+    attemptId: "original-attempt",
+    challenge: "original-challenge",
+    eventId: "original-event",
+  }
+  const user = {
+    id: "actual-auth-account",
+    email: "signup@example.test",
+    updated_at: "2026-10-01T00:00:00Z",
+  }
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockVerifyRecaptcha.mockResolvedValue({ verified: true })
+    mockAttestFingerprintSignup.mockResolvedValue(true)
+    mockBindPromotionSignupAccount.mockReset().mockResolvedValue("bound")
+    mockRegisterPromotionSignupAccount.mockReset().mockResolvedValue("owner")
+    mockPublishPromotionIdentity.mockReset().mockResolvedValue(undefined)
+    mockGenerateLink.mockResolvedValue({
+      data: { user, properties: { hashed_token: "synthetic-token" } },
+      error: null,
+    })
+    mockSendEmail.mockResolvedValue({ success: true })
+    mockTrackEvent.mockResolvedValue(undefined)
+    mockObserveCloudflareSignup.mockResolvedValue(undefined)
+    fingerprintSignupEventId = "original-event"
+  })
+  const signup = () =>
+    signUpWithEmail(
+      "signup@example.test",
+      "synthetic-password",
+      "Synthetic account",
+      undefined,
+      undefined,
+      capture,
+    )
+
+  it("binds the actual Auth result and registers East before sending confirmation, with one lookup", async () => {
+    expect(await signup()).toEqual({ success: true })
+    expect(mockAttestFingerprintSignup).toHaveBeenCalledExactlyOnceWith(
+      capture,
+      "email",
+    )
+    expect(mockObserveFingerprintSignup).not.toHaveBeenCalled()
+    expect(mockBindPromotionSignupAccount).toHaveBeenCalledExactlyOnceWith(
+      user.id,
+      capture.attemptId,
+    )
+    expect(mockPublishPromotionIdentity).toHaveBeenCalledWith(
+      "use",
+      user.id,
+      user,
+      expect.any(String),
+    )
+    expect(mockRegisterPromotionSignupAccount).toHaveBeenCalledExactlyOnceWith(
+      user.id,
+      capture.attemptId,
+    )
+    expect(
+      mockBindPromotionSignupAccount.mock.invocationCallOrder[0],
+    ).toBeLessThan(mockPublishPromotionIdentity.mock.invocationCallOrder[0])
+    expect(
+      mockPublishPromotionIdentity.mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      mockRegisterPromotionSignupAccount.mock.invocationCallOrder[0],
+    )
+    expect(
+      mockRegisterPromotionSignupAccount.mock.invocationCallOrder[0],
+    ).toBeLessThan(mockSendEmail.mock.invocationCallOrder[0])
+  })
+
+  it.each(["bound", "replayed"])(
+    "publishes only the retained original tuple after %s binding",
+    async (outcome) => {
+      mockBindPromotionSignupAccount.mockResolvedValue(outcome)
+      expect(await signup()).toEqual({ success: true })
+      expect(mockRegisterPromotionSignupAccount).toHaveBeenCalledWith(
+        user.id,
+        capture.attemptId,
+      )
+    },
+  )
+
+  it("does not register a replacement attempt when the original evidence was retained", async () => {
+    mockBindPromotionSignupAccount.mockResolvedValue("first_evidence_retained")
+    expect(await signup()).toEqual({ success: true })
+    expect(mockRegisterPromotionSignupAccount).not.toHaveBeenCalled()
+  })
+
+  it("stops publication on an uncertain bind without blocking confirmation", async () => {
+    mockBindPromotionSignupAccount.mockRejectedValue(new Error("response lost"))
+    expect(await signup()).toEqual({ success: true })
+    expect(mockRegisterPromotionSignupAccount).not.toHaveBeenCalled()
+    expect(mockSendEmail).toHaveBeenCalledOnce()
+  })
+
+  it.each(["owner_conflict", "unavailable"])(
+    "preserves signup after regional %s",
+    async (outcome) => {
+      if (outcome === "unavailable")
+        mockRegisterPromotionSignupAccount.mockRejectedValue(
+          new Error("authority_unavailable"),
+        )
+      else mockRegisterPromotionSignupAccount.mockResolvedValue(outcome)
+      expect(await signup()).toEqual({ success: true })
+      expect(mockSendEmail).toHaveBeenCalledOnce()
+    },
+  )
+
+  it("stops regional publication on canonical identity failure", async () => {
+    mockPublishPromotionIdentity.mockRejectedValue(
+      new Error("identity unavailable"),
+    )
+    expect(await signup()).toEqual({ success: true })
+    expect(mockRegisterPromotionSignupAccount).not.toHaveBeenCalled()
+  })
+
+  it.each(["unverified", "auth-rejected"])(
+    "cannot publish from %s input",
+    async (failure) => {
+      if (failure === "unverified")
+        mockAttestFingerprintSignup.mockResolvedValue(false)
+      else
+        mockGenerateLink.mockResolvedValue({
+          data: null,
+          error: { message: "already registered" },
+        })
+      await signup()
+      expect(mockBindPromotionSignupAccount).not.toHaveBeenCalled()
+      expect(mockRegisterPromotionSignupAccount).not.toHaveBeenCalled()
+    },
+  )
 })

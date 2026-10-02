@@ -67,6 +67,7 @@ import {
   requireGoogleSignupProof,
   markGoogleSignupAttempt,
   hasValidLegacyGoogleSignupProof,
+  readGoogleSignupDeviceAttempt,
 } from "./google-signup-proof"
 
 describe("google-signup-proof", () => {
@@ -80,6 +81,43 @@ describe("google-signup-proof", () => {
 
   afterEach(() => {
     delete process.env.GOOGLE_SIGNUP_PROOF_SECRET
+  })
+
+  it("carries an attested attempt only to a newly created Auth account", async () => {
+    const before = new Date(Date.now() - 60_000).toISOString()
+    await issueGoogleSignupProof("signup-a", "device-a")
+    const created = new Date().toISOString()
+    expect(await readGoogleSignupDeviceAttempt("signup-a", created)).toBe(
+      "device-a",
+    )
+    expect(
+      await readGoogleSignupDeviceAttempt("signup-a", before),
+    ).toBeUndefined()
+    expect(
+      await readGoogleSignupDeviceAttempt("signup-b", created),
+    ).toBeUndefined()
+    expect(
+      await readGoogleSignupDeviceAttempt("signup-a", "invalid"),
+    ).toBeUndefined()
+  })
+
+  it("does not reconstruct binding provenance from a legacy onboarding proof", async () => {
+    cookieEntries = [
+      {
+        name: "__Host-superserve-google-signup-signup-a",
+        value: signProofPayload({
+          v: 1,
+          purpose: "signup_google",
+          exp: Math.floor(Date.now() / 1000) + 300,
+          signup_attempt_id: "signup-a",
+          device_attempt_id: "device-a",
+        }),
+      },
+    ]
+    expect(await hasValidGoogleSignupProof("signup-a")).toBe(true)
+    expect(
+      await readGoogleSignupDeviceAttempt("signup-a", new Date().toISOString()),
+    ).toBeUndefined()
   })
 
   it("issues a signed HttpOnly proof cookie that validates", async () => {

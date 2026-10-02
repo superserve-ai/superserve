@@ -3,6 +3,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const getUser = vi.fn()
 const from = vi.fn()
 const rpc = vi.fn()
+const publishIdentity = vi.fn()
+const registerDevice = vi.fn()
+vi.mock("@/lib/api/promotion-identity", () => ({
+  publishPromotionIdentity: (...args: unknown[]) => publishIdentity(...args),
+}))
+vi.mock("@/lib/api/promotion-device-evidence", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./promotion-device-evidence")>()),
+  registerPromotionSignupDevice: (...args: unknown[]) =>
+    registerDevice(...args),
+}))
 
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: vi.fn(async () => ({
@@ -143,6 +153,8 @@ function usageQuery(rows: Array<Record<string, unknown>> = []) {
 describe("billing actions", () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    publishIdentity.mockResolvedValue(undefined)
+    registerDevice.mockResolvedValue("owner")
     getUser.mockResolvedValue({
       data: { user: { id: "user-1" } },
     })
@@ -170,6 +182,46 @@ describe("billing actions", () => {
       if (table === "team_billing_usage_hourly") return usageQuery()
       throw new Error(`unexpected table ${table}`)
     })
+  })
+
+  it("publishes canonical identity before the original signup device at billing", async () => {
+    const { publishBillingPromotionEvidence } =
+      await import("./billing-actions")
+    await expect(publishBillingPromotionEvidence()).resolves.toBe("published")
+    expect(publishIdentity).toHaveBeenCalledWith(
+      "use",
+      "user-1",
+      { id: "user-1" },
+      expect.any(String),
+    )
+    expect(registerDevice).toHaveBeenCalledExactlyOnceWith("use", "user-1")
+    expect(publishIdentity.mock.invocationCallOrder[0]).toBeLessThan(
+      registerDevice.mock.invocationCallOrder[0],
+    )
+  })
+
+  it("reports identity failure as unavailable without replacing it with missing evidence", async () => {
+    publishIdentity.mockRejectedValue(
+      new Error("identity persistence unavailable"),
+    )
+    const { publishBillingPromotionEvidence } =
+      await import("./billing-actions")
+    await expect(publishBillingPromotionEvidence()).resolves.toBe("unavailable")
+    expect(registerDevice).not.toHaveBeenCalled()
+  })
+
+  it("rejects a user returned alongside an Auth verification error", async () => {
+    getUser.mockResolvedValue({
+      data: { user: { id: "user-1" } },
+      error: new Error("invalid credential"),
+    })
+    const { publishBillingPromotionEvidence } =
+      await import("./billing-actions")
+    await expect(publishBillingPromotionEvidence()).rejects.toThrow(
+      "Not authenticated",
+    )
+    expect(publishIdentity).not.toHaveBeenCalled()
+    expect(registerDevice).not.toHaveBeenCalled()
   })
 
   it("uses the active team pricing plan and newest active rate", async () => {

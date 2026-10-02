@@ -9,6 +9,7 @@ let currentUser: {
 } | null = null
 
 let proofAvailable = true
+let authUserError: Error | null = null
 let directoryState = {
   memberships: [] as Array<{ teamId: string; region: string }>,
   degradedRegions: [] as string[],
@@ -31,9 +32,20 @@ const mockSendWelcomeEmail = vi.fn()
 const mockConsumeFingerprintSignupEventId = vi.fn()
 const mockScheduleFingerprintObservation = vi.fn()
 const mockBindPromotionSignupAccount = vi.fn()
+const mockRegisterPromotionSignupAccount = vi.fn()
+const mockRegisterPromotionSignupDevice = vi.fn()
+const mockPublishPromotionIdentity = vi.fn()
+vi.mock("@/lib/api/promotion-identity", () => ({
+  publishPromotionIdentity: (...args: unknown[]) =>
+    mockPublishPromotionIdentity(...args),
+}))
 vi.mock("@/lib/api/promotion-device-evidence", () => ({
   bindPromotionSignupAccount: (...args: unknown[]) =>
     mockBindPromotionSignupAccount(...args),
+  registerPromotionSignupAccount: (...args: unknown[]) =>
+    mockRegisterPromotionSignupAccount(...args),
+  registerPromotionSignupDevice: (...args: unknown[]) =>
+    mockRegisterPromotionSignupDevice(...args),
 }))
 vi.mock("@/app/(auth)/auth/signup/action", () => ({
   sendWelcomeEmail: (...args: unknown[]) => mockSendWelcomeEmail(...args),
@@ -114,7 +126,10 @@ vi.mock("@/lib/supabase/server", () => ({
     auth: {
       exchangeCodeForSession: async () => ({ error: null }),
       verifyOtp: async () => ({ error: null }),
-      getUser: async () => ({ data: { user: currentUser } }),
+      getUser: async () => ({
+        data: { user: currentUser },
+        error: authUserError,
+      }),
     },
   }),
 }))
@@ -123,6 +138,7 @@ import { GET } from "./route"
 
 describe("auth callback", () => {
   beforeEach(() => {
+    authUserError = null
     currentUser = {
       id: "u1",
       email: "user@example.com",
@@ -143,6 +159,9 @@ describe("auth callback", () => {
     mockConsumeFingerprintSignupEventId.mockResolvedValue(undefined)
     mockScheduleFingerprintObservation.mockReset()
     mockBindPromotionSignupAccount.mockReset().mockResolvedValue("bound")
+    mockRegisterPromotionSignupAccount.mockReset().mockResolvedValue("owner")
+    mockRegisterPromotionSignupDevice.mockReset().mockResolvedValue("owner")
+    mockPublishPromotionIdentity.mockReset().mockResolvedValue(undefined)
     mockReadGoogleSignupDeviceAttempt.mockReset().mockResolvedValue(undefined)
     mockListTeamMembershipsForUserDetailed
       .mockReset()
@@ -257,10 +276,22 @@ describe("auth callback", () => {
       ),
     )
 
-    expect(mockReadGoogleSignupDeviceAttempt).toHaveBeenCalledWith("attempt-1")
+    expect(mockReadGoogleSignupDeviceAttempt).toHaveBeenCalledWith(
+      "attempt-1",
+      currentUser!.created_at,
+    )
     expect(mockBindPromotionSignupAccount).toHaveBeenCalledWith(
       "u1",
       "device-attempt-1",
+    )
+    expect(mockRegisterPromotionSignupAccount).toHaveBeenCalledWith(
+      "u1",
+      "device-attempt-1",
+    )
+    expect(
+      mockPublishPromotionIdentity.mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      mockRegisterPromotionSignupAccount.mock.invocationCallOrder[0],
     )
     expect(mockConsumeFingerprintSignupEventId).toHaveBeenCalled()
     expect(mockScheduleFingerprintObservation).not.toHaveBeenCalled()
@@ -274,5 +305,68 @@ describe("auth callback", () => {
         observed_at: expect.any(String),
       },
     )
+  })
+  it.each([
+    "uncertain-bind",
+    "retained-original",
+    "lost-context",
+    "existing-login",
+  ])("does not mint signup registration after %s", async (scenario) => {
+    googleMembershipState = { kind: "first_time" }
+    mockReadGoogleSignupDeviceAttempt.mockResolvedValue(
+      "original-device-attempt",
+    )
+    if (scenario === "uncertain-bind")
+      mockBindPromotionSignupAccount.mockRejectedValue(
+        new Error("response lost"),
+      )
+    if (scenario === "retained-original")
+      mockBindPromotionSignupAccount.mockResolvedValue(
+        "first_evidence_retained",
+      )
+    if (scenario === "lost-context")
+      mockReadGoogleSignupDeviceAttempt.mockResolvedValue(undefined)
+    if (scenario === "existing-login")
+      googleMembershipState = {
+        kind: "existing",
+        membership: { teamId: "existing", region: "use" },
+      }
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=original-signup",
+      ),
+    )
+    expect(response.headers.get("location")).toContain("/sandboxes")
+    expect(mockRegisterPromotionSignupAccount).not.toHaveBeenCalled()
+    if (scenario === "lost-context" || scenario === "existing-login")
+      expect(mockBindPromotionSignupAccount).not.toHaveBeenCalled()
+  })
+
+  it("does not substitute query identities or an unsigned attempt at confirmation", async () => {
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?token_hash=synthetic&type=signup&user_id=other&device_attempt_id=forged&device_bind_proof=unsigned",
+      ),
+    )
+    expect(response.headers.get("location")).toContain("/sandboxes")
+    expect(mockBindPromotionSignupAccount).not.toHaveBeenCalled()
+    expect(mockRegisterPromotionSignupAccount).not.toHaveBeenCalled()
+    expect(mockRegisterPromotionSignupDevice).not.toHaveBeenCalled()
+  })
+
+  it("does not sign from an Auth result accompanied by a verification error", async () => {
+    authUserError = new Error("invalid credential")
+    googleMembershipState = { kind: "first_time" }
+    mockReadGoogleSignupDeviceAttempt.mockResolvedValue(
+      "original-device-attempt",
+    )
+    await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=original-signup",
+      ),
+    )
+    expect(mockBindPromotionSignupAccount).not.toHaveBeenCalled()
+    expect(mockRegisterPromotionSignupAccount).not.toHaveBeenCalled()
+    expect(mockPublishPromotionIdentity).not.toHaveBeenCalled()
   })
 })

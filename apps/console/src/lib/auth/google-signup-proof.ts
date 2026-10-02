@@ -17,6 +17,7 @@ interface ProofPayload {
   exp: number
   signup_attempt_id?: string
   device_attempt_id?: string
+  initiated_at?: number
 }
 
 function cookieName(signupAttemptId?: string): string {
@@ -45,6 +46,7 @@ function encodeProof(
     exp: Math.floor(Date.now() / 1000) + TTL_SECONDS,
     ...(signupAttemptId ? { signup_attempt_id: signupAttemptId } : {}),
     ...(deviceAttemptId ? { device_attempt_id: deviceAttemptId } : {}),
+    initiated_at: Date.now(),
   }
   const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url")
   return `${encoded}.${signature(encoded).toString("base64url")}`
@@ -119,6 +121,7 @@ export async function issueGoogleSignupProof(
 /** Only a valid signed signup proof may carry a verified device attempt to OAuth callback. */
 export async function readGoogleSignupDeviceAttempt(
   signupAttemptId: string,
+  accountCreatedAt: string,
 ): Promise<string | undefined> {
   try {
     const store = await cookies()
@@ -128,6 +131,17 @@ export async function readGoogleSignupDeviceAttempt(
     const payload = JSON.parse(
       Buffer.from(encoded, "base64url").toString("utf8"),
     ) as ProofPayload
+    const createdAt = Date.parse(accountCreatedAt)
+    // An ordinary login (including an account with no teams) is not a new
+    // signup. Older proofs still authorize onboarding, but not a new binding.
+    if (
+      typeof payload.initiated_at !== "number" ||
+      !Number.isFinite(payload.initiated_at) ||
+      !Number.isFinite(createdAt) ||
+      createdAt < payload.initiated_at ||
+      createdAt > Date.now()
+    )
+      return undefined
     return typeof payload.device_attempt_id === "string"
       ? payload.device_attempt_id
       : undefined

@@ -6,7 +6,12 @@ import {
   scheduleFingerprintObservation,
   sendWelcomeEmail,
 } from "@/app/(auth)/auth/signup/action"
-import { bindPromotionSignupAccount } from "@/lib/api/promotion-device-evidence"
+import {
+  bindPromotionSignupAccount,
+  registerPromotionSignupAccount,
+  registerPromotionSignupDevice,
+} from "@/lib/api/promotion-device-evidence"
+import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
 import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
@@ -17,6 +22,7 @@ import {
   markGoogleSignupAttempt,
   readGoogleSignupDeviceAttempt,
 } from "@/lib/auth/google-signup-proof"
+import { DEFAULT_REGION } from "@/lib/cells"
 import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
@@ -96,9 +102,10 @@ export async function GET(request: Request) {
 
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser()
 
-      if (user) {
+      if (user && !userError) {
         if (type === "signup" && tokenHash) {
           const deviceAttemptId = searchParams.get("device_attempt_id")
           const proof = searchParams.get("device_bind_proof")
@@ -109,6 +116,15 @@ export async function GET(request: Request) {
           ) {
             try {
               await bindPromotionSignupAccount(user.id, deviceAttemptId)
+              await publishPromotionIdentity(
+                DEFAULT_REGION,
+                user.id,
+                user,
+                new Date().toISOString(),
+              )
+              // Confirmation reuses accepted evidence under verified login;
+              // it must not mint fresh pre-confirmation signup provenance.
+              await registerPromotionSignupDevice(DEFAULT_REGION, user.id)
             } catch (error) {
               console.warn("Confirmation device evidence binding unavailable", {
                 reason:
@@ -184,11 +200,28 @@ export async function GET(request: Request) {
             }
             console.info("Google OAuth signup proof validated at callback")
             if (signupAttemptId) {
-              const deviceAttemptId =
-                await readGoogleSignupDeviceAttempt(signupAttemptId)
+              const deviceAttemptId = await readGoogleSignupDeviceAttempt(
+                signupAttemptId,
+                user.created_at,
+              )
               if (deviceAttemptId) {
                 try {
-                  await bindPromotionSignupAccount(user.id, deviceAttemptId)
+                  const binding = await bindPromotionSignupAccount(
+                    user.id,
+                    deviceAttemptId,
+                  )
+                  if (binding !== "first_evidence_retained") {
+                    await publishPromotionIdentity(
+                      DEFAULT_REGION,
+                      user.id,
+                      user,
+                      new Date().toISOString(),
+                    )
+                    await registerPromotionSignupAccount(
+                      user.id,
+                      deviceAttemptId,
+                    )
+                  }
                 } catch (error) {
                   console.warn(
                     "Google signup device evidence binding unavailable",

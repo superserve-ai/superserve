@@ -70,7 +70,7 @@ const nextConfig: NextConfig = {
         },
       ),
       new webpack.NormalModuleReplacementPlugin(
-        /^@\/(app\/\(auth\)\/auth\/(signin|signup)\/action|lib\/(supabase\/server|posthog\/actions|api\/(promotion-device-evidence|team-directory)|auth\/google-signup-proof|fingerprint\/binding-proof))$/,
+        /^@\/(app\/\(auth\)\/auth\/(signin|signup)\/action|lib\/(supabase\/server|posthog\/actions|api\/(promotion-device-evidence|promotion-identity|team-directory)|auth\/google-signup-proof|fingerprint\/binding-proof))$/,
         (resource: { context: string; request: string }) => {
           if (
             resource.context === callbackRoot ||
