@@ -1,13 +1,35 @@
-# Fingerprint signup evidence
+# Fingerprint signup evaluation
 
-Signup submission obtains a server-issued attempt and challenge before capture. The server resolves the event and checks its challenge before publishing evidence. Fingerprint failure does not reject Auth signup. The promotion backend owns eligibility and grants; a known visitor or successful signup never establishes that credit was awarded.
+The browser captures an opaque Fingerprint event ID. The console resolves it once through Fingerprint's Server API and uses only the exact visitor ID returned for that event. The existing `auth_fingerprint_signup_observed` PostHog event records the observation; risk signals and returning-visitor flags do not determine signup policy.
 
-Configure `NEXT_PUBLIC_FINGERPRINT_API_KEY` for the browser agent and `FINGERPRINT_SECRET_API_KEY` for trusted server-side event lookup. `FINGERPRINT_SERVER_API_URL` defaults to the global Fingerprint Server API and can be overridden for regional workspaces.
+The console passes the verified visitor ID to the signup restriction evaluator on the local provisioning cell. The backend owns the shared restriction file and effective mode:
 
-Capture starts on submission, so time spent filling out the form does not age the event. Overlapping submissions share the result. A captured event retains its original attempt and challenge across retries. A lost attempt-creation response before capture may be retried with a fresh attempt. An ambiguous provider response after capture starts does not authorize replacing that attempt with a different event.
+| Mode            | Exact configured match | Signup result                                           |
+| --------------- | ---------------------- | ------------------------------------------------------- |
+| `off` (default) | Allowed                | Continue                                                |
+| `observe`       | `would_deny`           | Record and continue                                     |
+| `enforce`       | `blocked`              | Deny new standalone provisioning with a generic message |
 
-The server-only promotion adapter uses `PROMOTION_CAPTURE_TOKEN` for attempt creation and verification, `PROMOTION_ACCOUNT_TOKEN` for East account operations, and `PROMOTION_ACCOUNT_TOKEN_USWEST` for West account operations. These credentials must be distinct and must not reuse internal API tokens. `PROMOTION_ACCOUNT_PRIVATE_KEY` is an Ed25519 PKCS#8 PEM with actual newlines. Only Console holds the private key; each backend receives the matching raw 32-byte public key in standard base64.
+An unmatched ID is allowed in every mode. Only a valid backend `blocked` response denies through this evaluator. The guard runs before the first standalone team, API key, or trial value is provisioned. Invites, existing-team use, and additional teams for completed accounts are outside this gate.
 
-Account reuse verifies the current Auth login before signing. Binding before email confirmation instead uses the trusted signup result. Region entry uses the original durable account evidence; it does not capture a new device or copy regional ownership. The creation adapter requires its caller to retain every server-derived creation field before sending the first request. Transport failure cannot authorize a direct insert or a replacement attempt.
+The server keeps one fixed-name, signed Fingerprint context for the active browser signup attempt. It binds at most one exact server-verified visitor ID to the actor and attempt for up to 600 seconds. Starting a new attempt supersedes the previous context, including across tabs; a late callback for the superseded attempt cannot overwrite the active context. Repeated callbacks for the same attempt reuse its verified visitor without extending the expiry. Denial or provisioning failure preserves valid active evidence for a retry against current policy; successful provisioning clears only the matching context. No policy verdict or prior-attempt visitor history is retained. Missing, expired, lost, or superseded evidence, Fingerprint lookup failure, and unavailable or invalid evaluator responses fail open. Google signup proof remains separate, and independent authentication, CAPTCHA, and Google signup-proof checks still apply.
 
-Deploy shared Auth migrations and matching backend routes before activating enforcement. Readiness requires verification of every signup, provisioning and billing caller, signed interoperability, and both regions. Preserve canonical identity publication, independent signup restrictions and Checkout recovery throughout rollout.
+Configure `NEXT_PUBLIC_FINGERPRINT_API_KEY` for the browser agent and `FINGERPRINT_SECRET_API_KEY` for the server lookup. `FINGERPRINT_SERVER_API_URL` defaults to the global Fingerprint Server API and can be overridden for regional workspaces. The evaluator uses the selected cell's server-only `INTERNAL_API_TOKEN` (or `INTERNAL_API_TOKEN_USWEST` for `usw`) and a 1500 ms request deadline. Console does not load or refresh restriction configuration.
+
+Restriction telemetry records bounded outcomes, effective mode, and matched subject type without visitor IDs or other subject identifiers in event properties. Observation telemetry remains separate; telemetry failures cannot affect signup. Controlled browser/device correlation scenarios remain manual, and cross-account history is outside this integration.
+
+## Promotion evidence
+
+Promotion capture obtains an East-issued attempt and challenge before calling the
+browser agent. The same server lookup used above verifies the provider event's
+`tags.signup_challenge`, exact event ID, visitor ID, and timestamp before attesting
+the attempt. The existing normalized observation remains intact. These promotion
+checks are separate from the known-abuse restriction policy described above.
+
+Email signup binds only the actual newly created Auth account and registers East
+ownership before confirmation; a signed, actor-bound email proof can retry that
+original association. Google carries verified evidence in the signed pre-auth
+proof and binds only an account created after that proof. Older-account Google
+recovery still retains restriction evidence but cannot replace promotion provenance.
+Each region registers the original account evidence independently. See the Console
+README for rollout configuration, fail-closed credit behavior, and durable retries.

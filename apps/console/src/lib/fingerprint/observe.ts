@@ -1,3 +1,5 @@
+import { after } from "next/server"
+
 import { verifyPromotionSignupAttempt } from "@/lib/api/promotion-device-evidence"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
@@ -10,8 +12,11 @@ const DEFAULT_FINGERPRINT_SERVER_API = "https://api.fpjs.io"
 export type FingerprintSignupObservation = {
   eventId: string
   userId?: string | null
+  getObservationUserId?: () => string | null
   signupMethod: "email" | "google"
   signupAttemptId?: string
+  capture?: SignupFingerprintCapture
+  onAttested?: () => void
 }
 
 type FingerprintNormalizedEvent = {
@@ -175,9 +180,8 @@ function normalizeFingerprintEvent(
 
 /**
  * Resolve a browser-generated Fingerprint event using the trusted Server API
- * and record an observe-only signup event. This helper is deliberately
- * fail-open: Fingerprint is evaluation telemetry and must never become a
- * signup availability dependency.
+ * and record the existing observation event. An unavailable provider yields
+ * no trusted visitor ID.
  */
 export async function observeFingerprintSignup({
   eventId,
@@ -185,8 +189,26 @@ export async function observeFingerprintSignup({
   signupMethod,
   signupAttemptId,
 }: FingerprintSignupObservation): Promise<void> {
+  await resolveFingerprintSignup({
+    eventId,
+    userId,
+    signupMethod,
+    signupAttemptId,
+  })
+}
+
+/** Return only the exact visitor ID verified by the provider's server API. */
+export async function resolveFingerprintSignup({
+  eventId,
+  userId = null,
+  getObservationUserId,
+  capture,
+  onAttested,
+  signupMethod,
+  signupAttemptId,
+}: FingerprintSignupObservation): Promise<string | null> {
   const secretApiKey = process.env.FINGERPRINT_SECRET_API_KEY
-  if (!secretApiKey || !eventId) return
+  if (!secretApiKey || !eventId) return null
 
   const baseUrl =
     process.env.FINGERPRINT_SERVER_API_URL || DEFAULT_FINGERPRINT_SERVER_API
@@ -195,7 +217,7 @@ export async function observeFingerprintSignup({
     const response = await fetch(
       `${baseUrl.replace(/\/$/, "")}/v4/events/${encodeURIComponent(eventId)}`,
       {
-        headers: { "Auth-API-Key": secretApiKey },
+        headers: { Authorization: `Bearer ${secretApiKey}` },
         signal: AbortSignal.timeout(FINGERPRINT_EVENT_TIMEOUT_MS),
         cache: "no-store",
       },
@@ -203,124 +225,86 @@ export async function observeFingerprintSignup({
 
     if (!response.ok) {
       console.warn("Fingerprint observation lookup failed", {
-        eventId,
         status: response.status,
       })
-      return
+      return null
     }
 
-    const event = normalizeFingerprintEvent(await response.json(), eventId)
-    if (!event) {
-      console.warn("Fingerprint observation response was malformed", {
-        eventId,
-      })
-      return
-    }
-
-    console.info("Fingerprint observation lookup succeeded", {
-      eventId: event.providerEventId,
-      visitorId: event.visitorId,
-    })
-
-    await trackEvent(
-      AUTH_EVENTS.FINGERPRINT_SIGNUP_OBSERVED,
-      userId || eventId,
-      {
-        provider: "fingerprint",
-        signup_attempt_id: signupAttemptId,
-        provider_event_id: event.providerEventId,
-        visitor_id: event.visitorId,
-        visitor_found: event.visitorFound,
-        confidence_score: event.confidenceScore,
-        bot_result: event.botResult,
-        bot_type: event.botType,
-        vpn: event.vpn,
-        vpn_confidence: event.vpnConfidence,
-        proxy: event.proxy,
-        proxy_confidence: event.proxyConfidence,
-        incognito: event.incognito,
-        tampering: event.tampering,
-        tampering_confidence: event.tamperingConfidence,
-        virtual_machine: event.virtualMachine,
-        developer_tools: event.developerTools,
-        high_activity_device: event.highActivityDevice,
-        suspect_score: event.suspectScore,
-        smart_signals: event.smartSignals,
-        superserve_user_id: userId,
-        signup_method: signupMethod,
-        observed_at: new Date().toISOString(),
-      },
-    )
-  } catch (error) {
-    console.warn("Fingerprint observation failed open", {
-      eventId,
-      error: error instanceof Error ? error.message : "unknown_error",
-    })
-  }
-}
-
-/** The provider response, not browser metadata, supplies the promotion evidence. */
-export async function attestFingerprintSignup(
-  capture: SignupFingerprintCapture,
-  signupMethod: "email" | "google",
-  userId?: string,
-): Promise<boolean> {
-  const secret = process.env.FINGERPRINT_SECRET_API_KEY
-  if (!secret) return false
-  try {
-    const baseUrl =
-      process.env.FINGERPRINT_SERVER_API_URL || DEFAULT_FINGERPRINT_SERVER_API
-    const response = await fetch(
-      `${baseUrl.replace(/\/$/, "")}/v4/events/${encodeURIComponent(capture.eventId)}`,
-      {
-        headers: { "Auth-API-Key": secret },
-        signal: AbortSignal.timeout(FINGERPRINT_EVENT_TIMEOUT_MS),
-        cache: "no-store",
-      },
-    )
-    if (!response.ok) return false
     const payload: unknown = await response.json()
-    const event = normalizeFingerprintEvent(payload, capture.eventId)
-    if (!event || !isRecord(payload)) return false
-    const tag = recordOrNull(payload.tag)
-    if (tag?.signup_challenge !== capture.challenge) return false
-    const timestamp = payload.timestamp
-    const eventAt =
-      typeof timestamp === "number" && Number.isFinite(timestamp)
-        ? new Date(timestamp).toISOString()
-        : typeof timestamp === "string" && !Number.isNaN(Date.parse(timestamp))
-          ? new Date(timestamp).toISOString()
-          : undefined
-    if (!eventAt) return false
-    await verifyPromotionSignupAttempt({
-      attemptId: capture.attemptId,
-      challenge: capture.challenge,
-      eventId: event.providerEventId,
-      fingerprint: event.visitorId,
-      eventAt,
-    })
-    try {
-      await trackEvent(
-        AUTH_EVENTS.FINGERPRINT_SIGNUP_OBSERVED,
-        userId || capture.eventId,
-        {
-          provider: "fingerprint",
-          provider_event_id: event.providerEventId,
-          visitor_id: event.visitorId,
-          visitor_found: event.visitorFound,
-          signup_method: signupMethod,
-          superserve_user_id: userId ?? null,
-          observed_at: new Date().toISOString(),
-        },
-      )
-    } catch {
-      // Telemetry cannot invalidate verified evidence.
+    const event = normalizeFingerprintEvent(payload, eventId)
+    if (!event) {
+      console.warn("Fingerprint observation response was malformed")
+      return null
     }
-    return true
-  } catch (error) {
-    console.warn("Fingerprint signup attestation unavailable", {
-      reason: error instanceof Error ? error.message : "unknown_error",
-    })
-    return false
+
+    try {
+      after(async () => {
+        try {
+          const observationUserId = getObservationUserId?.() ?? userId
+          await trackEvent(
+            AUTH_EVENTS.FINGERPRINT_SIGNUP_OBSERVED,
+            observationUserId || eventId,
+            {
+              provider: "fingerprint",
+              signup_attempt_id: signupAttemptId,
+              provider_event_id: event.providerEventId,
+              visitor_id: event.visitorId,
+              visitor_found: event.visitorFound,
+              confidence_score: event.confidenceScore,
+              bot_result: event.botResult,
+              bot_type: event.botType,
+              vpn: event.vpn,
+              vpn_confidence: event.vpnConfidence,
+              proxy: event.proxy,
+              proxy_confidence: event.proxyConfidence,
+              incognito: event.incognito,
+              tampering: event.tampering,
+              tampering_confidence: event.tamperingConfidence,
+              virtual_machine: event.virtualMachine,
+              developer_tools: event.developerTools,
+              high_activity_device: event.highActivityDevice,
+              suspect_score: event.suspectScore,
+              smart_signals: event.smartSignals,
+              superserve_user_id: observationUserId,
+              signup_method: signupMethod,
+              observed_at: new Date().toISOString(),
+            },
+          )
+        } catch {
+          /* Observation cannot affect signup. */
+        }
+      })
+    } catch {
+      /* Observation cannot affect signup. */
+    }
+    if (capture && capture.eventId === eventId && isRecord(payload)) {
+      const tags = recordOrNull(payload.tags)
+      const timestamp = payload.timestamp
+      const eventAt =
+        typeof timestamp === "number" || typeof timestamp === "string"
+          ? new Date(timestamp).getTime()
+          : NaN
+      if (
+        tags?.signup_challenge === capture.challenge &&
+        Number.isFinite(eventAt)
+      ) {
+        try {
+          await verifyPromotionSignupAttempt({
+            attemptId: capture.attemptId,
+            challenge: capture.challenge,
+            eventId: event.providerEventId,
+            fingerprint: event.visitorId,
+            eventAt: new Date(eventAt).toISOString(),
+          })
+          onAttested?.()
+        } catch {
+          console.warn("Promotion signup attestation unavailable")
+        }
+      }
+    }
+    return event.visitorId
+  } catch {
+    console.warn("Fingerprint observation failed open")
+    return null
   }
 }

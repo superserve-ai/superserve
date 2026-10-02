@@ -1,3 +1,6 @@
+vi.mock("@/hooks/use-user", () => ({
+  useUser: () => ({ user: { id: "u1" }, loading: false }),
+}))
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -126,6 +129,7 @@ function renderSection(summary = baseSummary) {
 
 describe("CustomerBillingSection", () => {
   beforeEach(() => {
+    sessionStorage.clear()
     addToast.mockReset()
     createStripeCheckoutSession.mockReset()
     createStripeCustomerPortalSession.mockReset()
@@ -225,6 +229,7 @@ describe("CustomerBillingSection", () => {
         returnUrl.searchParams.set("billing", "success")
         cancelUrl.searchParams.set("billing", "cancel")
         expect(request).toHaveBeenCalledWith({
+          intentScope: expect.any(String),
           successUrl: returnUrl.toString(),
           cancelUrl: cancelUrl.toString(),
         })

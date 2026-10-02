@@ -49,6 +49,8 @@ export interface SandboxInfo {
   previewAccess: PreviewAccess
   /** Secrets bound to this sandbox (env-var → secret), when any are attached. */
   secrets?: SandboxSecretBinding[]
+  /** The snapshot this sandbox was created from, when it was. */
+  sourceSnapshotId?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -65,8 +67,13 @@ export interface SandboxCreateOptions extends ConnectionOptions {
   name: string
   /** Template name, UUID, or Template instance. */
   fromTemplate?: string | { name?: string; id: string }
-  /** Snapshot UUID. */
-  fromSnapshot?: string
+  /**
+   * Create the sandbox from a saved snapshot instead of a template: it
+   * continues with the snapshot's memory and disk, on the host holding it.
+   * Snapshot UUID or Snapshot instance. Mutually exclusive with
+   * `fromTemplate`.
+   */
+  fromSnapshot?: string | { id: string }
   timeoutSeconds?: number
   /**
    * Delete the sandbox once it has been continuously paused for this
@@ -96,6 +103,76 @@ export interface SandboxListOptions extends ConnectionOptions {
   metadata?: Record<string, string>
   /** Only return sandboxes in this status. */
   status?: SandboxStatus
+  /** Maximum rows to return. Omit to return the full list. */
+  limit?: number
+  /** Rows to skip; combine with `limit` to page. */
+  offset?: number
+}
+
+// ---------------------------------------------------------------------------
+// Snapshots
+// ---------------------------------------------------------------------------
+
+/** What a snapshot holds. `mem+fs` is memory and disk. */
+export type SnapshotKind = "mem+fs"
+
+export type SnapshotStatus = "creating" | "ready" | "failed" | "deleting"
+
+export interface SnapshotResources {
+  vcpuCount: number
+  memoryMib: number
+  diskMib: number
+}
+
+export interface SnapshotInfo {
+  id: string
+  /** The sandbox the snapshot was taken from. It may since have been deleted. */
+  sandboxId: string
+  /** The template the captured sandbox was created from. */
+  templateId?: string
+  kind: SnapshotKind
+  status: SnapshotStatus
+  name?: string
+  /** Bytes the snapshot holds on disk; 0 until ready. */
+  sizeBytes: number
+  /** vCPU, memory and disk a sandbox created from it gets. */
+  resources: SnapshotResources
+  createdAt: Date
+  readyAt?: Date
+}
+
+export interface SnapshotWaitOptions {
+  /** Give up after this long. Default 15 minutes. */
+  timeoutMs?: number
+  /** How often to check. Default 2 seconds. */
+  pollIntervalMs?: number
+  signal?: AbortSignal
+}
+
+export interface SnapshotCreateOptions {
+  kind?: SnapshotKind
+  /** Label, 1 to 64 characters. Can be changed later with `rename()`. */
+  name?: string
+  /**
+   * A retry carrying the same key returns the snapshot the first request
+   * made instead of taking another. Generated when omitted, so the SDK's
+   * own retries are safe; pass one to make yours safe too.
+   */
+  idempotencyKey?: string
+  /**
+   * Wait until the snapshot is ready (the default). The capture itself
+   * returns once the host holds the snapshot; this only matters when its
+   * answer was lost and the platform settles it shortly after.
+   */
+  wait?: boolean
+  /** Give up after this long, capture and wait together. Default 15 minutes. */
+  timeoutMs?: number
+  /** How often to check while waiting. Default 2 seconds. */
+  pollIntervalMs?: number
+  signal?: AbortSignal
+}
+
+export interface SnapshotListOptions extends ConnectionOptions {
   /** Maximum rows to return. Omit to return the full list. */
   limit?: number
   /** Rows to skip; combine with `limit` to page. */
@@ -258,6 +335,7 @@ export interface ApiSandboxResponse {
   vcpu_count?: number
   memory_mib?: number
   access_token?: string
+  routing_hint?: string
   created_at?: string
   timeout_seconds?: number
   auto_delete_seconds?: number
@@ -270,6 +348,21 @@ export interface ApiSandboxResponse {
     secret_name?: string
     revoked?: boolean
   }>
+  source_snapshot_id?: string
+}
+
+/** @internal */
+export interface ApiSnapshotResponse {
+  id?: string
+  sandbox_id?: string
+  template_id?: string | null
+  kind?: string
+  status?: string
+  name?: string | null
+  size_bytes?: number
+  resources?: { vcpu_count?: number; memory_mib?: number; disk_mib?: number }
+  created_at?: string
+  ready_at?: string | null
 }
 
 /** @internal Response shape from POST /sandboxes/{id}/resume. */
@@ -277,6 +370,7 @@ export interface ApiResumeResponse {
   id?: string
   status?: string
   access_token?: string
+  routing_hint?: string
 }
 
 /** @internal */
@@ -339,6 +433,32 @@ export function toSandboxInfo(raw: ApiSandboxResponse): SandboxInfo {
       secretName: s.secret_name ?? "",
       revoked: s.revoked,
     })),
+    sourceSnapshotId: raw.source_snapshot_id ?? undefined,
+  }
+}
+
+/** @internal Convert an API snapshot response to a SnapshotInfo. */
+export function toSnapshotInfo(raw: ApiSnapshotResponse): SnapshotInfo {
+  if (!raw.id || !raw.sandbox_id || !raw.status || !raw.created_at) {
+    throw new SandboxError(
+      "Invalid API response: snapshot missing id, sandbox_id, status or created_at",
+    )
+  }
+  return {
+    id: raw.id,
+    sandboxId: raw.sandbox_id,
+    templateId: raw.template_id ?? undefined,
+    kind: (raw.kind ?? "mem+fs") as SnapshotKind,
+    status: raw.status as SnapshotStatus,
+    name: raw.name ?? undefined,
+    sizeBytes: raw.size_bytes ?? 0,
+    resources: {
+      vcpuCount: raw.resources?.vcpu_count ?? 0,
+      memoryMib: raw.resources?.memory_mib ?? 0,
+      diskMib: raw.resources?.disk_mib ?? 0,
+    },
+    createdAt: new Date(raw.created_at),
+    readyAt: raw.ready_at ? new Date(raw.ready_at) : undefined,
   }
 }
 

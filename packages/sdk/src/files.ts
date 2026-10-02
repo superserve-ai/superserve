@@ -1,3 +1,4 @@
+import { dataPlaneTarget } from "./config.js"
 /**
  * `sandbox.files` - read and write files inside a sandbox.
  *
@@ -8,10 +9,9 @@
  *
  * Accessed as `sandbox.files.write(...)` / `sandbox.files.read(...)`.
  */
-
-import { dataPlaneTarget } from "./config.js"
 import { ValidationError } from "./errors.js"
 import { downloadBytes, uploadBytes } from "./http.js"
+import { routingHintHeaders } from "./routingHint.js"
 import { withTokenRetry } from "./tokenRetry.js"
 import type { FileInput } from "./types.js"
 
@@ -29,6 +29,7 @@ export interface FilesDeps {
   sandboxId: string
   sandboxHost: string
   getAccessToken: () => string
+  getRoutingHint?: () => string | undefined
   refreshActivate: () => Promise<string>
 }
 
@@ -66,7 +67,11 @@ export class Files {
     await withTokenRetry(this._deps, (token) =>
       uploadBytes({
         url,
-        headers: { ...this._routingHeaders, "X-Access-Token": token },
+        headers: {
+          ...this._routingHeaders,
+          ...routingHintHeaders(this._deps),
+          "X-Access-Token": token,
+        },
         body,
         timeoutMs: options.timeoutMs,
         signal: options.signal,
@@ -97,7 +102,11 @@ export class Files {
     return withTokenRetry(this._deps, (token) =>
       downloadBytes({
         url,
-        headers: { ...this._routingHeaders, "X-Access-Token": token },
+        headers: {
+          ...this._routingHeaders,
+          ...routingHintHeaders(this._deps),
+          "X-Access-Token": token,
+        },
         timeoutMs: options.timeoutMs,
         signal: options.signal,
         maxBytes: options.maxBytes,
@@ -159,7 +168,11 @@ export class Files {
     return withTokenRetry(this._deps, (token) =>
       downloadBytes({
         url,
-        headers: { ...this._routingHeaders, "X-Access-Token": token },
+        headers: {
+          ...this._routingHeaders,
+          ...routingHintHeaders(this._deps),
+          "X-Access-Token": token,
+        },
         timeoutMs: options.timeoutMs,
         signal: options.signal,
         maxBytes: options.maxBytes,

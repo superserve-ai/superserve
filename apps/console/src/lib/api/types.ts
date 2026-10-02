@@ -14,6 +14,8 @@ export interface SandboxListItem {
   vcpu_count: number
   memory_mib: number
   snapshot_id?: string
+  /** The saved snapshot this sandbox was created from. */
+  source_snapshot_id?: string
   timeout_seconds?: number
   auto_delete_seconds?: number
   /** Deletion deadline; present only while paused with auto_delete_seconds set. */
@@ -50,6 +52,7 @@ export interface CreateSandboxRequest {
   name: string
   /** Template UUID or name to boot from. */
   from_template?: string
+  /** Saved snapshot ID to continue from; excludes from_template. */
   from_snapshot?: string
   timeout_seconds?: number
   /** Delete the sandbox once continuously paused for this many seconds. */
@@ -131,14 +134,25 @@ export interface CreateApiKeyResponse {
   created_at: string
 }
 
+export type SnapshotStatus = "creating" | "ready" | "failed" | "deleting"
+
 export interface SnapshotResponse {
   id: string
   sandbox_id: string
+  template_id: string | null
+  kind: "mem+fs"
+  status: SnapshotStatus
   name: string | null
   size_bytes: number
-  saved: boolean
-  trigger: string
+  resources: { vcpu_count: number; memory_mib: number; disk_mib: number }
   created_at: string
+  ready_at: string | null
+}
+
+/** A team-wide list row: the snapshot plus its source sandbox's name, which is
+ *  null once that sandbox is deleted. */
+export interface TeamSnapshot extends SnapshotResponse {
+  sandbox_name: string | null
 }
 
 export interface ActivityResponse {

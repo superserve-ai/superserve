@@ -200,3 +200,41 @@ export function scheduleFingerprintObservation() {}
 export async function sendWelcomeEmail() {}
 export async function notifySlackOfNewUser() {}
 export async function trackEvent() {}
+
+export async function completedMemberships(
+  _userId: string,
+  directory: unknown,
+) {
+  return directory
+}
+export async function readGooglePromotionEvidence() {
+  return {
+    attemptId: "synthetic-attempt",
+    originalSignup: true,
+    routineMissing: false,
+  }
+}
+export async function publishOriginalSignupEvidence(
+  user: User,
+  attemptId?: string,
+) {
+  if (attemptId) {
+    await bindPromotionSignupAccount(user.id, attemptId)
+    await registerPromotionSignupAccount(user.id, attemptId)
+  }
+}
+export async function readSignupEvidenceEntries() {
+  return []
+}
+export async function readSignupEvidence() {
+  return null
+}
+export async function isActiveSignupEvidenceAttempt() {
+  return false
+}
+export async function saveSignupEvidence() {}
+export async function evaluateSignupRestriction() {}
+export class SignupRestrictedError extends Error {}
+export async function readFingerprintSignupEventId() {
+  return undefined
+}

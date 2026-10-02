@@ -56,6 +56,10 @@ const nextConfig: NextConfig = {
     // Keep production UI and hooks; replace external service boundaries locally.
     config.plugins.push(
       new webpack.NormalModuleReplacementPlugin(
+        /^@\/hooks\/use-user$/,
+        resolve(__dirname, "user-dependencies.ts"),
+      ),
+      new webpack.NormalModuleReplacementPlugin(
         /^@\/lib\/api\/teams-actions$/,
         (resource: { context: string; request: string; resource?: string }) => {
           if (resource.context === resolve(sourceRoot, "hooks"))
@@ -70,7 +74,7 @@ const nextConfig: NextConfig = {
         },
       ),
       new webpack.NormalModuleReplacementPlugin(
-        /^@\/(app\/\(auth\)\/auth\/(signin|signup)\/action|lib\/(supabase\/server|posthog\/actions|api\/(promotion-device-evidence|promotion-identity|team-directory)|auth\/google-signup-proof|fingerprint\/binding-proof))$/,
+        /^@\/(app\/\(auth\)\/auth\/(signin|signup)\/action|lib\/(supabase\/server|posthog\/actions|api\/(promotion-device-evidence|promotion-identity|promotion-publication|team-provisioning|team-directory)|auth\/(google-signup-proof|signup-evidence|signup-restrictions)|fingerprint\/binding-proof))$/,
         (resource: { context: string; request: string }) => {
           if (
             resource.context === callbackRoot ||

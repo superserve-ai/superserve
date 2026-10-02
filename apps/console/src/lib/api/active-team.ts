@@ -4,6 +4,7 @@ import {
   listTeamMembershipsForUser,
   type TeamMembership,
 } from "@/lib/api/team-directory"
+import { completedMemberships } from "@/lib/api/team-provisioning"
 
 // The user's selected team, stored as "<region>:<teamId>". The cookie is a
 // preference, never an authorization: every read validates it against the
@@ -71,9 +72,13 @@ export function pickActiveTeam(
 export async function resolveActiveTeam(
   userId: string,
 ): Promise<TeamMembership | null> {
-  const [memberships, selection] = await Promise.all([
+  const [rawMemberships, selection] = await Promise.all([
     listTeamMembershipsForUser(userId),
     readTeamSelection(),
   ])
+  const { memberships } = await completedMemberships(userId, {
+    memberships: rawMemberships,
+    degradedRegions: [],
+  })
   return pickActiveTeam(memberships, selection)
 }

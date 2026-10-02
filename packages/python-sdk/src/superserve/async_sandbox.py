@@ -11,15 +11,23 @@ from urllib.parse import quote, urlencode
 import httpx
 
 from ._config import ResolvedConfig, preview_url, resolve_config
+from ._routing_hint import routing_hint_expired
 from ._http import (
     async_api_request,
     DeadlineExceeded,
     DEFAULT_PAUSE_TIMEOUT,
     pause_poll_delay,
     PAUSE_FAST_POLL_WINDOW_S,
+    using_async_client,
 )
 from .commands import AsyncCommands, AsyncCommandsDeps
 from .errors import ConflictError, NotFoundError, SandboxError, SandboxTimeoutError
+from .async_snapshots import AsyncSnapshot
+from .snapshots import (
+    DEFAULT_SNAPSHOT_POLL_S,
+    DEFAULT_SNAPSHOT_TIMEOUT,
+    _snapshot_create_body,
+)
 from .files import AsyncFiles, AsyncFilesDeps
 from .types import (
     UNSET,
@@ -36,11 +44,15 @@ from .types import (
     SandboxInfo,
     SandboxSecretBinding,
     SandboxStatus,
+    SnapshotInfo,
+    SnapshotKind,
     to_network_log_page,
     to_sandbox_info,
+    to_snapshot_info,
 )
 
 if TYPE_CHECKING:
+    from .snapshots import Snapshot
     from .async_template import AsyncTemplate
     from .template import Template
 
@@ -53,6 +65,7 @@ class AsyncSandbox:
         info: SandboxInfo,
         access_token: str,
         config: ResolvedConfig,
+        routing_hint: str | None = None,
     ) -> None:
         self.id: str = info.id
         self.name: str = info.name
@@ -62,6 +75,9 @@ class AsyncSandbox:
         # Secrets bound at construction time; call get_info() to refresh.
         self.secrets: list[SandboxSecretBinding] | None = info.secrets
         self._access_token: str = access_token
+        self._routing_hint = routing_hint
+        self._route_revision = 0
+        self._applied_route_revision = 0
         self._config = config
         self._http_client: httpx.AsyncClient = httpx.AsyncClient(timeout=30.0)
         self._closed = False
@@ -72,7 +88,9 @@ class AsyncSandbox:
                 sandbox_id=self.id,
                 sandbox_host=config.sandbox_host,
                 get_access_token=lambda: self._access_token,
+                get_routing_hint=lambda: self._routing_hint,
                 refresh_activate=self._refresh_activate,
+                refresh_expired_hint=self._refresh_expired_hint,
             ),
             client=self._http_client,
         )
@@ -81,13 +99,17 @@ class AsyncSandbox:
                 sandbox_id=self.id,
                 sandbox_host=config.sandbox_host,
                 get_access_token=lambda: self._access_token,
+                get_routing_hint=lambda: self._routing_hint,
                 refresh_activate=self._refresh_activate,
+                refresh_expired_hint=self._refresh_expired_hint,
             ),
             client=self._http_client,
         )
 
     async def _post_and_rotate_token(self, endpoint: str) -> str:
         """Async variant of Sandbox._post_and_rotate_token."""
+        self._route_revision += 1
+        revision = self._route_revision
         raw = await async_api_request(
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/{endpoint}",
@@ -100,13 +122,25 @@ class AsyncSandbox:
                 f"Invalid API response from POST /sandboxes/{self.id}/{endpoint}: "
                 "missing access_token"
             )
-        self._access_token = token
-        return token
+        if revision > self._applied_route_revision:
+            self._applied_route_revision = revision
+            self._access_token = token
+            self._routing_hint = raw.get("routing_hint")
+        return self._access_token
 
     async def _refresh_activate(self) -> str:
         """Async variant of Sandbox._refresh_activate."""
+        revision = self._applied_route_revision
         async with self._refresh_lock:
+            if revision != self._applied_route_revision:
+                return self._access_token
             return await self._post_and_rotate_token("activate")
+
+    async def _refresh_expired_hint(self) -> str:
+        async with self._refresh_lock:
+            if routing_hint_expired(lambda: self._routing_hint):
+                return await self._post_and_rotate_token("activate")
+            return self._access_token
 
     @classmethod
     async def create(
@@ -114,7 +148,7 @@ class AsyncSandbox:
         *,
         name: str,
         from_template: "str | Template | AsyncTemplate | None" = None,
-        from_snapshot: str | None = None,
+        from_snapshot: "str | Snapshot | AsyncSnapshot | None" = None,
         timeout_seconds: int | None = None,
         auto_delete_seconds: int | None = None,
         metadata: dict[str, str] | None = None,
@@ -143,7 +177,9 @@ class AsyncSandbox:
                     getattr(from_template, "name", None) or from_template.id
                 )
         if from_snapshot is not None:
-            body["from_snapshot"] = from_snapshot
+            body["from_snapshot"] = (
+                from_snapshot if isinstance(from_snapshot, str) else from_snapshot.id
+            )
         if timeout_seconds is not None:
             body["timeout_seconds"] = timeout_seconds
         if auto_delete_seconds is not None:
@@ -173,7 +209,7 @@ class AsyncSandbox:
             raise SandboxError(
                 "Invalid API response from POST /sandboxes: missing access_token"
             )
-        return cls(to_sandbox_info(raw), token, config)
+        return cls(to_sandbox_info(raw), token, config, raw.get("routing_hint"))
 
     @classmethod
     async def connect(
@@ -201,7 +237,7 @@ class AsyncSandbox:
                 f"Invalid API response from POST /sandboxes/{sandbox_id}/activate: "
                 "missing access_token"
             )
-        return cls(to_sandbox_info(raw), token, config)
+        return cls(to_sandbox_info(raw), token, config, raw.get("routing_hint"))
 
     @classmethod
     async def list(
@@ -309,6 +345,57 @@ class AsyncSandbox:
             client=self._http_client,
         )
         return to_sandbox_info(raw)
+
+    async def snapshot(
+        self,
+        *,
+        name: str | None = None,
+        kind: SnapshotKind = "mem+fs",
+        idempotency_key: str | None = None,
+        wait: bool = True,
+        timeout: float = DEFAULT_SNAPSHOT_TIMEOUT,
+        poll_interval_s: float = DEFAULT_SNAPSHOT_POLL_S,
+    ) -> AsyncSnapshot:
+        """Take a snapshot of this sandbox's memory and disk, kept until deleted.
+
+        A running sandbox is paused for the capture and resumed after. Create
+        sandboxes from it with ``AsyncSandbox.create(from_snapshot=...)``; they continue
+        with the processes that were running. ``timeout`` covers capture and
+        wait together.
+        """
+        self._require_not_deleted()
+        started = time.monotonic()
+        raw = await async_api_request(
+            "POST",
+            f"{self._config.base_url}/sandboxes/{self.id}/snapshot",
+            headers={"X-API-Key": self._config.api_key},
+            json_body=_snapshot_create_body(kind, name, idempotency_key),
+            timeout=timeout,
+            budget=timeout,
+            client=self._http_client,
+        )
+        snapshot = AsyncSnapshot(to_snapshot_info(raw), self._config)
+        if not wait:
+            return snapshot
+        # A 202 answer is still creating; the platform settles it shortly.
+        with using_async_client(self._http_client):
+            return await snapshot.wait_until_ready(
+                timeout=max(timeout - (time.monotonic() - started), 0.0),
+                poll_interval_s=poll_interval_s,
+            )
+
+    async def snapshots(
+        self, *, limit: int | None = None, offset: int | None = None
+    ) -> builtins.list[SnapshotInfo]:
+        """This sandbox's snapshots, newest first."""
+        with using_async_client(self._http_client):
+            return await AsyncSnapshot.list(
+                self.id,
+                limit=limit,
+                offset=offset,
+                api_key=self._config.api_key,
+                base_url=self._config.base_url,
+            )
 
     def get_preview_url(self, port: int) -> str:
         """Build the preview URL for a port running inside this sandbox.

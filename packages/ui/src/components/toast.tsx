@@ -36,7 +36,7 @@ type AddToastInput =
     }
 
 interface ToastContextType {
-  addToast: (input: AddToastInput, variant?: ToastVariant) => string
+  addToast: (input: AddToastInput, variant?: ToastVariant) => void
   removeToast: (id: string) => void
   toasts: Toast[]
 }
@@ -69,8 +69,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       setTimeout(() => {
         setToasts((prev) => prev.filter((toast) => toast.id !== id))
       }, 5000)
-
-      return id
     },
     [],
   )

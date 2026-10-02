@@ -1,3 +1,6 @@
+vi.mock("@/hooks/use-user", () => ({
+  useUser: () => ({ user: { id: "u1" }, loading: false }),
+}))
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
@@ -75,6 +78,7 @@ const summaryB = {
 
 let client: QueryClient
 beforeEach(() => {
+  sessionStorage.clear()
   vi.resetAllMocks()
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   client.setQueryData(teamKeys.directory(), directory)
@@ -101,6 +105,29 @@ function setup() {
     },
   )
 }
+
+it("keeps the current team when creation returns a signup denial", async () => {
+  mocks.create.mockResolvedValue({
+    code: "signup_blocked",
+    message: "Signup is not available. Please try again later.",
+  })
+  const { result } = setup()
+
+  await act(async () => {
+    await result.current.create
+      .mutateAsync({ name: "blocked", region: "usw" })
+      .catch(() => {})
+  })
+
+  await waitFor(() =>
+    expect(result.current.create.error?.message).toBe(
+      "Signup is not available. Please try again later.",
+    ),
+  )
+  expect(
+    client.getQueryData<TeamDirectoryResponse>(teamKeys.directory()),
+  ).toEqual(directory)
+})
 
 it.each([false, true])(
   "clears old team data immediately and keeps billing guarded through directory reconciliation (failure: %s)",

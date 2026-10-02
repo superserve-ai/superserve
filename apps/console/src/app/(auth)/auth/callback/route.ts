@@ -3,16 +3,12 @@ import { NextResponse } from "next/server"
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import {
   consumeFingerprintSignupEventId,
-  scheduleFingerprintObservation,
+  readFingerprintSignupEventId,
   sendWelcomeEmail,
 } from "@/app/(auth)/auth/signup/action"
-import {
-  bindPromotionSignupAccount,
-  registerPromotionSignupAccount,
-  registerPromotionSignupDevice,
-} from "@/lib/api/promotion-device-evidence"
-import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
+import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
+import { completedMemberships } from "@/lib/api/team-provisioning"
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
 import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
 import {
@@ -20,10 +16,21 @@ import {
   hasValidLegacyGoogleSignupProof,
   isGoogleUser,
   markGoogleSignupAttempt,
-  readGoogleSignupDeviceAttempt,
+  readGooglePromotionEvidence,
 } from "@/lib/auth/google-signup-proof"
+import {
+  isActiveSignupEvidenceAttempt,
+  readSignupEvidence,
+  readSignupEvidenceEntries,
+  saveSignupEvidence,
+} from "@/lib/auth/signup-evidence"
+import {
+  evaluateSignupRestriction,
+  SignupRestrictedError,
+} from "@/lib/auth/signup-restrictions"
 import { DEFAULT_REGION } from "@/lib/cells"
 import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
+import { resolveFingerprintSignup } from "@/lib/fingerprint/observe"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createServerClient } from "@/lib/supabase/server"
@@ -102,37 +109,9 @@ export async function GET(request: Request) {
 
       const {
         data: { user },
-        error: userError,
       } = await supabase.auth.getUser()
 
-      if (user && !userError) {
-        if (type === "signup" && tokenHash) {
-          const deviceAttemptId = searchParams.get("device_attempt_id")
-          const proof = searchParams.get("device_bind_proof")
-          if (
-            deviceAttemptId &&
-            proof &&
-            validSignupDeviceBinding(user.id, deviceAttemptId, proof)
-          ) {
-            try {
-              await bindPromotionSignupAccount(user.id, deviceAttemptId)
-              await publishPromotionIdentity(
-                DEFAULT_REGION,
-                user.id,
-                user,
-                new Date().toISOString(),
-              )
-              // Confirmation reuses accepted evidence under verified login;
-              // it must not mint fresh pre-confirmation signup provenance.
-              await registerPromotionSignupDevice(DEFAULT_REGION, user.id)
-            } catch (error) {
-              console.warn("Confirmation device evidence binding unavailable", {
-                reason:
-                  error instanceof Error ? error.message : "unknown_error",
-              })
-            }
-          }
-        }
+      if (user) {
         const signupAttemptId =
           searchParams.get("signup_attempt_id") || undefined
         const provider = code
@@ -143,9 +122,12 @@ export async function GET(request: Request) {
         if (code && isGoogleUser(user)) {
           const directory = await classifyGoogleMembershipState(
             user.id,
-            await listTeamMembershipsForUserDetailed(user.id, {
-              maxAgeMs: 0,
-            }),
+            await completedMemberships(
+              user.id,
+              await listTeamMembershipsForUserDetailed(user.id, {
+                maxAgeMs: 0,
+              }),
+            ),
           )
 
           if (directory.kind === "indeterminate") {
@@ -199,54 +181,68 @@ export async function GET(request: Request) {
               )
             }
             console.info("Google OAuth signup proof validated at callback")
-            if (signupAttemptId) {
-              const deviceAttemptId = await readGoogleSignupDeviceAttempt(
-                signupAttemptId,
-                user.created_at,
-              )
-              if (deviceAttemptId) {
+            await markGoogleSignupAttempt(signupAttemptId, user.id)
+          }
+
+          if (isNewUser && signupAttemptId) {
+            const original = await readGooglePromotionEvidence(
+              signupAttemptId,
+              user.id,
+              user.created_at,
+            )
+            if (original) {
+              if (original.originalSignup)
+                await publishOriginalSignupEvidence(
+                  user,
+                  original.attemptId,
+                  original.routineMissing,
+                )
+              if (original.eventId && original.visitor)
+                await saveSignupEvidence(
+                  user.id,
+                  signupAttemptId,
+                  original.eventId,
+                  original.visitor,
+                )
+            }
+          }
+          if (isNewUser) {
+            const activeAttempt =
+              signupAttemptId &&
+              (await isActiveSignupEvidenceAttempt(signupAttemptId))
+            const fingerprintEventId = activeAttempt
+              ? await readFingerprintSignupEventId()
+              : undefined
+            const existingVisitor = signupAttemptId
+              ? await readSignupEvidence(user.id, signupAttemptId)
+              : null
+            if (fingerprintEventId && !existingVisitor && signupAttemptId) {
+              let visitor: string | null = null
+              try {
+                visitor = await resolveFingerprintSignup({
+                  eventId: fingerprintEventId,
+                  userId: user.id,
+                  signupMethod: "google",
+                  signupAttemptId,
+                })
+              } finally {
+                await consumeFingerprintSignupEventId(fingerprintEventId)
+              }
+              if (visitor) {
                 try {
-                  const binding = await bindPromotionSignupAccount(
+                  await saveSignupEvidence(
                     user.id,
-                    deviceAttemptId,
+                    signupAttemptId,
+                    fingerprintEventId,
+                    visitor,
                   )
-                  if (binding !== "first_evidence_retained") {
-                    await publishPromotionIdentity(
-                      DEFAULT_REGION,
-                      user.id,
-                      user,
-                      new Date().toISOString(),
-                    )
-                    await registerPromotionSignupAccount(
-                      user.id,
-                      deviceAttemptId,
-                    )
-                  }
-                } catch (error) {
-                  console.warn(
-                    "Google signup device evidence binding unavailable",
-                    {
-                      reason:
-                        error instanceof Error
-                          ? error.message
-                          : "unknown_error",
-                    },
-                  )
+                } catch {
+                  console.warn("Signup evidence retention unavailable", {
+                    stage: "google_callback",
+                  })
                 }
               }
             }
-            if (signupAttemptId) await markGoogleSignupAttempt(signupAttemptId)
-          }
-
-          const fingerprintEventId = await consumeFingerprintSignupEventId()
-          if (isNewUser) {
-            if (!signupAttemptId)
-              scheduleFingerprintObservation(
-                fingerprintEventId,
-                "google",
-                user.id,
-                signupAttemptId,
-              )
             if (signupAttemptId) {
               await trackEvent(AUTH_EVENTS.SIGNUP_ATTEMPT_ASSOCIATED, user.id, {
                 signup_attempt_id: signupAttemptId,
@@ -259,6 +255,66 @@ export async function GET(request: Request) {
         } else {
           const createdAt = new Date(user.created_at)
           isNewUser = Date.now() - createdAt.getTime() < 30000
+        }
+
+        if (type === "signup") {
+          const attempt = searchParams.get("device_attempt_id")
+          const proof = searchParams.get("device_bind_proof")
+          if (
+            attempt &&
+            proof &&
+            validSignupDeviceBinding(user.id, attempt, proof)
+          )
+            await publishOriginalSignupEvidence(user, attempt, false)
+        }
+
+        if (type !== "invite" && (type === "signup" || (code && isNewUser))) {
+          const directory = await completedMemberships(
+            user.id,
+            await listTeamMembershipsForUserDetailed(user.id, {
+              maxAgeMs: 0,
+            }),
+          )
+          if (
+            directory.memberships.length === 0 &&
+            directory.degradedRegions.length > 0
+          )
+            return NextResponse.redirect(
+              buildRedirectUrl(
+                origin,
+                "/auth/auth-code-error?reason=membership_lookup_degraded",
+              ),
+            )
+          if (
+            directory.memberships.length === 0 &&
+            directory.degradedRegions.length === 0
+          ) {
+            try {
+              const entries = signupAttemptId
+                ? await readSignupEvidenceEntries(user.id, signupAttemptId)
+                : []
+              if (entries.length === 0)
+                await evaluateSignupRestriction(DEFAULT_REGION, user.id, null)
+              for (const visitor of new Set(
+                entries.map(({ visitor }) => visitor),
+              ))
+                await evaluateSignupRestriction(
+                  DEFAULT_REGION,
+                  user.id,
+                  visitor,
+                )
+            } catch (error) {
+              if (error instanceof SignupRestrictedError) {
+                return NextResponse.redirect(
+                  buildRedirectUrl(
+                    origin,
+                    "/auth/auth-code-error?reason=signup_blocked",
+                  ),
+                )
+              }
+              throw error
+            }
+          }
         }
 
         if (isNewUser) {

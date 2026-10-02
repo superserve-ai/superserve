@@ -51,7 +51,9 @@ describe("signup capture retry boundary", () => {
     const client = await import("./client")
     const getData = vi.fn().mockResolvedValue({ event_id: "event-original" })
     client.registerFingerprintGetData(getData)
-    expect(await client.ensureFingerprintSignupCapture()).toBeUndefined()
+    expect(await client.ensureFingerprintSignupCapture()).toEqual({
+      unavailable: true,
+    })
     expect(getData).not.toHaveBeenCalled()
     expect(await client.ensureFingerprintSignupCapture()).toMatchObject({
       attemptId: "attempt-original",
@@ -64,15 +66,21 @@ describe("signup capture retry boundary", () => {
     const client = await import("./client")
     const getData = vi.fn().mockRejectedValue(new Error("response lost"))
     client.registerFingerprintGetData(getData)
-    expect(await client.ensureFingerprintSignupCapture()).toBeUndefined()
-    expect(await client.ensureFingerprintSignupCapture()).toBeUndefined()
+    expect(await client.ensureFingerprintSignupCapture()).toEqual({
+      unavailable: true,
+    })
+    expect(await client.ensureFingerprintSignupCapture()).toEqual({
+      unavailable: true,
+    })
     expect(createAttempt).toHaveBeenCalledOnce()
     expect(getData).toHaveBeenCalledOnce()
 
     vi.resetModules()
     const reloaded = await import("./client")
     reloaded.registerFingerprintGetData(getData)
-    expect(await reloaded.ensureFingerprintSignupCapture()).toBeUndefined()
+    expect(await reloaded.ensureFingerprintSignupCapture()).toEqual({
+      unavailable: true,
+    })
     expect(getData).toHaveBeenCalledOnce()
   })
 

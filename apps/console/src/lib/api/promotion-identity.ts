@@ -1,4 +1,3 @@
-import "server-only"
 import type { User } from "@supabase/supabase-js"
 
 import { cellFor } from "@/lib/cells"

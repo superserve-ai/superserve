@@ -9,11 +9,15 @@ export interface SignupFingerprintCapture {
   challenge: string
   eventId: string
 }
+export type SignupFingerprintResult =
+  | SignupFingerprintCapture
+  | { unavailable: true }
+
 type FingerprintGetData = (options?: {
   tag: { signup_challenge: string }
 }) => Promise<{ event_id?: string }>
 let fingerprintGetData: FingerprintGetData | undefined
-let capturePromise: Promise<SignupFingerprintCapture | undefined> | undefined
+let capturePromise: Promise<SignupFingerprintResult | undefined> | undefined
 let completedCapture: SignupFingerprintCapture | undefined
 let captureStarted = false
 
@@ -88,15 +92,26 @@ export function writeFingerprintSignupEventIdCookie(eventId: string) {
 
 /** The captured event keeps its original server attempt through form retries. */
 export function ensureFingerprintSignupCapture(): Promise<
-  SignupFingerprintCapture | undefined
+  SignupFingerprintResult | undefined
 > {
   if (typeof window === "undefined") return Promise.resolve(undefined)
+  try {
+    if (
+      sessionStorage.getItem(CAPTURE_KEY) &&
+      !storedCapture() &&
+      !pendingAttempt()
+    )
+      return Promise.resolve({ unavailable: true })
+  } catch {
+    return Promise.resolve({ unavailable: true })
+  }
   const existing = completedCapture ?? storedCapture()
   if (existing) return Promise.resolve(existing)
   if (capturePromise) return capturePromise
   // A reload or rejected provider response cannot prove capture did not occur.
   // Keep that attempt instead of creating a different event for its challenge.
-  if (captureStarted || pendingAttempt()) return Promise.resolve(undefined)
+  if (captureStarted || pendingAttempt())
+    return Promise.resolve({ unavailable: true })
   if (!fingerprintGetData) return Promise.resolve(undefined)
   capturePromise = (async () => {
     const attempt = {
@@ -108,7 +123,7 @@ export function ensureFingerprintSignupCapture(): Promise<
     const result = await fingerprintGetData!({
       tag: { signup_challenge: attempt.challenge },
     })
-    if (!result.event_id) return undefined
+    if (!result.event_id) return { unavailable: true as const }
     const capture = {
       attemptId: attempt.attemptId,
       challenge: attempt.challenge,
@@ -119,7 +134,7 @@ export function ensureFingerprintSignupCapture(): Promise<
     writeFingerprintSignupEventIdCookie(result.event_id)
     return capture
   })()
-    .catch(() => undefined)
+    .catch(() => ({ unavailable: true as const }))
     .finally(() => {
       capturePromise = undefined
     })
@@ -127,7 +142,9 @@ export function ensureFingerprintSignupCapture(): Promise<
 }
 
 export function ensureFingerprintSignupEventId(): Promise<string | undefined> {
-  return ensureFingerprintSignupCapture().then((capture) => capture?.eventId)
+  return ensureFingerprintSignupCapture().then((capture) =>
+    capture && "eventId" in capture ? capture.eventId : undefined,
+  )
 }
 
 export function clearFingerprintSignupCapture(): void {

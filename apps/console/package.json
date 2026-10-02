@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001",
-    "build": "next build",
+    "build": "bun run check:promotion-config && next build",
     "start": "next start -p 3001",
     "lint": "bunx oxlint",
     "format": "bunx oxfmt --write",
@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "email:dev": "email dev --dir src/lib/email/templates --port 3002"
+    "email:dev": "email dev --dir src/lib/email/templates --port 3002",
+    "check:promotion-config": "node scripts/check-promotion-config.mjs"
   },
   "dependencies": {
     "@fingerprint/react": "^3.1.0",

@@ -12,9 +12,13 @@ import {
   Separator,
   useToast,
 } from "@superserve/ui"
-import { useRef, useState } from "react"
+import { useState } from "react"
 
 import { useCreateTeam, useTeams } from "@/hooks/use-teams"
+import {
+  GOOGLE_SIGNUP_RECOVERY_URL,
+  requiresGoogleSignupRecovery,
+} from "@/lib/api/client"
 import { regionLabel } from "@/lib/format"
 
 /**
@@ -28,11 +32,10 @@ import { regionLabel } from "@/lib/format"
 export function TeamsSection() {
   const { data } = useTeams()
   const createTeam = useCreateTeam()
-  const { addToast, removeToast } = useToast()
+  const { addToast } = useToast()
 
   const [name, setName] = useState("")
   const [region, setRegion] = useState("use")
-  const lastCreateErrorToast = useRef<string | null>(null)
 
   if (!data || (data.regions.length <= 1 && data.teams.length <= 1)) {
     return null
@@ -45,20 +48,17 @@ export function TeamsSection() {
       {
         onSuccess: (team) => {
           setName("")
-          if (lastCreateErrorToast.current) {
-            removeToast(lastCreateErrorToast.current)
-            lastCreateErrorToast.current = null
-          }
           addToast(
             `Team ${team.name} created in ${regionLabel(team.region)}`,
             "success",
           )
         },
         onError: (error) => {
-          lastCreateErrorToast.current = addToast(
-            error.message || "Failed to create team",
-            "error",
-          )
+          if (requiresGoogleSignupRecovery(error)) {
+            window.location.assign(GOOGLE_SIGNUP_RECOVERY_URL)
+            return
+          }
+          addToast(error.message || "Failed to create team", "error")
         },
       },
     )

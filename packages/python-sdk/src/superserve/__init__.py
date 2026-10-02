@@ -6,8 +6,10 @@ from ._config import (
     RESERVED_PREVIEW_PORT,
     preview_url,
 )
+from ._http import async_connection_pool
 from .async_sandbox import AsyncSandbox
 from .async_secrets import AsyncSecret
+from .async_snapshots import AsyncSnapshot
 from .async_template import AsyncTemplate
 from .command_session import AsyncCommandSession
 from .errors import (
@@ -24,6 +26,7 @@ from .errors import (
 from .providers import AsyncProvider, Provider
 from .sandbox import Sandbox
 from .secrets import Secret
+from .snapshots import Snapshot
 from .template import Template
 from .types import (
     BuildLogEvent,
@@ -50,6 +53,10 @@ from .types import (
     SecretAuthType,
     SecretInfo,
     SecretSandboxBinding,
+    SnapshotInfo,
+    SnapshotKind,
+    SnapshotResources,
+    SnapshotStatus,
     TemplateBuildInfo,
     TemplateBuildStatus,
     TemplateInfo,
@@ -59,14 +66,16 @@ from .types import (
     WorkdirStep,
 )
 
-__version__ = "0.9.1"
+__version__ = "0.9.2"
 
 __all__ = [
     "AsyncCommandSession",
     "AsyncProvider",
     "AsyncSandbox",
     "AsyncSecret",
+    "AsyncSnapshot",
     "AsyncTemplate",
+    "async_connection_pool",
     "AuthenticationError",
     "BuildError",
     "BuildLogEvent",
@@ -105,6 +114,11 @@ __all__ = [
     "SecretInfo",
     "SecretSandboxBinding",
     "ServerError",
+    "Snapshot",
+    "SnapshotInfo",
+    "SnapshotKind",
+    "SnapshotResources",
+    "SnapshotStatus",
     "Template",
     "TemplateBuildInfo",
     "TemplateBuildStatus",

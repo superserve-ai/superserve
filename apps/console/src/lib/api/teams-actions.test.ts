@@ -1,11 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { PromotionTeamCreationAttempt } from "@/lib/api/promotion-device-evidence"
-
-vi.mock("@/lib/api/promotion-identity", () => ({
-  publishPromotionIdentity: vi.fn(async () => {}),
-}))
-
+const mockPublishPromotionIdentity = vi.fn(async (..._args: unknown[]) => {})
 let currentUser: {
   id: string
   email: string
@@ -68,18 +63,20 @@ const mockListTeamMembershipsForUserDetailed = vi.fn(
   async (_userId: string, _opts?: { maxAgeMs?: number }) => directoryState,
 )
 const mockTrackEvent = vi.fn()
-const mockRegisterPromotionSignupDevice = vi.fn()
-const mockCreateTeamWithPromotionAttempt = vi.fn(
-  async (_binding: PromotionTeamCreationAttempt) => ({
-    teamId: "team-new",
-    outcome: "granted" as const,
-    reason: "eligible",
-  }),
-)
+const mockEvaluateSignupRestriction = vi.fn()
+
+vi.mock("@/lib/auth/signup-restrictions", () => ({
+  SIGNUP_RESTRICTED_MESSAGE: "Signup is not available. Please try again later.",
+  SignupRestrictedError: class SignupRestrictedError extends Error {},
+  evaluateSignupRestriction: (...args: unknown[]) =>
+    mockEvaluateSignupRestriction(...args),
+}))
 
 // Per-test knobs read lazily by the cells mock.
 let regions: string[] = ["use", "usw"]
 let cellClients: Record<string, ReturnType<typeof recordingCellClient>> = {}
+let existingRbacAssignment = false
+let unfinishedTeamId: string | null = null
 
 // Records every write per table so tests can assert the full create chain
 // landed in one cell and nowhere else.
@@ -119,11 +116,31 @@ function recordingCellClient() {
             record(table, row)
             return { error: null }
           },
-          // The directory's RBAC-authoritative lookup also selects from
-          // team_memberships; empty = legacy-discovery path.
-          select: () => ({
-            eq: async () => ({ data: [], error: null }),
-          }),
+          // A directory entry represents an existing team only when its
+          // provisioning RBAC chain was completed.
+          select: () => {
+            let teamId = ""
+            return {
+              eq(column: string, value: string) {
+                if (column === "team_id") teamId = value
+                return this
+              },
+              is(_column: string, _value: null) {
+                return this
+              },
+              async limit() {
+                return {
+                  data:
+                    table === "user_role_assignments" &&
+                    existingRbacAssignment &&
+                    teamId !== unfinishedTeamId
+                      ? [{ id: "assignment-old" }]
+                      : [],
+                  error: null,
+                }
+              },
+            }
+          },
         }
       case "roles":
         return {
@@ -143,6 +160,10 @@ function recordingCellClient() {
   return { from, writes }
 }
 
+vi.mock("@/lib/api/promotion-identity", () => ({
+  publishPromotionIdentity: (...args: unknown[]) =>
+    mockPublishPromotionIdentity(...args),
+}))
 vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
   configuredRegions: () => regions,
@@ -172,8 +193,10 @@ vi.mock("@/lib/api/team-directory", () => ({
   invalidateMembershipDirectory: () => {},
 }))
 vi.mock("@/lib/auth/google-signup-proof", () => ({
+  GoogleSignupRecoveryRequiredError: class GoogleSignupRecoveryRequiredError extends Error {},
   consumeGoogleSignupProof: (...args: unknown[]) =>
     mockConsumeGoogleSignupProof(...args),
+  readGoogleSignupVisitors: async () => [],
   isGoogleUser: (user: {
     app_metadata?: { provider?: string; providers?: string[] }
   }) => mockIsGoogleUser(user),
@@ -194,12 +217,6 @@ vi.mock("@/lib/auth/google-onboarding", () => ({
 vi.mock("@/lib/posthog/actions", () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
 }))
-vi.mock("@/lib/api/promotion-device-evidence", () => ({
-  registerPromotionSignupDevice: (...args: unknown[]) =>
-    mockRegisterPromotionSignupDevice(...args),
-  createTeamWithPromotionAttempt: (binding: PromotionTeamCreationAttempt) =>
-    mockCreateTeamWithPromotionAttempt(binding),
-}))
 
 // Cookie store stub capturing active-team writes.
 let cookieValue: string | undefined
@@ -216,17 +233,38 @@ vi.mock("next/headers", () => ({
 }))
 
 import {
-  createTeamAction,
+  SignupRestrictedError,
+  SIGNUP_RESTRICTED_MESSAGE,
+} from "@/lib/auth/signup-restrictions"
+
+import {
+  createTeamAction as createActualTeamAction,
   listTeamsAction,
   setActiveTeamAction,
 } from "./teams-actions"
+
+async function createAllowedTeam(name: string, region?: string) {
+  const result = await createTeamAction(name, region)
+  if ("code" in result) throw new Error(result.message)
+  return result
+}
+
+function createTeamAction(name: string, region?: string) {
+  return createActualTeamAction(
+    name,
+    region,
+    "11111111-1111-4111-8111-111111111111",
+  )
+}
 
 describe("createTeamAction", () => {
   beforeEach(() => {
     regions = ["use", "usw"]
     directoryTeams = []
     currentUser = { id: "u1", email: "pavitra@superserve.ai" }
+    mockPublishPromotionIdentity.mockClear()
     googleUser = false
+    existingRbacAssignment = false
     directoryState = { memberships: [], degradedRegions: [] }
     cookieValue = undefined
     cookieSets.length = 0
@@ -272,12 +310,7 @@ describe("createTeamAction", () => {
       },
     )
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
-    mockRegisterPromotionSignupDevice.mockReset().mockResolvedValue("owner")
-    mockCreateTeamWithPromotionAttempt.mockReset().mockResolvedValue({
-      teamId: "team-new",
-      outcome: "granted",
-      reason: "eligible",
-    })
+    mockEvaluateSignupRestriction.mockReset().mockResolvedValue(undefined)
     cellClients = {
       use: recordingCellClient(),
       usw: recordingCellClient(),
@@ -285,31 +318,27 @@ describe("createTeamAction", () => {
   })
 
   it("writes the full RBAC chain into the target cell", async () => {
-    const team = await createTeamAction("west pilot", "usw")
+    const team = await createAllowedTeam("west pilot", "usw")
 
     expect(team).toEqual({ id: "team-new", name: "west pilot", region: "usw" })
 
     const writes = cellClients.usw.writes
-    expect(writes.profile).toEqual([
-      { id: "u1", email: "pavitra@superserve.ai" },
-    ])
+    expect(mockPublishPromotionIdentity).toHaveBeenCalledWith(
+      "usw",
+      "u1",
+      currentUser,
+      expect.any(String),
+    )
     expect(writes.team).toBeUndefined()
-    expect(mockCreateTeamWithPromotionAttempt).toHaveBeenCalledExactlyOnceWith({
-      userId: "u1",
-      attemptId: expect.any(String),
-      teamId: expect.any(String),
-      name: "west pilot",
-      region: "usw",
-      authorityUnavailable: false,
-    })
     expect(writes.team_member).toEqual([
       { team_id: "team-new", profile_id: "u1", role: "owner" },
     ])
     expect(writes.team_memberships).toEqual([
-      { team_id: "team-new", user_id: "u1", status: "active" },
+      { id: "team-new", team_id: "team-new", user_id: "u1", status: "active" },
     ])
     expect(writes.user_role_assignments).toEqual([
       {
+        id: "team-new",
         user_id: "u1",
         role_id: "role-owner",
         scope_type: "team",
@@ -317,7 +346,6 @@ describe("createTeamAction", () => {
       },
     ])
     expect(mockEnsureGoogleOnboardingMembership).not.toHaveBeenCalled()
-    expect(mockRegisterPromotionSignupDevice).toHaveBeenCalledWith("usw", "u1")
 
     // Nothing leaked into the default cell.
     expect(cellClients.use.from).not.toHaveBeenCalled()
@@ -329,20 +357,24 @@ describe("createTeamAction", () => {
   })
 
   it("defaults to the default region when none is given", async () => {
-    const team = await createTeamAction("east team")
+    const team = await createAllowedTeam("east team")
 
     expect(team.region).toBe("use")
     expect(cellClients.use.writes.team).toBeUndefined()
-    expect(mockCreateTeamWithPromotionAttempt).toHaveBeenCalledExactlyOnceWith({
-      userId: "u1",
-      attemptId: expect.any(String),
-      teamId: expect.any(String),
-      name: "east team",
-      region: "use",
-      authorityUnavailable: false,
-    })
     expect(cellClients.usw.from).not.toHaveBeenCalled()
-    expect(mockRegisterPromotionSignupDevice).toHaveBeenCalledWith("use", "u1")
+  })
+
+  it("returns a serializable denial without selecting a team", async () => {
+    mockEvaluateSignupRestriction.mockRejectedValueOnce(
+      new SignupRestrictedError(),
+    )
+
+    await expect(createTeamAction("blocked", "usw")).resolves.toEqual({
+      code: "signup_blocked",
+      message: SIGNUP_RESTRICTED_MESSAGE,
+    })
+    expect(cellClients.usw.writes.team).toBeUndefined()
+    expect(cookieSets).toEqual([])
   })
 
   it("rejects a region that is not configured", async () => {
@@ -407,20 +439,13 @@ describe("createTeamAction", () => {
       memberships: [{ teamId: "team-old", region: "use" }],
       degradedRegions: [],
     }
+    existingRbacAssignment = true
 
-    const team = await createTeamAction("west pilot", "usw")
+    const team = await createAllowedTeam("west pilot", "usw")
 
     expect(team).toEqual({ id: "team-new", name: "west pilot", region: "usw" })
     expect(mockRequireGoogleSignupProof).not.toHaveBeenCalled()
     expect(cellClients.usw.writes.team).toBeUndefined()
-    expect(mockCreateTeamWithPromotionAttempt).toHaveBeenCalledExactlyOnceWith({
-      userId: "u1",
-      attemptId: expect.any(String),
-      teamId: expect.any(String),
-      name: "west pilot",
-      region: "usw",
-      authorityUnavailable: false,
-    })
   })
 
   it("fails transiently when a degraded empty lookup cannot be recovered", async () => {
@@ -444,6 +469,9 @@ describe("createTeamAction", () => {
 describe("active team", () => {
   beforeEach(() => {
     regions = ["use", "usw"]
+    existingRbacAssignment = true
+    unfinishedTeamId = null
+    cellClients = { use: recordingCellClient(), usw: recordingCellClient() }
     cookieValue = undefined
     cookieSets.length = 0
     directoryTeams = [
@@ -478,4 +506,55 @@ describe("active team", () => {
     )
     expect(cookieSets).toEqual([])
   })
+
+  it("hides an orphaned membership and rejects selecting it", async () => {
+    directoryTeams = [
+      { id: "team-a", name: "orphan", region: "use" },
+      { id: "team-b", name: "completed", region: "use" },
+    ]
+    unfinishedTeamId = "team-a"
+    cookieValue = "use:team-a"
+
+    expect(await listTeamsAction()).toMatchObject({
+      teams: [{ id: "team-b" }],
+      activeTeamId: "team-b",
+      activeRegion: "use",
+    })
+    await expect(setActiveTeamAction("team-a", "use")).rejects.toThrow(
+      "not a member",
+    )
+    expect(cookieSets).toEqual([])
+
+    cookieValue = undefined
+    expect((await listTeamsAction()).activeTeamId).toBe("team-b")
+  })
 })
+
+vi.mock("@/lib/api/promotion-publication", () => ({
+  publishAccountPromotion: async (
+    region: string,
+    user: { id: string },
+    observedAt: string,
+  ) => {
+    try {
+      await mockPublishPromotionIdentity(region, user.id, user, observedAt)
+      return { authorityUnavailable: false }
+    } catch {
+      return { authorityUnavailable: true }
+    }
+  },
+}))
+vi.mock("@/lib/api/promotion-device-evidence", () => ({
+  PromotionEvidenceError: class extends Error {},
+  recoverPromotionTeam: async () => null,
+  preparePromotionTeam: async (input: object) => ({
+    ...input,
+    teamId: "team-new",
+    attemptId: "backend-attempt",
+    state: "prepared",
+  }),
+  completePromotionTeam: async (input: object) => ({
+    ...input,
+    state: "completed",
+  }),
+}))

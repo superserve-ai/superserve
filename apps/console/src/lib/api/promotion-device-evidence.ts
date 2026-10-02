@@ -67,6 +67,7 @@ type PromotionEvidenceErrorCode =
   | "authority_unavailable"
   | "creation_missing"
   | "creation_conflict"
+  | "team_name_conflict"
 
 export class PromotionEvidenceError extends Error {
   constructor(
@@ -228,6 +229,13 @@ async function post(
         throw new PromotionEvidenceError("invalid_evidence", response.status)
       if (response.status === 404 && code === "creation_missing")
         throw new PromotionEvidenceError("creation_missing", response.status)
+      if (
+        response.status === 409 &&
+        code === "creation_conflict" &&
+        isRecord(errorBody) &&
+        errorBody.message === "team name already exists"
+      )
+        throw new PromotionEvidenceError("team_name_conflict", response.status)
       if (response.status === 409 && code === "creation_conflict")
         throw new PromotionEvidenceError("creation_conflict", response.status)
       throw new PromotionEvidenceError("authority_unavailable", response.status)

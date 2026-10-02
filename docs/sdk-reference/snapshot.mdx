@@ -1,0 +1,121 @@
+---
+title: "Snapshot"
+sidebarTitle: Snapshot
+description: The Snapshot class - taking, listing, renaming and deleting saved snapshots of a sandbox.
+---
+
+A `Snapshot` is a saved copy of a sandbox's memory and disk. Take one with [`sandbox.snapshot()`](/sdk-reference/sandbox#snapshot), and start new sandboxes from it with `Sandbox.create({ fromSnapshot })`. Python has a sync `Snapshot` and an async `AsyncSnapshot` with the same methods. For how snapshots and forks behave, see [Snapshots and forks](/sandbox/snapshots).
+
+## Import
+
+<CodeGroup>
+```typescript TypeScript
+import { Snapshot } from "@superserve/sdk"
+```
+
+```python Python
+from superserve import Snapshot
+# Async variant:
+from superserve import AsyncSnapshot
+```
+</CodeGroup>
+
+## Factory methods
+
+### `Snapshot.get`
+
+Fetch a snapshot by ID.
+
+<CodeGroup>
+```typescript TypeScript
+const snapshot = await Snapshot.get("5b9c2e1a-...")
+```
+
+```python Python
+snapshot = Snapshot.get("5b9c2e1a-...")
+```
+</CodeGroup>
+
+### `Snapshot.list`
+
+List a sandbox's snapshots, newest first. This also works after the sandbox is deleted. For a sandbox you already have, `sandbox.snapshots()` does the same.
+
+| Option | Type | Description |
+|---|---|---|
+| `limit` | `number` | Maximum number of snapshots to return. Omit it to get them all. |
+| `offset` | `number` | Number of snapshots to skip. Use with `limit` to page through results. |
+
+Returns `SnapshotInfo[]`.
+
+### `Snapshot.deleteById` / `Snapshot.delete_by_id`
+
+Delete a snapshot by ID. Safe to call more than once.
+
+## Methods on `snapshot`
+
+### `getInfo` / `get_info`
+
+Fetch the snapshot's current state as a [`SnapshotInfo`](#snapshotinfo).
+
+### `rename`
+
+Change the snapshot's name (1 to 64 characters). Returns the renamed `Snapshot`.
+
+### `delete`
+
+Delete the snapshot. Sandboxes already created from it keep running. Safe to call more than once.
+
+### `waitUntilReady` / `wait_until_ready`
+
+Wait until the snapshot is `ready`. You only need this if you called `sandbox.snapshot()` with `wait: false` / `wait=False`.
+
+If the snapshot failed or was deleted, this raises `SandboxError`. If it still isn't ready when the timeout runs out, TypeScript throws `TimeoutError` and Python raises `SandboxTimeoutError`.
+
+| Option | Type | Description |
+|---|---|---|
+| `timeoutMs` / `timeout` | `number` | How long to wait. TypeScript in milliseconds, Python in seconds. Default 15 minutes. |
+| `pollIntervalMs` / `poll_interval_s` | `number` | How often to check. TypeScript in milliseconds, Python in seconds. Default 2 seconds. |
+
+## Types
+
+### `SnapshotInfo`
+
+<CodeGroup>
+```typescript TypeScript
+interface SnapshotInfo {
+  id: string
+  sandboxId: string // the original sandbox, which may no longer exist
+  templateId?: string
+  kind: "mem+fs"
+  status: "creating" | "ready" | "failed" | "deleting"
+  name?: string
+  sizeBytes: number // 0 until ready
+  resources: { vcpuCount: number; memoryMib: number; diskMib: number }
+  createdAt: Date
+  readyAt?: Date
+}
+```
+
+```python Python
+class SnapshotInfo(BaseModel):
+    id: str
+    sandbox_id: str  # the original sandbox, which may no longer exist
+    template_id: str | None = None
+    kind: str  # "mem+fs"
+    status: SnapshotStatus  # creating | ready | failed | deleting
+    name: str | None = None
+    size_bytes: int  # 0 until ready
+    resources: SnapshotResources  # vcpu_count, memory_mib, disk_mib
+    created_at: datetime
+    ready_at: datetime | None = None
+```
+</CodeGroup>
+
+## Errors
+
+| Error | When |
+|---|---|
+| `RateLimitError` (`too_many_snapshots`) | The team or sandbox is at its snapshot limit. |
+| `RateLimitError` (`too_many_snapshots_in_flight`) | The team is at its limit on snapshots being taken at once. |
+| `ConflictError` | The sandbox isn't `active` or `paused`. |
+| `NotFoundError` | The snapshot or sandbox doesn't exist. |

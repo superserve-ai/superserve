@@ -5,8 +5,8 @@ import { type QueryClient, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 
 import { useQueryScope } from "@/components/query-provider"
+import { useUser } from "@/hooks/use-user"
 import type { BillingSummaryResponse } from "@/lib/api/billing"
-import { publishBillingPromotionEvidence } from "@/lib/api/billing-actions"
 import {
   createStripeCheckoutSession,
   createStripeCustomerPortalSession,
@@ -22,6 +22,7 @@ export function useBillingPayment(
   teamKey: string | null,
 ) {
   const { addToast } = useToast()
+  const { user } = useUser()
   const queryClient = useQueryClient()
   const cacheScope = useQueryScope()
   const [submitting, setSubmitting] = useState<"checkout" | "portal" | null>(
@@ -42,6 +43,7 @@ export function useBillingPayment(
   }, [])
 
   const available = Boolean(
+    user &&
     summary?.permissions?.can_manage &&
     (summary.portal_available || summary.checkout_available) &&
     cacheScope === "self",
@@ -88,23 +90,12 @@ export function useBillingPayment(
           returnUrl: returnUrl.toString(),
         })
       } else {
-        // Publication is intentionally before Checkout creation so the
-        // regional backend can pin the account's original signup evidence.
-        // The action is best-effort: missing/unavailable evidence must still
-        // allow ordinary paid access and the backend withholds only the
-        // promotion when its independent gate requires evidence.
-        try {
-          await publishBillingPromotionEvidence()
-        } catch {
-          // The promotion publication is advisory to Checkout. Auth and
-          // billing independently enforce access; an unavailable evidence
-          // writer must not prevent a paid subscription from starting.
-        }
         const successUrl = new URL(currentUrl)
         successUrl.searchParams.set("billing", "success")
         const cancelUrl = new URL(currentUrl)
         cancelUrl.searchParams.set("billing", "cancel")
         session = await createStripeCheckoutSession({
+          intentScope: `${user?.id}:${teamKey}`,
           successUrl: successUrl.toString(),
           cancelUrl: cancelUrl.toString(),
         })

@@ -1,7 +1,7 @@
 import type { Icon } from "@phosphor-icons/react"
 import {
   BookOpenIcon,
-  // CameraIcon, // TODO: re-enable when Snapshots ships
+  CameraIcon,
   ChartBarIcon,
   ClipboardTextIcon,
   CubeIcon,
@@ -37,7 +37,7 @@ export const mainNavItems: NavItem[] = [
   { label: "Sandboxes", href: "/sandboxes", icon: CubeIcon },
   { label: "Templates", href: "/templates", icon: StackIcon },
   { label: "Secrets", href: "/secrets", icon: LockKeyIcon },
-  // { label: "Snapshots", href: "/snapshots", icon: CameraIcon }, // TODO: re-enable when Snapshots ships
+  { label: "Snapshots", href: "/snapshots", icon: CameraIcon },
   { label: "Audit Logs", href: "/audit-logs", icon: ClipboardTextIcon },
   { label: "API Keys", href: "/api-keys", icon: KeyIcon },
   { label: "Plan & Usage", href: "/plan-usage", icon: ChartBarIcon },

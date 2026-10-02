@@ -4,14 +4,10 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { pickActiveTeam, readTeamSelection } from "@/lib/api/active-team"
 import {
-  PromotionEvidenceError,
-  registerPromotionSignupDevice,
-} from "@/lib/api/promotion-device-evidence"
-import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
-import {
   listTeamMembershipsForUserDetailed,
   type TeamMembership,
 } from "@/lib/api/team-directory"
+import { completedMemberships } from "@/lib/api/team-provisioning"
 import { cellFor } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -63,8 +59,13 @@ async function getTeam(userId: string): Promise<TeamMembership | null> {
   // maxAgeMs 0: billing's fail-closed check below reasons about the
   // freshness of the read itself, so it must not be served from the
   // directory cache.
-  const { memberships, degradedRegions } =
-    await listTeamMembershipsForUserDetailed(userId, { maxAgeMs: 0 })
+  const directory = await listTeamMembershipsForUserDetailed(userId, {
+    maxAgeMs: 0,
+  })
+  const { memberships, degradedRegions } = await completedMemberships(
+    userId,
+    directory,
+  )
 
   // Fail closed on a partial directory read: with a cell unreachable,
   // "exactly one membership" may just mean the other team's cell is down —
@@ -77,50 +78,6 @@ async function getTeam(userId: string): Promise<TeamMembership | null> {
   }
 
   return pickActiveTeam(memberships, await readTeamSelection())
-}
-
-/**
- * Publish the account's original signup evidence to the active billing
- * region before Checkout. The regional backend remains the grant authority;
- * this action is deliberately best-effort so unavailable evidence never
- * blocks paid access or changes the Checkout request/recovery identity.
- */
-export async function publishBillingPromotionEvidence(): Promise<
-  "published" | "missing" | "unavailable"
-> {
-  const supabase = await createServerClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-  if (authError || !user) throw new Error("Not authenticated")
-
-  let team: TeamMembership | null
-  try {
-    team = await getTeam(user.id)
-  } catch {
-    return "unavailable"
-  }
-  if (!team) return "missing"
-
-  try {
-    await publishPromotionIdentity(
-      team.region,
-      user.id,
-      user,
-      new Date().toISOString(),
-    )
-    await registerPromotionSignupDevice(team.region, user.id)
-    return "published"
-  } catch (error) {
-    if (
-      error instanceof PromotionEvidenceError &&
-      error.code === "evidence_missing"
-    )
-      return "missing"
-    // Do not turn a promotion-authority outage into a paid-access outage.
-    return "unavailable"
-  }
 }
 
 function normalizePeriod(periodStart: string, periodEnd: string) {

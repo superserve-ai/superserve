@@ -1,78 +1,30 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+vi.mock("next/server", () => ({
+  after: vi.fn(),
+}))
+
 vi.mock("@/lib/posthog/actions", () => ({
   trackEvent: vi.fn(),
 }))
-const mockVerifyPromotionSignupAttempt = vi.fn()
-vi.mock("@/lib/api/promotion-device-evidence", () => ({
-  verifyPromotionSignupAttempt: (...args: unknown[]) =>
-    mockVerifyPromotionSignupAttempt(...args),
-}))
+
+import { after } from "next/server"
 
 import { trackEvent } from "@/lib/posthog/actions"
 
-import { attestFingerprintSignup, observeFingerprintSignup } from "./observe"
+import { observeFingerprintSignup, resolveFingerprintSignup } from "./observe"
 
 const originalSecret = process.env.FINGERPRINT_SECRET_API_KEY
 
 afterEach(() => {
   vi.restoreAllMocks()
-  vi.mocked(trackEvent).mockClear()
-  mockVerifyPromotionSignupAttempt.mockReset()
+  vi.mocked(after).mockReset()
+  vi.mocked(trackEvent).mockReset()
   if (originalSecret === undefined) {
     delete process.env.FINGERPRINT_SECRET_API_KEY
   } else {
     process.env.FINGERPRINT_SECRET_API_KEY = originalSecret
   }
-})
-
-describe("attestFingerprintSignup", () => {
-  const capture = {
-    attemptId: "attempt-1",
-    challenge: "challenge-1",
-    eventId: "event-1",
-  }
-
-  it("verifies only a provider event carrying the issued challenge", async () => {
-    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          event_id: "event-1",
-          timestamp: "2026-09-26T12:00:00.000Z",
-          tag: { signup_challenge: "challenge-1" },
-          identification: { visitor_id: "Exact-Visitor" },
-        }),
-      ),
-    )
-    mockVerifyPromotionSignupAttempt.mockResolvedValue("verified")
-
-    expect(await attestFingerprintSignup(capture, "email")).toBe(true)
-    expect(fetch).toHaveBeenCalledTimes(1)
-    expect(mockVerifyPromotionSignupAttempt).toHaveBeenCalledWith({
-      attemptId: "attempt-1",
-      challenge: "challenge-1",
-      eventId: "event-1",
-      fingerprint: "Exact-Visitor",
-      eventAt: "2026-09-26T12:00:00.000Z",
-    })
-  })
-
-  it("does not publish a mismatched challenge", async () => {
-    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          event_id: "event-1",
-          timestamp: "2026-09-26T12:00:00.000Z",
-          tag: { signup_challenge: "different" },
-          identification: { visitor_id: "Exact-Visitor" },
-        }),
-      ),
-    )
-    expect(await attestFingerprintSignup(capture, "email")).toBe(false)
-    expect(mockVerifyPromotionSignupAttempt).not.toHaveBeenCalled()
-  })
 })
 
 describe("observeFingerprintSignup", () => {
@@ -97,6 +49,84 @@ describe("observeFingerprintSignup", () => {
     ).resolves.toBeUndefined()
 
     expect(trackEvent).not.toHaveBeenCalled()
+  })
+
+  it("fails open after 1500 ms when the Server API request stalls", async () => {
+    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+    vi.useFakeTimers()
+
+    try {
+      const timeoutSpy = vi
+        .spyOn(AbortSignal, "timeout")
+        .mockImplementation((milliseconds) => {
+          const controller = new AbortController()
+          setTimeout(() => controller.abort(), milliseconds)
+          return controller.signal
+        })
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
+        (_input, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            const signal = init?.signal
+            signal?.addEventListener("abort", () => reject(signal?.reason), {
+              once: true,
+            })
+          }),
+      )
+
+      const result = resolveFingerprintSignup({
+        eventId: "event-1",
+        signupMethod: "email",
+      })
+      let settled = false
+      void result.then(() => {
+        settled = true
+      })
+
+      expect(timeoutSpy).toHaveBeenCalledWith(1500)
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "https://api.fpjs.io/v4/events/event-1",
+        expect.objectContaining({ signal: timeoutSpy.mock.results[0]?.value }),
+      )
+      await vi.advanceTimersByTimeAsync(1499)
+      expect(settled).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+
+      await expect(result).resolves.toBeNull()
+      expect(after).not.toHaveBeenCalled()
+      expect(trackEvent).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("keeps provider-failure warnings free of Fingerprint identifiers", async () => {
+    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+    const eventId = "sensitive-event-id"
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            event_id: "different-event-id",
+            identification: { visitor_id: "sensitive-visitor-id" },
+          }),
+        ),
+      )
+      .mockRejectedValueOnce(new Error(`request for ${eventId} failed`))
+
+    for (let index = 0; index < 3; index++) {
+      await expect(
+        resolveFingerprintSignup({ eventId, signupMethod: "email" }),
+      ).resolves.toBeNull()
+    }
+
+    expect(warn.mock.calls).toEqual([
+      ["Fingerprint observation lookup failed", { status: 503 }],
+      ["Fingerprint observation response was malformed"],
+      ["Fingerprint observation failed open"],
+    ])
+    expect(after).not.toHaveBeenCalled()
   })
 
   it("records trusted server-side v4 identification data", async () => {
@@ -146,9 +176,16 @@ describe("observeFingerprintSignup", () => {
     expect(fetch).toHaveBeenCalledWith(
       "https://api.fpjs.io/v4/events/event-1",
       expect.objectContaining({
-        headers: { "Auth-API-Key": "server-secret" },
+        headers: { Authorization: "Bearer server-secret" },
       }),
     )
+    expect(trackEvent).not.toHaveBeenCalled()
+    expect(after).toHaveBeenCalledTimes(1)
+    const task = vi.mocked(after).mock.calls[0]?.[0]
+    if (typeof task !== "function")
+      throw new Error("Expected an after callback")
+    await task()
+
     expect(trackEvent).toHaveBeenCalledWith(
       "auth_fingerprint_signup_observed",
       "user-1",
@@ -185,13 +222,110 @@ describe("observeFingerprintSignup", () => {
     )
   })
 
-  it("fails open for malformed or unrelated server responses", async () => {
+  it("attributes a verified email observation to the user created after lookup", async () => {
+    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        event_id: "event-1",
+        identification: { visitor_id: "VisitorCase" },
+      }),
+    )
+    let userId: string | null = null
+    await expect(
+      resolveFingerprintSignup({
+        eventId: "event-1",
+        signupMethod: "email",
+        getObservationUserId: () => userId,
+      }),
+    ).resolves.toBe("VisitorCase")
+    expect(fetch).toHaveBeenCalledTimes(1)
+    userId = "created-user"
+
+    const task = vi.mocked(after).mock.calls[0]?.[0]
+    if (typeof task !== "function")
+      throw new Error("Expected an after callback")
+    await task()
+    expect(trackEvent).toHaveBeenCalledWith(
+      "auth_fingerprint_signup_observed",
+      "created-user",
+      expect.objectContaining({ superserve_user_id: "created-user" }),
+    )
+  })
+
+  it("returns the verified visitor while observation telemetry is pending", async () => {
+    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          event_id: "event-1",
+          identification: { visitor_id: "VisitorCase" },
+        }),
+        { status: 200 },
+      ),
+    )
+    vi.mocked(trackEvent).mockImplementation(() => new Promise(() => {}))
+    vi.mocked(after).mockImplementation((task) => {
+      if (typeof task === "function") void task()
+    })
+
+    await expect(
+      resolveFingerprintSignup({ eventId: "event-1", signupMethod: "email" }),
+    ).resolves.toBe("VisitorCase")
+    expect(after).toHaveBeenCalledTimes(1)
+    expect(trackEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps the verified visitor when observation cannot be scheduled", async () => {
+    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          event_id: "event-1",
+          identification: { visitor_id: "VisitorCase" },
+        }),
+        { status: 200 },
+      ),
+    )
+    vi.mocked(after).mockImplementation(() => {
+      throw new Error("request context unavailable")
+    })
+
+    await expect(
+      resolveFingerprintSignup({ eventId: "event-1", signupMethod: "email" }),
+    ).resolves.toBe("VisitorCase")
+    expect(trackEvent).not.toHaveBeenCalled()
+  })
+
+  it("keeps the verified visitor when observation telemetry rejects", async () => {
+    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          event_id: "event-1",
+          identification: { visitor_id: "VisitorCase" },
+        }),
+        { status: 200 },
+      ),
+    )
+    vi.mocked(trackEvent).mockRejectedValue(new Error("telemetry unavailable"))
+
+    await expect(
+      resolveFingerprintSignup({ eventId: "event-1", signupMethod: "email" }),
+    ).resolves.toBe("VisitorCase")
+    const task = vi.mocked(after).mock.calls[0]?.[0]
+    if (typeof task !== "function")
+      throw new Error("Expected an after callback")
+    await expect(task()).resolves.toBeUndefined()
+    expect(trackEvent).toHaveBeenCalledTimes(1)
+  })
+
+  it("rejects a provider event ID mismatch even with a visitor ID", async () => {
     process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
           event_id: "other-event",
-          identification: {},
+          identification: { visitor_id: "VisitorCase" },
           vpn: true,
         }),
         { status: 200 },
@@ -199,9 +333,93 @@ describe("observeFingerprintSignup", () => {
     )
 
     await expect(
-      observeFingerprintSignup({ eventId: "event-1", signupMethod: "email" }),
-    ).resolves.toBeUndefined()
+      resolveFingerprintSignup({ eventId: "event-1", signupMethod: "email" }),
+    ).resolves.toBeNull()
 
+    expect(after).not.toHaveBeenCalled()
     expect(trackEvent).not.toHaveBeenCalled()
   })
+
+  it("fails open when the server response has no visitor ID", async () => {
+    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ event_id: "event-1", identification: {} }),
+        { status: 200 },
+      ),
+    )
+
+    await expect(
+      resolveFingerprintSignup({ eventId: "event-1", signupMethod: "email" }),
+    ).resolves.toBeNull()
+    expect(after).not.toHaveBeenCalled()
+  })
 })
+
+vi.mock("@/lib/api/promotion-device-evidence", () => ({
+  verifyPromotionSignupAttempt: vi.fn(),
+}))
+import { verifyPromotionSignupAttempt } from "@/lib/api/promotion-device-evidence"
+
+it.each([
+  "valid",
+  "wrong challenge",
+  "wrong event",
+  "no timestamp",
+  "verify failed",
+])(
+  "attests the exact signup event with one provider lookup: %s",
+  async (mode) => {
+    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+    const capture = {
+      attemptId: "attempt",
+      challenge: "challenge",
+      eventId: "event",
+    }
+    const verified = vi.fn()
+    vi.mocked(verifyPromotionSignupAttempt)
+      .mockReset()
+      .mockResolvedValue("verified")
+    if (mode === "verify failed")
+      vi.mocked(verifyPromotionSignupAttempt).mockRejectedValue(
+        new Error("unavailable"),
+      )
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        event_id: mode === "wrong event" ? "other" : "event",
+        identification: { visitor_id: "ServerVisitor", visitor_found: true },
+        tags: {
+          signup_challenge: mode === "wrong challenge" ? "other" : "challenge",
+        },
+        timestamp: mode === "no timestamp" ? undefined : 1790899200000,
+        vpn: true,
+      }),
+    )
+    const visitor = await resolveFingerprintSignup({
+      eventId: capture.eventId,
+      signupMethod: "email",
+      capture,
+      onAttested: verified,
+    })
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(fetchSpy.mock.calls[0][1]?.headers).toEqual({
+      Authorization: "Bearer server-secret",
+    })
+    expect(visitor).toBe(mode === "wrong event" ? null : "ServerVisitor")
+    expect(verified).toHaveBeenCalledTimes(mode === "valid" ? 1 : 0)
+    if (mode === "valid") {
+      expect(verifyPromotionSignupAttempt).toHaveBeenCalledWith({
+        ...capture,
+        fingerprint: "ServerVisitor",
+        eventAt: "2026-10-02T00:00:00.000Z",
+      })
+      const callback = vi.mocked(after).mock.calls[0][0] as () => Promise<void>
+      await callback()
+      expect(trackEvent).toHaveBeenCalledWith(
+        expect.any(String),
+        "event",
+        expect.objectContaining({ vpn: true, visitor_id: "ServerVisitor" }),
+      )
+    }
+  },
+)

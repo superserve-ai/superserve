@@ -3,16 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const getUser = vi.fn()
 const from = vi.fn()
 const rpc = vi.fn()
-const publishIdentity = vi.fn()
-const registerDevice = vi.fn()
-vi.mock("@/lib/api/promotion-identity", () => ({
-  publishPromotionIdentity: (...args: unknown[]) => publishIdentity(...args),
-}))
-vi.mock("@/lib/api/promotion-device-evidence", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./promotion-device-evidence")>()),
-  registerPromotionSignupDevice: (...args: unknown[]) =>
-    registerDevice(...args),
-}))
+let directoryTeamIds = ["team-1"]
+let unfinishedTeamId: string | null = null
 
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: vi.fn(async () => ({
@@ -27,6 +19,20 @@ vi.mock("@/lib/supabase/admin", () => ({
     from,
     rpc,
   })),
+}))
+vi.mock("@/lib/api/team-provisioning", () => ({
+  completedMemberships: async (
+    _userId: string,
+    directory: {
+      memberships: Array<{ teamId: string; region: string }>
+      degradedRegions: string[]
+    },
+  ) => ({
+    ...directory,
+    memberships: directory.memberships.filter(
+      (membership) => membership.teamId !== unfinishedTeamId,
+    ),
+  }),
 }))
 
 // No cookie set: active-team resolution falls back to the first membership.
@@ -153,8 +159,8 @@ function usageQuery(rows: Array<Record<string, unknown>> = []) {
 describe("billing actions", () => {
   beforeEach(() => {
     vi.resetAllMocks()
-    publishIdentity.mockResolvedValue(undefined)
-    registerDevice.mockResolvedValue("owner")
+    directoryTeamIds = ["team-1"]
+    unfinishedTeamId = null
     getUser.mockResolvedValue({
       data: { user: { id: "user-1" } },
     })
@@ -175,53 +181,13 @@ describe("billing actions", () => {
         return {
           select: () => ({ eq: async () => ({ data: [], error: null }) }),
         }
-      if (table === "team_member") return singleTeamResult()
+      if (table === "team_member") return singleTeamResult(directoryTeamIds)
       if (table === "team_pricing_plan") return teamPricingPlanQuery()
       if (table === "pricing_plan") return pricingPlanQuery()
       if (table === "pricing_rate") return pricingRateQuery()
       if (table === "team_billing_usage_hourly") return usageQuery()
       throw new Error(`unexpected table ${table}`)
     })
-  })
-
-  it("publishes canonical identity before the original signup device at billing", async () => {
-    const { publishBillingPromotionEvidence } =
-      await import("./billing-actions")
-    await expect(publishBillingPromotionEvidence()).resolves.toBe("published")
-    expect(publishIdentity).toHaveBeenCalledWith(
-      "use",
-      "user-1",
-      { id: "user-1" },
-      expect.any(String),
-    )
-    expect(registerDevice).toHaveBeenCalledExactlyOnceWith("use", "user-1")
-    expect(publishIdentity.mock.invocationCallOrder[0]).toBeLessThan(
-      registerDevice.mock.invocationCallOrder[0],
-    )
-  })
-
-  it("reports identity failure as unavailable without replacing it with missing evidence", async () => {
-    publishIdentity.mockRejectedValue(
-      new Error("identity persistence unavailable"),
-    )
-    const { publishBillingPromotionEvidence } =
-      await import("./billing-actions")
-    await expect(publishBillingPromotionEvidence()).resolves.toBe("unavailable")
-    expect(registerDevice).not.toHaveBeenCalled()
-  })
-
-  it("rejects a user returned alongside an Auth verification error", async () => {
-    getUser.mockResolvedValue({
-      data: { user: { id: "user-1" } },
-      error: new Error("invalid credential"),
-    })
-    const { publishBillingPromotionEvidence } =
-      await import("./billing-actions")
-    await expect(publishBillingPromotionEvidence()).rejects.toThrow(
-      "Not authenticated",
-    )
-    expect(publishIdentity).not.toHaveBeenCalled()
-    expect(registerDevice).not.toHaveBeenCalled()
   })
 
   it("uses the active team pricing plan and newest active rate", async () => {
@@ -295,5 +261,21 @@ describe("billing actions", () => {
     )
 
     expect(response.billing_mode).toBe("active")
+  })
+
+  it("bills the completed team when an orphaned team is listed first", async () => {
+    directoryTeamIds = ["team-a", "team-b"]
+    unfinishedTeamId = "team-a"
+    const { getBillingUsageAction } = await import("./billing-actions")
+
+    await getBillingUsageAction(
+      "2026-01-01T00:00:00.000Z",
+      "2026-01-02T00:00:00.000Z",
+    )
+
+    expect(rpc).toHaveBeenCalledWith("feature_enabled", {
+      flag_key: "tenant_usage_dashboard",
+      flag_team_id: "team-b",
+    })
   })
 })

@@ -1,3 +1,6 @@
+vi.mock("@/hooks/use-user", () => ({
+  useUser: () => ({ user: { id: "u1" }, loading: false }),
+}))
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, renderHook } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest"
@@ -46,6 +49,7 @@ function setup(value = summary) {
   return { ...hook, client }
 }
 beforeEach(() => {
+  sessionStorage.clear()
   vi.clearAllMocks()
   mocks.scope.mockReturnValue("self")
   mocks.publishEvidence.mockResolvedValue("published")
@@ -53,12 +57,6 @@ beforeEach(() => {
 })
 
 it("keeps checkout return conventions and blocks duplicate submission", async () => {
-  let finishPublication!: () => void
-  mocks.publishEvidence.mockReturnValueOnce(
-    new Promise<void>((resolve) => {
-      finishPublication = resolve
-    }),
-  )
   let reject!: (reason: Error) => void
   mocks.checkout.mockReturnValue(
     new Promise((_resolve, rej) => {
@@ -71,12 +69,8 @@ it("keeps checkout return conventions and blocks duplicate submission", async ()
     pending = result.current.openSession()
     void result.current.openSession()
   })
-  expect(mocks.publishEvidence).toHaveBeenCalledTimes(1)
-  expect(mocks.checkout).not.toHaveBeenCalled()
+  expect(mocks.publishEvidence).not.toHaveBeenCalled()
   expect(result.current.submitting).toBe("checkout")
-  await act(async () => {
-    finishPublication()
-  })
   expect(mocks.checkout).toHaveBeenCalledTimes(1)
   const params = mocks.checkout.mock.calls[0][0]
   expect(new URL(params.successUrl).searchParams.get("billing")).toBe("success")

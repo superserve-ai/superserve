@@ -30,7 +30,9 @@ import { createPortal } from "react-dom"
 import { CornerBrackets } from "@/components/corner-brackets"
 import type { SecretBindingEntry } from "@/components/secrets/secret-binding-editor"
 import { SecretBindingEditor } from "@/components/secrets/secret-binding-editor"
+import { snapshotLabel } from "@/components/snapshots/snapshot-status-badge"
 import { useCreateSandbox } from "@/hooks/use-sandboxes"
+import { useSnapshots } from "@/hooks/use-snapshots"
 import { useTemplates } from "@/hooks/use-templates"
 import type { CreateSandboxRequest, PreviewAccessPolicy } from "@/lib/api/types"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
@@ -38,27 +40,32 @@ import { isSystemTemplate } from "@/lib/templates/is-system-template"
 
 const DEFAULT_TEMPLATE = "superserve/base"
 
-interface TemplatePickerItem {
-  id: string
-  name: string
-  system: boolean
+interface PickerItem {
+  value: string
+  label: string
+  /** Short mono tag beside the label, e.g. "System" or the resources. */
+  tag?: string
 }
 
-function TemplatePicker({
+function SourcePicker({
   value,
   items,
   onChange,
+  emptyText,
+  placeholder,
 }: {
   value: string
-  items: TemplatePickerItem[]
-  onChange: (name: string) => void
+  items: PickerItem[]
+  onChange: (value: string) => void
+  emptyText: string
+  placeholder?: string
 }) {
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [rect, setRect] = useState<DOMRect | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
-  const current = items.find((i) => i.name === value)
+  const current = items.find((i) => i.value === value)
 
   useEffect(() => setMounted(true), [])
 
@@ -115,17 +122,17 @@ function TemplatePicker({
           >
             {items.length === 0 ? (
               <div className="px-3 py-2 font-mono text-xs text-muted">
-                No ready templates available
+                {emptyText}
               </div>
             ) : (
               items.map((item) => {
-                const selected = item.name === value
+                const selected = item.value === value
                 return (
                   <button
-                    key={item.id}
+                    key={item.value}
                     type="button"
                     onClick={() => {
-                      onChange(item.name)
+                      onChange(item.value)
                       setOpen(false)
                     }}
                     className={cn(
@@ -135,10 +142,10 @@ function TemplatePicker({
                         : "text-foreground/80 hover:bg-surface-hover",
                     )}
                   >
-                    <span className="font-mono">{item.name}</span>
-                    {item.system && (
+                    <span className="font-mono">{item.label}</span>
+                    {item.tag && (
                       <span className="font-mono text-[10px] text-muted uppercase">
-                        System
+                        {item.tag}
                       </span>
                     )}
                   </button>
@@ -162,10 +169,17 @@ function TemplatePicker({
         )}
       >
         <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate font-mono">{value}</span>
-          {current?.system && (
+          <span
+            className={cn(
+              "truncate font-mono",
+              !current && !value && "text-muted",
+            )}
+          >
+            {current?.label ?? (value || placeholder)}
+          </span>
+          {current?.tag && (
             <span className="font-mono text-[10px] text-muted uppercase">
-              System
+              {current.tag}
             </span>
           )}
         </span>
@@ -183,6 +197,12 @@ function TemplatePicker({
 }
 
 type Mode = "form" | "code"
+type Source = "template" | "snapshot"
+
+const SOURCES: { label: string; value: Source }[] = [
+  { label: "Template", value: "template" },
+  { label: "Snapshot", value: "snapshot" },
+]
 type Language = "typescript" | "python"
 
 const LANGUAGES: { label: string; value: Language }[] = [
@@ -253,6 +273,8 @@ interface FormState {
   metadataEntries: { key: string; value: string }[]
   previewAccess: PreviewAccessPolicy
   templateRef?: string
+  /** Saved snapshot to continue from; takes the place of `templateRef`. */
+  snapshotId?: string
 }
 
 /** Max auto-pause timeout (7 days) and auto-delete window (30 days), matching
@@ -305,7 +327,9 @@ export function parseWindowSeconds(
  *    dropped.
  *  - `secrets` is only included when at least one entry has both an env
  *    key and a secret name.
- *  - `template_id` is only included when `templateRef` is non-empty.
+ *  - `from_snapshot` is included when `snapshotId` is set, and then
+ *    `from_template` never is; otherwise `from_template` is included when
+ *    `templateRef` is non-empty.
  *  - `preview_access` is always explicit so new console sandboxes use the
  *    published-port model instead of the compatibility-only legacy mode.
  */
@@ -350,7 +374,11 @@ export function buildCreateSandboxRequest(
   return {
     name: state.name.trim(),
     preview_access: state.previewAccess,
-    ...(state.templateRef ? { from_template: state.templateRef } : {}),
+    ...(state.snapshotId
+      ? { from_snapshot: state.snapshotId }
+      : state.templateRef
+        ? { from_template: state.templateRef }
+        : {}),
     ...(timeoutSeconds !== undefined
       ? { timeout_seconds: timeoutSeconds }
       : {}),
@@ -382,6 +410,8 @@ interface CreateSandboxDialogProps {
    * create payload includes `template_id`.
    */
   initialTemplateRef?: string | null
+  /** Saved snapshot to preselect; opens the dialog on the Snapshot source. */
+  initialSnapshotId?: string | null
 }
 
 export function CreateSandboxDialog({
@@ -390,6 +420,7 @@ export function CreateSandboxDialog({
   hideTrigger,
   onCreated,
   initialTemplateRef,
+  initialSnapshotId,
 }: CreateSandboxDialogProps = {}) {
   const posthog = usePostHog()
   const [internalOpen, setInternalOpen] = useState(false)
@@ -418,11 +449,21 @@ export function CreateSandboxDialog({
     initialTemplateRef ?? DEFAULT_TEMPLATE,
   )
 
+  const [source, setSource] = useState<Source>(
+    initialSnapshotId ? "snapshot" : "template",
+  )
+  const [snapshotId, setSnapshotId] = useState(initialSnapshotId ?? "")
+
   // Keep `templateRef` in sync when the caller changes `initialTemplateRef`
   // (e.g. a different Launch action was fired).
   useEffect(() => {
     setTemplateRef(initialTemplateRef ?? DEFAULT_TEMPLATE)
   }, [initialTemplateRef])
+
+  useEffect(() => {
+    setSnapshotId(initialSnapshotId ?? "")
+    setSource(initialSnapshotId ? "snapshot" : "template")
+  }, [initialSnapshotId])
 
   const { data: templates } = useTemplates()
   const templateOptions = useMemo(() => {
@@ -438,26 +479,45 @@ export function CreateSandboxDialog({
   }, [templates])
 
   const selectItems = useMemo(() => {
+    const tag = (system: boolean) => (system ? "System" : undefined)
     const mapped = templateOptions.map((t) => ({
-      id: t.id,
-      name: t.name,
-      system: isSystemTemplate(t),
+      value: t.name,
+      label: t.name,
+      tag: tag(isSystemTemplate(t)),
     }))
     // Ensure the current value is always in the items list, even if the
     // templates query hasn't resolved yet.
-    const names = new Set(mapped.map((t) => t.name))
+    const names = new Set(mapped.map((t) => t.value))
     if (templateRef && !names.has(templateRef)) {
       return [
         {
-          id: templateRef,
-          name: templateRef,
-          system: isSystemTemplate({ name: templateRef }),
+          value: templateRef,
+          label: templateRef,
+          tag: tag(isSystemTemplate({ name: templateRef })),
         },
         ...mapped,
       ]
     }
     return mapped
   }, [templateOptions, templateRef])
+
+  // Only while open: the dialog stays mounted on the sandboxes page.
+  const { data: snapshots } = useSnapshots({ enabled: open })
+  const readySnapshots = useMemo(
+    () => (snapshots ?? []).filter((s) => s.status === "ready"),
+    [snapshots],
+  )
+  const snapshotItems = useMemo(
+    () =>
+      readySnapshots.map((s) => ({
+        value: s.id,
+        label: snapshotLabel(s),
+        tag: `${s.resources.vcpu_count} vCPU · ${s.resources.memory_mib} MiB`,
+      })),
+    [readySnapshots],
+  )
+  const selectedSnapshot = readySnapshots.find((s) => s.id === snapshotId)
+  const fromSnapshot = source === "snapshot"
 
   const createMutation = useCreateSandbox()
   const { addToast } = useToast()
@@ -475,6 +535,8 @@ export function CreateSandboxDialog({
     setShowAdvanced(false)
     setMode("form")
     setTemplateRef(initialTemplateRef ?? DEFAULT_TEMPLATE)
+    setSnapshotId(initialSnapshotId ?? "")
+    setSource(initialSnapshotId ? "snapshot" : "template")
   }
 
   const handleCreate = () => {
@@ -490,7 +552,8 @@ export function CreateSandboxDialog({
         envEntries,
         metadataEntries,
         previewAccess,
-        templateRef: templateRef || undefined,
+        templateRef: fromSnapshot ? undefined : templateRef || undefined,
+        snapshotId: fromSnapshot ? snapshotId : undefined,
       })
     } catch (e) {
       addToast(e instanceof Error ? e.message : "Invalid input", "error")
@@ -512,6 +575,7 @@ export function CreateSandboxDialog({
         : 0,
       advanced_expanded: showAdvanced,
       from_template: !!payload.from_template,
+      from_snapshot: !!payload.from_snapshot,
       preview_access: payload.preview_access,
     })
 
@@ -608,30 +672,60 @@ export function CreateSandboxDialog({
                 />
               </Field>
 
-              <Field
-                label="Template"
-                required
-                description="Base image the sandbox boots from."
-              >
-                <TemplatePicker
-                  value={templateRef}
-                  items={selectItems}
-                  onChange={setTemplateRef}
-                />
+              <Field label="Source">
+                <div className="flex items-center gap-1">
+                  {SOURCES.map((s) => (
+                    <button
+                      key={s.value}
+                      type="button"
+                      aria-pressed={source === s.value}
+                      onClick={() => setSource(s.value)}
+                      className={cn(
+                        "relative inline-flex cursor-pointer items-center px-3 py-1 font-mono text-xs transition-colors",
+                        source === s.value
+                          ? "bg-brand/10 text-foreground"
+                          : "text-muted hover:text-foreground",
+                      )}
+                    >
+                      {source === s.value && <CornerBrackets size="sm" />}
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
               </Field>
 
-              {/* TODO: re-enable when multiple snapshots are available
-              <Field label="Snapshot" description="More snapshots coming soon">
-                <Select defaultValue="base">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectPopup>
-                    <SelectItem value="base">superserve/base</SelectItem>
-                  </SelectPopup>
-                </Select>
-              </Field>
-              */}
+              {fromSnapshot ? (
+                <Field
+                  label="Snapshot"
+                  required
+                  description={
+                    selectedSnapshot
+                      ? `Starts where the snapshot left off, with ${selectedSnapshot.resources.vcpu_count} vCPU, ${selectedSnapshot.resources.memory_mib} MiB memory and ${selectedSnapshot.resources.disk_mib} MiB disk.`
+                      : "Starts where the snapshot left off. The snapshot sets vCPU, memory and disk."
+                  }
+                >
+                  <SourcePicker
+                    value={snapshotId}
+                    items={snapshotItems}
+                    onChange={setSnapshotId}
+                    emptyText="No ready snapshots available"
+                    placeholder="Select a snapshot"
+                  />
+                </Field>
+              ) : (
+                <Field
+                  label="Template"
+                  required
+                  description="Base image the sandbox boots from."
+                >
+                  <SourcePicker
+                    value={templateRef}
+                    items={selectItems}
+                    onChange={setTemplateRef}
+                    emptyText="No ready templates available"
+                  />
+                </Field>
+              )}
 
               <button
                 type="button"
@@ -679,7 +773,9 @@ export function CreateSandboxDialog({
                       >
                         <Input
                           type="number"
-                          placeholder="No timeout"
+                          placeholder={
+                            fromSnapshot ? "Snapshot's timeout" : "No timeout"
+                          }
                           suffix="sec"
                           min={1}
                           max={MAX_TIMEOUT_SECONDS}
@@ -934,7 +1030,11 @@ export function CreateSandboxDialog({
                 Cancel
               </Button>
               <Button
-                disabled={!name.trim() || createMutation.isPending}
+                disabled={
+                  !name.trim() ||
+                  (fromSnapshot && !snapshotId) ||
+                  createMutation.isPending
+                }
                 onClick={handleCreate}
               >
                 {createMutation.isPending ? "Creating..." : "Create Sandbox"}

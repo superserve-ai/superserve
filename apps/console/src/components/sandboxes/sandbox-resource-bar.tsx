@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+
 import type { SandboxResponse } from "@/lib/api/types"
 import { formatTime, formatTimeout } from "@/lib/format"
 
@@ -14,7 +16,12 @@ function formatMemory(mib: number): string {
 export function SandboxResourceBar({ sandbox }: SandboxResourceBarProps) {
   const created = formatTime(new Date(sandbox.created_at))
 
-  const items: { label: string; value: string; title?: string }[] = [
+  const items: {
+    label: string
+    value: string
+    title?: string
+    href?: string
+  }[] = [
     {
       label: "vCPU",
       value: String(sandbox.vcpu_count),
@@ -29,13 +36,16 @@ export function SandboxResourceBar({ sandbox }: SandboxResourceBarProps) {
         ? formatTimeout(sandbox.timeout_seconds)
         : "None",
     },
-    {
-      label: "Snapshot",
-      value: sandbox.snapshot_id
-        ? `${sandbox.snapshot_id.slice(0, 8)}`
-        : "None",
-      title: sandbox.snapshot_id ?? undefined,
-    },
+    ...(sandbox.source_snapshot_id
+      ? [
+          {
+            label: "Created from snapshot",
+            value: sandbox.source_snapshot_id.slice(0, 8),
+            title: sandbox.source_snapshot_id,
+            href: `/snapshots/?q=${sandbox.source_snapshot_id}`,
+          },
+        ]
+      : []),
     {
       label: "Created",
       value: created.relative,
@@ -50,12 +60,22 @@ export function SandboxResourceBar({ sandbox }: SandboxResourceBarProps) {
           <span className="font-mono text-[10px] tracking-wider text-muted uppercase">
             {item.label}
           </span>
-          <span
-            className="font-mono text-xs text-foreground/80 tabular-nums"
-            title={item.title}
-          >
-            {item.value}
-          </span>
+          {item.href ? (
+            <Link
+              href={item.href}
+              className="font-mono text-xs text-foreground/80 tabular-nums underline-offset-2 hover:underline"
+              title={item.title}
+            >
+              {item.value}
+            </Link>
+          ) : (
+            <span
+              className="font-mono text-xs text-foreground/80 tabular-nums"
+              title={item.title}
+            >
+              {item.value}
+            </span>
+          )}
           {i < items.length - 1 && (
             <span className="ml-4 h-3 w-px bg-border" aria-hidden />
           )}

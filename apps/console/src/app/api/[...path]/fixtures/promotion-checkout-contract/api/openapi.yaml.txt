@@ -1,0 +1,82 @@
+  /stripe/checkout-session/recover:
+    post:
+      operationId: recoverStripeCheckoutSession
+      tags: [Billing]
+      summary: Recover an existing Stripe Checkout session
+      description: |
+        Requires the original authenticated billing actor, billing:write and live
+        billing. Retrieves only the recorded open session, retaining its original
+        actor, generation and immutable identity evidence without refreshing the
+        evidence. Never creates a customer, session, subscription or replacement
+        generation. The original tuple is revalidated under database locks after
+        provider retrieval; concurrent completion, abandonment or replacement
+        makes recovery unavailable.
+
+        An empty body or {} recovers only the generation observed at the first
+        backend read. An optional timestamp restricts recovery further. Unknown
+        fields, null bodies, trailing JSON and bodies over 4 KiB are rejected.
+        A 409 does not prove an ambiguous create failed or release its fence.
+        Fresh trusted evidence must be published before attempting creation;
+        evidence failure or an older server's 404 must not trigger create fallback.
+      security:
+        - apiKey: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                checkout_generation:
+                  type: [string, "null"]
+                  format: date-time
+                  description: Original generation timestamp, with fractional seconds preserved; null is treated as omitted.
+      responses:
+        "200":
+          description: Original Checkout session recovered without mutation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [outcome, id, url, checkout_generation]
+                properties:
+                  outcome:
+                    type: string
+                    enum: [recovered]
+                  id:
+                    type: string
+                  url:
+                    type: string
+                    format: uri
+                  checkout_generation:
+                    type: string
+                    format: date-time
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: checkout_recovery_unavailable — no matching recoverable generation or provider session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          description: bad_gateway — provider transport, timeout or response failure other than 404
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: service_unavailable — recovery transport or captured identity authority unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"

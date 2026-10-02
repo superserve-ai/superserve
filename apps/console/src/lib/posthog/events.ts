@@ -10,6 +10,7 @@ export const AUTH_EVENTS = {
   GOOGLE_SIGNUP_BYPASS_BLOCKED: "auth_google_signup_bypass_blocked",
   GOOGLE_SIGNUP_PROOF_CONSUMED: "auth_google_signup_proof_consumed",
   FINGERPRINT_SIGNUP_OBSERVED: "auth_fingerprint_signup_observed",
+  SIGNUP_RESTRICTION_EVALUATED: "auth_signup_restriction_evaluated",
   CLOUDFLARE_SIGNUP_OBSERVED: "auth_cloudflare_signup_observed",
   CLOUDFLARE_SIGNUP_OBSERVATION_FAILED:
     "auth_cloudflare_signup_observation_failed",
@@ -56,8 +57,9 @@ export const API_KEY_EVENTS = {
 } as const
 
 export const SNAPSHOT_EVENTS = {
+  TAKEN: "snapshot_taken",
+  RENAMED: "snapshot_renamed",
   DELETED: "snapshot_deleted",
-  BULK_DELETED: "snapshot_bulk_deleted",
 } as const
 
 export const SECRET_EVENTS = {
