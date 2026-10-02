@@ -106,6 +106,26 @@ function setup() {
   )
 }
 
+it.each(["a".repeat(257), "é".repeat(129), "   "])(
+  "allows correcting an invalid team name without retaining an intent",
+  async (name) => {
+    mocks.create.mockResolvedValue(teamB)
+    mocks.directory.mockResolvedValue({ ...directory, teams: [teamA, teamB] })
+    const { result } = setup()
+    await act(async () => {
+      await expect(
+        result.current.create.mutateAsync({ name, region: "usw" }),
+      ).rejects.toThrow("Enter a team name")
+    })
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(sessionStorage.getItem("superserve:team-creation:u1:usw")).toBeNull()
+    await act(async () => {
+      await result.current.create.mutateAsync({ name: "B", region: "usw" })
+    })
+    expect(mocks.create).toHaveBeenCalledWith("B", "usw", expect.any(String))
+  },
+)
+
 it("keeps the current team when creation returns a signup denial", async () => {
   mocks.create.mockResolvedValue({
     code: "signup_blocked",

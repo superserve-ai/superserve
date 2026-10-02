@@ -56,6 +56,8 @@ export function useCreateTeam() {
     mutationKey: ["switch-team", "create"],
     mutationFn: async ({ name, region }: { name: string; region: string }) => {
       if (!user) throw new Error("Not authenticated")
+      if (!name.trim() || new TextEncoder().encode(name).length > 256)
+        throw new Error("Enter a team name between 1 and 256 bytes")
       const key = `superserve:team-creation:${user.id}:${region}`
       const stored = sessionStorage.getItem(key)
       let intent: {
