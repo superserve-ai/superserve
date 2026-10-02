@@ -28,6 +28,13 @@ describe("formatSignupEligibility", () => {
         text: "Signup Fingerprint could not be verified",
       },
     },
+    {
+      outcome: { kind: "enforced_device_redeemed" },
+      expected: {
+        emoji: "💸",
+        text: "Signup Fingerprint is not eligible under the East device policy",
+      },
+    },
   ])("renders the explicit $outcome.kind outcome", ({ outcome, expected }) => {
     expect(formatSignupEligibility(outcome)).toEqual(expected)
   })
@@ -102,6 +109,7 @@ describe("formatSignupEligibility", () => {
       formatSignupEligibility({ kind: "eligible" }),
       formatSignupEligibility({ kind: "enforced_other_owner" }),
       formatSignupEligibility({ kind: "enforced_missing_evidence" }),
+      formatSignupEligibility({ kind: "enforced_device_redeemed" }),
       formatSignupEligibility({ kind: "blocked", reason: "known_abuse" }),
       formatSignupEligibility({ kind: "unavailable" }),
     ]
@@ -125,10 +133,28 @@ describe("normalizeSignupEligibilitySnapshot", () => {
     ],
     [
       {
+        ownership: "owner",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "verified_identity_missing",
+      },
+      { kind: "eligible" },
+    ],
+    [
+      {
+        ownership: "owner",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "historical_identity_unresolved",
+      },
+      { kind: "eligible" },
+    ],
+    [
+      {
         ownership: "another_owner",
         deviceDecision: "owner_conflict",
         eligibility: "ineligible",
-        reason: "already_registered",
+        reason: "owner_conflict",
       },
       { kind: "enforced_other_owner" },
     ],
@@ -137,9 +163,18 @@ describe("normalizeSignupEligibilitySnapshot", () => {
         ownership: "evidence_missing",
         deviceDecision: "evidence_missing",
         eligibility: "ineligible",
-        reason: "missing",
+        reason: "evidence_missing",
       },
       { kind: "enforced_missing_evidence" },
+    ],
+    [
+      {
+        ownership: "owner",
+        deviceDecision: "device_already_redeemed",
+        eligibility: "ineligible",
+        reason: "device_already_redeemed",
+      },
+      { kind: "enforced_device_redeemed" },
     ],
   ])("maps the exact policy-aware combination", (snapshot, expected) => {
     expect(normalizeSignupEligibilitySnapshot(snapshot)).toEqual(expected)
@@ -150,19 +185,25 @@ describe("normalizeSignupEligibilitySnapshot", () => {
       ownership: "another_owner",
       deviceDecision: "eligible",
       eligibility: "unknown",
-      reason: "owner_conflict",
+      reason: "team_checks_pending",
     },
     {
       ownership: "evidence_missing",
       deviceDecision: "eligible",
       eligibility: "unknown",
-      reason: "evidence_missing",
+      reason: "team_checks_pending",
     },
     {
       ownership: "owner",
       deviceDecision: "eligible",
       eligibility: "ineligible",
       reason: "user_already_claimed",
+    },
+    {
+      ownership: "owner",
+      deviceDecision: "eligible",
+      eligibility: "ineligible",
+      reason: "identity_already_claimed",
     },
   ])(
     "keeps bypassed or non-device ineligibility unavailable through formatting",
@@ -196,6 +237,13 @@ describe("normalizeSignupEligibilitySnapshot", () => {
       ownership: "owner",
       deviceDecision: "eligible",
       eligibility: "unknown",
+      reason: "unexpected_reason",
+    },
+    {
+      ownership: "owner",
+      deviceDecision: "device_already_redeemed",
+      eligibility: "ineligible",
+      reason: "owner_conflict",
     },
     {
       ownership: "another_owner",

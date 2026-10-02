@@ -346,6 +346,22 @@ describe("auth callback", () => {
     })
   })
 
+  it("uses unavailable for a pre-identity Google trigger rejection", async () => {
+    authExchangeError = { message: "database error saving new user" }
+    mockNotifySlackOfNewUser.mockRejectedValueOnce(new Error("webhook down"))
+
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+      ),
+    )
+
+    expect(response.headers.get("location")).toContain("reason=signup_blocked")
+    expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith("", null, "google", {
+      kind: "unavailable",
+    })
+  })
+
   it("does not read active signup evidence for a callback without an attempt ID", async () => {
     currentUser!.app_metadata = { provider: "email" }
     mockReadSignupEvidence.mockResolvedValue("NewerAttemptVisitor")
@@ -530,6 +546,26 @@ describe("auth callback", () => {
       { kind: "eligible" },
     ],
     [
+      "pre-confirmation identity unavailable",
+      {
+        ownership: "owner",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "verified_identity_missing",
+      },
+      { kind: "eligible" },
+    ],
+    [
+      "historical identity unresolved",
+      {
+        ownership: "owner",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "historical_identity_unresolved",
+      },
+      { kind: "eligible" },
+    ],
+    [
       "another owner",
       {
         ownership: "another_owner",
@@ -548,6 +584,16 @@ describe("auth callback", () => {
         reason: "evidence_missing",
       },
       { kind: "enforced_missing_evidence" },
+    ],
+    [
+      "device already redeemed",
+      {
+        ownership: "owner",
+        deviceDecision: "device_already_redeemed",
+        eligibility: "ineligible",
+        reason: "device_already_redeemed",
+      },
+      { kind: "enforced_device_redeemed" },
     ],
   ] as const)(
     "publishes before notifying with the authoritative Google %s snapshot",
@@ -573,6 +619,16 @@ describe("auth callback", () => {
         "Test User",
         "google",
         expected,
+      )
+      expect(mockReadGooglePromotionEvidence).toHaveBeenCalledWith(
+        "attempt-1",
+        "u1",
+        currentUser!.created_at,
+      )
+      expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledWith(
+        currentUser,
+        "original-attempt",
+        false,
       )
       expect(
         mockPublishOriginalSignupEvidence.mock.invocationCallOrder[0],
@@ -602,6 +658,16 @@ describe("auth callback", () => {
       "Test User",
       "google",
       { kind: "unavailable" },
+    )
+    expect(mockReadGooglePromotionEvidence).toHaveBeenCalledWith(
+      "attempt-1",
+      "u1",
+      currentUser!.created_at,
+    )
+    expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledWith(
+      currentUser,
+      "original-attempt",
+      false,
     )
   })
 
@@ -846,6 +912,7 @@ describe("auth callback", () => {
     mockReadFingerprintSignupEventId.mockResolvedValue(undefined)
     mockReadSignupEvidence.mockResolvedValue("RetainedVisitor")
     mockEvaluateSignupRestriction.mockRejectedValue(new SignupRestrictedError())
+    mockNotifySlackOfNewUser.mockRejectedValueOnce(new Error("webhook down"))
 
     const response = await GET(
       new Request(
@@ -855,6 +922,12 @@ describe("auth callback", () => {
 
     expect(response.headers.get("location")).toContain("reason=signup_blocked")
     expect(mockMarkGoogleSignupAttempt).toHaveBeenCalledWith("attempt-1", "u1")
+    expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
+      "user@example.com",
+      "Test User",
+      "google",
+      { kind: "blocked" },
+    )
   })
 
   it("reuses verified evidence on a repeated callback and rechecks policy", async () => {

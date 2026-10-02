@@ -52,7 +52,18 @@ describe("notifySlackOfNewUser", () => {
     expect(mockSendToSlackHook.mock.calls[0][0].text).toContain(
       "❌ Signup blocked by configured signup restriction",
     )
-    expect(mockSendToSlackHook.mock.calls[0][0].text).not.toContain("N/A")
+    expect(mockSendToSlackHook.mock.calls[0][0].blocks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "section",
+          fields: expect.arrayContaining([
+            { type: "mrkdwn", text: "*Email:* N/A" },
+            { type: "mrkdwn", text: "*Name:* N/A" },
+            { type: "mrkdwn", text: "*Provider:* google" },
+          ]),
+        }),
+      ]),
+    )
 
     await notifySlackOfNewUser("user@example.com", null, "google")
     expect(mockSendToSlackHook.mock.calls[1][0].text).toContain(

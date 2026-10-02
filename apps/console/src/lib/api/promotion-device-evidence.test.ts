@@ -917,28 +917,107 @@ describe("promotion evidence producer contract", () => {
     })
   })
 
-  it("reads the pre-confirmation snapshot with only the trusted Auth actor", async () => {
-    const fetcher = vi.fn().mockResolvedValue(
-      response({
+  it.each([
+    [
+      "owner pending",
+      {
         ownership: "owner",
         device_decision: "eligible",
         eligibility: "unknown",
         reason: "team_checks_pending",
-      }),
-    )
-    vi.stubGlobal("fetch", fetcher)
-    getUser.mockRejectedValue(new Error("no confirmation session"))
+      },
+    ],
+    [
+      "owner pre-confirmation identity",
+      {
+        ownership: "owner",
+        device_decision: "eligible",
+        eligibility: "unknown",
+        reason: "verified_identity_missing",
+      },
+    ],
+    [
+      "owner historical identity",
+      {
+        ownership: "owner",
+        device_decision: "eligible",
+        eligibility: "unknown",
+        reason: "historical_identity_unresolved",
+      },
+    ],
+    [
+      "owner device consumption",
+      {
+        ownership: "owner",
+        device_decision: "device_already_redeemed",
+        eligibility: "ineligible",
+        reason: "device_already_redeemed",
+      },
+    ],
+    [
+      "another owner enforced",
+      {
+        ownership: "another_owner",
+        device_decision: "owner_conflict",
+        eligibility: "ineligible",
+        reason: "owner_conflict",
+      },
+    ],
+    [
+      "missing evidence enforced",
+      {
+        ownership: "evidence_missing",
+        device_decision: "evidence_missing",
+        eligibility: "ineligible",
+        reason: "evidence_missing",
+      },
+    ],
+    [
+      "gate bypass another owner",
+      {
+        ownership: "another_owner",
+        device_decision: "eligible",
+        eligibility: "unknown",
+        reason: "team_checks_pending",
+      },
+    ],
+    [
+      "gate bypass missing evidence",
+      {
+        ownership: "evidence_missing",
+        device_decision: "eligible",
+        eligibility: "unknown",
+        reason: "team_checks_pending",
+      },
+    ],
+    [
+      "identity already claimed",
+      {
+        ownership: "owner",
+        device_decision: "eligible",
+        eligibility: "ineligible",
+        reason: "identity_already_claimed",
+      },
+    ],
+  ] as const)(
+    "reads the backend-shaped %s snapshot with only the trusted Auth actor",
+    async (_label, snapshot) => {
+      const fetcher = vi.fn().mockResolvedValue(response(snapshot))
+      vi.stubGlobal("fetch", fetcher)
+      getUser.mockRejectedValue(new Error("no confirmation session"))
 
-    await expect(
-      getPromotionSignupEligibilityForTrustedSignup(userId),
-    ).resolves.toMatchObject({
-      ownership: "owner",
-      deviceDecision: "eligible",
-      eligibility: "unknown",
-    })
-    expect(getUser).not.toHaveBeenCalled()
-    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
-      user_id: userId,
-    })
-  })
+      await expect(
+        getPromotionSignupEligibilityForTrustedSignup(userId),
+      ).resolves.toEqual({
+        ownership: snapshot.ownership,
+        deviceDecision: snapshot.device_decision,
+        eligibility: snapshot.eligibility,
+        reason: snapshot.reason,
+      })
+      expect(getUser).not.toHaveBeenCalled()
+      expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
+        user_id: userId,
+      })
+    },
+  )
 })

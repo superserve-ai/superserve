@@ -9,6 +9,7 @@ export type SignupEligibilityPresentationOutcome =
   | { kind: "eligible" }
   | { kind: "enforced_other_owner" }
   | { kind: "enforced_missing_evidence" }
+  | { kind: "enforced_device_redeemed" }
   | { kind: "blocked"; reason?: SignupBlockedReason }
   | { kind: "unavailable" }
 
@@ -59,21 +60,33 @@ export function normalizeSignupEligibilitySnapshot(
     if (
       value.ownership === "owner" &&
       value.deviceDecision === "eligible" &&
-      value.eligibility === "unknown"
+      value.eligibility === "unknown" &&
+      (value.reason === "team_checks_pending" ||
+        value.reason === "verified_identity_missing" ||
+        value.reason === "historical_identity_unresolved")
     )
       return { kind: "eligible" }
     if (
       value.ownership === "another_owner" &&
       value.deviceDecision === "owner_conflict" &&
-      value.eligibility === "ineligible"
+      value.eligibility === "ineligible" &&
+      value.reason === "owner_conflict"
     )
       return { kind: "enforced_other_owner" }
     if (
       value.ownership === "evidence_missing" &&
       value.deviceDecision === "evidence_missing" &&
-      value.eligibility === "ineligible"
+      value.eligibility === "ineligible" &&
+      value.reason === "evidence_missing"
     )
       return { kind: "enforced_missing_evidence" }
+    if (
+      value.ownership === "owner" &&
+      value.deviceDecision === "device_already_redeemed" &&
+      value.eligibility === "ineligible" &&
+      value.reason === "device_already_redeemed"
+    )
+      return { kind: "enforced_device_redeemed" }
   } catch {
     // Untrusted or hostile values must remain unavailable.
   }
@@ -148,6 +161,14 @@ export function formatSignupEligibility(
         return {
           emoji: "💸",
           text: "Signup Fingerprint could not be verified",
+        }
+      case "enforced_device_redeemed":
+        if (!hasOnlyKeys(outcome, ["kind"])) {
+          return unavailableAnnotation()
+        }
+        return {
+          emoji: "💸",
+          text: "Signup Fingerprint is not eligible under the East device policy",
         }
       case "blocked": {
         if (!hasOnlyKeys(outcome, ["kind", "reason"])) {

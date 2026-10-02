@@ -749,6 +749,7 @@ describe("signUpWithEmail", () => {
     await expect(
       signUpWithEmail("user@test.com", "password123", "Test User"),
     ).resolves.toEqual({ success: true })
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
   })
 
   it("preserves the original rejection when a blocked notification rejects", async () => {
@@ -1015,6 +1016,26 @@ describe("original signup promotion evidence", () => {
       { kind: "eligible" },
     ],
     [
+      "pre-confirmation identity unavailable",
+      {
+        ownership: "owner",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "verified_identity_missing",
+      },
+      { kind: "eligible" },
+    ],
+    [
+      "historical identity unresolved",
+      {
+        ownership: "owner",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "historical_identity_unresolved",
+      },
+      { kind: "eligible" },
+    ],
+    [
       "another owner",
       {
         ownership: "another_owner",
@@ -1033,6 +1054,16 @@ describe("original signup promotion evidence", () => {
         reason: "evidence_missing",
       },
       { kind: "enforced_missing_evidence" },
+    ],
+    [
+      "device already redeemed",
+      {
+        ownership: "owner",
+        deviceDecision: "device_already_redeemed",
+        eligibility: "ineligible",
+        reason: "device_already_redeemed",
+      },
+      { kind: "enforced_device_redeemed" },
     ],
   ] as const)(
     "publishes before notifying with the authoritative %s snapshot",
@@ -1055,6 +1086,11 @@ describe("original signup promotion evidence", () => {
         "Name",
         "email",
         expected,
+      )
+      expect(mockOriginalPublication).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "actual-auth-user" }),
+        "original-attempt",
+        false,
       )
       expect(mockOriginalPublication.mock.invocationCallOrder[0]).toBeLessThan(
         mockSlack.mock.invocationCallOrder[0],
