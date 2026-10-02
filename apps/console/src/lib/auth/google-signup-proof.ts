@@ -22,6 +22,13 @@ export class GoogleSignupRecoveryRequiredError extends Error {
   }
 }
 
+export interface GooglePromotionEvidence {
+  attemptId?: string
+  eventId?: string
+  visitor?: string
+  routineMissing: boolean
+}
+
 interface ProofPayload {
   v: number
   purpose: string
@@ -29,6 +36,7 @@ interface ProofPayload {
   issued_at?: number
   signup_attempt_id?: string
   actor?: string
+  promotion?: GooglePromotionEvidence
 }
 
 function cookieName(signupAttemptId?: string): string {
@@ -183,6 +191,7 @@ function writeProof(
     issued_at: payload.issued_at,
     signup_attempt_id: payload.signup_attempt_id,
     actor: payload.actor,
+    promotion: payload.promotion,
   }
   const encoded = Buffer.from(JSON.stringify(proof)).toString("base64url")
   const value = `${encoded}.${signature(encoded).toString("base64url")}`
@@ -222,6 +231,7 @@ function writeProof(
 
 export async function issueGoogleSignupProof(
   signupAttemptId?: string,
+  promotion?: GooglePromotionEvidence,
 ): Promise<void> {
   const store = await cookies()
   const name = cookieName(signupAttemptId)
@@ -240,6 +250,7 @@ export async function issueGoogleSignupProof(
     name,
     payload || {
       ...fresh,
+      promotion,
       issued_at: Math.max(
         Date.now(),
         ...entries.map(
@@ -468,4 +479,30 @@ export function isGoogleUser(user: {
     user.app_metadata?.provider === "google" ||
     user.app_metadata?.providers?.includes("google") === true
   )
+}
+
+/** Original pre-auth context only. A later ordinary login cannot supply replacement evidence. */
+export async function readGooglePromotionEvidence(
+  signupAttemptId: string,
+  actor: string,
+  createdAt: string,
+): Promise<
+  (GooglePromotionEvidence & { originalSignup: boolean }) | undefined
+> {
+  try {
+    const store = await cookies()
+    const name = cookieName(signupAttemptId)
+    const value = store.get(name)?.value
+    if (!value || !validProof(value, signupAttemptId, false, actor))
+      return undefined
+    const payload = decodedProof(name, value)
+    if (!payload?.promotion) return undefined
+    return {
+      ...payload.promotion,
+      originalSignup:
+        !!payload.issued_at && Date.parse(createdAt) >= payload.issued_at,
+    }
+  } catch {
+    return undefined
+  }
 }

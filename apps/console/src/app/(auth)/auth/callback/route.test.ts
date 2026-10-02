@@ -144,6 +144,7 @@ vi.mock("@/lib/auth/google-signup-proof", () => ({
     mockHasValidLegacyGoogleSignupProof(...args),
   consumeGoogleSignupProof: (...args: unknown[]) =>
     mockConsumeGoogleSignupProof(...args),
+  readGooglePromotionEvidence: async () => undefined,
   markGoogleSignupAttempt: (...args: unknown[]) =>
     mockMarkGoogleSignupAttempt(...args),
   retainGoogleSignupVisitor: (...args: unknown[]) =>

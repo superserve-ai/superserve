@@ -1,7 +1,10 @@
 import { after } from "next/server"
 
+import { verifyPromotionSignupAttempt } from "@/lib/api/promotion-device-evidence"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
+
+import type { SignupFingerprintCapture } from "./client"
 
 const FINGERPRINT_EVENT_TIMEOUT_MS = 1500
 const DEFAULT_FINGERPRINT_SERVER_API = "https://api.fpjs.io"
@@ -12,6 +15,8 @@ export type FingerprintSignupObservation = {
   getObservationUserId?: () => string | null
   signupMethod: "email" | "google"
   signupAttemptId?: string
+  capture?: SignupFingerprintCapture
+  onAttested?: () => void
 }
 
 type FingerprintNormalizedEvent = {
@@ -197,6 +202,8 @@ export async function resolveFingerprintSignup({
   eventId,
   userId = null,
   getObservationUserId,
+  capture,
+  onAttested,
   signupMethod,
   signupAttemptId,
 }: FingerprintSignupObservation): Promise<string | null> {
@@ -223,7 +230,8 @@ export async function resolveFingerprintSignup({
       return null
     }
 
-    const event = normalizeFingerprintEvent(await response.json(), eventId)
+    const payload: unknown = await response.json()
+    const event = normalizeFingerprintEvent(payload, eventId)
     if (!event) {
       console.warn("Fingerprint observation response was malformed")
       return null
@@ -268,6 +276,31 @@ export async function resolveFingerprintSignup({
       })
     } catch {
       /* Observation cannot affect signup. */
+    }
+    if (capture && capture.eventId === eventId && isRecord(payload)) {
+      const tags = recordOrNull(payload.tags)
+      const timestamp = payload.timestamp
+      const eventAt =
+        typeof timestamp === "number" || typeof timestamp === "string"
+          ? new Date(timestamp).getTime()
+          : NaN
+      if (
+        tags?.signup_challenge === capture.challenge &&
+        Number.isFinite(eventAt)
+      ) {
+        try {
+          await verifyPromotionSignupAttempt({
+            attemptId: capture.attemptId,
+            challenge: capture.challenge,
+            eventId: event.providerEventId,
+            fingerprint: event.visitorId,
+            eventAt: new Date(eventAt).toISOString(),
+          })
+          onAttested?.()
+        } catch {
+          console.warn("Promotion signup attestation unavailable")
+        }
+      }
     }
     return event.visitorId
   } catch {

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { useUser } from "@/hooks/use-user"
 import { ApiError } from "@/lib/api/client"
 import { billingKeys, teamKeys } from "@/lib/api/query-keys"
 import {
@@ -48,13 +49,44 @@ export function refreshTeamScopedQueries(
 }
 
 export function useCreateTeam() {
+  const { user } = useUser()
   const queryClient = useQueryClient()
   return useMutation({
     // Creation also changes the active-team cookie; share billing's switch guard.
     mutationKey: ["switch-team", "create"],
     mutationFn: async ({ name, region }: { name: string; region: string }) => {
-      const result = await createTeamAction(name, region)
-      if ("code" in result) throw new ApiError(403, result.code, result.message)
+      if (!user) throw new Error("Not authenticated")
+      if (!name.trim() || new TextEncoder().encode(name).length > 256)
+        throw new Error("Enter a team name between 1 and 256 bytes")
+      const key = `superserve:team-creation:${user.id}:${region}`
+      const stored = sessionStorage.getItem(key)
+      let intent: {
+        operationId: string
+        name: string
+        nameRejected?: boolean
+      } = stored
+        ? JSON.parse(stored)
+        : { operationId: crypto.randomUUID(), name }
+      if (intent.nameRejected && intent.name !== name)
+        intent = { operationId: crypto.randomUUID(), name }
+      if (intent.name !== name)
+        throw new Error(
+          "Retry the pending team creation using its original name",
+        )
+      sessionStorage.setItem(key, JSON.stringify(intent))
+      const result = await createTeamAction(
+        intent.name,
+        region,
+        intent.operationId,
+      )
+      if ("code" in result) {
+        if (result.code === "team_name_conflict") {
+          intent.nameRejected = true
+          sessionStorage.setItem(key, JSON.stringify(intent))
+        }
+        throw new ApiError(403, result.code, result.message)
+      }
+      sessionStorage.removeItem(key)
       return result
     },
     onSuccess: async (team) => {

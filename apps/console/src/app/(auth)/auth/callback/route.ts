@@ -6,6 +6,7 @@ import {
   readFingerprintSignupEventId,
   sendWelcomeEmail,
 } from "@/app/(auth)/auth/signup/action"
+import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { completedMemberships } from "@/lib/api/team-provisioning"
 import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
@@ -15,6 +16,7 @@ import {
   hasValidLegacyGoogleSignupProof,
   isGoogleUser,
   markGoogleSignupAttempt,
+  readGooglePromotionEvidence,
 } from "@/lib/auth/google-signup-proof"
 import {
   isActiveSignupEvidenceAttempt,
@@ -27,6 +29,7 @@ import {
   SignupRestrictedError,
 } from "@/lib/auth/signup-restrictions"
 import { DEFAULT_REGION } from "@/lib/cells"
+import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import { resolveFingerprintSignup } from "@/lib/fingerprint/observe"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
@@ -181,6 +184,28 @@ export async function GET(request: Request) {
             await markGoogleSignupAttempt(signupAttemptId, user.id)
           }
 
+          if (isNewUser && signupAttemptId) {
+            const original = await readGooglePromotionEvidence(
+              signupAttemptId,
+              user.id,
+              user.created_at,
+            )
+            if (original) {
+              if (original.originalSignup)
+                await publishOriginalSignupEvidence(
+                  user,
+                  original.attemptId,
+                  original.routineMissing,
+                )
+              if (original.eventId && original.visitor)
+                await saveSignupEvidence(
+                  user.id,
+                  signupAttemptId,
+                  original.eventId,
+                  original.visitor,
+                )
+            }
+          }
           if (isNewUser) {
             const activeAttempt =
               signupAttemptId &&
@@ -230,6 +255,17 @@ export async function GET(request: Request) {
         } else {
           const createdAt = new Date(user.created_at)
           isNewUser = Date.now() - createdAt.getTime() < 30000
+        }
+
+        if (type === "signup") {
+          const attempt = searchParams.get("device_attempt_id")
+          const proof = searchParams.get("device_bind_proof")
+          if (
+            attempt &&
+            proof &&
+            validSignupDeviceBinding(user.id, attempt, proof)
+          )
+            await publishOriginalSignupEvidence(user, attempt, false)
         }
 
         if (type !== "invite" && (type === "signup" || (code && isNewUser))) {

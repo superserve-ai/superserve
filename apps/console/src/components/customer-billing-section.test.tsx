@@ -1,3 +1,6 @@
+vi.mock("@/hooks/use-user", () => ({
+  useUser: () => ({ user: { id: "u1" }, loading: false }),
+}))
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -9,6 +12,7 @@ import { CustomerBillingSection } from "./customer-billing-section"
 const useCustomerBillingPeriods = vi.fn()
 const createStripeCheckoutSession = vi.fn()
 const createStripeCustomerPortalSession = vi.fn()
+const publishBillingPromotionEvidence = vi.fn()
 const addToast = vi.fn()
 
 const baseSummary: BillingSummaryResponse = {
@@ -91,6 +95,10 @@ vi.mock("@/lib/api/billing-stripe", () => ({
     createStripeCustomerPortalSession(...args),
 }))
 
+vi.mock("@/lib/api/billing-actions", () => ({
+  publishBillingPromotionEvidence: () => publishBillingPromotionEvidence(),
+}))
+
 vi.mock("@superserve/ui", async () => {
   const actual =
     await vi.importActual<typeof import("@superserve/ui")>("@superserve/ui")
@@ -121,9 +129,11 @@ function renderSection(summary = baseSummary) {
 
 describe("CustomerBillingSection", () => {
   beforeEach(() => {
+    sessionStorage.clear()
     addToast.mockReset()
     createStripeCheckoutSession.mockReset()
     createStripeCustomerPortalSession.mockReset()
+    publishBillingPromotionEvidence.mockReset().mockResolvedValue("published")
     useCustomerBillingPeriods.mockReset()
     window.history.replaceState({}, "", "/plan-usage")
     useCustomerBillingPeriods.mockReturnValue({
@@ -203,7 +213,9 @@ describe("CustomerBillingSection", () => {
 
       const button = screen.getByRole("button", { name: label })
       expect(button).toBeEnabled()
-      fireEvent.click(button)
+      await act(async () => {
+        fireEvent.click(button)
+      })
       expect(request).toHaveBeenCalledTimes(1)
       const returnUrl = new URL(window.location.href)
       if (portalAvailable) {
@@ -217,6 +229,7 @@ describe("CustomerBillingSection", () => {
         returnUrl.searchParams.set("billing", "success")
         cancelUrl.searchParams.set("billing", "cancel")
         expect(request).toHaveBeenCalledWith({
+          intentScope: expect.any(String),
           successUrl: returnUrl.toString(),
           cancelUrl: cancelUrl.toString(),
         })

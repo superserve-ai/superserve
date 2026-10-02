@@ -17,3 +17,19 @@ The server keeps one fixed-name, signed Fingerprint context for the active brows
 Configure `NEXT_PUBLIC_FINGERPRINT_API_KEY` for the browser agent and `FINGERPRINT_SECRET_API_KEY` for the server lookup. `FINGERPRINT_SERVER_API_URL` defaults to the global Fingerprint Server API and can be overridden for regional workspaces. The evaluator uses the selected cell's server-only `INTERNAL_API_TOKEN` (or `INTERNAL_API_TOKEN_USWEST` for `usw`) and a 1500 ms request deadline. Console does not load or refresh restriction configuration.
 
 Restriction telemetry records bounded outcomes, effective mode, and matched subject type without visitor IDs or other subject identifiers in event properties. Observation telemetry remains separate; telemetry failures cannot affect signup. Controlled browser/device correlation scenarios remain manual, and cross-account history is outside this integration.
+
+## Promotion evidence
+
+Promotion capture obtains an East-issued attempt and challenge before calling the
+browser agent. The same server lookup used above verifies the provider event's
+`tags.signup_challenge`, exact event ID, visitor ID, and timestamp before attesting
+the attempt. The existing normalized observation remains intact. These promotion
+checks are separate from the known-abuse restriction policy described above.
+
+Email signup binds only the actual newly created Auth account and registers East
+ownership before confirmation; a signed, actor-bound email proof can retry that
+original association. Google carries verified evidence in the signed pre-auth
+proof and binds only an account created after that proof. Older-account Google
+recovery still retains restriction evidence but cannot replace promotion provenance.
+Each region registers the original account evidence independently. See the Console
+README for rollout configuration, fail-closed credit behavior, and durable retries.

@@ -5,6 +5,7 @@ import { type QueryClient, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 
 import { useQueryScope } from "@/components/query-provider"
+import { useUser } from "@/hooks/use-user"
 import type { BillingSummaryResponse } from "@/lib/api/billing"
 import {
   createStripeCheckoutSession,
@@ -21,6 +22,7 @@ export function useBillingPayment(
   teamKey: string | null,
 ) {
   const { addToast } = useToast()
+  const { user } = useUser()
   const queryClient = useQueryClient()
   const cacheScope = useQueryScope()
   const [submitting, setSubmitting] = useState<"checkout" | "portal" | null>(
@@ -41,6 +43,7 @@ export function useBillingPayment(
   }, [])
 
   const available = Boolean(
+    user &&
     summary?.permissions?.can_manage &&
     (summary.portal_available || summary.checkout_available) &&
     cacheScope === "self",
@@ -92,6 +95,7 @@ export function useBillingPayment(
         const cancelUrl = new URL(currentUrl)
         cancelUrl.searchParams.set("billing", "cancel")
         session = await createStripeCheckoutSession({
+          intentScope: `${user?.id}:${teamKey}`,
           successUrl: successUrl.toString(),
           cancelUrl: cancelUrl.toString(),
         })

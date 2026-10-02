@@ -355,3 +355,71 @@ describe("observeFingerprintSignup", () => {
     expect(after).not.toHaveBeenCalled()
   })
 })
+
+vi.mock("@/lib/api/promotion-device-evidence", () => ({
+  verifyPromotionSignupAttempt: vi.fn(),
+}))
+import { verifyPromotionSignupAttempt } from "@/lib/api/promotion-device-evidence"
+
+it.each([
+  "valid",
+  "wrong challenge",
+  "wrong event",
+  "no timestamp",
+  "verify failed",
+])(
+  "attests the exact signup event with one provider lookup: %s",
+  async (mode) => {
+    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+    const capture = {
+      attemptId: "attempt",
+      challenge: "challenge",
+      eventId: "event",
+    }
+    const verified = vi.fn()
+    vi.mocked(verifyPromotionSignupAttempt)
+      .mockReset()
+      .mockResolvedValue("verified")
+    if (mode === "verify failed")
+      vi.mocked(verifyPromotionSignupAttempt).mockRejectedValue(
+        new Error("unavailable"),
+      )
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        event_id: mode === "wrong event" ? "other" : "event",
+        identification: { visitor_id: "ServerVisitor", visitor_found: true },
+        tags: {
+          signup_challenge: mode === "wrong challenge" ? "other" : "challenge",
+        },
+        timestamp: mode === "no timestamp" ? undefined : 1790899200000,
+        vpn: true,
+      }),
+    )
+    const visitor = await resolveFingerprintSignup({
+      eventId: capture.eventId,
+      signupMethod: "email",
+      capture,
+      onAttested: verified,
+    })
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(fetchSpy.mock.calls[0][1]?.headers).toEqual({
+      Authorization: "Bearer server-secret",
+    })
+    expect(visitor).toBe(mode === "wrong event" ? null : "ServerVisitor")
+    expect(verified).toHaveBeenCalledTimes(mode === "valid" ? 1 : 0)
+    if (mode === "valid") {
+      expect(verifyPromotionSignupAttempt).toHaveBeenCalledWith({
+        ...capture,
+        fingerprint: "ServerVisitor",
+        eventAt: "2026-10-02T00:00:00.000Z",
+      })
+      const callback = vi.mocked(after).mock.calls[0][0] as () => Promise<void>
+      await callback()
+      expect(trackEvent).toHaveBeenCalledWith(
+        expect.any(String),
+        "event",
+        expect.objectContaining({ vpn: true, visitor_id: "ServerVisitor" }),
+      )
+    }
+  },
+)

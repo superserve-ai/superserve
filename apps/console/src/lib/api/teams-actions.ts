@@ -9,6 +9,7 @@ import {
   serializeTeamSelection,
   type TeamSelection,
 } from "@/lib/api/active-team"
+import { PromotionEvidenceError } from "@/lib/api/promotion-device-evidence"
 import {
   invalidateMembershipDirectory,
   listTeamsForUser,
@@ -108,10 +109,14 @@ export async function setActiveTeamAction(
 export async function createTeamAction(
   name: string,
   region?: string,
+  operationId?: string,
 ): Promise<
   | TeamSummary
   | {
-      code: "signup_blocked" | "google_signup_recovery_required"
+      code:
+        | "signup_blocked"
+        | "google_signup_recovery_required"
+        | "team_name_conflict"
       message: string
     }
 > {
@@ -122,6 +127,8 @@ export async function createTeamAction(
   const observedAt = new Date().toISOString()
   if (!user) throw new Error("Not authenticated")
 
+  if (!operationId || operationId === user.id)
+    throw new Error("A distinct team creation operation is required")
   const trimmed = name.trim()
   if (!trimmed) throw new Error("Team name is required")
 
@@ -138,8 +145,18 @@ export async function createTeamAction(
       user.email ?? user.id,
       trimmed,
       { user, observedAt },
+      operationId,
     )
   } catch (error) {
+    if (
+      error instanceof PromotionEvidenceError &&
+      error.code === "team_name_conflict"
+    )
+      return {
+        code: "team_name_conflict",
+        message:
+          "That team name is already taken. Submit a different name to start a new creation.",
+      }
     if (error instanceof SignupRestrictedError)
       return { code: "signup_blocked", message: SIGNUP_RESTRICTED_MESSAGE }
     if (error instanceof GoogleSignupRecoveryRequiredError)
