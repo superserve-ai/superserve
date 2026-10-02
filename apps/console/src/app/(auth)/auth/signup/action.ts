@@ -423,7 +423,7 @@ export const signUpWithEmail = async (
           parsed.data.email,
           parsed.data.fullName,
           "email",
-          { kind: "blocked", reason: "blocked_email" },
+          { kind: "unavailable" },
         ).catch(() => {})
         return {
           success: false,

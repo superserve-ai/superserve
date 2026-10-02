@@ -20,6 +20,8 @@ let googleMembershipState:
   kind: "existing",
   membership: { teamId: "team-1", region: "use" },
 }
+let authExchangeError: { message: string } | null = null
+let authVerifyOtpError: { message: string } | null = null
 
 const mockNotifySlackOfNewUser = vi.fn()
 vi.mock("@/app/(auth)/auth/signin/action", () => ({
@@ -118,6 +120,8 @@ const mockConsumeGoogleSignupProof = vi.fn()
 const mockMarkGoogleSignupAttempt = vi.fn()
 const mockRetainGoogleSignupVisitor = vi.fn()
 const mockReadGoogleSignupVisitors = vi.fn()
+const mockReadGooglePromotionEvidence = vi.fn()
+const mockPublishOriginalSignupEvidence = vi.fn()
 const mockRequireGoogleSignupProof = vi.fn()
 const mockEnsureGoogleOnboardingMembership = vi.fn()
 const mockListTeamMembershipsForUserDetailed = vi.fn(
@@ -144,7 +148,8 @@ vi.mock("@/lib/auth/google-signup-proof", () => ({
     mockHasValidLegacyGoogleSignupProof(...args),
   consumeGoogleSignupProof: (...args: unknown[]) =>
     mockConsumeGoogleSignupProof(...args),
-  readGooglePromotionEvidence: async () => undefined,
+  readGooglePromotionEvidence: (...args: unknown[]) =>
+    mockReadGooglePromotionEvidence(...args),
   markGoogleSignupAttempt: (...args: unknown[]) =>
     mockMarkGoogleSignupAttempt(...args),
   retainGoogleSignupVisitor: (...args: unknown[]) =>
@@ -158,6 +163,10 @@ vi.mock("@/lib/auth/google-signup-proof", () => ({
   }) =>
     user.app_metadata?.provider === "google" ||
     user.app_metadata?.providers?.includes("google") === true,
+}))
+vi.mock("@/lib/api/promotion-publication", () => ({
+  publishOriginalSignupEvidence: (...args: unknown[]) =>
+    mockPublishOriginalSignupEvidence(...args),
 }))
 vi.mock("@/lib/auth/google-onboarding", () => ({
   classifyGoogleMembershipState: (
@@ -188,8 +197,8 @@ vi.mock("@/lib/posthog/events", () => ({
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({
     auth: {
-      exchangeCodeForSession: async () => ({ error: null }),
-      verifyOtp: async () => ({ error: null }),
+      exchangeCodeForSession: async () => ({ error: authExchangeError }),
+      verifyOtp: async () => ({ error: authVerifyOtpError }),
       getUser: async () => ({ data: { user: currentUser } }),
     },
   }),
@@ -214,6 +223,8 @@ describe("auth callback", () => {
       kind: "existing",
       membership: { teamId: "team-1", region: "use" },
     }
+    authExchangeError = null
+    authVerifyOtpError = null
     mockNotifySlackOfNewUser.mockReset()
     mockNotifySlackOfNewUser.mockResolvedValue(undefined)
     mockSendWelcomeEmail.mockReset()
@@ -230,6 +241,8 @@ describe("auth callback", () => {
     mockVerifySignupRecaptcha.mockReset().mockResolvedValue({ verified: true })
     mockRetainGoogleSignupVisitor.mockReset().mockResolvedValue(undefined)
     mockReadGoogleSignupVisitors.mockReset().mockResolvedValue([])
+    mockReadGooglePromotionEvidence.mockReset().mockResolvedValue(undefined)
+    mockPublishOriginalSignupEvidence.mockReset().mockResolvedValue(undefined)
     mockReadSignupEvidence.mockReset().mockResolvedValue(null)
     mockEvaluateSignupRestriction.mockReset().mockResolvedValue(undefined)
     rolelessJoinedTeams.clear()
@@ -299,6 +312,7 @@ describe("auth callback", () => {
     currentUser!.app_metadata = { provider: "email" }
     mockReadSignupEvidence.mockResolvedValue("VisitorCase")
     mockEvaluateSignupRestriction.mockRejectedValue(new SignupRestrictedError())
+    mockNotifySlackOfNewUser.mockRejectedValueOnce(new Error("webhook down"))
 
     const response = await GET(
       new Request(
@@ -314,6 +328,22 @@ describe("auth callback", () => {
       "email",
       { kind: "blocked" },
     )
+  })
+
+  it("uses unavailable for a pre-identity trigger rejection and preserves redirect", async () => {
+    authVerifyOtpError = { message: "database error saving new user" }
+    mockNotifySlackOfNewUser.mockRejectedValueOnce(new Error("webhook down"))
+
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?token_hash=token&type=signup",
+      ),
+    )
+
+    expect(response.headers.get("location")).toContain("reason=signup_blocked")
+    expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith("", null, "email", {
+      kind: "unavailable",
+    })
   })
 
   it("does not read active signup evidence for a callback without an attempt ID", async () => {
@@ -486,6 +516,93 @@ describe("auth callback", () => {
       email: "user@example.com",
       is_new_user: true,
     })
+  })
+
+  it.each([
+    [
+      "eligible",
+      {
+        ownership: "owner",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "team_checks_pending",
+      },
+      { kind: "eligible" },
+    ],
+    [
+      "another owner",
+      {
+        ownership: "another_owner",
+        deviceDecision: "owner_conflict",
+        eligibility: "ineligible",
+        reason: "owner_conflict",
+      },
+      { kind: "enforced_other_owner" },
+    ],
+    [
+      "missing evidence",
+      {
+        ownership: "evidence_missing",
+        deviceDecision: "evidence_missing",
+        eligibility: "ineligible",
+        reason: "evidence_missing",
+      },
+      { kind: "enforced_missing_evidence" },
+    ],
+  ] as const)(
+    "publishes before notifying with the authoritative Google %s snapshot",
+    async (_label, snapshot, expected) => {
+      googleMembershipState = { kind: "first_time" }
+      mockHasValidGoogleSignupProof.mockResolvedValue(true)
+      mockReadGooglePromotionEvidence.mockResolvedValue({
+        originalSignup: true,
+        attemptId: "original-attempt",
+        routineMissing: false,
+      })
+      mockPublishOriginalSignupEvidence.mockResolvedValue(snapshot)
+
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+        ),
+      )
+
+      expect(response.headers.get("location")).toContain("/sandboxes")
+      expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
+        "user@example.com",
+        "Test User",
+        "google",
+        expected,
+      )
+      expect(
+        mockPublishOriginalSignupEvidence.mock.invocationCallOrder[0],
+      ).toBeLessThan(mockNotifySlackOfNewUser.mock.invocationCallOrder[0])
+    },
+  )
+
+  it("uses unavailable when Google publication has no authoritative snapshot", async () => {
+    googleMembershipState = { kind: "first_time" }
+    mockHasValidGoogleSignupProof.mockResolvedValue(true)
+    mockReadGooglePromotionEvidence.mockResolvedValue({
+      originalSignup: true,
+      attemptId: "original-attempt",
+      routineMissing: false,
+    })
+    mockPublishOriginalSignupEvidence.mockResolvedValue(undefined)
+
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+      ),
+    )
+
+    expect(response.headers.get("location")).toContain("/sandboxes")
+    expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
+      "user@example.com",
+      "Test User",
+      "google",
+      { kind: "unavailable" },
+    )
   })
 
   it("uses the known email provider when Auth metadata omits it", async () => {

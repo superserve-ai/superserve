@@ -88,8 +88,7 @@ export async function GET(request: Request) {
       if (blocked) {
         console.warn("OAuth signup blocked by trigger")
         await notifySlackOfNewUser("", null, code ? "google" : "email", {
-          kind: "blocked",
-          reason: "blocked_email",
+          kind: "unavailable",
         }).catch(() => {})
         return NextResponse.redirect(
           buildRedirectUrl(

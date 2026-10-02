@@ -669,6 +669,27 @@ describe("signUpWithEmail", () => {
     })
   })
 
+  it("keeps trigger rejection behavior without claiming a policy block", async () => {
+    mockGenerateLink.mockResolvedValue({
+      data: null,
+      error: { message: "database error saving new user" },
+    })
+
+    await expect(
+      signUpWithEmail("user@test.com", "password123", "Test User"),
+    ).resolves.toEqual({
+      success: false,
+      error: "Signup is not available for this email address.",
+      errorCode: "blocked_email",
+    })
+    expect(mockSlack).toHaveBeenCalledWith(
+      "user@test.com",
+      "Test User",
+      "email",
+      { kind: "unavailable" },
+    )
+  })
+
   it("returns error when token hash is missing", async () => {
     mockGenerateLink.mockResolvedValue({
       data: { properties: {} },
@@ -728,6 +749,28 @@ describe("signUpWithEmail", () => {
     await expect(
       signUpWithEmail("user@test.com", "password123", "Test User"),
     ).resolves.toEqual({ success: true })
+  })
+
+  it("preserves the original rejection when a blocked notification rejects", async () => {
+    fingerprintSignupEventId = "event-blocked"
+    mockEvaluateSignupRestriction.mockRejectedValueOnce(
+      new SignupRestrictedError(),
+    )
+    mockSlack.mockRejectedValueOnce(new Error("webhook down"))
+
+    await expect(
+      signUpWithEmail("user@test.com", "password123", "Test User"),
+    ).resolves.toEqual({
+      success: false,
+      error: "Signup is not available. Please try again later.",
+    })
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockSlack).toHaveBeenCalledWith(
+      "user@test.com",
+      "Test User",
+      "email",
+      { kind: "blocked" },
+    )
   })
 })
 
@@ -957,6 +1000,86 @@ describe("original signup promotion evidence", () => {
       "use",
       expect.any(String),
       "ServerVisitor",
+    )
+  })
+
+  it.each([
+    [
+      "eligible",
+      {
+        ownership: "owner",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "team_checks_pending",
+      },
+      { kind: "eligible" },
+    ],
+    [
+      "another owner",
+      {
+        ownership: "another_owner",
+        deviceDecision: "owner_conflict",
+        eligibility: "ineligible",
+        reason: "owner_conflict",
+      },
+      { kind: "enforced_other_owner" },
+    ],
+    [
+      "missing evidence",
+      {
+        ownership: "evidence_missing",
+        deviceDecision: "evidence_missing",
+        eligibility: "ineligible",
+        reason: "evidence_missing",
+      },
+      { kind: "enforced_missing_evidence" },
+    ],
+  ] as const)(
+    "publishes before notifying with the authoritative %s snapshot",
+    async (_label, snapshot, expected) => {
+      mockOriginalPublication.mockResolvedValue(snapshot)
+
+      await expect(
+        signUpWithEmail(
+          "user@example.com",
+          "password123",
+          "Name",
+          undefined,
+          undefined,
+          capture,
+        ),
+      ).resolves.toEqual({ success: true })
+
+      expect(mockSlack).toHaveBeenCalledWith(
+        "user@example.com",
+        "Name",
+        "email",
+        expected,
+      )
+      expect(mockOriginalPublication.mock.invocationCallOrder[0]).toBeLessThan(
+        mockSlack.mock.invocationCallOrder[0],
+      )
+    },
+  )
+
+  it("uses unavailable when publication has no authoritative snapshot", async () => {
+    mockOriginalPublication.mockResolvedValue(undefined)
+
+    await expect(
+      signUpWithEmail(
+        "user@example.com",
+        "password123",
+        "Name",
+        undefined,
+        undefined,
+        capture,
+      ),
+    ).resolves.toEqual({ success: true })
+    expect(mockSlack).toHaveBeenCalledWith(
+      "user@example.com",
+      "Name",
+      "email",
+      { kind: "unavailable" },
     )
   })
   it("does not attach a new attempt to an older unconfirmed account", async () => {

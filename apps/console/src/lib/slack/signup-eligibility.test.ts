@@ -148,27 +148,27 @@ describe("normalizeSignupEligibilitySnapshot", () => {
   it.each([
     {
       ownership: "another_owner",
-      deviceDecision: "owner_conflict",
+      deviceDecision: "eligible",
       eligibility: "unknown",
+      reason: "team_checks_pending",
     },
     {
       ownership: "evidence_missing",
-      deviceDecision: "evidence_missing",
+      deviceDecision: "eligible",
       eligibility: "unknown",
+      reason: "team_checks_pending",
     },
     {
       ownership: "owner",
       deviceDecision: "eligible",
       eligibility: "ineligible",
+      reason: "user_already_claimed",
     },
-  ])(
-    "does not infer a verdict when the policy combination is incomplete",
-    (snapshot) => {
-      expect(normalizeSignupEligibilitySnapshot(snapshot)).toEqual({
-        kind: "unavailable",
-      })
-    },
-  )
+  ])("keeps bypassed or non-device ineligibility unavailable", (snapshot) => {
+    expect(normalizeSignupEligibilitySnapshot(snapshot)).toEqual({
+      kind: "unavailable",
+    })
+  })
 
   it.each([
     {
