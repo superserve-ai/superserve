@@ -337,7 +337,7 @@ export async function GET(request: Request) {
           await notifySlackOfNewUser(
             user.email || "",
             user.user_metadata?.full_name || null,
-            user.app_metadata?.provider || null,
+            provider,
             normalizeSignupEligibilitySnapshot(signupEligibilitySnapshot),
           )
           Promise.resolve(

@@ -488,6 +488,24 @@ describe("auth callback", () => {
     })
   })
 
+  it("uses the known email provider when Auth metadata omits it", async () => {
+    currentUser!.app_metadata = {} as { provider: string; providers?: string[] }
+
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?token_hash=token&type=signup",
+      ),
+    )
+
+    expect(response.headers.get("location")).toContain("/sandboxes")
+    expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
+      "user@example.com",
+      "Test User",
+      "email",
+      { kind: "unavailable" },
+    )
+  })
+
   it("authorizes an ordinary missing-evidence signup after the callback", async () => {
     const proofs = await vi.importActual<
       typeof import("@/lib/auth/google-signup-proof")

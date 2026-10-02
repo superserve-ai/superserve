@@ -37,13 +37,22 @@ export function normalizeSignupEligibilitySnapshot(
     if (!snapshot || typeof snapshot !== "object")
       return { kind: "unavailable" }
     const value = snapshot as Record<string, unknown>
+    const expectedKeys = [
+      "ownership",
+      "deviceDecision",
+      "eligibility",
+      "reason",
+    ] as const
     if (
+      Object.keys(value).length !== expectedKeys.length ||
+      expectedKeys.some(
+        (key) => !Object.prototype.hasOwnProperty.call(value, key),
+      ) ||
       Object.keys(value).some(
-        (key) =>
-          !["ownership", "deviceDecision", "eligibility", "reason"].includes(
-            key,
-          ),
-      )
+        (key) => !expectedKeys.some((expectedKey) => expectedKey === key),
+      ) ||
+      typeof value.reason !== "string" ||
+      value.reason.length === 0
     )
       return { kind: "unavailable" }
 

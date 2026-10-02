@@ -169,4 +169,22 @@ describe("normalizeSignupEligibilitySnapshot", () => {
       })
     },
   )
+
+  it.each([
+    {
+      ownership: "owner",
+      deviceDecision: "eligible",
+      eligibility: "unknown",
+    },
+    {
+      ownership: "another_owner",
+      deviceDecision: "owner_conflict",
+      eligibility: "ineligible",
+      reason: 42,
+    },
+  ])("does not trust malformed snapshots: %o", (snapshot) => {
+    expect(normalizeSignupEligibilitySnapshot(snapshot)).toEqual({
+      kind: "unavailable",
+    })
+  })
 })

@@ -1,6 +1,19 @@
-import "@testing-library/jest-dom/vitest"
+import * as matchers from "@testing-library/jest-dom/matchers"
+import type { TestingLibraryMatchers } from "@testing-library/jest-dom/matchers"
 import { cleanup } from "@testing-library/react"
-import { afterEach, beforeEach, vi } from "vitest"
+import { afterEach, beforeEach, expect, vi } from "vitest"
+
+// Register against Console's Vitest; jest-dom's adapter can resolve the root's
+// different Vitest version under Bun's isolated dependency layout.
+expect.extend(matchers)
+
+declare module "vitest" {
+  interface Assertion<T> extends TestingLibraryMatchers<unknown, T> {}
+  interface AsymmetricMatchersContaining extends TestingLibraryMatchers<
+    unknown,
+    unknown
+  > {}
+}
 
 // Silence console.error/warn in tests — the error-path tests intentionally
 // trigger catch blocks that call console.error in the source code.
