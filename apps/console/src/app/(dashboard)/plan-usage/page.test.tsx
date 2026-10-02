@@ -556,6 +556,104 @@ describe("PlanUsagePage", () => {
     )
   })
 
+  it("keeps mixed storage eligibility neutral and preserves returned historical costs", () => {
+    useBillingUsage.mockReturnValue({
+      data: {
+        start: "2026-06-01T00:00:00.000Z",
+        end: "2026-07-01T00:00:00.000Z",
+        granularity: "day",
+        timezone: "UTC",
+        buckets: [
+          {
+            start: "2026-06-01T00:00:00.000Z",
+            end: "2026-06-02T00:00:00.000Z",
+            cpu: { usage: 1, cost_usd: 1, tracked: true, billable: true },
+            memory: { usage: 1, cost_usd: 2, tracked: true, billable: true },
+            storage: {
+              usage: 1000,
+              // This is the backend's historical pre-activation amount.
+              cost_usd: 17.25,
+              tracked: true,
+              billable: false,
+            },
+            billed_total_usd: 3,
+          },
+          {
+            start: "2026-06-02T00:00:00.000Z",
+            end: "2026-06-03T00:00:00.000Z",
+            cpu: { usage: 1, cost_usd: 4, tracked: true, billable: true },
+            memory: { usage: 1, cost_usd: 5, tracked: true, billable: true },
+            storage: {
+              usage: 1000,
+              // Keep this distinct from the current rate-derived amount.
+              cost_usd: 23.75,
+              tracked: true,
+              billable: true,
+            },
+            billed_total_usd: 32.75,
+          },
+        ],
+      },
+      isPending: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    renderPage()
+
+    expect(
+      screen.getByText("Storage (mixed billing eligibility)"),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByLabelText(/Storage \$17\.25 \(not billed\)/),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByLabelText(/Storage \$23\.75(?! \(not billed\))/),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText(/Billed total \$32\.75/)).toBeInTheDocument()
+  })
+
+  it("does not add not-billed copy when every storage bucket is billable", () => {
+    useBillingUsage.mockReturnValue({
+      data: {
+        start: "2026-06-01T00:00:00.000Z",
+        end: "2026-06-02T00:00:00.000Z",
+        granularity: "day",
+        timezone: "UTC",
+        buckets: [
+          {
+            start: "2026-06-01T00:00:00.000Z",
+            end: "2026-06-02T00:00:00.000Z",
+            cpu: { usage: 1, cost_usd: 1, tracked: true, billable: true },
+            memory: { usage: 1, cost_usd: 2, tracked: true, billable: true },
+            storage: {
+              usage: 1000,
+              cost_usd: 23.75,
+              tracked: true,
+              billable: true,
+            },
+            billed_total_usd: 26.75,
+          },
+        ],
+      },
+      isPending: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    renderPage()
+
+    expect(
+      within(screen.getByTestId("usage-cost-chart")).getByText("Storage"),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText("Storage equivalent (not billed)"),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByLabelText(/Storage \$23\.75(?! \(not billed\))/),
+    ).toBeInTheDocument()
+  })
+
   it("does not show the not-charged indicator for active usage", () => {
     useBillingUsage.mockReturnValue({
       data: {

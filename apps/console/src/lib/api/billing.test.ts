@@ -145,4 +145,39 @@ describe("billing api", () => {
       )
     },
   )
+
+  it("preserves backend usage-series billability and monetary fields", async () => {
+    const response = {
+      start: "2026-06-01T00:00:00.000Z",
+      end: "2026-06-03T00:00:00.000Z",
+      granularity: "day",
+      timezone: "UTC",
+      buckets: [
+        {
+          start: "2026-06-01T00:00:00.000Z",
+          end: "2026-06-02T00:00:00.000Z",
+          cpu: { usage: 1, cost_usd: 1, tracked: true, billable: true },
+          memory: { usage: 2, cost_usd: 2, tracked: true, billable: true },
+          storage: {
+            usage: 100,
+            cost_usd: 17.25,
+            tracked: true,
+            billable: false,
+          },
+          billed_total_usd: 3,
+        },
+      ],
+    }
+    apiClient.mockResolvedValue(response)
+
+    const { getBillingUsageSeries } = await import("./billing")
+    await expect(
+      getBillingUsageSeries({
+        start: response.start,
+        end: response.end,
+        granularity: "daily",
+        timezone: response.timezone,
+      }),
+    ).resolves.toEqual(response)
+  })
 })
