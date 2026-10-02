@@ -438,11 +438,17 @@ export const signUpWithEmail = async (
       data?.user && Date.parse(data.user.created_at) >= signupStartedAt
     let signupEligibilitySnapshot: unknown
     if (originalSignup) {
-      signupEligibilitySnapshot = await publishOriginalSignupEvidence(
-        data.user,
-        deviceVerified ? capture?.attemptId : undefined,
-        !fingerprintEventId && !captureResult,
-      )
+      try {
+        signupEligibilitySnapshot = await publishOriginalSignupEvidence(
+          data.user,
+          deviceVerified ? capture?.attemptId : undefined,
+          !fingerprintEventId && !captureResult,
+        )
+      } catch {
+        // Publication is best effort; an unavailable snapshot must not change
+        // the Auth signup result or suppress the original notification.
+        console.warn("Original signup promotion publication unavailable")
+      }
     }
     if (fingerprintEventId && visitor && data?.user?.id) {
       try {

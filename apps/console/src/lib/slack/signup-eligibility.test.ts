@@ -150,13 +150,13 @@ describe("normalizeSignupEligibilitySnapshot", () => {
       ownership: "another_owner",
       deviceDecision: "eligible",
       eligibility: "unknown",
-      reason: "team_checks_pending",
+      reason: "owner_conflict",
     },
     {
       ownership: "evidence_missing",
       deviceDecision: "eligible",
       eligibility: "unknown",
-      reason: "team_checks_pending",
+      reason: "evidence_missing",
     },
     {
       ownership: "owner",
@@ -164,10 +164,31 @@ describe("normalizeSignupEligibilitySnapshot", () => {
       eligibility: "ineligible",
       reason: "user_already_claimed",
     },
-  ])("keeps bypassed or non-device ineligibility unavailable", (snapshot) => {
-    expect(normalizeSignupEligibilitySnapshot(snapshot)).toEqual({
+  ])(
+    "keeps bypassed or non-device ineligibility unavailable through formatting",
+    (snapshot) => {
+      const outcome = normalizeSignupEligibilitySnapshot(snapshot)
+      expect(outcome).toEqual({
+        kind: "unavailable",
+      })
+      expect(formatSignupEligibility(outcome)).toEqual({
+        text: "Signup eligibility unavailable",
+      })
+    },
+  )
+
+  it("does not infer a definitive annotation from a valid non-device failure", () => {
+    const outcome = normalizeSignupEligibilitySnapshot({
+      ownership: "owner",
+      deviceDecision: "eligible",
+      eligibility: "ineligible",
+      reason: "user_already_claimed",
+    })
+
+    expect(outcome).toEqual({
       kind: "unavailable",
     })
+    expect(formatSignupEligibility(outcome).emoji).toBeUndefined()
   })
 
   it.each([

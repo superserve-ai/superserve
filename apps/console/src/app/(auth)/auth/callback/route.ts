@@ -196,12 +196,22 @@ export async function GET(request: Request) {
               user.created_at,
             )
             if (original) {
-              if (original.originalSignup)
-                signupEligibilitySnapshot = await publishOriginalSignupEvidence(
-                  user,
-                  original.attemptId,
-                  original.routineMissing,
-                )
+              if (original.originalSignup) {
+                try {
+                  signupEligibilitySnapshot =
+                    await publishOriginalSignupEvidence(
+                      user,
+                      original.attemptId,
+                      original.routineMissing,
+                    )
+                } catch {
+                  // Publication is best effort; callback auth and notification
+                  // continue with an unavailable eligibility annotation.
+                  console.warn(
+                    "Original signup promotion publication unavailable",
+                  )
+                }
+              }
               if (original.eventId && original.visitor)
                 await saveSignupEvidence(
                   user.id,
@@ -269,12 +279,17 @@ export async function GET(request: Request) {
             attempt &&
             proof &&
             validSignupDeviceBinding(user.id, attempt, proof)
-          )
-            signupEligibilitySnapshot = await publishOriginalSignupEvidence(
-              user,
-              attempt,
-              false,
-            )
+          ) {
+            try {
+              signupEligibilitySnapshot = await publishOriginalSignupEvidence(
+                user,
+                attempt,
+                false,
+              )
+            } catch {
+              console.warn("Original signup promotion publication unavailable")
+            }
+          }
         }
 
         if (type !== "invite" && (type === "signup" || (code && isNewUser))) {
@@ -338,7 +353,7 @@ export async function GET(request: Request) {
             user.user_metadata?.full_name || null,
             provider,
             normalizeSignupEligibilitySnapshot(signupEligibilitySnapshot),
-          )
+          ).catch(() => {})
           Promise.resolve(
             sendWelcomeEmail(
               user.email || "",

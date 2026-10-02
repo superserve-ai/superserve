@@ -605,6 +605,38 @@ describe("auth callback", () => {
     )
   })
 
+  it("continues the Google callback with unavailable when publication rejects", async () => {
+    googleMembershipState = { kind: "first_time" }
+    mockHasValidGoogleSignupProof.mockResolvedValue(true)
+    mockReadGooglePromotionEvidence.mockResolvedValue({
+      originalSignup: true,
+      attemptId: "original-attempt",
+      routineMissing: false,
+    })
+    mockPublishOriginalSignupEvidence.mockRejectedValueOnce(
+      new Error("publication transport unavailable"),
+    )
+    mockNotifySlackOfNewUser.mockRejectedValueOnce(new Error("webhook down"))
+
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+      ),
+    )
+
+    expect(response.headers.get("location")).toContain("/sandboxes")
+    expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
+      "user@example.com",
+      "Test User",
+      "google",
+      { kind: "unavailable" },
+    )
+    expect(mockSendWelcomeEmail).toHaveBeenCalledWith(
+      "user@example.com",
+      "Test User",
+    )
+  })
+
   it("uses the known email provider when Auth metadata omits it", async () => {
     currentUser!.app_metadata = {} as { provider: string; providers?: string[] }
 

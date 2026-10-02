@@ -1082,6 +1082,31 @@ describe("original signup promotion evidence", () => {
       { kind: "unavailable" },
     )
   })
+
+  it("continues signup with unavailable when publication rejects", async () => {
+    mockOriginalPublication.mockRejectedValueOnce(
+      new Error("publication transport unavailable"),
+    )
+
+    await expect(
+      signUpWithEmail(
+        "user@example.com",
+        "password123",
+        "Name",
+        undefined,
+        undefined,
+        capture,
+      ),
+    ).resolves.toEqual({ success: true })
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+    expect(mockSlack).toHaveBeenCalledWith(
+      "user@example.com",
+      "Name",
+      "email",
+      { kind: "unavailable" },
+    )
+  })
+
   it("does not attach a new attempt to an older unconfirmed account", async () => {
     mockGenerateLink.mockResolvedValue({
       data: {
