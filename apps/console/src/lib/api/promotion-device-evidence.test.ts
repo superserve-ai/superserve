@@ -999,6 +999,15 @@ describe("promotion evidence producer contract", () => {
         reason: "identity_already_claimed",
       },
     ],
+    [
+      "user already claimed",
+      {
+        ownership: "owner",
+        device_decision: "eligible",
+        eligibility: "ineligible",
+        reason: "user_already_claimed",
+      },
+    ],
   ] as const)(
     "reads the backend-shaped %s snapshot with only the trusted Auth actor",
     async (_label, snapshot) => {
