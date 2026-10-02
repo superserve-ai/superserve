@@ -295,7 +295,7 @@ describe("auth callback", () => {
     mockTrackEvent.mockReset()
   })
 
-  it("returns a generic callback denial before signup notifications", async () => {
+  it("notifies a generic callback denial without exposing evidence", async () => {
     currentUser!.app_metadata = { provider: "email" }
     mockReadSignupEvidence.mockResolvedValue("VisitorCase")
     mockEvaluateSignupRestriction.mockRejectedValue(new SignupRestrictedError())
@@ -308,7 +308,12 @@ describe("auth callback", () => {
 
     expect(response.headers.get("location")).toContain("reason=signup_blocked")
     expect(response.headers.get("location")).not.toContain("VisitorCase")
-    expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+    expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
+      "user@example.com",
+      "Test User",
+      "email",
+      { kind: "blocked" },
+    )
   })
 
   it("does not read active signup evidence for a callback without an attempt ID", async () => {
@@ -469,6 +474,7 @@ describe("auth callback", () => {
       "user@example.com",
       "Test User",
       "google",
+      { kind: "unavailable" },
     )
     expect(mockSendWelcomeEmail).toHaveBeenCalledWith(
       "user@example.com",

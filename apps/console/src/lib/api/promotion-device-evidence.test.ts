@@ -12,6 +12,7 @@ import {
   completePromotionTeam,
   discoverPromotionTeams,
   getPromotionSignupEligibility,
+  getPromotionSignupEligibilityForTrustedSignup,
   getPromotionSignupAccountEvidence,
   PromotionEvidenceError,
   registerPromotionSignupDevice,
@@ -911,6 +912,31 @@ describe("promotion evidence producer contract", () => {
       operation: "signup-eligibility",
     })
     expect(claims).not.toHaveProperty("attempt_id")
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
+      user_id: userId,
+    })
+  })
+
+  it("reads the pre-confirmation snapshot with only the trusted Auth actor", async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      response({
+        ownership: "owner",
+        device_decision: "eligible",
+        eligibility: "unknown",
+        reason: "team_checks_pending",
+      }),
+    )
+    vi.stubGlobal("fetch", fetcher)
+    getUser.mockRejectedValue(new Error("no confirmation session"))
+
+    await expect(
+      getPromotionSignupEligibilityForTrustedSignup(userId),
+    ).resolves.toMatchObject({
+      ownership: "owner",
+      deviceDecision: "eligible",
+      eligibility: "unknown",
+    })
+    expect(getUser).not.toHaveBeenCalled()
     expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
       user_id: userId,
     })

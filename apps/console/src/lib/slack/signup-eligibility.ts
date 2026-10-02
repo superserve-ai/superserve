@@ -24,6 +24,53 @@ export type SignupEligibilityAnnotation = {
   text: string
 }
 
+/**
+ * Convert the trusted SS-640 snapshot into the deliberately smaller local
+ * presentation contract. Ownership alone is never enough: the backend's
+ * policy-aware device decision and eligibility state must agree on an
+ * enforced outcome before a definitive emoji is selected.
+ */
+export function normalizeSignupEligibilitySnapshot(
+  snapshot: unknown,
+): SignupEligibilityPresentationOutcome {
+  try {
+    if (!snapshot || typeof snapshot !== "object")
+      return { kind: "unavailable" }
+    const value = snapshot as Record<string, unknown>
+    if (
+      Object.keys(value).some(
+        (key) =>
+          !["ownership", "deviceDecision", "eligibility", "reason"].includes(
+            key,
+          ),
+      )
+    )
+      return { kind: "unavailable" }
+
+    if (
+      value.ownership === "owner" &&
+      value.deviceDecision === "eligible" &&
+      value.eligibility === "unknown"
+    )
+      return { kind: "eligible" }
+    if (
+      value.ownership === "another_owner" &&
+      value.deviceDecision === "owner_conflict" &&
+      value.eligibility === "ineligible"
+    )
+      return { kind: "enforced_other_owner" }
+    if (
+      value.ownership === "evidence_missing" &&
+      value.deviceDecision === "evidence_missing" &&
+      value.eligibility === "ineligible"
+    )
+      return { kind: "enforced_missing_evidence" }
+  } catch {
+    // Untrusted or hostile values must remain unavailable.
+  }
+  return { kind: "unavailable" }
+}
+
 const unavailableAnnotation = (): SignupEligibilityAnnotation => ({
   text: "Signup eligibility unavailable",
 })

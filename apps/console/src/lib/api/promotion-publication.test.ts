@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   register: vi.fn(),
   bind: vi.fn(),
   signup: vi.fn(),
+  snapshot: vi.fn(),
   update: vi.fn(),
 }))
 vi.mock("./promotion-identity", () => ({
@@ -17,6 +18,7 @@ vi.mock("./promotion-device-evidence", async (original) => ({
   registerPromotionSignupDevice: mocks.register,
   bindPromotionSignupAccount: mocks.bind,
   registerPromotionSignupAccount: mocks.signup,
+  getPromotionSignupEligibilityForTrustedSignup: mocks.snapshot,
 }))
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
@@ -41,6 +43,12 @@ beforeEach(() => {
   )
   mocks.update.mockResolvedValue({ error: null })
   mocks.bind.mockResolvedValue("bound")
+  mocks.snapshot.mockResolvedValue({
+    ownership: "owner",
+    deviceDecision: "eligible",
+    eligibility: "unknown",
+    reason: "team_checks_pending",
+  })
 })
 it.each([
   {},
@@ -133,4 +141,22 @@ it("never publishes a replacement signup attempt when the backend retained first
   mocks.bind.mockResolvedValue("first_evidence_retained")
   await publishOriginalSignupEvidence(user, "different", false)
   expect(mocks.signup).not.toHaveBeenCalled()
+})
+
+it("returns the trusted non-issuing snapshot after publication ordering", async () => {
+  const result = await publishOriginalSignupEvidence(
+    user,
+    "original-attempt",
+    false,
+  )
+  expect(result).toEqual({
+    ownership: "owner",
+    deviceDecision: "eligible",
+    eligibility: "unknown",
+    reason: "team_checks_pending",
+  })
+  expect(mocks.snapshot).toHaveBeenCalledWith(user.id)
+  expect(mocks.signup.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.snapshot.mock.invocationCallOrder[0],
+  )
 })

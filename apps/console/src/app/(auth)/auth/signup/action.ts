@@ -40,6 +40,7 @@ import {
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { verifyRecaptcha } from "@/lib/recaptcha/verify"
+import { normalizeSignupEligibilitySnapshot } from "@/lib/slack/signup-eligibility"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 const signUpSchema = z.object({
@@ -376,8 +377,15 @@ export const signUpWithEmail = async (
           visitor,
         )
       } catch (error) {
-        if (error instanceof SignupRestrictedError)
+        if (error instanceof SignupRestrictedError) {
+          await notifySlackOfNewUser(
+            parsed.data.email,
+            parsed.data.fullName,
+            "email",
+            { kind: "blocked" },
+          ).catch(() => {})
           return { success: false, error: SIGNUP_RESTRICTED_MESSAGE }
+        }
         throw error
       }
     }
@@ -411,6 +419,12 @@ export const signUpWithEmail = async (
       }
       if (error.message.toLowerCase().includes(BLOCKED_TRIGGER_MESSAGE)) {
         console.warn("Signup blocked by trigger", { email: parsed.data.email })
+        await notifySlackOfNewUser(
+          parsed.data.email,
+          parsed.data.fullName,
+          "email",
+          { kind: "blocked", reason: "blocked_email" },
+        ).catch(() => {})
         return {
           success: false,
           error: "Signup is not available for this email address.",
@@ -422,8 +436,9 @@ export const signUpWithEmail = async (
 
     const originalSignup =
       data?.user && Date.parse(data.user.created_at) >= signupStartedAt
+    let signupEligibilitySnapshot: unknown
     if (originalSignup) {
-      await publishOriginalSignupEvidence(
+      signupEligibilitySnapshot = await publishOriginalSignupEvidence(
         data.user,
         deviceVerified ? capture?.attemptId : undefined,
         !fingerprintEventId && !captureResult,
@@ -481,6 +496,7 @@ export const signUpWithEmail = async (
       parsed.data.email,
       parsed.data.fullName,
       "email",
+      normalizeSignupEligibilitySnapshot(signupEligibilitySnapshot),
     ).catch(() => {})
     return { success: true }
   } catch (err) {

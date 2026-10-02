@@ -33,6 +33,7 @@ import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import { resolveFingerprintSignup } from "@/lib/fingerprint/observe"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
+import { normalizeSignupEligibilitySnapshot } from "@/lib/slack/signup-eligibility"
 import { createServerClient } from "@/lib/supabase/server"
 
 const TRUSTED_REDIRECT_PATTERN =
@@ -86,6 +87,10 @@ export async function GET(request: Request) {
         .includes(BLOCKED_TRIGGER_MESSAGE)
       if (blocked) {
         console.warn("OAuth signup blocked by trigger")
+        await notifySlackOfNewUser("", null, code ? "google" : "email", {
+          kind: "blocked",
+          reason: "blocked_email",
+        }).catch(() => {})
         return NextResponse.redirect(
           buildRedirectUrl(
             origin,
@@ -118,6 +123,7 @@ export async function GET(request: Request) {
           ? user.app_metadata?.provider || "google"
           : "email"
         let isNewUser = false
+        let signupEligibilitySnapshot: unknown
 
         if (code && isGoogleUser(user)) {
           const directory = await classifyGoogleMembershipState(
@@ -192,7 +198,7 @@ export async function GET(request: Request) {
             )
             if (original) {
               if (original.originalSignup)
-                await publishOriginalSignupEvidence(
+                signupEligibilitySnapshot = await publishOriginalSignupEvidence(
                   user,
                   original.attemptId,
                   original.routineMissing,
@@ -265,7 +271,11 @@ export async function GET(request: Request) {
             proof &&
             validSignupDeviceBinding(user.id, attempt, proof)
           )
-            await publishOriginalSignupEvidence(user, attempt, false)
+            signupEligibilitySnapshot = await publishOriginalSignupEvidence(
+              user,
+              attempt,
+              false,
+            )
         }
 
         if (type !== "invite" && (type === "signup" || (code && isNewUser))) {
@@ -305,6 +315,12 @@ export async function GET(request: Request) {
                 )
             } catch (error) {
               if (error instanceof SignupRestrictedError) {
+                await notifySlackOfNewUser(
+                  user.email || "",
+                  user.user_metadata?.full_name || null,
+                  provider,
+                  { kind: "blocked" },
+                ).catch(() => {})
                 return NextResponse.redirect(
                   buildRedirectUrl(
                     origin,
@@ -322,6 +338,7 @@ export async function GET(request: Request) {
             user.email || "",
             user.user_metadata?.full_name || null,
             user.app_metadata?.provider || null,
+            normalizeSignupEligibilitySnapshot(signupEligibilitySnapshot),
           )
           Promise.resolve(
             sendWelcomeEmail(

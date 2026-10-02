@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 
-import { formatSignupEligibility } from "./signup-eligibility"
+import {
+  formatSignupEligibility,
+  normalizeSignupEligibilitySnapshot,
+} from "./signup-eligibility"
 
 describe("formatSignupEligibility", () => {
   it.each([
@@ -107,4 +110,63 @@ describe("formatSignupEligibility", () => {
       true,
     )
   })
+})
+
+describe("normalizeSignupEligibilitySnapshot", () => {
+  it.each([
+    [
+      {
+        ownership: "owner",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "team_checks_pending",
+      },
+      { kind: "eligible" },
+    ],
+    [
+      {
+        ownership: "another_owner",
+        deviceDecision: "owner_conflict",
+        eligibility: "ineligible",
+        reason: "already_registered",
+      },
+      { kind: "enforced_other_owner" },
+    ],
+    [
+      {
+        ownership: "evidence_missing",
+        deviceDecision: "evidence_missing",
+        eligibility: "ineligible",
+        reason: "missing",
+      },
+      { kind: "enforced_missing_evidence" },
+    ],
+  ])("maps the exact policy-aware combination", (snapshot, expected) => {
+    expect(normalizeSignupEligibilitySnapshot(snapshot)).toEqual(expected)
+  })
+
+  it.each([
+    {
+      ownership: "another_owner",
+      deviceDecision: "owner_conflict",
+      eligibility: "unknown",
+    },
+    {
+      ownership: "evidence_missing",
+      deviceDecision: "evidence_missing",
+      eligibility: "unknown",
+    },
+    {
+      ownership: "owner",
+      deviceDecision: "eligible",
+      eligibility: "ineligible",
+    },
+  ])(
+    "does not infer a verdict when the policy combination is incomplete",
+    (snapshot) => {
+      expect(normalizeSignupEligibilitySnapshot(snapshot)).toEqual({
+        kind: "unavailable",
+      })
+    },
+  )
 })
