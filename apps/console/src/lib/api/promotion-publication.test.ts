@@ -63,7 +63,15 @@ it.each([
   },
 )
 it("only classifies successfully persisted routine absence as ordinary missing", async () => {
-  await publishOriginalSignupEvidence(user, undefined, true)
+  await expect(
+    publishOriginalSignupEvidence(user, undefined, true),
+  ).resolves.toEqual({
+    ownership: "owner",
+    deviceDecision: "eligible",
+    eligibility: "unknown",
+    reason: "team_checks_pending",
+  })
+  expect(mocks.snapshot).toHaveBeenCalledWith(user.id)
   expect(mocks.update).toHaveBeenCalledWith(user.id, {
     app_metadata: { promotion_routine_absence: true },
   })
@@ -139,7 +147,15 @@ it("never treats an old cell or transport failure as routine absence", async () 
 })
 it("never publishes a replacement signup attempt when the backend retained first evidence", async () => {
   mocks.bind.mockResolvedValue("first_evidence_retained")
-  await publishOriginalSignupEvidence(user, "different", false)
+  await expect(
+    publishOriginalSignupEvidence(user, "different", false),
+  ).resolves.toEqual({
+    ownership: "owner",
+    deviceDecision: "eligible",
+    eligibility: "unknown",
+    reason: "team_checks_pending",
+  })
+  expect(mocks.snapshot).toHaveBeenCalledWith(user.id)
   expect(mocks.signup).not.toHaveBeenCalled()
 })
 

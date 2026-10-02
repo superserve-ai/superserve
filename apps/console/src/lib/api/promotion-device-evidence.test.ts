@@ -331,10 +331,13 @@ describe("promotion evidence producer contract", () => {
     await expect(
       getPromotionSignupAccountEvidence(userId),
     ).rejects.toMatchObject({ code: "forbidden" })
+    await expect(getPromotionSignupEligibility(userId)).rejects.toMatchObject({
+      code: "forbidden",
+    })
     await expect(
       registerPromotionSignupDevice("usw", userId),
     ).rejects.toMatchObject({ code: "forbidden" })
-    expect(getUser).toHaveBeenCalledTimes(2)
+    expect(getUser).toHaveBeenCalledTimes(3)
     expect(signer).not.toHaveBeenCalled()
     expect(fetcher).not.toHaveBeenCalled()
   })
@@ -381,6 +384,9 @@ describe("promotion evidence producer contract", () => {
     vi.stubGlobal("fetch", fetcher)
     await expect(
       getPromotionSignupAccountEvidence(otherUser),
+    ).rejects.toMatchObject({ code: "forbidden" })
+    await expect(
+      getPromotionSignupEligibility(otherUser),
     ).rejects.toMatchObject({ code: "forbidden" })
     await expect(
       registerPromotionSignupDevice("usw", otherUser),
