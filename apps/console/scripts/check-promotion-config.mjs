@@ -25,6 +25,7 @@ if (
     tokens.some(
       (value) =>
         value === process.env.INTERNAL_API_TOKEN ||
+        value === process.env.INTERNAL_API_TOKEN_USWEST ||
         value === process.env.SANDBOX_INTERNAL_API_TOKEN,
     )
   )

@@ -103,6 +103,8 @@ function producerToken(region: string, kind: "capture" | "account"): string {
     (region === "usw" && account === eastAccount) ||
     capture === process.env.INTERNAL_API_TOKEN ||
     account === process.env.INTERNAL_API_TOKEN ||
+    capture === process.env.INTERNAL_API_TOKEN_USWEST ||
+    account === process.env.INTERNAL_API_TOKEN_USWEST ||
     capture === process.env.SANDBOX_INTERNAL_API_TOKEN ||
     account === process.env.SANDBOX_INTERNAL_API_TOKEN
   )

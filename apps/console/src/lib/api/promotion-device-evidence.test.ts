@@ -285,6 +285,26 @@ describe("promotion evidence producer contract", () => {
     expect(fetcher).not.toHaveBeenCalled()
   })
 
+  it("rejects reuse of the West internal credential before transport", async () => {
+    const previous = process.env.INTERNAL_API_TOKEN_USWEST
+    const fetcher = vi.fn()
+    vi.stubGlobal("fetch", fetcher)
+    try {
+      process.env.INTERNAL_API_TOKEN_USWEST = "west-account-test-token"
+      await expect(
+        registerPromotionSignupDevice("usw", userId),
+      ).rejects.toMatchObject({ code: "authority_unavailable" })
+      process.env.INTERNAL_API_TOKEN_USWEST = "capture-test-token"
+      await expect(createPromotionSignupAttempt()).rejects.toMatchObject({
+        code: "authority_unavailable",
+      })
+      expect(fetcher).not.toHaveBeenCalled()
+    } finally {
+      if (previous === undefined) delete process.env.INTERNAL_API_TOKEN_USWEST
+      else process.env.INTERNAL_API_TOKEN_USWEST = previous
+    }
+  })
+
   it.each([
     ["missing credential", { data: { user: null }, error: null }],
     [
