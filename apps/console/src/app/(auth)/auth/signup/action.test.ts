@@ -716,6 +716,19 @@ describe("signUpWithEmail", () => {
     await new Promise((r) => setTimeout(r, 0))
     expect(mockSlack).toHaveBeenCalled()
   })
+
+  it("preserves signup when the notification boundary rejects", async () => {
+    mockGenerateLink.mockResolvedValue({
+      data: { properties: { hashed_token: "abc123" } },
+      error: null,
+    })
+    mockSendEmail.mockResolvedValue({ success: true })
+    mockSlack.mockRejectedValueOnce(new Error("webhook down"))
+
+    await expect(
+      signUpWithEmail("user@test.com", "password123", "Test User"),
+    ).resolves.toEqual({ success: true })
+  })
 })
 
 describe("beginGoogleSignup", () => {
