@@ -31,8 +31,14 @@ export default function SettingsPage() {
   const { user, loading } = useUser()
   const billingSummary = useBillingSummary(!loading && !!user)
   const billingPricing = useBillingSettings()
-  const billingSummaryData = billingSummary.data
-  const billingSettings = billingPricing.data
+  // A failed refresh must not leave the previous team's/resource state looking
+  // authoritative. React Query may retain data alongside an error, so clear
+  // the projection on failure and let the UI fall back to its unavailable
+  // state until a fresh authenticated response arrives.
+  const billingSummaryData = billingSummary.error
+    ? undefined
+    : billingSummary.data
+  const billingSettings = billingPricing.error ? undefined : billingPricing.data
   const posthog = usePostHog()
   const { addToast } = useToast()
 

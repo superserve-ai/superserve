@@ -108,7 +108,7 @@ vi.mock("@superserve/ui", async () => {
   }
 })
 
-function renderSection(summary = baseSummary) {
+function renderSection(summary: BillingSummaryResponse | null = baseSummary) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -179,6 +179,17 @@ describe("CustomerBillingSection", () => {
     expect(screen.getByText("0.03 vCPU-hours")).toBeInTheDocument()
     expect(screen.getByText("0.56 GiB-hours")).toBeInTheDocument()
     expect(screen.getByText("1.11 GiB-hours")).toBeInTheDocument()
+  })
+
+  it("keeps payment status neutral while the authoritative summary is unavailable", () => {
+    renderSection(null)
+
+    expect(screen.getByText("Payment Status")).toBeInTheDocument()
+    expect(screen.getAllByText("Unavailable")).toHaveLength(2)
+    expect(
+      screen.getByText("Billing data is unavailable for this team right now."),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("Tracking only")).not.toBeInTheDocument()
   })
 
   it("disables the CTA while billing periods are still loading", () => {

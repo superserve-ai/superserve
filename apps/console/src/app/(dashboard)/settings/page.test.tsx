@@ -241,4 +241,35 @@ describe("Settings billing", () => {
     view.rerender(<SettingsPage />)
     expect(view.queryByText("Usage-based billing")).not.toBeInTheDocument()
   })
+
+  it("does not render retained summary data after an authenticated refresh fails", () => {
+    useBillingSummary.mockReturnValue({
+      data: summary(true),
+      isPending: false,
+      error: new Error("refresh failed"),
+    })
+
+    const view = renderPage()
+
+    expect(view.queryByText("Usage-based billing")).not.toBeInTheDocument()
+    expect(view.queryByText("Billed")).not.toBeInTheDocument()
+  })
+
+  it("keeps storage eligibility authoritative when pricing is unavailable", () => {
+    useBillingSettings.mockReturnValue({
+      data: pricing,
+      isPending: false,
+      error: new Error("pricing unavailable"),
+    })
+    useBillingSummary.mockReturnValue({
+      data: summary(true),
+      isPending: false,
+      error: null,
+    })
+
+    renderPage()
+
+    expect(screen.getByText("Billed")).toBeInTheDocument()
+    expect(screen.getAllByText("Unavailable")).toHaveLength(3)
+  })
 })

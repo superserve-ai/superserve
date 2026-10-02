@@ -185,7 +185,11 @@ export function PlanUsagePageClient() {
   const teamsQuery = useTeams()
   const dashboardTeam = useDashboardTeamContext()
   const summaryQuery = useBillingSummary(!userLoading && !!user)
-  const summary = summaryQuery.data
+  // Do not render retained summary data after a failed refresh. The billing
+  // query is team-scoped, but React Query can still expose the last successful
+  // value together with an error for that key; that value is not authoritative
+  // while the current response is unavailable.
+  const summary = summaryQuery.error ? undefined : summaryQuery.data
   const activeTeam = useMemo(() => {
     const teams = teamsQuery.data?.teams ?? []
     if (queryScope !== "self") {
