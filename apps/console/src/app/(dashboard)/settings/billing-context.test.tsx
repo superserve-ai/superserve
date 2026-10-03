@@ -7,6 +7,7 @@ import type {
   BillingPricingResponse,
   BillingSummaryResponse,
 } from "@/lib/api/billing"
+import { billingKeys } from "@/lib/api/query-keys"
 import type { TeamDirectoryResponse } from "@/lib/api/teams-actions"
 import { billingFixture } from "@/test/ui/ss669/fixtures"
 
@@ -50,8 +51,9 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-function Page() {
+function Page({ disableRetries = false }: { disableRetries?: boolean }) {
   client = useQueryClient()
+  if (disableRetries) client.setQueryDefaults(billingKeys.all, { retry: false })
   return <SettingsPage />
 }
 
@@ -71,6 +73,97 @@ describe("Settings billing context isolation", () => {
     selectTeam("team-a", "use")
   })
   afterEach(() => client?.clear())
+
+  it.each(["summary", "pricing"] as const)(
+    "clears retained %s claims after a failed refresh and recovers on retry",
+    async (resource) => {
+      const initial = billingFixture("paid")
+      const recovered = billingFixture("tracked")
+      recovered.pricing.rates.find(
+        (rate) => rate.resource_key === "storage_gib",
+      )!.price_usd_hourly = 0.000216
+      const recovery = deferred<
+        BillingSummaryResponse | BillingPricingResponse
+      >()
+      const failure = new Error("refresh failed")
+      getBillingSummary.mockResolvedValue(initial.summary)
+      getBillingPricing.mockResolvedValue(initial.pricing)
+      const getter =
+        resource === "summary" ? getBillingSummary : getBillingPricing
+      const queryKey = (
+        resource === "summary" ? billingKeys.summary : billingKeys.settings
+      )({
+        cacheScope: "self",
+        teamKey: "use:team-a",
+      })
+      render(
+        <QueryProvider>
+          <Page disableRetries />
+        </QueryProvider>,
+      )
+      expect(await screen.findByText("Billed")).toBeInTheDocument()
+      expect(
+        await screen.findByText("$0.000108 / GiB-hour"),
+      ).toBeInTheDocument()
+
+      getter
+        .mockRejectedValueOnce(failure)
+        .mockReturnValueOnce(recovery.promise)
+      await act(async () => {
+        await client.invalidateQueries({ queryKey, exact: true })
+      })
+      await waitFor(() => {
+        expect(client.getQueryState(queryKey)).toMatchObject({
+          status: "error",
+          data: initial[resource],
+          error: failure,
+          fetchStatus: "idle",
+        })
+        if (resource === "summary") {
+          expect(
+            screen.queryByText("Usage-based billing"),
+          ).not.toBeInTheDocument()
+          expect(screen.queryByText("Billed")).not.toBeInTheDocument()
+        } else {
+          expect(screen.getAllByText("Unavailable")).toHaveLength(3)
+          expect(
+            screen.queryByText("$0.000108 / GiB-hour"),
+          ).not.toBeInTheDocument()
+          expect(screen.getByText("Billed")).toBeInTheDocument()
+        }
+      })
+      expect(getter).toHaveBeenCalledTimes(2)
+      expect(
+        screen.queryByText("Tracked only · Not billed"),
+      ).not.toBeInTheDocument()
+
+      act(() => {
+        void client.refetchQueries({ queryKey, exact: true })
+      })
+      await waitFor(() => expect(getter).toHaveBeenCalledTimes(3))
+      await act(async () => {
+        recovery.resolve(recovered[resource])
+      })
+      await waitFor(() => {
+        expect(client.getQueryState(queryKey)).toMatchObject({
+          status: "success",
+          data: recovered[resource],
+          error: null,
+        })
+        if (resource === "summary") {
+          expect(
+            screen.getByText("Tracked only · Not billed"),
+          ).toBeInTheDocument()
+          expect(screen.queryByText("Billed")).not.toBeInTheDocument()
+          expect(screen.getByText("$0.000108 / GiB-hour")).toBeInTheDocument()
+        } else {
+          expect(screen.getByText("$0.000216 / GiB-hour")).toBeInTheDocument()
+          expect(screen.getByText("Billed")).toBeInTheDocument()
+          expect(screen.queryByText("Unavailable")).not.toBeInTheDocument()
+        }
+      })
+    },
+  )
 
   it("does not fetch or claim billing state before the team resolves", async () => {
     directory = undefined
