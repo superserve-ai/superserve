@@ -59,6 +59,24 @@ export interface PromotionSignupEligibility {
   reason: string
 }
 
+function parsePromotionSignupEligibility(
+  result: Record<string, unknown>,
+): PromotionSignupEligibility {
+  if (
+    (result.ownership !== "owner" &&
+      result.ownership !== "another_owner" &&
+      result.ownership !== "evidence_missing") ||
+    (result.eligibility !== "unknown" && result.eligibility !== "ineligible")
+  )
+    throw new PromotionEvidenceError("authority_unavailable")
+  return {
+    ownership: result.ownership,
+    deviceDecision: requiredString(result.device_decision),
+    eligibility: result.eligibility,
+    reason: requiredString(result.reason),
+  }
+}
+
 type PromotionEvidenceErrorCode =
   | "forbidden"
   | "evidence_missing"
@@ -389,19 +407,28 @@ export async function getPromotionSignupEligibility(
     { user_id: userId },
     { userId, operation: "signup-eligibility" },
   )
-  if (
-    (result.ownership !== "owner" &&
-      result.ownership !== "another_owner" &&
-      result.ownership !== "evidence_missing") ||
-    (result.eligibility !== "unknown" && result.eligibility !== "ineligible")
+  return parsePromotionSignupEligibility(result)
+}
+
+/**
+ * Read the non-issuing East snapshot for the actual Auth user created by the
+ * trusted signup continuation. Unlike the ordinary read above, this path
+ * deliberately does not consult the browser session: confirmation email
+ * signup runs before a session exists. The caller must pass the Auth user ID
+ * returned by server-owned creation; no browser-facing action exposes this.
+ */
+export async function getPromotionSignupEligibilityForTrustedSignup(
+  userId: string,
+): Promise<PromotionSignupEligibility> {
+  if (!userId) throw new PromotionEvidenceError("forbidden", 403)
+  const result = await post(
+    DEFAULT_REGION,
+    "/internal/promotion/account/signup-eligibility",
+    "account",
+    { user_id: userId },
+    { userId, operation: "signup-eligibility" },
   )
-    throw new PromotionEvidenceError("authority_unavailable")
-  return {
-    ownership: result.ownership,
-    deviceDecision: requiredString(result.device_decision),
-    eligibility: result.eligibility,
-    reason: requiredString(result.reason),
-  }
+  return parsePromotionSignupEligibility(result)
 }
 
 /**

@@ -10,6 +10,7 @@ const sendToSlackHook = async (message: Record<string, any>) => {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(message),
+    signal: AbortSignal.timeout(5000),
   })
 
   if (!response.ok) {

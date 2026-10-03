@@ -9,7 +9,7 @@ import {
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { completedMemberships } from "@/lib/api/team-provisioning"
-import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
+import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
 import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
 import {
   hasValidGoogleSignupProof,
@@ -33,6 +33,7 @@ import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import { resolveFingerprintSignup } from "@/lib/fingerprint/observe"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
+import { normalizeSignupEligibilitySnapshot } from "@/lib/slack/signup-eligibility"
 import { createServerClient } from "@/lib/supabase/server"
 
 const TRUSTED_REDIRECT_PATTERN =
@@ -81,11 +82,15 @@ export async function GET(request: Request) {
     }
 
     if (error) {
-      const blocked = error.message
-        .toLowerCase()
-        .includes(BLOCKED_TRIGGER_MESSAGE)
-      if (blocked) {
-        console.warn("OAuth signup blocked by trigger")
+      // Supabase's generic trigger error is not authoritative SS-499 policy
+      // evidence. Preserve the existing rejected-auth redirect and report an
+      // unavailable annotation rather than a definitive blocked outcome.
+      const authSignupRejected = isGenericAuthSignupFailure(error.message)
+      if (authSignupRejected) {
+        console.warn("OAuth signup rejected by Auth trigger")
+        await notifySlackOfNewUser("", null, code ? "google" : "email", {
+          kind: "unavailable",
+        }).catch(() => {})
         return NextResponse.redirect(
           buildRedirectUrl(
             origin,
@@ -118,6 +123,7 @@ export async function GET(request: Request) {
           ? user.app_metadata?.provider || "google"
           : "email"
         let isNewUser = false
+        let signupEligibilitySnapshot: unknown
 
         if (code && isGoogleUser(user)) {
           const directory = await classifyGoogleMembershipState(
@@ -191,12 +197,22 @@ export async function GET(request: Request) {
               user.created_at,
             )
             if (original) {
-              if (original.originalSignup)
-                await publishOriginalSignupEvidence(
-                  user,
-                  original.attemptId,
-                  original.routineMissing,
-                )
+              if (original.originalSignup) {
+                try {
+                  signupEligibilitySnapshot =
+                    await publishOriginalSignupEvidence(
+                      user,
+                      original.attemptId,
+                      original.routineMissing,
+                    )
+                } catch {
+                  // Publication is best effort; callback auth and notification
+                  // continue with an unavailable eligibility annotation.
+                  console.warn(
+                    "Original signup promotion publication unavailable",
+                  )
+                }
+              }
               if (original.eventId && original.visitor)
                 await saveSignupEvidence(
                   user.id,
@@ -264,8 +280,17 @@ export async function GET(request: Request) {
             attempt &&
             proof &&
             validSignupDeviceBinding(user.id, attempt, proof)
-          )
-            await publishOriginalSignupEvidence(user, attempt, false)
+          ) {
+            try {
+              signupEligibilitySnapshot = await publishOriginalSignupEvidence(
+                user,
+                attempt,
+                false,
+              )
+            } catch {
+              console.warn("Original signup promotion publication unavailable")
+            }
+          }
         }
 
         if (type !== "invite" && (type === "signup" || (code && isNewUser))) {
@@ -305,6 +330,12 @@ export async function GET(request: Request) {
                 )
             } catch (error) {
               if (error instanceof SignupRestrictedError) {
+                await notifySlackOfNewUser(
+                  user.email || "",
+                  user.user_metadata?.full_name || null,
+                  provider,
+                  { kind: "blocked" },
+                ).catch(() => {})
                 return NextResponse.redirect(
                   buildRedirectUrl(
                     origin,
@@ -321,8 +352,9 @@ export async function GET(request: Request) {
           await notifySlackOfNewUser(
             user.email || "",
             user.user_metadata?.full_name || null,
-            user.app_metadata?.provider || null,
-          )
+            provider,
+            normalizeSignupEligibilitySnapshot(signupEligibilitySnapshot),
+          ).catch(() => {})
           Promise.resolve(
             sendWelcomeEmail(
               user.email || "",
