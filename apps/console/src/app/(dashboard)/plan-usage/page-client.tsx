@@ -103,6 +103,16 @@ export function formatUsageCost(value: number): string {
     : value.toFixed(2)
 }
 
+function storageLegend(buckets: BillingUsageSeriesBucket[]): string {
+  if (buckets.length === 0) return "Storage"
+  const billable = buckets.map((bucket) => bucket.storage.billable)
+  if (billable.every(Boolean)) return "Storage"
+  if (billable.every((value) => value === false)) {
+    return "Storage equivalent (not billed)"
+  }
+  return "Storage (mixed billing eligibility)"
+}
+
 function bucketTooltip(
   bucket: BillingUsageSeriesBucket,
   granularity: BillingUsageGranularity,
@@ -175,7 +185,11 @@ export function PlanUsagePageClient() {
   const teamsQuery = useTeams()
   const dashboardTeam = useDashboardTeamContext()
   const summaryQuery = useBillingSummary(!userLoading && !!user)
-  const summary = summaryQuery.data
+  // Do not render retained summary data after a failed refresh. The billing
+  // query is team-scoped, but React Query can still expose the last successful
+  // value together with an error for that key; that value is not authoritative
+  // while the current response is unavailable.
+  const summary = summaryQuery.error ? undefined : summaryQuery.data
   const activeTeam = useMemo(() => {
     const teams = teamsQuery.data?.teams ?? []
     if (queryScope !== "self") {
@@ -203,9 +217,11 @@ export function PlanUsagePageClient() {
     }
     return null
   }, [activeTeam, dashboardTeam])
+  // Retain the viewed period on refresh errors without retaining billing claims.
+  // This cached data belongs to the current team/region/impersonation query key.
   const billingPeriod = useMemo(
-    () => toDateRange(summary?.billing_period),
-    [summary?.billing_period],
+    () => toDateRange(summaryQuery.data?.billing_period),
+    [summaryQuery.data?.billing_period],
   )
   const [fallbackRange] = useState<DateRange>(() => defaultUsageRange())
   const [dateRange, setDateRange] = useState<DateRange | null>(null)
@@ -430,10 +446,7 @@ export function PlanUsagePageClient() {
                     </span>
                     <span>
                       <i className="mr-1 inline-block size-2 rounded-sm bg-muted" />
-                      Storage equivalent
-                      {buckets.some((b) => b.storage.billable === false)
-                        ? " (not billed)"
-                        : ""}
+                      {storageLegend(buckets)}
                     </span>
                   </div>
                   <div

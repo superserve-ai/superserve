@@ -8,8 +8,13 @@ import { useEffect, useState } from "react"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { PageHeader } from "@/components/page-header"
 import { TeamsSection } from "@/components/settings/teams-section"
+import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { useBillingSettings } from "@/hooks/use-billing-usage"
 import { useUser } from "@/hooks/use-user"
+import type {
+  BillingPricingRate,
+  BillingSummaryResource,
+} from "@/lib/api/billing"
 import { SETTINGS_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
@@ -24,7 +29,16 @@ function formatRate(value: number): string {
 
 export default function SettingsPage() {
   const { user, loading } = useUser()
-  const { data: billingSettings } = useBillingSettings()
+  const billingSummary = useBillingSummary(!loading && !!user)
+  const billingPricing = useBillingSettings()
+  // A failed refresh must not leave the previous team's/resource state looking
+  // authoritative. React Query may retain data alongside an error, so clear
+  // the projection on failure and let the UI fall back to its unavailable
+  // state until a fresh authenticated response arrives.
+  const billingSummaryData = billingSummary.error
+    ? undefined
+    : billingSummary.data
+  const billingSettings = billingPricing.error ? undefined : billingPricing.data
   const posthog = usePostHog()
   const { addToast } = useToast()
 
@@ -46,6 +60,23 @@ export default function SettingsPage() {
 
   const email = user?.email || ""
   const isOAuth = user?.app_metadata?.provider === "google"
+  const storageResource = billingSummaryData?.resources.find(
+    (resource) => resource.resource_key === "storage_gib",
+  )
+  const storageRate = billingSettings?.rates.find(
+    (rate) => rate.resource_key === "storage_gib",
+  )
+  const billingVisible = billingSummaryData?.permissions.can_view === true
+
+  const rateLabel = (rate: BillingPricingRate | undefined) =>
+    rate
+      ? `${formatRate(rate.price_usd_hourly)} / ${rate.display_unit}`
+      : "Unavailable"
+
+  const resourceStatus = (resource: BillingSummaryResource | undefined) => {
+    if (!resource) return "Unavailable"
+    return resource.billable ? "Billed" : "Tracked only · Not billed"
+  }
 
   const handleSaveProfile = async () => {
     setSavingProfile(true)
@@ -224,7 +255,7 @@ export default function SettingsPage() {
         {/* Renders nothing unless a second cell (region) is configured */}
         <TeamsSection />
 
-        {billingSettings?.enabled && (
+        {billingVisible && (
           <>
             {/* Billing */}
             <div className="grid grid-cols-[240px_1fr] gap-12 px-8 py-8">
@@ -244,41 +275,44 @@ export default function SettingsPage() {
                         Usage-based billing
                       </p>
                       <p className="mt-1 text-xs leading-relaxed text-muted">
-                        Your team has billing enabled. Usage is metered from
-                        active vCPU seconds, active GiB memory seconds, and GiB
-                        storage seconds.
+                        Usage is metered from active vCPU seconds, active GiB
+                        memory seconds, and GiB storage seconds.
                       </p>
                     </div>
                     <span className="bg-brand/10 px-2 py-1 font-mono text-xs text-brand uppercase">
-                      Active
+                      {billingSummaryData?.billing_mode === "shadow"
+                        ? "Tracking"
+                        : "Active"}
                     </span>
                   </div>
                   <dl className="mt-4 grid gap-3 font-mono text-xs md:grid-cols-3">
                     <div>
                       <dt className="text-muted uppercase">Compute</dt>
                       <dd className="mt-1 text-foreground">
-                        {formatRate(
-                          billingSettings.pricing?.cpu_vcpu_hour_usd ?? 0,
-                        )}{" "}
-                        / vCPU-hour
+                        {rateLabel(
+                          billingSettings?.rates.find(
+                            (rate) => rate.resource_key === "vcpu",
+                          ),
+                        )}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-muted uppercase">Memory</dt>
                       <dd className="mt-1 text-foreground">
-                        {formatRate(
-                          billingSettings.pricing?.memory_gib_hour_usd ?? 0,
-                        )}{" "}
-                        / GiB-hour
+                        {rateLabel(
+                          billingSettings?.rates.find(
+                            (rate) => rate.resource_key === "memory_gib",
+                          ),
+                        )}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-muted uppercase">Storage</dt>
                       <dd className="mt-1 text-foreground">
-                        {formatRate(
-                          billingSettings.pricing?.storage_gib_hour_usd ?? 0,
-                        )}{" "}
-                        / GiB-hour
+                        {rateLabel(storageRate)}
+                      </dd>
+                      <dd className="mt-1 text-xs text-muted">
+                        {resourceStatus(storageResource)}
                       </dd>
                     </div>
                   </dl>

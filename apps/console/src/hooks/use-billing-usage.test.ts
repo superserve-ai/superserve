@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 const useQuery = vi.fn((config) => config)
 const useBillingContext = vi.fn()
 const getBillingUsageSeries = vi.fn()
+const getBillingPricing = vi.fn()
 const runtimeTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
 vi.mock("@tanstack/react-query", () => ({
@@ -14,11 +15,11 @@ vi.mock("@/hooks/use-billing-context", () => ({
 }))
 
 vi.mock("@/lib/api/billing-actions", () => ({
-  getBillingSettingsAction: vi.fn(),
   getBillingUsageAction: vi.fn(),
 }))
 
 vi.mock("@/lib/api/billing", () => ({
+  getBillingPricing,
   getBillingUsageSeries,
 }))
 
@@ -193,6 +194,51 @@ describe("useBillingUsage", () => {
           "2026-01-02T00:00:00.000Z",
         ],
         queryFn: expect.any(Function),
+      }),
+    )
+  })
+})
+
+describe("useBillingSettings", () => {
+  beforeEach(() => {
+    useQuery.mockClear()
+    getBillingPricing.mockReset()
+    useBillingContext.mockReset()
+  })
+
+  it("uses authenticated pricing and waits for resolved billing context", async () => {
+    useBillingContext.mockReturnValue({
+      cacheScope: "impersonation:admin",
+      teamKey: "usw:team-a",
+      ready: true,
+    })
+    const { useBillingSettings } = await import("./use-billing-usage")
+
+    useBillingSettings()
+
+    expect(useQuery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enabled: true,
+        queryKey: ["billing", "settings", "impersonation:admin", "usw:team-a"],
+        queryFn: getBillingPricing,
+      }),
+    )
+  })
+
+  it("does not enable pricing before the active team is resolved", async () => {
+    useBillingContext.mockReturnValue({
+      cacheScope: "self",
+      teamKey: null,
+      ready: false,
+    })
+    const { useBillingSettings } = await import("./use-billing-usage")
+
+    useBillingSettings()
+
+    expect(useQuery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enabled: false,
+        queryKey: ["billing", "settings", "self", "unresolved"],
       }),
     )
   })

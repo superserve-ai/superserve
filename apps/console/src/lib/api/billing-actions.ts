@@ -49,12 +49,6 @@ export interface BillingUsageResponse {
   rows: BillingUsageHourly[]
 }
 
-export interface BillingSettingsResponse {
-  enabled: boolean
-  billing_mode: BillingUsageMode
-  pricing?: BillingPricing
-}
-
 async function getTeam(userId: string): Promise<TeamMembership | null> {
   // maxAgeMs 0: billing's fail-closed check below reasons about the
   // freshness of the read itself, so it must not be served from the
@@ -349,41 +343,5 @@ export async function getBillingUsageAction(
       ),
       updated_at: row.updated_at as string,
     })),
-  }
-}
-
-export async function getBillingSettingsAction(): Promise<BillingSettingsResponse> {
-  const supabase = await createServerClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Not authenticated")
-
-  const team = await getTeam(user.id)
-  if (!team) {
-    return {
-      enabled: false,
-      billing_mode: "disabled",
-    }
-  }
-
-  const admin = cellFor(team.region).createAdminClient()
-  const billingExportEnabled = await getFeatureEnabled(
-    admin,
-    team.teamId,
-    BILLING_EXPORT_FLAG,
-  )
-
-  if (!billingExportEnabled) {
-    return {
-      enabled: false,
-      billing_mode: "disabled",
-    }
-  }
-
-  return {
-    enabled: true,
-    billing_mode: "active",
-    pricing: await getTeamBillingPricing(admin, team.teamId),
   }
 }

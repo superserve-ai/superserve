@@ -196,7 +196,14 @@ function paymentSummary(
     }
   }
 
-  return summary?.billing_mode === "live"
+  if (!summary) {
+    return {
+      headline: "Unavailable",
+      detail: "Billing data is unavailable for this team right now.",
+    }
+  }
+
+  return summary.billing_mode === "live"
     ? {
         headline: "Billing unavailable",
         detail:
