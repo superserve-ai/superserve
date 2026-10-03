@@ -217,9 +217,11 @@ export function PlanUsagePageClient() {
     }
     return null
   }, [activeTeam, dashboardTeam])
+  // Retain the viewed period on refresh errors without retaining billing claims.
+  // This cached data belongs to the current team/region/impersonation query key.
   const billingPeriod = useMemo(
-    () => toDateRange(summary?.billing_period),
-    [summary?.billing_period],
+    () => toDateRange(summaryQuery.data?.billing_period),
+    [summaryQuery.data?.billing_period],
   )
   const [fallbackRange] = useState<DateRange>(() => defaultUsageRange())
   const [dateRange, setDateRange] = useState<DateRange | null>(null)

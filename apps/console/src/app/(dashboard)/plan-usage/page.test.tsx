@@ -315,6 +315,62 @@ describe("PlanUsagePage", () => {
     expect(refetch).toHaveBeenCalledOnce()
   })
 
+  it("keeps the viewed period through a refresh error and adopts the recovered period", () => {
+    const summaryQuery = useBillingSummary()
+    useBillingUsage.mockClear()
+    useBillingUsage.mockReturnValue({
+      data: { buckets: [] },
+      isPending: false,
+      error: null,
+    })
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const page = () => (
+      <QueryClientProvider client={client}>
+        <PlanUsagePage />
+      </QueryClientProvider>
+    )
+    const { rerender } = render(page())
+    const assertRange = (start: string, end: string) => {
+      expect(useBillingUsage).toHaveBeenCalled()
+      for (const call of useBillingUsage.mock.calls) {
+        expect(call).toEqual([
+          new Date(start),
+          new Date(end),
+          "daily",
+          expect.any(String),
+          true,
+        ])
+      }
+    }
+    assertRange("2026-06-01T00:00:00.000Z", "2026-07-01T00:00:00.000Z")
+    useBillingUsage.mockClear()
+    useBillingSummary.mockReturnValue({
+      ...summaryQuery,
+      error: new Error("refresh failed"),
+    })
+    rerender(page())
+    assertRange("2026-06-01T00:00:00.000Z", "2026-07-01T00:00:00.000Z")
+    expect(screen.queryByText("Current Balance")).not.toBeInTheDocument()
+    expect(screen.queryByText("Billing is live")).not.toBeInTheDocument()
+
+    useBillingUsage.mockClear()
+    useBillingSummary.mockReturnValue({
+      ...summaryQuery,
+      data: {
+        ...summaryQuery.data,
+        billing_period: {
+          start: "2026-07-01T00:00:00.000Z",
+          end: "2026-08-01T00:00:00.000Z",
+        },
+      },
+    })
+    rerender(page())
+    assertRange("2026-07-01T00:00:00.000Z", "2026-08-01T00:00:00.000Z")
+    expect(screen.getByText("Current Balance")).toBeInTheDocument()
+  })
+
   it("shows the preview state when billing dashboard access is disabled", () => {
     useBillingUsage.mockReturnValue({
       data: {
