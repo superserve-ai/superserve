@@ -1099,6 +1099,15 @@ describe("promotion evidence producer contract", () => {
         reason: snapshot.reason,
       })
       expect(getUser).not.toHaveBeenCalled()
+      expect(fetcher.mock.calls[0][1].headers["X-Actor-User-Id"]).toBe(userId)
+      const claims = verifyAssertion(
+        fetcher.mock.calls[0][1].headers["X-Promotion-Account-Assertion"],
+      )
+      expect(claims).toMatchObject({
+        sub: userId,
+        operation: "signup-eligibility",
+      })
+      expect(claims).not.toHaveProperty("attempt_id")
       expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
         user_id: userId,
       })

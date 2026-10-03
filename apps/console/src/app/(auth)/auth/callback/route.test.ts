@@ -712,6 +712,39 @@ describe("auth callback", () => {
     )
   })
 
+  it("keeps a no-fingerprint original Google signup unavailable", async () => {
+    googleMembershipState = { kind: "first_time" }
+    mockHasValidGoogleSignupProof.mockResolvedValue(true)
+    mockReadGooglePromotionEvidence.mockResolvedValue({
+      originalSignup: true,
+      attemptId: undefined,
+      routineMissing: true,
+    })
+    mockPublishOriginalSignupEvidence.mockResolvedValue(undefined)
+
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+      ),
+    )
+
+    expect(response.headers.get("location")).toContain("/sandboxes")
+    expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledWith(
+      currentUser,
+      undefined,
+      true,
+    )
+    expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
+      "user@example.com",
+      "Test User",
+      "google",
+      { kind: "unavailable" },
+    )
+    expect(
+      mockPublishOriginalSignupEvidence.mock.invocationCallOrder[0],
+    ).toBeLessThan(mockNotifySlackOfNewUser.mock.invocationCallOrder[0])
+  })
+
   it.each([
     [
       "eligible",
