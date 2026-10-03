@@ -636,7 +636,17 @@ describe("auth callback", () => {
         attemptId: "original-attempt",
         routineMissing: false,
       })
-      mockPublishOriginalSignupEvidence.mockResolvedValue(snapshot)
+      mockPublishOriginalSignupEvidence.mockImplementation(
+        async (publishedUser, attemptId, routineMissing) => {
+          if (
+            publishedUser !== currentUser ||
+            attemptId !== "original-attempt" ||
+            routineMissing !== false
+          )
+            return undefined
+          return snapshot
+        },
+      )
 
       const response = await GET(
         new Request(
@@ -702,64 +712,102 @@ describe("auth callback", () => {
     )
   })
 
-  it("publishes a signed email confirmation snapshot before notifying", async () => {
-    const previousSecret = process.env.GOOGLE_SIGNUP_PROOF_SECRET
-    process.env.GOOGLE_SIGNUP_PROOF_SECRET =
-      "a-secret-with-at-least-thirty-two-characters"
-    try {
-      currentUser!.app_metadata = { provider: "email" }
-      const attemptId = "email-confirmation-attempt"
-      const proof = signSignupDeviceBinding(currentUser!.id, attemptId)
-      expect(proof).toEqual(expect.any(String))
-
-      let resolvePublication: (value: unknown) => void = () => {}
-      mockPublishOriginalSignupEvidence.mockImplementation(
-        () =>
-          new Promise((resolve) => {
-            resolvePublication = resolve
-          }),
-      )
-      const snapshot = {
+  it.each([
+    [
+      "eligible",
+      {
         ownership: "owner",
         deviceDecision: "eligible",
         eligibility: "unknown",
         reason: "team_checks_pending",
+      },
+      { kind: "eligible" },
+    ],
+    [
+      "another owner",
+      {
+        ownership: "another_owner",
+        deviceDecision: "owner_conflict",
+        eligibility: "ineligible",
+        reason: "owner_conflict",
+      },
+      { kind: "enforced_other_owner" },
+    ],
+    [
+      "missing evidence",
+      {
+        ownership: "evidence_missing",
+        deviceDecision: "evidence_missing",
+        eligibility: "ineligible",
+        reason: "evidence_missing",
+      },
+      { kind: "enforced_missing_evidence" },
+    ],
+    [
+      "device already redeemed",
+      {
+        ownership: "owner",
+        deviceDecision: "device_already_redeemed",
+        eligibility: "ineligible",
+        reason: "device_already_redeemed",
+      },
+      { kind: "enforced_device_redeemed" },
+    ],
+  ] as const)(
+    "publishes a signed email confirmation %s snapshot before notifying",
+    async (_label, snapshot, expected) => {
+      const previousSecret = process.env.GOOGLE_SIGNUP_PROOF_SECRET
+      process.env.GOOGLE_SIGNUP_PROOF_SECRET =
+        "a-secret-with-at-least-thirty-two-characters"
+      try {
+        currentUser!.app_metadata = { provider: "email" }
+        const attemptId = "email-confirmation-attempt"
+        const proof = signSignupDeviceBinding(currentUser!.id, attemptId)
+        expect(proof).toEqual(expect.any(String))
+
+        let resolvePublication: (value: unknown) => void = () => {}
+        mockPublishOriginalSignupEvidence.mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              resolvePublication = resolve
+            }),
+        )
+
+        const responsePromise = GET(
+          new Request(
+            `https://console.superserve.ai/auth/callback?token_hash=token&type=signup&device_attempt_id=${attemptId}&device_bind_proof=${proof}`,
+          ),
+        )
+        await vi.waitFor(() =>
+          expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledTimes(1),
+        )
+        expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledWith(
+          currentUser,
+          attemptId,
+          false,
+        )
+        expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+
+        resolvePublication(snapshot)
+        const response = await responsePromise
+
+        expect(response.headers.get("location")).toContain("/sandboxes")
+        expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
+          "user@example.com",
+          "Test User",
+          "email",
+          expected,
+        )
+        expect(
+          mockPublishOriginalSignupEvidence.mock.invocationCallOrder[0],
+        ).toBeLessThan(mockNotifySlackOfNewUser.mock.invocationCallOrder[0])
+      } finally {
+        if (previousSecret === undefined)
+          delete process.env.GOOGLE_SIGNUP_PROOF_SECRET
+        else process.env.GOOGLE_SIGNUP_PROOF_SECRET = previousSecret
       }
-
-      const responsePromise = GET(
-        new Request(
-          `https://console.superserve.ai/auth/callback?token_hash=token&type=signup&device_attempt_id=${attemptId}&device_bind_proof=${proof}`,
-        ),
-      )
-      await vi.waitFor(() =>
-        expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledTimes(1),
-      )
-      expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledWith(
-        currentUser,
-        attemptId,
-        false,
-      )
-      expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
-
-      resolvePublication(snapshot)
-      const response = await responsePromise
-
-      expect(response.headers.get("location")).toContain("/sandboxes")
-      expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
-        "user@example.com",
-        "Test User",
-        "email",
-        { kind: "eligible" },
-      )
-      expect(
-        mockPublishOriginalSignupEvidence.mock.invocationCallOrder[0],
-      ).toBeLessThan(mockNotifySlackOfNewUser.mock.invocationCallOrder[0])
-    } finally {
-      if (previousSecret === undefined)
-        delete process.env.GOOGLE_SIGNUP_PROOF_SECRET
-      else process.env.GOOGLE_SIGNUP_PROOF_SECRET = previousSecret
-    }
-  })
+    },
+  )
 
   it("uses unavailable when a signed email confirmation publication rejects", async () => {
     const previousSecret = process.env.GOOGLE_SIGNUP_PROOF_SECRET
