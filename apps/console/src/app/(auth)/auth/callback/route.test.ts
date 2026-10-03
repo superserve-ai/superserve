@@ -205,6 +205,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }))
 
 import { SignupRestrictedError } from "@/lib/auth/signup-restrictions"
+import { signSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 
 import { GET } from "./route"
 
@@ -699,6 +700,104 @@ describe("auth callback", () => {
       "original-attempt",
       false,
     )
+  })
+
+  it("publishes a signed email confirmation snapshot before notifying", async () => {
+    const previousSecret = process.env.GOOGLE_SIGNUP_PROOF_SECRET
+    process.env.GOOGLE_SIGNUP_PROOF_SECRET =
+      "a-secret-with-at-least-thirty-two-characters"
+    try {
+      currentUser!.app_metadata = { provider: "email" }
+      const attemptId = "email-confirmation-attempt"
+      const proof = signSignupDeviceBinding(currentUser!.id, attemptId)
+      expect(proof).toEqual(expect.any(String))
+
+      let resolvePublication: (value: unknown) => void = () => {}
+      mockPublishOriginalSignupEvidence.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolvePublication = resolve
+          }),
+      )
+      const snapshot = {
+        ownership: "owner",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "team_checks_pending",
+      }
+
+      const responsePromise = GET(
+        new Request(
+          `https://console.superserve.ai/auth/callback?token_hash=token&type=signup&device_attempt_id=${attemptId}&device_bind_proof=${proof}`,
+        ),
+      )
+      await vi.waitFor(() =>
+        expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledTimes(1),
+      )
+      expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledWith(
+        currentUser,
+        attemptId,
+        false,
+      )
+      expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+
+      resolvePublication(snapshot)
+      const response = await responsePromise
+
+      expect(response.headers.get("location")).toContain("/sandboxes")
+      expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
+        "user@example.com",
+        "Test User",
+        "email",
+        { kind: "eligible" },
+      )
+      expect(
+        mockPublishOriginalSignupEvidence.mock.invocationCallOrder[0],
+      ).toBeLessThan(mockNotifySlackOfNewUser.mock.invocationCallOrder[0])
+    } finally {
+      if (previousSecret === undefined)
+        delete process.env.GOOGLE_SIGNUP_PROOF_SECRET
+      else process.env.GOOGLE_SIGNUP_PROOF_SECRET = previousSecret
+    }
+  })
+
+  it("uses unavailable when a signed email confirmation publication rejects", async () => {
+    const previousSecret = process.env.GOOGLE_SIGNUP_PROOF_SECRET
+    process.env.GOOGLE_SIGNUP_PROOF_SECRET =
+      "a-secret-with-at-least-thirty-two-characters"
+    try {
+      currentUser!.app_metadata = { provider: "email" }
+      const attemptId = "email-confirmation-attempt"
+      const proof = signSignupDeviceBinding(currentUser!.id, attemptId)
+      expect(proof).toEqual(expect.any(String))
+      mockPublishOriginalSignupEvidence.mockRejectedValueOnce(
+        new Error("publication transport unavailable"),
+      )
+      mockNotifySlackOfNewUser.mockRejectedValueOnce(new Error("webhook down"))
+
+      const response = await GET(
+        new Request(
+          `https://console.superserve.ai/auth/callback?token_hash=token&type=signup&device_attempt_id=${attemptId}&device_bind_proof=${proof}`,
+        ),
+      )
+
+      expect(response.headers.get("location")).toContain("/sandboxes")
+      expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledWith(
+        currentUser,
+        attemptId,
+        false,
+      )
+      expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
+        "user@example.com",
+        "Test User",
+        "email",
+        { kind: "unavailable" },
+      )
+    } finally {
+      if (previousSecret === undefined)
+        delete process.env.GOOGLE_SIGNUP_PROOF_SECRET
+      else process.env.GOOGLE_SIGNUP_PROOF_SECRET = previousSecret
+    }
   })
 
   it("continues the Google callback with unavailable when publication rejects", async () => {
