@@ -332,7 +332,7 @@ describe("auth callback", () => {
   })
 
   it("uses unavailable for a pre-identity trigger rejection and preserves redirect", async () => {
-    authVerifyOtpError = { message: "database error saving new user" }
+    authVerifyOtpError = { message: "DATABASE ERROR SAVING NEW USER" }
     mockNotifySlackOfNewUser.mockRejectedValueOnce(new Error("webhook down"))
 
     const response = await GET(
@@ -348,7 +348,7 @@ describe("auth callback", () => {
   })
 
   it("uses unavailable for a pre-identity Google trigger rejection", async () => {
-    authExchangeError = { message: "database error saving new user" }
+    authExchangeError = { message: "DATABASE ERROR SAVING NEW USER" }
     mockNotifySlackOfNewUser.mockRejectedValueOnce(new Error("webhook down"))
 
     const response = await GET(

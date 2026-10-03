@@ -10,7 +10,7 @@ import * as z from "zod"
 import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { createPromotionSignupAttempt } from "@/lib/api/promotion-device-evidence"
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
-import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
+import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
 import { issueGoogleSignupProof } from "@/lib/auth/google-signup-proof"
 import {
   beginSignupEvidenceAttempt,
@@ -420,7 +420,7 @@ export const signUpWithEmail = async (
       // Auth exposes trigger failures as a generic database error. It keeps
       // the existing rejected-auth result, but does not prove SS-499 blocked
       // policy evidence, so the notification must remain unavailable.
-      if (error.message.toLowerCase().includes(BLOCKED_TRIGGER_MESSAGE)) {
+      if (isGenericAuthSignupFailure(error.message)) {
         console.warn("Signup rejected by Auth trigger", {
           email: parsed.data.email,
         })

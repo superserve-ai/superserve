@@ -9,7 +9,7 @@ import {
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { completedMemberships } from "@/lib/api/team-provisioning"
-import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
+import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
 import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
 import {
   hasValidGoogleSignupProof,
@@ -85,9 +85,7 @@ export async function GET(request: Request) {
       // Supabase's generic trigger error is not authoritative SS-499 policy
       // evidence. Preserve the existing rejected-auth redirect and report an
       // unavailable annotation rather than a definitive blocked outcome.
-      const authSignupRejected = error.message
-        .toLowerCase()
-        .includes(BLOCKED_TRIGGER_MESSAGE)
+      const authSignupRejected = isGenericAuthSignupFailure(error.message)
       if (authSignupRejected) {
         console.warn("OAuth signup rejected by Auth trigger")
         await notifySlackOfNewUser("", null, code ? "google" : "email", {

@@ -672,7 +672,7 @@ describe("signUpWithEmail", () => {
   it("keeps trigger rejection behavior without claiming a policy block", async () => {
     mockGenerateLink.mockResolvedValue({
       data: null,
-      error: { message: "database error saving new user" },
+      error: { message: "DATABASE ERROR SAVING NEW USER" },
     })
     mockSlack.mockRejectedValueOnce(new Error("webhook down"))
 
