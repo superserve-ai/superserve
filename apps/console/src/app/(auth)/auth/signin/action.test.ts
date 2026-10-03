@@ -5,7 +5,7 @@ vi.mock("@/lib/slack/send-to-webhook", () => ({
   default: (...args: unknown[]) => mockSendToSlackHook(...args),
 }))
 
-import { notifySlackOfNewUser } from "./action"
+import { notifySlackOfNewUser } from "@/lib/slack/signup-notification"
 
 describe("notifySlackOfNewUser", () => {
   beforeEach(() => {

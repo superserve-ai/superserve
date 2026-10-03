@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server"
 
-import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import {
   consumeFingerprintSignupEventId,
   readFingerprintSignupEventId,
@@ -34,6 +33,7 @@ import { resolveFingerprintSignup } from "@/lib/fingerprint/observe"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { normalizeSignupEligibilitySnapshot } from "@/lib/slack/signup-eligibility"
+import { notifySlackOfNewUser } from "@/lib/slack/signup-notification"
 import { createServerClient } from "@/lib/supabase/server"
 
 const TRUSTED_REDIRECT_PATTERN =

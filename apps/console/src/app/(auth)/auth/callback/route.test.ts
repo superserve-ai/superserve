@@ -24,7 +24,7 @@ let authExchangeError: { message: string } | null = null
 let authVerifyOtpError: { message: string } | null = null
 
 const mockNotifySlackOfNewUser = vi.fn()
-vi.mock("@/app/(auth)/auth/signin/action", () => ({
+vi.mock("@/lib/slack/signup-notification", () => ({
   notifySlackOfNewUser: (...args: unknown[]) =>
     mockNotifySlackOfNewUser(...args),
 }))

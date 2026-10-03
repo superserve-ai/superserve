@@ -7,7 +7,6 @@ import { headers } from "next/headers"
 import { after } from "next/server"
 import * as z from "zod"
 
-import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { createPromotionSignupAttempt } from "@/lib/api/promotion-device-evidence"
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
 import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
@@ -41,6 +40,7 @@ import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { verifyRecaptcha } from "@/lib/recaptcha/verify"
 import { normalizeSignupEligibilitySnapshot } from "@/lib/slack/signup-eligibility"
+import { notifySlackOfNewUser } from "@/lib/slack/signup-notification"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 const signUpSchema = z.object({

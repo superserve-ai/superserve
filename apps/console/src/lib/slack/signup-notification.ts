@@ -1,11 +1,17 @@
-"use server"
-
+import "server-only"
 import sendToSlackHook from "@/lib/slack/send-to-webhook"
 import {
   formatSignupEligibility,
   type SignupEligibilityPresentationOutcome,
 } from "@/lib/slack/signup-eligibility"
 
+/**
+ * Send the original signup notification from a server-only continuation.
+ *
+ * Callers must first obtain and normalize the trusted signup outcome. Keeping
+ * this helper outside a `use server` module prevents browser callers from
+ * choosing an authoritative-looking eligibility annotation themselves.
+ */
 export const notifySlackOfNewUser = async (
   email: string,
   fullName: string | null,
@@ -52,5 +58,3 @@ export const notifySlackOfNewUser = async (
     console.error("Error sending Slack message:", error)
   }
 }
-
-export default notifySlackOfNewUser
