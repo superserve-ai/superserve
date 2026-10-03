@@ -12,6 +12,7 @@ import {
   completePromotionTeam,
   discoverPromotionTeams,
   getPromotionSignupEligibility,
+  getPromotionSignupEligibilityForTrustedSignup,
   getPromotionSignupAccountEvidence,
   PromotionEvidenceError,
   registerPromotionSignupDevice,
@@ -330,10 +331,13 @@ describe("promotion evidence producer contract", () => {
     await expect(
       getPromotionSignupAccountEvidence(userId),
     ).rejects.toMatchObject({ code: "forbidden" })
+    await expect(getPromotionSignupEligibility(userId)).rejects.toMatchObject({
+      code: "forbidden",
+    })
     await expect(
       registerPromotionSignupDevice("usw", userId),
     ).rejects.toMatchObject({ code: "forbidden" })
-    expect(getUser).toHaveBeenCalledTimes(2)
+    expect(getUser).toHaveBeenCalledTimes(3)
     expect(signer).not.toHaveBeenCalled()
     expect(fetcher).not.toHaveBeenCalled()
   })
@@ -380,6 +384,9 @@ describe("promotion evidence producer contract", () => {
     vi.stubGlobal("fetch", fetcher)
     await expect(
       getPromotionSignupAccountEvidence(otherUser),
+    ).rejects.toMatchObject({ code: "forbidden" })
+    await expect(
+      getPromotionSignupEligibility(otherUser),
     ).rejects.toMatchObject({ code: "forbidden" })
     await expect(
       registerPromotionSignupDevice("usw", otherUser),
@@ -915,4 +922,195 @@ describe("promotion evidence producer contract", () => {
       user_id: userId,
     })
   })
+
+  it.each([
+    {
+      ownership: "owner",
+      device_decision: "eligible",
+      eligibility: "unknown",
+      reason: "verified_identity_missing",
+    },
+    {
+      ownership: "owner",
+      device_decision: "eligible",
+      eligibility: "unknown",
+      reason: "historical_identity_unresolved",
+    },
+    {
+      ownership: "another_owner",
+      device_decision: "owner_conflict",
+      eligibility: "ineligible",
+      reason: "owner_conflict",
+    },
+    {
+      ownership: "evidence_missing",
+      device_decision: "evidence_missing",
+      eligibility: "ineligible",
+      reason: "evidence_missing",
+    },
+    {
+      ownership: "owner",
+      device_decision: "device_already_redeemed",
+      eligibility: "ineligible",
+      reason: "device_already_redeemed",
+    },
+    {
+      ownership: "another_owner",
+      device_decision: "eligible",
+      eligibility: "unknown",
+      reason: "team_checks_pending",
+    },
+    {
+      ownership: "evidence_missing",
+      device_decision: "eligible",
+      eligibility: "unknown",
+      reason: "team_checks_pending",
+    },
+    {
+      ownership: "owner",
+      device_decision: "eligible",
+      eligibility: "ineligible",
+      reason: "identity_already_claimed",
+    },
+  ] as const)(
+    "parses the complete backend-shaped snapshot %j",
+    async (snapshot) => {
+      const fetcher = vi.fn().mockResolvedValue(response(snapshot))
+      vi.stubGlobal("fetch", fetcher)
+
+      await expect(getPromotionSignupEligibility(userId)).resolves.toEqual({
+        ownership: snapshot.ownership,
+        deviceDecision: snapshot.device_decision,
+        eligibility: snapshot.eligibility,
+        reason: snapshot.reason,
+      })
+      expect(getUser).toHaveBeenCalledOnce()
+      expect(fetcher).toHaveBeenCalledOnce()
+      expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
+        user_id: userId,
+      })
+    },
+  )
+
+  it.each([
+    [
+      "owner pending",
+      {
+        ownership: "owner",
+        device_decision: "eligible",
+        eligibility: "unknown",
+        reason: "team_checks_pending",
+      },
+    ],
+    [
+      "owner pre-confirmation identity",
+      {
+        ownership: "owner",
+        device_decision: "eligible",
+        eligibility: "unknown",
+        reason: "verified_identity_missing",
+      },
+    ],
+    [
+      "owner historical identity",
+      {
+        ownership: "owner",
+        device_decision: "eligible",
+        eligibility: "unknown",
+        reason: "historical_identity_unresolved",
+      },
+    ],
+    [
+      "owner device consumption",
+      {
+        ownership: "owner",
+        device_decision: "device_already_redeemed",
+        eligibility: "ineligible",
+        reason: "device_already_redeemed",
+      },
+    ],
+    [
+      "another owner enforced",
+      {
+        ownership: "another_owner",
+        device_decision: "owner_conflict",
+        eligibility: "ineligible",
+        reason: "owner_conflict",
+      },
+    ],
+    [
+      "missing evidence enforced",
+      {
+        ownership: "evidence_missing",
+        device_decision: "evidence_missing",
+        eligibility: "ineligible",
+        reason: "evidence_missing",
+      },
+    ],
+    [
+      "gate bypass another owner",
+      {
+        ownership: "another_owner",
+        device_decision: "eligible",
+        eligibility: "unknown",
+        reason: "team_checks_pending",
+      },
+    ],
+    [
+      "gate bypass missing evidence",
+      {
+        ownership: "evidence_missing",
+        device_decision: "eligible",
+        eligibility: "unknown",
+        reason: "team_checks_pending",
+      },
+    ],
+    [
+      "identity already claimed",
+      {
+        ownership: "owner",
+        device_decision: "eligible",
+        eligibility: "ineligible",
+        reason: "identity_already_claimed",
+      },
+    ],
+    [
+      "user already claimed",
+      {
+        ownership: "owner",
+        device_decision: "eligible",
+        eligibility: "ineligible",
+        reason: "user_already_claimed",
+      },
+    ],
+  ] as const)(
+    "reads the backend-shaped %s snapshot with only the trusted Auth actor",
+    async (_label, snapshot) => {
+      const fetcher = vi.fn().mockResolvedValue(response(snapshot))
+      vi.stubGlobal("fetch", fetcher)
+      getUser.mockRejectedValue(new Error("no confirmation session"))
+
+      await expect(
+        getPromotionSignupEligibilityForTrustedSignup(userId),
+      ).resolves.toEqual({
+        ownership: snapshot.ownership,
+        deviceDecision: snapshot.device_decision,
+        eligibility: snapshot.eligibility,
+        reason: snapshot.reason,
+      })
+      expect(getUser).not.toHaveBeenCalled()
+      expect(fetcher.mock.calls[0][1].headers["X-Actor-User-Id"]).toBe(userId)
+      const claims = verifyAssertion(
+        fetcher.mock.calls[0][1].headers["X-Promotion-Account-Assertion"],
+      )
+      expect(claims).toMatchObject({
+        sub: userId,
+        operation: "signup-eligibility",
+      })
+      expect(claims).not.toHaveProperty("attempt_id")
+      expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
+        user_id: userId,
+      })
+    },
+  )
 })

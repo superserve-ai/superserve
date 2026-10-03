@@ -7,10 +7,12 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import {
   bindPromotionSignupAccount,
   getPromotionSignupAccountEvidence,
+  getPromotionSignupEligibilityForTrustedSignup,
   PromotionEvidenceError,
   registerPromotionSignupAccount,
   registerPromotionSignupDevice,
 } from "./promotion-device-evidence"
+import type { PromotionSignupEligibility } from "./promotion-device-evidence"
 import { publishPromotionIdentity } from "./promotion-identity"
 
 /** Missing initialization must not turn a failed association into routine absence. */
@@ -29,7 +31,7 @@ export async function publishOriginalSignupEvidence(
   user: User,
   attemptId: string | undefined,
   routineMissing: boolean,
-): Promise<void> {
+): Promise<PromotionSignupEligibility | undefined> {
   try {
     // Failure is monotonic. Never clear it using a later callback or login.
     const field = routineMissing
@@ -42,18 +44,22 @@ export async function publishOriginalSignupEvidence(
       },
     )
     if (error) throw error
-    if (!attemptId) return
-    const binding = await bindPromotionSignupAccount(user.id, attemptId)
-    if (binding === "first_evidence_retained") return
-    await publishPromotionIdentity(
-      DEFAULT_REGION,
-      user.id,
-      user,
-      new Date().toISOString(),
-    )
-    await registerPromotionSignupAccount(user.id, attemptId)
+    if (attemptId) {
+      const binding = await bindPromotionSignupAccount(user.id, attemptId)
+      if (binding !== "first_evidence_retained") {
+        await publishPromotionIdentity(
+          DEFAULT_REGION,
+          user.id,
+          user,
+          new Date().toISOString(),
+        )
+        await registerPromotionSignupAccount(user.id, attemptId)
+      }
+    }
+    return await getPromotionSignupEligibilityForTrustedSignup(user.id)
   } catch {
     console.warn("Original signup promotion publication unavailable")
+    return undefined
   }
 }
 
