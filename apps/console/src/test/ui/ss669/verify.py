@@ -13,6 +13,7 @@ import time
 from urllib.error import URLError
 from urllib.parse import urlsplit
 from urllib.request import urlopen
+from uuid import uuid4
 
 try:
     from playwright.sync_api import expect, sync_playwright
@@ -26,9 +27,12 @@ APP = Path(__file__).resolve().parents[4]
 SCENARIOS = ("tracked", "zero", "paid", "credited")
 
 
-def health(base):
+def health(base, run_id=None):
     with urlopen(base + "/api/fixture-health/", timeout=2) as response:
-        return json.load(response) == {"fixture": "ss669-storage-billing"}
+        payload = json.load(response)
+        return payload.get("fixture") == "ss669-storage-billing" and (
+            run_id is None or payload.get("run_id") == run_id
+        )
 
 
 @contextmanager
@@ -44,10 +48,17 @@ def server(base):
         return
 
     base = "http://127.0.0.1:4174"
+    try:
+        if health(base):
+            raise RuntimeError("Fixture port is already in use; use --base-url to select it explicitly")
+    except (URLError, TimeoutError):
+        pass
+    run_id = str(uuid4())
     with tempfile.TemporaryFile(mode="w+") as log:
         process = subprocess.Popen(
             ["bun", "run", "dev:storage-ui"], cwd=APP,
             stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+            env={**os.environ, "SS669_UI_RUN_ID": run_id},
         )
         try:
             deadline = time.monotonic() + 90
@@ -56,14 +67,12 @@ def server(base):
                     log.seek(0)
                     raise RuntimeError("Fixture server failed to start:\n" + log.read()[-4000:])
                 try:
-                    if health(base):
-                        # Do not silently reuse another server when our bind failed.
-                        process.wait(timeout=0.2)
-                        raise RuntimeError("Fixture port is already in use; use --base-url to select it explicitly")
-                except subprocess.TimeoutExpired:
-                    break
+                    # The nonce also closes the race after the preflight check.
+                    if health(base, run_id):
+                        break
                 except (URLError, TimeoutError):
-                    time.sleep(0.2)
+                    pass
+                time.sleep(0.2)
             else:
                 raise RuntimeError("Timed out starting the local billing fixture")
             yield base

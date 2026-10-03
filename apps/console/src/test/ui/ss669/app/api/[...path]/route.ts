@@ -10,7 +10,10 @@ import {
 export function GET(request: NextRequest) {
   const path = request.nextUrl.pathname.replace(/\/$/, "")
   if (path === "/api/fixture-health")
-    return NextResponse.json({ fixture: "ss669-storage-billing" })
+    return NextResponse.json({
+      fixture: "ss669-storage-billing",
+      run_id: process.env.SS669_UI_RUN_ID ?? null,
+    })
   const scenario = request.cookies.get(fixtureCookie)?.value
   if (!isScenario(scenario)) {
     return NextResponse.json(

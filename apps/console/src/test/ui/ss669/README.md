@@ -53,10 +53,17 @@ repository root:
 UI_TEST_PYTHON="$PWD/.venv/storage-ui/bin/python" bun --filter @superserve/console run test:storage-ui
 ```
 
-The verifier starts and stops its own loopback fixture server. To use a fixture
+The verifier starts and stops its own loopback fixture server, rejects an existing
+fixture, and checks a per-run server identifier to avoid startup races. To use a fixture
 server you already started, append `--base-url http://127.0.0.1:4174`. Append
 `--output /tmp/ss669-browser` to choose a screenshot directory; otherwise a fresh
 temporary directory is printed on completion.
+
+Run the server-ownership regression checks separately with the same Python:
+
+```sh
+"$UI_TEST_PYTHON" -m unittest discover -s apps/console/src/test/ui/ss669 -p test_verify.py
+```
 
 Each scenario gets a fresh browser context. Checks cover eight page states,
 Settings-to-usage navigation, matching summary responses, rates, storage badges
