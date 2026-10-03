@@ -595,6 +595,36 @@ describe("auth callback", () => {
       },
       { kind: "enforced_device_redeemed" },
     ],
+    [
+      "another owner with enforcement bypassed",
+      {
+        ownership: "another_owner",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "team_checks_pending",
+      },
+      { kind: "unavailable" },
+    ],
+    [
+      "missing evidence with enforcement bypassed",
+      {
+        ownership: "evidence_missing",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "team_checks_pending",
+      },
+      { kind: "unavailable" },
+    ],
+    [
+      "non-device eligibility denial",
+      {
+        ownership: "owner",
+        deviceDecision: "eligible",
+        eligibility: "ineligible",
+        reason: "identity_already_claimed",
+      },
+      { kind: "unavailable" },
+    ],
   ] as const)(
     "publishes before notifying with the authoritative Google %s snapshot",
     async (_label, snapshot, expected) => {

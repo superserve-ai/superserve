@@ -674,6 +674,7 @@ describe("signUpWithEmail", () => {
       data: null,
       error: { message: "database error saving new user" },
     })
+    mockSlack.mockRejectedValueOnce(new Error("webhook down"))
 
     await expect(
       signUpWithEmail("user@test.com", "password123", "Test User"),
@@ -1064,6 +1065,36 @@ describe("original signup promotion evidence", () => {
         reason: "device_already_redeemed",
       },
       { kind: "enforced_device_redeemed" },
+    ],
+    [
+      "another owner with enforcement bypassed",
+      {
+        ownership: "another_owner",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "team_checks_pending",
+      },
+      { kind: "unavailable" },
+    ],
+    [
+      "missing evidence with enforcement bypassed",
+      {
+        ownership: "evidence_missing",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "team_checks_pending",
+      },
+      { kind: "unavailable" },
+    ],
+    [
+      "non-device eligibility denial",
+      {
+        ownership: "owner",
+        deviceDecision: "eligible",
+        eligibility: "ineligible",
+        reason: "identity_already_claimed",
+      },
+      { kind: "unavailable" },
     ],
   ] as const)(
     "publishes before notifying with the authoritative %s snapshot",

@@ -82,11 +82,14 @@ export async function GET(request: Request) {
     }
 
     if (error) {
-      const blocked = error.message
+      // Supabase's generic trigger error is not authoritative SS-499 policy
+      // evidence. Preserve the existing rejected-auth redirect and report an
+      // unavailable annotation rather than a definitive blocked outcome.
+      const authSignupRejected = error.message
         .toLowerCase()
         .includes(BLOCKED_TRIGGER_MESSAGE)
-      if (blocked) {
-        console.warn("OAuth signup blocked by trigger")
+      if (authSignupRejected) {
+        console.warn("OAuth signup rejected by Auth trigger")
         await notifySlackOfNewUser("", null, code ? "google" : "email", {
           kind: "unavailable",
         }).catch(() => {})

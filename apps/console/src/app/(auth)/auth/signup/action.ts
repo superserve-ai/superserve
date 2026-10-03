@@ -417,8 +417,13 @@ export const signUpWithEmail = async (
           error: "An account with this email already exists.",
         }
       }
+      // Auth exposes trigger failures as a generic database error. It keeps
+      // the existing rejected-auth result, but does not prove SS-499 blocked
+      // policy evidence, so the notification must remain unavailable.
       if (error.message.toLowerCase().includes(BLOCKED_TRIGGER_MESSAGE)) {
-        console.warn("Signup blocked by trigger", { email: parsed.data.email })
+        console.warn("Signup rejected by Auth trigger", {
+          email: parsed.data.email,
+        })
         await notifySlackOfNewUser(
           parsed.data.email,
           parsed.data.fullName,

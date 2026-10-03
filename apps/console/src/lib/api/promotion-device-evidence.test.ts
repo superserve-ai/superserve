@@ -924,6 +924,75 @@ describe("promotion evidence producer contract", () => {
   })
 
   it.each([
+    {
+      ownership: "owner",
+      device_decision: "eligible",
+      eligibility: "unknown",
+      reason: "verified_identity_missing",
+    },
+    {
+      ownership: "owner",
+      device_decision: "eligible",
+      eligibility: "unknown",
+      reason: "historical_identity_unresolved",
+    },
+    {
+      ownership: "another_owner",
+      device_decision: "owner_conflict",
+      eligibility: "ineligible",
+      reason: "owner_conflict",
+    },
+    {
+      ownership: "evidence_missing",
+      device_decision: "evidence_missing",
+      eligibility: "ineligible",
+      reason: "evidence_missing",
+    },
+    {
+      ownership: "owner",
+      device_decision: "device_already_redeemed",
+      eligibility: "ineligible",
+      reason: "device_already_redeemed",
+    },
+    {
+      ownership: "another_owner",
+      device_decision: "eligible",
+      eligibility: "unknown",
+      reason: "team_checks_pending",
+    },
+    {
+      ownership: "evidence_missing",
+      device_decision: "eligible",
+      eligibility: "unknown",
+      reason: "team_checks_pending",
+    },
+    {
+      ownership: "owner",
+      device_decision: "eligible",
+      eligibility: "ineligible",
+      reason: "identity_already_claimed",
+    },
+  ] as const)(
+    "parses the complete backend-shaped snapshot %j",
+    async (snapshot) => {
+      const fetcher = vi.fn().mockResolvedValue(response(snapshot))
+      vi.stubGlobal("fetch", fetcher)
+
+      await expect(getPromotionSignupEligibility(userId)).resolves.toEqual({
+        ownership: snapshot.ownership,
+        deviceDecision: snapshot.device_decision,
+        eligibility: snapshot.eligibility,
+        reason: snapshot.reason,
+      })
+      expect(getUser).toHaveBeenCalledOnce()
+      expect(fetcher).toHaveBeenCalledOnce()
+      expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
+        user_id: userId,
+      })
+    },
+  )
+
+  it.each([
     [
       "owner pending",
       {
