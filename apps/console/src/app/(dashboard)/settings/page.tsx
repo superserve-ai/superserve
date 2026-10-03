@@ -275,10 +275,8 @@ export default function SettingsPage() {
                         Usage-based billing
                       </p>
                       <p className="mt-1 text-xs leading-relaxed text-muted">
-                        Billing status is sourced from the authenticated
-                        resource summary. Usage is metered from active vCPU
-                        seconds, active GiB memory seconds, and GiB storage
-                        seconds.
+                        Usage is metered from active vCPU seconds, active GiB
+                        memory seconds, and GiB storage seconds.
                       </p>
                     </div>
                     <span className="bg-brand/10 px-2 py-1 font-mono text-xs text-brand uppercase">

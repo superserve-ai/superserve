@@ -221,6 +221,57 @@ describe("Settings billing", () => {
     expect(screen.getByText("$0.0144 / GiB-hour")).toBeInTheDocument()
   })
 
+  it("shows permitted shadow teams without using billing mode as storage eligibility", () => {
+    useBillingSummary.mockReturnValue({
+      data: { ...summary(true), billing_mode: "shadow" },
+      isPending: false,
+      error: null,
+    })
+    renderPage()
+    expect(screen.getByText("Usage-based billing")).toBeInTheDocument()
+    expect(screen.getByText("Tracking")).toBeInTheDocument()
+    expect(screen.getByText("Billed")).toBeInTheDocument()
+  })
+
+  it("treats a missing storage resource as unknown even when pricing exists", () => {
+    const data = summary(true)
+    data.resources = data.resources.filter(
+      (resource) => resource.resource_key !== "storage_gib",
+    )
+    useBillingSummary.mockReturnValue({ data, isPending: false, error: null })
+    renderPage()
+    expect(screen.getByText("Unavailable")).toBeInTheDocument()
+    expect(screen.getByText("$0.000108 / GiB-hour")).toBeInTheDocument()
+    expect(screen.queryByText("Billed")).not.toBeInTheDocument()
+    expect(
+      screen.queryByText("Tracked only · Not billed"),
+    ).not.toBeInTheDocument()
+  })
+
+  it("preserves billability when the storage rate is missing instead of showing a zero rate", () => {
+    useBillingSettings.mockReturnValue({
+      data: {
+        ...pricing,
+        rates: pricing.rates.filter(
+          (rate) => rate.resource_key !== "storage_gib",
+        ),
+      },
+      isPending: false,
+      error: null,
+    })
+    useBillingSummary.mockReturnValue({
+      data: summary(true),
+      isPending: false,
+      error: null,
+    })
+    renderPage()
+    expect(screen.getByText("Unavailable")).toBeInTheDocument()
+    expect(screen.getByText("Billed")).toBeInTheDocument()
+    expect(screen.queryByText("$0.000108 / GiB-hour")).not.toBeInTheDocument()
+    expect(screen.queryByText("$0.000000 / GiB-hour")).not.toBeInTheDocument()
+    expect(screen.getByText("$0.0720 / vCPU-hour")).toBeInTheDocument()
+  })
+
   it("fails closed when the summary is unavailable or view permission is denied", () => {
     useBillingSummary.mockReturnValue({
       data: undefined,

@@ -288,6 +288,33 @@ describe("PlanUsagePage", () => {
     }
   })
 
+  it("removes retained summary claims when a refresh fails and allows retry", () => {
+    const summaryQuery = useBillingSummary()
+    const refetch = vi.fn()
+    useBillingSummary.mockReturnValue({
+      ...summaryQuery,
+      error: new Error("refresh failed"),
+      refetch,
+    })
+    useBillingUsage.mockReturnValue({
+      data: { buckets: [] },
+      isPending: false,
+      error: null,
+    })
+    renderPage()
+
+    expect(screen.queryByText("Pay-as-you-go • USD")).not.toBeInTheDocument()
+    expect(screen.queryByText("Current Balance")).not.toBeInTheDocument()
+    expect(screen.queryByText("Billing is live")).not.toBeInTheDocument()
+    expect(screen.queryByText("Tracked but not billed")).not.toBeInTheDocument()
+    expect(screen.queryByText("Charge: $60.00")).not.toBeInTheDocument()
+    expect(
+      screen.getByText("Billing data is unavailable for this team right now."),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: /try again/i }))
+    expect(refetch).toHaveBeenCalledOnce()
+  })
+
   it("shows the preview state when billing dashboard access is disabled", () => {
     useBillingUsage.mockReturnValue({
       data: {
