@@ -422,6 +422,36 @@ describe("auth callback", () => {
     expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
   })
 
+  it.each(["degraded", "throws"])(
+    "retains the OAuth actor before a membership lookup that %s",
+    async (failure) => {
+      googleMembershipState = {
+        kind: "indeterminate",
+        degradedRegions: ["use"],
+      }
+      mockListTeamMembershipsForUserDetailed.mockImplementationOnce(
+        async () => {
+          expect(mockRetainOriginalGoogleSignup).toHaveBeenCalledWith(
+            "pre-auth-intent",
+            currentUser,
+          )
+          if (failure === "throws") throw new Error("directory unavailable")
+          return { memberships: [], degradedRegions: ["use"] }
+        },
+      )
+      const result = GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&google_signin_intent=pre-auth-intent",
+        ),
+      )
+      expect((await result).headers.get("location")).toContain(
+        "membership_lookup_degraded",
+      )
+      expect(mockPublishOriginalSignupEvidence).not.toHaveBeenCalled()
+      expect(mockMarkGoogleSignupAttempt).not.toHaveBeenCalled()
+    },
+  )
+
   it("keeps the CAPTCHA recovery redirect when origin retention fails", async () => {
     googleMembershipState = { kind: "first_time" }
     proofAvailable = false
