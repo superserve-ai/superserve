@@ -17,6 +17,7 @@ export type FingerprintSignupObservation = {
   signupAttemptId?: string
   capture?: SignupFingerprintCapture
   onAttested?: () => void
+  // Provider lookup and backend attestation failures both make evidence unavailable.
   onAttestationFailed?: () => void
 }
 
@@ -210,7 +211,11 @@ export async function resolveFingerprintSignup({
   signupAttemptId,
 }: FingerprintSignupObservation): Promise<string | null> {
   const secretApiKey = process.env.FINGERPRINT_SECRET_API_KEY
-  if (!secretApiKey || !eventId) return null
+  if (!eventId) return null
+  if (!secretApiKey) {
+    onAttestationFailed?.()
+    return null
+  }
 
   const baseUrl =
     process.env.FINGERPRINT_SERVER_API_URL || DEFAULT_FINGERPRINT_SERVER_API
@@ -226,6 +231,7 @@ export async function resolveFingerprintSignup({
     )
 
     if (!response.ok) {
+      onAttestationFailed?.()
       console.warn("Fingerprint observation lookup failed", {
         status: response.status,
       })
@@ -235,6 +241,7 @@ export async function resolveFingerprintSignup({
     const payload: unknown = await response.json()
     const event = normalizeFingerprintEvent(payload, eventId)
     if (!event) {
+      onAttestationFailed?.()
       console.warn("Fingerprint observation response was malformed")
       return null
     }
@@ -307,6 +314,7 @@ export async function resolveFingerprintSignup({
     }
     return event.visitorId
   } catch {
+    onAttestationFailed?.()
     console.warn("Fingerprint observation failed open")
     return null
   }
