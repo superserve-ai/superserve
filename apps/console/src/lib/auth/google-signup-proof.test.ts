@@ -648,4 +648,68 @@ describe("google-signup-proof", () => {
       await readGooglePromotionEvidence("retry", "first", created_at),
     ).toMatchObject({ originalSignup: false })
   })
+  it("keeps two concurrent OAuth starts bound to their own recovered accounts", async () => {
+    vi.useFakeTimers()
+    const start = Date.now()
+    const first = await beginGoogleSigninOrigin()
+    vi.setSystemTime(start + 1000)
+    const second = await beginGoogleSigninOrigin()
+    vi.setSystemTime(start + 10_000)
+    const created_at = new Date().toISOString()
+    await retainOriginalGoogleSignup(first, { id: "first", created_at })
+    await retainOriginalGoogleSignup(second, { id: "second", created_at })
+    vi.setSystemTime(start + 20_000)
+    for (const actor of ["first", "second"]) {
+      await issueGoogleSignupProof(actor, {
+        attemptId: `${actor}-capture`,
+        routineMissing: false,
+      })
+      await markGoogleSignupAttempt(actor, actor)
+    }
+    for (const actor of ["first", "second"]) {
+      expect(
+        await readGooglePromotionEvidence(actor, actor, created_at),
+      ).toMatchObject({ originalSignup: true, attemptId: `${actor}-capture` })
+    }
+  })
+
+  it("bounds retained origins and removes expired records when starting OAuth", async () => {
+    vi.useFakeTimers()
+    const start = Date.now()
+    for (let n = 0; n < 6; n++) {
+      vi.setSystemTime(start + n)
+      await beginGoogleSigninOrigin()
+    }
+    expect(
+      cookieEntries.filter((c) =>
+        c.name.startsWith("__Host-superserve-google-origin-"),
+      ),
+    ).toHaveLength(4)
+    vi.setSystemTime(start + 301_000)
+    await beginGoogleSigninOrigin()
+    expect(
+      cookieEntries.filter((c) =>
+        c.name.startsWith("__Host-superserve-google-origin-"),
+      ),
+    ).toHaveLength(1)
+  })
+
+  it("does not authorize a recovery using an origin bound after the signup proof", async () => {
+    vi.useFakeTimers()
+    const start = Date.now()
+    const intent = await beginGoogleSigninOrigin()
+    vi.setSystemTime(start + 10_000)
+    const created_at = new Date().toISOString()
+    vi.setSystemTime(start + 20_000)
+    await issueGoogleSignupProof("retry", {
+      attemptId: "capture",
+      routineMissing: false,
+    })
+    await markGoogleSignupAttempt("retry", "actor")
+    vi.setSystemTime(start + 30_000)
+    await retainOriginalGoogleSignup(intent, { id: "actor", created_at })
+    expect(
+      await readGooglePromotionEvidence("retry", "actor", created_at),
+    ).toMatchObject({ originalSignup: false })
+  })
 })

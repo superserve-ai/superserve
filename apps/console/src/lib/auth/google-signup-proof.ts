@@ -37,7 +37,6 @@ interface ProofPayload {
   signup_attempt_id?: string
   actor?: string
   promotion?: GooglePromotionEvidence
-  original_signup?: { actor: string; createdAt: string; expiresAt: number }
 }
 
 function cookieName(signupAttemptId?: string): string {
@@ -193,7 +192,6 @@ function writeProof(
     signup_attempt_id: payload.signup_attempt_id,
     actor: payload.actor,
     promotion: payload.promotion,
-    original_signup: payload.original_signup,
   }
   const encoded = Buffer.from(JSON.stringify(proof)).toString("base64url")
   const value = `${encoded}.${signature(encoded).toString("base64url")}`
@@ -253,7 +251,6 @@ export async function issueGoogleSignupProof(
     payload || {
       ...fresh,
       promotion,
-      original_signup: await readOriginalGoogleSignup(),
       issued_at: Math.max(
         Date.now(),
         ...entries.map(
@@ -504,9 +501,11 @@ export async function readGooglePromotionEvidence(
       ...payload.promotion,
       originalSignup:
         (!!payload.issued_at && Date.parse(createdAt) >= payload.issued_at) ||
-        (payload.original_signup?.actor === actor &&
-          payload.original_signup.createdAt === createdAt &&
-          payload.original_signup.expiresAt > Date.now()),
+        (await isOriginalGoogleSignupRecovery(
+          actor,
+          createdAt,
+          payload.issued_at,
+        )),
     }
   } catch {
     return undefined
@@ -521,11 +520,15 @@ type GoogleOrigin = {
   expiresAt: number
   actor?: string
   createdAt?: string
+  boundAt?: number
 }
 
-async function readGoogleOrigin(): Promise<GoogleOrigin | undefined> {
+async function readGoogleOrigin(
+  intentId: string,
+): Promise<GoogleOrigin | undefined> {
   try {
-    const value = (await cookies()).get(ORIGIN_COOKIE)?.value
+    if (!/^[a-f0-9-]{36}$/i.test(intentId)) return undefined
+    const value = (await cookies()).get(`${ORIGIN_COOKIE}-${intentId}`)?.value
     if (!value || value.length > 2048) return undefined
     const [encoded, signed, extra] = value.split(".")
     if (!encoded || !signed || extra) return undefined
@@ -542,7 +545,7 @@ async function readGoogleOrigin(): Promise<GoogleOrigin | undefined> {
     ) as GoogleOrigin
     if (
       origin.purpose !== "google_oauth_origin" ||
-      typeof origin.id !== "string" ||
+      origin.id !== intentId ||
       !Number.isFinite(origin.startedAt) ||
       !Number.isFinite(origin.expiresAt) ||
       origin.startedAt > Date.now() ||
@@ -560,7 +563,7 @@ async function writeGoogleOrigin(origin: GoogleOrigin): Promise<void> {
   const encoded = Buffer.from(JSON.stringify(origin)).toString("base64url")
   const store = await cookies()
   store.set(
-    ORIGIN_COOKIE,
+    `${ORIGIN_COOKIE}-${origin.id}`,
     `${encoded}.${signature(encoded).toString("base64url")}`,
     {
       httpOnly: true,
@@ -576,6 +579,18 @@ async function writeGoogleOrigin(origin: GoogleOrigin): Promise<void> {
 export async function beginGoogleSigninOrigin(): Promise<string> {
   const startedAt = Date.now()
   const id = crypto.randomUUID()
+  const store = await cookies()
+  const origins = await googleOrigins()
+  const keep = new Set(
+    origins
+      .toSorted((a, b) => b.startedAt - a.startedAt)
+      .slice(0, MAX_PROOF_COOKIES - 1)
+      .map((origin) => `${ORIGIN_COOKIE}-${origin.id}`),
+  )
+  for (const cookie of store.getAll()) {
+    if (cookie.name.startsWith(`${ORIGIN_COOKIE}-`) && !keep.has(cookie.name))
+      expireCookie(store, cookie.name)
+  }
   await writeGoogleOrigin({
     purpose: "google_oauth_origin",
     id,
@@ -590,7 +605,8 @@ export async function retainOriginalGoogleSignup(
   intentId: string | null,
   user: { id: string; created_at: string },
 ): Promise<void> {
-  const origin = await readGoogleOrigin()
+  if (!intentId) return
+  const origin = await readGoogleOrigin(intentId)
   const createdAt = Date.parse(user.created_at)
   if (
     !origin ||
@@ -605,17 +621,35 @@ export async function retainOriginalGoogleSignup(
     ...origin,
     actor: user.id,
     createdAt: user.created_at,
+    boundAt: origin.boundAt ?? Date.now(),
   })
 }
 
-async function readOriginalGoogleSignup(): Promise<
-  ProofPayload["original_signup"]
-> {
-  const origin = await readGoogleOrigin()
-  if (!origin?.actor || !origin.createdAt) return undefined
-  return {
-    actor: origin.actor,
-    createdAt: origin.createdAt,
-    expiresAt: origin.expiresAt,
+async function googleOrigins(): Promise<GoogleOrigin[]> {
+  const entries = (await cookies()).getAll()
+  if (entries.length > MAX_REQUEST_COOKIES)
+    throw new Error("Too many OAuth origin cookies")
+  const origins: GoogleOrigin[] = []
+  for (const { name } of entries) {
+    if (!name.startsWith(`${ORIGIN_COOKIE}-`)) continue
+    const origin = await readGoogleOrigin(name.slice(ORIGIN_COOKIE.length + 1))
+    if (origin) origins.push(origin)
   }
+  return origins
+}
+
+async function isOriginalGoogleSignupRecovery(
+  actor: string,
+  createdAt: string,
+  proofIssuedAt?: number,
+): Promise<boolean> {
+  if (proofIssuedAt === undefined) return false
+  const origins = await googleOrigins()
+  return origins.some(
+    (origin) =>
+      origin.actor === actor &&
+      origin.createdAt === createdAt &&
+      origin.boundAt !== undefined &&
+      origin.boundAt <= proofIssuedAt,
+  )
 }
