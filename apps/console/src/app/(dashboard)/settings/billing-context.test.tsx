@@ -34,7 +34,15 @@ vi.mock("@/components/settings/teams-section", () => ({
   TeamsSection: () => null,
 }))
 vi.mock("@/lib/api/billing-actions", () => ({ getBillingUsageAction: vi.fn() }))
-vi.mock("@/lib/supabase/client", () => ({ createBrowserClient: vi.fn() }))
+vi.mock("@/lib/supabase/client", () => ({
+  createBrowserClient: () => ({
+    auth: {
+      onAuthStateChange: () => ({
+        data: { subscription: { unsubscribe: vi.fn() } },
+      }),
+    },
+  }),
+}))
 vi.mock("posthog-js/react", () => ({
   usePostHog: () => ({ capture: vi.fn() }),
 }))
