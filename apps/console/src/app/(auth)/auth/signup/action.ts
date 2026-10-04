@@ -227,6 +227,7 @@ export const beginGoogleSignup = async (
 
   try {
     let verified = false
+    let attestationFailed = false
     const visitor = fingerprintEventId
       ? await resolveFingerprintSignup({
           eventId: fingerprintEventId,
@@ -235,6 +236,9 @@ export const beginGoogleSignup = async (
           capture,
           onAttested: () => {
             verified = true
+          },
+          onAttestationFailed: () => {
+            attestationFailed = true
           },
         })
       : null
@@ -245,8 +249,8 @@ export const beginGoogleSignup = async (
       eventId: fingerprintEventId,
       visitor: visitor ?? undefined,
       // Missing capture is governed by the backend evidence-required policy.
-      // Only a failed publication of verified evidence is an authority failure.
-      routineMissing: !verified,
+      // Attestation or publication outages remain authority failures.
+      routineMissing: !verified && !attestationFailed,
     })
     await trackEvent(
       AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_VERIFIED,
@@ -350,6 +354,7 @@ export const signUpWithEmail = async (
   try {
     let visitor: string | null = null
     let deviceVerified = false
+    let attestationFailed = false
     if (fingerprintEventId) {
       try {
         visitor = await resolveFingerprintSignup({
@@ -360,6 +365,9 @@ export const signUpWithEmail = async (
           capture,
           onAttested: () => {
             deviceVerified = true
+          },
+          onAttestationFailed: () => {
+            attestationFailed = true
           },
         })
       } finally {
@@ -449,7 +457,7 @@ export const signUpWithEmail = async (
         signupEligibilitySnapshot = await publishOriginalSignupEvidence(
           data.user,
           deviceVerified ? capture?.attemptId : undefined,
-          !deviceVerified,
+          !deviceVerified && !attestationFailed,
         )
       } catch {
         // Publication is best effort; an unavailable snapshot must not change

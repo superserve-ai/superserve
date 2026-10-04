@@ -377,6 +377,7 @@ it.each([
       eventId: "event",
     }
     const verified = vi.fn()
+    const attestationFailed = vi.fn()
     vi.mocked(verifyPromotionSignupAttempt)
       .mockReset()
       .mockResolvedValue("verified")
@@ -400,6 +401,7 @@ it.each([
       signupMethod: "email",
       capture,
       onAttested: verified,
+      onAttestationFailed: attestationFailed,
     })
     expect(fetchSpy).toHaveBeenCalledTimes(1)
     expect(fetchSpy.mock.calls[0][1]?.headers).toEqual({
@@ -407,6 +409,9 @@ it.each([
     })
     expect(visitor).toBe(mode === "wrong event" ? null : "ServerVisitor")
     expect(verified).toHaveBeenCalledTimes(mode === "valid" ? 1 : 0)
+    expect(attestationFailed).toHaveBeenCalledTimes(
+      mode === "verify failed" ? 1 : 0,
+    )
     if (mode === "valid") {
       expect(verifyPromotionSignupAttempt).toHaveBeenCalledWith({
         ...capture,

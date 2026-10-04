@@ -376,6 +376,7 @@ describe("signUpWithEmail", () => {
       getObservationUserId: expect.any(Function),
       capture: undefined,
       onAttested: expect.any(Function),
+      onAttestationFailed: expect.any(Function),
     })
     for (const [args] of mockResolveFingerprintSignup.mock.calls) {
       expect(args.getObservationUserId()).toBe("user-1")
@@ -1195,6 +1196,36 @@ describe("original signup promotion evidence", () => {
     ).toEqual({ success: true })
     expect(mockOriginalPublication).not.toHaveBeenCalled()
   })
+  it("preserves attestation authority failures for email and Google signup", async () => {
+    mockResolveFingerprintSignup.mockImplementation(async (input) => {
+      input.onAttestationFailed?.()
+      return "ServerVisitor"
+    })
+    expect(
+      await signUpWithEmail(
+        "user@example.com",
+        "password123",
+        "Name",
+        undefined,
+        undefined,
+        capture,
+      ),
+    ).toEqual({ success: true })
+    expect(mockOriginalPublication).toHaveBeenCalledWith(
+      expect.anything(),
+      undefined,
+      false,
+    )
+    mockIssueGoogleSignupProof.mockClear()
+    expect(
+      await beginGoogleSignup("google-token", undefined, capture),
+    ).toMatchObject({ success: true })
+    expect(mockIssueGoogleSignupProof).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ attemptId: undefined, routineMissing: false }),
+    )
+  })
+
   it("delegates unattested and absent captures to the backend missing-evidence policy", async () => {
     mockResolveFingerprintSignup.mockResolvedValue(null)
     expect(

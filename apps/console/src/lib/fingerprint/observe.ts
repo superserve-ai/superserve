@@ -17,6 +17,7 @@ export type FingerprintSignupObservation = {
   signupAttemptId?: string
   capture?: SignupFingerprintCapture
   onAttested?: () => void
+  onAttestationFailed?: () => void
 }
 
 type FingerprintNormalizedEvent = {
@@ -204,6 +205,7 @@ export async function resolveFingerprintSignup({
   getObservationUserId,
   capture,
   onAttested,
+  onAttestationFailed,
   signupMethod,
   signupAttemptId,
 }: FingerprintSignupObservation): Promise<string | null> {
@@ -298,6 +300,7 @@ export async function resolveFingerprintSignup({
           })
           onAttested?.()
         } catch {
+          onAttestationFailed?.()
           console.warn("Promotion signup attestation unavailable")
         }
       }
