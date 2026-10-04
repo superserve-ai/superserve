@@ -113,7 +113,10 @@ function SignInContent() {
       }
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: callbackUrl.toString() },
+        options: {
+          redirectTo: callbackUrl.toString(),
+          queryParams: { prompt: "select_account" },
+        },
       })
       if (error) {
         setErrors({ form: "Error signing in. Please try again." })

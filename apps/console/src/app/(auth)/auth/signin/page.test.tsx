@@ -285,6 +285,7 @@ describe("SignInPage", () => {
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
         options: {
+          queryParams: { prompt: "select_account" },
           redirectTo: expect.stringContaining(
             "google_signin_intent=signin-origin",
           ),

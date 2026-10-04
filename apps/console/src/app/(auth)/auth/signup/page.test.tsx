@@ -430,6 +430,7 @@ describe("SignUpPage", () => {
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
         options: {
+          queryParams: { prompt: "select_account" },
           redirectTo: expect.stringContaining(
             "/auth/callback?signup_attempt_id=attempt-123",
           ),
@@ -463,6 +464,7 @@ describe("SignUpPage", () => {
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
         options: {
+          queryParams: { prompt: "select_account" },
           redirectTo: expect.stringContaining(
             "/auth/callback?signup_attempt_id=attempt-456",
           ),
@@ -594,7 +596,10 @@ describe("SignUpPage with reCAPTCHA configured", () => {
     await waitFor(() => {
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
-        options: { redirectTo: expect.stringContaining("/auth/callback") },
+        options: {
+          redirectTo: expect.stringContaining("/auth/callback"),
+          queryParams: { prompt: "select_account" },
+        },
       })
     })
   })
@@ -631,6 +636,7 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
         options: {
+          queryParams: { prompt: "select_account" },
           redirectTo: expect.stringContaining(
             "next=https%3A%2F%2Fapp.superserve.ai%2Fdevice%2Fabc",
           ),
