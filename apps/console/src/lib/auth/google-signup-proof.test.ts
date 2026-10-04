@@ -80,6 +80,9 @@ import {
   revokeGoogleSignupAuthorization,
   hasValidLegacyGoogleSignupProof,
   GoogleSignupRecoveryRequiredError,
+  beginGoogleSigninOrigin,
+  retainOriginalGoogleSignup,
+  readGooglePromotionEvidence,
 } from "./google-signup-proof"
 
 describe("google-signup-proof", () => {
@@ -92,6 +95,7 @@ describe("google-signup-proof", () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     delete process.env.GOOGLE_SIGNUP_PROOF_SECRET
   })
 
@@ -564,5 +568,84 @@ describe("google-signup-proof", () => {
       expect.any(String),
       { reason: "missing_or_invalid_proof", scope: "first_team_provisioning" },
     )
+  })
+  it("retains original signup evidence across sign-in -> signup recovery without authorizing CAPTCHA", async () => {
+    vi.useFakeTimers()
+    const start = Date.now()
+    const intent = await beginGoogleSigninOrigin()
+    expect(await hasValidGoogleSignupProof()).toBe(false)
+    vi.setSystemTime(start + 10_000)
+    const created_at = new Date().toISOString()
+    await retainOriginalGoogleSignup(intent, { id: "new-google", created_at })
+    expect(await hasValidGoogleSignupProof()).toBe(false)
+    vi.setSystemTime(start + 25_000)
+    await issueGoogleSignupProof("retry", {
+      attemptId: "verified-capture",
+      routineMissing: false,
+    })
+    await markGoogleSignupAttempt("retry", "new-google")
+    expect(
+      await readGooglePromotionEvidence("retry", "new-google", created_at),
+    ).toMatchObject({ originalSignup: true, attemptId: "verified-capture" })
+    expect(
+      await readGooglePromotionEvidence("retry", "other-user", created_at),
+    ).toBeUndefined()
+  })
+
+  it.each([
+    "existing-account",
+    "wrong-intent",
+    "expired-intent",
+    "tampered-intent",
+  ])("does not retrofit signup evidence for %s", async (kind) => {
+    vi.useFakeTimers()
+    const start = Date.now()
+    const intent = await beginGoogleSigninOrigin()
+    vi.setSystemTime(start + (kind === "expired-intent" ? 301_000 : 10_000))
+    const created_at = new Date(
+      kind === "existing-account" ? start - 1000 : start + 5000,
+    ).toISOString()
+    if (kind === "tampered-intent")
+      cookieEntries.forEach((c) => {
+        c.value += "bad"
+      })
+    await retainOriginalGoogleSignup(
+      kind === "wrong-intent" ? "forged" : intent,
+      { id: "actor", created_at },
+    )
+    await issueGoogleSignupProof("retry", {
+      attemptId: "capture",
+      routineMissing: false,
+    })
+    await markGoogleSignupAttempt("retry", "actor")
+    expect(
+      await readGooglePromotionEvidence("retry", "actor", created_at),
+    ).toMatchObject({ originalSignup: false })
+  })
+
+  it("does not rebind the origin to another Auth account or extend its expiry", async () => {
+    vi.useFakeTimers()
+    const start = Date.now()
+    const intent = await beginGoogleSigninOrigin()
+    vi.setSystemTime(start + 10_000)
+    const created_at = new Date().toISOString()
+    await retainOriginalGoogleSignup(intent, { id: "first", created_at })
+    await retainOriginalGoogleSignup(intent, { id: "second", created_at })
+    vi.setSystemTime(start + 20_000)
+    await issueGoogleSignupProof("retry", {
+      attemptId: "capture",
+      routineMissing: false,
+    })
+    await markGoogleSignupAttempt("retry", "first")
+    expect(
+      await readGooglePromotionEvidence("retry", "second", created_at),
+    ).toBeUndefined()
+    expect(
+      await readGooglePromotionEvidence("retry", "first", created_at),
+    ).toMatchObject({ originalSignup: true })
+    vi.setSystemTime(start + 301_000)
+    expect(
+      await readGooglePromotionEvidence("retry", "first", created_at),
+    ).toMatchObject({ originalSignup: false })
   })
 })

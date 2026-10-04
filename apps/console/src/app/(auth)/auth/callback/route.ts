@@ -16,6 +16,7 @@ import {
   isGoogleUser,
   markGoogleSignupAttempt,
   readGooglePromotionEvidence,
+  retainOriginalGoogleSignup,
 } from "@/lib/auth/google-signup-proof"
 import {
   isActiveSignupEvidenceAttempt,
@@ -158,6 +159,14 @@ export async function GET(request: Request) {
           isNewUser = directory.kind === "first_time"
 
           if (isNewUser) {
+            try {
+              await retainOriginalGoogleSignup(
+                searchParams.get("google_signin_intent"),
+                user,
+              )
+            } catch {
+              console.warn("Google signup origin could not be retained")
+            }
             // Accept a legacy unscoped proof for OAuth flows that started
             // before this rollout; new flows must carry and match the signed
             // attempt ID for exact cross-provider correlation.

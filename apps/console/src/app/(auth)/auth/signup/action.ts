@@ -244,7 +244,9 @@ export const beginGoogleSignup = async (
       attemptId: verified ? capture?.attemptId : undefined,
       eventId: fingerprintEventId,
       visitor: visitor ?? undefined,
-      routineMissing: !fingerprintEventId && !captureResult,
+      // Missing capture is governed by the backend evidence-required policy.
+      // Only a failed publication of verified evidence is an authority failure.
+      routineMissing: !verified,
     })
     await trackEvent(
       AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_VERIFIED,
@@ -447,7 +449,7 @@ export const signUpWithEmail = async (
         signupEligibilitySnapshot = await publishOriginalSignupEvidence(
           data.user,
           deviceVerified ? capture?.attemptId : undefined,
-          !fingerprintEventId && !captureResult,
+          !deviceVerified,
         )
       } catch {
         // Publication is best effort; an unavailable snapshot must not change

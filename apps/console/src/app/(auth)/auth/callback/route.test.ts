@@ -121,6 +121,7 @@ const mockMarkGoogleSignupAttempt = vi.fn()
 const mockRetainGoogleSignupVisitor = vi.fn()
 const mockReadGoogleSignupVisitors = vi.fn()
 const mockReadGooglePromotionEvidence = vi.fn()
+const mockRetainOriginalGoogleSignup = vi.fn()
 const mockPublishOriginalSignupEvidence = vi.fn()
 const mockRequireGoogleSignupProof = vi.fn()
 const mockEnsureGoogleOnboardingMembership = vi.fn()
@@ -148,6 +149,8 @@ vi.mock("@/lib/auth/google-signup-proof", () => ({
     mockHasValidLegacyGoogleSignupProof(...args),
   consumeGoogleSignupProof: (...args: unknown[]) =>
     mockConsumeGoogleSignupProof(...args),
+  retainOriginalGoogleSignup: (...args: unknown[]) =>
+    mockRetainOriginalGoogleSignup(...args),
   readGooglePromotionEvidence: (...args: unknown[]) =>
     mockReadGooglePromotionEvidence(...args),
   markGoogleSignupAttempt: (...args: unknown[]) =>
@@ -299,6 +302,7 @@ describe("auth callback", () => {
       .mockImplementation(async () => proofAvailable)
     mockConsumeGoogleSignupProof.mockReset()
     mockMarkGoogleSignupAttempt.mockReset().mockResolvedValue(undefined)
+    mockRetainOriginalGoogleSignup.mockReset().mockResolvedValue(undefined)
     mockRequireGoogleSignupProof.mockReset()
     mockEnsureGoogleOnboardingMembership
       .mockReset()
@@ -401,6 +405,38 @@ describe("auth callback", () => {
     expect(mockEvaluateSignupRestriction).not.toHaveBeenCalled()
   })
 
+  it("retains the verified OAuth actor before redirecting through signup recovery", async () => {
+    googleMembershipState = { kind: "first_time" }
+    proofAvailable = false
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&google_signin_intent=pre-auth-intent",
+      ),
+    )
+    expect(mockRetainOriginalGoogleSignup).toHaveBeenCalledWith(
+      "pre-auth-intent",
+      currentUser,
+    )
+    expect(response.headers.get("location")).toContain("complete_google=1")
+    expect(mockPublishOriginalSignupEvidence).not.toHaveBeenCalled()
+    expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+  })
+
+  it("keeps the CAPTCHA recovery redirect when origin retention fails", async () => {
+    googleMembershipState = { kind: "first_time" }
+    proofAvailable = false
+    mockRetainOriginalGoogleSignup.mockRejectedValue(
+      new Error("cookie write failed"),
+    )
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&google_signin_intent=pre-auth-intent",
+      ),
+    )
+    expect(response.headers.get("location")).toContain("complete_google=1")
+    expect(mockPublishOriginalSignupEvidence).not.toHaveBeenCalled()
+  })
+
   it("lets an established Google user through without requiring proof", async () => {
     googleMembershipState = {
       kind: "existing",
@@ -411,6 +447,7 @@ describe("auth callback", () => {
       new Request("https://console.superserve.ai/auth/callback?code=abc"),
     )
 
+    expect(mockRetainOriginalGoogleSignup).not.toHaveBeenCalled()
     expect(mockHasValidGoogleSignupProof).not.toHaveBeenCalled()
     expect(mockMarkGoogleSignupAttempt).not.toHaveBeenCalled()
     expect(response.headers.get("location")).toContain("/sandboxes")
