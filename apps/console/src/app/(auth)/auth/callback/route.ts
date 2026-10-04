@@ -9,13 +9,17 @@ import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { completedMemberships } from "@/lib/api/team-provisioning"
 import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
-import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
+import {
+  classifyGoogleMembershipState,
+  type GoogleMembershipState,
+} from "@/lib/auth/google-onboarding"
 import {
   hasValidGoogleSignupProof,
   hasValidLegacyGoogleSignupProof,
   isGoogleUser,
   markGoogleSignupAttempt,
   readGooglePromotionEvidence,
+  retainOriginalGoogleSignup,
 } from "@/lib/auth/google-signup-proof"
 import {
   isActiveSignupEvidenceAttempt,
@@ -126,15 +130,31 @@ export async function GET(request: Request) {
         let signupEligibilitySnapshot: unknown
 
         if (code && isGoogleUser(user)) {
-          const directory = await classifyGoogleMembershipState(
-            user.id,
-            await completedMemberships(
+          const originIntent = searchParams.get("google_signin_intent")
+          if (originIntent) {
+            // Preserve verified account provenance before fallible directory work.
+            // The signed origin validates account creation independently of membership.
+            try {
+              await retainOriginalGoogleSignup(originIntent, user)
+            } catch {
+              console.warn("Google signup origin could not be retained")
+            }
+          }
+          let directory: GoogleMembershipState
+          try {
+            directory = await classifyGoogleMembershipState(
               user.id,
-              await listTeamMembershipsForUserDetailed(user.id, {
-                maxAgeMs: 0,
-              }),
-            ),
-          )
+              await completedMemberships(
+                user.id,
+                await listTeamMembershipsForUserDetailed(user.id, {
+                  maxAgeMs: 0,
+                }),
+              ),
+            )
+          } catch {
+            // Return a response so retained origin cookies survive lookup failures.
+            directory = { kind: "indeterminate", degradedRegions: [] }
+          }
 
           if (directory.kind === "indeterminate") {
             await trackEvent(AUTH_EVENTS.SIGN_IN_FAILED, user.id, {

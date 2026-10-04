@@ -176,3 +176,33 @@ it("returns the trusted non-issuing snapshot after publication ordering", async 
     mocks.snapshot.mock.invocationCallOrder[0],
   )
 })
+
+it("still withholds credit when identity publication fails despite allowed missing capture", async () => {
+  mocks.identity.mockRejectedValue(new Error("identity backend unavailable"))
+  expect(
+    await publishAccountPromotion(
+      "use",
+      { ...user, app_metadata: { promotion_routine_absence: true } },
+      "now",
+    ),
+  ).toEqual({ authorityUnavailable: true })
+})
+
+it("still withholds credit for a failed association of verified evidence", async () => {
+  mocks.bind.mockRejectedValue(
+    new PromotionEvidenceError("authority_unavailable"),
+  )
+  expect(
+    await publishOriginalSignupEvidence(user, "verified-attempt", false),
+  ).toBeUndefined()
+  expect(mocks.update).toHaveBeenCalledWith(user.id, {
+    app_metadata: { promotion_authority_failed: true },
+  })
+  expect(
+    await publishAccountPromotion(
+      "use",
+      { ...user, app_metadata: { promotion_authority_failed: true } },
+      "now",
+    ),
+  ).toEqual({ authorityUnavailable: true })
+})

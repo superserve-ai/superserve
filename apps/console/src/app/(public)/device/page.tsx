@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useState } from "react"
 
+import { beginGoogleSignIn } from "@/app/(auth)/auth/signin/google-action"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
@@ -82,7 +83,10 @@ function DevicePageContent() {
     setIsLoading(true)
     try {
       const supabase = createBrowserClient()
+      const intentId = await beginGoogleSignIn()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
+      if (intentId)
+        callbackUrl.searchParams.set("google_signin_intent", intentId)
       callbackUrl.searchParams.set(
         "next",
         `/device?code=${encodeURIComponent(userCode ?? "")}`,

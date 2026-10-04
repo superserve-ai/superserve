@@ -41,7 +41,8 @@ vi.mock("@/lib/recaptcha/verify", () => ({
 
 const mockIssueGoogleSignupProof = vi.fn()
 vi.mock("@/lib/auth/google-signup-proof", () => ({
-  issueGoogleSignupProof: () => mockIssueGoogleSignupProof(),
+  issueGoogleSignupProof: (...args: unknown[]) =>
+    mockIssueGoogleSignupProof(...args),
 }))
 
 const mockObserveCloudflareSignup = vi.fn()
@@ -375,6 +376,7 @@ describe("signUpWithEmail", () => {
       getObservationUserId: expect.any(Function),
       capture: undefined,
       onAttested: expect.any(Function),
+      onAttestationFailed: expect.any(Function),
     })
     for (const [args] of mockResolveFingerprintSignup.mock.calls) {
       expect(args.getObservationUserId()).toBe("user-1")
@@ -1194,8 +1196,11 @@ describe("original signup promotion evidence", () => {
     ).toEqual({ success: true })
     expect(mockOriginalPublication).not.toHaveBeenCalled()
   })
-  it("keeps failed attestation distinct from routine missing capture", async () => {
-    mockResolveFingerprintSignup.mockResolvedValue(null)
+  it("preserves attestation authority failures for email and Google signup", async () => {
+    mockResolveFingerprintSignup.mockImplementation(async (input) => {
+      input.onAttestationFailed?.()
+      return "ServerVisitor"
+    })
     expect(
       await signUpWithEmail(
         "user@example.com",
@@ -1211,6 +1216,33 @@ describe("original signup promotion evidence", () => {
       undefined,
       false,
     )
+    mockIssueGoogleSignupProof.mockClear()
+    expect(
+      await beginGoogleSignup("google-token", undefined, capture),
+    ).toMatchObject({ success: true })
+    expect(mockIssueGoogleSignupProof).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ attemptId: undefined, routineMissing: false }),
+    )
+  })
+
+  it("delegates unattested and absent captures to the backend missing-evidence policy", async () => {
+    mockResolveFingerprintSignup.mockResolvedValue(null)
+    expect(
+      await signUpWithEmail(
+        "user@example.com",
+        "password123",
+        "Name",
+        undefined,
+        undefined,
+        capture,
+      ),
+    ).toEqual({ success: true })
+    expect(mockOriginalPublication).toHaveBeenCalledWith(
+      expect.anything(),
+      undefined,
+      true,
+    )
     mockOriginalPublication.mockClear()
     expect(
       await signUpWithEmail("user@example.com", "password123", "Name"),
@@ -1223,7 +1255,7 @@ describe("original signup promotion evidence", () => {
   })
 })
 
-it("records an interrupted capture as failure after refresh, never routine absence", async () => {
+it("leaves an interrupted capture to the missing-evidence policy after refresh", async () => {
   mockOriginalPublication.mockReset().mockResolvedValue(undefined)
   mockVerifyRecaptcha.mockResolvedValue({ verified: true })
   fingerprintSignupEventId = undefined
@@ -1247,6 +1279,19 @@ it("records an interrupted capture as failure after refresh, never routine absen
   expect(mockOriginalPublication).toHaveBeenCalledWith(
     expect.anything(),
     undefined,
-    false,
+    true,
+  )
+})
+
+it("lets Google signup without a completed capture follow the missing-evidence policy", async () => {
+  mockVerifyRecaptcha.mockResolvedValue({ verified: true })
+  fingerprintSignupEventId = undefined
+  mockIssueGoogleSignupProof.mockClear()
+  expect(
+    await beginGoogleSignup("google-token", undefined, { unavailable: true }),
+  ).toMatchObject({ success: true })
+  expect(mockIssueGoogleSignupProof).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({ attemptId: undefined, routineMissing: true }),
   )
 })
