@@ -1,3 +1,6 @@
+vi.mock("@/hooks/use-user", () => ({
+  useUser: () => ({ user: { id: "u1" }, loading: false }),
+}))
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -9,6 +12,7 @@ import { CustomerBillingSection } from "./customer-billing-section"
 const useCustomerBillingPeriods = vi.fn()
 const createStripeCheckoutSession = vi.fn()
 const createStripeCustomerPortalSession = vi.fn()
+const publishBillingPromotionEvidence = vi.fn()
 const addToast = vi.fn()
 
 const baseSummary: BillingSummaryResponse = {
@@ -91,6 +95,10 @@ vi.mock("@/lib/api/billing-stripe", () => ({
     createStripeCustomerPortalSession(...args),
 }))
 
+vi.mock("@/lib/api/billing-actions", () => ({
+  publishBillingPromotionEvidence: () => publishBillingPromotionEvidence(),
+}))
+
 vi.mock("@superserve/ui", async () => {
   const actual =
     await vi.importActual<typeof import("@superserve/ui")>("@superserve/ui")
@@ -100,7 +108,7 @@ vi.mock("@superserve/ui", async () => {
   }
 })
 
-function renderSection(summary = baseSummary) {
+function renderSection(summary: BillingSummaryResponse | null = baseSummary) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -121,9 +129,11 @@ function renderSection(summary = baseSummary) {
 
 describe("CustomerBillingSection", () => {
   beforeEach(() => {
+    sessionStorage.clear()
     addToast.mockReset()
     createStripeCheckoutSession.mockReset()
     createStripeCustomerPortalSession.mockReset()
+    publishBillingPromotionEvidence.mockReset().mockResolvedValue("published")
     useCustomerBillingPeriods.mockReset()
     window.history.replaceState({}, "", "/plan-usage")
     useCustomerBillingPeriods.mockReturnValue({
@@ -171,6 +181,17 @@ describe("CustomerBillingSection", () => {
     expect(screen.getByText("1.11 GiB-hours")).toBeInTheDocument()
   })
 
+  it("keeps payment status neutral while the authoritative summary is unavailable", () => {
+    renderSection(null)
+
+    expect(screen.getByText("Payment Status")).toBeInTheDocument()
+    expect(screen.getAllByText("Unavailable")).toHaveLength(2)
+    expect(
+      screen.getByText("Billing data is unavailable for this team right now."),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("Tracking only")).not.toBeInTheDocument()
+  })
+
   it("disables the CTA while billing periods are still loading", () => {
     useCustomerBillingPeriods.mockReturnValue({
       data: undefined,
@@ -203,7 +224,9 @@ describe("CustomerBillingSection", () => {
 
       const button = screen.getByRole("button", { name: label })
       expect(button).toBeEnabled()
-      fireEvent.click(button)
+      await act(async () => {
+        fireEvent.click(button)
+      })
       expect(request).toHaveBeenCalledTimes(1)
       const returnUrl = new URL(window.location.href)
       if (portalAvailable) {
@@ -217,6 +240,7 @@ describe("CustomerBillingSection", () => {
         returnUrl.searchParams.set("billing", "success")
         cancelUrl.searchParams.set("billing", "cancel")
         expect(request).toHaveBeenCalledWith({
+          intentScope: expect.any(String),
           successUrl: returnUrl.toString(),
           cancelUrl: cancelUrl.toString(),
         })

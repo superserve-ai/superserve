@@ -11,12 +11,14 @@ from urllib.parse import quote, urlencode
 import httpx
 
 from ._config import ResolvedConfig, preview_url, resolve_config
+from ._routing_hint import routing_hint_expired
 from ._http import (
     DEFAULT_PAUSE_TIMEOUT,
     DeadlineExceeded,
     api_request,
     pause_poll_delay,
     PAUSE_FAST_POLL_WINDOW_S,
+    shared_client,
 )
 from .commands import Commands, CommandsDeps
 from .errors import ConflictError, NotFoundError, SandboxError, SandboxTimeoutError
@@ -63,6 +65,7 @@ class Sandbox:
         info: SandboxInfo,
         access_token: str,
         config: ResolvedConfig,
+        routing_hint: str | None = None,
     ) -> None:
         self.id: str = info.id
         self.name: str = info.name
@@ -72,8 +75,10 @@ class Sandbox:
         # Secrets bound at construction time; call get_info() to refresh.
         self.secrets: list[SandboxSecretBinding] | None = info.secrets
         self._access_token: str = access_token
+        self._routing_hint = routing_hint
+        self._route_revision = 0
+        self._applied_route_revision = 0
         self._config = config
-        self._http_client: httpx.Client = httpx.Client(timeout=30.0)
         self._closed = False
         self._refresh_lock = threading.Lock()
 
@@ -82,18 +87,20 @@ class Sandbox:
                 sandbox_id=self.id,
                 sandbox_host=config.sandbox_host,
                 get_access_token=lambda: self._access_token,
+                get_routing_hint=lambda: self._routing_hint,
                 refresh_activate=self._refresh_activate,
+                refresh_expired_hint=self._refresh_expired_hint,
             ),
-            client=self._http_client,
         )
         self.files = Files(
             FilesDeps(
                 sandbox_id=self.id,
                 sandbox_host=config.sandbox_host,
                 get_access_token=lambda: self._access_token,
+                get_routing_hint=lambda: self._routing_hint,
                 refresh_activate=self._refresh_activate,
+                refresh_expired_hint=self._refresh_expired_hint,
             ),
-            client=self._http_client,
         )
 
     def _post_and_rotate_token(self, endpoint: str) -> str:
@@ -101,6 +108,8 @@ class Sandbox:
         update the cached token. ``commands`` and ``files`` read the token
         live, so they pick up the rotation. Returns the new token.
         """
+        self._route_revision += 1
+        revision = self._route_revision
         raw = api_request(
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/{endpoint}",
@@ -113,16 +122,28 @@ class Sandbox:
                 f"Invalid API response from POST /sandboxes/{self.id}/{endpoint}: "
                 "missing access_token"
             )
-        self._access_token = token
-        return token
+        if revision > self._applied_route_revision:
+            self._applied_route_revision = revision
+            self._access_token = token
+            self._routing_hint = raw.get("routing_hint")
+        return self._access_token
 
     def _refresh_activate(self) -> str:
         """Slow-path fallback for data-plane AuthenticationError. Lock
         serializes refreshes so concurrent callers don't race the
         server-side BeginResume claim (the loser gets 409).
         """
+        revision = self._applied_route_revision
         with self._refresh_lock:
+            if revision != self._applied_route_revision:
+                return self._access_token
             return self._post_and_rotate_token("activate")
+
+    def _refresh_expired_hint(self) -> str:
+        with self._refresh_lock:
+            if routing_hint_expired(lambda: self._routing_hint):
+                return self._post_and_rotate_token("activate")
+            return self._access_token
 
     @classmethod
     def create(
@@ -191,7 +212,7 @@ class Sandbox:
             raise SandboxError(
                 "Invalid API response from POST /sandboxes: missing access_token"
             )
-        return cls(to_sandbox_info(raw), token, config)
+        return cls(to_sandbox_info(raw), token, config, raw.get("routing_hint"))
 
     @classmethod
     def connect(
@@ -219,7 +240,7 @@ class Sandbox:
                 f"Invalid API response from POST /sandboxes/{sandbox_id}/activate: "
                 "missing access_token"
             )
-        return cls(to_sandbox_info(raw), token, config)
+        return cls(to_sandbox_info(raw), token, config, raw.get("routing_hint"))
 
     @classmethod
     def list(
@@ -302,13 +323,12 @@ class Sandbox:
 
     # Methods on sandbox
 
+    @property
+    def _http_client(self) -> httpx.Client:
+        return shared_client()
+
     def _close_http_client(self) -> None:
-        if not self._closed:
-            self._closed = True
-            try:
-                self._http_client.close()
-            except Exception:
-                pass
+        self._closed = True
 
     def _require_not_deleted(self) -> None:
         """Reject calls on a deleted handle without requiring an active VM."""

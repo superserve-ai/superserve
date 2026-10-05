@@ -20,7 +20,7 @@ import type { ApiExecStreamEvent } from "./types.js"
 
 export const DEFAULT_TIMEOUT_MS = 30_000
 
-const SDK_VERSION = "0.9.2"
+const SDK_VERSION = "0.9.3"
 const USER_AGENT = `@superserve/sdk/${SDK_VERSION} (node/${
   typeof process !== "undefined" && process.versions?.node
     ? `v${process.versions.node}`
@@ -307,10 +307,25 @@ async function retryableFetch(
 async function readErrorBody(
   res: Response,
 ): Promise<{ error?: { code?: string; message?: string } }> {
+  let text: string
   try {
-    return (await res.json()) as { error?: { code?: string; message?: string } }
+    text = await res.text()
   } catch {
     return {}
+  }
+  try {
+    return JSON.parse(text) as { error?: { code?: string; message?: string } }
+  } catch {
+    // Older proxies emit these exact http.Error responses before dispatch.
+    // Do not broaden this to arbitrary 503 bodies from an upstream operation.
+    const legacyPaused =
+      res.status === 503 &&
+      res.headers.get("content-type")?.startsWith("text/plain") &&
+      res.headers.get("x-content-type-options") === "nosniff" &&
+      (text === "sandbox is paused\n" || text === "sandbox is stopped\n")
+    return legacyPaused
+      ? { error: { code: "sandbox_unavailable", message: text.trim() } }
+      : {}
   }
 }
 

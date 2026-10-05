@@ -1,6 +1,6 @@
 ---
 title: "Snapshots and forks"
-sidebarTitle: Snapshots
+sidebarTitle: Snapshots and forks
 description: Save a sandbox's memory and disk, then start new sandboxes from that exact point.
 ---
 
@@ -107,5 +107,3 @@ Deleting a snapshot takes effect immediately and doesn't affect sandboxes alread
 - **4 snapshots** being taken at once per team.
 
 Past a limit, `snapshot()` fails with `too_many_snapshots` or `too_many_snapshots_in_flight`. Delete snapshots you no longer need to free up room, or contact support@superserve.ai to raise a limit.
-
-While a snapshot is being taken, you can't attach or detach that sandbox's secrets. Those calls return `409 snapshot_in_progress`; retry once the snapshot is ready.

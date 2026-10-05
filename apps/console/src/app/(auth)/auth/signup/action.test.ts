@@ -30,7 +30,7 @@ vi.mock("@/lib/email/templates/welcome", () => ({
 }))
 
 const mockSlack = vi.fn().mockResolvedValue(undefined)
-vi.mock("@/app/(auth)/auth/signin/action", () => ({
+vi.mock("@/lib/slack/signup-notification", () => ({
   notifySlackOfNewUser: (...args: unknown[]) => mockSlack(...args),
 }))
 
@@ -41,7 +41,8 @@ vi.mock("@/lib/recaptcha/verify", () => ({
 
 const mockIssueGoogleSignupProof = vi.fn()
 vi.mock("@/lib/auth/google-signup-proof", () => ({
-  issueGoogleSignupProof: () => mockIssueGoogleSignupProof(),
+  issueGoogleSignupProof: (...args: unknown[]) =>
+    mockIssueGoogleSignupProof(...args),
 }))
 
 const mockObserveCloudflareSignup = vi.fn()
@@ -373,6 +374,9 @@ describe("signUpWithEmail", () => {
       signupMethod: "email",
       signupAttemptId: expect.any(String),
       getObservationUserId: expect.any(Function),
+      capture: undefined,
+      onAttested: expect.any(Function),
+      onAttestationFailed: expect.any(Function),
     })
     for (const [args] of mockResolveFingerprintSignup.mock.calls) {
       expect(args.getObservationUserId()).toBe("user-1")
@@ -667,6 +671,28 @@ describe("signUpWithEmail", () => {
     })
   })
 
+  it("keeps trigger rejection behavior without claiming a policy block", async () => {
+    mockGenerateLink.mockResolvedValue({
+      data: null,
+      error: { message: "DATABASE ERROR SAVING NEW USER" },
+    })
+    mockSlack.mockRejectedValueOnce(new Error("webhook down"))
+
+    await expect(
+      signUpWithEmail("user@test.com", "password123", "Test User"),
+    ).resolves.toEqual({
+      success: false,
+      error: "Signup is not available for this email address.",
+      errorCode: "blocked_email",
+    })
+    expect(mockSlack).toHaveBeenCalledWith(
+      "user@test.com",
+      "Test User",
+      "email",
+      { kind: "unavailable" },
+    )
+  })
+
   it("returns error when token hash is missing", async () => {
     mockGenerateLink.mockResolvedValue({
       data: { properties: {} },
@@ -713,6 +739,42 @@ describe("signUpWithEmail", () => {
     // Slack is called fire-and-forget via .catch(), give it a tick
     await new Promise((r) => setTimeout(r, 0))
     expect(mockSlack).toHaveBeenCalled()
+  })
+
+  it("preserves signup when the notification boundary rejects", async () => {
+    mockGenerateLink.mockResolvedValue({
+      data: { properties: { hashed_token: "abc123" } },
+      error: null,
+    })
+    mockSendEmail.mockResolvedValue({ success: true })
+    mockSlack.mockRejectedValueOnce(new Error("webhook down"))
+
+    await expect(
+      signUpWithEmail("user@test.com", "password123", "Test User"),
+    ).resolves.toEqual({ success: true })
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+  })
+
+  it("preserves the original rejection when a blocked notification rejects", async () => {
+    fingerprintSignupEventId = "event-blocked"
+    mockEvaluateSignupRestriction.mockRejectedValueOnce(
+      new SignupRestrictedError(),
+    )
+    mockSlack.mockRejectedValueOnce(new Error("webhook down"))
+
+    await expect(
+      signUpWithEmail("user@test.com", "password123", "Test User"),
+    ).resolves.toEqual({
+      success: false,
+      error: "Signup is not available. Please try again later.",
+    })
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockSlack).toHaveBeenCalledWith(
+      "user@test.com",
+      "Test User",
+      "email",
+      { kind: "blocked" },
+    )
   })
 })
 
@@ -817,7 +879,7 @@ describe("beginGoogleSignup", () => {
     },
   )
 
-  it("retains the fingerprint cookie for callback-side observation", async () => {
+  it("resolves Google evidence before redirect and consumes its event cookie", async () => {
     fingerprintSignupEventId = encodeURIComponent("event-456")
 
     const result = await beginGoogleSignup("google-token")
@@ -826,8 +888,11 @@ describe("beginGoogleSignup", () => {
       success: true,
       signupAttemptId: expect.any(String),
     })
-    expect(mockFingerprintCookieDelete).not.toHaveBeenCalled()
-    expect(fingerprintSignupEventId).toBe("event-456")
+    expect(mockFingerprintCookieDelete).toHaveBeenCalled()
+    expect(fingerprintSignupEventId).toBeUndefined()
+    expect(mockResolveFingerprintSignup).toHaveBeenCalledWith(
+      expect.objectContaining({ eventId: "event-456", signupMethod: "google" }),
+    )
     expect(mockObserveFingerprintSignup).not.toHaveBeenCalled()
   })
 
@@ -877,4 +942,356 @@ describe("beginGoogleSignup", () => {
       },
     )
   })
+})
+
+const mockOriginalPublication = vi.fn()
+vi.mock("@/lib/api/promotion-publication", () => ({
+  publishOriginalSignupEvidence: (...args: unknown[]) =>
+    mockOriginalPublication(...args),
+}))
+
+describe("original signup promotion evidence", () => {
+  const capture = {
+    attemptId: "original-attempt",
+    challenge: "challenge",
+    eventId: "provider-event",
+  }
+  beforeEach(() => {
+    mockOriginalPublication.mockReset().mockResolvedValue(undefined)
+    mockVerifyRecaptcha.mockReset().mockResolvedValue({ verified: true })
+    mockSendEmail.mockReset().mockResolvedValue({ success: true })
+    mockSlack.mockReset().mockResolvedValue(undefined)
+    mockEvaluateSignupRestriction.mockReset().mockResolvedValue(undefined)
+    mockTrackEvent.mockReset().mockResolvedValue(undefined)
+    mockBeginSignupEvidenceAttempt.mockResolvedValue(true)
+    mockIsSupersededSignupEvidenceAttempt.mockResolvedValue(false)
+    fingerprintSignupEventId = undefined
+    mockResolveFingerprintSignup
+      .mockReset()
+      .mockImplementation(async (input) => {
+        input.onAttested?.()
+        return "ServerVisitor"
+      })
+    mockGenerateLink.mockReset().mockImplementation(async () => ({
+      data: {
+        user: { id: "actual-auth-user", created_at: new Date().toISOString() },
+        properties: { hashed_token: "token" },
+      },
+      error: null,
+    }))
+  })
+  it("binds the actual new Auth result before sending confirmation, with one shared lookup", async () => {
+    expect(
+      await signUpWithEmail(
+        "user@example.com",
+        "password123",
+        "Name",
+        undefined,
+        undefined,
+        capture,
+      ),
+    ).toEqual({ success: true })
+    expect(mockResolveFingerprintSignup).toHaveBeenCalledTimes(1)
+    expect(mockOriginalPublication).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "actual-auth-user" }),
+      "original-attempt",
+      false,
+    )
+    expect(mockOriginalPublication.mock.invocationCallOrder[0]).toBeLessThan(
+      mockSendEmail.mock.invocationCallOrder[0],
+    )
+    expect(mockEvaluateSignupRestriction).toHaveBeenCalledWith(
+      "use",
+      expect.any(String),
+      "ServerVisitor",
+    )
+  })
+
+  it.each([
+    [
+      "eligible",
+      {
+        ownership: "owner",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "team_checks_pending",
+      },
+      { kind: "eligible" },
+    ],
+    [
+      "pre-confirmation identity unavailable",
+      {
+        ownership: "owner",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "verified_identity_missing",
+      },
+      { kind: "eligible" },
+    ],
+    [
+      "historical identity unresolved",
+      {
+        ownership: "owner",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "historical_identity_unresolved",
+      },
+      { kind: "eligible" },
+    ],
+    [
+      "another owner",
+      {
+        ownership: "another_owner",
+        deviceDecision: "owner_conflict",
+        eligibility: "ineligible",
+        reason: "owner_conflict",
+      },
+      { kind: "enforced_other_owner" },
+    ],
+    [
+      "missing evidence",
+      {
+        ownership: "evidence_missing",
+        deviceDecision: "evidence_missing",
+        eligibility: "ineligible",
+        reason: "evidence_missing",
+      },
+      { kind: "enforced_missing_evidence" },
+    ],
+    [
+      "device already redeemed",
+      {
+        ownership: "owner",
+        deviceDecision: "device_already_redeemed",
+        eligibility: "ineligible",
+        reason: "device_already_redeemed",
+      },
+      { kind: "enforced_device_redeemed" },
+    ],
+    [
+      "another owner with enforcement bypassed",
+      {
+        ownership: "another_owner",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "team_checks_pending",
+      },
+      { kind: "unavailable" },
+    ],
+    [
+      "missing evidence with enforcement bypassed",
+      {
+        ownership: "evidence_missing",
+        deviceDecision: "eligible",
+        eligibility: "unknown",
+        reason: "team_checks_pending",
+      },
+      { kind: "unavailable" },
+    ],
+    [
+      "non-device eligibility denial",
+      {
+        ownership: "owner",
+        deviceDecision: "eligible",
+        eligibility: "ineligible",
+        reason: "identity_already_claimed",
+      },
+      { kind: "unavailable" },
+    ],
+  ] as const)(
+    "publishes before notifying with the authoritative %s snapshot",
+    async (_label, snapshot, expected) => {
+      mockOriginalPublication.mockResolvedValue(snapshot)
+
+      await expect(
+        signUpWithEmail(
+          "user@example.com",
+          "password123",
+          "Name",
+          undefined,
+          undefined,
+          capture,
+        ),
+      ).resolves.toEqual({ success: true })
+
+      expect(mockSlack).toHaveBeenCalledWith(
+        "user@example.com",
+        "Name",
+        "email",
+        expected,
+      )
+      expect(mockOriginalPublication).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "actual-auth-user" }),
+        "original-attempt",
+        false,
+      )
+      expect(mockOriginalPublication.mock.invocationCallOrder[0]).toBeLessThan(
+        mockSlack.mock.invocationCallOrder[0],
+      )
+    },
+  )
+
+  it("uses unavailable when publication has no authoritative snapshot", async () => {
+    mockOriginalPublication.mockResolvedValue(undefined)
+
+    await expect(
+      signUpWithEmail(
+        "user@example.com",
+        "password123",
+        "Name",
+        undefined,
+        undefined,
+        capture,
+      ),
+    ).resolves.toEqual({ success: true })
+    expect(mockSlack).toHaveBeenCalledWith(
+      "user@example.com",
+      "Name",
+      "email",
+      { kind: "unavailable" },
+    )
+  })
+
+  it("continues signup with unavailable when publication rejects", async () => {
+    mockOriginalPublication.mockRejectedValueOnce(
+      new Error("publication transport unavailable"),
+    )
+
+    await expect(
+      signUpWithEmail(
+        "user@example.com",
+        "password123",
+        "Name",
+        undefined,
+        undefined,
+        capture,
+      ),
+    ).resolves.toEqual({ success: true })
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+    expect(mockSlack).toHaveBeenCalledWith(
+      "user@example.com",
+      "Name",
+      "email",
+      { kind: "unavailable" },
+    )
+  })
+
+  it("does not attach a new attempt to an older unconfirmed account", async () => {
+    mockGenerateLink.mockResolvedValue({
+      data: {
+        user: { id: "existing-user", created_at: "2020-01-01T00:00:00Z" },
+        properties: { hashed_token: "token" },
+      },
+      error: null,
+    })
+    expect(
+      await signUpWithEmail(
+        "user@example.com",
+        "password123",
+        "Name",
+        undefined,
+        undefined,
+        capture,
+      ),
+    ).toEqual({ success: true })
+    expect(mockOriginalPublication).not.toHaveBeenCalled()
+  })
+  it("preserves attestation authority failures for email and Google signup", async () => {
+    mockResolveFingerprintSignup.mockImplementation(async (input) => {
+      input.onAttestationFailed?.()
+      return "ServerVisitor"
+    })
+    expect(
+      await signUpWithEmail(
+        "user@example.com",
+        "password123",
+        "Name",
+        undefined,
+        undefined,
+        capture,
+      ),
+    ).toEqual({ success: true })
+    expect(mockOriginalPublication).toHaveBeenCalledWith(
+      expect.anything(),
+      undefined,
+      false,
+    )
+    mockIssueGoogleSignupProof.mockClear()
+    expect(
+      await beginGoogleSignup("google-token", undefined, capture),
+    ).toMatchObject({ success: true })
+    expect(mockIssueGoogleSignupProof).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ attemptId: undefined, routineMissing: false }),
+    )
+  })
+
+  it("delegates unattested and absent captures to the backend missing-evidence policy", async () => {
+    mockResolveFingerprintSignup.mockResolvedValue(null)
+    expect(
+      await signUpWithEmail(
+        "user@example.com",
+        "password123",
+        "Name",
+        undefined,
+        undefined,
+        capture,
+      ),
+    ).toEqual({ success: true })
+    expect(mockOriginalPublication).toHaveBeenCalledWith(
+      expect.anything(),
+      undefined,
+      true,
+    )
+    mockOriginalPublication.mockClear()
+    expect(
+      await signUpWithEmail("user@example.com", "password123", "Name"),
+    ).toEqual({ success: true })
+    expect(mockOriginalPublication).toHaveBeenCalledWith(
+      expect.anything(),
+      undefined,
+      true,
+    )
+  })
+})
+
+it("leaves an interrupted capture to the missing-evidence policy after refresh", async () => {
+  mockOriginalPublication.mockReset().mockResolvedValue(undefined)
+  mockVerifyRecaptcha.mockResolvedValue({ verified: true })
+  fingerprintSignupEventId = undefined
+  mockGenerateLink.mockImplementation(async () => ({
+    data: {
+      user: { id: "new-user", created_at: new Date().toISOString() },
+      properties: { hashed_token: "token" },
+    },
+    error: null,
+  }))
+  expect(
+    await signUpWithEmail(
+      "user@example.com",
+      "password123",
+      "Name",
+      undefined,
+      undefined,
+      { unavailable: true },
+    ),
+  ).toEqual({ success: true })
+  expect(mockOriginalPublication).toHaveBeenCalledWith(
+    expect.anything(),
+    undefined,
+    true,
+  )
+})
+
+it("lets Google signup without a completed capture follow the missing-evidence policy", async () => {
+  mockVerifyRecaptcha.mockResolvedValue({ verified: true })
+  fingerprintSignupEventId = undefined
+  mockIssueGoogleSignupProof.mockClear()
+  expect(
+    await beginGoogleSignup("google-token", undefined, { unavailable: true }),
+  ).toMatchObject({ success: true })
+  expect(mockIssueGoogleSignupProof).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({ attemptId: undefined, routineMissing: true }),
+  )
 })

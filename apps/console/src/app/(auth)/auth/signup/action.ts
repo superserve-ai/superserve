@@ -7,8 +7,9 @@ import { headers } from "next/headers"
 import { after } from "next/server"
 import * as z from "zod"
 
-import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
-import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
+import { createPromotionSignupAttempt } from "@/lib/api/promotion-device-evidence"
+import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
+import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
 import { issueGoogleSignupProof } from "@/lib/auth/google-signup-proof"
 import {
   beginSignupEvidenceAttempt,
@@ -28,6 +29,8 @@ import {
 import { sendEmail } from "@/lib/email/send"
 import { ConfirmationEmail } from "@/lib/email/templates/confirmation"
 import { WelcomeEmail } from "@/lib/email/templates/welcome"
+import { signSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
+import type { SignupFingerprintResult } from "@/lib/fingerprint/client"
 import { FINGERPRINT_SIGNUP_COOKIE } from "@/lib/fingerprint/constants"
 import {
   observeFingerprintSignup,
@@ -36,6 +39,8 @@ import {
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { verifyRecaptcha } from "@/lib/recaptcha/verify"
+import { normalizeSignupEligibilitySnapshot } from "@/lib/slack/signup-eligibility"
+import { notifySlackOfNewUser } from "@/lib/slack/signup-notification"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 const signUpSchema = z.object({
@@ -49,6 +54,10 @@ export async function isCloudflareSignupObservationEnabled(): Promise<boolean> {
     readCloudflareObservationFlag(),
     new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 750)),
   ])
+}
+
+export async function createSignupFingerprintAttempt() {
+  return createPromotionSignupAttempt()
 }
 
 export async function scheduleCloudflareObservation(
@@ -152,6 +161,7 @@ export async function scheduleFingerprintObservation(
 export const beginGoogleSignup = async (
   recaptchaToken?: string,
   turnstileToken?: string,
+  captureResult?: SignupFingerprintResult,
 ): Promise<
   | { success: true; signupAttemptId: string }
   | {
@@ -160,10 +170,13 @@ export const beginGoogleSignup = async (
       errorCode: "captcha_failed" | "proof_unavailable"
     }
 > => {
+  const capture =
+    captureResult && "attemptId" in captureResult ? captureResult : undefined
   const signupAttemptId = crypto.randomUUID()
   await beginSignupEvidenceAttempt(signupAttemptId)
   const clientContext = await readCloudflareClientContext()
-  const fingerprintEventId = await readFingerprintSignupEventId()
+  const fingerprintEventId =
+    capture?.eventId ?? (await readFingerprintSignupEventId())
   scheduleCloudflareObservation(
     signupAttemptId,
     "google",
@@ -213,7 +226,32 @@ export const beginGoogleSignup = async (
   }
 
   try {
-    await issueGoogleSignupProof(signupAttemptId)
+    let verified = false
+    let attestationFailed = false
+    const visitor = fingerprintEventId
+      ? await resolveFingerprintSignup({
+          eventId: fingerprintEventId,
+          signupMethod: "google",
+          signupAttemptId,
+          capture,
+          onAttested: () => {
+            verified = true
+          },
+          onAttestationFailed: () => {
+            attestationFailed = true
+          },
+        })
+      : null
+    if (fingerprintEventId)
+      await consumeFingerprintSignupEventId(fingerprintEventId)
+    await issueGoogleSignupProof(signupAttemptId, {
+      attemptId: verified ? capture?.attemptId : undefined,
+      eventId: fingerprintEventId,
+      visitor: visitor ?? undefined,
+      // Missing capture is governed by the backend evidence-required policy.
+      // Attestation or publication outages remain authority failures.
+      routineMissing: !verified && !attestationFailed,
+    })
     await trackEvent(
       AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_VERIFIED,
       signupAttemptId,
@@ -250,16 +288,20 @@ export const signUpWithEmail = async (
   fullName: string,
   recaptchaToken?: string,
   turnstileToken?: string,
+  captureResult?: SignupFingerprintResult,
 ) => {
   const parsed = signUpSchema.safeParse({ email, password, fullName })
   if (!parsed.success)
     return { success: false, error: parsed.error.issues[0].message }
 
+  const capture =
+    captureResult && "attemptId" in captureResult ? captureResult : undefined
   const signupAttemptId = crypto.randomUUID()
   const evidenceAttemptStarted =
     await beginSignupEvidenceAttempt(signupAttemptId)
   const clientContext = await readCloudflareClientContext()
-  const fingerprintEventId = await readFingerprintSignupEventId()
+  const fingerprintEventId =
+    capture?.eventId ?? (await readFingerprintSignupEventId())
   scheduleCloudflareObservation(
     signupAttemptId,
     "email",
@@ -311,6 +353,8 @@ export const signUpWithEmail = async (
 
   try {
     let visitor: string | null = null
+    let deviceVerified = false
+    let attestationFailed = false
     if (fingerprintEventId) {
       try {
         visitor = await resolveFingerprintSignup({
@@ -318,6 +362,13 @@ export const signUpWithEmail = async (
           signupMethod: "email",
           signupAttemptId,
           getObservationUserId: () => observationUserId,
+          capture,
+          onAttested: () => {
+            deviceVerified = true
+          },
+          onAttestationFailed: () => {
+            attestationFailed = true
+          },
         })
       } finally {
         await consumeFingerprintSignupEventId(fingerprintEventId)
@@ -336,8 +387,15 @@ export const signUpWithEmail = async (
           visitor,
         )
       } catch (error) {
-        if (error instanceof SignupRestrictedError)
+        if (error instanceof SignupRestrictedError) {
+          await notifySlackOfNewUser(
+            parsed.data.email,
+            parsed.data.fullName,
+            "email",
+            { kind: "blocked" },
+          ).catch(() => {})
           return { success: false, error: SIGNUP_RESTRICTED_MESSAGE }
+        }
         throw error
       }
     }
@@ -346,6 +404,7 @@ export const signUpWithEmail = async (
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai"
     const redirectTo = `${appUrl}/auth/callback`
+    const signupStartedAt = Date.now()
     const { data, error } = await supabase.auth.admin.generateLink({
       type: "signup",
       email: parsed.data.email,
@@ -368,8 +427,19 @@ export const signUpWithEmail = async (
           error: "An account with this email already exists.",
         }
       }
-      if (error.message.toLowerCase().includes(BLOCKED_TRIGGER_MESSAGE)) {
-        console.warn("Signup blocked by trigger", { email: parsed.data.email })
+      // Auth exposes trigger failures as a generic database error. It keeps
+      // the existing rejected-auth result, but does not prove SS-499 blocked
+      // policy evidence, so the notification must remain unavailable.
+      if (isGenericAuthSignupFailure(error.message)) {
+        console.warn("Signup rejected by Auth trigger", {
+          email: parsed.data.email,
+        })
+        await notifySlackOfNewUser(
+          parsed.data.email,
+          parsed.data.fullName,
+          "email",
+          { kind: "unavailable" },
+        ).catch(() => {})
         return {
           success: false,
           error: "Signup is not available for this email address.",
@@ -379,6 +449,22 @@ export const signUpWithEmail = async (
       return { success: false, error: error.message }
     }
 
+    const originalSignup =
+      data?.user && Date.parse(data.user.created_at) >= signupStartedAt
+    let signupEligibilitySnapshot: unknown
+    if (originalSignup) {
+      try {
+        signupEligibilitySnapshot = await publishOriginalSignupEvidence(
+          data.user,
+          deviceVerified ? capture?.attemptId : undefined,
+          !deviceVerified && !attestationFailed,
+        )
+      } catch {
+        // Publication is best effort; an unavailable snapshot must not change
+        // the Auth signup result or suppress the original notification.
+        console.warn("Original signup promotion publication unavailable")
+      }
+    }
     if (fingerprintEventId && visitor && data?.user?.id) {
       try {
         await saveSignupEvidence(
@@ -408,7 +494,20 @@ export const signUpWithEmail = async (
     if (!tokenHash)
       return { success: false, error: "Failed to generate confirmation link." }
 
-    const confirmationUrl = `${redirectTo}?token_hash=${tokenHash}&type=signup&signup_attempt_id=${signupAttemptId}&utm_source=email&utm_medium=signup_confirmation`
+    const confirmation = new URL(redirectTo)
+    confirmation.searchParams.set("token_hash", tokenHash)
+    confirmation.searchParams.set("type", "signup")
+    confirmation.searchParams.set("signup_attempt_id", signupAttemptId)
+    confirmation.searchParams.set("utm_source", "email")
+    confirmation.searchParams.set("utm_medium", "signup_confirmation")
+    if (originalSignup && deviceVerified && capture) {
+      const proof = signSignupDeviceBinding(data.user.id, capture.attemptId)
+      if (proof) {
+        confirmation.searchParams.set("device_attempt_id", capture.attemptId)
+        confirmation.searchParams.set("device_bind_proof", proof)
+      }
+    }
+    const confirmationUrl = confirmation.toString()
     await sendEmail({
       to: parsed.data.email,
       subject: "Confirm your Superserve account",
@@ -418,6 +517,7 @@ export const signUpWithEmail = async (
       parsed.data.email,
       parsed.data.fullName,
       "email",
+      normalizeSignupEligibilitySnapshot(signupEligibilitySnapshot),
     ).catch(() => {})
     return { success: true }
   } catch (err) {

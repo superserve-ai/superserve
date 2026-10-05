@@ -1,4 +1,4 @@
-import { apiClient } from "./client"
+import { ApiError, apiClient } from "./client"
 
 export interface CustomerBillingUsageResponse {
   period_id: string
@@ -131,15 +131,65 @@ export async function getCustomerBillingExportPreview(
 export async function createStripeCheckoutSession(params: {
   successUrl: string
   cancelUrl: string
+  intentScope: string
 }): Promise<BillingSessionResponse> {
-  return apiClient<BillingSessionResponse>("/stripe/checkout-session", {
-    method: "POST",
-    cache: "no-store",
-    body: JSON.stringify({
-      success_url: params.successUrl,
-      cancel_url: params.cancelUrl,
-    }),
-  })
+  const key = `superserve:checkout:${params.intentScope}`
+  const raw = sessionStorage.getItem(key)
+  let intent: {
+    operationId: string
+    receipt?: string
+    newOnNextClick?: boolean
+  } = raw ? JSON.parse(raw) : { operationId: crypto.randomUUID() }
+  if (intent.newOnNextClick) {
+    // The preceding conflict asked for an explicit new attempt. Keep the old
+    // receipt available; a conflict alone does not prove it was retired.
+    sessionStorage.setItem(
+      `${key}:previous:${intent.operationId}`,
+      JSON.stringify(intent),
+    )
+    intent = { operationId: crypto.randomUUID() }
+  }
+  // Retain before either request. Failure to retain stops dispatch.
+  sessionStorage.setItem(key, JSON.stringify(intent))
+  if (!intent.receipt) {
+    const prepared = await apiClient<
+      { receipt: string } | BillingSessionResponse
+    >("/stripe/checkout-session", {
+      method: "POST",
+      cache: "no-store",
+      body: JSON.stringify({
+        prepare: true,
+        operation_id: intent.operationId,
+        success_url: params.successUrl,
+        cancel_url: params.cancelUrl,
+      }),
+    })
+    if ("url" in prepared) return prepared
+    intent.receipt = prepared.receipt
+    sessionStorage.setItem(key, JSON.stringify(intent))
+  }
+  // Keep the receipt after success for lost navigation/refresh recovery.
+  try {
+    return await apiClient<BillingSessionResponse>("/stripe/checkout-session", {
+      method: "POST",
+      cache: "no-store",
+      body: JSON.stringify({ receipt: intent.receipt }),
+    })
+  } catch (error) {
+    if (
+      error instanceof ApiError &&
+      error.status === 409 &&
+      error.code === "conflict"
+    ) {
+      intent.newOnNextClick = true
+      sessionStorage.setItem(key, JSON.stringify(intent))
+      throw new Error(
+        "Checkout could not resume. Click Set Up Billing again to request a new attempt; any existing Checkout must finish or expire first.",
+        { cause: error },
+      )
+    }
+    throw error
+  }
 }
 
 export async function createStripeCustomerPortalSession(params: {

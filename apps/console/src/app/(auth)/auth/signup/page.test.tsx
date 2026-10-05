@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { StrictMode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // --- Mocks ---
@@ -71,7 +72,8 @@ const mockEnsureFingerprintSignupEventId = vi.fn<
   () => Promise<string | undefined>
 >(() => Promise.resolve(undefined))
 vi.mock("@/lib/fingerprint/client", () => ({
-  ensureFingerprintSignupEventId: () => mockEnsureFingerprintSignupEventId(),
+  ensureFingerprintSignupCapture: () => mockEnsureFingerprintSignupEventId(),
+  clearFingerprintSignupCapture: vi.fn(),
 }))
 
 const mockSignUpWithEmail = vi.fn()
@@ -268,8 +270,47 @@ describe("SignUpPage", () => {
     )
   })
 
-  it("does not wait for the fingerprint observation handoff before submitting email signup", async () => {
-    const fingerprintPromise = new Promise<string | undefined>(() => {})
+  it("submits user-entered form values under StrictMode", async () => {
+    const { default: SignUpContent } = await import("./form")
+    const { signUpWithEmail, syntheticSignupValues, signupTrace } =
+      await import("@/test/ui/ss640/browser-dependencies")
+    signupTrace.submissions = []
+    mockSignUpWithEmail.mockImplementation(signUpWithEmail)
+    render(
+      <StrictMode>
+        <SignUpContent />
+      </StrictMode>,
+    )
+
+    await user.type(
+      await screen.findByPlaceholderText("Full Name"),
+      syntheticSignupValues.fullName,
+    )
+    await user.type(
+      screen.getByPlaceholderText("Email"),
+      syntheticSignupValues.email,
+    )
+    await user.type(
+      screen.getByPlaceholderText("Password"),
+      syntheticSignupValues.password,
+    )
+    await user.type(
+      screen.getByPlaceholderText("Confirm Password"),
+      syntheticSignupValues.confirmPassword,
+    )
+    await user.click(await screen.findByRole("button", { name: "Sign Up" }))
+
+    expect(await screen.findByText("Check Your Email")).toBeInTheDocument()
+    expect(signupTrace.submissions).toHaveLength(1)
+    expect(screen.queryByRole("button", { name: "Sign Up" })).toBeNull()
+    expect(screen.getByRole("link", { name: "Sign in" })).toBeInTheDocument()
+  })
+
+  it("waits for capture to finish before submitting email signup", async () => {
+    let finishCapture!: (value: undefined) => void
+    const fingerprintPromise = new Promise<string | undefined>((resolve) => {
+      finishCapture = resolve
+    })
     mockEnsureFingerprintSignupEventId.mockReturnValueOnce(fingerprintPromise)
     mockSignUpWithEmail.mockResolvedValue({ success: true })
     render(<SignUpPage />)
@@ -287,6 +328,8 @@ describe("SignUpPage", () => {
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
     expect(mockEnsureFingerprintSignupEventId).toHaveBeenCalledTimes(1)
+    expect(mockSignUpWithEmail).not.toHaveBeenCalled()
+    finishCapture(undefined)
 
     await waitFor(() => {
       expect(mockSignUpWithEmail).toHaveBeenCalledWith(
@@ -387,6 +430,7 @@ describe("SignUpPage", () => {
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
         options: {
+          queryParams: { prompt: "select_account" },
           redirectTo: expect.stringContaining(
             "/auth/callback?signup_attempt_id=attempt-123",
           ),
@@ -395,8 +439,11 @@ describe("SignUpPage", () => {
     })
   })
 
-  it("does not wait for the fingerprint observation handoff before starting Google signup", async () => {
-    const fingerprintPromise = new Promise<string | undefined>(() => {})
+  it("waits for capture to finish before starting Google signup", async () => {
+    let finishCapture!: (value: undefined) => void
+    const fingerprintPromise = new Promise<string | undefined>((resolve) => {
+      finishCapture = resolve
+    })
     mockEnsureFingerprintSignupEventId.mockReturnValueOnce(fingerprintPromise)
     mockBeginGoogleSignup.mockResolvedValue({
       success: true,
@@ -409,12 +456,15 @@ describe("SignUpPage", () => {
     )
 
     expect(mockEnsureFingerprintSignupEventId).toHaveBeenCalledTimes(1)
+    expect(mockBeginGoogleSignup).not.toHaveBeenCalled()
+    finishCapture(undefined)
 
     await waitFor(() => {
       expect(mockBeginGoogleSignup).toHaveBeenCalledWith(undefined)
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
         options: {
+          queryParams: { prompt: "select_account" },
           redirectTo: expect.stringContaining(
             "/auth/callback?signup_attempt_id=attempt-456",
           ),
@@ -546,7 +596,10 @@ describe("SignUpPage with reCAPTCHA configured", () => {
     await waitFor(() => {
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
-        options: { redirectTo: expect.stringContaining("/auth/callback") },
+        options: {
+          redirectTo: expect.stringContaining("/auth/callback"),
+          queryParams: { prompt: "select_account" },
+        },
       })
     })
   })
@@ -583,6 +636,7 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
         options: {
+          queryParams: { prompt: "select_account" },
           redirectTo: expect.stringContaining(
             "next=https%3A%2F%2Fapp.superserve.ai%2Fdevice%2Fabc",
           ),

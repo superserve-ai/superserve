@@ -1,6 +1,11 @@
 import type { User } from "@supabase/supabase-js"
 
-import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
+import {
+  recoverPromotionTeam,
+  preparePromotionTeam,
+  completePromotionTeam,
+} from "@/lib/api/promotion-device-evidence"
+import { publishAccountPromotion } from "@/lib/api/promotion-publication"
 import {
   listTeamMembershipsForUserDetailed,
   type MembershipDirectory,
@@ -174,6 +179,7 @@ export async function provisionTeam(
   _email: string,
   name: string,
   observation?: { user: User; observedAt: string },
+  operationId?: string,
 ): Promise<ProvisionedTeam> {
   // This is the common value boundary for lazy onboarding and explicit team
   // creation. A direct Supabase Google OAuth session must not be able to call
@@ -220,14 +226,33 @@ export async function provisionTeam(
   }
   const admin = cellFor(region).createAdminClient()
 
-  await publishPromotionIdentity(region, userId, user, observedAt)
-
-  const { data: team, error: teamErr } = await admin
-    .from("team")
-    .insert({ name, home_region: region })
-    .select("id, name")
-    .single()
-  if (teamErr) throw new Error(`Failed to create team: ${teamErr.message}`)
+  // The Auth UUID is reserved for the single automatic initial East intent.
+  // Explicit creations must retain a separate locator before calling this boundary.
+  if (!operationId && region !== DEFAULT_REGION)
+    throw new Error("Team creation requires its original operation identifier")
+  const locator = { userId, region, operationId: operationId ?? userId }
+  let prepared = await recoverPromotionTeam(locator)
+  if (!prepared) {
+    if (!operationId && !firstTeam)
+      throw new Error("No initial team creation to recover")
+    const publication = await publishAccountPromotion(region, user, observedAt)
+    prepared = await preparePromotionTeam({ ...locator, name, ...publication })
+  }
+  if (prepared.authorityUnavailable) {
+    // Repair only the regional FK target. The persisted no-credit decision
+    // remains unchanged even if canonical publication failed before profile creation.
+    const { error } = await admin
+      .from("profile")
+      .upsert(
+        { id: userId, email: user.email ?? "" },
+        { onConflict: "id", ignoreDuplicates: true },
+      )
+    if (error) throw new Error("Failed to repair regional profile")
+  }
+  const completed = await completePromotionTeam(prepared)
+  if (completed.state === "deleted")
+    throw new Error("This team creation has already been deleted")
+  const team = { id: completed.teamId, name: completed.name }
 
   try {
     const { error: memberErr } = await admin.from("team_member").insert({
@@ -235,14 +260,39 @@ export async function provisionTeam(
       profile_id: userId,
       role: "owner",
     })
-    if (memberErr) {
+    if (memberErr?.code === "23505") {
+      const { data: existing, error } = await admin
+        .from("team_member")
+        .select("team_id")
+        .eq("team_id", team.id)
+        .eq("profile_id", userId)
+        .eq("role", "owner")
+        .limit(1)
+      if (error || !existing?.length)
+        throw new Error("Unable to verify existing team owner")
+    } else if (memberErr) {
       throw new Error(`Failed to add team member: ${memberErr.message}`)
     }
 
     const { error: membershipErr } = await admin
       .from("team_memberships")
-      .insert({ team_id: team.id, user_id: userId, status: "active" })
-    if (membershipErr) {
+      .insert({
+        id: team.id,
+        team_id: team.id,
+        user_id: userId,
+        status: "active",
+      })
+    if (membershipErr?.code === "23505") {
+      const { data: existing, error } = await admin
+        .from("team_memberships")
+        .select("id")
+        .eq("team_id", team.id)
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .limit(1)
+      if (error || !existing?.length)
+        throw new Error("Unable to verify existing active membership")
+    } else if (membershipErr) {
       throw new Error(
         `Failed to create team membership: ${membershipErr.message}`,
       )
@@ -262,33 +312,32 @@ export async function provisionTeam(
     const { error: assignErr } = await admin
       .from("user_role_assignments")
       .insert({
+        id: team.id,
         user_id: userId,
         role_id: role.id,
         scope_type: "team",
         team_id: team.id,
       })
-    if (assignErr) {
+    if (assignErr?.code === "23505") {
+      const { data: existing, error } = await admin
+        .from("user_role_assignments")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("role_id", role.id)
+        .eq("team_id", team.id)
+        .eq("scope_type", "team")
+        .is("revoked_at", null)
+        .limit(1)
+      if (error || !existing?.length)
+        throw new Error("Unable to verify existing team owner assignment")
+    } else if (assignErr) {
       throw new Error(
         `Failed to assign ${TEAM_OWNER_ROLE}: ${assignErr.message}`,
       )
     }
   } catch (chainErr) {
-    for (const [table, column] of [
-      ["user_role_assignments", "team_id"],
-      ["team_memberships", "team_id"],
-      ["team_member", "team_id"],
-      ["team", "id"],
-    ] as const) {
-      const { error: unwindErr } = await admin
-        .from(table)
-        .delete()
-        .eq(column, team.id)
-      if (unwindErr) {
-        console.error(
-          `provision-team unwind: failed to delete from ${table} for team ${team.id}: ${unwindErr.message}`,
-        )
-      }
-    }
+    // The backend committed this team and its decision. Retain partial membership
+    // writes so the same operation can safely finish after an uncertain response.
     throw new Error(
       `${chainErr instanceof Error ? chainErr.message : String(chainErr)} (team ${team.id})`,
       { cause: chainErr },

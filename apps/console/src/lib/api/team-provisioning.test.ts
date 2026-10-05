@@ -297,7 +297,21 @@ vi.mock("@/lib/auth/google-onboarding", () => ({
 
 import { createServerClient } from "@/lib/supabase/server"
 
-import { completedMemberships, provisionTeam } from "./team-provisioning"
+import {
+  completedMemberships,
+  provisionTeam as provisionActualTeam,
+} from "./team-provisioning"
+
+function provisionTeam(...args: Parameters<typeof provisionActualTeam>) {
+  return provisionActualTeam(
+    args[0],
+    args[1],
+    args[2],
+    args[3],
+    args[4],
+    args[5] ?? "11111111-1111-4111-8111-111111111111",
+  )
+}
 
 describe("provisionTeam", () => {
   beforeEach(() => {
@@ -689,15 +703,16 @@ describe("provisionTeam", () => {
       currentUser,
       expect.any(String),
     )
-    expect(writes.team).toEqual([{ name: "west pilot", home_region: "usw" }])
+    expect(writes.team).toBeUndefined()
     expect(writes.team_member).toEqual([
       { team_id: "team-new", profile_id: "u1", role: "owner" },
     ])
     expect(writes.team_memberships).toEqual([
-      { team_id: "team-new", user_id: "u1", status: "active" },
+      { id: "team-new", team_id: "team-new", user_id: "u1", status: "active" },
     ])
     expect(writes.user_role_assignments).toEqual([
       {
+        id: "team-new",
         user_id: "u1",
         role_id: "role-owner",
         scope_type: "team",
@@ -750,14 +765,14 @@ describe("provisionTeam", () => {
     },
   )
 
-  it("does not create a team when identity publication fails", async () => {
+  it("allows team creation without credit when identity publication fails", async () => {
     mockPublishPromotionIdentity.mockRejectedValueOnce(
       new Error("publication unavailable"),
     )
     await expect(
       provisionTeam("usw", "u1", "ignored@example.com", "west pilot"),
-    ).rejects.toThrow("publication unavailable")
-    expect(clients.usw.writes).toEqual({})
+    ).resolves.toMatchObject({ id: "team-new" })
+    expect(clients.usw.writes.team).toBeUndefined()
   })
 
   it("uses the authenticated raw email rather than the caller email", async () => {
@@ -804,7 +819,7 @@ describe("provisionTeam", () => {
     })
     expect(clients.usw.rpcCalls[1]).toMatchObject({
       name: "upsert_profile_with_promotion_identity",
-      teamWriteCount: 1,
+      teamWriteCount: 0,
       args: {
         p_user_id: "u1",
         p_email: "Changed+Tag@Example.COM",
@@ -813,23 +828,18 @@ describe("provisionTeam", () => {
         p_observed_at: expect.any(String),
       },
     })
-    expect(clients.usw.writes.team).toHaveLength(2)
+    expect(clients.usw.writes.team).toBeUndefined()
   })
 
-  it("unwinds in reverse dependency order when a chain write fails", async () => {
+  it("retains the committed team and partial memberships when a chain write fails", async () => {
     clients = { use: recordingClient("team_memberships") }
 
     await expect(
       provisionTeam("use", "u1", "user@example.com", "east team"),
     ).rejects.toThrow(/boom team_memberships.*\(team team-new\)/)
 
-    // Reverse dependency order so nothing is deleted before its dependents.
-    expect(clients.use.deletes).toEqual([
-      "user_role_assignments",
-      "team_memberships",
-      "team_member",
-      "team",
-    ])
+    // The durable backend team survives local completion errors.
+    expect(clients.use.deletes).toEqual([])
     expect(mockConsumeGoogleSignupProof).not.toHaveBeenCalled()
   })
 
@@ -909,12 +919,7 @@ describe("provisionTeam", () => {
       await expect(
         provisionTeam("use", "u1", "user@example.com", "first"),
       ).rejects.toThrow("boom user_role_assignments")
-      expect(clients.use.deletes).toEqual([
-        "user_role_assignments",
-        "team_memberships",
-        "team_member",
-        "team",
-      ])
+      expect(clients.use.deletes).toEqual([])
       directoryState = {
         memberships: [{ teamId: "team-new", region: "use" }],
         degradedRegions: [],
@@ -963,7 +968,7 @@ describe("provisionTeam", () => {
       await expect(
         provisionTeam("use", "u1", "user@example.com", "overlap"),
       ).rejects.toThrow("Signup is not available")
-      expect(clients.use.writes.team).toHaveLength(1)
+      expect(clients.use.writes.team_member).toHaveLength(1)
     } finally {
       releaseMember()
       await first
@@ -1012,7 +1017,7 @@ describe("provisionTeam", () => {
 
       expect(mockEvaluateSignupRestriction).not.toHaveBeenCalled()
       expect(mockRequireGoogleSignupProof).not.toHaveBeenCalled()
-      expect(clients.use.writes.team).toHaveLength(1)
+      expect(clients.use.writes.team_member).toHaveLength(1)
     },
   )
 
@@ -1039,7 +1044,7 @@ describe("provisionTeam", () => {
 
     expect(mockRequireGoogleSignupProof).not.toHaveBeenCalled()
     expect(mockEvaluateSignupRestriction).not.toHaveBeenCalled()
-    expect(clients.use.writes.team).toHaveLength(1)
+    expect(clients.use.writes.team_member).toHaveLength(1)
   })
 
   it("allows an active joined Google member without a role to create another team", async () => {
@@ -1065,7 +1070,7 @@ describe("provisionTeam", () => {
 
     expect(mockRequireGoogleSignupProof).not.toHaveBeenCalled()
     expect(mockEvaluateSignupRestriction).not.toHaveBeenCalled()
-    expect(clients.use.writes.team).toHaveLength(1)
+    expect(clients.use.writes.team_member).toHaveLength(1)
   })
 
   it.each([false, true])(
@@ -1094,7 +1099,7 @@ describe("provisionTeam", () => {
 
       expect(mockRequireGoogleSignupProof).not.toHaveBeenCalled()
       expect(mockEvaluateSignupRestriction).not.toHaveBeenCalled()
-      expect(clients.use.writes.team).toHaveLength(1)
+      expect(clients.use.writes.team_member).toHaveLength(1)
     },
   )
 
@@ -1113,7 +1118,7 @@ describe("provisionTeam", () => {
     await provisionTeam("use", "u1", "user@example.com", "extra")
 
     expect(mockEvaluateSignupRestriction).not.toHaveBeenCalled()
-    expect(clients.use.writes.team).toHaveLength(1)
+    expect(clients.use.writes.team_member).toHaveLength(1)
   })
 
   it("does not treat a revoked RBAC owner assignment as completion", async () => {
@@ -1328,3 +1333,32 @@ describe("provisionTeam", () => {
     await provisionTeam("usw", "u1", "user@example.com", "west pilot")
   })
 })
+
+vi.mock("@/lib/api/promotion-publication", () => ({
+  publishAccountPromotion: async (
+    region: string,
+    user: { id: string },
+    observedAt: string,
+  ) => {
+    try {
+      await mockPublishPromotionIdentity(region, user.id, user, observedAt)
+      return { authorityUnavailable: false }
+    } catch {
+      return { authorityUnavailable: true }
+    }
+  },
+}))
+vi.mock("@/lib/api/promotion-device-evidence", () => ({
+  PromotionEvidenceError: class extends Error {},
+  recoverPromotionTeam: async () => null,
+  preparePromotionTeam: async (input: object) => ({
+    ...input,
+    teamId: "team-new",
+    attemptId: "backend-attempt",
+    state: "prepared",
+  }),
+  completePromotionTeam: async (input: object) => ({
+    ...input,
+    state: "completed",
+  }),
+}))

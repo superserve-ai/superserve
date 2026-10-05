@@ -15,6 +15,7 @@ import httpx
 
 from ._config import data_plane_target
 from ._http import api_request, async_api_request, async_stream_sse, stream_sse
+from ._routing_hint import routing_hint_headers
 from ._token_retry import async_with_token_retry, with_token_retry
 from .command_session import AsyncCommandSession, AsyncSpawnDeps, spawn_command
 from .errors import SandboxError
@@ -29,6 +30,8 @@ class CommandsDeps:
     sandbox_host: str
     get_access_token: Callable[[], str]
     refresh_activate: Callable[[], str]
+    refresh_expired_hint: Callable[[], str] | None = None
+    get_routing_hint: Callable[[], str | None] = lambda: None
 
 
 @dataclass(frozen=True)
@@ -39,6 +42,8 @@ class AsyncCommandsDeps:
     sandbox_host: str
     get_access_token: Callable[[], str]
     refresh_activate: Callable[[], Awaitable[str]]
+    refresh_expired_hint: Callable[[], Awaitable[str]] | None = None
+    get_routing_hint: Callable[[], str | None] = lambda: None
 
 
 class Commands:
@@ -103,7 +108,11 @@ class Commands:
             return api_request(
                 "POST",
                 f"{self._data_plane_base_url}/exec",
-                headers={**self._routing_headers, "X-Access-Token": token},
+                headers={
+                    **self._routing_headers,
+                    **routing_hint_headers(self._deps.get_routing_hint),
+                    "X-Access-Token": token,
+                },
                 json_body=body,
                 timeout=float(timeout_seconds) + 5.0
                 if timeout_seconds is not None
@@ -112,7 +121,11 @@ class Commands:
             )
 
         raw: dict[str, Any] = with_token_retry(
-            self._deps.get_access_token, self._deps.refresh_activate, send
+            self._deps.get_access_token,
+            self._deps.refresh_activate,
+            send,
+            self._deps.get_routing_hint,
+            self._deps.refresh_expired_hint,
         )
         return CommandResult(
             stdout=raw.get("stdout", ""),
@@ -131,7 +144,11 @@ class Commands:
         def send(token: str) -> CommandResult:
             return self._consume_stream(
                 f"{self._data_plane_base_url}/exec/stream",
-                {**self._routing_headers, "X-Access-Token": token},
+                {
+                    **self._routing_headers,
+                    **routing_hint_headers(self._deps.get_routing_hint),
+                    "X-Access-Token": token,
+                },
                 body,
                 on_stdout,
                 on_stderr,
@@ -141,7 +158,11 @@ class Commands:
         # Safe for streaming: the resumable status (401/503) arrives before any
         # SSE data is written, so a retry can't double-emit callbacks.
         return with_token_retry(
-            self._deps.get_access_token, self._deps.refresh_activate, send
+            self._deps.get_access_token,
+            self._deps.refresh_activate,
+            send,
+            self._deps.get_routing_hint,
+            self._deps.refresh_expired_hint,
         )
 
     def _consume_stream(
@@ -273,6 +294,8 @@ class AsyncCommands:
                 sandbox_id=self._deps.sandbox_id,
                 sandbox_host=self._deps.sandbox_host,
                 get_access_token=self._deps.get_access_token,
+                get_routing_hint=self._deps.get_routing_hint,
+                refresh_expired_hint=self._deps.refresh_expired_hint,
                 refresh_activate=self._deps.refresh_activate,
             ),
             command,
@@ -292,7 +315,11 @@ class AsyncCommands:
             return await async_api_request(
                 "POST",
                 f"{self._data_plane_base_url}/exec",
-                headers={**self._routing_headers, "X-Access-Token": token},
+                headers={
+                    **self._routing_headers,
+                    **routing_hint_headers(self._deps.get_routing_hint),
+                    "X-Access-Token": token,
+                },
                 json_body=body,
                 timeout=float(timeout_seconds) + 5.0
                 if timeout_seconds is not None
@@ -301,7 +328,11 @@ class AsyncCommands:
             )
 
         raw: dict[str, Any] = await async_with_token_retry(
-            self._deps.get_access_token, self._deps.refresh_activate, send
+            self._deps.get_access_token,
+            self._deps.refresh_activate,
+            send,
+            self._deps.get_routing_hint,
+            self._deps.refresh_expired_hint,
         )
         return CommandResult(
             stdout=raw.get("stdout", ""),
@@ -320,7 +351,11 @@ class AsyncCommands:
         async def send(token: str) -> CommandResult:
             return await self._consume_stream(
                 f"{self._data_plane_base_url}/exec/stream",
-                {**self._routing_headers, "X-Access-Token": token},
+                {
+                    **self._routing_headers,
+                    **routing_hint_headers(self._deps.get_routing_hint),
+                    "X-Access-Token": token,
+                },
                 body,
                 on_stdout,
                 on_stderr,
@@ -328,7 +363,11 @@ class AsyncCommands:
             )
 
         return await async_with_token_retry(
-            self._deps.get_access_token, self._deps.refresh_activate, send
+            self._deps.get_access_token,
+            self._deps.refresh_activate,
+            send,
+            self._deps.get_routing_hint,
+            self._deps.refresh_expired_hint,
         )
 
     async def _consume_stream(

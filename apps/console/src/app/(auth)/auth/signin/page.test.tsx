@@ -92,6 +92,10 @@ const mockSignInWithPassword = vi.fn()
 const mockSignInWithOAuth = vi.fn()
 const mockGetUser = vi.fn()
 const mockSignOut = vi.fn()
+const mockBeginGoogleSignIn = vi.fn()
+vi.mock("./google-action", () => ({
+  beginGoogleSignIn: () => mockBeginGoogleSignIn(),
+}))
 
 vi.mock("@/lib/supabase/client", () => ({
   createBrowserClient: () => ({
@@ -116,6 +120,7 @@ describe("SignInPage", () => {
     mockSignInWithPassword.mockReset()
     mockSignInWithOAuth.mockReset()
     mockSignOut.mockReset()
+    mockBeginGoogleSignIn.mockReset().mockResolvedValue("signin-origin")
     mockCapture.mockReset()
     searchParamsMap = {}
     // Default: no existing session
@@ -279,9 +284,27 @@ describe("SignInPage", () => {
     await waitFor(() => {
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
-        options: { redirectTo: expect.stringContaining("/auth/callback") },
+        options: {
+          queryParams: { prompt: "select_account" },
+          redirectTo: expect.stringContaining(
+            "google_signin_intent=signin-origin",
+          ),
+        },
       })
     })
+  })
+
+  it("continues Google sign-in when optional origin retention is unavailable", async () => {
+    mockBeginGoogleSignIn.mockResolvedValue(undefined)
+    mockSignInWithOAuth.mockResolvedValue({ error: null })
+    render(<SignInPage />)
+    await user.click(
+      await screen.findByRole("button", { name: /Continue with Google/ }),
+    )
+    await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalled())
+    expect(
+      mockSignInWithOAuth.mock.calls[0][0].options.redirectTo,
+    ).not.toContain("google_signin_intent")
   })
 
   it("has links to sign up and forgot password", async () => {

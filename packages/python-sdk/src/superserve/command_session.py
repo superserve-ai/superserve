@@ -16,6 +16,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Union
 
+from ._routing_hint import routing_hint_expired
 from .errors import SandboxError
 from .types import CommandResult
 
@@ -48,6 +49,8 @@ class AsyncSpawnDeps:
     sandbox_host: str
     get_access_token: Callable[[], str]
     refresh_activate: Callable[[], Awaitable[str]]
+    refresh_expired_hint: Callable[[], Awaitable[str]] | None = None
+    get_routing_hint: Callable[[], str | None] = lambda: None
 
 
 async def spawn_command(
@@ -90,16 +93,22 @@ async def _dial_with_resume(websockets: Any, deps: AsyncSpawnDeps, uri: str) -> 
     # A failed dial usually means a stale token or a paused sandbox, both fixed
     # by activating (which resumes and rotates the token). Retry once on
     # connection-level errors only, so a programming bug surfaces immediately.
+    if routing_hint_expired(deps.get_routing_hint):
+        await (deps.refresh_expired_hint or deps.refresh_activate)()
     try:
-        return await _dial(websockets, uri, deps.get_access_token())
+        return await _dial(
+            websockets, uri, deps.get_access_token(), deps.get_routing_hint()
+        )
     except (OSError, websockets.exceptions.WebSocketException):
         token = await deps.refresh_activate()
-        return await _dial(websockets, uri, token)
+        return await _dial(websockets, uri, token, deps.get_routing_hint())
 
 
-async def _dial(websockets: Any, uri: str, token: str) -> Any:
+async def _dial(websockets: Any, uri: str, token: str, hint: str | None = None) -> Any:
     return await websockets.connect(
-        uri, subprotocols=[_EXEC_SUBPROTOCOL, _TOKEN_PREFIX + token]
+        uri,
+        subprotocols=[_EXEC_SUBPROTOCOL, _TOKEN_PREFIX + token]
+        + (["route." + hint] if hint else []),
     )
 
 

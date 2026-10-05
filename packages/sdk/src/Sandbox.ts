@@ -121,6 +121,9 @@ export class Sandbox {
   readonly files: Files
 
   private _accessToken: string
+  private _routingHint?: string
+  private _routeRevision = 0
+  private _appliedRouteRevision = 0
   private _refreshInFlight: Promise<string> | null = null
   private readonly _config: ResolvedConfig
 
@@ -129,6 +132,7 @@ export class Sandbox {
     info: SandboxInfo,
     accessToken: string,
     config: ResolvedConfig,
+    routingHint?: string,
   ) {
     this.id = info.id
     this.name = info.name
@@ -137,18 +141,21 @@ export class Sandbox {
     this.previewAccess = info.previewAccess
     this.secrets = info.secrets
     this._accessToken = accessToken
+    this._routingHint = routingHint
     this._config = config
 
     this.commands = new Commands({
       sandboxId: this.id,
       sandboxHost: config.sandboxHost,
       getAccessToken: () => this._accessToken,
+      getRoutingHint: () => this._routingHint,
       refreshActivate: () => this._refreshActivate(),
     })
     this.files = new Files({
       sandboxId: this.id,
       sandboxHost: config.sandboxHost,
       getAccessToken: () => this._accessToken,
+      getRoutingHint: () => this._routingHint,
       refreshActivate: () => this._refreshActivate(),
     })
   }
@@ -162,6 +169,7 @@ export class Sandbox {
     endpoint: "resume" | "activate",
     signal?: AbortSignal,
   ): Promise<string> {
+    const revision = ++this._routeRevision
     const raw = await request<ApiSandboxResponse>({
       method: "POST",
       url: `${this._config.baseUrl}/sandboxes/${this.id}/${endpoint}`,
@@ -173,7 +181,11 @@ export class Sandbox {
         `Invalid API response from POST /sandboxes/${this.id}/${endpoint}: missing access_token`,
       )
     }
-    this._accessToken = raw.access_token
+    if (revision > this._appliedRouteRevision) {
+      this._appliedRouteRevision = revision
+      this._accessToken = raw.access_token
+      this._routingHint = raw.routing_hint
+    }
     return this._accessToken
   }
 
@@ -251,7 +263,12 @@ export class Sandbox {
         "Invalid API response from POST /sandboxes: missing access_token",
       )
     }
-    return new Sandbox(toSandboxInfo(raw), raw.access_token, config)
+    return new Sandbox(
+      toSandboxInfo(raw),
+      raw.access_token,
+      config,
+      raw.routing_hint,
+    )
   }
 
   /**
@@ -283,7 +300,12 @@ export class Sandbox {
         `Invalid API response from POST /sandboxes/${sandboxId}/activate: missing access_token`,
       )
     }
-    return new Sandbox(toSandboxInfo(raw), raw.access_token, config)
+    return new Sandbox(
+      toSandboxInfo(raw),
+      raw.access_token,
+      config,
+      raw.routing_hint,
+    )
   }
 
   /**

@@ -73,7 +73,9 @@ describe("observeFingerprintSignup", () => {
           }),
       )
 
+      const attestationFailed = vi.fn()
       const result = resolveFingerprintSignup({
+        onAttestationFailed: attestationFailed,
         eventId: "event-1",
         signupMethod: "email",
       })
@@ -92,6 +94,7 @@ describe("observeFingerprintSignup", () => {
       await vi.advanceTimersByTimeAsync(1)
 
       await expect(result).resolves.toBeNull()
+      expect(attestationFailed).toHaveBeenCalledOnce()
       expect(after).not.toHaveBeenCalled()
       expect(trackEvent).not.toHaveBeenCalled()
     } finally {
@@ -355,3 +358,114 @@ describe("observeFingerprintSignup", () => {
     expect(after).not.toHaveBeenCalled()
   })
 })
+
+vi.mock("@/lib/api/promotion-device-evidence", () => ({
+  verifyPromotionSignupAttempt: vi.fn(),
+}))
+import { verifyPromotionSignupAttempt } from "@/lib/api/promotion-device-evidence"
+
+it.each([
+  "valid",
+  "wrong challenge",
+  "wrong event",
+  "no timestamp",
+  "verify failed",
+])(
+  "attests the exact signup event with one provider lookup: %s",
+  async (mode) => {
+    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+    const capture = {
+      attemptId: "attempt",
+      challenge: "challenge",
+      eventId: "event",
+    }
+    const verified = vi.fn()
+    const attestationFailed = vi.fn()
+    vi.mocked(verifyPromotionSignupAttempt)
+      .mockReset()
+      .mockResolvedValue("verified")
+    if (mode === "verify failed")
+      vi.mocked(verifyPromotionSignupAttempt).mockRejectedValue(
+        new Error("unavailable"),
+      )
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        event_id: mode === "wrong event" ? "other" : "event",
+        identification: { visitor_id: "ServerVisitor", visitor_found: true },
+        tags: {
+          signup_challenge: mode === "wrong challenge" ? "other" : "challenge",
+        },
+        timestamp: mode === "no timestamp" ? undefined : 1790899200000,
+        vpn: true,
+      }),
+    )
+    const visitor = await resolveFingerprintSignup({
+      eventId: capture.eventId,
+      signupMethod: "email",
+      capture,
+      onAttested: verified,
+      onAttestationFailed: attestationFailed,
+    })
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(fetchSpy.mock.calls[0][1]?.headers).toEqual({
+      Authorization: "Bearer server-secret",
+    })
+    expect(visitor).toBe(mode === "wrong event" ? null : "ServerVisitor")
+    expect(verified).toHaveBeenCalledTimes(mode === "valid" ? 1 : 0)
+    expect(attestationFailed).toHaveBeenCalledTimes(
+      mode === "verify failed" || mode === "wrong event" ? 1 : 0,
+    )
+    if (mode === "valid") {
+      expect(verifyPromotionSignupAttempt).toHaveBeenCalledWith({
+        ...capture,
+        fingerprint: "ServerVisitor",
+        eventAt: "2026-10-02T00:00:00.000Z",
+      })
+      const callback = vi.mocked(after).mock.calls[0][0] as () => Promise<void>
+      await callback()
+      expect(trackEvent).toHaveBeenCalledWith(
+        expect.any(String),
+        "event",
+        expect.objectContaining({ vpn: true, visitor_id: "ServerVisitor" }),
+      )
+    }
+  },
+)
+
+it.each([
+  "network",
+  "http",
+  "invalid json",
+  "malformed",
+  "unconfigured",
+  "absent event",
+])(
+  "distinguishes provider authority failure from missing capture: %s",
+  async (mode) => {
+    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+    const failed = vi.fn()
+    const attested = vi.fn()
+    const lookup = vi.spyOn(globalThis, "fetch")
+    if (mode === "network") lookup.mockRejectedValue(new Error("network down"))
+    else if (mode === "http")
+      lookup.mockResolvedValue(new Response(null, { status: 503 }))
+    else if (mode === "invalid json")
+      lookup.mockResolvedValue(new Response("not json"))
+    else
+      lookup.mockResolvedValue(
+        Response.json({ event_id: "event", identification: {} }),
+      )
+    if (mode === "unconfigured") delete process.env.FINGERPRINT_SECRET_API_KEY
+    const result = await resolveFingerprintSignup({
+      eventId: mode === "absent event" ? "" : "event",
+      signupMethod: "email",
+      onAttestationFailed: failed,
+      onAttested: attested,
+    })
+    expect(result).toBeNull()
+    expect(failed).toHaveBeenCalledTimes(mode === "absent event" ? 0 : 1)
+    expect(attested).not.toHaveBeenCalled()
+    if (mode === "unconfigured" || mode === "absent event")
+      expect(lookup).not.toHaveBeenCalled()
+  },
+)

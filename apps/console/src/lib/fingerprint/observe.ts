@@ -1,7 +1,10 @@
 import { after } from "next/server"
 
+import { verifyPromotionSignupAttempt } from "@/lib/api/promotion-device-evidence"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
+
+import type { SignupFingerprintCapture } from "./client"
 
 const FINGERPRINT_EVENT_TIMEOUT_MS = 1500
 const DEFAULT_FINGERPRINT_SERVER_API = "https://api.fpjs.io"
@@ -12,6 +15,10 @@ export type FingerprintSignupObservation = {
   getObservationUserId?: () => string | null
   signupMethod: "email" | "google"
   signupAttemptId?: string
+  capture?: SignupFingerprintCapture
+  onAttested?: () => void
+  // Provider lookup and backend attestation failures both make evidence unavailable.
+  onAttestationFailed?: () => void
 }
 
 type FingerprintNormalizedEvent = {
@@ -197,11 +204,18 @@ export async function resolveFingerprintSignup({
   eventId,
   userId = null,
   getObservationUserId,
+  capture,
+  onAttested,
+  onAttestationFailed,
   signupMethod,
   signupAttemptId,
 }: FingerprintSignupObservation): Promise<string | null> {
   const secretApiKey = process.env.FINGERPRINT_SECRET_API_KEY
-  if (!secretApiKey || !eventId) return null
+  if (!eventId) return null
+  if (!secretApiKey) {
+    onAttestationFailed?.()
+    return null
+  }
 
   const baseUrl =
     process.env.FINGERPRINT_SERVER_API_URL || DEFAULT_FINGERPRINT_SERVER_API
@@ -217,14 +231,17 @@ export async function resolveFingerprintSignup({
     )
 
     if (!response.ok) {
+      onAttestationFailed?.()
       console.warn("Fingerprint observation lookup failed", {
         status: response.status,
       })
       return null
     }
 
-    const event = normalizeFingerprintEvent(await response.json(), eventId)
+    const payload: unknown = await response.json()
+    const event = normalizeFingerprintEvent(payload, eventId)
     if (!event) {
+      onAttestationFailed?.()
       console.warn("Fingerprint observation response was malformed")
       return null
     }
@@ -269,8 +286,35 @@ export async function resolveFingerprintSignup({
     } catch {
       /* Observation cannot affect signup. */
     }
+    if (capture && capture.eventId === eventId && isRecord(payload)) {
+      const tags = recordOrNull(payload.tags)
+      const timestamp = payload.timestamp
+      const eventAt =
+        typeof timestamp === "number" || typeof timestamp === "string"
+          ? new Date(timestamp).getTime()
+          : NaN
+      if (
+        tags?.signup_challenge === capture.challenge &&
+        Number.isFinite(eventAt)
+      ) {
+        try {
+          await verifyPromotionSignupAttempt({
+            attemptId: capture.attemptId,
+            challenge: capture.challenge,
+            eventId: event.providerEventId,
+            fingerprint: event.visitorId,
+            eventAt: new Date(eventAt).toISOString(),
+          })
+          onAttested?.()
+        } catch {
+          onAttestationFailed?.()
+          console.warn("Promotion signup attestation unavailable")
+        }
+      }
+    }
     return event.visitorId
   } catch {
+    onAttestationFailed?.()
     console.warn("Fingerprint observation failed open")
     return null
   }

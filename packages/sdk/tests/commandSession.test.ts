@@ -278,6 +278,25 @@ describe("Commands.spawn", () => {
     expect(removed).toBe(1)
   })
 
+  it("refreshes an expired route before the first successful handshake", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    let hint = "v1." + btoa(JSON.stringify({ e: 1 })) + ".sig"
+    const refresh = vi.fn(async () => {
+      expect(instances).toHaveLength(0)
+      hint = "fresh"
+      return "tok-initial"
+    })
+    const session = await new Commands(
+      makeDeps({ getRoutingHint: () => hint, refreshActivate: refresh }),
+    ).spawn("echo once")
+    expect(refresh).toHaveBeenCalledOnce()
+    expect(instances).toHaveLength(1)
+    expect(last().protocols).toContain("route.fresh")
+    expect(last().sent).toHaveLength(1)
+    last()._emit(`{"finished":true,"exit_code":0}`)
+    await session.wait()
+  })
+
   it("resumes and retries once when the first dial fails", async () => {
     vi.stubGlobal("WebSocket", FakeWebSocket)
     // First socket fails to open; the rest open normally.
@@ -291,16 +310,26 @@ describe("Commands.spawn", () => {
       }
     }
 
-    const refresh = vi.fn(async () => "tok-refreshed")
-    const commands = new Commands(makeDeps({ refreshActivate: refresh }))
+    let hint = "old-route"
+    const refresh = vi.fn(async () => {
+      hint = "fresh-route"
+      return "tok-refreshed"
+    })
+    const commands = new Commands(
+      makeDeps({ refreshActivate: refresh, getRoutingHint: () => hint }),
+    )
 
     const session = await commands.spawn("run")
     expect(refresh).toHaveBeenCalledOnce()
     expect(instances).toHaveLength(2)
+    expect(instances[0].protocols).toContain("route.old-route")
+    expect(instances[0].sent).toHaveLength(0)
     expect(last().protocols).toEqual([
       "superserve.exec.v1",
       "token.tok-refreshed",
+      "route.fresh-route",
     ])
+    expect(last().sent).toHaveLength(1)
 
     last()._emit(`{"finished":true,"exit_code":0}`)
     await session.wait()
@@ -344,4 +373,18 @@ describe("Commands.spawn", () => {
     expect(result.stderr).toBe("boom")
     expect(result.exitCode).toBe(0)
   })
+})
+
+it("sends a separate live routing-hint subprotocol without changing the auth token", async () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket)
+  const deps = makeDeps({ getRoutingHint: () => "signed-hint" })
+  const session = await new Commands(deps).spawn("echo once")
+  expect(last().protocols).toEqual([
+    "superserve.exec.v1",
+    "token.tok-initial",
+    "route.signed-hint",
+  ])
+  session.close()
+  vi.unstubAllGlobals()
+  instances.length = 0
 })

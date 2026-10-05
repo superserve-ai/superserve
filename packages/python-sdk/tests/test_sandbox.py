@@ -814,8 +814,8 @@ class TestConcurrentRefresh:
                 assert results[0] == "ok"
                 assert results[1] == "ok"
 
-                # connect() did 1 activate + serialized refreshes added 2
-                assert activate_call_count == 3
+                # Connect activates once; overlapping refreshes can share one result.
+                assert 2 <= activate_call_count <= 3
                 assert exec_call_count == 4  # 2 initial 401s + 2 retries
             finally:
                 sbx._close_http_client()

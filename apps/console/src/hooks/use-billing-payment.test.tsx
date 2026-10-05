@@ -1,3 +1,6 @@
+vi.mock("@/hooks/use-user", () => ({
+  useUser: () => ({ user: { id: "u1" }, loading: false }),
+}))
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, renderHook } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest"
@@ -10,12 +13,16 @@ import { useBillingPayment } from "./use-billing-payment"
 const mocks = vi.hoisted(() => ({
   checkout: vi.fn(),
   portal: vi.fn(),
+  publishEvidence: vi.fn(),
   toast: vi.fn(),
   scope: vi.fn(),
 }))
 vi.mock("@/lib/api/billing-stripe", () => ({
   createStripeCheckoutSession: mocks.checkout,
   createStripeCustomerPortalSession: mocks.portal,
+}))
+vi.mock("@/lib/api/billing-actions", () => ({
+  publishBillingPromotionEvidence: mocks.publishEvidence,
 }))
 vi.mock("@/components/query-provider", () => ({ useQueryScope: mocks.scope }))
 vi.mock("@superserve/ui", () => ({
@@ -42,8 +49,10 @@ function setup(value = summary) {
   return { ...hook, client }
 }
 beforeEach(() => {
+  sessionStorage.clear()
   vi.clearAllMocks()
   mocks.scope.mockReturnValue("self")
+  mocks.publishEvidence.mockResolvedValue("published")
   window.history.replaceState({}, "", "/sandboxes/?tab=one")
 })
 
@@ -60,6 +69,8 @@ it("keeps checkout return conventions and blocks duplicate submission", async ()
     pending = result.current.openSession()
     void result.current.openSession()
   })
+  expect(mocks.publishEvidence).not.toHaveBeenCalled()
+  expect(result.current.submitting).toBe("checkout")
   expect(mocks.checkout).toHaveBeenCalledTimes(1)
   const params = mocks.checkout.mock.calls[0][0]
   expect(new URL(params.successUrl).searchParams.get("billing")).toBe("success")
@@ -113,7 +124,7 @@ it.each([false, true])(
       },
     )
     let pending!: Promise<void>
-    act(() => {
+    await act(async () => {
       pending = result.current.banner.openSession()
       void result.current.billingPage.openSession()
     })

@@ -2,9 +2,14 @@ import type { User } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
 
 import { getImpersonationContext } from "@/lib/admin/impersonation"
-import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
 import {
-  ensureAuthApiKeyForTeam,
+  checkoutAssertion,
+  readCheckoutIntent,
+  signCheckoutIntent,
+  validOperationId,
+} from "@/lib/api/checkout-intent"
+import { publishAccountPromotion } from "@/lib/api/promotion-publication"
+import {
   getAuthApiKeyAndTeamForRecovery,
   getAuthApiKeyAndTeamForUser,
   getAuthApiKeyForUser,
@@ -33,6 +38,7 @@ const ALLOWED_PREFIXES = [
   "snapshots",
   "providers",
   "billing/summary",
+  "billing/pricing",
   "billing/usage-series",
 ]
 
@@ -273,7 +279,7 @@ async function proxyRequest(
   const upstreamUrl = new URL(`${apiBaseUrl}/${joinedPath}`)
   upstreamUrl.search = url.search
 
-  const body =
+  let body: ArrayBuffer | string | undefined =
     request.method !== "GET" && request.method !== "HEAD"
       ? await request.arrayBuffer()
       : undefined
@@ -288,7 +294,6 @@ async function proxyRequest(
       )
     }
     const checkoutUser = user
-    const checkoutObservedAt = authObservedAt
     const recoveryHeaders = new Headers(headers)
     recoveryHeaders.delete("content-length")
     recoveryHeaders.set("content-type", "application/json")
@@ -301,15 +306,12 @@ async function proxyRequest(
         headers: recoveryHeaders,
         body: "{}",
       })
-    const ensureCheckoutKey = async (recoveryRepair = false) => {
+    const ensureCheckoutKey = async () => {
       if (!checkoutTeam) throw new Error("Billing team unavailable")
-      const ensuredKey = recoveryRepair
-        ? await repairRecoveryAuthApiKeyForTeam(checkoutUser, checkoutTeam)
-        : await ensureAuthApiKeyForTeam(
-            checkoutUser,
-            checkoutTeam,
-            checkoutObservedAt,
-          )
+      const ensuredKey = await repairRecoveryAuthApiKeyForTeam(
+        checkoutUser,
+        checkoutTeam,
+      )
       if (ensuredKey !== headers.get("X-API-Key")) {
         throw new Error("Billing team changed during Checkout preflight")
       }
@@ -333,7 +335,7 @@ async function proxyRequest(
       // Checkout. Repair it, then retry recovery before considering creation.
       if (recovery.status === 401) {
         try {
-          await ensureCheckoutKey(true)
+          await ensureCheckoutKey()
           recovery = await attemptRecovery()
         } catch {
           return NextResponse.json(
@@ -365,14 +367,113 @@ async function proxyRequest(
           impersonationContext?.teamId ?? null,
         )
       }
-      if (!teamRegion) throw new Error("Billing team region unavailable")
-      await publishPromotionIdentity(
-        teamRegion,
-        checkoutUser.id,
-        checkoutUser,
-        checkoutObservedAt,
-      )
+      if (!teamRegion || !checkoutTeam)
+        throw new Error("Billing team region unavailable")
+      let input: Record<string, unknown>
+      try {
+        input = JSON.parse(new TextDecoder().decode(body as ArrayBuffer))
+      } catch {
+        return NextResponse.json(
+          {
+            error: {
+              code: "invalid_request",
+              message: "Invalid Checkout request",
+            },
+          },
+          { status: 400 },
+        )
+      }
+      if (input.prepare === true) {
+        if (
+          !validOperationId(input.operation_id) ||
+          typeof input.success_url !== "string" ||
+          typeof input.cancel_url !== "string"
+        )
+          return NextResponse.json(
+            {
+              error: {
+                code: "invalid_request",
+                message: "Checkout operation and redirects are required",
+              },
+            },
+            { status: 400 },
+          )
+        if (
+          [input.success_url, input.cancel_url].some((value) => {
+            try {
+              return new URL(value as string).origin !== request.nextUrl.origin
+            } catch {
+              return true
+            }
+          })
+        )
+          return NextResponse.json(
+            {
+              error: {
+                code: "invalid_request",
+                message: "Invalid Checkout redirects",
+              },
+            },
+            { status: 400 },
+          )
+        const publication = await publishAccountPromotion(
+          teamRegion,
+          user,
+          authObservedAt,
+        )
+        const receipt = signCheckoutIntent({
+          actor: user.id,
+          team: checkoutTeam.teamId,
+          operation_id: input.operation_id,
+          home_region: teamRegion,
+          decision: publication.authorityUnavailable
+            ? "publication_failed"
+            : "standard",
+          success_url: input.success_url,
+          cancel_url: input.cancel_url,
+        })
+        return NextResponse.json(
+          { receipt },
+          { headers: { "cache-control": "private, no-store" } },
+        )
+      }
+      if (!input.receipt)
+        return NextResponse.json(
+          {
+            error: {
+              code: "checkout_intent_required",
+              message:
+                "The original Checkout intent is required; please retry from billing",
+            },
+          },
+          { status: 409 },
+        )
+      let intent
+      try {
+        intent = readCheckoutIntent(
+          input.receipt,
+          user.id,
+          checkoutTeam.teamId,
+          teamRegion,
+        )
+      } catch {
+        return NextResponse.json(
+          {
+            error: {
+              code: "invalid_checkout_intent",
+              message: "Checkout intent does not match this account and team",
+            },
+          },
+          { status: 400 },
+        )
+      }
       await ensureCheckoutKey()
+      const { actor: _actor, team: _team, ...fields } = intent
+      body = JSON.stringify(fields)
+      headers.delete("content-length")
+      headers.set("content-type", "application/json")
+      headers.set("X-Promotion-Account-Assertion", checkoutAssertion(intent))
+      upstreamUrl.pathname = "/stripe/checkout-session/publication-decision"
     } catch {
       console.error("Promotion identity publication failed", {
         operation: "upsert_profile_with_promotion_identity",

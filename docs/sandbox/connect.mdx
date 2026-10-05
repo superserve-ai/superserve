@@ -63,3 +63,22 @@ for info in prod:
 </CodeGroup>
 
 `list()` returns an array of [`SandboxInfo`](/sdk-reference/sandbox#sandboxinfo) - no live `sandbox` is constructed. Call `Sandbox.connect(id)` when you need one.
+
+## Automatic routing hints
+
+Current TypeScript and Python SDKs carry the optional `routing_hint` returned by
+create, connect/activate, and resume on command, file, and session requests.
+The proxy uses this signed hint to select the sandbox's logical host without
+looking up ownership on every new sandbox request. Authorization is unchanged.
+
+Raw HTTP callers can opt in by passing the response's `routing_hint` as
+`X-Superserve-Routing-Hint` alongside `X-Access-Token`. Replace both values after
+resume or activate. For a WebSocket session, add `route.<routing_hint>` to the
+subprotocol list alongside `superserve.exec.v1` and `token.<access_token>`.
+Callers that omit the hint keep working through ownership lookup, including its
+existing latency and capacity limits.
+
+Hints expire after one hour. SDKs refresh expired hints before their next
+operation and refresh a rejected stale route once through activate. A routing
+hint grants no access by itself. Never replay a command after an ambiguous
+connection loss or timeout: it may already have executed.

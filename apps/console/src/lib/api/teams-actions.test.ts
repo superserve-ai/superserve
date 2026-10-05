@@ -238,7 +238,7 @@ import {
 } from "@/lib/auth/signup-restrictions"
 
 import {
-  createTeamAction,
+  createTeamAction as createActualTeamAction,
   listTeamsAction,
   setActiveTeamAction,
 } from "./teams-actions"
@@ -247,6 +247,14 @@ async function createAllowedTeam(name: string, region?: string) {
   const result = await createTeamAction(name, region)
   if ("code" in result) throw new Error(result.message)
   return result
+}
+
+function createTeamAction(name: string, region?: string) {
+  return createActualTeamAction(
+    name,
+    region,
+    "11111111-1111-4111-8111-111111111111",
+  )
 }
 
 describe("createTeamAction", () => {
@@ -321,15 +329,16 @@ describe("createTeamAction", () => {
       currentUser,
       expect.any(String),
     )
-    expect(writes.team).toEqual([{ name: "west pilot", home_region: "usw" }])
+    expect(writes.team).toBeUndefined()
     expect(writes.team_member).toEqual([
       { team_id: "team-new", profile_id: "u1", role: "owner" },
     ])
     expect(writes.team_memberships).toEqual([
-      { team_id: "team-new", user_id: "u1", status: "active" },
+      { id: "team-new", team_id: "team-new", user_id: "u1", status: "active" },
     ])
     expect(writes.user_role_assignments).toEqual([
       {
+        id: "team-new",
         user_id: "u1",
         role_id: "role-owner",
         scope_type: "team",
@@ -351,9 +360,7 @@ describe("createTeamAction", () => {
     const team = await createAllowedTeam("east team")
 
     expect(team.region).toBe("use")
-    expect(cellClients.use.writes.team).toEqual([
-      { name: "east team", home_region: "use" },
-    ])
+    expect(cellClients.use.writes.team).toBeUndefined()
     expect(cellClients.usw.from).not.toHaveBeenCalled()
   })
 
@@ -438,9 +445,7 @@ describe("createTeamAction", () => {
 
     expect(team).toEqual({ id: "team-new", name: "west pilot", region: "usw" })
     expect(mockRequireGoogleSignupProof).not.toHaveBeenCalled()
-    expect(cellClients.usw.writes.team).toEqual([
-      { name: "west pilot", home_region: "usw" },
-    ])
+    expect(cellClients.usw.writes.team).toBeUndefined()
   })
 
   it("fails transiently when a degraded empty lookup cannot be recovered", async () => {
@@ -524,3 +529,32 @@ describe("active team", () => {
     expect((await listTeamsAction()).activeTeamId).toBe("team-b")
   })
 })
+
+vi.mock("@/lib/api/promotion-publication", () => ({
+  publishAccountPromotion: async (
+    region: string,
+    user: { id: string },
+    observedAt: string,
+  ) => {
+    try {
+      await mockPublishPromotionIdentity(region, user.id, user, observedAt)
+      return { authorityUnavailable: false }
+    } catch {
+      return { authorityUnavailable: true }
+    }
+  },
+}))
+vi.mock("@/lib/api/promotion-device-evidence", () => ({
+  PromotionEvidenceError: class extends Error {},
+  recoverPromotionTeam: async () => null,
+  preparePromotionTeam: async (input: object) => ({
+    ...input,
+    teamId: "team-new",
+    attemptId: "backend-attempt",
+    state: "prepared",
+  }),
+  completePromotionTeam: async (input: object) => ({
+    ...input,
+    state: "completed",
+  }),
+}))

@@ -6,6 +6,7 @@ from ._config import (
     RESERVED_PREVIEW_PORT,
     preview_url,
 )
+from ._http import async_connection_pool
 from .async_sandbox import AsyncSandbox
 from .async_secrets import AsyncSecret
 from .async_snapshots import AsyncSnapshot
@@ -65,7 +66,7 @@ from .types import (
     WorkdirStep,
 )
 
-__version__ = "0.9.2"
+__version__ = "0.9.3"
 
 __all__ = [
     "AsyncCommandSession",
@@ -74,6 +75,7 @@ __all__ = [
     "AsyncSecret",
     "AsyncSnapshot",
     "AsyncTemplate",
+    "async_connection_pool",
     "AuthenticationError",
     "BuildError",
     "BuildLogEvent",

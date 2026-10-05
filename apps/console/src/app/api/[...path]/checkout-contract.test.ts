@@ -1,95 +1,72 @@
-import { readFileSync } from "node:fs"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
+import crypto from "node:crypto"
 
 import { NextRequest } from "next/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-// Backend promotion identity and Checkout recovery contract at commit
-// 4e3b32e6d39c4c24ff6a371a206bc0daf50ee802:
-// api/openapi.yaml, internal/api/handlers_billing_checkout_recovery.go, and
-// supabase/migrations/20260924191820_canonical_promotion_identity.sql.
-const backendContract = {
-  writer: "upsert_profile_with_promotion_identity",
-  writerArguments: [
-    "p_user_id",
-    "p_email",
-    "p_email_verified",
-    "p_auth_updated_at",
-    "p_observed_at",
-  ],
-  recoveryPath: "/stripe/checkout-session/recover",
-  creationPath: "/stripe/checkout-session",
-  unavailableCode: "checkout_recovery_unavailable",
-  recovered: {
-    outcome: "recovered",
-    id: "cs_original",
-    url: "https://checkout.stripe.test/original",
-    checkout_generation: "2026-09-24T18:00:00.123456Z",
-  },
-} as const
+import {
+  readCheckoutIntent,
+  signCheckoutIntent,
+} from "@/lib/api/checkout-intent"
 
-function pinnedBackendFile(path: string): string {
-  const fixtureDirectory = join(
-    dirname(fileURLToPath(import.meta.url)),
-    "fixtures/promotion-checkout-contract",
-  )
-  return readFileSync(join(fixtureDirectory, `${path}.txt`), "utf8")
-}
-
-const calls: string[] = []
-const rpc = vi.fn()
-const fetchBackend = vi.fn()
-vi.stubGlobal("fetch", fetchBackend)
-
+const mocks = vi.hoisted(() => ({
+  rpc: vi.fn(),
+  fetch: vi.fn(),
+  repair: vi.fn(),
+  context: vi.fn(),
+  evidence: vi.fn(),
+  register: vi.fn(),
+}))
 vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
   cellFor: (region: string) => ({
-    region,
     apiBaseUrl: `https://api-${region}.test`,
-    createAdminClient: () => ({
-      rpc: (name: string, args: unknown) => rpc(region, name, args),
-    }),
+    createAdminClient: () => ({ rpc: mocks.rpc }),
   }),
 }))
-vi.mock("@/lib/supabase/server", () => ({ createServerClient: vi.fn() }))
+vi.mock("@/lib/supabase/server", () => ({
+  createServerClient: async () => ({
+    auth: { getUser: async () => ({ data: { user: actor } }) },
+  }),
+}))
 vi.mock("@/lib/api/proxy-auth", () => ({
-  ensureAuthApiKeyForTeam: vi.fn(),
-  getAuthApiKeyAndTeamForRecovery: vi.fn(),
+  getAuthApiKeyAndTeamForRecovery: mocks.context,
   getAuthApiKeyAndTeamForUser: vi.fn(),
   getAuthApiKeyForUser: vi.fn(),
+  repairRecoveryAuthApiKeyForTeam: mocks.repair,
 }))
 vi.mock("@/lib/admin/impersonation", () => ({
-  getImpersonationContext: vi.fn().mockResolvedValue(null),
+  getImpersonationContext: async () => null,
 }))
-
-import {
-  ensureAuthApiKeyForTeam,
-  getAuthApiKeyAndTeamForRecovery,
-  getAuthApiKeyAndTeamForUser,
-} from "@/lib/api/proxy-auth"
-import { createServerClient } from "@/lib/supabase/server"
-
+vi.mock("@/lib/api/promotion-device-evidence", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/lib/api/promotion-device-evidence")
+  >()),
+  getPromotionSignupAccountEvidence: mocks.evidence,
+  registerPromotionSignupDevice: mocks.register,
+}))
 import { POST } from "./route"
-
 const actor = {
   id: "11111111-1111-4111-8111-111111111111",
   email: "Raw+Tag@Example.COM",
   email_confirmed_at: "2024-01-01T00:00:00Z",
   updated_at: "2024-01-01T00:00:00Z",
+  created_at: "2024-01-01T00:00:00Z",
 }
-
-function mockCheckoutTeam(
-  context: Awaited<ReturnType<typeof getAuthApiKeyAndTeamForUser>>,
-) {
-  vi.mocked(getAuthApiKeyAndTeamForRecovery).mockResolvedValue(context)
-  vi.mocked(ensureAuthApiKeyForTeam).mockResolvedValue(context.apiKey)
+const operation = "22222222-2222-4222-8222-222222222222"
+const pair = crypto.generateKeyPairSync("ed25519")
+const prepareBody = {
+  prepare: true,
+  operation_id: operation,
+  success_url: "https://console.test/success",
+  cancel_url: "https://console.test/cancel",
 }
-
+const missing = () =>
+  Response.json(
+    { error: { code: "checkout_recovery_unavailable" } },
+    { status: 409 },
+  )
 async function checkout(
-  body: Record<string, unknown> = {
-    success_url: "https://console.test/success",
-  },
+  body: unknown = {},
   headers: Record<string, string> = {},
 ) {
   return POST(
@@ -101,279 +78,204 @@ async function checkout(
     { params: Promise.resolve({ path: ["stripe", "checkout-session"] }) },
   )
 }
-
-describe("pinned promotion identity and Checkout recovery contract", () => {
-  it("matches the pinned backend route, response, and SQL writer", () => {
-    const router = pinnedBackendFile("internal/api/router.go")
-    const handler = pinnedBackendFile(
-      "internal/api/handlers_billing_checkout_recovery.go",
-    )
-    const migration = pinnedBackendFile(
-      "supabase/migrations/20260924191820_canonical_promotion_identity.sql",
-    )
-    const openapi = pinnedBackendFile("api/openapi.yaml")
-
-    expect(router).toContain(
-      `api.POST("${backendContract.recoveryPath}", h.RecoverStripeCheckoutSession)`,
-    )
-    expect(handler).toContain(`"${backendContract.unavailableCode}"`)
-    expect(handler).toContain('Outcome: "recovered"')
-    expect(handler).toContain('json:"checkout_generation"')
-    expect(handler).toContain("LockTeamBillingCheckoutForRecovery")
-    expect(handler).toContain("StripeCheckoutRecoveryEvidenceAvailable")
-    expect(openapi).toContain(`  ${backendContract.recoveryPath}:`)
-    expect(openapi).toContain("A 409 does not prove an ambiguous create failed")
-    expect(migration).toContain(
-      `CREATE FUNCTION ${backendContract.writer}(${backendContract.writerArguments[0]} uuid, ${backendContract.writerArguments[1]} text,`,
-    )
-    expect(migration).toContain(
-      `${backendContract.writerArguments[2]} boolean, ${backendContract.writerArguments[3]} timestamptz, ${backendContract.writerArguments[4]} timestamptz)`,
-    )
-    expect(migration).toContain("RETURN QUERY SELECT 'applied'::text")
-    expect(migration).toContain("RETURN QUERY SELECT 'replayed'::text")
-    expect(migration).toContain("INSERT INTO profile(id, email)")
-    expect(migration).toContain("INSERT INTO promotion_identity_evidence(")
+function useRegion(region: string) {
+  mocks.context.mockResolvedValue({
+    apiKey: "payer-key",
+    team: { teamId: `team-${region}`, region },
   })
-
-  beforeEach(() => {
-    calls.length = 0
-    vi.mocked(getAuthApiKeyAndTeamForRecovery).mockReset()
-    vi.mocked(getAuthApiKeyAndTeamForUser).mockReset()
-    vi.mocked(ensureAuthApiKeyForTeam).mockReset()
-    rpc.mockReset().mockImplementation(() => {
-      calls.push("publish")
-      return Promise.resolve({
-        data: [{ outcome: "applied", evidence_version: "evidence-id" }],
-        error: null,
-      })
-    })
-    fetchBackend.mockReset().mockImplementation((url: string) => {
-      if (url.endsWith(backendContract.recoveryPath)) {
-        calls.push("recover")
-        return Promise.resolve(
-          Response.json(
-            { error: { code: backendContract.unavailableCode } },
-            { status: 409 },
-          ),
-        )
-      }
-      calls.push("create")
-      return Promise.resolve(Response.json({ id: "cs_new" }))
-    })
-    vi.mocked(createServerClient).mockResolvedValue({
-      auth: { getUser: async () => ({ data: { user: actor } }) },
-    } as never)
+}
+function receipt(
+  region = "use",
+  decision: "standard" | "publication_failed" = "standard",
+) {
+  return signCheckoutIntent({
+    actor: actor.id,
+    team: `team-${region}`,
+    operation_id: operation,
+    home_region: region,
+    decision,
+    success_url: prepareBody.success_url,
+    cancel_url: prepareBody.cancel_url,
   })
-
-  it.each(["use", "usw"])(
-    "publishes the backend writer contract in %s before creating Checkout",
-    async (region) => {
-      mockCheckoutTeam({
-        apiKey: "ss_live_payer_key",
-        team: { teamId: `team-${region}`, region },
-      })
-      const checkoutBody = {
-        success_url: "https://console.test/success",
-        cancel_url: "https://console.test/cancel",
-      }
-
-      const response = await checkout(checkoutBody, {
-        "idempotency-key": "checkout-request-123",
-      })
-      expect(response.status).toBe(200)
-      expect(calls).toEqual(["recover", "publish", "create"])
-      expect(fetchBackend.mock.calls.map(([url]) => url)).toEqual([
-        `https://api-${region}.test${backendContract.recoveryPath}`,
-        `https://api-${region}.test${backendContract.creationPath}`,
-      ])
-      const [writerRegion, writerName, args] = rpc.mock.calls[0]
-      expect(writerRegion).toBe(region)
-      expect(writerName).toBe(backendContract.writer)
-      expect(Object.keys(args).toSorted()).toEqual(
-        [...backendContract.writerArguments].toSorted(),
-      )
-      expect(args).toMatchObject({
-        p_user_id: actor.id,
-        p_email: actor.email,
-        p_email_verified: true,
-        p_auth_updated_at: actor.updated_at,
-      })
-      expect(Date.parse(args.p_observed_at)).toBeGreaterThan(
-        Date.now() - 60_000,
-      )
-      const [recoveryUrl, recoveryInit] = fetchBackend.mock.calls[0]
-      expect(recoveryUrl).toContain(backendContract.recoveryPath)
-      expect(recoveryInit.method).toBe("POST")
-      expect(recoveryInit.body).toBe("{}")
-      expect((recoveryInit.headers as Headers).get("x-api-key")).toBe(
-        "ss_live_payer_key",
-      )
-      const [, creationInit] = fetchBackend.mock.calls[1]
-      expect(creationInit.method).toBe("POST")
-      expect(await new Response(creationInit.body).json()).toEqual(checkoutBody)
-      const creationHeaders = creationInit.headers as Headers
-      expect(creationHeaders.get("content-type")).toBe("application/json")
-      expect(creationHeaders.get("idempotency-key")).toBe(
-        "checkout-request-123",
-      )
-      expect(creationHeaders.get("x-api-key")).toBe("ss_live_payer_key")
-    },
+}
+beforeEach(() => {
+  vi.resetAllMocks()
+  vi.stubGlobal("fetch", mocks.fetch)
+  vi.stubEnv(
+    "GOOGLE_SIGNUP_PROOF_SECRET",
+    "a-signing-secret-at-least-32-bytes-long",
   )
-
-  it("uses the authenticated payer in the selected cell despite creator and client identity fields", async () => {
-    const creator = {
-      id: "22222222-2222-4222-8222-222222222222",
-      email: "creator@example.com",
-    }
-    const payer = {
-      ...actor,
-      user_metadata: { creator_id: creator.id, email: creator.email },
-    }
-    vi.mocked(createServerClient).mockResolvedValue({
-      auth: { getUser: async () => ({ data: { user: payer } }) },
-    } as never)
-    mockCheckoutTeam({
-      apiKey: "ss_live_payer_key",
-      team: { teamId: "creator-owned-team", region: "usw" },
-    })
-
-    const response = await checkout(
-      {
-        success_url: "https://console.test/success",
-        actor_id: creator.id,
-        user_id: creator.id,
-        email: creator.email,
-      },
-      { "x-api-key": "ss_live_creator_key" },
-    )
-
-    expect(response.status).toBe(200)
-    expect(ensureAuthApiKeyForTeam).toHaveBeenCalledWith(
-      payer,
-      { teamId: "creator-owned-team", region: "usw" },
-      expect.any(String),
-    )
-    expect(getAuthApiKeyAndTeamForUser).not.toHaveBeenCalled()
-    expect(calls).toEqual(["recover", "publish", "create"])
-    expect(rpc).toHaveBeenCalledWith(
-      "usw",
-      backendContract.writer,
-      expect.objectContaining({
-        p_user_id: payer.id,
-        p_email: payer.email,
-        p_email_verified: true,
-        p_auth_updated_at: payer.updated_at,
-      }),
-    )
-    expect(fetchBackend.mock.calls.map(([url]) => url)).toEqual([
-      `https://api-usw.test${backendContract.recoveryPath}`,
-      `https://api-usw.test${backendContract.creationPath}`,
-    ])
-    for (const [, init] of fetchBackend.mock.calls) {
-      expect((init.headers as Headers).get("x-api-key")).toBe(
-        "ss_live_payer_key",
+  vi.stubEnv(
+    "PROMOTION_ACCOUNT_PRIVATE_KEY",
+    pair.privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+  )
+  mocks.rpc.mockResolvedValue({
+    data: [{ outcome: "applied", evidence_version: "v1" }],
+    error: null,
+  })
+  mocks.evidence.mockResolvedValue({ attemptId: "original" })
+  mocks.register.mockResolvedValue("owner")
+  mocks.repair.mockResolvedValue("payer-key")
+  useRegion("use")
+  mocks.fetch.mockImplementation(async (url: string) =>
+    url.endsWith("/recover")
+      ? missing()
+      : Response.json({
+          id: "cs_new",
+          url: "https://checkout.stripe.test/new",
+        }),
+  )
+})
+describe("trusted Checkout publication contract", () => {
+  it.each(["use", "usw"])(
+    "prepares and signs the actual payer/region decision in %s",
+    async (region) => {
+      useRegion(region)
+      const prepared = await checkout(
+        { ...prepareBody, user_id: "forged", decision: "publication_failed" },
+        { "x-api-key": "forged" },
       )
-    }
-    expect(fetchBackend.mock.calls[0][1].body).toBe("{}")
-  })
-
-  it("returns the original generation without publication or creation", async () => {
-    mockCheckoutTeam({
-      apiKey: "ss_live_payer_key",
-      team: { teamId: "team-usw", region: "usw" },
-    })
-    fetchBackend.mockResolvedValueOnce(Response.json(backendContract.recovered))
-    rpc.mockRejectedValue(new Error("identity authority unavailable"))
-
-    const response = await checkout()
-    expect(response.status).toBe(200)
-    expect(await response.json()).toEqual(backendContract.recovered)
-    expect(calls).toEqual([])
-    expect(rpc).not.toHaveBeenCalled()
-    expect(fetchBackend).toHaveBeenCalledTimes(1)
-    expect(fetchBackend.mock.calls[0][0]).toBe(
-      `https://api-usw.test${backendContract.recoveryPath}`,
-    )
-  })
-
-  it.each([
-    [409, "checkout_conflict"],
-    [502, "bad_gateway"],
-    [503, "service_unavailable"],
-  ])(
-    "forwards recovery %i with %s without publishing or creating Checkout",
-    async (status, code) => {
-      mockCheckoutTeam({
-        apiKey: "ss_live_payer_key",
-        team: { teamId: "team-usw", region: "usw" },
-      })
-      const body = JSON.stringify({
-        error: { code, message: "Retry recovery" },
-      })
-      fetchBackend.mockResolvedValueOnce(
-        new Response(body, {
-          status,
-          headers: {
-            "content-type": "application/json",
-            "x-recovery-error": code,
-          },
+      expect(prepared.status).toBe(200)
+      const { receipt: retained } = await prepared.json()
+      expect(
+        readCheckoutIntent(retained, actor.id, `team-${region}`, region)
+          .decision,
+      ).toBe("standard")
+      expect(mocks.rpc).toHaveBeenCalledWith(
+        "upsert_profile_with_promotion_identity",
+        expect.objectContaining({
+          p_user_id: actor.id,
+          p_email: actor.email,
+          p_email_verified: true,
         }),
       )
-
-      const response = await checkout()
-      expect(response.status).toBe(status)
-      expect(await response.text()).toBe(body)
-      expect(response.headers.get("x-recovery-error")).toBe(code)
-      expect(rpc).not.toHaveBeenCalled()
-      expect(fetchBackend).toHaveBeenCalledTimes(1)
-      expect(fetchBackend.mock.calls[0][0]).toBe(
-        `https://api-usw.test${backendContract.recoveryPath}`,
+      expect(mocks.register).toHaveBeenCalledWith(region, actor.id)
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+      const result = await checkout({ receipt: retained })
+      expect(result.status).toBe(200)
+      const [url, init] = mocks.fetch.mock.calls[2]
+      expect(url).toBe(
+        `https://api-${region}.test/stripe/checkout-session/publication-decision`,
       )
-    },
-  )
-
-  it("stops after a recovery network failure", async () => {
-    mockCheckoutTeam({
-      apiKey: "ss_live_payer_key",
-      team: { teamId: "team-usw", region: "usw" },
-    })
-    fetchBackend.mockRejectedValueOnce(new TypeError("network unavailable"))
-
-    const response = await checkout()
-    expect(response.status).toBe(503)
-    expect(await response.json()).toEqual({
-      error: {
-        code: "service_unavailable",
-        message: "Checkout recovery unavailable",
-      },
-    })
-    expect(rpc).not.toHaveBeenCalled()
-    expect(fetchBackend).toHaveBeenCalledTimes(1)
-    expect(fetchBackend.mock.calls[0][0]).toBe(
-      `https://api-usw.test${backendContract.recoveryPath}`,
-    )
-  })
-
-  it.each(["writer failure", "older cell"])(
-    "does not create after %s",
-    async (failure) => {
-      mockCheckoutTeam({
-        apiKey: "ss_live_payer_key",
-        team: { teamId: "team-usw", region: "usw" },
+      const body = JSON.parse(init.body)
+      expect(body).toEqual({
+        operation_id: operation,
+        home_region: region,
+        decision: "standard",
+        success_url: prepareBody.success_url,
+        cancel_url: prepareBody.cancel_url,
       })
-      if (failure === "writer failure") {
-        rpc.mockResolvedValueOnce({ data: null, error: { code: "55000" } })
-      } else {
-        fetchBackend.mockResolvedValueOnce(new Response(null, { status: 404 }))
-      }
-
-      const response = await checkout()
-      expect(response.status).toBe(failure === "writer failure" ? 503 : 404)
-      expect(calls).toEqual(failure === "writer failure" ? ["recover"] : [])
-      expect(fetchBackend).toHaveBeenCalledTimes(1)
-      expect(fetchBackend.mock.calls[0][0]).toBe(
-        `https://api-usw.test${backendContract.recoveryPath}`,
-      )
+      expect(init.headers.get("x-api-key")).toBe("payer-key")
+      const [header, payload, signature] = init.headers
+        .get("X-Promotion-Account-Assertion")
+        .split(".")
+      expect(
+        crypto.verify(
+          null,
+          Buffer.from(`${header}.${payload}`),
+          pair.publicKey,
+          Buffer.from(signature, "base64url"),
+        ),
+      ).toBe(true)
+      expect(JSON.parse(Buffer.from(payload, "base64url").toString())).toEqual({
+        iss: "promotion-auth-adapter",
+        aud: "promotion-account",
+        sub: actor.id,
+        iat: expect.any(Number),
+        exp: expect.any(Number),
+        operation: "checkout",
+        team_id: `team-${region}`,
+        ...body,
+      })
+      expect(mocks.rpc).toHaveBeenCalledTimes(1)
     },
   )
+  it.each(["canonical", "device"])(
+    "pins no credit after %s publication failure and never upgrades on replay",
+    async (failure) => {
+      if (failure === "canonical")
+        mocks.rpc.mockResolvedValue({ data: null, error: { code: "55000" } })
+      else mocks.register.mockRejectedValue(new Error("unavailable"))
+      const { receipt: retained } = await (await checkout(prepareBody)).json()
+      expect(
+        readCheckoutIntent(retained, actor.id, "team-use", "use").decision,
+      ).toBe("publication_failed")
+      mocks.rpc.mockResolvedValue({
+        data: [{ outcome: "applied", evidence_version: "v1" }],
+        error: null,
+      })
+      mocks.register.mockResolvedValue("owner")
+      mocks.fetch
+        .mockImplementationOnce(async () => missing())
+        .mockRejectedValueOnce(new Error("lost response"))
+      await expect(checkout({ receipt: retained })).rejects.toThrow(
+        "lost response",
+      )
+      expect((await checkout({ receipt: retained })).status).toBe(200)
+      const creations = mocks.fetch.mock.calls.filter(([url]) =>
+        url.endsWith("/publication-decision"),
+      )
+      expect(creations).toHaveLength(2)
+      expect(creations[0][1].body).toBe(creations[1][1].body)
+      expect(JSON.parse(creations[1][1].body).decision).toBe(
+        "publication_failed",
+      )
+      expect(mocks.rpc).toHaveBeenCalledTimes(1)
+    },
+  )
+  it("recovers without any receipt or publication", async () => {
+    mocks.fetch.mockResolvedValueOnce(
+      Response.json({ id: "original", url: "original-url" }),
+    )
+    expect(await (await checkout()).json()).toEqual({
+      id: "original",
+      url: "original-url",
+    })
+    expect(mocks.rpc).not.toHaveBeenCalled()
+    expect(mocks.fetch).toHaveBeenCalledTimes(1)
+  })
+  it.each([404, 403, 502, 503])(
+    "never falls back after recovery status %s",
+    async (status) => {
+      mocks.fetch.mockResolvedValueOnce(new Response(null, { status }))
+      expect((await checkout({ receipt: receipt() })).status).toBe(status)
+      expect(mocks.rpc).not.toHaveBeenCalled()
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+    },
+  )
+  it("rejects missing intent at direct legacy Console endpoint", async () => {
+    expect((await checkout()).status).toBe(409)
+    expect(mocks.fetch).toHaveBeenCalledTimes(1)
+  })
+  it.each(["tampered", "wrong team"])(
+    "rejects %s receipt before creation",
+    async (mode) => {
+      const retained = mode === "tampered" ? `${receipt()}x` : receipt("usw")
+      expect((await checkout({ receipt: retained })).status).toBe(400)
+      expect(mocks.fetch).toHaveBeenCalledTimes(1)
+    },
+  )
+  it.each(["failed", "changed"])("stops when key repair %s", async (mode) => {
+    if (mode === "failed")
+      mocks.repair.mockRejectedValue(new Error("unavailable"))
+    else mocks.repair.mockResolvedValue("wrong-key")
+    expect((await checkout({ receipt: receipt() })).status).toBe(503)
+    expect(mocks.fetch).toHaveBeenCalledTimes(1)
+    expect(mocks.rpc).not.toHaveBeenCalled()
+  })
+  it("keeps the selected cell and key after a directory change during recovery", async () => {
+    useRegion("usw")
+    const result = await checkout({ receipt: receipt("usw") })
+    expect(result.status).toBe(200)
+    expect(mocks.context).toHaveBeenCalledTimes(1)
+    expect(mocks.repair).toHaveBeenCalledWith(actor, {
+      teamId: "team-usw",
+      region: "usw",
+    })
+    expect(
+      mocks.fetch.mock.calls.every(([url]) =>
+        url.startsWith("https://api-usw.test/"),
+      ),
+    ).toBe(true)
+  })
 })
