@@ -17,9 +17,25 @@
 import { Commands } from "./commands.js"
 import { previewUrl, type ResolvedConfig, resolveConfig } from "./config.js"
 import { Desktop, DESKTOP_STREAM_PORT } from "./desktop.js"
-import { NotFoundError, SandboxError } from "./errors.js"
+import {
+  ConflictError,
+  NotFoundError,
+  SandboxError,
+  TimeoutError,
+} from "./errors.js"
 import { Files } from "./files.js"
-import { request, requestVoid } from "./http.js"
+import {
+  composeSignals,
+  DEFAULT_TIMEOUT_MS,
+  request,
+  requestVoid,
+  sleep,
+} from "./http.js"
+import {
+  DEFAULT_SNAPSHOT_TIMEOUT_MS,
+  Snapshot,
+  waitForSnapshot,
+} from "./Snapshot.js"
 import type {
   ApiNetworkPage,
   ApiSandboxResponse,
@@ -38,8 +54,39 @@ import type {
   SandboxStatus,
   SandboxUpdateOptions,
   SignedPreviewUrlOptions,
+  SnapshotCreateOptions,
+  SnapshotInfo,
+  SnapshotListOptions,
+  ApiSnapshotResponse,
 } from "./types.js"
-import { toNetworkLogPage, toSandboxInfo } from "./types.js"
+import { toNetworkLogPage, toSandboxInfo, toSnapshotInfo } from "./types.js"
+
+/** How long `pause()` waits for the host across every request it makes. */
+/**
+ * A key for one capture request. `crypto.randomUUID` is missing on Node 18 and
+ * on pages served over plain HTTP; a key only has to be unique, not secret.
+ */
+function newIdempotencyKey(): string {
+  const uuid = globalThis.crypto?.randomUUID?.()
+  if (uuid) return uuid
+  const rand = () => Math.random().toString(36).slice(2)
+  return `${Date.now().toString(36)}-${rand()}${rand()}`
+}
+
+const DEFAULT_PAUSE_TIMEOUT_MS = 300_000
+// Status checks while a waited pause is young: most pauses finish within a
+// second or two, so the first checks are close together; after this window
+// the caller's poll interval applies.
+const PAUSE_FAST_POLL_MS = 50
+const PAUSE_FAST_POLL_WINDOW_MS = 2_000
+const DEFAULT_PAUSE_POLL_MS = 1_000
+
+type PauseWait = {
+  signal: AbortSignal
+  deadline: AbortSignal
+  timeoutMs: number
+  stillPausing: () => TimeoutError
+}
 
 export class Sandbox {
   /** Unique sandbox ID (UUID). */
@@ -81,6 +128,9 @@ export class Sandbox {
   readonly desktop: Desktop
 
   private _accessToken: string
+  private _routingHint?: string
+  private _routeRevision = 0
+  private _appliedRouteRevision = 0
   private _refreshInFlight: Promise<string> | null = null
   private readonly _config: ResolvedConfig
 
@@ -89,6 +139,7 @@ export class Sandbox {
     info: SandboxInfo,
     accessToken: string,
     config: ResolvedConfig,
+    routingHint?: string,
   ) {
     this.id = info.id
     this.name = info.name
@@ -97,24 +148,28 @@ export class Sandbox {
     this.previewAccess = info.previewAccess
     this.secrets = info.secrets
     this._accessToken = accessToken
+    this._routingHint = routingHint
     this._config = config
 
     this.commands = new Commands({
       sandboxId: this.id,
       sandboxHost: config.sandboxHost,
       getAccessToken: () => this._accessToken,
+      getRoutingHint: () => this._routingHint,
       refreshActivate: () => this._refreshActivate(),
     })
     this.files = new Files({
       sandboxId: this.id,
       sandboxHost: config.sandboxHost,
       getAccessToken: () => this._accessToken,
+      getRoutingHint: () => this._routingHint,
       refreshActivate: () => this._refreshActivate(),
     })
     this.desktop = new Desktop({
       sandboxId: this.id,
       sandboxHost: config.sandboxHost,
       getAccessToken: () => this._accessToken,
+      getRoutingHint: () => this._routingHint,
       refreshActivate: () => this._refreshActivate(),
       publishStreamPort: async () => {
         await this.publishPreviewPort(DESKTOP_STREAM_PORT)
@@ -130,18 +185,25 @@ export class Sandbox {
    */
   private async _postAndRotateToken(
     endpoint: "resume" | "activate",
+    signal?: AbortSignal,
   ): Promise<string> {
+    const revision = ++this._routeRevision
     const raw = await request<ApiSandboxResponse>({
       method: "POST",
       url: `${this._config.baseUrl}/sandboxes/${this.id}/${endpoint}`,
       headers: { "X-API-Key": this._config.apiKey },
+      signal,
     })
     if (!raw.access_token) {
       throw new SandboxError(
         `Invalid API response from POST /sandboxes/${this.id}/${endpoint}: missing access_token`,
       )
     }
-    this._accessToken = raw.access_token
+    if (revision > this._appliedRouteRevision) {
+      this._appliedRouteRevision = revision
+      this._accessToken = raw.access_token
+      this._routingHint = raw.routing_hint
+    }
     return this._accessToken
   }
 
@@ -189,7 +251,10 @@ export class Sandbox {
           : (options.fromTemplate.name ?? options.fromTemplate.id)
     }
     if (options.fromSnapshot !== undefined) {
-      body.from_snapshot = options.fromSnapshot
+      body.from_snapshot =
+        typeof options.fromSnapshot === "string"
+          ? options.fromSnapshot
+          : options.fromSnapshot.id
     }
     if (options.metadata !== undefined) body.metadata = options.metadata
     if (options.envVars !== undefined) body.env_vars = options.envVars
@@ -216,7 +281,12 @@ export class Sandbox {
         "Invalid API response from POST /sandboxes: missing access_token",
       )
     }
-    return new Sandbox(toSandboxInfo(raw), raw.access_token, config)
+    return new Sandbox(
+      toSandboxInfo(raw),
+      raw.access_token,
+      config,
+      raw.routing_hint,
+    )
   }
 
   /**
@@ -248,17 +318,26 @@ export class Sandbox {
         `Invalid API response from POST /sandboxes/${sandboxId}/activate: missing access_token`,
       )
     }
-    return new Sandbox(toSandboxInfo(raw), raw.access_token, config)
+    return new Sandbox(
+      toSandboxInfo(raw),
+      raw.access_token,
+      config,
+      raw.routing_hint,
+    )
   }
 
   /**
-   * List all sandboxes belonging to the authenticated team.
+   * List sandboxes belonging to the authenticated team.
    *
    * @param options.metadata — Filter by metadata key-value pairs.
+   * @param options.status — Only return sandboxes in this status.
+   * @param options.limit — Maximum rows to return.
+   * @param options.offset — Rows to skip; combine with `limit` to page.
    *
    * @example
    * ```typescript
-   * const sandboxes = await Sandbox.list()
+   * const running = await Sandbox.list({ status: "active" })
+   * const page = await Sandbox.list({ limit: 100, offset: 200 })
    * const prodBoxes = await Sandbox.list({ metadata: { env: "prod" } })
    * ```
    */
@@ -266,13 +345,15 @@ export class Sandbox {
     const config = resolveConfig(options)
 
     let url = `${config.baseUrl}/sandboxes`
-    if (options.metadata && Object.keys(options.metadata).length > 0) {
-      const params = new URLSearchParams()
-      for (const [key, value] of Object.entries(options.metadata)) {
-        params.set(`metadata.${key}`, value)
-      }
-      url += `?${params.toString()}`
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(options.metadata ?? {})) {
+      params.set(`metadata.${key}`, value)
     }
+    if (options.status !== undefined) params.set("status", options.status)
+    if (options.limit !== undefined) params.set("limit", String(options.limit))
+    if (options.offset !== undefined)
+      params.set("offset", String(options.offset))
+    if (params.toString()) url += `?${params.toString()}`
 
     const raw = await request<ApiSandboxResponse[]>({
       method: "GET",
@@ -300,6 +381,8 @@ export class Sandbox {
         url: `${config.baseUrl}/sandboxes/${sandboxId}`,
         headers: { "X-API-Key": config.apiKey },
         signal: options.signal,
+        // Don't drop a mid-transition sandbox on bulk delete (see retryConflict).
+        retryConflict: true,
       })
     } catch (err) {
       if (!(err instanceof NotFoundError)) throw err
@@ -350,37 +433,247 @@ export class Sandbox {
   }
 
   /**
-   * Pause this sandbox. The sandbox transitions to `paused`.
-   * All running processes and file state are preserved.
+   * Take a snapshot of this sandbox's memory and disk, kept until deleted.
+   * The sandbox must be active or paused; a running one is paused for the
+   * capture and resumed after, typically for under a second.
+   *
+   * Create sandboxes from it with `Sandbox.create({ fromSnapshot })`. They
+   * continue with the processes that were running.
+   *
+   * @example
+   * ```typescript
+   * const snapshot = await sandbox.snapshot({ name: "before-upgrade" })
+   * const fork = await Sandbox.create({ name: "fork", fromSnapshot: snapshot })
+   * ```
    */
-  async pause(): Promise<void> {
-    await requestVoid({
+  async snapshot(options: SnapshotCreateOptions = {}): Promise<Snapshot> {
+    const timeoutMs = options.timeoutMs ?? DEFAULT_SNAPSHOT_TIMEOUT_MS
+    const started = Date.now()
+    const body: Record<string, unknown> = {
+      kind: options.kind ?? "mem+fs",
+      idempotency_key: options.idempotencyKey ?? newIdempotencyKey(),
+    }
+    if (options.name !== undefined) body.name = options.name
+    const raw = await request<ApiSnapshotResponse>({
       method: "POST",
-      url: `${this._config.baseUrl}/sandboxes/${this.id}/pause`,
+      url: `${this._config.baseUrl}/sandboxes/${this.id}/snapshot`,
       headers: { "X-API-Key": this._config.apiKey },
+      body,
+      timeoutMs,
+      signal: options.signal,
+    })
+    const snapshot = new Snapshot(toSnapshotInfo(raw), this._config)
+    if (options.wait === false) return snapshot
+    return waitForSnapshot(this._config, snapshot, {
+      timeoutMs: Math.max(timeoutMs - (Date.now() - started), 1),
+      pollIntervalMs: options.pollIntervalMs,
+      signal: options.signal,
+    })
+  }
+
+  /** This sandbox's snapshots, newest first. */
+  async snapshots(
+    options: Omit<SnapshotListOptions, "apiKey" | "baseUrl"> = {},
+  ): Promise<SnapshotInfo[]> {
+    return Snapshot.list(this.id, {
+      ...options,
+      apiKey: this._config.apiKey,
+      baseUrl: this._config.baseUrl,
     })
   }
 
   /**
-   * Resume a paused sandbox. Status transitions back to `active`.
+   * Pause this sandbox. The sandbox transitions to `paused`.
+   * All running processes and file state are preserved.
+   *
+   * Returns once the pause is accepted; with `wait: true` it returns once the
+   * sandbox is `paused`.
+   */
+  async pause(
+    options: {
+      wait?: boolean
+      timeoutMs?: number
+      pollIntervalMs?: number
+      signal?: AbortSignal
+    } = {},
+  ): Promise<void> {
+    const url = `${this._config.baseUrl}/sandboxes/${this.id}/pause`
+    const headers = {
+      "X-API-Key": this._config.apiKey,
+      Prefer: "respond-async",
+    }
+    if (!options.wait) {
+      // Any failure here, a timeout included, means the pause may not have
+      // been accepted; nothing is asserted on the caller's behalf.
+      await request<unknown>({
+        method: "POST",
+        url,
+        headers,
+        signal: options.signal,
+      })
+      return
+    }
+    await this._underPauseDeadline(options, async (ctx) => {
+      let raw: { status?: string } | undefined
+      try {
+        raw = await request<{ status?: string } | undefined>({
+          method: "POST",
+          url,
+          headers,
+          timeoutMs: Math.min(DEFAULT_TIMEOUT_MS, ctx.timeoutMs),
+          signal: ctx.signal,
+        })
+      } catch (err) {
+        // The request outlived its own timeout; the pause may still land.
+        // Follow it through the sandbox's status like an accepted one.
+        if (err instanceof TimeoutError && !ctx.deadline.aborted) {
+          raw = { status: "pausing" }
+        } else {
+          throw err
+        }
+      }
+      if (raw?.status !== "pausing") return
+      await this._pollUntilPaused(ctx, options.pollIntervalMs)
+    })
+  }
+
+  /**
+   * Resume a paused sandbox. Status transitions back to `active`. A pause
+   * still in progress is waited out first.
    * The access token is rotated; `sandbox.commands` and `sandbox.files` pick
    * up the fresh token transparently.
    */
-  async resume(): Promise<void> {
-    await this._postAndRotateToken("resume")
+  async resume(
+    options: {
+      timeoutMs?: number
+      pollIntervalMs?: number
+      signal?: AbortSignal
+    } = {},
+  ): Promise<void> {
+    try {
+      await this._postAndRotateToken("resume", options.signal)
+    } catch (err) {
+      if (!(err instanceof ConflictError)) throw err
+      const current = await request<ApiSandboxResponse>({
+        method: "GET",
+        url: `${this._config.baseUrl}/sandboxes/${this.id}`,
+        headers: { "X-API-Key": this._config.apiKey },
+        signal: options.signal,
+      })
+      // A pause that finished between the two requests reads as paused here.
+      const { status } = toSandboxInfo(current)
+      if (status !== "pausing" && status !== "paused") throw err
+      if (status === "pausing") {
+        await this._underPauseDeadline(options, (ctx) =>
+          this._pollUntilPaused(ctx, options.pollIntervalMs),
+        )
+      }
+      await this._postAndRotateToken("resume", options.signal)
+    }
+  }
+
+  /**
+   * Runs body under one operation deadline, enforced as a signal so it reaches
+   * into requests, their retries and backoff, and body reads. @internal
+   */
+  private async _underPauseDeadline(
+    options: { timeoutMs?: number; signal?: AbortSignal },
+    body: (ctx: PauseWait) => Promise<void>,
+  ): Promise<void> {
+    const timeoutMs = options.timeoutMs ?? DEFAULT_PAUSE_TIMEOUT_MS
+    const deadline = new AbortController()
+    const deadlineTimer = setTimeout(() => deadline.abort(), timeoutMs)
+    const { signal, release } = composeSignals(deadline.signal, options.signal)
+    const stillPausing = () =>
+      new TimeoutError(
+        `Sandbox ${this.id} is still pausing after ${timeoutMs}ms; it will finish in the background`,
+      )
+    try {
+      await body({ signal, deadline: deadline.signal, timeoutMs, stillPausing })
+    } catch (err) {
+      // Whatever was in flight when the deadline fired ended because of it.
+      if (deadline.signal.aborted && !options.signal?.aborted) {
+        throw stillPausing()
+      }
+      throw err
+    } finally {
+      clearTimeout(deadlineTimer)
+      release()
+    }
+  }
+
+  /**
+   * Polls until the sandbox is `paused`. A sandbox deleted meanwhile (delete
+   * on pause) counts as done; `failed` throws. @internal
+   */
+  private async _pollUntilPaused(
+    ctx: PauseWait,
+    pollMs: number | undefined,
+  ): Promise<void> {
+    // Monotonic: a wall-clock step must not hold the fast cadence open.
+    const started = performance.now()
+    let first = true
+    while (true) {
+      if (!first) {
+        // The SDK's own cadence when the caller set no interval: fast checks
+        // while the pause is young, then every second. A caller's interval
+        // is used as given.
+        let delay = pollMs
+        if (delay === undefined) {
+          const young = performance.now() - started < PAUSE_FAST_POLL_WINDOW_MS
+          delay = young ? PAUSE_FAST_POLL_MS : DEFAULT_PAUSE_POLL_MS
+        }
+        await sleep(delay, ctx.signal)
+      }
+      first = false
+      let info: ApiSandboxResponse
+      try {
+        info = await request<ApiSandboxResponse>({
+          method: "GET",
+          url: `${this._config.baseUrl}/sandboxes/${this.id}`,
+          headers: { "X-API-Key": this._config.apiKey },
+          signal: ctx.signal,
+        })
+      } catch (err) {
+        if (err instanceof NotFoundError) return
+        // One slow poll; the operation deadline decides whether to go on.
+        if (err instanceof TimeoutError && !ctx.deadline.aborted) continue
+        throw err
+      }
+      if (ctx.deadline.aborted) throw ctx.stillPausing()
+      const { status } = toSandboxInfo(info)
+      if (status === "paused" || status === "deleted") return
+      // A request that timed out may be accepted only after this first
+      // look; 'active' this early is not yet an answer.
+      if (
+        status === "active" &&
+        performance.now() - started < PAUSE_FAST_POLL_WINDOW_MS
+      ) {
+        continue
+      }
+      if (status !== "pausing") {
+        throw new SandboxError(
+          `Sandbox ${this.id} did not pause: status is ${status}`,
+        )
+      }
+    }
   }
 
   /**
    * Delete this sandbox and all its resources.
    *
-   * Idempotent: if the sandbox is already deleted, this is a no-op.
+   * Idempotent: if the sandbox is already deleted, this is a no-op. The
+   * signal cancels the request and any retries.
    */
-  async kill(): Promise<void> {
+  async kill(options: { signal?: AbortSignal } = {}): Promise<void> {
     try {
       await requestVoid({
         method: "DELETE",
         url: `${this._config.baseUrl}/sandboxes/${this.id}`,
         headers: { "X-API-Key": this._config.apiKey },
+        signal: options.signal,
+        // Don't drop a mid-transition sandbox on bulk delete (see retryConflict).
+        retryConflict: true,
       })
     } catch (err) {
       if (!(err instanceof NotFoundError)) throw err

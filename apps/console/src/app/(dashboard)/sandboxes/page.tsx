@@ -33,6 +33,7 @@ import { ConnectSandboxDialog } from "@/components/sandboxes/connect-sandbox-dia
 import { CreateSandboxDialog } from "@/components/sandboxes/create-sandbox-dialog"
 import { DeleteSandboxDialog } from "@/components/sandboxes/delete-sandbox-dialog"
 import { SandboxTableRow } from "@/components/sandboxes/sandbox-table-row"
+import { TakeSnapshotDialog } from "@/components/snapshots/take-snapshot-dialog"
 import { SortableTableHead } from "@/components/sortable-table-head"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
 import { TableToolbar } from "@/components/table-toolbar"
@@ -101,17 +102,22 @@ function SandboxesPageContent() {
   } | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [templateRef, setTemplateRef] = useState<string | null>(null)
+  const [snapshotId, setSnapshotId] = useState<string | null>(null)
+  const [snapshotTarget, setSnapshotTarget] = useState<string | null>(null)
 
-  // When the user clicks "Launch sandbox" from the templates section, we
-  // navigate here with ?from_template=<name>. Open the dialog with the
-  // template prefilled, then strip the param so refreshing doesn't re-open.
+  // Launching from a template or a snapshot navigates here with
+  // ?from_template=<name> or ?from_snapshot=<id>. Open the dialog with the
+  // source prefilled, then strip the param so refreshing doesn't re-open.
   useEffect(() => {
     const name = searchParams.get("from_template")
-    if (!name) return
+    const snapshot = searchParams.get("from_snapshot")
+    if (!name && !snapshot) return
     setTemplateRef(name)
+    setSnapshotId(snapshot)
     setCreateOpen(true)
     const next = new URLSearchParams(searchParams.toString())
     next.delete("from_template")
+    next.delete("from_snapshot")
     const qs = next.toString()
     router.replace(qs ? `?${qs}` : window.location.pathname)
   }, [searchParams, router, setCreateOpen])
@@ -168,11 +174,15 @@ function SandboxesPageContent() {
           open={createOpen}
           onOpenChange={(v) => {
             setCreateOpen(v)
-            if (!v) setTemplateRef(null)
+            if (!v) {
+              setTemplateRef(null)
+              setSnapshotId(null)
+            }
           }}
           hideTrigger={isEmpty || isPending}
           onCreated={(id) => setConnectSandboxId(id)}
           initialTemplateRef={templateRef}
+          initialSnapshotId={snapshotId}
         />
       </PageHeader>
 
@@ -283,6 +293,7 @@ function SandboxesPageContent() {
                           source: "list_menu",
                         })
                       }
+                      onTakeSnapshot={() => setSnapshotTarget(sandbox.id)}
                     />
                   ))}
                 </StickyHoverTableBody>
@@ -309,6 +320,16 @@ function SandboxesPageContent() {
           onOpenChange={(v) => {
             if (!v) setConnectSandboxId(null)
           }}
+        />
+      )}
+
+      {snapshotTarget && (
+        <TakeSnapshotDialog
+          open={!!snapshotTarget}
+          onOpenChange={(v) => {
+            if (!v) setSnapshotTarget(null)
+          }}
+          sandboxId={snapshotTarget}
         />
       )}
 

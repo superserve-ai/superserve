@@ -18,9 +18,9 @@ import {
 } from "./errors.js"
 import type { ApiExecStreamEvent } from "./types.js"
 
-const DEFAULT_TIMEOUT_MS = 30_000
+export const DEFAULT_TIMEOUT_MS = 30_000
 
-const SDK_VERSION = "0.8.2"
+const SDK_VERSION = "0.9.3"
 const USER_AGENT = `@superserve/sdk/${SDK_VERSION} (node/${
   typeof process !== "undefined" && process.versions?.node
     ? `v${process.versions.node}`
@@ -29,6 +29,14 @@ const USER_AGENT = `@superserve/sdk/${SDK_VERSION} (node/${
 
 // Retry tuning
 const DEFAULT_MAX_ATTEMPTS = 3
+// The conflict budget (see retryConflict) must outlast a transition. Typical
+// transitions settle in single-digit seconds, but a pause writes the sandbox's
+// memory snapshot and can legitimately take 30-60s on large sandboxes (see
+// tests/sdk-e2e-ts/README.md). Eleven attempts guarantee a request after the
+// 60s mark: even at minimum jitter (0.8x) the sleeps before the final attempt
+// sum past ~70s. Callers who can't wait pass an AbortSignal, which cancels
+// mid-backoff.
+const CONFLICT_MAX_ATTEMPTS = 11
 const BASE_BACKOFF_MS = 100
 const MAX_BACKOFF_MS = 30_000
 const RETRYABLE_STATUSES = new Set([429, 502, 503, 504])
@@ -51,22 +59,77 @@ interface RequestOptions {
    * control-plane responses (the default — unchanged `res.text()` behavior).
    */
   maxBytes?: number
+  /**
+   * Retry a 409 response on this (idempotent) request. Set it only where a 409
+   * is transient and self-clearing: a sandbox delete returns 409 while the
+   * sandbox is mid-transition (resuming/pausing/starting) and clears once the
+   * transition completes. Leave it unset where 409 is a terminal precondition
+   * (e.g. deleting a template that still has active sandboxes), so the call
+   * fails fast instead of retrying in vain. Only honored on GET/DELETE.
+   */
+  retryConflict?: boolean
 }
 
 /**
  * Compose an internal controller signal with an optional user signal.
  * Uses AbortSignal.any when available.
  */
-function composeSignals(
+export function composeSignals(
   internal: AbortSignal,
   user?: AbortSignal,
-): AbortSignal {
-  if (!user) return internal
-  return AbortSignal.any([internal, user])
+): { signal: AbortSignal; release: () => void } {
+  if (!user) return { signal: internal, release: () => {} }
+  if (typeof AbortSignal.any === "function") {
+    return { signal: AbortSignal.any([internal, user]), release: () => {} }
+  }
+  // Older runtimes (Node before 18.17): forward whichever aborts first. The
+  // listeners sit on signals that may outlive this request, so the caller
+  // releases them once the composed signal is no longer needed.
+  const controller = new AbortController()
+  const onInternal = () => {
+    release()
+    controller.abort(internal.reason)
+  }
+  const onUser = () => {
+    release()
+    controller.abort(user.reason)
+  }
+  const release = () => {
+    internal.removeEventListener("abort", onInternal)
+    user.removeEventListener("abort", onUser)
+  }
+  if (internal.aborted) {
+    controller.abort(internal.reason)
+  } else if (user.aborted) {
+    controller.abort(user.reason)
+  } else {
+    internal.addEventListener("abort", onInternal)
+    user.addEventListener("abort", onUser)
+  }
+  return { signal: controller.signal, release }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+// Sleep that ends early, rejecting with the abort reason, if signal aborts:
+// without this, cancelling mid-backoff would silently wait out the full delay
+// before the abort is noticed on the next attempt.
+export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const abortErr = () =>
+      signal?.reason ?? new DOMException("aborted", "AbortError")
+    if (signal?.aborted) {
+      reject(abortErr())
+      return
+    }
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(abortErr())
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort)
+      resolve()
+    }, ms)
+    signal?.addEventListener("abort", onAbort, { once: true })
+  })
 }
 
 /**
@@ -124,7 +187,8 @@ function isNetworkError(err: unknown): boolean {
  * and optional retry on transient conditions (429, 5xx, network errors).
  *
  * Only retries when `opts.retryable` is true. Callers must ensure the
- * operation is idempotent before enabling retries.
+ * operation is idempotent before enabling retries. `opts.retryConflict` also
+ * retries a self-clearing 409 (see RequestOptions.retryConflict).
  */
 async function retryableFetch(
   input: RequestInfo | URL,
@@ -133,10 +197,15 @@ async function retryableFetch(
     timeoutMs: number
     maxAttempts?: number
     retryable: boolean
+    retryConflict?: boolean
     userSignal?: AbortSignal
+    /** Keep the attempt timer running until the caller releases the response. */
+    timeoutCoversBody?: boolean
   },
-): Promise<Response> {
-  const maxAttempts = opts.retryable
+): Promise<{ res: Response; release: () => void }> {
+  // Extends to the conflict budget only after an actual 409 (below), so
+  // transient 5xx/429/network keep their default bound.
+  let maxAttempts = opts.retryable
     ? (opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS)
     : 1
 
@@ -149,15 +218,36 @@ async function retryableFetch(
       controller.abort()
     }, opts.timeoutMs)
 
-    const signal = composeSignals(controller.signal, opts.userSignal)
+    const { signal, release } = composeSignals(
+      controller.signal,
+      opts.userSignal,
+    )
+    // On the fallback path the caller keeps the forwarding alive through
+    // the body read and releases it afterwards; a retried attempt releases
+    // its own here.
+    let handedOff = false
+    const done = () => {
+      clearTimeout(timer)
+      release()
+    }
 
     try {
       const res = await fetch(input, { ...init, signal })
 
-      // Retry on specific 5xx / 429
-      if (opts.retryable && RETRYABLE_STATUSES.has(res.status)) {
+      // Transient 5xx / 429, plus a caller-marked self-clearing 409 (see
+      // RequestOptions.retryConflict).
+      const retryableStatus =
+        RETRYABLE_STATUSES.has(res.status) ||
+        (res.status === 409 && opts.retryConflict === true)
+      if (opts.retryable && retryableStatus) {
+        // A self-clearing 409 (implies retryConflict) extends the budget; a
+        // caller-set maxAttempts is respected as-is.
+        if (res.status === 409 && opts.maxAttempts === undefined) {
+          maxAttempts = CONFLICT_MAX_ATTEMPTS
+        }
         if (attempt >= maxAttempts) {
-          return res
+          handedOff = true
+          return { res, release: done }
         }
         let delay: number | null = null
         if (res.status === 429) {
@@ -173,11 +263,12 @@ async function retryableFetch(
           // ignore
         }
         clearTimeout(timer)
-        await sleep(delay)
+        await sleep(delay, opts.userSignal)
         continue
       }
 
-      return res
+      handedOff = true
+      return { res, release: done }
     } catch (err) {
       lastError = err
 
@@ -198,13 +289,14 @@ async function retryableFetch(
 
       // Retry network errors if retryable and attempts remain
       if (opts.retryable && isNetworkError(err) && attempt < maxAttempts) {
-        await sleep(backoffDelay(attempt))
+        await sleep(backoffDelay(attempt), opts.userSignal)
         continue
       }
 
       throw err
     } finally {
-      clearTimeout(timer)
+      if (!handedOff) done()
+      else if (!opts.timeoutCoversBody) clearTimeout(timer)
     }
   }
 
@@ -215,10 +307,25 @@ async function retryableFetch(
 async function readErrorBody(
   res: Response,
 ): Promise<{ error?: { code?: string; message?: string } }> {
+  let text: string
   try {
-    return (await res.json()) as { error?: { code?: string; message?: string } }
+    text = await res.text()
   } catch {
     return {}
+  }
+  try {
+    return JSON.parse(text) as { error?: { code?: string; message?: string } }
+  } catch {
+    // Older proxies emit these exact http.Error responses before dispatch.
+    // Do not broaden this to arbitrary 503 bodies from an upstream operation.
+    const legacyPaused =
+      res.status === 503 &&
+      res.headers.get("content-type")?.startsWith("text/plain") &&
+      res.headers.get("x-content-type-options") === "nosniff" &&
+      (text === "sandbox is paused\n" || text === "sandbox is stopped\n")
+    return legacyPaused
+      ? { error: { code: "sandbox_unavailable", message: text.trim() } }
+      : {}
   }
 }
 
@@ -227,8 +334,9 @@ async function readErrorBody(
  *
  * Throws typed SandboxError subclasses on non-2xx responses.
  *
- * Retries GET/DELETE on transient failures (429, 502/503/504, network errors).
- * POST/PATCH are never retried (not idempotent).
+ * Retries GET/DELETE on transient failures (429, 502/503/504, network errors),
+ * and — when `retryConflict` is set — a self-clearing 409. POST/PATCH are never
+ * retried (not idempotent).
  */
 export async function request<T>(opts: RequestOptions): Promise<T> {
   const {
@@ -239,6 +347,7 @@ export async function request<T>(opts: RequestOptions): Promise<T> {
     timeoutMs = DEFAULT_TIMEOUT_MS,
     signal: userSignal,
     maxBytes,
+    retryConflict,
   } = opts
 
   const retryable = method === "GET" || method === "DELETE"
@@ -249,40 +358,53 @@ export async function request<T>(opts: RequestOptions): Promise<T> {
   }
 
   try {
-    const res = await retryableFetch(
+    const { res, release } = await retryableFetch(
       url,
       {
         method,
         headers: mergedHeaders,
         body: body !== undefined ? JSON.stringify(body) : undefined,
       },
-      { timeoutMs, retryable, userSignal },
+      {
+        timeoutMs,
+        retryable,
+        retryConflict,
+        userSignal,
+        timeoutCoversBody: true,
+      },
     )
+    try {
+      if (!res.ok) {
+        const errorBody = await readErrorBody(res)
+        throw mapApiError(res.status, errorBody)
+      }
 
-    if (!res.ok) {
-      const errorBody = await readErrorBody(res)
-      throw mapApiError(res.status, errorBody)
+      // 204 No Content
+      if (res.status === 204) {
+        return undefined as T
+      }
+
+      // Untrusted (data-plane) endpoints: read the JSON body with a streaming
+      // byte cap so a hostile sandbox can't make us buffer an unbounded response.
+      if (maxBytes !== undefined) {
+        const bytes = await readBodyWithLimit(res, maxBytes, "Response body")
+        if (bytes.byteLength === 0) return undefined as T
+        return JSON.parse(new TextDecoder().decode(bytes)) as T
+      }
+
+      // Some endpoints legally return 2xx with an empty body.
+      const text = await res.text()
+      return text ? (JSON.parse(text) as T) : (undefined as T)
+    } finally {
+      release()
     }
-
-    // 204 No Content
-    if (res.status === 204) {
-      return undefined as T
-    }
-
-    // Untrusted (data-plane) endpoints: read the JSON body with a streaming
-    // byte cap so a hostile sandbox can't make us buffer an unbounded response.
-    if (maxBytes !== undefined) {
-      const bytes = await readBodyWithLimit(res, maxBytes, "Response body")
-      if (bytes.byteLength === 0) return undefined as T
-      return JSON.parse(new TextDecoder().decode(bytes)) as T
-    }
-
-    // Some endpoints legally return 2xx with an empty body.
-    const text = await res.text()
-    return text ? (JSON.parse(text) as T) : (undefined as T)
   } catch (err) {
     if (err instanceof SandboxError) throw err
     if (err instanceof DOMException && err.name === "AbortError") {
+      // Past the headers only the attempt timer and the caller can abort.
+      if (!userSignal?.aborted) {
+        throw new TimeoutError(`Request timed out after ${timeoutMs}ms`)
+      }
       throw new SandboxError("Request aborted", undefined, undefined, {
         cause: err,
       })
@@ -330,15 +452,18 @@ export async function uploadBytes(opts: {
   }
 
   try {
-    const res = await retryableFetch(
+    const { res, release } = await retryableFetch(
       url,
       { method: "POST", headers: mergedHeaders, body },
       { timeoutMs, retryable: false, userSignal },
     )
-
-    if (!res.ok) {
-      const errorBody = await readErrorBody(res)
-      throw mapApiError(res.status, errorBody)
+    try {
+      if (!res.ok) {
+        const errorBody = await readErrorBody(res)
+        throw mapApiError(res.status, errorBody)
+      }
+    } finally {
+      release()
     }
   } catch (err) {
     if (err instanceof SandboxError) throw err
@@ -444,18 +569,21 @@ export async function downloadBytes(opts: {
   }
 
   try {
-    const res = await retryableFetch(
+    const { res, release } = await retryableFetch(
       url,
       { method: "GET", headers: mergedHeaders },
       { timeoutMs, retryable: true, userSignal },
     )
+    try {
+      if (!res.ok) {
+        const errorBody = await readErrorBody(res)
+        throw mapApiError(res.status, errorBody)
+      }
 
-    if (!res.ok) {
-      const errorBody = await readErrorBody(res)
-      throw mapApiError(res.status, errorBody)
+      return await readBodyWithLimit(res, maxBytes)
+    } finally {
+      release()
     }
-
-    return await readBodyWithLimit(res, maxBytes)
   } catch (err) {
     if (err instanceof SandboxError) throw err
     if (err instanceof DOMException && err.name === "AbortError") {
@@ -508,7 +636,7 @@ export async function streamSSE<TEvent = ApiExecStreamEvent>(opts: {
     controller.abort()
   }, timeoutMs)
 
-  const signal = composeSignals(controller.signal, userSignal)
+  const { signal, release } = composeSignals(controller.signal, userSignal)
 
   try {
     const init: RequestInit = {
@@ -585,6 +713,7 @@ export async function streamSSE<TEvent = ApiExecStreamEvent>(opts: {
       { cause: err },
     )
   } finally {
+    release()
     if (timer) clearTimeout(timer)
   }
 }

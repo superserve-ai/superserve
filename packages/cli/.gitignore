@@ -6,3 +6,5 @@ dist/
 !.env.example
 .DS_Store
 bun.lockb
+
+*.bun-build

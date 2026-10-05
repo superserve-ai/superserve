@@ -110,6 +110,16 @@ async def main():
 asyncio.run(main())
 ```
 
+Calls made on an `AsyncSandbox` reuse its connection. To reuse connections across other calls too, such as `AsyncSandbox.create` or `AsyncSnapshot.get`, make them inside `async_connection_pool()`. The connections close when the block ends.
+
+```python
+from superserve import AsyncSandbox, AsyncSnapshot, async_connection_pool
+
+async with async_connection_pool():
+    sandbox = await AsyncSandbox.create(name="async-example")
+    snapshots = await AsyncSnapshot.list(sandbox.id)
+```
+
 ## Streaming command output
 
 ```python

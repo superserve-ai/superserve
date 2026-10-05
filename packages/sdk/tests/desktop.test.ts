@@ -283,3 +283,22 @@ describe("Desktop token retry", () => {
     expect(tokens).toEqual(["tok-initial", "tok-refreshed"])
   })
 })
+
+describe("routing hint", () => {
+  it("sends the hint header when the sandbox has one, and nothing otherwise", async () => {
+    const sent: Headers[] = []
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        sent.push(new Headers(init.headers))
+        return jsonResponse({})
+      }),
+    )
+    await new Desktop(makeDeps({ getRoutingHint: () => "hint-1" })).click(1, 2)
+    await new Desktop(makeDeps()).click(1, 2)
+    expect(sent.map((h) => h.get("X-Superserve-Routing-Hint"))).toEqual([
+      "hint-1",
+      null,
+    ])
+  })
+})

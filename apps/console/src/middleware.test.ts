@@ -14,6 +14,7 @@
  *      is returned.
  */
 
+import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server"
 import { NextRequest, NextResponse } from "next/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -35,7 +36,7 @@ vi.mock("@/lib/supabase/middleware", () => ({
 }))
 
 // Import AFTER mocks so the module picks them up.
-import { middleware } from "./middleware"
+import { config, middleware } from "./middleware"
 
 function buildRequest(path: string): NextRequest {
   return new NextRequest(new URL(`https://console.superserve.ai${path}`))
@@ -124,4 +125,23 @@ describe("middleware", () => {
     const res = await middleware(buildRequest("/sandboxes"))
     expect(res).toBe(mockClient.response)
   })
+})
+
+describe("middleware matcher", () => {
+  it.each([
+    "/ingest",
+    "/ingest/",
+    "/ingest/i/v0/e/?ip=0",
+    "/ingest/s/",
+    "/ingest/static/array.js",
+  ])("bypasses auth for analytics request %s", (url) => {
+    expect(unstable_doesMiddlewareMatch({ config, url })).toBe(false)
+  })
+
+  it.each(["/", "/sandboxes", "/settings", "/ingestion", "/ingest-private"])(
+    "still protects %s",
+    (url) => {
+      expect(unstable_doesMiddlewareMatch({ config, url })).toBe(true)
+    },
+  )
 })

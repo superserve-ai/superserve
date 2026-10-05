@@ -7,11 +7,17 @@ connection pooling and retry logic for idempotent methods (GET, DELETE).
 from __future__ import annotations
 
 import asyncio
+from asyncio import TimeoutError as _AsyncTimeout
+from asyncio import wait_for as _wait_for
+import contextlib
+import contextvars
 import json as json_module
+import os
 import random
 import sys
+import threading
 import time
-from collections.abc import AsyncIterable, Callable, Iterable
+from collections.abc import AsyncIterable, AsyncIterator, Callable, Iterable, Iterator
 from email.utils import parsedate_to_datetime
 from typing import Any
 
@@ -21,11 +27,105 @@ from .errors import SandboxError, SandboxTimeoutError, ValidationError, map_api_
 
 DEFAULT_TIMEOUT = 30.0
 
+_shared_lock = threading.Lock()
+_shared: httpx.Client | None = None
+
+
+def shared_client() -> httpx.Client:
+    """The process's pooled client, so calls reuse open connections instead of
+    each paying a TCP and TLS handshake. Connections are uncapped so long-lived
+    streams never starve other calls; only idle ones are capped."""
+    global _shared
+    with _shared_lock:
+        if _shared is None:
+            _shared = httpx.Client(
+                timeout=DEFAULT_TIMEOUT,
+                limits=httpx.Limits(max_connections=None, max_keepalive_connections=20),
+            )
+        return _shared
+
+
+def _reset_shared_client() -> None:
+    """A forked child must not reuse the parent's pooled sockets, nor inherit
+    the lock held by a parent thread that no longer exists."""
+    global _shared, _shared_lock
+    _shared = None
+    _shared_lock = threading.Lock()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_shared_client)
+
+_async_pool: contextvars.ContextVar[httpx.AsyncClient | None] = contextvars.ContextVar(
+    "superserve_async_pool", default=None
+)
+
+
+@contextlib.contextmanager
+def using_async_client(client: httpx.AsyncClient) -> Iterator[None]:
+    """Serve the calls a sandbox hands to other classes from the sandbox's own
+    client, unless a pool is already open."""
+    if _async_pool.get() is not None:
+        yield
+        return
+    token = _async_pool.set(client)
+    try:
+        yield
+    finally:
+        _async_pool.reset(token)
+
+
+@contextlib.asynccontextmanager
+async def async_connection_pool() -> AsyncIterator[None]:
+    """Reuse connections across async SDK calls made inside the block, and
+    close them when it ends. Outside one, each call that is not made on an
+    ``AsyncSandbox`` opens its own connection.
+
+    Example::
+
+        async with superserve.async_connection_pool():
+            sandbox = await AsyncSandbox.create(name="demo")
+            snapshots = await AsyncSnapshot.list(sandbox.id)
+    """
+    async with httpx.AsyncClient(
+        timeout=DEFAULT_TIMEOUT,
+        limits=httpx.Limits(max_connections=None, max_keepalive_connections=20),
+    ) as client:
+        token = _async_pool.set(client)
+        try:
+            yield
+        finally:
+            _async_pool.reset(token)
+
+
+# How long pause() waits, across every request it makes; each request still
+# gets the ordinary timeout.
+DEFAULT_PAUSE_TIMEOUT = 300.0
+# Status checks while a waited pause is young: most pauses finish within a
+# second or two, so the first checks are close together; after this window the
+# caller's poll interval applies.
+PAUSE_FAST_POLL_S = 0.05
+PAUSE_FAST_POLL_WINDOW_S = 2.0
+
+
+DEFAULT_PAUSE_POLL_S = 1.0
+
+
+def pause_poll_delay(elapsed: float, poll_interval_s: float | None) -> float:
+    """The SDK's own cadence when the caller set no interval: fast checks while
+    the pause is young, then every second. A caller's interval is used as given."""
+    if poll_interval_s is not None:
+        return poll_interval_s
+    if elapsed < PAUSE_FAST_POLL_WINDOW_S:
+        return PAUSE_FAST_POLL_S
+    return DEFAULT_PAUSE_POLL_S
+
+
 DEFAULT_MAX_DOWNLOAD_BYTES = (
     2 * 1024 * 1024 * 1024
 )  # 2 GiB; matches boxd's server-side zip cap
 
-SDK_VERSION = "0.8.2"
+SDK_VERSION = "0.9.3"
 USER_AGENT = (
     f"superserve-python/{SDK_VERSION} "
     f"(python/{sys.version_info.major}.{sys.version_info.minor})"
@@ -33,6 +133,7 @@ USER_AGENT = (
 
 # Retry tuning
 _MAX_ATTEMPTS = 3
+_CONFLICT_MAX_ATTEMPTS = 11
 _BASE_BACKOFF = 0.1
 _MAX_BACKOFF = 30.0
 _RETRY_STATUS_CODES = {429, 502, 503, 504}
@@ -103,6 +204,16 @@ def _build_error_body(response: httpx.Response) -> dict[str, Any]:
             return parsed
     except Exception:
         pass
+    # These exact legacy proxy responses are emitted before dispatch.
+    if (
+        response.status_code == 503
+        and response.headers.get("content-type", "").startswith("text/plain")
+        and response.headers.get("x-content-type-options") == "nosniff"
+        and response.text in ("sandbox is paused\n", "sandbox is stopped\n")
+    ):
+        return {
+            "error": {"code": "sandbox_unavailable", "message": response.text.strip()}
+        }
     return {
         "error": {
             "message": response.text[:500] or f"API error ({response.status_code})"
@@ -143,6 +254,132 @@ async def _aread_capped(achunks: AsyncIterable[bytes], max_bytes: int) -> bytes:
 # ---------------------------------------------------------------------------
 
 
+class DeadlineExceeded(SandboxTimeoutError):
+    """The operation deadline passed while a request, retry wait, or response
+    was still in progress."""
+
+
+def _attempt_timeout(timeout: float, deadline: float | None) -> float:
+    """Per-attempt timeout that also stops at the operation deadline."""
+    if deadline is None:
+        return timeout
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise DeadlineExceeded("Operation deadline exceeded")
+    return min(timeout, remaining)
+
+
+def _retry_delay(delay: float, deadline: float | None) -> float:
+    """A retry wait that would end past the deadline is not worth starting."""
+    if deadline is not None and time.monotonic() + delay >= deadline:
+        raise DeadlineExceeded("Operation deadline exceeded")
+    return delay
+
+
+def _check_deadline(deadline: float | None) -> None:
+    if deadline is not None and time.monotonic() >= deadline:
+        raise DeadlineExceeded("Operation deadline exceeded")
+
+
+def _read_within(
+    client: httpx.Client,
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str],
+    json_body: Any | None,
+    timeout: float,
+    deadline: float | None,
+) -> httpx.Response:
+    """One attempt. With a deadline the whole exchange, headers and body, runs
+    on a worker and the caller waits only for what is left of the deadline:
+    the HTTP timeout bounds inactivity, not wall time, and a blocking read
+    cannot be interrupted. The worker is a daemon thread, so one that outlives
+    the deadline never pins the process; it winds down on its own read
+    timeout."""
+    if deadline is None:
+        return client.request(
+            method, url, headers=headers, json=json_body, timeout=timeout
+        )
+
+    def exchange() -> httpx.Response:
+        with client.stream(
+            method, url, headers=headers, json=json_body, timeout=timeout
+        ) as streamed:
+            parts: list[bytes] = []
+            for chunk in streamed.iter_bytes():
+                parts.append(chunk)
+                _check_deadline(deadline)
+            return httpx.Response(
+                streamed.status_code,
+                headers=streamed.headers,
+                content=b"".join(parts),
+                request=streamed.request,
+            )
+
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise DeadlineExceeded("Operation deadline exceeded")
+    outcome: list[httpx.Response | Exception] = []
+
+    def run() -> None:
+        try:
+            outcome.append(exchange())
+        except Exception as exc:
+            outcome.append(exc)
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    worker.join(remaining)
+    if not outcome:
+        raise DeadlineExceeded("Operation deadline exceeded")
+    result = outcome[0]
+    if isinstance(result, Exception):
+        raise result
+    return result
+
+
+async def _async_read_within(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str],
+    json_body: Any | None,
+    timeout: float,
+    deadline: float | None,
+) -> httpx.Response:
+    """Async variant of ``_read_within``: the whole exchange runs under one
+    wall-clock wait and is cancelled at the deadline."""
+    if deadline is None:
+        return await client.request(
+            method, url, headers=headers, json=json_body, timeout=timeout
+        )
+
+    async def exchange() -> httpx.Response:
+        async with client.stream(
+            method, url, headers=headers, json=json_body, timeout=timeout
+        ) as streamed:
+            parts: list[bytes] = []
+            async for chunk in streamed.aiter_bytes():
+                parts.append(chunk)
+                _check_deadline(deadline)
+            return httpx.Response(
+                streamed.status_code,
+                headers=streamed.headers,
+                content=b"".join(parts),
+                request=streamed.request,
+            )
+
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise DeadlineExceeded("Operation deadline exceeded")
+    try:
+        return await _wait_for(exchange(), remaining)
+    except _AsyncTimeout as exc:
+        raise DeadlineExceeded("Operation deadline exceeded") from exc
+
+
 def _do_request_with_retry(
     method: str,
     url: str,
@@ -150,78 +387,93 @@ def _do_request_with_retry(
     headers: dict[str, str],
     json_body: Any | None = None,
     timeout: float = DEFAULT_TIMEOUT,
+    budget: float | None = None,
     client: httpx.Client | None = None,
+    retry_conflict: bool = False,
 ) -> httpx.Response:
     """Perform an HTTP request with retry for idempotent methods.
+
+    ``budget`` (seconds) bounds the whole call: every attempt, every retry
+    wait, and the response itself.
 
     Retries on 429/502/503/504 and on transient connection errors
     (``httpx.ConnectError``, ``httpx.ReadError``, ``httpx.RemoteProtocolError``).
     Never retries non-idempotent methods.
     """
-    owned = client is None
-    if owned:
-        client = httpx.Client(timeout=timeout)
+    deadline = None if budget is None else time.monotonic() + budget
+    if client is None:
+        client = shared_client()
     assert client is not None
 
     method_upper = method.upper()
     last_exc: BaseException | None = None
 
-    try:
-        for attempt in range(_MAX_ATTEMPTS):
-            try:
-                response = client.request(
-                    method_upper,
-                    url,
-                    headers=headers,
-                    json=json_body,
-                    timeout=timeout,
-                )
-            except httpx.TimeoutException as exc:
-                raise SandboxTimeoutError(
-                    f"Request timed out after {timeout}s"
-                ) from exc
-            except _RETRY_CONNECTION_EXCEPTIONS as exc:
-                last_exc = exc
-                if (
-                    method_upper not in _IDEMPOTENT_METHODS
-                    or attempt == _MAX_ATTEMPTS - 1
-                ):
-                    raise SandboxError(f"Network error: {exc}") from exc
-                time.sleep(_compute_backoff(attempt))
-                continue
-            except httpx.HTTPError as exc:
+    max_attempts = _MAX_ATTEMPTS
+    for attempt in range(_CONFLICT_MAX_ATTEMPTS):
+        attempt_timeout = _attempt_timeout(timeout, deadline)
+        try:
+            response = _read_within(
+                client,
+                method_upper,
+                url,
+                headers=headers,
+                json_body=json_body,
+                timeout=attempt_timeout,
+                deadline=deadline,
+            )
+        except httpx.TimeoutException as exc:
+            _check_deadline(deadline)
+            raise SandboxTimeoutError(
+                f"Request timed out after {attempt_timeout}s"
+            ) from exc
+        except _RETRY_CONNECTION_EXCEPTIONS as exc:
+            last_exc = exc
+            if method_upper not in _IDEMPOTENT_METHODS or attempt >= max_attempts - 1:
                 raise SandboxError(f"Network error: {exc}") from exc
+            time.sleep(_retry_delay(_compute_backoff(attempt), deadline))
+            continue
+        except httpx.HTTPError as exc:
+            raise SandboxError(f"Network error: {exc}") from exc
 
-            if (
-                _should_retry_status(method_upper, response.status_code)
-                and attempt < _MAX_ATTEMPTS - 1
-            ):
-                delay: float
-                if response.status_code == 429:
-                    retry_after = _parse_retry_after(
-                        response.headers.get("Retry-After")
-                    )
-                    delay = (
-                        min(retry_after, _MAX_BACKOFF)
-                        if retry_after is not None
-                        else _compute_backoff(attempt)
-                    )
-                else:
-                    delay = _compute_backoff(attempt)
-                response.close()
-                if delay > 0:
-                    time.sleep(delay)
-                continue
+        # A self-clearing 409 is retried only on an idempotent method, like
+        # every other retry here; the flag never overrides that.
+        retry_this_conflict = (
+            retry_conflict
+            and response.status_code == 409
+            and method_upper in _IDEMPOTENT_METHODS
+        )
+        if retry_this_conflict:
+            max_attempts = _CONFLICT_MAX_ATTEMPTS
 
-            return response
+        is_retryable = (
+            _should_retry_status(method_upper, response.status_code)
+            or retry_this_conflict
+        )
 
-        # Should not reach here unless all attempts failed to a connection error
-        if last_exc is not None:
-            raise SandboxError(f"Network error: {last_exc}") from last_exc
-        raise SandboxError("Request failed after retries")
-    finally:
-        if owned:
-            client.close()
+        if is_retryable and attempt < max_attempts - 1:
+            delay: float
+            if response.status_code == 429:
+                retry_after = _parse_retry_after(response.headers.get("Retry-After"))
+                delay = (
+                    min(retry_after, _MAX_BACKOFF)
+                    if retry_after is not None
+                    else _compute_backoff(attempt)
+                )
+            else:
+                delay = _compute_backoff(attempt)
+            response.close()
+            delay = _retry_delay(delay, deadline)
+            if delay > 0:
+                time.sleep(delay)
+            continue
+
+        _check_deadline(deadline)
+        return response
+
+    # Should not reach here unless all attempts failed to a connection error
+    if last_exc is not None:
+        raise SandboxError(f"Network error: {last_exc}") from last_exc
+    raise SandboxError("Request failed after retries")
 
 
 def api_request(
@@ -231,7 +483,9 @@ def api_request(
     headers: dict[str, str],
     json_body: Any | None = None,
     timeout: float = DEFAULT_TIMEOUT,
+    budget: float | None = None,
     client: httpx.Client | None = None,
+    retry_conflict: bool = False,
 ) -> Any:
     """Make a JSON API request. Returns parsed response body or None for 204."""
     merged = _default_headers(headers, content_type="application/json")
@@ -241,10 +495,13 @@ def api_request(
         headers=merged,
         json_body=json_body,
         timeout=timeout,
+        budget=budget,
         client=client,
+        retry_conflict=retry_conflict,
     )
 
-    if response.status_code == 204:
+    # A 202 may carry no body either.
+    if response.status_code == 204 or (response.is_success and not response.content):
         return None
 
     if not response.is_success:
@@ -262,9 +519,8 @@ def upload_bytes(
     client: httpx.Client | None = None,
 ) -> None:
     """Upload raw bytes to data plane. POST — no retries."""
-    owned = client is None
-    if owned:
-        client = httpx.Client(timeout=timeout)
+    if client is None:
+        client = shared_client()
     assert client is not None
 
     merged = _default_headers(headers, content_type="application/octet-stream")
@@ -274,9 +530,6 @@ def upload_bytes(
         raise SandboxTimeoutError(f"Upload timed out after {timeout}s") from exc
     except httpx.HTTPError as exc:
         raise SandboxError(f"Upload error: {exc}") from exc
-    finally:
-        if owned:
-            client.close()
 
     if not response.is_success:
         raise map_api_error(response.status_code, _build_error_body(response))
@@ -296,69 +549,60 @@ def download_bytes(
     ``ValidationError`` and dropping the connection as soon as the body exceeds
     it -- so a hostile/unbounded response cannot exhaust memory.
     """
-    owned = client is None
-    if owned:
-        client = httpx.Client(timeout=timeout)
+    if client is None:
+        client = shared_client()
     assert client is not None
 
     merged = _default_headers(headers)
     last_exc: BaseException | None = None
 
-    try:
-        for attempt in range(_MAX_ATTEMPTS):
-            try:
-                with client.stream(
-                    "GET", url, headers=merged, timeout=timeout
-                ) as response:
-                    if (
-                        _should_retry_status("GET", response.status_code)
-                        and attempt < _MAX_ATTEMPTS - 1
-                    ):
-                        delay: float
-                        if response.status_code == 429:
-                            retry_after = _parse_retry_after(
-                                response.headers.get("Retry-After")
-                            )
-                            delay = (
-                                min(retry_after, _MAX_BACKOFF)
-                                if retry_after is not None
-                                else _compute_backoff(attempt)
-                            )
-                        else:
-                            delay = _compute_backoff(attempt)
-                        # Stream closed by the context manager on continue.
-                        if delay > 0:
-                            time.sleep(delay)
-                        continue
-
-                    if not response.is_success:
-                        response.read()
-                        raise map_api_error(
-                            response.status_code, _build_error_body(response)
+    for attempt in range(_MAX_ATTEMPTS):
+        try:
+            with client.stream("GET", url, headers=merged, timeout=timeout) as response:
+                if (
+                    _should_retry_status("GET", response.status_code)
+                    and attempt < _MAX_ATTEMPTS - 1
+                ):
+                    delay: float
+                    if response.status_code == 429:
+                        retry_after = _parse_retry_after(
+                            response.headers.get("Retry-After")
                         )
+                        delay = (
+                            min(retry_after, _MAX_BACKOFF)
+                            if retry_after is not None
+                            else _compute_backoff(attempt)
+                        )
+                    else:
+                        delay = _compute_backoff(attempt)
+                    # Stream closed by the context manager on continue.
+                    if delay > 0:
+                        time.sleep(delay)
+                    continue
 
-                    # Raising inside the `with` block (cap exceeded) closes the
-                    # stream, dropping the connection to the sandbox.
-                    return _read_capped(response.iter_bytes(), max_bytes)
-            except httpx.TimeoutException as exc:
-                raise SandboxTimeoutError(
-                    f"Request timed out after {timeout}s"
-                ) from exc
-            except _RETRY_CONNECTION_EXCEPTIONS as exc:
-                last_exc = exc
-                if attempt == _MAX_ATTEMPTS - 1:
-                    raise SandboxError(f"Network error: {exc}") from exc
-                time.sleep(_compute_backoff(attempt))
-                continue
-            except httpx.HTTPError as exc:
+                if not response.is_success:
+                    response.read()
+                    raise map_api_error(
+                        response.status_code, _build_error_body(response)
+                    )
+
+                # Raising inside the `with` block (cap exceeded) closes the
+                # stream, dropping the connection to the sandbox.
+                return _read_capped(response.iter_bytes(), max_bytes)
+        except httpx.TimeoutException as exc:
+            raise SandboxTimeoutError(f"Request timed out after {timeout}s") from exc
+        except _RETRY_CONNECTION_EXCEPTIONS as exc:
+            last_exc = exc
+            if attempt == _MAX_ATTEMPTS - 1:
                 raise SandboxError(f"Network error: {exc}") from exc
+            time.sleep(_compute_backoff(attempt))
+            continue
+        except httpx.HTTPError as exc:
+            raise SandboxError(f"Network error: {exc}") from exc
 
-        if last_exc is not None:
-            raise SandboxError(f"Network error: {last_exc}") from last_exc
-        raise SandboxError("Request failed after retries")
-    finally:
-        if owned:
-            client.close()
+    if last_exc is not None:
+        raise SandboxError(f"Network error: {last_exc}") from last_exc
+    raise SandboxError("Request failed after retries")
 
 
 def stream_sse(
@@ -372,9 +616,8 @@ def stream_sse(
     client: httpx.Client | None = None,
 ) -> None:
     """Consume an SSE stream. Supports both POST (with body) and GET (no body). No retries."""
-    owned = client is None
-    if owned:
-        client = httpx.Client(timeout=timeout)
+    if client is None:
+        client = shared_client()
     assert client is not None
 
     merged = _default_headers(
@@ -409,9 +652,6 @@ def stream_sse(
         raise SandboxTimeoutError(f"Stream timed out after {timeout}s") from exc
     except httpx.HTTPError as exc:
         raise SandboxError(f"Stream error: {exc}") from exc
-    finally:
-        if owned:
-            client.close()
 
 
 # ---------------------------------------------------------------------------
@@ -426,9 +666,14 @@ async def _async_do_request_with_retry(
     headers: dict[str, str],
     json_body: Any | None = None,
     timeout: float = DEFAULT_TIMEOUT,
+    budget: float | None = None,
     client: httpx.AsyncClient | None = None,
+    retry_conflict: bool = False,
 ) -> httpx.Response:
     """Async variant of ``_do_request_with_retry``."""
+    deadline = None if budget is None else time.monotonic() + budget
+    if client is None:
+        client = _async_pool.get()
     owned = client is None
     if owned:
         client = httpx.AsyncClient(timeout=timeout)
@@ -438,35 +683,52 @@ async def _async_do_request_with_retry(
     last_exc: BaseException | None = None
 
     try:
-        for attempt in range(_MAX_ATTEMPTS):
+        max_attempts = _MAX_ATTEMPTS
+        for attempt in range(_CONFLICT_MAX_ATTEMPTS):
+            attempt_timeout = _attempt_timeout(timeout, deadline)
             try:
-                response = await client.request(
+                response = await _async_read_within(
+                    client,
                     method_upper,
                     url,
                     headers=headers,
-                    json=json_body,
-                    timeout=timeout,
+                    json_body=json_body,
+                    timeout=attempt_timeout,
+                    deadline=deadline,
                 )
             except httpx.TimeoutException as exc:
+                _check_deadline(deadline)
                 raise SandboxTimeoutError(
-                    f"Request timed out after {timeout}s"
+                    f"Request timed out after {attempt_timeout}s"
                 ) from exc
             except _RETRY_CONNECTION_EXCEPTIONS as exc:
                 last_exc = exc
                 if (
                     method_upper not in _IDEMPOTENT_METHODS
-                    or attempt == _MAX_ATTEMPTS - 1
+                    or attempt >= max_attempts - 1
                 ):
                     raise SandboxError(f"Network error: {exc}") from exc
-                await asyncio.sleep(_compute_backoff(attempt))
+                await asyncio.sleep(_retry_delay(_compute_backoff(attempt), deadline))
                 continue
             except httpx.HTTPError as exc:
                 raise SandboxError(f"Network error: {exc}") from exc
 
-            if (
+            # A self-clearing 409 is retried only on an idempotent method, like
+            # every other retry here; the flag never overrides that.
+            retry_this_conflict = (
+                retry_conflict
+                and response.status_code == 409
+                and method_upper in _IDEMPOTENT_METHODS
+            )
+            if retry_this_conflict:
+                max_attempts = _CONFLICT_MAX_ATTEMPTS
+
+            is_retryable = (
                 _should_retry_status(method_upper, response.status_code)
-                and attempt < _MAX_ATTEMPTS - 1
-            ):
+                or retry_this_conflict
+            )
+
+            if is_retryable and attempt < max_attempts - 1:
                 delay: float
                 if response.status_code == 429:
                     retry_after = _parse_retry_after(
@@ -480,10 +742,12 @@ async def _async_do_request_with_retry(
                 else:
                     delay = _compute_backoff(attempt)
                 await response.aclose()
+                delay = _retry_delay(delay, deadline)
                 if delay > 0:
                     await asyncio.sleep(delay)
                 continue
 
+            _check_deadline(deadline)
             return response
 
         if last_exc is not None:
@@ -501,7 +765,9 @@ async def async_api_request(
     headers: dict[str, str],
     json_body: Any | None = None,
     timeout: float = DEFAULT_TIMEOUT,
+    budget: float | None = None,
     client: httpx.AsyncClient | None = None,
+    retry_conflict: bool = False,
 ) -> Any:
     """Async variant of api_request."""
     merged = _default_headers(headers, content_type="application/json")
@@ -511,10 +777,13 @@ async def async_api_request(
         headers=merged,
         json_body=json_body,
         timeout=timeout,
+        budget=budget,
         client=client,
+        retry_conflict=retry_conflict,
     )
 
-    if response.status_code == 204:
+    # A 202 may carry no body either.
+    if response.status_code == 204 or (response.is_success and not response.content):
         return None
 
     if not response.is_success:
@@ -532,6 +801,8 @@ async def async_upload_bytes(
     client: httpx.AsyncClient | None = None,
 ) -> None:
     """Async variant of upload_bytes. POST — no retries."""
+    if client is None:
+        client = _async_pool.get()
     owned = client is None
     if owned:
         client = httpx.AsyncClient(timeout=timeout)
@@ -568,6 +839,8 @@ async def async_download_bytes(
     ``ValidationError`` and dropping the connection as soon as the body exceeds
     it -- so a hostile/unbounded response cannot exhaust memory.
     """
+    if client is None:
+        client = _async_pool.get()
     owned = client is None
     if owned:
         client = httpx.AsyncClient(timeout=timeout)
@@ -644,6 +917,8 @@ async def async_stream_sse(
     client: httpx.AsyncClient | None = None,
 ) -> None:
     """Async variant of stream_sse. Supports both POST (with body) and GET (no body). No retries."""
+    if client is None:
+        client = _async_pool.get()
     owned = client is None
     if owned:
         client = httpx.AsyncClient(timeout=timeout)

@@ -4,7 +4,7 @@ import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react"
 import { Button, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useState } from "react"
 
@@ -14,6 +14,8 @@ import { GoogleIcon, Spinner } from "@/components/icons"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
+import { beginGoogleSignIn } from "./google-action"
+
 function SignInContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [isEmailLoading, setIsEmailLoading] = useState(false)
@@ -21,13 +23,16 @@ function SignInContent() {
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const router = useRouter()
   const searchParams = useSearchParams()
   const posthog = usePostHog()
 
   const rawNext = searchParams.get("next") || "/"
   const nextUrl =
-    rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/"
+    rawNext.startsWith("/") &&
+    !rawNext.startsWith("//") &&
+    !/[\\\u0000-\u0020\u007f]/.test(rawNext)
+      ? rawNext
+      : "/"
 
   useEffect(() => {
     const checkUser = async () => {
@@ -44,13 +49,13 @@ function SignInContent() {
           await supabase.auth.signOut()
           return
         }
-        if (user) router.push(nextUrl)
+        if (user) window.location.replace(nextUrl)
       } catch {
         // Network error: leave the session alone.
       }
     }
     checkUser()
-  }, [router, nextUrl])
+  }, [nextUrl])
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -85,7 +90,8 @@ function SignInContent() {
         return
       }
       posthog.capture(AUTH_EVENTS.SIGN_IN_COMPLETED, { method: "email" })
-      router.push(nextUrl)
+      // Discard routes prefetched before the session cookies were set.
+      window.location.replace(nextUrl)
     } catch {
       setErrors({ form: "Error signing in. Please try again." })
     } finally {
@@ -98,13 +104,19 @@ function SignInContent() {
     setErrors({})
     try {
       const supabase = createBrowserClient()
+      const intentId = await beginGoogleSignIn()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
+      if (intentId)
+        callbackUrl.searchParams.set("google_signin_intent", intentId)
       if (nextUrl && nextUrl !== "/") {
         callbackUrl.searchParams.set("next", nextUrl)
       }
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: callbackUrl.toString() },
+        options: {
+          redirectTo: callbackUrl.toString(),
+          queryParams: { prompt: "select_account" },
+        },
       })
       if (error) {
         setErrors({ form: "Error signing in. Please try again." })

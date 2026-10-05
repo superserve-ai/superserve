@@ -1,6 +1,11 @@
 "use client"
 
-import { useQueryScope } from "@/components/query-provider"
+import { useIsMutating } from "@tanstack/react-query"
+
+import {
+  useDashboardTeamContext,
+  useQueryScope,
+} from "@/components/query-provider"
 
 import { useTeams } from "./use-teams"
 
@@ -12,15 +17,18 @@ export interface BillingQueryContext {
 
 export function useBillingContext(): BillingQueryContext {
   const cacheScope = useQueryScope()
+  const impersonatedTeam = useDashboardTeamContext()
+  const switching = useIsMutating({ mutationKey: ["switch-team"] }) > 0
   const { data: teams } = useTeams()
-  const teamKey =
-    teams?.activeTeamId && teams.activeRegion
+  const teamKey = impersonatedTeam
+    ? `${impersonatedTeam.region}:${impersonatedTeam.teamId}`
+    : teams?.activeTeamId && teams.activeRegion
       ? `${teams.activeRegion}:${teams.activeTeamId}`
       : null
 
   return {
     cacheScope,
     teamKey,
-    ready: teamKey !== null,
+    ready: teamKey !== null && !switching,
   }
 }

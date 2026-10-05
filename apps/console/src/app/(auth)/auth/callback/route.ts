@@ -1,10 +1,43 @@
 import { NextResponse } from "next/server"
 
-import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
-import { sendWelcomeEmail } from "@/app/(auth)/auth/signup/action"
-import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
+import {
+  consumeFingerprintSignupEventId,
+  readFingerprintSignupEventId,
+  sendWelcomeEmail,
+} from "@/app/(auth)/auth/signup/action"
+import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
+import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
+import { completedMemberships } from "@/lib/api/team-provisioning"
+import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
+import {
+  classifyGoogleMembershipState,
+  type GoogleMembershipState,
+} from "@/lib/auth/google-onboarding"
+import {
+  hasValidGoogleSignupProof,
+  hasValidLegacyGoogleSignupProof,
+  isGoogleUser,
+  markGoogleSignupAttempt,
+  readGooglePromotionEvidence,
+  retainOriginalGoogleSignup,
+} from "@/lib/auth/google-signup-proof"
+import {
+  isActiveSignupEvidenceAttempt,
+  readSignupEvidence,
+  readSignupEvidenceEntries,
+  saveSignupEvidence,
+} from "@/lib/auth/signup-evidence"
+import {
+  evaluateSignupRestriction,
+  SignupRestrictedError,
+} from "@/lib/auth/signup-restrictions"
+import { DEFAULT_REGION } from "@/lib/cells"
+import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
+import { resolveFingerprintSignup } from "@/lib/fingerprint/observe"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
+import { normalizeSignupEligibilitySnapshot } from "@/lib/slack/signup-eligibility"
+import { notifySlackOfNewUser } from "@/lib/slack/signup-notification"
 import { createServerClient } from "@/lib/supabase/server"
 
 const TRUSTED_REDIRECT_PATTERN =
@@ -15,7 +48,6 @@ function buildRedirectUrl(origin: string, path: string): string {
     process.env.VERCEL_ENV === "preview"
       ? origin
       : process.env.NEXT_PUBLIC_APP_URL || origin
-
   return new URL(path, base).toString()
 }
 
@@ -41,7 +73,6 @@ export async function GET(request: Request) {
 
   if (code || tokenHash) {
     const supabase = await createServerClient()
-
     let error = null
     if (code) {
       const result = await supabase.auth.exchangeCodeForSession(code)
@@ -55,11 +86,15 @@ export async function GET(request: Request) {
     }
 
     if (error) {
-      const blocked = error.message
-        .toLowerCase()
-        .includes(BLOCKED_TRIGGER_MESSAGE)
-      if (blocked) {
-        console.warn("OAuth signup blocked by trigger")
+      // Supabase's generic trigger error is not authoritative SS-499 policy
+      // evidence. Preserve the existing rejected-auth redirect and report an
+      // unavailable annotation rather than a definitive blocked outcome.
+      const authSignupRejected = isGenericAuthSignupFailure(error.message)
+      if (authSignupRejected) {
+        console.warn("OAuth signup rejected by Auth trigger")
+        await notifySlackOfNewUser("", null, code ? "google" : "email", {
+          kind: "unavailable",
+        }).catch(() => {})
         return NextResponse.redirect(
           buildRedirectUrl(
             origin,
@@ -86,23 +121,265 @@ export async function GET(request: Request) {
       } = await supabase.auth.getUser()
 
       if (user) {
-        const createdAt = new Date(user.created_at)
-        const now = new Date()
-        const isNewUser = now.getTime() - createdAt.getTime() < 30000
-
+        const signupAttemptId =
+          searchParams.get("signup_attempt_id") || undefined
         const provider = code
           ? user.app_metadata?.provider || "google"
           : "email"
+        let isNewUser = false
+        let signupEligibilitySnapshot: unknown
+
+        if (code && isGoogleUser(user)) {
+          const originIntent = searchParams.get("google_signin_intent")
+          if (originIntent) {
+            // Preserve verified account provenance before fallible directory work.
+            // The signed origin validates account creation independently of membership.
+            try {
+              await retainOriginalGoogleSignup(originIntent, user)
+            } catch {
+              console.warn("Google signup origin could not be retained")
+            }
+          }
+          let directory: GoogleMembershipState
+          try {
+            directory = await classifyGoogleMembershipState(
+              user.id,
+              await completedMemberships(
+                user.id,
+                await listTeamMembershipsForUserDetailed(user.id, {
+                  maxAgeMs: 0,
+                }),
+              ),
+            )
+          } catch {
+            // Return a response so retained origin cookies survive lookup failures.
+            directory = { kind: "indeterminate", degradedRegions: [] }
+          }
+
+          if (directory.kind === "indeterminate") {
+            await trackEvent(AUTH_EVENTS.SIGN_IN_FAILED, user.id, {
+              provider,
+              email: user.email,
+              reason: "membership_lookup_degraded",
+            })
+            console.warn("Google OAuth membership lookup degraded", {
+              provider,
+              stage: "callback",
+              degradedRegions: directory.degradedRegions,
+            })
+            return NextResponse.redirect(
+              buildRedirectUrl(
+                origin,
+                "/auth/auth-code-error?reason=membership_lookup_degraded",
+              ),
+            )
+          }
+
+          isNewUser = directory.kind === "first_time"
+
+          if (isNewUser) {
+            // Accept a legacy unscoped proof for OAuth flows that started
+            // before this rollout; new flows must carry and match the signed
+            // attempt ID for exact cross-provider correlation.
+            const proofValid = signupAttemptId
+              ? await hasValidGoogleSignupProof(signupAttemptId)
+              : await hasValidLegacyGoogleSignupProof()
+            if (!proofValid) {
+              await trackEvent(
+                AUTH_EVENTS.GOOGLE_SIGNUP_BYPASS_BLOCKED,
+                user.id,
+                {
+                  reason: "missing_or_invalid_proof",
+                  provider,
+                },
+              )
+              console.warn("Google OAuth onboarding blocked", {
+                reason: "missing_or_invalid_proof",
+              })
+              const recoveryUrl = new URL("/auth/signup", origin)
+              recoveryUrl.searchParams.set("complete_google", "1")
+              if (next !== "/") recoveryUrl.searchParams.set("next", next)
+              return NextResponse.redirect(
+                buildRedirectUrl(
+                  origin,
+                  `${recoveryUrl.pathname}${recoveryUrl.search}`,
+                ),
+              )
+            }
+            console.info("Google OAuth signup proof validated at callback")
+            await markGoogleSignupAttempt(signupAttemptId, user.id)
+          }
+
+          if (isNewUser && signupAttemptId) {
+            const original = await readGooglePromotionEvidence(
+              signupAttemptId,
+              user.id,
+              user.created_at,
+            )
+            if (original) {
+              if (original.originalSignup) {
+                try {
+                  signupEligibilitySnapshot =
+                    await publishOriginalSignupEvidence(
+                      user,
+                      original.attemptId,
+                      original.routineMissing,
+                    )
+                } catch {
+                  // Publication is best effort; callback auth and notification
+                  // continue with an unavailable eligibility annotation.
+                  console.warn(
+                    "Original signup promotion publication unavailable",
+                  )
+                }
+              }
+              if (original.eventId && original.visitor)
+                await saveSignupEvidence(
+                  user.id,
+                  signupAttemptId,
+                  original.eventId,
+                  original.visitor,
+                )
+            }
+          }
+          if (isNewUser) {
+            const activeAttempt =
+              signupAttemptId &&
+              (await isActiveSignupEvidenceAttempt(signupAttemptId))
+            const fingerprintEventId = activeAttempt
+              ? await readFingerprintSignupEventId()
+              : undefined
+            const existingVisitor = signupAttemptId
+              ? await readSignupEvidence(user.id, signupAttemptId)
+              : null
+            if (fingerprintEventId && !existingVisitor && signupAttemptId) {
+              let visitor: string | null = null
+              try {
+                visitor = await resolveFingerprintSignup({
+                  eventId: fingerprintEventId,
+                  userId: user.id,
+                  signupMethod: "google",
+                  signupAttemptId,
+                })
+              } finally {
+                await consumeFingerprintSignupEventId(fingerprintEventId)
+              }
+              if (visitor) {
+                try {
+                  await saveSignupEvidence(
+                    user.id,
+                    signupAttemptId,
+                    fingerprintEventId,
+                    visitor,
+                  )
+                } catch {
+                  console.warn("Signup evidence retention unavailable", {
+                    stage: "google_callback",
+                  })
+                }
+              }
+            }
+            if (signupAttemptId) {
+              await trackEvent(AUTH_EVENTS.SIGNUP_ATTEMPT_ASSOCIATED, user.id, {
+                signup_attempt_id: signupAttemptId,
+                superserve_user_id: user.id,
+                signup_method: "google",
+                observed_at: new Date().toISOString(),
+              })
+            }
+          }
+        } else {
+          const createdAt = new Date(user.created_at)
+          isNewUser = Date.now() - createdAt.getTime() < 30000
+        }
+
+        if (type === "signup") {
+          const attempt = searchParams.get("device_attempt_id")
+          const proof = searchParams.get("device_bind_proof")
+          if (
+            attempt &&
+            proof &&
+            validSignupDeviceBinding(user.id, attempt, proof)
+          ) {
+            try {
+              signupEligibilitySnapshot = await publishOriginalSignupEvidence(
+                user,
+                attempt,
+                false,
+              )
+            } catch {
+              console.warn("Original signup promotion publication unavailable")
+            }
+          }
+        }
+
+        if (type !== "invite" && (type === "signup" || (code && isNewUser))) {
+          const directory = await completedMemberships(
+            user.id,
+            await listTeamMembershipsForUserDetailed(user.id, {
+              maxAgeMs: 0,
+            }),
+          )
+          if (
+            directory.memberships.length === 0 &&
+            directory.degradedRegions.length > 0
+          )
+            return NextResponse.redirect(
+              buildRedirectUrl(
+                origin,
+                "/auth/auth-code-error?reason=membership_lookup_degraded",
+              ),
+            )
+          if (
+            directory.memberships.length === 0 &&
+            directory.degradedRegions.length === 0
+          ) {
+            try {
+              const entries = signupAttemptId
+                ? await readSignupEvidenceEntries(user.id, signupAttemptId)
+                : []
+              if (entries.length === 0)
+                await evaluateSignupRestriction(DEFAULT_REGION, user.id, null)
+              for (const visitor of new Set(
+                entries.map(({ visitor }) => visitor),
+              ))
+                await evaluateSignupRestriction(
+                  DEFAULT_REGION,
+                  user.id,
+                  visitor,
+                )
+            } catch (error) {
+              if (error instanceof SignupRestrictedError) {
+                await notifySlackOfNewUser(
+                  user.email || "",
+                  user.user_metadata?.full_name || null,
+                  provider,
+                  { kind: "blocked" },
+                ).catch(() => {})
+                return NextResponse.redirect(
+                  buildRedirectUrl(
+                    origin,
+                    "/auth/auth-code-error?reason=signup_blocked",
+                  ),
+                )
+              }
+              throw error
+            }
+          }
+        }
 
         if (isNewUser) {
           await notifySlackOfNewUser(
             user.email || "",
             user.user_metadata?.full_name || null,
-            user.app_metadata?.provider || null,
-          )
-          sendWelcomeEmail(
-            user.email || "",
-            user.user_metadata?.full_name || "there",
+            provider,
+            normalizeSignupEligibilitySnapshot(signupEligibilitySnapshot),
+          ).catch(() => {})
+          Promise.resolve(
+            sendWelcomeEmail(
+              user.email || "",
+              user.user_metadata?.full_name || "there",
+            ),
           ).catch(() => {})
         }
 
@@ -119,9 +396,7 @@ export async function GET(request: Request) {
         }
       }
 
-      if (next.startsWith("https://")) {
-        return NextResponse.redirect(next)
-      }
+      if (next.startsWith("https://")) return NextResponse.redirect(next)
       return NextResponse.redirect(buildRedirectUrl(origin, next))
     }
   }

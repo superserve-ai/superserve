@@ -19,6 +19,7 @@ import {
 } from "@/components/sandboxes/sandbox-info-grid"
 import { SandboxResourceBar } from "@/components/sandboxes/sandbox-resource-bar"
 import { SandboxStatusHero } from "@/components/sandboxes/sandbox-status-hero"
+import { SnapshotsSection } from "@/components/sandboxes/snapshots-section"
 import { NetworkLogTable } from "@/components/secrets/network-log-table"
 import { SecretBindingList } from "@/components/secrets/secret-binding-list"
 import { useSandboxNetwork } from "@/hooks/use-network"
@@ -158,13 +159,6 @@ export default function SandboxDetailPage() {
     staleTime: 30_000,
   })
 
-  // const { data: snapshots, isPending: snapshotsPending } = useQuery({
-  //   queryKey: snapshotKeys.bySandbox(sandboxId),
-  //   queryFn: () => listSnapshotsBySandboxAction(sandboxId),
-  //   enabled: !!sandboxId,
-  //   staleTime: 30_000,
-  // })
-
   if (isPending) return <DetailSkeleton />
 
   if (error || !sandbox) {
@@ -273,7 +267,10 @@ export default function SandboxDetailPage() {
         {/* Layer 6: preview (state-aware) */}
         <PreviewSection sandbox={sandbox} onStart={handleStart} />
 
-        {/* Layer 7: activity (history, lower priority) */}
+        {/* Layer 7: saved snapshots */}
+        <SnapshotsSection sandbox={sandbox} />
+
+        {/* Layer 8: activity (history, lower priority) */}
         <ActivitySection
           activity={activity}
           isPending={activityPending}
@@ -281,7 +278,7 @@ export default function SandboxDetailPage() {
           onRetry={() => void refetchActivity()}
         />
 
-        {/* Layer 8: unified egress log (connections + secret requests) */}
+        {/* Layer 9: unified egress log (connections + secret requests) */}
         <NetworkLogTable
           title="Network"
           events={network.data?.data}

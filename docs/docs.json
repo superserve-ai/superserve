@@ -78,6 +78,7 @@
               "sandbox/create",
               "sandbox/connect",
               "sandbox/lifecycle",
+              "sandbox/snapshots",
               "sandbox/metadata",
               "sandbox/networking",
               "sandbox/preview-urls",
@@ -134,6 +135,7 @@
             "pages": [
               "sdk-reference/sandbox",
               "sdk-reference/secret",
+              "sdk-reference/snapshot",
               "sdk-reference/template",
               "sdk-reference/commands",
               "sdk-reference/files"
@@ -165,6 +167,16 @@
             ]
           },
           {
+            "group": "Snapshots",
+            "pages": [
+              "POST /sandboxes/{sandbox_id}/snapshot",
+              "GET /sandboxes/{sandbox_id}/snapshots",
+              "GET /snapshots/{snapshot_id}",
+              "PATCH /snapshots/{snapshot_id}",
+              "DELETE /snapshots/{snapshot_id}"
+            ]
+          },
+          {
             "group": "Exec",
             "pages": ["POST /exec", "POST /exec/stream", "GET /exec/connect"]
           },
@@ -174,6 +186,16 @@
               "GET /sandboxes/{sandbox_id}/files",
               "GET /files",
               "POST /files"
+            ]
+          },
+          {
+            "group": "Snapshots",
+            "pages": [
+              "POST /sandboxes/{sandbox_id}/snapshot",
+              "GET /sandboxes/{sandbox_id}/snapshots",
+              "GET /snapshots/{snapshot_id}",
+              "PATCH /snapshots/{snapshot_id}",
+              "DELETE /snapshots/{snapshot_id}"
             ]
           },
           {
@@ -210,7 +232,16 @@
             "pages": [
               "GET /billing/pricing",
               "GET /billing/pricing/public",
-              "GET /billing/summary"
+              "GET /billing/summary",
+              "GET /billing/usage-series",
+              "GET /teams/{team_id}/billing/periods",
+              "GET /teams/{team_id}/billing/periods/{period_id}/export-preview",
+              "GET /teams/{team_id}/billing/usage",
+              "POST /stripe/checkout-session",
+              "POST /stripe/checkout-session/recover",
+              "POST /stripe/checkout-session/publication-decision",
+              "POST /stripe/customer-portal-session",
+              "POST /stripe/webhook"
             ]
           },
           {
@@ -237,15 +268,6 @@
         "icon": "utensils",
         "groups": [
           {
-            "group": "Recipes",
-            "pages": ["cookbook/pr-loop"]
-          },
-          {
-            "group": "MCP",
-            "tag": "NEW",
-            "pages": ["integrations/mcp"]
-          },
-          {
             "group": "Coding Agents",
             "pages": [
               "integrations/coding-agents/claude",
@@ -263,15 +285,23 @@
           },
           {
             "group": "Managed Agents",
-            "pages": ["integrations/managed-agents/claude-managed-agents"]
+            "pages": [
+              "integrations/managed-agents/claude-managed-agents",
+              "integrations/managed-agents/cursor-cloud-agents"
+            ]
           },
           {
             "group": "Agent Harnesses",
             "pages": [
               "integrations/agent-harnesses/agno",
               "integrations/agent-harnesses/claude-agent-sdk",
+              "integrations/agent-harnesses/langchain",
               "integrations/agent-harnesses/openai-agents-sdk"
             ]
+          },
+          {
+            "group": "MCP Sandboxes",
+            "pages": ["integrations/mcp"]
           }
         ]
       }

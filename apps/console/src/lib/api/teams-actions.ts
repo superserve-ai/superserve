@@ -9,12 +9,22 @@ import {
   serializeTeamSelection,
   type TeamSelection,
 } from "@/lib/api/active-team"
+import { PromotionEvidenceError } from "@/lib/api/promotion-device-evidence"
 import {
   invalidateMembershipDirectory,
   listTeamsForUser,
   membershipExistsInCell,
 } from "@/lib/api/team-directory"
-import { provisionTeam } from "@/lib/api/team-provisioning"
+import {
+  completedMemberships,
+  provisionTeam,
+  type ProvisionedTeam,
+} from "@/lib/api/team-provisioning"
+import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
+import {
+  SignupRestrictedError,
+  SIGNUP_RESTRICTED_MESSAGE,
+} from "@/lib/auth/signup-restrictions"
 import { configuredRegions, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -26,11 +36,7 @@ export interface TeamSummary {
 
 export interface TeamDirectoryResponse {
   teams: TeamSummary[]
-  // Regions available for team creation, i.e. every configured cell.
   regions: string[]
-  // The team every dashboard surface operates on. Identified by id AND
-  // region: during a cross-cell migration the same team id can appear in
-  // two cells at once, and only one of them is active.
   activeTeamId: string | null
   activeRegion: string | null
 }
@@ -46,14 +52,17 @@ export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
     listTeamsForUser(user.id),
     readTeamSelection(),
   ])
-  // Resolve the active team from the same list the UI renders, so the
-  // directory can never mark a team it doesn't show.
-  const active = pickActiveTeam(
-    teams.map((t) => ({ teamId: t.id, region: t.region })),
-    selection,
+  const { memberships } = await completedMemberships(user.id, {
+    memberships: teams.map((t) => ({ teamId: t.id, region: t.region })),
+    degradedRegions: [],
+  })
+  const selectable = new Set(memberships.map((m) => `${m.region}:${m.teamId}`))
+  const completedTeams = teams.filter((t) =>
+    selectable.has(`${t.region}:${t.id}`),
   )
+  const active = pickActiveTeam(memberships, selection)
   return {
-    teams,
+    teams: completedTeams,
     regions: configuredRegions(),
     activeTeamId: active?.teamId ?? null,
     activeRegion: active?.region ?? null,
@@ -71,11 +80,6 @@ async function storeTeamSelection(selection: TeamSelection): Promise<void> {
   })
 }
 
-/**
- * Switch the dashboard to another of the user's teams. Membership is
- * verified before the cookie is written; reads re-verify on every request,
- * so the cookie only ever narrows which valid membership is used.
- */
 export async function setActiveTeamAction(
   teamId: string,
   region: string,
@@ -86,11 +90,15 @@ export async function setActiveTeamAction(
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
-  // The target names its cell, so validate the membership there alone — the
-  // every-cell fan-out buys nothing here and doubles the action's latency.
   if (
     !configuredRegions().includes(region) ||
-    !(await membershipExistsInCell(region, user.id, teamId))
+    !(await membershipExistsInCell(region, user.id, teamId)) ||
+    !(
+      await completedMemberships(user.id, {
+        memberships: [{ region, teamId }],
+        degradedRegions: [],
+      })
+    ).memberships.length
   ) {
     throw new Error("You are not a member of that team")
   }
@@ -98,21 +106,29 @@ export async function setActiveTeamAction(
   await storeTeamSelection({ region, teamId })
 }
 
-/**
- * Create a team homed in the given cell. The full RBAC chain the control
- * plane needs is written by `provisionTeam`; this action only enforces who
- * may create where, then lands the creator in the new team.
- */
 export async function createTeamAction(
   name: string,
   region?: string,
-): Promise<TeamSummary> {
+  operationId?: string,
+): Promise<
+  | TeamSummary
+  | {
+      code:
+        | "signup_blocked"
+        | "google_signup_recovery_required"
+        | "team_name_conflict"
+      message: string
+    }
+> {
   const supabase = await createServerClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
+  const observedAt = new Date().toISOString()
   if (!user) throw new Error("Not authenticated")
 
+  if (!operationId || operationId === user.id)
+    throw new Error("A distinct team creation operation is required")
   const trimmed = name.trim()
   if (!trimmed) throw new Error("Team name is required")
 
@@ -121,19 +137,34 @@ export async function createTeamAction(
     throw new Error(`Region ${targetRegion} is not available`)
   }
 
-  const team = await provisionTeam(
-    targetRegion,
-    user.id,
-    user.email ?? user.id,
-    trimmed,
-  )
+  let team: ProvisionedTeam
+  try {
+    team = await provisionTeam(
+      targetRegion,
+      user.id,
+      user.email ?? user.id,
+      trimmed,
+      { user, observedAt },
+      operationId,
+    )
+  } catch (error) {
+    if (
+      error instanceof PromotionEvidenceError &&
+      error.code === "team_name_conflict"
+    )
+      return {
+        code: "team_name_conflict",
+        message:
+          "That team name is already taken. Submit a different name to start a new creation.",
+      }
+    if (error instanceof SignupRestrictedError)
+      return { code: "signup_blocked", message: SIGNUP_RESTRICTED_MESSAGE }
+    if (error instanceof GoogleSignupRecoveryRequiredError)
+      return { code: "google_signup_recovery_required", message: error.message }
+    throw error
+  }
 
-  // The user just gained a membership; drop their cached directory so the
-  // very next read sees the new team instead of waiting out the TTL.
   invalidateMembershipDirectory(user.id)
-
-  // Land the creator in the team they just made — the reason to create a
-  // team is almost always to start working in it.
   await storeTeamSelection({ region: targetRegion, teamId: team.id })
 
   return { id: team.id, name: team.name, region: targetRegion }

@@ -27,21 +27,31 @@ vi.mock("@/lib/admin/impersonation-key", () => ({
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: vi.fn(),
 }))
+vi.mock("@/lib/api/promotion-identity", () => ({
+  publishPromotionIdentity: vi.fn(),
+}))
 vi.mock("@/lib/admin/impersonation", () => ({
   getImpersonationTeamId: vi.fn(),
   impersonationTtlMs: vi.fn(() => 30 * 60_000),
 }))
 
 // No cookie set: active-team resolution falls back to the first membership.
+let activeTeamCookie: string | undefined
 vi.mock("next/headers", () => ({
-  cookies: async () => ({ get: () => undefined }),
+  cookies: async () => ({
+    get: (name: string) =>
+      name === "ss-active-team" && activeTeamCookie !== undefined
+        ? { name, value: activeTeamCookie }
+        : undefined,
+  }),
 }))
 
 // The user's team lives in the usw cell — used by the cell-targeting tests.
 vi.mock("@/lib/api/team-directory", () => ({
-  listTeamMembershipsForUser: vi.fn(async () => [
-    { teamId: "team-west", region: "usw" },
-  ]),
+  listTeamMembershipsForUserDetailed: vi.fn(async () => ({
+    memberships: [{ teamId: "team-west", region: "usw" }],
+    degradedRegions: [],
+  })),
   invalidateMembershipDirectory: vi.fn(),
   findTeamById: vi.fn(async () => ({ region: "use" })),
 }))
@@ -50,15 +60,64 @@ vi.mock("@/lib/api/team-directory", () => ({
 // new-user test asserts getTeamForUser routes through it instead of writing a
 // legacy-only team the control plane would reject.
 vi.mock("@/lib/api/team-provisioning", () => ({
+  completedMemberships: vi.fn(
+    async (
+      _userId: string,
+      directory: import("@/lib/api/team-directory").MembershipDirectory,
+    ) => directory,
+  ),
   provisionTeam: vi.fn(async () => ({
     id: "team-new",
     name: "new@example.com",
     region: "use",
   })),
 }))
+const mockEnsureGoogleOnboardingMembership = vi.fn()
+const mockReadVerifiedGoogleOnboardingMembership = vi.fn()
+const mockClassifyGoogleMembershipState = vi.fn(
+  async (
+    userId: string,
+    directory: {
+      memberships: Array<{ teamId: string; region: string }>
+      degradedRegions: string[]
+    },
+  ) => {
+    const membership = directory.memberships[0]
+    if (membership) {
+      return { kind: "existing" as const, membership }
+    }
+    if (directory.degradedRegions.length > 0) {
+      const onboardingMembership =
+        await mockReadVerifiedGoogleOnboardingMembership(userId)
+      if (onboardingMembership) {
+        return { kind: "existing" as const, membership: onboardingMembership }
+      }
+      return {
+        kind: "indeterminate" as const,
+        degradedRegions: directory.degradedRegions,
+      }
+    }
+    return { kind: "first_time" as const }
+  },
+)
+vi.mock("@/lib/auth/google-onboarding", () => ({
+  classifyGoogleMembershipState: (
+    userId: string,
+    directory: {
+      memberships: Array<{ teamId: string; region: string }>
+      degradedRegions: string[]
+    },
+  ) => mockClassifyGoogleMembershipState(userId, directory),
+  ensureGoogleOnboardingMembership: (...args: unknown[]) =>
+    mockEnsureGoogleOnboardingMembership(...args),
+  readVerifiedGoogleOnboardingMembership: (...args: unknown[]) =>
+    mockReadVerifiedGoogleOnboardingMembership(...args),
+}))
 
 const uswApiKeyUpserts: Array<Record<string, unknown>> = []
 const useApiKeyUpserts: Array<Record<string, unknown>> = []
+const uswProfileReads: string[] = []
+let missingProfileExists = false
 vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
   configuredRegions: () => ["use", "usw"],
@@ -70,7 +129,34 @@ vi.mock("@/lib/cells", () => ({
         ? {
             // Captures the proxy key upsert.
             from: (table: string) => ({
+              select: () => ({
+                eq: (_column: string, userId: string) => ({
+                  maybeSingle: async () => {
+                    if (table === "profile") uswProfileReads.push(userId)
+                    return {
+                      data:
+                        userId.startsWith("missing-profile-") &&
+                        !missingProfileExists
+                          ? null
+                          : { id: userId },
+                      error: null,
+                    }
+                  },
+                }),
+              }),
               upsert: async (row: Record<string, unknown>) => {
+                if (table === "profile") {
+                  missingProfileExists = true
+                }
+                if (
+                  table === "api_key" &&
+                  String(row.created_by).startsWith("missing-profile-") &&
+                  !missingProfileExists
+                ) {
+                  return {
+                    error: { message: "created_by violates profile FK" },
+                  }
+                }
                 uswApiKeyUpserts.push({ table, ...row })
                 return { error: null }
               },
@@ -82,7 +168,10 @@ vi.mock("@/lib/cells", () => ({
             from: (table: string) => ({
               select: () => ({
                 eq: () => ({
-                  single: async () => ({ data: { id: "u1" }, error: null }),
+                  maybeSingle: async () => ({
+                    data: { id: "u1" },
+                    error: null,
+                  }),
                 }),
               }),
               upsert: async (row: Record<string, unknown>) => {
@@ -96,15 +185,24 @@ vi.mock("@/lib/cells", () => ({
 
 import { ensureImpersonationKeyRow } from "@/lib/admin/impersonation-key"
 import { platformImpersonationReadScopes } from "@/lib/admin/permissions"
-import { listTeamMembershipsForUser } from "@/lib/api/team-directory"
-import { provisionTeam } from "@/lib/api/team-provisioning"
+import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
+import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
+import {
+  completedMemberships,
+  provisionTeam,
+} from "@/lib/api/team-provisioning"
+import { SignupRestrictedError } from "@/lib/auth/signup-restrictions"
 
 import {
   deriveRawKey,
+  ensureAuthApiKeyForTeam,
   getApiBaseUrlForUser,
+  getAuthApiKeyAndTeamForRecovery,
+  getAuthApiKeyAndTeamForUser,
   getAuthApiKeyForUser,
   getProxySecret,
   hashKey,
+  repairRecoveryAuthApiKeyForTeam,
 } from "./proxy-auth"
 
 const ORIGINAL_SECRET = process.env.CONSOLE_PROXY_SECRET
@@ -194,11 +292,33 @@ describe("proxy-auth.hashKey", () => {
 
 describe("proxy-auth cell targeting", () => {
   const user = { id: "cell-user", email: "pavitra@superserve.ai" }
+  const originalSecret = process.env.CONSOLE_PROXY_SECRET
+
+  beforeEach(() => {
+    process.env.CONSOLE_PROXY_SECRET =
+      "test-secret-must-be-at-least-thirty-two-chars-long-abcdef"
+    missingProfileExists = false
+    activeTeamCookie = undefined
+    vi.mocked(listTeamMembershipsForUserDetailed).mockReset()
+    vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValue({
+      memberships: [{ teamId: "team-west", region: "usw" }],
+      degradedRegions: [],
+    })
+    vi.mocked(publishPromotionIdentity).mockReset()
+  })
+
+  afterEach(() => {
+    process.env.CONSOLE_PROXY_SECRET = originalSecret
+  })
 
   it("ensures the proxy key row in the team's home cell", async () => {
+    vi.mocked(publishPromotionIdentity).mockRejectedValue(
+      new Error("writer unavailable"),
+    )
     const key = await getAuthApiKeyForUser(user as never)
 
     expect(key).toMatch(/^ss_live_/)
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
     expect(uswApiKeyUpserts).toEqual([
       {
         table: "api_key",
@@ -211,10 +331,370 @@ describe("proxy-auth cell targeting", () => {
     ])
   })
 
+  it("returns the same team that supplies the proxy key", async () => {
+    vi.mocked(publishPromotionIdentity).mockRejectedValue(
+      new Error("writer unavailable"),
+    )
+    const { apiKey, team } = await getAuthApiKeyAndTeamForUser({
+      id: "paired-context-user",
+      email: "payer@example.com",
+    } as never)
+
+    expect(team).toEqual({ teamId: "team-west", region: "usw" })
+    expect(apiKey).toBe(deriveRawKey("paired-context-user", team.teamId))
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
+    expect(uswApiKeyUpserts).toContainEqual(
+      expect.objectContaining({
+        table: "api_key",
+        team_id: team.teamId,
+        key_hash: hashKey(apiKey),
+        created_by: "paired-context-user",
+      }),
+    )
+  })
+
   it("resolves the proxy upstream to the team's home cell API", async () => {
     expect(await getApiBaseUrlForUser(user as never)).toBe(
       "https://api-usw.test",
     )
+  })
+
+  it("publishes a missing regional profile before inserting its proxy key", async () => {
+    uswProfileReads.length = 0
+    vi.mocked(publishPromotionIdentity).mockImplementationOnce(async () => {
+      missingProfileExists = true
+    })
+
+    const observedAt = new Date().toISOString()
+    const user = {
+      id: "missing-profile-success-user",
+      email: "user@example.com",
+      updated_at: observedAt,
+    }
+
+    const key = await getAuthApiKeyForUser(user as never, null, observedAt)
+
+    expect(key).toMatch(/^ss_live_/)
+    expect(uswProfileReads).toEqual(["missing-profile-success-user"])
+    expect(publishPromotionIdentity).toHaveBeenCalledWith(
+      "usw",
+      user.id,
+      user,
+      observedAt,
+    )
+    expect(uswApiKeyUpserts).toContainEqual(
+      expect.objectContaining({
+        table: "api_key",
+        created_by: "missing-profile-success-user",
+      }),
+    )
+
+    await getAuthApiKeyForUser(user as never, null, observedAt)
+    expect(uswProfileReads).toEqual(["missing-profile-success-user"])
+    expect(publishPromotionIdentity).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not insert a proxy key when its missing profile cannot be published", async () => {
+    vi.mocked(publishPromotionIdentity).mockRejectedValueOnce(
+      new Error("writer unavailable"),
+    )
+    const observedAt = new Date().toISOString()
+
+    await expect(
+      getAuthApiKeyForUser(
+        {
+          id: "missing-profile-user",
+          email: "user@example.com",
+          updated_at: observedAt,
+        } as never,
+        null,
+        observedAt,
+      ),
+    ).rejects.toThrow("writer unavailable")
+    expect(uswApiKeyUpserts).not.toContainEqual(
+      expect.objectContaining({ created_by: "missing-profile-user" }),
+    )
+  })
+
+  it("resolves a pinned Checkout key without repairing a missing profile", async () => {
+    uswProfileReads.length = 0
+    vi.mocked(publishPromotionIdentity).mockRejectedValue(
+      new Error("writer unavailable"),
+    )
+    const user = {
+      id: "missing-profile-recovery-user",
+      email: "user@example.com",
+    }
+
+    const result = await getAuthApiKeyAndTeamForRecovery(user as never)
+
+    expect(result).toEqual({
+      apiKey: deriveRawKey(user.id, "team-west"),
+      team: { teamId: "team-west", region: "usw" },
+    })
+    expect(uswProfileReads).toEqual([])
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
+    expect(uswApiKeyUpserts).not.toContainEqual(
+      expect.objectContaining({ created_by: user.id }),
+    )
+  })
+
+  it("repairs the originally resolved Checkout key without another membership lookup", async () => {
+    const user = { id: "checkout-repair-user", email: "payer@example.com" }
+    const observedAt = new Date().toISOString()
+    const resolved = await getAuthApiKeyAndTeamForRecovery(
+      user as never,
+      observedAt,
+    )
+    vi.mocked(listTeamMembershipsForUserDetailed).mockClear()
+    vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValueOnce({
+      memberships: [],
+      degradedRegions: [],
+    })
+    vi.mocked(provisionTeam).mockClear()
+
+    const repaired = await ensureAuthApiKeyForTeam(
+      user as never,
+      resolved.team,
+      observedAt,
+    )
+
+    expect(repaired).toBe(resolved.apiKey)
+    expect(listTeamMembershipsForUserDetailed).not.toHaveBeenCalled()
+    expect(provisionTeam).not.toHaveBeenCalled()
+    expect(uswApiKeyUpserts).toContainEqual(
+      expect.objectContaining({
+        table: "api_key",
+        team_id: "team-west",
+        key_hash: hashKey(resolved.apiKey),
+        created_by: user.id,
+      }),
+    )
+  })
+
+  it("repairs a missing recovery profile and key while the identity writer is down", async () => {
+    const user = {
+      id: "missing-profile-repair-user",
+      email: "Raw.Email@Example.COM",
+      email_confirmed_at: new Date().toISOString(),
+    }
+    vi.mocked(publishPromotionIdentity).mockRejectedValue(
+      new Error("writer unavailable"),
+    )
+    const resolved = await getAuthApiKeyAndTeamForRecovery(user as never)
+    vi.mocked(provisionTeam).mockClear()
+
+    const key = await repairRecoveryAuthApiKeyForTeam(
+      user as never,
+      resolved.team,
+    )
+
+    expect(key).toBe(resolved.apiKey)
+    expect(uswApiKeyUpserts).toContainEqual({
+      table: "profile",
+      id: user.id,
+      email: user.email,
+    })
+    expect(uswApiKeyUpserts).toContainEqual(
+      expect.objectContaining({
+        table: "api_key",
+        team_id: resolved.team.teamId,
+        key_hash: hashKey(resolved.apiKey),
+        created_by: user.id,
+      }),
+    )
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
+    expect(provisionTeam).not.toHaveBeenCalled()
+
+    // A later recovery 401 must override the recent-success cache.
+    missingProfileExists = false
+    await repairRecoveryAuthApiKeyForTeam(user as never, resolved.team)
+    expect(
+      uswApiKeyUpserts.filter(
+        (row) => row.table === "profile" && row.id === user.id,
+      ),
+    ).toHaveLength(2)
+  })
+
+  it("re-ensures a deleted recovery key row while its ensure cache is fresh", async () => {
+    const user = { id: "missing-key-repair-user", email: "payer@example.com" }
+    const team = { teamId: "team-west", region: "usw" }
+    const key = await ensureAuthApiKeyForTeam(user as never, team)
+    const matchingUpserts = () =>
+      uswApiKeyUpserts.filter(
+        (row) =>
+          row.table === "api_key" &&
+          row.created_by === user.id &&
+          row.key_hash === hashKey(key),
+      )
+
+    expect(matchingUpserts()).toHaveLength(1)
+    expect(await ensureAuthApiKeyForTeam(user as never, team)).toBe(key)
+    expect(matchingUpserts()).toHaveLength(1)
+
+    // The backend 401 shows that the row disappeared despite the cache hit.
+    expect(await repairRecoveryAuthApiKeyForTeam(user as never, team)).toBe(key)
+    expect(matchingUpserts()).toHaveLength(2)
+    expect(uswApiKeyUpserts).not.toContainEqual(
+      expect.objectContaining({ table: "profile", id: user.id }),
+    )
+  })
+
+  it.each([
+    { memberships: [], degradedRegions: [] },
+    { memberships: [], degradedRegions: ["usw"] },
+    {
+      memberships: [{ teamId: "team-east", region: "use" }],
+      degradedRegions: ["usw"],
+    },
+    {
+      memberships: [
+        { teamId: "team-west", region: "usw" },
+        { teamId: "team-west", region: "usw" },
+      ],
+      degradedRegions: [],
+    },
+  ])(
+    "rejects incomplete or ambiguous recovery membership %j",
+    async (directory) => {
+      vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValueOnce(
+        directory,
+      )
+      vi.mocked(provisionTeam).mockClear()
+
+      await expect(
+        getAuthApiKeyAndTeamForRecovery({ id: "recovery-user" } as never),
+      ).rejects.toThrow(/Checkout/)
+
+      expect(listTeamMembershipsForUserDetailed).toHaveBeenCalledWith(
+        "recovery-user",
+        { maxAgeMs: 0 },
+      )
+      expect(provisionTeam).not.toHaveBeenCalled()
+    },
+  )
+
+  it("uses the selected team and falls back when its cell changes", async () => {
+    activeTeamCookie = "usw:team-west"
+    vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValueOnce({
+      memberships: [
+        { teamId: "team-east", region: "use" },
+        { teamId: "team-west", region: "usw" },
+      ],
+      degradedRegions: [],
+    })
+    const user = { id: "selected-recovery-user" }
+    await expect(
+      getAuthApiKeyAndTeamForRecovery(user as never),
+    ).resolves.toEqual({
+      apiKey: deriveRawKey(user.id, "team-west"),
+      team: { teamId: "team-west", region: "usw" },
+    })
+
+    vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValueOnce({
+      memberships: [{ teamId: "team-west", region: "use" }],
+      degradedRegions: [],
+    })
+    await expect(
+      getAuthApiKeyAndTeamForRecovery(user as never),
+    ).resolves.toEqual({
+      apiKey: deriveRawKey(user.id, "team-west"),
+      team: { teamId: "team-west", region: "use" },
+    })
+    expect(provisionTeam).not.toHaveBeenCalled()
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
+    expect(uswApiKeyUpserts).not.toContainEqual(
+      expect.objectContaining({ created_by: user.id }),
+    )
+    expect(useApiKeyUpserts).not.toContainEqual(
+      expect.objectContaining({ created_by: user.id }),
+    )
+    expect(uswApiKeyUpserts).not.toContainEqual(
+      expect.objectContaining({ table: "profile", id: user.id }),
+    )
+    expect(useApiKeyUpserts).not.toContainEqual(
+      expect.objectContaining({ table: "profile", id: user.id }),
+    )
+  })
+
+  it.each(["usw:removed-team", "usw:team-a"])(
+    "uses a live membership when the selected team or cell is stale: %s",
+    async (cookie) => {
+      activeTeamCookie = cookie
+      vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValueOnce({
+        memberships: [
+          { teamId: "team-b", region: "use" },
+          { teamId: "team-a", region: "use" },
+          { teamId: "team-west", region: "usw" },
+        ],
+        degradedRegions: [],
+      })
+
+      await expect(
+        getAuthApiKeyAndTeamForRecovery({
+          id: "fallback-recovery-user",
+        } as never),
+      ).resolves.toEqual({
+        apiKey: deriveRawKey("fallback-recovery-user", "team-a"),
+        team: { teamId: "team-a", region: "use" },
+      })
+      expect(provisionTeam).not.toHaveBeenCalled()
+      expect(publishPromotionIdentity).not.toHaveBeenCalled()
+      expect(uswApiKeyUpserts).not.toContainEqual(
+        expect.objectContaining({ created_by: "fallback-recovery-user" }),
+      )
+      expect(useApiKeyUpserts).not.toContainEqual(
+        expect.objectContaining({ created_by: "fallback-recovery-user" }),
+      )
+      expect(uswApiKeyUpserts).not.toContainEqual(
+        expect.objectContaining({
+          table: "profile",
+          id: "fallback-recovery-user",
+        }),
+      )
+      expect(useApiKeyUpserts).not.toContainEqual(
+        expect.objectContaining({
+          table: "profile",
+          id: "fallback-recovery-user",
+        }),
+      )
+    },
+  )
+
+  it("rejects an ambiguous fallback when the selected team is stale", async () => {
+    activeTeamCookie = "usw:removed-team"
+    vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValueOnce({
+      memberships: [
+        { teamId: "team-a", region: "use" },
+        { teamId: "team-a", region: "use" },
+      ],
+      degradedRegions: [],
+    })
+
+    await expect(
+      getAuthApiKeyAndTeamForRecovery({ id: "recovery-user" } as never),
+    ).rejects.toThrow("Checkout team membership unavailable or ambiguous")
+    expect(provisionTeam).not.toHaveBeenCalled()
+  })
+
+  it("uses the deterministic membership fallback when no team is selected", async () => {
+    vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValueOnce({
+      memberships: [
+        { teamId: "team-b", region: "use" },
+        { teamId: "team-a", region: "use" },
+        { teamId: "team-west", region: "usw" },
+      ],
+      degradedRegions: [],
+    })
+    const user = { id: "fallback-recovery-user" }
+
+    await expect(
+      getAuthApiKeyAndTeamForRecovery(user as never),
+    ).resolves.toEqual({
+      apiKey: deriveRawKey(user.id, "team-a"),
+      team: { teamId: "team-a", region: "use" },
+    })
+    expect(provisionTeam).not.toHaveBeenCalled()
   })
 })
 
@@ -223,10 +703,64 @@ describe("proxy-auth new-user provisioning", () => {
     process.env.CONSOLE_PROXY_SECRET =
       "test-secret-must-be-at-least-thirty-two-chars-long-abcdef"
     useApiKeyUpserts.length = 0
+    activeTeamCookie = undefined
+    vi.mocked(provisionTeam).mockClear()
+    vi.mocked(listTeamMembershipsForUserDetailed)
+      .mockReset()
+      .mockResolvedValue({
+        memberships: [{ teamId: "team-west", region: "usw" }],
+        degradedRegions: [],
+      })
+    vi.mocked(completedMemberships).mockImplementation(
+      async (_userId, directory) => directory,
+    )
+    vi.mocked(provisionTeam).mockResolvedValue({
+      id: "team-new",
+      name: "new@example.com",
+      region: "use",
+    })
+    mockEnsureGoogleOnboardingMembership
+      .mockReset()
+      .mockResolvedValue(undefined)
+    mockReadVerifiedGoogleOnboardingMembership
+      .mockReset()
+      .mockResolvedValue(null)
+    mockClassifyGoogleMembershipState.mockReset().mockImplementation(
+      async (
+        userId: string,
+        directory: {
+          memberships: Array<{ teamId: string; region: string }>
+          degradedRegions: string[]
+        },
+      ) => {
+        const membership = directory.memberships[0]
+        if (membership) {
+          return { kind: "existing" as const, membership }
+        }
+        if (directory.degradedRegions.length > 0) {
+          const onboardingMembership =
+            await mockReadVerifiedGoogleOnboardingMembership(userId)
+          if (onboardingMembership) {
+            return {
+              kind: "existing" as const,
+              membership: onboardingMembership,
+            }
+          }
+          return {
+            kind: "indeterminate" as const,
+            degradedRegions: directory.degradedRegions,
+          }
+        }
+        return { kind: "first_time" as const }
+      },
+    )
   })
 
   it("provisions a full RBAC team when the user has no memberships", async () => {
-    vi.mocked(listTeamMembershipsForUser).mockResolvedValueOnce([])
+    vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValueOnce({
+      memberships: [],
+      degradedRegions: [],
+    })
 
     const key = await getAuthApiKeyForUser({
       id: "brand-new",
@@ -240,6 +774,7 @@ describe("proxy-auth new-user provisioning", () => {
       "brand-new",
       "new@example.com",
       "new@example.com",
+      undefined,
     )
     expect(key).toMatch(/^ss_live_/)
     // Proxy key row lands in the newly provisioned team's home (default) cell.
@@ -253,6 +788,210 @@ describe("proxy-auth new-user provisioning", () => {
         created_by: "brand-new",
       },
     ])
+  })
+
+  it("does not mint a proxy key when first-team provisioning is blocked", async () => {
+    vi.mocked(listTeamMembershipsForUserDetailed)
+      .mockResolvedValueOnce({ memberships: [], degradedRegions: [] })
+      .mockResolvedValueOnce({ memberships: [], degradedRegions: [] })
+    vi.mocked(provisionTeam).mockRejectedValueOnce(new SignupRestrictedError())
+
+    await expect(
+      getAuthApiKeyForUser({
+        id: "blocked-new-user",
+        email: "blocked@example.com",
+      } as never),
+    ).rejects.toThrow(SignupRestrictedError)
+
+    expect(provisionTeam).toHaveBeenCalledOnce()
+    expect(useApiKeyUpserts).toEqual([])
+
+    const retryKey = await getAuthApiKeyForUser({
+      id: "blocked-new-user",
+      email: "blocked@example.com",
+    } as never)
+    expect(retryKey).toMatch(/^ss_live_/)
+    expect(provisionTeam).toHaveBeenCalledTimes(2)
+    expect(useApiKeyUpserts).toEqual([
+      expect.objectContaining({
+        table: "api_key",
+        team_id: "team-new",
+        key_hash: hashKey(retryKey as string),
+        created_by: "blocked-new-user",
+      }),
+    ])
+
+    const key = await getAuthApiKeyForUser({
+      id: "established-user",
+      email: "existing@example.com",
+    } as never)
+    expect(key).toMatch(/^ss_live_/)
+    expect(provisionTeam).toHaveBeenCalledTimes(2)
+    expect(uswApiKeyUpserts).toContainEqual(
+      expect.objectContaining({
+        table: "api_key",
+        team_id: "team-west",
+        created_by: "established-user",
+      }),
+    )
+  })
+
+  it("routes an unfinished owner membership through provisioning on retry", async () => {
+    vi.mocked(completedMemberships).mockImplementation(
+      async (_userId, directory) => ({
+        ...directory,
+        memberships: directory.memberships.filter(
+          (membership) => membership.teamId !== "unfinished-team",
+        ),
+      }),
+    )
+    vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValueOnce({
+      memberships: [{ teamId: "unfinished-team", region: "use" }],
+      degradedRegions: [],
+    })
+    vi.mocked(provisionTeam).mockRejectedValueOnce(new SignupRestrictedError())
+
+    await expect(
+      getAuthApiKeyForUser({
+        id: "failed-cleanup-user",
+        email: "retry@example.com",
+      } as never),
+    ).rejects.toThrow(SignupRestrictedError)
+
+    expect(completedMemberships).toHaveBeenCalledWith(
+      "failed-cleanup-user",
+      expect.objectContaining({
+        memberships: [{ teamId: "unfinished-team", region: "use" }],
+      }),
+    )
+    expect(provisionTeam).toHaveBeenCalledWith(
+      "use",
+      "failed-cleanup-user",
+      "retry@example.com",
+      "retry@example.com",
+      undefined,
+    )
+    expect(useApiKeyUpserts).toEqual([])
+  })
+
+  it("rejects unfinished owner memberships during Checkout recovery without provisioning", async () => {
+    vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValueOnce({
+      memberships: [{ teamId: "unfinished-team", region: "use" }],
+      degradedRegions: [],
+    })
+    vi.mocked(completedMemberships).mockResolvedValueOnce({
+      memberships: [],
+      degradedRegions: [],
+    })
+    vi.mocked(provisionTeam).mockClear()
+    vi.mocked(publishPromotionIdentity).mockClear()
+    await expect(
+      getAuthApiKeyAndTeamForRecovery({ id: "unfinished-owner" } as never),
+    ).rejects.toThrow("Checkout team membership unavailable")
+    expect(completedMemberships).toHaveBeenCalledWith(
+      "unfinished-owner",
+      expect.objectContaining({
+        memberships: [{ teamId: "unfinished-team", region: "use" }],
+      }),
+    )
+    expect(provisionTeam).not.toHaveBeenCalled()
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
+  })
+
+  it("does not provision when a secondary-cell completion lookup is degraded", async () => {
+    vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValueOnce({
+      memberships: [{ teamId: "team-west", region: "usw" }],
+      degradedRegions: [],
+    })
+    vi.mocked(completedMemberships).mockResolvedValueOnce({
+      memberships: [],
+      degradedRegions: ["usw"],
+    })
+
+    await expect(
+      getAuthApiKeyForUser({
+        id: "degraded-completion-user",
+        email: "existing@example.com",
+      } as never),
+    ).rejects.toThrow("Membership lookup degraded; please try again")
+
+    expect(provisionTeam).not.toHaveBeenCalled()
+    expect(useApiKeyUpserts).toEqual([])
+  })
+
+  it("does not provision when the initial non-Google membership read is degraded", async () => {
+    vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValueOnce({
+      memberships: [],
+      degradedRegions: ["usw"],
+    })
+
+    await expect(
+      getAuthApiKeyForUser({
+        id: "degraded-initial-user",
+        email: "existing@example.com",
+      } as never),
+    ).rejects.toThrow("Membership lookup degraded; please try again")
+
+    expect(provisionTeam).not.toHaveBeenCalled()
+    expect(useApiKeyUpserts).toEqual([])
+  })
+
+  it("uses a detailed Google membership read when the initial lookup is empty", async () => {
+    vi.mocked(listTeamMembershipsForUserDetailed)
+      .mockResolvedValueOnce({ memberships: [], degradedRegions: [] })
+      .mockResolvedValueOnce({
+        memberships: [{ teamId: "team-west", region: "usw" }],
+        degradedRegions: ["use"],
+      })
+
+    const key = await getAuthApiKeyForUser({
+      id: "google-user",
+      email: "google@example.com",
+      app_metadata: { provider: "google", providers: ["google"] },
+    } as never)
+
+    expect(key).toMatch(/^ss_live_/)
+    expect(provisionTeam).not.toHaveBeenCalled()
+  })
+
+  it("respects the selected active team when recovering a fresh Google lookup", async () => {
+    vi.mocked(listTeamMembershipsForUserDetailed)
+      .mockResolvedValueOnce({ memberships: [], degradedRegions: [] })
+      .mockResolvedValueOnce({
+        memberships: [
+          { teamId: "team-east", region: "use" },
+          { teamId: "team-west", region: "usw" },
+        ],
+        degradedRegions: [],
+      })
+    activeTeamCookie = "usw:team-west"
+
+    const key = await getAuthApiKeyForUser({
+      id: "google-selected-user",
+      email: "google@example.com",
+      app_metadata: { provider: "google", providers: ["google"] },
+    } as never)
+
+    expect(key).toMatch(/^ss_live_/)
+    expect(provisionTeam).not.toHaveBeenCalled()
+  })
+
+  it("fails transiently when a degraded empty lookup cannot be recovered", async () => {
+    vi.mocked(listTeamMembershipsForUserDetailed)
+      .mockResolvedValueOnce({ memberships: [], degradedRegions: [] })
+      .mockResolvedValueOnce({
+        memberships: [],
+        degradedRegions: ["use"],
+      })
+    await expect(
+      getAuthApiKeyForUser({
+        id: "google-indeterminate-user",
+        email: "google@example.com",
+        app_metadata: { provider: "google", providers: ["google"] },
+      } as never),
+    ).rejects.toThrow("Google membership lookup degraded; please try again")
+
+    expect(provisionTeam).not.toHaveBeenCalled()
   })
 })
 

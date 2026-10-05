@@ -1,9 +1,11 @@
 ---
 title: "MCP Server"
-sidebarTitle: MCP
+sidebarTitle: Setup
 description: Create, run, and manage Superserve sandboxes from any MCP client.
 icon: "plug"
 ---
+
+Looking to let an agent create sandboxes itself? This MCP server does that.
 
 The Superserve **MCP server** (`@superserve/mcp`) exposes sandbox primitives as [Model Context Protocol](https://modelcontextprotocol.io) tools, so any MCP-capable client — Claude, Cursor, VS Code, Windsurf, Codex — can create sandboxes, run commands, read and write files, build templates, broker secrets, and control network access in an isolated Firecracker microVM.
 
@@ -236,7 +238,7 @@ When it's done, the agent can `sandbox_pause` (state preserved, cheaper to keep 
 - **Auto-resume.** `sandbox_exec` and the file tools transparently resume a paused sandbox, so agents never need to call `sandbox_resume` first. `sandbox_resume` exists only to warm a sandbox explicitly.
 - **Output is capped for context.** `sandbox_exec` truncates stdout and stderr to 32 KiB each — a truncated result sets `truncated: true` and reports the original byte length. `sandbox_files_read` **rejects** files larger than 1 MiB (it does not return partial content); the error tells you to read a slice with `sandbox_exec` (e.g. `head -c`) or download the whole file with the SDK/CLI. `sandbox_files_write` inline content is capped at 8 MiB.
 - **Default command timeout is 60s**, capped at 10 minutes. Override it per call with `timeout_ms`.
-- **Egress is controllable.** `allow_out` (domain patterns or CIDRs) adds allowed destinations; `deny_out` (CIDRs only) blocks them. `allow_out` alone does **not** lock a sandbox down — for a strict allowlist, combine it with `deny_out: ["0.0.0.0/0"]` (deny all, then allow the listed destinations). Set these on `sandbox_create` or `sandbox_update`, and audit what a sandbox actually reached with `sandbox_network_log`.
+- **Egress is controllable.** `allow_out` (domain patterns, IPs, or CIDRs) adds allowed destinations; `deny_out` (IPs or CIDRs, no domains) blocks them. `allow_out` alone does **not** lock a sandbox down — for a strict allowlist, combine it with `deny_out: ["0.0.0.0/0"]` (deny all, then allow the listed destinations). If the allowlist has domain rules or the workload resolves hostnames, also allow the sandbox's DNS resolvers, `1.1.1.1/32` and `8.8.8.8/32`, since deny-all blocks DNS too; leave them out of an IP-only allowlist, where an allowed resolver is only an extra outbound channel. Set these on `sandbox_create` or `sandbox_update`, and audit what a sandbox actually reached with `sandbox_network_log`.
 - **Errors are actionable.** A failed tool call returns a short message telling the agent what to do next — e.g. _"Sandbox quota reached. Pause or kill a sandbox, or retry later."_ — rather than a raw stack trace, so the agent can self-correct.
 
 ## Secrets, templates, and ports

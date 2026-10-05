@@ -1,6 +1,7 @@
 import { ImpersonationBanner } from "@/components/admin/impersonation-banner"
 import { DashboardShell } from "@/components/layout/dashboard-shell"
 import { QueryProvider } from "@/components/query-provider"
+import { TrialBillingBanner } from "@/components/trial-billing-banner"
 import {
   getImpersonationContext,
   hasImpersonationCookie,
@@ -17,8 +18,20 @@ export default async function DashboardLayout({
   const queryScope = impersonationContext?.teamId ?? "self"
 
   return (
-    <QueryProvider cacheScope={queryScope}>
+    <QueryProvider
+      cacheScope={queryScope}
+      teamContext={
+        impersonationContext
+          ? {
+              teamId: impersonationContext.teamId,
+              region: impersonationContext.region,
+              name: impersonationContext.teamName,
+            }
+          : null
+      }
+    >
       <DashboardShell
+        globalBanner={<TrialBillingBanner />}
         banner={<ImpersonationBanner context={impersonationContext} />}
       >
         {children}

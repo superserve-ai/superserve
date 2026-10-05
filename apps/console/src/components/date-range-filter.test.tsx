@@ -23,6 +23,25 @@ describe("DateRangeFilter", () => {
     expect(parseDateInput("2026-13-01")).toBeNull()
   })
 
+  it("displays the inclusive end date for custom ranges", () => {
+    render(
+      <DateRangeFilter
+        value={{
+          start: new Date("2026-06-01T00:00:00"),
+          end: new Date("2026-06-03T00:00:00"),
+        }}
+        onChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText("Jun 1 – Jun 2")).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", {
+        name: "Custom date range: Jun 1 to Jun 2",
+      }),
+    ).toBeInTheDocument()
+  })
+
   it("rejects invalid custom ranges without calling onChange", async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()
@@ -36,6 +55,58 @@ describe("DateRangeFilter", () => {
 
     expect(onChange).not.toHaveBeenCalled()
   })
+
+  it.each([
+    ["7D", "2026-06-08", "Jun 8"],
+    ["30D", "2026-05-16", "May 16"],
+  ])(
+    "keeps exclusive custom ends distinct from %s",
+    async (label, start, displayStart) => {
+      vi.setSystemTime(new Date("2026-06-15T12:00:00"))
+      const user = userEvent.setup()
+      const onChange = vi.fn()
+      const { rerender } = render(
+        <DateRangeFilter
+          value={{
+            start: new Date(`${start}T00:00:00`),
+            end: new Date("2026-06-15T00:00:00"),
+          }}
+          onChange={onChange}
+        />,
+      )
+
+      expect(screen.getByText(`${displayStart} – Jun 14`)).toBeInTheDocument()
+      expect(
+        screen.getByRole("button", {
+          name: `Custom date range: ${displayStart} to Jun 14`,
+        }),
+      ).toHaveClass("bg-brand/10")
+      expect(screen.getByRole("button", { name: label })).not.toHaveClass(
+        "bg-brand/10",
+      )
+
+      await user.click(screen.getByRole("button", { name: label }))
+      const rollingRange = {
+        start: new Date(`${start}T00:00:00`),
+        end: new Date("2026-06-15T12:00:00"),
+      }
+      expect(onChange).toHaveBeenLastCalledWith(rollingRange)
+
+      // A later render must still recognize the selected rolling preset.
+      vi.setSystemTime(new Date("2026-06-15T12:01:00"))
+      rerender(<DateRangeFilter value={rollingRange} onChange={onChange} />)
+      expect(screen.getByRole("button", { name: label })).toHaveClass(
+        "bg-brand/10",
+      )
+      expect(
+        screen.getByRole("button", {
+          name: "Select a custom date range",
+        }),
+      ).toBeInTheDocument()
+      await user.click(screen.getByRole("button", { name: label }))
+      expect(onChange).toHaveBeenLastCalledWith(null)
+    },
+  )
 
   it("rejects an inverted range without calling onChange", async () => {
     const user = userEvent.setup()

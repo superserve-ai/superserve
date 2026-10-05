@@ -14,14 +14,20 @@ import {
   readTeamSelection,
   serializeTeamSelection,
 } from "@/lib/api/active-team"
+import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
 import { getProxySecret, hashKey } from "@/lib/api/proxy-secret"
 import {
   invalidateMembershipDirectory,
-  listTeamMembershipsForUser,
+  listTeamMembershipsForUserDetailed,
   findTeamById,
   type TeamMembership,
 } from "@/lib/api/team-directory"
-import { provisionTeam } from "@/lib/api/team-provisioning"
+import {
+  completedMemberships,
+  provisionTeam,
+} from "@/lib/api/team-provisioning"
+import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
+import { isGoogleUser } from "@/lib/auth/google-signup-proof"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -81,51 +87,67 @@ const ensuredKeys = new Map<string, Expiring<true>>()
 // switch takes effect immediately instead of after the TTL.
 const teamCache = new Map<string, Expiring<TeamMembership>>()
 
-async function ensureProfile(userId: string, email: string): Promise<void> {
-  const admin = cellFor(DEFAULT_REGION).createAdminClient()
-  const { data: existing } = await admin
-    .from("profile")
-    .select("id")
-    .eq("id", userId)
-    .single()
-
-  if (existing) return
-
-  const { error } = await admin.from("profile").insert({
-    id: userId,
-    email,
-  })
-
-  if (error && !error.message.includes("duplicate key")) {
-    throw new Error(`Failed to create profile: ${error.message}`)
-  }
-}
-
 async function getTeamForUser(
-  userId: string,
-  email: string,
+  user: User,
+  observedAt?: string,
 ): Promise<TeamMembership> {
+  const userId = user.id
+  const email = user.email ?? user.id
+  const googleUser = isGoogleUser(user)
   const selection = await readTeamSelection()
   const cacheKey = `${userId}|${selection ? serializeTeamSelection(selection) : ""}`
   const cached = getFresh(teamCache, cacheKey)
   if (cached) return cached
 
-  await ensureProfile(userId, email)
-
-  const membership = pickActiveTeam(
-    await listTeamMembershipsForUser(userId),
-    selection,
+  let directory = await completedMemberships(
+    userId,
+    await listTeamMembershipsForUserDetailed(userId),
   )
+  let memberships = directory.memberships
+  if (googleUser && memberships.length === 0) {
+    // A fresh, complete directory read is required before deciding this is a
+    // first-team Google onboarding attempt. If that read is degraded, a
+    // verified onboarding marker can recover the current membership, but the
+    // marker itself never counts as membership.
+    directory = await completedMemberships(
+      userId,
+      await listTeamMembershipsForUserDetailed(userId, { maxAgeMs: 0 }),
+    )
+    memberships = directory.memberships
+    const state = await classifyGoogleMembershipState(userId, directory)
+    if (state.kind === "existing") {
+      const activeMembership =
+        pickActiveTeam(directory.memberships, selection) ?? state.membership
+      setFresh(teamCache, cacheKey, activeMembership)
+      return activeMembership
+    } else if (state.kind === "indeterminate") {
+      console.warn("Google onboarding blocked: membership lookup degraded", {
+        userId,
+        degradedRegions: state.degradedRegions,
+        stage: "proxy-auth",
+      })
+      throw new Error("Google membership lookup degraded; please try again")
+    }
+  }
+  const membership = pickActiveTeam(memberships, selection)
   if (membership) {
     setFresh(teamCache, cacheKey, membership)
     return membership
   }
+  if (directory.degradedRegions.length > 0)
+    throw new Error("Membership lookup degraded; please try again")
 
   // First login: no membership yet. Provision a team through the same full
   // RBAC chain the create-team action uses — a legacy-only team (team +
   // team_member, no team_memberships/role assignment) is one the console
   // lists but the control plane 403s, so the user's first request fails.
-  const team = await provisionTeam(DEFAULT_REGION, userId, email, email)
+  const team = await provisionTeam(
+    DEFAULT_REGION,
+    userId,
+    email,
+    email,
+    observedAt ? { user, observedAt } : undefined,
+  )
 
   // The empty membership list we just read may be cached; drop it so other
   // surfaces (billing, quota, directory) see the new team immediately.
@@ -136,19 +158,21 @@ async function getTeamForUser(
   return created
 }
 
-export async function getTeamIdForUser(user: User): Promise<string> {
-  const { teamId } = await getTeamForUser(user.id, user.email ?? user.id)
+export async function getTeamIdForUser(
+  user: User,
+  observedAt?: string,
+): Promise<string> {
+  const { teamId } = await getTeamForUser(user, observedAt)
   return teamId
 }
 
 /**
- * Base URL of the control-plane API serving the user's team. Proxied
- * requests must go to the team's home cell — that's the only control plane
- * whose database holds the proxy key row.
+ * Home region of the user's active team. Billing publication and upstream
+ * requests must target the same cell as the proxy key row.
  */
-export async function getApiBaseUrlForUser(user: User): Promise<string> {
-  const { region } = await getTeamForUser(user.id, user.email ?? user.id)
-  return cellFor(region).apiBaseUrl
+export async function getRegionForUser(user: User): Promise<string> {
+  const { region } = await getTeamForUser(user)
+  return region
 }
 
 /**
@@ -158,15 +182,44 @@ export async function getApiBaseUrlForUser(user: User): Promise<string> {
  * each other.
  */
 async function ensureProxyKeyRow(
-  userId: string,
+  user: User,
   team: TeamMembership,
   keyHash: string,
+  observedAt?: string,
+  recovery = false,
 ): Promise<void> {
+  const userId = user.id
   const ensureKey = `${userId}|${team.region}:${team.teamId}`
-  if (getFresh(ensuredKeys, ensureKey)) return
+  // A recovery 401 is evidence that the row is absent or unusable, even if
+  // this process recently cached a successful ensure.
+  if (!recovery && getFresh(ensuredKeys, ensureKey)) return
 
   const admin = cellFor(team.region).createAdminClient()
-
+  const { data: profile, error: profileError } = await admin
+    .from("profile")
+    .select("id")
+    .eq("id", userId)
+    .maybeSingle()
+  if (profileError) throw new Error("Failed to read regional profile")
+  if (!profile) {
+    if (recovery) {
+      // A pinned Checkout needs its existing backend actor/key, but no new
+      // promotion claim. Only repair the FK target using trusted Auth data.
+      const { error } = await admin
+        .from("profile")
+        .upsert(
+          { id: userId, email: user.email ?? "" },
+          { onConflict: "id", ignoreDuplicates: true },
+        )
+      if (error) throw new Error("Failed to repair regional profile")
+    } else if (!observedAt) {
+      throw new Error(
+        "Authenticated user observation unavailable; please retry",
+      )
+    } else {
+      await publishPromotionIdentity(team.region, userId, user, observedAt)
+    }
+  }
   const { error } = await admin.from("api_key").upsert(
     {
       team_id: team.teamId,
@@ -189,6 +242,7 @@ export async function getAuthApiKeyForUser(
     | string
     | Pick<ImpersonationDisplayContext, "teamId" | "region">
     | null,
+  observedAt?: string,
 ): Promise<string | null> {
   if (!user) return null
 
@@ -226,10 +280,65 @@ export async function getAuthApiKeyForUser(
     )
   }
 
-  const team = await getTeamForUser(user.id, user.email ?? user.id)
-  const rawKey = deriveRawKey(user.id, team.teamId)
-  await ensureProxyKeyRow(user.id, team, hashKey(rawKey))
-  return rawKey
+  return (await getAuthApiKeyAndTeamForUser(user, observedAt)).apiKey
+}
+
+/** Keep the key and its resolved team together for a single proxy request. */
+export async function getAuthApiKeyAndTeamForUser(
+  user: User,
+  observedAt?: string,
+): Promise<{ apiKey: string; team: TeamMembership }> {
+  const team = await getTeamForUser(user, observedAt)
+  const apiKey = await ensureAuthApiKeyForTeam(user, team, observedAt)
+  return { apiKey, team }
+}
+
+/** Repair only the key for a team already resolved by this request. */
+export async function ensureAuthApiKeyForTeam(
+  user: User,
+  team: TeamMembership,
+  observedAt?: string,
+): Promise<string> {
+  const apiKey = deriveRawKey(user.id, team.teamId)
+  await ensureProxyKeyRow(user, team, hashKey(apiKey), observedAt)
+  return apiKey
+}
+
+/** Repair only an already resolved, pinned Checkout actor's regional auth. */
+export async function repairRecoveryAuthApiKeyForTeam(
+  user: User,
+  team: TeamMembership,
+): Promise<string> {
+  const apiKey = deriveRawKey(user.id, team.teamId)
+  await ensureProxyKeyRow(user, team, hashKey(apiKey), undefined, true)
+  return apiKey
+}
+
+/** Resolve an existing Checkout from a complete, fresh membership read. */
+export async function getAuthApiKeyAndTeamForRecovery(
+  user: User,
+  _observedAt?: string,
+): Promise<{ apiKey: string; team: TeamMembership }> {
+  const [directory, selection] = await Promise.all([
+    listTeamMembershipsForUserDetailed(user.id, { maxAgeMs: 0 }).then(
+      (directory) => completedMemberships(user.id, directory),
+    ),
+    readTeamSelection(),
+  ])
+  if (directory.degradedRegions.length > 0) {
+    throw new Error("Checkout membership lookup incomplete; please retry")
+  }
+  const active = pickActiveTeam(directory.memberships, selection)
+  const matches = directory.memberships.filter(
+    (membership) =>
+      membership.teamId === active?.teamId &&
+      membership.region === active?.region,
+  )
+  if (matches.length !== 1) {
+    throw new Error("Checkout team membership unavailable or ambiguous")
+  }
+  const team = matches[0]
+  return { apiKey: deriveRawKey(user.id, team.teamId), team }
 }
 
 /**
@@ -241,5 +350,9 @@ export async function getAuthApiKey(): Promise<string | null> {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  return getAuthApiKeyForUser(user)
+  return getAuthApiKeyForUser(user, undefined, new Date().toISOString())
+}
+
+export async function getApiBaseUrlForUser(user: User): Promise<string> {
+  return cellFor(await getRegionForUser(user)).apiBaseUrl
 }

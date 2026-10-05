@@ -30,6 +30,18 @@ export SUPERSERVE_API_KEY=ss_live_...
 export SUPERSERVE_BASE_URL=https://api.superserve.ai  # optional
 ```
 
+## Connection reuse (Python async)
+
+The sync SDK reuses connections across calls. In async Python, calls on an `AsyncSandbox` reuse its connection. Wrap other calls in `async_connection_pool()` to reuse connections across them. The connections close when the block ends.
+
+```python
+from superserve import AsyncSandbox, AsyncSnapshot, async_connection_pool
+
+async with async_connection_pool():
+    sandbox = await AsyncSandbox.create(name="example")
+    snapshots = await AsyncSnapshot.list(sandbox.id)
+```
+
 ## Factory methods
 
 ### `Sandbox.create`
@@ -43,7 +55,11 @@ const sandbox = await Sandbox.create({
   timeoutSeconds: 3600,
   metadata: { env: "prod" },
   envVars: { OPENAI_API_KEY: "sk-..." },
-  network: { allowOut: ["api.openai.com"], denyOut: ["0.0.0.0/0"] },
+  network: {
+    // deny everything except OpenAI and the sandbox's DNS resolvers
+    allowOut: ["api.openai.com", "1.1.1.1/32", "8.8.8.8/32"],
+    denyOut: ["0.0.0.0/0"],
+  },
   previewAccess: "private",
 })
 ```
@@ -57,7 +73,8 @@ sandbox = Sandbox.create(
     metadata={"env": "prod"},
     env_vars={"OPENAI_API_KEY": "sk-..."},
     network=NetworkConfig(
-        allow_out=["api.openai.com"],
+        # deny everything except OpenAI and the sandbox's DNS resolvers
+        allow_out=["api.openai.com", "1.1.1.1/32", "8.8.8.8/32"],
         deny_out=["0.0.0.0/0"],
     ),
     preview_access="private",
@@ -72,7 +89,7 @@ sandbox = Sandbox.create(
 | ------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `name`                                      | `string`                 | **Required.** Human-readable sandbox name.                                                                                                                                                                                                         |
 | `fromTemplate` / `from_template`            | `string \| Template`     | Template name, UUID, or `Template` instance to boot from. Defaults to `superserve/base`.                                                                                                                                                           |
-| `fromSnapshot` / `from_snapshot`            | `string`                 | Snapshot UUID to boot from.                                                                                                                                                                                                                        |
+| `fromSnapshot` / `from_snapshot`            | `string \| Snapshot`     | Snapshot ID or `Snapshot` to create the sandbox from. It starts with the snapshot's files and running processes. See [Snapshots and forks](/sandbox/snapshots).                                                                                        |
 | `timeoutSeconds` / `timeout_seconds`        | `number`                 | Auto-pause after this many seconds of active time (per session; re-armed on resume). See [Lifecycle](/sandbox/lifecycle#auto-pause).                                                                                                               |
 | `autoDeleteSeconds` / `auto_delete_seconds` | `number`                 | Delete the sandbox once continuously paused for this many seconds (max 30 days, `0` = delete on pause). See [Lifecycle](/sandbox/lifecycle#auto-delete).                                                                                           |
 | `metadata`                                  | `Record<string, string>` | String tags.                                                                                                                                                                                                                                       |
@@ -101,17 +118,23 @@ sandbox = Sandbox.connect("7a3f2b8c-1234-...")
 
 ### `Sandbox.list`
 
-List sandboxes on the authenticated team. `metadata` filters combine with AND.
+List sandboxes on the authenticated team. `metadata` returns only sandboxes
+matching every key-value pair you pass; `status` filters to one lifecycle
+state; `limit`/`offset` page through the list.
 
 <CodeGroup>
 ```typescript TypeScript
 const all = await Sandbox.list()
 const prod = await Sandbox.list({ metadata: { env: "prod" } })
+const running = await Sandbox.list({ status: "active" })
+const page = await Sandbox.list({ limit: 100, offset: 100 })
 ```
 
 ```python Python
 all_boxes = Sandbox.list()
 prod = Sandbox.list(metadata={"env": "prod"})
+running = Sandbox.list(status="active")
+page = Sandbox.list(limit=100, offset=100)
 ```
 
 </CodeGroup>
@@ -161,34 +184,79 @@ Fetch the current server-side state. Returns a fresh [`SandboxInfo`](#sandboxinf
 <CodeGroup>
 ```typescript TypeScript
 const info = await sandbox.getInfo()
-console.log(info.status)  // "active" | "paused" | "resuming" | "failed"
+console.log(info.status)  // e.g. "active" — see SandboxStatus
 ```
 
 ```python Python
 info = sandbox.get_info()
-print(info.status.value)  # "active" | "paused" | "resuming" | "failed"
+print(info.status.value)  # e.g. "active" — see SandboxStatus
 ```
 
 </CodeGroup>
 
 ### `pause`
 
-Checkpoint the VM state to disk. The sandbox transitions to `paused`. Returns nothing.
+Checkpoint the VM state to disk. Returns once the pause is accepted; the sandbox transitions to `pausing` and then `paused` on its own. Pass `wait` to return once it is `paused`.
+
+| Option                               | Type          | Description                                                                                                        |
+| ------------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `wait`                               | `boolean`     | Return once the sandbox is `paused` rather than once the pause is accepted. A sandbox configured to delete on pause counts as done once it is deleted. Default `false`. |
+| `timeoutMs` / `timeout`              | `number`      | With `wait`, how long to wait for `paused` before raising a timeout. TypeScript in milliseconds, Python in seconds. Default 5 minutes. |
+| `pollIntervalMs` / `poll_interval_s` | `number`      | With `wait`, how often to check the status. When unset, the SDK checks every 50 ms for the pause's first two seconds, then every second. TypeScript in milliseconds, Python in seconds. |
+| `signal` (TypeScript only)           | `AbortSignal` | Cancels the request, and the polling when `wait` is set.                                                           |
 
 <CodeGroup>
 ```typescript TypeScript
 await sandbox.pause()
+// or, to return only once the sandbox is paused:
+// await sandbox.pause({ wait: true })
 ```
 
 ```python Python
 sandbox.pause()
+# or, to return only once the sandbox is paused:
+# sandbox.pause(wait=True)
 ```
 
 </CodeGroup>
 
+### `snapshot`
+
+Save the sandbox's memory and disk as a [`Snapshot`](/sdk-reference/snapshot), which is kept until you delete it. A running sandbox pauses briefly while the snapshot is taken. Returns once the snapshot is `ready`.
+
+| Option                               | Type          | Description |
+| ------------------------------------ | ------------- | ----------- |
+| `name`                               | `string`      | Label, 1 to 64 characters. |
+| `idempotencyKey` / `idempotency_key` | `string`      | Retrying with the same key returns the same snapshot instead of taking a new one. Generated if you don't pass one. |
+| `wait`                               | `boolean`     | Wait until the snapshot is `ready`. Default `true`. |
+| `timeoutMs` / `timeout`              | `number`      | Maximum time for taking the snapshot and waiting for it. TypeScript in milliseconds, Python in seconds. Default 15 minutes. |
+| `pollIntervalMs` / `poll_interval_s` | `number`      | How often to check while waiting. TypeScript in milliseconds, Python in seconds. Default 2 seconds. |
+| `signal` (TypeScript only)           | `AbortSignal` | Cancels the request and the wait. |
+
+<CodeGroup>
+```typescript TypeScript
+const snapshot = await sandbox.snapshot({ name: "before-upgrade" })
+```
+
+```python Python
+snapshot = sandbox.snapshot(name="before-upgrade")
+```
+
+</CodeGroup>
+
+### `snapshots`
+
+List this sandbox's snapshots, newest first. Takes `limit` and `offset`. Returns `SnapshotInfo[]`.
+
 ### `resume`
 
-Restore a paused sandbox. The backend rotates the per-sandbox access token; the SDK re-injects it into `sandbox.files` transparently.
+Restore a paused sandbox. A pause still in progress is waited out first, under the same controls as `pause` with `wait`. The backend rotates the per-sandbox access token; the SDK re-injects it into `sandbox.files` transparently.
+
+| Option                               | Type          | Description                                                                                                        |
+| ------------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `timeoutMs` / `timeout`              | `number`      | How long to wait out a pause in progress before raising a timeout. TypeScript in milliseconds, Python in seconds. Default 5 minutes. |
+| `pollIntervalMs` / `poll_interval_s` | `number`      | How often to check the status while waiting. When unset, the SDK checks every 50 ms for the first two seconds, then every second. TypeScript in milliseconds, Python in seconds. |
+| `signal` (TypeScript only)           | `AbortSignal` | Cancels the resume request and any waiting.                                                                        |
 
 <CodeGroup>
 ```typescript TypeScript
@@ -316,7 +384,7 @@ sandbox.detach_secret("ANTHROPIC_API_KEY")
 
 ### `getNetworkLog` / `get_network_log`
 
-The sandbox's network log — every outbound connection and secret-bearing request, newest first. Returns a `NetworkLogPage`. See the [Network log](/sandbox/network-log) guide for the full model.
+The sandbox's network log — every outbound HTTP and HTTPS connection to a public address on ports 80 and 443, and every secret-bearing request, newest first. Platform-level drops of private, link-local, and loopback addresses are not recorded. Returns a `NetworkLogPage`. See the [Network log](/sandbox/network-log) guide for the full model.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -362,25 +430,38 @@ for e in page.events:
 
 <CodeGroup>
 ```typescript TypeScript
-type SandboxStatus = "active" | "paused" | "resuming" | "failed"
+type SandboxStatus =
+  | "starting"
+  | "active"
+  | "pausing"
+  | "paused"
+  | "resuming"
+  | "failed"
+  | "deleted"
 ```
 
 ```python Python
 from enum import Enum
 
 class SandboxStatus(str, Enum):
+    STARTING = "starting"
     ACTIVE = "active"
+    PAUSING = "pausing"
     PAUSED = "paused"
     RESUMING = "resuming"
     FAILED = "failed"
+    DELETED = "deleted"
 ```
 
 </CodeGroup>
 
+- `starting` - a new sandbox is booting
 - `active` - running and ready to accept commands
+- `pausing` - a pause is in progress
 - `paused` - stopped with state saved to disk
-- `resuming` - transient, briefly visible while a paused sandbox is being restored to `active` (retry shortly)
+- `resuming` - a paused sandbox is being restored
 - `failed` - the sandbox couldn't boot or resume; the entry remains until you delete it
+- `deleted` - removed; deleted sandboxes do not appear in list results
 
 Deletion removes the sandbox entirely - subsequent API calls return `404`.
 
@@ -401,6 +482,7 @@ interface SandboxInfo {
   network?: NetworkConfig
   metadata: Record<string, string>
   previewAccess: "legacy_public" | "public" | "private"
+  sourceSnapshotId?: string // set when the sandbox was created from a snapshot
 }
 ```
 
@@ -422,6 +504,8 @@ class SandboxInfo(BaseModel):
     network: NetworkConfig | None = None
     metadata: dict[str, str]
     preview_access: PreviewAccess
+    # Set when the sandbox was created from a snapshot.
+    source_snapshot_id: str | None = None
 ```
 
 </CodeGroup>
@@ -431,8 +515,8 @@ class SandboxInfo(BaseModel):
 <CodeGroup>
 ```typescript TypeScript
 interface NetworkConfig {
-  allowOut?: string[]  // CIDRs or domain patterns
-  denyOut?: string[]   // CIDRs only - use "0.0.0.0/0" to deny all
+  allowOut?: string[]  // IPs, CIDRs, or domain patterns (a bare IP reads back as /32)
+  denyOut?: string[]   // IPs and CIDRs only - use "0.0.0.0/0" to deny all
 }
 ```
 
@@ -440,8 +524,8 @@ interface NetworkConfig {
 from pydantic import BaseModel
 
 class NetworkConfig(BaseModel):
-    allow_out: list[str] | None = None  # CIDRs or domain patterns
-    deny_out: list[str] | None = None   # CIDRs only
+    allow_out: list[str] | None = None  # IPs, CIDRs, or domain patterns (a bare IP reads back as /32)
+    deny_out: list[str] | None = None   # IPs and CIDRs only - use "0.0.0.0/0" to deny all
 ```
 
 </CodeGroup>

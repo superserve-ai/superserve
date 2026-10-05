@@ -14,6 +14,7 @@
 
 import { dataPlaneTarget } from "./config.js"
 import { request } from "./http.js"
+import { routingHintHeaders } from "./routingHint.js"
 import { withTokenRetry } from "./tokenRetry.js"
 
 /** @internal */
@@ -22,6 +23,7 @@ export interface DesktopDeps {
   sandboxHost: string
   getAccessToken: () => string
   refreshActivate: () => Promise<string>
+  getRoutingHint?: () => string | undefined
   /** Publish the noVNC port and build its public URL (from the Sandbox). */
   publishStreamPort: () => Promise<void>
   streamBaseUrl: () => string
@@ -381,7 +383,11 @@ export class Desktop {
       request<T>({
         method: "POST",
         url: `${this._dataPlaneBaseUrl}${RPC_BASE}/${method}`,
-        headers: { ...this._routingHeaders, "X-Access-Token": token },
+        headers: {
+          ...this._routingHeaders,
+          ...routingHintHeaders(this._deps),
+          "X-Access-Token": token,
+        },
         body,
         maxBytes: opts.maxBytes,
       })

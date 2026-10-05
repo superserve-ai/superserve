@@ -1,4 +1,5 @@
 import {
+  CameraIcon,
   DotsThreeVerticalIcon,
   // KeyIcon, // TODO: re-enable when SSH access ships
   // KeyReturnIcon, // TODO: re-enable when SSH access ships
@@ -36,6 +37,7 @@ interface SandboxTableRowProps extends HTMLMotionProps<"tr"> {
   onPause: () => void
   onResume: () => void
   onOpenTerminal: () => void
+  onTakeSnapshot: () => void
 }
 
 export function SandboxTableRow({
@@ -47,6 +49,7 @@ export function SandboxTableRow({
   onPause,
   onResume,
   onOpenTerminal,
+  onTakeSnapshot,
   className,
   ...rest
 }: SandboxTableRowProps) {
@@ -138,6 +141,15 @@ export function SandboxTableRow({
               >
                 <TerminalIcon className="size-4" weight="light" />
                 Open Terminal
+              </MenuItem>
+              <MenuItem
+                disabled={
+                  sandbox.status !== "active" && sandbox.status !== "paused"
+                }
+                onClick={onTakeSnapshot}
+              >
+                <CameraIcon className="size-4" weight="light" />
+                Take snapshot
               </MenuItem>
               {/* TODO: re-enable when SSH access ships
               <MenuItem disabled={isFailed}>

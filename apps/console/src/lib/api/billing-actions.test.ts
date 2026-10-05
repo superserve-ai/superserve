@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const getUser = vi.fn()
 const from = vi.fn()
 const rpc = vi.fn()
+let directoryTeamIds = ["team-1"]
+let unfinishedTeamId: string | null = null
 
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: vi.fn(async () => ({
@@ -17,6 +19,20 @@ vi.mock("@/lib/supabase/admin", () => ({
     from,
     rpc,
   })),
+}))
+vi.mock("@/lib/api/team-provisioning", () => ({
+  completedMemberships: async (
+    _userId: string,
+    directory: {
+      memberships: Array<{ teamId: string; region: string }>
+      degradedRegions: string[]
+    },
+  ) => ({
+    ...directory,
+    memberships: directory.memberships.filter(
+      (membership) => membership.teamId !== unfinishedTeamId,
+    ),
+  }),
 }))
 
 // No cookie set: active-team resolution falls back to the first membership.
@@ -143,6 +159,8 @@ function usageQuery(rows: Array<Record<string, unknown>> = []) {
 describe("billing actions", () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    directoryTeamIds = ["team-1"]
+    unfinishedTeamId = null
     getUser.mockResolvedValue({
       data: { user: { id: "user-1" } },
     })
@@ -163,7 +181,7 @@ describe("billing actions", () => {
         return {
           select: () => ({ eq: async () => ({ data: [], error: null }) }),
         }
-      if (table === "team_member") return singleTeamResult()
+      if (table === "team_member") return singleTeamResult(directoryTeamIds)
       if (table === "team_pricing_plan") return teamPricingPlanQuery()
       if (table === "pricing_plan") return pricingPlanQuery()
       if (table === "pricing_rate") return pricingRateQuery()
@@ -243,5 +261,21 @@ describe("billing actions", () => {
     )
 
     expect(response.billing_mode).toBe("active")
+  })
+
+  it("bills the completed team when an orphaned team is listed first", async () => {
+    directoryTeamIds = ["team-a", "team-b"]
+    unfinishedTeamId = "team-a"
+    const { getBillingUsageAction } = await import("./billing-actions")
+
+    await getBillingUsageAction(
+      "2026-01-01T00:00:00.000Z",
+      "2026-01-02T00:00:00.000Z",
+    )
+
+    expect(rpc).toHaveBeenCalledWith("feature_enabled", {
+      flag_key: "tenant_usage_dashboard",
+      flag_team_id: "team-b",
+    })
   })
 })

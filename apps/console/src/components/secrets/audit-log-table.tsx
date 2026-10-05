@@ -199,8 +199,8 @@ export function AuditLogTable({
           </Table>
           {events.length >= AUDIT_PAGE_SIZE && (
             <p className="border-t border-border px-4 py-2 text-xs text-muted">
-              Showing the {AUDIT_PAGE_SIZE} most recent events. Use the API for
-              the full log.
+              Showing the {AUDIT_PAGE_SIZE} most recent events. The API has the
+              last 7 days.
             </p>
           )}
         </div>

@@ -4,20 +4,36 @@ from __future__ import annotations
 
 import asyncio
 import builtins
+import time
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote, urlencode
 
 import httpx
 
 from ._config import ResolvedConfig, preview_url, resolve_config
-from ._http import async_api_request
+from ._routing_hint import routing_hint_expired
+from ._http import (
+    async_api_request,
+    DeadlineExceeded,
+    DEFAULT_PAUSE_TIMEOUT,
+    pause_poll_delay,
+    PAUSE_FAST_POLL_WINDOW_S,
+    using_async_client,
+)
 from .commands import AsyncCommands, AsyncCommandsDeps
 from .desktop import DESKTOP_STREAM_PORT, AsyncDesktop, AsyncDesktopDeps
-from .errors import NotFoundError, SandboxError
+from .errors import ConflictError, NotFoundError, SandboxError, SandboxTimeoutError
+from .async_snapshots import AsyncSnapshot
+from .snapshots import (
+    DEFAULT_SNAPSHOT_POLL_S,
+    DEFAULT_SNAPSHOT_TIMEOUT,
+    _snapshot_create_body,
+)
 from .files import AsyncFiles, AsyncFilesDeps
 from .types import (
     UNSET,
     build_update_body,
+    list_query,
     NetworkConfig,
     NetworkLogPage,
     NetworkVerdict,
@@ -29,11 +45,15 @@ from .types import (
     SandboxInfo,
     SandboxSecretBinding,
     SandboxStatus,
+    SnapshotInfo,
+    SnapshotKind,
     to_network_log_page,
     to_sandbox_info,
+    to_snapshot_info,
 )
 
 if TYPE_CHECKING:
+    from .snapshots import Snapshot
     from .async_template import AsyncTemplate
     from .template import Template
 
@@ -46,6 +66,7 @@ class AsyncSandbox:
         info: SandboxInfo,
         access_token: str,
         config: ResolvedConfig,
+        routing_hint: str | None = None,
     ) -> None:
         self.id: str = info.id
         self.name: str = info.name
@@ -55,6 +76,9 @@ class AsyncSandbox:
         # Secrets bound at construction time; call get_info() to refresh.
         self.secrets: list[SandboxSecretBinding] | None = info.secrets
         self._access_token: str = access_token
+        self._routing_hint = routing_hint
+        self._route_revision = 0
+        self._applied_route_revision = 0
         self._config = config
         self._http_client: httpx.AsyncClient = httpx.AsyncClient(timeout=30.0)
         self._closed = False
@@ -65,7 +89,9 @@ class AsyncSandbox:
                 sandbox_id=self.id,
                 sandbox_host=config.sandbox_host,
                 get_access_token=lambda: self._access_token,
+                get_routing_hint=lambda: self._routing_hint,
                 refresh_activate=self._refresh_activate,
+                refresh_expired_hint=self._refresh_expired_hint,
             ),
             client=self._http_client,
         )
@@ -74,7 +100,9 @@ class AsyncSandbox:
                 sandbox_id=self.id,
                 sandbox_host=config.sandbox_host,
                 get_access_token=lambda: self._access_token,
+                get_routing_hint=lambda: self._routing_hint,
                 refresh_activate=self._refresh_activate,
+                refresh_expired_hint=self._refresh_expired_hint,
             ),
             client=self._http_client,
         )
@@ -87,7 +115,9 @@ class AsyncSandbox:
                 sandbox_id=self.id,
                 sandbox_host=config.sandbox_host,
                 get_access_token=lambda: self._access_token,
+                get_routing_hint=lambda: self._routing_hint,
                 refresh_activate=self._refresh_activate,
+                refresh_expired_hint=self._refresh_expired_hint,
                 publish_stream_port=_publish_stream_port,
                 stream_base_url=lambda: self.get_preview_url(DESKTOP_STREAM_PORT),
             ),
@@ -96,6 +126,8 @@ class AsyncSandbox:
 
     async def _post_and_rotate_token(self, endpoint: str) -> str:
         """Async variant of Sandbox._post_and_rotate_token."""
+        self._route_revision += 1
+        revision = self._route_revision
         raw = await async_api_request(
             "POST",
             f"{self._config.base_url}/sandboxes/{self.id}/{endpoint}",
@@ -108,13 +140,25 @@ class AsyncSandbox:
                 f"Invalid API response from POST /sandboxes/{self.id}/{endpoint}: "
                 "missing access_token"
             )
-        self._access_token = token
-        return token
+        if revision > self._applied_route_revision:
+            self._applied_route_revision = revision
+            self._access_token = token
+            self._routing_hint = raw.get("routing_hint")
+        return self._access_token
 
     async def _refresh_activate(self) -> str:
         """Async variant of Sandbox._refresh_activate."""
+        revision = self._applied_route_revision
         async with self._refresh_lock:
+            if revision != self._applied_route_revision:
+                return self._access_token
             return await self._post_and_rotate_token("activate")
+
+    async def _refresh_expired_hint(self) -> str:
+        async with self._refresh_lock:
+            if routing_hint_expired(lambda: self._routing_hint):
+                return await self._post_and_rotate_token("activate")
+            return self._access_token
 
     @classmethod
     async def create(
@@ -122,7 +166,7 @@ class AsyncSandbox:
         *,
         name: str,
         from_template: "str | Template | AsyncTemplate | None" = None,
-        from_snapshot: str | None = None,
+        from_snapshot: "str | Snapshot | AsyncSnapshot | None" = None,
         timeout_seconds: int | None = None,
         auto_delete_seconds: int | None = None,
         metadata: dict[str, str] | None = None,
@@ -151,7 +195,9 @@ class AsyncSandbox:
                     getattr(from_template, "name", None) or from_template.id
                 )
         if from_snapshot is not None:
-            body["from_snapshot"] = from_snapshot
+            body["from_snapshot"] = (
+                from_snapshot if isinstance(from_snapshot, str) else from_snapshot.id
+            )
         if timeout_seconds is not None:
             body["timeout_seconds"] = timeout_seconds
         if auto_delete_seconds is not None:
@@ -181,7 +227,7 @@ class AsyncSandbox:
             raise SandboxError(
                 "Invalid API response from POST /sandboxes: missing access_token"
             )
-        return cls(to_sandbox_info(raw), token, config)
+        return cls(to_sandbox_info(raw), token, config, raw.get("routing_hint"))
 
     @classmethod
     async def connect(
@@ -209,24 +255,30 @@ class AsyncSandbox:
                 f"Invalid API response from POST /sandboxes/{sandbox_id}/activate: "
                 "missing access_token"
             )
-        return cls(to_sandbox_info(raw), token, config)
+        return cls(to_sandbox_info(raw), token, config, raw.get("routing_hint"))
 
     @classmethod
     async def list(
         cls,
         *,
         metadata: dict[str, str] | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> builtins.list[SandboxInfo]:
-        """List all sandboxes belonging to the authenticated team."""
+        """List sandboxes belonging to the authenticated team.
+
+        Optional filters: ``metadata`` (AND semantics), ``status``, and
+        ``limit``/``offset`` paging. Without ``limit`` the full list is
+        returned.
+        """
         config = resolve_config(api_key=api_key, base_url=base_url)
         url = f"{config.base_url}/sandboxes"
-        if metadata:
-            from urllib.parse import urlencode
-
-            params = {f"metadata.{k}": v for k, v in metadata.items()}
-            url += f"?{urlencode(params)}"
+        query = list_query(metadata, status, limit, offset)
+        if query:
+            url += f"?{query}"
 
         raw = await async_api_request("GET", url, headers={"X-API-Key": config.api_key})
         return [to_sandbox_info(item) for item in raw]
@@ -246,6 +298,7 @@ class AsyncSandbox:
                 "DELETE",
                 f"{config.base_url}/sandboxes/{sandbox_id}",
                 headers={"X-API-Key": config.api_key},
+                retry_conflict=True,
             )
         except NotFoundError:
             pass  # Already deleted
@@ -310,6 +363,57 @@ class AsyncSandbox:
             client=self._http_client,
         )
         return to_sandbox_info(raw)
+
+    async def snapshot(
+        self,
+        *,
+        name: str | None = None,
+        kind: SnapshotKind = "mem+fs",
+        idempotency_key: str | None = None,
+        wait: bool = True,
+        timeout: float = DEFAULT_SNAPSHOT_TIMEOUT,
+        poll_interval_s: float = DEFAULT_SNAPSHOT_POLL_S,
+    ) -> AsyncSnapshot:
+        """Take a snapshot of this sandbox's memory and disk, kept until deleted.
+
+        A running sandbox is paused for the capture and resumed after. Create
+        sandboxes from it with ``AsyncSandbox.create(from_snapshot=...)``; they continue
+        with the processes that were running. ``timeout`` covers capture and
+        wait together.
+        """
+        self._require_not_deleted()
+        started = time.monotonic()
+        raw = await async_api_request(
+            "POST",
+            f"{self._config.base_url}/sandboxes/{self.id}/snapshot",
+            headers={"X-API-Key": self._config.api_key},
+            json_body=_snapshot_create_body(kind, name, idempotency_key),
+            timeout=timeout,
+            budget=timeout,
+            client=self._http_client,
+        )
+        snapshot = AsyncSnapshot(to_snapshot_info(raw), self._config)
+        if not wait:
+            return snapshot
+        # A 202 answer is still creating; the platform settles it shortly.
+        with using_async_client(self._http_client):
+            return await snapshot.wait_until_ready(
+                timeout=max(timeout - (time.monotonic() - started), 0.0),
+                poll_interval_s=poll_interval_s,
+            )
+
+    async def snapshots(
+        self, *, limit: int | None = None, offset: int | None = None
+    ) -> builtins.list[SnapshotInfo]:
+        """This sandbox's snapshots, newest first."""
+        with using_async_client(self._http_client):
+            return await AsyncSnapshot.list(
+                self.id,
+                limit=limit,
+                offset=offset,
+                api_key=self._config.api_key,
+                base_url=self._config.base_url,
+            )
 
     def get_preview_url(self, port: int) -> str:
         """Build the preview URL for a port running inside this sandbox.
@@ -411,24 +515,122 @@ class AsyncSandbox:
         )
         return PreviewToken(**raw)
 
-    async def pause(self) -> None:
-        """Pause this sandbox. The sandbox transitions to ``paused``."""
-        self._require_not_deleted()
-        await async_api_request(
-            "POST",
-            f"{self._config.base_url}/sandboxes/{self.id}/pause",
-            headers={"X-API-Key": self._config.api_key},
-            client=self._http_client,
-        )
+    async def pause(
+        self,
+        *,
+        wait: bool = False,
+        timeout: float = DEFAULT_PAUSE_TIMEOUT,
+        poll_interval_s: float | None = None,
+    ) -> None:
+        """Pause this sandbox. The sandbox transitions to ``paused``.
 
-    async def resume(self) -> None:
-        """Resume a paused sandbox.
-
-        The access token is rotated; ``sandbox.commands`` and ``sandbox.files``
-        pick up the fresh token transparently.
+        Returns once the pause is accepted; with ``wait=True`` it returns once
+        the sandbox is ``paused``.
         """
         self._require_not_deleted()
-        await self._post_and_rotate_token("resume")
+        deadline = time.monotonic() + timeout
+        try:
+            raw = await async_api_request(
+                "POST",
+                f"{self._config.base_url}/sandboxes/{self.id}/pause",
+                headers={"X-API-Key": self._config.api_key, "Prefer": "respond-async"},
+                budget=timeout if wait else None,
+                client=self._http_client,
+            )
+        except DeadlineExceeded as exc:
+            raise self._still_pausing(timeout) from exc
+        except SandboxTimeoutError:
+            # Without waiting there is no way to tell whether the pause was
+            # accepted; only a waiting call follows it through the status.
+            if not wait:
+                raise
+            raw = {"status": "pausing"}
+        # A 204 means the pause already completed; only an accepted one is followed.
+        if wait and isinstance(raw, dict) and raw.get("status") == "pausing":
+            await self._wait_until_paused(deadline, timeout, poll_interval_s)
+
+    async def _wait_until_paused(
+        self, deadline: float, timeout: float, poll_interval_s: float | None
+    ) -> None:
+        """Poll until the sandbox is ``paused``. A sandbox deleted meanwhile
+        (delete on pause) counts as done; ``failed`` raises."""
+        headers = {"X-API-Key": self._config.api_key}
+        started = time.monotonic()
+        first = True
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise self._still_pausing(timeout)
+            # Most pauses finish within a second or two: check at once, then
+            # closely for a short while, then at the caller's interval.
+            if not first:
+                await asyncio.sleep(
+                    min(
+                        pause_poll_delay(time.monotonic() - started, poll_interval_s),
+                        remaining,
+                    )
+                )
+            first = False
+            try:
+                raw = await async_api_request(
+                    "GET",
+                    f"{self._config.base_url}/sandboxes/{self.id}",
+                    headers=headers,
+                    budget=deadline - time.monotonic(),
+                    client=self._http_client,
+                )
+            except DeadlineExceeded as exc:
+                raise self._still_pausing(timeout) from exc
+            except NotFoundError:
+                return
+            except SandboxTimeoutError:
+                # One slow poll; the deadline decides whether to keep going.
+                continue
+            status = to_sandbox_info(raw).status
+            if status in (SandboxStatus.PAUSED, SandboxStatus.DELETED):
+                return
+            # A request that timed out may be accepted only after this first
+            # look; 'active' this early is not yet an answer.
+            if (
+                status == SandboxStatus.ACTIVE
+                and time.monotonic() - started < PAUSE_FAST_POLL_WINDOW_S
+            ):
+                continue
+            if status != SandboxStatus.PAUSING:
+                raise SandboxError(
+                    f"Sandbox {self.id} did not pause: status is {SandboxStatus(status).value}"
+                )
+
+    def _still_pausing(self, timeout: float) -> SandboxTimeoutError:
+        return SandboxTimeoutError(
+            f"Sandbox {self.id} is still pausing after {timeout}s; it will finish in the background"
+        )
+
+    async def resume(
+        self,
+        *,
+        timeout: float = DEFAULT_PAUSE_TIMEOUT,
+        poll_interval_s: float | None = None,
+    ) -> None:
+        """Resume a paused sandbox.
+
+        A pause still in progress is waited out first. The access token is
+        rotated; ``sandbox.commands`` and ``sandbox.files`` pick up the fresh
+        token transparently.
+        """
+        self._require_not_deleted()
+        try:
+            await self._post_and_rotate_token("resume")
+        except ConflictError:
+            # A pause that finished between the two requests reads as paused here.
+            status = (await self.get_info()).status
+            if status not in (SandboxStatus.PAUSING, SandboxStatus.PAUSED):
+                raise
+            if status == SandboxStatus.PAUSING:
+                await self._wait_until_paused(
+                    time.monotonic() + timeout, timeout, poll_interval_s
+                )
+            await self._post_and_rotate_token("resume")
 
     async def kill(self) -> None:
         """Delete this sandbox and all its resources. Idempotent."""
@@ -440,6 +642,7 @@ class AsyncSandbox:
                 f"{self._config.base_url}/sandboxes/{self.id}",
                 headers={"X-API-Key": self._config.api_key},
                 client=self._http_client,
+                retry_conflict=True,
             )
         except NotFoundError:
             pass  # Already deleted

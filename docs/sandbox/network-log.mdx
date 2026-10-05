@@ -1,23 +1,24 @@
 ---
 title: "Network log"
 sidebarTitle: Network log
-description: See every outbound connection a sandbox made — allowed, blocked, or failed — and every secret-bearing request, in one timeline.
+description: See every HTTP and HTTPS connection a sandbox made to a public address on ports 80 and 443 — allowed, blocked, or failed — and every secret-bearing request, in one timeline.
 ---
 
-The network log answers a question you can't answer from inside an untrusted sandbox: **what did it actually reach on the network?** Every outbound connection passes through Superserve, so the log is recorded by the platform — code inside the sandbox can't see it or tamper with it.
+The network log answers a question you can't answer from inside an untrusted sandbox: **what did it actually reach on the network?** Every outbound HTTP and HTTPS connection to a public address on ports 80 and 443 passes through Superserve, so the log is recorded by the platform — code inside the sandbox can't see it or tamper with it.
 
 <CodeGroup>
 ```typescript TypeScript
 const page = await sandbox.getNetworkLog({ limit: 50 })
 
 for (const e of page.events) {
-  if (e.kind === "connection") {
-    console.log(e.ts, e.host ?? e.dstIp, e.verdict)
-  } else {
-    console.log(e.ts, e.method, e.host + e.path, "→", e.status)
-  }
+if (e.kind === "connection") {
+console.log(e.ts, e.host ?? e.dstIp, e.verdict)
+} else {
+console.log(e.ts, e.method, e.host + e.path, "→", e.status)
 }
-```
+}
+
+````
 
 ```python Python
 page = sandbox.get_network_log(limit=50)
@@ -27,14 +28,15 @@ for e in page.events:
         print(e.ts, e.host or e.dst_ip, e.verdict)
     else:
         print(e.ts, e.method, f"{e.host}{e.path}", "→", e.status)
-```
+````
+
 </CodeGroup>
 
 ## Two kinds of rows
 
 Each event has a `kind`:
 
-- **`connection`** — a raw outbound connection. Carries the host (or `dstIp`), a `verdict`, and byte counts. This is every connection the sandbox opened, whether or not a secret was involved.
+- **`connection`** — a raw outbound connection. Carries the host (or `dstIp`), a `verdict`, and byte counts. This is every HTTP or HTTPS connection the sandbox opened to a public address on ports 80 and 443, whether or not a secret was involved. Attempts at private, link-local, or loopback addresses are dropped before they reach the log.
 - **`request`** — a secret-bearing request (the sandbox used a [secret](/secrets/overview)). Carries `method`, `path`, `status`, and the `secretId` that was used.
 
 Fields that don't apply to a row's kind are omitted.
@@ -43,11 +45,11 @@ Fields that don't apply to a row's kind are omitted.
 
 Every `connection` row has a verdict:
 
-| Verdict | Meaning |
-|---|---|
-| `allowed` | Connected — `bytesSent` / `bytesRecv` are populated |
-| `blocked` | Denied by one of your [network rules](/sandbox/networking), or because sandboxes are limited to the public internet — private and internal addresses are always blocked. `matchRule` names the rule that stopped it |
-| `failed` | Allowed by policy, but the connection couldn't be established |
+| Verdict   | Meaning                                                                                                |
+| --------- | ------------------------------------------------------------------------------------------------------ |
+| `allowed` | Connected — `bytesSent` / `bytesRecv` are populated                                                    |
+| `blocked` | Denied by one of your [network rules](/sandbox/networking). `matchRule` names the rule that stopped it |
+| `failed`  | Allowed by policy, but the connection couldn't be established                                          |
 
 `matchRule` names the rule behind a `blocked` connection — a useful signal for catching when a sandbox tried to reach somewhere you didn't expect.
 
@@ -62,10 +64,11 @@ const blocked = await sandbox.getNetworkLog({ verdict: "blocked" })
 
 // A specific window during an incident.
 const window = await sandbox.getNetworkLog({
-  since: "2026-06-11T14:00:00Z",
-  before: "2026-06-11T15:00:00Z",
+since: "2026-06-11T14:00:00Z",
+before: "2026-06-11T15:00:00Z",
 })
-```
+
+````
 
 ```python Python
 blocked = sandbox.get_network_log(verdict="blocked")
@@ -74,11 +77,13 @@ window = sandbox.get_network_log(
     since="2026-06-11T14:00:00Z",
     before="2026-06-11T15:00:00Z",
 )
-```
+````
+
 </CodeGroup>
 
 <Note>
-A `verdict` filter returns only `connection` rows — `request` rows have no verdict.
+  A `verdict` filter returns only `connection` rows — `request` rows have no
+  verdict.
 </Note>
 
 ## Pagination
@@ -105,14 +110,20 @@ while True:
     if not cursor:
         break
 ```
+
 </CodeGroup>
 
 ## What the log does and doesn't capture
 
 The log records what the **sandbox** sent. It does **not** record work a third party does on the sandbox's behalf — if an agent calls an LLM that itself runs a web search server-side, you'll see the one request to the LLM, not the searches it ran on its own infrastructure. Those packets never left your sandbox.
 
-It covers HTTP and HTTPS egress. DNS resolution and raw non-HTTP sockets aren't in this log.
+It covers HTTP and HTTPS egress on ports 80 and 443. DNS resolution, raw non-HTTP sockets, other ports, and the platform's own drops of private, link-local, and loopback addresses happen below this log and aren't recorded in it.
+
+The log keeps the last **7 days**. Older rows are dropped on a rolling basis; page the API if you want to keep a longer history elsewhere.
 
 <Tip>
-Pair the network log (what was reached) with [network rules](/sandbox/networking) (what's allowed) and [secrets](/secrets/overview) (credentials attached to outbound requests) for end-to-end control and visibility over a sandbox's network.
+  Pair the network log (what was reached) with [network
+  rules](/sandbox/networking) (what's allowed) and [secrets](/secrets/overview)
+  (credentials attached to outbound requests) for end-to-end control and
+  visibility over a sandbox's network.
 </Tip>

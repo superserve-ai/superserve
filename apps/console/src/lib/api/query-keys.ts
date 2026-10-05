@@ -79,6 +79,47 @@ export const networkKeys = {
 
 export const billingKeys = {
   all: ["billing"] as const,
+  customer: {
+    all: ["billing", "customer"] as const,
+    exportPreview: (context: {
+      cacheScope: string
+      teamKey: string
+      periodId: string
+    }) =>
+      [
+        ...billingKeys.customer.all,
+        "export-preview",
+        context.cacheScope,
+        context.teamKey,
+        context.periodId,
+      ] as const,
+    periods: (context: {
+      cacheScope: string
+      teamKey: string
+      limit: number
+    }) =>
+      [
+        ...billingKeys.customer.all,
+        "periods",
+        context.cacheScope,
+        context.teamKey,
+        context.limit,
+      ] as const,
+    usage: (context: {
+      cacheScope: string
+      teamKey: string
+      periodStart: string
+      periodEnd: string
+    }) =>
+      [
+        ...billingKeys.customer.all,
+        "usage",
+        context.cacheScope,
+        context.teamKey,
+        context.periodStart,
+        context.periodEnd,
+      ] as const,
+  },
   summary: (context: { cacheScope: string; teamKey: string }) =>
     [
       ...billingKeys.all,
@@ -106,6 +147,24 @@ export const billingKeys = {
       context.teamKey,
       context.periodStart,
       context.periodEnd,
+    ] as const,
+  usageSeries: (context: {
+    cacheScope: string
+    teamKey: string
+    start: string
+    end: string
+    granularity: string
+    timezone: string
+  }) =>
+    [
+      ...billingKeys.all,
+      "usage-series",
+      context.cacheScope,
+      context.teamKey,
+      context.start,
+      context.end,
+      context.granularity,
+      context.timezone,
     ] as const,
 }
 

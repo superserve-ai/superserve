@@ -7,6 +7,7 @@ import pytest
 import respx
 from superserve._http import (
     SDK_VERSION,
+    pause_poll_delay,
     USER_AGENT,
     api_request,
     async_api_request,
@@ -217,6 +218,60 @@ class TestRetriesSync:
             assert result is None
             assert route.call_count == 2
 
+    def test_delete_retries_on_409_with_retry_conflict(self, zero_sleep: None) -> None:
+        with respx.mock() as router:
+            route = router.delete("https://api.example.com/foo").mock(
+                side_effect=[
+                    httpx.Response(409, json={"error": {"code": "conflict"}}),
+                    httpx.Response(409, json={"error": {"code": "conflict"}}),
+                    httpx.Response(204),
+                ]
+            )
+            result = api_request(
+                "DELETE",
+                "https://api.example.com/foo",
+                headers={"X-API-Key": "k"},
+                retry_conflict=True,
+            )
+            assert result is None
+            assert route.call_count == 3
+
+    def test_delete_409_without_retry_conflict_fails_fast(
+        self, zero_sleep: None
+    ) -> None:
+        from superserve.errors import ConflictError
+
+        with respx.mock() as router:
+            route = router.delete("https://api.example.com/foo").mock(
+                return_value=httpx.Response(409, json={"error": {"code": "conflict"}})
+            )
+            with pytest.raises(ConflictError):
+                api_request(
+                    "DELETE",
+                    "https://api.example.com/foo",
+                    headers={"X-API-Key": "k"},
+                    retry_conflict=False,
+                )
+            assert route.call_count == 1
+
+    def test_post_409_is_not_retried_even_with_retry_conflict(
+        self, zero_sleep: None
+    ) -> None:
+        from superserve.errors import ConflictError
+
+        with respx.mock() as router:
+            route = router.post("https://api.example.com/foo").mock(
+                return_value=httpx.Response(409, json={"error": {"code": "conflict"}})
+            )
+            with pytest.raises(ConflictError):
+                api_request(
+                    "POST",
+                    "https://api.example.com/foo",
+                    headers={"X-API-Key": "k"},
+                    retry_conflict=True,
+                )
+            assert route.call_count == 1
+
     def test_connect_error_retries_on_get(self, zero_sleep: None) -> None:
         with respx.mock() as router:
             route = router.get("https://api.example.com/foo").mock(
@@ -360,6 +415,25 @@ class TestAsyncApiRequest:
             assert result == {"ok": True}
             assert route.call_count == 2
 
+    async def test_delete_retries_on_409_with_retry_conflict(
+        self, zero_sleep: None
+    ) -> None:
+        with respx.mock() as router:
+            route = router.delete("https://api.example.com/foo").mock(
+                side_effect=[
+                    httpx.Response(409, json={"error": {"code": "conflict"}}),
+                    httpx.Response(204),
+                ]
+            )
+            result = await async_api_request(
+                "DELETE",
+                "https://api.example.com/foo",
+                headers={"X-API-Key": "k"},
+                retry_conflict=True,
+            )
+            assert result is None
+            assert route.call_count == 2
+
     async def test_timeout_raises_sandbox_timeout(self) -> None:
         with respx.mock() as router:
             router.get("https://api.example.com/foo").mock(
@@ -396,3 +470,12 @@ class TestStreamSSEGet:
             assert len(events) == 2
             assert route.call_count == 1
             assert route.calls.last.request.content == b""
+
+
+def test_pause_poll_delay_ramps_only_when_the_caller_set_no_interval() -> None:
+    assert pause_poll_delay(0.0, None) == 0.05
+    assert pause_poll_delay(1.9, None) == 0.05
+    assert pause_poll_delay(2.0, None) == 1.0
+    # An explicit interval is used as given, from the first check on.
+    assert pause_poll_delay(0.0, 5.0) == 5.0
+    assert pause_poll_delay(0.0, 0.01) == 0.01

@@ -9,6 +9,7 @@ import { Suspense } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
+import { SIGNUP_RESTRICTED_MESSAGE } from "@/lib/auth/signup-restricted-message"
 
 function AuthCodeErrorContent() {
   const searchParams = useSearchParams()
@@ -39,7 +40,9 @@ function AuthCodeErrorContent() {
             Authentication Error
           </h1>
           <p className="mt-2 text-center text-xs text-muted">
-            Something went wrong. Please try again.
+            {isSignupContext
+              ? SIGNUP_RESTRICTED_MESSAGE
+              : "Something went wrong. Please try again."}
           </p>
           <Button render={<Link href={retryHref} />} size="sm" className="mt-5">
             Try Again

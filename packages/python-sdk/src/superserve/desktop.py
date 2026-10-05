@@ -21,6 +21,7 @@ import httpx
 
 from ._config import data_plane_target
 from ._http import api_request, async_api_request
+from ._routing_hint import routing_hint_headers
 from ._token_retry import async_with_token_retry, with_token_retry
 
 _RPC_BASE = "/superserve.boxd.v1.DesktopService"
@@ -85,6 +86,8 @@ class DesktopDeps:
     refresh_activate: Callable[[], str]
     publish_stream_port: Callable[[], None]
     stream_base_url: Callable[[], str]
+    get_routing_hint: Callable[[], str | None] = lambda: None
+    refresh_expired_hint: Callable[[], str] | None = None
 
 
 @dataclass(frozen=True)
@@ -97,6 +100,8 @@ class AsyncDesktopDeps:
     refresh_activate: Callable[[], Awaitable[str]]
     publish_stream_port: Callable[[], Awaitable[None]]
     stream_base_url: Callable[[], str]
+    get_routing_hint: Callable[[], str | None] = lambda: None
+    refresh_expired_hint: Callable[[], Awaitable[str]] | None = None
 
 
 def _keysym(key: str) -> str:
@@ -304,13 +309,21 @@ class Desktop:
             return api_request(
                 "POST",
                 f"{self._data_plane_base_url}{_RPC_BASE}/{method}",
-                headers={**self._routing_headers, "X-Access-Token": token},
+                headers={
+                    **self._routing_headers,
+                    **routing_hint_headers(self._deps.get_routing_hint),
+                    "X-Access-Token": token,
+                },
                 json_body=body,
                 client=self._client,
             )
 
         return with_token_retry(
-            self._deps.get_access_token, self._deps.refresh_activate, send
+            self._deps.get_access_token,
+            self._deps.refresh_activate,
+            send,
+            self._deps.get_routing_hint,
+            self._deps.refresh_expired_hint,
         )
 
 
@@ -405,11 +418,19 @@ class AsyncDesktop:
             return await async_api_request(
                 "POST",
                 f"{self._data_plane_base_url}{_RPC_BASE}/{method}",
-                headers={**self._routing_headers, "X-Access-Token": token},
+                headers={
+                    **self._routing_headers,
+                    **routing_hint_headers(self._deps.get_routing_hint),
+                    "X-Access-Token": token,
+                },
                 json_body=body,
                 client=self._client,
             )
 
         return await async_with_token_retry(
-            self._deps.get_access_token, self._deps.refresh_activate, send
+            self._deps.get_access_token,
+            self._deps.refresh_activate,
+            send,
+            self._deps.get_routing_hint,
+            self._deps.refresh_expired_hint,
         )

@@ -23,6 +23,29 @@ const emptyState = {
   previewAccess: "public" as const,
 }
 
+describe("buildCreateSandboxRequest source", () => {
+  it("sends from_template for a template source", () => {
+    const req = buildCreateSandboxRequest({
+      ...emptyState,
+      name: "x",
+      templateRef: "superserve/base",
+    })
+    expect(req.from_template).toBe("superserve/base")
+    expect(req).not.toHaveProperty("from_snapshot")
+  })
+
+  it("sends from_snapshot and never from_template for a snapshot source", () => {
+    const req = buildCreateSandboxRequest({
+      ...emptyState,
+      name: "x",
+      templateRef: "superserve/base",
+      snapshotId: "0b6f3c1e-4d2a-4f7b-9a1e-2c3d4e5f6a7b",
+    })
+    expect(req.from_snapshot).toBe("0b6f3c1e-4d2a-4f7b-9a1e-2c3d4e5f6a7b")
+    expect(req).not.toHaveProperty("from_template")
+  })
+})
+
 describe("buildCreateSandboxRequest", () => {
   it("trims the name", () => {
     const req = buildCreateSandboxRequest({ ...emptyState, name: "  hi  " })

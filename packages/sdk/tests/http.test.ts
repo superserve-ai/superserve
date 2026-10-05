@@ -1,13 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
+  ConflictError,
   NotFoundError,
+  RateLimitError,
   SandboxError,
   ServerError,
   TimeoutError,
   ValidationError,
 } from "../src/errors.js"
-import { request, streamSSE } from "../src/http.js"
+import { composeSignals, request, streamSSE } from "../src/http.js"
 
 type FetchMock = ReturnType<typeof vi.fn>
 
@@ -37,6 +39,48 @@ function installFetch(
 }
 
 describe("http.request", () => {
+  it("maps a body read cut by the attempt timer to TimeoutError", async () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: RequestInit) => {
+          const body = new ReadableStream<Uint8Array>({
+            start(stream) {
+              init.signal?.addEventListener(
+                "abort",
+                () => stream.error(new DOMException("aborted", "AbortError")),
+                { once: true },
+              )
+            },
+          })
+          return new Response(body, {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        }),
+      )
+      let outcome: unknown = "pending"
+      const pending = request({
+        method: "GET",
+        url: "https://api.example.com/x",
+        timeoutMs: 50,
+      }).then(
+        (v) => {
+          outcome = v
+        },
+        (e: unknown) => {
+          outcome = e
+        },
+      )
+      await vi.advanceTimersByTimeAsync(60)
+      await pending
+      expect(outcome).toBeInstanceOf(TimeoutError)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.useRealTimers()
@@ -140,6 +184,82 @@ describe("http.request", () => {
         body: { a: 1 },
       }),
     ).rejects.toBeInstanceOf(ServerError)
+    expect(mock).toHaveBeenCalledTimes(1)
+  })
+
+  it("retries DELETE on 409 with retryConflict, then succeeds", async () => {
+    let call = 0
+    const mock = installFetch(async () => {
+      call++
+      if (call === 1) {
+        return jsonResponse(
+          { error: { code: "conflict", message: "mid-transition" } },
+          { status: 409 },
+        )
+      }
+      return emptyResponse(204)
+    })
+    const out = await request<void>({
+      method: "DELETE",
+      url: "https://example.com/sandboxes/abc",
+      retryConflict: true,
+    })
+    expect(out).toBeUndefined()
+    expect(mock).toHaveBeenCalledTimes(2)
+  })
+
+  it("settles promptly when aborted during a conflict backoff", async () => {
+    installFetch(async () =>
+      jsonResponse(
+        { error: { code: "conflict", message: "mid-transition" } },
+        { status: 409 },
+      ),
+    )
+    const controller = new AbortController()
+    const started = Date.now()
+    const pending = request<void>({
+      method: "DELETE",
+      url: "https://example.com/sandboxes/abc",
+      retryConflict: true,
+      signal: controller.signal,
+    })
+    // Let the first 409 land and the backoff sleep begin, then cancel.
+    await new Promise((r) => setTimeout(r, 50))
+    controller.abort()
+    await expect(pending).rejects.toThrow()
+    // Must settle on the abort, not after sleeping out the remaining backoff.
+    expect(Date.now() - started).toBeLessThan(1_000)
+  })
+
+  it("retryConflict does not extend the budget for non-409 failures", async () => {
+    // A rate-limited delete keeps the default 3-attempt bound; only an actual
+    // 409 unlocks the longer conflict budget.
+    const mock = installFetch(
+      async () =>
+        new Response("{}", { status: 429, headers: { "Retry-After": "0" } }),
+    )
+    await expect(
+      request({
+        method: "DELETE",
+        url: "https://example.com/sandboxes/abc",
+        retryConflict: true,
+      }),
+    ).rejects.toBeInstanceOf(RateLimitError)
+    expect(mock).toHaveBeenCalledTimes(3)
+  })
+
+  it("does NOT retry 409 on DELETE without retryConflict", async () => {
+    // A terminal 409 (e.g. deleting a template with active sandboxes) must fail
+    // fast, not spin the conflict-retry budget.
+    const mock = installFetch(async () =>
+      jsonResponse(
+        { error: { code: "conflict", message: "has active sandboxes" } },
+        { status: 409 },
+      ),
+    )
+    await expect(
+      request({ method: "DELETE", url: "https://example.com/templates/abc" }),
+    ).rejects.toBeInstanceOf(ConflictError)
     expect(mock).toHaveBeenCalledTimes(1)
   })
 
@@ -292,5 +412,54 @@ describe("streamSSE with GET", () => {
     expect(init.method).toBe("GET")
     expect(init.body).toBeUndefined()
     expect(events.length).toBe(2)
+  })
+})
+
+describe("composeSignals", () => {
+  const anySignal = AbortSignal.any
+
+  afterEach(() => {
+    AbortSignal.any = anySignal
+  })
+
+  it("forwards either abort without AbortSignal.any (Node before 18.17)", () => {
+    // @ts-expect-error simulate a runtime without AbortSignal.any
+    AbortSignal.any = undefined
+
+    const a = new AbortController()
+    const b = new AbortController()
+    const { signal: composed } = composeSignals(a.signal, b.signal)
+    expect(composed.aborted).toBe(false)
+    b.abort(new Error("caller cancelled"))
+    expect(composed.aborted).toBe(true)
+    expect((composed.reason as Error).message).toBe("caller cancelled")
+
+    const already = new AbortController()
+    already.abort()
+    expect(
+      composeSignals(new AbortController().signal, already.signal).signal
+        .aborted,
+    ).toBe(true)
+  })
+
+  it("release detaches the fallback listeners from long-lived signals", () => {
+    // @ts-expect-error simulate a runtime without AbortSignal.any
+    AbortSignal.any = undefined
+
+    const internal = new AbortController()
+    const user = new AbortController()
+    const { signal: composed, release } = composeSignals(
+      internal.signal,
+      user.signal,
+    )
+    release()
+    user.abort()
+    internal.abort()
+    expect(composed.aborted).toBe(false)
+  })
+
+  it("returns the internal signal alone when no caller signal is given", () => {
+    const internal = new AbortController().signal
+    expect(composeSignals(internal).signal).toBe(internal)
   })
 })

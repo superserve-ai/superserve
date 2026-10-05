@@ -37,7 +37,14 @@ function startOfDay(date: Date): Date {
 
 function endOfDay(date: Date): Date {
   const d = new Date(date)
-  d.setHours(23, 59, 59, 999)
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() + 1)
+  return d
+}
+
+function previousCalendarDay(date: Date): Date {
+  const d = new Date(date)
+  d.setDate(d.getDate() - 1)
   return d
 }
 
@@ -176,9 +183,16 @@ function getActivePreset(
   }
   for (const preset of QUICK_PRESETS) {
     const range = preset.getRange()
+    // Rolling ends may age between renders, but an exclusive midnight end
+    // must not match a rolling range that includes part of today.
+    const endMatches =
+      value.end.getTime() === range.end.getTime() ||
+      (preset.key !== "yesterday" &&
+        isSameDay(value.end, range.end) &&
+        value.end > startOfDay(range.end))
     if (
       startOfDay(value.start).getTime() === startOfDay(range.start).getTime() &&
-      startOfDay(value.end).getTime() === startOfDay(range.end).getTime()
+      endMatches
     ) {
       return preset.key
     }
@@ -193,6 +207,8 @@ export function DateRangeFilter({
 }: DateRangeFilterProps) {
   const [customStart, setCustomStart] = useState<Date | null>(null)
   const [customEnd, setCustomEnd] = useState<Date | null>(null)
+  // Preserve the inclusive calendar end separately from the exclusive fetch end.
+  const [customDisplayEnd, setCustomDisplayEnd] = useState<Date | null>(null)
   const [customError, setCustomError] = useState<string | null>(null)
   const [popoverOpen, setPopoverOpen] = useState(false)
   const [visibleMonth, setVisibleMonth] = useState(() =>
@@ -205,9 +221,25 @@ export function DateRangeFilter({
       startOfMonth(value?.start ?? billingPeriod?.start ?? new Date()),
     )
   }, [billingPeriod?.start, popoverOpen, value?.start])
+  useEffect(() => {
+    setCustomDisplayEnd(null)
+  }, [value?.start, value?.end])
 
   const activePreset = getActivePreset(value, billingPeriod)
   const isCustom = value && !activePreset
+  // `value.end` is the exclusive next-midnight boundary. Convert it to the
+  // inclusive calendar day for the visible label and accessible name.
+  const endIsExclusiveMidnight = value
+    ? value.end.getHours() === 0 &&
+      value.end.getMinutes() === 0 &&
+      value.end.getSeconds() === 0 &&
+      value.end.getMilliseconds() === 0
+    : false
+  const displayCustomEnd =
+    customDisplayEnd ??
+    (value && endIsExclusiveMidnight
+      ? previousCalendarDay(value.end)
+      : (value?.end ?? null))
   const monthDays = useMemo(() => buildMonthDays(visibleMonth), [visibleMonth])
 
   const handlePresetClick = (preset: Preset) => {
@@ -231,6 +263,7 @@ export function DateRangeFilter({
       start: startOfDay(customStart),
       end: endOfDay(customEnd!),
     })
+    setCustomDisplayEnd(customEnd)
     setCustomError(null)
     setPopoverOpen(false)
   }
@@ -239,6 +272,7 @@ export function DateRangeFilter({
     onChange(billingPeriod ?? null)
     setCustomStart(null)
     setCustomEnd(null)
+    setCustomDisplayEnd(null)
     setCustomError(null)
     setPopoverOpen(false)
   }
@@ -282,7 +316,7 @@ export function DateRangeFilter({
               type="button"
               aria-label={
                 isCustom
-                  ? `Custom date range: ${formatShortDate(value.start)} to ${formatShortDate(value.end)}`
+                  ? `Custom date range: ${formatShortDate(value.start)} to ${formatShortDate(displayCustomEnd!)}`
                   : "Select a custom date range"
               }
               className={cn(
@@ -296,7 +330,7 @@ export function DateRangeFilter({
         >
           <CalendarBlankIcon className="size-3.5" weight="light" />
           {isCustom
-            ? `${formatShortDate(value.start)} – ${formatShortDate(value.end)}`
+            ? `${formatShortDate(value.start)} – ${formatShortDate(displayCustomEnd!)}`
             : "Custom"}
         </PopoverTrigger>
         <PopoverPopup className="w-64 space-y-3 p-4">
@@ -349,6 +383,7 @@ export function DateRangeFilter({
                     if (!customStart || (customStart && customEnd)) {
                       setCustomStart(day)
                       setCustomEnd(null)
+                      setCustomDisplayEnd(null)
                       return
                     }
                     if (day < customStart) {

@@ -1,6 +1,7 @@
 import type { SandboxInfo } from "@superserve/sdk"
 import { Sandbox } from "@superserve/sdk"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+
 import { connectionOptions, hasCredentials, RUN_ID } from "../src/client.js"
 
 describe.skipIf(!hasCredentials())("sandboxes", () => {
@@ -44,7 +45,7 @@ describe.skipIf(!hasCredentials())("sandboxes", () => {
   })
 
   it("pause → resume lifecycle", async () => {
-    await sandbox.pause()
+    await sandbox.pause({ wait: true })
     expect((await sandbox.getInfo()).status).toBe("paused")
 
     await sandbox.resume()

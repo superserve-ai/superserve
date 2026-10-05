@@ -45,6 +45,7 @@ export const config = {
     // authenticates its own request (and answers JSON, not a redirect to the
     // signin page), so the middleware getUser() was a second Supabase auth
     // round-trip on every API call — including the 10s sandbox list poll.
-    "/((?!api/|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|otf|css|js|map)$).*)",
+    // PostHog ingestion must reach the rewrite even before sign-in.
+    "/((?!ingest(?:/|$)|api/|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|otf|css|js|map)$).*)",
   ],
 }

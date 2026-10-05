@@ -309,3 +309,49 @@ class TestAsyncDesktop:
         assert pointer.call_count == 1
         assert shot.data == png
         assert (shot.width, shot.height) == (10, 5)
+
+
+class TestRoutingHint:
+    @respx.mock
+    def test_sync_sends_hint_when_present(self) -> None:
+        route = respx.post(f"{RPC_BASE}/SendPointer").mock(
+            return_value=httpx.Response(200, json={})
+        )
+        deps = DesktopDeps(
+            sandbox_id=SBX,
+            sandbox_host=SANDBOX_HOST,
+            get_access_token=lambda: "tok",
+            refresh_activate=lambda: "tok",
+            publish_stream_port=lambda: None,
+            stream_base_url=lambda: "",
+            get_routing_hint=lambda: "hint-1",
+        )
+        Desktop(deps).click(1, 2)
+        assert route.calls.last.request.headers["X-Superserve-Routing-Hint"] == "hint-1"
+        _make_desktop().click(1, 2)
+        assert "X-Superserve-Routing-Hint" not in route.calls.last.request.headers
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_async_sends_hint_when_present(self) -> None:
+        route = respx.post(f"{RPC_BASE}/SendPointer").mock(
+            return_value=httpx.Response(200, json={})
+        )
+
+        async def _tok() -> str:
+            return "tok"
+
+        async def _noop() -> None:
+            return None
+
+        deps = AsyncDesktopDeps(
+            sandbox_id=SBX,
+            sandbox_host=SANDBOX_HOST,
+            get_access_token=lambda: "tok",
+            refresh_activate=_tok,
+            publish_stream_port=_noop,
+            stream_base_url=lambda: "",
+            get_routing_hint=lambda: "hint-1",
+        )
+        await AsyncDesktop(deps).click(1, 2)
+        assert route.calls.last.request.headers["X-Superserve-Routing-Hint"] == "hint-1"

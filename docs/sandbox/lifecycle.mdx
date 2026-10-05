@@ -9,7 +9,7 @@ A sandbox transitions between two long-lived states:
 - **`active`** - VM is running, processes executing, compute billed
 - **`paused`** - VM paused, state persisted to disk, no compute billed
 
-You'll briefly see **`resuming`** while a paused sandbox is being restored to `active` - retry shortly. **`failed`** indicates the sandbox couldn't boot or resume; the entry remains until you delete it. Deletion removes the sandbox entirely; further API calls return `404`.
+You'll briefly see **`pausing`** while a sandbox is being checkpointed and **`resuming`** while a paused sandbox is being restored to `active` - retry shortly. **`failed`** indicates the sandbox couldn't boot or resume; the entry remains until you delete it. Deletion removes the sandbox entirely; further API calls return `404`.
 
 ```
 active  ↔  paused  →  deleted
@@ -17,7 +17,7 @@ active  ↔  paused  →  deleted
 
 ## Pause
 
-`pause()` checkpoints the full VM state (memory, processes, filesystem) to disk and stops billing for compute.
+`pause()` checkpoints the full VM state (memory, processes, filesystem) to disk and stops billing for compute. It returns once the pause is accepted and the sandbox finishes pausing on its own; pass `wait: true` / `wait=True` to return once the sandbox is `paused`.
 
 <CodeGroup>
 ```typescript TypeScript {5}
@@ -26,6 +26,8 @@ import { Sandbox } from "@superserve/sdk"
 const sandbox = await Sandbox.create({ name: "long-job" })
 
 await sandbox.pause()
+// or, to return only once the sandbox is paused:
+// await sandbox.pause({ wait: true })
 ```
 
 ```python Python {5}
@@ -34,6 +36,8 @@ from superserve import Sandbox
 sandbox = Sandbox.create(name="long-job")
 
 sandbox.pause()
+# or, to return only once the sandbox is paused:
+# sandbox.pause(wait=True)
 ```
 </CodeGroup>
 

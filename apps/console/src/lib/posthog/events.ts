@@ -5,6 +5,17 @@ export const AUTH_EVENTS = {
   SIGN_IN_FAILED: "auth_sign_in_failed",
   SIGN_UP_COMPLETED: "auth_sign_up_completed",
   SIGN_UP_FAILED: "auth_sign_up_failed",
+  GOOGLE_SIGNUP_CAPTCHA_VERIFIED: "auth_google_signup_captcha_verified",
+  GOOGLE_SIGNUP_CAPTCHA_FAILED: "auth_google_signup_captcha_failed",
+  GOOGLE_SIGNUP_BYPASS_BLOCKED: "auth_google_signup_bypass_blocked",
+  GOOGLE_SIGNUP_PROOF_CONSUMED: "auth_google_signup_proof_consumed",
+  FINGERPRINT_SIGNUP_OBSERVED: "auth_fingerprint_signup_observed",
+  SIGNUP_RESTRICTION_EVALUATED: "auth_signup_restriction_evaluated",
+  CLOUDFLARE_SIGNUP_OBSERVED: "auth_cloudflare_signup_observed",
+  CLOUDFLARE_SIGNUP_OBSERVATION_FAILED:
+    "auth_cloudflare_signup_observation_failed",
+  SIGNUP_RECAPTCHA_OBSERVED: "auth_signup_recaptcha_observed",
+  SIGNUP_ATTEMPT_ASSOCIATED: "auth_signup_attempt_associated",
   SIGN_OUT: "auth_sign_out",
   PASSWORD_RESET_REQUESTED: "auth_password_reset_requested",
   PASSWORD_RESET_COMPLETED: "auth_password_reset_completed",
@@ -46,8 +57,9 @@ export const API_KEY_EVENTS = {
 } as const
 
 export const SNAPSHOT_EVENTS = {
+  TAKEN: "snapshot_taken",
+  RENAMED: "snapshot_renamed",
   DELETED: "snapshot_deleted",
-  BULK_DELETED: "snapshot_bulk_deleted",
 } as const
 
 export const SECRET_EVENTS = {
