@@ -251,14 +251,26 @@ describe("Desktop.scroll / resize / actions", () => {
 })
 
 describe("Desktop.getStreamUrl", () => {
-  it("publishes the port and returns the noVNC URL", async () => {
-    const publish = vi.fn(async () => "public" as const)
+  it("activates the sandbox, publishes the port and returns the noVNC URL", async () => {
+    const order: string[] = []
+    const activate = vi.fn(async () => {
+      order.push("activate")
+      return "tok"
+    })
+    const publish = vi.fn(async () => {
+      order.push("publish")
+      return "public" as const
+    })
     const mint = vi.fn()
     const desktop = new Desktop(
-      makeDeps({ publishStreamPort: publish, mintStreamToken: mint }),
+      makeDeps({
+        refreshActivate: activate,
+        publishStreamPort: publish,
+        mintStreamToken: mint,
+      }),
     )
     const url = await desktop.getStreamUrl()
-    expect(publish).toHaveBeenCalledOnce()
+    expect(order).toEqual(["activate", "publish"])
     expect(mint).not.toHaveBeenCalled()
     expect(url).toBe(
       `https://6080-${sandboxId}.${sandboxHost}/vnc.html?autoconnect=1&resize=scale`,

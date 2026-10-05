@@ -316,6 +316,9 @@ class Desktop:
         The URL goes through the sandbox's preview-port access policy — under
         a private policy, viewers also need a preview token.
         """
+        # Publishing a port and minting its token never resume the VM;
+        # activate first so the viewer is running when the URL is opened.
+        self._deps.refresh_activate()
         access = self._deps.publish_stream_port()
         credential = self._deps.mint_stream_token() if access == "private" else None
         return _stream_url(
@@ -433,6 +436,7 @@ class AsyncDesktop:
 
     async def get_stream_url(self, *, view_only: bool = False) -> str:
         """Async variant of :meth:`Desktop.get_stream_url`."""
+        await self._deps.refresh_activate()
         access = await self._deps.publish_stream_port()
         credential = (
             await self._deps.mint_stream_token() if access == "private" else None

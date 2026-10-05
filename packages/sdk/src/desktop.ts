@@ -362,6 +362,10 @@ export class Desktop {
    * cookie on first navigation, which noVNC's WebSocket then presents.
    */
   async getStreamUrl(options: StreamUrlOptions = {}): Promise<string> {
+    // Publishing a port and minting its token are control-plane calls that
+    // never resume the VM; activate first so the viewer is actually running
+    // when the URL is opened. Idempotent on an active sandbox.
+    await this._deps.refreshActivate()
     const access = await this._deps.publishStreamPort()
     const base = this._deps.streamBaseUrl()
     const params = new URLSearchParams({ autoconnect: "1", resize: "scale" })
