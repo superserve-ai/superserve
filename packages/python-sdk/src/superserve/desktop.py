@@ -29,6 +29,9 @@ _RPC_BASE = "/superserve.boxd.v1.DesktopService"
 
 #: Port the desktop template serves noVNC (websockify) on.
 DESKTOP_STREAM_PORT = 6080
+# Screenshots are the one large data-plane response; the data plane is
+# untrusted, so the body is capped while it is read (matches the TS SDK).
+MAX_SCREENSHOT_RESPONSE_BYTES = 48 * 1024 * 1024
 
 MouseButton = Literal["left", "right", "middle"]
 
@@ -223,7 +226,9 @@ class Desktop:
 
         One round trip; safe to call while a live stream viewer is open.
         """
-        return _decode_screenshot(self._rpc("Screenshot", {}))
+        return _decode_screenshot(
+            self._rpc("Screenshot", {}, max_bytes=MAX_SCREENSHOT_RESPONSE_BYTES)
+        )
 
     def click(self, x: int, y: int, *, button: MouseButton = "left") -> None:
         """Click at (x, y). One RPC — move and click are a single action."""
@@ -317,7 +322,9 @@ class Desktop:
             self._deps.stream_base_url(), view_only=view_only, credential=credential
         )
 
-    def _rpc(self, method: str, body: dict[str, Any]) -> dict[str, Any]:
+    def _rpc(
+        self, method: str, body: dict[str, Any], *, max_bytes: int | None = None
+    ) -> dict[str, Any]:
         def send(token: str) -> Any:
             return api_request(
                 "POST",
@@ -329,6 +336,7 @@ class Desktop:
                 },
                 json_body=body,
                 client=self._client,
+                max_bytes=max_bytes,
             )
 
         return with_token_retry(
@@ -354,7 +362,9 @@ class AsyncDesktop:
 
     async def screenshot(self) -> Screenshot:
         """Async variant of :meth:`Desktop.screenshot`."""
-        return _decode_screenshot(await self._rpc("Screenshot", {}))
+        return _decode_screenshot(
+            await self._rpc("Screenshot", {}, max_bytes=MAX_SCREENSHOT_RESPONSE_BYTES)
+        )
 
     async def click(self, x: int, y: int, *, button: MouseButton = "left") -> None:
         """Async variant of :meth:`Desktop.click`."""
@@ -431,7 +441,9 @@ class AsyncDesktop:
             self._deps.stream_base_url(), view_only=view_only, credential=credential
         )
 
-    async def _rpc(self, method: str, body: dict[str, Any]) -> dict[str, Any]:
+    async def _rpc(
+        self, method: str, body: dict[str, Any], *, max_bytes: int | None = None
+    ) -> dict[str, Any]:
         async def send(token: str) -> Any:
             return await async_api_request(
                 "POST",
@@ -443,6 +455,7 @@ class AsyncDesktop:
                 },
                 json_body=body,
                 client=self._client,
+                max_bytes=max_bytes,
             )
 
         return await async_with_token_retry(

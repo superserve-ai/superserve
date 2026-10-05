@@ -8,8 +8,10 @@ import json
 import httpx
 import pytest
 import respx
+from superserve.errors import ValidationError
 from superserve.types import PreviewToken
 from superserve.desktop import (
+    MAX_SCREENSHOT_RESPONSE_BYTES,
     AsyncDesktop,
     AsyncDesktopDeps,
     Desktop,
@@ -429,3 +431,39 @@ class TestPrivateStreamUrl:
         url = await AsyncDesktop(deps).get_stream_url()
         assert url.endswith("&superserve_preview_token=spv1.secret")
         assert "/vnc.html?autoconnect=1&resize=scale" in url
+
+
+class TestScreenshotCap:
+    @respx.mock
+    def test_sync_rejects_oversized_body_while_reading(self) -> None:
+        respx.post(f"{RPC_BASE}/Screenshot").mock(
+            return_value=httpx.Response(
+                200, content=b"x" * (MAX_SCREENSHOT_RESPONSE_BYTES + 1)
+            )
+        )
+        with pytest.raises(ValidationError, match="maximum size"):
+            _make_desktop().screenshot()
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_async_rejects_oversized_body_while_reading(self) -> None:
+        respx.post(f"{RPC_BASE}/Screenshot").mock(
+            return_value=httpx.Response(
+                200, content=b"x" * (MAX_SCREENSHOT_RESPONSE_BYTES + 1)
+            )
+        )
+
+        async def refresh() -> str:
+            return "tok"
+
+        deps = AsyncDesktopDeps(
+            sandbox_id=SBX,
+            sandbox_host=SANDBOX_HOST,
+            get_access_token=lambda: "tok",
+            refresh_activate=refresh,
+            publish_stream_port=_public_async,
+            stream_base_url=lambda: "",
+            mint_stream_token=_mint_async,
+        )
+        with pytest.raises(ValidationError, match="maximum size"):
+            await AsyncDesktop(deps).screenshot()
