@@ -43,12 +43,10 @@ Don't run `bunx oxfmt --write` from the repo root with no path argument: `docs/`
 ## Releasing SDKs
 
 Keep TS and Python version numbers in sync:
-
 - TS: `packages/sdk/package.json` → `version`
 - Python: `packages/python-sdk/pyproject.toml` → `version` AND `packages/python-sdk/src/superserve/__init__.py` → `__version__`
 
 Prefer the **Release SDKs** GitHub Actions workflow (`workflow_dispatch`). For manual publish:
-
 - TS: `bunx turbo run build --filter=@superserve/sdk && cd packages/sdk && bun publish --access public`
 - Python: run `uv build --package superserve && uv publish dist/superserve-*` from repo root (uv workspaces put artifacts there)
 
