@@ -221,6 +221,16 @@ def _build_error_body(response: httpx.Response) -> dict[str, Any]:
     }
 
 
+def _decoded_headers(headers: httpx.Headers) -> httpx.Headers:
+    """Headers for a Response rebuilt from already-decoded chunks: ``iter_bytes``
+    has applied Content-Encoding, so leaving it (and the wire length) would
+    make httpx decompress the body a second time."""
+    out = httpx.Headers(headers)
+    out.pop("content-encoding", None)
+    out.pop("content-length", None)
+    return out
+
+
 def _read_capped(chunks: Iterable[bytes], max_bytes: int) -> bytes:
     """Accumulate byte ``chunks`` into a buffer, enforcing a hard size cap.
 
@@ -320,7 +330,7 @@ def _read_within(
                     _check_deadline(deadline)
             return httpx.Response(
                 streamed.status_code,
-                headers=streamed.headers,
+                headers=_decoded_headers(streamed.headers),
                 content=b"".join(parts),
                 request=streamed.request,
             )
@@ -384,7 +394,7 @@ async def _async_read_within(
                     _check_deadline(deadline)
             return httpx.Response(
                 streamed.status_code,
-                headers=streamed.headers,
+                headers=_decoded_headers(streamed.headers),
                 content=b"".join(parts),
                 request=streamed.request,
             )
