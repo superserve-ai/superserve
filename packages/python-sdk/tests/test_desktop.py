@@ -233,19 +233,19 @@ class TestBatchAndMisc:
 
 
 class TestStreamUrl:
-    def test_publishes_and_builds_novnc_url(self) -> None:
-        published: list[bool] = []
+    def test_activates_publishes_and_builds_novnc_url(self) -> None:
+        order: list[str] = []
         deps = DesktopDeps(
             sandbox_id=SBX,
             sandbox_host=SANDBOX_HOST,
             get_access_token=lambda: "tok",
-            refresh_activate=lambda: "tok",
-            publish_stream_port=lambda: (published.append(True), "public")[1],
+            refresh_activate=lambda: (order.append("activate"), "tok")[1],
+            publish_stream_port=lambda: (order.append("publish"), "public")[1],
             stream_base_url=lambda: f"https://6080-{SBX}.{SANDBOX_HOST}",
             mint_stream_token=lambda: _TOKEN,
         )
         url = Desktop(deps).get_stream_url()
-        assert published == [True]
+        assert order == ["activate", "publish"]
         assert url == (
             f"https://6080-{SBX}.{SANDBOX_HOST}/vnc.html?autoconnect=1&resize=scale"
         )
@@ -467,3 +467,29 @@ class TestScreenshotCap:
         )
         with pytest.raises(ValidationError, match="maximum size"):
             await AsyncDesktop(deps).screenshot()
+
+
+@respx.mock
+def test_sync_sandbox_desktop_resolves_client_per_call() -> None:
+    """A handle created before os.fork() must not pin the parent's pool."""
+    from superserve import Sandbox
+
+    respx.post("https://api.example.com/sandboxes").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": SBX,
+                "name": "example",
+                "status": "active",
+                "vcpu_count": 2,
+                "memory_mib": 512,
+                "access_token": "auth",
+                "created_at": "2026-01-01T00:00:00Z",
+                "metadata": {},
+            },
+        )
+    )
+    sb = Sandbox.create(
+        name="example", api_key="ss_live_test", base_url="https://api.example.com"
+    )
+    assert sb.desktop._client is None

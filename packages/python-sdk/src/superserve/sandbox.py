@@ -121,7 +121,8 @@ class Sandbox:
                     DESKTOP_STREAM_PORT, expires_in_seconds=60
                 ),
             ),
-            client=self._http_client,
+            # No client: resolved per call, so a process forked after this
+            # handle was created uses its own pool, as commands and files do.
         )
 
     def _post_and_rotate_token(self, endpoint: str) -> str:
