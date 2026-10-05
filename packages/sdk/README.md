@@ -62,7 +62,10 @@ Control a GUI desktop inside a sandbox — screenshot, mouse, keyboard, and a
 live browser viewer. Requires a desktop-enabled template.
 
 ```typescript
-const sandbox = await Sandbox.create({ template: "superserve/desktop" })
+const sandbox = await Sandbox.create({
+  name: "desktop",
+  fromTemplate: "superserve/desktop",
+})
 
 const shot = await sandbox.desktop.screenshot() // PNG bytes + dimensions
 await sandbox.desktop.click(640, 400)

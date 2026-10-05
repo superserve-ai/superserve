@@ -56,7 +56,7 @@ Control a GUI desktop inside a sandbox — screenshot, mouse, keyboard, and a
 live browser viewer. Requires a desktop-enabled template.
 
 ```python
-sandbox = Sandbox.create(template="superserve/desktop")
+sandbox = Sandbox.create(name="desktop", from_template="superserve/desktop")
 
 shot = sandbox.desktop.screenshot()  # PNG bytes + dimensions
 sandbox.desktop.click(640, 400)
