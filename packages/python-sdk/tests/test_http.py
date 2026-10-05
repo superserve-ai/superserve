@@ -479,3 +479,24 @@ def test_pause_poll_delay_ramps_only_when_the_caller_set_no_interval() -> None:
     # An explicit interval is used as given, from the first check on.
     assert pause_poll_delay(0.0, 5.0) == 5.0
     assert pause_poll_delay(0.0, 0.01) == 0.01
+
+
+def test_budgeted_request_decodes_gzip_once() -> None:
+    """The deadline path rebuilds the response from decoded chunks; it must drop
+    the wire Content-Encoding or httpx decompresses twice."""
+    import gzip as _gzip
+
+    with respx.mock:
+        respx.get("https://api.example.com/thing").mock(
+            return_value=httpx.Response(
+                200,
+                content=_gzip.compress(b'{"ok": true}'),
+                headers={
+                    "content-encoding": "gzip",
+                    "content-type": "application/json",
+                },
+            )
+        )
+        assert api_request(
+            "GET", "https://api.example.com/thing", headers={}, budget=5.0
+        ) == {"ok": True}

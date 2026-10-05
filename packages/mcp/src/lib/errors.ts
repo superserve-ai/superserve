@@ -51,3 +51,13 @@ export function formatSdkError(err: unknown): string {
   }
   return "Unexpected error."
 }
+
+/**
+ * The error's own message, without retry guidance. For operations that are
+ * not idempotent, the caller decides what to do next, so this must not
+ * suggest a replay the way `formatSdkError` does for server errors.
+ */
+export function describeSdkError(err: unknown): string {
+  if (err instanceof ServerError) return err.message
+  return formatSdkError(err)
+}

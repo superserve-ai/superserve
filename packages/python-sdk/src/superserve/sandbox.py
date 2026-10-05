@@ -21,6 +21,7 @@ from ._http import (
     shared_client,
 )
 from .commands import Commands, CommandsDeps
+from .desktop import DESKTOP_STREAM_PORT, Desktop, DesktopDeps
 from .errors import ConflictError, NotFoundError, SandboxError, SandboxTimeoutError
 from .snapshots import (
     DEFAULT_SNAPSHOT_POLL_S,
@@ -101,6 +102,27 @@ class Sandbox:
                 refresh_activate=self._refresh_activate,
                 refresh_expired_hint=self._refresh_expired_hint,
             ),
+        )
+
+        def _publish_stream_port() -> PreviewAccessPolicy:
+            return self.publish_preview_port(DESKTOP_STREAM_PORT).access
+
+        self.desktop = Desktop(
+            DesktopDeps(
+                sandbox_id=self.id,
+                sandbox_host=config.sandbox_host,
+                get_access_token=lambda: self._access_token,
+                get_routing_hint=lambda: self._routing_hint,
+                refresh_activate=self._refresh_activate,
+                refresh_expired_hint=self._refresh_expired_hint,
+                publish_stream_port=_publish_stream_port,
+                stream_base_url=lambda: self.get_preview_url(DESKTOP_STREAM_PORT),
+                mint_stream_token=lambda: self.get_preview_token(
+                    DESKTOP_STREAM_PORT, expires_in_seconds=60
+                ),
+            ),
+            # No client: resolved per call, so a process forked after this
+            # handle was created uses its own pool, as commands and files do.
         )
 
     def _post_and_rotate_token(self, endpoint: str) -> str:

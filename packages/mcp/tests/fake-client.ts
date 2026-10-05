@@ -12,6 +12,7 @@ import type {
   SandboxSecretBinding,
   SandboxStatus,
 } from "@superserve/sdk"
+import type { DesktopAction, Screenshot } from "@superserve/sdk"
 
 import type {
   ExecInput,
@@ -48,6 +49,16 @@ export interface FakeClient {
   networkEvents: NetworkEvent[]
   /** The options the most recent `exec` call received (for asserting clamps). */
   lastExec: { command: string; opts: ExecInput } | undefined
+  /** Every desktopActions batch received, in order (for asserting lowering). */
+  desktopBatches: DesktopAction[][]
+  /** Screenshot returned by desktopScreenshot (seed-able). */
+  screenshot: Screenshot
+  /** When set, the next desktopScreenshot rejects with it, then clears. */
+  failNextScreenshotWith: Error | undefined
+  /** When set, the next desktopActions rejects with it, then clears. */
+  failNextActionsWith: Error | undefined
+  /** Every desktopResize call received. */
+  resizes: Array<{ width: number; height: number }>
 }
 
 export function createFakeClient(): FakeClient {
@@ -56,6 +67,18 @@ export function createFakeClient(): FakeClient {
   const secrets: SecretSummary[] = []
   const networkEvents: NetworkEvent[] = []
   const fake: Pick<FakeClient, "lastExec"> = { lastExec: undefined }
+  const desktopBatches: DesktopAction[][] = []
+  const resizes: Array<{ width: number; height: number }> = []
+  const faults: {
+    nextScreenshot: Error | undefined
+    nextActions: Error | undefined
+  } = { nextScreenshot: undefined, nextActions: undefined }
+  // Not a decodable PNG — the MCP layer treats image bytes as opaque.
+  const screenshot: Screenshot = {
+    data: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+    width: 1280,
+    height: 800,
+  }
   let counter = 0
 
   const must = (id: string): FakeSandbox => {
@@ -303,6 +326,35 @@ export function createFakeClient(): FakeClient {
       // Idempotent: deleting a missing sandbox is a no-op.
       sandboxes.delete(id)
     },
+
+    async desktopScreenshot(id) {
+      must(id)
+      if (faults.nextScreenshot) {
+        const err = faults.nextScreenshot
+        faults.nextScreenshot = undefined
+        throw err
+      }
+      return screenshot
+    },
+
+    async desktopActions(id, actions) {
+      must(id)
+      if (faults.nextActions) {
+        const err = faults.nextActions
+        faults.nextActions = undefined
+        throw err
+      }
+      desktopBatches.push(actions)
+    },
+
+    async desktopResize(id, width, height) {
+      must(id)
+      resizes.push({ width, height })
+    },
+
+    async desktopStreamUrl(id) {
+      return `https://6080-${must(id).id}.sandbox.example.com/vnc.html?autoconnect=1`
+    },
   }
 
   return {
@@ -314,5 +366,20 @@ export function createFakeClient(): FakeClient {
     get lastExec() {
       return fake.lastExec
     },
+    desktopBatches,
+    screenshot,
+    get failNextScreenshotWith() {
+      return faults.nextScreenshot
+    },
+    set failNextScreenshotWith(err: Error | undefined) {
+      faults.nextScreenshot = err
+    },
+    get failNextActionsWith() {
+      return faults.nextActions
+    },
+    set failNextActionsWith(err: Error | undefined) {
+      faults.nextActions = err
+    },
+    resizes,
   }
 }

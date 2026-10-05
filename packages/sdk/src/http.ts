@@ -304,9 +304,11 @@ async function retryableFetch(
   throw lastError ?? new SandboxError("Request failed with no response")
 }
 
-async function readErrorBody(
-  res: Response,
-): Promise<{ error?: { code?: string; message?: string } }> {
+async function readErrorBody(res: Response): Promise<{
+  error?: { code?: string; message?: string }
+  code?: string
+  message?: string
+}> {
   let text: string
   try {
     text = await res.text()
@@ -314,7 +316,11 @@ async function readErrorBody(
     return {}
   }
   try {
-    return JSON.parse(text) as { error?: { code?: string; message?: string } }
+    return JSON.parse(text) as {
+      error?: { code?: string; message?: string }
+      code?: string
+      message?: string
+    }
   } catch {
     // Older proxies emit these exact http.Error responses before dispatch.
     // Do not broaden this to arbitrary 503 bodies from an upstream operation.
