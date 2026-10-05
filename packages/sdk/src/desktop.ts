@@ -16,6 +16,7 @@ import { dataPlaneTarget } from "./config.js"
 import { request } from "./http.js"
 import { routingHintHeaders } from "./routingHint.js"
 import { withTokenRetry } from "./tokenRetry.js"
+import type { PreviewAccessPolicy, PreviewToken } from "./types.js"
 
 /** @internal */
 export interface DesktopDeps {
@@ -24,9 +25,11 @@ export interface DesktopDeps {
   getAccessToken: () => string
   refreshActivate: () => Promise<string>
   getRoutingHint?: () => string | undefined
-  /** Publish the noVNC port and build its public URL (from the Sandbox). */
-  publishStreamPort: () => Promise<void>
+  /** Publish the noVNC port and report its access mode (from the Sandbox). */
+  publishStreamPort: () => Promise<PreviewAccessPolicy>
   streamBaseUrl: () => string
+  /** Mint a short-lived credential for the noVNC port when it is private. */
+  mintStreamToken: () => Promise<Pick<PreviewToken, "token" | "queryParam">>
 }
 
 const RPC_BASE = "/superserve.boxd.v1.DesktopService"
@@ -354,14 +357,19 @@ export class Desktop {
   /**
    * Publish the live desktop viewer (noVNC) and return its browser URL.
    *
-   * The URL goes through the sandbox's preview-port access policy — under a
-   * private policy, viewers also need a preview token.
+   * Under a private preview policy the URL carries a short-lived signed
+   * credential, as `getSignedPreviewUrl()` does: the edge turns it into a
+   * cookie on first navigation, which noVNC's WebSocket then presents.
    */
   async getStreamUrl(options: StreamUrlOptions = {}): Promise<string> {
-    await this._deps.publishStreamPort()
+    const access = await this._deps.publishStreamPort()
     const base = this._deps.streamBaseUrl()
     const params = new URLSearchParams({ autoconnect: "1", resize: "scale" })
     if (options.viewOnly) params.set("view_only", "1")
+    if (access === "private") {
+      const credential = await this._deps.mintStreamToken()
+      params.set(credential.queryParam, credential.token)
+    }
     return `${base}/vnc.html?${params.toString()}`
   }
 

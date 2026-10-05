@@ -104,8 +104,8 @@ class Sandbox:
             ),
         )
 
-        def _publish_stream_port() -> None:
-            self.publish_preview_port(DESKTOP_STREAM_PORT)
+        def _publish_stream_port() -> PreviewAccessPolicy:
+            return self.publish_preview_port(DESKTOP_STREAM_PORT).access
 
         self.desktop = Desktop(
             DesktopDeps(
@@ -117,6 +117,9 @@ class Sandbox:
                 refresh_expired_hint=self._refresh_expired_hint,
                 publish_stream_port=_publish_stream_port,
                 stream_base_url=lambda: self.get_preview_url(DESKTOP_STREAM_PORT),
+                mint_stream_token=lambda: self.get_preview_token(
+                    DESKTOP_STREAM_PORT, expires_in_seconds=60
+                ),
             ),
             client=self._http_client,
         )

@@ -8,6 +8,7 @@ import json
 import httpx
 import pytest
 import respx
+from superserve.types import PreviewToken
 from superserve.desktop import (
     AsyncDesktop,
     AsyncDesktopDeps,
@@ -19,6 +20,23 @@ from superserve.desktop import (
 SANDBOX_HOST = "sandbox.example.com"
 SBX = "sbx-1"
 RPC_BASE = f"https://boxd-{SBX}.{SANDBOX_HOST}/superserve.boxd.v1.DesktopService"
+_TOKEN = PreviewToken(
+    token="spv1.secret",
+    port=6080,
+    header="X-Superserve-Preview-Token",
+    query_param="superserve_preview_token",
+    token_version=1,
+    access="private",
+    preview_access="private",
+)
+
+
+async def _mint_async() -> PreviewToken:
+    return _TOKEN
+
+
+async def _public_async() -> str:
+    return "public"
 
 
 def _make_desktop() -> Desktop:
@@ -27,8 +45,9 @@ def _make_desktop() -> Desktop:
         sandbox_host=SANDBOX_HOST,
         get_access_token=lambda: "tok-initial",
         refresh_activate=lambda: "tok-refreshed",
-        publish_stream_port=lambda: None,
+        publish_stream_port=lambda: "public",
         stream_base_url=lambda: f"https://6080-{SBX}.{SANDBOX_HOST}",
+        mint_stream_token=lambda: _TOKEN,
     )
     return Desktop(deps)
 
@@ -219,8 +238,9 @@ class TestStreamUrl:
             sandbox_host=SANDBOX_HOST,
             get_access_token=lambda: "tok",
             refresh_activate=lambda: "tok",
-            publish_stream_port=lambda: published.append(True),
+            publish_stream_port=lambda: (published.append(True), "public")[1],
             stream_base_url=lambda: f"https://6080-{SBX}.{SANDBOX_HOST}",
+            mint_stream_token=lambda: _TOKEN,
         )
         url = Desktop(deps).get_stream_url()
         assert published == [True]
@@ -262,8 +282,9 @@ class TestTokenRetry:
             sandbox_host=SANDBOX_HOST,
             get_access_token=lambda: state["token"],
             refresh_activate=refresh_and_store,
-            publish_stream_port=lambda: None,
+            publish_stream_port=lambda: "public",
             stream_base_url=lambda: "unused",
+            mint_stream_token=lambda: _TOKEN,
         )
         Desktop(deps).click(1, 1)
         assert tokens == ["tok-initial", "tok-refreshed"]
@@ -289,8 +310,8 @@ class TestAsyncDesktop:
             )
         )
 
-        async def publish() -> None:
-            return None
+        async def publish() -> str:
+            return "public"
 
         async def refresh() -> str:
             return "tok"
@@ -302,6 +323,7 @@ class TestAsyncDesktop:
             refresh_activate=refresh,
             publish_stream_port=publish,
             stream_base_url=lambda: f"https://6080-{SBX}.{SANDBOX_HOST}",
+            mint_stream_token=_mint_async,
         )
         desktop = AsyncDesktop(deps)
         await desktop.click(3, 4)
@@ -322,8 +344,9 @@ class TestRoutingHint:
             sandbox_host=SANDBOX_HOST,
             get_access_token=lambda: "tok",
             refresh_activate=lambda: "tok",
-            publish_stream_port=lambda: None,
+            publish_stream_port=lambda: "public",
             stream_base_url=lambda: "",
+            mint_stream_token=lambda: _TOKEN,
             get_routing_hint=lambda: "hint-1",
         )
         Desktop(deps).click(1, 2)
@@ -349,9 +372,60 @@ class TestRoutingHint:
             sandbox_host=SANDBOX_HOST,
             get_access_token=lambda: "tok",
             refresh_activate=_tok,
-            publish_stream_port=_noop,
+            publish_stream_port=_public_async,
             stream_base_url=lambda: "",
+            mint_stream_token=_mint_async,
             get_routing_hint=lambda: "hint-1",
         )
         await AsyncDesktop(deps).click(1, 2)
         assert route.calls.last.request.headers["X-Superserve-Routing-Hint"] == "hint-1"
+
+
+class TestPrivateStreamUrl:
+    def test_sync_signs_private_port(self) -> None:
+        minted: list[bool] = []
+
+        def mint() -> PreviewToken:
+            minted.append(True)
+            return _TOKEN
+
+        deps = DesktopDeps(
+            sandbox_id=SBX,
+            sandbox_host=SANDBOX_HOST,
+            get_access_token=lambda: "tok",
+            refresh_activate=lambda: "tok",
+            publish_stream_port=lambda: "private",
+            stream_base_url=lambda: f"https://6080-{SBX}.{SANDBOX_HOST}",
+            mint_stream_token=mint,
+        )
+        url = Desktop(deps).get_stream_url(view_only=True)
+        assert url == (
+            f"https://6080-{SBX}.{SANDBOX_HOST}/vnc.html"
+            "?autoconnect=1&resize=scale&view_only=1&superserve_preview_token=spv1.secret"
+        )
+        assert minted == [True]
+
+    def test_sync_public_port_is_not_signed(self) -> None:
+        url = _make_desktop().get_stream_url()
+        assert "superserve_preview_token" not in url
+
+    @pytest.mark.asyncio
+    async def test_async_signs_private_port(self) -> None:
+        async def private() -> str:
+            return "private"
+
+        async def refresh() -> str:
+            return "tok"
+
+        deps = AsyncDesktopDeps(
+            sandbox_id=SBX,
+            sandbox_host=SANDBOX_HOST,
+            get_access_token=lambda: "tok",
+            refresh_activate=refresh,
+            publish_stream_port=private,
+            stream_base_url=lambda: f"https://6080-{SBX}.{SANDBOX_HOST}",
+            mint_stream_token=_mint_async,
+        )
+        url = await AsyncDesktop(deps).get_stream_url()
+        assert url.endswith("&superserve_preview_token=spv1.secret")
+        assert "/vnc.html?autoconnect=1&resize=scale" in url

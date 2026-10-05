@@ -22,6 +22,7 @@ import httpx
 from ._config import data_plane_target
 from ._http import api_request, async_api_request
 from ._routing_hint import routing_hint_headers
+from .types import PreviewAccessPolicy, PreviewToken
 from ._token_retry import async_with_token_retry, with_token_retry
 
 _RPC_BASE = "/superserve.boxd.v1.DesktopService"
@@ -84,8 +85,9 @@ class DesktopDeps:
     sandbox_host: str
     get_access_token: Callable[[], str]
     refresh_activate: Callable[[], str]
-    publish_stream_port: Callable[[], None]
+    publish_stream_port: Callable[[], PreviewAccessPolicy]
     stream_base_url: Callable[[], str]
+    mint_stream_token: Callable[[], PreviewToken]
     get_routing_hint: Callable[[], str | None] = lambda: None
     refresh_expired_hint: Callable[[], str] | None = None
 
@@ -98,8 +100,9 @@ class AsyncDesktopDeps:
     sandbox_host: str
     get_access_token: Callable[[], str]
     refresh_activate: Callable[[], Awaitable[str]]
-    publish_stream_port: Callable[[], Awaitable[None]]
+    publish_stream_port: Callable[[], Awaitable[PreviewAccessPolicy]]
     stream_base_url: Callable[[], str]
+    mint_stream_token: Callable[[], Awaitable[PreviewToken]]
     get_routing_hint: Callable[[], str | None] = lambda: None
     refresh_expired_hint: Callable[[], Awaitable[str]] | None = None
 
@@ -191,10 +194,17 @@ def _decode_screenshot(raw: dict[str, Any]) -> Screenshot:
     )
 
 
-def _stream_url(base: str, *, view_only: bool) -> str:
+def _stream_url(
+    base: str, *, view_only: bool, credential: PreviewToken | None = None
+) -> str:
     params: dict[str, str] = {"autoconnect": "1", "resize": "scale"}
     if view_only:
         params["view_only"] = "1"
+    # A private port needs the signed credential, as get_signed_preview_url
+    # provides: the edge turns it into a cookie on first navigation, which
+    # noVNC's WebSocket then presents.
+    if credential is not None:
+        params[credential.query_param] = credential.token
     return f"{base}/vnc.html?{urlencode(params)}"
 
 
@@ -301,8 +311,11 @@ class Desktop:
         The URL goes through the sandbox's preview-port access policy — under
         a private policy, viewers also need a preview token.
         """
-        self._deps.publish_stream_port()
-        return _stream_url(self._deps.stream_base_url(), view_only=view_only)
+        access = self._deps.publish_stream_port()
+        credential = self._deps.mint_stream_token() if access == "private" else None
+        return _stream_url(
+            self._deps.stream_base_url(), view_only=view_only, credential=credential
+        )
 
     def _rpc(self, method: str, body: dict[str, Any]) -> dict[str, Any]:
         def send(token: str) -> Any:
@@ -410,8 +423,13 @@ class AsyncDesktop:
 
     async def get_stream_url(self, *, view_only: bool = False) -> str:
         """Async variant of :meth:`Desktop.get_stream_url`."""
-        await self._deps.publish_stream_port()
-        return _stream_url(self._deps.stream_base_url(), view_only=view_only)
+        access = await self._deps.publish_stream_port()
+        credential = (
+            await self._deps.mint_stream_token() if access == "private" else None
+        )
+        return _stream_url(
+            self._deps.stream_base_url(), view_only=view_only, credential=credential
+        )
 
     async def _rpc(self, method: str, body: dict[str, Any]) -> dict[str, Any]:
         async def send(token: str) -> Any:

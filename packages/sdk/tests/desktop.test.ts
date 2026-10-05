@@ -23,8 +23,12 @@ function makeDeps(overrides: Partial<DesktopDeps> = {}): DesktopDeps {
       token = "tok-refreshed"
       return token
     },
-    publishStreamPort: async () => {},
+    publishStreamPort: async () => "public" as const,
     streamBaseUrl: () => `https://6080-${sandboxId}.${sandboxHost}`,
+    mintStreamToken: async () => ({
+      token: "spv1.secret",
+      queryParam: "superserve_preview_token",
+    }),
     ...overrides,
   }
 }
@@ -248,12 +252,26 @@ describe("Desktop.scroll / resize / actions", () => {
 
 describe("Desktop.getStreamUrl", () => {
   it("publishes the port and returns the noVNC URL", async () => {
-    const publish = vi.fn(async () => {})
-    const desktop = new Desktop(makeDeps({ publishStreamPort: publish }))
+    const publish = vi.fn(async () => "public" as const)
+    const mint = vi.fn()
+    const desktop = new Desktop(
+      makeDeps({ publishStreamPort: publish, mintStreamToken: mint }),
+    )
     const url = await desktop.getStreamUrl()
     expect(publish).toHaveBeenCalledOnce()
+    expect(mint).not.toHaveBeenCalled()
     expect(url).toBe(
       `https://6080-${sandboxId}.${sandboxHost}/vnc.html?autoconnect=1&resize=scale`,
+    )
+  })
+
+  it("signs the URL when the port is private, keeping the viewer path and params", async () => {
+    const desktop = new Desktop(
+      makeDeps({ publishStreamPort: async () => "private" as const }),
+    )
+    const url = await desktop.getStreamUrl({ viewOnly: true })
+    expect(url).toBe(
+      `https://6080-${sandboxId}.${sandboxHost}/vnc.html?autoconnect=1&resize=scale&view_only=1&superserve_preview_token=spv1.secret`,
     )
   })
 

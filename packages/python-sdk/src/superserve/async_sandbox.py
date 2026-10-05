@@ -107,8 +107,13 @@ class AsyncSandbox:
             client=self._http_client,
         )
 
-        async def _publish_stream_port() -> None:
-            await self.publish_preview_port(DESKTOP_STREAM_PORT)
+        async def _publish_stream_port() -> PreviewAccessPolicy:
+            return (await self.publish_preview_port(DESKTOP_STREAM_PORT)).access
+
+        async def _mint_stream_token() -> PreviewToken:
+            return await self.get_preview_token(
+                DESKTOP_STREAM_PORT, expires_in_seconds=60
+            )
 
         self.desktop = AsyncDesktop(
             AsyncDesktopDeps(
@@ -120,6 +125,7 @@ class AsyncSandbox:
                 refresh_expired_hint=self._refresh_expired_hint,
                 publish_stream_port=_publish_stream_port,
                 stream_base_url=lambda: self.get_preview_url(DESKTOP_STREAM_PORT),
+                mint_stream_token=_mint_stream_token,
             ),
             client=self._http_client,
         )

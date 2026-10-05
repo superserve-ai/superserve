@@ -171,10 +171,11 @@ export class Sandbox {
       getAccessToken: () => this._accessToken,
       getRoutingHint: () => this._routingHint,
       refreshActivate: () => this._refreshActivate(),
-      publishStreamPort: async () => {
-        await this.publishPreviewPort(DESKTOP_STREAM_PORT)
-      },
+      publishStreamPort: async () =>
+        (await this.publishPreviewPort(DESKTOP_STREAM_PORT)).access,
       streamBaseUrl: () => this.getPreviewUrl(DESKTOP_STREAM_PORT),
+      mintStreamToken: () =>
+        this.getPreviewToken(DESKTOP_STREAM_PORT, { expiresInSeconds: 60 }),
     })
   }
 
