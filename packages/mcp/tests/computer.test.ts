@@ -1,5 +1,6 @@
 /** `sandbox_computer` — action lowering, screenshots, and error paths. */
 
+import { ServerError } from "@superserve/sdk"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { createFakeClient, type FakeClient } from "./fake-client.js"
@@ -145,6 +146,19 @@ describe("sandbox_computer (in-memory, fake client)", () => {
     })
     expect(res.structured).toEqual({ waited_ms: 10 })
     expect(fake.desktopBatches).toEqual([])
+  })
+
+  it("a failed input RPC is an error that never suggests a replay", async () => {
+    fake.failNextActionsWith = new ServerError(
+      "action 1 failed after 1 executed: xdotool timeout",
+      "internal",
+      500,
+    )
+    const res = await callRaw({ action: "triple_click", coordinate: [10, 20] })
+    expect(res.isError).toBe(true)
+    expect(res.content[0].text).toContain("after 1 executed")
+    expect(res.content[0].text).toContain("Take a screenshot")
+    expect(res.content[0].text).not.toContain("safe to retry")
   })
 
   it("a failed follow-up screenshot still reports the delivered action", async () => {

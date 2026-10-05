@@ -55,6 +55,8 @@ export interface FakeClient {
   screenshot: Screenshot
   /** When set, the next desktopScreenshot rejects with it, then clears. */
   failNextScreenshotWith: Error | undefined
+  /** When set, the next desktopActions rejects with it, then clears. */
+  failNextActionsWith: Error | undefined
   /** Every desktopResize call received. */
   resizes: Array<{ width: number; height: number }>
 }
@@ -67,9 +69,10 @@ export function createFakeClient(): FakeClient {
   const fake: Pick<FakeClient, "lastExec"> = { lastExec: undefined }
   const desktopBatches: DesktopAction[][] = []
   const resizes: Array<{ width: number; height: number }> = []
-  const faults: { nextScreenshot: Error | undefined } = {
-    nextScreenshot: undefined,
-  }
+  const faults: {
+    nextScreenshot: Error | undefined
+    nextActions: Error | undefined
+  } = { nextScreenshot: undefined, nextActions: undefined }
   // Not a decodable PNG — the MCP layer treats image bytes as opaque.
   const screenshot: Screenshot = {
     data: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
@@ -336,6 +339,11 @@ export function createFakeClient(): FakeClient {
 
     async desktopActions(id, actions) {
       must(id)
+      if (faults.nextActions) {
+        const err = faults.nextActions
+        faults.nextActions = undefined
+        throw err
+      }
       desktopBatches.push(actions)
     },
 
@@ -365,6 +373,12 @@ export function createFakeClient(): FakeClient {
     },
     set failNextScreenshotWith(err: Error | undefined) {
       faults.nextScreenshot = err
+    },
+    get failNextActionsWith() {
+      return faults.nextActions
+    },
+    set failNextActionsWith(err: Error | undefined) {
+      faults.nextActions = err
     },
     resizes,
   }

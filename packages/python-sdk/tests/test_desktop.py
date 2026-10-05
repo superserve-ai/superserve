@@ -8,7 +8,9 @@ import json
 import httpx
 import pytest
 import respx
-from superserve.errors import ValidationError
+import gzip
+
+from superserve.errors import ServerError, ValidationError
 from superserve.types import PreviewToken
 from superserve.desktop import (
     MAX_SCREENSHOT_RESPONSE_BYTES,
@@ -493,3 +495,57 @@ def test_sync_sandbox_desktop_resolves_client_per_call() -> None:
         name="example", api_key="ss_live_test", base_url="https://api.example.com"
     )
     assert sb.desktop._client is None
+
+
+def _gzipped_screenshot() -> httpx.Response:
+    body = json.dumps(
+        {"image": base64.b64encode(b"\x89PNG").decode(), "width": 4, "height": 2}
+    )
+    return httpx.Response(
+        200,
+        content=gzip.compress(body.encode()),
+        headers={"content-encoding": "gzip", "content-type": "application/json"},
+    )
+
+
+class TestCompressedScreenshot:
+    """The capped read streams decoded chunks; the rebuilt response must not
+    carry the wire encoding or httpx decompresses the JSON twice."""
+
+    @respx.mock
+    def test_sync_decodes_gzip_once(self) -> None:
+        respx.post(f"{RPC_BASE}/Screenshot").mock(return_value=_gzipped_screenshot())
+        shot = _make_desktop().screenshot()
+        assert (shot.width, shot.height) == (4, 2)
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_async_decodes_gzip_once(self) -> None:
+        respx.post(f"{RPC_BASE}/Screenshot").mock(return_value=_gzipped_screenshot())
+
+        async def refresh() -> str:
+            return "tok"
+
+        deps = AsyncDesktopDeps(
+            sandbox_id=SBX,
+            sandbox_host=SANDBOX_HOST,
+            get_access_token=lambda: "tok",
+            refresh_activate=refresh,
+            publish_stream_port=_public_async,
+            stream_base_url=lambda: "",
+            mint_stream_token=_mint_async,
+        )
+        shot = await AsyncDesktop(deps).screenshot()
+        assert (shot.width, shot.height) == (4, 2)
+
+
+@respx.mock
+def test_connect_error_message_is_preserved() -> None:
+    respx.post(f"{RPC_BASE}/SendActions").mock(
+        return_value=httpx.Response(
+            500,
+            json={"code": "internal", "message": "action 1 failed after 1 executed"},
+        )
+    )
+    with pytest.raises(ServerError, match="after 1 executed"):
+        _make_desktop().actions([{"type": "click", "x": 1, "y": 1, "button": "left"}])

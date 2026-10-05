@@ -11,7 +11,7 @@ import type { DesktopAction, MouseButton } from "@superserve/sdk"
 import { z } from "zod"
 
 import type { SandboxClient } from "../client.js"
-import { formatSdkError } from "../lib/errors.js"
+import { describeSdkError, formatSdkError } from "../lib/errors.js"
 import { toolError, toolOk } from "../lib/result.js"
 import type { CallToolResult, McpServer } from "../lib/sdk.js"
 import { defineTool } from "../lib/tool.js"
@@ -253,7 +253,17 @@ export function registerComputerTool(
             return toolOk(url, { url })
           }
           default: {
-            await client.desktopActions(sandbox_id, toDesktopActions(args))
+            try {
+              await client.desktopActions(sandbox_id, toDesktopActions(args))
+            } catch (e) {
+              // Input is not idempotent and a batch can fail part-way, so a
+              // failed RPC does not mean nothing was delivered. The generic
+              // formatter's "safe to retry" would be wrong here.
+              return toolError(
+                `${action} failed and may have been partially or fully delivered: ${describeSdkError(e)}. ` +
+                  "Take a screenshot and check the screen before deciding whether to repeat the input.",
+              )
+            }
             if (args.screenshot_after === false) {
               return toolOk(`${action} done`, { action })
             }
