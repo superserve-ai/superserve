@@ -47,6 +47,16 @@ describe("mapApiError", () => {
     error: { code, message },
   })
 
+  it("keeps the message and code of a flat Connect error body", () => {
+    const err = mapApiError(500, {
+      code: "internal",
+      message: "action 1 failed after 1 executed",
+    })
+    expect(err).toBeInstanceOf(ServerError)
+    expect(err.code).toBe("internal")
+    expect(err.message).toBe("action 1 failed after 1 executed")
+  })
+
   it("maps 400 to ValidationError with code", () => {
     const err = mapApiError(400, withError("bad_request", "no"))
     expect(err).toBeInstanceOf(ValidationError)
