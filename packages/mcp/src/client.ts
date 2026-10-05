@@ -469,6 +469,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
       const url = new URL(`${base}/sandboxes/${encodeURIComponent(id)}/network`)
       if (opts.limit !== undefined)
         url.searchParams.set("limit", String(opts.limit))
+      if (opts.before !== undefined) url.searchParams.set("before", opts.before)
       if (opts.verdict !== undefined)
         url.searchParams.set("verdict", opts.verdict)
 
