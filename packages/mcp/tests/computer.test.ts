@@ -147,6 +147,20 @@ describe("sandbox_computer (in-memory, fake client)", () => {
     expect(fake.desktopBatches).toEqual([])
   })
 
+  it("a failed follow-up screenshot still reports the delivered action", async () => {
+    fake.failNextScreenshotWith = new Error("activate failed")
+    const res = await callRaw({ action: "left_click", coordinate: [10, 20] })
+    expect(res.isError).toBeFalsy()
+    expect(fake.desktopBatches).toHaveLength(1)
+    expect(res.content.some((c) => c.type === "image")).toBe(false)
+    expect(res.content[0].text).toContain("left_click done")
+    expect(res.content[0].text).toContain("do not repeat the input")
+    expect(res.structuredContent).toMatchObject({ action: "left_click" })
+    expect(String(res.structuredContent?.screenshot_error)).toContain(
+      "activate failed",
+    )
+  })
+
   it("missing required params is a tool error, not a crash", async () => {
     const res = await callRaw({ action: "left_click" })
     expect(res.isError).toBe(true)

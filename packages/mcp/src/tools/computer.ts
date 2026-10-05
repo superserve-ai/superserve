@@ -258,10 +258,22 @@ export function registerComputerTool(
               return toolOk(`${action} done`, { action })
             }
             await new Promise((resolve) => setTimeout(resolve, SETTLE_MS))
-            return screenshotResult(
-              await client.desktopScreenshot(sandbox_id),
-              `${action} done`,
-            )
+            // The input was delivered; a failed observation must not read as
+            // a failed action, or the agent retries a click or keystroke
+            // that already happened.
+            try {
+              return screenshotResult(
+                await client.desktopScreenshot(sandbox_id),
+                `${action} done`,
+              )
+            } catch (e) {
+              const screenshot_error = formatSdkError(e)
+              return toolOk(
+                `${action} done, but the follow-up screenshot failed: ${screenshot_error}. ` +
+                  "Use the screenshot action to observe the result; do not repeat the input.",
+                { action, screenshot_error },
+              )
+            }
           }
         }
       } catch (e) {

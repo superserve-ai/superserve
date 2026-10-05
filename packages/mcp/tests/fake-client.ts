@@ -53,6 +53,8 @@ export interface FakeClient {
   desktopBatches: DesktopAction[][]
   /** Screenshot returned by desktopScreenshot (seed-able). */
   screenshot: Screenshot
+  /** When set, the next desktopScreenshot rejects with it, then clears. */
+  failNextScreenshotWith: Error | undefined
   /** Every desktopResize call received. */
   resizes: Array<{ width: number; height: number }>
 }
@@ -65,6 +67,9 @@ export function createFakeClient(): FakeClient {
   const fake: Pick<FakeClient, "lastExec"> = { lastExec: undefined }
   const desktopBatches: DesktopAction[][] = []
   const resizes: Array<{ width: number; height: number }> = []
+  const faults: { nextScreenshot: Error | undefined } = {
+    nextScreenshot: undefined,
+  }
   // Not a decodable PNG — the MCP layer treats image bytes as opaque.
   const screenshot: Screenshot = {
     data: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
@@ -321,6 +326,11 @@ export function createFakeClient(): FakeClient {
 
     async desktopScreenshot(id) {
       must(id)
+      if (faults.nextScreenshot) {
+        const err = faults.nextScreenshot
+        faults.nextScreenshot = undefined
+        throw err
+      }
       return screenshot
     },
 
@@ -350,6 +360,12 @@ export function createFakeClient(): FakeClient {
     },
     desktopBatches,
     screenshot,
+    get failNextScreenshotWith() {
+      return faults.nextScreenshot
+    },
+    set failNextScreenshotWith(err: Error | undefined) {
+      faults.nextScreenshot = err
+    },
     resizes,
   }
 }
