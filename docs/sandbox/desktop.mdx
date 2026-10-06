@@ -1,0 +1,260 @@
+---
+title: "Desktop (computer use)"
+sidebarTitle: Desktop
+description: Give an agent a GUI desktop inside a sandbox, with screenshots, mouse, keyboard, and a live browser viewer.
+---
+
+A computer-use agent works a desktop the way a person does: it looks at the
+screen, decides, then clicks or types. `sandbox.desktop` gives an agent that
+desktop inside a sandbox: screenshots, mouse, keyboard, scroll, a resizable
+display, and a live viewer you can open in a browser.
+
+Every call is one authenticated request to the sandbox. A click is one round
+trip, a drag is one request, a whole model turn can go in one request, and
+typing has no per-character delay. A paused sandbox resumes on first use, as
+with `commands` and `files`.
+
+## Create a desktop sandbox
+
+The sandbox must come from a desktop-enabled template. `superserve/desktop`
+ships an X server, the xfce desktop, Chrome, and a noVNC viewer, and runs the
+session as the non-root `desktop` user (also the default user for
+`commands.run`). The display starts at 1280x800.
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({
+name: "desktop",
+fromTemplate: "superserve/desktop",
+})
+
+````
+
+```python Python
+from superserve import Sandbox
+
+sandbox = Sandbox.create(name="desktop", from_template="superserve/desktop")
+````
+
+</CodeGroup>
+
+## The agent loop
+
+Your code owns the model call and the conversation. The sandbox runs the
+actions. Each turn is a screenshot in, a list of actions out:
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.desktop.resize(1024, 768) // match the model's screen size
+
+let shot = await sandbox.desktop.screenshot()
+while (true) {
+const actions = await nextActions(shot) // your model call
+if (actions.length === 0) break
+await sandbox.desktop.actions(actions)
+shot = await sandbox.desktop.screenshot()
+}
+
+````
+
+```python Python
+sandbox.desktop.resize(1024, 768)  # match the model's screen size
+
+shot = sandbox.desktop.screenshot()
+while True:
+    actions = next_actions(shot)  # your model call
+    if not actions:
+        break
+    sandbox.desktop.actions(actions)
+    shot = sandbox.desktop.screenshot()
+````
+
+</CodeGroup>
+
+`actions` sends the model's whole turn as one request (see
+[Batch actions](#batch-actions)), and the screenshot after it is the next
+observation. The call returns once the input has reached the X server, so
+take the next screenshot after the application has had a moment to repaint.
+Resizing to the model's native resolution first keeps frames small and maps
+its coordinates 1:1 onto the screen.
+
+<Note>
+  Everything the agent reads from the screen is untrusted input to the model:
+  page content, file contents, text in dialogs. Keep credentials out of the
+  desktop, restrict where the sandbox can connect with [network
+  rules](/sandbox/networking), and have the model ask for approval before an
+  action with an outside effect.
+</Note>
+
+## Watch it live
+
+<CodeGroup>
+```typescript TypeScript
+const url = await sandbox.desktop.getStreamUrl()
+const readOnly = await sandbox.desktop.getStreamUrl({ viewOnly: true })
+```
+
+```python Python
+url = sandbox.desktop.get_stream_url()
+read_only = sandbox.desktop.get_stream_url(view_only=True)
+```
+
+</CodeGroup>
+
+Returns a browser URL for the noVNC viewer on port `6080`, publishing that port
+under the sandbox's [preview policy](/sandbox/preview-urls). Under `public` the
+URL is clean. Under `private` it carries a 60-second signed credential that the
+edge exchanges for a cookie on first navigation, as `getSignedPreviewUrl` /
+`get_signed_preview_url` does; mint a fresh URL for each viewer. `viewOnly` /
+`view_only` is a flag on that viewer only and does not stop someone else from
+opening the same URL with control, so use a `private` policy when the viewer
+must not be shared.
+
+## Screenshots
+
+<CodeGroup>
+```typescript TypeScript
+const shot = await sandbox.desktop.screenshot()
+await fs.writeFile("screen.png", shot.data) // PNG bytes; shot.width, shot.height
+```
+
+```python Python
+shot = sandbox.desktop.screenshot()
+Path("screen.png").write_bytes(shot.data)  # PNG bytes; shot.width, shot.height
+```
+
+</CodeGroup>
+
+The capture includes the cursor. Coordinates in every other call are pixels in
+this image, with the origin at the top-left.
+
+## Mouse
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.desktop.click(640, 400)
+await sandbox.desktop.click(640, 400, { button: "right" }) // or rightClick / middleClick
+await sandbox.desktop.doubleClick(640, 400)
+await sandbox.desktop.moveMouse(100, 100)
+await sandbox.desktop.drag([10, 10], [200, 200])
+await sandbox.desktop.scroll({ dy: 3 }) // positive scrolls down; dx for horizontal
+```
+
+```python Python
+sandbox.desktop.click(640, 400)
+sandbox.desktop.click(640, 400, button="right")  # or right_click / middle_click
+sandbox.desktop.double_click(640, 400)
+sandbox.desktop.move_mouse(100, 100)
+sandbox.desktop.drag((10, 10), (200, 200))
+sandbox.desktop.scroll(dy=3)  # positive scrolls down; dx for horizontal
+```
+
+</CodeGroup>
+
+A click moves the pointer and clicks in one request. A drag runs as one atomic
+batch (press, move, release) under the sandbox's input lock, so no other input
+can land in the middle of it. Scroll moves the wheel by whole clicks and targets
+whatever is under the pointer, so move first to scroll a specific element.
+
+## Keyboard
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.desktop.write("hello world")
+await sandbox.desktop.press("enter")
+await sandbox.desktop.press("ctrl+shift+p") // or press(["ctrl", "shift", "p"])
+```
+
+```python Python
+sandbox.desktop.write("hello world")
+sandbox.desktop.press("enter")
+sandbox.desktop.press("ctrl+shift+p")  # or press(["ctrl", "shift", "p"])
+```
+
+</CodeGroup>
+
+`write` types literal text with no per-character pacing, so long strings land
+in well under a second. `press` sends a key or chord. Friendly names (`enter`,
+`esc`, `tab`, `backspace`, `delete`, `up`, `down`, `pageup`, `ctrl`, `alt`,
+`shift`, `cmd`) map to X keysyms; anything else passes through as an X keysym
+name, so `F5`, `Return`, and `KP_Enter` work as written.
+
+## Batch actions
+
+Models that emit several actions per turn can send them in one request:
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.desktop.actions([
+  { type: "click", x: 640, y: 32 },
+  { type: "write", text: "https://example.com" },
+  { type: "press", key: "enter" },
+])
+```
+
+```python Python
+sandbox.desktop.actions([
+    {"type": "click", "x": 640, "y": 32},
+    {"type": "write", "text": "https://example.com"},
+    {"type": "press", "key": "enter"},
+])
+```
+
+</CodeGroup>
+
+The whole batch is validated before anything runs, then executes under the
+input lock. Execution stops at the first failing action.
+
+| TypeScript `type`       | Python `type`             | Fields                 |
+| ----------------------- | ------------------------- | ---------------------- |
+| `click`                 | `click`                   | `x`, `y`, `button?`    |
+| `doubleClick`           | `double_click`            | `x`, `y`               |
+| `move`                  | `move`                    | `x`, `y`               |
+| `mouseDown` / `mouseUp` | `mouse_down` / `mouse_up` | `x`, `y`, `button?`    |
+| `press`                 | `press`                   | `key` (string or list) |
+| `write`                 | `write`                   | `text`                 |
+| `scroll`                | `scroll`                  | `dx?`, `dy?`           |
+
+<Warning>
+  Input is not idempotent. If a pointer, key, or batch call fails with a
+  transport error, the input may already have been delivered. Take a screenshot
+  and check the screen before repeating it.
+</Warning>
+
+## Resize the display
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.desktop.resize(1920, 1080)
+```
+
+```python Python
+sandbox.desktop.resize(1920, 1080)
+```
+
+</CodeGroup>
+
+Takes effect live, with no restart: open windows re-lay out. Width must be a
+multiple of 8 from 320 to 8192; height from 200 to 8192.
+
+## Pause and resume
+
+The desktop survives a pause. Open windows, running applications, and the
+screen come back exactly as they were, and the next `desktop` call on a paused
+sandbox resumes it first.
+
+## MCP
+
+The MCP server exposes the same surface as the `sandbox_computer` tool, one
+action per call (`screenshot`, `left_click`, `type`, `key`, `scroll`,
+`left_click_drag`, …) in the vocabulary computer-use models are trained on.
+Input actions return a fresh screenshot of the result by default. See
+[MCP Sandboxes](/integrations/mcp#computer-use).
+
+## Related
+
+- [SDK reference: Sandbox](/sdk-reference/sandbox#desktop-methods)
+- [Preview URLs](/sandbox/preview-urls) — access policy for the viewer port
+- [Templates](/templates/overview) — the `superserve/desktop` template
