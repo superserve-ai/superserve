@@ -352,6 +352,27 @@ does not publish or authenticate a port.
 See the [Preview URLs guide](/sandbox/preview-urls) for policy selection,
 machine headers, browser cookies, and revocation examples.
 
+### Desktop methods
+
+`sandbox.desktop` drives a GUI desktop and requires a desktop-enabled template
+such as `superserve/desktop`. Every method is one request; a paused sandbox
+resumes on first use.
+
+| TypeScript                            | Python                                    | Description                                                                       |
+| ------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------- |
+| `desktop.screenshot()`                | `desktop.screenshot()`                    | Capture the screen; returns PNG `data` plus `width` and `height`.                 |
+| `desktop.click(x, y, { button? })`    | `desktop.click(x, y, button=...)`         | Move and click in one request. Also `doubleClick`, `rightClick`, `middleClick`.   |
+| `desktop.moveMouse(x, y)`             | `desktop.move_mouse(x, y)`                | Move the pointer without clicking.                                                |
+| `desktop.drag(from, to, { button? })` | `desktop.drag(start, end, button=...)`    | Press, move, release as one atomic batch.                                         |
+| `desktop.scroll({ dx?, dy? })`        | `desktop.scroll(dx=0, dy=0)`              | Scroll by wheel clicks under the pointer; positive `dy` scrolls down.             |
+| `desktop.write(text)`                 | `desktop.write(text)`                     | Type literal text with no per-character pacing.                                   |
+| `desktop.press(key)`                  | `desktop.press(key)`                      | Press a key or chord: `"enter"`, `"ctrl+c"`, `["ctrl", "shift", "p"]`.            |
+| `desktop.actions(actions)`            | `desktop.actions(actions)`                | Run an ordered batch in one request; stops at the first failing action.           |
+| `desktop.resize(width, height)`       | `desktop.resize(width, height)`           | Resize the display live. Width a multiple of 8, 320–8192; height 200–8192.        |
+| `desktop.getStreamUrl({ viewOnly? })` | `desktop.get_stream_url(view_only=False)` | Publish the viewer port and return a browser URL; signed for 60 s under `private`. |
+
+See the [Desktop guide](/sandbox/desktop) for the action vocabulary, key
+names, and viewer access.
 ### `attachSecret` / `attach_secret`
 
 Bind a team secret to a live or paused sandbox under an environment variable. The sandbox sees a stand-in token; the real credential is swapped in for outbound requests to the secret's allowed hosts. Takes effect for processes started after the call; a paused sandbox applies it on resume.
@@ -423,6 +444,7 @@ for e in page.events:
 | `secrets`                          | `SandboxSecretBinding[] \| undefined`      | Bound secrets (`envKey` → `secretName`, with a `revoked` flag) at construction time.         |
 | `commands`                         | `Commands`                                 | See [Commands](/sdk-reference/commands).                                                     |
 | `files`                            | `Files`                                    | See [Files](/sdk-reference/files). Rebuilt after `resume()`.                                 |
+| `desktop`                          | `Desktop`                                  | See [Desktop methods](#desktop-methods). Requires a desktop-enabled template.                |
 
 ## Types
 
