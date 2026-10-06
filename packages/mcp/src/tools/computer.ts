@@ -7,7 +7,13 @@
  * collapsing the model's act-then-look turn into one tool call.
  */
 
-import type { DesktopAction, MouseButton } from "@superserve/sdk"
+import {
+  type DesktopAction,
+  type MouseButton,
+  NotFoundError,
+  type Screenshot,
+  type StepResult,
+} from "@superserve/sdk"
 import { z } from "zod"
 
 import type { SandboxClient } from "../client.js"
@@ -20,9 +26,9 @@ import { defineTool } from "../lib/tool.js"
 const MAX_WAIT_MS = 10_000
 
 /**
- * Pause before a post-action screenshot so the application has repainted.
- * ponytail: fixed settle delay; replace with server-side changed-frame
- * detection when it lands.
+ * Settle the sandbox applies between the batch and its capture so the
+ * application has repainted. Fixed for now; changed-frame detection would
+ * replace it.
  */
 const SETTLE_MS = 300
 
@@ -136,20 +142,76 @@ function toDesktopActions(args: ComputerArgs): DesktopAction[] {
   }
 }
 
-function screenshotResult(
-  shot: { data: Uint8Array; width: number; height: number },
-  note: string,
-): CallToolResult {
+function imageBlock(shot: Screenshot) {
+  return {
+    type: "image" as const,
+    data: Buffer.from(shot.data).toString("base64"),
+    mimeType: "image/png",
+  }
+}
+
+function screenshotResult(shot: Screenshot, note: string): CallToolResult {
   return {
     content: [
       { type: "text", text: `${note} (${shot.width}x${shot.height})` },
-      {
-        type: "image",
-        data: Buffer.from(shot.data).toString("base64"),
-        mimeType: "image/png",
-      },
+      imageBlock(shot),
     ],
     structuredContent: { width: shot.width, height: shot.height },
+  }
+}
+
+/**
+ * Input is not idempotent and a batch can stop part-way, so a failed input
+ * call never reads as "nothing happened" (the generic formatter's "safe to
+ * retry" would be wrong here).
+ */
+function inputFailed(action: string, detail: string): CallToolResult {
+  return toolError(
+    `${action} failed and may have been partially or fully delivered: ${detail}. ` +
+      "Take a screenshot and check the screen before deciding whether to repeat the input.",
+  )
+}
+
+/**
+ * The input was delivered; a failed observation must not read as a failed
+ * action, or the agent repeats input that already landed.
+ */
+function screenshotFailed(
+  action: string,
+  screenshot_error: string,
+): CallToolResult {
+  return toolOk(
+    `${action} done, but the follow-up screenshot failed: ${screenshot_error}. ` +
+      "Use the screenshot action to observe the result; do not repeat the input.",
+    { action, screenshot_error },
+  )
+}
+
+/**
+ * Act-then-look as two calls, for a desktop whose boxd predates the fused
+ * step (a paused sandbox keeps the boxd it was created with).
+ */
+async function actThenLook(
+  client: SandboxClient,
+  sandbox_id: string,
+  action: string,
+  actions: DesktopAction[],
+): Promise<CallToolResult> {
+  try {
+    await client.desktopActions(sandbox_id, actions)
+  } catch (e) {
+    // A missing sandbox or route delivered nothing.
+    if (e instanceof NotFoundError) return toolError(formatSdkError(e))
+    return inputFailed(action, describeSdkError(e))
+  }
+  await new Promise((resolve) => setTimeout(resolve, SETTLE_MS))
+  try {
+    return screenshotResult(
+      await client.desktopScreenshot(sandbox_id),
+      `${action} done`,
+    )
+  } catch (e) {
+    return screenshotFailed(action, formatSdkError(e))
   }
 }
 
@@ -157,6 +219,10 @@ export function registerComputerTool(
   server: McpServer,
   client: SandboxClient,
 ): void {
+  // Sandboxes that answered the fused step with "no such procedure"; they
+  // get the two-call sequence without paying the failed attempt again.
+  const withoutStep = new Set<string>()
+
   defineTool<ComputerArgs>(
     server,
     "sandbox_computer",
@@ -253,37 +319,54 @@ export function registerComputerTool(
             return toolOk(url, { url })
           }
           default: {
-            try {
-              await client.desktopActions(sandbox_id, toDesktopActions(args))
-            } catch (e) {
-              // Input is not idempotent and a batch can fail part-way, so a
-              // failed RPC does not mean nothing was delivered. The generic
-              // formatter's "safe to retry" would be wrong here.
-              return toolError(
-                `${action} failed and may have been partially or fully delivered: ${describeSdkError(e)}. ` +
-                  "Take a screenshot and check the screen before deciding whether to repeat the input.",
-              )
-            }
+            const actions = toDesktopActions(args)
             if (args.screenshot_after === false) {
+              try {
+                await client.desktopActions(sandbox_id, actions)
+              } catch (e) {
+                return inputFailed(action, describeSdkError(e))
+              }
               return toolOk(`${action} done`, { action })
             }
-            await new Promise((resolve) => setTimeout(resolve, SETTLE_MS))
-            // The input was delivered; a failed observation must not read as
-            // a failed action, or the agent retries a click or keystroke
-            // that already happened.
+            if (withoutStep.has(sandbox_id)) {
+              return actThenLook(client, sandbox_id, action, actions)
+            }
+            // Act-then-look is one request: the sandbox runs the batch,
+            // settles, and captures before releasing its input lock.
+            let step: StepResult
             try {
-              return screenshotResult(
-                await client.desktopScreenshot(sandbox_id),
-                `${action} done`,
-              )
+              step = await client.desktopStep(sandbox_id, actions, SETTLE_MS)
             } catch (e) {
-              const screenshot_error = formatSdkError(e)
-              return toolOk(
-                `${action} done, but the follow-up screenshot failed: ${screenshot_error}. ` +
-                  "Use the screenshot action to observe the result; do not repeat the input.",
-                { action, screenshot_error },
+              // An older boxd has no Step route and answers 404 before any
+              // input is read, so the two-call sequence is safe to run.
+              if (!(e instanceof NotFoundError)) {
+                return inputFailed(action, describeSdkError(e))
+              }
+              withoutStep.add(sandbox_id)
+              return actThenLook(client, sandbox_id, action, actions)
+            }
+            if (step.actionError) {
+              // The frame shows what the partial batch did, so the agent can
+              // look before deciding whether to repeat anything.
+              const text =
+                `${action} stopped after ${step.executed} of ${actions.length} actions, so the input may be partially delivered: ${step.actionError}. ` +
+                (step.screenshot
+                  ? "The attached screenshot shows the current state; check it before deciding whether to repeat the input."
+                  : "Take a screenshot and check the screen before deciding whether to repeat the input.")
+              return {
+                content: step.screenshot
+                  ? [{ type: "text", text }, imageBlock(step.screenshot)]
+                  : [{ type: "text", text }],
+                isError: true,
+              }
+            }
+            if (!step.screenshot) {
+              return screenshotFailed(
+                action,
+                step.screenshotError ?? "no frame",
               )
             }
+            return screenshotResult(step.screenshot, `${action} done`)
           }
         }
       } catch (e) {

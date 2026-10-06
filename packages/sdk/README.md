@@ -80,6 +80,12 @@ await sandbox.desktop.actions([
   { type: "press", key: "enter" },
 ])
 
+// …or the whole turn plus the next frame, still one request:
+const { screenshot } = await sandbox.desktop.step(
+  [{ type: "click", x: 640, y: 400 }],
+  { settleMs: 300 },
+)
+
 await sandbox.desktop.resize(1920, 1080) // live, no restart
 const viewer = await sandbox.desktop.getStreamUrl() // noVNC URL
 ```

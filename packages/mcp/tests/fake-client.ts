@@ -12,7 +12,7 @@ import type {
   SandboxSecretBinding,
   SandboxStatus,
 } from "@superserve/sdk"
-import type { DesktopAction, Screenshot } from "@superserve/sdk"
+import type { DesktopAction, Screenshot, StepResult } from "@superserve/sdk"
 
 import type {
   ExecInput,
@@ -59,6 +59,12 @@ export interface FakeClient {
   failNextActionsWith: Error | undefined
   /** Every desktopResize call received. */
   resizes: Array<{ width: number; height: number }>
+  /** Every desktopStep call received, in order. */
+  desktopSteps: Array<{ actions: DesktopAction[]; settleMs: number }>
+  /** When set, the next desktopStep returns it after recording the batch, then clears. */
+  nextStepResult: StepResult | undefined
+  /** When set, the next desktopStep rejects with it before recording anything, then clears. */
+  failNextStepWith: Error | undefined
 }
 
 export function createFakeClient(): FakeClient {
@@ -69,10 +75,18 @@ export function createFakeClient(): FakeClient {
   const fake: Pick<FakeClient, "lastExec"> = { lastExec: undefined }
   const desktopBatches: DesktopAction[][] = []
   const resizes: Array<{ width: number; height: number }> = []
+  const desktopSteps: Array<{ actions: DesktopAction[]; settleMs: number }> = []
   const faults: {
     nextScreenshot: Error | undefined
     nextActions: Error | undefined
-  } = { nextScreenshot: undefined, nextActions: undefined }
+    nextStepResult: StepResult | undefined
+    nextStep: Error | undefined
+  } = {
+    nextScreenshot: undefined,
+    nextActions: undefined,
+    nextStepResult: undefined,
+    nextStep: undefined,
+  }
   // Not a decodable PNG — the MCP layer treats image bytes as opaque.
   const screenshot: Screenshot = {
     data: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
@@ -347,6 +361,35 @@ export function createFakeClient(): FakeClient {
       desktopBatches.push(actions)
     },
 
+    // Honors the same faults as the two calls it fuses, so a test can fail
+    // the input or the observation half independently.
+    async desktopStep(id, actions, settleMs) {
+      must(id)
+      if (faults.nextStep) {
+        const err = faults.nextStep
+        faults.nextStep = undefined
+        throw err
+      }
+      if (faults.nextActions) {
+        const err = faults.nextActions
+        faults.nextActions = undefined
+        throw err
+      }
+      desktopBatches.push(actions)
+      desktopSteps.push({ actions, settleMs })
+      if (faults.nextStepResult) {
+        const result = faults.nextStepResult
+        faults.nextStepResult = undefined
+        return result
+      }
+      if (faults.nextScreenshot) {
+        const err = faults.nextScreenshot
+        faults.nextScreenshot = undefined
+        return { executed: actions.length, screenshotError: err.message }
+      }
+      return { executed: actions.length, screenshot }
+    },
+
     async desktopResize(id, width, height) {
       must(id)
       resizes.push({ width, height })
@@ -381,5 +424,18 @@ export function createFakeClient(): FakeClient {
       faults.nextActions = err
     },
     resizes,
+    desktopSteps,
+    get nextStepResult() {
+      return faults.nextStepResult
+    },
+    set nextStepResult(result: StepResult | undefined) {
+      faults.nextStepResult = result
+    },
+    get failNextStepWith() {
+      return faults.nextStep
+    },
+    set failNextStepWith(err: Error | undefined) {
+      faults.nextStep = err
+    },
   }
 }

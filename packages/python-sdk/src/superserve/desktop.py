@@ -197,6 +197,48 @@ def _decode_screenshot(raw: dict[str, Any]) -> Screenshot:
     )
 
 
+@dataclass(frozen=True)
+class StepResult:
+    """Outcome of one ``desktop.step()``.
+
+    Input is not idempotent, so a failed action and a failed capture are
+    reported here rather than raised: the actions that ran have already
+    landed either way.
+    """
+
+    executed: int
+    """Actions that executed; the batch size unless ``action_error`` is set."""
+    action_error: str | None = None
+    """Why the batch stopped early; ``executed`` is then the failing index."""
+    screenshot: Screenshot | None = None
+    """Frame captured after the batch stopped; ``None`` when capture failed."""
+    screenshot_error: str | None = None
+    """Why no frame was captured."""
+
+
+def _step_body(actions: Sequence[dict[str, Any]], settle_ms: int) -> dict[str, Any]:
+    if not actions:
+        raise ValueError("step: actions is empty")
+    return {"actions": [_action_body(a) for a in actions], "settleMs": settle_ms}
+
+
+def _decode_step(raw: dict[str, Any]) -> StepResult:
+    executed = raw.get("executed", 0)
+    action_error = raw.get("actionError") or None
+    shot = raw.get("screenshot")
+    if shot is not None and shot.get("image") is not None:
+        return StepResult(
+            executed=executed,
+            action_error=action_error,
+            screenshot=_decode_screenshot(shot),
+        )
+    return StepResult(
+        executed=executed,
+        action_error=action_error,
+        screenshot_error=raw.get("captureError") or "Step response missing image data",
+    )
+
+
 def _stream_url(
     base: str, *, view_only: bool, credential: PreviewToken | None = None
 ) -> str:
@@ -304,6 +346,32 @@ class Desktop:
         if not actions:
             return
         self._rpc("SendActions", {"actions": [_action_body(a) for a in actions]})
+
+    def step(
+        self, actions: Sequence[dict[str, Any]], *, settle_ms: int = 0
+    ) -> StepResult:
+        """Run an ordered batch and capture the frame after it, in one request.
+
+        The act-then-look turn of an agent loop as a single round trip. Same
+        validation and stop-at-first-failure semantics as :meth:`actions`;
+        the frame is captured even when the batch stops early. ``settle_ms``
+        is how long the sandbox waits before capturing, for applications
+        that repaint after the input lands (max 2000).
+
+        Example::
+
+            result = sandbox.desktop.step(
+                [{"type": "click", "x": 640, "y": 400}], settle_ms=300
+            )
+            frame = result.screenshot
+        """
+        return _decode_step(
+            self._rpc(
+                "Step",
+                _step_body(actions, settle_ms),
+                max_bytes=MAX_SCREENSHOT_RESPONSE_BYTES,
+            )
+        )
 
     def resize(self, width: int, height: int) -> None:
         """Resize the virtual display. Width must be a multiple of 8 between
@@ -429,6 +497,18 @@ class AsyncDesktop:
         if not actions:
             return
         await self._rpc("SendActions", {"actions": [_action_body(a) for a in actions]})
+
+    async def step(
+        self, actions: Sequence[dict[str, Any]], *, settle_ms: int = 0
+    ) -> StepResult:
+        """Async variant of :meth:`Desktop.step`."""
+        return _decode_step(
+            await self._rpc(
+                "Step",
+                _step_body(actions, settle_ms),
+                max_bytes=MAX_SCREENSHOT_RESPONSE_BYTES,
+            )
+        )
 
     async def resize(self, width: int, height: int) -> None:
         """Async variant of :meth:`Desktop.resize`."""

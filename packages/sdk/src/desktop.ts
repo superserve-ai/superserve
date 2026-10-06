@@ -71,6 +71,31 @@ export interface StreamUrlOptions {
   viewOnly?: boolean
 }
 
+export interface StepOptions {
+  /**
+   * Milliseconds the sandbox waits between the last action and the capture,
+   * for applications that repaint after the input lands. Default 0; the
+   * sandbox rejects values above 2000.
+   */
+  settleMs?: number
+}
+
+/**
+ * Outcome of one `desktop.step()`. Input is not idempotent, so a failed
+ * action and a failed capture are reported here rather than thrown: the
+ * actions that ran have already landed either way.
+ */
+export interface StepResult {
+  /** Actions that executed; the batch size unless `actionError` is set. */
+  executed: number
+  /** Why the batch stopped early; `executed` is then the failing index. */
+  actionError?: string
+  /** Frame captured after the batch stopped; absent when capture failed. */
+  screenshot?: Screenshot
+  /** Why no frame was captured. */
+  screenshotError?: string
+}
+
 /**
  * Friendly key names → X keysyms, so agent-facing code can say "enter" or
  * "ctrl". Unlisted names pass through verbatim (all X keysyms stay usable).
@@ -211,6 +236,18 @@ function actionBody(action: DesktopAction): ActionBody {
   }
 }
 
+function decodeScreenshot(raw: {
+  image?: string
+  width?: number
+  height?: number
+}): Screenshot {
+  return {
+    data: Uint8Array.from(atob(raw.image ?? ""), (c) => c.charCodeAt(0)),
+    width: raw.width ?? 0,
+    height: raw.height ?? 0,
+  }
+}
+
 export class Desktop {
   private readonly _dataPlaneBaseUrl: string
   private readonly _routingHeaders: Record<string, string>
@@ -242,11 +279,7 @@ export class Desktop {
     if (raw.image === undefined) {
       throw new Error("Screenshot response missing image data")
     }
-    return {
-      data: Uint8Array.from(atob(raw.image), (c) => c.charCodeAt(0)),
-      width: raw.width ?? 0,
-      height: raw.height ?? 0,
-    }
+    return decodeScreenshot(raw)
   }
 
   /** Click at (x, y). One RPC — move and click are a single action. */
@@ -344,6 +377,51 @@ export class Desktop {
   async actions(actions: DesktopAction[]): Promise<void> {
     if (actions.length === 0) return
     await this._rpc("SendActions", { actions: actions.map(actionBody) })
+  }
+
+  /**
+   * Run an ordered batch and capture the frame after it, in one request:
+   * the act-then-look turn of an agent loop as a single round trip. Same
+   * validation and stop-at-first-failure semantics as `actions()`; the
+   * frame is captured even when the batch stops early.
+   *
+   * @example
+   * ```typescript
+   * const { screenshot } = await sandbox.desktop.step(
+   *   [{ type: "click", x: 640, y: 400 }],
+   *   { settleMs: 300 },
+   * )
+   * ```
+   */
+  async step(
+    actions: DesktopAction[],
+    options: StepOptions = {},
+  ): Promise<StepResult> {
+    if (actions.length === 0) {
+      throw new Error("step: actions is empty")
+    }
+    const raw = await this._rpc<{
+      executed?: number
+      actionError?: string
+      screenshot?: { image?: string; width?: number; height?: number }
+      captureError?: string
+    }>(
+      "Step",
+      {
+        actions: actions.map(actionBody),
+        settleMs: options.settleMs ?? 0,
+      },
+      { maxBytes: MAX_SCREENSHOT_RESPONSE_BYTES },
+    )
+    const result: StepResult = { executed: raw.executed ?? 0 }
+    if (raw.actionError) result.actionError = raw.actionError
+    if (raw.screenshot?.image !== undefined) {
+      result.screenshot = decodeScreenshot(raw.screenshot)
+    } else {
+      result.screenshotError =
+        raw.captureError || "Step response missing image data"
+    }
+    return result
   }
 
   /**

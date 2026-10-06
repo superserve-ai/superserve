@@ -71,6 +71,10 @@ sandbox.desktop.actions([
     {"type": "press", "key": "enter"},
 ])
 
+# ...or the whole turn plus the next frame, still one request:
+step = sandbox.desktop.step([{"type": "click", "x": 640, "y": 400}], settle_ms=300)
+frame = step.screenshot
+
 sandbox.desktop.resize(1920, 1080)  # live, no restart
 viewer = sandbox.desktop.get_stream_url()  # noVNC URL
 ```
