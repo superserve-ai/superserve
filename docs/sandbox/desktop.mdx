@@ -53,6 +53,7 @@ while (true) {
   const actions = await nextActions(shot) // your model call
   if (actions.length === 0) break
   const step = await sandbox.desktop.step(actions, { settleMs: 300 })
+  if (step.actionError) throw new Error(step.actionError) // stopped at step.executed
   if (!step.screenshot) throw new Error(step.screenshotError)
   shot = step.screenshot
 }
@@ -67,6 +68,8 @@ while True:
     if not actions:
         break
     step = sandbox.desktop.step(actions, settle_ms=300)
+    if step.action_error:
+        raise RuntimeError(step.action_error)  # stopped at step.executed
     if step.screenshot is None:
         raise RuntimeError(step.screenshot_error)
     shot = step.screenshot
