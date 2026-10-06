@@ -67,7 +67,7 @@ from .types import (
     WorkdirStep,
 )
 
-__version__ = "0.9.3"
+__version__ = "0.10.0"
 
 __all__ = [
     "AsyncCommandSession",
