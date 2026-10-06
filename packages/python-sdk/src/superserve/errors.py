@@ -112,6 +112,9 @@ class BuildError(SandboxError):
 def map_api_error(status_code: int, body: dict[str, Any]) -> SandboxError:
     """Map an HTTP status code and response body to a typed error."""
     error_data = body.get("error")
+    if error_data is None and isinstance(body.get("message"), str):
+        # Connect RPC errors (boxd's DesktopService) are flat: {"code", "message"}.
+        error_data = {"message": body["message"], "code": body.get("code")}
     if isinstance(error_data, dict):
         # Control-plane errors use ``{"error": {"message": ..., "code": ...}}``.
         message = error_data.get("message") or f"API error ({status_code})"

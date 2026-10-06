@@ -91,6 +91,36 @@ describe("billing api", () => {
     })
   })
 
+  it("loads authenticated team pricing without deriving billability from the rate", async () => {
+    const pricing = {
+      plan_key: "payg",
+      plan_name: "Pay as you go",
+      currency: "USD",
+      rates: [
+        {
+          resource_key: "storage_gib",
+          resource: "storage",
+          display_name: "Storage",
+          sort_order: 30,
+          unit: "second",
+          display_unit: "GiB-hours",
+          price_usd: 0.00000003,
+          price_usd_hourly: 0.000108,
+          effective_from: "2026-06-01T00:00:00.000Z",
+          tracked: true,
+          billable: false,
+        },
+      ],
+    }
+    apiClient.mockResolvedValue(pricing)
+
+    const { getBillingPricing } = await import("./billing")
+    await expect(getBillingPricing()).resolves.toEqual(pricing)
+    expect(apiClient).toHaveBeenCalledWith("/billing/pricing", {
+      cache: "no-store",
+    })
+  })
+
   it.each([
     ["hourly", "hour"],
     ["daily", "day"],
@@ -115,4 +145,39 @@ describe("billing api", () => {
       )
     },
   )
+
+  it("preserves backend usage-series billability and monetary fields", async () => {
+    const response = {
+      start: "2026-06-01T00:00:00.000Z",
+      end: "2026-06-03T00:00:00.000Z",
+      granularity: "day",
+      timezone: "UTC",
+      buckets: [
+        {
+          start: "2026-06-01T00:00:00.000Z",
+          end: "2026-06-02T00:00:00.000Z",
+          cpu: { usage: 1, cost_usd: 1, tracked: true, billable: true },
+          memory: { usage: 2, cost_usd: 2, tracked: true, billable: true },
+          storage: {
+            usage: 100,
+            cost_usd: 17.25,
+            tracked: true,
+            billable: false,
+          },
+          billed_total_usd: 3,
+        },
+      ],
+    }
+    apiClient.mockResolvedValue(response)
+
+    const { getBillingUsageSeries } = await import("./billing")
+    await expect(
+      getBillingUsageSeries({
+        start: response.start,
+        end: response.end,
+        granularity: "daily",
+        timezone: response.timezone,
+      }),
+    ).resolves.toEqual(response)
+  })
 })

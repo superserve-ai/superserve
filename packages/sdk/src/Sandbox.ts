@@ -16,6 +16,7 @@
 
 import { Commands } from "./commands.js"
 import { previewUrl, type ResolvedConfig, resolveConfig } from "./config.js"
+import { Desktop, DESKTOP_STREAM_PORT } from "./desktop.js"
 import {
   ConflictError,
   NotFoundError,
@@ -120,6 +121,12 @@ export class Sandbox {
    */
   readonly files: Files
 
+  /**
+   * Control a GUI desktop inside this sandbox (screenshot, mouse, keyboard,
+   * live viewer). Requires a desktop-enabled template.
+   */
+  readonly desktop: Desktop
+
   private _accessToken: string
   private _routingHint?: string
   private _routeRevision = 0
@@ -157,6 +164,18 @@ export class Sandbox {
       getAccessToken: () => this._accessToken,
       getRoutingHint: () => this._routingHint,
       refreshActivate: () => this._refreshActivate(),
+    })
+    this.desktop = new Desktop({
+      sandboxId: this.id,
+      sandboxHost: config.sandboxHost,
+      getAccessToken: () => this._accessToken,
+      getRoutingHint: () => this._routingHint,
+      refreshActivate: () => this._refreshActivate(),
+      publishStreamPort: async () =>
+        (await this.publishPreviewPort(DESKTOP_STREAM_PORT)).access,
+      streamBaseUrl: () => this.getPreviewUrl(DESKTOP_STREAM_PORT),
+      mintStreamToken: () =>
+        this.getPreviewToken(DESKTOP_STREAM_PORT, { expiresInSeconds: 60 }),
     })
   }
 

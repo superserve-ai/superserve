@@ -103,6 +103,16 @@ export function formatUsageCost(value: number): string {
     : value.toFixed(2)
 }
 
+function storageLegend(buckets: BillingUsageSeriesBucket[]): string {
+  if (buckets.length === 0) return "Storage"
+  const billable = buckets.map((bucket) => bucket.storage.billable)
+  if (billable.every(Boolean)) return "Storage"
+  if (billable.every((value) => value === false)) {
+    return "Storage equivalent (not billed)"
+  }
+  return "Storage (mixed billing eligibility)"
+}
+
 function bucketTooltip(
   bucket: BillingUsageSeriesBucket,
   granularity: BillingUsageGranularity,
@@ -127,7 +137,7 @@ function bucketTooltip(
     `${bucketLabel(bucket.start, granularity, granularity === "monthly", timezone)} (${start} – ${end})`,
     `CPU $${formatUsageCost(bucket.cpu.cost_usd)}`,
     `Memory $${formatUsageCost(bucket.memory.cost_usd)}`,
-    `Storage ${storage}`,
+    `Storage ${storage}${bucket.storage.usage === null ? " · usage unavailable" : ""}`,
     `Billed total $${formatUsageCost(bucket.billed_total_usd)}`,
   ]
 }
@@ -175,7 +185,11 @@ export function PlanUsagePageClient() {
   const teamsQuery = useTeams()
   const dashboardTeam = useDashboardTeamContext()
   const summaryQuery = useBillingSummary(!userLoading && !!user)
-  const summary = summaryQuery.data
+  // Do not render retained summary data after a failed refresh. The billing
+  // query is team-scoped, but React Query can still expose the last successful
+  // value together with an error for that key; that value is not authoritative
+  // while the current response is unavailable.
+  const summary = summaryQuery.error ? undefined : summaryQuery.data
   const activeTeam = useMemo(() => {
     const teams = teamsQuery.data?.teams ?? []
     if (queryScope !== "self") {
@@ -203,9 +217,11 @@ export function PlanUsagePageClient() {
     }
     return null
   }, [activeTeam, dashboardTeam])
+  // Retain the viewed period on refresh errors without retaining billing claims.
+  // This cached data belongs to the current team/region/impersonation query key.
   const billingPeriod = useMemo(
-    () => toDateRange(summary?.billing_period),
-    [summary?.billing_period],
+    () => toDateRange(summaryQuery.data?.billing_period),
+    [summaryQuery.data?.billing_period],
   )
   const [fallbackRange] = useState<DateRange>(() => defaultUsageRange())
   const [dateRange, setDateRange] = useState<DateRange | null>(null)
@@ -284,9 +300,7 @@ export function PlanUsagePageClient() {
     buckets.some((bucket) =>
       (["cpu", "memory", "storage"] as const)
         .map((key) => bucketResource(bucket, key))
-        .some(
-          (resource) => resource?.usage !== undefined && resource.usage !== 0,
-        ),
+        .some((resource) => resource?.usage != null && resource.usage !== 0),
     ) ||
     legacyRows.some((row) =>
       [row.vcpu_seconds, row.memory_mib_seconds, row.storage_mib_seconds].some(
@@ -381,7 +395,8 @@ export function PlanUsagePageClient() {
                   title={usageErrorDetails.title}
                   onRetry={() => void usageQuery.refetch()}
                 />
-              ) : !hasUsage ? (
+              ) : !hasUsage &&
+                !buckets.some((bucket) => bucket.storage.usage === null) ? (
                 <EmptyState
                   icon={ChartBarIcon}
                   title="No Usage For This Period"
@@ -392,6 +407,12 @@ export function PlanUsagePageClient() {
                   className="space-y-4 border border-border/70 bg-surface/40 p-4"
                   data-testid="usage-cost-chart"
                 >
+                  {buckets.some((bucket) => bucket.storage.usage === null) ? (
+                    <output className="block text-sm text-muted">
+                      Some storage usage measurements are unavailable. Charges
+                      shown include all billable usage.
+                    </output>
+                  ) : null}
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h3 className="text-base font-semibold">Cost over time</h3>
                     <label className="text-sm">
@@ -430,10 +451,7 @@ export function PlanUsagePageClient() {
                     </span>
                     <span>
                       <i className="mr-1 inline-block size-2 rounded-sm bg-muted" />
-                      Storage equivalent
-                      {buckets.some((b) => b.storage.billable === false)
-                        ? " (not billed)"
-                        : ""}
+                      {storageLegend(buckets)}
                     </span>
                   </div>
                   <div

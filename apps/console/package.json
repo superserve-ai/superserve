@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001",
+    "dev:storage-ui": "next dev src/test/ui/ss669 --webpack --hostname 127.0.0.1 --port 4174",
+    "test:storage-ui": "${UI_TEST_PYTHON:-python3} src/test/ui/ss669/verify.py",
     "build": "bun run check:promotion-config && next build",
     "start": "next start -p 3001",
     "lint": "bunx oxlint",

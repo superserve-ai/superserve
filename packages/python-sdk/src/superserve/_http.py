@@ -125,7 +125,7 @@ DEFAULT_MAX_DOWNLOAD_BYTES = (
     2 * 1024 * 1024 * 1024
 )  # 2 GiB; matches boxd's server-side zip cap
 
-SDK_VERSION = "0.9.3"
+SDK_VERSION = "0.10.0"
 USER_AGENT = (
     f"superserve-python/{SDK_VERSION} "
     f"(python/{sys.version_info.major}.{sys.version_info.minor})"
@@ -221,6 +221,16 @@ def _build_error_body(response: httpx.Response) -> dict[str, Any]:
     }
 
 
+def _decoded_headers(headers: httpx.Headers) -> httpx.Headers:
+    """Headers for a Response rebuilt from already-decoded chunks: ``iter_bytes``
+    has applied Content-Encoding, so leaving it (and the wire length) would
+    make httpx decompress the body a second time."""
+    out = httpx.Headers(headers)
+    out.pop("content-encoding", None)
+    out.pop("content-length", None)
+    return out
+
+
 def _read_capped(chunks: Iterable[bytes], max_bytes: int) -> bytes:
     """Accumulate byte ``chunks`` into a buffer, enforcing a hard size cap.
 
@@ -290,6 +300,7 @@ def _read_within(
     json_body: Any | None,
     timeout: float,
     deadline: float | None,
+    max_bytes: int | None = None,
 ) -> httpx.Response:
     """One attempt. With a deadline the whole exchange, headers and body, runs
     on a worker and the caller waits only for what is left of the deadline:
@@ -297,7 +308,7 @@ def _read_within(
     cannot be interrupted. The worker is a daemon thread, so one that outlives
     the deadline never pins the process; it winds down on its own read
     timeout."""
-    if deadline is None:
+    if deadline is None and max_bytes is None:
         return client.request(
             method, url, headers=headers, json=json_body, timeout=timeout
         )
@@ -307,16 +318,25 @@ def _read_within(
             method, url, headers=headers, json=json_body, timeout=timeout
         ) as streamed:
             parts: list[bytes] = []
+            total = 0
             for chunk in streamed.iter_bytes():
                 parts.append(chunk)
-                _check_deadline(deadline)
+                total += len(chunk)
+                if max_bytes is not None and total > max_bytes:
+                    raise ValidationError(
+                        f"Response body exceeds the maximum size of {max_bytes} bytes"
+                    )
+                if deadline is not None:
+                    _check_deadline(deadline)
             return httpx.Response(
                 streamed.status_code,
-                headers=streamed.headers,
+                headers=_decoded_headers(streamed.headers),
                 content=b"".join(parts),
                 request=streamed.request,
             )
 
+    if deadline is None:
+        return exchange()
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise DeadlineExceeded("Operation deadline exceeded")
@@ -348,10 +368,11 @@ async def _async_read_within(
     json_body: Any | None,
     timeout: float,
     deadline: float | None,
+    max_bytes: int | None = None,
 ) -> httpx.Response:
     """Async variant of ``_read_within``: the whole exchange runs under one
     wall-clock wait and is cancelled at the deadline."""
-    if deadline is None:
+    if deadline is None and max_bytes is None:
         return await client.request(
             method, url, headers=headers, json=json_body, timeout=timeout
         )
@@ -361,16 +382,25 @@ async def _async_read_within(
             method, url, headers=headers, json=json_body, timeout=timeout
         ) as streamed:
             parts: list[bytes] = []
+            total = 0
             async for chunk in streamed.aiter_bytes():
                 parts.append(chunk)
-                _check_deadline(deadline)
+                total += len(chunk)
+                if max_bytes is not None and total > max_bytes:
+                    raise ValidationError(
+                        f"Response body exceeds the maximum size of {max_bytes} bytes"
+                    )
+                if deadline is not None:
+                    _check_deadline(deadline)
             return httpx.Response(
                 streamed.status_code,
-                headers=streamed.headers,
+                headers=_decoded_headers(streamed.headers),
                 content=b"".join(parts),
                 request=streamed.request,
             )
 
+    if deadline is None:
+        return await exchange()
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise DeadlineExceeded("Operation deadline exceeded")
@@ -390,6 +420,7 @@ def _do_request_with_retry(
     budget: float | None = None,
     client: httpx.Client | None = None,
     retry_conflict: bool = False,
+    max_bytes: int | None = None,
 ) -> httpx.Response:
     """Perform an HTTP request with retry for idempotent methods.
 
@@ -420,6 +451,7 @@ def _do_request_with_retry(
                 json_body=json_body,
                 timeout=attempt_timeout,
                 deadline=deadline,
+                max_bytes=max_bytes,
             )
         except httpx.TimeoutException as exc:
             _check_deadline(deadline)
@@ -486,6 +518,7 @@ def api_request(
     budget: float | None = None,
     client: httpx.Client | None = None,
     retry_conflict: bool = False,
+    max_bytes: int | None = None,
 ) -> Any:
     """Make a JSON API request. Returns parsed response body or None for 204."""
     merged = _default_headers(headers, content_type="application/json")
@@ -498,6 +531,7 @@ def api_request(
         budget=budget,
         client=client,
         retry_conflict=retry_conflict,
+        max_bytes=max_bytes,
     )
 
     # A 202 may carry no body either.
@@ -669,6 +703,7 @@ async def _async_do_request_with_retry(
     budget: float | None = None,
     client: httpx.AsyncClient | None = None,
     retry_conflict: bool = False,
+    max_bytes: int | None = None,
 ) -> httpx.Response:
     """Async variant of ``_do_request_with_retry``."""
     deadline = None if budget is None else time.monotonic() + budget
@@ -695,6 +730,7 @@ async def _async_do_request_with_retry(
                     json_body=json_body,
                     timeout=attempt_timeout,
                     deadline=deadline,
+                    max_bytes=max_bytes,
                 )
             except httpx.TimeoutException as exc:
                 _check_deadline(deadline)
@@ -768,6 +804,7 @@ async def async_api_request(
     budget: float | None = None,
     client: httpx.AsyncClient | None = None,
     retry_conflict: bool = False,
+    max_bytes: int | None = None,
 ) -> Any:
     """Async variant of api_request."""
     merged = _default_headers(headers, content_type="application/json")
@@ -780,6 +817,7 @@ async def async_api_request(
         budget=budget,
         client=client,
         retry_conflict=retry_conflict,
+        max_bytes=max_bytes,
     )
 
     # A 202 may carry no body either.

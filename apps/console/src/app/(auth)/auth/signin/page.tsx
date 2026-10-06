@@ -14,6 +14,8 @@ import { GoogleIcon, Spinner } from "@/components/icons"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
+import { beginGoogleSignIn } from "./google-action"
+
 function SignInContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [isEmailLoading, setIsEmailLoading] = useState(false)
@@ -102,13 +104,19 @@ function SignInContent() {
     setErrors({})
     try {
       const supabase = createBrowserClient()
+      const intentId = await beginGoogleSignIn()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
+      if (intentId)
+        callbackUrl.searchParams.set("google_signin_intent", intentId)
       if (nextUrl && nextUrl !== "/") {
         callbackUrl.searchParams.set("next", nextUrl)
       }
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: callbackUrl.toString() },
+        options: {
+          redirectTo: callbackUrl.toString(),
+          queryParams: { prompt: "select_account" },
+        },
       })
       if (error) {
         setErrors({ form: "Error signing in. Please try again." })

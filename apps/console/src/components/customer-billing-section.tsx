@@ -196,7 +196,14 @@ function paymentSummary(
     }
   }
 
-  return summary?.billing_mode === "live"
+  if (!summary) {
+    return {
+      headline: "Unavailable",
+      detail: "Billing data is unavailable for this team right now.",
+    }
+  }
+
+  return summary.billing_mode === "live"
     ? {
         headline: "Billing unavailable",
         detail:
@@ -211,11 +218,13 @@ function paymentSummary(
 function ResourceCard({ resource }: { resource: BillingSummaryResource }) {
   const billingLabel = resource.billable ? "Billed" : "Tracked only"
   const usageHours =
-    resource.unit === "second"
-      ? resource.resource === "memory" || resource.resource === "storage"
-        ? resource.usage / 1024 / 3600
-        : resource.usage / 3600
-      : resource.usage
+    resource.usage == null
+      ? null
+      : resource.unit === "second"
+        ? resource.resource === "memory" || resource.resource === "storage"
+          ? resource.usage / 1024 / 3600
+          : resource.usage / 3600
+        : resource.usage
 
   return (
     <div className="border border-dashed border-border/70 bg-surface/40 px-3 py-3">
@@ -225,7 +234,9 @@ function ResourceCard({ resource }: { resource: BillingSummaryResource }) {
             {resource.display_name}
           </p>
           <p className="mt-2 text-sm font-medium text-foreground">
-            {formatMetric(usageHours, resource.display_unit)}
+            {usageHours == null
+              ? "Usage unavailable"
+              : formatMetric(usageHours, resource.display_unit)}
           </p>
           <p className="mt-1 text-xs text-muted">
             {resource.billable

@@ -204,6 +204,26 @@ describe("api proxy /api/[...path]", () => {
     )
   })
 
+  it("forwards the authenticated billing pricing endpoint", async () => {
+    vi.mocked(publishPromotionIdentity).mockRejectedValue(
+      new Error("writer unavailable"),
+    )
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ rates: [] }), { status: 200 }),
+    )
+
+    const res = await GET(
+      req("GET", ["billing", "pricing"]),
+      params(["billing", "pricing"]),
+    )
+
+    expect(res.status).toBe(200)
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://api.test.superserve.ai/billing/pricing",
+      expect.objectContaining({ method: "GET" }),
+    )
+  })
+
   it("forwards the secrets, providers, activity, and billing prefixes", async () => {
     vi.mocked(publishPromotionIdentity).mockRejectedValue(
       new Error("writer unavailable"),

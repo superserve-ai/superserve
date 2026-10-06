@@ -288,6 +288,89 @@ describe("PlanUsagePage", () => {
     }
   })
 
+  it("removes retained summary claims when a refresh fails and allows retry", () => {
+    const summaryQuery = useBillingSummary()
+    const refetch = vi.fn()
+    useBillingSummary.mockReturnValue({
+      ...summaryQuery,
+      error: new Error("refresh failed"),
+      refetch,
+    })
+    useBillingUsage.mockReturnValue({
+      data: { buckets: [] },
+      isPending: false,
+      error: null,
+    })
+    renderPage()
+
+    expect(screen.queryByText("Pay-as-you-go • USD")).not.toBeInTheDocument()
+    expect(screen.queryByText("Current Balance")).not.toBeInTheDocument()
+    expect(screen.queryByText("Billing is live")).not.toBeInTheDocument()
+    expect(screen.queryByText("Tracked but not billed")).not.toBeInTheDocument()
+    expect(screen.queryByText("Charge: $60.00")).not.toBeInTheDocument()
+    expect(
+      screen.getByText("Billing data is unavailable for this team right now."),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: /try again/i }))
+    expect(refetch).toHaveBeenCalledOnce()
+  })
+
+  it("keeps the viewed period through a refresh error and adopts the recovered period", () => {
+    const summaryQuery = useBillingSummary()
+    useBillingUsage.mockClear()
+    useBillingUsage.mockReturnValue({
+      data: { buckets: [] },
+      isPending: false,
+      error: null,
+    })
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const page = () => (
+      <QueryClientProvider client={client}>
+        <PlanUsagePage />
+      </QueryClientProvider>
+    )
+    const { rerender } = render(page())
+    const assertRange = (start: string, end: string) => {
+      expect(useBillingUsage).toHaveBeenCalled()
+      for (const call of useBillingUsage.mock.calls) {
+        expect(call).toEqual([
+          new Date(start),
+          new Date(end),
+          "daily",
+          expect.any(String),
+          true,
+        ])
+      }
+    }
+    assertRange("2026-06-01T00:00:00.000Z", "2026-07-01T00:00:00.000Z")
+    useBillingUsage.mockClear()
+    useBillingSummary.mockReturnValue({
+      ...summaryQuery,
+      error: new Error("refresh failed"),
+    })
+    rerender(page())
+    assertRange("2026-06-01T00:00:00.000Z", "2026-07-01T00:00:00.000Z")
+    expect(screen.queryByText("Current Balance")).not.toBeInTheDocument()
+    expect(screen.queryByText("Billing is live")).not.toBeInTheDocument()
+
+    useBillingUsage.mockClear()
+    useBillingSummary.mockReturnValue({
+      ...summaryQuery,
+      data: {
+        ...summaryQuery.data,
+        billing_period: {
+          start: "2026-07-01T00:00:00.000Z",
+          end: "2026-08-01T00:00:00.000Z",
+        },
+      },
+    })
+    rerender(page())
+    assertRange("2026-07-01T00:00:00.000Z", "2026-08-01T00:00:00.000Z")
+    expect(screen.getByText("Current Balance")).toBeInTheDocument()
+  })
+
   it("shows the preview state when billing dashboard access is disabled", () => {
     useBillingUsage.mockReturnValue({
       data: {
@@ -487,6 +570,68 @@ describe("PlanUsagePage", () => {
     expect(screen.queryByTestId("usage-cost-chart")).not.toBeInTheDocument()
   })
 
+  it.each([0, 1.2])(
+    "preserves the page with unknown storage usage and %s compute charges",
+    (computeCost) => {
+      const summary = structuredClone(useBillingSummary().data)
+      summary.resources.find(
+        (resource: { resource_key: string }) =>
+          resource.resource_key === "storage_gib",
+      ).usage = null
+      useBillingSummary.mockReturnValue({
+        data: summary,
+        isPending: false,
+        error: null,
+        refetch: vi.fn(),
+      })
+      useBillingUsage.mockReturnValue({
+        data: {
+          start: "2026-06-01T00:00:00.000Z",
+          end: "2026-07-01T00:00:00.000Z",
+          granularity: "day",
+          timezone: "UTC",
+          buckets: [
+            {
+              start: "2026-06-01T00:00:00.000Z",
+              end: "2026-06-02T00:00:00.000Z",
+              cpu: {
+                usage: computeCost === 0 ? 0 : 3600,
+                cost_usd: computeCost,
+                tracked: true,
+                billable: true,
+              },
+              memory: { usage: 0, cost_usd: 0, tracked: true, billable: true },
+              storage: {
+                usage: null,
+                cost_usd: 0,
+                tracked: true,
+                billable: false,
+              },
+              billed_total_usd: computeCost,
+            },
+          ],
+        },
+        isPending: false,
+        error: null,
+        refetch: vi.fn(),
+      })
+      renderPage()
+      expect(screen.getByTestId("billing-statement")).toBeInTheDocument()
+      expect(screen.getByTestId("usage-cost-chart")).toBeInTheDocument()
+      expect(
+        screen.getByText(/Some storage usage measurements are unavailable/),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByText("No Usage For This Period"),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.getByRole("button", {
+          name: /Storage \$0.00 \(not billed\) · usage unavailable/,
+        }),
+      ).toHaveAccessibleName(new RegExp(`CPU \\$${computeCost.toFixed(2)}`))
+    },
+  )
+
   it("uses backend bucket boundaries for monthly labels and tooltip ranges", () => {
     useCustomerBillingPeriods.mockReturnValue({
       data: {
@@ -554,6 +699,104 @@ describe("PlanUsagePage", () => {
     expect(bucketLabel("2026-01-01T00:00:00.000Z", "monthly", true)).toMatch(
       /Jan 2026/,
     )
+  })
+
+  it("keeps mixed storage eligibility neutral and preserves returned historical costs", () => {
+    useBillingUsage.mockReturnValue({
+      data: {
+        start: "2026-06-01T00:00:00.000Z",
+        end: "2026-07-01T00:00:00.000Z",
+        granularity: "day",
+        timezone: "UTC",
+        buckets: [
+          {
+            start: "2026-06-01T00:00:00.000Z",
+            end: "2026-06-02T00:00:00.000Z",
+            cpu: { usage: 1, cost_usd: 1, tracked: true, billable: true },
+            memory: { usage: 1, cost_usd: 2, tracked: true, billable: true },
+            storage: {
+              usage: 1000,
+              // This is the backend's historical pre-activation amount.
+              cost_usd: 17.25,
+              tracked: true,
+              billable: false,
+            },
+            billed_total_usd: 3,
+          },
+          {
+            start: "2026-06-02T00:00:00.000Z",
+            end: "2026-06-03T00:00:00.000Z",
+            cpu: { usage: 1, cost_usd: 4, tracked: true, billable: true },
+            memory: { usage: 1, cost_usd: 5, tracked: true, billable: true },
+            storage: {
+              usage: 1000,
+              // Keep this distinct from the current rate-derived amount.
+              cost_usd: 23.75,
+              tracked: true,
+              billable: true,
+            },
+            billed_total_usd: 32.75,
+          },
+        ],
+      },
+      isPending: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    renderPage()
+
+    expect(
+      screen.getByText("Storage (mixed billing eligibility)"),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByLabelText(/Storage \$17\.25 \(not billed\)/),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByLabelText(/Storage \$23\.75(?! \(not billed\))/),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText(/Billed total \$32\.75/)).toBeInTheDocument()
+  })
+
+  it("does not add not-billed copy when every storage bucket is billable", () => {
+    useBillingUsage.mockReturnValue({
+      data: {
+        start: "2026-06-01T00:00:00.000Z",
+        end: "2026-06-02T00:00:00.000Z",
+        granularity: "day",
+        timezone: "UTC",
+        buckets: [
+          {
+            start: "2026-06-01T00:00:00.000Z",
+            end: "2026-06-02T00:00:00.000Z",
+            cpu: { usage: 1, cost_usd: 1, tracked: true, billable: true },
+            memory: { usage: 1, cost_usd: 2, tracked: true, billable: true },
+            storage: {
+              usage: 1000,
+              cost_usd: 23.75,
+              tracked: true,
+              billable: true,
+            },
+            billed_total_usd: 26.75,
+          },
+        ],
+      },
+      isPending: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    renderPage()
+
+    expect(
+      within(screen.getByTestId("usage-cost-chart")).getByText("Storage"),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText("Storage equivalent (not billed)"),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByLabelText(/Storage \$23\.75(?! \(not billed\))/),
+    ).toBeInTheDocument()
   })
 
   it("does not show the not-charged indicator for active usage", () => {

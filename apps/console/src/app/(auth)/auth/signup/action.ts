@@ -7,10 +7,9 @@ import { headers } from "next/headers"
 import { after } from "next/server"
 import * as z from "zod"
 
-import { notifySlackOfNewUser } from "@/app/(auth)/auth/signin/action"
 import { createPromotionSignupAttempt } from "@/lib/api/promotion-device-evidence"
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
-import { BLOCKED_TRIGGER_MESSAGE } from "@/lib/auth/errors"
+import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
 import { issueGoogleSignupProof } from "@/lib/auth/google-signup-proof"
 import {
   beginSignupEvidenceAttempt,
@@ -40,6 +39,8 @@ import {
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { verifyRecaptcha } from "@/lib/recaptcha/verify"
+import { normalizeSignupEligibilitySnapshot } from "@/lib/slack/signup-eligibility"
+import { notifySlackOfNewUser } from "@/lib/slack/signup-notification"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 const signUpSchema = z.object({
@@ -226,6 +227,7 @@ export const beginGoogleSignup = async (
 
   try {
     let verified = false
+    let attestationFailed = false
     const visitor = fingerprintEventId
       ? await resolveFingerprintSignup({
           eventId: fingerprintEventId,
@@ -235,6 +237,9 @@ export const beginGoogleSignup = async (
           onAttested: () => {
             verified = true
           },
+          onAttestationFailed: () => {
+            attestationFailed = true
+          },
         })
       : null
     if (fingerprintEventId)
@@ -243,7 +248,9 @@ export const beginGoogleSignup = async (
       attemptId: verified ? capture?.attemptId : undefined,
       eventId: fingerprintEventId,
       visitor: visitor ?? undefined,
-      routineMissing: !fingerprintEventId && !captureResult,
+      // Missing capture is governed by the backend evidence-required policy.
+      // Attestation or publication outages remain authority failures.
+      routineMissing: !verified && !attestationFailed,
     })
     await trackEvent(
       AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_VERIFIED,
@@ -347,6 +354,7 @@ export const signUpWithEmail = async (
   try {
     let visitor: string | null = null
     let deviceVerified = false
+    let attestationFailed = false
     if (fingerprintEventId) {
       try {
         visitor = await resolveFingerprintSignup({
@@ -357,6 +365,9 @@ export const signUpWithEmail = async (
           capture,
           onAttested: () => {
             deviceVerified = true
+          },
+          onAttestationFailed: () => {
+            attestationFailed = true
           },
         })
       } finally {
@@ -376,8 +387,15 @@ export const signUpWithEmail = async (
           visitor,
         )
       } catch (error) {
-        if (error instanceof SignupRestrictedError)
+        if (error instanceof SignupRestrictedError) {
+          await notifySlackOfNewUser(
+            parsed.data.email,
+            parsed.data.fullName,
+            "email",
+            { kind: "blocked" },
+          ).catch(() => {})
           return { success: false, error: SIGNUP_RESTRICTED_MESSAGE }
+        }
         throw error
       }
     }
@@ -409,8 +427,19 @@ export const signUpWithEmail = async (
           error: "An account with this email already exists.",
         }
       }
-      if (error.message.toLowerCase().includes(BLOCKED_TRIGGER_MESSAGE)) {
-        console.warn("Signup blocked by trigger", { email: parsed.data.email })
+      // Auth exposes trigger failures as a generic database error. It keeps
+      // the existing rejected-auth result, but does not prove SS-499 blocked
+      // policy evidence, so the notification must remain unavailable.
+      if (isGenericAuthSignupFailure(error.message)) {
+        console.warn("Signup rejected by Auth trigger", {
+          email: parsed.data.email,
+        })
+        await notifySlackOfNewUser(
+          parsed.data.email,
+          parsed.data.fullName,
+          "email",
+          { kind: "unavailable" },
+        ).catch(() => {})
         return {
           success: false,
           error: "Signup is not available for this email address.",
@@ -422,12 +451,19 @@ export const signUpWithEmail = async (
 
     const originalSignup =
       data?.user && Date.parse(data.user.created_at) >= signupStartedAt
+    let signupEligibilitySnapshot: unknown
     if (originalSignup) {
-      await publishOriginalSignupEvidence(
-        data.user,
-        deviceVerified ? capture?.attemptId : undefined,
-        !fingerprintEventId && !captureResult,
-      )
+      try {
+        signupEligibilitySnapshot = await publishOriginalSignupEvidence(
+          data.user,
+          deviceVerified ? capture?.attemptId : undefined,
+          !deviceVerified && !attestationFailed,
+        )
+      } catch {
+        // Publication is best effort; an unavailable snapshot must not change
+        // the Auth signup result or suppress the original notification.
+        console.warn("Original signup promotion publication unavailable")
+      }
     }
     if (fingerprintEventId && visitor && data?.user?.id) {
       try {
@@ -481,6 +517,7 @@ export const signUpWithEmail = async (
       parsed.data.email,
       parsed.data.fullName,
       "email",
+      normalizeSignupEligibilitySnapshot(signupEligibilitySnapshot),
     ).catch(() => {})
     return { success: true }
   } catch (err) {

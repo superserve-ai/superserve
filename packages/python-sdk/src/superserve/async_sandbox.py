@@ -21,6 +21,7 @@ from ._http import (
     using_async_client,
 )
 from .commands import AsyncCommands, AsyncCommandsDeps
+from .desktop import DESKTOP_STREAM_PORT, AsyncDesktop, AsyncDesktopDeps
 from .errors import ConflictError, NotFoundError, SandboxError, SandboxTimeoutError
 from .async_snapshots import AsyncSnapshot
 from .snapshots import (
@@ -102,6 +103,29 @@ class AsyncSandbox:
                 get_routing_hint=lambda: self._routing_hint,
                 refresh_activate=self._refresh_activate,
                 refresh_expired_hint=self._refresh_expired_hint,
+            ),
+            client=self._http_client,
+        )
+
+        async def _publish_stream_port() -> PreviewAccessPolicy:
+            return (await self.publish_preview_port(DESKTOP_STREAM_PORT)).access
+
+        async def _mint_stream_token() -> PreviewToken:
+            return await self.get_preview_token(
+                DESKTOP_STREAM_PORT, expires_in_seconds=60
+            )
+
+        self.desktop = AsyncDesktop(
+            AsyncDesktopDeps(
+                sandbox_id=self.id,
+                sandbox_host=config.sandbox_host,
+                get_access_token=lambda: self._access_token,
+                get_routing_hint=lambda: self._routing_hint,
+                refresh_activate=self._refresh_activate,
+                refresh_expired_hint=self._refresh_expired_hint,
+                publish_stream_port=_publish_stream_port,
+                stream_base_url=lambda: self.get_preview_url(DESKTOP_STREAM_PORT),
+                mint_stream_token=_mint_stream_token,
             ),
             client=self._http_client,
         )

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   register: vi.fn(),
   bind: vi.fn(),
   signup: vi.fn(),
+  snapshot: vi.fn(),
   update: vi.fn(),
 }))
 vi.mock("./promotion-identity", () => ({
@@ -17,6 +18,7 @@ vi.mock("./promotion-device-evidence", async (original) => ({
   registerPromotionSignupDevice: mocks.register,
   bindPromotionSignupAccount: mocks.bind,
   registerPromotionSignupAccount: mocks.signup,
+  getPromotionSignupEligibilityForTrustedSignup: mocks.snapshot,
 }))
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
@@ -41,6 +43,12 @@ beforeEach(() => {
   )
   mocks.update.mockResolvedValue({ error: null })
   mocks.bind.mockResolvedValue("bound")
+  mocks.snapshot.mockResolvedValue({
+    ownership: "owner",
+    deviceDecision: "eligible",
+    eligibility: "unknown",
+    reason: "team_checks_pending",
+  })
 })
 it.each([
   {},
@@ -55,7 +63,15 @@ it.each([
   },
 )
 it("only classifies successfully persisted routine absence as ordinary missing", async () => {
-  await publishOriginalSignupEvidence(user, undefined, true)
+  await expect(
+    publishOriginalSignupEvidence(user, undefined, true),
+  ).resolves.toEqual({
+    ownership: "owner",
+    deviceDecision: "eligible",
+    eligibility: "unknown",
+    reason: "team_checks_pending",
+  })
+  expect(mocks.snapshot).toHaveBeenCalledWith(user.id)
   expect(mocks.update).toHaveBeenCalledWith(user.id, {
     app_metadata: { promotion_routine_absence: true },
   })
@@ -131,6 +147,62 @@ it("never treats an old cell or transport failure as routine absence", async () 
 })
 it("never publishes a replacement signup attempt when the backend retained first evidence", async () => {
   mocks.bind.mockResolvedValue("first_evidence_retained")
-  await publishOriginalSignupEvidence(user, "different", false)
+  await expect(
+    publishOriginalSignupEvidence(user, "different", false),
+  ).resolves.toEqual({
+    ownership: "owner",
+    deviceDecision: "eligible",
+    eligibility: "unknown",
+    reason: "team_checks_pending",
+  })
+  expect(mocks.snapshot).toHaveBeenCalledWith(user.id)
   expect(mocks.signup).not.toHaveBeenCalled()
+})
+
+it("returns the trusted non-issuing snapshot after publication ordering", async () => {
+  const result = await publishOriginalSignupEvidence(
+    user,
+    "original-attempt",
+    false,
+  )
+  expect(result).toEqual({
+    ownership: "owner",
+    deviceDecision: "eligible",
+    eligibility: "unknown",
+    reason: "team_checks_pending",
+  })
+  expect(mocks.snapshot).toHaveBeenCalledWith(user.id)
+  expect(mocks.signup.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.snapshot.mock.invocationCallOrder[0],
+  )
+})
+
+it("still withholds credit when identity publication fails despite allowed missing capture", async () => {
+  mocks.identity.mockRejectedValue(new Error("identity backend unavailable"))
+  expect(
+    await publishAccountPromotion(
+      "use",
+      { ...user, app_metadata: { promotion_routine_absence: true } },
+      "now",
+    ),
+  ).toEqual({ authorityUnavailable: true })
+})
+
+it("still withholds credit for a failed association of verified evidence", async () => {
+  mocks.bind.mockRejectedValue(
+    new PromotionEvidenceError("authority_unavailable"),
+  )
+  expect(
+    await publishOriginalSignupEvidence(user, "verified-attempt", false),
+  ).toBeUndefined()
+  expect(mocks.update).toHaveBeenCalledWith(user.id, {
+    app_metadata: { promotion_authority_failed: true },
+  })
+  expect(
+    await publishAccountPromotion(
+      "use",
+      { ...user, app_metadata: { promotion_authority_failed: true } },
+      "now",
+    ),
+  ).toEqual({ authorityUnavailable: true })
 })

@@ -18,7 +18,7 @@ export interface BillingSummaryResource {
   sort_order: number
   unit: string
   display_unit: string
-  usage: number
+  usage: number | null
   tracked: boolean
   billable: boolean
   charge_usd: number
@@ -71,6 +71,33 @@ export async function getBillingSummary(): Promise<BillingSummaryResponse> {
   })
 }
 
+export interface BillingPricingRate {
+  resource_key: string
+  resource: string
+  display_name: string
+  sort_order: number
+  unit: string
+  display_unit: string
+  price_usd: number
+  price_usd_hourly: number
+  effective_from: string
+  tracked: boolean
+  billable: boolean
+}
+
+export interface BillingPricingResponse {
+  plan_key: string
+  plan_name: string
+  currency: string
+  rates: BillingPricingRate[]
+}
+
+export async function getBillingPricing(): Promise<BillingPricingResponse> {
+  return apiClient<BillingPricingResponse>("/billing/pricing", {
+    cache: "no-store",
+  })
+}
+
 export type BillingUsageGranularity = "hourly" | "daily" | "weekly" | "monthly"
 /** Values accepted by the usage-series endpoint. */
 export type BillingUsageApiGranularity = "hour" | "day" | "week" | "month"
@@ -87,7 +114,7 @@ export function toBillingUsageApiGranularity(
   return BILLING_USAGE_API_GRANULARITY[granularity]
 }
 export interface BillingUsageSeriesResource {
-  usage: number
+  usage: number | null
   cost_usd: number
   tracked: boolean
   billable: boolean
