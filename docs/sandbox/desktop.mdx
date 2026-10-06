@@ -26,17 +26,16 @@ session as the non-root `desktop` user (also the default user for
 import { Sandbox } from "@superserve/sdk"
 
 const sandbox = await Sandbox.create({
-name: "desktop",
-fromTemplate: "superserve/desktop",
+  name: "desktop",
+  fromTemplate: "superserve/desktop",
 })
-
-````
+```
 
 ```python Python
 from superserve import Sandbox
 
 sandbox = Sandbox.create(name="desktop", from_template="superserve/desktop")
-````
+```
 
 </CodeGroup>
 
@@ -47,19 +46,23 @@ actions. Each turn is a screenshot in, a list of actions out:
 
 <CodeGroup>
 ```typescript TypeScript
+import { setTimeout as sleep } from "node:timers/promises"
+
 await sandbox.desktop.resize(1024, 768) // match the model's screen size
 
 let shot = await sandbox.desktop.screenshot()
 while (true) {
-const actions = await nextActions(shot) // your model call
-if (actions.length === 0) break
-await sandbox.desktop.actions(actions)
-shot = await sandbox.desktop.screenshot()
+  const actions = await nextActions(shot) // your model call
+  if (actions.length === 0) break
+  await sandbox.desktop.actions(actions)
+  await sleep(300) // let the application repaint
+  shot = await sandbox.desktop.screenshot()
 }
-
-````
+```
 
 ```python Python
+import time
+
 sandbox.desktop.resize(1024, 768)  # match the model's screen size
 
 shot = sandbox.desktop.screenshot()
@@ -68,15 +71,17 @@ while True:
     if not actions:
         break
     sandbox.desktop.actions(actions)
+    time.sleep(0.3)  # let the application repaint
     shot = sandbox.desktop.screenshot()
-````
+```
 
 </CodeGroup>
 
 `actions` sends the model's whole turn as one request (see
 [Batch actions](#batch-actions)), and the screenshot after it is the next
 observation. The call returns once the input is delivered, not once the
-application has repainted, so give it a moment before the next screenshot.
+application has repainted, so wait briefly before the next screenshot; how
+long depends on the application.
 Resizing to the model's native resolution first keeps frames small and maps
 its coordinates 1:1 onto the screen.
 
@@ -107,20 +112,23 @@ Returns a browser URL for the viewer on port `6080`, publishing that port
 under the sandbox's [preview policy](/sandbox/preview-urls). Under `public` the
 URL is clean. Under `private` it carries a 60-second signed credential, as
 `getSignedPreviewUrl` / `get_signed_preview_url` does; mint a fresh URL for
-each viewer. `viewOnly` /
-`view_only` is a flag on that viewer only and does not stop someone else from
-opening the same URL with control, so use a `private` policy when the viewer
-must not be shared.
+each viewer. `viewOnly` / `view_only` is a flag on that viewer only and does
+not stop someone else from opening the same URL with control, so use a
+`private` policy when the viewer must not be shared.
 
 ## Screenshots
 
 <CodeGroup>
 ```typescript TypeScript
+import fs from "node:fs/promises"
+
 const shot = await sandbox.desktop.screenshot()
 await fs.writeFile("screen.png", shot.data) // PNG bytes; shot.width, shot.height
 ```
 
 ```python Python
+from pathlib import Path
+
 shot = sandbox.desktop.screenshot()
 Path("screen.png").write_bytes(shot.data)  # PNG bytes; shot.width, shot.height
 ```
