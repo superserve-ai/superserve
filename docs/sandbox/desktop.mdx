@@ -46,23 +46,19 @@ actions. Each turn is a screenshot in, a list of actions out:
 
 <CodeGroup>
 ```typescript TypeScript
-import { setTimeout as sleep } from "node:timers/promises"
-
 await sandbox.desktop.resize(1024, 768) // match the model's screen size
 
 let shot = await sandbox.desktop.screenshot()
 while (true) {
   const actions = await nextActions(shot) // your model call
   if (actions.length === 0) break
-  await sandbox.desktop.actions(actions)
-  await sleep(300) // let the application repaint
-  shot = await sandbox.desktop.screenshot()
+  const step = await sandbox.desktop.step(actions, { settleMs: 300 })
+  if (!step.screenshot) throw new Error(step.screenshotError)
+  shot = step.screenshot
 }
 ```
 
 ```python Python
-import time
-
 sandbox.desktop.resize(1024, 768)  # match the model's screen size
 
 shot = sandbox.desktop.screenshot()
@@ -70,20 +66,24 @@ while True:
     actions = next_actions(shot)  # your model call
     if not actions:
         break
-    sandbox.desktop.actions(actions)
-    time.sleep(0.3)  # let the application repaint
-    shot = sandbox.desktop.screenshot()
+    step = sandbox.desktop.step(actions, settle_ms=300)
+    if step.screenshot is None:
+        raise RuntimeError(step.screenshot_error)
+    shot = step.screenshot
 ```
 
 </CodeGroup>
 
-`actions` sends the model's whole turn as one request (see
-[Batch actions](#batch-actions)), and the screenshot after it is the next
-observation. The call returns once the input is delivered, not once the
-application has repainted, so wait briefly before the next screenshot; how
-long depends on the application.
-Resizing to the model's native resolution first keeps frames small and maps
-its coordinates 1:1 onto the screen.
+`step` runs the model's whole turn and captures the frame after it in one
+request, so a turn is a single round trip. The sandbox waits `settleMs` /
+`settle_ms` (up to 2000) before capturing, because input is delivered before
+the application has repainted; how long it needs depends on the application.
+`step` does not throw when the batch stops at a failing action or when the
+capture fails, since the actions that ran have already landed: check
+`actionError` / `action_error` (with `executed`, the index it stopped at) and
+`screenshotError` / `screenshot_error`. Resizing to the model's native
+resolution first keeps frames small and maps its coordinates 1:1 onto the
+screen.
 
 <Note>
   Everything the agent reads from the screen is untrusted input to the model:
@@ -212,7 +212,9 @@ sandbox.desktop.actions([
 </CodeGroup>
 
 The whole batch is validated before anything runs, then runs in order and
-stops at the first failing action.
+stops at the first failing action. `step` is the same batch followed by a
+capture in the same request, for the agent loop above; `actions` is for input
+you do not need to look at afterwards.
 
 | TypeScript `type`       | Python `type`             | Fields                 |
 | ----------------------- | ------------------------- | ---------------------- |

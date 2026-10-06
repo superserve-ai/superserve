@@ -18,6 +18,8 @@ from superserve.desktop import (
     AsyncDesktopDeps,
     Desktop,
     DesktopDeps,
+    Screenshot,
+    StepResult,
     _chord_parts,
 )
 
@@ -549,3 +551,79 @@ def test_connect_error_message_is_preserved() -> None:
     )
     with pytest.raises(ServerError, match="after 1 executed"):
         _make_desktop().actions([{"type": "click", "x": 1, "y": 1, "button": "left"}])
+
+
+class TestStep:
+    @respx.mock
+    def test_sends_batch_and_settle_and_decodes_frame(self) -> None:
+        png = b"\x89PNG-fake"
+        route = respx.post(f"{RPC_BASE}/Step").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "executed": 2,
+                    "screenshot": {
+                        "image": base64.b64encode(png).decode(),
+                        "width": 4,
+                        "height": 2,
+                    },
+                },
+            )
+        )
+        result = _make_desktop().step(
+            [{"type": "click", "x": 1, "y": 2}, {"type": "press", "key": "enter"}],
+            settle_ms=300,
+        )
+        assert _request_body(route) == {
+            "actions": [
+                {
+                    "pointer": {
+                        "x": 1,
+                        "y": 2,
+                        "button": "POINTER_BUTTON_LEFT",
+                        "action": "POINTER_ACTION_CLICK",
+                    }
+                },
+                {"key": {"key": "Return", "modifiers": []}},
+            ],
+            "settleMs": 300,
+        }
+        assert result == StepResult(
+            executed=2, screenshot=Screenshot(data=png, width=4, height=2)
+        )
+
+    @respx.mock
+    def test_stopped_batch_returns_its_frame_instead_of_raising(self) -> None:
+        respx.post(f"{RPC_BASE}/Step").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "executed": 1,
+                    "actionError": "action 1 failed after 1 executed: boom",
+                    "screenshot": {
+                        "image": base64.b64encode(b"x").decode(),
+                        "width": 4,
+                        "height": 2,
+                    },
+                },
+            )
+        )
+        result = _make_desktop().step([{"type": "click", "x": 1, "y": 2}])
+        assert result.executed == 1
+        assert result.action_error is not None and "action 1" in result.action_error
+        assert result.screenshot is not None and result.screenshot.width == 4
+        assert result.screenshot_error is None
+
+    @respx.mock
+    def test_failed_capture_reports_error_with_executed_count(self) -> None:
+        respx.post(f"{RPC_BASE}/Step").mock(
+            return_value=httpx.Response(
+                200, json={"executed": 1, "captureError": "import: nope"}
+            )
+        )
+        result = _make_desktop().step([{"type": "click", "x": 1, "y": 2}])
+        assert result == StepResult(executed=1, screenshot_error="import: nope")
+
+    def test_empty_batch_is_rejected_without_a_request(self) -> None:
+        with pytest.raises(ValueError, match="actions is empty"):
+            _make_desktop().step([])

@@ -27,6 +27,7 @@ import type {
   CommandResult,
   DesktopAction,
   Screenshot,
+  StepResult,
   NetworkConfig,
   NetworkEvent,
   NetworkLogPage,
@@ -244,6 +245,12 @@ export interface SandboxClient {
   desktopScreenshot(id: string): Promise<Screenshot>
   /** Execute an ordered input batch under the sandbox's input lock. */
   desktopActions(id: string, actions: DesktopAction[]): Promise<void>
+  /** Run an input batch and capture the frame after it, in one request. */
+  desktopStep(
+    id: string,
+    actions: DesktopAction[],
+    settleMs: number,
+  ): Promise<StepResult>
   desktopResize(id: string, width: number, height: number): Promise<void>
   /** Publish the noVNC viewer port and return its browser URL. */
   desktopStreamUrl(id: string): Promise<string>
@@ -573,6 +580,11 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
     async desktopActions(id, actions) {
       const sb = await Sandbox.connect(id, conn)
       await sb.desktop.actions(actions)
+    },
+
+    async desktopStep(id, actions, settleMs) {
+      const sb = await Sandbox.connect(id, conn)
+      return sb.desktop.step(actions, { settleMs })
     },
 
     async desktopResize(id, width, height) {

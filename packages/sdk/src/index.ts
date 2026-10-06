@@ -15,6 +15,8 @@ export type {
   DesktopAction,
   MouseButton,
   Screenshot,
+  StepOptions,
+  StepResult,
   StreamUrlOptions,
 } from "./desktop.js"
 export {

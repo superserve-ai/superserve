@@ -161,6 +161,32 @@ describe("sandbox_computer (in-memory, fake client)", () => {
     expect(res.content[0].text).not.toContain("safe to retry")
   })
 
+  it("act-then-look is one fused step, with the settle applied in the sandbox", async () => {
+    const res = await callRaw({ action: "left_click", coordinate: [10, 20] })
+    expect(res.isError).toBeFalsy()
+    expect(fake.desktopSteps).toEqual([
+      {
+        actions: [{ type: "click", x: 10, y: 20, button: "left" }],
+        settleMs: 300,
+      },
+    ])
+    expect(res.content.some((c) => c.type === "image")).toBe(true)
+  })
+
+  it("a batch that stops part-way is an error that carries the frame", async () => {
+    fake.nextStepResult = {
+      executed: 1,
+      actionError: "action 1 failed after 1 executed: boom",
+      screenshot: fake.screenshot,
+    }
+    const res = await callRaw({ action: "triple_click", coordinate: [10, 20] })
+    expect(res.isError).toBe(true)
+    expect(res.content[0].text).toContain("stopped after 1 of 3")
+    expect(res.content[0].text).toContain("attached screenshot")
+    expect(res.content[0].text).not.toContain("safe to retry")
+    expect(res.content.some((c) => c.type === "image")).toBe(true)
+  })
+
   it("a failed follow-up screenshot still reports the delivered action", async () => {
     fake.failNextScreenshotWith = new Error("activate failed")
     const res = await callRaw({ action: "left_click", coordinate: [10, 20] })
