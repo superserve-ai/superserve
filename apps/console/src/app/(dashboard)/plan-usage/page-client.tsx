@@ -137,7 +137,7 @@ function bucketTooltip(
     `${bucketLabel(bucket.start, granularity, granularity === "monthly", timezone)} (${start} – ${end})`,
     `CPU $${formatUsageCost(bucket.cpu.cost_usd)}`,
     `Memory $${formatUsageCost(bucket.memory.cost_usd)}`,
-    `Storage ${storage}`,
+    `Storage ${storage}${bucket.storage.usage === null ? " · usage unavailable" : ""}`,
     `Billed total $${formatUsageCost(bucket.billed_total_usd)}`,
   ]
 }
@@ -300,9 +300,7 @@ export function PlanUsagePageClient() {
     buckets.some((bucket) =>
       (["cpu", "memory", "storage"] as const)
         .map((key) => bucketResource(bucket, key))
-        .some(
-          (resource) => resource?.usage !== undefined && resource.usage !== 0,
-        ),
+        .some((resource) => resource?.usage != null && resource.usage !== 0),
     ) ||
     legacyRows.some((row) =>
       [row.vcpu_seconds, row.memory_mib_seconds, row.storage_mib_seconds].some(
@@ -397,7 +395,8 @@ export function PlanUsagePageClient() {
                   title={usageErrorDetails.title}
                   onRetry={() => void usageQuery.refetch()}
                 />
-              ) : !hasUsage ? (
+              ) : !hasUsage &&
+                !buckets.some((bucket) => bucket.storage.usage === null) ? (
                 <EmptyState
                   icon={ChartBarIcon}
                   title="No Usage For This Period"
@@ -408,6 +407,12 @@ export function PlanUsagePageClient() {
                   className="space-y-4 border border-border/70 bg-surface/40 p-4"
                   data-testid="usage-cost-chart"
                 >
+                  {buckets.some((bucket) => bucket.storage.usage === null) ? (
+                    <output className="block text-sm text-muted">
+                      Some storage usage measurements are unavailable. Charges
+                      shown include all billable usage.
+                    </output>
+                  ) : null}
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h3 className="text-base font-semibold">Cost over time</h3>
                     <label className="text-sm">

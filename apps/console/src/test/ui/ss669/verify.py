@@ -24,7 +24,7 @@ except ImportError:
     )
 
 APP = Path(__file__).resolve().parents[4]
-SCENARIOS = ("tracked", "zero", "paid", "credited")
+SCENARIOS = ("tracked", "zero", "paid", "credited", "unavailable")
 
 
 def health(base, run_id=None):
@@ -90,6 +90,7 @@ def server(base):
 
 
 def verify(browser, base, scenario, output):
+    billable = scenario not in ("tracked", "unavailable")
     context = browser.new_context(
         viewport={"width": 1280, "height": 1000}, timezone_id="UTC",
         service_workers="block",
@@ -129,8 +130,8 @@ def verify(browser, base, scenario, output):
         assert urlsplit(page.url).path == "/settings/", page.url
         storage_rate = page.locator("dl > div").filter(has=page.locator("dt", has_text="Storage"))
         expect(storage_rate).to_contain_text("$0.000108 / GiB-hour")
-        expect(storage_rate).to_contain_text("Tracked only · Not billed" if scenario == "tracked" else "Billed")
-        if scenario != "tracked":
+        expect(storage_rate).to_contain_text("Billed" if billable else "Tracked only · Not billed")
+        if billable:
             expect(storage_rate).not_to_contain_text("Not billed")
         expect(page.get_by_text("$0.0720 / vCPU-hour", exact=True)).to_be_visible()
         expect(page.get_by_text("$0.0144 / GiB-hour", exact=True)).to_be_visible()
@@ -143,13 +144,21 @@ def verify(browser, base, scenario, output):
         card = page.locator("div.border-dashed.px-3.py-3").filter(has=page.get_by_text("Storage", exact=True))
         expect(card).to_have_count(1)
         charge = "$1.25" if scenario in ("paid", "credited") else "$0.00"
-        expect(card).to_contain_text("Tracked but not billed" if scenario == "tracked" else f"Charge: {charge}")
-        expect(card.get_by_text("Tracked only" if scenario == "tracked" else "Billed", exact=True)).to_be_visible()
+        expect(card).to_contain_text(f"Charge: {charge}" if billable else "Tracked but not billed")
+        expect(card.get_by_text("Billed" if billable else "Tracked only", exact=True)).to_be_visible()
+        if scenario == "unavailable":
+            expect(card.get_by_text("Usage unavailable", exact=True)).to_be_visible()
+            expect(card).not_to_contain_text("GiB-hours")
+            expect(page.get_by_text("Some storage usage measurements are unavailable. Charges shown include all billable usage.", exact=True)).to_be_visible()
+            expect(page.get_by_test_id("billing-statement")).to_be_visible()
+            expect(page.get_by_text("No Usage For This Period", exact=True)).to_have_count(0)
+        else:
+            expect(card.get_by_text("Usage unavailable", exact=True)).to_have_count(0)
         card.scroll_into_view_if_needed()
         page.screenshot(path=str(output / f"usage-resources-{scenario}.png"), full_page=True)
         legend = page.get_by_label("Chart legend", exact=True)
-        expect(legend).to_contain_text("Storage equivalent (not billed)" if scenario == "tracked" else "Storage")
-        if scenario != "tracked":
+        expect(legend).to_contain_text("Storage" if billable else "Storage equivalent (not billed)")
+        if billable:
             expect(page.get_by_text("Tracked but not billed", exact=True)).to_have_count(0)
             expect(legend).not_to_contain_text("not billed")
         chart = page.get_by_label("Usage cost chart", exact=True)
@@ -157,6 +166,8 @@ def verify(browser, base, scenario, output):
         expect(buckets).to_have_count(2)
         before = "Storage $0.63 (not billed)" if scenario == "tracked" else "Storage $0.00"
         after = "Storage $0.63 (not billed)" if scenario == "tracked" else f"Storage {charge}"
+        if scenario == "unavailable":
+            before = after = "Storage $0.00 (not billed) · usage unavailable"
         expect(buckets.first).to_have_attribute("aria-label", re.compile(re.escape(before)))
         expect(buckets.last).to_have_attribute("aria-label", re.compile(re.escape(after)))
         expect(buckets.first).to_have_attribute("aria-label", re.compile(r"Billed total \$1\.80"))
@@ -170,7 +181,10 @@ def verify(browser, base, scenario, output):
 
         assert settings_summary == summaries[-1], "Pages received different summary fixtures"
         storage = next(r for r in settings_summary["resources"] if r["resource_key"] == "storage_gib")
-        assert storage["billable"] == (scenario != "tracked")
+        assert storage["billable"] == billable
+        if scenario == "unavailable":
+            assert storage["usage"] is None
+            assert settings_summary["current_charges_usd"] == 3.6
         if scenario == "credited":
             assert storage["charge_usd"] > 0
             assert settings_summary["expected_invoice_amount_usd"] == 0
@@ -201,7 +215,7 @@ def main():
                 verify(browser, base, scenario, args.output)
         finally:
             browser.close()
-    print(f"PASS: 8 billing page states. Screenshots: {args.output}")
+    print(f"PASS: {len(SCENARIOS) * 2} billing page states. Screenshots: {args.output}")
 
 
 if __name__ == "__main__":

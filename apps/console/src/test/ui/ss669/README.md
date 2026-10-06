@@ -22,12 +22,13 @@ bun --filter @superserve/console run dev:storage-ui
 
 Open `http://127.0.0.1:4174/settings/?scenario=tracked`. Available scenarios:
 
-| Scenario   | Storage state                                                                         |
-| ---------- | ------------------------------------------------------------------------------------- |
-| `tracked`  | Nonzero advertised rate and usage; storage is not billable                            |
-| `zero`     | Billable storage with zero usage and zero storage charge                              |
-| `paid`     | Billable storage; tracked usage before activation costs zero, later usage costs $1.25 |
-| `credited` | Same positive storage charge; credits cover the full invoice                          |
+| Scenario      | Storage state                                                                                 |
+| ------------- | --------------------------------------------------------------------------------------------- |
+| `tracked`     | Nonzero advertised rate and usage; storage is not billable                                    |
+| `zero`        | Billable storage with zero usage and zero storage charge                                      |
+| `paid`        | Billable storage; tracked usage before activation costs zero, later usage costs $1.25         |
+| `credited`    | Same positive storage charge; credits cover the full invoice                                  |
+| `unavailable` | Missing legacy storage measurements; known compute charges and billing summary remain visible |
 
 The production **Billing & Usage** link keeps the fixture selection. Direct entry
 also works at `/plan-usage/?scenario=paid`. Each scenario URL should be opened
@@ -65,9 +66,9 @@ Run the server-ownership regression checks separately with the same Python:
 "$UI_TEST_PYTHON" -m unittest discover -s apps/console/src/test/ui/ss669 -p test_verify.py
 ```
 
-Each scenario gets a fresh browser context. Checks cover eight page states,
+Each scenario gets a fresh browser context. Checks cover ten page states,
 Settings-to-usage navigation, matching summary responses, rates, storage badges
-and charges, chart legends, pre/post-activation costs, and hover text. External
+and charges, unavailable storage usage, chart legends, pre/post-activation costs, and hover text. External
 requests, browser errors, failed API responses, and framework error overlays fail
 the run. The fixture API rejects payment writes. Screenshots include Settings,
 the usage resource cards, and the chart for each scenario.

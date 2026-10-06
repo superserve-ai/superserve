@@ -570,6 +570,68 @@ describe("PlanUsagePage", () => {
     expect(screen.queryByTestId("usage-cost-chart")).not.toBeInTheDocument()
   })
 
+  it.each([0, 1.2])(
+    "preserves the page with unknown storage usage and %s compute charges",
+    (computeCost) => {
+      const summary = structuredClone(useBillingSummary().data)
+      summary.resources.find(
+        (resource: { resource_key: string }) =>
+          resource.resource_key === "storage_gib",
+      ).usage = null
+      useBillingSummary.mockReturnValue({
+        data: summary,
+        isPending: false,
+        error: null,
+        refetch: vi.fn(),
+      })
+      useBillingUsage.mockReturnValue({
+        data: {
+          start: "2026-06-01T00:00:00.000Z",
+          end: "2026-07-01T00:00:00.000Z",
+          granularity: "day",
+          timezone: "UTC",
+          buckets: [
+            {
+              start: "2026-06-01T00:00:00.000Z",
+              end: "2026-06-02T00:00:00.000Z",
+              cpu: {
+                usage: computeCost === 0 ? 0 : 3600,
+                cost_usd: computeCost,
+                tracked: true,
+                billable: true,
+              },
+              memory: { usage: 0, cost_usd: 0, tracked: true, billable: true },
+              storage: {
+                usage: null,
+                cost_usd: 0,
+                tracked: true,
+                billable: false,
+              },
+              billed_total_usd: computeCost,
+            },
+          ],
+        },
+        isPending: false,
+        error: null,
+        refetch: vi.fn(),
+      })
+      renderPage()
+      expect(screen.getByTestId("billing-statement")).toBeInTheDocument()
+      expect(screen.getByTestId("usage-cost-chart")).toBeInTheDocument()
+      expect(
+        screen.getByText(/Some storage usage measurements are unavailable/),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByText("No Usage For This Period"),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.getByRole("button", {
+          name: /Storage \$0.00 \(not billed\) · usage unavailable/,
+        }),
+      ).toHaveAccessibleName(new RegExp(`CPU \\$${computeCost.toFixed(2)}`))
+    },
+  )
+
   it("uses backend bucket boundaries for monthly labels and tooltip ranges", () => {
     useCustomerBillingPeriods.mockReturnValue({
       data: {
