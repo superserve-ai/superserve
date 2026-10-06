@@ -369,7 +369,7 @@ resumes on first use.
 | `desktop.press(key)`                  | `desktop.press(key)`                      | Press a key or chord: `"enter"`, `"ctrl+c"`, `["ctrl", "shift", "p"]`.            |
 | `desktop.actions(actions)`            | `desktop.actions(actions)`                | Run an ordered batch in one request; stops at the first failing action.           |
 | `desktop.resize(width, height)`       | `desktop.resize(width, height)`           | Resize the display live. Width a multiple of 8, 320–8192; height 200–8192.        |
-| `desktop.getStreamUrl({ viewOnly? })` | `desktop.get_stream_url(view_only=False)` | Publish the noVNC port and return a browser URL; signed for 60 s under `private`. |
+| `desktop.getStreamUrl({ viewOnly? })` | `desktop.get_stream_url(view_only=False)` | Publish the viewer port and return a browser URL; signed for 60 s under `private`. |
 
 See the [Desktop guide](/sandbox/desktop) for the action vocabulary, key
 names, and viewer access.

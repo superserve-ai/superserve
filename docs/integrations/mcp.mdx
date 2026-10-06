@@ -285,8 +285,8 @@ sandbox_computer  { sandbox_id: "a1b2c3…", action: "key", text: "Return" }
 
 Input actions return a fresh screenshot of the result, so the model's
 act-then-look turn is one tool call; pass `screenshot_after: false` when
-sending several actions back to back. `wait` sleeps locally for `duration_ms`
-(capped at 10 seconds) without a round trip. `stream_url` returns a live
+sending several actions back to back. `wait` pauses for `duration_ms` (capped
+at 10 seconds) without a request to the sandbox. `stream_url` returns a live
 browser viewer for the desktop under the sandbox's preview policy.
 
 If an input action fails, the input may already have been delivered. The tool
