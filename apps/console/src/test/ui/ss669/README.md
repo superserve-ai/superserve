@@ -66,9 +66,9 @@ Run the server-ownership regression checks separately with the same Python:
 "$UI_TEST_PYTHON" -m unittest discover -s apps/console/src/test/ui/ss669 -p test_verify.py
 ```
 
-Each scenario gets a fresh browser context. Checks cover eight page states,
+Each scenario gets a fresh browser context. Checks cover ten page states,
 Settings-to-usage navigation, matching summary responses, rates, storage badges
-and charges, chart legends, pre/post-activation costs, and hover text. External
+and charges, unavailable storage usage, chart legends, pre/post-activation costs, and hover text. External
 requests, browser errors, failed API responses, and framework error overlays fail
 the run. The fixture API rejects payment writes. Screenshots include Settings,
 the usage resource cards, and the chart for each scenario.
