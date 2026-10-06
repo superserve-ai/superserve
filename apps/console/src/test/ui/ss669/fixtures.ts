@@ -4,7 +4,13 @@ import type {
   BillingUsageSeriesResponse,
 } from "../../../lib/api/billing"
 
-export const scenarios = ["tracked", "zero", "paid", "credited"] as const
+export const scenarios = [
+  "tracked",
+  "zero",
+  "paid",
+  "credited",
+  "unavailable",
+] as const
 export type Scenario = (typeof scenarios)[number]
 export const fixtureCookie = "ss669-ui-case"
 
@@ -15,7 +21,7 @@ export function isScenario(
 }
 
 export function billingFixture(scenario: Scenario) {
-  const billable = scenario !== "tracked"
+  const billable = scenario !== "tracked" && scenario !== "unavailable"
   const storageCharge =
     scenario === "paid" || scenario === "credited" ? 1.25 : 0
   const charges = 3.6 + storageCharge
@@ -62,7 +68,12 @@ export function billingFixture(scenario: Scenario) {
         sort_order: 30,
         unit: "second",
         display_unit: "GiB-hours",
-        usage: scenario === "zero" ? 0 : 46080000000,
+        usage:
+          scenario === "unavailable"
+            ? null
+            : scenario === "zero"
+              ? 0
+              : 46080000000,
         tracked: true,
         billable,
         charge_usd: storageCharge,
@@ -121,7 +132,7 @@ export function usageFixture(
     buckets: [0, 1].map((index) => {
       // Activated teams retain tracked pre-cutoff usage with zero payable cost.
       const cost = index === 0 ? 0 : summary.cost_breakdown_usd.storage
-      const billable = scenario !== "tracked"
+      const billable = scenario !== "tracked" && scenario !== "unavailable"
       return {
         start: new Date(
           new Date(start).getTime() + index * duration,
@@ -137,8 +148,13 @@ export function usageFixture(
           billable: true,
         },
         storage: {
-          usage: scenario === "zero" ? 0 : 23040000000,
-          cost_usd: billable ? cost : 0.625,
+          usage:
+            scenario === "unavailable"
+              ? null
+              : scenario === "zero"
+                ? 0
+                : 23040000000,
+          cost_usd: scenario === "unavailable" ? 0 : billable ? cost : 0.625,
           tracked: true,
           billable,
         },

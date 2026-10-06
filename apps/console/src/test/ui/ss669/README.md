@@ -22,12 +22,13 @@ bun --filter @superserve/console run dev:storage-ui
 
 Open `http://127.0.0.1:4174/settings/?scenario=tracked`. Available scenarios:
 
-| Scenario   | Storage state                                                                         |
-| ---------- | ------------------------------------------------------------------------------------- |
-| `tracked`  | Nonzero advertised rate and usage; storage is not billable                            |
-| `zero`     | Billable storage with zero usage and zero storage charge                              |
-| `paid`     | Billable storage; tracked usage before activation costs zero, later usage costs $1.25 |
-| `credited` | Same positive storage charge; credits cover the full invoice                          |
+| Scenario      | Storage state                                                                                 |
+| ------------- | --------------------------------------------------------------------------------------------- |
+| `tracked`     | Nonzero advertised rate and usage; storage is not billable                                    |
+| `zero`        | Billable storage with zero usage and zero storage charge                                      |
+| `paid`        | Billable storage; tracked usage before activation costs zero, later usage costs $1.25         |
+| `credited`    | Same positive storage charge; credits cover the full invoice                                  |
+| `unavailable` | Missing legacy storage measurements; known compute charges and billing summary remain visible |
 
 The production **Billing & Usage** link keeps the fixture selection. Direct entry
 also works at `/plan-usage/?scenario=paid`. Each scenario URL should be opened

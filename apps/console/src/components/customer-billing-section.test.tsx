@@ -2,7 +2,14 @@ vi.mock("@/hooks/use-user", () => ({
   useUser: () => ({ user: { id: "u1" }, loading: false }),
 }))
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { BillingSummaryResponse } from "@/lib/api/billing"
@@ -163,6 +170,38 @@ describe("CustomerBillingSection", () => {
       error: null,
     })
   })
+
+  it.each([false, true])(
+    "shows unknown storage usage without hiding known charges (billable %s)",
+    (billable) => {
+      renderSection({
+        ...baseSummary,
+        resources: baseSummary.resources.map((resource) =>
+          resource.resource_key === "storage_gib"
+            ? {
+                ...resource,
+                usage: null,
+                billable,
+                charge_usd: billable ? 1.25 : 0,
+              }
+            : resource,
+        ),
+      })
+
+      const card = screen
+        .getByText("Storage")
+        .closest(".border-dashed") as HTMLElement
+      expect(within(card).getByText("Usage unavailable")).toBeInTheDocument()
+      expect(within(card).queryByText(/0.*GiB-hours/)).not.toBeInTheDocument()
+      expect(
+        within(card).getByText(
+          billable ? "Charge: $1.25" : "Tracked but not billed",
+        ),
+      ).toBeInTheDocument()
+      expect(screen.getByText("0.03 vCPU-hours")).toBeInTheDocument()
+      expect(screen.getByText("Open Customer Portal")).toBeEnabled()
+    },
+  )
 
   it("uses the latest billing period even when the API returns unsorted rows", () => {
     renderSection()

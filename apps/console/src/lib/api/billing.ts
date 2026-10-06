@@ -18,7 +18,7 @@ export interface BillingSummaryResource {
   sort_order: number
   unit: string
   display_unit: string
-  usage: number
+  usage: number | null
   tracked: boolean
   billable: boolean
   charge_usd: number
@@ -114,7 +114,7 @@ export function toBillingUsageApiGranularity(
   return BILLING_USAGE_API_GRANULARITY[granularity]
 }
 export interface BillingUsageSeriesResource {
-  usage: number
+  usage: number | null
   cost_usd: number
   tracked: boolean
   billable: boolean
