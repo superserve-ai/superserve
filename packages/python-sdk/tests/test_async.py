@@ -63,6 +63,27 @@ class TestAsyncStaticMethodsAreAsync:
 
 
 class TestAsyncSandboxSmoke:
+    async def test_list_multiple_statuses_use_one_request(self) -> None:
+        with respx.mock() as router:
+            route = router.get(url__regex=rf"{API}/sandboxes.*").mock(
+                return_value=httpx.Response(200, json=[])
+            )
+            await AsyncSandbox.list(
+                status=["active", "starting", "resuming"], limit=100
+            )
+            assert route.call_count == 1
+            assert (
+                route.calls.last.request.url.params["status"]
+                == "active,starting,resuming"
+            )
+            assert route.calls.last.request.url.params["limit"] == "100"
+
+    async def test_list_empty_status_list_is_rejected(self) -> None:
+        with respx.mock() as router:
+            with pytest.raises(ValueError, match="status must not be empty"):
+                await AsyncSandbox.list(status=[])
+            assert not router.calls
+
     async def test_list_passes_status_and_pagination(self) -> None:
         with respx.mock() as router:
             route = router.get(url__regex=rf"{API}/sandboxes.*").mock(

@@ -247,7 +247,7 @@ class Sandbox:
         cls,
         *,
         metadata: dict[str, str] | None = None,
-        status: str | None = None,
+        status: str | builtins.list[str] | None = None,
         limit: int | None = None,
         offset: int | None = None,
         api_key: str | None = None,
@@ -255,7 +255,8 @@ class Sandbox:
     ) -> builtins.list[SandboxInfo]:
         """List sandboxes belonging to the authenticated team.
 
-        Optional filters: ``metadata`` (AND semantics), ``status``, and
+        Optional filters: ``metadata`` (AND semantics), ``status`` (one status
+        or a nonempty list matching any selected status), and
         ``limit``/``offset`` paging. Without ``limit`` the full list is
         returned.
         """
