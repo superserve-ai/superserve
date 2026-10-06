@@ -7,21 +7,15 @@ import { useEffect, useRef, useState } from "react"
 
 import { templateKeys } from "@/lib/api/query-keys"
 import type { BuildLogEvent, TemplateResponse } from "@/lib/api/types"
+import { formatLogTime } from "@/lib/templates/format-log-time"
 
 interface LogLine {
-  ts: string
+  ts: string | undefined
   stream: BuildLogEvent["stream"]
   text: string
 }
 
 const MAX_LINES = 10_000
-
-function timeSlice(ts: string): string {
-  // Accepts ISO timestamps; shows HH:mm:ss in local time.
-  const d = new Date(ts)
-  if (Number.isNaN(d.getTime())) return ts.slice(11, 19)
-  return d.toLocaleTimeString([], { hour12: false })
-}
 
 export function BuildLogViewer({
   templateId,
@@ -175,7 +169,9 @@ export function BuildLogViewer({
         )}
         {lines.map((l, i) => (
           <div key={i} className="flex gap-3 break-words whitespace-pre-wrap">
-            <span className="shrink-0 text-muted/50">{timeSlice(l.ts)}</span>
+            <span className="shrink-0 text-muted/50">
+              {formatLogTime(l.ts)}
+            </span>
             <span
               className={cn(
                 l.stream === "stderr" && "text-destructive",
