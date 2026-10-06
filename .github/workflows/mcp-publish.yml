@@ -4,10 +4,18 @@ name: Publish MCP Server
 # Publishing + provenance), then registers server.json in the MCP Registry.
 # Prereqs: npm Trusted Publisher configured for @superserve/mcp; @superserve/sdk
 # >= 0.8.0 published; mcp.superserve.ai live; public repo (OIDC + provenance).
+# A failed run can be repeated with workflow_dispatch for the same version
+# without re-tagging; the npm step skips a version that is already published.
 
 on:
   push:
     tags: ["mcp-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish or finish publishing (e.g. 0.2.0)"
+        required: true
+        type: string
 
 jobs:
   publish:
@@ -34,11 +42,13 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
-      - name: Set version from tag
+      - name: Set version from tag or input
         working-directory: packages/mcp
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF#refs/tags/mcp-v}"
+          VERSION="${{ inputs.version }}"
+          [ -n "$VERSION" ] || VERSION="${GITHUB_REF#refs/tags/mcp-v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
           jq --arg v "$VERSION" '.version = $v | (.packages[] | select(.registryType=="npm") | .version) = $v' server.json > server.json.tmp && mv server.json.tmp server.json
 
@@ -67,7 +77,27 @@ jobs:
 
       - name: Publish to npm (Trusted Publishing + provenance)
         working-directory: packages/mcp
-        run: npm publish --access public --provenance
+        run: |
+          set -euo pipefail
+          if npm view "@superserve/mcp@$VERSION" version >/dev/null 2>&1; then
+            echo "@superserve/mcp@$VERSION is already on npm; skipping publish"
+          else
+            npm publish --access public --provenance
+          fi
+
+      # npm processes a publish asynchronously; the registry refuses a version
+      # it cannot yet fetch from npm.
+      - name: Wait for npm to serve the version
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 40); do
+            if npm view "@superserve/mcp@$VERSION" version >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::@superserve/mcp@$VERSION not visible on npm after 10 minutes" >&2
+          exit 1
 
       - name: Install mcp-publisher
         run: |
