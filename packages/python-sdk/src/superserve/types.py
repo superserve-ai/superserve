@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional, Sequence, Union
 from urllib.parse import urlencode
 
 from pydantic import BaseModel, Field
@@ -135,7 +135,7 @@ def build_update_body(
 
 def list_query(
     metadata: Optional[dict[str, str]],
-    status: Optional[Union[str, list[str]]],
+    status: Optional[Union[str, Sequence[str]]],
     limit: Optional[int],
     offset: Optional[int],
 ) -> str:

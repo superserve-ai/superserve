@@ -131,6 +131,7 @@ class TestSandboxStatus:
         assert SandboxStatus.PAUSING.value == "pausing"
         assert SandboxStatus.PAUSED.value == "paused"
         assert SandboxStatus.RESUMING.value == "resuming"
+        assert SandboxStatus.MIGRATING.value == "migrating"
         assert SandboxStatus.FAILED.value == "failed"
         assert SandboxStatus.DELETED.value == "deleted"
 
@@ -141,6 +142,7 @@ class TestSandboxStatus:
             "pausing",
             "paused",
             "resuming",
+            "migrating",
             "failed",
             "deleted",
         }

@@ -358,9 +358,10 @@ class TestList:
             route = router.get(url__regex=rf"{API}/sandboxes.*").mock(
                 return_value=httpx.Response(200, json=[])
             )
-            Sandbox.list(
-                status=[SandboxStatus.ACTIVE, "starting", "resuming"], limit=100
-            )
+            statuses = [
+                SandboxStatus.ACTIVE, SandboxStatus.STARTING, SandboxStatus.RESUMING
+            ]
+            Sandbox.list(status=statuses, limit=100)
             assert route.call_count == 1
             assert (
                 route.calls.last.request.url.params["status"]

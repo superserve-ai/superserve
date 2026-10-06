@@ -69,7 +69,7 @@ class TestAsyncSandboxSmoke:
                 return_value=httpx.Response(200, json=[])
             )
             await AsyncSandbox.list(
-                status=["active", "starting", "resuming"], limit=100
+                status=(SandboxStatus.ACTIVE, "starting", "resuming"), limit=100
             )
             assert route.call_count == 1
             assert (

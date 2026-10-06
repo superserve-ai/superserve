@@ -5,7 +5,7 @@ from __future__ import annotations
 import builtins
 import threading
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Sequence
 from urllib.parse import quote, urlencode
 
 import httpx
@@ -247,7 +247,7 @@ class Sandbox:
         cls,
         *,
         metadata: dict[str, str] | None = None,
-        status: str | builtins.list[str] | None = None,
+        status: str | Sequence[str] | None = None,
         limit: int | None = None,
         offset: int | None = None,
         api_key: str | None = None,
