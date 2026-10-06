@@ -4,8 +4,9 @@ name: Publish MCP Server
 # Publishing + provenance), then registers server.json in the MCP Registry.
 # Prereqs: npm Trusted Publisher configured for @superserve/mcp; @superserve/sdk
 # >= 0.8.0 published; mcp.superserve.ai live; public repo (OIDC + provenance).
-# A failed run can be repeated with workflow_dispatch for the same version
-# without re-tagging; the npm step skips a version that is already published.
+# A failed run can be repeated with workflow_dispatch for the same version: it
+# checks out that version's tag, and the npm step skips an already-published
+# version.
 
 on:
   push:
@@ -27,6 +28,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # A manual run builds the tagged release, never the dispatching branch.
+          ref: ${{ inputs.version && format('refs/tags/mcp-v{0}', inputs.version) || github.ref }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
