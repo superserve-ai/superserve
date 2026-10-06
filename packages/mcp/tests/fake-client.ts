@@ -63,6 +63,8 @@ export interface FakeClient {
   desktopSteps: Array<{ actions: DesktopAction[]; settleMs: number }>
   /** When set, the next desktopStep returns it after recording the batch, then clears. */
   nextStepResult: StepResult | undefined
+  /** When set, the next desktopStep rejects with it before recording anything, then clears. */
+  failNextStepWith: Error | undefined
 }
 
 export function createFakeClient(): FakeClient {
@@ -78,10 +80,12 @@ export function createFakeClient(): FakeClient {
     nextScreenshot: Error | undefined
     nextActions: Error | undefined
     nextStepResult: StepResult | undefined
+    nextStep: Error | undefined
   } = {
     nextScreenshot: undefined,
     nextActions: undefined,
     nextStepResult: undefined,
+    nextStep: undefined,
   }
   // Not a decodable PNG — the MCP layer treats image bytes as opaque.
   const screenshot: Screenshot = {
@@ -361,6 +365,11 @@ export function createFakeClient(): FakeClient {
     // the input or the observation half independently.
     async desktopStep(id, actions, settleMs) {
       must(id)
+      if (faults.nextStep) {
+        const err = faults.nextStep
+        faults.nextStep = undefined
+        throw err
+      }
       if (faults.nextActions) {
         const err = faults.nextActions
         faults.nextActions = undefined
@@ -421,6 +430,12 @@ export function createFakeClient(): FakeClient {
     },
     set nextStepResult(result: StepResult | undefined) {
       faults.nextStepResult = result
+    },
+    get failNextStepWith() {
+      return faults.nextStep
+    },
+    set failNextStepWith(err: Error | undefined) {
+      faults.nextStep = err
     },
   }
 }

@@ -7,11 +7,12 @@
  * collapsing the model's act-then-look turn into one tool call.
  */
 
-import type {
-  DesktopAction,
-  MouseButton,
-  Screenshot,
-  StepResult,
+import {
+  type DesktopAction,
+  type MouseButton,
+  NotFoundError,
+  type Screenshot,
+  type StepResult,
 } from "@superserve/sdk"
 import { z } from "zod"
 
@@ -171,10 +172,57 @@ function inputFailed(action: string, detail: string): CallToolResult {
   )
 }
 
+/**
+ * The input was delivered; a failed observation must not read as a failed
+ * action, or the agent repeats input that already landed.
+ */
+function screenshotFailed(
+  action: string,
+  screenshot_error: string,
+): CallToolResult {
+  return toolOk(
+    `${action} done, but the follow-up screenshot failed: ${screenshot_error}. ` +
+      "Use the screenshot action to observe the result; do not repeat the input.",
+    { action, screenshot_error },
+  )
+}
+
+/**
+ * Act-then-look as two calls, for a desktop whose boxd predates the fused
+ * step (a paused sandbox keeps the boxd it was created with).
+ */
+async function actThenLook(
+  client: SandboxClient,
+  sandbox_id: string,
+  action: string,
+  actions: DesktopAction[],
+): Promise<CallToolResult> {
+  try {
+    await client.desktopActions(sandbox_id, actions)
+  } catch (e) {
+    // A missing sandbox or route delivered nothing.
+    if (e instanceof NotFoundError) return toolError(formatSdkError(e))
+    return inputFailed(action, describeSdkError(e))
+  }
+  await new Promise((resolve) => setTimeout(resolve, SETTLE_MS))
+  try {
+    return screenshotResult(
+      await client.desktopScreenshot(sandbox_id),
+      `${action} done`,
+    )
+  } catch (e) {
+    return screenshotFailed(action, formatSdkError(e))
+  }
+}
+
 export function registerComputerTool(
   server: McpServer,
   client: SandboxClient,
 ): void {
+  // Sandboxes that answered the fused step with "no such procedure"; they
+  // get the two-call sequence without paying the failed attempt again.
+  const withoutStep = new Set<string>()
+
   defineTool<ComputerArgs>(
     server,
     "sandbox_computer",
@@ -280,13 +328,22 @@ export function registerComputerTool(
               }
               return toolOk(`${action} done`, { action })
             }
+            if (withoutStep.has(sandbox_id)) {
+              return actThenLook(client, sandbox_id, action, actions)
+            }
             // Act-then-look is one request: the sandbox runs the batch,
             // settles, and captures before releasing its input lock.
             let step: StepResult
             try {
               step = await client.desktopStep(sandbox_id, actions, SETTLE_MS)
             } catch (e) {
-              return inputFailed(action, describeSdkError(e))
+              // An older boxd has no Step route and answers 404 before any
+              // input is read, so the two-call sequence is safe to run.
+              if (!(e instanceof NotFoundError)) {
+                return inputFailed(action, describeSdkError(e))
+              }
+              withoutStep.add(sandbox_id)
+              return actThenLook(client, sandbox_id, action, actions)
             }
             if (step.actionError) {
               // The frame shows what the partial batch did, so the agent can
@@ -304,13 +361,9 @@ export function registerComputerTool(
               }
             }
             if (!step.screenshot) {
-              // The input was delivered; a failed observation must not read
-              // as a failed action, or the agent repeats input that landed.
-              const screenshot_error = step.screenshotError ?? "no frame"
-              return toolOk(
-                `${action} done, but the follow-up screenshot failed: ${screenshot_error}. ` +
-                  "Use the screenshot action to observe the result; do not repeat the input.",
-                { action, screenshot_error },
+              return screenshotFailed(
+                action,
+                step.screenshotError ?? "no frame",
               )
             }
             return screenshotResult(step.screenshot, `${action} done`)
