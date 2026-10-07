@@ -119,21 +119,21 @@ sandbox = Sandbox.connect("7a3f2b8c-1234-...")
 ### `Sandbox.list`
 
 List sandboxes on the authenticated team. `metadata` returns only sandboxes
-matching every key-value pair you pass; `status` accepts one lifecycle status or
-a nonempty list matching any selected state; `limit`/`offset` page through the list.
+matching every key-value pair you pass; `status` filters to one lifecycle
+state; `limit`/`offset` page through the list.
 
 <CodeGroup>
 ```typescript TypeScript
 const all = await Sandbox.list()
 const prod = await Sandbox.list({ metadata: { env: "prod" } })
-const running = await Sandbox.list({ status: ["active", "starting", "resuming"] })
+const running = await Sandbox.list({ status: "active" })
 const page = await Sandbox.list({ limit: 100, offset: 100 })
 ```
 
 ```python Python
 all_boxes = Sandbox.list()
 prod = Sandbox.list(metadata={"env": "prod"})
-running = Sandbox.list(status=["active", "starting", "resuming"])
+running = Sandbox.list(status="active")
 page = Sandbox.list(limit=100, offset=100)
 ```
 
@@ -459,7 +459,6 @@ type SandboxStatus =
   | "pausing"
   | "paused"
   | "resuming"
-  | "migrating"
   | "failed"
   | "deleted"
 ```
@@ -473,7 +472,6 @@ class SandboxStatus(str, Enum):
     PAUSING = "pausing"
     PAUSED = "paused"
     RESUMING = "resuming"
-    MIGRATING = "migrating"
     FAILED = "failed"
     DELETED = "deleted"
 ```
