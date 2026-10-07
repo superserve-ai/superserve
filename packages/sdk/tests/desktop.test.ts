@@ -332,3 +332,92 @@ describe("routing hint", () => {
     ])
   })
 })
+
+describe("Desktop.step", () => {
+  const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
+  const png = btoa(String.fromCharCode(...pngBytes))
+
+  it("sends the batch and settle in one request and decodes the frame", async () => {
+    const calls = await recordCalls(
+      [
+        jsonResponse({
+          executed: 2,
+          screenshot: { image: png, width: 4, height: 2 },
+        }),
+      ],
+      async (d) => {
+        const result = await d.step(
+          [
+            { type: "click", x: 1, y: 2 },
+            { type: "press", key: "enter" },
+          ],
+          { settleMs: 300 },
+        )
+        expect(result).toEqual({
+          executed: 2,
+          screenshot: { data: pngBytes, width: 4, height: 2 },
+        })
+      },
+    )
+    expect(calls).toHaveLength(1)
+    expect(calls[0].url).toBe(`${rpcBase}/Step`)
+    expect(calls[0].body).toEqual({
+      actions: [
+        {
+          pointer: {
+            x: 1,
+            y: 2,
+            button: "POINTER_BUTTON_LEFT",
+            action: "POINTER_ACTION_CLICK",
+          },
+        },
+        { key: { key: "Return", modifiers: [] } },
+      ],
+      settleMs: 300,
+    })
+  })
+
+  it("reports a stopped batch together with its frame instead of throwing", async () => {
+    await recordCalls(
+      [
+        jsonResponse({
+          executed: 1,
+          actionError: "action 1 failed after 1 executed: boom",
+          screenshot: { image: png, width: 4, height: 2 },
+        }),
+      ],
+      async (d) => {
+        const result = await d.step([
+          { type: "click", x: 1, y: 2 },
+          { type: "press", key: "enter" },
+        ])
+        expect(result.executed).toBe(1)
+        expect(result.actionError).toContain("action 1")
+        expect(result.screenshot?.width).toBe(4)
+        expect(result.screenshotError).toBeUndefined()
+      },
+    )
+  })
+
+  it("reports a failed capture with the executed count", async () => {
+    await recordCalls(
+      [jsonResponse({ executed: 1, captureError: "import: nope" })],
+      async (d) => {
+        const result = await d.step([{ type: "click", x: 1, y: 2 }])
+        expect(result).toEqual({
+          executed: 1,
+          screenshotError: "import: nope",
+        })
+      },
+    )
+  })
+
+  it("rejects an empty batch without a request", async () => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal("fetch", fetchSpy)
+    await expect(new Desktop(makeDeps()).step([])).rejects.toThrow(
+      "actions is empty",
+    )
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+})

@@ -12,7 +12,13 @@ from .async_secrets import AsyncSecret
 from .async_snapshots import AsyncSnapshot
 from .async_template import AsyncTemplate
 from .command_session import AsyncCommandSession
-from .desktop import DESKTOP_STREAM_PORT, AsyncDesktop, Desktop, Screenshot
+from .desktop import (
+    DESKTOP_STREAM_PORT,
+    AsyncDesktop,
+    Desktop,
+    Screenshot,
+    StepResult,
+)
 from .errors import (
     AuthenticationError,
     BuildError,
@@ -67,7 +73,7 @@ from .types import (
     WorkdirStep,
 )
 
-__version__ = "0.10.0"
+__version__ = "0.10.1"
 
 __all__ = [
     "AsyncCommandSession",
@@ -75,6 +81,7 @@ __all__ = [
     "Desktop",
     "DESKTOP_STREAM_PORT",
     "Screenshot",
+    "StepResult",
     "AsyncProvider",
     "AsyncSandbox",
     "AsyncSecret",

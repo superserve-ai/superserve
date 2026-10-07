@@ -4,10 +4,19 @@ name: Publish MCP Server
 # Publishing + provenance), then registers server.json in the MCP Registry.
 # Prereqs: npm Trusted Publisher configured for @superserve/mcp; @superserve/sdk
 # >= 0.8.0 published; mcp.superserve.ai live; public repo (OIDC + provenance).
+# A failed run can be repeated with workflow_dispatch for the same version: it
+# checks out that version's tag, and the npm step skips an already-published
+# version.
 
 on:
   push:
     tags: ["mcp-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish or finish publishing (e.g. 0.2.0)"
+        required: true
+        type: string
 
 jobs:
   publish:
@@ -19,6 +28,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # A manual run builds the tagged release, never the dispatching branch.
+          ref: ${{ inputs.version && format('refs/tags/mcp-v{0}', inputs.version) || github.ref }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -34,11 +46,13 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
-      - name: Set version from tag
+      - name: Set version from tag or input
         working-directory: packages/mcp
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF#refs/tags/mcp-v}"
+          VERSION="${{ inputs.version }}"
+          [ -n "$VERSION" ] || VERSION="${GITHUB_REF#refs/tags/mcp-v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
           jq --arg v "$VERSION" '.version = $v | (.packages[] | select(.registryType=="npm") | .version) = $v' server.json > server.json.tmp && mv server.json.tmp server.json
 
@@ -49,7 +63,7 @@ jobs:
         working-directory: packages/mcp
         run: |
           set -euo pipefail
-          MIN_SDK_VERSION="0.10.0"
+          MIN_SDK_VERSION="0.10.1"
           SDK_VERSION="$(npm view @superserve/sdk version)"
           test -n "$SDK_VERSION"
           if [ "$(printf '%s\n%s\n' "$MIN_SDK_VERSION" "$SDK_VERSION" | sort -V | head -n1)" != "$MIN_SDK_VERSION" ]; then
@@ -67,7 +81,27 @@ jobs:
 
       - name: Publish to npm (Trusted Publishing + provenance)
         working-directory: packages/mcp
-        run: npm publish --access public --provenance
+        run: |
+          set -euo pipefail
+          if npm view "@superserve/mcp@$VERSION" version >/dev/null 2>&1; then
+            echo "@superserve/mcp@$VERSION is already on npm; skipping publish"
+          else
+            npm publish --access public --provenance
+          fi
+
+      # npm processes a publish asynchronously; the registry refuses a version
+      # it cannot yet fetch from npm.
+      - name: Wait for npm to serve the version
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 40); do
+            if npm view "@superserve/mcp@$VERSION" version >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::@superserve/mcp@$VERSION not visible on npm after 10 minutes" >&2
+          exit 1
 
       - name: Install mcp-publisher
         run: |

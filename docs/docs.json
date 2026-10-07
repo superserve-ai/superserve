@@ -82,7 +82,8 @@
               "sandbox/metadata",
               "sandbox/networking",
               "sandbox/preview-urls",
-              "sandbox/network-log"
+              "sandbox/network-log",
+              "sandbox/desktop"
             ]
           },
           {

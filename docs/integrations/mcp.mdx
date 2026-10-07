@@ -201,6 +201,7 @@ Same tools and behavior as the local server — the only difference is transport
 | `sandbox_kill`               | Permanently delete a sandbox.                                                                                     |
 | `sandbox_preview_url`        | Publish a port and return a clean public URL or an expiring private signed URL.                                   |
 | `sandbox_network_log`        | Audit a sandbox's outbound connections (host, verdict, bytes) without resuming it.                                |
+| `sandbox_computer`           | Drive a GUI desktop sandbox: screenshot, mouse, keyboard, scroll, resize, viewer URL. One action per call.        |
 | `sandbox_template_list`      | List the templates (base images) your team can launch from.                                                       |
 | `sandbox_template_create`    | Build a custom template with a specific vCPU/memory/disk shape or preinstalled software (async — poll for ready). |
 | `secret_list`                | List bindable team secrets (metadata only — never values).                                                        |
@@ -262,6 +263,35 @@ idempotently publishes that one port and uses the returned port mode to return
 either a clean public URL or an expiring private signed URL. Private links
 default to one hour; set `expires_in_seconds` to a value from 1 through 604800
 seconds. See [Preview URLs](/sandbox/preview-urls).
+
+## Computer use
+
+`sandbox_computer` drives a GUI desktop in a sandbox created from a desktop
+template such as `superserve/desktop`. It takes one `action` per call in the
+vocabulary computer-use models emit: `screenshot`, `left_click`, `right_click`,
+`middle_click`, `double_click`, `triple_click`, `left_click_drag`,
+`left_mouse_down`, `left_mouse_up`, `mouse_move`, `key`, `type`, `scroll`,
+`wait`, `resize`, and `stream_url`. Pointer actions take `coordinate: [x, y]`
+in screen pixels (origin top-left); `key` and `type` take `text`; `scroll`
+takes `scroll_direction` and an optional `scroll_amount`.
+
+```text
+sandbox_create    { name: "browser", from_template: "superserve/desktop" }
+sandbox_computer  { sandbox_id: "a1b2c3…", action: "left_click", coordinate: [640, 32] }
+                    → text "left_click done (1280x800)" + image/png
+sandbox_computer  { sandbox_id: "a1b2c3…", action: "type", text: "https://example.com" }
+sandbox_computer  { sandbox_id: "a1b2c3…", action: "key", text: "Return" }
+```
+
+Input actions return a fresh screenshot of the result, so the model's
+act-then-look turn is one tool call; pass `screenshot_after: false` when
+sending several actions back to back. `wait` pauses for `duration_ms` (capped
+at 10 seconds) without a request to the sandbox. `stream_url` returns a live
+browser viewer for the desktop under the sandbox's preview policy.
+
+If an input action fails, the input may already have been delivered. The tool
+says so and asks the agent to take a screenshot before repeating it. See the
+[Desktop guide](/sandbox/desktop) for the underlying SDK surface.
 
 ## Not yet in the MCP surface
 
