@@ -303,6 +303,31 @@ describe("Sandbox statics", () => {
     expect(url).toContain("offset=200")
   })
 
+  it("Sandbox.list sends multiple statuses in one request", async () => {
+    const mock = vi.fn(async () => jsonResponse([]))
+    vi.stubGlobal("fetch", mock)
+    await Sandbox.list({
+      ...commonOpts,
+      status: ["active", "starting", "resuming"],
+      limit: 100,
+    })
+    expect(mock).toHaveBeenCalledTimes(1)
+    const [url] = mock.mock.calls[0] as [string, RequestInit]
+    expect(new URL(url).searchParams.get("status")).toBe(
+      "active,starting,resuming",
+    )
+    expect(new URL(url).searchParams.get("limit")).toBe("100")
+  })
+
+  it("Sandbox.list rejects an empty status list without making a request", async () => {
+    const mock = vi.fn()
+    vi.stubGlobal("fetch", mock)
+    await expect(Sandbox.list({ ...commonOpts, status: [] })).rejects.toThrow(
+      "status must not be empty",
+    )
+    expect(mock).not.toHaveBeenCalled()
+  })
+
   it("Sandbox.list sends no query string without filters", async () => {
     const mock = vi.fn(async () => jsonResponse([]))
     vi.stubGlobal("fetch", mock)

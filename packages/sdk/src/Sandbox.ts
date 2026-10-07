@@ -331,13 +331,13 @@ export class Sandbox {
    * List sandboxes belonging to the authenticated team.
    *
    * @param options.metadata — Filter by metadata key-value pairs.
-   * @param options.status — Only return sandboxes in this status.
+   * @param options.status — Match one status or any status in a nonempty list.
    * @param options.limit — Maximum rows to return.
    * @param options.offset — Rows to skip; combine with `limit` to page.
    *
    * @example
    * ```typescript
-   * const running = await Sandbox.list({ status: "active" })
+   * const running = await Sandbox.list({ status: ["active", "starting", "resuming"] })
    * const page = await Sandbox.list({ limit: 100, offset: 200 })
    * const prodBoxes = await Sandbox.list({ metadata: { env: "prod" } })
    * ```
@@ -350,7 +350,13 @@ export class Sandbox {
     for (const [key, value] of Object.entries(options.metadata ?? {})) {
       params.set(`metadata.${key}`, value)
     }
-    if (options.status !== undefined) params.set("status", options.status)
+    if (options.status !== undefined) {
+      const statuses =
+        typeof options.status === "string" ? [options.status] : options.status
+      if (statuses.length === 0)
+        throw new SandboxError("status must not be empty")
+      params.set("status", statuses.join(","))
+    }
     if (options.limit !== undefined) params.set("limit", String(options.limit))
     if (options.offset !== undefined)
       params.set("offset", String(options.offset))

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional, Sequence, Union
 from urllib.parse import urlencode
 
 from pydantic import BaseModel, Field
@@ -18,6 +18,7 @@ class SandboxStatus(str, Enum):
     PAUSING = "pausing"
     PAUSED = "paused"
     RESUMING = "resuming"
+    MIGRATING = "migrating"
     FAILED = "failed"
     DELETED = "deleted"
 
@@ -134,15 +135,20 @@ def build_update_body(
 
 def list_query(
     metadata: Optional[dict[str, str]],
-    status: Optional[str],
+    status: Optional[Union[str, Sequence[str]]],
     limit: Optional[int],
     offset: Optional[int],
 ) -> str:
     """Build the query string for the list-sandboxes endpoint ("" when empty)."""
     params: dict[str, str] = {f"metadata.{k}": v for k, v in (metadata or {}).items()}
     if status is not None:
-        # A (str, Enum) member urlencodes as "SandboxStatus.ACTIVE"; send its value.
-        params["status"] = status.value if isinstance(status, Enum) else status
+        statuses = [status] if isinstance(status, str) else status
+        if not statuses:
+            raise ValueError("status must not be empty")
+        # A (str, Enum) member stringifies as "SandboxStatus.ACTIVE".
+        params["status"] = ",".join(
+            value.value if isinstance(value, Enum) else value for value in statuses
+        )
     if limit is not None:
         params["limit"] = str(limit)
     if offset is not None:

@@ -353,6 +353,28 @@ class TestList:
             assert "limit=100" in url
             assert "offset=200" in url
 
+    def test_multiple_statuses_use_one_request(self) -> None:
+        with respx.mock() as router:
+            route = router.get(url__regex=rf"{API}/sandboxes.*").mock(
+                return_value=httpx.Response(200, json=[])
+            )
+            statuses = [
+                SandboxStatus.ACTIVE, SandboxStatus.STARTING, SandboxStatus.RESUMING
+            ]
+            Sandbox.list(status=statuses, limit=100)
+            assert route.call_count == 1
+            assert (
+                route.calls.last.request.url.params["status"]
+                == "active,starting,resuming"
+            )
+            assert route.calls.last.request.url.params["limit"] == "100"
+
+    def test_empty_status_list_is_rejected(self) -> None:
+        with respx.mock() as router:
+            with pytest.raises(ValueError, match="status must not be empty"):
+                Sandbox.list(status=[])
+            assert not router.calls
+
     def test_no_query_string_without_filters(self) -> None:
         with respx.mock() as router:
             route = router.get(f"{API}/sandboxes").mock(

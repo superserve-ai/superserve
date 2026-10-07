@@ -17,6 +17,7 @@ export type SandboxStatus =
   | "pausing"
   | "paused"
   | "resuming"
+  | "migrating"
   | "failed"
   | "deleted"
 
@@ -101,8 +102,8 @@ export interface SandboxCreateOptions extends ConnectionOptions {
 
 export interface SandboxListOptions extends ConnectionOptions {
   metadata?: Record<string, string>
-  /** Only return sandboxes in this status. */
-  status?: SandboxStatus
+  /** Match one status or any status in a nonempty list. */
+  status?: SandboxStatus | readonly SandboxStatus[]
   /** Maximum rows to return. Omit to return the full list. */
   limit?: number
   /** Rows to skip; combine with `limit` to page. */
