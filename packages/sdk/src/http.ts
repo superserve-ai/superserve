@@ -16,6 +16,10 @@ import {
   TimeoutError,
   ValidationError,
 } from "./errors.js"
+import {
+  controlPlaneHeaders,
+  type ResolvedSandboxConfig,
+} from "./sandboxConfig.js"
 import type { ApiExecStreamEvent } from "./types.js"
 
 export const DEFAULT_TIMEOUT_MS = 30_000
@@ -44,6 +48,7 @@ const RETRYABLE_STATUSES = new Set([429, 502, 503, 504])
 const DEFAULT_MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024 // 2 GiB; matches boxd's server-side zip cap
 
 interface RequestOptions {
+  controlPlane?: ResolvedSandboxConfig
   method: "GET" | "POST" | "PATCH" | "DELETE"
   url: string
   headers?: Record<string, string>
@@ -345,6 +350,49 @@ async function readErrorBody(res: Response): Promise<{
  * retried (not idempotent).
  */
 export async function request<T>(opts: RequestOptions): Promise<T> {
+  const headers = {
+    ...opts.headers,
+    ...(opts.controlPlane
+      ? controlPlaneHeaders(opts.controlPlane, opts.method, opts.url)
+      : {}),
+  }
+  return withCredentialErrors(headers, () =>
+    performRequest<T>({ ...opts, headers }),
+  )
+}
+
+async function withCredentialErrors<T>(
+  headers: Record<string, string>,
+  send: () => Promise<T>,
+): Promise<T> {
+  const credentials = Object.entries(headers)
+    .filter(([key]) =>
+      /^(x-api-key|x-qm-machine-credential|x-access-token)$/i.test(key),
+    )
+    .map(([, value]) => value)
+    .filter(Boolean)
+  try {
+    return await send()
+  } catch (err) {
+    if (!(err instanceof SandboxError) || credentials.length === 0) throw err
+    const redact = (value: string) =>
+      credentials.reduce(
+        (text, credential) => text.split(credential).join("[REDACTED]"),
+        value,
+      )
+    const safe = new SandboxError(
+      redact(String(err.message)),
+      err.statusCode,
+      err.code === undefined ? undefined : redact(String(err.code)),
+    )
+    // Preserve typed catch behavior without retaining a transport's arbitrary cause.
+    Object.setPrototypeOf(safe, Object.getPrototypeOf(err))
+    safe.name = err.name
+    throw safe
+  }
+}
+
+async function performRequest<T>(opts: RequestOptions): Promise<T> {
   const {
     method,
     url,
@@ -368,6 +416,9 @@ export async function request<T>(opts: RequestOptions): Promise<T> {
       url,
       {
         method,
+        ...(opts.controlPlane?.machineCredential !== undefined
+          ? { redirect: "error" as const }
+          : {}),
         headers: mergedHeaders,
         body: body !== undefined ? JSON.stringify(body) : undefined,
       },
@@ -436,7 +487,13 @@ export async function requestVoid(opts: RequestOptions): Promise<void> {
  *
  * Not retried — POST is not idempotent.
  */
-export async function uploadBytes(opts: {
+export async function uploadBytes(
+  opts: Parameters<typeof performUploadBytes>[0],
+): Promise<void> {
+  return withCredentialErrors(opts.headers, () => performUploadBytes(opts))
+}
+
+async function performUploadBytes(opts: {
   url: string
   headers: Record<string, string>
   body: BodyInit
@@ -554,7 +611,13 @@ async function readBodyWithLimit(
  * The response body is read with a byte cap (`maxBytes`, default 2 GiB) to
  * protect against a hostile data plane returning an unbounded response.
  */
-export async function downloadBytes(opts: {
+export async function downloadBytes(
+  opts: Parameters<typeof performDownloadBytes>[0],
+): Promise<Uint8Array> {
+  return withCredentialErrors(opts.headers, () => performDownloadBytes(opts))
+}
+
+async function performDownloadBytes(opts: {
   url: string
   headers: Record<string, string>
   timeoutMs?: number
@@ -617,7 +680,15 @@ export async function downloadBytes(opts: {
  *
  * Not retried — POST is not idempotent.
  */
-export async function streamSSE<TEvent = ApiExecStreamEvent>(opts: {
+export async function streamSSE<TEvent = ApiExecStreamEvent>(
+  opts: Parameters<typeof performStreamSSE<TEvent>>[0],
+): Promise<void> {
+  return withCredentialErrors(opts.headers, () =>
+    performStreamSSE<TEvent>(opts),
+  )
+}
+
+async function performStreamSSE<TEvent>(opts: {
   url: string
   headers: Record<string, string>
   body?: unknown
