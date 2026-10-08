@@ -57,6 +57,7 @@ const REGION_KEY_RE = /^ss_live_([a-z0-9]{1,17})_[A-Za-z0-9_-]{32}$/
 
 export interface ResolvedConfig {
   apiKey: string
+  machineCredential?: never
   baseUrl: string
   sandboxHost: string
 }
@@ -72,8 +73,14 @@ export interface ResolvedConfig {
  */
 export function resolveConfig(opts?: {
   apiKey?: string
+  machineCredential?: string
   baseUrl?: string
 }): ResolvedConfig {
+  if (opts?.machineCredential !== undefined) {
+    throw new ValidationError(
+      "Machine credentials are supported only by Sandbox lifecycle operations",
+    )
+  }
   const apiKey = opts?.apiKey ?? process.env.SUPERSERVE_API_KEY
   if (!apiKey) {
     throw new AuthenticationError(
@@ -220,7 +227,7 @@ export function previewUrl(
  * `https://api-staging.superserve.ai` → `staging-sandbox.superserve.ai`
  * Any other URL                        → `sandbox.superserve.ai` (safe default)
  */
-function deriveSandboxHost(baseUrl: string): string {
+export function deriveSandboxHost(baseUrl: string): string {
   try {
     const host = new URL(baseUrl).hostname
     if (host === "api-staging.superserve.ai") {

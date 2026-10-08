@@ -20,6 +20,8 @@ import type { PreviewAccessPolicy, PreviewToken } from "./types.js"
 
 /** @internal */
 export interface DesktopDeps {
+  /** Reject unsupported authentication modes before any activation or RPC. */
+  assertSupported?: () => void
   sandboxId: string
   sandboxHost: string
   getAccessToken: () => string
@@ -455,6 +457,7 @@ export class Desktop {
    * cookie on first navigation, which noVNC's WebSocket then presents.
    */
   async getStreamUrl(options: StreamUrlOptions = {}): Promise<string> {
+    this._deps.assertSupported?.()
     // Publishing a port and minting its token are control-plane calls that
     // never resume the VM; activate first so the viewer is actually running
     // when the URL is opened. Idempotent on an active sandbox.
@@ -484,6 +487,7 @@ export class Desktop {
     body: unknown,
     opts: { maxBytes?: number } = {},
   ): Promise<T> {
+    this._deps.assertSupported?.()
     const send = (token: string) =>
       request<T>({
         method: "POST",

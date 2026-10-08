@@ -108,6 +108,32 @@ const sandbox = await Sandbox.create({
 })
 ```
 
+### Machine credentials
+
+For a runtime provisioned with a sandbox machine credential, pass it explicitly
+with the control-plane origin supplied by your operator:
+
+```typescript
+const sandbox = await Sandbox.connect(sandboxId, {
+  machineCredential: process.env.SUPERSERVE_MACHINE_CREDENTIAL!,
+  baseUrl: "https://api.superserve.ai",
+})
+```
+
+The SDK does not read a machine credential from the environment automatically.
+Explicit machine mode ignores `SUPERSERVE_API_KEY`; passing both `apiKey` and
+`machineCredential` is an error. `baseUrl` is required in this mode and must be
+an HTTPS origin (loopback HTTP is supported for local tests).
+
+Machine credentials are sent only to sandbox create, list, connect, info,
+update, pause, resume and delete routes. Other control-plane operations reject
+machine mode before making a request. Server policy still determines which
+sandboxes and operations the credential permits. Files and commands use the
+returned sandbox access token, including opaque `mcap.v1` tokens; refreshes
+retain machine authentication. Machine control-plane requests reject redirects
+and never fall back to API-key authentication. Create requests are not retried:
+an uncertain response does not prove the sandbox was not created.
+
 ## Streaming command output
 
 ```typescript

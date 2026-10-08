@@ -59,6 +59,8 @@ export interface SandboxInfo {
 // ---------------------------------------------------------------------------
 
 export interface ConnectionOptions {
+  /** Explicit sandbox machine mode; requires baseUrl and excludes apiKey. */
+  machineCredential?: string
   apiKey?: string
   baseUrl?: string
   signal?: AbortSignal
