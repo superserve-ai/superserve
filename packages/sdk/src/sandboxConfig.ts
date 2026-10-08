@@ -73,6 +73,17 @@ export function resolveSandboxConfig(
       "sandboxHost must be a lowercase DNS hostname without a scheme, port or path",
     )
   }
+  try {
+    // Numeric/IP suffixes pass DNS-label syntax but cannot form a prefixed URL host.
+    const prefixedHost = `boxd-validation.${sandboxHost}`
+    if (new URL(`https://${prefixedHost}`).hostname !== prefixedHost) {
+      throw new Error("Invalid host")
+    }
+  } catch {
+    throw new ValidationError(
+      "sandboxHost must support per-sandbox DNS names, not an IP address",
+    )
+  }
   return {
     machineCredential: credential,
     baseUrl: endpoint.origin,

@@ -86,6 +86,10 @@ describe("explicit machine mode", () => {
       "sandbox.example\n",
       "-sandbox.example",
       "sandbox..example",
+      "127.0.0.1",
+      "123",
+      "0x7f000001",
+      "sandbox.123",
     ]) {
       await expect(
         Sandbox.connect(id, { ...options, sandboxHost }),
