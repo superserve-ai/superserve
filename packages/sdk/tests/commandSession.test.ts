@@ -89,36 +89,51 @@ describe("Commands.spawn", () => {
     behavior = (ws) => ws._open()
   })
 
-  it("passes opaque machine child tokens to WebSocket without the root credential", async () => {
-    const token = "mcap.v1.opaque-payload.signature"
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response(
-            JSON.stringify({
-              id: "us-west-2-sbx-1",
-              status: "active",
-              created_at: "2026-01-01T00:00:00Z",
-              access_token: token,
-            }),
-          ),
-      ),
-    )
-    vi.stubGlobal("WebSocket", FakeWebSocket)
-    const box = await Sandbox.connect("us-west-2-sbx-1", {
-      machineCredential: "machine-root",
+  it.each([
+    {
       baseUrl: "https://api-usw.superserve.ai",
-    })
-    const session = await box.commands.spawn("true")
-    expect(last().url).toBe(
-      "wss://boxd-us-west-2-sbx-1.usw-sandbox.superserve.ai/exec/connect",
-    )
-    expect(last().protocols).toEqual(["superserve.exec.v1", `token.${token}`])
-    expect(JSON.stringify(last().sent)).not.toContain("machine-root")
-    last()._emit('{"finished":true,"exit_code":0}')
-    await session.wait()
-  })
+      sandboxHost: undefined,
+      expectedHost: "usw-sandbox.superserve.ai",
+    },
+    {
+      baseUrl: "https://control.example",
+      sandboxHost: "sandbox.example",
+      expectedHost: "sandbox.example",
+    },
+  ])(
+    "passes opaque machine child tokens only to the configured WebSocket host $expectedHost",
+    async ({ baseUrl, sandboxHost, expectedHost }) => {
+      const token = "mcap.v1.opaque-payload.signature"
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({
+                id: "us-west-2-sbx-1",
+                status: "active",
+                created_at: "2026-01-01T00:00:00Z",
+                access_token: token,
+              }),
+            ),
+        ),
+      )
+      vi.stubGlobal("WebSocket", FakeWebSocket)
+      const box = await Sandbox.connect("us-west-2-sbx-1", {
+        machineCredential: "machine-root",
+        baseUrl,
+        sandboxHost,
+      })
+      const session = await box.commands.spawn("true")
+      expect(last().url).toBe(
+        `wss://boxd-us-west-2-sbx-1.${expectedHost}/exec/connect`,
+      )
+      expect(last().protocols).toEqual(["superserve.exec.v1", `token.${token}`])
+      expect(JSON.stringify(last().sent)).not.toContain("machine-root")
+      last()._emit('{"finished":true,"exit_code":0}')
+      await session.wait()
+    },
+  )
 
   it("dials /exec/connect with the token subprotocol and sends the start frame", async () => {
     vi.stubGlobal("WebSocket", FakeWebSocket)

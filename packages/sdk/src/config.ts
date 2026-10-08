@@ -215,6 +215,16 @@ export function previewUrl(
   return `https://${port}-${sandboxId}.${sandboxHost}`
 }
 
+/** Known machine endpoint pairs; unknown origins must supply their data-plane host. */
+export function knownSandboxHost(baseUrl: string): string | undefined {
+  if (baseUrl === "https://api-staging.superserve.ai")
+    return "staging-sandbox.superserve.ai"
+  for (const cell of KNOWN_REGIONS.values()) {
+    if (baseUrl === cell.baseUrl) return cell.sandboxHost
+  }
+  return undefined
+}
+
 /**
  * Derive the data-plane sandbox host from the control-plane base URL.
  *
@@ -227,7 +237,7 @@ export function previewUrl(
  * `https://api-staging.superserve.ai` → `staging-sandbox.superserve.ai`
  * Any other URL                        → `sandbox.superserve.ai` (safe default)
  */
-export function deriveSandboxHost(baseUrl: string): string {
+function deriveSandboxHost(baseUrl: string): string {
   try {
     const host = new URL(baseUrl).hostname
     if (host === "api-staging.superserve.ai") {

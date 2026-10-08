@@ -63,6 +63,70 @@ describe("explicit machine mode", () => {
       )
   })
 
+  it("requires a data-plane host for unknown origins before any request", async () => {
+    const mock = vi.fn()
+    vi.stubGlobal("fetch", mock)
+    for (const baseUrl of [
+      "https://custom.example",
+      "http://localhost:1234",
+      "https://api.superserve.ai:444",
+    ]) {
+      await expect(
+        Sandbox.connect(id, { machineCredential: root, baseUrl }),
+      ).rejects.toThrow("requires an explicit sandboxHost")
+    }
+    for (const sandboxHost of [
+      "",
+      "https://sandbox.example",
+      "user@sandbox.example",
+      "sandbox.example:443",
+      "sandbox.example/path",
+      "sandbox.example?x",
+      "sandbox.example#x",
+      "sandbox.example\n",
+      "-sandbox.example",
+      "sandbox..example",
+    ]) {
+      await expect(
+        Sandbox.connect(id, { ...options, sandboxHost }),
+      ).rejects.toBeInstanceOf(ValidationError)
+    }
+    expect(mock).not.toHaveBeenCalled()
+    expect(
+      resolveSandboxConfig({
+        ...options,
+        baseUrl: "https://api-staging.superserve.ai",
+      }).sandboxHost,
+    ).toBe("staging-sandbox.superserve.ai")
+  })
+
+  it("routes custom-origin file and command requests only to the explicit data-plane host", async () => {
+    const mock = vi.fn(async (url: string) =>
+      url.startsWith("https://control.example")
+        ? json(info)
+        : url.endsWith("/exec")
+          ? json({ stdout: "ok", stderr: "", exit_code: 0 })
+          : new Response("file"),
+    )
+    vi.stubGlobal("fetch", mock)
+    const box = await Sandbox.connect(id, {
+      machineCredential: root,
+      baseUrl: "https://control.example",
+      sandboxHost: "sandbox.example",
+    })
+    expect(await box.files.readText("/tmp/test")).toBe("file")
+    expect((await box.commands.run("true")).stdout).toBe("ok")
+    for (const [url, init] of (
+      mock.mock.calls as unknown as Array<[string, RequestInit]>
+    ).slice(1)) {
+      expect(new URL(url).hostname).toBe(`boxd-${id}.sandbox.example`)
+      expect(new Headers(init.headers).get("X-Access-Token")).toBe(child)
+      expect(new Headers(init.headers).has("X-QM-Machine-Credential")).toBe(
+        false,
+      )
+    }
+  })
+
   it("retains machine mode on every lifecycle operation and preserves the full regional id", async () => {
     vi.stubEnv("SUPERSERVE_API_KEY", "ambient-key")
     const calls: Array<[string, RequestInit]> = []
@@ -283,6 +347,7 @@ describe("explicit machine mode", () => {
         Sandbox.create({
           ...options,
           baseUrl: `http://127.0.0.1:${address.port}`,
+          sandboxHost: "sandbox.localhost",
           name: "test",
         }),
       ).rejects.toThrow()

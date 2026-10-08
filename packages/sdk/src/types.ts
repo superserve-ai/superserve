@@ -61,6 +61,8 @@ export interface SandboxInfo {
 export interface ConnectionOptions {
   /** Explicit sandbox machine mode; requires baseUrl and excludes apiKey. */
   machineCredential?: string
+  /** Machine mode data-plane DNS suffix; required for custom baseUrl origins. */
+  sandboxHost?: string
   apiKey?: string
   baseUrl?: string
   signal?: AbortSignal

@@ -123,7 +123,12 @@ const sandbox = await Sandbox.connect(sandboxId, {
 The SDK does not read a machine credential from the environment automatically.
 Explicit machine mode ignores `SUPERSERVE_API_KEY`; passing both `apiKey` and
 `machineCredential` is an error. `baseUrl` is required in this mode and must be
-an HTTPS origin (loopback HTTP is supported for local tests).
+an HTTPS origin (loopback HTTP is supported for local tests). Known production,
+regional and staging origins select their paired data-plane hosts. Custom origins,
+including loopback and nonstandard ports, also require an explicit `sandboxHost`
+DNS suffix, such as `sandbox.example.com`, for HTTPS file/command requests and
+per-sandbox WebSocket hosts. The SDK never guesses a production data-plane host
+for an unknown machine endpoint. `sandboxHost` is used only in machine mode.
 
 Machine credentials are sent only to sandbox create, list, connect, info,
 update, pause, resume and delete routes. Other control-plane operations reject

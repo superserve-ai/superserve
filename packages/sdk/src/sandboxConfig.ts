@@ -1,5 +1,5 @@
 import {
-  deriveSandboxHost,
+  knownSandboxHost,
   resolveConfig,
   type ResolvedConfig,
 } from "./config.js"
@@ -56,10 +56,27 @@ export function resolveSandboxConfig(
       "Machine baseUrl must be an HTTPS origin (HTTP is allowed only on loopback)",
     )
   }
+  const sandboxHost = options.sandboxHost ?? knownSandboxHost(endpoint.origin)
+  if (sandboxHost === undefined) {
+    throw new ValidationError(
+      "Custom machine baseUrl requires an explicit sandboxHost",
+    )
+  }
+  // This is a DNS suffix used in HTTPS and per-sandbox WebSocket hosts, not a URL.
+  if (
+    typeof sandboxHost !== "string" ||
+    !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(
+      sandboxHost,
+    )
+  ) {
+    throw new ValidationError(
+      "sandboxHost must be a lowercase DNS hostname without a scheme, port or path",
+    )
+  }
   return {
     machineCredential: credential,
     baseUrl: endpoint.origin,
-    sandboxHost: deriveSandboxHost(endpoint.origin),
+    sandboxHost,
   }
 }
 
