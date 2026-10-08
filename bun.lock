@@ -164,7 +164,7 @@
     },
     "packages/mcp": {
       "name": "@superserve/mcp",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "bin": {
         "superserve-mcp": "./dist/index.js",
         "superserve-mcp-http": "./dist/httpServer.js",
