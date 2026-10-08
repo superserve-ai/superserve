@@ -214,12 +214,23 @@ class StepResult:
     """Frame captured after the batch stopped; ``None`` when capture failed."""
     screenshot_error: str | None = None
     """Why no frame was captured."""
+    changed: bool = False
+    """With ``wait_for_change``: whether the frame differs from the one before
+    the batch. Also ``False`` when the sandbox could not compare frames."""
 
 
-def _step_body(actions: Sequence[dict[str, Any]], settle_ms: int) -> dict[str, Any]:
+def _step_body(
+    actions: Sequence[dict[str, Any]], settle_ms: int, wait_for_change: bool = False
+) -> dict[str, Any]:
     if not actions:
         raise ValueError("step: actions is empty")
-    return {"actions": [_action_body(a) for a in actions], "settleMs": settle_ms}
+    body: dict[str, Any] = {
+        "actions": [_action_body(a) for a in actions],
+        "settleMs": settle_ms,
+    }
+    if wait_for_change:
+        body["waitForChange"] = True
+    return body
 
 
 def _decode_step(raw: dict[str, Any]) -> StepResult:
@@ -231,6 +242,7 @@ def _decode_step(raw: dict[str, Any]) -> StepResult:
             executed=executed,
             action_error=action_error,
             screenshot=_decode_screenshot(shot),
+            changed=raw.get("changed") is True,
         )
     return StepResult(
         executed=executed,
@@ -348,7 +360,11 @@ class Desktop:
         self._rpc("SendActions", {"actions": [_action_body(a) for a in actions]})
 
     def step(
-        self, actions: Sequence[dict[str, Any]], *, settle_ms: int = 0
+        self,
+        actions: Sequence[dict[str, Any]],
+        *,
+        settle_ms: int = 0,
+        wait_for_change: bool = False,
     ) -> StepResult:
         """Run an ordered batch and capture the frame after it, in one request.
 
@@ -356,19 +372,23 @@ class Desktop:
         validation and stop-at-first-failure semantics as :meth:`actions`;
         the frame is captured even when the batch stops early. ``settle_ms``
         is how long the sandbox waits before capturing, for applications
-        that repaint after the input lands (max 2000).
+        that repaint after the input lands (max 2000). With
+        ``wait_for_change`` the sandbox instead captures the first frame
+        whose pixels differ from the frame before the batch, waiting at most
+        ``settle_ms`` (0 means the sandbox default, 1000); a changed frame
+        proves the display repainted, not that the application finished.
 
         Example::
 
             result = sandbox.desktop.step(
-                [{"type": "click", "x": 640, "y": 400}], settle_ms=300
+                [{"type": "click", "x": 640, "y": 400}], wait_for_change=True
             )
             frame = result.screenshot
         """
         return _decode_step(
             self._rpc(
                 "Step",
-                _step_body(actions, settle_ms),
+                _step_body(actions, settle_ms, wait_for_change),
                 max_bytes=MAX_SCREENSHOT_RESPONSE_BYTES,
             )
         )
@@ -499,13 +519,17 @@ class AsyncDesktop:
         await self._rpc("SendActions", {"actions": [_action_body(a) for a in actions]})
 
     async def step(
-        self, actions: Sequence[dict[str, Any]], *, settle_ms: int = 0
+        self,
+        actions: Sequence[dict[str, Any]],
+        *,
+        settle_ms: int = 0,
+        wait_for_change: bool = False,
     ) -> StepResult:
         """Async variant of :meth:`Desktop.step`."""
         return _decode_step(
             await self._rpc(
                 "Step",
-                _step_body(actions, settle_ms),
+                _step_body(actions, settle_ms, wait_for_change),
                 max_bytes=MAX_SCREENSHOT_RESPONSE_BYTES,
             )
         )

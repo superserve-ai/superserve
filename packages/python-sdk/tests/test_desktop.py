@@ -593,6 +593,31 @@ class TestStep:
         )
 
     @respx.mock
+    def test_asks_for_a_changed_frame_and_reports_whether_one_arrived(self) -> None:
+        png = b"\x89PNG"
+        route = respx.post(f"{RPC_BASE}/Step").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "executed": 1,
+                    "screenshot": {
+                        "image": base64.b64encode(png).decode(),
+                        "width": 4,
+                        "height": 2,
+                    },
+                    "changed": True,
+                },
+            )
+        )
+        result = _make_desktop().step(
+            [{"type": "click", "x": 1, "y": 2}], settle_ms=500, wait_for_change=True
+        )
+        body = _request_body(route)
+        assert body["settleMs"] == 500 and body["waitForChange"] is True
+        assert result.changed is True
+        assert result.screenshot == Screenshot(data=png, width=4, height=2)
+
+    @respx.mock
     def test_stopped_batch_returns_its_frame_instead_of_raising(self) -> None:
         respx.post(f"{RPC_BASE}/Step").mock(
             return_value=httpx.Response(
