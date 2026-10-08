@@ -429,9 +429,9 @@ export class Desktop {
     )
     const result: StepResult = { executed: raw.executed ?? 0 }
     if (raw.actionError) result.actionError = raw.actionError
+    if (options.waitForChange) result.changed = raw.changed === true
     if (raw.screenshot?.image !== undefined) {
       result.screenshot = decodeScreenshot(raw.screenshot)
-      if (options.waitForChange) result.changed = raw.changed === true
     } else {
       result.screenshotError =
         raw.captureError || "Step response missing image data"

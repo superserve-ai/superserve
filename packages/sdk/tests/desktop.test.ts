@@ -402,6 +402,19 @@ describe("Desktop.step", () => {
     expect(calls[0].body).toMatchObject({ settleMs: 500, waitForChange: true })
   })
 
+  it("reports changed as false when the changed-frame capture fails", async () => {
+    await recordCalls(
+      [jsonResponse({ executed: 1, captureError: "x server gone" })],
+      async (d) => {
+        const result = await d.step([{ type: "click", x: 1, y: 2 }], {
+          waitForChange: true,
+        })
+        expect(result.changed).toBe(false)
+        expect(result.screenshotError).toBe("x server gone")
+      },
+    )
+  })
+
   it("reports a stopped batch together with its frame instead of throwing", async () => {
     await recordCalls(
       [
