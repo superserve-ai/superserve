@@ -72,7 +72,7 @@ sandbox.desktop.actions([
 ])
 
 # ...or the whole turn plus the next frame, still one request:
-step = sandbox.desktop.step([{"type": "click", "x": 640, "y": 400}], settle_ms=300)
+step = sandbox.desktop.step([{"type": "click", "x": 640, "y": 400}], wait_for_change=True)
 frame = step.screenshot
 
 sandbox.desktop.resize(1920, 1080)  # live, no restart

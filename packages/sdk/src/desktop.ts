@@ -75,9 +75,16 @@ export interface StepOptions {
   /**
    * Milliseconds the sandbox waits between the last action and the capture,
    * for applications that repaint after the input lands. Default 0; the
-   * sandbox rejects values above 2000.
+   * sandbox rejects values above 2000. With `waitForChange` it is the
+   * longest wait instead, and 0 means the sandbox default (1000).
    */
   settleMs?: number
+  /**
+   * Capture the first frame whose pixels differ from the frame before the
+   * batch, instead of sleeping `settleMs`. A changed frame proves the
+   * display repainted, not that the application finished.
+   */
+  waitForChange?: boolean
 }
 
 /**
@@ -94,6 +101,11 @@ export interface StepResult {
   screenshot?: Screenshot
   /** Why no frame was captured. */
   screenshotError?: string
+  /**
+   * With `waitForChange`: whether the frame differs from the one before the
+   * batch. Also `false` when the sandbox could not compare frames.
+   */
+  changed?: boolean
 }
 
 /**
@@ -389,7 +401,7 @@ export class Desktop {
    * ```typescript
    * const { screenshot } = await sandbox.desktop.step(
    *   [{ type: "click", x: 640, y: 400 }],
-   *   { settleMs: 300 },
+   *   { waitForChange: true },
    * )
    * ```
    */
@@ -405,11 +417,13 @@ export class Desktop {
       actionError?: string
       screenshot?: { image?: string; width?: number; height?: number }
       captureError?: string
+      changed?: boolean
     }>(
       "Step",
       {
         actions: actions.map(actionBody),
         settleMs: options.settleMs ?? 0,
+        ...(options.waitForChange ? { waitForChange: true } : {}),
       },
       { maxBytes: MAX_SCREENSHOT_RESPONSE_BYTES },
     )
@@ -417,6 +431,7 @@ export class Desktop {
     if (raw.actionError) result.actionError = raw.actionError
     if (raw.screenshot?.image !== undefined) {
       result.screenshot = decodeScreenshot(raw.screenshot)
+      if (options.waitForChange) result.changed = raw.changed === true
     } else {
       result.screenshotError =
         raw.captureError || "Step response missing image data"

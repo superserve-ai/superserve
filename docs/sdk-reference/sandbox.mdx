@@ -368,7 +368,7 @@ resumes on first use.
 | `desktop.write(text)`                 | `desktop.write(text)`                     | Type literal text with no per-character pacing.                                   |
 | `desktop.press(key)`                  | `desktop.press(key)`                      | Press a key or chord: `"enter"`, `"ctrl+c"`, `["ctrl", "shift", "p"]`.            |
 | `desktop.actions(actions)`            | `desktop.actions(actions)`                | Run an ordered batch in one request; stops at the first failing action.           |
-| `desktop.step(actions, { settleMs? })` | `desktop.step(actions, settle_ms=0)`     | Run a batch and capture the frame after it in one request; failures are reported in the result, not thrown. |
+| `desktop.step(actions, { waitForChange?, settleMs? })` | `desktop.step(actions, wait_for_change=False, settle_ms=0)` | Run a batch and capture the frame after it in one request, the first changed frame with `waitForChange`; failures are reported in the result, not thrown. |
 | `desktop.resize(width, height)`       | `desktop.resize(width, height)`           | Resize the display live. Width a multiple of 8, 320–8192; height 200–8192.        |
 | `desktop.getStreamUrl({ viewOnly? })` | `desktop.get_stream_url(view_only=False)` | Publish the viewer port and return a browser URL; signed for 60 s under `private`. |
 

@@ -161,13 +161,13 @@ describe("sandbox_computer (in-memory, fake client)", () => {
     expect(res.content[0].text).not.toContain("safe to retry")
   })
 
-  it("act-then-look is one fused step, with the settle applied in the sandbox", async () => {
+  it("act-then-look is one fused step that waits for a changed frame in the sandbox", async () => {
     const res = await callRaw({ action: "left_click", coordinate: [10, 20] })
     expect(res.isError).toBeFalsy()
     expect(fake.desktopSteps).toEqual([
       {
         actions: [{ type: "click", x: 10, y: 20, button: "left" }],
-        settleMs: 300,
+        options: { settleMs: 500, waitForChange: true },
       },
     ])
     expect(res.content.some((c) => c.type === "image")).toBe(true)

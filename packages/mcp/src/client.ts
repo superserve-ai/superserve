@@ -27,6 +27,7 @@ import type {
   CommandResult,
   DesktopAction,
   Screenshot,
+  StepOptions,
   StepResult,
   NetworkConfig,
   NetworkEvent,
@@ -249,7 +250,7 @@ export interface SandboxClient {
   desktopStep(
     id: string,
     actions: DesktopAction[],
-    settleMs: number,
+    options: StepOptions,
   ): Promise<StepResult>
   desktopResize(id: string, width: number, height: number): Promise<void>
   /** Publish the noVNC viewer port and return its browser URL. */
@@ -582,9 +583,9 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
       await sb.desktop.actions(actions)
     },
 
-    async desktopStep(id, actions, settleMs) {
+    async desktopStep(id, actions, options) {
       const sb = await Sandbox.connect(id, conn)
-      return sb.desktop.step(actions, { settleMs })
+      return sb.desktop.step(actions, options)
     },
 
     async desktopResize(id, width, height) {

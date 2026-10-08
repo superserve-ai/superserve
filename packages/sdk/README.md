@@ -83,7 +83,7 @@ await sandbox.desktop.actions([
 // …or the whole turn plus the next frame, still one request:
 const { screenshot } = await sandbox.desktop.step(
   [{ type: "click", x: 640, y: 400 }],
-  { settleMs: 300 },
+  { waitForChange: true }, // captures the first frame that changed
 )
 
 await sandbox.desktop.resize(1920, 1080) // live, no restart

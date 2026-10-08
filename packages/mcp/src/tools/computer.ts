@@ -26,9 +26,14 @@ import { defineTool } from "../lib/tool.js"
 const MAX_WAIT_MS = 10_000
 
 /**
- * Settle the sandbox applies between the batch and its capture so the
- * application has repainted. Fixed for now; changed-frame detection would
- * replace it.
+ * Longest the sandbox waits for the frame to change after a batch; it
+ * captures as soon as a repaint differs from the frame before the input.
+ */
+const CHANGE_WAIT_MS = 500
+
+/**
+ * Fixed settle between the batch and its capture when they are two calls,
+ * so the application has repainted.
  */
 const SETTLE_MS = 300
 
@@ -332,10 +337,14 @@ export function registerComputerTool(
               return actThenLook(client, sandbox_id, action, actions)
             }
             // Act-then-look is one request: the sandbox runs the batch,
-            // settles, and captures before releasing its input lock.
+            // waits for the first repaint that changes the frame, and
+            // captures before releasing its input lock.
             let step: StepResult
             try {
-              step = await client.desktopStep(sandbox_id, actions, SETTLE_MS)
+              step = await client.desktopStep(sandbox_id, actions, {
+                settleMs: CHANGE_WAIT_MS,
+                waitForChange: true,
+              })
             } catch (e) {
               // An older boxd has no Step route and answers 404 before any
               // input is read, so the two-call sequence is safe to run.

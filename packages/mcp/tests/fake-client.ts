@@ -12,7 +12,12 @@ import type {
   SandboxSecretBinding,
   SandboxStatus,
 } from "@superserve/sdk"
-import type { DesktopAction, Screenshot, StepResult } from "@superserve/sdk"
+import type {
+  DesktopAction,
+  Screenshot,
+  StepOptions,
+  StepResult,
+} from "@superserve/sdk"
 
 import type {
   ExecInput,
@@ -60,7 +65,7 @@ export interface FakeClient {
   /** Every desktopResize call received. */
   resizes: Array<{ width: number; height: number }>
   /** Every desktopStep call received, in order. */
-  desktopSteps: Array<{ actions: DesktopAction[]; settleMs: number }>
+  desktopSteps: Array<{ actions: DesktopAction[]; options: StepOptions }>
   /** When set, the next desktopStep returns it after recording the batch, then clears. */
   nextStepResult: StepResult | undefined
   /** When set, the next desktopStep rejects with it before recording anything, then clears. */
@@ -75,7 +80,10 @@ export function createFakeClient(): FakeClient {
   const fake: Pick<FakeClient, "lastExec"> = { lastExec: undefined }
   const desktopBatches: DesktopAction[][] = []
   const resizes: Array<{ width: number; height: number }> = []
-  const desktopSteps: Array<{ actions: DesktopAction[]; settleMs: number }> = []
+  const desktopSteps: Array<{
+    actions: DesktopAction[]
+    options: StepOptions
+  }> = []
   const faults: {
     nextScreenshot: Error | undefined
     nextActions: Error | undefined
@@ -363,7 +371,7 @@ export function createFakeClient(): FakeClient {
 
     // Honors the same faults as the two calls it fuses, so a test can fail
     // the input or the observation half independently.
-    async desktopStep(id, actions, settleMs) {
+    async desktopStep(id, actions, options) {
       must(id)
       if (faults.nextStep) {
         const err = faults.nextStep
@@ -376,7 +384,7 @@ export function createFakeClient(): FakeClient {
         throw err
       }
       desktopBatches.push(actions)
-      desktopSteps.push({ actions, settleMs })
+      desktopSteps.push({ actions, options })
       if (faults.nextStepResult) {
         const result = faults.nextStepResult
         faults.nextStepResult = undefined

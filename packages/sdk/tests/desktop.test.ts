@@ -377,6 +377,31 @@ describe("Desktop.step", () => {
     })
   })
 
+  it("asks for a changed frame and reports whether one arrived", async () => {
+    const calls = await recordCalls(
+      [
+        jsonResponse({
+          executed: 1,
+          screenshot: { image: png, width: 4, height: 2 },
+          changed: true,
+        }),
+      ],
+      async (d) => {
+        const result = await d.step([{ type: "click", x: 1, y: 2 }], {
+          waitForChange: true,
+          settleMs: 500,
+        })
+        expect(result.changed).toBe(true)
+        expect(result.screenshot).toEqual({
+          data: pngBytes,
+          width: 4,
+          height: 2,
+        })
+      },
+    )
+    expect(calls[0].body).toMatchObject({ settleMs: 500, waitForChange: true })
+  })
+
   it("reports a stopped batch together with its frame instead of throwing", async () => {
     await recordCalls(
       [
