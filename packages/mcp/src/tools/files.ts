@@ -152,7 +152,8 @@ export function registerFileTools(
         content: z
           .string()
           .describe(
-            "File content (UTF-8 text, or base64 when encoding=base64).",
+            "File content (UTF-8 text, or base64 when encoding=base64). " +
+              "Base64 accepts standard or URL-safe characters, optional padding, and ASCII whitespace.",
           ),
         encoding,
       },
@@ -165,10 +166,21 @@ export function registerFileTools(
     },
     async ({ sandbox_id, path, content, encoding: enc }) => {
       try {
-        const data =
-          enc === "base64"
-            ? new Uint8Array(Buffer.from(content, "base64"))
-            : content
+        let data: string | Uint8Array = content
+        if (enc === "base64") {
+          const base64 = content.replace(/[\t-\r ]/g, "")
+          // Buffer.from silently discards invalid characters and truncated input.
+          if (
+            !/^[A-Za-z0-9+/_-]*={0,2}$/.test(base64) ||
+            base64.length % 4 === 1 ||
+            (base64.includes("=") && base64.length % 4 !== 0)
+          ) {
+            return toolError(
+              "Invalid base64 content: check the characters and padding.",
+            )
+          }
+          data = new Uint8Array(Buffer.from(base64, "base64"))
+        }
         const bytes = byteLengthOf(data)
         // Bound the write before touching the network so a large (post-decode)
         // payload cannot pin host memory on the hosted server.
