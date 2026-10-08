@@ -90,12 +90,23 @@ describe("explicit machine mode", () => {
       "123",
       "0x7f000001",
       "sandbox.123",
+      `${"a".repeat(63)}.${"b".repeat(63)}.${"c".repeat(62)}`,
+      `${"a".repeat(63)}.${"b".repeat(63)}.${"c".repeat(63)}.${"d".repeat(61)}`,
     ]) {
       await expect(
         Sandbox.connect(id, { ...options, sandboxHost }),
       ).rejects.toBeInstanceOf(ValidationError)
     }
     expect(mock).not.toHaveBeenCalled()
+    const longestSuffix = `${"a".repeat(63)}.${"b".repeat(63)}.${"c".repeat(61)}`
+    expect(
+      resolveSandboxConfig({
+        ...options,
+        baseUrl: "https://custom.example",
+        sandboxHost: longestSuffix,
+      }).sandboxHost,
+    ).toBe(longestSuffix)
+    expect(`${"x".repeat(63)}.${longestSuffix}`).toHaveLength(253)
     expect(
       resolveSandboxConfig({
         ...options,

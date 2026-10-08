@@ -126,7 +126,7 @@ Explicit machine mode ignores `SUPERSERVE_API_KEY`; passing both `apiKey` and
 an HTTPS origin (loopback HTTP is supported for local tests). Known production,
 regional and staging origins select their paired data-plane hosts. Custom origins,
 including loopback and nonstandard ports, also require an explicit `sandboxHost`
-DNS suffix, such as `sandbox.example.com`, for HTTPS file/command requests and
+DNS suffix of at most 189 characters, such as `sandbox.example.com`, for HTTPS file/command requests and
 per-sandbox WebSocket hosts. The SDK never guesses a production data-plane host
 for an unknown machine endpoint. `sandboxHost` is used only in machine mode.
 

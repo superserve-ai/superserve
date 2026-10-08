@@ -62,15 +62,16 @@ export function resolveSandboxConfig(
       "Custom machine baseUrl requires an explicit sandboxHost",
     )
   }
+  // Reserve a full 63-character sandbox label plus its dot within the 253-character DNS limit.
   // This is a DNS suffix used in HTTPS and per-sandbox WebSocket hosts, not a URL.
   if (
     typeof sandboxHost !== "string" ||
-    !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(
+    !/^(?=.{1,189}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(
       sandboxHost,
     )
   ) {
     throw new ValidationError(
-      "sandboxHost must be a lowercase DNS hostname without a scheme, port or path",
+      "sandboxHost must be a lowercase DNS hostname of at most 189 characters without a scheme, port or path",
     )
   }
   try {
