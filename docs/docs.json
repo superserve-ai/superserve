@@ -229,6 +229,10 @@
             ]
           },
           {
+            "group": "Activity",
+            "pages": ["GET /activity"]
+          },
+          {
             "group": "Billing",
             "pages": [
               "GET /billing/pricing",
