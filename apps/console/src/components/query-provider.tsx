@@ -1,9 +1,11 @@
 "use client"
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { createContext, useContext, useState } from "react"
+import { createContext, useContext, useEffect, useState } from "react"
 
 import { ApiError } from "@/lib/api/client"
+import { redirectToSignIn } from "@/lib/auth/session-recovery"
+import { createBrowserClient } from "@/lib/supabase/client"
 
 const QueryScopeContext = createContext("self")
 export interface DashboardTeamContextValue {
@@ -55,6 +57,19 @@ export function QueryProvider({
   children: React.ReactNode
 }) {
   const [queryClient] = useState(() => createQueryClient())
+
+  useEffect(() => {
+    const supabase = createBrowserClient()
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        queryClient.clear()
+        redirectToSignIn()
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [queryClient])
 
   return (
     <QueryScopeContext.Provider value={cacheScope}>
