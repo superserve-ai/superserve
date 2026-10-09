@@ -1,0 +1,46 @@
+---
+title: "Architecture"
+sidebarTitle: Architecture
+description: What runs where in a hosted QM stack, how agent sandboxes are managed, and how data is stored and backed up.
+noindex: true
+---
+
+Every team gets its own stack. Nothing about QM is multi-tenant: your stack runs its own copy of QM against its own database, bucket, and identity. What is shared is the cloud infrastructure underneath, which Superserve operates.
+
+## One stack per team
+
+A stack is made of:
+
+| Component | What it is |
+| --- | --- |
+| QM service | One Cloud Run service running QM's core, the web UI, and the portal in a single container. The portal is the only public listener; core and the web UI are bound to loopback behind it |
+| Database | A dedicated Postgres database and role on a shared Cloud SQL instance |
+| Object storage | A dedicated bucket for snapshots and file transfers |
+| Service identity | A dedicated service account for the stack. There is deliberately no shared tenant identity |
+| Secrets | Your model API key and the stack's generated secrets, held in Google Secret Manager |
+| Edge | `<slug>.qm.superserve.ai`, routed to the stack's service |
+| Agent computers | Superserve sandboxes |
+
+## The code your stack runs
+
+A hosted stack runs QM from a [public fork](https://github.com/superserve-ai/qm-superserve) of upstream QM. The fork adds two things: a Superserve sandbox backend, so the agent's computer is a Firecracker microVM, and a single-container deployment image that runs core, the web UI, and the portal under one supervisor. Everything else is upstream QM, and the intent is to contribute the sandbox backend upstream rather than keep it as a private patch.
+
+## Agent computers are Superserve sandboxes
+
+The agent's computer is scoped to the conversation, not to the stack. A direct message with the agent gets **your own** durable sandbox; a channel or group gets **one sandbox shared** by everyone in it. The same sandbox is reused for every later conversation in that scope, so files, installed tools, and working state persist.
+
+- **Paused 15 minutes after it wakes.** As with any Superserve sandbox, the window is a cap on *active* time rather than idle time, so a sandbox is checkpointed 15 minutes after it resumes whether or not work is still running. QM extends the window when it deliberately leaves background work running.
+- **Resume on demand.** The next message resumes the sandbox from its paused state, with its disk as it was, and starts a fresh window.
+- **Retention.** A sandbox carries a 30-day auto-delete deadline that is pushed forward every time it is used, so a sandbox in regular use is never collected. One left untouched for 30 days is deleted, along with anything that existed only on its disk. Data QM keeps in Postgres and the bucket is unaffected, and a fresh sandbox is created on the next use.
+
+Because these are ordinary Superserve sandboxes, the same [lifecycle](/sandbox/lifecycle) rules apply to them.
+
+## Region
+
+Stacks run in a single Google Cloud region that Superserve picks. You do not choose it at provisioning and a stack cannot be moved afterwards. If you have a data-residency requirement, talk to us before provisioning (see [Limits and support](/qm/limits-and-support)).
+
+## Backups
+
+The Cloud SQL instance your database lives on runs **automated daily backups with point-in-time recovery**. If you need a restore during the beta, contact support (see [Limits and support](/qm/limits-and-support)).
+
+For taking your data with you, rather than restoring it in place, see [Export and leave](/qm/export-and-leave).

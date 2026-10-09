@@ -1,0 +1,45 @@
+---
+title: "Limits and support"
+sidebarTitle: Limits and support
+description: Pricing, beta limits, and how to get help with a hosted QM stack.
+noindex: true
+---
+
+## Pricing
+
+A hosted stack is **free during the beta**: no hosting fee, and the agent sandboxes it runs are not metered against your Superserve account. Pricing will be announced before that changes.
+
+## Limits during the beta
+
+| Limit | Value |
+| --- | --- |
+| Stacks per team | One |
+| Region | Fixed by Superserve, not selectable |
+| Model providers | Anthropic, OpenAI, OpenRouter |
+| Sign-in methods | Magic link, Slack SSO |
+| Slack delivery | Socket Mode only |
+| Agent sandbox retention | Deleted after 30 days without use |
+
+## What is not yet available
+
+- **Changing a stack after provisioning.** The subdomain, harness, and sign-in method are fixed at provisioning, as are the provider and key the console stored for you. Models are not: QM's own admin setup page takes a key for any supported provider and lets you pick the organization's default model, which overrides what the stack was deployed with. Ask support if you want the stored key itself replaced.
+- **Publishing apps.** QM's app publishing needs a Docker daemon that the hosted image does not have.
+- **Scaling out, choosing a region, or running the stack in your own cloud account.** Not offered today. If you want to run QM yourself, [Export and leave](/qm/export-and-leave) is the supported path.
+
+The console does cover creating a stack, retrying a failed provision, minting an admin sign-in link, and deleting a stack. These go through support instead:
+
+- Database and files export (see [Export and leave](/qm/export-and-leave))
+- Restoring the database from a backup
+- Changing the sign-in domain rule or allowlist
+- Enabling Slack SSO
+
+## Support
+
+- **From the console.** Open [QM in the Superserve console](https://console.superserve.ai/qm?utm_source=docs&utm_medium=link) and reach support from there.
+- **By email.** Write to [support@superserve.ai](mailto:support@superserve.ai) and include your organization slug.
+
+For questions about QM itself (how the agent behaves, how rooms and memory work, how to write skills), QM's own documentation in the [QM repository](https://github.com/yc-software/qm) is the reference, and its issue tracker is the place for bugs in QM.
+
+<Note>
+If you report a problem with your stack, do not include your model API key or Slack credentials. Superserve can see whether a key is configured, and whether your stack's smoke test passed, without the value.
+</Note>

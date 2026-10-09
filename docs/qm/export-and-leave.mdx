@@ -1,0 +1,106 @@
+---
+title: "Export and leave"
+sidebarTitle: Export and leave
+description: Take your data out of a hosted QM stack and run QM yourself.
+noindex: true
+---
+
+A hosted stack holds two kinds of data: a **Postgres database** and **object-storage bytes** (snapshots and file transfers). Both can be exported, and QM's self-hosting path is designed to run from exactly those two things plus your secrets. There is no proprietary format to unwind.
+
+<Warning>
+During the beta, export is a procedure, not a button in the console. You request the exports and Superserve produces them for you.
+</Warning>
+
+## 1. Request the exports
+
+Contact support (see [Limits and support](/qm/limits-and-support)) and ask for:
+
+- a **database dump** of your Postgres database, and
+- a **files export** of your object-storage bucket.
+
+You will receive a Postgres dump and an archive of the bucket contents.
+
+You also need the stack's **secrets**: your model API key (which you already hold), any Slack app credentials you configured, and the secrets QM generated for the stack. Ask for the generated secrets along with the export.
+
+<Warning>
+If your hosted stack runs the Slack bot, plan the cutover before you reuse its tokens. Two deployments connected to one Slack app open two Socket Mode connections, and Slack hands each event to only one of them, so messages sent during the overlap land in one database or the other. Remove the Slack installation from the hosted stack's admin page before starting the replacement, or give the replacement its own Slack app.
+</Warning>
+
+## 2. Initialize a deployment
+
+Follow QM's [README](https://github.com/yc-software/qm#readme) to initialize a deployment repository. `qm init` supports the `docker`, `fly`, and `aws` targets. Pick `fly` or `aws` to reproduce what you had on Superserve: they scaffold the whole stack, including the portal, the sign-in broker, admin, and Slack. The `docker` target scaffolds only core and the web UI, which is enough to try QM locally but not to replace a hosted deployment.
+
+```bash
+npm exec --yes --package=@yc-software/qm@latest -- \
+  qm init . --org "$YOUR_SLUG" --target fly --model-provider anthropic
+npm install
+```
+
+Pass the **same model provider** your hosted stack used — `qm init` defaults to `anthropic`, and the generated configuration is provider-specific, so scaffolding the wrong one leaves your exported model key wired to the wrong contract.
+
+Initialization walks through infrastructure, web sign-in, connector credentials, optional Slack access, deployment, and verification. Use the same organization slug you had on Superserve so paths and identifiers match, and configure the same secrets you collected in step 1 (`qm secrets push` uploads them on the `fly` and `aws` targets; the `docker` target reads them from `.env`).
+
+<Note>
+If your hosted stack signed in through **Slack SSO**, the scaffold does not reproduce that on its own: `qm init` wires QM's built-in magic-link broker as the `auth` service. Drop `auth` from the generated `services` list and point the portal at Slack instead — `OIDC_ISSUER=https://slack.com`, the SSO app's `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET`, and `PORTAL_EXPECTED_TEAM_ID` for your workspace — with `<publicUrl>/auth/callback` registered as the app's redirect URL. The comments in the generated config spell this out.
+</Note>
+
+`qm init` only scaffolds the repository; the database and the object store come from the deploy that follows. The next two steps are about getting your data into them before the deployment starts serving.
+
+## 3. Restore the database
+
+`qm init` generates a `deployment.md` for the target you picked, and that file — not this page — is the reference for the order of operations: where Postgres comes from, what infrastructure has to exist first, and when to bring the services up. On `aws`, for instance, the generated Terraform is applied before `qm up`; on `docker`, setting `DATABASE_URL` in `.env` points the deployment at a Postgres you already run instead of one the CLI starts.
+
+Two things decide how the restore goes.
+
+**Timing.** Restore before anyone starts using the deployment. Where you bring your own database, restore into it and deploy afterwards. Where the first deploy provisions the database, let it come up, stop the QM services, restore, then start them again.
+
+**Reach.** `pg_restore` needs a connection string that works from wherever you run it, and a target-managed database usually is not reachable from your laptop: the `docker` target's Postgres answers to the hostname `pg` on its own Docker network, and `fly` and `aws` keep their connection details in provider-managed secrets behind private networking. Bringing your own Postgres sidesteps this — create it, restore into it, and point the deployment at it (on `docker`, by setting `DATABASE_URL` in `.env`). Otherwise, open a route to the managed database the way that target documents, such as a Fly proxy, a bastion or VPN into the AWS VPC, or a shell on the deployment's Docker network, and run the restore through it.
+
+Start from an empty schema whichever dump format you have, so nothing the target created during its own initialization survives underneath your data:
+
+```bash
+psql -v ON_ERROR_STOP=1 -d "$DATABASE_URL" \
+  -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+```
+
+Then load the export, in one transaction so a failure cannot pass for a usable restore:
+
+```bash
+# custom-format archive
+pg_restore --exit-on-error --single-transaction --no-owner --no-privileges \
+  -d "$DATABASE_URL" qm.dump
+
+# or a plain SQL file
+psql -v ON_ERROR_STOP=1 --single-transaction -d "$DATABASE_URL" -f qm.sql
+```
+
+QM runs its migrations at startup, so a deployment started after the restore migrates your restored data rather than an empty schema.
+
+## 4. Move the files across
+
+QM reads snapshots and file transfers from an object store, configured in the deployment's core environment:
+
+```bash
+SNAPSHOT_STORE=s3
+TRANSFER_STORE=s3
+S3_BUCKET=your-bucket
+S3_REGION=your-region
+```
+
+The `fly` and `aws` targets require both stores to be `s3`, which is also what you want for a migration: the export is a copy of a bucket, so its keys carry straight over to another S3-compatible store, while QM's local store lays the same data out differently on disk and would need the export remapped by hand.
+
+Where the bucket comes from depends on the target. On `fly`, `qm up` creates a private Tigris bucket and attaches its credentials to the app; on `aws`, the generated infrastructure provisions one. On `docker` with the `s3` stores, nothing is provisioned for you — create the bucket and give the deployment its credentials before the first deploy. Attaching a bucket you already own works on any target, but it means supplying its credentials and endpoint the way that target expects them; `deployment.md` is the reference. Either way, upload the files export into whichever bucket the deployment ends up reading.
+
+<Warning>
+Whichever bucket you settle on, confirm the deployment is reading the one that holds your files export. A QM deployment pointed at an empty store still starts and reports healthy; the missing data only shows up later, as snapshots and transferred files that cannot be found.
+</Warning>
+
+## 5. Verify, then delete the hosted stack
+
+Verify the new deployment per QM's README: sign in, open a conversation, and confirm your history and files are there.
+
+Once you have, delete the hosted stack from its page in the console. Deleting removes the stack's database, bucket, service account, and secrets, and there is no undo, so keep the exports until you are sure. The one lagging copy is backup: the shared Cloud SQL instance keeps automated backups and point-in-time recovery logs that still contain your database until they age out of their retention window.
+
+<Warning>
+Sandboxes are not part of the export. Only what QM stores in Postgres and the bucket survives the move. Anything that exists solely on a sandbox's disk, such as files the agent created in its working directory and never saved through QM, is lost when the hosted stack is deleted. Before you leave, have the agent save any sandbox files you need through QM so they land in the bucket, or copy them out yourself. After the move, the agent starts with a fresh computer per person and per channel.
+</Warning>

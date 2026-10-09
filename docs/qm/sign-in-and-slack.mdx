@@ -1,0 +1,62 @@
+---
+title: "Sign-in and Slack"
+sidebarTitle: Sign-in and Slack
+description: How teammates sign in to a hosted QM stack with magic links or Slack SSO, how to connect the Slack bot, and how to invite people.
+noindex: true
+---
+
+A stack provisioned with **magic link** as its sign-in method needs no further setup: teammates can sign in as soon as it is ready. A stack provisioned with **Slack SSO** signs everyone in through Slack instead, and needs a Slack app before anyone can get in.
+
+Slack involves **two separate apps**, both created after the stack is up: one for SSO, which signs people in, and one for the bot your team talks to. They carry different scopes and are configured in different places, so you can have either, both, or neither.
+
+## Magic link
+
+With magic-link sign-in, a teammate enters their work email on your stack's sign-in page and receives a one-time link that is good for a short window. The email is sent from Superserve's sending domain, so if your team filters mail, allow that domain.
+
+Two rules can gate who qualifies:
+
+- the **allowed email domain**, which starts as the domain of the admin email you entered at provisioning, and
+- an **allowlist** of specific addresses.
+
+**Configure one, not both.** QM checks the two rules at different layers of the stack, and they do not compose the way you would expect — a stack with both set can mail someone a sign-in link and then refuse them a session. Use the domain rule for a team that shares one email domain, or the allowlist for a named set of people, and bring in anyone outside your chosen rule with an **invitation** (see below) rather than by adding a second rule.
+
+Both rules are stack configuration; during the beta, contact support to set or change either. Someone who satisfies neither your rule nor an invitation cannot sign in, even if they know the stack's URL.
+
+<Note>
+The **Open admin sign-in** button in the Superserve console is separate from magic links. It mints a link that is valid for five minutes and redeemable once, and signs in the admin directly. Use it to recover access if the admin cannot receive email; otherwise sign in the normal way.
+</Note>
+
+## Slack SSO
+
+This applies to stacks provisioned with **Slack SSO** as the sign-in method. Slack SSO replaces magic links rather than sitting alongside them: everyone signs in through Slack. During the beta the sign-in method is settled at provisioning and a stack cannot be switched from one to the other, so pick it there.
+
+Slack SSO needs its own Slack app, built from QM's **SSO manifest** — user scopes only (`openid`, `profile`, `email`), Socket Mode off. QM's own docs cover creating it; see the getting-started guide in the `docs/` folder of the [QM repository](https://github.com/yc-software/qm). Register your stack's callback, `https://<slug>.qm.superserve.ai/auth/callback`, as the app's redirect URL — Slack matches redirect URIs exactly, so the bare origin is rejected at sign-in.
+
+QM signs in through Slack as a standard OIDC provider, and the sign-in is pinned to your workspace, so a Slack account from another workspace is rejected. The credentials are stack configuration rather than a setting in QM's admin pages, so applying them takes a restart. During the beta, ask support to enable Slack SSO once the app exists (see [Limits and support](/qm/limits-and-support)); they will set up a secure handoff for the client ID and secret. Do not put the client secret in the support email.
+
+Once Slack SSO is on, teammates sign in with their Slack identity, and the same identity carries between Slack and the web UI.
+
+## The Slack bot
+
+The Slack bot is what lets your team talk to the agent in Slack channels and DMs. It is a **second, independent Slack app**, built from QM's bot manifest — bot scopes, a bot user, and Socket Mode on. The SSO app cannot serve as the bot: it has no bot user and so issues no `xoxb-` or `xapp-` tokens.
+
+Unlike SSO, you install the bot yourself from QM's admin page: paste the app's **bot token** (`xoxb-`) and **app-level token** (`xapp-`), and QM validates them against Slack, stores them in your stack, and restarts its Slack connection without a redeploy. Tokens stored this way take precedence over anything configured at deploy time.
+
+<Warning>
+The hosted image connects to Slack over **Socket Mode** only. It exposes no Slack events endpoint, so a Slack app configured for HTTP event delivery will not work. Enable Socket Mode on the app and generate an app-level token for it.
+</Warning>
+
+Slack app credentials are stored in your stack, not in the Superserve console. If you rotate the bot's tokens in Slack, update them on QM's admin page. If you rotate the SSO client secret, ask support to apply it through the same secure handoff.
+
+## Inviting teammates
+
+There are two ways to add people:
+
+- **From QM's admin users page.** Add a teammate by email and set when the access expires.
+- **By asking the agent.** In a conversation, ask the agent to invite a teammate. It uses the same mechanism, and it can add members but not admins — promoting someone to org admin is an admin-page action.
+
+Teammates whose email satisfies the sign-in rules above can sign in without an invitation. An invitation is how you bring in someone **outside** those rules, such as an outside collaborator. This works on magic-link stacks; on a Slack SSO stack, sign-in still requires an account in your Slack workspace, so an invitation alone will not let an outsider in. Every invitation carries an expiry, and access ends when it lapses. The admin page pre-fills a date 30 days out, so change it if you want a different window.
+
+<Note>
+Direct messages with the agent get a sandbox per person, and channels get one shared sandbox. See [Architecture](/qm/architecture) for how sandboxes are managed.
+</Note>
