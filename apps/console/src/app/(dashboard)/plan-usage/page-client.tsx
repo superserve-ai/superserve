@@ -280,7 +280,7 @@ export function PlanUsagePageClient() {
         rows?: Array<{
           vcpu_seconds?: number
           memory_mib_seconds?: number
-          storage_mib_seconds?: number
+          storage_mib_seconds?: number | null
         }>
       }
     | undefined
@@ -304,7 +304,7 @@ export function PlanUsagePageClient() {
     ) ||
     legacyRows.some((row) =>
       [row.vcpu_seconds, row.memory_mib_seconds, row.storage_mib_seconds].some(
-        (value) => value !== undefined && value !== 0,
+        (value) => value != null && value !== 0,
       ),
     )
 

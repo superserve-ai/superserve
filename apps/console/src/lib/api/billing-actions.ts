@@ -27,7 +27,8 @@ export interface BillingUsageHourly {
   hour_end: string
   vcpu_seconds: number
   memory_mib_seconds: number
-  storage_mib_seconds: number
+  /** Null until the hour's storage has been measured; never a zero stand-in. */
+  storage_mib_seconds: number | null
   updated_at: string
 }
 
@@ -337,10 +338,10 @@ export async function getBillingUsageAction(
         row.memory_mib_seconds,
         "memory_mib_seconds",
       ),
-      storage_mib_seconds: numericToNumber(
-        row.storage_mib_seconds,
-        "storage_mib_seconds",
-      ),
+      storage_mib_seconds:
+        row.storage_mib_seconds === null
+          ? null
+          : numericToNumber(row.storage_mib_seconds, "storage_mib_seconds"),
       updated_at: row.updated_at as string,
     })),
   }

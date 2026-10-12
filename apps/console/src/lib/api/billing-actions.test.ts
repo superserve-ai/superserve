@@ -263,6 +263,35 @@ describe("billing actions", () => {
     expect(response.billing_mode).toBe("active")
   })
 
+  it("keeps unmeasured hourly storage as null instead of failing", async () => {
+    const tables = from.getMockImplementation()!
+    from.mockImplementation((table: string) =>
+      table === "team_billing_usage_hourly"
+        ? usageQuery([
+            {
+              hour_start: "2026-01-01T00:00:00.000Z",
+              hour_end: "2026-01-01T01:00:00.000Z",
+              vcpu_seconds: "3600",
+              memory_mib_seconds: "3686400",
+              storage_mib_seconds: null,
+              updated_at: "2026-01-01T01:05:00.000Z",
+            },
+          ])
+        : tables(table),
+    )
+    const { getBillingUsageAction } = await import("./billing-actions")
+
+    const response = await getBillingUsageAction(
+      "2026-01-01T00:00:00.000Z",
+      "2026-01-02T00:00:00.000Z",
+    )
+
+    expect(response.rows[0]).toMatchObject({
+      vcpu_seconds: 3600,
+      storage_mib_seconds: null,
+    })
+  })
+
   it("bills the completed team when an orphaned team is listed first", async () => {
     directoryTeamIds = ["team-a", "team-b"]
     unfinishedTeamId = "team-a"
