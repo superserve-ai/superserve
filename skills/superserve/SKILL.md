@@ -209,7 +209,9 @@ memory · 4096 MiB disk**.
 
 - **New teams are capped at 2 vCPU / 2048 MiB** — email support@superserve.ai to raise it.
 - Heavier system templates (`superserve/python-ml`, `code-interpreter`, `claude-code`,
-  `openclaw`, `hermes`) ship at 2 vCPU / 2048 MiB. See the full catalog in the docs.
+  `openclaw`, `hermes`) ship at 2 vCPU / 2048 MiB; `superserve/omnara` (Omnara's
+  coding-agent toolchain) and `superserve/desktop` at 2 vCPU / 4096 MiB. See the full
+  catalog in the docs.
 - Live shape and timestamps (`vcpuCount`, `memoryMib`, `createdAt`, `network`) live on
   **`SandboxInfo`** (from `getInfo()` / `list()`), not on the sandbox instance.
 
