@@ -109,20 +109,22 @@ export function composeSignals(
   return { signal: controller.signal, release }
 }
 
+export function abortReason(signal?: AbortSignal): unknown {
+  return signal?.reason ?? new DOMException("aborted", "AbortError")
+}
+
 // Sleep that ends early, rejecting with the abort reason, if signal aborts:
 // without this, cancelling mid-backoff would silently wait out the full delay
 // before the abort is noticed on the next attempt.
 export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    const abortErr = () =>
-      signal?.reason ?? new DOMException("aborted", "AbortError")
     if (signal?.aborted) {
-      reject(abortErr())
+      reject(abortReason(signal))
       return
     }
     const onAbort = () => {
       clearTimeout(timer)
-      reject(abortErr())
+      reject(abortReason(signal))
     }
     const timer = setTimeout(() => {
       signal?.removeEventListener("abort", onAbort)

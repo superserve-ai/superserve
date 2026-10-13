@@ -274,8 +274,52 @@ describe("Commands.spawn", () => {
     await session.wait()
     await Promise.resolve() // let the .finally() microtask run
 
-    expect(added).toBe(1)
-    expect(removed).toBe(1)
+    expect(added).toBeGreaterThan(0)
+    expect(removed).toBe(added)
+  })
+
+  it("an abort during the dial closes the pending socket and sends no start frame", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    behavior = () => {} // never opens
+    const refresh = vi.fn(async () => "tok-refreshed")
+    const controller = new AbortController()
+
+    const pending = new Commands(makeDeps({ refreshActivate: refresh })).spawn(
+      "rm -rf build",
+      { signal: controller.signal },
+    )
+    controller.abort()
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" })
+    expect(last().readyState).toBe(FakeWebSocket.CLOSED)
+    expect(last().sent).toHaveLength(0)
+    expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it("an already-aborted signal never dials", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(
+      new Commands(makeDeps()).spawn("run", { signal: controller.signal }),
+    ).rejects.toMatchObject({ name: "AbortError" })
+    expect(instances).toHaveLength(0)
+  })
+
+  it("startupSignal gates the start but leaves a running command alone", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    const startup = new AbortController()
+
+    const session = await new Commands(makeDeps()).spawn("run", {
+      startupSignal: startup.signal,
+    })
+    startup.abort()
+
+    expect(last().readyState).toBe(FakeWebSocket.OPEN)
+    expect(last().sent).toHaveLength(1) // the start frame; no kill
+    last()._emit(`{"finished":true,"exit_code":0}`)
+    await expect(session.wait()).resolves.toMatchObject({ exitCode: 0 })
   })
 
   it("refreshes an expired route before the first successful handshake", async () => {

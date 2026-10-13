@@ -7,6 +7,7 @@ import { SandboxError } from "./errors.js"
  * frames. `spawnCommand` opens the socket, sends the start frame, and returns
  * a `CommandSession` handle. Backs `sandbox.commands.spawn(...)`.
  */
+import { abortReason } from "./http.js"
 import { routingHintExpired } from "./routingHint.js"
 import type {
   CommandResult,
@@ -63,7 +64,15 @@ export async function spawnCommand(
   // files use: a browser can't set the sandbox-id header on a WS upgrade, and
   // each session is its own long-lived socket, so there's no pool to share.
   const url = `wss://boxd-${deps.sandboxId}.${deps.sandboxHost}/exec/connect`
-  const ws = await dialWithResume(deps, url)
+  // Startup is gated separately from the running session: an abort during a
+  // slow connect must not start a command only to kill it.
+  const startup = options.startupSignal ?? options.signal
+  if (startup?.aborted) throw abortReason(startup)
+  const ws = await dialWithResume(deps, url, startup)
+  if (startup?.aborted) {
+    ws.close()
+    throw abortReason(startup)
+  }
   ws.send(JSON.stringify(buildStart(command, options)))
   return new Session(ws, options)
 }
@@ -82,19 +91,34 @@ function buildStart(command: string, o: SpawnOptions): Record<string, unknown> {
 async function dialWithResume(
   deps: SpawnDeps,
   url: string,
+  signal?: AbortSignal,
 ): Promise<WebSocket> {
   if (routingHintExpired(deps)) await deps.refreshActivate()
   try {
-    return await dial(url, deps.getAccessToken(), deps.getRoutingHint?.())
+    return await dial(
+      url,
+      deps.getAccessToken(),
+      deps.getRoutingHint?.(),
+      signal,
+    )
   } catch (err) {
     if (!(err instanceof SandboxError)) throw err
     const fresh = await deps.refreshActivate()
-    return await dial(url, fresh, deps.getRoutingHint?.())
+    return await dial(url, fresh, deps.getRoutingHint?.(), signal)
   }
 }
 
-function dial(url: string, token: string, hint?: string): Promise<WebSocket> {
+function dial(
+  url: string,
+  token: string,
+  hint?: string,
+  signal?: AbortSignal,
+): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortReason(signal))
+      return
+    }
     const ws = new WebSocket(url, [
       EXEC_SUBPROTOCOL,
       TOKEN_PREFIX + token,
@@ -105,6 +129,7 @@ function dial(url: string, token: string, hint?: string): Promise<WebSocket> {
       ws.removeEventListener("open", onOpen)
       ws.removeEventListener("error", onError)
       ws.removeEventListener("close", onClose)
+      signal?.removeEventListener("abort", onAbort)
     }
     const onOpen = () => {
       cleanup()
@@ -120,9 +145,15 @@ function dial(url: string, token: string, hint?: string): Promise<WebSocket> {
         new SandboxError(`exec/connect: closed before open (code ${ev.code})`),
       )
     }
+    const onAbort = () => {
+      cleanup()
+      ws.close()
+      reject(abortReason(signal))
+    }
     ws.addEventListener("open", onOpen)
     ws.addEventListener("error", onError)
     ws.addEventListener("close", onClose)
+    signal?.addEventListener("abort", onAbort, { once: true })
   })
 }
 

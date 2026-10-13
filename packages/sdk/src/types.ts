@@ -285,8 +285,16 @@ export interface SpawnOptions {
   onStdout?: (data: string) => void
   /** Called with decoded stderr text as it streams. */
   onStderr?: (data: string) => void
-  /** Abort to kill the process and close the connection. */
+  /**
+   * Abort to kill the process and close the connection. Aborting before the
+   * command starts cancels the start instead.
+   */
   signal?: AbortSignal
+  /**
+   * Cancels only the connect and start; a command already running is left
+   * alone. Defaults to `signal`.
+   */
+  startupSignal?: AbortSignal
 }
 
 /** Write to and close a running process's stdin. */
