@@ -15,7 +15,7 @@
  */
 
 import { Commands } from "./commands.js"
-import { previewUrl, type ResolvedConfig, resolveConfig } from "./config.js"
+import { previewUrl } from "./config.js"
 import { Desktop, DESKTOP_STREAM_PORT } from "./desktop.js"
 import {
   ConflictError,
@@ -31,6 +31,11 @@ import {
   requestVoid,
   sleep,
 } from "./http.js"
+import {
+  requireApiKeyConfig,
+  resolveSandboxConfig,
+  type ResolvedSandboxConfig,
+} from "./sandboxConfig.js"
 import {
   DEFAULT_SNAPSHOT_TIMEOUT_MS,
   Snapshot,
@@ -132,13 +137,13 @@ export class Sandbox {
   private _routeRevision = 0
   private _appliedRouteRevision = 0
   private _refreshInFlight: Promise<string> | null = null
-  private readonly _config: ResolvedConfig
+  private readonly _config: ResolvedSandboxConfig
 
   /** @internal — Use Sandbox.create() or Sandbox.connect() instead. */
   private constructor(
     info: SandboxInfo,
     accessToken: string,
-    config: ResolvedConfig,
+    config: ResolvedSandboxConfig,
     routingHint?: string,
   ) {
     this.id = info.id
@@ -166,6 +171,9 @@ export class Sandbox {
       refreshActivate: () => this._refreshActivate(),
     })
     this.desktop = new Desktop({
+      assertSupported: () => {
+        requireApiKeyConfig(config)
+      },
       sandboxId: this.id,
       sandboxHost: config.sandboxHost,
       getAccessToken: () => this._accessToken,
@@ -192,7 +200,7 @@ export class Sandbox {
     const raw = await request<ApiSandboxResponse>({
       method: "POST",
       url: `${this._config.baseUrl}/sandboxes/${this.id}/${endpoint}`,
-      headers: { "X-API-Key": this._config.apiKey },
+      controlPlane: this._config,
       signal,
     })
     if (!raw.access_token) {
@@ -238,7 +246,7 @@ export class Sandbox {
    * ```
    */
   static async create(options: SandboxCreateOptions): Promise<Sandbox> {
-    const config = resolveConfig(options)
+    const config = resolveSandboxConfig(options)
 
     const body: Record<string, unknown> = { name: options.name }
     if (options.timeoutSeconds !== undefined)
@@ -272,7 +280,7 @@ export class Sandbox {
     const raw = await request<ApiSandboxResponse>({
       method: "POST",
       url: `${config.baseUrl}/sandboxes`,
-      headers: { "X-API-Key": config.apiKey },
+      controlPlane: config,
       body,
       signal: options.signal,
     })
@@ -305,12 +313,12 @@ export class Sandbox {
     sandboxId: string,
     options: ConnectionOptions = {},
   ): Promise<Sandbox> {
-    const config = resolveConfig(options)
+    const config = resolveSandboxConfig(options)
 
     const raw = await request<ApiSandboxResponse>({
       method: "POST",
       url: `${config.baseUrl}/sandboxes/${sandboxId}/activate`,
-      headers: { "X-API-Key": config.apiKey },
+      controlPlane: config,
       signal: options.signal,
     })
 
@@ -343,7 +351,7 @@ export class Sandbox {
    * ```
    */
   static async list(options: SandboxListOptions = {}): Promise<SandboxInfo[]> {
-    const config = resolveConfig(options)
+    const config = resolveSandboxConfig(options)
 
     let url = `${config.baseUrl}/sandboxes`
     const params = new URLSearchParams()
@@ -365,7 +373,7 @@ export class Sandbox {
     const raw = await request<ApiSandboxResponse[]>({
       method: "GET",
       url,
-      headers: { "X-API-Key": config.apiKey },
+      controlPlane: config,
       signal: options.signal,
     })
 
@@ -381,12 +389,12 @@ export class Sandbox {
     sandboxId: string,
     options: ConnectionOptions = {},
   ): Promise<void> {
-    const config = resolveConfig(options)
+    const config = resolveSandboxConfig(options)
     try {
       await requestVoid({
         method: "DELETE",
         url: `${config.baseUrl}/sandboxes/${sandboxId}`,
-        headers: { "X-API-Key": config.apiKey },
+        controlPlane: config,
         signal: options.signal,
         // Don't drop a mid-transition sandbox on bulk delete (see retryConflict).
         retryConflict: true,
@@ -409,11 +417,11 @@ export class Sandbox {
     options: SandboxUpdateOptions,
     connection: ConnectionOptions = {},
   ): Promise<void> {
-    const config = resolveConfig(connection)
+    const config = resolveSandboxConfig(connection)
     await requestVoid({
       method: "PATCH",
       url: `${config.baseUrl}/sandboxes/${sandboxId}`,
-      headers: { "X-API-Key": config.apiKey },
+      controlPlane: config,
       body: Sandbox.buildUpdateBody(options),
       signal: connection.signal,
     })
@@ -434,7 +442,7 @@ export class Sandbox {
     const raw = await request<ApiSandboxResponse>({
       method: "GET",
       url: `${this._config.baseUrl}/sandboxes/${this.id}`,
-      headers: { "X-API-Key": this._config.apiKey },
+      controlPlane: this._config,
     })
     return toSandboxInfo(raw)
   }
@@ -454,6 +462,7 @@ export class Sandbox {
    * ```
    */
   async snapshot(options: SnapshotCreateOptions = {}): Promise<Snapshot> {
+    const config = requireApiKeyConfig(this._config)
     const timeoutMs = options.timeoutMs ?? DEFAULT_SNAPSHOT_TIMEOUT_MS
     const started = Date.now()
     const body: Record<string, unknown> = {
@@ -464,14 +473,14 @@ export class Sandbox {
     const raw = await request<ApiSnapshotResponse>({
       method: "POST",
       url: `${this._config.baseUrl}/sandboxes/${this.id}/snapshot`,
-      headers: { "X-API-Key": this._config.apiKey },
+      controlPlane: this._config,
       body,
       timeoutMs,
       signal: options.signal,
     })
-    const snapshot = new Snapshot(toSnapshotInfo(raw), this._config)
+    const snapshot = new Snapshot(toSnapshotInfo(raw), config)
     if (options.wait === false) return snapshot
-    return waitForSnapshot(this._config, snapshot, {
+    return waitForSnapshot(config, snapshot, {
       timeoutMs: Math.max(timeoutMs - (Date.now() - started), 1),
       pollIntervalMs: options.pollIntervalMs,
       signal: options.signal,
@@ -480,11 +489,15 @@ export class Sandbox {
 
   /** This sandbox's snapshots, newest first. */
   async snapshots(
-    options: Omit<SnapshotListOptions, "apiKey" | "baseUrl"> = {},
+    options: Omit<
+      SnapshotListOptions,
+      "apiKey" | "baseUrl" | "machineCredential"
+    > = {},
   ): Promise<SnapshotInfo[]> {
+    const config = requireApiKeyConfig(this._config)
     return Snapshot.list(this.id, {
       ...options,
-      apiKey: this._config.apiKey,
+      apiKey: config.apiKey,
       baseUrl: this._config.baseUrl,
     })
   }
@@ -506,7 +519,6 @@ export class Sandbox {
   ): Promise<void> {
     const url = `${this._config.baseUrl}/sandboxes/${this.id}/pause`
     const headers = {
-      "X-API-Key": this._config.apiKey,
       Prefer: "respond-async",
     }
     if (!options.wait) {
@@ -516,6 +528,7 @@ export class Sandbox {
         method: "POST",
         url,
         headers,
+        controlPlane: this._config,
         signal: options.signal,
       })
       return
@@ -527,6 +540,7 @@ export class Sandbox {
           method: "POST",
           url,
           headers,
+          controlPlane: this._config,
           timeoutMs: Math.min(DEFAULT_TIMEOUT_MS, ctx.timeoutMs),
           signal: ctx.signal,
         })
@@ -564,7 +578,7 @@ export class Sandbox {
       const current = await request<ApiSandboxResponse>({
         method: "GET",
         url: `${this._config.baseUrl}/sandboxes/${this.id}`,
-        headers: { "X-API-Key": this._config.apiKey },
+        controlPlane: this._config,
         signal: options.signal,
       })
       // A pause that finished between the two requests reads as paused here.
@@ -638,7 +652,7 @@ export class Sandbox {
         info = await request<ApiSandboxResponse>({
           method: "GET",
           url: `${this._config.baseUrl}/sandboxes/${this.id}`,
-          headers: { "X-API-Key": this._config.apiKey },
+          controlPlane: this._config,
           signal: ctx.signal,
         })
       } catch (err) {
@@ -677,7 +691,7 @@ export class Sandbox {
       await requestVoid({
         method: "DELETE",
         url: `${this._config.baseUrl}/sandboxes/${this.id}`,
-        headers: { "X-API-Key": this._config.apiKey },
+        controlPlane: this._config,
         signal: options.signal,
         // Don't drop a mid-transition sandbox on bulk delete (see retryConflict).
         retryConflict: true,
@@ -700,7 +714,7 @@ export class Sandbox {
     await requestVoid({
       method: "PATCH",
       url: `${this._config.baseUrl}/sandboxes/${this.id}`,
-      headers: { "X-API-Key": this._config.apiKey },
+      controlPlane: this._config,
       body: Sandbox.buildUpdateBody(options),
     })
   }
@@ -753,7 +767,7 @@ export class Sandbox {
     }>({
       method: "GET",
       url: `${this._config.baseUrl}/sandboxes/${this.id}/preview-ports`,
-      headers: { "X-API-Key": this._config.apiKey },
+      controlPlane: this._config,
     })
     const ports = (raw.ports ?? []).map((item) => {
       const access = item.access
@@ -793,7 +807,7 @@ export class Sandbox {
     }>({
       method: "POST",
       url: `${this._config.baseUrl}/sandboxes/${this.id}/preview-ports`,
-      headers: { "X-API-Key": this._config.apiKey },
+      controlPlane: this._config,
       body:
         options.access === undefined
           ? { port }
@@ -819,7 +833,7 @@ export class Sandbox {
     await requestVoid({
       method: "DELETE",
       url: `${this._config.baseUrl}/sandboxes/${this.id}/preview-ports/${port}`,
-      headers: { "X-API-Key": this._config.apiKey },
+      controlPlane: this._config,
     })
   }
 
@@ -845,7 +859,7 @@ export class Sandbox {
     }>({
       method: "POST",
       url: `${this._config.baseUrl}/sandboxes/${this.id}/preview-ports/${port}/token`,
-      headers: { "X-API-Key": this._config.apiKey },
+      controlPlane: this._config,
       body:
         options.expiresInSeconds === undefined
           ? {}
@@ -905,7 +919,7 @@ export class Sandbox {
     }>({
       method: "POST",
       url: `${this._config.baseUrl}/sandboxes/${this.id}/preview-ports/${port}/token/rotate`,
-      headers: { "X-API-Key": this._config.apiKey },
+      controlPlane: this._config,
     })
     if (
       !raw.token ||
@@ -951,7 +965,7 @@ export class Sandbox {
     const raw = await request<ApiNetworkPage>({
       method: "GET",
       url: `${this._config.baseUrl}/sandboxes/${this.id}/network${suffix}`,
-      headers: { "X-API-Key": this._config.apiKey },
+      controlPlane: this._config,
       signal: options.signal,
     })
     return toNetworkLogPage(raw)
@@ -970,7 +984,7 @@ export class Sandbox {
     await requestVoid({
       method: "POST",
       url: `${this._config.baseUrl}/sandboxes/${this.id}/secrets`,
-      headers: { "X-API-Key": this._config.apiKey },
+      controlPlane: this._config,
       body: { env_key: envKey, secret_name: secretName },
     })
   }
@@ -985,7 +999,7 @@ export class Sandbox {
     await requestVoid({
       method: "DELETE",
       url: `${this._config.baseUrl}/sandboxes/${this.id}/secrets/${encodeURIComponent(envKey)}`,
-      headers: { "X-API-Key": this._config.apiKey },
+      controlPlane: this._config,
     })
   }
 }

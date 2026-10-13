@@ -57,6 +57,7 @@ const REGION_KEY_RE = /^ss_live_([a-z0-9]{1,17})_[A-Za-z0-9_-]{32}$/
 
 export interface ResolvedConfig {
   apiKey: string
+  machineCredential?: never
   baseUrl: string
   sandboxHost: string
 }
@@ -72,8 +73,14 @@ export interface ResolvedConfig {
  */
 export function resolveConfig(opts?: {
   apiKey?: string
+  machineCredential?: string
   baseUrl?: string
 }): ResolvedConfig {
+  if (opts?.machineCredential !== undefined) {
+    throw new ValidationError(
+      "Machine credentials are supported only by Sandbox lifecycle operations",
+    )
+  }
   const apiKey = opts?.apiKey ?? process.env.SUPERSERVE_API_KEY
   if (!apiKey) {
     throw new AuthenticationError(
@@ -206,6 +213,16 @@ export function previewUrl(
     )
   }
   return `https://${port}-${sandboxId}.${sandboxHost}`
+}
+
+/** Known machine endpoint pairs; unknown origins must supply their data-plane host. */
+export function knownSandboxHost(baseUrl: string): string | undefined {
+  if (baseUrl === "https://api-staging.superserve.ai")
+    return "staging-sandbox.superserve.ai"
+  for (const cell of KNOWN_REGIONS.values()) {
+    if (baseUrl === cell.baseUrl) return cell.sandboxHost
+  }
+  return undefined
 }
 
 /**
