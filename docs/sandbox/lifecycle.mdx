@@ -9,7 +9,7 @@ A sandbox transitions between two long-lived states:
 - **`active`** - VM is running, processes executing, compute billed
 - **`paused`** - VM paused, state persisted to disk, no compute billed
 
-You'll briefly see **`pausing`** while a sandbox is being checkpointed and **`resuming`** while a paused sandbox is being restored to `active` - retry shortly. **`failed`** indicates the sandbox couldn't boot or resume; the entry remains until you delete it. Deletion removes the sandbox entirely; further API calls return `404`.
+You'll briefly see **`pausing`** while a sandbox is being checkpointed and **`resuming`** while a paused sandbox is being restored to `active`. `connect()` and `resume()` wait a pause out for you; a pause still finishing after that wait answers `409` with code `sandbox_pausing` and a `Retry-After` header, so retry shortly. **`failed`** indicates the sandbox couldn't boot or resume; the entry remains until you delete it. Deletion removes the sandbox entirely; further API calls return `404`.
 
 ```
 active  ↔  paused  →  deleted
@@ -17,7 +17,7 @@ active  ↔  paused  →  deleted
 
 ## Pause
 
-`pause()` checkpoints the full VM state (memory, processes, filesystem) to disk and stops billing for compute. It returns once the pause is accepted and the sandbox finishes pausing on its own; pass `wait: true` / `wait=True` to return once the sandbox is `paused`.
+`pause()` checkpoints the full VM state (memory, processes, filesystem) to disk and stops billing for compute. It returns once the pause is accepted and the sandbox finishes pausing on its own; pass `wait: true` / `wait=True` to return once the sandbox is `paused`. A waited pause is a single request the server holds until the pause lands, so it costs no polling.
 
 <CodeGroup>
 ```typescript TypeScript {5}

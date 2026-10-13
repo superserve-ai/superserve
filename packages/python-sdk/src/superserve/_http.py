@@ -110,6 +110,11 @@ PAUSE_FAST_POLL_WINDOW_S = 2.0
 
 DEFAULT_PAUSE_POLL_S = 1.0
 
+# A pause still finishing when connect() asks: past its own wait the server
+# answers sandbox_pausing with Retry-After, and the pause lands shortly after.
+ACTIVATE_PAUSING_RETRY_S = 1.0
+ACTIVATE_PAUSING_WAIT_S = 30.0
+
 
 def pause_poll_delay(elapsed: float, poll_interval_s: float | None) -> float:
     """The SDK's own cadence when the caller set no interval: fast checks while
