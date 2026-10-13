@@ -272,6 +272,31 @@ describe("Sandbox statics", () => {
     }
   })
 
+  it("Sandbox.connect gives up on a pause that outlives its retry window", async () => {
+    vi.useFakeTimers()
+    try {
+      const mock = vi.fn(async () =>
+        jsonResponse(
+          { error: { code: "sandbox_pausing", message: "still pausing" } },
+          409,
+        ),
+      )
+      vi.stubGlobal("fetch", mock)
+
+      let outcome: unknown = "pending"
+      const pending = Sandbox.connect("sbx-1", commonOpts).catch((e) => {
+        outcome = e
+      })
+      await vi.advanceTimersByTimeAsync(31_000)
+      await pending
+      expect(outcome).toBeInstanceOf(ConflictError)
+      // One a second within the window, and none started past it.
+      expect(mock.mock.calls.length).toBeLessThanOrEqual(31)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("Sandbox.connect throws when access_token missing", async () => {
     vi.stubGlobal(
       "fetch",

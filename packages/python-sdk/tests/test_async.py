@@ -286,6 +286,28 @@ class TestAsyncSandboxSmoke:
             finally:
                 await sbx._close_http_client()
 
+    async def test_connect_gives_up_on_a_pause_that_outlives_its_window(
+        self, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(async_module, "ACTIVATE_PAUSING_RETRY_S", 0.001)
+        monkeypatch.setattr(async_module, "ACTIVATE_PAUSING_WAIT_S", 0.0035)
+        with respx.mock() as router:
+            activate = router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+                return_value=httpx.Response(
+                    409,
+                    json={
+                        "error": {
+                            "code": "sandbox_pausing",
+                            "message": "still pausing",
+                        }
+                    },
+                )
+            )
+            with pytest.raises(ConflictError):
+                await AsyncSandbox.connect("sbx-1")
+            # One per retry interval within the window, none started past it.
+            assert activate.call_count <= 4
+
     async def test_pause_sends_prefer_respond_async(self) -> None:
         with respx.mock() as router:
             router.post(f"{API}/sandboxes/sbx-1/activate").mock(

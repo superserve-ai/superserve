@@ -494,6 +494,30 @@ class TestInstanceMethods:
             finally:
                 sbx._close_http_client()
 
+    def test_connect_gives_up_on_a_pause_that_outlives_its_window(
+        self, monkeypatch
+    ) -> None:
+        import superserve.sandbox as sandbox_module
+
+        monkeypatch.setattr(sandbox_module, "ACTIVATE_PAUSING_RETRY_S", 0.001)
+        monkeypatch.setattr(sandbox_module, "ACTIVATE_PAUSING_WAIT_S", 0.0035)
+        with respx.mock() as router:
+            activate = router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+                return_value=httpx.Response(
+                    409,
+                    json={
+                        "error": {
+                            "code": "sandbox_pausing",
+                            "message": "still pausing",
+                        }
+                    },
+                )
+            )
+            with pytest.raises(ConflictError):
+                Sandbox.connect("sbx-1")
+            # One per retry interval within the window, none started past it.
+            assert activate.call_count <= 4
+
     def test_pause_follows_202_until_paused(self) -> None:
         with respx.mock() as router:
             router.post(f"{API}/sandboxes/sbx-1/activate").mock(

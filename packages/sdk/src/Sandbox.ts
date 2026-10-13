@@ -311,6 +311,8 @@ export class Sandbox {
   ): Promise<Sandbox> {
     const config = resolveConfig(options)
 
+    // Retries stay within one window: none starts without a second of it
+    // left, and each request is capped by what remains.
     const deadline = Date.now() + ACTIVATE_PAUSING_WINDOW_MS
     let raw: ApiSandboxResponse
     for (;;) {
@@ -319,6 +321,10 @@ export class Sandbox {
           method: "POST",
           url: `${config.baseUrl}/sandboxes/${sandboxId}/activate`,
           headers: { "X-API-Key": config.apiKey },
+          timeoutMs: Math.min(
+            DEFAULT_TIMEOUT_MS,
+            Math.max(1, deadline - Date.now()),
+          ),
           signal: options.signal,
         })
         break
@@ -326,7 +332,7 @@ export class Sandbox {
         if (
           !(err instanceof ConflictError) ||
           err.code !== "sandbox_pausing" ||
-          Date.now() >= deadline
+          deadline - Date.now() <= ACTIVATE_PAUSING_RETRY_MS
         ) {
           throw err
         }
