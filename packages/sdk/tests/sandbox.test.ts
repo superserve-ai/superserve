@@ -290,8 +290,8 @@ describe("Sandbox statics", () => {
       await vi.advanceTimersByTimeAsync(31_000)
       await pending
       expect(outcome).toBeInstanceOf(ConflictError)
-      // One a second within the window, and none started past it.
-      expect(mock.mock.calls.length).toBeLessThanOrEqual(31)
+      // One a second from t=0 through t=29; none started at the edge.
+      expect(mock).toHaveBeenCalledTimes(30)
     } finally {
       vi.useRealTimers()
     }

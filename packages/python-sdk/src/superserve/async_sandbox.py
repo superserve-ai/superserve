@@ -255,8 +255,8 @@ class AsyncSandbox:
         config = resolve_config(api_key=api_key, base_url=base_url)
         # A pause still finishing is waited out by the server; past its own
         # wait it answers sandbox_pausing, and the pause lands shortly after.
-        # Retries stay within one window: none starts without a second of it
-        # left, and each request is capped by what remains.
+        # No retry starts without a second of the window left, so connect never
+        # runs much past it.
         deadline = time.monotonic() + ACTIVATE_PAUSING_WAIT_S
         while True:
             try:
@@ -264,7 +264,6 @@ class AsyncSandbox:
                     "POST",
                     f"{config.base_url}/sandboxes/{sandbox_id}/activate",
                     headers={"X-API-Key": config.api_key},
-                    budget=max(0.001, deadline - time.monotonic()),
                 )
                 break
             except ConflictError as exc:

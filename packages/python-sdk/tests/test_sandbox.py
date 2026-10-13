@@ -499,8 +499,16 @@ class TestInstanceMethods:
     ) -> None:
         import superserve.sandbox as sandbox_module
 
-        monkeypatch.setattr(sandbox_module, "ACTIVATE_PAUSING_RETRY_S", 0.001)
-        monkeypatch.setattr(sandbox_module, "ACTIVATE_PAUSING_WAIT_S", 0.0035)
+        class FakeTime:
+            now = 0.0
+
+            def monotonic(self) -> float:
+                return self.now
+
+            def sleep(self, seconds: float) -> None:
+                self.now += seconds
+
+        monkeypatch.setattr(sandbox_module, "time", FakeTime())
         with respx.mock() as router:
             activate = router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(
@@ -515,8 +523,8 @@ class TestInstanceMethods:
             )
             with pytest.raises(ConflictError):
                 Sandbox.connect("sbx-1")
-            # One per retry interval within the window, none started past it.
-            assert activate.call_count <= 4
+            # One a second from t=0 through t=29; none started at the edge.
+            assert activate.call_count == 30
 
     def test_pause_follows_202_until_paused(self) -> None:
         with respx.mock() as router:
