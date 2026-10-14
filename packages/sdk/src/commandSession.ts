@@ -7,7 +7,7 @@ import { SandboxError } from "./errors.js"
  * frames. `spawnCommand` opens the socket, sends the start frame, and returns
  * a `CommandSession` handle. Backs `sandbox.commands.spawn(...)`.
  */
-import { abortReason } from "./http.js"
+import { abortReason, composeSignals } from "./http.js"
 import { routingHintExpired } from "./routingHint.js"
 import type {
   CommandResult,
@@ -64,11 +64,19 @@ export async function spawnCommand(
   // files use: a browser can't set the sandbox-id header on a WS upgrade, and
   // each session is its own long-lived socket, so there's no pool to share.
   const url = `wss://boxd-${deps.sandboxId}.${deps.sandboxHost}/exec/connect`
-  // Startup is gated separately from the running session: an abort during a
-  // slow connect must not start a command only to kill it.
-  const startup = options.startupSignal ?? options.signal
+  // Startup stops on either signal, so an abort during a slow connect never
+  // starts a command only to kill it; only `signal` outlives the start.
+  const gate = options.startupSignal
+    ? composeSignals(options.startupSignal, options.signal)
+    : { signal: options.signal, release: () => {} }
+  const startup = gate.signal
   if (startup?.aborted) throw abortReason(startup)
-  const ws = await dialWithResume(deps, url, startup)
+  let ws: WebSocket
+  try {
+    ws = await dialWithResume(deps, url, startup)
+  } finally {
+    gate.release()
+  }
   if (startup?.aborted) {
     ws.close()
     throw abortReason(startup)
@@ -102,7 +110,7 @@ async function dialWithResume(
       signal,
     )
   } catch (err) {
-    if (!(err instanceof SandboxError)) throw err
+    if (signal?.aborted || !(err instanceof SandboxError)) throw err
     const fresh = await deps.refreshActivate()
     return await dial(url, fresh, deps.getRoutingHint?.(), signal)
   }

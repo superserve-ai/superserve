@@ -288,9 +288,11 @@ describe("Commands.spawn", () => {
       "rm -rf build",
       { signal: controller.signal },
     )
-    controller.abort()
+    // A SandboxError reason must not be mistaken for a failed dial and retried.
+    const reason = new SandboxError("cancelled")
+    controller.abort(reason)
 
-    await expect(pending).rejects.toMatchObject({ name: "AbortError" })
+    await expect(pending).rejects.toBe(reason)
     expect(last().readyState).toBe(FakeWebSocket.CLOSED)
     expect(last().sent).toHaveLength(0)
     expect(refresh).not.toHaveBeenCalled()
@@ -320,6 +322,23 @@ describe("Commands.spawn", () => {
     expect(last().sent).toHaveLength(1) // the start frame; no kill
     last()._emit(`{"finished":true,"exit_code":0}`)
     await expect(session.wait()).resolves.toMatchObject({ exitCode: 0 })
+  })
+
+  it("signal still cancels the start when a startupSignal is also given", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    behavior = () => {} // never opens
+    const startup = new AbortController()
+    const controller = new AbortController()
+
+    const pending = new Commands(makeDeps()).spawn("run", {
+      startupSignal: startup.signal,
+      signal: controller.signal,
+    })
+    controller.abort()
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" })
+    expect(last().readyState).toBe(FakeWebSocket.CLOSED)
+    expect(last().sent).toHaveLength(0)
   })
 
   it("refreshes an expired route before the first successful handshake", async () => {
