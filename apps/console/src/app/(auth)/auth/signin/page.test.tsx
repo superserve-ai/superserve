@@ -273,6 +273,24 @@ describe("SignInPage", () => {
     ).toBeInTheDocument()
   })
 
+  it("carries the offer through the signup link and Google signin", async () => {
+    searchParamsMap = { offer: "pro_annual" }
+    mockSignInWithOAuth.mockResolvedValue({ error: null })
+    render(<SignInPage />)
+    expect(
+      await screen.findByRole("link", { name: "Sign up" }),
+    ).toHaveAttribute("href", "/auth/signup?offer=pro_annual")
+    await user.click(
+      screen.getByRole("button", { name: /Continue with Google/ }),
+    )
+    await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalled())
+    expect(
+      new URL(
+        mockSignInWithOAuth.mock.lastCall![0].options.redirectTo,
+      ).searchParams.get("offer"),
+    ).toBe("pro_annual")
+  })
+
   it("triggers Google OAuth on button click", async () => {
     mockSignInWithOAuth.mockResolvedValue({ error: null })
     render(<SignInPage />)

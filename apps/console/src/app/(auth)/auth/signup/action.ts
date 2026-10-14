@@ -11,6 +11,7 @@ import { createPromotionSignupAttempt } from "@/lib/api/promotion-device-evidenc
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
 import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
 import { issueGoogleSignupProof } from "@/lib/auth/google-signup-proof"
+import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
 import {
   beginSignupEvidenceAttempt,
   isSupersededSignupEvidenceAttempt,
@@ -289,7 +290,9 @@ export const signUpWithEmail = async (
   recaptchaToken?: string,
   turnstileToken?: string,
   captureResult?: SignupFingerprintResult,
+  offer?: string,
 ) => {
+  const requestedOffer = normalizeRequestedOffer(offer)
   const parsed = signUpSchema.safeParse({ email, password, fullName })
   if (!parsed.success)
     return { success: false, error: parsed.error.issues[0].message }
@@ -393,6 +396,7 @@ export const signUpWithEmail = async (
             parsed.data.fullName,
             "email",
             { kind: "blocked" },
+            requestedOffer,
           ).catch(() => {})
           return { success: false, error: SIGNUP_RESTRICTED_MESSAGE }
         }
@@ -403,7 +407,9 @@ export const signUpWithEmail = async (
     const supabase = createAdminClient()
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai"
-    const redirectTo = `${appUrl}/auth/callback`
+    const callbackUrl = new URL("/auth/callback", appUrl)
+    if (requestedOffer) callbackUrl.searchParams.set("offer", requestedOffer)
+    const redirectTo = callbackUrl.toString()
     const signupStartedAt = Date.now()
     const { data, error } = await supabase.auth.admin.generateLink({
       type: "signup",
@@ -439,6 +445,7 @@ export const signUpWithEmail = async (
           parsed.data.fullName,
           "email",
           { kind: "unavailable" },
+          requestedOffer,
         ).catch(() => {})
         return {
           success: false,
@@ -518,6 +525,7 @@ export const signUpWithEmail = async (
       parsed.data.fullName,
       "email",
       normalizeSignupEligibilitySnapshot(signupEligibilitySnapshot),
+      requestedOffer,
     ).catch(() => {})
     return { success: true }
   } catch (err) {

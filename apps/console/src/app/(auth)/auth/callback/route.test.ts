@@ -332,6 +332,7 @@ describe("auth callback", () => {
       "Test User",
       "email",
       { kind: "blocked" },
+      undefined,
     )
   })
 
@@ -346,9 +347,15 @@ describe("auth callback", () => {
     )
 
     expect(response.headers.get("location")).toContain("reason=signup_blocked")
-    expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith("", null, "email", {
-      kind: "unavailable",
-    })
+    expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
+      "",
+      null,
+      "email",
+      {
+        kind: "unavailable",
+      },
+      undefined,
+    )
   })
 
   it("uses unavailable for a pre-identity Google trigger rejection", async () => {
@@ -362,9 +369,15 @@ describe("auth callback", () => {
     )
 
     expect(response.headers.get("location")).toContain("reason=signup_blocked")
-    expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith("", null, "google", {
-      kind: "unavailable",
-    })
+    expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
+      "",
+      null,
+      "google",
+      {
+        kind: "unavailable",
+      },
+      undefined,
+    )
   })
 
   it("does not read active signup evidence for a callback without an attempt ID", async () => {
@@ -410,7 +423,7 @@ describe("auth callback", () => {
     proofAvailable = false
     const response = await GET(
       new Request(
-        "https://console.superserve.ai/auth/callback?code=abc&google_signin_intent=pre-auth-intent",
+        "https://console.superserve.ai/auth/callback?code=abc&google_signin_intent=pre-auth-intent&offer=yc_2026",
       ),
     )
     expect(mockRetainOriginalGoogleSignup).toHaveBeenCalledWith(
@@ -418,6 +431,9 @@ describe("auth callback", () => {
       currentUser,
     )
     expect(response.headers.get("location")).toContain("complete_google=1")
+    expect(
+      new URL(response.headers.get("location")!).searchParams.get("offer"),
+    ).toBe("yc_2026")
     expect(mockPublishOriginalSignupEvidence).not.toHaveBeenCalled()
     expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
   })
@@ -566,6 +582,39 @@ describe("auth callback", () => {
     })
   })
 
+  it.each([
+    ["pro_annual", "pro_annual"],
+    ["yc_2026", "yc_2026"],
+    ["arbitrary_plan", undefined],
+  ])(
+    "passes only a valid Google callback offer to Slack: %s",
+    async (offer, expected) => {
+      googleMembershipState = { kind: "first_time" }
+      const response = await GET(
+        new Request(
+          `https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1&offer=${offer}`,
+        ),
+      )
+      expect(response.headers.get("location")).toContain("/sandboxes")
+      expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
+        "user@example.com",
+        "Test User",
+        "google",
+        { kind: "unavailable" },
+        expected,
+      )
+    },
+  )
+
+  it("does not route an existing customer's offer as a new signup", async () => {
+    await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&offer=pro_annual",
+      ),
+    )
+    expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+  })
+
   it("lets a first-time Google user through when proof is valid", async () => {
     googleMembershipState = { kind: "first_time" }
     mockHasValidGoogleSignupProof.mockResolvedValue(true)
@@ -589,6 +638,7 @@ describe("auth callback", () => {
       "Test User",
       "google",
       { kind: "unavailable" },
+      undefined,
     )
     expect(mockSendWelcomeEmail).toHaveBeenCalledWith(
       "user@example.com",
@@ -727,6 +777,7 @@ describe("auth callback", () => {
         "Test User",
         "google",
         expected,
+        undefined,
       )
       expect(mockReadGooglePromotionEvidence).toHaveBeenCalledWith(
         "attempt-1",
@@ -766,6 +817,7 @@ describe("auth callback", () => {
       "Test User",
       "google",
       { kind: "unavailable" },
+      undefined,
     )
     expect(mockReadGooglePromotionEvidence).toHaveBeenCalledWith(
       "attempt-1",
@@ -806,6 +858,7 @@ describe("auth callback", () => {
       "Test User",
       "google",
       { kind: "unavailable" },
+      undefined,
     )
     expect(
       mockPublishOriginalSignupEvidence.mock.invocationCallOrder[0],
@@ -897,6 +950,7 @@ describe("auth callback", () => {
           "Test User",
           "email",
           expected,
+          undefined,
         )
         expect(
           mockPublishOriginalSignupEvidence.mock.invocationCallOrder[0],
@@ -940,6 +994,7 @@ describe("auth callback", () => {
         "Test User",
         "email",
         { kind: "unavailable" },
+        undefined,
       )
     } finally {
       if (previousSecret === undefined)
@@ -973,6 +1028,7 @@ describe("auth callback", () => {
       "Test User",
       "google",
       { kind: "unavailable" },
+      undefined,
     )
     expect(mockSendWelcomeEmail).toHaveBeenCalledWith(
       "user@example.com",
@@ -995,6 +1051,7 @@ describe("auth callback", () => {
       "Test User",
       "email",
       { kind: "unavailable" },
+      undefined,
     )
   })
 
@@ -1204,6 +1261,7 @@ describe("auth callback", () => {
       "Test User",
       "google",
       { kind: "blocked" },
+      undefined,
     )
   })
 
@@ -1263,11 +1321,20 @@ describe("auth callback", () => {
       })
 
       expect(
-        await signUpWithEmail("user@example.com", "password123", "Test User"),
+        await signUpWithEmail(
+          "user@example.com",
+          "password123",
+          "Test User",
+          undefined,
+          undefined,
+          undefined,
+          "pro_monthly",
+        ),
       ).toEqual({ success: true })
       const confirmationUrl = new URL(
         mockSendConfirmationEmail.mock.lastCall![0].react,
       )
+      expect(confirmationUrl.searchParams.get("offer")).toBe("pro_monthly")
       const attemptId = confirmationUrl.searchParams.get("signup_attempt_id")
       expect(attemptId).toEqual(expect.any(String))
       expect(attemptId).not.toBe("")
@@ -1279,7 +1346,9 @@ describe("auth callback", () => {
       )
 
       mockEvaluateSignupRestriction.mockClear()
+      mockNotifySlackOfNewUser.mockClear()
       const response = await GET(new Request(confirmationUrl))
+      expect(mockNotifySlackOfNewUser.mock.lastCall![4]).toBe("pro_monthly")
       expect(response.headers.get("location")).toContain("/sandboxes")
       expect(mockEvaluateSignupRestriction).toHaveBeenCalledExactlyOnceWith(
         "use",

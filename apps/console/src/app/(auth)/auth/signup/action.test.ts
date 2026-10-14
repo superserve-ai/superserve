@@ -306,39 +306,60 @@ describe("signUpWithEmail", () => {
     expect(mockGenerateLink).not.toHaveBeenCalled()
   })
 
-  it("returns success and sends confirmation email on valid signup", async () => {
-    mockGenerateLink.mockResolvedValue({
-      data: { properties: { hashed_token: "abc123" } },
-      error: null,
-    })
-    mockSendEmail.mockResolvedValue({ success: true })
+  it.each([undefined, "pro_monthly", "arbitrary_plan"])(
+    "sends confirmation and Slack with only a valid offer: %s",
+    async (offer) => {
+      mockGenerateLink.mockResolvedValue({
+        data: { properties: { hashed_token: "abc123" } },
+        error: null,
+      })
+      mockSendEmail.mockResolvedValue({ success: true })
 
-    const result = await signUpWithEmail(
-      "user@test.com",
-      "password123",
-      "Test User",
-    )
+      const result = await signUpWithEmail(
+        "user@test.com",
+        "password123",
+        "Test User",
+        undefined,
+        undefined,
+        undefined,
+        offer,
+      )
 
-    expect(result).toEqual({ success: true })
-    expect(mockGenerateLink).toHaveBeenCalledWith({
-      type: "signup",
-      email: "user@test.com",
-      password: "password123",
-      options: {
-        data: {
-          full_name: "Test User",
-          signup_attempt_id: expect.any(String),
+      const expected = offer === "pro_monthly" ? offer : undefined
+      expect(
+        new URL(
+          mockGenerateLink.mock.lastCall![0].options.redirectTo,
+        ).searchParams.get("offer"),
+      ).toBe(expected ?? null)
+      const confirmationUrl = mockSendEmail.mock.lastCall![0].react.replace(
+        "ConfirmationEmail:",
+        "",
+      )
+      expect(new URL(confirmationUrl).searchParams.get("offer")).toBe(
+        expected ?? null,
+      )
+      expect(mockSlack.mock.lastCall![4]).toBe(expected)
+      expect(result).toEqual({ success: true })
+      expect(mockGenerateLink).toHaveBeenCalledWith({
+        type: "signup",
+        email: "user@test.com",
+        password: "password123",
+        options: {
+          data: {
+            full_name: "Test User",
+            signup_attempt_id: expect.any(String),
+          },
+          redirectTo: expect.stringContaining("/auth/callback"),
         },
-        redirectTo: expect.stringContaining("/auth/callback"),
-      },
-    })
-    expect(mockSendEmail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: "user@test.com",
-        subject: "Confirm your Superserve account",
-      }),
-    )
-  })
+      })
+      expect(mockSendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: "user@test.com",
+          subject: "Confirm your Superserve account",
+        }),
+      )
+    },
+  )
 
   it("consumes the fingerprint event after lookup so a later attempt cannot reuse it", async () => {
     fingerprintSignupEventId = encodeURIComponent("event-123")
@@ -690,6 +711,7 @@ describe("signUpWithEmail", () => {
       "Test User",
       "email",
       { kind: "unavailable" },
+      undefined,
     )
   })
 
@@ -774,6 +796,7 @@ describe("signUpWithEmail", () => {
       "Test User",
       "email",
       { kind: "blocked" },
+      undefined,
     )
   })
 })
@@ -1119,6 +1142,7 @@ describe("original signup promotion evidence", () => {
         "Name",
         "email",
         expected,
+        undefined,
       )
       expect(mockOriginalPublication).toHaveBeenCalledWith(
         expect.objectContaining({ id: "actual-auth-user" }),
@@ -1149,6 +1173,7 @@ describe("original signup promotion evidence", () => {
       "Name",
       "email",
       { kind: "unavailable" },
+      undefined,
     )
   })
 
@@ -1173,6 +1198,7 @@ describe("original signup promotion evidence", () => {
       "Name",
       "email",
       { kind: "unavailable" },
+      undefined,
     )
   })
 

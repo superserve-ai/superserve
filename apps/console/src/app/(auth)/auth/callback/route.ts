@@ -21,6 +21,7 @@ import {
   readGooglePromotionEvidence,
   retainOriginalGoogleSignup,
 } from "@/lib/auth/google-signup-proof"
+import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
 import {
   isActiveSignupEvidenceAttempt,
   readSignupEvidence,
@@ -60,6 +61,7 @@ function sanitizeNext(raw: string | null): string {
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
+  const requestedOffer = normalizeRequestedOffer(searchParams.get("offer"))
   const code = searchParams.get("code")
   const tokenHash = searchParams.get("token_hash")
   const type = searchParams.get("type") as
@@ -92,9 +94,15 @@ export async function GET(request: Request) {
       const authSignupRejected = isGenericAuthSignupFailure(error.message)
       if (authSignupRejected) {
         console.warn("OAuth signup rejected by Auth trigger")
-        await notifySlackOfNewUser("", null, code ? "google" : "email", {
-          kind: "unavailable",
-        }).catch(() => {})
+        await notifySlackOfNewUser(
+          "",
+          null,
+          code ? "google" : "email",
+          {
+            kind: "unavailable",
+          },
+          requestedOffer,
+        ).catch(() => {})
         return NextResponse.redirect(
           buildRedirectUrl(
             origin,
@@ -198,6 +206,8 @@ export async function GET(request: Request) {
               })
               const recoveryUrl = new URL("/auth/signup", origin)
               recoveryUrl.searchParams.set("complete_google", "1")
+              if (requestedOffer)
+                recoveryUrl.searchParams.set("offer", requestedOffer)
               if (next !== "/") recoveryUrl.searchParams.set("next", next)
               return NextResponse.redirect(
                 buildRedirectUrl(
@@ -355,6 +365,7 @@ export async function GET(request: Request) {
                   user.user_metadata?.full_name || null,
                   provider,
                   { kind: "blocked" },
+                  requestedOffer,
                 ).catch(() => {})
                 return NextResponse.redirect(
                   buildRedirectUrl(
@@ -374,6 +385,7 @@ export async function GET(request: Request) {
             user.user_metadata?.full_name || null,
             provider,
             normalizeSignupEligibilitySnapshot(signupEligibilitySnapshot),
+            requestedOffer,
           ).catch(() => {})
           Promise.resolve(
             sendWelcomeEmail(
@@ -388,7 +400,14 @@ export async function GET(request: Request) {
             ? AUTH_EVENTS.SIGN_UP_COMPLETED
             : AUTH_EVENTS.SIGN_IN_COMPLETED,
           user.id,
-          { provider, email: user.email, is_new_user: isNewUser },
+          {
+            provider,
+            email: user.email,
+            is_new_user: isNewUser,
+            ...(isNewUser && requestedOffer
+              ? { requested_offer: requestedOffer }
+              : {}),
+          },
         )
 
         if (!next.startsWith("/device") && !next.startsWith("https://")) {

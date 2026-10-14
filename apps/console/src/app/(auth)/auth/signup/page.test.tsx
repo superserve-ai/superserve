@@ -245,6 +245,7 @@ describe("SignUpPage", () => {
 
   it("calls signUpWithEmail and shows email-sent state on success", async () => {
     mockSignUpWithEmail.mockResolvedValue({ success: true })
+    mockSearchParams = new URLSearchParams("offer=pro_monthly")
     render(<SignUpPage />)
 
     await user.type(
@@ -262,11 +263,18 @@ describe("SignUpPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Check Your Email")).toBeInTheDocument()
     })
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+      "href",
+      "/auth/signin?offer=pro_monthly",
+    )
     expect(mockSignUpWithEmail).toHaveBeenCalledWith(
       "test@test.com",
       "password123",
       "Test User",
       undefined,
+      undefined,
+      undefined,
+      "pro_monthly",
     )
   })
 
@@ -336,6 +344,9 @@ describe("SignUpPage", () => {
         "test@test.com",
         "password123",
         "Test User",
+        undefined,
+        undefined,
+        undefined,
         undefined,
       )
     })
@@ -412,6 +423,34 @@ describe("SignUpPage", () => {
       await screen.findByText("Error creating account. Please try again."),
     ).toBeInTheDocument()
   })
+
+  it.each([
+    ["pro_annual", "pro_annual"],
+    ["arbitrary_plan", null],
+  ])(
+    "carries only a valid offer through Google signup and the signin link: %s",
+    async (offer, expected) => {
+      mockSearchParams = new URLSearchParams({ offer: offer! })
+      mockSignInWithOAuth.mockResolvedValue({ error: null })
+      render(<SignUpPage />)
+      const link = await screen.findByRole("link", { name: "Sign in" })
+      expect(
+        new URL(
+          link.getAttribute("href")!,
+          "https://console.superserve.ai",
+        ).searchParams.get("offer"),
+      ).toBe(expected)
+      await user.click(
+        screen.getByRole("button", { name: /Continue with Google/ }),
+      )
+      await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalled())
+      expect(
+        new URL(
+          mockSignInWithOAuth.mock.lastCall![0].options.redirectTo,
+        ).searchParams.get("offer"),
+      ).toBe(expected)
+    },
+  )
 
   it("triggers Google OAuth on button click", async () => {
     mockBeginGoogleSignup.mockResolvedValue({
@@ -606,7 +645,7 @@ describe("SignUpPage with reCAPTCHA configured", () => {
 
   it("preserves next when completing signup with Google", async () => {
     mockSearchParams = new URLSearchParams(
-      "complete_google=1&next=https%3A%2F%2Fapp.superserve.ai%2Fdevice%2Fabc",
+      "complete_google=1&offer=yc_2026&next=https%3A%2F%2Fapp.superserve.ai%2Fdevice%2Fabc",
     )
     const execute = vi.fn().mockResolvedValue("google-token")
     mockBeginGoogleSignup.mockResolvedValue({
@@ -632,6 +671,11 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       expect(execute).toHaveBeenCalledWith("test-site-key", {
         action: "signup_google",
       })
+      expect(
+        new URL(
+          mockSignInWithOAuth.mock.lastCall![0].options.redirectTo,
+        ).searchParams.get("offer"),
+      ).toBe("yc_2026")
       expect(mockBeginGoogleSignup).toHaveBeenCalledWith("google-token")
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
@@ -674,6 +718,9 @@ describe("SignUpPage with reCAPTCHA configured", () => {
         "password123",
         "Test User",
         "real-token",
+        undefined,
+        undefined,
+        undefined,
       )
     })
   })
