@@ -172,6 +172,15 @@ function dial(
     }
     const onAbort = () => {
       cleanup()
+      // ws-style polyfills report closing a connecting socket as an error
+      // event; with no listener left, that would take the process down.
+      const swallow = () => {}
+      ws.addEventListener("error", swallow)
+      ws.addEventListener(
+        "close",
+        () => ws.removeEventListener("error", swallow),
+        { once: true },
+      )
       ws.close()
       reject(abortReason(signal))
     }

@@ -1,4 +1,7 @@
+import { type AddressInfo, createServer, type Socket } from "node:net"
+
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { WebSocket as WsWebSocket } from "ws"
 
 import { Commands, type CommandsDeps } from "../src/commands.js"
 import { STDIN_CHUNK_BYTES } from "../src/commandSession.js"
@@ -356,6 +359,47 @@ describe("Commands.spawn", () => {
     await expect(pending).rejects.toMatchObject({ name: "AbortError" })
     expect(refresh).toHaveBeenCalledOnce()
     expect(instances).toHaveLength(0)
+  })
+
+  // The ws polyfill reports closing a still-connecting socket as an error
+  // event; the EventTarget fake above doesn't, so this one dials for real.
+  it("an abort while a ws-polyfill socket is connecting rejects without crashing the process", async () => {
+    // Accepts the TCP connection but never answers the upgrade.
+    const sockets: Socket[] = []
+    const server = createServer((socket) => {
+      sockets.push(socket)
+      socket.on("data", () => {})
+    })
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r))
+    const port = (server.address() as AddressInfo).port
+    class LocalWebSocket extends WsWebSocket {
+      constructor(_url: string, protocols?: string | string[]) {
+        super(`ws://127.0.0.1:${port}/exec/connect`, protocols)
+      }
+    }
+    vi.stubGlobal("WebSocket", LocalWebSocket)
+    const uncaught = vi.fn()
+    process.on("uncaughtException", uncaught)
+    const refresh = vi.fn(async () => "tok-refreshed")
+    const controller = new AbortController()
+    const reason = new Error("cancelled")
+
+    try {
+      const pending = new Commands(
+        makeDeps({ refreshActivate: refresh }),
+      ).spawn("run", { signal: controller.signal })
+      await new Promise((r) => setTimeout(r, 20))
+      controller.abort(reason)
+      await expect(pending).rejects.toBe(reason)
+      // Let the polyfill's deferred error event fire.
+      await new Promise((r) => setTimeout(r, 20))
+      expect(uncaught).not.toHaveBeenCalled()
+      expect(refresh).not.toHaveBeenCalled()
+    } finally {
+      process.off("uncaughtException", uncaught)
+      for (const socket of sockets) socket.destroy()
+      await new Promise<void>((r) => server.close(() => r()))
+    }
   })
 
   it("refreshes an expired route before the first successful handshake", async () => {
