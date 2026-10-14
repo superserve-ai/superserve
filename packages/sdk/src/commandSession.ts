@@ -101,7 +101,7 @@ async function dialWithResume(
   url: string,
   signal?: AbortSignal,
 ): Promise<WebSocket> {
-  if (routingHintExpired(deps)) await deps.refreshActivate()
+  if (routingHintExpired(deps)) await abortable(deps.refreshActivate(), signal)
   try {
     return await dial(
       url,
@@ -111,9 +111,26 @@ async function dialWithResume(
     )
   } catch (err) {
     if (signal?.aborted || !(err instanceof SandboxError)) throw err
-    const fresh = await deps.refreshActivate()
+    const fresh = await abortable(deps.refreshActivate(), signal)
     return await dial(url, fresh, deps.getRoutingHint?.(), signal)
   }
+}
+
+// An activate is shared with every caller waiting on it, so an abort stops
+// this caller waiting rather than cancelling the request under the others.
+function abortable<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return p
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(abortReason(signal))
+      return
+    }
+    const onAbort = () => reject(abortReason(signal))
+    signal.addEventListener("abort", onAbort, { once: true })
+    p.then(resolve, reject).finally(() =>
+      signal.removeEventListener("abort", onAbort),
+    )
+  })
 }
 
 function dial(

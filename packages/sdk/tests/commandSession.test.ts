@@ -341,6 +341,23 @@ describe("Commands.spawn", () => {
     expect(last().sent).toHaveLength(0)
   })
 
+  it("an abort while activate is pending stops waiting on it, without dialing", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    const hint = "v1." + btoa(JSON.stringify({ e: 1 })) + ".sig"
+    const refresh = vi.fn(() => new Promise<string>(() => {})) // never settles
+    const controller = new AbortController()
+
+    const pending = new Commands(
+      makeDeps({ getRoutingHint: () => hint, refreshActivate: refresh }),
+    ).spawn("run", { signal: controller.signal })
+    await Promise.resolve()
+    controller.abort()
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" })
+    expect(refresh).toHaveBeenCalledOnce()
+    expect(instances).toHaveLength(0)
+  })
+
   it("refreshes an expired route before the first successful handshake", async () => {
     vi.stubGlobal("WebSocket", FakeWebSocket)
     let hint = "v1." + btoa(JSON.stringify({ e: 1 })) + ".sig"
