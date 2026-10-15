@@ -352,12 +352,7 @@ export function PlanUsagePageClient() {
               />
             ) : summary ? (
               <>
-                {summary.plan ? (
-                  <CurrentPlan
-                    plan={summary.plan}
-                    currency={summary.pricing_tier.currency || "USD"}
-                  />
-                ) : null}
+                <CurrentPlan summary={summary} />
                 <BillingSummary summary={summary} />
               </>
             ) : null}

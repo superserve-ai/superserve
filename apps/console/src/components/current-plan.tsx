@@ -1,89 +1,104 @@
 "use client"
 
-import { Badge, Card, CardContent } from "@superserve/ui"
+import { Badge, cn } from "@superserve/ui"
 
-import { formatCurrency, formatPeriodDate } from "@/components/billing-summary"
-import type { BillingIncludedUsage, BillingPlan } from "@/lib/api/billing"
+import {
+  billingCredits,
+  currencyCode,
+  formatCurrency,
+} from "@/components/billing-summary"
+import { CornerBrackets } from "@/components/corner-brackets"
+import type { BillingPlan, BillingSummaryResponse } from "@/lib/api/billing"
 
-function priceLabel(plan: BillingPlan, currency: string): string {
-  if (plan.price_usd == null || plan.billing_interval_months == null) {
-    return "No subscription fee"
+const EYEBROW =
+  "font-mono text-[10px] font-semibold tracking-[0.18em] text-muted uppercase"
+
+const shortDate = (value: string) =>
+  new Date(value).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  })
+
+function priceLabel(plan: BillingPlan | undefined, currency: string): string {
+  if (plan?.price_usd == null || plan.billing_interval_months == null) {
+    return "Pay as you go · no monthly fee"
   }
-  const price = formatCurrency(plan.price_usd, currency)
+  const price = formatCurrency(plan.price_usd, currency).replace(/\.00$/, "")
   if (plan.billing_interval_months === 1) return `${price} / month`
   if (plan.billing_interval_months === 12) return `${price} / year`
   return `${price} every ${plan.billing_interval_months} months`
 }
 
-function includedUsageDetail(included: BillingIncludedUsage): string {
-  const expires = formatPeriodDate(included.period_end)
-  if (included.status === "issued") {
-    return `Applied to usage until ${expires}. Unused credit does not roll over.`
+function creditNote(
+  plan: BillingPlan | undefined,
+  remaining: number | null,
+  currency: string,
+): string {
+  const included = plan?.included_usage
+  if (included) {
+    const amount = formatCurrency(included.amount_usd, currency).replace(
+      /\.00$/,
+      "",
+    )
+    const period = `${shortDate(included.period_start)} – ${shortDate(included.period_end)}`
+    if (included.status === "issued") {
+      return `Includes ${amount} for ${period}. Unused credit expires.`
+    }
+    if (included.status === "pending") {
+      return `${amount} for ${period} is being added.`
+    }
+    return `${amount} for ${period} is added once payment is confirmed.`
   }
-  if (included.status === "pending") {
-    return "Being added to your account."
-  }
-  return "Not added for this period yet. It is added once your plan payment is confirmed and no invoices are overdue."
+  if (remaining == null) return "Credit balance couldn't be loaded."
+  return remaining > 0
+    ? "Applied automatically to your usage."
+    : "Usage is billed at standard rates."
 }
 
-export function CurrentPlan({
-  plan,
-  currency,
-}: {
-  plan: BillingPlan
-  currency: string
-}) {
-  const included = plan.included_usage
+export function CurrentPlan({ summary }: { summary: BillingSummaryResponse }) {
+  const plan = summary.plan
+  const currency = currencyCode(summary)
+  const remaining = billingCredits(summary).remaining
   return (
-    <Card
-      className="border-border/70 bg-background/60"
+    <section
+      aria-label="Plan and credits"
+      className="relative mx-auto grid w-full max-w-4xl border border-dashed border-border bg-surface/40 sm:grid-cols-2"
       data-testid="current-plan"
     >
-      <CardContent className="grid gap-4 p-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <p className="font-mono text-[10px] font-semibold tracking-wide text-muted uppercase">
-            Current Plan
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-base font-semibold text-foreground">
-              {plan.name}
-            </p>
-            {plan.status === "pending" ? (
-              <Badge variant="warning">Awaiting payment</Badge>
-            ) : null}
-          </div>
-          <p className="text-sm text-muted">{priceLabel(plan, currency)}</p>
-        </div>
-
-        <div className="space-y-2">
-          <p className="font-mono text-[10px] font-semibold tracking-wide text-muted uppercase">
-            Included Usage
-          </p>
-          {included ? (
-            <>
-              <p className="text-sm font-medium text-foreground">
-                {formatCurrency(included.amount_usd, currency)} for{" "}
-                {formatPeriodDate(included.period_start)} -{" "}
-                {formatPeriodDate(included.period_end)}
-              </p>
-              <p className="text-xs text-muted">
-                {includedUsageDetail(included)}
-              </p>
-            </>
-          ) : (
-            <p className="text-sm text-muted">
-              {plan.key === "free"
-                ? "None. Usage is billed at standard rates."
-                : "No included usage for the current period."}
-            </p>
-          )}
-          {plan.key !== "free" ? (
-            <p className="text-xs text-muted">
-              Usage beyond included credit is billed at standard rates.
-            </p>
+      <CornerBrackets size="sm" className="border-brand/70" />
+      <div className="space-y-3 p-5 sm:p-6">
+        <div className="flex items-center gap-2">
+          <p className={EYEBROW}>Plan</p>
+          {plan?.status === "pending" ? (
+            <Badge variant="warning">Awaiting payment</Badge>
           ) : null}
         </div>
-      </CardContent>
-    </Card>
+        <p className="text-3xl font-medium tracking-tight text-foreground">
+          {plan?.name ?? summary.pricing_tier.plan_name}
+        </p>
+        <p className="text-sm text-muted">{priceLabel(plan, currency)}</p>
+      </div>
+      <div className="space-y-3 border-t border-dashed border-border p-5 sm:border-t-0 sm:border-l sm:p-6">
+        <p className={EYEBROW}>Credits remaining</p>
+        <p
+          className={cn(
+            "text-3xl tracking-tight",
+            remaining == null
+              ? "font-medium text-muted"
+              : "font-mono font-semibold tabular-nums",
+            remaining != null &&
+              (remaining > 0 ? "text-brand" : "text-foreground"),
+          )}
+        >
+          {remaining == null
+            ? "Unavailable"
+            : formatCurrency(remaining, currency)}
+        </p>
+        <p className="text-sm text-muted">
+          {creditNote(plan, remaining, currency)}
+        </p>
+      </div>
+    </section>
   )
 }

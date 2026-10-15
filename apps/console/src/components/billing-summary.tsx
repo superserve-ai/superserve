@@ -1,6 +1,5 @@
 "use client"
 
-import { ClockCounterClockwiseIcon } from "@phosphor-icons/react"
 import { Skeleton, cn } from "@superserve/ui"
 import type { ReactNode } from "react"
 
@@ -387,15 +386,6 @@ export function BillingSummary({
                 <p className="text-sm text-muted">Not enough usage data</p>
               )}
             </StatementColumn>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3 font-mono text-[11px] text-muted uppercase">
-            <ClockCounterClockwiseIcon className="size-4" />
-            <span>
-              Credits remaining:{" "}
-              {credits.remaining == null
-                ? "Unavailable"
-                : formatCurrency(credits.remaining, currency)}
-            </span>
           </div>
         </div>
       </div>
