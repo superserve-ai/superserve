@@ -20,8 +20,8 @@ const shortDate = (value: string) =>
     timeZone: "UTC",
   })
 
-function priceLabel(plan: BillingPlan | undefined, currency: string): string {
-  if (plan?.price_usd == null || plan.billing_interval_months == null) {
+function priceLabel(plan: BillingPlan, currency: string): string {
+  if (plan.price_usd == null || plan.billing_interval_months == null) {
     return "Pay as you go · no monthly fee"
   }
   const price = formatCurrency(plan.price_usd, currency).replace(/\.00$/, "")
@@ -74,10 +74,20 @@ export function CurrentPlan({ summary }: { summary: BillingSummaryResponse }) {
             <Badge variant="warning">Awaiting payment</Badge>
           ) : null}
         </div>
-        <p className="text-3xl font-medium tracking-tight text-foreground">
-          {plan?.name ?? summary.pricing_tier.plan_name}
+        {/* A missing plan means the API didn't report it, not that it's Free. */}
+        <p
+          className={cn(
+            "text-3xl font-medium tracking-tight",
+            plan ? "text-foreground" : "text-muted",
+          )}
+        >
+          {plan?.name ?? "Unavailable"}
         </p>
-        <p className="text-sm text-muted">{priceLabel(plan, currency)}</p>
+        <p className="text-sm text-muted">
+          {plan
+            ? priceLabel(plan, currency)
+            : "Plan details couldn't be loaded."}
+        </p>
       </div>
       <div className="space-y-3 border-t border-dashed border-border p-5 sm:border-t-0 sm:border-l sm:p-6">
         <p className={EYEBROW}>Credits remaining</p>

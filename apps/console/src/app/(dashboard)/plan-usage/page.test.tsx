@@ -1001,6 +1001,13 @@ describe("PlanUsagePage", () => {
       expect(card.getByText(detail)).toBeInTheDocument()
     })
 
+    it("does not present a missing plan as Free", () => {
+      withSummary({ plan: undefined })
+      const card = within(screen.getByTestId("current-plan"))
+      expect(card.getByText("Unavailable")).toBeInTheDocument()
+      expect(card.queryByText(/no monthly fee/)).not.toBeInTheDocument()
+    })
+
     it("shows Stripe credit instead of the empty local balance", () => {
       withSummary({
         credit_source: "stripe",
