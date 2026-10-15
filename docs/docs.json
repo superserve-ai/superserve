@@ -229,21 +229,8 @@
             ]
           },
           {
-            "group": "Billing",
-            "pages": [
-              "GET /billing/pricing",
-              "GET /billing/pricing/public",
-              "GET /billing/summary",
-              "GET /billing/usage-series",
-              "GET /teams/{team_id}/billing/periods",
-              "GET /teams/{team_id}/billing/periods/{period_id}/export-preview",
-              "GET /teams/{team_id}/billing/usage"
-            ]
-          },
-          {
             "group": "Team Management",
             "pages": [
-              "GET /teams/{team_id}/management",
               "GET /teams/{team_id}/members",
               "POST /teams/{team_id}/members",
               "DELETE /teams/{team_id}/members/{user_id}",
