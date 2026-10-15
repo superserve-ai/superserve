@@ -241,6 +241,8 @@
               "POST /stripe/checkout-session",
               "POST /stripe/checkout-session/recover",
               "POST /stripe/checkout-session/publication-decision",
+              "POST /stripe/plan-choice",
+              "POST /stripe/pro-checkout/recover",
               "POST /stripe/customer-portal-session",
               "POST /stripe/webhook"
             ]
