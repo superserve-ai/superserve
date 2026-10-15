@@ -22,7 +22,7 @@ const shortDate = (value: string) =>
 
 function priceLabel(plan: BillingPlan, currency: string): string {
   if (plan.price_usd == null || plan.billing_interval_months == null) {
-    return "Pay as you go · no monthly fee"
+    return "Pay as you go"
   }
   const price = formatCurrency(plan.price_usd, currency).replace(/\.00$/, "")
   if (plan.billing_interval_months === 1) return `${price} / month`

@@ -956,9 +956,7 @@ describe("PlanUsagePage", () => {
       })
       const plan = within(screen.getByTestId("current-plan"))
       expect(plan.getByText("Free")).toBeInTheDocument()
-      expect(
-        plan.getByText("Pay as you go · no monthly fee"),
-      ).toBeInTheDocument()
+      expect(plan.getByText("Pay as you go")).toBeInTheDocument()
       expect(plan.getByText("$76.55")).toBeInTheDocument()
     })
 
@@ -1005,7 +1003,7 @@ describe("PlanUsagePage", () => {
       withSummary({ plan: undefined })
       const card = within(screen.getByTestId("current-plan"))
       expect(card.getByText("Unavailable")).toBeInTheDocument()
-      expect(card.queryByText(/no monthly fee/)).not.toBeInTheDocument()
+      expect(card.queryByText("Pay as you go")).not.toBeInTheDocument()
     })
 
     it("shows Stripe credit instead of the empty local balance", () => {
