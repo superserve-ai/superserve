@@ -157,9 +157,10 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
                   <li>
                     $5 to start, plus $95 when you add billing, if eligible
                   </li>
-                  <li>Up to 100 concurrent sandboxes</li>
+                  <li>Up to 20 concurrent sandboxes</li>
                   <li>No time limit on sandboxes</li>
                   <li>Standard usage rates after credit</li>
+                  <li>Up to 2 vCPU, 2 GiB memory, 8 GiB disk per sandbox</li>
                 </Benefits>
               </div>
             </Card>
@@ -220,6 +221,7 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
                   <li>$1,000 in metered usage included each month</li>
                   <li>Priority support</li>
                   <li>Up to 1,000 concurrent sandboxes</li>
+                  <li>Up to 16 vCPU, 64 GiB memory, 64 GiB disk per sandbox</li>
                 </Benefits>
                 <p className="text-muted-foreground mt-6 text-xs leading-relaxed">
                   Free signup credits do not stack with Pro. Usage beyond the
@@ -253,7 +255,7 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
                 </p>
                 <Benefits>
                   <li>Self-host in your AWS, GCP, or Azure account</li>
-                  <li>Custom concurrency limits</li>
+                  <li>Custom concurrency and sandbox sizes</li>
                   <li>Dedicated support</li>
                 </Benefits>
                 <p className="text-muted-foreground mt-6 text-xs leading-relaxed">
