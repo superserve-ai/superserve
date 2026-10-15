@@ -34,6 +34,9 @@ DESKTOP_STREAM_PORT = 6080
 MAX_SCREENSHOT_RESPONSE_BYTES = 48 * 1024 * 1024
 
 MouseButton = Literal["left", "right", "middle"]
+#: Encoding of a captured frame. PNG is lossless; JPEG is several times
+#: smaller and faster to encode, for loops where a model reads the frame.
+FrameFormat = Literal["png", "jpeg"]
 
 _BUTTONS: dict[str, str] = {
     "left": "POINTER_BUTTON_LEFT",
@@ -73,11 +76,13 @@ _KEYSYMS: dict[str, str] = {
 
 @dataclass(frozen=True)
 class Screenshot:
-    """A captured frame: PNG bytes plus the display dimensions."""
+    """A captured frame: encoded bytes (see ``format``) plus the display
+    dimensions."""
 
     data: bytes
     width: int
     height: int
+    format: str = "png"
 
 
 @dataclass(frozen=True)
@@ -186,6 +191,16 @@ def _action_body(action: dict[str, Any]) -> dict[str, Any]:
     raise ValueError(f"Unknown desktop action type: {kind!r}")
 
 
+def _format_body(format: str) -> dict[str, str]:
+    # PNG is the server default, so the field is only sent for JPEG and a
+    # boxd that predates JPEG never sees it.
+    if format == "jpeg":
+        return {"format": "FRAME_FORMAT_JPEG"}
+    if format != "png":
+        raise ValueError(f"Unknown frame format: {format!r}")
+    return {}
+
+
 def _decode_screenshot(raw: dict[str, Any]) -> Screenshot:
     image = raw.get("image")
     if image is None:
@@ -194,7 +209,22 @@ def _decode_screenshot(raw: dict[str, Any]) -> Screenshot:
         data=base64.b64decode(image),
         width=raw.get("width", 0),
         height=raw.get("height", 0),
+        format="jpeg" if raw.get("format") == "FRAME_FORMAT_JPEG" else "png",
     )
+
+
+@dataclass(frozen=True)
+class StepTimings:
+    """Where the sandbox spent a ``desktop.step()``, in milliseconds."""
+
+    queue_ms: int
+    """Waiting for the sandbox's input lock."""
+    actions_ms: int
+    """Delivering the actions."""
+    settle_ms: int
+    """Sleeping, or waiting for a changed frame."""
+    capture_ms: int
+    """Capturing and encoding the frame."""
 
 
 @dataclass(frozen=True)
@@ -217,25 +247,38 @@ class StepResult:
     changed: bool = False
     """With ``wait_for_change``: whether the frame differs from the one before
     the batch. Also ``False`` when the sandbox could not compare frames."""
+    timings: StepTimings | None = None
+    """Sandbox-side phase timings; ``None`` from a sandbox that predates them."""
 
 
 def _step_body(
-    actions: Sequence[dict[str, Any]], settle_ms: int, wait_for_change: bool = False
+    actions: Sequence[dict[str, Any]],
+    settle_ms: int,
+    wait_for_change: bool = False,
+    format: str = "png",
 ) -> dict[str, Any]:
     if not actions:
         raise ValueError("step: actions is empty")
     body: dict[str, Any] = {
         "actions": [_action_body(a) for a in actions],
         "settleMs": settle_ms,
+        **_format_body(format),
     }
     if wait_for_change:
         body["waitForChange"] = True
     return body
 
 
+_PHASES = ("queueMs", "actionsMs", "settleMs", "captureMs")
+
+
 def _decode_step(raw: dict[str, Any]) -> StepResult:
     executed = raw.get("executed", 0)
     action_error = raw.get("actionError") or None
+    timings = None
+    if any(k in raw for k in _PHASES):
+        # proto-JSON omits zero-valued fields, so a reported phase can be missing.
+        timings = StepTimings(*(raw.get(k, 0) for k in _PHASES))
     shot = raw.get("screenshot")
     if shot is not None and shot.get("image") is not None:
         return StepResult(
@@ -243,11 +286,13 @@ def _decode_step(raw: dict[str, Any]) -> StepResult:
             action_error=action_error,
             screenshot=_decode_screenshot(shot),
             changed=raw.get("changed") is True,
+            timings=timings,
         )
     return StepResult(
         executed=executed,
         action_error=action_error,
         screenshot_error=raw.get("captureError") or "Step response missing image data",
+        timings=timings,
     )
 
 
@@ -275,13 +320,17 @@ class Desktop:
         self._data_plane_base_url = target.url
         self._routing_headers = target.headers
 
-    def screenshot(self) -> Screenshot:
-        """Capture the current screen as a PNG.
+    def screenshot(self, *, format: FrameFormat = "png") -> Screenshot:
+        """Capture the current screen, as a PNG unless ``format`` says otherwise.
 
         One round trip; safe to call while a live stream viewer is open.
         """
         return _decode_screenshot(
-            self._rpc("Screenshot", {}, max_bytes=MAX_SCREENSHOT_RESPONSE_BYTES)
+            self._rpc(
+                "Screenshot",
+                _format_body(format),
+                max_bytes=MAX_SCREENSHOT_RESPONSE_BYTES,
+            )
         )
 
     def click(self, x: int, y: int, *, button: MouseButton = "left") -> None:
@@ -365,6 +414,7 @@ class Desktop:
         *,
         settle_ms: int = 0,
         wait_for_change: bool = False,
+        format: FrameFormat = "png",
     ) -> StepResult:
         """Run an ordered batch and capture the frame after it, in one request.
 
@@ -377,6 +427,7 @@ class Desktop:
         whose pixels differ from the frame before the batch, waiting at most
         ``settle_ms`` (0 means the sandbox default, 1000); a changed frame
         proves the display repainted, not that the application finished.
+        ``format`` picks the frame encoding as for :meth:`screenshot`.
 
         Example::
 
@@ -388,7 +439,7 @@ class Desktop:
         return _decode_step(
             self._rpc(
                 "Step",
-                _step_body(actions, settle_ms, wait_for_change),
+                _step_body(actions, settle_ms, wait_for_change, format),
                 max_bytes=MAX_SCREENSHOT_RESPONSE_BYTES,
             )
         )
@@ -451,10 +502,14 @@ class AsyncDesktop:
         self._data_plane_base_url = target.url
         self._routing_headers = target.headers
 
-    async def screenshot(self) -> Screenshot:
+    async def screenshot(self, *, format: FrameFormat = "png") -> Screenshot:
         """Async variant of :meth:`Desktop.screenshot`."""
         return _decode_screenshot(
-            await self._rpc("Screenshot", {}, max_bytes=MAX_SCREENSHOT_RESPONSE_BYTES)
+            await self._rpc(
+                "Screenshot",
+                _format_body(format),
+                max_bytes=MAX_SCREENSHOT_RESPONSE_BYTES,
+            )
         )
 
     async def click(self, x: int, y: int, *, button: MouseButton = "left") -> None:
@@ -524,12 +579,13 @@ class AsyncDesktop:
         *,
         settle_ms: int = 0,
         wait_for_change: bool = False,
+        format: FrameFormat = "png",
     ) -> StepResult:
         """Async variant of :meth:`Desktop.step`."""
         return _decode_step(
             await self._rpc(
                 "Step",
-                _step_body(actions, settle_ms, wait_for_change),
+                _step_body(actions, settle_ms, wait_for_change, format),
                 max_bytes=MAX_SCREENSHOT_RESPONSE_BYTES,
             )
         )

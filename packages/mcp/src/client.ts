@@ -27,6 +27,7 @@ import type {
   CommandResult,
   DesktopAction,
   Screenshot,
+  ScreenshotOptions,
   StepOptions,
   StepResult,
   NetworkConfig,
@@ -242,8 +243,11 @@ export interface SandboxClient {
   pause(id: string): Promise<void>
   resume(id: string): Promise<SandboxSummary>
   kill(id: string): Promise<void>
-  /** Capture the desktop as PNG bytes + dimensions (desktop templates only). */
-  desktopScreenshot(id: string): Promise<Screenshot>
+  /** Capture the desktop as encoded bytes + dimensions (desktop templates only). */
+  desktopScreenshot(
+    id: string,
+    options?: ScreenshotOptions,
+  ): Promise<Screenshot>
   /** Execute an ordered input batch under the sandbox's input lock. */
   desktopActions(id: string, actions: DesktopAction[]): Promise<void>
   /** Run an input batch and capture the frame after it, in one request. */
@@ -573,9 +577,9 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
       )
     },
 
-    async desktopScreenshot(id) {
+    async desktopScreenshot(id, options) {
       const sb = await Sandbox.connect(id, conn)
-      return sb.desktop.screenshot()
+      return sb.desktop.screenshot(options)
     },
 
     async desktopActions(id, actions) {

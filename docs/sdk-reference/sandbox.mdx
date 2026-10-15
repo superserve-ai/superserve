@@ -360,7 +360,7 @@ resumes on first use.
 
 | TypeScript                            | Python                                    | Description                                                                       |
 | ------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------- |
-| `desktop.screenshot()`                | `desktop.screenshot()`                    | Capture the screen; returns PNG `data` plus `width` and `height`.                 |
+| `desktop.screenshot({ format? })`     | `desktop.screenshot(format="png")`        | Capture the screen; returns `data` (PNG, or JPEG with `format`) plus `width`, `height` and `format`. |
 | `desktop.click(x, y, { button? })`    | `desktop.click(x, y, button=...)`         | Move and click in one request. Also `doubleClick`, `rightClick`, `middleClick`.   |
 | `desktop.moveMouse(x, y)`             | `desktop.move_mouse(x, y)`                | Move the pointer without clicking.                                                |
 | `desktop.drag(from, to, { button? })` | `desktop.drag(start, end, button=...)`    | Press, move, release as one atomic batch.                                         |
@@ -368,7 +368,7 @@ resumes on first use.
 | `desktop.write(text)`                 | `desktop.write(text)`                     | Type literal text with no per-character pacing.                                   |
 | `desktop.press(key)`                  | `desktop.press(key)`                      | Press a key or chord: `"enter"`, `"ctrl+c"`, `["ctrl", "shift", "p"]`.            |
 | `desktop.actions(actions)`            | `desktop.actions(actions)`                | Run an ordered batch in one request; stops at the first failing action.           |
-| `desktop.step(actions, { waitForChange?, settleMs? })` | `desktop.step(actions, wait_for_change=False, settle_ms=0)` | Run a batch and capture the frame after it in one request, the first changed frame with `waitForChange`; failures are reported in the result, not thrown. |
+| `desktop.step(actions, { waitForChange?, settleMs?, format? })` | `desktop.step(actions, wait_for_change=False, settle_ms=0, format="png")` | Run a batch and capture the frame after it in one request, the first changed frame with `waitForChange`; `timings` says where the sandbox spent the turn; failures are reported in the result, not thrown. |
 | `desktop.resize(width, height)`       | `desktop.resize(width, height)`           | Resize the display live. Width a multiple of 8, 320–8192; height 200–8192.        |
 | `desktop.getStreamUrl({ viewOnly? })` | `desktop.get_stream_url(view_only=False)` | Publish the viewer port and return a browser URL; signed for 60 s under `private`. |
 

@@ -18,6 +18,7 @@ from .desktop import (
     Desktop,
     Screenshot,
     StepResult,
+    StepTimings,
 )
 from .errors import (
     AuthenticationError,
@@ -82,6 +83,7 @@ __all__ = [
     "DESKTOP_STREAM_PORT",
     "Screenshot",
     "StepResult",
+    "StepTimings",
     "AsyncProvider",
     "AsyncSandbox",
     "AsyncSecret",

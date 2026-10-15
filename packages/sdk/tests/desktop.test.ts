@@ -75,6 +75,26 @@ describe("Desktop.screenshot", () => {
     expect(shot!.data).toEqual(png)
     expect(shot!.width).toBe(1280)
     expect(shot!.height).toBe(800)
+    expect(shot!.format).toBe("png")
+    expect(calls[0].body).toEqual({})
+  })
+
+  it("asks for JPEG only when told to and reports the frame's encoding", async () => {
+    const calls = await recordCalls(
+      [
+        jsonResponse({
+          image: btoa("\xff\xd8"),
+          width: 4,
+          height: 2,
+          format: "FRAME_FORMAT_JPEG",
+        }),
+      ],
+      async (d) => {
+        const shot = await d.screenshot({ format: "jpeg" })
+        expect(shot.format).toBe("jpeg")
+      },
+    )
+    expect(calls[0].body).toEqual({ format: "FRAME_FORMAT_JPEG" })
   })
 
   it("throws when the response has no image", async () => {
@@ -355,7 +375,7 @@ describe("Desktop.step", () => {
         )
         expect(result).toEqual({
           executed: 2,
-          screenshot: { data: pngBytes, width: 4, height: 2 },
+          screenshot: { data: pngBytes, width: 4, height: 2, format: "png" },
         })
       },
     )
@@ -396,10 +416,44 @@ describe("Desktop.step", () => {
           data: pngBytes,
           width: 4,
           height: 2,
+          format: "png",
         })
       },
     )
     expect(calls[0].body).toMatchObject({ settleMs: 500, waitForChange: true })
+  })
+
+  it("carries the sandbox's phase timings and the frame's encoding", async () => {
+    const calls = await recordCalls(
+      [
+        jsonResponse({
+          executed: 1,
+          screenshot: {
+            image: png,
+            width: 4,
+            height: 2,
+            format: "FRAME_FORMAT_JPEG",
+          },
+          queueMs: 1,
+          actionsMs: 12,
+          captureMs: 30,
+        }),
+      ],
+      async (d) => {
+        const result = await d.step([{ type: "click", x: 1, y: 2 }], {
+          format: "jpeg",
+        })
+        expect(result.screenshot?.format).toBe("jpeg")
+        // settleMs is absent from the response: a zero phase is omitted.
+        expect(result.timings).toEqual({
+          queueMs: 1,
+          actionsMs: 12,
+          settleMs: 0,
+          captureMs: 30,
+        })
+      },
+    )
+    expect(calls[0].body).toMatchObject({ format: "FRAME_FORMAT_JPEG" })
   })
 
   it("reports changed as false when the changed-frame capture fails", async () => {

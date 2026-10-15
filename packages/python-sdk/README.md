@@ -58,7 +58,7 @@ live browser viewer. Requires a desktop-enabled template.
 ```python
 sandbox = Sandbox.create(name="desktop", from_template="superserve/desktop")
 
-shot = sandbox.desktop.screenshot()  # PNG bytes + dimensions
+shot = sandbox.desktop.screenshot()  # PNG; format="jpeg" for smaller frames
 sandbox.desktop.click(640, 400)
 sandbox.desktop.write("hello")  # no per-character pacing
 sandbox.desktop.press("ctrl+l")
@@ -72,7 +72,9 @@ sandbox.desktop.actions([
 ])
 
 # ...or the whole turn plus the next frame, still one request:
-step = sandbox.desktop.step([{"type": "click", "x": 640, "y": 400}], wait_for_change=True)
+step = sandbox.desktop.step(
+    [{"type": "click", "x": 640, "y": 400}], wait_for_change=True, format="jpeg"
+)
 frame = step.screenshot
 
 sandbox.desktop.resize(1920, 1080)  # live, no restart
