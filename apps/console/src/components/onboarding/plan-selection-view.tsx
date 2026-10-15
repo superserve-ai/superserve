@@ -273,13 +273,18 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
               previous payment cannot complete.
             </output>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Button disabled={busy} onClick={props.onCheckPayment}>
+              <Button
+                className="h-auto min-h-9 w-full py-2 whitespace-normal sm:w-auto"
+                disabled={busy}
+                onClick={props.onCheckPayment}
+              >
                 {busy ? "Checking…" : "Check payment status"}
               </Button>
               <Button
                 variant="outline"
                 disabled={busy}
                 onClick={props.onCancelPayment}
+                className="h-auto min-h-9 w-full py-2 whitespace-normal sm:w-auto"
               >
                 Cancel checkout and change plan
               </Button>
