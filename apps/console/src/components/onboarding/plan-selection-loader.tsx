@@ -11,31 +11,42 @@ import { createBrowserClient } from "@/lib/supabase/client"
 import { PlanSelection } from "./plan-selection"
 
 export function PlanSelectionLoader({
+  initialContext,
   billingReturn,
   expectedTeam,
   expectedUser,
 }: {
+  initialContext: SignupPlanContext | null
   billingReturn?: string
   expectedTeam?: string
   expectedUser?: string
 }) {
-  const [initial, setInitial] = useState<SignupPlanContext | null>(null)
-  const [failed, setFailed] = useState(false)
+  const [initial, setInitial] = useState<SignupPlanContext | null>(
+    initialContext,
+  )
+  const [failed, setFailed] = useState(!initialContext)
   const [attempt, setAttempt] = useState(0)
+  const [retrying, setRetrying] = useState(false)
   const [switchingAccount, setSwitchingAccount] = useState(false)
   const [recoveryError, setRecoveryError] = useState<string | null>(null)
   const returnPath = `/onboarding/plan/?${new URLSearchParams({ ...(expectedTeam ? { team: expectedTeam } : {}), ...(expectedUser ? { account: expectedUser } : {}), ...(billingReturn ? { billing: billingReturn } : {}) })}`
   useEffect(() => {
+    if (!attempt) return
     let active = true
-    setFailed(false)
-    setInitial(null)
+    setRetrying(true)
     // Invoke as a server action: first signup provisioning can consume proof cookies.
     void getSignupPlanAction(expectedTeam, expectedUser, billingReturn)
       .then((value) => {
-        if (active) setInitial(value)
+        if (active) {
+          setInitial(value)
+          setFailed(false)
+        }
       })
       .catch(() => {
         if (active) setFailed(true)
+      })
+      .finally(() => {
+        if (active) setRetrying(false)
       })
     return () => {
       active = false
@@ -50,12 +61,16 @@ export function PlanSelectionLoader({
             ? "Return to the account and team that started checkout before continuing. We’ll check its payment status before offering another plan."
             : "Please retry to confirm your latest account and payment status."}
         </p>
-        <Button onClick={() => setAttempt((value) => value + 1)}>
-          Try again
+        <Button
+          disabled={retrying}
+          onClick={() => setAttempt((value) => value + 1)}
+        >
+          {retrying ? "Retrying…" : "Try again"}
         </Button>
         {expectedTeam && (
           <Button
             className="ml-3"
+            disabled={retrying}
             variant="outline"
             onClick={async () => {
               const [region, teamId] = expectedTeam.split(":")
@@ -101,12 +116,7 @@ export function PlanSelectionLoader({
         )}
       </main>
     )
-  if (!initial)
-    return (
-      <main className="p-10">
-        <output>Checking your account setup…</output>
-      </main>
-    )
+  if (!initial) return null
   return (
     <PlanSelection
       key={`${initial.userId}:${initial.teamKey}`}

@@ -1,17 +1,12 @@
 "use server"
 
-import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 
 import { getImpersonationContext } from "@/lib/admin/impersonation"
 import { getAuthApiKeyAndTeamForUser } from "@/lib/api/proxy-auth"
-import {
-  parseSignupChoice,
-  type SignupPlanContext,
-} from "@/lib/api/signup-plan"
+import type { SignupPlanContext } from "@/lib/api/signup-plan"
+import { readSignupPlan } from "@/lib/api/signup-plan-read"
 import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
-import { PLAN_OFFER_COOKIE, readPlanOffer } from "@/lib/auth/plan-preselection"
-import { cellFor } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
 export async function getSignupPlanAction(
@@ -47,27 +42,5 @@ export async function getSignupPlanAction(
       redirect("/auth/signup?complete_google=1")
     throw error
   })
-  const teamKey = `${team.region}:${team.teamId}`
-  if (expectedTeam && expectedTeam !== teamKey)
-    throw new Error("Your active team changed. Reload to continue.")
-  const { data, error } = await cellFor(team.region)
-    .createAdminClient()
-    .from("billing_signup_choice")
-    .select("state, offer_key")
-    .eq("team_id", team.teamId)
-    .maybeSingle()
-  // A cell without the onboarding migration still runs the existing signup flow.
-  // Once the table exists, every error is blocking rather than proof of completion.
-  if (error && error.code !== "42P01" && error.code !== "PGRST205")
-    throw new Error("Unable to check your plan. Please retry.")
-  const requestedOffer = readPlanOffer(
-    (await cookies()).get(PLAN_OFFER_COOKIE)?.value,
-    user.id,
-  )
-  return {
-    userId: user.id,
-    teamKey,
-    ...parseSignupChoice(error ? null : data),
-    requestedOffer,
-  }
+  return readSignupPlan(user.id, team, expectedTeam)
 }

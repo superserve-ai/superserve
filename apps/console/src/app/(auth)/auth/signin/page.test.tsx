@@ -182,6 +182,7 @@ describe("SignInPage", () => {
       })
       expect(mockReplace).toHaveBeenCalledWith("/")
     })
+    expect(screen.getByRole("button", { name: /Signing in/ })).toBeDisabled()
   })
 
   it("redirects to next URL after successful login", async () => {

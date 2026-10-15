@@ -54,8 +54,12 @@ function SignInContent() {
           await supabase.auth.signOut()
           return
         }
-        if (user) window.location.replace(nextUrl)
+        if (user) {
+          setIsEmailLoading(true)
+          window.location.replace(nextUrl)
+        }
       } catch {
+        setIsEmailLoading(false)
         // Network error: leave the session alone.
       }
     }
@@ -74,6 +78,7 @@ function SignInContent() {
       return
     }
     setIsEmailLoading(true)
+    let navigating = false
     try {
       const supabase = createBrowserClient()
       const { error } = await supabase.auth.signInWithPassword({
@@ -97,10 +102,11 @@ function SignInContent() {
       posthog.capture(AUTH_EVENTS.SIGN_IN_COMPLETED, { method: "email" })
       // Discard routes prefetched before the session cookies were set.
       window.location.replace(nextUrl)
+      navigating = true
     } catch {
       setErrors({ form: "Error signing in. Please try again." })
     } finally {
-      setIsEmailLoading(false)
+      if (!navigating) setIsEmailLoading(false)
     }
   }
 
