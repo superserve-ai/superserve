@@ -326,14 +326,7 @@ export function PlanUsagePageClient() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Billing & Usage">
-        {summary ? (
-          <p className="text-[11px] font-medium text-muted sm:text-right sm:text-sm">
-            {summary.plan?.name ?? summary.pricing_tier.plan_name} •{" "}
-            {summary.pricing_tier.currency || "USD"}
-          </p>
-        ) : null}
-      </PageHeader>
+      <PageHeader title="Billing & Usage" />
 
       {userLoading ? (
         <div className="flex flex-1 items-center justify-center">

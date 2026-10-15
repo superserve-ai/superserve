@@ -303,7 +303,7 @@ describe("PlanUsagePage", () => {
     })
     renderPage()
 
-    expect(screen.queryByText("Pay-as-you-go • USD")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("billing-statement")).not.toBeInTheDocument()
     expect(screen.queryByText("Current Balance")).not.toBeInTheDocument()
     expect(screen.queryByText("Billing is live")).not.toBeInTheDocument()
     expect(screen.queryByText("Tracked but not billed")).not.toBeInTheDocument()
@@ -388,7 +388,7 @@ describe("PlanUsagePage", () => {
     renderPage()
 
     expect(screen.queryByText("Free During Preview")).not.toBeInTheDocument()
-    expect(screen.queryByText("Pay-as-you-go • USD")).toBeInTheDocument()
+    expect(screen.getByTestId("billing-statement")).toBeInTheDocument()
     expect(useBillingUsage).toHaveBeenCalledWith(
       new Date("2026-06-01T00:00:00.000Z"),
       new Date("2026-07-01T00:00:00.000Z"),
@@ -451,7 +451,7 @@ describe("PlanUsagePage", () => {
         "Billing Period",
       ),
     ).toBeInTheDocument()
-    expect(screen.getByText("Pay-as-you-go • USD")).toBeInTheDocument()
+    expect(screen.getByTestId("billing-statement")).toBeInTheDocument()
     expect(
       within(screen.getByTestId("customer-billing-section")).getByText(
         "Credits remaining: $76.55",
@@ -829,7 +829,7 @@ describe("PlanUsagePage", () => {
     ).not.toBeInTheDocument()
     expect(screen.getByText("Usage Details")).toBeInTheDocument()
     expect(screen.queryByText(/Last updated:/i)).not.toBeInTheDocument()
-    expect(screen.getByText("Pay-as-you-go • USD")).toBeInTheDocument()
+    expect(screen.getByTestId("billing-statement")).toBeInTheDocument()
     expect(screen.queryByTestId("usage-cards-grid")).not.toBeInTheDocument()
     expect(screen.queryByTestId("sandboxes-card")).not.toBeInTheDocument()
     expect(screen.queryByTestId("compute-section")).not.toBeInTheDocument()
