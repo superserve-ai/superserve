@@ -905,6 +905,137 @@ describe("PlanUsagePage", () => {
       "use:impersonated-team",
     )
   })
+  describe("current plan and credits", () => {
+    const included = {
+      amount_usd: 1000,
+      period_start: "2026-06-01T00:00:00.000Z",
+      period_end: "2026-07-01T00:00:00.000Z",
+    }
+    const pro = (overrides: Record<string, unknown>) => ({
+      key: "pro_monthly",
+      name: "Pro Monthly",
+      status: "active",
+      price_usd: 1200,
+      billing_interval_months: 1,
+      starts_at: "2026-06-01T00:00:00.000Z",
+      ends_at: null,
+      included_usage: { ...included, status: "issued" },
+      ...overrides,
+    })
+
+    function withSummary(overrides: Record<string, unknown>) {
+      const current = useBillingSummary()
+      useBillingSummary.mockReturnValue({
+        ...current,
+        data: { ...current.data, ...overrides },
+      })
+      renderPage()
+    }
+
+    const creditsRemaining = () =>
+      screen.getAllByText(/Credits remaining/).map((node) => node.textContent)
+
+    it("shows Free with no included usage", () => {
+      withSummary({
+        plan: {
+          key: "free",
+          name: "Free",
+          status: "active",
+          price_usd: null,
+          billing_interval_months: null,
+          starts_at: null,
+          ends_at: null,
+          included_usage: null,
+        },
+      })
+      const plan = within(screen.getByTestId("current-plan"))
+      expect(plan.getByText("Free")).toBeInTheDocument()
+      expect(plan.getByText("No subscription fee")).toBeInTheDocument()
+      expect(
+        plan.getByText("None. Usage is billed at standard rates."),
+      ).toBeInTheDocument()
+    })
+
+    it.each([
+      [
+        "Pro Monthly",
+        pro({}),
+        "Pro Monthly",
+        "$1,200.00 / month",
+        "does not roll over",
+      ],
+      [
+        "Pro Annual with a pending allowance",
+        pro({
+          key: "pro_annual",
+          name: "Pro Annual",
+          price_usd: 12000,
+          billing_interval_months: 12,
+          included_usage: { ...included, status: "pending" },
+        }),
+        "Pro Annual",
+        "$12,000.00 / year",
+        "Being added to your account.",
+      ],
+      [
+        "Pro awaiting its first payment",
+        pro({
+          status: "pending",
+          included_usage: { ...included, status: "not_issued" },
+        }),
+        "Awaiting payment",
+        "$1,200.00 / month",
+        "Not added for this period yet",
+      ],
+    ])("shows %s", (_, plan, label, price, detail) => {
+      withSummary({ plan })
+      const card = within(screen.getByTestId("current-plan"))
+      expect(card.getByText(label)).toBeInTheDocument()
+      expect(card.getByText(price)).toBeInTheDocument()
+      expect(
+        card.getByText("$1,000.00 for Jun 1, 2026 - Jul 1, 2026"),
+      ).toBeInTheDocument()
+      expect(card.getByText(new RegExp(detail))).toBeInTheDocument()
+    })
+
+    it("shows Stripe credit instead of the empty local balance", () => {
+      withSummary({
+        credit_source: "stripe",
+        credit_status: "available",
+        credits_applied_usd: null,
+        credits_remaining_usd: null,
+        expected_invoice_amount_usd: 0,
+        stripe_credits_applied_usd: 123.45,
+        stripe_remaining_credit_usd: 876.55,
+      })
+      for (const text of creditsRemaining()) expect(text).toContain("$876.55")
+    })
+
+    it("keeps a known zero balance distinct from an unavailable one", () => {
+      withSummary({
+        credit_source: "stripe",
+        stripe_credits_applied_usd: 123.45,
+        stripe_remaining_credit_usd: 0,
+      })
+      for (const text of creditsRemaining()) expect(text).toContain("$0.00")
+    })
+
+    it("never shows $0 when Stripe credit is unavailable", () => {
+      withSummary({
+        credit_source: "stripe",
+        credit_status: "unavailable",
+        credits_applied_usd: null,
+        credits_remaining_usd: null,
+        expected_invoice_amount_usd: null,
+        stripe_credits_applied_usd: null,
+        stripe_remaining_credit_usd: null,
+      })
+      for (const text of creditsRemaining()) {
+        expect(text).toContain("Unavailable")
+        expect(text).not.toContain("$")
+      }
+    })
+  })
 })
 
 describe("hourly bucket labels", () => {

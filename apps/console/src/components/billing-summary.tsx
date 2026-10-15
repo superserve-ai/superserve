@@ -35,6 +35,30 @@ export function currencyCode(summary: BillingSummaryResponse): string {
   return summary.pricing_tier.currency || "USD"
 }
 
+export interface BillingCredits {
+  applied: number | null
+  remaining: number | null
+  payable: number | null
+}
+
+// Picks the backend's authoritative credit figures; null means unknown, not $0.
+export function billingCredits(
+  summary: BillingSummaryResponse,
+): BillingCredits {
+  if (summary.credit_source === "stripe") {
+    return {
+      applied: summary.stripe_credits_applied_usd ?? null,
+      remaining: summary.stripe_remaining_credit_usd ?? null,
+      payable: summary.expected_invoice_amount_usd,
+    }
+  }
+  return {
+    applied: summary.credits_applied_usd,
+    remaining: summary.credits_remaining_usd,
+    payable: summary.expected_invoice_amount_usd,
+  }
+}
+
 export function formatCurrency(value: number, currency = "USD"): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -105,7 +129,7 @@ export function formatDurationRemaining(ms: number): string {
 
 export interface ProjectedStatementRow {
   label: string
-  value: number
+  value: number | null
   emphasize?: boolean
   negative?: boolean
 }
@@ -144,8 +168,24 @@ export function getProjectedPeriodEndEstimate(
 
   const projectedCharges =
     (summary.current_charges_usd * progress.totalMs) / progress.elapsedMs
+  const credits = billingCredits(summary)
+  // Without a payable figure the backend could not place the current period's
+  // credit, so there is no credit total to project against.
+  if (
+    credits.applied == null ||
+    credits.remaining == null ||
+    credits.payable == null
+  ) {
+    return {
+      available: true,
+      projectedCharges,
+      estimatedCredits: null,
+      estimatedInvoice: null,
+    }
+  }
+  // Remaining credit is net of credit already applied this period.
   const estimatedCredits = Math.min(
-    Math.max(summary.credits_remaining_usd, 0),
+    Math.max(credits.applied + credits.remaining, 0),
     projectedCharges,
   )
 
@@ -168,12 +208,12 @@ export function getProjectedStatementRows(
     { label: "Projected Charges", value: estimate.projectedCharges ?? 0 },
     {
       label: "Estimated Credits",
-      value: estimate.estimatedCredits ?? 0,
+      value: estimate.estimatedCredits,
       negative: true,
     },
     {
       label: "Estimated Invoice",
-      value: estimate.estimatedInvoice ?? 0,
+      value: estimate.estimatedInvoice,
       emphasize: true,
     },
   ]
@@ -254,6 +294,7 @@ export function BillingSummary({
     ),
     0,
   )
+  const credits = billingCredits(summary)
   const projectedRows = getProjectedStatementRows(summary)
   const projectedCharges = projectedRows?.[0]?.value ?? null
   const currentBreakdownRows = getCurrentBreakdownRows(summary)
@@ -282,7 +323,8 @@ export function BillingSummary({
             <StatementColumn
               title="Current Balance"
               sectionLabel="Charges"
-              total={summary.expected_invoice_amount_usd}
+              total={credits.payable}
+              unknownLabel="Unavailable"
               currency={currency}
               totalTone="current"
             >
@@ -298,7 +340,7 @@ export function BillingSummary({
               </div>
               <StatementLine
                 label="Credits Applied"
-                value={summary.credits_applied_usd}
+                value={credits.applied}
                 currency={currency}
                 negative
               />
@@ -310,6 +352,9 @@ export function BillingSummary({
               total={
                 projectedRows?.find((row) => row.label === "Estimated Invoice")
                   ?.value ?? null
+              }
+              unknownLabel={
+                projectedRows ? "Unavailable" : "Not enough usage data"
               }
               currency={currency}
               totalTone="projected"
@@ -332,7 +377,7 @@ export function BillingSummary({
                     value={
                       projectedRows.find(
                         (row) => row.label === "Estimated Credits",
-                      )?.value ?? 0
+                      )?.value ?? null
                     }
                     currency={currency}
                     negative
@@ -347,7 +392,9 @@ export function BillingSummary({
             <ClockCounterClockwiseIcon className="size-4" />
             <span>
               Credits remaining:{" "}
-              {formatCurrency(summary.credits_remaining_usd, currency)}
+              {credits.remaining == null
+                ? "Unavailable"
+                : formatCurrency(credits.remaining, currency)}
             </span>
           </div>
         </div>
@@ -363,11 +410,13 @@ function StatementColumn({
   currency,
   totalTone,
   available = true,
+  unknownLabel,
   children,
 }: {
   title: string
   sectionLabel: string
   total: number | null
+  unknownLabel: string
   currency: string
   totalTone: "current" | "projected"
   available?: boolean
@@ -383,9 +432,7 @@ function StatementColumn({
             totalTone === "projected" && "text-foreground",
           )}
         >
-          {total == null
-            ? "Not enough usage data"
-            : formatCurrency(total, currency)}
+          {total == null ? unknownLabel : formatCurrency(total, currency)}
         </div>
       </div>
       <div className="space-y-1">
@@ -405,7 +452,7 @@ function StatementLine({
   negative = false,
 }: {
   label: string
-  value: number
+  value: number | null
   currency: string
   negative?: boolean
 }) {
@@ -414,8 +461,14 @@ function StatementLine({
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 text-sm">
       <span className="text-foreground">{label}</span>
       <span className="font-mono text-foreground">
-        {prefix}
-        {formatCurrency(Math.abs(value), currency)}
+        {value == null ? (
+          "Unavailable"
+        ) : (
+          <>
+            {prefix}
+            {formatCurrency(Math.abs(value), currency)}
+          </>
+        )}
       </span>
     </div>
   )

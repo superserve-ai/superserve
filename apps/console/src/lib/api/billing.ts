@@ -46,6 +46,24 @@ export interface BillingTrialBalance {
   runway_observed_at?: string | null
 }
 
+export interface BillingIncludedUsage {
+  amount_usd: number
+  period_start: string
+  period_end: string
+  status: "issued" | "pending" | "not_issued"
+}
+
+export interface BillingPlan {
+  key: string
+  name: string
+  status: "active" | "pending"
+  price_usd: number | null
+  billing_interval_months: number | null
+  starts_at: string | null
+  ends_at: string | null
+  included_usage: BillingIncludedUsage | null
+}
+
 export interface BillingSummaryResponse {
   trial?: BillingTrialBalance | null
   billing_mode: "shadow" | "live"
@@ -54,9 +72,16 @@ export interface BillingSummaryResponse {
   payment_setup_required: boolean
   permissions: BillingSummaryPermissions
   current_charges_usd: number
-  credits_applied_usd: number
-  credits_remaining_usd: number
-  expected_invoice_amount_usd: number
+  // null when the authoritative credit source cannot be read; never treat as 0.
+  credits_applied_usd: number | null
+  credits_remaining_usd: number | null
+  expected_invoice_amount_usd: number | null
+  credit_source?: "local_trial" | "stripe"
+  credit_status?: "available" | "unavailable"
+  stripe_credits_applied_usd?: number | null
+  stripe_remaining_credit_usd?: number | null
+  // Optional until every API region reports the commercial plan.
+  plan?: BillingPlan
   cost_breakdown_usd: BillingSummaryCostBreakdown
   resources: BillingSummaryResource[]
   resources_by_key?: Record<string, BillingSummaryResource>
