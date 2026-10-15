@@ -596,6 +596,13 @@ describe("auth callback", () => {
         ),
       )
       expect(response.headers.get("location")).toContain("/sandboxes")
+      const offerCookie = response.cookies.get("ss-plan-offer")
+      if (expected)
+        expect(JSON.parse(offerCookie!.value)).toEqual({
+          userId: "u1",
+          offer: expected,
+        })
+      else expect(offerCookie?.value).toBe("")
       expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
         "user@example.com",
         "Test User",
@@ -606,13 +613,50 @@ describe("auth callback", () => {
     },
   )
 
+  it("preserves an email signup offer after a delayed confirmation", async () => {
+    currentUser!.app_metadata = { provider: "email" }
+    currentUser!.created_at = new Date(Date.now() - 3600000).toISOString()
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?token_hash=token&type=signup&offer=pro_monthly",
+      ),
+    )
+    expect(JSON.parse(response.cookies.get("ss-plan-offer")!.value)).toEqual({
+      userId: "u1",
+      offer: "pro_monthly",
+    })
+  })
+
+  it("preserves checkout account and team through OAuth reauthentication", async () => {
+    const next =
+      "/onboarding/plan/?team=use%3Aoriginal&account=u1&billing=success"
+    const response = await GET(
+      new Request(
+        `https://console.superserve.ai/auth/callback?code=abc&next=${encodeURIComponent(next)}`,
+      ),
+    )
+    expect(new URL(response.headers.get("location")!).pathname).toBe(
+      "/onboarding/plan/",
+    )
+    expect(
+      new URL(response.headers.get("location")!).searchParams.get("team"),
+    ).toBe("use:original")
+    expect(
+      new URL(response.headers.get("location")!).searchParams.get("account"),
+    ).toBe("u1")
+    expect(
+      new URL(response.headers.get("location")!).searchParams.get("billing"),
+    ).toBe("success")
+  })
+
   it("does not route an existing customer's offer as a new signup", async () => {
-    await GET(
+    const response = await GET(
       new Request(
         "https://console.superserve.ai/auth/callback?code=abc&offer=pro_annual",
       ),
     )
     expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+    expect(response.cookies.get("ss-plan-offer")?.value).toBe("")
   })
 
   it("lets a first-time Google user through when proof is valid", async () => {

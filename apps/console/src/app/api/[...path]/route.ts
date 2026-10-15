@@ -53,8 +53,17 @@ function isTeamBillingPath(path: string): boolean {
 function isStripeBillingPath(path: string): boolean {
   return (
     path === "stripe/checkout-session" ||
-    path === "stripe/customer-portal-session"
+    path === "stripe/customer-portal-session" ||
+    isPlanBillingPath(path)
   )
+}
+
+function isPlanBillingPath(path: string): boolean {
+  return [
+    "stripe/pro-checkout",
+    "stripe/pro-checkout/recover",
+    "stripe/plan-choice",
+  ].includes(path)
 }
 
 /** Paths that carry their own auth (e.g. Bearer token). */
@@ -135,6 +144,9 @@ async function proxyRequest(
   }
 
   const skipKeyInjection = shouldSkipKeyInjection(joinedPath)
+  const planRequest = isPlanBillingPath(joinedPath)
+  if (planRequest && request.method !== "POST")
+    return NextResponse.json({ error: "Method not allowed" }, { status: 405 })
   const checkoutRequest =
     joinedPath === "stripe/checkout-session" && request.method === "POST"
   const debugImpersonation =
@@ -231,7 +243,8 @@ async function proxyRequest(
           )
         }
       }
-      if (checkoutRequest) checkoutTeam = selfContext?.team ?? null
+      if (checkoutRequest || planRequest)
+        checkoutTeam = selfContext?.team ?? null
       apiKey = impersonationContext
         ? await getAuthApiKeyForUser(
             user,
@@ -284,6 +297,100 @@ async function proxyRequest(
       ? await request.arrayBuffer()
       : undefined
 
+  if (planRequest) {
+    let input: Record<string, unknown>
+    try {
+      input = JSON.parse(new TextDecoder().decode(body as ArrayBuffer))
+      if (!input || typeof input !== "object" || Array.isArray(input))
+        throw new Error("Invalid request")
+    } catch {
+      return NextResponse.json(
+        { error: { code: "invalid_request", message: "Invalid plan request" } },
+        { status: 400 },
+      )
+    }
+    if (
+      !checkoutTeam ||
+      input.expected_team !== `${checkoutTeam.region}:${checkoutTeam.teamId}`
+    ) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "plan_team_changed",
+            message: "Your active team changed. Reload to continue.",
+          },
+        },
+        { status: 409 },
+      )
+    }
+    if (joinedPath === "stripe/pro-checkout") {
+      if (!["pro_monthly", "pro_annual"].includes(input.offer as string))
+        return NextResponse.json(
+          {
+            error: {
+              code: "invalid_offer",
+              message: "Select a Pro billing frequency",
+            },
+          },
+          { status: 400 },
+        )
+      const validReturn = (value: unknown) => {
+        try {
+          const url = new URL(value as string)
+          return (
+            url.origin === request.nextUrl.origin &&
+            url.pathname.replace(/\/$/, "") === "/onboarding/plan"
+          )
+        } catch {
+          return false
+        }
+      }
+      if (!validReturn(input.success_url) || !validReturn(input.cancel_url))
+        return NextResponse.json(
+          {
+            error: {
+              code: "invalid_request",
+              message: "Invalid payment return URL",
+            },
+          },
+          { status: 400 },
+        )
+      upstreamUrl.pathname = "/stripe/checkout-session"
+      body = JSON.stringify({
+        offer: input.offer,
+        success_url: input.success_url,
+        cancel_url: input.cancel_url,
+      })
+    } else if (joinedPath === "stripe/plan-choice") {
+      if (input.offer !== "free")
+        return NextResponse.json(
+          {
+            error: {
+              code: "invalid_offer",
+              message: "Select Free to continue",
+            },
+          },
+          { status: 400 },
+        )
+      body = JSON.stringify({ offer: "free" })
+    } else {
+      if (typeof input.restart !== "boolean")
+        return NextResponse.json(
+          {
+            error: {
+              code: "invalid_request",
+              message: "Invalid recovery request",
+            },
+          },
+          { status: 400 },
+        )
+      body = JSON.stringify({ restart: input.restart })
+    }
+    headers.delete("content-length")
+    headers.set("content-type", "application/json")
+    upstreamUrl.search = ""
+  }
+
   // Recovery is checked first. Only its specific unavailable outcome can
   // proceed to fresh publication and a new Checkout generation.
   if (checkoutRequest) {
@@ -294,6 +401,34 @@ async function proxyRequest(
       )
     }
     const checkoutUser = user
+    try {
+      const input = JSON.parse(new TextDecoder().decode(body as ArrayBuffer))
+      if (
+        input?.expected_team !== undefined &&
+        input.expected_team !==
+          `${checkoutTeam?.region}:${checkoutTeam?.teamId}`
+      ) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "plan_team_changed",
+              message: "Your active team changed. Reload to continue.",
+            },
+          },
+          { status: 409 },
+        )
+      }
+    } catch {
+      return NextResponse.json(
+        {
+          error: {
+            code: "invalid_request",
+            message: "Invalid Checkout request",
+          },
+        },
+        { status: 400 },
+      )
+    }
     const recoveryHeaders = new Headers(headers)
     recoveryHeaders.delete("content-length")
     recoveryHeaders.set("content-type", "application/json")
@@ -524,7 +659,7 @@ async function forwardResponse(
     }
     responseHeaders.set(key, value)
   }
-  if (joinedPath === "billing/summary") {
+  if (joinedPath === "billing/summary" || isPlanBillingPath(joinedPath)) {
     responseHeaders.set("cache-control", "private, no-store")
   }
   setImpersonationDebugHeaders(

@@ -1,5 +1,6 @@
 import { ImpersonationBanner } from "@/components/admin/impersonation-banner"
 import { DashboardShell } from "@/components/layout/dashboard-shell"
+import { SignupPlanGate } from "@/components/onboarding/signup-plan-gate"
 import { QueryProvider } from "@/components/query-provider"
 import { TrialBillingBanner } from "@/components/trial-billing-banner"
 import {
@@ -30,12 +31,14 @@ export default async function DashboardLayout({
           : null
       }
     >
-      <DashboardShell
-        globalBanner={<TrialBillingBanner />}
-        banner={<ImpersonationBanner context={impersonationContext} />}
-      >
-        {children}
-      </DashboardShell>
+      <SignupPlanGate>
+        <DashboardShell
+          globalBanner={<TrialBillingBanner />}
+          banner={<ImpersonationBanner context={impersonationContext} />}
+        >
+          {children}
+        </DashboardShell>
+      </SignupPlanGate>
     </QueryProvider>
   )
 }

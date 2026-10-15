@@ -132,6 +132,7 @@ export async function createStripeCheckoutSession(params: {
   successUrl: string
   cancelUrl: string
   intentScope: string
+  expectedTeam?: string
 }): Promise<BillingSessionResponse> {
   const key = `superserve:checkout:${params.intentScope}`
   const raw = sessionStorage.getItem(key)
@@ -162,6 +163,7 @@ export async function createStripeCheckoutSession(params: {
         operation_id: intent.operationId,
         success_url: params.successUrl,
         cancel_url: params.cancelUrl,
+        ...(params.expectedTeam ? { expected_team: params.expectedTeam } : {}),
       }),
     })
     if ("url" in prepared) return prepared
@@ -173,7 +175,10 @@ export async function createStripeCheckoutSession(params: {
     return await apiClient<BillingSessionResponse>("/stripe/checkout-session", {
       method: "POST",
       cache: "no-store",
-      body: JSON.stringify({ receipt: intent.receipt }),
+      body: JSON.stringify({
+        receipt: intent.receipt,
+        ...(params.expectedTeam ? { expected_team: params.expectedTeam } : {}),
+      }),
     })
   } catch (error) {
     if (

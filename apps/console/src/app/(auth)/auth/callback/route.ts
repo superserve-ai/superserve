@@ -21,6 +21,7 @@ import {
   readGooglePromotionEvidence,
   retainOriginalGoogleSignup,
 } from "@/lib/auth/google-signup-proof"
+import { PLAN_OFFER_COOKIE } from "@/lib/auth/plan-preselection"
 import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
 import {
   isActiveSignupEvidenceAttempt,
@@ -128,6 +129,7 @@ export async function GET(request: Request) {
         data: { user },
       } = await supabase.auth.getUser()
 
+      let newSignup = false
       if (user) {
         const signupAttemptId =
           searchParams.get("signup_attempt_id") || undefined
@@ -323,6 +325,7 @@ export async function GET(request: Request) {
           }
         }
 
+        newSignup = type !== "invite" && (type === "signup" || isNewUser)
         if (type !== "invite" && (type === "signup" || (code && isNewUser))) {
           const directory = await completedMemberships(
             user.id,
@@ -410,13 +413,34 @@ export async function GET(request: Request) {
           },
         )
 
-        if (!next.startsWith("/device") && !next.startsWith("https://")) {
+        if (
+          !next.startsWith("/device") &&
+          !next.startsWith("https://") &&
+          !/^\/onboarding\/plan\/?(?:\?|$)/.test(next)
+        ) {
           next = "/sandboxes"
         }
       }
 
-      if (next.startsWith("https://")) return NextResponse.redirect(next)
-      return NextResponse.redirect(buildRedirectUrl(origin, next))
+      const response = NextResponse.redirect(
+        next.startsWith("https://") ? next : buildRedirectUrl(origin, next),
+      )
+      if (user && newSignup && requestedOffer) {
+        response.cookies.set(
+          PLAN_OFFER_COOKIE,
+          JSON.stringify({ userId: user.id, offer: requestedOffer }),
+          {
+            httpOnly: true,
+            sameSite: "lax",
+            secure: new URL(request.url).protocol === "https:",
+            path: "/",
+            maxAge: 7 * 24 * 60 * 60,
+          },
+        )
+      }
+      if (!newSignup || !requestedOffer)
+        response.cookies.delete(PLAN_OFFER_COOKIE)
+      return response
     }
   }
   return NextResponse.redirect(`${origin}/auth/auth-code-error`)

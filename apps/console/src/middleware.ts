@@ -25,7 +25,14 @@ export async function middleware(request: NextRequest) {
   if (!user && !isPublicRoute) {
     const signinUrl = request.nextUrl.clone()
     signinUrl.pathname = "/auth/signin"
-    signinUrl.searchParams.set("next", pathname)
+    signinUrl.search = ""
+    signinUrl.searchParams.set(
+      "next",
+      pathname +
+        (pathname.replace(/\/$/, "") === "/onboarding/plan"
+          ? request.nextUrl.search
+          : ""),
+    )
     // Build the redirect on top of client.response so any refreshed Supabase
     // auth cookies (written by getUser() via setAll) survive the redirect.
     const redirect = NextResponse.redirect(signinUrl)
