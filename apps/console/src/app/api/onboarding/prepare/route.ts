@@ -17,5 +17,7 @@ export async function GET(request: Request) {
     unstable_rethrow(error)
     redirect(`${destination}&setup_error=1`)
   }
-  redirect(destination)
+  // Preparation can succeed against a cached team that the page's fresh
+  // membership read no longer sees. Allow only one automatic attempt.
+  redirect(`${destination}&setup_attempted=1`)
 }

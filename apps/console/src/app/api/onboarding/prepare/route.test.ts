@@ -24,7 +24,7 @@ it("provisions before redirecting with the original checkout identity", async ()
       ),
     ),
   ).rejects.toThrow(
-    "/onboarding/plan/?team=use%3Ateam&account=owner&billing=cancel",
+    "/onboarding/plan/?team=use%3Ateam&account=owner&billing=cancel&setup_attempted=1",
   )
   expect(m.prepare).toHaveBeenCalledWith("use:team", "owner", "cancel")
 })

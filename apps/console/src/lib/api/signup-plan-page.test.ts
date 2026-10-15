@@ -7,6 +7,7 @@ const m = vi.hoisted(() => ({
   selection: vi.fn(),
   teams: vi.fn(),
   read: vi.fn(),
+  prepare: vi.fn(),
 }))
 vi.mock("next/navigation", () => ({
   redirect: (url: string) => {
@@ -34,6 +35,11 @@ vi.mock("@/lib/api/active-team", () => ({
 }))
 vi.mock("@/lib/api/teams-actions", () => ({ listTeamsAction: m.teams }))
 vi.mock("@/lib/api/signup-plan-read", () => ({ readSignupPlan: m.read }))
+vi.mock("@/lib/api/signup-plan-actions", () => ({
+  getSignupPlanAction: m.prepare,
+}))
+import { GET as prepareAccount } from "@/app/api/onboarding/prepare/route"
+
 import { getSignupPlanPage } from "./signup-plan-page"
 
 beforeEach(() => {
@@ -55,6 +61,12 @@ beforeEach(() => {
     teamKey: "use:team",
     state: "selecting",
     offer: null,
+  })
+  m.prepare.mockResolvedValue({
+    userId: "owner",
+    teamKey: "use:team",
+    state: "committed",
+    offer: "free",
   })
 })
 
@@ -93,6 +105,35 @@ it("preserves checkout identity through authentication and preparation", async (
 it("shows recovery after provisioning fails instead of redirecting in a loop", async () => {
   m.memberships.mockResolvedValue({ memberships: [], degradedRegions: [] })
   expect(await getSignupPlanPage({ setup_error: "1" })).toBeNull()
+})
+
+it("stops after successful preparation if fresh membership still finds no team", async () => {
+  // The preparation action can still see its cached team after the last
+  // membership was revoked; the page intentionally performs a fresh read.
+  m.memberships.mockResolvedValue({ memberships: [], degradedRegions: [] })
+  const initialRedirect = await getSignupPlanPage().catch((error) => {
+    expect(error.redirect).toBe(true)
+    return new URL(error.message, "https://console.test")
+  })
+  expect(initialRedirect).toBeInstanceOf(URL)
+  const preparedRedirect = await prepareAccount(
+    new Request(initialRedirect as URL),
+  ).catch((error) => {
+    expect(error.redirect).toBe(true)
+    return new URL(error.message, "https://console.test")
+  })
+  if (!preparedRedirect) throw new Error("Expected preparation to redirect")
+  expect(
+    await getSignupPlanPage(Object.fromEntries(preparedRedirect.searchParams)),
+  ).toBeNull()
+  expect(m.prepare).toHaveBeenCalledTimes(1)
+  expect(m.read).not.toHaveBeenCalled()
+})
+
+it("still renders a freshly resolved team after a preparation attempt", async () => {
+  expect(
+    (await getSignupPlanPage({ setup_attempted: "1" }))?.context.teamKey,
+  ).toBe("use:team")
 })
 it("rejects changed accounts and impersonated sessions before reading plans", async () => {
   expect(await getSignupPlanPage({ account: "other" })).toBeNull()

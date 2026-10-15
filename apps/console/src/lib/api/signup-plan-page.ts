@@ -14,6 +14,7 @@ export interface SignupPlanPageParams {
   account?: string
   billing?: string
   setup_error?: string
+  setup_attempted?: string
 }
 
 export function signupPlanPath(params: SignupPlanPageParams) {
@@ -52,7 +53,7 @@ export async function getSignupPlanPage(params: SignupPlanPageParams = {}) {
     if (!team) {
       if (memberships.degradedRegions.length)
         throw new Error("Membership lookup incomplete")
-      if (params.setup_error) return null
+      if (params.setup_error || params.setup_attempted) return null
       const query = new URLSearchParams(signupPlanPath(params).split("?")[1])
       redirect(`/api/onboarding/prepare/?${query}`)
     }
