@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -60,6 +60,28 @@ describe("signup plan gate", () => {
     )
     expect(screen.queryByText("Console contents")).not.toBeInTheDocument()
   })
+  it("refreshes an empty directory after legacy provisioning before exposing the console", async () => {
+    let refreshed!: () => void
+    mocks.teams.refetch.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        refreshed = resolve
+      }),
+    )
+    mocks.getPlan.mockResolvedValue({
+      userId: "new-user",
+      teamKey: "use:new-team",
+      state: "legacy",
+      offer: null,
+    })
+    renderGate()
+    await waitFor(() =>
+      expect(mocks.teams.refetch).toHaveBeenCalledWith({ throwOnError: true }),
+    )
+    expect(screen.queryByText("Console contents")).not.toBeInTheDocument()
+    await act(async () => refreshed())
+    expect(await screen.findByText("Console contents")).toBeVisible()
+  })
+
   it("allows existing teams without a new-user onboarding record", async () => {
     mocks.context = { ready: true, teamKey: "use:existing" }
     mocks.getPlan.mockResolvedValue({

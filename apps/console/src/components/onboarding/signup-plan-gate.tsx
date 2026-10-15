@@ -29,7 +29,13 @@ function SelfSignupPlanGate({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams()
   const query = useQuery({
     queryKey: ["signup-plan", teamKey],
-    queryFn: () => getSignupPlanAction(teamKey ?? undefined),
+    queryFn: async () => {
+      const context = await getSignupPlanAction(teamKey ?? undefined)
+      // Provisioning can create the first team after the directory cached an
+      // empty result. Reconcile that cache before exposing team-scoped pages.
+      if (bootstrap) await teams.refetch({ throwOnError: true })
+      return context
+    },
     enabled: canRead,
     staleTime: 0,
     retry: false,
