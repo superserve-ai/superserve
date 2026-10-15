@@ -237,14 +237,7 @@
               "GET /billing/usage-series",
               "GET /teams/{team_id}/billing/periods",
               "GET /teams/{team_id}/billing/periods/{period_id}/export-preview",
-              "GET /teams/{team_id}/billing/usage",
-              "POST /stripe/checkout-session",
-              "POST /stripe/checkout-session/recover",
-              "POST /stripe/checkout-session/publication-decision",
-              "POST /stripe/customer-portal-session",
-              "POST /stripe/plan-choice",
-              "POST /stripe/pro-checkout/recover",
-              "POST /stripe/webhook"
+              "GET /teams/{team_id}/billing/usage"
             ]
           },
           {

@@ -20,12 +20,20 @@ const HTTP_METHODS = [
 ]
 
 // Paths defined in the spec but intentionally absent from the public nav.
-// Billing/pricing are UI endpoints (console pricing page), not part of the
+// Billing/pricing are UI endpoints (console pricing page) and Stripe routes
+// serve the console's checkout and Stripe's webhooks; none are part of the
 // developer sandbox API reference.
 const EXEMPT_PATHS = new Set([
   "/health",
   "/billing/pricing",
   "/billing/pricing/public",
+  "/stripe/checkout-session",
+  "/stripe/checkout-session/recover",
+  "/stripe/checkout-session/publication-decision",
+  "/stripe/customer-portal-session",
+  "/stripe/plan-choice",
+  "/stripe/pro-checkout/recover",
+  "/stripe/webhook",
 ])
 
 const OP_RE = new RegExp(`^(${HTTP_METHODS.join("|")})\\s+/`)
