@@ -12,7 +12,7 @@ import {
 export default function Page() {
   const [step, setStep] = useState<PlanStep>("plans")
   const [cadence, setCadence] = useState<PlanCadence>("annual")
-  const [selection, setSelection] = useState<"free" | "pro">("free")
+  const [selection, setSelection] = useState<"free" | "pro">("pro")
   const [notice, setNotice] = useState<string | null>(null)
   return (
     <PlanSelectionView

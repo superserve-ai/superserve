@@ -4,7 +4,7 @@ import { initialPlanSelection, readPlanOffer } from "./plan-preselection"
 
 describe("plan preselection", () => {
   it.each([
-    [undefined, "free", "annual"],
+    [undefined, "pro", "annual"],
     ["free", "free", "annual"],
     ["pro_monthly", "pro", "monthly"],
     ["pro_annual", "pro", "annual"],

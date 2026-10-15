@@ -21,9 +21,9 @@ export function readPlanOffer(
 export function initialPlanSelection(offer: RequestedOffer | undefined) {
   return {
     selection:
-      offer === "pro_monthly" || offer === "pro_annual"
-        ? ("pro" as const)
-        : ("free" as const),
+      offer === "free" || offer === "yc_2026"
+        ? ("free" as const)
+        : ("pro" as const),
     cadence:
       offer === "pro_monthly" ? ("monthly" as const) : ("annual" as const),
   }
