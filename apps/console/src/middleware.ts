@@ -9,6 +9,8 @@ const PUBLIC_ROUTES = [
   "/auth/callback",
   "/auth/auth-code-error",
   "/device",
+  "/yc/confirm",
+  "/yc/claim",
 ]
 
 export async function middleware(request: NextRequest) {

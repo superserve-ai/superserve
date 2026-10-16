@@ -380,6 +380,23 @@ describe("auth callback", () => {
     )
   })
 
+  it("returns confirmed YC onboarding to claim completion after ordinary signup", async () => {
+    currentUser!.app_metadata = { provider: "email" }
+    evidenceJar.set(
+      "yc_claim_confirmation",
+      "11111111-1111-4111-8111-111111111111." + "a".repeat(43),
+    )
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?token_hash=token&type=signup",
+      ),
+    )
+    expect(new URL(response.headers.get("location")!).pathname).toBe(
+      "/yc/claim",
+    )
+    expect(mockEvaluateSignupRestriction).toHaveBeenCalled()
+  })
+
   it("does not read active signup evidence for a callback without an attempt ID", async () => {
     currentUser!.app_metadata = { provider: "email" }
     mockReadSignupEvidence.mockResolvedValue("NewerAttemptVisitor")

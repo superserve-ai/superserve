@@ -1,3 +1,4 @@
+import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 
 import {
@@ -419,6 +420,12 @@ export async function GET(request: Request) {
           !/^\/onboarding\/plan\/?(?:\?|$)/.test(next)
         ) {
           next = "/sandboxes"
+        }
+        if (
+          next === "/sandboxes" &&
+          (await cookies()).get("yc_claim_confirmation")
+        ) {
+          next = "/yc/claim"
         }
       }
 
