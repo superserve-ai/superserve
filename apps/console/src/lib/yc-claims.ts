@@ -35,6 +35,8 @@ export function parseYCConfirmation(
     : null
 }
 
+export class YCManualReviewError extends Error {}
+
 export async function ycRequest<T>(
   operation: string,
   body: unknown,
@@ -66,14 +68,14 @@ export async function ycRequest<T>(
       signal: AbortSignal.timeout(10000),
     },
   )
-  if (!response.ok)
-    throw new Error(
+  if (response.status === 409 || response.status === 403)
+    throw new YCManualReviewError(
       response.status === 409
         ? "This claim requires manual review. Contact the Superserve team."
-        : response.status === 403
-          ? "A team owner or administrator must complete this claim."
-          : "YC claim service unavailable. Please retry later.",
+        : "A team owner or administrator must complete this claim.",
     )
+  if (!response.ok)
+    throw new Error("YC claim service unavailable. Please retry later.")
   return response.json() as Promise<T>
 }
 
@@ -134,7 +136,7 @@ export async function ycTeams(
   if (
     directory.memberships.some((t) => !names.has(`${t.region}:${t.teamId}`))
   ) {
-    throw new Error(
+    throw new YCManualReviewError(
       "Team home region requires manual review. Contact Superserve.",
     )
   }

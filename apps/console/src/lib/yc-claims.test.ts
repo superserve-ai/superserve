@@ -33,7 +33,13 @@ vi.mock("@/lib/cells", () => ({
     }),
   }),
 }))
-import { parseYCConfirmation, ycAccount, ycTeams } from "./yc-claims"
+import {
+  parseYCConfirmation,
+  ycAccount,
+  ycTeams,
+  ycRequest,
+  YCManualReviewError,
+} from "./yc-claims"
 const user = {
   id: "11111111-1111-4111-8111-111111111111",
   email: "founder@example.test",
@@ -102,4 +108,20 @@ describe("YC account and team boundary", () => {
       user.id,
     )
   })
+})
+
+it("classifies service conflicts as manual review", async () => {
+  vi.stubEnv("YC_CLAIM_CONSOLE_TOKEN", "a".repeat(32))
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(new Response("", { status: 409 })),
+  )
+  try {
+    await expect(ycRequest("bind", {})).rejects.toBeInstanceOf(
+      YCManualReviewError,
+    )
+  } finally {
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+  }
 })

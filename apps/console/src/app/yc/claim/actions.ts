@@ -9,6 +9,7 @@ import {
   ycRequest,
   ycTeams,
   YC_COOKIE,
+  YCManualReviewError,
   type YCClaim,
 } from "@/lib/yc-claims"
 
@@ -31,8 +32,8 @@ export async function bindYCClaim(form: FormData) {
     )
     result = claim.state === "bound" ? "bound" : "review"
     if (claim.state === "bound") (await cookies()).delete(YC_COOKIE)
-  } catch {
-    result = "retry"
+  } catch (error) {
+    result = error instanceof YCManualReviewError ? "review" : "retry"
   }
   redirect(`/yc/claim?result=${result}`)
 }
@@ -57,8 +58,8 @@ export async function prepareYCTeam() {
     )
       throw new Error("Confirmed claim required")
     await ycTeams(user, true)
-  } catch {
-    result = "retry"
+  } catch (error) {
+    result = error instanceof YCManualReviewError ? "review" : "retry"
   }
   redirect(`/yc/claim?result=${result}`)
 }
