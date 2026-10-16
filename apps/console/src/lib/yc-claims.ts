@@ -131,13 +131,18 @@ export async function ycTeams(
           names.set(`${region}:${team.id}`, team.name)
     }),
   )
-  return directory.memberships
-    .filter((t) => names.has(`${t.region}:${t.teamId}`))
-    .map((t) => ({
-      teamId: t.teamId,
-      region: t.region,
-      name: names.get(`${t.region}:${t.teamId}`)!,
-    }))
+  if (
+    directory.memberships.some((t) => !names.has(`${t.region}:${t.teamId}`))
+  ) {
+    throw new Error(
+      "Team home region requires manual review. Contact Superserve.",
+    )
+  }
+  return directory.memberships.map((t) => ({
+    teamId: t.teamId,
+    region: t.region,
+    name: names.get(`${t.region}:${t.teamId}`)!,
+  }))
 }
 
 export async function ycProof() {

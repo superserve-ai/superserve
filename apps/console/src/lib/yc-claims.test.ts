@@ -84,6 +84,18 @@ describe("YC account and team boundary", () => {
     await expect(ycTeams(user as never, true)).rejects.toThrow("incomplete")
     expect(mocks.provision).not.toHaveBeenCalled()
   })
+  it("routes unresolved legacy placement to review without offering first-team setup", async () => {
+    mocks.directory.mockResolvedValue({
+      memberships: [{ teamId: "team", region: "use" }],
+      degradedRegions: [],
+    })
+    mocks.names.mockResolvedValue({
+      data: [{ id: "team", name: "Legacy Team", home_region: null }],
+      error: null,
+    })
+    await expect(ycTeams(user as never, true)).rejects.toThrow("manual review")
+    expect(mocks.provision).not.toHaveBeenCalled()
+  })
   it("rejects malformed and appended proof values", () => {
     expect(parseYCConfirmation(`${user.id}.${"a".repeat(43)}.extra`)).toBeNull()
     expect(parseYCConfirmation(`${user.id}.${"a".repeat(43)}`)?.id).toBe(
