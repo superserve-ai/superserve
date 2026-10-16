@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest"
 
+import type { SignupPlanContext } from "@/lib/api/signup-plan"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { setActiveTeamAction } from "@/lib/api/teams-actions"
 
@@ -23,6 +24,7 @@ it("blocks a return with a different active team and restores only the checkout 
   vi.mocked(getSignupPlanAction).mockRejectedValue(new Error("Team changed"))
   render(
     <PlanSelectionLoader
+      initialContext={null}
       expectedTeam="use:original"
       expectedUser="owner"
       billingReturn="success"
@@ -31,11 +33,7 @@ it("blocks a return with a different active team and restores only the checkout 
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "account and team that started checkout",
   )
-  expect(getSignupPlanAction).toHaveBeenCalledWith(
-    "use:original",
-    "owner",
-    "success",
-  )
+  expect(getSignupPlanAction).not.toHaveBeenCalled()
   expect(screen.queryByText("Plan choices")).not.toBeInTheDocument()
   vi.mocked(setActiveTeamAction).mockResolvedValue(undefined)
   vi.mocked(getSignupPlanAction).mockResolvedValue({
@@ -61,6 +59,7 @@ it("signs out the other account before returning to bound sign-in", async () => 
     .mockImplementation(() => {})
   render(
     <PlanSelectionLoader
+      initialContext={null}
       expectedTeam="use:original"
       expectedUser="owner"
       billingReturn="success"
@@ -81,4 +80,59 @@ it("signs out the other account before returning to bound sign-in", async () => 
   expect(destination.searchParams.get("account")).toBe("owner")
   expect(destination.searchParams.get("team")).toBe("use:original")
   expect(destination.searchParams.get("billing")).toBe("success")
+})
+
+it("renders the server-resolved plan immediately without another setup check", () => {
+  render(
+    <PlanSelectionLoader
+      initialContext={{
+        userId: "owner",
+        teamKey: "use:original",
+        state: "selecting",
+        offer: null,
+      }}
+    />,
+  )
+  expect(screen.getByText("Plan choices")).toBeVisible()
+  expect(
+    screen.queryByText("Checking your account setup…"),
+  ).not.toBeInTheDocument()
+  expect(getSignupPlanAction).not.toHaveBeenCalled()
+})
+
+it("keeps recovery visible while a slow retry checks the account", async () => {
+  let finish!: (value: SignupPlanContext) => void
+  vi.mocked(getSignupPlanAction).mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve
+    }),
+  )
+  render(
+    <PlanSelectionLoader
+      initialContext={null}
+      expectedTeam="use:original"
+      expectedUser="owner"
+      billingReturn="success"
+    />,
+  )
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+  expect(
+    await screen.findByRole("button", { name: "Retrying…" }),
+  ).toBeDisabled()
+  expect(screen.getByRole("alert")).toBeVisible()
+  expect(screen.queryByText("Plan choices")).not.toBeInTheDocument()
+  expect(getSignupPlanAction).toHaveBeenCalledWith(
+    "use:original",
+    "owner",
+    "success",
+  )
+  await act(async () =>
+    finish({
+      userId: "owner",
+      teamKey: "use:original",
+      state: "pending",
+      offer: "pro_annual",
+    }),
+  )
+  expect(await screen.findByText("Plan choices")).toBeVisible()
 })

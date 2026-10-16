@@ -5,6 +5,7 @@ import { useIsMutating, useQuery } from "@tanstack/react-query"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, type ReactNode } from "react"
 
+import { Spinner } from "@/components/icons"
 import { useQueryScope } from "@/components/query-provider"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { useTeams } from "@/hooks/use-teams"
@@ -38,6 +39,7 @@ function SelfSignupPlanGate({ children }: { children: ReactNode }) {
     },
     enabled: canRead,
     staleTime: 0,
+    refetchOnMount: false,
     retry: false,
   })
   const required = query.data && needsPlanSelection(query.data)
@@ -61,8 +63,13 @@ function SelfSignupPlanGate({ children }: { children: ReactNode }) {
     )
   if (!canRead || !query.data || required)
     return (
-      <main className="p-10">
-        <output>Checking your account setup…</output>
+      <main
+        className="flex min-h-dvh items-center justify-center"
+        aria-busy="true"
+      >
+        <output aria-label="Loading team">
+          <Spinner />
+        </output>
       </main>
     )
   return (

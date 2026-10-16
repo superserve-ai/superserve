@@ -63,6 +63,9 @@ describe("onboarding plan flow", () => {
     expect(commitFreePlan).toHaveBeenCalledWith("use:team")
     expect(assign).toHaveBeenCalledWith("/sandboxes")
     expect(createStripeCheckoutSession).not.toHaveBeenCalled()
+    expect(screen.getByRole("button", { name: "Skip for now" })).toBeDisabled()
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }))
+    expect(commitFreePlan).toHaveBeenCalledTimes(1)
   })
 
   it("sends the selected Pro offer straight to Checkout", async () => {
@@ -222,4 +225,29 @@ describe("onboarding plan flow", () => {
       screen.queryByRole("button", { name: "Continue with Free" }),
     ).not.toBeInTheDocument()
   })
+})
+
+it("rechecks checkout after browser Back restores the previous page", async () => {
+  vi.mocked(startProCheckout).mockResolvedValue(
+    "https://checkout.stripe.com/c/pay/test",
+  )
+  render(<PlanSelection initial={selecting} />)
+  fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
+  await waitFor(() => expect(assign).toHaveBeenCalled())
+  expect(
+    screen.getByRole("button", { name: "Continue to payment" }),
+  ).toBeDisabled()
+  const reads = vi.mocked(getSignupPlanAction).mock.calls.length
+  const restored = new Event("pageshow")
+  Object.defineProperty(restored, "persisted", { value: true })
+  fireEvent(window, restored)
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Continue to payment" }),
+    ).toBeEnabled(),
+  )
+  expect(vi.mocked(getSignupPlanAction).mock.calls.length).toBeGreaterThan(
+    reads,
+  )
+  expect(startProCheckout).toHaveBeenCalledTimes(1)
 })

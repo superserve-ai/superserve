@@ -37,6 +37,7 @@ export function PlanSelection({
   const inFlight = useRef(false)
   const mounted = useRef(true)
   const completionSent = useRef(false)
+  const navigating = useRef(false)
   const step =
     context.state === "pending"
       ? "payment-pending"
@@ -62,17 +63,22 @@ export function PlanSelection({
     [initial.requestedOffer],
   )
 
+  const navigate = useCallback((url: string) => {
+    window.location.assign(url)
+    navigating.current = true
+    inFlight.current = true
+    setBusy(true)
+  }, [])
+
   const finish = useCallback(
     (offer: string | null, salesFallback = false) => {
       if (!completionSent.current) {
         track("completed", offer ?? "free")
         completionSent.current = true
       }
-      window.location.assign(
-        salesFallback ? "/sandboxes?contact_sales=1" : "/sandboxes",
-      )
+      navigate(salesFallback ? "/sandboxes?contact_sales=1" : "/sandboxes")
     },
-    [track],
+    [track, navigate],
   )
 
   const refresh = useCallback(async () => {
@@ -113,8 +119,10 @@ export function PlanSelection({
           }
         }
       } finally {
-        inFlight.current = false
-        if (mounted.current) setBusy(false)
+        if (!navigating.current) {
+          inFlight.current = false
+          if (mounted.current) setBusy(false)
+        }
       }
     },
     [refresh],
@@ -161,8 +169,18 @@ export function PlanSelection({
     const onFocus = () => {
       void checkPayment()
     }
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return
+      navigating.current = false
+      inFlight.current = false
+      void checkPayment()
+    }
     window.addEventListener("focus", onFocus)
-    return () => window.removeEventListener("focus", onFocus)
+    window.addEventListener("pageshow", onPageShow)
+    return () => {
+      window.removeEventListener("focus", onFocus)
+      window.removeEventListener("pageshow", onPageShow)
+    }
   }, [checkPayment])
 
   useEffect(() => {
@@ -242,7 +260,7 @@ export function PlanSelection({
             offer,
             checkoutReturnUrl().toString(),
           )
-          if (url) window.location.assign(url)
+          if (url) navigate(url)
           else await refresh()
         })
       }
@@ -293,7 +311,7 @@ export function PlanSelection({
             throw new Error(
               "Unable to open billing. Please try again or skip for now.",
             )
-          window.location.assign(session.url)
+          navigate(session.url)
         })
       }
       onSkip={() =>
