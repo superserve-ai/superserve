@@ -1,5 +1,5 @@
 import { useQueryClient, type QueryClient } from "@tanstack/react-query"
-import { act, render, screen, waitFor } from "@testing-library/react"
+import { act, render, screen } from "@testing-library/react"
 import { expect, it, vi } from "vitest"
 
 import { QueryProvider } from "@/components/query-provider"
@@ -18,7 +18,7 @@ vi.mock("@/lib/api/teams-actions", () => ({
   listTeamsAction: () => new Promise(() => {}),
 }))
 
-it("renders a verified dashboard immediately but drops its authorization on team reset", async () => {
+it("renders a verified dashboard immediately and keeps it while a team reset re-checks", async () => {
   let client!: QueryClient
   function CaptureClient() {
     client = useQueryClient()
@@ -53,7 +53,5 @@ it("renders a verified dashboard immediately but drops its authorization on team
     refreshTeamScopedQueries(client)
   })
   expect(client.getQueryData(["signup-plan", "use:team"])).toBeUndefined()
-  await waitFor(() =>
-    expect(screen.queryByText("Verified dashboard")).not.toBeInTheDocument(),
-  )
+  expect(screen.getByText("Verified dashboard")).toBeVisible()
 })

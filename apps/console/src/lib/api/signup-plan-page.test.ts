@@ -1,3 +1,4 @@
+import { AuthSessionMissingError } from "@supabase/supabase-js"
 import { beforeEach, expect, it, vi } from "vitest"
 
 const m = vi.hoisted(() => ({
@@ -160,4 +161,14 @@ it("keeps an established team available when an unrelated region is degraded", a
     degradedRegions: ["usw"],
   })
   expect((await getSignupPlanPage())?.context.teamKey).toBe("use:team")
+})
+
+it("sends an expired session to sign-in instead of the setup error", async () => {
+  m.user.mockResolvedValue({
+    data: { user: null },
+    error: new AuthSessionMissingError(),
+  })
+  await expect(getSignupPlanPage()).rejects.toThrow(
+    "/auth/signin?next=%2Fonboarding%2Fplan%2F%3F",
+  )
 })

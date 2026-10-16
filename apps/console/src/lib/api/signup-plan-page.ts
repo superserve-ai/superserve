@@ -1,4 +1,5 @@
 import "server-only"
+import { isAuthSessionMissingError } from "@supabase/supabase-js"
 import { redirect, unstable_rethrow } from "next/navigation"
 
 import { getImpersonationContext } from "@/lib/admin/impersonation"
@@ -34,7 +35,8 @@ export async function getSignupPlanPage(params: SignupPlanPageParams = {}) {
       data: { user },
       error,
     } = await supabase.auth.getUser()
-    if (error) throw error
+    // A missing session is a sign-in, not a failed account check.
+    if (error && !isAuthSessionMissingError(error)) throw error
     if (!user)
       redirect(
         `/auth/signin?next=${encodeURIComponent(signupPlanPath(params))}`,

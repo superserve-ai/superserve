@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 
 import { ImpersonationBanner } from "@/components/admin/impersonation-banner"
 import { DashboardShell } from "@/components/layout/dashboard-shell"
+import { SessionExpiryRedirect } from "@/components/layout/session-expiry-redirect"
 import { PlanSelectionLoader } from "@/components/onboarding/plan-selection-loader"
 import { SignupPlanGate } from "@/components/onboarding/signup-plan-gate"
 import { QueryProvider } from "@/components/query-provider"
@@ -41,6 +42,7 @@ export default async function DashboardLayout({
           : null
       }
     >
+      <SessionExpiryRedirect />
       <SignupPlanGate>
         <DashboardShell
           globalBanner={<TrialBillingBanner />}
