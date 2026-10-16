@@ -18,8 +18,8 @@ export async function readSignupPlan(
   const teamKey = `${team.region}:${team.teamId}`
   if (expectedTeam && expectedTeam !== teamKey)
     throw new Error("Your active team changed. Reload to continue.")
-  const { data, error } = await cellFor(team.region)
-    .createAdminClient()
+  const admin = cellFor(team.region).createAdminClient()
+  const { data, error } = await admin
     .from("billing_signup_choice")
     .select("state, offer_key")
     .eq("team_id", team.teamId)
@@ -28,6 +28,40 @@ export async function readSignupPlan(
   // Once the table exists, every error is blocking rather than proof of completion.
   if (error && error.code !== "42P01" && error.code !== "PGRST205")
     throw new Error("Unable to check your plan. Please retry.")
+  const choice = parseSignupChoice(error ? null : data)
+  if (choice.state === "selecting") {
+    const [intent, billing] = await Promise.all([
+      admin
+        .from("yc_claim_team_intent")
+        .select("claim_id, released_at")
+        .eq("team_id", team.teamId)
+        .maybeSingle(),
+      admin
+        .from("billing_yc_operation")
+        .select("id")
+        .eq("team_id", team.teamId)
+        .maybeSingle(),
+    ])
+    for (const result of [intent, billing]) {
+      if (
+        result.error &&
+        result.error.code !== "42P01" &&
+        result.error.code !== "PGRST205"
+      )
+        throw new Error("Unable to check your plan. Please retry.")
+    }
+    // The durable backend fence owns plan routing, including uncertain binds.
+    // This permits dashboard/payment setup; billing still owns all entitlements.
+    // Revoking eligibility can release the claim fence while an existing billing
+    // contract still requires dashboard access and payment management.
+    if (
+      (!intent.error &&
+        intent.data?.claim_id &&
+        intent.data.released_at === null) ||
+      (!billing.error && billing.data?.id)
+    )
+      choice.state = "yc_claim"
+  }
   const requestedOffer = readPlanOffer(
     (await cookies()).get(PLAN_OFFER_COOKIE)?.value,
     userId,
@@ -35,7 +69,7 @@ export async function readSignupPlan(
   return {
     userId,
     teamKey,
-    ...parseSignupChoice(error ? null : data),
+    ...choice,
     requestedOffer,
   }
 }

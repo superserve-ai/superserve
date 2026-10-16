@@ -184,6 +184,10 @@ export function PlanSelection({
   }, [checkPayment])
 
   useEffect(() => {
+    if (context.state === "yc_claim") {
+      navigate("/yc/claim/")
+      return
+    }
     if (
       context.state === "legacy" ||
       (context.state === "committed" &&
@@ -192,7 +196,14 @@ export function PlanSelection({
           billingReturn === "success"))
     )
       finish(context.offer)
-  }, [context.state, context.offer, freeBilling, billingReturn, finish])
+  }, [
+    context.state,
+    context.offer,
+    freeBilling,
+    billingReturn,
+    finish,
+    navigate,
+  ])
 
   const checkoutReturnUrl = () => {
     const url = new URL("/onboarding/plan/", window.location.origin)
@@ -206,6 +217,9 @@ export function PlanSelection({
     if (latest.state !== "selecting") return false
     return true
   }
+
+  if (context.state === "yc_claim")
+    return <main className="p-10">Opening your YC claim…</main>
 
   if (uncertain)
     return (

@@ -48,6 +48,15 @@ beforeEach(() => {
 })
 
 describe("onboarding plan flow", () => {
+  it("returns YC teams to their claim without offering conflicting purchases", async () => {
+    render(<PlanSelection initial={{ ...selecting, state: "yc_claim" }} />)
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("/yc/claim/"))
+    expect(
+      screen.queryByRole("button", { name: "Continue with Free" }),
+    ).not.toBeInTheDocument()
+    expect(startProCheckout).not.toHaveBeenCalled()
+    expect(commitFreePlan).not.toHaveBeenCalled()
+  })
   it("skips Free billing only after the backend commits Free", async () => {
     let resolve!: () => void
     vi.mocked(commitFreePlan).mockReturnValue(

@@ -3,7 +3,12 @@ import {
   type RequestedOffer,
 } from "@/lib/auth/requested-offer"
 
-export type SignupPlanState = "legacy" | "selecting" | "pending" | "committed"
+export type SignupPlanState =
+  | "legacy"
+  | "selecting"
+  | "pending"
+  | "committed"
+  | "yc_claim"
 export type PurchaseOffer = "pro_monthly" | "pro_annual"
 
 export interface SignupPlanContext {

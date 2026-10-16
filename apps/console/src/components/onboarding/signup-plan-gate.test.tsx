@@ -52,6 +52,17 @@ beforeEach(() => {
   })
 })
 describe("signup plan gate", () => {
+  it("allows YC teams to reach dashboard billing while commercial access remains backend-controlled", async () => {
+    mocks.context = { ready: true, teamKey: "use:yc-team" }
+    mocks.getPlan.mockResolvedValue({
+      state: "yc_claim",
+      offer: null,
+      teamKey: "use:yc-team",
+    })
+    renderGate()
+    expect(await screen.findByText("Console contents")).toBeVisible()
+    expect(mocks.replace).not.toHaveBeenCalled()
+  })
   it("bootstraps a first signup with an empty team directory before rendering console", async () => {
     renderGate()
     await waitFor(() => expect(mocks.getPlan).toHaveBeenCalledWith(undefined))
