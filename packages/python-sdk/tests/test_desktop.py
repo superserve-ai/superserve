@@ -630,10 +630,14 @@ class TestStep:
             )
         )
         result = _make_desktop().step(
-            [{"type": "click", "x": 1, "y": 2}], settle_ms=500, wait_for_change=True
+            [{"type": "click", "x": 1, "y": 2}],
+            settle_ms=500,
+            wait_for_change=True,
+            quiet_ms=60,
         )
         body = _request_body(route)
         assert body["settleMs"] == 500 and body["waitForChange"] is True
+        assert body["quietMs"] == 60
         assert result.changed is True
         assert result.screenshot == Screenshot(data=png, width=4, height=2)
 

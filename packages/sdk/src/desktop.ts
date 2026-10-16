@@ -99,6 +99,14 @@ export interface StepOptions {
   waitForChange?: boolean
   /** Encoding of the captured frame, as for `screenshot()`. */
   format?: FrameFormat
+  /**
+   * With `waitForChange`: keep capturing while repaints keep arriving and
+   * return the frame once the display has been still for this long, so a
+   * batch whose effects land in several paints (a focus ring, then the
+   * typed text) comes back settled. Bounded by `settleMs`; default 0
+   * returns the first changed frame.
+   */
+  quietMs?: number
 }
 
 /** Where the sandbox spent a `step()`, in milliseconds. */
@@ -466,6 +474,8 @@ export class Desktop {
         actions: actions.map(actionBody),
         settleMs: options.settleMs ?? 0,
         ...(options.waitForChange ? { waitForChange: true } : {}),
+        // Sent only when set, so a sandbox that predates it never sees it.
+        ...(options.quietMs ? { quietMs: options.quietMs } : {}),
         ...formatBody(options.format),
       },
       { maxBytes: MAX_SCREENSHOT_RESPONSE_BYTES },

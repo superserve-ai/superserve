@@ -410,6 +410,7 @@ describe("Desktop.step", () => {
         const result = await d.step([{ type: "click", x: 1, y: 2 }], {
           waitForChange: true,
           settleMs: 500,
+          quietMs: 60,
         })
         expect(result.changed).toBe(true)
         expect(result.screenshot).toEqual({
@@ -420,7 +421,11 @@ describe("Desktop.step", () => {
         })
       },
     )
-    expect(calls[0].body).toMatchObject({ settleMs: 500, waitForChange: true })
+    expect(calls[0].body).toMatchObject({
+      settleMs: 500,
+      waitForChange: true,
+      quietMs: 60,
+    })
   })
 
   it("carries the sandbox's phase timings and the frame's encoding", async () => {
