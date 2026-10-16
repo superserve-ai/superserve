@@ -190,16 +190,6 @@
             ]
           },
           {
-            "group": "Snapshots",
-            "pages": [
-              "POST /sandboxes/{sandbox_id}/snapshot",
-              "GET /sandboxes/{sandbox_id}/snapshots",
-              "GET /snapshots/{snapshot_id}",
-              "PATCH /snapshots/{snapshot_id}",
-              "DELETE /snapshots/{snapshot_id}"
-            ]
-          },
-          {
             "group": "Templates",
             "pages": [
               "GET /templates",
@@ -229,26 +219,8 @@
             ]
           },
           {
-            "group": "Billing",
-            "pages": [
-              "GET /billing/pricing",
-              "GET /billing/pricing/public",
-              "GET /billing/summary",
-              "GET /billing/usage-series",
-              "GET /teams/{team_id}/billing/periods",
-              "GET /teams/{team_id}/billing/periods/{period_id}/export-preview",
-              "GET /teams/{team_id}/billing/usage",
-              "POST /stripe/checkout-session",
-              "POST /stripe/checkout-session/recover",
-              "POST /stripe/checkout-session/publication-decision",
-              "POST /stripe/customer-portal-session",
-              "POST /stripe/webhook"
-            ]
-          },
-          {
             "group": "Team Management",
             "pages": [
-              "GET /teams/{team_id}/management",
               "GET /teams/{team_id}/members",
               "POST /teams/{team_id}/members",
               "DELETE /teams/{team_id}/members/{user_id}",

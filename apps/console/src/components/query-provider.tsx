@@ -4,6 +4,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { createContext, useContext, useState } from "react"
 
 import { ApiError } from "@/lib/api/client"
+import { teamKeys } from "@/lib/api/query-keys"
+import type { SignupPlanContext } from "@/lib/api/signup-plan"
+import type { TeamDirectoryResponse } from "@/lib/api/teams-actions"
 
 const QueryScopeContext = createContext("self")
 export interface DashboardTeamContextValue {
@@ -49,12 +52,27 @@ export function QueryProvider({
   cacheScope = "self",
   teamContext = null,
   children,
+  initialSignup,
 }: {
   cacheScope?: string
   teamContext?: DashboardTeamContextValue | null
+  initialSignup?: {
+    context: SignupPlanContext
+    directory: TeamDirectoryResponse
+  }
   children: React.ReactNode
 }) {
-  const [queryClient] = useState(() => createQueryClient())
+  const [queryClient] = useState(() => {
+    const client = createQueryClient()
+    if (initialSignup && cacheScope === "self") {
+      client.setQueryData(teamKeys.directory(), initialSignup.directory)
+      client.setQueryData(
+        ["signup-plan", initialSignup.context.teamKey],
+        initialSignup.context,
+      )
+    }
+    return client
+  })
 
   return (
     <QueryScopeContext.Provider value={cacheScope}>

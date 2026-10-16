@@ -74,9 +74,9 @@ template = Template.create(
 |---|---|---|
 | `name` | `string` | **Required.** Team-scoped identifier. Must not start with `superserve/`. Names are unique per team among non-deleted templates and are released for reuse the moment a template is deleted. |
 | `from` / `from_` | `string` | **Required.** OCI base image (e.g. `python:3.11`). See [BuildSpec](/templates/build-spec#from-base-image). |
-| `vcpu` | `number` | 1-4. Default `1`. |
-| `memoryMib` / `memory_mib` | `number` | 256-4096. Default `1024`. |
-| `diskMib` / `disk_mib` | `number` | 1024-8192. Default `4096`. |
+| `vcpu` | `number` | 1-2 on Free, 1-16 on Pro. Default `1`. |
+| `memoryMib` / `memory_mib` | `number` | 256-2048 on Free, 256-65536 on Pro. Default `1024`. |
+| `diskMib` / `disk_mib` | `number` | 1024-8192 on Free, 1024-65536 on Pro. Default `4096`. |
 | `steps` | [`BuildStep[]`](#buildstep) | Ordered build steps. |
 | `startCmd` / `start_cmd` | `string` | Long-running process captured in the snapshot. |
 | `readyCmd` / `ready_cmd` | `string` | Readiness probe polled every 2s after `startCmd`. |

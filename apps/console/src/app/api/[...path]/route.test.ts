@@ -116,6 +116,131 @@ describe("api proxy /api/[...path]", () => {
     expect(res.status).toBe(404)
   })
 
+  it("forwards only the selected Pro offer and owned return URLs, never client price IDs", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify({ url: "https://checkout.stripe.com/session" }),
+        { status: 200 },
+      ),
+    )
+    const path = ["stripe", "pro-checkout"]
+    const res = await POST(
+      req("POST", path, {
+        body: JSON.stringify({
+          expected_team: "use:team-east",
+          offer: "pro_annual",
+          price_id: "attacker-price",
+          success_url: "https://console.test/onboarding/plan/?billing=success",
+          cancel_url: "https://console.test/onboarding/plan/?billing=cancel",
+        }),
+      }),
+      params(path),
+    )
+    expect(res.status).toBe(200)
+    expect(fetchSpy).toHaveBeenCalledOnce()
+    const [url, init] = fetchSpy.mock.calls[0]
+    expect(url).toBe("https://api.test.superserve.ai/stripe/checkout-session")
+    expect(JSON.parse(init.body)).toEqual({
+      offer: "pro_annual",
+      success_url: "https://console.test/onboarding/plan/?billing=success",
+      cancel_url: "https://console.test/onboarding/plan/?billing=cancel",
+    })
+    expect(res.headers.get("cache-control")).toBe("private, no-store")
+    expect(publishPromotionIdentity).not.toHaveBeenCalled()
+  })
+
+  it.each(["plan-choice", "pro-checkout", "pro-checkout/recover"])(
+    "rejects a stale team's %s request before dispatch",
+    async (suffix) => {
+      const path = ["stripe", ...suffix.split("/")]
+      const res = await POST(
+        req("POST", path, {
+          body: JSON.stringify({
+            expected_team: "usw:old-team",
+            offer: "free",
+            restart: true,
+          }),
+        }),
+        params(path),
+      )
+      expect(res.status).toBe(409)
+      expect(fetchSpy).not.toHaveBeenCalled()
+    },
+  )
+
+  it("preserves the backend's uncertain-payment outcome and accepts only explicit recovery intent", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify({ outcome: "payment_confirmation_pending" }),
+        { status: 202 },
+      ),
+    )
+    const path = ["stripe", "pro-checkout", "recover"]
+    const res = await POST(
+      req("POST", path, {
+        body: JSON.stringify({
+          expected_team: "use:team-east",
+          restart: true,
+          offer: "free",
+        }),
+      }),
+      params(path),
+    )
+    expect(res.status).toBe(202)
+    expect(JSON.parse(fetchSpy.mock.calls[0][1].body)).toEqual({
+      restart: true,
+    })
+    expect(await res.json()).toEqual({
+      outcome: "payment_confirmation_pending",
+    })
+  })
+
+  it("does not allow plan mutation during impersonation", async () => {
+    vi.mocked(getImpersonationContext).mockResolvedValue({
+      teamId: "other",
+      region: "usw",
+    } as never)
+    const path = ["stripe", "plan-choice"]
+    expect(
+      (
+        await POST(
+          req("POST", path, {
+            body: JSON.stringify({ expected_team: "usw:other", offer: "free" }),
+          }),
+          params(path),
+        )
+      ).status,
+    ).toBe(403)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("rejects arbitrary offers and cross-origin payment returns", async () => {
+    const path = ["stripe", "pro-checkout"]
+    for (const body of [
+      {
+        offer: "yc_2026",
+        success_url: "https://console.test/onboarding/plan/",
+        cancel_url: "https://console.test/onboarding/plan/",
+      },
+      {
+        offer: "pro_monthly",
+        success_url: "https://other.test/onboarding/plan/",
+        cancel_url: "https://console.test/onboarding/plan/",
+      },
+    ])
+      expect(
+        (
+          await POST(
+            req("POST", path, {
+              body: JSON.stringify({ expected_team: "use:team-east", ...body }),
+            }),
+            params(path),
+          )
+        ).status,
+      ).toBe(400)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
   it("forwards the snapshots prefix", async () => {
     fetchSpy.mockResolvedValue(new Response("{}", { status: 200 }))
 

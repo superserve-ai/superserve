@@ -7,6 +7,7 @@ import { SandboxError } from "./errors.js"
  * frames. `spawnCommand` opens the socket, sends the start frame, and returns
  * a `CommandSession` handle. Backs `sandbox.commands.spawn(...)`.
  */
+import { abortReason, composeSignals } from "./http.js"
 import { routingHintExpired } from "./routingHint.js"
 import type {
   CommandResult,
@@ -63,7 +64,23 @@ export async function spawnCommand(
   // files use: a browser can't set the sandbox-id header on a WS upgrade, and
   // each session is its own long-lived socket, so there's no pool to share.
   const url = `wss://boxd-${deps.sandboxId}.${deps.sandboxHost}/exec/connect`
-  const ws = await dialWithResume(deps, url)
+  // Startup stops on either signal, so an abort during a slow connect never
+  // starts a command only to kill it; only `signal` outlives the start.
+  const gate = options.startupSignal
+    ? composeSignals(options.startupSignal, options.signal)
+    : { signal: options.signal, release: () => {} }
+  const startup = gate.signal
+  if (startup?.aborted) throw abortReason(startup)
+  let ws: WebSocket
+  try {
+    ws = await dialWithResume(deps, url, startup)
+  } finally {
+    gate.release()
+  }
+  if (startup?.aborted) {
+    ws.close()
+    throw abortReason(startup)
+  }
   ws.send(JSON.stringify(buildStart(command, options)))
   return new Session(ws, options)
 }
@@ -82,19 +99,51 @@ function buildStart(command: string, o: SpawnOptions): Record<string, unknown> {
 async function dialWithResume(
   deps: SpawnDeps,
   url: string,
+  signal?: AbortSignal,
 ): Promise<WebSocket> {
-  if (routingHintExpired(deps)) await deps.refreshActivate()
+  if (routingHintExpired(deps)) await abortable(deps.refreshActivate(), signal)
   try {
-    return await dial(url, deps.getAccessToken(), deps.getRoutingHint?.())
+    return await dial(
+      url,
+      deps.getAccessToken(),
+      deps.getRoutingHint?.(),
+      signal,
+    )
   } catch (err) {
-    if (!(err instanceof SandboxError)) throw err
-    const fresh = await deps.refreshActivate()
-    return await dial(url, fresh, deps.getRoutingHint?.())
+    if (signal?.aborted || !(err instanceof SandboxError)) throw err
+    const fresh = await abortable(deps.refreshActivate(), signal)
+    return await dial(url, fresh, deps.getRoutingHint?.(), signal)
   }
 }
 
-function dial(url: string, token: string, hint?: string): Promise<WebSocket> {
+// An activate is shared with every caller waiting on it, so an abort stops
+// this caller waiting rather than cancelling the request under the others.
+function abortable<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return p
   return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(abortReason(signal))
+      return
+    }
+    const onAbort = () => reject(abortReason(signal))
+    signal.addEventListener("abort", onAbort, { once: true })
+    p.then(resolve, reject).finally(() =>
+      signal.removeEventListener("abort", onAbort),
+    )
+  })
+}
+
+function dial(
+  url: string,
+  token: string,
+  hint?: string,
+  signal?: AbortSignal,
+): Promise<WebSocket> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortReason(signal))
+      return
+    }
     const ws = new WebSocket(url, [
       EXEC_SUBPROTOCOL,
       TOKEN_PREFIX + token,
@@ -105,6 +154,7 @@ function dial(url: string, token: string, hint?: string): Promise<WebSocket> {
       ws.removeEventListener("open", onOpen)
       ws.removeEventListener("error", onError)
       ws.removeEventListener("close", onClose)
+      signal?.removeEventListener("abort", onAbort)
     }
     const onOpen = () => {
       cleanup()
@@ -120,9 +170,24 @@ function dial(url: string, token: string, hint?: string): Promise<WebSocket> {
         new SandboxError(`exec/connect: closed before open (code ${ev.code})`),
       )
     }
+    const onAbort = () => {
+      cleanup()
+      // ws-style polyfills report closing a connecting socket as an error
+      // event; with no listener left, that would take the process down.
+      const swallow = () => {}
+      ws.addEventListener("error", swallow)
+      ws.addEventListener(
+        "close",
+        () => ws.removeEventListener("error", swallow),
+        { once: true },
+      )
+      ws.close()
+      reject(abortReason(signal))
+    }
     ws.addEventListener("open", onOpen)
     ws.addEventListener("error", onError)
     ws.addEventListener("close", onClose)
+    signal?.addEventListener("abort", onAbort, { once: true })
   })
 }
 

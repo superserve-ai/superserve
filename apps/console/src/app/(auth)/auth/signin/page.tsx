@@ -11,6 +11,7 @@ import { Suspense, useEffect, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
+import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
@@ -24,6 +25,7 @@ function SignInContent() {
   const [showPassword, setShowPassword] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const searchParams = useSearchParams()
+  const requestedOffer = normalizeRequestedOffer(searchParams.get("offer"))
   const posthog = usePostHog()
 
   const rawNext = searchParams.get("next") || "/"
@@ -33,6 +35,11 @@ function SignInContent() {
     !/[\\\u0000-\u0020\u007f]/.test(rawNext)
       ? rawNext
       : "/"
+
+  const signUpParams = new URLSearchParams()
+  if (requestedOffer) signUpParams.set("offer", requestedOffer)
+  if (nextUrl !== "/") signUpParams.set("next", nextUrl)
+  const signUpHref = `/auth/signup${signUpParams.size ? `?${signUpParams}` : ""}`
 
   useEffect(() => {
     const checkUser = async () => {
@@ -49,8 +56,12 @@ function SignInContent() {
           await supabase.auth.signOut()
           return
         }
-        if (user) window.location.replace(nextUrl)
+        if (user) {
+          setIsEmailLoading(true)
+          window.location.replace(nextUrl)
+        }
       } catch {
+        setIsEmailLoading(false)
         // Network error: leave the session alone.
       }
     }
@@ -69,6 +80,7 @@ function SignInContent() {
       return
     }
     setIsEmailLoading(true)
+    let navigating = false
     try {
       const supabase = createBrowserClient()
       const { error } = await supabase.auth.signInWithPassword({
@@ -92,10 +104,11 @@ function SignInContent() {
       posthog.capture(AUTH_EVENTS.SIGN_IN_COMPLETED, { method: "email" })
       // Discard routes prefetched before the session cookies were set.
       window.location.replace(nextUrl)
+      navigating = true
     } catch {
       setErrors({ form: "Error signing in. Please try again." })
     } finally {
-      setIsEmailLoading(false)
+      if (!navigating) setIsEmailLoading(false)
     }
   }
 
@@ -106,6 +119,7 @@ function SignInContent() {
       const supabase = createBrowserClient()
       const intentId = await beginGoogleSignIn()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
+      if (requestedOffer) callbackUrl.searchParams.set("offer", requestedOffer)
       if (intentId)
         callbackUrl.searchParams.set("google_signin_intent", intentId)
       if (nextUrl && nextUrl !== "/") {
@@ -228,7 +242,7 @@ function SignInContent() {
         <p className="mt-5 text-center text-xs text-muted">
           Don&apos;t have an account?{" "}
           <Link
-            href="/auth/signup"
+            href={signUpHref}
             className="font-medium text-foreground hover:underline"
           >
             Sign up

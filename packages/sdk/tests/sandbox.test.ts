@@ -248,6 +248,55 @@ describe("Sandbox statics", () => {
     expect(init.method).toBe("POST")
   })
 
+  it("Sandbox.connect retries an activate refused while the pause finishes", async () => {
+    vi.useFakeTimers()
+    try {
+      const mock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          jsonResponse(
+            { error: { code: "sandbox_pausing", message: "still pausing" } },
+            409,
+          ),
+        )
+        .mockResolvedValueOnce(jsonResponse(baseSandbox))
+      vi.stubGlobal("fetch", mock)
+
+      const pending = Sandbox.connect("sbx-1", commonOpts)
+      await vi.advanceTimersByTimeAsync(1_000)
+      const sandbox = await pending
+      expect(sandbox.id).toBe("sbx-1")
+      expect(mock).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("Sandbox.connect gives up on a pause that outlives its retry window", async () => {
+    vi.useFakeTimers()
+    try {
+      const mock = vi.fn(async () =>
+        jsonResponse(
+          { error: { code: "sandbox_pausing", message: "still pausing" } },
+          409,
+        ),
+      )
+      vi.stubGlobal("fetch", mock)
+
+      let outcome: unknown = "pending"
+      const pending = Sandbox.connect("sbx-1", commonOpts).catch((e) => {
+        outcome = e
+      })
+      await vi.advanceTimersByTimeAsync(31_000)
+      await pending
+      expect(outcome).toBeInstanceOf(ConflictError)
+      // One a second from t=0 through t=29; none started at the edge.
+      expect(mock).toHaveBeenCalledTimes(30)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("Sandbox.connect throws when access_token missing", async () => {
     vi.stubGlobal(
       "fetch",
@@ -412,7 +461,35 @@ describe("Sandbox instance methods", () => {
     expect(init.method).toBe("POST")
   })
 
-  it("sandbox.pause sends Prefer: respond-async and follows a 202 until paused", async () => {
+  it("sandbox.pause without wait asks for the acceptance alone", async () => {
+    const sandbox = await makeSandbox()
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ status: "pausing" }, 202))
+    vi.stubGlobal("fetch", mock)
+
+    await expect(sandbox.pause()).resolves.toBeUndefined()
+
+    const [, init] = mock.mock.calls[0] as [string, RequestInit]
+    expect((init.headers as Record<string, string>).Prefer).toBe(
+      "respond-async",
+    )
+    expect(mock).toHaveBeenCalledTimes(1)
+  })
+
+  it("sandbox.pause with wait is one request the server holds until paused", async () => {
+    const sandbox = await makeSandbox()
+    const mock = vi.fn().mockResolvedValueOnce(noContentResponse())
+    vi.stubGlobal("fetch", mock)
+
+    await expect(sandbox.pause({ wait: true })).resolves.toBeUndefined()
+
+    const [, init] = mock.mock.calls[0] as [string, RequestInit]
+    expect((init.headers as Record<string, string>).Prefer).toBeUndefined()
+    expect(mock).toHaveBeenCalledTimes(1)
+  })
+
+  it("sandbox.pause with wait follows a 202 the server stopped waiting on until paused", async () => {
     const sandbox = await makeSandbox()
     const mock = vi
       .fn()
@@ -428,9 +505,7 @@ describe("Sandbox instance methods", () => {
     ).resolves.toBeUndefined()
 
     const [, init] = mock.mock.calls[0] as [string, RequestInit]
-    expect((init.headers as Record<string, string>).Prefer).toBe(
-      "respond-async",
-    )
+    expect((init.headers as Record<string, string>).Prefer).toBeUndefined()
     expect(mock).toHaveBeenCalledTimes(3)
     expect((mock.mock.calls[2] as [string])[0]).toBe(
       "https://api.superserve.ai/sandboxes/sbx-1",
@@ -1001,7 +1076,7 @@ describe("Sandbox instance methods", () => {
     )
   })
 
-  it("sandbox.pause with wait checks closely while the pause is young", async () => {
+  it("sandbox.pause with wait follows a 202 at the slow cadence", async () => {
     const sandbox = await makeSandbox()
     vi.useFakeTimers()
     try {
@@ -1026,10 +1101,11 @@ describe("Sandbox instance methods", () => {
       })
       await vi.advanceTimersByTimeAsync(2_000)
       await pending
-      // Seen within one fast check of the flip, not at the 1s interval.
-      expect(doneAt).toBeGreaterThanOrEqual(500)
-      expect(doneAt).toBeLessThan(600)
-      expect(gets).toBeGreaterThan(5)
+      // The server already waited; what follows is a check a second, not a
+      // fast poll. Seen at the next check after the flip.
+      expect(doneAt).toBeGreaterThanOrEqual(1_000)
+      expect(doneAt).toBeLessThan(1_100)
+      expect(gets).toBe(2)
     } finally {
       vi.useRealTimers()
     }
@@ -1059,35 +1135,6 @@ describe("Sandbox instance methods", () => {
       const gaps = at.slice(1).map((t, i) => t - at[i])
       expect(at.length).toBe(4)
       expect(Math.min(...gaps)).toBeGreaterThanOrEqual(500)
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it("sandbox.pause with wait falls back to the poll interval after the fast window", async () => {
-    const sandbox = await makeSandbox()
-    vi.useFakeTimers()
-    try {
-      const start = Date.now()
-      const at: number[] = []
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(async (_url: string, init: RequestInit) => {
-          if (init.method === "POST")
-            return jsonResponse({ status: "pausing" }, 202)
-          at.push(Date.now() - start)
-          return jsonResponse({
-            ...baseSandbox,
-            status: at.length > 60 ? "paused" : "pausing",
-          })
-        }),
-      )
-      const pending = sandbox.pause({ wait: true })
-      await vi.advanceTimersByTimeAsync(30_000)
-      await pending
-      const late = at.filter((t) => t > 2_000)
-      const gaps = late.slice(1).map((t, i) => t - late[i])
-      expect(Math.min(...gaps)).toBeGreaterThanOrEqual(1_000)
     } finally {
       vi.useRealTimers()
     }
@@ -1129,7 +1176,9 @@ describe("Sandbox instance methods", () => {
           outcome = e
         },
       )
-      await vi.advanceTimersByTimeAsync(31_000)
+      // The held request times out at 30s; the readings then come a second
+      // apart, and the early 'active' ones are not yet an answer.
+      await vi.advanceTimersByTimeAsync(35_000)
       await pending
       expect(outcome).toBe("paused")
     } finally {

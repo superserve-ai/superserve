@@ -303,7 +303,7 @@ describe("PlanUsagePage", () => {
     })
     renderPage()
 
-    expect(screen.queryByText("Pay-as-you-go • USD")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("billing-statement")).not.toBeInTheDocument()
     expect(screen.queryByText("Current Balance")).not.toBeInTheDocument()
     expect(screen.queryByText("Billing is live")).not.toBeInTheDocument()
     expect(screen.queryByText("Tracked but not billed")).not.toBeInTheDocument()
@@ -388,7 +388,7 @@ describe("PlanUsagePage", () => {
     renderPage()
 
     expect(screen.queryByText("Free During Preview")).not.toBeInTheDocument()
-    expect(screen.queryByText("Pay-as-you-go • USD")).toBeInTheDocument()
+    expect(screen.getByTestId("billing-statement")).toBeInTheDocument()
     expect(useBillingUsage).toHaveBeenCalledWith(
       new Date("2026-06-01T00:00:00.000Z"),
       new Date("2026-07-01T00:00:00.000Z"),
@@ -451,7 +451,7 @@ describe("PlanUsagePage", () => {
         "Billing Period",
       ),
     ).toBeInTheDocument()
-    expect(screen.getByText("Pay-as-you-go • USD")).toBeInTheDocument()
+    expect(screen.getByTestId("billing-statement")).toBeInTheDocument()
     expect(
       within(screen.getByTestId("customer-billing-section")).getByText(
         "Credits remaining: $76.55",
@@ -829,7 +829,7 @@ describe("PlanUsagePage", () => {
     ).not.toBeInTheDocument()
     expect(screen.getByText("Usage Details")).toBeInTheDocument()
     expect(screen.queryByText(/Last updated:/i)).not.toBeInTheDocument()
-    expect(screen.getByText("Pay-as-you-go • USD")).toBeInTheDocument()
+    expect(screen.getByTestId("billing-statement")).toBeInTheDocument()
     expect(screen.queryByTestId("usage-cards-grid")).not.toBeInTheDocument()
     expect(screen.queryByTestId("sandboxes-card")).not.toBeInTheDocument()
     expect(screen.queryByTestId("compute-section")).not.toBeInTheDocument()
@@ -904,6 +904,145 @@ describe("PlanUsagePage", () => {
       "impersonated-team",
       "use:impersonated-team",
     )
+  })
+  describe("current plan and credits", () => {
+    const included = {
+      amount_usd: 1000,
+      period_start: "2026-06-01T00:00:00.000Z",
+      period_end: "2026-07-01T00:00:00.000Z",
+    }
+    const pro = (overrides: Record<string, unknown>) => ({
+      key: "pro_monthly",
+      name: "Pro Monthly",
+      status: "active",
+      price_usd: 1200,
+      billing_interval_months: 1,
+      starts_at: "2026-06-01T00:00:00.000Z",
+      ends_at: null,
+      included_usage: { ...included, status: "issued" },
+      ...overrides,
+    })
+
+    function withSummary(overrides: Record<string, unknown>) {
+      const current = useBillingSummary()
+      useBillingSummary.mockReturnValue({
+        ...current,
+        data: { ...current.data, ...overrides },
+      })
+      renderPage()
+    }
+
+    // The plan panel's headline figure plus the billing section's summary line.
+    const creditsRemaining = () => [
+      within(screen.getByTestId("current-plan")).getByText("Credits remaining")
+        .nextElementSibling?.textContent,
+      ...screen
+        .getAllByText(/Credits remaining:/)
+        .map((node) => node.textContent),
+    ]
+
+    it("shows Free with no included usage", () => {
+      withSummary({
+        plan: {
+          key: "free",
+          name: "Free",
+          status: "active",
+          price_usd: null,
+          billing_interval_months: null,
+          starts_at: null,
+          ends_at: null,
+          included_usage: null,
+        },
+      })
+      const plan = within(screen.getByTestId("current-plan"))
+      expect(plan.getByText("Free")).toBeInTheDocument()
+      expect(plan.getByText("Pay as you go")).toBeInTheDocument()
+      expect(plan.getByText("$76.55")).toBeInTheDocument()
+    })
+
+    it.each([
+      [
+        "Pro Monthly",
+        pro({}),
+        "Pro Monthly",
+        "$1,200 / month",
+        "Includes $1,000 for Jun 1 – Jul 1. Unused credit expires.",
+      ],
+      [
+        "Pro Annual with a pending allowance",
+        pro({
+          key: "pro_annual",
+          name: "Pro Annual",
+          price_usd: 12000,
+          billing_interval_months: 12,
+          included_usage: { ...included, status: "pending" },
+        }),
+        "Pro Annual",
+        "$12,000 / year",
+        "$1,000 for Jun 1 – Jul 1 is being added.",
+      ],
+      [
+        "Pro awaiting its first payment",
+        pro({
+          status: "pending",
+          included_usage: { ...included, status: "not_issued" },
+        }),
+        "Awaiting payment",
+        "$1,200 / month",
+        "$1,000 for Jun 1 – Jul 1 is added once payment is confirmed.",
+      ],
+    ])("shows %s", (_, plan, label, price, detail) => {
+      withSummary({ plan })
+      const card = within(screen.getByTestId("current-plan"))
+      expect(card.getByText(label)).toBeInTheDocument()
+      expect(card.getByText(price)).toBeInTheDocument()
+      expect(card.getByText(detail)).toBeInTheDocument()
+    })
+
+    it("does not present a missing plan as Free", () => {
+      withSummary({ plan: undefined })
+      const card = within(screen.getByTestId("current-plan"))
+      expect(card.getByText("Unavailable")).toBeInTheDocument()
+      expect(card.queryByText("Pay as you go")).not.toBeInTheDocument()
+    })
+
+    it("shows Stripe credit instead of the empty local balance", () => {
+      withSummary({
+        credit_source: "stripe",
+        credit_status: "available",
+        credits_applied_usd: null,
+        credits_remaining_usd: null,
+        expected_invoice_amount_usd: 0,
+        stripe_credits_applied_usd: 123.45,
+        stripe_remaining_credit_usd: 876.55,
+      })
+      for (const text of creditsRemaining()) expect(text).toContain("$876.55")
+    })
+
+    it("keeps a known zero balance distinct from an unavailable one", () => {
+      withSummary({
+        credit_source: "stripe",
+        stripe_credits_applied_usd: 123.45,
+        stripe_remaining_credit_usd: 0,
+      })
+      for (const text of creditsRemaining()) expect(text).toContain("$0.00")
+    })
+
+    it("never shows $0 when Stripe credit is unavailable", () => {
+      withSummary({
+        credit_source: "stripe",
+        credit_status: "unavailable",
+        credits_applied_usd: null,
+        credits_remaining_usd: null,
+        expected_invoice_amount_usd: null,
+        stripe_credits_applied_usd: null,
+        stripe_remaining_credit_usd: null,
+      })
+      for (const text of creditsRemaining()) {
+        expect(text).toContain("Unavailable")
+        expect(text).not.toContain("$")
+      }
+    })
   })
 })
 

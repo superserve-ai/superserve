@@ -85,6 +85,15 @@ describe("middleware", () => {
     expect(location).toContain("next=%2Fsandboxes%2Fabc")
   })
 
+  it("preserves the full checkout return through sign-in", async () => {
+    const path =
+      "/onboarding/plan/?team=use%3Aoriginal&account=user&billing=success"
+    const response = await middleware(buildRequest(path))
+    expect(
+      new URL(response.headers.get("location")!).searchParams.get("next"),
+    ).toBe(path)
+  })
+
   it("preserves refreshed auth cookies from client.response on redirect", async () => {
     // Simulate Supabase writing refreshed auth cookies onto client.response
     // (which is what setAll does when getUser() refreshes the token).

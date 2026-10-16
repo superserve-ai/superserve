@@ -11,6 +11,7 @@ import {
   BillingSummary,
   billingErrorMessage,
 } from "@/components/billing-summary"
+import { CurrentPlan } from "@/components/current-plan"
 import { CustomerBillingSection } from "@/components/customer-billing-section"
 import { DateRangeFilter, type DateRange } from "@/components/date-range-filter"
 import { EmptyState } from "@/components/empty-state"
@@ -325,14 +326,7 @@ export function PlanUsagePageClient() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Billing & Usage">
-        {summary ? (
-          <p className="text-[11px] font-medium text-muted sm:text-right sm:text-sm">
-            {summary.pricing_tier.plan_name} •{" "}
-            {summary.pricing_tier.currency || "USD"}
-          </p>
-        ) : null}
-      </PageHeader>
+      <PageHeader title="Billing & Usage" />
 
       {userLoading ? (
         <div className="flex flex-1 items-center justify-center">
@@ -357,7 +351,10 @@ export function PlanUsagePageClient() {
                 onRetry={() => void summaryQuery.refetch()}
               />
             ) : summary ? (
-              <BillingSummary summary={summary} />
+              <>
+                <CurrentPlan summary={summary} />
+                <BillingSummary summary={summary} />
+              </>
             ) : null}
 
             {billingTeam && (

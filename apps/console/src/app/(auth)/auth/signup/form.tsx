@@ -12,6 +12,7 @@ import { useEffect, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
+import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
 import {
   clearFingerprintSignupCapture,
   ensureFingerprintSignupCapture,
@@ -167,6 +168,11 @@ export default function SignUpContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const nextUrl = sanitizeNext(searchParams.get("next"))
+  const requestedOffer = normalizeRequestedOffer(searchParams.get("offer"))
+  const signInParams = new URLSearchParams()
+  if (requestedOffer) signInParams.set("offer", requestedOffer)
+  if (nextUrl !== "/") signInParams.set("next", nextUrl)
+  const signInHref = `/auth/signin${signInParams.size ? `?${signInParams}` : ""}`
   const isCompleteGoogleSignup = searchParams.get("complete_google") === "1"
 
   useEffect(() => {
@@ -204,33 +210,15 @@ export default function SignUpContent() {
         })
         return
       }
-      const result = turnstileToken
-        ? capture
-          ? await signUpWithEmail(
-              email,
-              password,
-              fullName,
-              recaptchaToken,
-              turnstileToken,
-              capture,
-            )
-          : await signUpWithEmail(
-              email,
-              password,
-              fullName,
-              recaptchaToken,
-              turnstileToken,
-            )
-        : capture
-          ? await signUpWithEmail(
-              email,
-              password,
-              fullName,
-              recaptchaToken,
-              undefined,
-              capture,
-            )
-          : await signUpWithEmail(email, password, fullName, recaptchaToken)
+      const result = await signUpWithEmail(
+        email,
+        password,
+        fullName,
+        recaptchaToken,
+        turnstileToken,
+        capture,
+        requestedOffer,
+      )
       if (!result.success) {
         posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
           method: "email",
@@ -243,7 +231,10 @@ export default function SignUpContent() {
         setErrors({ form: result.error || "Error creating account." })
         return
       }
-      posthog.capture(AUTH_EVENTS.SIGN_UP_COMPLETED, { method: "email" })
+      posthog.capture(AUTH_EVENTS.SIGN_UP_COMPLETED, {
+        method: "email",
+        ...(requestedOffer ? { requested_offer: requestedOffer } : {}),
+      })
       clearFingerprintSignupCapture()
       setEmailSent(true)
     } catch {
@@ -285,6 +276,7 @@ export default function SignUpContent() {
       const supabase = createBrowserClient()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
       callbackUrl.searchParams.set("signup_attempt_id", proof.signupAttemptId)
+      if (requestedOffer) callbackUrl.searchParams.set("offer", requestedOffer)
       if (nextUrl && nextUrl !== "/") {
         callbackUrl.searchParams.set("next", nextUrl)
       }
@@ -348,7 +340,7 @@ export default function SignUpContent() {
             <p className="mt-5 text-center text-xs text-muted">
               Already verified?{" "}
               <Link
-                href="/auth/signin"
+                href={signInHref}
                 className="font-medium text-foreground hover:underline"
               >
                 Sign in
@@ -475,7 +467,7 @@ export default function SignUpContent() {
             <p className="mt-5 text-center text-xs text-muted">
               Already have an account?{" "}
               <Link
-                href="/auth/signin"
+                href={signInHref}
                 className="font-medium text-foreground hover:underline"
               >
                 Sign in

@@ -19,6 +19,9 @@ from ._http import (
     pause_poll_delay,
     PAUSE_FAST_POLL_WINDOW_S,
     shared_client,
+    ACTIVATE_PAUSING_RETRY_S,
+    ACTIVATE_PAUSING_WAIT_S,
+    DEFAULT_PAUSE_POLL_S,
 )
 from .commands import Commands, CommandsDeps
 from .desktop import DESKTOP_STREAM_PORT, Desktop, DesktopDeps
@@ -251,11 +254,26 @@ class Sandbox:
         token.
         """
         config = resolve_config(api_key=api_key, base_url=base_url)
-        raw = api_request(
-            "POST",
-            f"{config.base_url}/sandboxes/{sandbox_id}/activate",
-            headers={"X-API-Key": config.api_key},
-        )
+        # A pause still finishing is waited out by the server; past its own
+        # wait it answers sandbox_pausing, and the pause lands shortly after.
+        # No retry starts without a second of the window left, so connect never
+        # runs much past it.
+        deadline = time.monotonic() + ACTIVATE_PAUSING_WAIT_S
+        while True:
+            try:
+                raw = api_request(
+                    "POST",
+                    f"{config.base_url}/sandboxes/{sandbox_id}/activate",
+                    headers={"X-API-Key": config.api_key},
+                )
+                break
+            except ConflictError as exc:
+                if (
+                    exc.code != "sandbox_pausing"
+                    or deadline - time.monotonic() <= ACTIVATE_PAUSING_RETRY_S
+                ):
+                    raise
+                time.sleep(ACTIVATE_PAUSING_RETRY_S)
         token = raw.get("access_token") if raw else None
         if not token:
             raise SandboxError(
@@ -530,11 +548,16 @@ class Sandbox:
         """
         self._require_not_deleted()
         deadline = time.monotonic() + timeout
+        # A waited pause is one request the server holds until the pause
+        # lands; an unwaited one asks for the acceptance alone.
+        headers = {"X-API-Key": self._config.api_key}
+        if not wait:
+            headers["Prefer"] = "respond-async"
         try:
             raw = api_request(
                 "POST",
                 f"{self._config.base_url}/sandboxes/{self.id}/pause",
-                headers={"X-API-Key": self._config.api_key, "Prefer": "respond-async"},
+                headers=headers,
                 budget=timeout if wait else None,
                 client=self._http_client,
             )
@@ -546,9 +569,15 @@ class Sandbox:
             if not wait:
                 raise
             raw = {"status": "pausing"}
-        # A 204 means the pause already completed; only an accepted one is followed.
+        # A 204 means the pause completed. Only one the server stopped waiting
+        # for is followed through the status, at the slow cadence: it has
+        # already run long.
         if wait and isinstance(raw, dict) and raw.get("status") == "pausing":
-            self._wait_until_paused(deadline, timeout, poll_interval_s)
+            self._wait_until_paused(
+                deadline,
+                timeout,
+                DEFAULT_PAUSE_POLL_S if poll_interval_s is None else poll_interval_s,
+            )
 
     def _wait_until_paused(
         self, deadline: float, timeout: float, poll_interval_s: float | None

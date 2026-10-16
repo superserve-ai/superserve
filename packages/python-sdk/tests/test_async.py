@@ -263,6 +263,68 @@ class TestAsyncSandboxSmoke:
             sbx = await AsyncSandbox.connect("sbx-1")
             await sbx.kill()  # Should NOT raise
 
+    async def test_connect_retries_while_the_pause_finishes(self, monkeypatch) -> None:
+        monkeypatch.setattr(async_module, "ACTIVATE_PAUSING_RETRY_S", 0.001)
+        with respx.mock() as router:
+            activate = router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+                side_effect=[
+                    httpx.Response(
+                        409,
+                        json={
+                            "error": {
+                                "code": "sandbox_pausing",
+                                "message": "still pausing",
+                            }
+                        },
+                    ),
+                    httpx.Response(200, json=_raw()),
+                ]
+            )
+            sbx = await AsyncSandbox.connect("sbx-1")
+            try:
+                assert activate.call_count == 2
+            finally:
+                await sbx._close_http_client()
+
+    async def test_connect_gives_up_on_a_pause_that_outlives_its_window(
+        self, monkeypatch
+    ) -> None:
+        class FakeTime:
+            now = 0.0
+
+            def monotonic(self) -> float:
+                return self.now
+
+        class FakeAsyncio:
+            def __init__(self, clock: FakeTime) -> None:
+                self.clock = clock
+
+            async def sleep(self, seconds: float) -> None:
+                self.clock.now += seconds
+
+            def __getattr__(self, name: str) -> object:
+                return getattr(asyncio, name)
+
+        clock = FakeTime()
+        monkeypatch.setattr(async_module, "time", clock)
+        monkeypatch.setattr(async_module, "asyncio", FakeAsyncio(clock))
+        with respx.mock() as router:
+            activate = router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+                return_value=httpx.Response(
+                    409,
+                    json={
+                        "error": {
+                            "code": "sandbox_pausing",
+                            "message": "still pausing",
+                        }
+                    },
+                )
+            )
+            with pytest.raises(ConflictError):
+                await AsyncSandbox.connect("sbx-1")
+            # One a second from t=0 through t=29; none started at the edge.
+            assert activate.call_count == 30
+
     async def test_pause_sends_prefer_respond_async(self) -> None:
         with respx.mock() as router:
             router.post(f"{API}/sandboxes/sbx-1/activate").mock(

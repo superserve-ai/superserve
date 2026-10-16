@@ -67,7 +67,7 @@ const sandbox = await Sandbox.create({
   fromTemplate: "superserve/desktop",
 })
 
-const shot = await sandbox.desktop.screenshot() // PNG bytes + dimensions
+const shot = await sandbox.desktop.screenshot() // PNG; { format: "jpeg" } for smaller frames
 await sandbox.desktop.click(640, 400)
 await sandbox.desktop.write("hello") // no per-character pacing
 await sandbox.desktop.press("ctrl+l")
@@ -83,7 +83,7 @@ await sandbox.desktop.actions([
 // …or the whole turn plus the next frame, still one request:
 const { screenshot } = await sandbox.desktop.step(
   [{ type: "click", x: 640, y: 400 }],
-  { waitForChange: true }, // captures the first frame that changed
+  { waitForChange: true, format: "jpeg" }, // the first frame that changed, as JPEG
 )
 
 await sandbox.desktop.resize(1920, 1080) // live, no restart

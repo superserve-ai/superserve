@@ -110,6 +110,11 @@ PAUSE_FAST_POLL_WINDOW_S = 2.0
 
 DEFAULT_PAUSE_POLL_S = 1.0
 
+# A pause still finishing when connect() asks: past its own wait the server
+# answers sandbox_pausing with Retry-After, and the pause lands shortly after.
+ACTIVATE_PAUSING_RETRY_S = 1.0
+ACTIVATE_PAUSING_WAIT_S = 30.0
+
 
 def pause_poll_delay(elapsed: float, poll_interval_s: float | None) -> float:
     """The SDK's own cadence when the caller set no interval: fast checks while
@@ -125,7 +130,7 @@ DEFAULT_MAX_DOWNLOAD_BYTES = (
     2 * 1024 * 1024 * 1024
 )  # 2 GiB; matches boxd's server-side zip cap
 
-SDK_VERSION = "0.11.1"
+SDK_VERSION = "0.11.4"
 USER_AGENT = (
     f"superserve-python/{SDK_VERSION} "
     f"(python/{sys.version_info.major}.{sys.version_info.minor})"

@@ -100,6 +100,7 @@ export function createFakeClient(): FakeClient {
     data: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
     width: 1280,
     height: 800,
+    format: "png",
   }
   let counter = 0
 
@@ -349,14 +350,14 @@ export function createFakeClient(): FakeClient {
       sandboxes.delete(id)
     },
 
-    async desktopScreenshot(id) {
+    async desktopScreenshot(id, options) {
       must(id)
       if (faults.nextScreenshot) {
         const err = faults.nextScreenshot
         faults.nextScreenshot = undefined
         throw err
       }
-      return screenshot
+      return { ...screenshot, format: options?.format ?? "png" }
     },
 
     async desktopActions(id, actions) {
@@ -395,7 +396,10 @@ export function createFakeClient(): FakeClient {
         faults.nextScreenshot = undefined
         return { executed: actions.length, screenshotError: err.message }
       }
-      return { executed: actions.length, screenshot }
+      return {
+        executed: actions.length,
+        screenshot: { ...screenshot, format: options.format ?? "png" },
+      }
     },
 
     async desktopResize(id, width, height) {

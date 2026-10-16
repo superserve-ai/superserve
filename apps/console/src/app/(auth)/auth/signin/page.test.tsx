@@ -182,6 +182,7 @@ describe("SignInPage", () => {
       })
       expect(mockReplace).toHaveBeenCalledWith("/")
     })
+    expect(screen.getByRole("button", { name: /Signing in/ })).toBeDisabled()
   })
 
   it("redirects to next URL after successful login", async () => {
@@ -271,6 +272,36 @@ describe("SignInPage", () => {
     expect(
       await screen.findByText("Error signing in. Please try again."),
     ).toBeInTheDocument()
+  })
+
+  it("preserves the claim destination when switching to signup", async () => {
+    searchParamsMap = { offer: "yc_2026", next: "/yc/claim" }
+    render(<SignInPage />)
+    const link = await screen.findByRole("link", { name: "Sign up" })
+    const url = new URL(
+      link.getAttribute("href")!,
+      "https://console.example.test",
+    )
+    expect(url.searchParams.get("next")).toBe("/yc/claim")
+    expect(url.searchParams.get("offer")).toBe("yc_2026")
+  })
+
+  it("carries the offer through the signup link and Google signin", async () => {
+    searchParamsMap = { offer: "pro_annual" }
+    mockSignInWithOAuth.mockResolvedValue({ error: null })
+    render(<SignInPage />)
+    expect(
+      await screen.findByRole("link", { name: "Sign up" }),
+    ).toHaveAttribute("href", "/auth/signup?offer=pro_annual")
+    await user.click(
+      screen.getByRole("button", { name: /Continue with Google/ }),
+    )
+    await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalled())
+    expect(
+      new URL(
+        mockSignInWithOAuth.mock.lastCall![0].options.redirectTo,
+      ).searchParams.get("offer"),
+    ).toBe("pro_annual")
   })
 
   it("triggers Google OAuth on button click", async () => {

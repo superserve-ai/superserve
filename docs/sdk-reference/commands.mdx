@@ -106,7 +106,8 @@ In Python the methods are awaitable (`await session.stdin.write(...)`, `await se
 | `timeoutMs` / `timeout_seconds` | `number` | Command timeout. Only sent when specified. |
 | `onStdout` / `on_stdout` | `(data: string) => void` | Stream stdout chunks. |
 | `onStderr` / `on_stderr` | `(data: string) => void` | Stream stderr chunks. |
-| `signal` | `AbortSignal` | TypeScript only. Aborts mid-execution. |
+| `signal` | `AbortSignal` | TypeScript only. Cancels the start, or kills the process once it's running. |
+| `startupSignal` | `AbortSignal` | TypeScript only. Cancels only the connect and start; a command already running is left alone. Defaults to `signal`. |
 
 ## `CommandResult`
 

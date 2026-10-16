@@ -18,7 +18,11 @@ import {
 import { useQueryClient } from "@tanstack/react-query"
 import { useEffect, useMemo, useState } from "react"
 
-import { formatCurrency, formatPeriodDate } from "@/components/billing-summary"
+import {
+  billingCredits,
+  formatCurrency,
+  formatPeriodDate,
+} from "@/components/billing-summary"
 import { useBillingPayment } from "@/hooks/use-billing-payment"
 import { useCustomerBillingPeriods } from "@/hooks/use-customer-billing"
 import type {
@@ -213,6 +217,11 @@ function paymentSummary(
         headline: "Tracking only",
         detail: "Usage is tracked, but billing actions are not available yet.",
       }
+}
+
+function creditsRemainingLabel(summary: BillingSummaryResponse): string {
+  const remaining = billingCredits(summary).remaining
+  return remaining == null ? "Unavailable" : formatCurrency(remaining)
 }
 
 function ResourceCard({ resource }: { resource: BillingSummaryResource }) {
@@ -451,7 +460,7 @@ export function CustomerBillingSection({
             </p>
             <p className="text-xs text-muted">
               {summary
-                ? `Credits remaining: ${formatCurrency(summary.credits_remaining_usd)}`
+                ? `Credits remaining: ${creditsRemainingLabel(summary)}`
                 : "The current statement will appear once billing data loads."}
             </p>
           </CardContent>

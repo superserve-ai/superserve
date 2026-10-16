@@ -1,4 +1,8 @@
 import "server-only"
+import {
+  normalizeRequestedOffer,
+  REQUESTED_OFFER_LABELS,
+} from "@/lib/auth/requested-offer"
 import sendToSlackHook from "@/lib/slack/send-to-webhook"
 import {
   formatSignupEligibility,
@@ -17,8 +21,10 @@ export const notifySlackOfNewUser = async (
   fullName: string | null,
   provider: string | null,
   outcome?: SignupEligibilityPresentationOutcome,
+  offer?: string,
 ) => {
   try {
+    const requestedOffer = normalizeRequestedOffer(offer)
     const annotation = formatSignupEligibility(outcome)
     const annotationText = annotation.emoji
       ? `${annotation.emoji} ${annotation.text}`
@@ -36,6 +42,14 @@ export const notifySlackOfNewUser = async (
             { type: "mrkdwn", text: `*Email:* ${email || "N/A"}` },
             { type: "mrkdwn", text: `*Name:* ${fullName || "N/A"}` },
             { type: "mrkdwn", text: `*Provider:* ${provider || "N/A"}` },
+            ...(requestedOffer
+              ? [
+                  {
+                    type: "mrkdwn",
+                    text: `*Requested offer:* ${REQUESTED_OFFER_LABELS[requestedOffer]}`,
+                  },
+                ]
+              : []),
             {
               type: "mrkdwn",
               text: `*Signup Eligibility:* ${annotationText}`,

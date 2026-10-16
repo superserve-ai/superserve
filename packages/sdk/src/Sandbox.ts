@@ -80,6 +80,10 @@ const DEFAULT_PAUSE_TIMEOUT_MS = 300_000
 const PAUSE_FAST_POLL_MS = 50
 const PAUSE_FAST_POLL_WINDOW_MS = 2_000
 const DEFAULT_PAUSE_POLL_MS = 1_000
+// A pause still finishing when connect() asks: past its own wait the server
+// answers sandbox_pausing with Retry-After, and the pause lands shortly after.
+const ACTIVATE_PAUSING_RETRY_MS = 1_000
+const ACTIVATE_PAUSING_WINDOW_MS = 30_000
 
 type PauseWait = {
   signal: AbortSignal
@@ -307,12 +311,30 @@ export class Sandbox {
   ): Promise<Sandbox> {
     const config = resolveConfig(options)
 
-    const raw = await request<ApiSandboxResponse>({
-      method: "POST",
-      url: `${config.baseUrl}/sandboxes/${sandboxId}/activate`,
-      headers: { "X-API-Key": config.apiKey },
-      signal: options.signal,
-    })
+    // No retry starts without a second of the window left, so connect never
+    // runs much past it.
+    const deadline = Date.now() + ACTIVATE_PAUSING_WINDOW_MS
+    let raw: ApiSandboxResponse
+    for (;;) {
+      try {
+        raw = await request<ApiSandboxResponse>({
+          method: "POST",
+          url: `${config.baseUrl}/sandboxes/${sandboxId}/activate`,
+          headers: { "X-API-Key": config.apiKey },
+          signal: options.signal,
+        })
+        break
+      } catch (err) {
+        if (
+          !(err instanceof ConflictError) ||
+          err.code !== "sandbox_pausing" ||
+          deadline - Date.now() <= ACTIVATE_PAUSING_RETRY_MS
+        ) {
+          throw err
+        }
+        await sleep(ACTIVATE_PAUSING_RETRY_MS, options.signal)
+      }
+    }
 
     if (!raw.access_token) {
       throw new SandboxError(
@@ -505,28 +527,27 @@ export class Sandbox {
     } = {},
   ): Promise<void> {
     const url = `${this._config.baseUrl}/sandboxes/${this.id}/pause`
-    const headers = {
-      "X-API-Key": this._config.apiKey,
-      Prefer: "respond-async",
-    }
     if (!options.wait) {
       // Any failure here, a timeout included, means the pause may not have
       // been accepted; nothing is asserted on the caller's behalf.
       await request<unknown>({
         method: "POST",
         url,
-        headers,
+        headers: { "X-API-Key": this._config.apiKey, Prefer: "respond-async" },
         signal: options.signal,
       })
       return
     }
+    // A waited pause is one request the server holds until the pause lands.
+    // Only a pause the server stopped waiting for (202) is followed through
+    // the sandbox's status, at the slow cadence: it has already run long.
     await this._underPauseDeadline(options, async (ctx) => {
       let raw: { status?: string } | undefined
       try {
         raw = await request<{ status?: string } | undefined>({
           method: "POST",
           url,
-          headers,
+          headers: { "X-API-Key": this._config.apiKey },
           timeoutMs: Math.min(DEFAULT_TIMEOUT_MS, ctx.timeoutMs),
           signal: ctx.signal,
         })
@@ -540,7 +561,10 @@ export class Sandbox {
         }
       }
       if (raw?.status !== "pausing") return
-      await this._pollUntilPaused(ctx, options.pollIntervalMs)
+      await this._pollUntilPaused(
+        ctx,
+        options.pollIntervalMs ?? DEFAULT_PAUSE_POLL_MS,
+      )
     })
   }
 

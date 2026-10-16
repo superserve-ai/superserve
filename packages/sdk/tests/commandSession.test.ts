@@ -1,4 +1,7 @@
+import { type AddressInfo, createServer, type Socket } from "node:net"
+
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { WebSocket as WsWebSocket } from "ws"
 
 import { Commands, type CommandsDeps } from "../src/commands.js"
 import { STDIN_CHUNK_BYTES } from "../src/commandSession.js"
@@ -274,8 +277,129 @@ describe("Commands.spawn", () => {
     await session.wait()
     await Promise.resolve() // let the .finally() microtask run
 
-    expect(added).toBe(1)
-    expect(removed).toBe(1)
+    expect(added).toBeGreaterThan(0)
+    expect(removed).toBe(added)
+  })
+
+  it("an abort during the dial closes the pending socket and sends no start frame", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    behavior = () => {} // never opens
+    const refresh = vi.fn(async () => "tok-refreshed")
+    const controller = new AbortController()
+
+    const pending = new Commands(makeDeps({ refreshActivate: refresh })).spawn(
+      "rm -rf build",
+      { signal: controller.signal },
+    )
+    // A SandboxError reason must not be mistaken for a failed dial and retried.
+    const reason = new SandboxError("cancelled")
+    controller.abort(reason)
+
+    await expect(pending).rejects.toBe(reason)
+    expect(last().readyState).toBe(FakeWebSocket.CLOSED)
+    expect(last().sent).toHaveLength(0)
+    expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it("an already-aborted signal never dials", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(
+      new Commands(makeDeps()).spawn("run", { signal: controller.signal }),
+    ).rejects.toMatchObject({ name: "AbortError" })
+    expect(instances).toHaveLength(0)
+  })
+
+  it("startupSignal gates the start but leaves a running command alone", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    const startup = new AbortController()
+
+    const session = await new Commands(makeDeps()).spawn("run", {
+      startupSignal: startup.signal,
+    })
+    startup.abort()
+
+    expect(last().readyState).toBe(FakeWebSocket.OPEN)
+    expect(last().sent).toHaveLength(1) // the start frame; no kill
+    last()._emit(`{"finished":true,"exit_code":0}`)
+    await expect(session.wait()).resolves.toMatchObject({ exitCode: 0 })
+  })
+
+  it("signal still cancels the start when a startupSignal is also given", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    behavior = () => {} // never opens
+    const startup = new AbortController()
+    const controller = new AbortController()
+
+    const pending = new Commands(makeDeps()).spawn("run", {
+      startupSignal: startup.signal,
+      signal: controller.signal,
+    })
+    controller.abort()
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" })
+    expect(last().readyState).toBe(FakeWebSocket.CLOSED)
+    expect(last().sent).toHaveLength(0)
+  })
+
+  it("an abort while activate is pending stops waiting on it, without dialing", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    const hint = "v1." + btoa(JSON.stringify({ e: 1 })) + ".sig"
+    const refresh = vi.fn(() => new Promise<string>(() => {})) // never settles
+    const controller = new AbortController()
+
+    const pending = new Commands(
+      makeDeps({ getRoutingHint: () => hint, refreshActivate: refresh }),
+    ).spawn("run", { signal: controller.signal })
+    await Promise.resolve()
+    controller.abort()
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" })
+    expect(refresh).toHaveBeenCalledOnce()
+    expect(instances).toHaveLength(0)
+  })
+
+  // The ws polyfill reports closing a still-connecting socket as an error
+  // event; the EventTarget fake above doesn't, so this one dials for real.
+  it("an abort while a ws-polyfill socket is connecting rejects without crashing the process", async () => {
+    // Accepts the TCP connection but never answers the upgrade.
+    const sockets: Socket[] = []
+    const server = createServer((socket) => {
+      sockets.push(socket)
+      socket.on("data", () => {})
+    })
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r))
+    const port = (server.address() as AddressInfo).port
+    class LocalWebSocket extends WsWebSocket {
+      constructor(_url: string, protocols?: string | string[]) {
+        super(`ws://127.0.0.1:${port}/exec/connect`, protocols)
+      }
+    }
+    vi.stubGlobal("WebSocket", LocalWebSocket)
+    const uncaught = vi.fn()
+    process.on("uncaughtException", uncaught)
+    const refresh = vi.fn(async () => "tok-refreshed")
+    const controller = new AbortController()
+    const reason = new Error("cancelled")
+
+    try {
+      const pending = new Commands(
+        makeDeps({ refreshActivate: refresh }),
+      ).spawn("run", { signal: controller.signal })
+      await new Promise((r) => setTimeout(r, 20))
+      controller.abort(reason)
+      await expect(pending).rejects.toBe(reason)
+      // Let the polyfill's deferred error event fire.
+      await new Promise((r) => setTimeout(r, 20))
+      expect(uncaught).not.toHaveBeenCalled()
+      expect(refresh).not.toHaveBeenCalled()
+    } finally {
+      process.off("uncaughtException", uncaught)
+      for (const socket of sockets) socket.destroy()
+      await new Promise<void>((r) => server.close(() => r()))
+    }
   })
 
   it("refreshes an expired route before the first successful handshake", async () => {

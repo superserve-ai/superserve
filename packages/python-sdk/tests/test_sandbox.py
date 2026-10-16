@@ -359,7 +359,9 @@ class TestList:
                 return_value=httpx.Response(200, json=[])
             )
             statuses = [
-                SandboxStatus.ACTIVE, SandboxStatus.STARTING, SandboxStatus.RESUMING
+                SandboxStatus.ACTIVE,
+                SandboxStatus.STARTING,
+                SandboxStatus.RESUMING,
             ]
             Sandbox.list(status=statuses, limit=100)
             assert route.call_count == 1
@@ -446,7 +448,7 @@ class TestInstanceMethods:
             # kill() itself stays safe (no-op on already-killed)
             sbx.kill()
 
-    def test_pause_sends_prefer_respond_async(self) -> None:
+    def test_pause_sends_prefer_respond_async_only_when_not_waiting(self) -> None:
         with respx.mock() as router:
             router.post(f"{API}/sandboxes/sbx-1/activate").mock(
                 return_value=httpx.Response(200, json=_raw())
@@ -460,8 +462,69 @@ class TestInstanceMethods:
                 assert (
                     pause_route.calls.last.request.headers["Prefer"] == "respond-async"
                 )
+                # A waited pause is one request the server holds: no polling.
+                sbx.pause(wait=True)
+                assert "Prefer" not in pause_route.calls.last.request.headers
+                assert pause_route.call_count == 2
             finally:
                 sbx._close_http_client()
+
+    def test_connect_retries_while_the_pause_finishes(self, monkeypatch) -> None:
+        import superserve.sandbox as sandbox_module
+
+        monkeypatch.setattr(sandbox_module, "ACTIVATE_PAUSING_RETRY_S", 0.001)
+        with respx.mock() as router:
+            activate = router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+                side_effect=[
+                    httpx.Response(
+                        409,
+                        json={
+                            "error": {
+                                "code": "sandbox_pausing",
+                                "message": "still pausing",
+                            }
+                        },
+                    ),
+                    httpx.Response(200, json=_raw()),
+                ]
+            )
+            sbx = Sandbox.connect("sbx-1")
+            try:
+                assert activate.call_count == 2
+            finally:
+                sbx._close_http_client()
+
+    def test_connect_gives_up_on_a_pause_that_outlives_its_window(
+        self, monkeypatch
+    ) -> None:
+        import superserve.sandbox as sandbox_module
+
+        class FakeTime:
+            now = 0.0
+
+            def monotonic(self) -> float:
+                return self.now
+
+            def sleep(self, seconds: float) -> None:
+                self.now += seconds
+
+        monkeypatch.setattr(sandbox_module, "time", FakeTime())
+        with respx.mock() as router:
+            activate = router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+                return_value=httpx.Response(
+                    409,
+                    json={
+                        "error": {
+                            "code": "sandbox_pausing",
+                            "message": "still pausing",
+                        }
+                    },
+                )
+            )
+            with pytest.raises(ConflictError):
+                Sandbox.connect("sbx-1")
+            # One a second from t=0 through t=29; none started at the edge.
+            assert activate.call_count == 30
 
     def test_pause_follows_202_until_paused(self) -> None:
         with respx.mock() as router:
