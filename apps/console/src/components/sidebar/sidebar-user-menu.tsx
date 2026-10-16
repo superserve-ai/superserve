@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { useEffect, useRef, useState } from "react"
 
+import { markSigningOut } from "@/components/layout/session-expiry-redirect"
 import { useUser } from "@/hooks/use-user"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
@@ -59,6 +60,7 @@ export function SidebarUserMenu() {
   const handleLogout = async () => {
     setOpen(false)
     posthog.capture(AUTH_EVENTS.SIGN_OUT)
+    markSigningOut()
     try {
       const supabase = createBrowserClient()
       await supabase.auth.signOut()
