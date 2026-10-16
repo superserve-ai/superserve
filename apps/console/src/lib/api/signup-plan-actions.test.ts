@@ -89,6 +89,56 @@ describe("authoritative signup plan read", () => {
     })
     expect((await getSignupPlanAction()).state).toBe("selecting")
   })
+  it.each(["intent", "billing"] as const)(
+    "routes a pending purchase through an authoritative YC %s",
+    async (authority) => {
+      mocks.single.mockResolvedValue({
+        data: { state: "pending", offer_key: "pro_monthly" },
+        error: null,
+      })
+      mocks[authority].mockResolvedValue({
+        data:
+          authority === "intent"
+            ? { claim_id: "claim", released_at: null }
+            : { id: "operation" },
+        error: null,
+      })
+      expect(await getSignupPlanAction()).toMatchObject({
+        state: "yc_claim",
+        offer: null,
+      })
+    },
+  )
+  it.each([null, { claim_id: "claim", released_at: "2026-10-16" }])(
+    "preserves pending purchase recovery without a live YC fence (%j)",
+    async (intent) => {
+      mocks.single.mockResolvedValue({
+        data: { state: "pending", offer_key: "pro_monthly" },
+        error: null,
+      })
+      mocks.intent.mockResolvedValue({ data: intent, error: null })
+      expect(await getSignupPlanAction()).toMatchObject({
+        state: "pending",
+        offer: "pro_monthly",
+      })
+    },
+  )
+  it("preserves an already committed ordinary purchase", async () => {
+    mocks.single.mockResolvedValue({
+      data: { state: "committed", offer_key: "pro_monthly" },
+      error: null,
+    })
+    mocks.intent.mockResolvedValue({
+      data: { claim_id: "claim", released_at: null },
+      error: null,
+    })
+    expect(await getSignupPlanAction()).toMatchObject({
+      state: "committed",
+      offer: "pro_monthly",
+    })
+    expect(mocks.intent).not.toHaveBeenCalled()
+    expect(mocks.billing).not.toHaveBeenCalled()
+  })
   it.each(["active", "renewed"])(
     "preserves dashboard access after revoking %s billing",
     async (state) => {

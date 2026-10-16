@@ -29,7 +29,7 @@ export async function readSignupPlan(
   if (error && error.code !== "42P01" && error.code !== "PGRST205")
     throw new Error("Unable to check your plan. Please retry.")
   const choice = parseSignupChoice(error ? null : data)
-  if (choice.state === "selecting") {
+  if (choice.state === "selecting" || choice.state === "pending") {
     const [intent, billing] = await Promise.all([
       admin
         .from("yc_claim_team_intent")
@@ -59,8 +59,10 @@ export async function readSignupPlan(
         intent.data?.claim_id &&
         intent.data.released_at === null) ||
       (!billing.error && billing.data?.id)
-    )
+    ) {
       choice.state = "yc_claim"
+      choice.offer = null
+    }
   }
   const requestedOffer = readPlanOffer(
     (await cookies()).get(PLAN_OFFER_COOKIE)?.value,
