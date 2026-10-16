@@ -256,6 +256,7 @@ def _step_body(
     settle_ms: int,
     wait_for_change: bool = False,
     format: str = "png",
+    quiet_ms: int = 0,
 ) -> dict[str, Any]:
     if not actions:
         raise ValueError("step: actions is empty")
@@ -266,6 +267,9 @@ def _step_body(
     }
     if wait_for_change:
         body["waitForChange"] = True
+    # Sent only when set, so a sandbox that predates it never sees it.
+    if quiet_ms:
+        body["quietMs"] = quiet_ms
     return body
 
 
@@ -415,6 +419,7 @@ class Desktop:
         settle_ms: int = 0,
         wait_for_change: bool = False,
         format: FrameFormat = "png",
+        quiet_ms: int = 0,
     ) -> StepResult:
         """Run an ordered batch and capture the frame after it, in one request.
 
@@ -427,7 +432,12 @@ class Desktop:
         whose pixels differ from the frame before the batch, waiting at most
         ``settle_ms`` (0 means the sandbox default, 1000); a changed frame
         proves the display repainted, not that the application finished.
-        ``format`` picks the frame encoding as for :meth:`screenshot`.
+        ``format`` picks the frame encoding as for :meth:`screenshot`. With
+        ``wait_for_change``, ``quiet_ms`` keeps capturing while repaints keep
+        arriving and returns the frame once the display has been still for
+        that long (bounded by ``settle_ms``), so a batch whose effects land
+        in several paints comes back settled; 0 returns the first changed
+        frame.
 
         Example::
 
@@ -439,7 +449,7 @@ class Desktop:
         return _decode_step(
             self._rpc(
                 "Step",
-                _step_body(actions, settle_ms, wait_for_change, format),
+                _step_body(actions, settle_ms, wait_for_change, format, quiet_ms),
                 max_bytes=MAX_SCREENSHOT_RESPONSE_BYTES,
             )
         )
@@ -580,12 +590,13 @@ class AsyncDesktop:
         settle_ms: int = 0,
         wait_for_change: bool = False,
         format: FrameFormat = "png",
+        quiet_ms: int = 0,
     ) -> StepResult:
         """Async variant of :meth:`Desktop.step`."""
         return _decode_step(
             await self._rpc(
                 "Step",
-                _step_body(actions, settle_ms, wait_for_change, format),
+                _step_body(actions, settle_ms, wait_for_change, format, quiet_ms),
                 max_bytes=MAX_SCREENSHOT_RESPONSE_BYTES,
             )
         )

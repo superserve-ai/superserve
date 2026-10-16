@@ -34,6 +34,13 @@ const MAX_WAIT_MS = 10_000
 const CHANGE_WAIT_MS = 500
 
 /**
+ * How long the display must stay still after a batch's first repaint before
+ * the frame is taken, so the model sees the typed text and not the focus
+ * ring that preceded it. Bounded by CHANGE_WAIT_MS.
+ */
+const QUIET_MS = 60
+
+/**
  * Fixed settle between the batch and its capture when they are two calls,
  * so the application has repainted.
  */
@@ -227,25 +234,32 @@ export function registerComputerTool(
   // Sandboxes that answered the fused step with "no such procedure"; they
   // get the two-call sequence without paying the failed attempt again.
   const withoutStep = new Set<string>()
-  // Frames go to a model, so JPEG. A boxd that predates JPEG rejects the
-  // format field before reading any input, so the same request is safe to
-  // repeat as PNG; remembered per sandbox like withoutStep.
-  const pngOnly = new Set<string>()
-  async function withFrameFormat<T>(
+  // Frames go to a model, so JPEG, and a batch is captured once the display
+  // has settled. A boxd that predates either option rejects the request
+  // before reading any input, so the same request is safe to repeat without
+  // them; remembered per sandbox like withoutStep.
+  const legacy = new Set<string>()
+  async function withFrameOptions<T>(
     sandbox_id: string,
-    call: (format: FrameFormat) => Promise<T>,
+    call: (frame: { format: FrameFormat; quietMs?: number }) => Promise<T>,
   ): Promise<T> {
-    if (pngOnly.has(sandbox_id)) return call("png")
+    if (legacy.has(sandbox_id)) return call({ format: "png" })
     try {
-      return await call("jpeg")
+      return await call({ format: "jpeg", quietMs: QUIET_MS })
     } catch (e) {
-      if (!(e instanceof ValidationError && /format/i.test(e.message))) throw e
-      pngOnly.add(sandbox_id)
-      return call("png")
+      if (
+        !(
+          e instanceof ValidationError &&
+          /format|quiet|unknown field/i.test(e.message)
+        )
+      )
+        throw e
+      legacy.add(sandbox_id)
+      return call({ format: "png" })
     }
   }
   const screenshotOf = (sandbox_id: string) => () =>
-    withFrameFormat(sandbox_id, (format) =>
+    withFrameOptions(sandbox_id, ({ format }) =>
       client.desktopScreenshot(sandbox_id, { format }),
     )
 
@@ -368,11 +382,11 @@ export function registerComputerTool(
             // captures before releasing its input lock.
             let step: StepResult
             try {
-              step = await withFrameFormat(sandbox_id, (format) =>
+              step = await withFrameOptions(sandbox_id, (frame) =>
                 client.desktopStep(sandbox_id, actions, {
                   settleMs: CHANGE_WAIT_MS,
                   waitForChange: true,
-                  format,
+                  ...frame,
                 }),
               )
             } catch (e) {

@@ -168,7 +168,12 @@ describe("sandbox_computer (in-memory, fake client)", () => {
     expect(fake.desktopSteps).toEqual([
       {
         actions: [{ type: "click", x: 10, y: 20, button: "left" }],
-        options: { settleMs: 500, waitForChange: true, format: "jpeg" },
+        options: {
+          settleMs: 500,
+          waitForChange: true,
+          format: "jpeg",
+          quietMs: 60,
+        },
       },
     ])
     expect(res.content.some((c) => c.type === "image")).toBe(true)
@@ -221,6 +226,21 @@ describe("sandbox_computer (in-memory, fake client)", () => {
     expect(second.content.find((c) => c.type === "image")?.mimeType).toBe(
       "image/png",
     )
+  })
+
+  it("a desktop without the quiet window gets the plain request, once per sandbox", async () => {
+    fake.failNextStepWith = new ValidationError('unknown field "quietMs"')
+    const res = await callRaw({ action: "left_click", coordinate: [10, 20] })
+    expect(res.isError).toBeFalsy()
+    expect(fake.desktopSteps.map((s) => s.options)).toEqual([
+      { settleMs: 500, waitForChange: true, format: "png" },
+    ])
+    await callRaw({ action: "key", text: "Return" })
+    expect(fake.desktopSteps[1].options).toEqual({
+      settleMs: 500,
+      waitForChange: true,
+      format: "png",
+    })
   })
 
   it("a rejected batch is reported, not retried as PNG", async () => {

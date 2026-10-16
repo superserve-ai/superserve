@@ -88,7 +88,10 @@ the batch, waiting at most `settleMs` / `settle_ms` (default 1000, up to
 2000); the result's `changed` says whether a repaint arrived. A changed frame
 proves the display repainted, not that the application finished, so check
 the screenshot for what you expect. Without `waitForChange` the sandbox
-sleeps `settleMs` and then captures. Frames are PNG unless `format` is
+sleeps `settleMs` and then captures. With `quietMs` / `quiet_ms` the capture
+also waits until the display has been still for that long, so a batch that
+paints in steps (a focus ring, then the typed text) comes back settled rather
+than mid-way. Frames are PNG unless `format` is
 `"jpeg"`: several times smaller and faster to encode, the right trade when a
 model reads the frame. The result's `timings` (`queueMs`, `actionsMs`,
 `settleMs`, `captureMs`) say where the sandbox spent the turn, so a slow loop
