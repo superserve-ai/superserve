@@ -1,3 +1,5 @@
+import { recoverSession, redirectToSignIn } from "@/lib/auth/session-recovery"
+
 export class ApiError extends Error {
   status: number
   code: string
@@ -41,6 +43,22 @@ function normalizePath(path: string): string {
   return pathname.endsWith("/") ? path : `${pathname}/${query}`
 }
 
+/** Cancel this caller's wait without cancelling a recovery shared by others. */
+async function recoverBeforeDeadline(signal: AbortSignal) {
+  let abort: () => void = () => {}
+  const aborted = new Promise<never>((_, reject) => {
+    abort = () =>
+      reject(new DOMException("The request timed out", "AbortError"))
+    if (signal.aborted) abort()
+    else signal.addEventListener("abort", abort, { once: true })
+  })
+  try {
+    return await Promise.race([recoverSession(), aborted])
+  } finally {
+    signal.removeEventListener("abort", abort)
+  }
+}
+
 /**
  * Runs a request against the console API proxy with a timeout (30s unless
  * given) and unified error handling, then hands the successful Response to `read`. The reader runs
@@ -67,11 +85,32 @@ async function request<R>(
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
-    const response = await fetch(url, {
+    let response = await fetch(url, {
       ...options,
       headers,
       signal: controller.signal,
     })
+
+    if (response.status === 401 && typeof window !== "undefined") {
+      // Inspect the console session independently: upstream key failures also
+      // return 401 and must not log the user out.
+      const session = await recoverBeforeDeadline(controller.signal)
+      if (controller.signal.aborted)
+        throw new DOMException("The request timed out", "AbortError")
+      if (session === "signed-out") redirectToSignIn()
+      const method = (options.method ?? "GET").toUpperCase()
+      if (
+        session === "authenticated" &&
+        (method === "GET" || method === "HEAD")
+      ) {
+        // Exactly one retry, and never replay a potentially applied mutation.
+        response = await fetch(url, {
+          ...options,
+          headers,
+          signal: controller.signal,
+        })
+      }
+    }
 
     if (!response.ok) {
       let code = "unknown_error"
