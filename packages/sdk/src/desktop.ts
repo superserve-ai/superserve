@@ -56,11 +56,23 @@ export type DesktopAction =
   | { type: "write"; text: string }
   | { type: "scroll"; dx?: number; dy?: number }
 
+/** Encoding of a captured frame. */
+export type FrameFormat = "png" | "jpeg"
+
 export interface Screenshot {
-  /** PNG bytes. */
+  /** Encoded frame bytes, in `format`. */
   data: Uint8Array
   width: number
   height: number
+  format: FrameFormat
+}
+
+export interface ScreenshotOptions {
+  /**
+   * Frame encoding. PNG (the default) is lossless; JPEG is several times
+   * smaller and faster to encode, for loops where a model reads the frame.
+   */
+  format?: FrameFormat
 }
 
 export interface StreamUrlOptions {
@@ -85,6 +97,20 @@ export interface StepOptions {
    * display repainted, not that the application finished.
    */
   waitForChange?: boolean
+  /** Encoding of the captured frame, as for `screenshot()`. */
+  format?: FrameFormat
+}
+
+/** Where the sandbox spent a `step()`, in milliseconds. */
+export interface StepTimings {
+  /** Waiting for the sandbox's input lock. */
+  queueMs: number
+  /** Delivering the actions. */
+  actionsMs: number
+  /** Sleeping, or waiting for a changed frame. */
+  settleMs: number
+  /** Capturing and encoding the frame. */
+  captureMs: number
 }
 
 /**
@@ -106,6 +132,8 @@ export interface StepResult {
    * batch. Also `false` when the sandbox could not compare frames.
    */
   changed?: boolean
+  /** Sandbox-side phase timings; absent from a sandbox that predates them. */
+  timings?: StepTimings
 }
 
 /**
@@ -248,16 +276,26 @@ function actionBody(action: DesktopAction): ActionBody {
   }
 }
 
-function decodeScreenshot(raw: {
+type RawScreenshot = {
   image?: string
   width?: number
   height?: number
-}): Screenshot {
+  format?: string
+}
+
+function decodeScreenshot(raw: RawScreenshot): Screenshot {
   return {
     data: Uint8Array.from(atob(raw.image ?? ""), (c) => c.charCodeAt(0)),
     width: raw.width ?? 0,
     height: raw.height ?? 0,
+    format: raw.format === "FRAME_FORMAT_JPEG" ? "jpeg" : "png",
   }
+}
+
+// PNG is the server default, so the field is only sent for JPEG and a boxd
+// that predates JPEG never sees it.
+function formatBody(format?: FrameFormat): { format?: string } {
+  return format === "jpeg" ? { format: "FRAME_FORMAT_JPEG" } : {}
 }
 
 export class Desktop {
@@ -272,7 +310,7 @@ export class Desktop {
   }
 
   /**
-   * Capture the current screen as a PNG.
+   * Capture the current screen, as a PNG unless `format` says otherwise.
    *
    * One round trip; safe to call while a live stream viewer is open.
    *
@@ -282,12 +320,12 @@ export class Desktop {
    * await fs.writeFile("screen.png", shot.data)
    * ```
    */
-  async screenshot(): Promise<Screenshot> {
-    const raw = await this._rpc<{
-      image?: string
-      width?: number
-      height?: number
-    }>("Screenshot", {}, { maxBytes: MAX_SCREENSHOT_RESPONSE_BYTES })
+  async screenshot(options: ScreenshotOptions = {}): Promise<Screenshot> {
+    const raw = await this._rpc<RawScreenshot>(
+      "Screenshot",
+      formatBody(options.format),
+      { maxBytes: MAX_SCREENSHOT_RESPONSE_BYTES },
+    )
     if (raw.image === undefined) {
       throw new Error("Screenshot response missing image data")
     }
@@ -415,15 +453,20 @@ export class Desktop {
     const raw = await this._rpc<{
       executed?: number
       actionError?: string
-      screenshot?: { image?: string; width?: number; height?: number }
+      screenshot?: RawScreenshot
       captureError?: string
       changed?: boolean
+      queueMs?: number
+      actionsMs?: number
+      settleMs?: number
+      captureMs?: number
     }>(
       "Step",
       {
         actions: actions.map(actionBody),
         settleMs: options.settleMs ?? 0,
         ...(options.waitForChange ? { waitForChange: true } : {}),
+        ...formatBody(options.format),
       },
       { maxBytes: MAX_SCREENSHOT_RESPONSE_BYTES },
     )
@@ -435,6 +478,16 @@ export class Desktop {
     } else {
       result.screenshotError =
         raw.captureError || "Step response missing image data"
+    }
+    const phases = [raw.queueMs, raw.actionsMs, raw.settleMs, raw.captureMs]
+    if (phases.some((ms) => ms !== undefined)) {
+      // proto-JSON omits zero-valued fields, so a reported phase can be missing.
+      result.timings = {
+        queueMs: raw.queueMs ?? 0,
+        actionsMs: raw.actionsMs ?? 0,
+        settleMs: raw.settleMs ?? 0,
+        captureMs: raw.captureMs ?? 0,
+      }
     }
     return result
   }

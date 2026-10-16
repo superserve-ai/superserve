@@ -9,10 +9,12 @@
 
 import {
   type DesktopAction,
+  type FrameFormat,
   type MouseButton,
   NotFoundError,
   type Screenshot,
   type StepResult,
+  ValidationError,
 } from "@superserve/sdk"
 import { z } from "zod"
 
@@ -151,7 +153,7 @@ function imageBlock(shot: Screenshot) {
   return {
     type: "image" as const,
     data: Buffer.from(shot.data).toString("base64"),
-    mimeType: "image/png",
+    mimeType: shot.format === "jpeg" ? "image/jpeg" : "image/png",
   }
 }
 
@@ -201,6 +203,7 @@ async function actThenLook(
   sandbox_id: string,
   action: string,
   actions: DesktopAction[],
+  screenshot: () => Promise<Screenshot>,
 ): Promise<CallToolResult> {
   try {
     await client.desktopActions(sandbox_id, actions)
@@ -211,10 +214,7 @@ async function actThenLook(
   }
   await new Promise((resolve) => setTimeout(resolve, SETTLE_MS))
   try {
-    return screenshotResult(
-      await client.desktopScreenshot(sandbox_id),
-      `${action} done`,
-    )
+    return screenshotResult(await screenshot(), `${action} done`)
   } catch (e) {
     return screenshotFailed(action, formatSdkError(e))
   }
@@ -227,6 +227,27 @@ export function registerComputerTool(
   // Sandboxes that answered the fused step with "no such procedure"; they
   // get the two-call sequence without paying the failed attempt again.
   const withoutStep = new Set<string>()
+  // Frames go to a model, so JPEG. A boxd that predates JPEG rejects the
+  // format field before reading any input, so the same request is safe to
+  // repeat as PNG; remembered per sandbox like withoutStep.
+  const pngOnly = new Set<string>()
+  async function withFrameFormat<T>(
+    sandbox_id: string,
+    call: (format: FrameFormat) => Promise<T>,
+  ): Promise<T> {
+    if (pngOnly.has(sandbox_id)) return call("png")
+    try {
+      return await call("jpeg")
+    } catch (e) {
+      if (!(e instanceof ValidationError && /format/i.test(e.message))) throw e
+      pngOnly.add(sandbox_id)
+      return call("png")
+    }
+  }
+  const screenshotOf = (sandbox_id: string) => () =>
+    withFrameFormat(sandbox_id, (format) =>
+      client.desktopScreenshot(sandbox_id, { format }),
+    )
 
   defineTool<ComputerArgs>(
     server,
@@ -304,7 +325,7 @@ export function registerComputerTool(
         switch (action) {
           case "screenshot":
             return screenshotResult(
-              await client.desktopScreenshot(sandbox_id),
+              await screenshotOf(sandbox_id)(),
               "screenshot",
             )
           case "wait": {
@@ -334,17 +355,26 @@ export function registerComputerTool(
               return toolOk(`${action} done`, { action })
             }
             if (withoutStep.has(sandbox_id)) {
-              return actThenLook(client, sandbox_id, action, actions)
+              return actThenLook(
+                client,
+                sandbox_id,
+                action,
+                actions,
+                screenshotOf(sandbox_id),
+              )
             }
             // Act-then-look is one request: the sandbox runs the batch,
             // waits for the first repaint that changes the frame, and
             // captures before releasing its input lock.
             let step: StepResult
             try {
-              step = await client.desktopStep(sandbox_id, actions, {
-                settleMs: CHANGE_WAIT_MS,
-                waitForChange: true,
-              })
+              step = await withFrameFormat(sandbox_id, (format) =>
+                client.desktopStep(sandbox_id, actions, {
+                  settleMs: CHANGE_WAIT_MS,
+                  waitForChange: true,
+                  format,
+                }),
+              )
             } catch (e) {
               // An older boxd has no Step route and answers 404 before any
               // input is read, so the two-call sequence is safe to run.
@@ -352,7 +382,13 @@ export function registerComputerTool(
                 return inputFailed(action, describeSdkError(e))
               }
               withoutStep.add(sandbox_id)
-              return actThenLook(client, sandbox_id, action, actions)
+              return actThenLook(
+                client,
+                sandbox_id,
+                action,
+                actions,
+                screenshotOf(sandbox_id),
+              )
             }
             if (step.actionError) {
               // The frame shows what the partial batch did, so the agent can

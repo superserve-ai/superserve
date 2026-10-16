@@ -1,6 +1,6 @@
 /** `sandbox_computer` — action lowering, screenshots, and error paths. */
 
-import { NotFoundError, ServerError } from "@superserve/sdk"
+import { NotFoundError, ServerError, ValidationError } from "@superserve/sdk"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { createFakeClient, type FakeClient } from "./fake-client.js"
@@ -40,7 +40,8 @@ describe("sandbox_computer (in-memory, fake client)", () => {
     const res = await callRaw({ action: "screenshot" })
     expect(res.isError).toBeFalsy()
     const image = res.content.find((c) => c.type === "image")
-    expect(image?.mimeType).toBe("image/png")
+    // Frames go to a model, so the tool asks for JPEG.
+    expect(image?.mimeType).toBe("image/jpeg")
     expect(res.structuredContent).toEqual({ width: 1280, height: 800 })
   })
 
@@ -167,7 +168,7 @@ describe("sandbox_computer (in-memory, fake client)", () => {
     expect(fake.desktopSteps).toEqual([
       {
         actions: [{ type: "click", x: 10, y: 20, button: "left" }],
-        options: { settleMs: 500, waitForChange: true },
+        options: { settleMs: 500, waitForChange: true, format: "jpeg" },
       },
     ])
     expect(res.content.some((c) => c.type === "image")).toBe(true)
@@ -202,6 +203,37 @@ describe("sandbox_computer (in-memory, fake client)", () => {
     expect(second.isError).toBeFalsy()
     expect(fake.desktopSteps).toHaveLength(0)
     expect(fake.desktopBatches).toHaveLength(2)
+  })
+
+  it("a desktop without JPEG frames gets PNG, once per sandbox", async () => {
+    fake.failNextStepWith = new ValidationError(
+      'invalid value for enum field format: "FRAME_FORMAT_JPEG"',
+    )
+    const first = await callRaw({ action: "left_click", coordinate: [10, 20] })
+    expect(first.isError).toBeFalsy()
+    expect(first.content.find((c) => c.type === "image")?.mimeType).toBe(
+      "image/png",
+    )
+    expect(fake.desktopSteps.map((s) => s.options.format)).toEqual(["png"])
+
+    // Remembered: no failed JPEG attempt on the next call.
+    const second = await callRaw({ action: "screenshot" })
+    expect(second.content.find((c) => c.type === "image")?.mimeType).toBe(
+      "image/png",
+    )
+  })
+
+  it("a rejected batch is reported, not retried as PNG", async () => {
+    fake.failNextStepWith = new ValidationError(
+      "click (9999, 9999) is outside the 1280x800 display",
+    )
+    const res = await callRaw({
+      action: "left_click",
+      coordinate: [9999, 9999],
+    })
+    expect(res.isError).toBe(true)
+    expect(res.content[0].text).toContain("outside")
+    expect(fake.desktopSteps).toHaveLength(0)
   })
 
   it("a failed follow-up screenshot still reports the delivered action", async () => {

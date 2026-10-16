@@ -52,7 +52,10 @@ let shot = await sandbox.desktop.screenshot()
 while (true) {
   const actions = await nextActions(shot) // your model call
   if (actions.length === 0) break
-  const step = await sandbox.desktop.step(actions, { waitForChange: true })
+  const step = await sandbox.desktop.step(actions, {
+    waitForChange: true,
+    format: "jpeg",
+  })
   if (step.actionError) throw new Error(step.actionError) // stopped at step.executed
   if (!step.screenshot) throw new Error(step.screenshotError)
   shot = step.screenshot
@@ -67,7 +70,7 @@ while True:
     actions = next_actions(shot)  # your model call
     if not actions:
         break
-    step = sandbox.desktop.step(actions, wait_for_change=True)
+    step = sandbox.desktop.step(actions, wait_for_change=True, format="jpeg")
     if step.action_error:
         raise RuntimeError(step.action_error)  # stopped at step.executed
     if step.screenshot is None:
@@ -85,7 +88,12 @@ the batch, waiting at most `settleMs` / `settle_ms` (default 1000, up to
 2000); the result's `changed` says whether a repaint arrived. A changed frame
 proves the display repainted, not that the application finished, so check
 the screenshot for what you expect. Without `waitForChange` the sandbox
-sleeps `settleMs` and then captures.
+sleeps `settleMs` and then captures. Frames are PNG unless `format` is
+`"jpeg"`: several times smaller and faster to encode, the right trade when a
+model reads the frame. The result's `timings` (`queueMs`, `actionsMs`,
+`settleMs`, `captureMs`) say where the sandbox spent the turn, so a slow loop
+can be attributed to input, the repaint wait or the capture rather than to the
+network.
 `step` does not throw when the batch stops at a failing action or when the
 capture fails, since the actions that ran have already landed: check
 `actionError` / `action_error` (with `executed`, the index it stopped at) and
@@ -144,7 +152,9 @@ Path("screen.png").write_bytes(shot.data)  # PNG bytes; shot.width, shot.height
 </CodeGroup>
 
 The capture includes the cursor. Coordinates in every other call are pixels in
-this image, with the origin at the top-left.
+this image, with the origin at the top-left. `screenshot({ format: "jpeg" })` /
+`screenshot(format="jpeg")` returns a JPEG instead; `shot.format` says which
+encoding you got.
 
 ## Mouse
 

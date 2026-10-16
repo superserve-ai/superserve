@@ -13,10 +13,13 @@ export type { ResolvedConfig } from "./config.js"
 export { DESKTOP_STREAM_PORT } from "./desktop.js"
 export type {
   DesktopAction,
+  FrameFormat,
   MouseButton,
   Screenshot,
+  ScreenshotOptions,
   StepOptions,
   StepResult,
+  StepTimings,
   StreamUrlOptions,
 } from "./desktop.js"
 export {

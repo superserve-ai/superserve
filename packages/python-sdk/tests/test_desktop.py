@@ -20,6 +20,7 @@ from superserve.desktop import (
     DesktopDeps,
     Screenshot,
     StepResult,
+    StepTimings,
     _chord_parts,
 )
 
@@ -80,7 +81,26 @@ class TestScreenshot:
         assert route.called
         assert shot.data == png
         assert (shot.width, shot.height) == (1280, 800)
+        assert shot.format == "png"
+        assert _request_body(route) == {}
         assert route.calls.last.request.headers["X-Access-Token"] == "tok-initial"
+
+    @respx.mock
+    def test_asks_for_jpeg_only_when_told_to(self) -> None:
+        route = respx.post(f"{RPC_BASE}/Screenshot").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "image": base64.b64encode(b"\xff\xd8").decode(),
+                    "width": 4,
+                    "height": 2,
+                    "format": "FRAME_FORMAT_JPEG",
+                },
+            )
+        )
+        shot = _make_desktop().screenshot(format="jpeg")
+        assert _request_body(route) == {"format": "FRAME_FORMAT_JPEG"}
+        assert shot.format == "jpeg"
 
     @respx.mock
     def test_missing_image_raises(self) -> None:
@@ -648,6 +668,35 @@ class TestStep:
         )
         result = _make_desktop().step([{"type": "click", "x": 1, "y": 2}])
         assert result == StepResult(executed=1, screenshot_error="import: nope")
+
+    @respx.mock
+    def test_carries_phase_timings_and_frame_encoding(self) -> None:
+        route = respx.post(f"{RPC_BASE}/Step").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "executed": 1,
+                    "screenshot": {
+                        "image": base64.b64encode(b"\xff\xd8").decode(),
+                        "width": 4,
+                        "height": 2,
+                        "format": "FRAME_FORMAT_JPEG",
+                    },
+                    "queueMs": 1,
+                    "actionsMs": 12,
+                    "captureMs": 30,
+                },
+            )
+        )
+        result = _make_desktop().step(
+            [{"type": "click", "x": 1, "y": 2}], format="jpeg"
+        )
+        assert _request_body(route)["format"] == "FRAME_FORMAT_JPEG"
+        assert result.screenshot is not None and result.screenshot.format == "jpeg"
+        # settle_ms is absent from the response: a zero phase is omitted.
+        assert result.timings == StepTimings(
+            queue_ms=1, actions_ms=12, settle_ms=0, capture_ms=30
+        )
 
     def test_empty_batch_is_rejected_without_a_request(self) -> None:
         with pytest.raises(ValueError, match="actions is empty"):

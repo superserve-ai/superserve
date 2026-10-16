@@ -18,6 +18,7 @@ from .desktop import (
     Desktop,
     Screenshot,
     StepResult,
+    StepTimings,
 )
 from .errors import (
     AuthenticationError,
@@ -73,7 +74,7 @@ from .types import (
     WorkdirStep,
 )
 
-__version__ = "0.11.2"
+__version__ = "0.11.3"
 
 __all__ = [
     "AsyncCommandSession",
@@ -82,6 +83,7 @@ __all__ = [
     "DESKTOP_STREAM_PORT",
     "Screenshot",
     "StepResult",
+    "StepTimings",
     "AsyncProvider",
     "AsyncSandbox",
     "AsyncSecret",
