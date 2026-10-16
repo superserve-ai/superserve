@@ -42,7 +42,10 @@ export default async function YCClaimPage({
           same address.
         </p>
         <p>
-          <Link className="underline" href="/auth/signup?offer=yc_2026">
+          <Link
+            className="underline"
+            href="/auth/signup?offer=yc_2026&next=%2Fyc%2Fclaim"
+          >
             Create an account
           </Link>
         </p>

@@ -26,9 +26,6 @@ function SignInContent() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const searchParams = useSearchParams()
   const requestedOffer = normalizeRequestedOffer(searchParams.get("offer"))
-  const signUpHref = requestedOffer
-    ? `/auth/signup?offer=${requestedOffer}`
-    : "/auth/signup"
   const posthog = usePostHog()
 
   const rawNext = searchParams.get("next") || "/"
@@ -38,6 +35,11 @@ function SignInContent() {
     !/[\\\u0000-\u0020\u007f]/.test(rawNext)
       ? rawNext
       : "/"
+
+  const signUpParams = new URLSearchParams()
+  if (requestedOffer) signUpParams.set("offer", requestedOffer)
+  if (nextUrl !== "/") signUpParams.set("next", nextUrl)
+  const signUpHref = `/auth/signup${signUpParams.size ? `?${signUpParams}` : ""}`
 
   useEffect(() => {
     const checkUser = async () => {

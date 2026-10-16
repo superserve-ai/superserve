@@ -243,6 +243,18 @@ describe("SignUpPage", () => {
     ).toBeInTheDocument()
   })
 
+  it("preserves the claim destination when switching to sign in", async () => {
+    mockSearchParams = new URLSearchParams("offer=yc_2026&next=%2Fyc%2Fclaim")
+    render(<SignUpPage />)
+    const link = await screen.findByRole("link", { name: "Sign in" })
+    const url = new URL(
+      link.getAttribute("href")!,
+      "https://console.example.test",
+    )
+    expect(url.searchParams.get("next")).toBe("/yc/claim")
+    expect(url.searchParams.get("offer")).toBe("yc_2026")
+  })
+
   it("calls signUpWithEmail and shows email-sent state on success", async () => {
     mockSignUpWithEmail.mockResolvedValue({ success: true })
     mockSearchParams = new URLSearchParams("offer=pro_monthly")

@@ -169,9 +169,10 @@ export default function SignUpContent() {
   const searchParams = useSearchParams()
   const nextUrl = sanitizeNext(searchParams.get("next"))
   const requestedOffer = normalizeRequestedOffer(searchParams.get("offer"))
-  const signInHref = requestedOffer
-    ? `/auth/signin?offer=${requestedOffer}`
-    : "/auth/signin"
+  const signInParams = new URLSearchParams()
+  if (requestedOffer) signInParams.set("offer", requestedOffer)
+  if (nextUrl !== "/") signInParams.set("next", nextUrl)
+  const signInHref = `/auth/signin${signInParams.size ? `?${signInParams}` : ""}`
   const isCompleteGoogleSignup = searchParams.get("complete_google") === "1"
 
   useEffect(() => {

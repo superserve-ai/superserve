@@ -273,6 +273,18 @@ describe("SignInPage", () => {
     ).toBeInTheDocument()
   })
 
+  it("preserves the claim destination when switching to signup", async () => {
+    searchParamsMap = { offer: "yc_2026", next: "/yc/claim" }
+    render(<SignInPage />)
+    const link = await screen.findByRole("link", { name: "Sign up" })
+    const url = new URL(
+      link.getAttribute("href")!,
+      "https://console.example.test",
+    )
+    expect(url.searchParams.get("next")).toBe("/yc/claim")
+    expect(url.searchParams.get("offer")).toBe("yc_2026")
+  })
+
   it("carries the offer through the signup link and Google signin", async () => {
     searchParamsMap = { offer: "pro_annual" }
     mockSignInWithOAuth.mockResolvedValue({ error: null })
