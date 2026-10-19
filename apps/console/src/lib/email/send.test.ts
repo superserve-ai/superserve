@@ -78,10 +78,9 @@ describe("sendEmail", () => {
 
     await expect(sendEmail(message)).resolves.toEqual({ success: true })
 
-    expect(mockCreateTransport).toHaveBeenCalledWith({
-      host: "127.0.0.1",
-      port: 1025,
-    })
+    expect(mockCreateTransport).toHaveBeenCalledWith(
+      expect.objectContaining({ host: "127.0.0.1", port: 1025 }),
+    )
     const sent = mockSendMail.mock.calls[0][0]
     expect(sent).toMatchObject({
       from: "Superserve <team@example.com>",
@@ -98,10 +97,9 @@ describe("sendEmail", () => {
 
     await sendEmail(message)
 
-    expect(mockCreateTransport).toHaveBeenCalledWith({
-      host: "mail.example.com",
-      port: 25,
-    })
+    expect(mockCreateTransport).toHaveBeenCalledWith(
+      expect.objectContaining({ host: "mail.example.com", port: 25 }),
+    )
   })
 
   it.each([

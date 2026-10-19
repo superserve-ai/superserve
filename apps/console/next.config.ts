@@ -1,5 +1,11 @@
 import type { NextConfig } from "next"
 
+import { defaultSandboxOrigin } from "./src/lib/sandbox-url"
+
+// Fail the build, not the first sandbox page load, on an invalid
+// NEXT_PUBLIC_SANDBOX_* value.
+defaultSandboxOrigin()
+
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },

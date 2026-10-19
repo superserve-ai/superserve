@@ -82,6 +82,7 @@ describe("sandboxUrl", () => {
     [{ NEXT_PUBLIC_SANDBOX_SCHEME: "wss" }, /NEXT_PUBLIC_SANDBOX_SCHEME/],
     [{ NEXT_PUBLIC_SANDBOX_PORT: "80a" }, /NEXT_PUBLIC_SANDBOX_PORT/],
     [{ NEXT_PUBLIC_SANDBOX_PORT: "0" }, /NEXT_PUBLIC_SANDBOX_PORT/],
+    [{ NEXT_PUBLIC_SANDBOX_PORT: "65536" }, /NEXT_PUBLIC_SANDBOX_PORT/],
   ])("rejects invalid configuration %o", async (env, message) => {
     await expect(loadWithEnv({ ...unset, ...env })).rejects.toThrow(message)
   })

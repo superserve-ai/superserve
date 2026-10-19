@@ -30,14 +30,14 @@ Located at `src/lib/email/templates/`:
 
 The `email:dev` script boots a [React Email](https://react.email) preview server with hot reload, multi-client previews (Gmail, Apple Mail, Outlook), dark mode toggle, and a "Send test" button that uses Resend if `RESEND_API_KEY` is set.
 
-Templates are sent from server actions in `src/app/(auth)/auth/*/action.ts` through `src/lib/email/send.ts`. `EMAIL_TRANSPORT` picks the transport: `resend` (default, production) or `smtp` (`SMTP_HOST`, `SMTP_PORT` default 25, no auth). When SMTP is selected, nothing falls back to Resend. A missing SMTP host or failed delivery just means the email isn't sent.
+Templates are sent from server actions in `src/app/(auth)/auth/*/action.ts` through `src/lib/email/send.ts`. `EMAIL_TRANSPORT` picks the transport: `resend` (default, production) or `smtp` (`SMTP_HOST`, `SMTP_PORT` default 25, no auth; STARTTLS is used when the server offers it and needs a certificate that verifies). When SMTP is selected, nothing falls back to Resend. A missing SMTP host or failed delivery just means the email isn't sent.
 
 ## Private single-box environments
 
 The console runs unchanged against a single private box. Every service listens
 on `127.0.0.1` there and is reached through SSH (IAP) port forwarding. The box
 differs from production only in configuration: the URL scheme, hosts and ports
-below, plus the SMTP transport. Nothing checks the hostname or environment name.
+below, plus the SMTP transport. There are no box-specific code paths.
 
 ### Build-time and runtime configuration
 
@@ -90,7 +90,7 @@ Keep the ports and the hostname unchanged. Open the console at
 
 - **Origins:** the box is built for the origin `http://localhost:3000`. The
   sandbox proxy only accepts terminal and file requests from that origin, and
-  server actions compare the browser's `Origin` with its `Host`.
+  Auth cookies set on `localhost` are not sent to `127.0.0.1`.
 - **Callbacks:** confirmation and password-reset links in Mailpit point to
   `http://localhost:3000/auth/callback`. Billing redirects return to the same
   origin.

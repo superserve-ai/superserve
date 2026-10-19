@@ -28,7 +28,8 @@ const REGION_SANDBOX_ORIGINS = new Map<string, SandboxOrigin>([
   ["usw", { secure: true, host: "usw-sandbox.superserve.ai" }],
 ])
 
-function defaultSandboxOrigin(): SandboxOrigin {
+/** The default cell's origin from configuration; throws on an invalid value. */
+export function defaultSandboxOrigin(): SandboxOrigin {
   const scheme = process.env.NEXT_PUBLIC_SANDBOX_SCHEME || "https"
   if (scheme !== "https" && scheme !== "http") {
     throw new Error(
@@ -36,7 +37,10 @@ function defaultSandboxOrigin(): SandboxOrigin {
     )
   }
   const port = process.env.NEXT_PUBLIC_SANDBOX_PORT || undefined
-  if (port !== undefined && !/^[1-9]\d{0,4}$/.test(port)) {
+  if (
+    port !== undefined &&
+    !(/^[1-9]\d{0,4}$/.test(port) && Number(port) <= 65535)
+  ) {
     throw new Error(
       `NEXT_PUBLIC_SANDBOX_PORT must be a TCP port number, got "${port}"`,
     )

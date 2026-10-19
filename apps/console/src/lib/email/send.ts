@@ -39,7 +39,13 @@ function smtpTransport(): EmailTransport | null {
     console.error(`SMTP_PORT is not a valid port: ${process.env.SMTP_PORT}`)
     return null
   }
-  const transporter = nodemailer.createTransport({ host, port })
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 30_000,
+  })
   return async ({ from, to, subject, react }) => {
     await transporter.sendMail({ from, to, subject, html: await render(react) })
   }
@@ -47,7 +53,8 @@ function smtpTransport(): EmailTransport | null {
 
 /**
  * The configured email transport: `EMAIL_TRANSPORT=resend` (default) or
- * `smtp` (`SMTP_HOST`, `SMTP_PORT` default 25). An incomplete or unknown
+ * `smtp` (`SMTP_HOST`, `SMTP_PORT` default 25; no auth, STARTTLS when the
+ * server offers it, with certificate verification). An incomplete or unknown
  * selection yields null — never a fallback to another transport.
  */
 function configuredTransport(): EmailTransport | null {
