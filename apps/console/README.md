@@ -89,12 +89,12 @@ Keep the ports and the hostname unchanged. Open the console at
 `http://localhost:3000`, not `127.0.0.1`:
 
 - **Origins:** the box is built for the origin `http://localhost:3000`. The
-  sandbox proxy only accepts terminal and file requests from that origin, and
-  Auth cookies set on `localhost` are not sent to `127.0.0.1`.
+  sandbox proxy only accepts terminal and file requests from that origin.
 - **Callbacks:** confirmation and password-reset links in Mailpit point to
   `http://localhost:3000/auth/callback`. Billing redirects return to the same
   origin.
-- **Cookies:** Auth cookies are host-only for `localhost`. Browsers treat
+- **Cookies:** auth cookies are host-only for `localhost`, so a session started
+  there isn't sent to `127.0.0.1`. Browsers treat
   `http://localhost` as a secure context, so `Secure` and `__Host-` cookies
   still work over plain HTTP.
 - **Sandbox hosts:** Chrome and Firefox resolve `*.localhost` to loopback, so
