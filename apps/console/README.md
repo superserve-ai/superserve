@@ -30,7 +30,76 @@ Located at `src/lib/email/templates/`:
 
 The `email:dev` script boots a [React Email](https://react.email) preview server with hot reload, multi-client previews (Gmail, Apple Mail, Outlook), dark mode toggle, and a "Send test" button that uses Resend if `RESEND_API_KEY` is set.
 
-Templates are sent in production via Resend from server actions in `src/app/(auth)/auth/*/action.ts`.
+Templates are sent from server actions in `src/app/(auth)/auth/*/action.ts` through `src/lib/email/send.ts`. `EMAIL_TRANSPORT` picks the transport: `resend` (default, production) or `smtp` (`SMTP_HOST`, `SMTP_PORT` default 25, no auth). When SMTP is selected, nothing falls back to Resend. A missing SMTP host or failed delivery just means the email isn't sent.
+
+## Private single-box environments
+
+The console runs unchanged against a single private box. Every service listens
+on `127.0.0.1` there and is reached through SSH (IAP) port forwarding. The box
+differs from production only in configuration: the URL scheme, hosts and ports
+below, plus the SMTP transport. Nothing checks the hostname or environment name.
+
+### Build-time and runtime configuration
+
+`NEXT_PUBLIC_*` values are inlined into the browser bundle by `next build`, so
+build the console on the box with the box's values. Everything else is read at
+runtime by the server and never reaches the browser.
+
+| Variable                                                                                                                                             | Box value                             | When read |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | --------- |
+| `NEXT_PUBLIC_APP_URL`                                                                                                                                | `http://localhost:3000`               | build     |
+| `NEXT_PUBLIC_SUPABASE_URL`                                                                                                                           | `http://localhost:54321`              | build     |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`                                                                                                                      | box anon key                          | build     |
+| `NEXT_PUBLIC_SANDBOX_SCHEME`                                                                                                                         | `http`                                | build     |
+| `NEXT_PUBLIC_SANDBOX_HOST`                                                                                                                           | `sandbox.localhost`                   | build     |
+| `NEXT_PUBLIC_SANDBOX_PORT`                                                                                                                           | `8090`                                | build     |
+| `NEXT_PUBLIC_RECAPTCHA_SITE_KEY`                                                                                                                     | site key, or empty to disable         | build     |
+| `NEXT_PUBLIC_COOKIE_DOMAIN`                                                                                                                          | empty (host-only cookies)             | build     |
+| `SANDBOX_API_URL`                                                                                                                                    | `http://localhost:8080`               | runtime   |
+| `SUPABASE_SERVICE_ROLE_KEY`, `CONSOLE_PROXY_SECRET`, `INTERNAL_API_TOKEN`, `SANDBOX_INTERNAL_API_TOKEN`, `RECAPTCHA_API_KEY`, `RECAPTCHA_PROJECT_ID` | box secrets                           | runtime   |
+| `EMAIL_TRANSPORT`, `SMTP_HOST`, `SMTP_PORT`                                                                                                          | `smtp`, `127.0.0.1`, `1025` (Mailpit) | runtime   |
+
+The production defaults stay the same: with the sandbox variables unset, URLs
+are `https://`/`wss://` on `sandbox.superserve.ai` with no port, and email goes
+through Resend. Sandboxes whose IDs carry a non-default region (`sb-usw-…`)
+always resolve to that region's production host.
+
+### Port forwarding
+
+Forward each port to the same port on your machine:
+
+```bash
+gcloud compute ssh <box> --zone <zone> --tunnel-through-iap -- -N \
+  -L 3000:127.0.0.1:3000 \
+  -L 8080:127.0.0.1:8080 \
+  -L 54321:127.0.0.1:54321 \
+  -L 8090:127.0.0.1:8090 \
+  -L 8025:127.0.0.1:8025
+```
+
+| Local URL                                    | Service                                        |
+| -------------------------------------------- | ---------------------------------------------- |
+| `http://localhost:3000`                      | Console                                        |
+| `http://localhost:8080`                      | API                                            |
+| `http://localhost:54321`                     | Auth and data gateway (`/auth/v1`, `/rest/v1`) |
+| `http://<label>-<id>.sandbox.localhost:8090` | Sandbox proxy (terminal, files, preview)       |
+| `http://localhost:8025`                      | Mailpit inbox                                  |
+
+Keep the ports and the hostname unchanged. Open the console at
+`http://localhost:3000`, not `127.0.0.1`:
+
+- **Origins:** the box is built for the origin `http://localhost:3000`. The
+  sandbox proxy only accepts terminal and file requests from that origin, and
+  server actions compare the browser's `Origin` with its `Host`.
+- **Callbacks:** confirmation and password-reset links in Mailpit point to
+  `http://localhost:3000/auth/callback`. Billing redirects return to the same
+  origin.
+- **Cookies:** Auth cookies are host-only for `localhost`. Browsers treat
+  `http://localhost` as a secure context, so `Secure` and `__Host-` cookies
+  still work over plain HTTP.
+- **Sandbox hosts:** Chrome and Firefox resolve `*.localhost` to loopback, so
+  `boxd-<id>.sandbox.localhost:8090` reaches the forwarded proxy without DNS
+  or `/etc/hosts` changes. Use one of those browsers.
 
 ## Promotion identity rollout
 

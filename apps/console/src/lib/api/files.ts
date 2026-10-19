@@ -13,7 +13,7 @@
 
 import { apiClient } from "@/lib/api/client"
 import type { SandboxResponse } from "@/lib/api/types"
-import { sandboxHostFor } from "@/lib/sandbox-host"
+import { sandboxUrl } from "@/lib/sandbox-url"
 
 /** A single entry in a directory listing. */
 export interface DirEntry {
@@ -32,7 +32,7 @@ export function filesUrl(
   path: string,
   params?: Record<string, string>,
 ): string {
-  let url = `https://boxd-${sandboxId}.${sandboxHostFor(sandboxId)}/files?path=${encodeURIComponent(path)}`
+  let url = `${sandboxUrl(sandboxId, "boxd", "http")}/files?path=${encodeURIComponent(path)}`
   for (const [key, value] of Object.entries(params ?? {})) {
     url += `&${encodeURIComponent(key)}=${encodeURIComponent(value)}`
   }

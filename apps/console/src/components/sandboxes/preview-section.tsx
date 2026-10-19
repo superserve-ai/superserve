@@ -23,7 +23,7 @@ import {
 import { mintSandboxPreviewToken, patchSandbox } from "@/lib/api/sandboxes"
 import type { PreviewAccess, SandboxResponse } from "@/lib/api/types"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
-import { sandboxHostFor } from "@/lib/sandbox-host"
+import { sandboxUrl } from "@/lib/sandbox-url"
 
 const DEFAULT_PORT_SUGGESTION = "3000"
 const PREVIEW_LINK_TTL_SECONDS = 3600
@@ -31,7 +31,7 @@ const PREVIEW_LINK_REFRESH_MARGIN_MS = 60_000
 const PREVIEW_LINK_REFRESH_RETRY_MS = 30_000
 
 function previewUrl(sandboxId: string, port: number): string {
-  return `https://${port}-${sandboxId}.${sandboxHostFor(sandboxId)}`
+  return sandboxUrl(sandboxId, String(port), "http")
 }
 
 interface PreviewSectionProps {

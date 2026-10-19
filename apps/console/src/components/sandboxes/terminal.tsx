@@ -13,7 +13,7 @@ import { usePostHog } from "posthog-js/react"
 import { useCallback, useEffect, useRef, useState } from "react"
 
 import { TERMINAL_EVENTS } from "@/lib/posthog/events"
-import { sandboxHostFor } from "@/lib/sandbox-host"
+import { sandboxUrl } from "@/lib/sandbox-url"
 import {
   clearTerminalBuffer,
   loadTerminalBuffer,
@@ -186,7 +186,7 @@ export function SandboxTerminal({
       setStatus("connecting")
 
       try {
-        const url = `wss://boxd-${sandboxId}.${sandboxHostFor(sandboxId)}/terminal`
+        const url = `${sandboxUrl(sandboxId, "boxd", "ws")}/terminal`
         const ws = new WebSocket(url, [
           TERMINAL_SUBPROTOCOL,
           `token.${accessToken}`,
