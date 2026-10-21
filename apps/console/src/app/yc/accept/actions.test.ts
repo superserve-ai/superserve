@@ -44,6 +44,23 @@ it.each(["forbidden", "unavailable"] as const)(
 it.each([
   { state: "funding_pending" as const },
   { state: "funding_ready" as const, held: true },
+  { state: "funding_ready" as const, financial_authority: null },
+  {
+    state: "funding_ready" as const,
+    financial_authority: {
+      kind: "accepted_offer" as const,
+      state: "revocation_pending" as const,
+      pending_invalidations: 1,
+    },
+  },
+  {
+    state: "funding_ready" as const,
+    financial_authority: {
+      kind: "accepted_offer" as const,
+      state: "revoked" as const,
+      pending_invalidations: 0,
+    },
+  },
 ])("does not switch teams from stale ready presentation", async (fields) => {
   vi.mocked(readOfferStatus).mockResolvedValue(
     offered({

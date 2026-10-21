@@ -9,6 +9,12 @@ import {
 } from "@/lib/yc-claims"
 import { journeyEnabled } from "@/lib/yc/acceptance-api"
 import { claimRoute } from "@/lib/yc/claim-route"
+import {
+  financialAuthoritySchema,
+  financialRevocationMessage,
+  type FinancialAuthority,
+} from "@/lib/yc/financial-authority"
+import { FinancialRevocation } from "@/lib/yc/financial-revocation"
 import { claimID } from "@/lib/yc/staff-schema"
 
 import { bindYCClaim, prepareYCTeam } from "./actions"
@@ -72,18 +78,31 @@ export default async function YCClaimPage({
       </main>
     )
 
-  let claims: YCClaim[] = []
+  let claims: (YCClaim & { financial_authority?: FinancialAuthority })[] = []
   let teams: Awaited<ReturnType<typeof ycTeams>> = []
   let error = false
   const billing = new Map<string, string>()
   const acceptanceClaims = new Set<string>()
   try {
-    claims = (
-      await ycRequest<{ claims: YCClaim[] }>("claims", { user_id: user.id })
-    ).claims
+    const response = await ycRequest<{
+      claims: (YCClaim & { financial_authority?: unknown })[]
+    }>("claims", { user_id: user.id })
+    claims = response.claims.map((claim) =>
+      Object.assign(claim, {
+        financial_authority: financialAuthoritySchema
+          .optional()
+          .parse(claim.financial_authority),
+      }),
+    )
     await Promise.all(
       claims
-        .filter((c) => c.state === "bound" && c.team_id && c.home_region)
+        .filter(
+          (c) =>
+            c.state === "bound" &&
+            c.team_id &&
+            c.home_region &&
+            !financialRevocationMessage(c.financial_authority),
+        )
         .map(async (claim) => {
           try {
             const status = await claimRoute(
@@ -91,6 +110,7 @@ export default async function YCClaimPage({
                 id: claim.id,
                 team_id: claim.team_id!,
                 home_region: claim.home_region!,
+                automated: !!claim.financial_authority,
               },
               user.id,
             )
@@ -140,35 +160,38 @@ export default async function YCClaimPage({
             {claim.evidence.companies?.map((c) => c.name).join(", ") ||
               "YC verification"}
           </h2>
-          <p>
-            {claim.state === "bound"
-              ? acceptanceClaims.has(claim.id)
-                ? "Your claim is approved. Review and accept your offer to begin setup. Approval alone does not activate Pro or credits."
-                : billing.get(claim.id) === "active"
-                  ? "Your YC Pro access is active and the payment-method requirement is satisfied."
-                  : billing.get(claim.id) === "awaiting_payment_method"
-                    ? "Your YC activation is approved. Add or update a usable payment method in team billing before using resources."
-                    : billing.get(claim.id) === "requires_review"
-                      ? "Your team is attached, but billing activation requires Superserve review."
-                      : billing.get(claim.id) === "renewed"
-                        ? "Your YC offer has transitioned to its renewal plan. View team billing for current plan details."
-                        : billing.get(claim.id) === "unavailable"
-                          ? "Your team is attached. Billing status is temporarily unavailable; refresh to check activation."
-                          : "Eligibility approved and team attached. Billing activation is pending; Pro access and credits are not enabled by this claim."
-              : claim.confirmation_status === "expired"
-                ? "Your confirmation link has expired. Contact Superserve for manual review."
-                : claim.confirmation_status === "delivery_failed"
-                  ? "Your claim is saved, but confirmation email delivery failed. Contact Superserve to retry delivery."
-                  : claim.state === "confirmed"
-                    ? "Email confirmed. Choose the team that should receive your company's offer."
-                    : claim.state === "awaiting_confirmation"
-                      ? "Email confirmation is pending. Open the link sent to your founder email."
-                      : claim.state === "revoked"
-                        ? "Your approval has been revoked. This offer cannot be accepted. Contact Superserve for review."
-                        : claim.state === "rejected"
-                          ? "Your claim was rejected. You can choose a standard plan or contact Superserve for review."
-                          : "Your claim is awaiting manual review."}
-          </p>
+          <FinancialRevocation authority={claim.financial_authority} />
+          {!financialRevocationMessage(claim.financial_authority) && (
+            <p>
+              {claim.state === "bound"
+                ? acceptanceClaims.has(claim.id)
+                  ? "Your claim is approved. Review and accept your offer to begin setup. Approval alone does not activate Pro or credits."
+                  : billing.get(claim.id) === "active"
+                    ? "Your YC Pro access is active and the payment-method requirement is satisfied."
+                    : billing.get(claim.id) === "awaiting_payment_method"
+                      ? "Your YC activation is approved. Add or update a usable payment method in team billing before using resources."
+                      : billing.get(claim.id) === "requires_review"
+                        ? "Your team is attached, but billing activation requires Superserve review."
+                        : billing.get(claim.id) === "renewed"
+                          ? "Your YC offer has transitioned to its renewal plan. View team billing for current plan details."
+                          : billing.get(claim.id) === "unavailable"
+                            ? "Your team is attached. Billing status is temporarily unavailable; refresh to check activation."
+                            : "Eligibility approved and team attached. Billing activation is pending; Pro access and credits are not enabled by this claim."
+                : claim.confirmation_status === "expired"
+                  ? "Your confirmation link has expired. Contact Superserve for manual review."
+                  : claim.confirmation_status === "delivery_failed"
+                    ? "Your claim is saved, but confirmation email delivery failed. Contact Superserve to retry delivery."
+                    : claim.state === "confirmed"
+                      ? "Email confirmed. Choose the team that should receive your company's offer."
+                      : claim.state === "awaiting_confirmation"
+                        ? "Email confirmation is pending. Open the link sent to your founder email."
+                        : claim.state === "revoked"
+                          ? "Your approval has been revoked. This offer cannot be accepted. Contact Superserve for review."
+                          : claim.state === "rejected"
+                            ? "Your claim was rejected. You can choose a standard plan or contact Superserve for review."
+                            : "Your claim is awaiting manual review."}
+            </p>
+          )}
           {acceptanceClaims.has(claim.id) && claim.state === "bound" && (
             <Link className="underline" href={`/yc/accept?claim=${claim.id}`}>
               Review offer and activation status

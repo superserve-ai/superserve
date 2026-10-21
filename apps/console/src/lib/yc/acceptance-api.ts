@@ -8,6 +8,7 @@ import {
   acceptInputSchema,
   type AcceptInput,
 } from "./acceptance-schema"
+import { financialAuthoritySchema } from "./financial-authority"
 import { claimID } from "./staff-schema"
 
 const accountClaim = z.object({
@@ -16,6 +17,7 @@ const accountClaim = z.object({
   team_id: claimID.nullable(),
   home_region: z.string().nullable(),
   claimed_user_id: claimID.nullable(),
+  financial_authority: financialAuthoritySchema.optional(),
 })
 import { AcceptanceError, postYCAccount } from "./customer-request"
 export { AcceptanceError } from "./customer-request"
@@ -24,6 +26,8 @@ export class ClaimStateError extends AcceptanceError {
     public readonly state:
       | "rejected"
       | "revoked"
+      | "financial_revocation_pending"
+      | "financial_revoked"
       | "manual_review"
       | "awaiting_confirmation",
   ) {
@@ -46,6 +50,7 @@ export async function resolveAcceptedClaim(locator: string) {
   const claim = claims.find((value) => value.id === locator)
   if (
     claim &&
+    !claim.financial_authority &&
     ["rejected", "revoked", "manual_review", "awaiting_confirmation"].includes(
       claim.state,
     )
@@ -58,7 +63,6 @@ export async function resolveAcceptedClaim(locator: string) {
     !claim.home_region
   )
     throw new AcceptanceError("forbidden")
-  if (claim.state !== "bound") throw new AcceptanceError("conflict")
   const teams = await ycTeams(user)
   if (
     !teams.some(
@@ -67,6 +71,11 @@ export async function resolveAcceptedClaim(locator: string) {
     )
   )
     throw new AcceptanceError("forbidden")
+  if (claim.financial_authority?.state === "revocation_pending")
+    throw new ClaimStateError("financial_revocation_pending")
+  if (claim.financial_authority?.state === "revoked")
+    throw new ClaimStateError("financial_revoked")
+  if (claim.state !== "bound") throw new AcceptanceError("conflict")
   return { user, claim }
 }
 

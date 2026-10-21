@@ -29,10 +29,16 @@ export function OfferJourney({ initial }: { initial: Acceptance }) {
   const [message, setMessage] = React.useState("")
   const [attempt, setAttempt] = React.useState<AcceptInput | null>(null)
   const sending = React.useRef(false)
-  const state = claimState ?? (failure ? "unavailable" : acceptanceState(offer))
+  const authorityState = claimState ?? acceptanceState(offer)
+  const state = failure ? "unavailable" : authorityState
   React.useEffect(() => {
-    if (claimState) return
-    if (offer.state === "offered" || offer.state === "revoked") return
+    if (claimState && claimState !== "financial_revocation_pending") return
+    if (authorityState === "financial_revoked") return
+    if (
+      authorityState !== "financial_revocation_pending" &&
+      (offer.state === "offered" || offer.state === "revoked")
+    )
+      return
     let cancelled = false
     let timer: ReturnType<typeof setTimeout>
     async function poll() {
@@ -42,15 +48,15 @@ export function OfferJourney({ initial }: { initial: Acceptance }) {
         if (result.kind === "claim_state") {
           setClaimState(result.state)
           setFailure(false)
-          return
-        }
-        if (
+          if (result.state !== "financial_revocation_pending") return
+        } else if (
           result.kind === "saved" &&
           result.offer.acceptance_id === initial.acceptance_id &&
           result.offer.terms_digest === initial.terms_digest &&
           result.offer.renewal_terms_digest === initial.renewal_terms_digest
         ) {
           setOffer(result.offer)
+          setClaimState(null)
           setFailure(false)
         } else setFailure(true)
       } catch {
@@ -70,6 +76,7 @@ export function OfferJourney({ initial }: { initial: Acceptance }) {
     initial.renewal_terms_digest,
     offer.state,
     claimState,
+    authorityState,
   ])
 
   async function accept() {
@@ -195,14 +202,20 @@ export function OfferJourney({ initial }: { initial: Acceptance }) {
         </form>
       )}
       {message && <p role="alert">{message}</p>}
-      {!claimState && offer.accepted_at && (
-        <Link
-          className="block underline"
-          href={`/yc/renewal?claim=${offer.claim_id}`}
-        >
-          Review your next plan
-        </Link>
-      )}
+      {!claimState &&
+        ![
+          "financial_revocation_pending",
+          "financial_revoked",
+          "unavailable",
+        ].includes(state) &&
+        offer.accepted_at && (
+          <Link
+            className="block underline"
+            href={`/yc/renewal?claim=${offer.claim_id}`}
+          >
+            Review your next plan
+          </Link>
+        )}
       {(state === "payment_needed" || state === "exhausted") && (
         <form action={openOfferBilling.bind(null, offer.claim_id)}>
           <button className="underline">Open team billing</button>

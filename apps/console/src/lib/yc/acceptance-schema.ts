@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+import { financialAuthoritySchema } from "./financial-authority"
 import type { JourneyState } from "./journey-state"
 import { money, type OfferTermsView } from "./offer-view"
 import { claimID } from "./staff-schema"
@@ -58,6 +59,7 @@ export const acceptanceSchema = z
     assignment_id: claimID.nullable(),
     operation_id: claimID.nullable(),
     ready: z.boolean(),
+    financial_authority: financialAuthoritySchema.optional(),
     state: z.enum([
       "offered",
       "confirming",
@@ -98,11 +100,15 @@ export const acceptInputSchema = z
 export type AcceptInput = z.infer<typeof acceptInputSchema>
 
 export function acceptanceState(value: Acceptance): JourneyState {
+  if (value.financial_authority?.state === "revocation_pending")
+    return "financial_revocation_pending"
+  if (value.financial_authority?.state === "revoked") return "financial_revoked"
   if (value.revoked) return "revoked"
   if (value.held) return "held"
   if (value.control_pending) return "outcome_unknown"
   if (value.state === "funding_ready")
-    return value.ready &&
+    return value.financial_authority?.state === "valid" &&
+      value.ready &&
       value.accepted_at &&
       value.assignment_id &&
       value.operation_id

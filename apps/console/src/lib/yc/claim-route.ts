@@ -13,7 +13,12 @@ const billingStatus = z.object({
 // New admission understands preferred verified identities and rejects existing
 // contracts. Preserve legacy billing status when new admission is unavailable.
 export async function claimRoute(
-  claim: { id: string; team_id: string; home_region: string },
+  claim: {
+    id: string
+    team_id: string
+    home_region: string
+    automated?: boolean
+  },
   user: string,
 ) {
   if (journeyEnabled()) {
@@ -24,6 +29,7 @@ export async function claimRoute(
       // Legacy contracts cannot enter the new-signup acceptance flow.
     }
   }
+  if (claim.automated) return { state: "unavailable", acceptance: false }
   const status = billingStatus.parse(
     await ycRequest(
       "status",

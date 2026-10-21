@@ -1,3 +1,5 @@
+import { financialRevocationMessages } from "./financial-authority"
+
 // A presentation model. API adapters must derive it from authenticated server
 // evidence; URL parameters and optimistic mutation results never select a state.
 export type JourneyState =
@@ -6,6 +8,8 @@ export type JourneyState =
   | "manual_review"
   | "rejected"
   | "revoked"
+  | "financial_revocation_pending"
+  | "financial_revoked"
   | "acceptance_required"
   | "accepted"
   | "provisioning"
@@ -43,6 +47,8 @@ export const journeyMessages: Record<
     description:
       "You can choose a standard plan or contact Superserve if you believe this decision is incorrect.",
   },
+  financial_revocation_pending: financialRevocationMessages.pending,
+  financial_revoked: financialRevocationMessages.revoked,
   revoked: {
     title: "Your approval has been revoked",
     description:

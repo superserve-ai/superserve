@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   proof: vi.fn(),
   teams: vi.fn(),
   offer: vi.fn(),
+  enabled: vi.fn(),
 }))
 vi.mock("@/lib/yc-claims", () => ({
   ycAccount: async () => ({ id: "user", email: "founder@example.test" }),
@@ -14,7 +15,7 @@ vi.mock("@/lib/yc-claims", () => ({
   ycTeams: mocks.teams,
 }))
 vi.mock("@/lib/yc/acceptance-api", () => ({
-  journeyEnabled: () => true,
+  journeyEnabled: mocks.enabled,
   readOffer: mocks.offer,
 }))
 vi.mock("./actions", () => ({ bindYCClaim: vi.fn(), prepareYCTeam: vi.fn() }))
@@ -33,6 +34,7 @@ const claim = {
 }
 beforeEach(() => {
   vi.resetAllMocks()
+  mocks.enabled.mockReturnValue(true)
   vi.stubEnv("YC_CONSOLE_JOURNEY_ENABLED", "true")
   mocks.offer.mockRejectedValue(new Error("new admission unavailable"))
   mocks.proof.mockResolvedValue({ id: "claim", token: "proof" })
@@ -130,5 +132,90 @@ it("routes an approved preferred account through new admission without the legac
   expect(
     screen.getByRole("link", { name: "Review offer and activation status" }),
   ).toHaveAttribute("href", "/yc/accept?claim=claim")
+  expect(mocks.request).toHaveBeenCalledTimes(1)
+})
+
+it.each([
+  ["revocation_pending", 1, "Revocation pending"],
+  ["revoked", 0, "Revocation confirmed"],
+] as const)(
+  "renders automated %s without legacy completion or activation claims",
+  async (state, pending, title) => {
+    mocks.request.mockResolvedValue({
+      claims: [
+        {
+          ...claim,
+          state: "revoked",
+          financial_authority: {
+            kind: "accepted_offer",
+            state,
+            pending_invalidations: pending,
+          },
+        },
+      ],
+    })
+    render(await YCClaimPage({ searchParams: Promise.resolve({}) }))
+    expect(screen.getByRole("heading", { name: title })).toBeInTheDocument()
+    expect(
+      screen.queryByText(/Your approval has been revoked/),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText("Review offer and activation status"),
+    ).not.toBeInTheDocument()
+    expect(mocks.offer).not.toHaveBeenCalled()
+  },
+)
+it("preserves the legacy manual revoked claim message", async () => {
+  mocks.request.mockResolvedValue({
+    claims: [{ ...claim, state: "revoked", financial_authority: null }],
+  })
+  render(await YCClaimPage({ searchParams: Promise.resolve({}) }))
+  expect(screen.getByText(/Your approval has been revoked/)).toBeInTheDocument()
+  expect(
+    screen.queryByRole("heading", { name: "Revocation confirmed" }),
+  ).not.toBeInTheDocument()
+})
+
+it("routes acceptance pending through new admission and never falls back to legacy ready", async () => {
+  mocks.request.mockResolvedValue({
+    claims: [
+      {
+        ...claim,
+        financial_authority: {
+          kind: "accepted_offer",
+          state: "acceptance_pending",
+          pending_invalidations: 0,
+        },
+      },
+    ],
+  })
+  mocks.offer.mockRejectedValue(new Error("unavailable"))
+  render(await YCClaimPage({ searchParams: Promise.resolve({}) }))
+  expect(
+    screen.getByText(/Billing status is temporarily unavailable/),
+  ).toBeInTheDocument()
+  expect(screen.queryByText(/Revocation confirmed/)).not.toBeInTheDocument()
+  expect(mocks.request).toHaveBeenCalledTimes(1)
+})
+
+it("does not fall back to legacy readiness for an automated claim when the journey is disabled", async () => {
+  mocks.enabled.mockReturnValue(false)
+  mocks.request.mockResolvedValue({
+    claims: [
+      {
+        ...claim,
+        financial_authority: {
+          kind: "accepted_offer",
+          state: "valid",
+          pending_invalidations: 0,
+        },
+      },
+    ],
+  })
+  render(await YCClaimPage({ searchParams: Promise.resolve({}) }))
+  expect(
+    screen.getByText(/Billing status is temporarily unavailable/),
+  ).toBeInTheDocument()
+  expect(mocks.offer).not.toHaveBeenCalled()
   expect(mocks.request).toHaveBeenCalledTimes(1)
 })

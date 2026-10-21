@@ -56,3 +56,56 @@ it("rejects incomplete or incompatible terms instead of substituting prices", ()
     }).success,
   ).toBe(false)
 })
+
+it("requires explicit valid financial authority for readiness, independent of provider state", () => {
+  const ready = offered({
+    state: "funding_ready",
+    ready: true,
+    accepted_at: "2026-10-21T15:00:00Z",
+    assignment_id: ids.assignment,
+    operation_id: ids.operation,
+  })
+  expect(acceptanceState({ ...ready, financial_authority: undefined })).toBe(
+    "unavailable",
+  )
+  expect(acceptanceState({ ...ready, financial_authority: null })).toBe(
+    "unavailable",
+  )
+  expect(
+    acceptanceState({
+      ...ready,
+      revoked: true,
+      control_pending: true,
+      financial_authority: {
+        kind: "accepted_offer",
+        state: "revocation_pending",
+        pending_invalidations: 2,
+      },
+    }),
+  ).toBe("financial_revocation_pending")
+  expect(
+    acceptanceState({
+      ...ready,
+      financial_authority: {
+        kind: "accepted_offer",
+        state: "revoked",
+        pending_invalidations: 0,
+      },
+    }),
+  ).toBe("financial_revoked")
+})
+
+it("accepts the explicit preacceptance projection without granting readiness", () => {
+  const offer = acceptanceSchema.parse(offered())
+  expect(acceptanceState(offer)).toBe("acceptance_required")
+  expect(
+    acceptanceState({
+      ...offer,
+      state: "funding_ready",
+      ready: true,
+      accepted_at: "2026-10-21T12:00:00Z",
+      assignment_id: ids.assignment,
+      operation_id: ids.operation,
+    }),
+  ).toBe("unavailable")
+})

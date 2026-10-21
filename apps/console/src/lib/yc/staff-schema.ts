@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { financialAuthoritySchema } from "./financial-authority"
+
 export const claimID = z
   .string()
   .uuid()
@@ -38,6 +40,7 @@ export const staffClaimSchema = z.object({
   home_region: z.string().nullable(),
   reason: z.string(),
   acceptance_required: z.boolean(),
+  financial_authority: financialAuthoritySchema.optional(),
   approval_notification: z
     .object({
       status: z.string(),

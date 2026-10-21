@@ -78,6 +78,13 @@ export function offered(overrides: Partial<Acceptance> = {}): Acceptance {
     assignment_id: null,
     operation_id: null,
     ready: false,
+    financial_authority: overrides.accepted_at
+      ? { kind: "accepted_offer", state: "valid", pending_invalidations: 0 }
+      : {
+          kind: "accepted_offer",
+          state: "acceptance_pending",
+          pending_invalidations: 0,
+        },
     state: "offered",
     ...overrides,
   }

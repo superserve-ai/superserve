@@ -1,6 +1,8 @@
 import Link from "next/link"
 
 import { configuredRegions } from "@/lib/cells"
+import { financialRevocationMessage } from "@/lib/yc/financial-authority"
+import { FinancialRevocation } from "@/lib/yc/financial-revocation"
 import { getStaffClaim, listStaffClaims } from "@/lib/yc/staff-api"
 import { claimState, type StaffClaim } from "@/lib/yc/staff-schema"
 
@@ -83,11 +85,14 @@ export default async function StaffYCPage({
               </section>
             </div>
           )}
-          <p>
-            {claim.state === "bound"
-              ? "Approved. Customer acceptance and activation must be checked separately."
-              : claim.state.replaceAll("_", " ")}
-          </p>
+          <FinancialRevocation authority={claim.financial_authority} />
+          {!financialRevocationMessage(claim.financial_authority) && (
+            <p>
+              {claim.state === "bound"
+                ? "Approved. Customer acceptance and activation must be checked separately."
+                : claim.state.replaceAll("_", " ")}
+            </p>
+          )}
           <p>{claim.reason}</p>
           {claim.approval_notification && (
             <p>

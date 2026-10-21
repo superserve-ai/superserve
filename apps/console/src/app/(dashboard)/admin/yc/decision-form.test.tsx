@@ -62,3 +62,42 @@ it("requires a refresh on stale revision instead of retrying a new decision", as
   ).not.toBeInTheDocument()
   expect(screen.getByRole("button", { name: "Save decision" })).toBeDisabled()
 })
+
+it.each([
+  ["revocation_pending", 1, "Revocation pending"],
+  ["revoked", 0, "Revocation confirmed"],
+] as const)(
+  "reports financial %s from the saved decision response",
+  async (state, pending, title) => {
+    vi.mocked(submitStaffDecision).mockResolvedValue({
+      kind: "saved",
+      claim: {
+        ...claim,
+        state: "revoked",
+        financial_authority: {
+          kind: "accepted_offer",
+          state,
+          pending_invalidations: pending,
+        },
+      },
+    })
+    render(<DecisionForm claim={claim} regions={["use"]} />)
+    fireEvent.change(screen.getByLabelText("Decision"), {
+      target: { value: "revoke" },
+    })
+    fireEvent.change(screen.getByLabelText("Reason"), {
+      target: { value: "Review completed" },
+    })
+    fireEvent.change(screen.getByLabelText("Evidence reference"), {
+      target: { value: "review evidence" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Save decision" }))
+    await screen.findByText(new RegExp(title))
+    expect(
+      screen.getByText(/does not confirm cancellation or a refund/),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(/Approval still requires/),
+    ).not.toBeInTheDocument()
+  },
+)

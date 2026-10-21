@@ -130,3 +130,52 @@ it("treats a lost response as unknown and never replays a write automatically", 
   })
   expect(f.fetch).toHaveBeenCalledTimes(1)
 })
+
+it.each([
+  ["revocation_pending", 1, "financial_revocation_pending"],
+  ["revoked", 0, "financial_revoked"],
+] as const)(
+  "projects financial %s after checking the bound actor and team",
+  async (state, pending, expected) => {
+    f.claims.mockResolvedValue({
+      claims: [
+        {
+          id: ids.claim,
+          state: "revoked",
+          claimed_user_id: ids.user,
+          team_id: ids.team,
+          home_region: "use",
+          financial_authority: {
+            kind: "accepted_offer",
+            state,
+            pending_invalidations: pending,
+          },
+        },
+      ],
+    })
+    await expect(readOffer(ids.claim)).rejects.toMatchObject({
+      state: expected,
+    })
+    expect(f.fetch).not.toHaveBeenCalled()
+    f.teams.mockResolvedValue([])
+    await expect(readOffer(ids.claim)).rejects.toMatchObject({
+      kind: "forbidden",
+    })
+  },
+)
+it("preserves legacy revocation when there is no automated shared acceptance", async () => {
+  f.claims.mockResolvedValue({
+    claims: [
+      {
+        id: ids.claim,
+        state: "revoked",
+        financial_authority: null,
+        team_id: null,
+        home_region: null,
+        claimed_user_id: null,
+      },
+    ],
+  })
+  await expect(readOffer(ids.claim)).rejects.toMatchObject({ state: "revoked" })
+  expect(f.fetch).not.toHaveBeenCalled()
+})

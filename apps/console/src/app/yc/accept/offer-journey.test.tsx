@@ -109,3 +109,123 @@ it.each(["revoked", "rejected"] as const)(
     expect(screen.queryByText("Review your next plan")).not.toBeInTheDocument()
   },
 )
+
+it("polls pending financial revocation through to acknowledgment and fails closed on errors", async () => {
+  vi.useFakeTimers()
+  vi.mocked(refreshAcceptance)
+    .mockReset()
+    .mockResolvedValueOnce({
+      kind: "claim_state",
+      state: "financial_revocation_pending",
+    })
+    .mockResolvedValueOnce({ kind: "unavailable" })
+    .mockResolvedValueOnce({ kind: "claim_state", state: "financial_revoked" })
+  render(
+    <OfferJourney
+      initial={offered({
+        state: "funding_ready",
+        ready: true,
+        accepted_at: "2026-10-21T12:00:00Z",
+        assignment_id: ids.assignment,
+        operation_id: ids.operation,
+      })}
+    />,
+  )
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(10000)
+  })
+  expect(
+    screen.getByRole("heading", { name: "Revocation pending" }),
+  ).toBeInTheDocument()
+  expect(
+    screen.queryByRole("button", { name: "Open Console" }),
+  ).not.toBeInTheDocument()
+  expect(screen.queryByText("Review your next plan")).not.toBeInTheDocument()
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(10000)
+  })
+  expect(
+    screen.queryByRole("heading", { name: "Revocation pending" }),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole("button", { name: "Open Console" }),
+  ).not.toBeInTheDocument()
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(15000)
+  })
+  expect(
+    screen.getByRole("heading", { name: "Revocation confirmed" }),
+  ).toBeInTheDocument()
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(30000)
+  })
+  expect(refreshAcceptance).toHaveBeenCalledTimes(3)
+})
+it("keeps polling a revoked receipt until financial revocation is acknowledged", async () => {
+  vi.useFakeTimers()
+  vi.mocked(refreshAcceptance)
+    .mockReset()
+    .mockResolvedValue({ kind: "claim_state", state: "financial_revoked" })
+  render(
+    <OfferJourney
+      initial={offered({
+        state: "revoked",
+        revoked: true,
+        accepted_at: "2026-10-21T12:00:00Z",
+        financial_authority: {
+          kind: "accepted_offer",
+          state: "revocation_pending",
+          pending_invalidations: 1,
+        },
+      })}
+    />,
+  )
+  expect(
+    screen.getByRole("heading", { name: "Revocation pending" }),
+  ).toBeInTheDocument()
+  expect(screen.queryByText("Review your next plan")).not.toBeInTheDocument()
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(15000)
+  })
+  expect(
+    screen.getByRole("heading", { name: "Revocation confirmed" }),
+  ).toBeInTheDocument()
+})
+
+it("recovers acknowledgment polling after a transient error on a revoked receipt", async () => {
+  vi.useFakeTimers()
+  vi.mocked(refreshAcceptance)
+    .mockReset()
+    .mockResolvedValueOnce({ kind: "unavailable" })
+    .mockResolvedValueOnce({ kind: "claim_state", state: "financial_revoked" })
+  render(
+    <OfferJourney
+      initial={offered({
+        state: "revoked",
+        revoked: true,
+        accepted_at: "2026-10-21T12:00:00Z",
+        financial_authority: {
+          kind: "accepted_offer",
+          state: "revocation_pending",
+          pending_invalidations: 1,
+        },
+      })}
+    />,
+  )
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(10000)
+  })
+  expect(
+    screen.queryByRole("heading", { name: "Revocation pending" }),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole("button", { name: "Open Console" }),
+  ).not.toBeInTheDocument()
+  expect(screen.queryByText("Review your next plan")).not.toBeInTheDocument()
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(15000)
+  })
+  expect(
+    screen.getByRole("heading", { name: "Revocation confirmed" }),
+  ).toBeInTheDocument()
+})

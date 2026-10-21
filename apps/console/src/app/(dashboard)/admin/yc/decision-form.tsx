@@ -2,6 +2,7 @@
 
 import * as React from "react"
 
+import { financialRevocationMessage } from "@/lib/yc/financial-authority"
 import {
   staffDecisionSchema,
   type StaffClaim,
@@ -32,8 +33,13 @@ export function DecisionForm({
       const result = await submitStaffDecision(value.decision, value.region)
       if (result.kind === "saved") {
         setSaved(true)
+        const financial = financialRevocationMessage(
+          result.claim.financial_authority,
+        )
         setMessage(
-          "Decision saved. Approval still requires the customer to accept the offer. Refresh to view the latest claim and email status.",
+          financial
+            ? `${financial.title}. ${financial.description} Refresh to check the latest status.`
+            : "Decision saved. Approval still requires the customer to accept the offer. Refresh to view the latest claim and email status.",
         )
       } else if (result.kind === "conflict" || result.kind === "forbidden") {
         setConflict(true)
