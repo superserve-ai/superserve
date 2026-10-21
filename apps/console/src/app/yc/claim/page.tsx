@@ -7,17 +7,29 @@ import {
   ycTeams,
   type YCClaim,
 } from "@/lib/yc-claims"
+import { journeyEnabled } from "@/lib/yc/acceptance-api"
+import { claimRoute } from "@/lib/yc/claim-route"
+import { claimID } from "@/lib/yc/staff-schema"
 
 import { bindYCClaim, prepareYCTeam } from "./actions"
+import { prepareReviewTeam, useDifferentClaimAccount } from "./review-actions"
+import { ReviewForm } from "./review-form"
 
 export const dynamic = "force-dynamic"
 
 export default async function YCClaimPage({
   searchParams,
 }: {
-  searchParams: Promise<{ result?: string }>
+  searchParams: Promise<{ result?: string; claim?: string }>
 }) {
-  const { result } = await searchParams
+  const { result, claim: locator } = await searchParams
+  const automated = journeyEnabled()
+  const proof = await ycProof()
+  const reviewClaim = claimID.safeParse(locator ?? proof?.id)
+  const returnPath =
+    automated && reviewClaim.success
+      ? `/yc/claim?claim=${reviewClaim.data}`
+      : "/yc/claim"
   let user
   try {
     user = await ycAccount()
@@ -44,7 +56,7 @@ export default async function YCClaimPage({
         <p>
           <Link
             className="underline"
-            href="/auth/signup?offer=yc_2026&next=%2Fyc%2Fclaim"
+            href={`/auth/signup?offer=yc_2026&next=${encodeURIComponent(returnPath)}`}
           >
             Create an account
           </Link>
@@ -52,7 +64,7 @@ export default async function YCClaimPage({
         <p>
           <Link
             className="underline"
-            href="/auth/signin?offer=yc_2026&next=%2Fyc%2Fclaim"
+            href={`/auth/signin?offer=yc_2026&next=${encodeURIComponent(returnPath)}`}
           >
             Sign in
           </Link>
@@ -64,7 +76,7 @@ export default async function YCClaimPage({
   let teams: Awaited<ReturnType<typeof ycTeams>> = []
   let error = false
   const billing = new Map<string, string>()
-  const proof = await ycProof()
+  const acceptanceClaims = new Set<string>()
   try {
     claims = (
       await ycRequest<{ claims: YCClaim[] }>("claims", { user_id: user.id })
@@ -74,11 +86,15 @@ export default async function YCClaimPage({
         .filter((c) => c.state === "bound" && c.team_id && c.home_region)
         .map(async (claim) => {
           try {
-            const status = await ycRequest<{ state: string }>(
-              "status",
-              { id: claim.id, user_id: user.id, team_id: claim.team_id },
-              claim.home_region!,
+            const status = await claimRoute(
+              {
+                id: claim.id,
+                team_id: claim.team_id!,
+                home_region: claim.home_region!,
+              },
+              user.id,
             )
+            if (automated && status.acceptance) acceptanceClaims.add(claim.id)
             billing.set(claim.id, status.state)
           } catch {
             billing.set(claim.id, "unavailable")
@@ -86,8 +102,9 @@ export default async function YCClaimPage({
         }),
     )
     if (
-      proof &&
-      claims.some((c) => c.id === proof.id && c.state === "confirmed")
+      (automated && reviewClaim.success) ||
+      (proof &&
+        claims.some((c) => c.id === proof.id && c.state === "confirmed"))
     )
       teams = await ycTeams(user)
   } catch {
@@ -125,17 +142,19 @@ export default async function YCClaimPage({
           </h2>
           <p>
             {claim.state === "bound"
-              ? billing.get(claim.id) === "active"
-                ? "Your YC Pro access is active and the payment-method requirement is satisfied."
-                : billing.get(claim.id) === "awaiting_payment_method"
-                  ? "Your YC activation is approved. Add or update a usable payment method in team billing before using resources."
-                  : billing.get(claim.id) === "requires_review"
-                    ? "Your team is attached, but billing activation requires Superserve review."
-                    : billing.get(claim.id) === "renewed"
-                      ? "Your YC offer has transitioned to its renewal plan. View team billing for current plan details."
-                      : billing.get(claim.id) === "unavailable"
-                        ? "Your team is attached. Billing status is temporarily unavailable; refresh to check activation."
-                        : "Eligibility approved and team attached. Billing activation is pending; Pro access and credits are not enabled by this claim."
+              ? acceptanceClaims.has(claim.id)
+                ? "Your claim is approved. Review and accept your offer to begin setup. Approval alone does not activate Pro or credits."
+                : billing.get(claim.id) === "active"
+                  ? "Your YC Pro access is active and the payment-method requirement is satisfied."
+                  : billing.get(claim.id) === "awaiting_payment_method"
+                    ? "Your YC activation is approved. Add or update a usable payment method in team billing before using resources."
+                    : billing.get(claim.id) === "requires_review"
+                      ? "Your team is attached, but billing activation requires Superserve review."
+                      : billing.get(claim.id) === "renewed"
+                        ? "Your YC offer has transitioned to its renewal plan. View team billing for current plan details."
+                        : billing.get(claim.id) === "unavailable"
+                          ? "Your team is attached. Billing status is temporarily unavailable; refresh to check activation."
+                          : "Eligibility approved and team attached. Billing activation is pending; Pro access and credits are not enabled by this claim."
               : claim.confirmation_status === "expired"
                 ? "Your confirmation link has expired. Contact Superserve for manual review."
                 : claim.confirmation_status === "delivery_failed"
@@ -144,10 +163,22 @@ export default async function YCClaimPage({
                     ? "Email confirmed. Choose the team that should receive your company's offer."
                     : claim.state === "awaiting_confirmation"
                       ? "Email confirmation is pending. Open the link sent to your founder email."
-                      : claim.state === "revoked" || claim.state === "rejected"
-                        ? "This claim is not approved. Contact Superserve for review."
-                        : "Your claim is awaiting manual review."}
+                      : claim.state === "revoked"
+                        ? "Your approval has been revoked. This offer cannot be accepted. Contact Superserve for review."
+                        : claim.state === "rejected"
+                          ? "Your claim was rejected. You can choose a standard plan or contact Superserve for review."
+                          : "Your claim is awaiting manual review."}
           </p>
+          {acceptanceClaims.has(claim.id) && claim.state === "bound" && (
+            <Link className="underline" href={`/yc/accept?claim=${claim.id}`}>
+              Review offer and activation status
+            </Link>
+          )}
+          {automated && claim.state === "rejected" && (
+            <Link className="underline" href="/onboarding/plan">
+              Choose a standard plan
+            </Link>
+          )}
           {proof?.id === claim.id &&
           claim.state === "confirmed" &&
           claim.confirmation_status !== "expired" &&
@@ -202,9 +233,49 @@ export default async function YCClaimPage({
           ) : null}
         </section>
       ))}
+      {automated &&
+        reviewClaim.success &&
+        !claims.some(
+          (claim) =>
+            claim.id === reviewClaim.data &&
+            ["bound", "rejected", "revoked"].includes(claim.state),
+        ) && (
+          <section className="space-y-4">
+            <form
+              action={useDifferentClaimAccount.bind(null, reviewClaim.data)}
+            >
+              <p>
+                Use your matching founder email, or create and verify an account
+                with your preferred email before requesting review.
+              </p>
+              <button className="mt-3 border border-dashed border-border px-4 py-2">
+                Use a different email
+              </button>
+            </form>
+            {!error &&
+              (teams.length ? (
+                <ReviewForm
+                  claim={reviewClaim.data}
+                  actor={user.id}
+                  teams={teams}
+                />
+              ) : (
+                <form action={prepareReviewTeam.bind(null, reviewClaim.data)}>
+                  <p>
+                    Finish normal account setup before requesting a review. This
+                    does not select a paid plan or grant offer eligibility.
+                  </p>
+                  <button className="mt-3 border border-dashed border-border px-4 py-2">
+                    Set up your account for review
+                  </button>
+                </form>
+              ))}
+          </section>
+        )}
       <p>
-        YC is available once per company. A usable payment method is required
-        before resource usage.
+        {automated
+          ? "YC is available once per company. No card is required for initial activation while eligible sponsored credits remain. Your offer and access must be confirmed before use."
+          : "YC is available once per company. A usable payment method is required before resource usage."}
       </p>
       <p>
         <Link href="/sandboxes" className="underline">

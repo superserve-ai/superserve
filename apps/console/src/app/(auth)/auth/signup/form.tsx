@@ -218,6 +218,7 @@ export default function SignUpContent() {
         turnstileToken,
         capture,
         requestedOffer,
+        nextUrl,
       )
       if (!result.success) {
         posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {

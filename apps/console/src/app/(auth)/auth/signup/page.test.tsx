@@ -287,6 +287,7 @@ describe("SignUpPage", () => {
       undefined,
       undefined,
       "pro_monthly",
+      "/",
     )
   })
 
@@ -360,6 +361,7 @@ describe("SignUpPage", () => {
         undefined,
         undefined,
         undefined,
+        "/",
       )
     })
   })
@@ -733,6 +735,7 @@ describe("SignUpPage with reCAPTCHA configured", () => {
         undefined,
         undefined,
         undefined,
+        "/",
       )
     })
   })

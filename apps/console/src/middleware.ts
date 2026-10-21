@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 import { createMiddlewareClient, matchesRoute } from "@/lib/supabase/middleware"
+import { ycReturnPath } from "@/lib/yc/return-path"
 
 const PUBLIC_ROUTES = [
   "/auth/signin",
@@ -30,10 +31,11 @@ export async function middleware(request: NextRequest) {
     signinUrl.search = ""
     signinUrl.searchParams.set(
       "next",
-      pathname +
-        (pathname.replace(/\/$/, "") === "/onboarding/plan"
-          ? request.nextUrl.search
-          : ""),
+      ycReturnPath(pathname + request.nextUrl.search) ??
+        pathname +
+          (pathname.replace(/\/$/, "") === "/onboarding/plan"
+            ? request.nextUrl.search
+            : ""),
     )
     // Build the redirect on top of client.response so any refreshed Supabase
     // auth cookies (written by getUser() via setAll) survive the redirect.

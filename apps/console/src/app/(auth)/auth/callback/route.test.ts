@@ -644,6 +644,33 @@ describe("auth callback", () => {
     })
   })
 
+  it.each(["code=abc", "token_hash=token&type=signup"])(
+    "preserves the YC approval locator through %s",
+    async (auth) => {
+      if (auth.startsWith("token_hash"))
+        currentUser!.app_metadata = { provider: "email" }
+      const next = "/yc/accept?claim=11111111-1111-4111-8111-111111111111"
+      const response = await GET(
+        new Request(
+          `https://console.superserve.ai/auth/callback?${auth}&next=${encodeURIComponent(next)}`,
+        ),
+      )
+      const destination = new URL(response.headers.get("location")!)
+      expect(destination.pathname + destination.search).toBe(next)
+    },
+  )
+
+  it("does not turn a claimed readiness parameter into an acceptance destination", async () => {
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&next=%2Fyc%2Faccept%3Fstate%3Dfunding_ready",
+      ),
+    )
+    expect(new URL(response.headers.get("location")!).pathname).toBe(
+      "/sandboxes",
+    )
+  })
+
   it("preserves checkout account and team through OAuth reauthentication", async () => {
     const next =
       "/onboarding/plan/?team=use%3Aoriginal&account=u1&billing=success"

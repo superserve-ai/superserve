@@ -8,6 +8,7 @@ import {
   type SignupPlanPageParams,
 } from "@/lib/api/signup-plan-page"
 import { trackEvent } from "@/lib/posthog/actions"
+import { ycOnboardingDestination } from "@/lib/yc/onboarding"
 
 export const metadata: Metadata = {
   title: "Choose your plan | Superserve",
@@ -22,6 +23,26 @@ export default async function PlanSelectionPage({
   const params = await searchParams
   const result = await getSignupPlanPage(params)
   const context = result?.context
+  if (context && ["selecting", "pending", "yc_claim"].includes(context.state)) {
+    let destination: string | null
+    try {
+      destination = await ycOnboardingDestination(context)
+    } catch {
+      return (
+        <main className="mx-auto max-w-2xl space-y-4 p-8">
+          <h1 className="text-2xl">Checking your plan</h1>
+          <p role="alert">
+            We could not check your saved offer. Refresh to retry before
+            choosing a plan.
+          </p>
+          <form action="/onboarding/plan" method="get">
+            <button className="underline">Refresh</button>
+          </form>
+        </main>
+      )
+    }
+    if (destination) redirect(destination)
+  }
   if (
     context &&
     (context.state === "legacy" ||

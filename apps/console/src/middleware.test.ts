@@ -53,6 +53,25 @@ function buildResponse(
 }
 
 describe("middleware", () => {
+  it("retains only an allowlisted YC locator through anonymous sign-in", async () => {
+    mockClient = {
+      supabase: {
+        auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
+      },
+      response: buildResponse(),
+    }
+    const next = "/yc/accept?claim=11111111-1111-4111-8111-111111111111"
+    const response = await middleware(buildRequest(next))
+    expect(
+      new URL(response.headers.get("location")!).searchParams.get("next"),
+    ).toBe(next)
+    const forged = await middleware(
+      buildRequest("/yc/accept?state=funding_ready"),
+    )
+    expect(
+      new URL(forged.headers.get("location")!).searchParams.get("next"),
+    ).toBe("/yc/accept")
+  })
   beforeEach(() => {
     mockClient = {
       supabase: {

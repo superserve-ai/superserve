@@ -1003,6 +1003,30 @@ describe("original signup promotion evidence", () => {
       error: null,
     }))
   })
+  it.each([
+    "/yc/accept?claim=11111111-1111-4111-8111-111111111111",
+    "https://evil.example/yc/accept",
+    "/yc/accept?state=funding_ready",
+  ])(
+    "forwards only safe YC return paths into email confirmation: %s",
+    async (next) => {
+      await signUpWithEmail(
+        "user@example.com",
+        "password123",
+        "Name",
+        undefined,
+        undefined,
+        capture,
+        undefined,
+        next,
+      )
+      const sent = new URL(mockGenerateLink.mock.calls[0][0].options.redirectTo)
+      expect(sent.searchParams.get("next")).toBe(
+        next.startsWith("/yc/accept?claim=") ? next : null,
+      )
+    },
+  )
+
   it("binds the actual new Auth result before sending confirmation, with one shared lookup", async () => {
     expect(
       await signUpWithEmail(

@@ -5,12 +5,17 @@ const mocks = vi.hoisted(() => ({
   request: vi.fn(),
   proof: vi.fn(),
   teams: vi.fn(),
+  offer: vi.fn(),
 }))
 vi.mock("@/lib/yc-claims", () => ({
   ycAccount: async () => ({ id: "user", email: "founder@example.test" }),
   ycRequest: mocks.request,
   ycProof: mocks.proof,
   ycTeams: mocks.teams,
+}))
+vi.mock("@/lib/yc/acceptance-api", () => ({
+  journeyEnabled: () => true,
+  readOffer: mocks.offer,
 }))
 vi.mock("./actions", () => ({ bindYCClaim: vi.fn(), prepareYCTeam: vi.fn() }))
 import YCClaimPage from "./page"
@@ -28,6 +33,8 @@ const claim = {
 }
 beforeEach(() => {
   vi.resetAllMocks()
+  vi.stubEnv("YC_CONSOLE_JOURNEY_ENABLED", "true")
+  mocks.offer.mockRejectedValue(new Error("new admission unavailable"))
   mocks.proof.mockResolvedValue({ id: "claim", token: "proof" })
   mocks.teams.mockResolvedValue([
     { teamId: "team", region: "use", name: "Synthetic Team" },
@@ -46,11 +53,14 @@ it.each([
     mocks.request.mockImplementation(async (operation) => {
       if (operation === "claims") return { claims: [claim] }
       if (state === "unavailable") throw new Error("service unavailable")
-      return { state }
+      return { state, contract_id: "11111111-1111-4111-8111-111111111111" }
     })
     render(await YCClaimPage({ searchParams: Promise.resolve({}) }))
     expect(screen.getByText(message, { exact: false })).toBeInTheDocument()
     expect(screen.queryByRole("button")).not.toBeInTheDocument()
+    expect(
+      screen.queryByText("Review offer and activation status"),
+    ).not.toBeInTheDocument()
     expect(mocks.request).toHaveBeenCalledWith(
       "status",
       { id: "claim", user_id: "user", team_id: "team" },
@@ -107,4 +117,18 @@ it("confirmed evidence without a team offers only explicit setup", async () => {
     screen.getByRole("button", { name: "Finish account setup" }),
   ).toBeInTheDocument()
   expect(screen.queryByRole("combobox")).not.toBeInTheDocument()
+})
+
+it("routes an approved preferred account through new admission without the legacy email gate", async () => {
+  mocks.offer.mockResolvedValue({})
+  mocks.request.mockImplementation(async (operation) =>
+    operation === "claims"
+      ? { claims: [claim] }
+      : { state: "activation_pending" },
+  )
+  render(await YCClaimPage({ searchParams: Promise.resolve({}) }))
+  expect(
+    screen.getByRole("link", { name: "Review offer and activation status" }),
+  ).toHaveAttribute("href", "/yc/accept?claim=claim")
+  expect(mocks.request).toHaveBeenCalledTimes(1)
 })
