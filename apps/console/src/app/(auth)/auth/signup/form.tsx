@@ -16,6 +16,7 @@ import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
 import {
   clearFingerprintSignupCapture,
   ensureFingerprintSignupCapture,
+  getFingerprintSignupDiagnostics,
 } from "@/lib/fingerprint/client"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
@@ -199,6 +200,7 @@ export default function SignUpContent() {
     setIsLoading(true)
     try {
       const capture = await ensureFingerprintSignupCapture()
+      const fingerprintDiagnostics = getFingerprintSignupDiagnostics()
       const recaptchaToken = await getRecaptchaToken("signup")
       const turnstileEnabled = await isCloudflareSignupObservationEnabled()
       const turnstileToken = turnstileEnabled
@@ -218,6 +220,7 @@ export default function SignUpContent() {
         turnstileToken,
         capture,
         requestedOffer,
+        fingerprintDiagnostics,
       )
       if (!result.success) {
         posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
@@ -249,6 +252,7 @@ export default function SignUpContent() {
     setErrors({})
     try {
       const capture = await ensureFingerprintSignupCapture()
+      const fingerprintDiagnostics = getFingerprintSignupDiagnostics()
       const recaptchaToken = await getRecaptchaToken("signup_google")
       const turnstileEnabled = await isCloudflareSignupObservationEnabled()
       const turnstileToken = turnstileEnabled
@@ -261,13 +265,12 @@ export default function SignUpContent() {
         return
       }
 
-      const proof = turnstileToken
-        ? capture
-          ? await beginGoogleSignup(recaptchaToken, turnstileToken, capture)
-          : await beginGoogleSignup(recaptchaToken, turnstileToken)
-        : capture
-          ? await beginGoogleSignup(recaptchaToken, undefined, capture)
-          : await beginGoogleSignup(recaptchaToken)
+      const proof = await beginGoogleSignup(
+        recaptchaToken,
+        turnstileToken,
+        capture,
+        fingerprintDiagnostics,
+      )
       if (!proof.success) {
         setErrors({ form: proof.error || "Google signup verification failed." })
         return

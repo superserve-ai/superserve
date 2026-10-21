@@ -2,6 +2,11 @@ import "server-only"
 import type { User } from "@supabase/supabase-js"
 
 import { DEFAULT_REGION } from "@/lib/cells"
+import type { DiagnosticStage } from "@/lib/fingerprint/diagnostics"
+import {
+  fingerprintDiagnostics,
+  promotionDiagnosticFailure,
+} from "@/lib/fingerprint/diagnostics-server"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 import {
@@ -31,7 +36,14 @@ export async function publishOriginalSignupEvidence(
   user: User,
   attemptId: string | undefined,
   routineMissing: boolean,
+  signupAttemptId?: string,
 ): Promise<PromotionSignupEligibility | undefined> {
+  const diagnostic = fingerprintDiagnostics({
+    userId: user.id,
+    captureAttemptId: attemptId,
+    signupAttemptId,
+  })
+  let stage: DiagnosticStage = "account_marker"
   try {
     // Failure is monotonic. Never clear it using a later callback or login.
     const field = routineMissing
@@ -45,19 +57,45 @@ export async function publishOriginalSignupEvidence(
     )
     if (error) throw error
     if (attemptId) {
+      stage = "attachment"
       const binding = await bindPromotionSignupAccount(user.id, attemptId)
+      diagnostic.record({
+        stage,
+        outcome:
+          binding === "first_evidence_retained" ? "skipped" : "succeeded",
+        reason: binding,
+      })
       if (binding !== "first_evidence_retained") {
+        stage = "identity_publication"
         await publishPromotionIdentity(
           DEFAULT_REGION,
           user.id,
           user,
           new Date().toISOString(),
         )
-        await registerPromotionSignupAccount(user.id, attemptId)
+        diagnostic.record({ stage, outcome: "succeeded", reason: "completed" })
+        stage = "device_publication"
+        const registration = await registerPromotionSignupAccount(
+          user.id,
+          attemptId,
+        )
+        diagnostic.record({
+          stage,
+          outcome: registration === "owner" ? "succeeded" : "rejected",
+          reason: registration,
+        })
       }
+    } else {
+      diagnostic.record({
+        stage: "attachment",
+        outcome: "skipped",
+        reason: "no_attested_attempt",
+      })
     }
+    stage = "eligibility_snapshot"
     return await getPromotionSignupEligibilityForTrustedSignup(user.id)
-  } catch {
+  } catch (error) {
+    diagnostic.record({ stage, ...promotionDiagnosticFailure(error) })
     console.warn("Original signup promotion publication unavailable")
     return undefined
   }

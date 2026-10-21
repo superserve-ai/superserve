@@ -116,3 +116,100 @@ describe("signup capture retry boundary", () => {
     expect(getData).toHaveBeenCalledOnce()
   })
 })
+
+describe("capture diagnostics preserve behavior", () => {
+  beforeEach(() => {
+    vi.resetModules()
+    createAttempt.mockReset().mockResolvedValue({
+      attemptId: "attempt-original",
+      challenge: "secret-challenge",
+    })
+    const values = new Map<string, string>()
+    vi.stubGlobal("sessionStorage", {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: vi.fn((key: string, value: string) => {
+        values.set(key, value)
+      }),
+      removeItem: (key: string) => values.delete(key),
+    })
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("keeps undefined distinct from unavailable when the SDK is not registered", async () => {
+    const client = await import("./client")
+    expect(await client.ensureFingerprintSignupCapture()).toBeUndefined()
+    expect(client.getFingerprintSignupDiagnostics().events[0]).toMatchObject({
+      stage: "capture",
+      outcome: "skipped",
+    })
+    expect(createAttempt).not.toHaveBeenCalled()
+  })
+
+  it("records capture success followed by storage failure without retrying the provider", async () => {
+    const client = await import("./client")
+    const getData = vi.fn().mockResolvedValue({ event_id: "event-original" })
+    client.registerFingerprintGetData(getData)
+    vi.mocked(sessionStorage.setItem)
+      .mockImplementationOnce(() => {})
+      .mockImplementationOnce(() => {
+        throw new Error("secret storage failure")
+      })
+    expect(await client.ensureFingerprintSignupCapture()).toEqual({
+      unavailable: true,
+    })
+    const diagnostic = client.getFingerprintSignupDiagnostics()
+    expect(diagnostic.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stage: "capture",
+          outcome: "succeeded",
+          capture_attempt_id: "attempt-original",
+          provider_event_id: "event-original",
+        }),
+        expect.objectContaining({
+          stage: "storage_write",
+          outcome: "unknown",
+          reason: "storage_unavailable",
+          provider_event_id: "event-original",
+        }),
+      ]),
+    )
+    expect(JSON.stringify(diagnostic)).not.toContain("secret")
+    expect(await client.ensureFingerprintSignupCapture()).toMatchObject({
+      eventId: "event-original",
+    })
+    expect(getData).toHaveBeenCalledOnce()
+  })
+
+  it("retains timeout uncertainty through reload with the original pending attempt", async () => {
+    const client = await import("./client")
+    const getData = vi.fn().mockRejectedValue(
+      Object.assign(new Error("secret request URL"), {
+        code: "client_timeout",
+      }),
+    )
+    client.registerFingerprintGetData(getData)
+    expect(await client.ensureFingerprintSignupCapture()).toEqual({
+      unavailable: true,
+    })
+    expect(
+      client.getFingerprintSignupDiagnostics().events.at(-1),
+    ).toMatchObject({
+      stage: "capture",
+      outcome: "unknown",
+      reason: "client_timeout",
+    })
+    vi.resetModules()
+    const reloaded = await import("./client")
+    reloaded.registerFingerprintGetData(getData)
+    expect(await reloaded.ensureFingerprintSignupCapture()).toEqual({
+      unavailable: true,
+    })
+    expect(reloaded.getFingerprintSignupDiagnostics().events[0]).toMatchObject({
+      reason: "incomplete_capture",
+      capture_attempt_id: "attempt-original",
+    })
+    expect(getData).toHaveBeenCalledOnce()
+    expect(createAttempt).toHaveBeenCalledOnce()
+  })
+})

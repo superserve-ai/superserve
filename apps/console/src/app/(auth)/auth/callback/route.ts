@@ -36,6 +36,7 @@ import {
 } from "@/lib/auth/signup-restrictions"
 import { DEFAULT_REGION } from "@/lib/cells"
 import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
+import { fingerprintDiagnostics } from "@/lib/fingerprint/diagnostics-server"
 import { resolveFingerprintSignup } from "@/lib/fingerprint/observe"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
@@ -229,6 +230,21 @@ export async function GET(request: Request) {
               user.id,
               user.created_at,
             )
+            if (!original || !original.originalSignup) {
+              fingerprintDiagnostics({
+                userId: user.id,
+                signupAttemptId,
+                captureAttemptId: original?.attemptId,
+                eventId: original?.eventId,
+                signupMethod: "google",
+              }).record({
+                stage: "attachment",
+                outcome: "skipped",
+                reason: original
+                  ? "not_original_signup"
+                  : "original_evidence_missing",
+              })
+            }
             if (original) {
               if (original.originalSignup) {
                 try {
@@ -237,6 +253,7 @@ export async function GET(request: Request) {
                       user,
                       original.attemptId,
                       original.routineMissing,
+                      signupAttemptId,
                     )
                 } catch {
                   // Publication is best effort; callback auth and notification

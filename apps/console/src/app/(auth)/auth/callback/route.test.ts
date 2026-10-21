@@ -849,6 +849,7 @@ describe("auth callback", () => {
         currentUser,
         "original-attempt",
         false,
+        "attempt-1",
       )
       expect(
         mockPublishOriginalSignupEvidence.mock.invocationCallOrder[0],
@@ -889,6 +890,7 @@ describe("auth callback", () => {
       currentUser,
       "original-attempt",
       false,
+      "attempt-1",
     )
   })
 
@@ -913,6 +915,7 @@ describe("auth callback", () => {
       currentUser,
       undefined,
       true,
+      "attempt-1",
     )
     expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
       "user@example.com",

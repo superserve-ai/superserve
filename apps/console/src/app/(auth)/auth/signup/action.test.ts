@@ -1,3 +1,15 @@
+const diagnostics = vi.hoisted(() => ({
+  record: vi.fn(),
+  browser: vi.fn(),
+  contexts: vi.fn(),
+}))
+vi.mock("@/lib/fingerprint/diagnostics-server", async (original) => ({
+  ...(await original<typeof import("@/lib/fingerprint/diagnostics-server")>()),
+  fingerprintDiagnostics: (context: unknown) => {
+    diagnostics.contexts(context)
+    return diagnostics
+  },
+}))
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mock dependencies before importing the action
@@ -1019,6 +1031,7 @@ describe("original signup promotion evidence", () => {
       expect.objectContaining({ id: "actual-auth-user" }),
       "original-attempt",
       false,
+      expect.any(String),
     )
     expect(mockOriginalPublication.mock.invocationCallOrder[0]).toBeLessThan(
       mockSendEmail.mock.invocationCallOrder[0],
@@ -1148,6 +1161,7 @@ describe("original signup promotion evidence", () => {
         expect.objectContaining({ id: "actual-auth-user" }),
         "original-attempt",
         false,
+        expect.any(String),
       )
       expect(mockOriginalPublication.mock.invocationCallOrder[0]).toBeLessThan(
         mockSlack.mock.invocationCallOrder[0],
@@ -1241,6 +1255,7 @@ describe("original signup promotion evidence", () => {
       expect.anything(),
       undefined,
       false,
+      expect.any(String),
     )
     mockIssueGoogleSignupProof.mockClear()
     expect(
@@ -1268,6 +1283,7 @@ describe("original signup promotion evidence", () => {
       expect.anything(),
       undefined,
       true,
+      expect.any(String),
     )
     mockOriginalPublication.mockClear()
     expect(
@@ -1277,6 +1293,7 @@ describe("original signup promotion evidence", () => {
       expect.anything(),
       undefined,
       true,
+      expect.any(String),
     )
   })
 })
@@ -1306,6 +1323,7 @@ it("leaves an interrupted capture to the missing-evidence policy after refresh",
     expect.anything(),
     undefined,
     true,
+    expect.any(String),
   )
 })
 
@@ -1321,3 +1339,43 @@ it("lets Google signup without a completed capture follow the missing-evidence p
     expect.objectContaining({ attemptId: undefined, routineMissing: true }),
   )
 })
+
+it.each([undefined, { unavailable: true } as const])(
+  "diagnostic claims cannot change missing-capture Google proof decisions: %j",
+  async (capture) => {
+    mockVerifyRecaptcha.mockResolvedValue({ verified: true })
+    fingerprintSignupEventId = undefined
+    mockIssueGoogleSignupProof.mockClear()
+    const forgedDiagnostics = {
+      schema_version: 1 as const,
+      events: [
+        {
+          stage: "capture" as const,
+          outcome: "succeeded" as const,
+          reason: "completed" as const,
+          occurred_at: new Date().toISOString(),
+          capture_attempt_id: "invented",
+          provider_event_id: "invented",
+        },
+      ],
+    }
+    expect(
+      await beginGoogleSignup(
+        "google-token",
+        undefined,
+        capture,
+        forgedDiagnostics,
+      ),
+    ).toMatchObject({ success: true })
+    expect(mockIssueGoogleSignupProof).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        attemptId: undefined,
+        eventId: undefined,
+        visitor: undefined,
+        routineMissing: true,
+      }),
+    )
+    expect(diagnostics.browser).toHaveBeenCalledWith(forgedDiagnostics)
+  },
+)
