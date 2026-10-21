@@ -31,6 +31,9 @@ preferred-identity approval and resume, actual Google callback/session
 revocation behavior, exact terms and revisions, uncertain/replayed operations,
 and readiness from real provider/funding reconciliation. Renewal must resolve
 the original provider boundary and expose only approved catalog choices;
-requested choices do not replace the last confirmed instruction. Preserve
+requested choices do not replace the last confirmed instruction. An instruction
+remains `confirmed` after the boundary; `successor_state` separately reports
+`active`, `free`, or `payment_pending`. There is no `effective` instruction
+state in this contract. Preserve
 existing debt and payment gates. Local fixtures and UI previews do not prove
 any of these runtime integrations.

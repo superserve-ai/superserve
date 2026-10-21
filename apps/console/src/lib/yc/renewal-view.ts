@@ -13,7 +13,6 @@ export interface RenewalView {
           | "dispatched"
           | "outcome_unknown"
           | "confirmed"
-          | "effective"
           | "review_required"
           | "rejected"
       })

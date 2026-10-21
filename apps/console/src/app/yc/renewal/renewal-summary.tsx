@@ -29,7 +29,7 @@ export function RenewalSummary({ renewal }: { renewal: RenewalView }) {
           <p>{renewal.requested.terms}</p>
           <p>Requested effective date: {renewal.requested.boundary}</p>
           <p>Status: {renewal.requested.state.replaceAll("_", " ")}</p>
-          {!["confirmed", "effective"].includes(renewal.requested.state) && (
+          {renewal.requested.state !== "confirmed" && (
             <p>
               Your change is not confirmed. The last confirmed instruction
               remains in effect and may renew while this request is pending.
@@ -37,6 +37,10 @@ export function RenewalSummary({ renewal }: { renewal: RenewalView }) {
           )}
         </div>
       )}
+      {renewal.successor === "active" && (
+        <p>Your paid renewal plan is active.</p>
+      )}
+      {renewal.successor === "free" && <p>Your Free plan is now in effect.</p>}
       {renewal.successor === "payment_pending" && (
         <p>
           Your paid plan is waiting for verified payment and account
