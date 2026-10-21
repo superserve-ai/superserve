@@ -8,6 +8,7 @@ import {
   type YCClaim,
 } from "@/lib/yc-claims"
 import { journeyEnabled } from "@/lib/yc/acceptance-api"
+import { ycClaimCaptureURL } from "@/lib/yc/capture-url"
 import { claimRoute } from "@/lib/yc/claim-route"
 import {
   financialAuthoritySchema,
@@ -30,6 +31,7 @@ export default async function YCClaimPage({
 }) {
   const { result, claim: locator } = await searchParams
   const automated = journeyEnabled()
+  const captureURL = ycClaimCaptureURL()
   const proof = await ycProof()
   const reviewClaim = claimID.safeParse(locator ?? proof?.id)
   const returnPath =
@@ -147,11 +149,23 @@ export default async function YCClaimPage({
       {!error && !claims.length ? (
         <p>
           No claim was found for this verified account email. Use the email from
-          your claim, or{" "}
-          <a className="underline" href="https://www.superserve.ai/yc">
-            submit your YC verification
-          </a>
-          .
+          your claim.
+          {captureURL ? (
+            <>
+              {" "}
+              Or{" "}
+              <a className="underline" href={captureURL}>
+                submit your YC verification
+              </a>
+              .
+            </>
+          ) : (
+            <>
+              {" "}
+              New verification is temporarily unavailable. Please try again
+              later.
+            </>
+          )}
         </p>
       ) : null}
       {claims.map((claim) => (

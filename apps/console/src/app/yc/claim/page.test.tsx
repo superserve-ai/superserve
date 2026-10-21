@@ -34,6 +34,7 @@ const claim = {
 }
 beforeEach(() => {
   vi.resetAllMocks()
+  vi.stubEnv("YC_CLAIM_WEBSITE_URL", undefined)
   mocks.enabled.mockReturnValue(true)
   vi.stubEnv("YC_CONSOLE_JOURNEY_ENABLED", "true")
   mocks.offer.mockRejectedValue(new Error("new admission unavailable"))
@@ -218,4 +219,30 @@ it("does not fall back to legacy readiness for an automated claim when the journ
   ).toBeInTheDocument()
   expect(mocks.offer).not.toHaveBeenCalled()
   expect(mocks.request).toHaveBeenCalledTimes(1)
+})
+
+it.each([
+  [undefined, "https://www.superserve.ai/yc"],
+  ["https://capture.example.test", "https://capture.example.test/yc"],
+])(
+  "renders the configured verification destination for an account without claims",
+  async (origin, expected) => {
+    vi.stubEnv("YC_CLAIM_WEBSITE_URL", origin)
+    mocks.request.mockResolvedValue({ claims: [] })
+    render(await YCClaimPage({ searchParams: Promise.resolve({}) }))
+    expect(
+      screen.getByRole("link", { name: "submit your YC verification" }),
+    ).toHaveAttribute("href", expected)
+  },
+)
+it("hides the verification link instead of routing to production when configuration is invalid", async () => {
+  vi.stubEnv("YC_CLAIM_WEBSITE_URL", "http://capture.example.test")
+  mocks.request.mockResolvedValue({ claims: [] })
+  render(await YCClaimPage({ searchParams: Promise.resolve({}) }))
+  expect(
+    screen.queryByRole("link", { name: "submit your YC verification" }),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.getByText(/New verification is temporarily unavailable/),
+  ).toBeInTheDocument()
 })
