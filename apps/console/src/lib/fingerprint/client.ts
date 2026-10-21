@@ -126,7 +126,6 @@ export function ensureFingerprintSignupCapture(): Promise<
   SignupFingerprintResult | undefined
 > {
   if (typeof window === "undefined") return Promise.resolve(undefined)
-  if (!capturePromise) diagnostics = { schema_version: 1, events: [] }
   try {
     if (
       sessionStorage.getItem(CAPTURE_KEY) &&
@@ -182,6 +181,8 @@ export function ensureFingerprintSignupCapture(): Promise<
     })
     return Promise.resolve(undefined)
   }
+  // Keep the first failure while this capture is retained across form retries.
+  diagnostics = { schema_version: 1, events: [] }
   const startedAt = Date.now()
   let stage: DiagnosticStage = "capture_attempt"
   let attemptId: string | undefined
@@ -273,6 +274,7 @@ export function clearFingerprintSignupCapture(): void {
   completedCapture = undefined
   captureStarted = false
   activeCaptureAttemptId = undefined
+  diagnostics = { schema_version: 1, events: [] }
   try {
     sessionStorage.removeItem(CAPTURE_KEY)
   } catch {

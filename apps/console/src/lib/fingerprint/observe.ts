@@ -389,12 +389,13 @@ export async function resolveFingerprintSignup({
     diagnostic.record({
       stage: lookupCompleted ? "attestation" : "lookup",
       outcome: "unknown",
-      reason: decoding
-        ? "invalid_provider_response"
-        : error instanceof Error &&
-            (error.name === "TimeoutError" || error.name === "AbortError")
+      reason:
+        error instanceof Error &&
+        (error.name === "TimeoutError" || error.name === "AbortError")
           ? "lookup_timeout"
-          : "lookup_unavailable",
+          : decoding
+            ? "invalid_provider_response"
+            : "lookup_unavailable",
       elapsed_ms: Date.now() - startedAt,
     })
     onAttestationFailed?.()

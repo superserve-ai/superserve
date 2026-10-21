@@ -526,3 +526,43 @@ it("separates provider lookup from mismatched challenge rejection without changi
     }),
   )
 })
+
+it.each(["headers", "body"])(
+  "records timeout uncertainty during %s without changing callbacks or retrying",
+  async (phase) => {
+    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+    const timeout = Object.assign(new Error("secret provider URL"), {
+      name: "TimeoutError",
+    })
+    const lookup = vi.spyOn(globalThis, "fetch")
+    if (phase === "headers") lookup.mockRejectedValue(timeout)
+    else {
+      const response = Response.json({})
+      vi.spyOn(response, "json").mockRejectedValue(timeout)
+      lookup.mockResolvedValue(response)
+    }
+    const failed = vi.fn()
+    const attested = vi.fn()
+    await expect(
+      resolveFingerprintSignup({
+        eventId: "event",
+        signupMethod: "email",
+        onAttestationFailed: failed,
+        onAttested: attested,
+      }),
+    ).resolves.toBeNull()
+    expect(failed).toHaveBeenCalledOnce()
+    expect(attested).not.toHaveBeenCalled()
+    expect(lookup).toHaveBeenCalledOnce()
+    expect(diagnostics.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stage: "lookup",
+        outcome: "unknown",
+        reason: "lookup_timeout",
+      }),
+    )
+    expect(JSON.stringify(diagnostics.record.mock.calls)).not.toContain(
+      "secret",
+    )
+  },
+)

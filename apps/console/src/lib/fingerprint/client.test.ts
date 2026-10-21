@@ -213,3 +213,47 @@ describe("capture diagnostics preserve behavior", () => {
     expect(createAttempt).toHaveBeenCalledOnce()
   })
 })
+
+it("retains the initial failure and timestamp across retries before a signup request is sent", async () => {
+  vi.resetModules()
+  const values = new Map<string, string>()
+  vi.stubGlobal("sessionStorage", {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+    removeItem: (key: string) => values.delete(key),
+  })
+  try {
+    createAttempt
+      .mockReset()
+      .mockResolvedValue({ attemptId: "original", challenge: "secret" })
+    const client = await import("./client")
+    const getData = vi.fn().mockRejectedValue({ code: "csp_block" })
+    client.registerFingerprintGetData(getData)
+    expect(await client.ensureFingerprintSignupCapture()).toEqual({
+      unavailable: true,
+    })
+    const originalFailure = client
+      .getFingerprintSignupDiagnostics()
+      .events.at(-1)
+    for (let index = 0; index < 20; index++)
+      await client.ensureFingerprintSignupCapture()
+    const report = client.getFingerprintSignupDiagnostics()
+    expect(report.events).toContainEqual(originalFailure)
+    expect(report.events).toContainEqual(
+      expect.objectContaining({
+        reason: "incomplete_capture",
+        capture_attempt_id: "original",
+      }),
+    )
+    expect(report.events.length).toBeLessThanOrEqual(8)
+    expect(originalFailure).toMatchObject({
+      reason: "csp_block",
+      capture_attempt_id: "original",
+    })
+    expect(getData).toHaveBeenCalledOnce()
+    client.clearFingerprintSignupCapture()
+    expect(client.getFingerprintSignupDiagnostics().events).toEqual([])
+  } finally {
+    vi.unstubAllGlobals()
+  }
+})

@@ -48,9 +48,13 @@ export function fingerprintDiagnostics(context: DiagnosticContext) {
         // IDs are links, not identity assertions; only the authenticated caller supplies userId.
         superserve_user_id: diagnosticId(context.userId),
         capture_attempt_id:
-          row.capture_attempt_id ?? diagnosticId(context.captureAttemptId),
+          row.capture_attempt_id ??
+          (source === "server"
+            ? diagnosticId(context.captureAttemptId)
+            : undefined),
         provider_event_id:
-          row.provider_event_id ?? diagnosticId(context.eventId),
+          row.provider_event_id ??
+          (source === "server" ? diagnosticId(context.eventId) : undefined),
         signup_method: context.signupMethod,
       })
       if (scheduled) return

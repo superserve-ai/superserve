@@ -124,3 +124,25 @@ it("isolates scheduling, logging, and rejected delivery from callers", async () 
   })
   await expect(mocks.after.mock.calls[0][0]()).resolves.toBeUndefined()
 })
+
+it("never fills a pending browser capture with a different tab's cookie event", async () => {
+  const diagnostic = fingerprintDiagnostics({
+    signupAttemptId: "signup",
+    eventId: "tab-b-event",
+  })
+  diagnostic.browser({
+    schema_version: 1,
+    events: [
+      {
+        ...row,
+        capture_attempt_id: "tab-a-attempt",
+        reason: "incomplete_capture",
+      },
+    ],
+  })
+  await mocks.after.mock.calls[0][0]()
+  const properties = mocks.batch.mock.calls[0][0][0].properties
+  expect(properties.capture_attempt_id).toBe("tab-a-attempt")
+  expect(properties.provider_event_id).toBeUndefined()
+  expect(properties.signup_attempt_id).toBe("signup")
+})
