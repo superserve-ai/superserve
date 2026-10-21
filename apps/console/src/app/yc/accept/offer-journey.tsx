@@ -14,6 +14,7 @@ import { money } from "@/lib/yc/offer-view"
 
 import {
   openOfferBilling,
+  openReadyOfferConsole,
   refreshAcceptance,
   submitAcceptance,
 } from "./actions"
@@ -123,7 +124,10 @@ export function OfferJourney({ initial }: { initial: Acceptance }) {
   }
   return (
     <div className="space-y-6">
-      <StatusPanel state={state} />
+      <StatusPanel
+        state={state}
+        readyAction={openReadyOfferConsole.bind(null, offer.claim_id)}
+      />
       {offer.control_pending && (
         <output className="block">
           Your hold or revocation is saved while an earlier setup result is

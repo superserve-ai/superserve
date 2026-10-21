@@ -10,7 +10,7 @@ import {
   readOfferStatus,
 } from "@/lib/yc/acceptance-api"
 import { resolveAcceptedClaim } from "@/lib/yc/acceptance-api"
-import type { AcceptInput } from "@/lib/yc/acceptance-schema"
+import { acceptanceState, type AcceptInput } from "@/lib/yc/acceptance-schema"
 
 export async function submitAcceptance(input: AcceptInput) {
   try {
@@ -48,4 +48,12 @@ export async function openOfferBilling(claim: string) {
     resolved.claim.home_region!,
   )
   redirect("/plan-usage")
+}
+
+export async function openReadyOfferConsole(claim: string) {
+  const offer = await readOfferStatus(claim)
+  if (acceptanceState(offer) !== "funding_ready")
+    throw new AcceptanceError("conflict")
+  await setActiveTeamAction(offer.team_id, offer.home_region)
+  redirect("/sandboxes")
 }

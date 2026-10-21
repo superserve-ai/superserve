@@ -2,7 +2,13 @@ import Link from "next/link"
 
 import { journeyMessages, type JourneyState } from "@/lib/yc/journey-state"
 
-export function StatusPanel({ state }: { state: JourneyState }) {
+export function StatusPanel({
+  state,
+  readyAction,
+}: {
+  state: JourneyState
+  readyAction?: () => Promise<void>
+}) {
   const message = journeyMessages[state] ?? journeyMessages.unavailable
   return (
     <section
@@ -11,10 +17,10 @@ export function StatusPanel({ state }: { state: JourneyState }) {
     >
       <h1 className="text-2xl font-semibold">{message.title}</h1>
       <p>{message.description}</p>
-      {state === "funding_ready" && (
-        <Link className="underline" href="/sandboxes">
-          Open Console
-        </Link>
+      {state === "funding_ready" && readyAction && (
+        <form action={readyAction}>
+          <button className="underline">Open Console</button>
+        </form>
       )}
       {state === "rejected" && (
         <Link className="underline" href="/onboarding/plan">

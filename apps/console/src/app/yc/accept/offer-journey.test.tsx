@@ -10,6 +10,7 @@ vi.mock("./actions", () => ({
   submitAcceptance: vi.fn(),
   refreshAcceptance: vi.fn(),
   openOfferBilling: vi.fn(),
+  openReadyOfferConsole: vi.fn(),
 }))
 beforeEach(() => {
   vi.mocked(submitAcceptance).mockReset()
@@ -29,7 +30,7 @@ it("shows pinned terms before accepting and reuses the request after a lost resp
   render(<OfferJourney initial={offered()} />)
   expect(screen.getByText("$30,000")).toBeInTheDocument()
   expect(
-    screen.queryByRole("link", { name: "Open Console" }),
+    screen.queryByRole("button", { name: "Open Console" }),
   ).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole("checkbox"))
   fireEvent.click(screen.getByRole("button", { name: "Accept offer" }))
@@ -41,7 +42,7 @@ it("shows pinned terms before accepting and reuses the request after a lost resp
   )
   await screen.findByRole("heading", { name: "Offer accepted" })
   expect(
-    screen.queryByRole("link", { name: "Open Console" }),
+    screen.queryByRole("button", { name: "Open Console" }),
   ).not.toBeInTheDocument()
 })
 it("does not grant ready access when a hold accompanies uncertain setup", () => {
@@ -89,7 +90,7 @@ it.each(["revoked", "rejected"] as const)(
       />,
     )
     expect(
-      screen.getByRole("link", { name: "Open Console" }),
+      screen.getByRole("button", { name: "Open Console" }),
     ).toBeInTheDocument()
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10000)
@@ -103,7 +104,7 @@ it.each(["revoked", "rejected"] as const)(
       }),
     ).toBeInTheDocument()
     expect(
-      screen.queryByRole("link", { name: "Open Console" }),
+      screen.queryByRole("button", { name: "Open Console" }),
     ).not.toBeInTheDocument()
     expect(screen.queryByText("Review your next plan")).not.toBeInTheDocument()
   },

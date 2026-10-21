@@ -9,12 +9,12 @@ describe("authoritative offer states", () => {
   it.each(Object.keys(journeyMessages) as JourneyState[])(
     "renders %s without granting premature access",
     (state) => {
-      render(<StatusPanel state={state} />)
+      render(<StatusPanel state={state} readyAction={async () => {}} />)
       expect(screen.getByRole("heading")).toHaveTextContent(
         journeyMessages[state].title,
       )
       expect(
-        screen.queryByRole("link", { name: "Open Console" }) !== null,
+        screen.queryByRole("button", { name: "Open Console" }) !== null,
       ).toBe(state === "funding_ready")
       expect(
         screen.queryByRole("link", { name: "Choose a standard plan" }) !== null,
