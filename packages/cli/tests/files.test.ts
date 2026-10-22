@@ -46,6 +46,13 @@ describe("files", () => {
     expect(lines[2]).toContain("b.txt")
   })
 
+  test("ls handles a listing with no entries field", async () => {
+    const r = await runCli(["files", "ls", SANDBOX_ID, "/tmp"], {
+      fetch: () => json({}),
+    })
+    expect(r.exitCode).toBe(0)
+  })
+
   test("relative sandbox paths are rejected before any request", async () => {
     const r = await runCli(["files", "cat", SANDBOX_ID, "etc/passwd"])
     expect(r.exitCode).toBe(2)

@@ -791,15 +791,36 @@ Examples:
           timer = setTimeout(() => quiet.abort(), ms)
         }
         arm(10_000)
+        // A stream can end before the build does (a proxy or server restart);
+        // with --follow, reconnect while it runs. Each connection replays the
+        // history from the start, so skip up to what was already printed.
+        let last = -1
+        let printedAtLast = 0
         try {
-          await tpl.streamBuildLogs({
-            buildId: build.id,
-            signal: AbortSignal.any([interrupted, quiet.signal]),
-            onEvent: (ev) => {
-              write(ev)
-              arm(1500)
-            },
-          })
+          for (;;) {
+            let replayedAtLast = 0
+            await tpl.streamBuildLogs({
+              buildId: build.id,
+              signal: AbortSignal.any([interrupted, quiet.signal]),
+              onEvent: (ev) => {
+                const at = ev.timestamp.getTime()
+                if (at < last) return
+                if (at === last) {
+                  if (++replayedAtLast <= printedAtLast) return
+                  printedAtLast++
+                } else {
+                  last = at
+                  printedAtLast = 1
+                  replayedAtLast = 1
+                }
+                write(ev)
+                arm(1500)
+              },
+            })
+            if (!opts.follow) break
+            const now = await apiRequest<BuildRow>("GET", bpath(id, build.id))
+            if (!IN_FLIGHT.has(now.status)) break
+          }
         } catch (err) {
           if (interrupted.aborted) throw stoppedFollowing(ref, build.id)
           if (!quiet.signal.aborted || !(err instanceof SandboxError)) throw err

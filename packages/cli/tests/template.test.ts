@@ -219,4 +219,40 @@ describe("template", () => {
     })
     expect(r.exitCode).toBe(7)
   })
+
+  test("logs -f reconnects when the stream ends mid-build, without repeats", async () => {
+    const t1 = "2026-01-01T00:00:01Z"
+    const t2 = "2026-01-01T00:00:02Z"
+    const streams = [
+      sse([{ timestamp: t1, stream: "stdout", text: "one" }]),
+      sse([
+        { timestamp: t1, stream: "stdout", text: "one" },
+        { timestamp: t2, stream: "stdout", text: "two" },
+        {
+          timestamp: t2,
+          stream: "system",
+          text: "ready",
+          finished: true,
+          status: "ready",
+        },
+      ]),
+    ]
+    const statuses = ["building", "building", "ready"] // initial lookup, then one per reconnect check
+    const r = await runCli(["template", "logs", TPL, "--build", BUILD, "-f"], {
+      fetch: (req) => {
+        const p = req.url.pathname
+        if (p.endsWith("/logs")) return streams.shift()
+        if (p === `/templates/${TPL}/builds/${BUILD}`)
+          return json({
+            id: BUILD,
+            template_id: TPL,
+            status: statuses.shift() ?? "ready",
+          })
+        if (p === `/templates/${TPL}`) return json(row("building"))
+      },
+    })
+    expect(r.exitCode).toBe(0)
+    expect(r.stdout.match(/one/g)).toHaveLength(1)
+    expect(r.stdout).toContain("two")
+  })
 })

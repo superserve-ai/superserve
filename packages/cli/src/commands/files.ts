@@ -240,10 +240,16 @@ async function connect(ref: string): Promise<Sandbox> {
   return Sandbox.connect(await resolveSandboxId(ref), sdkOptions())
 }
 
-function listDir(id: string, path: string): Promise<{ entries: DirEntry[] }> {
-  return apiRequest("GET", `/sandboxes/${encodeURIComponent(id)}/files`, {
-    query: { path },
-  })
+async function listDir(
+  id: string,
+  path: string,
+): Promise<{ entries: DirEntry[] }> {
+  const res = await apiRequest<{ entries?: DirEntry[] }>(
+    "GET",
+    `/sandboxes/${encodeURIComponent(id)}/files`,
+    { query: { path } },
+  )
+  return { ...res, entries: res.entries ?? [] }
 }
 
 function timeoutMs(opts: { timeout: string }): number {
