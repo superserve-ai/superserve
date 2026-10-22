@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { arch, platform } from "node:os"
 import { join } from "node:path"
 
@@ -14,7 +14,14 @@ const SEND_BUDGET_MS = 400
 
 function disabled(): boolean {
   const t = process.env.SUPERSERVE_TELEMETRY
-  return t === "0" || t === "false" || Boolean(process.env.DO_NOT_TRACK)
+  return (
+    t === "0" ||
+    t === "false" ||
+    Boolean(process.env.DO_NOT_TRACK) ||
+    // Opt-outs from earlier CLI versions keep working.
+    Boolean(process.env.SUPERSERVE_DO_NOT_TRACK) ||
+    existsSync(join(configDir(), ".analytics_disabled"))
+  )
 }
 
 function anonymousId(): string {
