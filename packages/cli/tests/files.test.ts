@@ -201,6 +201,27 @@ describe("files", () => {
     )
   })
 
+  test("--follow-symlinks uploads aliased directories and stops at real cycles", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ss-alias-"))
+    mkdirSync(join(root, "data"))
+    writeFileSync(join(root, "data", "f.txt"), "x")
+    symlinkSync(join(root, "data"), join(root, "copy")) // sorts before data/
+    symlinkSync(root, join(root, "data", "loop"))
+    const r = await runCli(
+      ["files", "upload", SANDBOX_ID, root, "/up", "--follow-symlinks"],
+      {
+        fetch: (req) =>
+          isActivate(req) ? activated() : isData(req) ? json({}) : undefined,
+      },
+    )
+    expect(r.exitCode).toBe(0)
+    const paths = r.requests
+      .filter(isData)
+      .map((q) => q.url.searchParams.get("path"))
+      .toSorted()
+    expect(paths).toEqual(["/up/copy/f.txt", "/up/data/f.txt"])
+  })
+
   test("a failed upload names the file", async () => {
     const root = mkdtempSync(join(tmpdir(), "ss-upf-"))
     writeFileSync(join(root, "bad.txt"), "x")

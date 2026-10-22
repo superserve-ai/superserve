@@ -311,11 +311,12 @@ function walk(
 ): LocalFile[] {
   const out: LocalFile[] = []
   const skipped: string[] = []
-  const seen = new Set<string>()
+  // Only ancestors count as a cycle; two aliases of one directory both upload.
+  const ancestors = new Set<string>()
   const visit = (dir: string, rel: string) => {
     const real = realpathSync(dir)
-    if (seen.has(real)) return // symlink cycle
-    seen.add(real)
+    if (ancestors.has(real)) return
+    ancestors.add(real)
     const entries = readdirSync(dir, { withFileTypes: true }).toSorted((a, b) =>
       a.name.localeCompare(b.name),
     )
@@ -331,6 +332,7 @@ function walk(
       else if (st?.isFile()) out.push({ abs, rel: r, size: st.size })
       else skipped.push(r)
     }
+    ancestors.delete(real)
   }
   visit(root, "")
   if (skipped.length) {
