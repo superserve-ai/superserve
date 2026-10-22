@@ -457,15 +457,15 @@ async function download(
   const id = await resolveSandboxId(ref)
   const trimmed = remote.replace(/\/+$/, "")
   const name = posix.basename(trimmed)
-  // The parent's listing tells a file from a directory; activation runs alongside.
-  const [entry, sb] = await Promise.all([
+  // Activate first: the listing also resumes a paused sandbox, and two
+  // concurrent resumes race. The parent's listing tells a file from a directory.
+  const sb = await Sandbox.connect(id, sdkOptions())
+  const entry =
     trimmed === ""
       ? { is_dir: true }
-      : listDir(id, posix.dirname(trimmed)).then((l) =>
-          l.entries.find((e) => e.name === name),
-        ),
-    Sandbox.connect(id, sdkOptions()),
-  ])
+      : (await listDir(id, posix.dirname(trimmed))).entries.find(
+          (e) => e.name === name,
+        )
 
   const targetFor = (dir: boolean): string => {
     const defaultName = dir ? `${name || "root"}.zip` : name
