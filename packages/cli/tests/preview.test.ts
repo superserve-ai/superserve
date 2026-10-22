@@ -76,3 +76,16 @@ describe("preview", () => {
     expect(r.requests).toHaveLength(0)
   })
 })
+
+describe("optional lists", () => {
+  test("preview list and network-log survive omitted arrays", async () => {
+    const list = await runCli(["preview", "list", SANDBOX_ID], {
+      fetch: () => json({ preview_access: "public" }),
+    })
+    expect(list.exitCode).toBe(0)
+    const log = await runCli(["sandbox", "network-log", SANDBOX_ID, "--all"], {
+      fetch: () => json({ next_cursor: null, has_more: false }),
+    })
+    expect(log.exitCode).toBe(0)
+  })
+})

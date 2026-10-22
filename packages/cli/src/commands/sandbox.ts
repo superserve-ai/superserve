@@ -66,7 +66,7 @@ interface NetworkEvent {
 }
 
 interface NetworkEventPage {
-  data: NetworkEvent[]
+  data?: NetworkEvent[]
   next_cursor: string | null
   has_more: boolean
 }
@@ -788,12 +788,12 @@ Examples:
         }
         const url = `${path(await resolveSandboxId(ref))}/network`
         let page = await apiRequest<NetworkEventPage>("GET", url, { query })
-        const events = [...page.data]
+        const events = [...(page.data ?? [])]
         while (opts.all && page.has_more && page.next_cursor) {
           page = await apiRequest<NetworkEventPage>("GET", url, {
             query: { ...query, before: page.next_cursor },
           })
-          events.push(...page.data)
+          events.push(...(page.data ?? []))
         }
         if (isJson()) {
           printJson({ ...page, data: events })

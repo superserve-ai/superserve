@@ -30,7 +30,7 @@ interface SecretRow {
   auth_type: string
   auth_config: Record<string, unknown>
   provider_shortcut?: string | null
-  hosts: string[]
+  hosts?: string[]
   created_at: string
   updated_at: string
   last_used_at?: string | null
@@ -40,7 +40,7 @@ interface ProviderRow {
   name: string
   display: string
   auth_type: string
-  hosts: string[]
+  hosts?: string[]
   token_shape: string
 }
 
@@ -277,7 +277,7 @@ function printSecret(s: SecretRow): void {
     ["Provider", s.provider_shortcut ?? undefined],
     ["Auth", s.auth_type],
     ["Auth config", JSON.stringify(s.auth_config)],
-    ["Hosts", s.hosts.join(", ")],
+    ["Hosts", (s.hosts ?? []).join(", ")],
     ["Created", formatDate(s.created_at)],
     ["Updated", formatDate(s.updated_at)],
     ["Last used", s.last_used_at ? formatDate(s.last_used_at) : "never"],
@@ -346,7 +346,7 @@ Examples:
         return
       }
       success(
-        `Created secret ${s.name} (${s.auth_type} → ${s.hosts.join(", ")})`,
+        `Created secret ${s.name} (${s.auth_type} → ${(s.hosts ?? []).join(", ")})`,
       )
       info(
         color.dim(
@@ -370,7 +370,7 @@ Examples:
         [
           { header: "name", value: (s) => s.name },
           { header: "auth", value: (s) => s.auth_type },
-          { header: "hosts", value: (s) => s.hosts.join(",") },
+          { header: "hosts", value: (s) => (s.hosts ?? []).join(",") },
           { header: "provider", value: (s) => s.provider_shortcut ?? "-" },
           {
             header: "last used",
@@ -458,7 +458,10 @@ Examples:
     .command("audit")
     .description("Show outbound requests that used a secret, newest first")
     .argument("<name>", "Secret name")
-    .option("--status <class>", "Only 2xx, 3xx, 4xx, 5xx or errors (4xx+5xx)")
+    .option(
+      "--status <class>",
+      "Only 2xx, 3xx, 4xx or 5xx responses, or errors (requests that failed before reaching the service)",
+    )
     .option("--limit <n>", "Events per page, 1-200", "50")
     .option("--before <id>", "Only events older than this event ID")
     .option("--all", "Fetch every page")
@@ -630,7 +633,7 @@ either change when it resumes.`
         rows,
         [
           { header: "name", value: (p) => p.name },
-          { header: "hosts", value: (p) => p.hosts.join(",") },
+          { header: "hosts", value: (p) => (p.hosts ?? []).join(",") },
           { header: "auth", value: (p) => p.auth_type },
           { header: "token shape", value: (p) => p.token_shape },
         ],

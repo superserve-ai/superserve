@@ -32,7 +32,7 @@ interface PreviewPort {
 
 interface PreviewPortList {
   preview_access: "legacy_public" | "public" | "private"
-  ports: PreviewPort[]
+  ports?: PreviewPort[]
 }
 
 interface PreviewToken {
@@ -72,7 +72,7 @@ export function register(program: Command): void {
       }
       process.stdout.write("\n")
       printTable(
-        list.ports,
+        list.ports ?? [],
         [
           { header: "port", value: (p) => String(p.port) },
           { header: "access", value: (p) => p.access },
