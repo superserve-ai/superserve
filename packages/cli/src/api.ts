@@ -85,12 +85,20 @@ async function send(
   }
 }
 
+/** Retry-After is delta-seconds or an HTTP-date; capped at 30s. */
+export function retryAfterMs(value?: string | null): number | undefined {
+  if (!value) return undefined
+  const secs = Number(value)
+  const ms = Number.isFinite(secs)
+    ? secs * 1000
+    : Date.parse(value) - Date.now()
+  return Number.isFinite(ms) && ms > 0 ? Math.min(ms, 30_000) : undefined
+}
+
 function backoff(attempt: number, retryAfter?: string | null): Promise<void> {
-  const hinted = Number(retryAfter)
   const ms =
-    Number.isFinite(hinted) && hinted > 0
-      ? Math.min(hinted, 30) * 1000
-      : Math.min(200 * 2 ** (attempt - 1), 2_000) * (0.8 + Math.random() * 0.4)
+    retryAfterMs(retryAfter) ??
+    Math.min(200 * 2 ** (attempt - 1), 2_000) * (0.8 + Math.random() * 0.4)
   return new Promise((r) => setTimeout(r, ms))
 }
 

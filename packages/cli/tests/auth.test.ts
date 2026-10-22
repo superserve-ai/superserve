@@ -3,6 +3,7 @@ import { mkdtempSync, statSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
+import { retryAfterMs } from "../src/api"
 import { API, json, runCli, TEST_KEY } from "./harness"
 
 describe("auth", () => {
@@ -77,5 +78,14 @@ describe("--json", () => {
     const r = await runCli(["sandbox", "get", "--json"])
     expect(r.exitCode).toBe(2)
     expect(JSON.parse(r.stderr).error.code).toBe("usage")
+  })
+})
+
+describe("Retry-After", () => {
+  test("accepts delta-seconds and HTTP-dates", () => {
+    expect(retryAfterMs("2")).toBe(2000)
+    const date = new Date(Date.now() + 5_000).toUTCString()
+    expect(retryAfterMs(date)).toBeGreaterThan(3_000)
+    expect(retryAfterMs("garbage")).toBeUndefined()
   })
 })
