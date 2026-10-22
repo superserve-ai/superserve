@@ -7,7 +7,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs"
-import { basename, join, posix } from "node:path"
+import { basename, join, posix, resolve } from "node:path"
 
 import { Sandbox, ValidationError } from "@superserve/sdk"
 import type { Command } from "commander"
@@ -358,7 +358,8 @@ async function upload(
   }
   const st = statSync(local, { throwIfNoEntry: false })
   if (!st) throw usageError(`${local} is a broken symlink.`)
-  const name = basename(realpathSync(local))
+  // The user-supplied name, not a symlink target's; resolve() handles "." and "..".
+  const name = basename(resolve(local))
   let dest = remote ? sandboxPath(remote) : `${HOME}/${name}`
   const timeout = timeoutMs(opts)
 

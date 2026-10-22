@@ -205,4 +205,18 @@ describe("template", () => {
     expect(r.exitCode).toBe(5)
     expect(r.stderr).toContain("template is referenced by 2 sandboxes")
   })
+
+  test("wait --timeout 0 checks once instead of waiting forever", async () => {
+    const r = await runCli(["template", "wait", TPL, "--timeout", "0"], {
+      fetch: (req) => {
+        const p = req.url.pathname
+        if (p === `/templates/${TPL}/builds`)
+          return json([{ id: BUILD, template_id: TPL, status: "building" }])
+        if (p === `/templates/${TPL}/builds/${BUILD}`)
+          return json({ id: BUILD, template_id: TPL, status: "building" })
+        if (p === `/templates/${TPL}`) return json(row("building"))
+      },
+    })
+    expect(r.exitCode).toBe(7)
+  })
 })

@@ -326,7 +326,8 @@ async function waitForBuild(
   buildId: string,
   { logs, timeoutSec }: { logs: boolean; timeoutSec?: number },
 ): Promise<TemplateRow> {
-  const deadline = timeoutSec ? Date.now() + timeoutSec * 1000 : Infinity
+  const deadline =
+    timeoutSec === undefined ? Infinity : Date.now() + timeoutSec * 1000
   return onInterrupt(async (interrupted) => {
     const logAbort = new AbortController()
     let streamed: Promise<void> = Promise.resolve()
@@ -363,7 +364,7 @@ async function waitForBuild(
           }
           return await apiRequest<TemplateRow>("GET", tpath(templateId))
         }
-        if (Date.now() > deadline) {
+        if (Date.now() >= deadline) {
           throw new CliError(
             `Timed out after ${timeoutSec}s; the build is still ${build.status}.`,
             EXIT.TIMEOUT,
@@ -766,19 +767,20 @@ Examples:
       await onInterrupt(async (interrupted) => {
         const quiet = new AbortController()
         let timer: ReturnType<typeof setTimeout> | undefined
-        const arm = () => {
+        // A slow connect gets 10s; once events flow, 1.5s of quiet ends it.
+        const arm = (ms: number) => {
           if (!stopWhenQuiet) return
           clearTimeout(timer)
-          timer = setTimeout(() => quiet.abort(), 1500)
+          timer = setTimeout(() => quiet.abort(), ms)
         }
-        arm()
+        arm(10_000)
         try {
           await tpl.streamBuildLogs({
             buildId: build.id,
             signal: AbortSignal.any([interrupted, quiet.signal]),
             onEvent: (ev) => {
               write(ev)
-              arm()
+              arm(1500)
             },
           })
         } catch (err) {

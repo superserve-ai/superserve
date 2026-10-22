@@ -186,6 +186,19 @@ describe("files", () => {
     const r = await runCli(["files", "upload", SANDBOX_ID, join(dir, "link")])
     expect(r.exitCode).toBe(2)
     expect(r.requests).toHaveLength(0)
+
+    // Followed, it still lands under the name the user gave, not the target's.
+    const followed = await runCli(
+      ["files", "upload", SANDBOX_ID, join(dir, "link"), "--follow-symlinks"],
+      {
+        fetch: (req) =>
+          isActivate(req) ? activated() : isData(req) ? json({}) : undefined,
+      },
+    )
+    expect(followed.exitCode).toBe(0)
+    expect(followed.requests.find(isData)!.url.searchParams.get("path")).toBe(
+      "/home/user/link",
+    )
   })
 
   test("a failed upload names the file", async () => {
