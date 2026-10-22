@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 
 import { createMiddlewareClient, matchesRoute } from "@/lib/supabase/middleware"
 import { ycReturnPath } from "@/lib/yc/return-path"
+import { staffReturnPath } from "@/lib/yc/staff-return-path"
 
 const PUBLIC_ROUTES = [
   "/auth/signin",
@@ -32,6 +33,9 @@ export async function middleware(request: NextRequest) {
     signinUrl.searchParams.set(
       "next",
       ycReturnPath(pathname + request.nextUrl.search) ??
+        (process.env.YC_STAFF_UI_ENABLED === "true"
+          ? staffReturnPath(pathname + request.nextUrl.search)
+          : null) ??
         pathname +
           (pathname.replace(/\/$/, "") === "/onboarding/plan"
             ? request.nextUrl.search

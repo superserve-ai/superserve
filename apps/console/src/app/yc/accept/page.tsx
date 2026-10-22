@@ -6,6 +6,7 @@ import {
   ClaimStateError,
   readOffer,
 } from "@/lib/yc/acceptance-api"
+import { renewalEnabled } from "@/lib/yc/renewal-api"
 import { claimID } from "@/lib/yc/staff-schema"
 
 import { OfferJourney } from "./offer-journey"
@@ -55,6 +56,7 @@ export default async function AcceptOfferPage({
       <OfferJourney
         key={`${offer.user_id}:${offer.acceptance_id}`}
         initial={offer}
+        renewalEnabled={renewalEnabled()}
       />
     </main>
   )

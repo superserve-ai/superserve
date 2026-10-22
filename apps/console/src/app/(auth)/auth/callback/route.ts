@@ -45,6 +45,7 @@ import { normalizeSignupEligibilitySnapshot } from "@/lib/slack/signup-eligibili
 import { notifySlackOfNewUser } from "@/lib/slack/signup-notification"
 import { createServerClient } from "@/lib/supabase/server"
 import { ycReturnPath } from "@/lib/yc/return-path"
+import { staffReturnPath } from "@/lib/yc/staff-return-path"
 import {
   completeStaffGoogle,
   STAFF_SESSION_COOKIE,
@@ -459,7 +460,11 @@ export async function GET(request: Request) {
           },
         )
 
-        const ycNext = ycReturnPath(next)
+        const ycNext =
+          ycReturnPath(next) ??
+          (process.env.YC_STAFF_UI_ENABLED === "true"
+            ? staffReturnPath(next)
+            : null)
         if (
           !next.startsWith("/device") &&
           !next.startsWith("https://") &&

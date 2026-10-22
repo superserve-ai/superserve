@@ -325,6 +325,22 @@ describe("SignInPage", () => {
     })
   })
 
+  it("forwards the retained staff review claim into the normal Google callback", async () => {
+    const next = "/admin/yc?claim=11111111-1111-4111-8111-111111111111"
+    searchParamsMap = { next }
+    mockSignInWithOAuth.mockResolvedValue({ error: null })
+    render(<SignInPage />)
+    await user.click(
+      await screen.findByRole("button", { name: /Continue with Google/ }),
+    )
+    await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalled())
+    const callback = new URL(
+      mockSignInWithOAuth.mock.lastCall![0].options.redirectTo,
+    )
+    expect(callback.pathname).toBe("/auth/callback")
+    expect(callback.searchParams.get("next")).toBe(next)
+  })
+
   it("continues Google sign-in when optional origin retention is unavailable", async () => {
     mockBeginGoogleSignIn.mockResolvedValue(undefined)
     mockSignInWithOAuth.mockResolvedValue({ error: null })

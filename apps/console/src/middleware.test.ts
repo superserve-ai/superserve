@@ -73,6 +73,7 @@ describe("middleware", () => {
     ).toBe("/yc/accept")
   })
   beforeEach(() => {
+    vi.stubEnv("YC_STAFF_UI_ENABLED", "false")
     mockClient = {
       supabase: {
         auth: {
@@ -91,6 +92,46 @@ describe("middleware", () => {
     // With no supabase, we should just pass client.response through.
     expect(res).toBe(mockClient.response)
   })
+
+  it.each([
+    [
+      "true",
+      "/admin/yc?claim=11111111-1111-4111-8111-111111111111",
+      "/admin/yc?claim=11111111-1111-4111-8111-111111111111",
+    ],
+    [
+      "true",
+      "/admin/yc/?claim=11111111-1111-4111-8111-111111111111",
+      "/admin/yc?claim=11111111-1111-4111-8111-111111111111",
+    ],
+    [
+      "false",
+      "/admin/yc?claim=11111111-1111-4111-8111-111111111111",
+      "/admin/yc",
+    ],
+    ["true", "/admin/yc?claim=bad", "/admin/yc"],
+    [
+      "true",
+      "/admin/yc?claim=11111111-1111-4111-8111-111111111111&next=//evil.example",
+      "/admin/yc",
+    ],
+  ])(
+    "validates the direct staff-entry locator with flag %s: %s",
+    async (enabled, path, expected) => {
+      vi.stubEnv("YC_STAFF_UI_ENABLED", enabled)
+      mockClient!.supabase!.auth.getUser.mockResolvedValue({
+        data: { user: null },
+      })
+      mockClient.response = buildResponse([
+        { name: "refreshed-auth", value: "synthetic" },
+      ])
+      const response = await middleware(buildRequest(path))
+      const destination = new URL(response.headers.get("location")!)
+      expect(destination.pathname.replace(/\/$/, "")).toBe("/auth/signin")
+      expect(destination.searchParams.get("next")).toBe(expected)
+      expect(response.cookies.get("refreshed-auth")?.value).toBe("synthetic")
+    },
+  )
 
   it("redirects unauthenticated users on protected routes with next param", async () => {
     const res = await middleware(buildRequest("/sandboxes/abc"))

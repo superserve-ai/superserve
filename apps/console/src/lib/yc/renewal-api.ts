@@ -11,13 +11,16 @@ import {
   type RenewalInput,
 } from "./renewal-schema"
 
+export function renewalEnabled() {
+  return process.env.YC_CONSOLE_RENEWAL_ENABLED === "true"
+}
+
 async function send(
   operation: "status" | "submit",
   locator: string,
   fields?: Record<string, unknown>,
 ) {
-  if (process.env.YC_CONSOLE_RENEWAL_ENABLED !== "true")
-    throw new AcceptanceError("unavailable")
+  if (!renewalEnabled()) throw new AcceptanceError("unavailable")
   const { user, claim } = await resolveAcceptedClaim(locator)
   const acceptance = await readOfferStatus(locator)
   if (!acceptance.accepted_at || !acceptance.assignment_id)

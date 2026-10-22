@@ -21,7 +21,13 @@ import {
 import { OfferTerms } from "./offer-terms"
 import { StatusPanel } from "./status-panel"
 
-export function OfferJourney({ initial }: { initial: Acceptance }) {
+export function OfferJourney({
+  initial,
+  renewalEnabled,
+}: {
+  initial: Acceptance
+  renewalEnabled: boolean
+}) {
   const [offer, setOffer] = React.useState(initial)
   const [claimState, setClaimState] = React.useState<JourneyState | null>(null)
   const [busy, setBusy] = React.useState(false)
@@ -202,7 +208,8 @@ export function OfferJourney({ initial }: { initial: Acceptance }) {
         </form>
       )}
       {message && <p role="alert">{message}</p>}
-      {!claimState &&
+      {renewalEnabled &&
+        !claimState &&
         ![
           "financial_revocation_pending",
           "financial_revoked",
