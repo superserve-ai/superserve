@@ -55,7 +55,7 @@ jobs:
       - name: Build
         run: bun run build
 
-      # The npm package is dist/index.js run by node (>= 22), not bun.
+      # The npm package is dist/index.js run by node (>= 22.4), not bun.
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:

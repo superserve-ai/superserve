@@ -5,7 +5,7 @@ Create sandboxes, run commands, move files and publish ports from your terminal.
 ## Install
 
 ```bash
-npm install -g @superserve/cli                    # Node.js 22 or later
+npm install -g @superserve/cli                    # Node.js 22.4 or later
 curl -fsSL https://superserve.ai/install | sh     # standalone binary, macOS and Linux
 brew install superserve-ai/tap/superserve         # Homebrew
 ```
