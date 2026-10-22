@@ -393,7 +393,9 @@ async function waitForBuild(
               "cancelled",
             )
           }
-          return await apiRequest<TemplateRow>("GET", tpath(templateId))
+          return await apiRequest<TemplateRow>("GET", tpath(templateId), {
+            signal: interrupted,
+          })
         }
         if (Date.now() >= deadline) throw timedOut(build.status)
         await sleep(2000, interrupted)
@@ -825,7 +827,9 @@ Examples:
               },
             })
             if (!opts.follow) break
-            const now = await apiRequest<BuildRow>("GET", bpath(id, build.id))
+            const now = await apiRequest<BuildRow>("GET", bpath(id, build.id), {
+              signal: interrupted,
+            })
             if (!IN_FLIGHT.has(now.status)) break
             await sleep(2000, interrupted)
           }
