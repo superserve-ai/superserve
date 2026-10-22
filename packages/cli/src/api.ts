@@ -123,9 +123,21 @@ export async function apiRequest<T>(
   path: string,
   req?: ApiRequest,
 ): Promise<T> {
-  const res = await apiFetch(method, path, req)
-  if (res.status === 204) return undefined as T
-  return (await res.json()) as T
+  const idempotent = method === "GET" || method === "DELETE"
+  for (let attempt = 1; ; attempt++) {
+    const res = await apiFetch(method, path, req)
+    if (res.status === 204) return undefined as T
+    try {
+      return (await res.json()) as T
+    } catch (err) {
+      // A body that stalls or arrives truncated: retry what's safe to repeat.
+      if (req?.signal?.aborted) throw err
+      if (idempotent && attempt < MAX_ATTEMPTS) continue
+      throw err instanceof Error && err.name === "TimeoutError"
+        ? new TimeoutError(`${method} ${path} timed out`)
+        : err
+    }
+  }
 }
 
 async function toApiError(res: Response): Promise<SandboxError> {

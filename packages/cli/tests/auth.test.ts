@@ -113,3 +113,19 @@ describe("retry backoff", () => {
     expect(Date.now() - started).toBeLessThan(2_000)
   })
 })
+
+describe("response bodies", () => {
+  test("a truncated GET body is retried", async () => {
+    let n = 0
+    const r = await runCli(["sandbox", "list", "--json"], {
+      fetch: () =>
+        ++n === 1
+          ? new Response('[{"id":', {
+              headers: { "Content-Type": "application/json" },
+            })
+          : json([]),
+    })
+    expect(r.exitCode).toBe(0)
+    expect(n).toBe(2)
+  })
+})

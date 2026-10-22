@@ -6,6 +6,7 @@ import {
   NotFoundError,
   SandboxError,
   Template,
+  TimeoutError,
   type BuildLogEvent,
 } from "@superserve/sdk"
 import type { Command } from "commander"
@@ -808,7 +809,7 @@ Examples:
         try {
           for (;;) {
             let replayedAtLast = 0
-            await tpl.streamBuildLogs({
+            const stream = tpl.streamBuildLogs({
               buildId: build.id,
               signal: AbortSignal.any([interrupted, quiet.signal]),
               onEvent: (ev) => {
@@ -826,6 +827,13 @@ Examples:
                 arm(1500)
               },
             })
+            // A long silent step trips the SDK's idle timeout; with --follow
+            // that's a reconnect, like a clean end of stream.
+            await (opts.follow
+              ? stream.catch((err) => {
+                  if (!(err instanceof TimeoutError)) throw err
+                })
+              : stream)
             if (!opts.follow) break
             const now = await apiRequest<BuildRow>("GET", bpath(id, build.id), {
               signal: interrupted,
