@@ -226,6 +226,7 @@ import { GET } from "./route"
 
 describe("auth callback", () => {
   beforeEach(() => {
+    vi.stubEnv("YC_STAFF_UI_ENABLED", "false")
     evidenceJar.clear()
     currentUser = {
       id: "u1",
@@ -728,6 +729,60 @@ describe("auth callback", () => {
       expect(destination.pathname + destination.search).toBe(next)
     },
   )
+
+  it("returns normal Google sign-in to guarded staff review with its claim locator", async () => {
+    vi.stubEnv("YC_STAFF_UI_ENABLED", "true")
+    currentUser!.email = "operator@superserve.ai"
+    const next = "/admin/yc?claim=11111111-1111-4111-8111-111111111111"
+    const response = await GET(
+      new Request(
+        `https://console.superserve.ai/auth/callback?code=abc&next=${encodeURIComponent(next)}`,
+      ),
+    )
+    expect(response.headers.get("location")).toBe(
+      `https://console.superserve.ai${next}`,
+    )
+    expect(mockCompleteStaffGoogle).not.toHaveBeenCalled()
+    expect(response.cookies.get(STAFF_SESSION_COOKIE)).toBeUndefined()
+    expect(mockClassifyGoogleMembershipState).toHaveBeenCalled()
+  })
+
+  it.each([
+    ["false", "/admin/yc?claim=11111111-1111-4111-8111-111111111111"],
+    ["true", "/admin/yc?claim=bad"],
+    ["true", "/admin/yc?state=approved"],
+  ])(
+    "keeps disabled or invalid staff recovery on normal navigation (%s, %s)",
+    async (enabled, next) => {
+      vi.stubEnv("YC_STAFF_UI_ENABLED", enabled)
+      const response = await GET(
+        new Request(
+          `https://console.superserve.ai/auth/callback?code=abc&next=${encodeURIComponent(next)}`,
+        ),
+      )
+      expect(response.headers.get("location")).toBe(
+        "https://console.superserve.ai/sandboxes",
+      )
+      expect(response.cookies.get(STAFF_SESSION_COOKIE)).toBeUndefined()
+    },
+  )
+
+  it("does not bypass normal signup proof for a staff recovery destination", async () => {
+    vi.stubEnv("YC_STAFF_UI_ENABLED", "true")
+    currentUser!.email = "operator@superserve.ai"
+    googleMembershipState = { kind: "first_time" }
+    proofAvailable = false
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&next=%2Fadmin%2Fyc",
+      ),
+    )
+    expect(response.headers.get("location")).toContain(
+      "/auth/signup?complete_google=1",
+    )
+    expect(mockHasValidLegacyGoogleSignupProof).toHaveBeenCalled()
+    expect(response.cookies.get(STAFF_SESSION_COOKIE)).toBeUndefined()
+  })
 
   it("does not turn a claimed readiness parameter into an acceptance destination", async () => {
     const response = await GET(
