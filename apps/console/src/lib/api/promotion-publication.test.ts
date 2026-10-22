@@ -1,3 +1,15 @@
+const diagnostics = vi.hoisted(() => ({
+  record: vi.fn(),
+  browser: vi.fn(),
+  contexts: vi.fn(),
+}))
+vi.mock("@/lib/fingerprint/diagnostics-server", async (original) => ({
+  ...(await original<typeof import("@/lib/fingerprint/diagnostics-server")>()),
+  fingerprintDiagnostics: (context: unknown) => {
+    diagnostics.contexts(context)
+    return diagnostics
+  },
+}))
 import type { User } from "@supabase/supabase-js"
 import { beforeEach, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({
@@ -205,4 +217,53 @@ it("still withholds credit for a failed association of verified evidence", async
       "now",
     ),
   ).toEqual({ authorityUnavailable: true })
+})
+
+it("reports retained original evidence without claiming the new attempt was attached", async () => {
+  mocks.bind.mockResolvedValue("first_evidence_retained")
+  await publishOriginalSignupEvidence(user, "later-attempt", false, "signup")
+  expect(diagnostics.record).toHaveBeenCalledWith({
+    stage: "attachment",
+    outcome: "skipped",
+    reason: "first_evidence_retained",
+  })
+  expect(diagnostics.record).not.toHaveBeenCalledWith(
+    expect.objectContaining({ stage: "attachment", outcome: "succeeded" }),
+  )
+  expect(mocks.identity).not.toHaveBeenCalled()
+})
+
+it("keeps a lost binding response unknown and does not add an authority read or retry", async () => {
+  mocks.bind.mockRejectedValue(
+    new PromotionEvidenceError("authority_unavailable"),
+  )
+  await expect(
+    publishOriginalSignupEvidence(user, "attempt", false, "signup"),
+  ).resolves.toBeUndefined()
+  expect(diagnostics.record).toHaveBeenCalledWith({
+    stage: "attachment",
+    outcome: "unknown",
+    reason: "authority_unavailable",
+  })
+  expect(mocks.bind).toHaveBeenCalledOnce()
+  expect(mocks.evidence).not.toHaveBeenCalled()
+  expect(mocks.signup).not.toHaveBeenCalled()
+})
+
+it("reports an attachment even when later publication fails", async () => {
+  mocks.identity.mockRejectedValue(new Error("secret failure detail"))
+  await expect(
+    publishOriginalSignupEvidence(user, "attempt", false, "signup"),
+  ).resolves.toBeUndefined()
+  expect(diagnostics.record).toHaveBeenCalledWith({
+    stage: "attachment",
+    outcome: "succeeded",
+    reason: "bound",
+  })
+  expect(diagnostics.record).toHaveBeenCalledWith({
+    stage: "identity_publication",
+    outcome: "unknown",
+    reason: "authority_unavailable",
+  })
+  expect(JSON.stringify(diagnostics.record.mock.calls)).not.toContain("secret")
 })

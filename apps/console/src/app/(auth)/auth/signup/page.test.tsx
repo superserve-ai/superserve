@@ -74,12 +74,16 @@ const mockEnsureFingerprintSignupEventId = vi.fn<
 vi.mock("@/lib/fingerprint/client", () => ({
   ensureFingerprintSignupCapture: () => mockEnsureFingerprintSignupEventId(),
   clearFingerprintSignupCapture: vi.fn(),
+  getFingerprintSignupDiagnostics: () => ({ schema_version: 1, events: [] }),
 }))
 
 const mockSignUpWithEmail = vi.fn()
 const mockBeginGoogleSignup = vi.fn<
   (
     token?: string,
+    turnstileToken?: string,
+    capture?: unknown,
+    diagnostics?: unknown,
   ) => Promise<
     | { success: true; signupAttemptId: string }
     | { success: false; error?: string }
@@ -92,7 +96,8 @@ const mockBeginGoogleSignup = vi.fn<
 )
 vi.mock("./action", () => ({
   signUpWithEmail: (...args: unknown[]) => mockSignUpWithEmail(...args),
-  beginGoogleSignup: (token?: string) => mockBeginGoogleSignup(token),
+  beginGoogleSignup: (...args: Parameters<typeof mockBeginGoogleSignup>) =>
+    mockBeginGoogleSignup(...args),
   isCloudflareSignupObservationEnabled: () => Promise.resolve(false),
 }))
 
@@ -255,9 +260,12 @@ describe("SignUpPage", () => {
     expect(url.searchParams.get("offer")).toBe("yc_2026")
   })
 
-  it("calls signUpWithEmail and shows email-sent state on success", async () => {
+  it("submits diagnostics and the YC return path together before showing email-sent state", async () => {
     mockSignUpWithEmail.mockResolvedValue({ success: true })
-    mockSearchParams = new URLSearchParams("offer=pro_monthly")
+    mockSearchParams = new URLSearchParams({
+      offer: "pro_monthly",
+      next: "/yc/claim",
+    })
     render(<SignUpPage />)
 
     await user.type(
@@ -277,7 +285,7 @@ describe("SignUpPage", () => {
     })
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
       "href",
-      "/auth/signin?offer=pro_monthly",
+      "/auth/signin?offer=pro_monthly&next=%2Fyc%2Fclaim",
     )
     expect(mockSignUpWithEmail).toHaveBeenCalledWith(
       "test@test.com",
@@ -287,7 +295,8 @@ describe("SignUpPage", () => {
       undefined,
       undefined,
       "pro_monthly",
-      "/",
+      { schema_version: 1, events: [] },
+      "/yc/claim",
     )
   })
 
@@ -361,6 +370,7 @@ describe("SignUpPage", () => {
         undefined,
         undefined,
         undefined,
+        { schema_version: 1, events: [] },
         "/",
       )
     })
@@ -479,7 +489,12 @@ describe("SignUpPage", () => {
     )
 
     await waitFor(() => {
-      expect(mockBeginGoogleSignup).toHaveBeenCalledWith(undefined)
+      expect(mockBeginGoogleSignup).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+        undefined,
+        { schema_version: 1, events: [] },
+      )
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
         options: {
@@ -513,7 +528,12 @@ describe("SignUpPage", () => {
     finishCapture(undefined)
 
     await waitFor(() => {
-      expect(mockBeginGoogleSignup).toHaveBeenCalledWith(undefined)
+      expect(mockBeginGoogleSignup).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+        undefined,
+        { schema_version: 1, events: [] },
+      )
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
         options: {
@@ -607,7 +627,12 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       await screen.findByRole("button", { name: /Continue with Google/ }),
     )
 
-    expect(mockBeginGoogleSignup).toHaveBeenCalledWith("google-token")
+    expect(mockBeginGoogleSignup).toHaveBeenCalledWith(
+      "google-token",
+      undefined,
+      undefined,
+      { schema_version: 1, events: [] },
+    )
     expect(mockSignInWithOAuth).not.toHaveBeenCalled()
     expect(await screen.findByText(/couldn't verify/i)).toBeInTheDocument()
   })
@@ -640,7 +665,12 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       expect(execute).toHaveBeenCalledWith("test-site-key", {
         action: "signup_google",
       })
-      expect(mockBeginGoogleSignup).toHaveBeenCalledWith("google-token")
+      expect(mockBeginGoogleSignup).toHaveBeenCalledWith(
+        "google-token",
+        undefined,
+        undefined,
+        { schema_version: 1, events: [] },
+      )
     })
     expect(mockSignInWithOAuth).not.toHaveBeenCalled()
 
@@ -690,7 +720,12 @@ describe("SignUpPage with reCAPTCHA configured", () => {
           mockSignInWithOAuth.mock.lastCall![0].options.redirectTo,
         ).searchParams.get("offer"),
       ).toBe("yc_2026")
-      expect(mockBeginGoogleSignup).toHaveBeenCalledWith("google-token")
+      expect(mockBeginGoogleSignup).toHaveBeenCalledWith(
+        "google-token",
+        undefined,
+        undefined,
+        { schema_version: 1, events: [] },
+      )
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
         options: {
@@ -735,6 +770,7 @@ describe("SignUpPage with reCAPTCHA configured", () => {
         undefined,
         undefined,
         undefined,
+        { schema_version: 1, events: [] },
         "/",
       )
     })

@@ -1,3 +1,15 @@
+const diagnostics = vi.hoisted(() => ({
+  record: vi.fn(),
+  browser: vi.fn(),
+  contexts: vi.fn(),
+}))
+vi.mock("@/lib/fingerprint/diagnostics-server", async (original) => ({
+  ...(await original<typeof import("@/lib/fingerprint/diagnostics-server")>()),
+  fingerprintDiagnostics: (context: unknown) => {
+    diagnostics.contexts(context)
+    return diagnostics
+  },
+}))
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("next/server", () => ({
@@ -17,6 +29,8 @@ import { observeFingerprintSignup, resolveFingerprintSignup } from "./observe"
 const originalSecret = process.env.FINGERPRINT_SECRET_API_KEY
 
 afterEach(() => {
+  diagnostics.record.mockClear()
+  diagnostics.contexts.mockClear()
   vi.restoreAllMocks()
   vi.mocked(after).mockReset()
   vi.mocked(trackEvent).mockReset()
@@ -359,7 +373,8 @@ describe("observeFingerprintSignup", () => {
   })
 })
 
-vi.mock("@/lib/api/promotion-device-evidence", () => ({
+vi.mock("@/lib/api/promotion-device-evidence", async (original) => ({
+  ...(await original<typeof import("@/lib/api/promotion-device-evidence")>()),
   verifyPromotionSignupAttempt: vi.fn(),
 }))
 import { verifyPromotionSignupAttempt } from "@/lib/api/promotion-device-evidence"
@@ -467,5 +482,87 @@ it.each([
     expect(attested).not.toHaveBeenCalled()
     if (mode === "unconfigured" || mode === "absent event")
       expect(lookup).not.toHaveBeenCalled()
+  },
+)
+
+it("separates provider lookup from mismatched challenge rejection without changing the result", async () => {
+  process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    Response.json({
+      event_id: "event",
+      identification: { visitor_id: "visitor" },
+      timestamp: Date.now(),
+      tags: { signup_challenge: "other-secret" },
+    }),
+  )
+  const onAttested = vi.fn()
+  const onAttestationFailed = vi.fn()
+  const result = await resolveFingerprintSignup({
+    eventId: "event",
+    signupMethod: "google",
+    signupAttemptId: "signup",
+    capture: { attemptId: "capture", eventId: "event", challenge: "secret" },
+    onAttested,
+    onAttestationFailed,
+  })
+  expect(result).toBe("visitor")
+  expect(onAttested).not.toHaveBeenCalled()
+  expect(onAttestationFailed).not.toHaveBeenCalled()
+  expect(diagnostics.contexts).toHaveBeenCalledWith(
+    expect.objectContaining({
+      signupAttemptId: "signup",
+      captureAttemptId: "capture",
+      eventId: "event",
+    }),
+  )
+  expect(diagnostics.record).toHaveBeenCalledWith(
+    expect.objectContaining({ stage: "lookup", outcome: "succeeded" }),
+  )
+  expect(diagnostics.record).toHaveBeenCalledWith(
+    expect.objectContaining({
+      stage: "attestation",
+      outcome: "rejected",
+      reason: "challenge_mismatch",
+    }),
+  )
+})
+
+it.each(["headers", "body"])(
+  "records timeout uncertainty during %s without changing callbacks or retrying",
+  async (phase) => {
+    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+    const timeout = Object.assign(new Error("secret provider URL"), {
+      name: "TimeoutError",
+    })
+    const lookup = vi.spyOn(globalThis, "fetch")
+    if (phase === "headers") lookup.mockRejectedValue(timeout)
+    else {
+      const response = Response.json({})
+      vi.spyOn(response, "json").mockRejectedValue(timeout)
+      lookup.mockResolvedValue(response)
+    }
+    const failed = vi.fn()
+    const attested = vi.fn()
+    await expect(
+      resolveFingerprintSignup({
+        eventId: "event",
+        signupMethod: "email",
+        onAttestationFailed: failed,
+        onAttested: attested,
+      }),
+    ).resolves.toBeNull()
+    expect(failed).toHaveBeenCalledOnce()
+    expect(attested).not.toHaveBeenCalled()
+    expect(lookup).toHaveBeenCalledOnce()
+    expect(diagnostics.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stage: "lookup",
+        outcome: "unknown",
+        reason: "lookup_timeout",
+      }),
+    )
+    expect(JSON.stringify(diagnostics.record.mock.calls)).not.toContain(
+      "secret",
+    )
   },
 )

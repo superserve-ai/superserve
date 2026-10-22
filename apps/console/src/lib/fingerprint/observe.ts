@@ -5,6 +5,10 @@ import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 
 import type { SignupFingerprintCapture } from "./client"
+import {
+  fingerprintDiagnostics,
+  promotionDiagnosticFailure,
+} from "./diagnostics-server"
 
 const FINGERPRINT_EVENT_TIMEOUT_MS = 1500
 const DEFAULT_FINGERPRINT_SERVER_API = "https://api.fpjs.io"
@@ -210,9 +214,29 @@ export async function resolveFingerprintSignup({
   signupMethod,
   signupAttemptId,
 }: FingerprintSignupObservation): Promise<string | null> {
+  const diagnostic = fingerprintDiagnostics({
+    signupAttemptId,
+    captureAttemptId: capture?.attemptId,
+    eventId,
+    userId,
+    signupMethod,
+  })
+  const startedAt = Date.now()
   const secretApiKey = process.env.FINGERPRINT_SECRET_API_KEY
-  if (!eventId) return null
+  if (!eventId) {
+    diagnostic.record({
+      stage: "lookup",
+      outcome: "skipped",
+      reason: "missing_event_id",
+    })
+    return null
+  }
   if (!secretApiKey) {
+    diagnostic.record({
+      stage: "lookup",
+      outcome: "skipped",
+      reason: "server_unconfigured",
+    })
     onAttestationFailed?.()
     return null
   }
@@ -220,6 +244,8 @@ export async function resolveFingerprintSignup({
   const baseUrl =
     process.env.FINGERPRINT_SERVER_API_URL || DEFAULT_FINGERPRINT_SERVER_API
 
+  let lookupCompleted = false
+  let decoding = false
   try {
     const response = await fetch(
       `${baseUrl.replace(/\/$/, "")}/v4/events/${encodeURIComponent(eventId)}`,
@@ -231,6 +257,13 @@ export async function resolveFingerprintSignup({
     )
 
     if (!response.ok) {
+      diagnostic.record({
+        stage: "lookup",
+        outcome: "unknown",
+        reason: "http_error",
+        http_status: response.status,
+        elapsed_ms: Date.now() - startedAt,
+      })
       onAttestationFailed?.()
       console.warn("Fingerprint observation lookup failed", {
         status: response.status,
@@ -238,14 +271,29 @@ export async function resolveFingerprintSignup({
       return null
     }
 
+    decoding = true
     const payload: unknown = await response.json()
     const event = normalizeFingerprintEvent(payload, eventId)
     if (!event) {
+      diagnostic.record({
+        stage: "lookup",
+        outcome: "rejected",
+        reason: "invalid_provider_response",
+        elapsed_ms: Date.now() - startedAt,
+      })
       onAttestationFailed?.()
       console.warn("Fingerprint observation response was malformed")
       return null
     }
 
+    decoding = false
+    lookupCompleted = true
+    diagnostic.record({
+      stage: "lookup",
+      outcome: "succeeded",
+      reason: "completed",
+      elapsed_ms: Date.now() - startedAt,
+    })
     try {
       after(async () => {
         try {
@@ -298,22 +346,58 @@ export async function resolveFingerprintSignup({
         Number.isFinite(eventAt)
       ) {
         try {
-          await verifyPromotionSignupAttempt({
+          const attestation = await verifyPromotionSignupAttempt({
             attemptId: capture.attemptId,
             challenge: capture.challenge,
             eventId: event.providerEventId,
             fingerprint: event.visitorId,
             eventAt: new Date(eventAt).toISOString(),
           })
+          diagnostic.record({
+            stage: "attestation",
+            outcome: "succeeded",
+            reason: attestation,
+          })
           onAttested?.()
-        } catch {
+        } catch (error) {
+          diagnostic.record({
+            stage: "attestation",
+            ...promotionDiagnosticFailure(error),
+          })
           onAttestationFailed?.()
           console.warn("Promotion signup attestation unavailable")
         }
+      } else {
+        diagnostic.record({
+          stage: "attestation",
+          outcome: "rejected",
+          reason:
+            tags?.signup_challenge !== capture.challenge
+              ? "challenge_mismatch"
+              : "invalid_timestamp",
+        })
       }
+    } else {
+      diagnostic.record({
+        stage: "attestation",
+        outcome: "skipped",
+        reason: capture ? "event_mismatch" : "capture_pairing_missing",
+      })
     }
     return event.visitorId
-  } catch {
+  } catch (error) {
+    diagnostic.record({
+      stage: lookupCompleted ? "attestation" : "lookup",
+      outcome: "unknown",
+      reason:
+        error instanceof Error &&
+        (error.name === "TimeoutError" || error.name === "AbortError")
+          ? "lookup_timeout"
+          : decoding
+            ? "invalid_provider_response"
+            : "lookup_unavailable",
+      elapsed_ms: Date.now() - startedAt,
+    })
     onAttestationFailed?.()
     console.warn("Fingerprint observation failed open")
     return null

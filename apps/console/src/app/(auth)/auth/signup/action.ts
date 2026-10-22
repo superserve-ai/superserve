@@ -33,6 +33,8 @@ import { WelcomeEmail } from "@/lib/email/templates/welcome"
 import { signSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import type { SignupFingerprintResult } from "@/lib/fingerprint/client"
 import { FINGERPRINT_SIGNUP_COOKIE } from "@/lib/fingerprint/constants"
+import type { BrowserFingerprintDiagnostics } from "@/lib/fingerprint/diagnostics"
+import { fingerprintDiagnostics } from "@/lib/fingerprint/diagnostics-server"
 import {
   observeFingerprintSignup,
   resolveFingerprintSignup,
@@ -164,6 +166,7 @@ export const beginGoogleSignup = async (
   recaptchaToken?: string,
   turnstileToken?: string,
   captureResult?: SignupFingerprintResult,
+  browserDiagnostics?: BrowserFingerprintDiagnostics,
 ): Promise<
   | { success: true; signupAttemptId: string }
   | {
@@ -179,6 +182,22 @@ export const beginGoogleSignup = async (
   const clientContext = await readCloudflareClientContext()
   const fingerprintEventId =
     capture?.eventId ?? (await readFingerprintSignupEventId())
+  const diagnostic = fingerprintDiagnostics({
+    signupAttemptId,
+    signupMethod: "google",
+    captureAttemptId: capture?.attemptId,
+    eventId: fingerprintEventId,
+  })
+  diagnostic.browser(browserDiagnostics)
+  diagnostic.record({
+    stage: "submission",
+    outcome: "succeeded",
+    reason: capture
+      ? "capture_present"
+      : captureResult
+        ? "capture_unavailable"
+        : "capture_absent",
+  })
   scheduleCloudflareObservation(
     signupAttemptId,
     "google",
@@ -292,6 +311,7 @@ export const signUpWithEmail = async (
   turnstileToken?: string,
   captureResult?: SignupFingerprintResult,
   offer?: string,
+  browserDiagnostics?: BrowserFingerprintDiagnostics,
   ycNext?: string,
 ) => {
   const requestedOffer = normalizeRequestedOffer(offer)
@@ -307,6 +327,22 @@ export const signUpWithEmail = async (
   const clientContext = await readCloudflareClientContext()
   const fingerprintEventId =
     capture?.eventId ?? (await readFingerprintSignupEventId())
+  const diagnostic = fingerprintDiagnostics({
+    signupAttemptId,
+    signupMethod: "email",
+    captureAttemptId: capture?.attemptId,
+    eventId: fingerprintEventId,
+  })
+  diagnostic.browser(browserDiagnostics)
+  diagnostic.record({
+    stage: "submission",
+    outcome: "succeeded",
+    reason: capture
+      ? "capture_present"
+      : captureResult
+        ? "capture_unavailable"
+        : "capture_absent",
+  })
   scheduleCloudflareObservation(
     signupAttemptId,
     "email",
@@ -469,6 +505,7 @@ export const signUpWithEmail = async (
           data.user,
           deviceVerified ? capture?.attemptId : undefined,
           !deviceVerified && !attestationFailed,
+          signupAttemptId,
         )
       } catch {
         // Publication is best effort; an unavailable snapshot must not change
