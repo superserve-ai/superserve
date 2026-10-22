@@ -340,4 +340,15 @@ describe("update metadata", () => {
     expect(r.exitCode).toBe(0)
     expect(r.requests[0].json()).toEqual({ metadata: {} })
   })
+
+  test("a 409 then 404 during pause recovery reports deleted", async () => {
+    const r = await runCli(["sandbox", "pause", SANDBOX_ID, "--json"], {
+      fetch: (req) =>
+        req.method === "POST"
+          ? apiError(409, "conflict", "already pausing")
+          : apiError(404, "not_found", "gone"),
+    })
+    expect(r.exitCode).toBe(0)
+    expect(JSON.parse(r.stdout).status).toBe("deleted")
+  })
 })

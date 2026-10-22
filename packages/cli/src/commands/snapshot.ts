@@ -81,7 +81,7 @@ async function waitReady(
     await new Promise((r) => setTimeout(r, Math.min(2_000, left)))
     try {
       current = await apiRequest<SnapshotItem>("GET", path(snap.id), {
-        timeoutMs: Math.max(deadline - Date.now(), 1),
+        signal: AbortSignal.timeout(Math.max(deadline - Date.now(), 1)),
       })
     } catch (err) {
       if (Date.now() >= deadline) throw timedOut()

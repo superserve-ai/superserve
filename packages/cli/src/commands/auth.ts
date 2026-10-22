@@ -47,13 +47,15 @@ SUPERSERVE_API_KEY, when set, takes precedence over the saved key.`,
         info(`Create an API key at ${color.cyan(`${CONSOLE_URL}/api-keys`)}`)
       }
       const apiKey = (await readSecret("API key: ")).trim()
-      if (!apiKey.startsWith("ss_live_")) {
+      const baseUrl = opts.baseUrl?.trim() || undefined
+      // Non-production endpoints (e.g. a local backend) issue ss_dev_ keys.
+      const prefixes = baseUrl ? ["ss_live_", "ss_dev_"] : ["ss_live_"]
+      if (!prefixes.some((p) => apiKey.startsWith(p))) {
         throw new CliError(
           "That doesn't look like a Superserve API key (expected ss_live_…).",
           EXIT.USAGE,
         )
       }
-      const baseUrl = opts.baseUrl?.trim() || undefined
       // Validate before saving so a typo never replaces a working key.
       await withSpinner("Checking key", () =>
         Sandbox.list({ apiKey, baseUrl, limit: 1 }),

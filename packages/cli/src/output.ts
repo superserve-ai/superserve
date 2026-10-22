@@ -56,6 +56,20 @@ export function printError(message: string | object, hint?: string): void {
   if (hint) process.stderr.write(`${errColor.dim(hint)}\n`)
 }
 
+/**
+ * Text from inside a sandbox (file names, metadata, hosts) is untrusted: escape
+ * control characters so it can't drive the terminal. Plain SGR colour codes,
+ * which this CLI adds itself, pass through.
+ */
+export function safeText(text: string): string {
+  return text.replace(
+    // eslint-disable-next-line no-control-regex
+    /\x1b\[[0-9;]*m|[\x00-\x1f\x7f-\x9f]/g,
+    (m) =>
+      m.length > 1 ? m : `\\x${m.charCodeAt(0).toString(16).padStart(2, "0")}`,
+  )
+}
+
 export interface Column<T> {
   header: string
   value: (row: T) => string | number | undefined | null
@@ -72,7 +86,9 @@ export function printTable<T>(
     info(empty)
     return
   }
-  const cells = rows.map((r) => columns.map((c) => String(c.value(r) ?? "-")))
+  const cells = rows.map((r) =>
+    columns.map((c) => safeText(String(c.value(r) ?? "-"))),
+  )
   const widths = columns.map((c, i) =>
     Math.max(c.header.length, ...cells.map((row) => row[i].length)),
   )
@@ -93,7 +109,9 @@ export function printFields(fields: [string, string | undefined][]): void {
   const shown = fields.filter((f): f is [string, string] => f[1] !== undefined)
   const width = Math.max(0, ...shown.map(([k]) => k.length))
   for (const [k, v] of shown) {
-    process.stdout.write(`${pc.dim(`${k}:`.padEnd(width + 1))} ${v}\n`)
+    process.stdout.write(
+      `${pc.dim(`${k}:`.padEnd(width + 1))} ${safeText(v)}\n`,
+    )
   }
 }
 

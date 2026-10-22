@@ -658,7 +658,14 @@ A paused sandbox uses no compute. Resume it with \`superserve sandbox resume\`;
           code = await postPause(id, !opts.wait)
         } catch (err) {
           if (err instanceof ConflictError) {
-            const { status } = await apiRequest<SandboxItem>("GET", path(id))
+            let status: string
+            try {
+              ;({ status } = await apiRequest<SandboxItem>("GET", path(id)))
+            } catch (lookup) {
+              // An --auto-delete 0 sandbox can vanish as its pause lands.
+              if (lookup instanceof NotFoundError) return "deleted"
+              throw lookup
+            }
             if (status === "paused") return "already"
             if (status !== "pausing") throw err
             code = 202

@@ -254,3 +254,19 @@ describe("files", () => {
     expect(ex("abbc")).toBe(false)
   })
 })
+
+describe("untrusted names", () => {
+  test("ls escapes terminal control sequences in file names, JSON keeps them raw", async () => {
+    const evil = "a\u001b]0;pwned\u0007b\nc"
+    const fetch = () =>
+      json({
+        entries: [{ name: evil, is_dir: false, size: 1, modified_unix: 0 }],
+      })
+    const human = await runCli(["files", "ls", SANDBOX_ID], { fetch })
+    expect(human.stdout).not.toContain("\u001b]")
+    expect(human.stdout).not.toContain("\u0007")
+    expect(human.stdout).toContain("a\\x1b]0;pwned\\x07b\\x0ac")
+    const raw = await runCli(["files", "ls", SANDBOX_ID, "--json"], { fetch })
+    expect(JSON.parse(raw.stdout).entries[0].name).toBe(evil)
+  })
+})

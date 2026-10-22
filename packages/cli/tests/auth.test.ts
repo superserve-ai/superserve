@@ -129,3 +129,26 @@ describe("response bodies", () => {
     expect(n).toBe(2)
   })
 })
+
+describe("dev keys", () => {
+  test("ss_dev_ keys are accepted only with a custom --base-url", async () => {
+    const env = { SUPERSERVE_API_KEY: undefined }
+    const key = `ss_dev_${"C".repeat(32)}`
+    const prod = await runCli(["login"], {
+      env,
+      stdin: key,
+      fetch: () => json([]),
+    })
+    expect(prod.exitCode).toBe(2)
+    const local = await runCli(
+      ["login", "--base-url", "http://localhost:8080"],
+      {
+        env,
+        stdin: key,
+        fetch: (req) =>
+          req.url.host === "localhost:8080" ? json([]) : undefined,
+      },
+    )
+    expect(local.exitCode).toBe(0)
+  })
+})
