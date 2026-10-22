@@ -1,7 +1,7 @@
 import { NotFoundError } from "@superserve/sdk"
 import type { Command } from "commander"
 
-import { apiFetch, apiRequest, isUuid, resolveSandboxId } from "../api"
+import { apiFetch, apiJson, apiRequest, isUuid, resolveSandboxId } from "../api"
 import { confirm, parseInteger } from "../args"
 import { CliError, EXIT, reportBatch, usageError } from "../errors"
 import {
@@ -162,12 +162,11 @@ Examples:
           // The request holds until the snapshot is ready; a 202 means the
           // host's answer was lost and it settles shortly. One budget covers both.
           const deadline = Date.now() + WAIT_MS
-          const res = await apiFetch(
+          const { data: created } = await apiJson<SnapshotItem>(
             "POST",
             `/sandboxes/${encodeURIComponent(id)}/snapshot`,
             { body, timeoutMs: WAIT_MS },
           )
-          const created = (await res.json()) as SnapshotItem
           return opts.wait ? waitReady(created, deadline) : created
         })
         if (!isJson()) {

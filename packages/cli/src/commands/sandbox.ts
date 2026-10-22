@@ -1,7 +1,7 @@
 import { ConflictError, NotFoundError, Sandbox } from "@superserve/sdk"
 import { type Command, Option } from "commander"
 
-import { apiFetch, apiRequest, isUuid, resolveSandboxId } from "../api"
+import { apiFetch, apiJson, apiRequest, isUuid, resolveSandboxId } from "../api"
 import {
   collect,
   confirm,
@@ -436,8 +436,11 @@ Examples:
         )) {
           query[`metadata.${k}`] = v
         }
-        const res = await apiFetch("GET", "/sandboxes", { query })
-        const rows = (await res.json()) as SandboxItem[]
+        const { data: rows, headers } = await apiJson<SandboxItem[]>(
+          "GET",
+          "/sandboxes",
+          { query },
+        )
         if (isJson()) {
           printJson(rows)
           return
@@ -458,7 +461,7 @@ Examples:
           ],
           "No sandboxes.",
         )
-        const total = Number(res.headers.get("X-Total-Count") ?? Number.NaN)
+        const total = Number(headers.get("X-Total-Count") ?? Number.NaN)
         if (rows.length && total > rows.length) {
           const from = Number(query.offset ?? 0)
           info(

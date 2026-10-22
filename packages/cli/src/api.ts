@@ -118,17 +118,19 @@ function backoff(
   })
 }
 
-export async function apiRequest<T>(
+/** Parsed body plus status and headers, for callers that need either. */
+export async function apiJson<T>(
   method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
   req?: ApiRequest,
-): Promise<T> {
+): Promise<{ data: T; status: number; headers: Headers }> {
   const idempotent = method === "GET" || method === "DELETE"
   for (let attempt = 1; ; attempt++) {
     const res = await apiFetch(method, path, req)
-    if (res.status === 204) return undefined as T
+    const meta = { status: res.status, headers: res.headers }
+    if (res.status === 204) return { data: undefined as T, ...meta }
     try {
-      return (await res.json()) as T
+      return { data: (await res.json()) as T, ...meta }
     } catch (err) {
       // A body that stalls or arrives truncated: retry what's safe to repeat.
       if (req?.signal?.aborted) throw err
@@ -138,6 +140,14 @@ export async function apiRequest<T>(
         : err
     }
   }
+}
+
+export async function apiRequest<T>(
+  method: "GET" | "POST" | "PATCH" | "DELETE",
+  path: string,
+  req?: ApiRequest,
+): Promise<T> {
+  return (await apiJson<T>(method, path, req)).data
 }
 
 async function toApiError(res: Response): Promise<SandboxError> {
