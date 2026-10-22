@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 import { setActiveTeamAction } from "@/lib/api/teams-actions"
 import { AcceptanceError, readOfferStatus } from "@/lib/yc/acceptance-api"
@@ -16,8 +16,12 @@ vi.mock("next/navigation", () => ({
     throw new Error(`redirect:${path}`)
   },
 }))
-beforeEach(() => vi.resetAllMocks())
-it("selects the freshly verified offer team before opening its Console", async () => {
+beforeEach(() => {
+  vi.resetAllMocks()
+  vi.stubEnv("YC_CONSOLE_RENEWAL_ENABLED", "false")
+})
+afterEach(() => vi.unstubAllEnvs())
+it("selects the freshly verified offer team before opening its Console with renewal disabled", async () => {
   vi.mocked(readOfferStatus).mockResolvedValue(
     offered({
       state: "funding_ready",

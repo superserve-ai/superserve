@@ -3,7 +3,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 import { ids, offered } from "@/lib/yc/test-fixtures"
 
-import { refreshAcceptance, submitAcceptance } from "./actions"
+import {
+  openReadyOfferConsole,
+  refreshAcceptance,
+  submitAcceptance,
+} from "./actions"
 import { OfferJourney } from "./offer-journey"
 
 vi.mock("./actions", () => ({
@@ -27,7 +31,7 @@ it("shows pinned terms before accepting and reuses the request after a lost resp
         accepted_at: "2026-10-21T12:00:00Z",
       }),
     })
-  render(<OfferJourney initial={offered()} />)
+  render(<OfferJourney initial={offered()} renewalEnabled />)
   expect(screen.getByText("$30,000")).toBeInTheDocument()
   expect(
     screen.queryByRole("button", { name: "Open Console" }),
@@ -48,6 +52,7 @@ it("shows pinned terms before accepting and reuses the request after a lost resp
 it("does not grant ready access when a hold accompanies uncertain setup", () => {
   render(
     <OfferJourney
+      renewalEnabled
       initial={offered({
         state: "outcome_unknown",
         ready: false,
@@ -80,6 +85,7 @@ it.each(["revoked", "rejected"] as const)(
     })
     render(
       <OfferJourney
+        renewalEnabled
         initial={offered({
           state: "funding_ready",
           ready: true,
@@ -122,6 +128,7 @@ it("polls pending financial revocation through to acknowledgment and fails close
     .mockResolvedValueOnce({ kind: "claim_state", state: "financial_revoked" })
   render(
     <OfferJourney
+      renewalEnabled
       initial={offered({
         state: "funding_ready",
         ready: true,
@@ -168,6 +175,7 @@ it("keeps polling a revoked receipt until financial revocation is acknowledged",
     .mockResolvedValue({ kind: "claim_state", state: "financial_revoked" })
   render(
     <OfferJourney
+      renewalEnabled
       initial={offered({
         state: "revoked",
         revoked: true,
@@ -200,6 +208,7 @@ it("recovers acknowledgment polling after a transient error on a revoked receipt
     .mockResolvedValueOnce({ kind: "claim_state", state: "financial_revoked" })
   render(
     <OfferJourney
+      renewalEnabled
       initial={offered({
         state: "revoked",
         revoked: true,
@@ -229,3 +238,57 @@ it("recovers acknowledgment polling after a transient error on a revoked receipt
     screen.getByRole("heading", { name: "Revocation confirmed" }),
   ).toBeInTheDocument()
 })
+
+it.each([false, true])(
+  "keeps activation on its current route as funding becomes ready with renewal %s",
+  async (renewalEnabled) => {
+    vi.useFakeTimers()
+    const previousURL = window.location.href
+    window.history.replaceState(null, "", `/yc/accept?claim=${ids.claim}`)
+    const statusURL = window.location.href
+    const ready = offered({
+      state: "funding_ready",
+      ready: true,
+      accepted_at: "2026-10-21T12:00:00Z",
+      assignment_id: ids.assignment,
+      operation_id: ids.operation,
+    })
+    vi.mocked(refreshAcceptance)
+      .mockReset()
+      .mockResolvedValue({ kind: "saved", offer: ready })
+    vi.mocked(openReadyOfferConsole).mockReset().mockResolvedValue(undefined)
+    try {
+      render(
+        <OfferJourney
+          initial={{ ...ready, state: "funding_pending", ready: false }}
+          renewalEnabled={renewalEnabled}
+        />,
+      )
+      expect(
+        screen.queryByRole("button", { name: "Open Console" }),
+      ).not.toBeInTheDocument()
+      expect(
+        !!screen.queryByRole("link", { name: "Review your next plan" }),
+      ).toBe(renewalEnabled)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10000)
+      })
+      expect(window.location.href).toBe(statusURL)
+      expect(
+        screen.getByRole("heading", { name: "Your Pro access is ready" }),
+      ).toBeInTheDocument()
+      expect(
+        !!screen.queryByRole("link", { name: "Review your next plan" }),
+      ).toBe(renewalEnabled)
+      expect(openReadyOfferConsole).not.toHaveBeenCalled()
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Open Console" }))
+      })
+      expect(vi.mocked(openReadyOfferConsole).mock.calls[0]?.[0]).toBe(
+        ids.claim,
+      )
+    } finally {
+      window.history.replaceState(null, "", previousURL)
+    }
+  },
+)

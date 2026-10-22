@@ -1,7 +1,7 @@
 import Link from "next/link"
 
 import { openOfferBilling } from "@/app/yc/accept/actions"
-import { readRenewal } from "@/lib/yc/renewal-api"
+import { readRenewal, renewalEnabled } from "@/lib/yc/renewal-api"
 import { claimID } from "@/lib/yc/staff-schema"
 
 import { RenewalForm } from "./renewal-form"
@@ -17,6 +17,26 @@ export default async function RenewalPage({
   searchParams: Promise<{ claim?: string }>
 }) {
   const { claim } = await searchParams
+  if (!renewalEnabled()) {
+    const locator = claimID.safeParse(claim)
+    return (
+      <main className="mx-auto max-w-2xl space-y-6 p-8">
+        <h1 className="text-2xl">Your next plan</h1>
+        <p>
+          Renewal choices are not available right now. You can still check your
+          current offer and access status.
+        </p>
+        <Link
+          href={
+            locator.success ? `/yc/accept?claim=${locator.data}` : "/yc/claim"
+          }
+          className="underline"
+        >
+          {locator.success ? "View offer and access status" : "Find your claim"}
+        </Link>
+      </main>
+    )
+  }
   let renewal
   try {
     renewal = await readRenewal(claimID.parse(claim))
