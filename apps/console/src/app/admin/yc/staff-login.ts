@@ -5,8 +5,6 @@ import { randomUUID } from "node:crypto"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 
-import { getImpersonationContext } from "@/lib/admin/impersonation"
-import { isStaff } from "@/lib/admin/staff"
 import { createServerClient } from "@/lib/supabase/server"
 import { signProof } from "@/lib/yc/signed-proof"
 import {
@@ -15,16 +13,30 @@ import {
   staffCookieOptions,
 } from "@/lib/yc/staff-session"
 
-export async function staffGoogleLogin() {
+import { staffLoginSession, staffReviewPath } from "./staff-login-session"
+
+export async function staffSignOut(claim?: string) {
+  const destination = staffReviewPath(claim)
+  if (process.env.YC_STAFF_UI_ENABLED !== "true") redirect(destination)
+  let signedOut = false
+  try {
+    const client = await createServerClient()
+    const { error } = await client.auth.signOut({ scope: "local" })
+    signedOut = !error
+  } catch {
+    console.error("Staff account sign-out failed")
+  }
+  if (!signedOut) redirect(destination)
+  redirect(`/auth/signin?next=${encodeURIComponent(destination)}`)
+}
+
+export async function staffGoogleLogin(claim?: string) {
   if (process.env.YC_STAFF_UI_ENABLED !== "true")
-    throw new Error("Staff review unavailable")
-  const client = await createServerClient()
-  const {
-    data: { user },
-    error,
-  } = await client.auth.getUser()
-  if (error || !user || !isStaff(user) || (await getImpersonationContext(user)))
-    throw new Error("Staff login required")
+    redirect(staffReviewPath(claim))
+  // Recheck at submission: the session may change after the page renders.
+  const session = await staffLoginSession()
+  if (session.kind !== "eligible") redirect(staffReviewPath(claim))
+  const { client, user } = session
   const origin = new URL(process.env.NEXT_PUBLIC_APP_URL ?? "")
   if (
     origin.protocol !== "https:" ||

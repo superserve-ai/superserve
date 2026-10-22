@@ -7,7 +7,8 @@ import { getStaffClaim, listStaffClaims } from "@/lib/yc/staff-api"
 import { claimState, type StaffClaim } from "@/lib/yc/staff-schema"
 
 import { DecisionForm } from "./decision-form"
-import { staffGoogleLogin } from "./staff-login"
+import { staffGoogleLogin, staffSignOut } from "./staff-login"
+import { staffLoginSession, staffReviewPath } from "./staff-login-session"
 
 export const dynamic = "force-dynamic"
 export default async function StaffYCPage({
@@ -22,6 +23,8 @@ export default async function StaffYCPage({
       ? [await getStaffClaim(params.claim)]
       : await listStaffClaims(params.state, params.after)
   } catch {
+    const enabled = process.env.YC_STAFF_UI_ENABLED === "true"
+    const session = enabled ? await staffLoginSession() : null
     return (
       <main className="space-y-4 p-8">
         <h1 className="text-2xl">YC claim review</h1>
@@ -29,8 +32,27 @@ export default async function StaffYCPage({
           Claim review is unavailable. Sign in with your authorized staff Google
           account, or retry later.
         </p>
-        {process.env.YC_STAFF_UI_ENABLED === "true" && (
-          <form action={staffGoogleLogin}>
+        {session?.kind === "signin" && (
+          <Link
+            className="underline"
+            href={`/auth/signin?next=${encodeURIComponent(staffReviewPath(params.claim))}`}
+          >
+            Sign in with your staff Google account
+          </Link>
+        )}
+        {session?.kind === "nonstaff" && (
+          <form action={staffSignOut.bind(null, params.claim)}>
+            <p>This account cannot access staff review.</p>
+            <button className="border border-dashed border-border px-4 py-2">
+              Sign out and use your staff account
+            </button>
+          </form>
+        )}
+        {session?.kind === "impersonating" && (
+          <p>Stop impersonating before verifying your staff Google sign-in.</p>
+        )}
+        {session?.kind === "eligible" && (
+          <form action={staffGoogleLogin.bind(null, params.claim)}>
             <button className="border border-dashed border-border px-4 py-2">
               Verify staff Google sign-in
             </button>
