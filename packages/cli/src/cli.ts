@@ -66,6 +66,8 @@ export async function run(argv: string[]): Promise<number> {
   let exitCode = 0
   resetConnection()
   setJsonMode(false)
+  // Commands report failures through process.exitCode; start each run clean.
+  process.exitCode = 0
   try {
     const program = buildProgram((path) => {
       commandPath = path

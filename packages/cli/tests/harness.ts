@@ -136,7 +136,6 @@ export async function runCli(
   Object.defineProperty(process, "stdin", { value: stdin, configurable: true })
 
   const savedExitCode = process.exitCode
-  process.exitCode = undefined
   try {
     const exitCode = await run(args)
     return { exitCode, stdout, stderr, requests }
