@@ -561,6 +561,7 @@ Examples:
       collect,
     )
     .option("--clear-network", "Remove all egress rules")
+    .option("--clear-metadata", "Remove all metadata tags")
     .addOption(previewAccessOption())
     .addHelpText(
       "after",
@@ -583,6 +584,7 @@ Examples:
           allowOut?: string[]
           denyOut?: string[]
           clearNetwork?: boolean
+          clearMetadata?: boolean
           previewAccess?: string
         },
       ) => {
@@ -591,10 +593,16 @@ Examples:
             "Use either --clear-network or --allow-out/--deny-out, not both.",
           )
         }
+        if (opts.clearMetadata && opts.metadata) {
+          throw usageError(
+            "Use either --clear-metadata or --metadata, not both.",
+          )
+        }
         const body: Record<string, unknown> = {}
         if (opts.metadata) {
           body.metadata = parseKeyValues(opts.metadata, "--metadata")
         }
+        if (opts.clearMetadata) body.metadata = {}
         if (opts.timeout !== undefined) {
           body.timeout_seconds = secondsOrNone(opts.timeout, "--timeout", {
             min: 1,
@@ -618,7 +626,7 @@ Examples:
         if (Object.keys(body).length === 0) {
           throw usageError(
             "Nothing to update.",
-            "Pass at least one of --metadata, --timeout, --auto-delete, --allow-out, --deny-out, --clear-network, --preview-access.",
+            "Pass at least one of --metadata, --clear-metadata, --timeout, --auto-delete, --allow-out, --deny-out, --clear-network, --preview-access.",
           )
         }
         const id = await resolveSandboxId(ref)

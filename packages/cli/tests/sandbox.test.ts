@@ -328,3 +328,16 @@ describe("pause wait", () => {
     expect(JSON.parse(r.stdout).status).toBe("deleted")
   })
 })
+
+describe("update metadata", () => {
+  test("--clear-metadata sends an empty map", async () => {
+    const r = await runCli(
+      ["sandbox", "update", SANDBOX_ID, "--clear-metadata"],
+      {
+        fetch: () => new Response(null, { status: 204 }),
+      },
+    )
+    expect(r.exitCode).toBe(0)
+    expect(r.requests[0].json()).toEqual({ metadata: {} })
+  })
+})

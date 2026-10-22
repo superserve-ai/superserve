@@ -138,7 +138,7 @@ Fork a snapshot into a new sandbox with:
     .option("-n, --name <name>", "Snapshot name")
     .option(
       "--idempotency-key <key>",
-      "Retries with the same key return the first request's snapshot",
+      "Retries with the same key return the first request's snapshot (default: a fresh key per run)",
     )
     .option("--no-wait", "Don't wait for a snapshot that is still creating")
     .addHelpText(
@@ -155,7 +155,8 @@ Examples:
       ) => {
         const body = {
           name: opts.name === undefined ? undefined : nameArg(opts.name),
-          idempotency_key: opts.idempotencyKey,
+          // A lost response then can't create a second snapshot on retry.
+          idempotency_key: opts.idempotencyKey ?? crypto.randomUUID(),
         }
         const id = await resolveSandboxId(ref)
         const snap = await withSpinner(`Snapshotting ${ref}`, async () => {
