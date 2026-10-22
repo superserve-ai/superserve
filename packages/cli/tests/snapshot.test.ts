@@ -76,3 +76,14 @@ describe("snapshot", () => {
     expect(r.requests).toHaveLength(0)
   })
 })
+
+describe("snapshot output", () => {
+  test("a snapshot without resources still prints", async () => {
+    const id = "33333333-3333-4333-8333-333333333333"
+    const r = await runCli(["snapshot", "get", id], {
+      fetch: () =>
+        json({ id, name: "s", status: "creating", sandbox_id: SANDBOX_ID }),
+    })
+    expect(r.exitCode).toBe(0)
+  })
+})

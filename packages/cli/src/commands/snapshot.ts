@@ -26,7 +26,7 @@ interface SnapshotItem {
   status: string
   name?: string | null
   size_bytes: number
-  resources: { vcpu_count: number; memory_mib: number; disk_mib: number }
+  resources?: { vcpu_count?: number; memory_mib?: number; disk_mib?: number }
   created_at: string
   ready_at?: string | null
 }
@@ -51,9 +51,15 @@ function nameArg(name: string): string {
   return name
 }
 
-function resources(s: SnapshotItem): string {
+function resources(s: SnapshotItem): string | undefined {
   const r = s.resources
-  return `${r.vcpu_count} vCPU, ${formatBytes(r.memory_mib * 1024 * 1024)}, ${formatBytes(r.disk_mib * 1024 * 1024)} disk`
+  if (r?.vcpu_count === undefined || r.memory_mib === undefined)
+    return undefined
+  const disk =
+    r.disk_mib === undefined
+      ? ""
+      : `, ${formatBytes(r.disk_mib * 1024 * 1024)} disk`
+  return `${r.vcpu_count} vCPU, ${formatBytes(r.memory_mib * 1024 * 1024)}${disk}`
 }
 
 /** Poll until the snapshot settles; a failed or deleted one is an error. */
