@@ -478,10 +478,15 @@ Examples:
       "\nThe sandbox's access token is omitted, --json included.",
     )
     .action(async (ref: string) => {
-      const s = await apiRequest<SandboxItem>(
+      const raw = await apiRequest<SandboxItem>(
         "GET",
         path(await resolveSandboxId(ref)),
       )
+      // Omitted on older sandboxes, which predate per-port publication.
+      const s = {
+        ...raw,
+        preview_access: raw.preview_access ?? "legacy_public",
+      }
       if (isJson()) {
         printJson(withoutToken(s))
         return
