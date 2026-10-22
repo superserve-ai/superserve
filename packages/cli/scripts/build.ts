@@ -1,10 +1,8 @@
 import { rmSync } from "node:fs"
 import { resolve } from "node:path"
 
-// `bun run build`: dist/index.js, a self-contained node bundle, so the npm
-// package installs nothing at runtime. `--binaries`: standalone executables
-// for the curl installer and Homebrew, named the way install.sh and the
-// formula expect.
+// `bun run build`: a self-contained node bundle for npm. `--binaries`: standalone
+// executables named the way install.sh and the Homebrew formula expect.
 
 const root = resolve(import.meta.dir, "..")
 const dist = resolve(root, "dist")

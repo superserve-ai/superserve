@@ -72,10 +72,7 @@ export function isInteractive(): boolean {
   return Boolean(process.stdin.isTTY && process.stderr.isTTY)
 }
 
-/**
- * Ask before destructive actions. `--yes` skips; a non-interactive session
- * without `--yes` refuses rather than guessing.
- */
+/** `--yes` skips; a non-interactive session without it refuses rather than guessing. */
 export async function confirm(question: string, yes?: boolean): Promise<void> {
   if (yes) return
   if (!isInteractive()) {
@@ -97,17 +94,13 @@ export async function confirm(question: string, yes?: boolean): Promise<void> {
   }
 }
 
-/** Read all of stdin (for piped secrets, keys and file contents). */
 export async function readStdin(): Promise<Buffer> {
   const chunks: Buffer[] = []
   for await (const chunk of process.stdin) chunks.push(chunk as Buffer)
   return Buffer.concat(chunks)
 }
 
-/**
- * Read a secret value: from stdin when piped, otherwise a hidden prompt.
- * Never from argv, which leaks into shell history and `ps`.
- */
+/** From stdin when piped, else a hidden prompt; never argv (shell history, `ps`). */
 export async function readSecret(prompt: string): Promise<string> {
   if (!process.stdin.isTTY) {
     const value = (await readStdin()).toString("utf8").replace(/\r?\n$/, "")

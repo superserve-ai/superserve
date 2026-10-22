@@ -125,10 +125,7 @@ function describe(err: unknown): Described {
   return { message: String(err), exitCode: EXIT.ERROR }
 }
 
-/**
- * Report a batch whose items succeed or fail independently (bulk delete):
- * every failure is named, and the exit code is the first failure's.
- */
+/** Bulk results: name every failure; the exit code is the first failure's. */
 export function reportBatch(
   ids: string[],
   labels: string[],

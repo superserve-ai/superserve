@@ -71,3 +71,11 @@ describe("auth", () => {
     expect(r.stderr).toContain("superserve login")
   })
 })
+
+describe("--json", () => {
+  test("parse errors are JSON too, before any command runs", async () => {
+    const r = await runCli(["sandbox", "get", "--json"])
+    expect(r.exitCode).toBe(2)
+    expect(JSON.parse(r.stderr).error.code).toBe("usage")
+  })
+})

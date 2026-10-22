@@ -75,10 +75,7 @@ const tpath = (id: string) => `/templates/${encodeURIComponent(id)}`
 const bpath = (id: string, buildId: string) =>
   `${tpath(id)}/builds/${encodeURIComponent(buildId)}`
 
-/**
- * Accept a template ID or its exact name (team or `superserve/*`). IDs cost
- * nothing; a name costs one list call, and the matched row rides along.
- */
+/** An ID is used as-is; a name costs one list call. */
 async function lookupTemplate(
   ref: string,
 ): Promise<{ id: string; row?: TemplateRow }> {
@@ -321,12 +318,8 @@ function buildFailure(templateId: string, build: BuildRow): BuildError {
   })
 }
 
-/**
- * Block until `buildId` is terminal, streaming its logs to stderr if asked.
- * The build row decides the outcome: SSE reports "ready" a moment before
- * sandboxes can use the template. The SDK's waitUntilReady can't target a
- * specific build ID, hence this loop.
- */
+// The build row decides the outcome (SSE says "ready" slightly early), and the
+// SDK's waitUntilReady can't target a specific build ID.
 async function waitForBuild(
   ref: string,
   templateId: string,

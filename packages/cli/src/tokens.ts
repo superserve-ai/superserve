@@ -5,13 +5,8 @@ import { join } from "node:path"
 import type { ActivatedSandbox } from "./api"
 import { configDir, connection } from "./config"
 
-/**
- * Per-sandbox data-plane tokens, reused across invocations so a repeat
- * `exec` skips the activate round trip. Access tokens stay valid for at
- * least an hour (current + previous HMAC window) and routing hints for one,
- * so an entry is reused for 50 minutes. A stale entry only costs one failed
- * dial: callers then activate and retry.
- */
+// Reused for 50 minutes: access tokens stay valid at least an hour and routing
+// hints exactly one. A stale entry costs one failed dial, then callers activate.
 
 const REUSE_MS = 50 * 60_000
 

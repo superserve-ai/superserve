@@ -26,9 +26,10 @@ In CI, set `SUPERSERVE_API_KEY` instead; it takes precedence over the saved key.
 ## Quickstart
 
 ```bash
-superserve sandbox create --name demo
+superserve sandbox create --name demo --template superserve/python-3.11
 superserve exec demo -- python3 -c "print('hello')"
 superserve cp ./app demo:/home/user/app
+superserve exec demo "cd /home/user/app && nohup python3 -m http.server 3000 >/dev/null 2>&1 &"
 superserve preview publish demo 3000 --open
 superserve shell demo
 superserve sandbox pause demo

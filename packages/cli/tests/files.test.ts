@@ -179,6 +179,15 @@ describe("files", () => {
     expect(r.stderr).toContain("link")
   })
 
+  test("a symlinked upload root needs --follow-symlinks", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ss-ulink-"))
+    writeFileSync(join(dir, "target.txt"), "x")
+    symlinkSync(join(dir, "target.txt"), join(dir, "link"))
+    const r = await runCli(["files", "upload", SANDBOX_ID, join(dir, "link")])
+    expect(r.exitCode).toBe(2)
+    expect(r.requests).toHaveLength(0)
+  })
+
   test("a failed upload names the file", async () => {
     const root = mkdtempSync(join(tmpdir(), "ss-upf-"))
     writeFileSync(join(root, "bad.txt"), "x")

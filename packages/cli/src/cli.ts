@@ -11,7 +11,7 @@ import { register as registerSnapshot } from "./commands/snapshot"
 import { register as registerTemplate } from "./commands/template"
 import { resetConnection, VERSION } from "./config"
 import { handleError } from "./errors"
-import { setJsonMode } from "./output"
+import { commanderError, setJsonMode } from "./output"
 import { recordCommand } from "./telemetry"
 
 /** A fresh program per call so tests can run the CLI in-process. */
@@ -20,6 +20,9 @@ export function buildProgram(onCommand: (path: string) => void): Command {
     .description("Run code in Superserve sandboxes from your terminal")
     .version(VERSION, "-v, --version", "Print the CLI version")
     .option("--json", "Print machine-readable JSON")
+    .configureOutput({
+      outputError: (str, write) => write(commanderError(str)),
+    })
     .showSuggestionAfterError()
     .exitOverride()
     .hook("preAction", (_root, action) => {
@@ -46,10 +49,7 @@ export function buildProgram(onCommand: (path: string) => void): Command {
   return program
 }
 
-/**
- * `superserve ... | head` closes the pipe early; that's the reader's choice,
- * not a crash. Exit quietly with whatever code the command had so far.
- */
+/** A closed pipe (`... | head`) is the reader's choice, not a crash: exit quietly. */
 export function installPipeGuard(): void {
   for (const stream of [process.stdout, process.stderr]) {
     stream.on("error", (err: NodeJS.ErrnoException) => {
@@ -65,9 +65,11 @@ export async function run(argv: string[]): Promise<number> {
   let commandPath = "help"
   let exitCode = 0
   resetConnection()
-  setJsonMode(false)
   // Commands report failures through process.exitCode; start each run clean.
   process.exitCode = 0
+  // Parse errors are reported before preAction runs, so honour --json up front.
+  const end = argv.indexOf("--")
+  setJsonMode((end === -1 ? argv : argv.slice(0, end)).includes("--json"))
   try {
     const program = buildProgram((path) => {
       commandPath = path

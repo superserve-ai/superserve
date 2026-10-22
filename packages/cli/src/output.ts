@@ -1,10 +1,7 @@
 import pc from "picocolors"
 
-/**
- * Output conventions: data goes to stdout (tables, JSON, file contents);
- * progress, status and errors go to stderr, so `superserve ... | jq` and
- * redirects only ever see data.
- */
+// Data (tables, JSON, file contents) goes to stdout; status and errors to stderr,
+// so pipes and redirects only ever see data.
 
 let jsonMode = false
 
@@ -21,6 +18,13 @@ const errColor = pc.createColors(
 )
 
 export const color = pc
+
+/** Commander's own parse errors, as the JSON error object in JSON mode. */
+export function commanderError(str: string): string {
+  if (!jsonMode) return str
+  const message = str.replace(/^error: /, "").trim()
+  return `${JSON.stringify({ error: { message, code: "usage" } })}\n`
+}
 
 export function printJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`)
@@ -59,7 +63,6 @@ export interface Column<T> {
   style?: (text: string, row: T) => string
 }
 
-/** Plain aligned table on stdout. Prints nothing but `empty` for no rows. */
 export function printTable<T>(
   rows: T[],
   columns: Column<T>[],
@@ -86,7 +89,6 @@ export function printTable<T>(
   })
 }
 
-/** Key/value detail view. Undefined values are skipped. */
 export function printFields(fields: [string, string | undefined][]): void {
   const shown = fields.filter((f): f is [string, string] => f[1] !== undefined)
   const width = Math.max(0, ...shown.map(([k]) => k.length))
@@ -145,10 +147,7 @@ export function formatBytes(n: number | undefined): string {
   return `${i === 0 ? v : v.toFixed(1)} ${units[i]}`
 }
 
-/**
- * Spinner on stderr. A no-op unless stderr is a TTY and output isn't JSON,
- * so scripts and CI logs never see control characters.
- */
+/** No-op unless stderr is a TTY and output isn't JSON, so logs never see control characters. */
 export function spinner(text: string): { stop: (final?: string) => void } {
   if (jsonMode || !process.stderr.isTTY) {
     return { stop: () => {} }
@@ -170,7 +169,6 @@ export function spinner(text: string): { stop: (final?: string) => void } {
   }
 }
 
-/** Run `fn` under a spinner, clearing it whether `fn` resolves or throws. */
 export async function withSpinner<T>(
   text: string,
   fn: () => Promise<T>,

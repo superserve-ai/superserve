@@ -12,12 +12,8 @@ import {
 import { connection, USER_AGENT } from "./config"
 import { CliError, EXIT } from "./errors"
 
-/**
- * Direct control-plane calls for the few endpoints the SDK doesn't wrap
- * (directory listing, raw activate for the terminal). Everything else goes
- * through the SDK so retries, region routing and token refresh stay in one
- * place. Errors map to the SDK's typed errors, same as SDK calls.
- */
+// Control-plane calls go straight to the API (no activate side effects); errors
+// map to the SDK's typed errors so handling stays uniform.
 
 const DEFAULT_TIMEOUT_MS = 30_000
 
@@ -32,11 +28,7 @@ export interface ApiRequest {
 const RETRYABLE = new Set([429, 502, 503, 504])
 const MAX_ATTEMPTS = 3
 
-/**
- * One control-plane request. GET and DELETE retry on 429/502/503/504 and on
- * network errors (honouring Retry-After), like the SDK; POST and PATCH never
- * retry because they may not be idempotent.
- */
+/** GET and DELETE retry 429/502/503/504 and network errors, like the SDK; POST/PATCH never do. */
 export async function apiFetch(
   method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
@@ -146,11 +138,7 @@ export interface ActivatedSandbox {
   routing_hint?: string
 }
 
-/**
- * POST /activate: resumes a paused sandbox and returns a fresh access token.
- * Waits out a pause that is still finishing (409 sandbox_pausing) for up to
- * a minute, honouring Retry-After, like the SDK's connect().
- */
+/** Resume if paused and mint a fresh access token, waiting out a pause still finishing. */
 export async function activate(sandboxId: string): Promise<ActivatedSandbox> {
   const deadline = Date.now() + 60_000
   for (;;) {
@@ -188,10 +176,7 @@ export function isSandboxId(s: string): boolean {
   return SANDBOX_ID_RE.test(s)
 }
 
-/**
- * Accept a sandbox ID or its exact name. IDs are used as-is (no round trip);
- * a name costs one list call and must match exactly one sandbox.
- */
+/** An ID is used as-is; a name costs one list call and must match exactly one sandbox. */
 export async function resolveSandboxId(ref: string): Promise<string> {
   if (isSandboxId(ref)) return ref
   const matches = (

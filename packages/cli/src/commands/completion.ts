@@ -63,12 +63,9 @@ function collect(root: Command): { nodes: Node[]; children: Children } {
   return { nodes, children }
 }
 
-/** POSIX single quotes: `'` → `'\''`. */
 const sq = (s: string) => `'${s.replaceAll("'", `'\\''`)}'`
-/** Fish single quotes, which backslash-escape inside. */
 const fq = (s: string) =>
   `'${s.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`
-/** PowerShell single quotes: `'` → `''`. */
 const pq = (s: string) => `'${s.replaceAll("'", "''")}'`
 
 function caseArms(children: Children): string {

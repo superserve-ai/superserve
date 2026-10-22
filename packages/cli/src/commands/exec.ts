@@ -4,7 +4,7 @@ import { activate, type ActivatedSandbox, resolveSandboxId } from "../api"
 import { collect, parseDuration, parseKeyValues } from "../args"
 import { connection, USER_AGENT } from "../config"
 import { CliError, EXIT, usageError } from "../errors"
-import { isJson, printJson, warn } from "../output"
+import { commanderError, isJson, printJson, warn } from "../output"
 import { cachedToken, forgetToken, rememberToken } from "../tokens"
 
 // Data-plane wire protocol: see the server's exec_ws.go and terminal.go.
@@ -41,9 +41,11 @@ export function register(program: Command): void {
     .configureOutput({
       outputError: (str, write) =>
         write(
-          /unknown option/.test(str)
-            ? `${str}Put the remote command after --: superserve exec <sandbox> -- <command> [args...]\n`
-            : str,
+          commanderError(
+            /unknown option/.test(str)
+              ? `${str}Put the remote command after --: superserve exec <sandbox> -- <command> [args...]\n`
+              : str,
+          ),
         ),
     })
     .addHelpText(

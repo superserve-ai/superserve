@@ -4,11 +4,8 @@ import { join } from "node:path"
 
 import { configDir, VERSION } from "./config"
 
-/**
- * One anonymous usage event per invocation: command path, exit code and
- * duration. Never arguments, IDs, paths or output. Opt out with
- * SUPERSERVE_TELEMETRY=0 or DO_NOT_TRACK=1.
- */
+// One anonymous event per run: command path, exit code, duration. Never arguments,
+// IDs, paths or output. Opt out with SUPERSERVE_TELEMETRY=0 or DO_NOT_TRACK=1.
 
 const POSTHOG_URL = "https://us.i.posthog.com/capture/"
 const POSTHOG_KEY = "phc_gjpDKKKQJAnkxkqLrPGrAhoariKsaHNuTpI5rVhkYre"

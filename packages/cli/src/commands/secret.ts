@@ -82,7 +82,6 @@ function checkSecretName(name: string): void {
   }
 }
 
-/** Read the value without ever echoing it, and check it before sending. */
 async function readValue(prompt: string): Promise<string> {
   const value = await readSecret(prompt)
   if (value.length > MAX_VALUE) {
@@ -173,7 +172,6 @@ function readAuthFile(path: string): Record<string, unknown> {
   return a
 }
 
-/** The provider/auth/hosts part of CreateSecretRequest, from flags or a file. */
 function authFields(opts: CreateOpts): Record<string, unknown> {
   const authFlags = [
     ["--host", opts.host],

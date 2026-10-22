@@ -30,7 +30,7 @@ function credentialsFile(): string {
 
 export interface StoredCredentials {
   api_key: string
-  /** Control-plane override saved by `login --base-url` (e.g. staging). */
+  /** Control-plane override saved by `login --base-url`. */
   base_url?: string
 }
 
@@ -56,7 +56,6 @@ export function writeCredentials(creds: StoredCredentials): string {
   return file
 }
 
-/** Remove stored credentials. Returns false when there were none. */
 export function clearCredentials(): boolean {
   const had = readCredentials() !== null
   rmSync(credentialsFile(), { force: true })
@@ -76,12 +75,7 @@ export function resetConnection(): void {
   cached = undefined
 }
 
-/**
- * The API key and endpoints for this invocation. SUPERSERVE_API_KEY and
- * SUPERSERVE_BASE_URL win over stored credentials so CI and one-off
- * overrides never need a login. Region endpoints are derived from the key
- * by the SDK, exactly as SDK users get them.
- */
+/** Env vars win over saved credentials, so CI never needs a login; the SDK derives region endpoints from the key. */
 export function connection(): Connection {
   if (cached) return cached
   const envKey = process.env.SUPERSERVE_API_KEY?.trim()

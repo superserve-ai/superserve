@@ -3,6 +3,7 @@ import {
   openAsBlob,
   readdirSync,
   realpathSync,
+  lstatSync,
   statSync,
   writeFileSync,
 } from "node:fs"
@@ -257,10 +258,7 @@ async function localBlob(path: string): Promise<Blob> {
   return openAsBlob(path)
 }
 
-/**
- * `box:/abs/path` → { ref, path }. `./a:/b` stays local, and so do Windows
- * drive paths (`C:/x`, `C:\x`): a single letter is never a sandbox ref there.
- */
+/** `box:/abs/path` → { ref, path }; `./a:/b` and Windows drive paths stay local. */
 export function remoteSpec(
   arg: string,
 ): { ref: string; path: string } | undefined {
@@ -350,8 +348,16 @@ async function upload(
   remote: string | undefined,
   opts: TransferOpts,
 ): Promise<void> {
+  const link = lstatSync(local, { throwIfNoEntry: false })
+  if (!link) throw usageError(`${local} does not exist.`)
+  if (link.isSymbolicLink() && !opts.followSymlinks) {
+    throw usageError(
+      `${local} is a symlink.`,
+      "Pass --follow-symlinks to upload its target.",
+    )
+  }
   const st = statSync(local, { throwIfNoEntry: false })
-  if (!st) throw usageError(`${local} does not exist.`)
+  if (!st) throw usageError(`${local} is a broken symlink.`)
   const name = basename(realpathSync(local))
   let dest = remote ? sandboxPath(remote) : `${HOME}/${name}`
   const timeout = timeoutMs(opts)
@@ -468,9 +474,8 @@ async function download(
     return t
   }
 
-  // Only a directory entry is trusted: listings are lstat-based (a symlink to
-  // a directory reads as a file) and capped at 10k entries, so anything else
-  // is read as a file, and the server's 400 for a directory switches to zip.
+  // Listings are lstat-based and capped at 10k entries, so only a directory entry
+  // is trusted; anything else is read as a file and a 400 switches to zip.
   let isDir = entry?.is_dir === true
   let target = targetFor(isDir)
   let bytes: Uint8Array | undefined
