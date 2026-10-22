@@ -37,3 +37,11 @@ remains `confirmed` after the boundary; `successor_state` separately reports
 state in this contract. Preserve
 existing debt and payment gates. Local fixtures and UI previews do not prove
 any of these runtime integrations.
+
+`YC_CLAIM_WEBSITE_URL` optionally sets the server-side HTTPS website origin for
+Submit verification. The path is always `/yc`. Unset preserves
+`https://www.superserve.ai/yc`; invalid or empty values disable the link instead
+of falling back to production. Credentials, paths, queries, and fragments are
+not allowed. Configure the capture website's own API target and reciprocal
+Console link separately; this setting changes neither API calls nor email
+confirmation destinations.
