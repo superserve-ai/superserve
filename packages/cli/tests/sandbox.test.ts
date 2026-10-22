@@ -316,4 +316,15 @@ describe("pause wait", () => {
     })
     expect(r.exitCode).toBe(0)
   })
+
+  test("a sandbox auto-deleted on pause is reported as deleted", async () => {
+    const r = await runCli(["sandbox", "pause", SANDBOX_ID, "--json"], {
+      fetch: (req) =>
+        req.method === "POST"
+          ? json({ status: "pausing" }, 202)
+          : apiError(404, "not_found", "gone"),
+    })
+    expect(r.exitCode).toBe(0)
+    expect(JSON.parse(r.stdout).status).toBe("deleted")
+  })
 })

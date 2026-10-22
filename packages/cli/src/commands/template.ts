@@ -339,7 +339,10 @@ async function waitForBuild(
     const logAbort = new AbortController()
     let streamed: Promise<void> = Promise.resolve()
     if (logs) {
-      const tpl = await Template.connect(templateId, sdkOptions())
+      const tpl = await Template.connect(templateId, {
+        ...sdkOptions(),
+        signal: interrupted,
+      })
       // Best effort: a dropped stream never fails the wait.
       streamed = tpl
         .streamBuildLogs({

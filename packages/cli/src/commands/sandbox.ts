@@ -152,7 +152,8 @@ async function postPause(id: string, async: boolean): Promise<number> {
 }
 
 /** Poll until the pause lands. Deleted meanwhile (auto-delete 0) counts as done. */
-async function waitPaused(id: string): Promise<void> {
+/** Resolves "deleted" when auto-delete removed it as soon as it paused. */
+async function waitPaused(id: string): Promise<"paused" | "deleted"> {
   const started = Date.now()
   const deadline = started + PAUSE_WAIT_MS
   for (;;) {
@@ -160,10 +161,10 @@ async function waitPaused(id: string): Promise<void> {
     try {
       status = (await apiRequest<SandboxItem>("GET", path(id))).status
     } catch (err) {
-      if (err instanceof NotFoundError) return
+      if (err instanceof NotFoundError) return "deleted"
       throw err
     }
-    if (status === "paused" || status === "deleted") return
+    if (status === "paused" || status === "deleted") return status
     // A pause accepted after a timed-out request can still read "active" at first.
     const early = status === "active" && Date.now() - started < 3_000
     if (status !== "pausing" && !early) {
@@ -658,15 +659,19 @@ A paused sandbox uses no compute. Resume it with \`superserve sandbox resume\`;
         }
         if (code !== 202) return "paused"
         if (!opts.wait) return "pausing"
-        await waitPaused(id)
-        return "paused"
+        return await waitPaused(id)
       })
       if (isJson()) {
-        printJson({ id, status: outcome === "pausing" ? "pausing" : "paused" })
+        printJson({
+          id,
+          status: outcome === "already" ? "paused" : outcome,
+        })
       } else if (outcome === "already") {
         success(`Sandbox ${ref} is already paused`)
       } else if (outcome === "pausing") {
         success(`Pausing sandbox ${ref} in the background`)
+      } else if (outcome === "deleted") {
+        success(`Paused sandbox ${ref}; auto-delete then removed it`)
       } else {
         success(`Paused sandbox ${ref}`)
       }
