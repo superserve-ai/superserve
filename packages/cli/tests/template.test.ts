@@ -286,4 +286,52 @@ describe("poll sleep", () => {
     await sleep(60_000, ac.signal)
     expect(getEventListeners(ac.signal, "abort")).toHaveLength(0)
   })
+
+  test("logs -f reconnects after a dropped connection mid-build", async () => {
+    const t1 = "2026-01-01T00:00:01Z"
+    const dropped = () =>
+      new Response(
+        new ReadableStream({
+          start(c) {
+            c.enqueue(
+              new TextEncoder().encode(
+                `data: ${JSON.stringify({ timestamp: t1, stream: "stdout", text: "one" })}\n\n`,
+              ),
+            )
+            c.error(new Error("connection reset"))
+          },
+        }),
+        { headers: { "Content-Type": "text/event-stream" } },
+      )
+    const streams = [
+      dropped(),
+      sse([
+        { timestamp: t1, stream: "stdout", text: "one" },
+        { timestamp: "2026-01-01T00:00:02Z", stream: "stdout", text: "two" },
+        {
+          timestamp: t1,
+          stream: "system",
+          text: "ready",
+          finished: true,
+          status: "ready",
+        },
+      ]),
+    ]
+    const statuses = ["building", "building", "ready"]
+    const r = await runCli(["template", "logs", TPL, "--build", BUILD, "-f"], {
+      fetch: (req) => {
+        const p = req.url.pathname
+        if (p.endsWith("/logs")) return streams.shift()
+        if (p === `/templates/${TPL}/builds/${BUILD}`)
+          return json({
+            id: BUILD,
+            template_id: TPL,
+            status: statuses.shift() ?? "ready",
+          })
+        if (p === `/templates/${TPL}`) return json(row("building"))
+      },
+    })
+    expect(r.exitCode).toBe(0)
+    expect(r.stdout).toContain("two")
+  })
 })

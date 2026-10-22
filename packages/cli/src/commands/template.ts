@@ -384,7 +384,13 @@ async function waitForBuild(
         }
         if (!IN_FLIGHT.has(build.status)) {
           // Let the log tail arrive; the stream closes itself at terminal.
-          await Promise.race([streamed, sleep(3000, interrupted)])
+          const tail = new AbortController()
+          await Promise.race([
+            streamed,
+            sleep(3000, AbortSignal.any([interrupted, tail.signal])),
+          ])
+          // Stop the losing timer so it can't hold the process open.
+          tail.abort()
           if (build.status === "failed") throw buildFailure(templateId, build)
           if (build.status === "cancelled") {
             throw new CliError(
@@ -827,11 +833,17 @@ Examples:
                 arm(1500)
               },
             })
-            // A long silent step trips the SDK's idle timeout; with --follow
-            // that's a reconnect, like a clean end of stream.
+            // With --follow, an idle timeout (a long silent step) or a dropped
+            // connection is a reconnect, like a clean end of stream.
             await (opts.follow
               ? stream.catch((err) => {
-                  if (!(err instanceof TimeoutError)) throw err
+                  // Transport failures (reset, proxy drop) carry no HTTP status;
+                  // API errors do, and those stay fatal.
+                  const transient =
+                    err instanceof TimeoutError ||
+                    (err instanceof SandboxError &&
+                      err.statusCode === undefined)
+                  if (interrupted.aborted || !transient) throw err
                 })
               : stream)
             if (!opts.follow) break
