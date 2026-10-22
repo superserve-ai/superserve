@@ -89,3 +89,27 @@ describe("Retry-After", () => {
     expect(retryAfterMs("garbage")).toBeUndefined()
   })
 })
+
+describe("retry backoff", () => {
+  test("an abort during a Retry-After wait stops the request at once", async () => {
+    const { apiRequest } = await import("../src/api")
+    const ac = new AbortController()
+    const saved = globalThis.fetch
+    globalThis.fetch = (async () =>
+      json({}, 429, { "Retry-After": "30" })) as unknown as typeof fetch
+    const savedKey = process.env.SUPERSERVE_API_KEY
+    process.env.SUPERSERVE_API_KEY = TEST_KEY
+    const started = Date.now()
+    setTimeout(() => ac.abort(), 50)
+    try {
+      await expect(
+        apiRequest("GET", "/sandboxes", { signal: ac.signal }),
+      ).rejects.toBeDefined()
+    } finally {
+      globalThis.fetch = saved
+      if (savedKey === undefined) delete process.env.SUPERSERVE_API_KEY
+      else process.env.SUPERSERVE_API_KEY = savedKey
+    }
+    expect(Date.now() - started).toBeLessThan(2_000)
+  })
+})

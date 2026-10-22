@@ -42,12 +42,12 @@ export async function apiFetch(
       res = await send(method, path, req)
     } catch (err) {
       if (last || err instanceof TimeoutError || req.signal?.aborted) throw err
-      await backoff(attempt)
+      await backoff(attempt, null, req.signal)
       continue
     }
     if (res.ok) return res
     if (last || !RETRYABLE.has(res.status)) throw await toApiError(res)
-    await backoff(attempt, res.headers.get("Retry-After"))
+    await backoff(attempt, res.headers.get("Retry-After"), req.signal)
   }
 }
 
@@ -95,11 +95,27 @@ export function retryAfterMs(value?: string | null): number | undefined {
   return Number.isFinite(ms) && ms > 0 ? Math.min(ms, 30_000) : undefined
 }
 
-function backoff(attempt: number, retryAfter?: string | null): Promise<void> {
+function backoff(
+  attempt: number,
+  retryAfter: string | null,
+  signal?: AbortSignal,
+): Promise<void> {
   const ms =
     retryAfterMs(retryAfter) ??
     Math.min(200 * 2 ** (attempt - 1), 2_000) * (0.8 + Math.random() * 0.4)
-  return new Promise((r) => setTimeout(r, ms))
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason)
+    const done = () => {
+      signal?.removeEventListener("abort", onAbort)
+      resolve()
+    }
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(signal?.reason)
+    }
+    const timer = setTimeout(done, ms)
+    signal?.addEventListener("abort", onAbort, { once: true })
+  })
 }
 
 export async function apiRequest<T>(
