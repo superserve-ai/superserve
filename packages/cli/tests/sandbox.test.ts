@@ -304,3 +304,16 @@ describe("sandbox references", () => {
     expect(r.stderr).toContain(`Deleted ${ok}`)
   })
 })
+
+describe("pause wait", () => {
+  test("an early 'active' after an accepted pause is not a failure", async () => {
+    const states = ["active", "pausing", "paused"]
+    const r = await runCli(["sandbox", "pause", SANDBOX_ID], {
+      fetch: (req) =>
+        req.method === "POST"
+          ? json({ status: "pausing" }, 202)
+          : json({ id: SANDBOX_ID, name: "box", status: states.shift() }),
+    })
+    expect(r.exitCode).toBe(0)
+  })
+})

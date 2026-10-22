@@ -153,7 +153,8 @@ async function postPause(id: string, async: boolean): Promise<number> {
 
 /** Poll until the pause lands. Deleted meanwhile (auto-delete 0) counts as done. */
 async function waitPaused(id: string): Promise<void> {
-  const deadline = Date.now() + PAUSE_WAIT_MS
+  const started = Date.now()
+  const deadline = started + PAUSE_WAIT_MS
   for (;;) {
     let status: string
     try {
@@ -162,8 +163,10 @@ async function waitPaused(id: string): Promise<void> {
       if (err instanceof NotFoundError) return
       throw err
     }
-    if (status === "paused") return
-    if (status !== "pausing") {
+    if (status === "paused" || status === "deleted") return
+    // A pause accepted after a timed-out request can still read "active" at first.
+    const early = status === "active" && Date.now() - started < 3_000
+    if (status !== "pausing" && !early) {
       throw new CliError(`Sandbox ${id} did not pause: status is ${status}.`)
     }
     if (Date.now() > deadline) {

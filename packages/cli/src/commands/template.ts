@@ -328,6 +328,13 @@ async function waitForBuild(
 ): Promise<TemplateRow> {
   const deadline =
     timeoutSec === undefined ? Infinity : Date.now() + timeoutSec * 1000
+  const timedOut = (status: string) =>
+    new CliError(
+      `Timed out after ${timeoutSec}s; the build is still ${status}.`,
+      EXIT.TIMEOUT,
+      `The build continues. Check again: superserve template wait ${ref}`,
+      "timeout",
+    )
   return onInterrupt(async (interrupted) => {
     const logAbort = new AbortController()
     let streamed: Promise<void> = Promise.resolve()
@@ -346,10 +353,27 @@ async function waitForBuild(
     try {
       for (;;) {
         if (interrupted.aborted) throw stoppedFollowing(ref, buildId)
-        const build = await apiRequest<BuildRow>(
-          "GET",
-          bpath(templateId, buildId),
-        )
+        // Ctrl-C and the deadline also cut a slow poll short.
+        const signal = Number.isFinite(deadline)
+          ? AbortSignal.any([
+              interrupted,
+              AbortSignal.timeout(Math.max(deadline - Date.now(), 0)),
+            ])
+          : interrupted
+        let build: BuildRow
+        try {
+          build = await apiRequest<BuildRow>(
+            "GET",
+            bpath(templateId, buildId),
+            {
+              signal,
+            },
+          )
+        } catch (err) {
+          if (interrupted.aborted) throw stoppedFollowing(ref, buildId)
+          if (Date.now() >= deadline) throw timedOut("building")
+          throw err
+        }
         if (!IN_FLIGHT.has(build.status)) {
           // Let the log tail arrive; the stream closes itself at terminal.
           await Promise.race([streamed, sleep(3000, interrupted)])
@@ -364,14 +388,7 @@ async function waitForBuild(
           }
           return await apiRequest<TemplateRow>("GET", tpath(templateId))
         }
-        if (Date.now() >= deadline) {
-          throw new CliError(
-            `Timed out after ${timeoutSec}s; the build is still ${build.status}.`,
-            EXIT.TIMEOUT,
-            `The build continues. Check again: superserve template wait ${ref}`,
-            "timeout",
-          )
-        }
+        if (Date.now() >= deadline) throw timedOut(build.status)
         await sleep(2000, interrupted)
       }
     } finally {
