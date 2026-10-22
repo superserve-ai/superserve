@@ -67,18 +67,26 @@ async function waitReady(
   snap: SnapshotItem,
   deadline = Date.now() + WAIT_MS,
 ): Promise<SnapshotItem> {
+  const timedOut = () =>
+    new CliError(
+      `Snapshot ${snap.id} is still creating.`,
+      EXIT.TIMEOUT,
+      `Check again with: superserve snapshot wait ${snap.id}`,
+      "timeout",
+    )
   let current = snap
   while (current.status === "creating") {
-    if (Date.now() > deadline) {
-      throw new CliError(
-        `Snapshot ${snap.id} is still creating.`,
-        EXIT.TIMEOUT,
-        `Check again with: superserve snapshot wait ${snap.id}`,
-        "timeout",
-      )
+    const left = deadline - Date.now()
+    if (left <= 0) throw timedOut()
+    await new Promise((r) => setTimeout(r, Math.min(2_000, left)))
+    try {
+      current = await apiRequest<SnapshotItem>("GET", path(snap.id), {
+        timeoutMs: Math.max(deadline - Date.now(), 1),
+      })
+    } catch (err) {
+      if (Date.now() >= deadline) throw timedOut()
+      throw err
     }
-    await new Promise((r) => setTimeout(r, 2_000))
-    current = await apiRequest<SnapshotItem>("GET", path(snap.id))
   }
   if (current.status !== "ready") {
     throw new CliError(
