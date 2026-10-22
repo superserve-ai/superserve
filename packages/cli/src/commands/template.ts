@@ -820,6 +820,7 @@ Examples:
             if (!opts.follow) break
             const now = await apiRequest<BuildRow>("GET", bpath(id, build.id))
             if (!IN_FLIGHT.has(now.status)) break
+            await sleep(2000, interrupted)
           }
         } catch (err) {
           if (interrupted.aborted) throw stoppedFollowing(ref, build.id)

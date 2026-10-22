@@ -58,7 +58,7 @@ export function printError(message: string | object, hint?: string): void {
 
 export interface Column<T> {
   header: string
-  value: (row: T) => string
+  value: (row: T) => string | number | undefined | null
   /** Colorize after padding so ANSI codes don't break alignment. */
   style?: (text: string, row: T) => string
 }
@@ -72,7 +72,7 @@ export function printTable<T>(
     info(empty)
     return
   }
-  const cells = rows.map((r) => columns.map((c) => c.value(r)))
+  const cells = rows.map((r) => columns.map((c) => String(c.value(r) ?? "-")))
   const widths = columns.map((c, i) =>
     Math.max(c.header.length, ...cells.map((row) => row[i].length)),
   )

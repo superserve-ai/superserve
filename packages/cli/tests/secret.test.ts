@@ -137,3 +137,13 @@ describe("secret", () => {
     ])
   })
 })
+
+describe("provider list", () => {
+  test("a minimal provider row still renders", async () => {
+    const r = await runCli(["provider", "list"], {
+      fetch: () => json([{ name: "example" }]),
+    })
+    expect(r.exitCode).toBe(0)
+    expect(r.stdout).toContain("example")
+  })
+})

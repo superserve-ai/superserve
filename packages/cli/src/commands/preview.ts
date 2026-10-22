@@ -31,7 +31,7 @@ interface PreviewPort {
 }
 
 interface PreviewPortList {
-  preview_access: "legacy_public" | "public" | "private"
+  preview_access?: "legacy_public" | "public" | "private"
   ports?: PreviewPort[]
 }
 
@@ -61,10 +61,15 @@ export function register(program: Command): void {
     .argument("<sandbox>", "Sandbox ID or name")
     .action(async (ref: string) => {
       const id = await resolveSandboxId(ref)
-      const list = await apiRequest<PreviewPortList>(
+      const raw = await apiRequest<PreviewPortList>(
         "GET",
         `${base(id)}/preview-ports`,
       )
+      // Omitted on older sandboxes, which predate per-port publication.
+      const list = {
+        ...raw,
+        preview_access: raw.preview_access ?? "legacy_public",
+      }
       if (isJson()) return printJson(list)
       printFields([["Default access", list.preview_access]])
       if (list.preview_access === "legacy_public") {
