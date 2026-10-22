@@ -23,6 +23,12 @@ let googleMembershipState:
 let authExchangeError: { message: string } | null = null
 let authVerifyOtpError: { message: string } | null = null
 
+const mockCompleteStaffGoogle = vi.fn()
+vi.mock("@/lib/yc/staff-session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/yc/staff-session")>()),
+  completeStaffGoogle: (...args: unknown[]) => mockCompleteStaffGoogle(...args),
+}))
+
 const mockNotifySlackOfNewUser = vi.fn()
 vi.mock("@/lib/slack/signup-notification", () => ({
   notifySlackOfNewUser: (...args: unknown[]) =>
@@ -200,7 +206,12 @@ vi.mock("@/lib/posthog/events", () => ({
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({
     auth: {
-      exchangeCodeForSession: async () => ({ error: authExchangeError }),
+      exchangeCodeForSession: async () => ({
+        error: authExchangeError,
+        data: {
+          session: { access_token: "exchanged-token", user: currentUser },
+        },
+      }),
       verifyOtp: async () => ({ error: authVerifyOtpError }),
       getUser: async () => ({ data: { user: currentUser } }),
     },
@@ -209,6 +220,7 @@ vi.mock("@/lib/supabase/server", () => ({
 
 import { SignupRestrictedError } from "@/lib/auth/signup-restrictions"
 import { signSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
+import { STAFF_SESSION_COOKIE } from "@/lib/yc/staff-session"
 
 import { GET } from "./route"
 
@@ -229,6 +241,7 @@ describe("auth callback", () => {
     }
     authExchangeError = null
     authVerifyOtpError = null
+    mockCompleteStaffGoogle.mockReset().mockResolvedValue(null)
     mockNotifySlackOfNewUser.mockReset()
     mockNotifySlackOfNewUser.mockResolvedValue(undefined)
     mockSendWelcomeEmail.mockReset()
@@ -311,6 +324,62 @@ describe("auth callback", () => {
       .mockReset()
       .mockImplementation(async () => googleMembershipState)
     mockTrackEvent.mockReset()
+  })
+
+  it.each(["first_time", "indeterminate"] as const)(
+    "returns verified staff proof without customer onboarding when membership is %s",
+    async (kind) => {
+      googleMembershipState =
+        kind === "first_time" ? { kind } : { kind, degradedRegions: ["use"] }
+      proofAvailable = false
+      mockCompleteStaffGoogle.mockResolvedValue("signed-staff-proof")
+
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&staff_google_nonce=nonce&next=/yc/claim",
+        ),
+      )
+
+      expect(response.headers.get("location")).toBe(
+        "https://console.superserve.ai/admin/yc",
+      )
+      expect(mockCompleteStaffGoogle).toHaveBeenCalledWith(
+        { access_token: "exchanged-token", user: currentUser },
+        "nonce",
+        currentUser,
+      )
+      expect(response.cookies.get(STAFF_SESSION_COOKIE)).toMatchObject({
+        value: "signed-staff-proof",
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 900,
+      })
+      expect(mockListTeamMembershipsForUserDetailed).not.toHaveBeenCalled()
+      expect(mockHasValidLegacyGoogleSignupProof).not.toHaveBeenCalled()
+      expect(mockEnsureGoogleOnboardingMembership).not.toHaveBeenCalled()
+      expect(mockPublishOriginalSignupEvidence).not.toHaveBeenCalled()
+      expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+      expect(mockSendWelcomeEmail).not.toHaveBeenCalled()
+    },
+  )
+
+  it("keeps normal signup checks when staff verification fails", async () => {
+    googleMembershipState = { kind: "first_time" }
+    proofAvailable = false
+
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&staff_google_nonce=nonce",
+      ),
+    )
+
+    expect(response.headers.get("location")).toContain(
+      "/auth/signup?complete_google=1",
+    )
+    expect(response.cookies.get(STAFF_SESSION_COOKIE)).toBeUndefined()
+    expect(mockHasValidLegacyGoogleSignupProof).toHaveBeenCalled()
   })
 
   it("notifies a generic callback denial without exposing evidence", async () => {

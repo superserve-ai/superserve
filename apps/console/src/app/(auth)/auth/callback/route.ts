@@ -142,14 +142,25 @@ export async function GET(request: Request) {
       } = await supabase.auth.getUser()
 
       let newSignup = false
-      let staffProof: string | null = null
       if (user) {
-        if (code && searchParams.has("staff_google_nonce"))
-          staffProof = await completeStaffGoogle(
+        if (code && searchParams.has("staff_google_nonce")) {
+          const staffProof = await completeStaffGoogle(
             exchangedSession,
             searchParams.get("staff_google_nonce"),
             user,
           )
+          if (staffProof) {
+            const response = NextResponse.redirect(
+              buildRedirectUrl(origin, "/admin/yc"),
+            )
+            response.cookies.set(STAFF_SESSION_COOKIE, staffProof, {
+              ...staffCookieOptions,
+              maxAge: STAFF_PROOF_SECONDS,
+            })
+            response.cookies.delete(PLAN_OFFER_COOKIE)
+            return response
+          }
+        }
         const signupAttemptId =
           searchParams.get("signup_attempt_id") || undefined
         const provider = code
@@ -467,17 +478,8 @@ export async function GET(request: Request) {
       }
 
       const response = NextResponse.redirect(
-        staffProof
-          ? buildRedirectUrl(origin, "/admin/yc")
-          : next.startsWith("https://")
-            ? next
-            : buildRedirectUrl(origin, next),
+        next.startsWith("https://") ? next : buildRedirectUrl(origin, next),
       )
-      if (staffProof)
-        response.cookies.set(STAFF_SESSION_COOKIE, staffProof, {
-          ...staffCookieOptions,
-          maxAge: STAFF_PROOF_SECONDS,
-        })
       if (user && newSignup && requestedOffer) {
         response.cookies.set(
           PLAN_OFFER_COOKIE,
