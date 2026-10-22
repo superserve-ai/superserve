@@ -63,8 +63,10 @@ function resources(s: SnapshotItem): string | undefined {
 }
 
 /** Poll until the snapshot settles; a failed or deleted one is an error. */
-async function waitReady(snap: SnapshotItem): Promise<SnapshotItem> {
-  const deadline = Date.now() + WAIT_MS
+async function waitReady(
+  snap: SnapshotItem,
+  deadline = Date.now() + WAIT_MS,
+): Promise<SnapshotItem> {
   let current = snap
   while (current.status === "creating") {
     if (Date.now() > deadline) {
@@ -150,14 +152,15 @@ Examples:
         const id = await resolveSandboxId(ref)
         const snap = await withSpinner(`Snapshotting ${ref}`, async () => {
           // The request holds until the snapshot is ready; a 202 means the
-          // host's answer was lost and it settles shortly.
+          // host's answer was lost and it settles shortly. One budget covers both.
+          const deadline = Date.now() + WAIT_MS
           const res = await apiFetch(
             "POST",
             `/sandboxes/${encodeURIComponent(id)}/snapshot`,
             { body, timeoutMs: WAIT_MS },
           )
           const created = (await res.json()) as SnapshotItem
-          return opts.wait ? waitReady(created) : created
+          return opts.wait ? waitReady(created, deadline) : created
         })
         if (!isJson()) {
           success(
