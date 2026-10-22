@@ -12,8 +12,11 @@ it.each([
   ["https://capture.example.test", "https://capture.example.test/yc"],
   ["https://capture.example.test/", "https://capture.example.test/yc"],
   ["https://capture.example.test:8443", "https://capture.example.test:8443/yc"],
+  ["http://127.0.0.1:3001", "http://127.0.0.1:3001/yc"],
+  ["http://localhost:46301/", "http://localhost:46301/yc"],
+  ["http://[::1]:3001", "http://[::1]:3001/yc"],
 ])(
-  "uses the configured HTTPS origin %s with the fixed capture path",
+  "uses the configured browser origin %s with the fixed capture path",
   (origin, expected) => {
     vi.stubEnv("YC_CLAIM_WEBSITE_URL", origin)
     expect(ycClaimCaptureURL()).toBe(expected)

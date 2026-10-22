@@ -38,10 +38,26 @@ state in this contract. Preserve
 existing debt and payment gates. Local fixtures and UI previews do not prove
 any of these runtime integrations.
 
-`YC_CLAIM_WEBSITE_URL` optionally sets the server-side HTTPS website origin for
+`YC_CLAIM_WEBSITE_URL` optionally sets the server-side website origin for
 Submit verification. The path is always `/yc`. Unset preserves
 `https://www.superserve.ai/yc`; invalid or empty values disable the link instead
 of falling back to production. Credentials, paths, queries, and fragments are
 not allowed. Configure the capture website's own API target and reciprocal
 Console link separately; this setting changes neither API calls nor email
 confirmation destinations.
+
+Both the capture link and `NEXT_PUBLIC_APP_URL` accept HTTPS origins or explicit
+HTTP origins on exactly `localhost`, `127.0.0.1`, or `[::1]` with an optional
+valid port. Other HTTP hosts and numeric aliases are rejected. This browser
+navigation allowance does not change the HTTPS requirement for backend APIs.
+
+YC confirmation requires a valid, explicitly configured `NEXT_PUBLIC_APP_URL`.
+Set the same canonical browser origin at build and runtime for signup, callback,
+and confirmation. Its POST compares `Origin` with that configured origin and
+uses it for the success redirect; internal listener URLs and forwarded headers
+are not origin authorities. Missing or invalid configuration rejects confirmation.
+
+The confirmation document uses `same-origin` referrer policy in both its header
+and meta tag so a native form POST retains its Origin. Cross-origin referrers
+remain suppressed; the fragment is cleared before enabling the form. Missing
+or `null` Origin remains rejected.
