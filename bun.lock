@@ -152,6 +152,7 @@
         "@types/bun": "^1.2.4",
         "commander": "^14.0.3",
         "picocolors": "^1.1.1",
+        "typescript": "^5.7.0",
       },
     },
     "packages/mcp": {

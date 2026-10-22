@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
+import { sleep } from "../src/commands/template"
 import { apiError, json, runCli } from "./harness"
 
 const TPL = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
@@ -268,5 +269,21 @@ describe("template", () => {
       },
     })
     expect(r.exitCode).toBe(0)
+  })
+})
+
+describe("poll sleep", () => {
+  test("leaves no abort listener behind across many polls", async () => {
+    const { getEventListeners } = await import("node:events")
+    const ac = new AbortController()
+    for (let i = 0; i < 15; i++) await sleep(1, ac.signal)
+    expect(getEventListeners(ac.signal, "abort")).toHaveLength(0)
+
+    // Aborted mid-sleep, and already aborted: both resolve at once.
+    const pending = sleep(60_000, ac.signal)
+    ac.abort()
+    await pending
+    await sleep(60_000, ac.signal)
+    expect(getEventListeners(ac.signal, "abort")).toHaveLength(0)
   })
 })
