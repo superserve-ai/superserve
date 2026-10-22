@@ -1,120 +1,129 @@
 name: Publish CLI
 
+# Tag-triggered (cli-v2.0.0 -> 2.0.0), the same convention as mcp-v* and
+# loops-v*: a bare v* tag or a "release published" trigger would also fire for
+# other packages' releases in this monorepo. Creates the GitHub release if the
+# tag has none, uploads the binaries, publishes to npm, then updates the
+# Homebrew tap. Re-running for the same tag is safe.
+
 on:
-  release:
-    types: [published]
+  push:
+    tags: ["cli-v*"]
 
 jobs:
-  publish-npm:
-    name: Publish to npm
+  release:
+    name: Build, release and publish to npm
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release and upload binaries
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    env:
+      SUPERSERVE_TELEMETRY: "0"
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # The version is bundled into the build, so set it first.
       - name: Set version from tag
+        id: version
         working-directory: packages/cli
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF#refs/tags/v}"
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#cli-v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
           jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp
           mv package.json.tmp package.json
 
-      - name: Pin workspace runtime deps to published versions
-        working-directory: packages/cli
+      - name: Build
         run: |
           set -euo pipefail
-          # npm publish does NOT translate `workspace:*` in this bun-managed repo,
-          # so a literal "@superserve/sdk": "workspace:*" would ship and break
-          # `npm i @superserve/cli`. Rewrite it to the SDK's concrete version.
-          # The matching @superserve/sdk release must already be on npm.
-          SDK_VERSION="$(jq -r .version ../sdk/package.json)"
-          jq --arg v "^$SDK_VERSION" '.dependencies["@superserve/sdk"] = $v' package.json > package.json.tmp
-          mv package.json.tmp package.json
+          bunx turbo run build --filter=@superserve/sdk
+          cd packages/cli && bun run build:binaries
 
-      - name: Publish
-        working-directory: packages/cli
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Verify versions
+        working-directory: packages/cli/dist
         run: |
           set -euo pipefail
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc
-          npm publish --access=public
-          rm .npmrc
-
-  build-binaries:
-    name: Build and upload binaries
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build binaries
-        working-directory: packages/cli
-        run: bun run build
+          test "$(node index.js --version)" = "$VERSION"
+          test "$(./superserve-bun-linux-x64 --version)" = "$VERSION"
 
       - name: Generate SHA256SUMS
         working-directory: packages/cli/dist
         run: sha256sum superserve-* > SHA256SUMS
 
-      - name: Upload release assets
+      - name: Create release and upload binaries
         working-directory: packages/cli/dist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF#refs/tags/}"
-          gh release upload "$TAG" superserve-* SHA256SUMS --repo "${{ github.repository }}" --clobber
+          # Draft until every asset is up: install.sh picks the newest published
+          # cli-v* release and must never see one without binaries.
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" --draft --verify-tag --title "CLI $VERSION" --generate-notes
+          gh release upload "$TAG" superserve-* SHA256SUMS --clobber
+          gh release edit "$TAG" --draft=false
+
+      # dist/index.js bundles every runtime dependency; the workspace:* dev
+      # dependencies mean nothing outside this repo.
+      - name: Publish to npm
+        working-directory: packages/cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if npm view "@superserve/cli@$VERSION" version >/dev/null 2>&1; then
+            echo "@superserve/cli@$VERSION is already on npm; skipping publish"
+            exit 0
+          fi
+          jq 'del(.devDependencies, .scripts)' package.json > package.json.tmp
+          mv package.json.tmp package.json
+          npm publish --access=public
 
   update-homebrew-tap:
     name: Update Homebrew formula
-    needs: build-binaries
+    needs: release
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.release.outputs.tag }}
+      VERSION: ${{ needs.release.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get release info
-        id: release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Render formula
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF#refs/tags/}"
-          VERSION="${TAG#v}"
-          BASE_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}"
-
-          curl -fsSL -o /tmp/SHA256SUMS "${BASE_URL}/SHA256SUMS"
-
-          get_sha() { grep "$1" /tmp/SHA256SUMS | awk '{print $1}' | tr -d '[:space:]'; }
-
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "sha256_darwin_arm64=$(get_sha superserve-bun-darwin-arm64)" >> "$GITHUB_OUTPUT"
-          echo "sha256_darwin_x64=$(get_sha superserve-bun-darwin-x64)" >> "$GITHUB_OUTPUT"
-          echo "sha256_linux_arm64=$(get_sha superserve-bun-linux-arm64)" >> "$GITHUB_OUTPUT"
-          echo "sha256_linux_x64=$(get_sha superserve-bun-linux-x64)" >> "$GITHUB_OUTPUT"
-
-      - name: Update formula
-        run: |
-          set -euo pipefail
-          sed -e "s|__TAG__|${{ steps.release.outputs.tag }}|g" \
-              -e "s|__VERSION__|${{ steps.release.outputs.version }}|g" \
-              -e "s|__SHA256_DARWIN_ARM64__|${{ steps.release.outputs.sha256_darwin_arm64 }}|g" \
-              -e "s|__SHA256_DARWIN_X64__|${{ steps.release.outputs.sha256_darwin_x64 }}|g" \
-              -e "s|__SHA256_LINUX_ARM64__|${{ steps.release.outputs.sha256_linux_arm64 }}|g" \
-              -e "s|__SHA256_LINUX_X64__|${{ steps.release.outputs.sha256_linux_x64 }}|g" \
+          curl -fsSL -o /tmp/SHA256SUMS "https://github.com/${{ github.repository }}/releases/download/${TAG}/SHA256SUMS"
+          sha() { grep " superserve-bun-$1\$" /tmp/SHA256SUMS | awk '{print $1}'; }
+          DARWIN_ARM64="$(sha darwin-arm64)"
+          DARWIN_X64="$(sha darwin-x64)"
+          LINUX_ARM64="$(sha linux-arm64)"
+          LINUX_X64="$(sha linux-x64)"
+          sed -e "s|__TAG__|${TAG}|g" \
+              -e "s|__VERSION__|${VERSION}|g" \
+              -e "s|__SHA256_DARWIN_ARM64__|${DARWIN_ARM64}|g" \
+              -e "s|__SHA256_DARWIN_X64__|${DARWIN_X64}|g" \
+              -e "s|__SHA256_LINUX_ARM64__|${LINUX_ARM64}|g" \
+              -e "s|__SHA256_LINUX_X64__|${LINUX_X64}|g" \
               packages/cli/Formula/superserve.rb > /tmp/superserve.rb
 
       - name: Push to tap repo
@@ -130,5 +139,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/superserve.rb
           git diff --staged --quiet && echo "Formula unchanged, skipping." && exit 0
-          git commit -m "superserve ${{ steps.release.outputs.tag }}"
+          git commit -m "superserve ${TAG}"
           git push

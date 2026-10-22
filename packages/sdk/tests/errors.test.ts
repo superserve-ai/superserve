@@ -57,6 +57,12 @@ describe("mapApiError", () => {
     expect(err.message).toBe("action 1 failed after 1 executed")
   })
 
+  it("keeps the message of a bare-string data-plane error body", () => {
+    const err = mapApiError(404, { error: "file not found" })
+    expect(err).toBeInstanceOf(NotFoundError)
+    expect(err.message).toBe("file not found")
+  })
+
   it("maps 400 to ValidationError with code", () => {
     const err = mapApiError(400, withError("bad_request", "no"))
     expect(err).toBeInstanceOf(ValidationError)

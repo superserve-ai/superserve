@@ -1,9 +1,10 @@
 {
-  "extends": "@superserve/typescript-config/cli.json",
+  "extends": "@superserve/typescript-config/base.json",
   "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./src"
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM"],
+    "noEmit": true,
+    "types": ["bun"]
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests"]
+  "include": ["src/**/*", "tests/**/*", "scripts/**/*"]
 }

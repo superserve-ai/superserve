@@ -26,16 +26,23 @@ case "$ARCH" in
 esac
 
 BINARY="superserve-bun-${OS}-${ARCH}"
+# The default x64 Linux build needs AVX2; older CPUs and some VMs get baseline.
+if [ "$OS" = "linux" ] && [ "$ARCH" = "x64" ] && ! grep -qw avx2 /proc/cpuinfo 2>/dev/null; then
+  BINARY="${BINARY}-baseline"
+fi
 info "Detected platform: ${OS}-${ARCH}"
 
 # --- Resolve version ---
-if [ -n "${SUPERSERVE_VERSION:-}" ]; then
-  TAG="$SUPERSERVE_VERSION"
-else
-  TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-    | grep '"tag_name"' | head -1 | cut -d'"' -f4) \
-    || error "Failed to fetch latest release"
-fi
+# CLI releases are tagged cli-vX.Y.Z; the repo's "latest" release may belong to
+# another package, so pick the newest cli-v* release instead.
+case "${SUPERSERVE_VERSION:-}" in
+  "")     TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=100" \
+            | sed -n 's/.*"tag_name": *"\(cli-v[^"]*\)".*/\1/p' | head -1) \
+            || error "Failed to fetch releases"
+          [ -n "$TAG" ] || error "No CLI release found" ;;
+  cli-v*) TAG="$SUPERSERVE_VERSION" ;;
+  *)      TAG="cli-v${SUPERSERVE_VERSION#v}" ;;
+esac
 info "Installing superserve ${TAG}"
 
 # --- Download binary and checksums ---

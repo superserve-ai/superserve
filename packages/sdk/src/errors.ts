@@ -128,17 +128,20 @@ export class BuildError extends SandboxError {
 export function mapApiError(
   status: number,
   body: {
-    error?: { code?: string; message?: string }
+    // Data-plane (boxd) file errors are a bare string: { error: "..." }.
+    error?: { code?: string; message?: string } | string
     // Connect RPC errors (boxd's DesktopService) are flat: { code, message }.
     code?: string
     message?: string
   },
 ): SandboxError {
+  const error = typeof body?.error === "string" ? undefined : body?.error
   const message =
-    body?.error?.message ??
+    error?.message ??
+    (typeof body?.error === "string" ? body.error : undefined) ??
     (typeof body?.message === "string" ? body.message : undefined) ??
     `API error (${status})`
-  const code = body?.error?.code ?? body?.code
+  const code = error?.code ?? body?.code
 
   switch (status) {
     case 400:
