@@ -349,7 +349,7 @@ Examples:
         printFields([
           ["ID", created.id],
           ["Name", created.name],
-          ["Status", statusColor(created.status)],
+          ["Status", created.status, statusColor],
           [
             "From",
             opts.snapshot
@@ -498,14 +498,14 @@ Examples:
         ? s.secrets
             .map(
               (b) =>
-                `${b.env_key}=${b.secret_name}${b.revoked ? color.red(" (revoked)") : ""}`,
+                `${b.env_key}=${b.secret_name}${b.revoked ? " (revoked)" : ""}`,
             )
             .join(", ")
         : undefined
       printFields([
         ["ID", s.id],
         ["Name", s.name],
-        ["Status", statusColor(s.status)],
+        ["Status", s.status, statusColor],
         ["Shape", shape(s)],
         ["Created", formatDate(s.created_at)],
         [

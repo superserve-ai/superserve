@@ -615,7 +615,7 @@ Examples:
       printFields([
         ["Name", t.name],
         ["ID", t.id],
-        ["Status", statusColor(t.status)],
+        ["Status", t.status, statusColor],
         ["vCPU", String(t.vcpu)],
         ["Memory", fmtMib(t.memory_mib)],
         ["Disk", fmtMib(t.disk_mib)],
@@ -734,7 +734,7 @@ Examples:
       printFields([
         ["ID", b.id],
         ["Template", b.template_id],
-        ["Status", statusColor(b.status)],
+        ["Status", b.status, statusColor],
         ["Error", b.error_message],
         ["Created", b.created_at && formatDate(b.created_at)],
         ["Started", b.started_at && formatDate(b.started_at)],

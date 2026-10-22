@@ -58,15 +58,14 @@ export function printError(message: string | object, hint?: string): void {
 
 /**
  * Text from inside a sandbox (file names, metadata, hosts) is untrusted: escape
- * control characters so it can't drive the terminal. Plain SGR colour codes,
- * which this CLI adds itself, pass through.
+ * every control character so it can't drive the terminal. The CLI's own colour
+ * is applied after escaping, never passed through it.
  */
 export function safeText(text: string): string {
   return text.replace(
     // eslint-disable-next-line no-control-regex
-    /\x1b\[[0-9;]*m|[\x00-\x1f\x7f-\x9f]/g,
-    (m) =>
-      m.length > 1 ? m : `\\x${m.charCodeAt(0).toString(16).padStart(2, "0")}`,
+    /[\x00-\x1f\x7f-\x9f]/g,
+    (m) => `\\x${m.charCodeAt(0).toString(16).padStart(2, "0")}`,
   )
 }
 
@@ -105,12 +104,22 @@ export function printTable<T>(
   })
 }
 
-export function printFields(fields: [string, string | undefined][]): void {
-  const shown = fields.filter((f): f is [string, string] => f[1] !== undefined)
+export type Field = [
+  label: string,
+  value: string | undefined,
+  /** Colour applied after the value is escaped. */
+  style?: (text: string) => string,
+]
+
+export function printFields(fields: Field[]): void {
+  const shown = fields.filter(
+    (f): f is [string, string, ((t: string) => string)?] => f[1] !== undefined,
+  )
   const width = Math.max(0, ...shown.map(([k]) => k.length))
-  for (const [k, v] of shown) {
+  for (const [k, v, style] of shown) {
+    const text = safeText(v)
     process.stdout.write(
-      `${pc.dim(`${k}:`.padEnd(width + 1))} ${safeText(v)}\n`,
+      `${pc.dim(`${k}:`.padEnd(width + 1))} ${style ? style(text) : text}\n`,
     )
   }
 }

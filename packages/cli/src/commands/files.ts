@@ -486,7 +486,9 @@ async function download(
   // Listings are lstat-based and capped at 10k entries, so only a directory entry
   // is trusted; anything else is read as a file and a 400 switches to zip.
   let isDir = entry?.is_dir === true
-  let target = targetFor(isDir)
+  // Check for a local collision up front only when the type is certain; an
+  // unlisted entry may turn out to be a directory, whose target is <name>.zip.
+  let target = entry ? targetFor(isDir) : undefined
   let bytes: Uint8Array | undefined
   if (!isDir) {
     try {
@@ -499,6 +501,7 @@ async function download(
       target = targetFor(true)
     }
   }
+  target ??= targetFor(isDir)
   if (!bytes) {
     try {
       bytes = await withSpinner(`Downloading ${remote}`, () =>

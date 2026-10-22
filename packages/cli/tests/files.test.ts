@@ -270,3 +270,42 @@ describe("untrusted names", () => {
     expect(JSON.parse(raw.stdout).entries[0].name).toBe(evil)
   })
 })
+
+describe("download target", () => {
+  test("an unlisted directory isn't blocked by a local file named like it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ss-dlt-"))
+    writeFileSync(join(dir, "out"), "unrelated local file")
+    const r = await runCli(
+      ["files", "download", SANDBOX_ID, "/home/user/out", dir],
+      {
+        fetch: (req) => {
+          if (req.url.pathname === `/sandboxes/${SANDBOX_ID}/files`)
+            return json({ entries: [] })
+          if (isActivate(req)) return activated()
+          if (isData(req))
+            return req.url.searchParams.get("format") === "zip"
+              ? new Response("PK")
+              : json({ error: "is a directory" }, 400)
+        },
+      },
+    )
+    expect(r.exitCode).toBe(0)
+    expect(readFileSync(join(dir, "out.zip"), "utf8")).toBe("PK")
+    expect(readFileSync(join(dir, "out"), "utf8")).toBe("unrelated local file")
+  })
+})
+
+describe("untrusted colour codes", () => {
+  test("SGR sequences in sandbox text are escaped too", async () => {
+    const r = await runCli(["files", "ls", SANDBOX_ID], {
+      fetch: () =>
+        json({
+          entries: [
+            { name: "evil\u001b[8m", is_dir: false, size: 1, modified_unix: 0 },
+          ],
+        }),
+    })
+    expect(r.stdout).not.toContain("\u001b[8m")
+    expect(r.stdout).toContain("evil\\x1b[8m")
+  })
+})

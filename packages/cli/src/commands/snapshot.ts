@@ -107,7 +107,7 @@ function show(s: SnapshotItem): void {
   printFields([
     ["ID", s.id],
     ["Name", s.name ?? undefined],
-    ["Status", statusColor(s.status)],
+    ["Status", s.status, statusColor],
     ["Sandbox", s.sandbox_id],
     ["Template", s.template_id ?? undefined],
     ["Resources", resources(s)],
