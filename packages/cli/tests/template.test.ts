@@ -255,4 +255,18 @@ describe("template", () => {
     expect(r.stdout.match(/one/g)).toHaveLength(1)
     expect(r.stdout).toContain("two")
   })
+
+  test("wait --timeout 0 on a finished build reports it ready", async () => {
+    const r = await runCli(["template", "wait", TPL, "--timeout", "0"], {
+      fetch: (req) => {
+        const p = req.url.pathname
+        if (p === `/templates/${TPL}/builds`)
+          return json([{ id: BUILD, template_id: TPL, status: "ready" }])
+        if (p === `/templates/${TPL}/builds/${BUILD}`)
+          return json({ id: BUILD, template_id: TPL, status: "ready" })
+        if (p === `/templates/${TPL}`) return json(row("ready"))
+      },
+    })
+    expect(r.exitCode).toBe(0)
+  })
 })

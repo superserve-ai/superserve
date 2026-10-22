@@ -59,7 +59,7 @@ Run `superserve <command> --help` for options and examples.
 
 ## JSON output
 
-Add `--json` to any command for machine-readable output on stdout. Progress and errors go to stderr, so pipes only ever see data:
+Add `--json` to any command that returns data for machine-readable output on stdout. Commands that stream raw bytes or take over the terminal (`files cat`, `files download -`, `shell`, `completion`) ignore it. Progress and errors go to stderr, so pipes only ever see data:
 
 ```bash
 superserve sandbox list --json | jq -r '.[].id'

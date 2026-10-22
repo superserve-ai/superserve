@@ -354,15 +354,19 @@ async function waitForBuild(
     }
     const spin = logs ? undefined : spinner("Waiting for the build")
     try {
+      let polled = false
       for (;;) {
         if (interrupted.aborted) throw stoppedFollowing(ref, buildId)
-        // Ctrl-C and the deadline also cut a slow poll short.
-        const signal = Number.isFinite(deadline)
-          ? AbortSignal.any([
-              interrupted,
-              AbortSignal.timeout(Math.max(deadline - Date.now(), 0)),
-            ])
-          : interrupted
+        // Ctrl-C and the deadline also cut a slow poll short; the first poll
+        // always gets an answer, so --timeout 0 still reports a finished build.
+        const signal =
+          Number.isFinite(deadline) && polled
+            ? AbortSignal.any([
+                interrupted,
+                AbortSignal.timeout(Math.max(deadline - Date.now(), 0)),
+              ])
+            : interrupted
+        polled = true
         let build: BuildRow
         try {
           build = await apiRequest<BuildRow>(
