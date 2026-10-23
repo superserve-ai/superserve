@@ -1,5 +1,5 @@
 export const fixtureCookie = "starter_ui_scenario"
-export const scenarios = ["first", "active", "declined"] as const
+export const scenarios = ["first", "active", "declined", "rollback"] as const
 export type Scenario = (typeof scenarios)[number]
 
 export function isScenario(value: unknown): value is Scenario {

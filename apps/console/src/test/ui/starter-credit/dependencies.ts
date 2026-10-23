@@ -25,9 +25,14 @@ export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
 }
 
 export async function getPublicBillingPlansAction(): Promise<{
-  pricing_version: "v2"
+  pricing_version: "legacy" | "v2"
 }> {
-  return { pricing_version: "v2" }
+  return {
+    pricing_version:
+      new URLSearchParams(window.location.search).get("scenario") === "rollback"
+        ? "legacy"
+        : "v2",
+  }
 }
 
 function unsupported(): never {

@@ -41,7 +41,9 @@ const STATE_LABELS: Record<PrepaidPurchase["state"], string> = {
   failed: "Failed",
 }
 
-export function BuyCreditPageClient() {
+export function BuyCreditPageClient({
+  allowEntry = true,
+}: { allowEntry?: boolean } = {}) {
   const params = useSearchParams()
   const purchase = params.get("purchase")
   const { data, isLoading, error } = usePrepaidCredit()
@@ -52,7 +54,7 @@ export function BuyCreditPageClient() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Buy credit" />
+      <PageHeader title={allowEntry ? "Buy credit" : "Prepaid credit"} />
       <div className="flex flex-col gap-6 overflow-y-auto p-4">
         {purchase === "success" && (
           <p className="border border-dashed border-border p-3 text-sm text-foreground">
@@ -73,9 +75,17 @@ export function BuyCreditPageClient() {
         {data && (
           <>
             <BalanceCard data={data} />
-            <PurchaseCard canManage={canManage} />
+            {allowEntry ? (
+              <PurchaseCard canManage={canManage} />
+            ) : (
+              <p className="text-sm text-muted">
+                Credit purchases and auto-recharge changes are temporarily
+                unavailable. You can still turn auto-recharge off.
+              </p>
+            )}
             <AutoRechargeCard
               key={[
+                allowEntry,
                 data.auto_recharge.enabled,
                 data.auto_recharge.threshold_cents,
                 data.auto_recharge.amount_cents,
@@ -83,6 +93,7 @@ export function BuyCreditPageClient() {
               ].join(":")}
               data={data}
               canManage={canManage}
+              allowEntry={allowEntry}
             />
             <PurchaseHistory purchases={data.purchases} />
           </>
@@ -100,8 +111,8 @@ function BalanceCard({ data }: { data: PrepaidCreditSummary }) {
         {formatDollars(data.balance_cents)}
       </p>
       <p className="mt-1 text-sm text-muted">
-        Credit never expires and pays for usage at normal rates. Sandboxes pause
-        when it reaches $0.
+        Credit never expires and pays for usage at normal rates. Prepaid plans
+        pause sandboxes at $0.
       </p>
     </section>
   )
@@ -195,9 +206,11 @@ function PurchaseCard({ canManage }: { canManage: boolean }) {
 function AutoRechargeCard({
   data,
   canManage,
+  allowEntry,
 }: {
   data: PrepaidCreditSummary
   canManage: boolean
+  allowEntry: boolean
 }) {
   const { teamKey, cacheScope } = useBillingContext()
   const queryClient = useQueryClient()
@@ -221,7 +234,8 @@ function AutoRechargeCard({
       validPrepaidCents(amountCents))
 
   const save = async () => {
-    if (!teamKey || !valid || saving) return
+    if (!teamKey || !canManage || !valid || saving || (!allowEntry && enabled))
+      return
     setSaving(true)
     try {
       const updated = await setPrepaidAutoRecharge(teamKey, {
@@ -250,14 +264,14 @@ function AutoRechargeCard({
     }
   }
 
-  const canEnable = data.has_saved_card
+  const canEnable = allowEntry && data.has_saved_card
   return (
     <section className="flex flex-col gap-4 border border-dashed border-border p-4">
       <h2 className="font-mono text-xs text-muted uppercase">Auto-recharge</h2>
       {current.disabled_reason && !current.enabled && (
         <p className="border border-dashed border-destructive p-3 text-sm text-foreground">
-          Auto-recharge was turned off: {current.disabled_reason}. Check your
-          card, then turn it back on.
+          Auto-recharge was turned off: {current.disabled_reason}.
+          {allowEntry && " Check your card, then turn it back on."}
         </p>
       )}
       <Switch
@@ -266,7 +280,7 @@ function AutoRechargeCard({
         disabled={!canManage || (!enabled && !canEnable)}
         onCheckedChange={setEnabled}
       />
-      {!canEnable && (
+      {allowEntry && !canEnable && (
         <p className="text-sm text-muted">
           Buy credit once to save a card, then you can turn on auto-recharge.
         </p>
@@ -284,7 +298,7 @@ function AutoRechargeCard({
             <Input
               inputMode="decimal"
               value={threshold}
-              disabled={!canManage}
+              disabled={!canManage || !allowEntry}
               onChange={(e) => setThreshold(e.target.value)}
             />
           </Field>
@@ -299,7 +313,7 @@ function AutoRechargeCard({
             <Input
               inputMode="decimal"
               value={amount}
-              disabled={!canManage}
+              disabled={!canManage || !allowEntry}
               onChange={(e) => setAmount(e.target.value)}
             />
           </Field>
@@ -312,7 +326,7 @@ function AutoRechargeCard({
       <div>
         <Button
           variant="outline"
-          disabled={!canManage || !valid || saving}
+          disabled={!canManage || !valid || saving || (!allowEntry && enabled)}
           onClick={save}
         >
           {saving ? "Saving…" : "Save"}

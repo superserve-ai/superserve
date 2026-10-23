@@ -1,17 +1,32 @@
 import { render, screen } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { dollarsToCents, formatDollars, requestedAmount } from "./page-client"
 
 vi.mock("@/hooks/use-pricing-version", () => ({
   usePricingVersion: vi.fn(),
 }))
+const prepaid = vi.hoisted(() => ({
+  data: {
+    purchases: [] as { state: string }[],
+    auto_recharge: { enabled: false },
+    balance_cents: 5000,
+    has_saved_card: true,
+  },
+  isLoading: false,
+  error: null as Error | null,
+}))
+vi.mock("@/hooks/use-prepaid-credit", () => ({
+  usePrepaidCredit: () => prepaid,
+}))
 vi.mock("../page-client", () => ({
   PlanUsagePageClient: () => <p>plan and usage</p>,
 }))
 vi.mock("./page-client", async (original) => ({
   ...(await original<typeof import("./page-client")>()),
-  BuyCreditPageClient: () => <p>buy credit</p>,
+  BuyCreditPageClient: ({ allowEntry = true }: { allowEntry?: boolean }) => (
+    <p>{allowEntry ? "buy credit" : "read and disable credit"}</p>
+  ),
 }))
 
 import { usePricingVersion } from "@/hooks/use-pricing-version"
@@ -41,6 +56,31 @@ describe("buy credit amounts", () => {
 })
 
 describe("buy credit route", () => {
+  beforeEach(() => {
+    prepaid.data.purchases = []
+    prepaid.data.auto_recharge.enabled = false
+    prepaid.isLoading = false
+    prepaid.error = null
+  })
+
+  it.each(["legacy", null] as const)(
+    "keeps existing recharge exit available when pricing is %s",
+    (version) => {
+      vi.mocked(usePricingVersion).mockReturnValue(version)
+      prepaid.data.auto_recharge.enabled = true
+      render(<BuyCreditRoute />)
+      expect(screen.getByText("read and disable credit")).toBeTruthy()
+      expect(screen.queryByText("buy credit")).toBeNull()
+    },
+  )
+
+  it("keeps purchased credit readable after pricing switches off", () => {
+    vi.mocked(usePricingVersion).mockReturnValue("legacy")
+    prepaid.data.purchases = [{ state: "credited" }]
+    render(<BuyCreditRoute />)
+    expect(screen.getByText("read and disable credit")).toBeTruthy()
+  })
+
   it("shows an error when pricing cannot be loaded", () => {
     vi.mocked(usePricingVersion).mockReturnValue(null)
     render(<BuyCreditRoute />)

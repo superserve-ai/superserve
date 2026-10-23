@@ -87,3 +87,42 @@ describe("auto-recharge refresh", () => {
     )
   })
 })
+
+describe("auto-recharge rollback", () => {
+  it("permits disabling while closing all new commitments", async () => {
+    mocks.save.mockReset()
+    mocks.data = initial
+    const client = new QueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <BuyCreditPageClient allowEntry={false} />
+      </QueryClientProvider>,
+    )
+    expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
+    for (const input of screen.getAllByRole("textbox"))
+      expect(input.hasAttribute("disabled")).toBe(true)
+    expect(
+      screen.getByRole("button", { name: "Save" }).hasAttribute("disabled"),
+    ).toBe(true)
+    mocks.save.mockResolvedValue({
+      ...initial,
+      auto_recharge: { ...initial.auto_recharge, enabled: false },
+    })
+    fireEvent.click(screen.getByRole("switch"))
+    expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe(
+      "false",
+    )
+    fireEvent.click(screen.getByRole("switch"))
+    expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe(
+      "false",
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+    await waitFor(() =>
+      expect(mocks.save).toHaveBeenCalledWith("us:team", {
+        enabled: false,
+        thresholdCents: 1000,
+        amountCents: 2500,
+      }),
+    )
+  })
+})
