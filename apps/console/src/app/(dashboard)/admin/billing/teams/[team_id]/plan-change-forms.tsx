@@ -53,15 +53,17 @@ function PlanChangePreviewNotice({
           message="The effective date could not be checked."
           detail={result.detail}
         />
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="mt-2"
-          onClick={onRetry}
-        >
-          Check again
-        </Button>
+        {result.kind === "unavailable" ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="mt-2"
+            onClick={onRetry}
+          >
+            Check again
+          </Button>
+        ) : null}
       </Alert>
     )
   if ("blocked" in result.preview)
@@ -119,19 +121,19 @@ export function SchedulePlanChangeForm({
   const [preview, setPreview] = React.useState<
     PlanChangePreviewResult | "loading" | null
   >(null)
-  const latest = React.useRef("")
+  const latest = React.useRef(0)
 
   async function choose(offer: string) {
     setTarget(offer)
     setKey(crypto.randomUUID())
-    latest.current = offer
+    const request = ++latest.current
     setPreview("loading")
     const next: PlanChangePreviewResult = await previewPlanChangeAction({
       region,
       teamId,
       targetOffer: offer,
     }).catch(() => ({ kind: "unavailable" as const }))
-    if (latest.current === offer) setPreview(next)
+    if (latest.current === request) setPreview(next)
   }
 
   const ready =

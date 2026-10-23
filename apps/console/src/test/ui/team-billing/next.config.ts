@@ -7,6 +7,12 @@ const config: NextConfig = {
   transpilePackages: ["@superserve/ui"],
   webpack(config) {
     config.resolve.alias["@"] = resolve(__dirname, "../../..")
+    config.resolve.alias[
+      resolve(
+        __dirname,
+        "../../../app/(dashboard)/admin/billing/teams/[team_id]/actions.ts",
+      )
+    ] = resolve(__dirname, "actions.ts")
     return config
   },
 }
