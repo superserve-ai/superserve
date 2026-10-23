@@ -14,15 +14,18 @@ import {
 import type { SignupPlanContext } from "@/lib/api/signup-plan"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { initialPlanSelection } from "@/lib/auth/plan-preselection"
+import type { PublicBillingPlans } from "@/lib/billing/plans"
 
 import { PlanSelectionView, type PlanCadence } from "./plan-selection-view"
 
 export function PlanSelection({
   initial,
   billingReturn,
+  plans,
 }: {
   initial: SignupPlanContext
   billingReturn?: string
+  plans?: PublicBillingPlans | null
 }) {
   const defaults = initialPlanSelection(initial.requestedOffer)
   const [context, setContext] = useState(initial)
@@ -249,6 +252,7 @@ export function PlanSelection({
       cadence={cadence}
       busy={busy}
       error={error}
+      plans={plans}
       onCadence={(value) => {
         setCadence(value)
         setSelection("pro")

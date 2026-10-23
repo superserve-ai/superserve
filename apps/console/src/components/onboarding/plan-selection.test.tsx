@@ -9,6 +9,7 @@ import {
 } from "@/lib/api/plan-checkout"
 import type { SignupPlanContext } from "@/lib/api/signup-plan"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
+import { publicBillingPlansFixture } from "@/lib/billing/plans.fixture"
 
 import { PlanSelection } from "./plan-selection"
 
@@ -49,7 +50,12 @@ beforeEach(() => {
 
 describe("onboarding plan flow", () => {
   it("returns YC teams to their claim without offering conflicting purchases", async () => {
-    render(<PlanSelection initial={{ ...selecting, state: "yc_claim" }} />)
+    render(
+      <PlanSelection
+        plans={publicBillingPlansFixture}
+        initial={{ ...selecting, state: "yc_claim" }}
+      />,
+    )
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/yc/claim/"))
     expect(
       screen.queryByRole("button", { name: "Continue with Free" }),
@@ -64,7 +70,9 @@ describe("onboarding plan flow", () => {
         resolve = r
       }),
     )
-    render(<PlanSelection initial={selecting} />)
+    render(
+      <PlanSelection plans={publicBillingPlansFixture} initial={selecting} />,
+    )
     fireEvent.click(screen.getByRole("button", { name: "Continue with Free" }))
     fireEvent.click(await screen.findByRole("button", { name: "Skip for now" }))
     expect(assign).not.toHaveBeenCalled()
@@ -83,6 +91,7 @@ describe("onboarding plan flow", () => {
     )
     render(
       <PlanSelection
+        plans={publicBillingPlansFixture}
         initial={{ ...selecting, requestedOffer: "pro_annual" }}
       />,
     )
@@ -104,7 +113,13 @@ describe("onboarding plan flow", () => {
 
   it("does not trust a Stripe success parameter while payment remains pending", async () => {
     vi.mocked(getSignupPlanAction).mockResolvedValue(pending)
-    render(<PlanSelection initial={pending} billingReturn="success" />)
+    render(
+      <PlanSelection
+        plans={publicBillingPlansFixture}
+        initial={pending}
+        billingReturn="success"
+      />,
+    )
     await waitFor(() =>
       expect(recoverProPayment).toHaveBeenCalledWith("use:team", false),
     )
@@ -119,7 +134,13 @@ describe("onboarding plan flow", () => {
 
   it("asks the backend to close the old attempt before unlocking plans", async () => {
     vi.mocked(getSignupPlanAction).mockResolvedValue(pending)
-    render(<PlanSelection initial={pending} billingReturn="cancel" />)
+    render(
+      <PlanSelection
+        plans={publicBillingPlansFixture}
+        initial={pending}
+        billingReturn="cancel"
+      />,
+    )
     const cancel = screen.getByRole("button", {
       name: "Cancel checkout and change plan",
     })
@@ -146,7 +167,9 @@ describe("onboarding plan flow", () => {
       ...pending,
       state: "committed",
     })
-    render(<PlanSelection initial={selecting} />)
+    render(
+      <PlanSelection plans={publicBillingPlansFixture} initial={selecting} />,
+    )
     fireEvent.click(screen.getByRole("button", { name: "Continue with Free" }))
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/sandboxes"))
     expect(commitFreePlan).not.toHaveBeenCalled()
@@ -157,7 +180,10 @@ describe("onboarding plan flow", () => {
 
   it("keeps YC on the optional Free billing path", async () => {
     render(
-      <PlanSelection initial={{ ...selecting, requestedOffer: "yc_2026" }} />,
+      <PlanSelection
+        plans={publicBillingPlansFixture}
+        initial={{ ...selecting, requestedOffer: "yc_2026" }}
+      />,
     )
     fireEvent.click(screen.getByRole("button", { name: "Continue with Free" }))
     expect(
@@ -173,7 +199,9 @@ describe("onboarding plan flow", () => {
       close: vi.fn(),
     }
     vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window)
-    render(<PlanSelection initial={selecting} />)
+    render(
+      <PlanSelection plans={publicBillingPlansFixture} initial={selecting} />,
+    )
     fireEvent.click(screen.getByRole("button", { name: /Contact sales/ }))
     await waitFor(() =>
       expect(tab.location.href).toBe("https://www.superserve.ai/meet/"),
@@ -185,7 +213,9 @@ describe("onboarding plan flow", () => {
 
   it("completes Enterprise onboarding with a scheduling fallback when popups are blocked", async () => {
     vi.spyOn(window, "open").mockReturnValue(null)
-    render(<PlanSelection initial={selecting} />)
+    render(
+      <PlanSelection plans={publicBillingPlansFixture} initial={selecting} />,
+    )
     fireEvent.click(screen.getByRole("button", { name: /Contact sales/ }))
     await waitFor(() =>
       expect(assign).toHaveBeenCalledWith("/sandboxes?contact_sales=1"),
@@ -198,7 +228,9 @@ describe("onboarding plan flow", () => {
       id: "session",
       url: "https://checkout.stripe.com/c/pay/test",
     })
-    render(<PlanSelection initial={selecting} />)
+    render(
+      <PlanSelection plans={publicBillingPlansFixture} initial={selecting} />,
+    )
     fireEvent.click(screen.getByRole("button", { name: "Continue with Free" }))
     fireEvent.click(
       await screen.findByRole("button", { name: "Add payment method" }),
@@ -223,7 +255,9 @@ describe("onboarding plan flow", () => {
     vi.mocked(getSignupPlanAction)
       .mockResolvedValueOnce(selecting)
       .mockRejectedValue(new Error("Unavailable"))
-    render(<PlanSelection initial={selecting} />)
+    render(
+      <PlanSelection plans={publicBillingPlansFixture} initial={selecting} />,
+    )
     fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
     expect(
       await screen.findByRole("heading", {
@@ -240,7 +274,9 @@ it("rechecks checkout after browser Back restores the previous page", async () =
   vi.mocked(startProCheckout).mockResolvedValue(
     "https://checkout.stripe.com/c/pay/test",
   )
-  render(<PlanSelection initial={selecting} />)
+  render(
+    <PlanSelection plans={publicBillingPlansFixture} initial={selecting} />,
+  )
   fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
   await waitFor(() => expect(assign).toHaveBeenCalled())
   expect(

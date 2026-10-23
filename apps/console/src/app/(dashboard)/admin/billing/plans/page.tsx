@@ -1,13 +1,35 @@
-import { TagIcon } from "@phosphor-icons/react/dist/ssr"
+import { notFound } from "next/navigation"
 
-import { EmptyState } from "@/components/empty-state"
+import { getBillingCatalogsAction } from "@/lib/admin/billing-catalog-actions"
+import { getImpersonationContext } from "@/lib/admin/impersonation"
+import {
+  canReadAdminBilling,
+  canWriteAdminBilling,
+} from "@/lib/admin/permissions"
+import { DEFAULT_REGION } from "@/lib/cells"
+import { createServerClient } from "@/lib/supabase/server"
 
-export default function AdminBillingPlansPage() {
+import { PlansCatalog } from "./plans-catalog"
+
+export default async function AdminBillingPlansPage() {
+  const supabase = await createServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!canReadAdminBilling(user)) notFound()
+  if (await getImpersonationContext(user))
+    return (
+      <p className="p-4 text-sm text-muted">
+        Stop impersonating the team to manage the plan catalog.
+      </p>
+    )
+
+  const catalogs = await getBillingCatalogsAction()
   return (
-    <EmptyState
-      icon={TagIcon}
-      title="Plans & pricing"
-      description="The plan catalog will appear here."
+    <PlansCatalog
+      catalogs={catalogs}
+      canWrite={canWriteAdminBilling(user)}
+      previewRegion={DEFAULT_REGION}
     />
   )
 }

@@ -15,6 +15,9 @@ vi.mock("@/lib/api/signup-plan-actions", () => ({
   getSignupPlanAction: vi.fn(),
 }))
 vi.mock("@/lib/api/teams-actions", () => ({ setActiveTeamAction: vi.fn() }))
+vi.mock("@/lib/billing/plans-actions", () => ({
+  getPublicBillingPlansAction: vi.fn().mockRejectedValue(new Error("offline")),
+}))
 vi.mock("./plan-selection", () => ({
   PlanSelection: () => <p>Plan choices</p>,
 }))
