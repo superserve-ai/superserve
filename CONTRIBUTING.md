@@ -71,6 +71,13 @@ For a single package:
 bunx turbo run dev --filter=@superserve/console
 ```
 
+For the CLI (the npm package is the `dist/index.js` bundle, run by Node):
+
+```bash
+bun packages/cli/src/index.ts --help                   # run from source
+bunx turbo run build --filter=@superserve/cli && node packages/cli/dist/index.js --help
+```
+
 For the Python SDK:
 
 ```bash
@@ -85,7 +92,7 @@ uv run mypy packages/python-sdk/src/superserve
 Always add dependencies from the repo root using `--filter`:
 
 ```bash
-bun add zod --filter @superserve/cli
+bun add -d zod --filter @superserve/cli   # the CLI bundles its deps: add them as devDependencies
 bun add react --filter @superserve/console
 bun add -d @types/node --filter @superserve/sdk
 ```

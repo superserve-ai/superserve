@@ -30,9 +30,9 @@ bunx turbo run build --filter=@superserve/sdk       # target a package
 bun run docs:dev                                    # Mintlify preview
 ```
 
-**Adding deps:** `bun add zod --filter @superserve/cli` — never `cd` into a package then `bun add`, it creates a conflicting lockfile.
+**Adding deps:** `bun add zod --filter @superserve/console` — never `cd` into a package then `bun add`, it creates a conflicting lockfile. The CLI bundles everything into `dist/index.js`, so its deps go in devDependencies (`bun add -d`).
 
-**CLI locally:** `bun packages/cli/src/index.ts deploy --help`
+**CLI locally:** `bun packages/cli/src/index.ts sandbox --help` · bundle: `bunx turbo run build --filter=@superserve/cli && node packages/cli/dist/index.js --help` · release: push a `cli-vX.Y.Z` tag
 
 **Python SDK:** `uv run pytest packages/python-sdk/tests/` · `uv run ruff check --fix packages/python-sdk tests/sdk-e2e-py` · `uv run ruff format packages/python-sdk tests/sdk-e2e-py` · `uv run mypy packages/python-sdk/src/superserve/`
 
@@ -43,10 +43,12 @@ Don't run `bunx oxfmt --write` from the repo root with no path argument: `docs/`
 ## Releasing SDKs
 
 Keep TS and Python version numbers in sync:
+
 - TS: `packages/sdk/package.json` → `version`
 - Python: `packages/python-sdk/pyproject.toml` → `version` AND `packages/python-sdk/src/superserve/__init__.py` → `__version__`
 
 Prefer the **Release SDKs** GitHub Actions workflow (`workflow_dispatch`). For manual publish:
+
 - TS: `bunx turbo run build --filter=@superserve/sdk && cd packages/sdk && bun publish --access public`
 - Python: run `uv build --package superserve && uv publish dist/superserve-*` from repo root (uv workspaces put artifacts there)
 

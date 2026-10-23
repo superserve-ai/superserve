@@ -1,0 +1,121 @@
+---
+title: "CLI"
+sidebarTitle: CLI
+description: Create sandboxes, run commands, move files and publish ports from your terminal.
+---
+
+The `superserve` CLI covers the same surface as the SDK: sandboxes, commands, files, preview URLs, snapshots, templates and secrets.
+
+## Install
+
+<CodeGroup>
+```bash npm
+npm install -g @superserve/cli
+```
+
+```bash curl
+curl -fsSL https://superserve.ai/install | sh
+```
+
+```bash Homebrew
+brew install superserve-ai/tap/superserve
+```
+</CodeGroup>
+
+The npm package needs Node.js 22.4 or later. The install script downloads a standalone binary for macOS or Linux into `~/.superserve/bin`.
+
+## Authenticate
+
+Create an API key in the [Superserve Console](https://console.superserve.ai?utm_source=docs&utm_medium=link) (see [Get an API key](/api-key)), then save it:
+
+```bash
+superserve login
+superserve whoami
+```
+
+`login` reads the key from a hidden prompt, or from stdin when piped, and saves it to `~/.superserve/credentials.json`. In CI, set `SUPERSERVE_API_KEY` instead; it takes precedence over the saved key.
+
+## Quickstart
+
+```bash
+superserve sandbox create --name demo --template superserve/python-3.11
+superserve exec demo -- python3 -c "print('hello')"
+superserve cp ./app demo:/home/user/app
+superserve exec demo "cd /home/user/app && nohup python3 -m http.server 3000 >/dev/null 2>&1 &"
+superserve preview publish demo 3000 --open
+superserve shell demo
+superserve sandbox pause demo
+superserve sandbox delete demo
+```
+
+Commands that take a sandbox accept its ID or its exact name.
+
+## Commands
+
+| Command | Subcommands |
+| --- | --- |
+| `sandbox` | `create`, `list`, `get`, `update`, `pause`, `resume`, `delete`, `network-log` |
+| `exec` | Run a command in a sandbox; exits with the command's exit code |
+| `shell` | Open an interactive shell in a sandbox |
+| `files` | `ls`, `cat`, `write`, `upload`, `download` |
+| `cp` | Copy files between your machine and a sandbox (`<sandbox>:<path>`) |
+| `preview` | `list`, `publish`, `unpublish`, `url`, `token`, `rotate` |
+| `snapshot` | `create`, `list`, `get`, `rename`, `delete`, `wait` |
+| `template` | `create`, `list`, `get`, `delete`, `rebuild`, `builds`, `build`, `cancel`, `logs`, `wait` |
+| `secret` | `create`, `list`, `get`, `rotate`, `delete`, `audit`, `sandboxes`, `attach`, `detach` |
+| `provider` | `list` |
+| `login`, `logout`, `whoami` | Manage the saved API key |
+| `completion` | Print a `bash`, `zsh`, `fish` or `powershell` completion script |
+
+Run `superserve <command> --help` for every option, with examples.
+
+## Scripting
+
+Add `--json` to any command that returns data for machine-readable output on stdout. Commands that stream raw bytes or take over the terminal (`files cat`, `files download -`, `shell`, `completion`) ignore it. Progress and errors go to stderr, so pipes only ever see data.
+
+```bash
+superserve sandbox list --status active --json | jq -r '.[].id'
+```
+
+With `--json`, errors are printed to stderr as `{"error": {"message", "code", "status"}}`. Destructive commands ask for confirmation in a terminal and refuse to run non-interactively unless you pass `--yes`.
+
+### Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Success |
+| `1` | Error |
+| `2` | Invalid usage or arguments |
+| `3` | Not logged in, or the API key was rejected |
+| `4` | Not found |
+| `5` | Conflict (for example, the sandbox is still pausing) |
+| `6` | Rate limited |
+| `7` | Timed out |
+| `130` | Interrupted |
+
+`superserve exec` exits with the remote command's own exit code.
+
+## Shell completion
+
+```bash
+echo 'eval "$(superserve completion bash)"' >> ~/.bashrc
+echo 'eval "$(superserve completion zsh)"' >> ~/.zshrc
+superserve completion fish > ~/.config/fish/completions/superserve.fish
+```
+
+For PowerShell, add `superserve completion powershell | Out-String | Invoke-Expression` to your `$PROFILE`.
+
+## Environment variables
+
+| Variable | Purpose |
+| --- | --- |
+| `SUPERSERVE_API_KEY` | API key; overrides the saved key |
+| `SUPERSERVE_BASE_URL` | Control-plane URL override |
+| `SUPERSERVE_CONFIG_DIR` | Where credentials are stored (default `~/.superserve`) |
+| `SUPERSERVE_TELEMETRY` | Set to `0` to disable usage telemetry |
+| `DO_NOT_TRACK` | Set to `1` to disable usage telemetry |
+| `SUPERSERVE_DEBUG` | Set to `1` to print stack traces on errors |
+
+## Telemetry
+
+The CLI sends one anonymous event per command: the command name (for example `sandbox create`), its exit code and duration, the CLI version, OS, CPU architecture, runtime and whether it ran in CI, keyed by a random ID stored in the config directory. It never sends arguments, sandbox IDs, file paths, output or your API key. Disable it with `SUPERSERVE_TELEMETRY=0` or `DO_NOT_TRACK=1`.

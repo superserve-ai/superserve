@@ -1,5 +1,5 @@
 class Superserve < Formula
-  desc "CLI for deploying AI agents to sandboxed cloud containers"
+  desc "CLI for Superserve sandboxes"
   homepage "https://superserve.ai"
   version "__VERSION__"
   license "MIT"
@@ -29,6 +29,6 @@ class Superserve < Formula
   end
 
   test do
-    assert_match "superserve", shell_output("#{bin}/superserve --help")
+    assert_match version.to_s, shell_output("#{bin}/superserve --version")
   end
 end

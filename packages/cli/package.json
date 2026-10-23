@@ -1,14 +1,13 @@
 {
   "name": "@superserve/cli",
-  "version": "1.1.0",
-  "description": "CLI for deploying AI agents to sandboxed cloud containers",
+  "version": "2.0.0",
+  "description": "Command-line interface for Superserve sandboxes",
   "keywords": [
-    "agents",
-    "ai",
     "cli",
-    "cloud",
-    "deploy",
-    "sandbox"
+    "firecracker",
+    "microvm",
+    "sandbox",
+    "superserve"
   ],
   "homepage": "https://superserve.ai?utm_source=npm&utm_medium=package_meta",
   "bugs": {
@@ -18,38 +17,35 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/superserve-ai/superserve.git",
-    "directory": "cli"
+    "directory": "packages/cli"
   },
   "bin": {
-    "superserve": "src/index.ts"
+    "superserve": "dist/index.js"
   },
   "files": [
-    "src/"
+    "dist/index.js"
   ],
   "type": "module",
   "scripts": {
-    "dev": "echo 'CLI has no dev server use directly with bun src/index.ts'",
+    "dev": "bun src/index.ts",
     "build": "bun run scripts/build.ts",
+    "build:binaries": "bun run scripts/build.ts --binaries",
+    "typecheck": "tsc --noEmit",
     "lint": "bunx oxlint",
     "lint:fix": "bunx oxlint --fix",
     "format": "bunx oxfmt --write",
     "format:check": "bunx oxfmt --check",
     "test": "bun test"
   },
-  "dependencies": {
-    "@superserve/sdk": "workspace:*",
-    "boxen": "^8.0.1",
-    "cli-table3": "^0.6.5",
-    "commander": "^14.0.3",
-    "js-yaml": "^4.1.0",
-    "picocolors": "^1.1.1",
-    "posthog-node": "^5.25.0",
-    "tar-stream": "^3.1.7",
-    "terminal-link": "^5.0.0"
-  },
   "devDependencies": {
+    "@superserve/sdk": "workspace:*",
     "@superserve/typescript-config": "workspace:*",
     "@types/bun": "^1.2.4",
-    "@types/js-yaml": "^4.0.9"
+    "commander": "^14.0.3",
+    "picocolors": "^1.1.1",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=22.4"
   }
 }

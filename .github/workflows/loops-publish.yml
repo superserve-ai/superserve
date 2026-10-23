@@ -1,8 +1,8 @@
 name: Publish Loops
 
 # Tag-triggered. Use tags like `loops-v0.1.0` so this does NOT collide with the
-# CLI/SDK release flows that listen on `v*` (cli-publish.yml, release.yml) — same
-# convention as mcp-publish.yml (`mcp-v*`).
+# other release flows — same convention as mcp-publish.yml (`mcp-v*`) and
+# cli-publish.yml (`cli-v*`).
 #
 # PREREQUISITES:
 #   - @superserve/sdk on npm: the loop runtime is vendored as raw .ts that imports

@@ -70,7 +70,7 @@
         "groups": [
           {
             "group": "Get Started",
-            "pages": ["introduction", "quickstart", "api-key"]
+            "pages": ["introduction", "quickstart", "api-key", "cli"]
           },
           {
             "group": "Sandbox",

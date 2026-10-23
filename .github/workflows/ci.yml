@@ -54,3 +54,14 @@ jobs:
 
       - name: Build
         run: bun run build
+
+      # The npm package is dist/index.js run by node (>= 22.4), not bun.
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Smoke-test the CLI bundle
+        env:
+          SUPERSERVE_TELEMETRY: "0"
+        run: node packages/cli/dist/index.js --help
