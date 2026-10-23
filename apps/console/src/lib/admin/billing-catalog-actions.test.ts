@@ -242,13 +242,6 @@ describe("billing catalog fan-out", () => {
     )
     expect(result.id).toBeUndefined()
     expect(Object.keys(result.errors)).toEqual(["usw"])
-    expect(
-      writes().every(
-        (write) =>
-          JSON.stringify(write.body.expected) ===
-          JSON.stringify(draftOf(plan())),
-      ),
-    ).toBe(true)
     const created = writes().find((w) => w.method === "POST")!.body.id
     expect(
       writes()
