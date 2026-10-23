@@ -33,6 +33,7 @@ export const planComputeSchema = z.object({
 export const planAllowanceSchema = z
   .object({
     amount_cents: z.number().int().nonnegative(),
+    amount_usd: z.string().optional(),
     period: z.enum(["day_window", "month"]),
     on_exhausted: z.enum(["pause", "payg"]),
     compute: planComputeSchema.optional(),
