@@ -1,5 +1,5 @@
 import "server-only"
-import type { z } from "zod"
+import { z } from "zod"
 
 import { getImpersonationTeamId } from "@/lib/admin/impersonation"
 import {
@@ -22,10 +22,33 @@ export type AdminBillingErrorKind =
   | "unavailable"
 
 export class AdminBillingRequestError extends Error {
-  constructor(public readonly kind: AdminBillingErrorKind) {
+  constructor(
+    public readonly kind: AdminBillingErrorKind,
+    public readonly detail?: string,
+  ) {
     super(kind)
     this.name = "AdminBillingRequestError"
   }
+}
+
+const MAX_DETAIL_LENGTH = 300
+
+const backendErrorSchema = z.object({
+  error: z.object({ message: z.string() }),
+})
+
+async function errorDetail(response: Response): Promise<string | undefined> {
+  const parsed = backendErrorSchema.safeParse(
+    await response.json().catch(() => null),
+  )
+  if (!parsed.success) return undefined
+  const detail = parsed.data.error.message
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .trim()
+  if (!detail) return undefined
+  return detail.length > MAX_DETAIL_LENGTH
+    ? `${detail.slice(0, MAX_DETAIL_LENGTH - 1)}…`
+    : detail
 }
 
 type Access = "read" | "write"
@@ -126,8 +149,15 @@ export async function adminBillingRequest<T>({
   } catch {
     throw new AdminBillingRequestError("unavailable")
   }
-  if (!response.ok)
-    throw new AdminBillingRequestError(errorKind(response.status))
+  if (!response.ok) {
+    const kind = errorKind(response.status)
+    throw new AdminBillingRequestError(
+      kind,
+      kind === "conflict" || kind === "invalid"
+        ? await errorDetail(response)
+        : undefined,
+    )
+  }
   const parsed = schema.safeParse(await response.json().catch(() => null))
   if (!parsed.success) throw new AdminBillingRequestError("unavailable")
   return parsed.data
