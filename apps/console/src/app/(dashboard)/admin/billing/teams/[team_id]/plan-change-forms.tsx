@@ -249,7 +249,7 @@ export function UndoPlanChangeForm({
           id="plan-change-undo"
           value={reason}
           maxLength={2000}
-          disabled={write.pending || write.result?.kind === "saved"}
+          disabled={write.locked || write.result?.kind === "saved"}
           onChange={(e) => setReason(e.target.value)}
         />
       </Field>

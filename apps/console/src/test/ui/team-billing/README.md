@@ -12,8 +12,8 @@ undoable move to Free, plan history and staff credit (one pending, one issued).
 Append `?state=starter` for a Starter team with the plan change and custom plan
 forms, or `?state=legacy` for a team while pricing v2 is off (no plan assigned,
 no plan writes). Add `&switch=off` to an assigned state to check that its plan
-remains effective and downgrade/undo stay available while new assignment is
-hidden. Data is local. The fixture swaps in `actions.ts`: assigning a
+remains effective, downgrade/undo stay available, and existing assignments can
+be replaced while new entry stays blocked. Data is local. The fixture swaps in `actions.ts`: assigning a
 plan reports the backend's switch-off refusal, and every other write reports
 billing as unavailable.
 

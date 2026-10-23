@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest"
 
 import {
@@ -123,8 +123,16 @@ it("warns that a move to Free pauses running compute", () => {
   ).toBeTruthy()
 })
 
-it("undoes the pending change with a reason", async () => {
-  vi.mocked(undoPlanChangeAction).mockResolvedValue({ kind: "saved" })
+it("preserves the undo reason through a pending request and lost response", async () => {
+  let loseResponse!: (reason: Error) => void
+  vi.mocked(undoPlanChangeAction)
+    .mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          loseResponse = reject
+        }),
+    )
+    .mockResolvedValueOnce({ kind: "saved" })
   render(
     <UndoPlanChangeForm
       region="use"
@@ -134,7 +142,15 @@ it("undoes the pending change with a reason", async () => {
   )
   choose(/Undo reason/, "Customer changed their mind")
   fireEvent.click(screen.getByRole("button", { name: "Undo change" }))
+  expect(screen.getByLabelText(/Undo reason/)).toBeDisabled()
+  await act(async () => loseResponse(new Error("lost response")))
+  await screen.findByRole("button", { name: "Retry undo" })
+  expect(screen.getByLabelText(/Undo reason/)).toBeDisabled()
+  fireEvent.click(screen.getByRole("button", { name: "Retry undo" }))
   await screen.findByText("Plan change undone.")
+  expect(vi.mocked(undoPlanChangeAction).mock.calls[1]).toEqual(
+    vi.mocked(undoPlanChangeAction).mock.calls[0],
+  )
   expect(undoPlanChangeAction).toHaveBeenCalledWith({
     region: "use",
     teamId: team,

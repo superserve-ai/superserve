@@ -5,11 +5,9 @@ import { revalidatePath } from "next/cache"
 import {
   AdminBillingRequestError,
   type AdminBillingErrorKind,
-  requireAdminBilling,
 } from "@/lib/admin/billing-api"
 import {
   assignTeamPlan,
-  getPlanCatalog,
   grantStaffCredit,
   isUuid,
   PLAN_CHANGE_TARGETS,
@@ -51,15 +49,6 @@ async function run(
   }
   revalidatePath(`/admin/billing/teams/${teamId}`)
   return { kind: "saved" }
-}
-
-async function requirePricingV2(region: string) {
-  await requireAdminBilling("write")
-  if (!(await getPlanCatalog(region)).pricingV2)
-    throw new AdminBillingRequestError(
-      "conflict",
-      "pricing v2 is off in this region",
-    )
 }
 
 function validWrite(input: {
@@ -143,7 +132,6 @@ export async function assignTeamPlanAction(input: {
   )
     return { kind: "invalid" }
   return run(input.teamId, async () => {
-    await requirePricingV2(input.region)
     await assignTeamPlan(input.region, input.teamId, {
       idempotencyKey: input.idempotencyKey,
       versionId: input.versionId,

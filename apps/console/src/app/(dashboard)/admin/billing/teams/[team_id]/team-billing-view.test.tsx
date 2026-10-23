@@ -93,7 +93,7 @@ it("keeps an existing assignment and undo available after switch-off", () => {
   })
   expect(screen.getByText(/Existing plans remain in effect/)).toBeTruthy()
   expect(screen.getByLabelText(/Undo reason/)).toBeTruthy()
-  expect(screen.queryByRole("button", { name: "Assign plan" })).toBeNull()
+  expect(screen.getByRole("button", { name: "Assign plan" })).toBeTruthy()
 })
 
 it.each([true, false])(
@@ -105,9 +105,7 @@ it.each([true, false])(
       .map((o) => o.textContent)
       .slice(1)
     expect(options).toEqual(["Starter", "Free"])
-    expect(Boolean(screen.queryByRole("button", { name: "Assign plan" }))).toBe(
-      pricingV2,
-    )
+    expect(screen.getByRole("button", { name: "Assign plan" })).toBeTruthy()
   },
 )
 

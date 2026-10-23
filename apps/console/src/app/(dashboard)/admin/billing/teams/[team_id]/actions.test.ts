@@ -55,13 +55,19 @@ beforeEach(() => {
   })
 })
 
-it("allows downgrades and undo but refuses new assignments while pricing v2 is off", async () => {
+it("allows exits and undo while delegating assignment eligibility to the backend", async () => {
   vi.mocked(getPlanCatalog).mockResolvedValue({
     pricingV2: false,
     assignablePlans: [],
     freeLimits: null,
   })
-  const off = { kind: "conflict", detail: "pricing v2 is off in this region" }
+  const off = {
+    kind: "conflict",
+    detail: "plan assignment is not available yet",
+  }
+  vi.mocked(assignTeamPlan).mockRejectedValueOnce(
+    new AdminBillingRequestError("conflict", off.detail),
+  )
   vi.mocked(requestPlanChange).mockResolvedValue({
     effective_at: "2026-12-05T14:20:00Z",
   } as never)
@@ -88,7 +94,17 @@ it("allows downgrades and undo but refuses new assignments while pricing v2 is o
   ).toEqual(off)
   expect(requestPlanChange).toHaveBeenCalled()
   expect(undoPlanChange).toHaveBeenCalled()
-  expect(assignTeamPlan).not.toHaveBeenCalled()
+  expect(assignTeamPlan).toHaveBeenCalled()
+  vi.mocked(assignTeamPlan).mockResolvedValueOnce({} as never)
+  expect(
+    await assignTeamPlanAction({
+      region: "use",
+      teamId: team,
+      idempotencyKey: "existing-team",
+      versionId: "44444444-4444-4444-8444-444444444444",
+      reason: "existing commitment",
+    }),
+  ).toEqual({ kind: "saved" })
 })
 
 it("rejects malformed targets before calling the backend", async () => {
