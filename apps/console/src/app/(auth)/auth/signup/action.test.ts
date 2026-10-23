@@ -80,8 +80,8 @@ vi.mock("@/lib/auth/signup-restrictions", () => ({
   evaluateSignupRestriction: (...args: unknown[]) =>
     mockEvaluateSignupRestriction(...args),
 }))
-vi.mock("@/lib/cells", () => ({
-  DEFAULT_REGION: "use",
+vi.mock("@/lib/cells", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/cells")>()),
   cellFor: () => ({ apiBaseUrl: "https://backend.example.test" }),
 }))
 vi.mock("@/lib/fingerprint/observe", () => ({

@@ -2,6 +2,7 @@ import type { User } from "@supabase/supabase-js"
 import { describe, expect, it } from "vitest"
 
 import {
+  canReadAdminBilling,
   canReadPlatformActivity,
   canReadPlatformBilling,
   canReadPlatformSandboxes,
@@ -9,6 +10,7 @@ import {
   canReadPlatformTeams,
   canStartPlatformImpersonation,
   canViewOtherUsersAccount,
+  canWriteAdminBilling,
   platformImpersonationReadScopes,
 } from "./permissions"
 import { isStaff } from "./staff"
@@ -371,6 +373,55 @@ describe("platform impersonation access", () => {
     expect(
       canStartPlatformImpersonation(
         user("a@superserve.ai", "google", ["google"], ["platform:teams:read"]),
+      ),
+    ).toBe(false)
+  })
+})
+
+describe("admin billing access", () => {
+  const read = "platform:billing:read"
+  const write = "platform:billing:write"
+
+  it("requires both staff identity and billing read", () => {
+    expect(
+      canReadAdminBilling(
+        user("a@superserve.ai", "google", ["google"], [read]),
+      ),
+    ).toBe(true)
+    expect(canReadAdminBilling(user("a@superserve.ai"))).toBe(false)
+    expect(
+      canReadAdminBilling(user("a@example.com", "google", ["google"], [read])),
+    ).toBe(false)
+    expect(
+      canReadAdminBilling(user("a@superserve.ai", "email", ["email"], [read])),
+    ).toBe(false)
+  })
+
+  it("requires billing read alongside billing write", () => {
+    expect(
+      canWriteAdminBilling(
+        user("a@superserve.ai", "google", ["google"], [read, write]),
+      ),
+    ).toBe(true)
+    expect(
+      canWriteAdminBilling(
+        user("a@superserve.ai", "google", ["google"], [write]),
+      ),
+    ).toBe(false)
+    expect(
+      canWriteAdminBilling(
+        user("a@superserve.ai", "google", ["google"], [read]),
+      ),
+    ).toBe(false)
+  })
+
+  it("ignores user-editable metadata", () => {
+    expect(
+      canReadAdminBilling(
+        userWithMetadata({
+          email: "a@superserve.ai",
+          userPermissions: [read],
+        }),
       ),
     ).toBe(false)
   })

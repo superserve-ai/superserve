@@ -7,7 +7,8 @@ const { mockTrackEvent, mockAfter } = vi.hoisted(() => ({
   }),
 }))
 vi.mock("next/server", () => ({ after: mockAfter }))
-vi.mock("@/lib/cells", () => ({
+vi.mock("@/lib/cells", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/cells")>()),
   cellFor: (region: string) => ({ apiBaseUrl: `https://${region}.test` }),
 }))
 vi.mock("@/lib/posthog/actions", () => ({
