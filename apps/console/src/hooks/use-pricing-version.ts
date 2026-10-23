@@ -3,24 +3,35 @@
 import { useQuery } from "@tanstack/react-query"
 
 import {
-  fetchPricingVersion,
+  fetchPublicPlans,
   type PricingVersion,
+  pricingVersionOf,
 } from "@/lib/api/pricing-version"
 import { billingKeys } from "@/lib/api/query-keys"
 
 import { useBillingContext } from "./use-billing-context"
 
-export function usePricingVersion(): PricingVersion {
+function usePublicPlans() {
   const { cacheScope, teamKey, ready } = useBillingContext()
-  const query = useQuery({
+  return useQuery({
     queryKey: billingKeys.pricingVersion({
       cacheScope,
       teamKey: teamKey ?? "",
     }),
-    queryFn: fetchPricingVersion,
+    queryFn: fetchPublicPlans,
     enabled: ready && teamKey !== null,
+    retry: false,
     staleTime: 60_000,
     refetchInterval: 5 * 60_000,
   })
-  return query.data ?? "legacy"
+}
+
+export function usePricingVersionState(): PricingVersion | "unknown" {
+  const query = usePublicPlans()
+  if (query.data !== undefined) return pricingVersionOf(query.data)
+  return query.isError ? "legacy" : "unknown"
+}
+
+export function usePricingVersion(): PricingVersion {
+  return usePricingVersionState() === "v2" ? "v2" : "legacy"
 }

@@ -15,10 +15,6 @@ export function pricingVersionOf(body: unknown): PricingVersion {
     : "legacy"
 }
 
-export async function fetchPricingVersion(): Promise<PricingVersion> {
-  try {
-    return pricingVersionOf(await apiClient<unknown>("/billing/plans/public"))
-  } catch {
-    return "legacy"
-  }
+export function fetchPublicPlans(): Promise<unknown> {
+  return apiClient<unknown>("/billing/plans/public")
 }

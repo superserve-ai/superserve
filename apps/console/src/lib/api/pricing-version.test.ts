@@ -1,9 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 
-vi.mock("./client", () => ({ apiClient: vi.fn() }))
-
-import { apiClient } from "./client"
-import { fetchPricingVersion, pricingVersionOf } from "./pricing-version"
+import { pricingVersionOf } from "./pricing-version"
 
 describe("pricingVersionOf", () => {
   it("is v2 only when the catalog says so explicitly", () => {
@@ -19,22 +16,5 @@ describe("pricingVersionOf", () => {
     ]) {
       expect(pricingVersionOf(body)).toBe("legacy")
     }
-  })
-})
-
-describe("fetchPricingVersion", () => {
-  beforeEach(() => {
-    vi.mocked(apiClient).mockReset()
-  })
-
-  it("reads the public plan catalog", async () => {
-    vi.mocked(apiClient).mockResolvedValue({ pricing_version: "v2" })
-    await expect(fetchPricingVersion()).resolves.toBe("v2")
-    expect(apiClient).toHaveBeenCalledWith("/billing/plans/public")
-  })
-
-  it("stays on legacy pricing when the catalog is unavailable", async () => {
-    vi.mocked(apiClient).mockRejectedValue(new Error("down"))
-    await expect(fetchPricingVersion()).resolves.toBe("legacy")
   })
 })

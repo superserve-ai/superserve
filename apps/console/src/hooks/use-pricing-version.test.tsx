@@ -7,7 +7,10 @@ const mocks = vi.hoisted(() => ({ context: vi.fn(), api: vi.fn() }))
 vi.mock("./use-billing-context", () => ({ useBillingContext: mocks.context }))
 vi.mock("@/lib/api/client", () => ({ apiClient: mocks.api }))
 
-import { usePricingVersion } from "./use-pricing-version"
+import {
+  usePricingVersion,
+  usePricingVersionState,
+} from "./use-pricing-version"
 
 function wrapper({ children }: { children: ReactNode }) {
   return (
@@ -61,5 +64,36 @@ describe("usePricingVersion", () => {
     const { result } = renderHook(() => usePricingVersion(), { wrapper })
     expect(result.current).toBe("legacy")
     expect(mocks.api).not.toHaveBeenCalled()
+  })
+
+  it("reports unknown until the catalog answers, without retrying failures", async () => {
+    let resolve: (value: unknown) => void = () => {}
+    mocks.api.mockReturnValue(new Promise((r) => (resolve = r)))
+    const { result } = renderHook(() => usePricingVersionState(), { wrapper })
+    expect(result.current).toBe("unknown")
+    resolve({ plans: [] })
+    await waitFor(() => expect(result.current).toBe("legacy"))
+    mocks.api.mockReset().mockRejectedValue(new Error("Not found"))
+    const failed = renderHook(() => usePricingVersionState(), {
+      wrapper,
+    })
+    await waitFor(() => expect(failed.result.current).toBe("legacy"))
+    expect(mocks.api).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps v2 when a later refresh fails", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    mocks.api.mockResolvedValue({ pricing_version: "v2" })
+    const { result } = renderHook(() => usePricingVersion(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    })
+    await waitFor(() => expect(result.current).toBe("v2"))
+    mocks.api.mockRejectedValue(new Error("down"))
+    await client.refetchQueries()
+    expect(result.current).toBe("v2")
   })
 })
