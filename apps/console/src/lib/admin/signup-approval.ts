@@ -148,7 +148,10 @@ export async function listSignupReviews(): Promise<{
   }
   const byNewest = (a: SignupReviewRow, b: SignupReviewRow) =>
     Date.parse(b.createdAt) - Date.parse(a.createdAt)
-  return { pending: pending.toSorted(byNewest), awaiting: awaiting.toSorted(byNewest) }
+  return {
+    pending: pending.toSorted(byNewest),
+    awaiting: awaiting.toSorted(byNewest),
+  }
 }
 
 async function sendApprovalEmail(user: User): Promise<void> {
