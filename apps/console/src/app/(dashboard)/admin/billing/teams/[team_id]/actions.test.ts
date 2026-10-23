@@ -3,9 +3,6 @@ import { beforeEach, expect, it, vi } from "vitest"
 vi.mock("server-only", () => ({}))
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
 vi.mock("@/lib/cells", () => ({ configuredRegions: () => ["use"] }))
-vi.mock("@/lib/admin/impersonation", () => ({
-  hasImpersonationCookie: vi.fn(async () => false),
-}))
 vi.mock("@/lib/admin/team-billing", async () => {
   const actual = await vi.importActual<object>("@/lib/admin/team-billing")
   return {
@@ -17,7 +14,6 @@ vi.mock("@/lib/admin/team-billing", async () => {
 })
 
 import { AdminBillingRequestError } from "@/lib/admin/billing-api"
-import { hasImpersonationCookie } from "@/lib/admin/impersonation"
 import {
   cancelPlanChange,
   grantStaffCredit,
@@ -81,33 +77,14 @@ it("maps backend failures to their kind", async () => {
   })
 })
 
-it("refuses billing writes while impersonating a team", async () => {
-  vi.mocked(hasImpersonationCookie).mockResolvedValueOnce(true)
+it("passes the backend's reason through with the failure kind", async () => {
+  vi.mocked(schedulePlanChange).mockRejectedValue(
+    new AdminBillingRequestError("conflict", "a checkout is in progress"),
+  )
   expect(await schedulePlanChangeAction(valid)).toEqual({
-    kind: "impersonating",
+    kind: "conflict",
+    detail: "a checkout is in progress",
   })
-  vi.mocked(hasImpersonationCookie).mockResolvedValueOnce(true)
-  expect(
-    await cancelPlanChangeAction({
-      region: "use",
-      teamId: team,
-      changeId: "33333333-3333-4333-8333-333333333333",
-      reason: "r",
-    }),
-  ).toEqual({ kind: "impersonating" })
-  vi.mocked(hasImpersonationCookie).mockResolvedValueOnce(true)
-  expect(
-    await grantStaffCreditAction({
-      region: "use",
-      teamId: team,
-      idempotencyKey: "k",
-      amountCents: 100,
-      reason: "r",
-    }),
-  ).toEqual({ kind: "impersonating" })
-  expect(schedulePlanChange).not.toHaveBeenCalled()
-  expect(cancelPlanChange).not.toHaveBeenCalled()
-  expect(grantStaffCredit).not.toHaveBeenCalled()
 })
 
 it("validates staff credit amounts before calling the backend", async () => {

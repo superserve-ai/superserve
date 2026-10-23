@@ -5,8 +5,9 @@ import * as React from "react"
 
 import type { StaffCredit } from "@/lib/admin/team-billing"
 
-import type { PlanChangeActionResult } from "./actions"
+import type { ActionFailure, PlanChangeActionResult } from "./actions"
 import { grantStaffCreditAction } from "./actions"
+import { FailureNotice } from "./failure-notice"
 
 const MAX_CREDIT_CENTS = 100_000_000
 
@@ -15,10 +16,7 @@ const usd = new Intl.NumberFormat("en-US", {
   currency: "USD",
 })
 
-const CREDIT_FAILURES: Record<
-  Exclude<PlanChangeActionResult["kind"], "saved">,
-  string
-> = {
+const CREDIT_FAILURES: Record<ActionFailure["kind"], string> = {
   forbidden: "You do not have permission to grant credit.",
   not_found: "The team no longer exists.",
   conflict:
@@ -26,7 +24,7 @@ const CREDIT_FAILURES: Record<
   invalid: "Enter an amount between $0.01 and $1,000,000.00 and a reason.",
   unavailable:
     "The outcome is unknown: Stripe may have granted the credit. Retry the same request; do not start a new one.",
-  impersonating:
+  read_only_impersonation:
     "Billing changes are disabled while viewing another team. Stop viewing it first.",
 }
 
@@ -108,7 +106,12 @@ export function StaffCreditForm({
         Credit applies to usage only, never to plan fees, and does not expire.
       </p>
       {result && result.kind !== "saved" ? (
-        <Alert variant="destructive">{CREDIT_FAILURES[result.kind]}</Alert>
+        <Alert variant="destructive">
+          <FailureNotice
+            message={CREDIT_FAILURES[result.kind]}
+            detail={result.detail}
+          />
+        </Alert>
       ) : null}
       {result?.kind === "saved" ? (
         <Alert variant="success">Credit granted.</Alert>
@@ -190,7 +193,10 @@ export function ResumeStaffCreditButton({
       </Button>
       {result ? (
         <p className="text-xs text-destructive">
-          {CREDIT_FAILURES[result.kind]}
+          <FailureNotice
+            message={CREDIT_FAILURES[result.kind]}
+            detail={result.detail}
+          />
         </p>
       ) : null}
     </div>

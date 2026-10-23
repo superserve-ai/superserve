@@ -6,7 +6,6 @@ import {
   AdminBillingRequestError,
   type AdminBillingErrorKind,
 } from "@/lib/admin/billing-api"
-import { hasImpersonationCookie } from "@/lib/admin/impersonation"
 import {
   cancelPlanChange,
   grantStaffCredit,
@@ -17,9 +16,17 @@ import {
 } from "@/lib/admin/team-billing"
 import { configuredRegions } from "@/lib/cells"
 
-export type PlanChangeActionResult =
-  | { kind: "saved" }
-  | { kind: AdminBillingErrorKind | "impersonating" }
+export type ActionFailure = { kind: AdminBillingErrorKind; detail?: string }
+
+export type PlanChangeActionResult = { kind: "saved" } | ActionFailure
+
+function failure(error: unknown): ActionFailure {
+  if (!(error instanceof AdminBillingRequestError))
+    return { kind: "unavailable" }
+  return error.detail
+    ? { kind: error.kind, detail: error.detail }
+    : { kind: error.kind }
+}
 
 function validTarget(region: string, teamId: string): boolean {
   return isUuid(teamId) && configuredRegions().includes(region)
@@ -29,15 +36,13 @@ async function run(
   teamId: string,
   action: () => Promise<unknown>,
 ): Promise<PlanChangeActionResult> {
-  if (await hasImpersonationCookie()) return { kind: "impersonating" }
   try {
     await action()
   } catch (error) {
-    const kind =
-      error instanceof AdminBillingRequestError ? error.kind : "unavailable"
-    if (kind === "conflict" || kind === "unavailable")
+    const result = failure(error)
+    if (result.kind === "conflict" || result.kind === "unavailable")
       revalidatePath(`/admin/billing/teams/${teamId}`)
-    return { kind }
+    return result
   }
   revalidatePath(`/admin/billing/teams/${teamId}`)
   return { kind: "saved" }
@@ -132,7 +137,7 @@ export async function grantStaffCreditAction(input: {
 
 export type PlanChangePreviewResult =
   | { kind: "preview"; preview: PlanChangePreview }
-  | { kind: AdminBillingErrorKind }
+  | ActionFailure
 
 export async function previewPlanChangeAction(input: {
   region: string
@@ -156,9 +161,6 @@ export async function previewPlanChangeAction(input: {
       ),
     }
   } catch (error) {
-    return {
-      kind:
-        error instanceof AdminBillingRequestError ? error.kind : "unavailable",
-    }
+    return failure(error)
   }
 }

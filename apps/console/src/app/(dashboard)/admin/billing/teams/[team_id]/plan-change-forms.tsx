@@ -3,12 +3,17 @@
 import { Alert, Button, Field, Textarea } from "@superserve/ui"
 import * as React from "react"
 
-import type { PlanChangeActionResult, PlanChangePreviewResult } from "./actions"
+import type {
+  ActionFailure,
+  PlanChangeActionResult,
+  PlanChangePreviewResult,
+} from "./actions"
 import {
   cancelPlanChangeAction,
   previewPlanChangeAction,
   schedulePlanChangeAction,
 } from "./actions"
+import { FailureNotice } from "./failure-notice"
 
 const TIMING: Record<string, string> = {
   next_anniversary: "the team's next billing anniversary",
@@ -37,7 +42,10 @@ function PlanChangePreviewNotice({
   if (result.kind !== "preview")
     return (
       <Alert variant="warning">
-        The effective date could not be checked. Try choosing the plan again.
+        <FailureNotice
+          message="The effective date could not be checked. Try choosing the plan again."
+          detail={result.detail}
+        />
       </Alert>
     )
   if (result.preview.blocked)
@@ -59,17 +67,14 @@ function PlanChangePreviewNotice({
   )
 }
 
-const FAILURES: Record<
-  Exclude<PlanChangeActionResult["kind"], "saved">,
-  string
-> = {
+const FAILURES: Record<ActionFailure["kind"], string> = {
   forbidden: "You do not have permission to change billing.",
   not_found: "The team or plan change no longer exists.",
   conflict:
     "The team's billing state does not allow this change. Reload to see the current state.",
   invalid: "Check the plan and reason and try again.",
   unavailable: "Billing is unavailable. Retry to send the same request.",
-  impersonating:
+  read_only_impersonation:
     "Billing changes are disabled while viewing another team. Stop viewing it first.",
 }
 
@@ -176,7 +181,12 @@ export function SchedulePlanChangeForm({
         prorated.
       </p>
       {result && result.kind !== "saved" ? (
-        <Alert variant="destructive">{FAILURES[result.kind]}</Alert>
+        <Alert variant="destructive">
+          <FailureNotice
+            message={FAILURES[result.kind]}
+            detail={result.detail}
+          />
+        </Alert>
       ) : null}
       {result?.kind === "saved" ? (
         <Alert variant="success">Plan change scheduled.</Alert>
@@ -229,7 +239,12 @@ export function CancelPlanChangeForm({
         />
       </Field>
       {result && result.kind !== "saved" ? (
-        <Alert variant="destructive">{FAILURES[result.kind]}</Alert>
+        <Alert variant="destructive">
+          <FailureNotice
+            message={FAILURES[result.kind]}
+            detail={result.detail}
+          />
+        </Alert>
       ) : null}
       <Button
         type="submit"
