@@ -7,8 +7,6 @@ import {
   getSignupPlanPage,
   type SignupPlanPageParams,
 } from "@/lib/api/signup-plan-page"
-import { teamRegion } from "@/lib/billing/plans"
-import { getPublicBillingPlansAction } from "@/lib/billing/plans-actions"
 import { trackEvent } from "@/lib/posthog/actions"
 import { ycOnboardingDestination } from "@/lib/yc/onboarding"
 
@@ -73,13 +71,9 @@ export default async function PlanSelectionPage({
     })
     redirect("/sandboxes")
   }
-  const plans = await getPublicBillingPlansAction(
-    teamRegion(context?.teamKey),
-  ).catch(() => undefined)
   return (
     <PlanSelectionLoader
       key={JSON.stringify([context, params])}
-      initialPlans={plans}
       initialContext={context ?? null}
       billingReturn={params.billing}
       expectedTeam={params.team}

@@ -100,7 +100,7 @@ const WRITE_ROUTES: [WriteMethod, string][] = [
   ["DELETE", `/internal/billing/catalog/plans/${UUID}`],
   ["POST", `/internal/billing/catalog/plans/${UUID}/publish`],
   ["POST", `/internal/billing/catalog/plans/${UUID}/retire`],
-  ["POST", "/internal/billing/catalog/promotions"],
+  ["POST", "/internal/billing/pricing-version"],
 ]
 
 const WRITE_ROUTE_PATTERNS = WRITE_ROUTES.map(

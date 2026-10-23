@@ -9,12 +9,13 @@ vi.mock("@/lib/admin/impersonation", () => ({
 import { getImpersonationTeamId } from "@/lib/admin/impersonation"
 import { createServerClient } from "@/lib/supabase/server"
 
+import type { PlanVersion } from "./billing-catalog"
 import {
   createDraftAction,
   updateDraftAction,
   previewScheduleAction,
-  publishSignupPromotionAction,
   publishVersionAction,
+  setPricingVersionAction,
   syncVersionAction,
 } from "./billing-catalog-actions"
 
@@ -41,14 +42,17 @@ function signIn(permissions: string[]) {
   } as never)
 }
 
-function plan(overrides: Record<string, unknown> = {}) {
+function plan(overrides: Partial<PlanVersion> = {}): PlanVersion {
   return {
     id: VERSION,
+    pricing_version: "legacy",
     family: "pro",
     version: 2,
     state: "draft",
+    kind: "subscription",
     public: true,
     display_name: "Pro",
+    price_label: "",
     tagline: "",
     features: [],
     sort_order: 2,
@@ -58,11 +62,13 @@ function plan(overrides: Record<string, unknown> = {}) {
     annual_fee_cents: null,
     credit_schedule: [],
     matching: null,
+    allowance: null,
     limits: {
-      max_sandboxes: 1000,
-      max_template_vcpu: null,
-      max_template_memory_mib: null,
-      max_template_disk_mib: null,
+      max_concurrent: 1000,
+      max_vcpu: null,
+      max_memory_mib: null,
+      max_disk_mib: null,
+      max_templates: null,
     },
     created_at: "2026-10-01T00:00:00Z",
     published_at: null,
@@ -81,7 +87,10 @@ function serve(
     const host = new URL(url).host
     if (init.method === "GET" && url.pathname === "/internal/billing/catalog")
       return new Response(
-        JSON.stringify({ plans: catalogs[host] ?? [], promotions: [] }),
+        JSON.stringify({
+          plans: catalogs[host] ?? [],
+          pricing_version: "legacy",
+        }),
         { status: 200 },
       )
     if (fail[host]) return new Response("{}", { status: fail[host] })
@@ -141,21 +150,7 @@ describe("billing catalog fan-out", () => {
       "usw.example.com": [plan({ version: 4, id: "other", state: "draft" })],
     })
     const result = await createDraftAction(
-      {
-        family: "pro",
-        public: true,
-        display_name: "Pro",
-        tagline: "",
-        features: [],
-        sort_order: 2,
-        display_only: false,
-        self_serve: true,
-        monthly_fee_cents: 160000,
-        annual_fee_cents: null,
-        credit_schedule: [],
-        matching: null,
-        limits: plan().limits,
-      },
+      { ...draftOf(plan()), monthly_fee_cents: 160000 },
       "Raise the Pro fee",
     )
     expect(result.errors).toEqual({})
@@ -274,12 +269,35 @@ describe("billing catalog fan-out", () => {
   it("refuses writes without platform billing write", async () => {
     signIn(["platform:billing:read"])
     serve({ "use.example.com": [], "usw.example.com": [] })
-    const result = await publishSignupPromotionAction(
-      "card_bonus",
-      10000,
-      "Raise bonus",
-    )
+    const result = await setPricingVersionAction("v2", "Launch v2")
     expect(Object.keys(result.errors)).toEqual(["use", "usw"])
+    expect(writes()).toEqual([])
+  })
+
+  it("switches the pricing model in every region with the reason", async () => {
+    signIn(["platform:billing:read", "platform:billing:write"])
+    const v2 = plan({ pricing_version: "v2", state: "published" })
+    serve({ "use.example.com": [v2], "usw.example.com": [v2] })
+    const result = await setPricingVersionAction("v2", "Launch v2")
+    expect(result.errors).toEqual({})
+    expect(writes().map((w) => [w.host, w.path, w.token, w.body])).toEqual(
+      ["use", "usw"].map((region) => [
+        `${region}.example.com`,
+        "/internal/billing/pricing-version",
+        `Bearer operator-${region}`,
+        { pricing_version: "v2", reason: "Launch v2" },
+      ]),
+    )
+  })
+
+  it("refuses to switch to v2 while regions publish different v2 plans", async () => {
+    signIn(["platform:billing:read", "platform:billing:write"])
+    serve({
+      "use.example.com": [plan({ pricing_version: "v2", state: "published" })],
+      "usw.example.com": [],
+    })
+    const result = await setPricingVersionAction("v2", "Launch v2")
+    expect(result.errors).toHaveProperty("all")
     expect(writes()).toEqual([])
   })
 
@@ -313,7 +331,7 @@ describe("billing catalog fan-out", () => {
     fetchMock.mockImplementation(async (_url: URL, init: RequestInit) => {
       if (init.method === "GET")
         return new Response(
-          JSON.stringify({ plans: [plan()], promotions: [] }),
+          JSON.stringify({ plans: [plan()], pricing_version: "legacy" }),
           { status: 200 },
         )
       return new Response(

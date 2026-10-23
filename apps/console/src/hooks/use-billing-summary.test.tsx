@@ -13,10 +13,6 @@ import { useBillingSummary } from "./use-billing-summary"
 const useBillingContext = vi.fn()
 const getBillingSummary = vi.fn()
 
-vi.mock("@/hooks/use-public-billing-plans", () => ({
-  usePublicBillingPlans: () => ({ data: undefined }),
-}))
-
 vi.mock("@/hooks/use-billing-context", () => ({
   useBillingContext: () => useBillingContext(),
 }))

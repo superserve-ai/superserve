@@ -8,10 +8,8 @@ import { useCallback, useEffect, useSyncExternalStore } from "react"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { useBillingPayment } from "@/hooks/use-billing-payment"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
-import { usePublicBillingPlans } from "@/hooks/use-public-billing-plans"
 import type { BillingTrialBalance } from "@/lib/api/billing"
 import { billingKeys } from "@/lib/api/query-keys"
-import { formatUsdCents, teamRegion } from "@/lib/billing/plans"
 
 // SS-484 billingTrialRunway accepts observations strictly newer than 15 minutes.
 // Expire cached observations too, including when background polling is suspended.
@@ -75,11 +73,6 @@ export function TrialBillingBanner() {
   const pathname = usePathname()
   const trial = summary?.trial
   const currentUrgentRunway = useCurrentUrgentRunway(trial)
-  const plans = usePublicBillingPlans(
-    teamRegion(teamKey),
-    trial?.state === "active" || trial?.state === "exhausted",
-  ).data
-  const bonus = plans ? formatUsdCents(plans.signup.card_bonus_cents) : null
 
   useEffect(() => {
     // Preserve the billing page's inline return notice and cleanup.
@@ -141,20 +134,14 @@ export function TrialBillingBanner() {
         {exhausted ? (
           <>
             Your free trial credit has run out. Add a payment method to unlock{" "}
-            <strong>
-              {bonus ? `${bonus} in credits` : "promotional credit"}
-            </strong>{" "}
-            and continue running sandboxes.
+            <strong>$95 in credits</strong> and continue running sandboxes.
           </>
         ) : urgent ? (
           <>
             Based on your recent usage, your trial credit may run out within the
             next 24 hours, and any running sandboxes will automatically be
             stopped. Add a payment method to unlock{" "}
-            <strong>
-              {bonus ? `${bonus} in credits` : "promotional credit"}
-            </strong>{" "}
-            and continue running sandboxes.
+            <strong>$95 in credits</strong> and continue running sandboxes.
           </>
         ) : (
           <>
@@ -166,10 +153,7 @@ export function TrialBillingBanner() {
               </>
             ) : null}
             . Add a payment method to unlock{" "}
-            <strong>
-              {bonus ? `${bonus} in additional credits` : "additional credits"}
-            </strong>
-            .
+            <strong>$95 in additional credits</strong>.
           </>
         )}
       </p>

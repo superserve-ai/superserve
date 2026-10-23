@@ -9,9 +9,6 @@ vi.mock("@/components/onboarding/plan-selection-loader", () => ({
   ),
 }))
 vi.mock("next/server", () => ({ after: vi.fn() }))
-vi.mock("@/lib/billing/plans-actions", () => ({
-  getPublicBillingPlansAction: vi.fn().mockRejectedValue(new Error("offline")),
-}))
 vi.mock("next/navigation", () => ({
   redirect: (url: string) => {
     throw new Error(`redirect:${url}`)

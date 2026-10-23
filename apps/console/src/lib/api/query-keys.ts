@@ -79,7 +79,6 @@ export const networkKeys = {
 
 export const billingKeys = {
   all: ["billing"] as const,
-  publicPlans: (region: string) => ["billing", "public-plans", region] as const,
   customer: {
     all: ["billing", "customer"] as const,
     exportPreview: (context: {

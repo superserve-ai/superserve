@@ -1,9 +1,12 @@
 import { z } from "zod"
 
 import {
+  planAllowanceSchema,
   planGrantSchema,
+  planKindSchema,
   planLimitsSchema,
   planMatchingSchema,
+  pricingVersionSchema,
 } from "@/lib/billing/plans"
 
 export const planGrantIssueSchema = z.object({
@@ -20,11 +23,14 @@ export const schedulePreviewSchema = z.object({
 
 export const planVersionSchema = z.object({
   id: z.string(),
+  pricing_version: pricingVersionSchema,
   family: z.string(),
   version: z.number().int(),
   state: z.enum(["draft", "published", "retired"]),
+  kind: planKindSchema,
   public: z.boolean(),
   display_name: z.string(),
+  price_label: z.string(),
   tagline: z.string(),
   features: z.array(z.string()),
   sort_order: z.number().int(),
@@ -34,6 +40,7 @@ export const planVersionSchema = z.object({
   annual_fee_cents: z.number().int().nullable(),
   credit_schedule: z.array(planGrantSchema),
   matching: planMatchingSchema,
+  allowance: planAllowanceSchema,
   limits: planLimitsSchema,
   created_at: z.string(),
   published_at: z.string().nullable(),
@@ -41,33 +48,23 @@ export const planVersionSchema = z.object({
   preview: schedulePreviewSchema,
 })
 
-export const signupPromotionVersionSchema = z.object({
-  id: z.string(),
-  promotion: z.enum(["trial", "card_bonus"]),
-  version: z.number().int(),
-  state: z.enum(["draft", "published", "retired"]),
-  amount_cents: z.number().int(),
-  published_at: z.string().nullable(),
-  retired_at: z.string().nullable(),
-})
-
 export const billingCatalogSchema = z.object({
   plans: z.array(planVersionSchema),
-  promotions: z.array(signupPromotionVersionSchema),
+  pricing_version: pricingVersionSchema,
 })
 
 export type PlanGrantIssue = z.infer<typeof planGrantIssueSchema>
 export type SchedulePreview = z.infer<typeof schedulePreviewSchema>
 export type PlanVersion = z.infer<typeof planVersionSchema>
-export type SignupPromotionVersion = z.infer<
-  typeof signupPromotionVersionSchema
->
 export type BillingCatalog = z.infer<typeof billingCatalogSchema>
 
 export interface PlanDraft {
+  pricing_version: PlanVersion["pricing_version"]
   family: string
+  kind: PlanVersion["kind"]
   public: boolean
   display_name: string
+  price_label: string
   tagline: string
   features: string[]
   sort_order: number
@@ -77,14 +74,18 @@ export interface PlanDraft {
   annual_fee_cents: number | null
   credit_schedule: PlanVersion["credit_schedule"]
   matching: PlanVersion["matching"]
+  allowance: PlanVersion["allowance"]
   limits: PlanVersion["limits"]
 }
 
 export function draftFromVersion(version: PlanVersion): PlanDraft {
   return {
+    pricing_version: version.pricing_version,
     family: version.family,
+    kind: version.kind,
     public: version.public,
     display_name: version.display_name,
+    price_label: version.price_label,
     tagline: version.tagline,
     features: version.features,
     sort_order: version.sort_order,
@@ -94,6 +95,7 @@ export function draftFromVersion(version: PlanVersion): PlanDraft {
     annual_fee_cents: version.annual_fee_cents,
     credit_schedule: version.credit_schedule,
     matching: version.matching,
+    allowance: version.allowance,
     limits: version.limits,
   }
 }
@@ -104,12 +106,6 @@ export type SyncStep = "create" | "publish" | "retire"
 
 export interface MergedVersion {
   version: PlanVersion
-  states: Record<string, RegionState>
-  steps: Record<string, SyncStep[]>
-}
-
-export interface MergedPromotion {
-  promotion: SignupPromotionVersion
   states: Record<string, RegionState>
   steps: Record<string, SyncStep[]>
 }
@@ -168,28 +164,6 @@ export function planGroupSync(group: SyncMember[]): Steps[] {
   return steps
 }
 
-// Publishing a promotion retires the one it replaces, so only the newest
-// published promotion is created where it is missing.
-export function promotionGroupSync(group: SyncMember[]): Steps[] {
-  const steps = group.map((m) => noSteps(m.states))
-  const published = group
-    .map((m, i) => [m, i] as const)
-    .filter(([m]) => reached(m, "published"))
-    .toSorted(([a], [b]) => b.version - a.version)
-  const newest = published[0]
-  // Two promotions published concurrently can share a number; syncing either
-  // would collide, so staff publish a new amount instead.
-  const tied = published[1] && published[1][0].version === newest?.[0].version
-  if (newest && !tied)
-    steps[newest[1]] = Object.fromEntries(
-      Object.entries(newest[0].states).map(([region, state]) => [
-        region,
-        state === "missing" ? ["create"] : [],
-      ]),
-    )
-  return steps
-}
-
 export function needsSync(steps: Steps): boolean {
   return Object.values(steps).some((s) => s.length > 0)
 }
@@ -217,10 +191,17 @@ function applyGroups<
   }
 }
 
+// Each pricing model publishes its own version of a family, so versions are
+// synced per model and family.
+export function planSet(
+  version: Pick<PlanVersion, "pricing_version" | "family">,
+): string {
+  return `${version.pricing_version}:${version.family}`
+}
+
 export function mergeCatalogs(catalogs: Record<string, BillingCatalog>) {
   const regions = Object.keys(catalogs)
   const versions = new Map<string, MergedVersion>()
-  const promotions = new Map<string, MergedPromotion>()
   for (const region of regions) {
     for (const plan of catalogs[region]!.plans) {
       const merged = versions.get(plan.id) ?? {
@@ -232,41 +213,20 @@ export function mergeCatalogs(catalogs: Record<string, BillingCatalog>) {
       if (RANK[plan.state] > RANK[merged.version.state]) merged.version = plan
       versions.set(plan.id, merged)
     }
-    for (const promotion of catalogs[region]!.promotions) {
-      const merged = promotions.get(promotion.id) ?? {
-        promotion,
-        states: Object.fromEntries(regions.map((r) => [r, "missing"])),
-        steps: {},
-      }
-      merged.states[region] = promotion.state
-      promotions.set(promotion.id, merged)
-    }
   }
   applyGroups(
     [...versions.values()],
-    (m) => m.version.family,
+    (m) => planSet(m.version),
     (m) => m.version.version,
     planGroupSync,
   )
-  applyGroups(
-    [...promotions.values()],
-    (m) => m.promotion.promotion,
-    (m) => m.promotion.version,
-    promotionGroupSync,
+  return [...versions.values()].toSorted(
+    (a, b) =>
+      a.version.pricing_version.localeCompare(b.version.pricing_version) ||
+      a.version.sort_order - b.version.sort_order ||
+      a.version.family.localeCompare(b.version.family) ||
+      b.version.version - a.version.version,
   )
-  return {
-    versions: [...versions.values()].toSorted(
-      (a, b) =>
-        a.version.sort_order - b.version.sort_order ||
-        a.version.family.localeCompare(b.version.family) ||
-        b.version.version - a.version.version,
-    ),
-    promotions: [...promotions.values()].toSorted(
-      (a, b) =>
-        a.promotion.promotion.localeCompare(b.promotion.promotion) ||
-        b.promotion.version - a.promotion.version,
-    ),
-  }
 }
 
 export function nextVersionNumber(
@@ -277,17 +237,6 @@ export function nextVersionNumber(
   for (const catalog of Object.values(catalogs))
     for (const plan of catalog.plans)
       if (plan.family === family) max = Math.max(max, plan.version)
-  return max + 1
-}
-
-export function nextPromotionVersion(
-  catalogs: Record<string, BillingCatalog>,
-  promotion: string,
-): number {
-  let max = 0
-  for (const catalog of Object.values(catalogs))
-    for (const p of catalog.promotions)
-      if (p.promotion === promotion) max = Math.max(max, p.version)
   return max + 1
 }
 
@@ -307,27 +256,24 @@ export function termsKey(version: PlanVersion): string {
 
 export function catalogDrift(catalogs: Record<string, BillingCatalog>) {
   const regions = Object.keys(catalogs)
-  const families = new Set<string>()
+  const sets = new Set<string>()
   for (const region of regions)
-    for (const plan of catalogs[region]!.plans) families.add(plan.family)
+    for (const plan of catalogs[region]!.plans) sets.add(planSet(plan))
   const drift: string[] = []
-  for (const family of [...families].toSorted()) {
+  for (const set of [...sets].toSorted()) {
     const terms = regions.map((region) => {
       const current = catalogs[region]!.plans.find(
-        (plan) => plan.family === family && plan.state === "published",
+        (plan) => planSet(plan) === set && plan.state === "published",
       )
       return current ? termsKey(current) : null
     })
-    if (new Set(terms).size > 1) drift.push(family)
-  }
-  for (const promotion of ["trial", "card_bonus"] as const) {
-    const amounts = regions.map(
-      (region) =>
-        catalogs[region]!.promotions.find(
-          (p) => p.promotion === promotion && p.state === "published",
-        )?.amount_cents ?? null,
-    )
-    if (new Set(amounts).size > 1) drift.push(promotion)
+    if (new Set(terms).size > 1) drift.push(set)
   }
   return drift
+}
+
+export function pricingVersions(catalogs: Record<string, BillingCatalog>) {
+  return Object.fromEntries(
+    Object.entries(catalogs).map(([region, c]) => [region, c.pricing_version]),
+  )
 }

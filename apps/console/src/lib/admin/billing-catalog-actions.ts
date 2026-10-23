@@ -10,12 +10,13 @@ import {
   requireAdminBilling,
   type AdminBillingErrorKind,
 } from "@/lib/admin/billing-api"
+import type { PricingVersion } from "@/lib/billing/plans"
 import { configuredRegions } from "@/lib/cells"
 
 import {
   billingCatalogSchema,
+  catalogDrift,
   mergeCatalogs,
-  nextPromotionVersion,
   nextVersionNumber,
   schedulePreviewSchema,
   termsKey,
@@ -23,7 +24,6 @@ import {
   type PlanDraft,
   type PlanVersion,
   type SchedulePreview,
-  type SignupPromotionVersion,
 } from "./billing-catalog"
 
 const UUID_RE =
@@ -104,9 +104,12 @@ export interface FanOutResult {
 
 function draftBody(version: PlanVersion | PlanDraft) {
   return {
+    pricing_version: version.pricing_version,
     family: version.family,
+    kind: version.kind,
     public: version.public,
     display_name: version.display_name,
+    price_label: version.price_label,
     tagline: version.tagline,
     features: version.features,
     sort_order: version.sort_order,
@@ -116,6 +119,7 @@ function draftBody(version: PlanVersion | PlanDraft) {
     annual_fee_cents: version.annual_fee_cents,
     credit_schedule: version.credit_schedule,
     matching: version.matching,
+    allowance: version.allowance,
     limits: version.limits,
   }
 }
@@ -229,9 +233,7 @@ export async function updateDraftAction(
 ): Promise<FanOutResult> {
   try {
     const catalogs = await loadCatalogs()
-    const merged = mergeCatalogs(catalogs).versions.find(
-      (v) => v.version.id === id,
-    )
+    const merged = mergeCatalogs(catalogs).find((v) => v.version.id === id)
     if (!merged) throw new Error("That draft no longer exists")
     if (
       Object.values(merged.states).some(
@@ -346,9 +348,7 @@ export async function syncVersionAction(
 ): Promise<FanOutResult> {
   try {
     const catalogs = await loadCatalogs()
-    const merged = mergeCatalogs(catalogs).versions.find(
-      (v) => v.version.id === id,
-    )
+    const merged = mergeCatalogs(catalogs).find((v) => v.version.id === id)
     if (!merged) throw new Error("That version no longer exists")
     const source = merged.version
     const regions = Object.entries(merged.steps)
@@ -387,71 +387,32 @@ export async function syncVersionAction(
   }
 }
 
-function publishPromotionIn(
-  region: string,
-  promotion:
-    | SignupPromotionVersion
-    | { id: string; version: number; promotion: string; amount_cents: number },
-  reason: string,
-) {
-  return adminBillingRequest({
-    region,
-    path: "/internal/billing/catalog/promotions",
-    method: "POST",
-    body: {
-      id: promotion.id,
-      version: promotion.version,
-      promotion: promotion.promotion,
-      amount_cents: promotion.amount_cents,
-      reason,
-    },
-    schema: anyBody,
-  })
-}
-
-export async function publishSignupPromotionAction(
-  promotion: "trial" | "card_bonus",
-  amountCents: number,
-  reason: string,
-): Promise<FanOutResult> {
-  try {
-    if (!Number.isInteger(amountCents) || amountCents < 1)
-      throw new Error("Enter a positive amount")
-    const catalogs = await loadCatalogs()
-    const id = randomUUID()
-    const version = nextPromotionVersion(catalogs, promotion)
-    return fanOut(
-      Object.keys(catalogs),
-      (region) =>
-        publishPromotionIn(
-          region,
-          { id, version, promotion, amount_cents: amountCents },
-          reason,
-        ),
-      id,
-    )
-  } catch (error) {
-    return failure(error)
-  }
-}
-
-export async function syncPromotionAction(
-  id: string,
+// Switches the live pricing model in every region. Turning v2 on requires
+// every region to publish the same v2 catalog, so no region sells different
+// terms. Repeating the switch is a no-op where it already took effect.
+export async function setPricingVersionAction(
+  pricingVersion: PricingVersion,
   reason: string,
 ): Promise<FanOutResult> {
   try {
     const catalogs = await loadCatalogs()
-    const merged = mergeCatalogs(catalogs).promotions.find(
-      (p) => p.promotion.id === id,
-    )
-    if (!merged) throw new Error("That promotion no longer exists")
-    const regions = Object.entries(merged.steps)
-      .filter(([, steps]) => steps.length)
-      .map(([region]) => region)
-    return fanOut(
-      regions,
-      (region) => publishPromotionIn(region, merged.promotion, reason),
-      id,
+    if (pricingVersion === "v2") {
+      const drift = catalogDrift(catalogs).filter((set) =>
+        set.startsWith("v2:"),
+      )
+      if (drift.length)
+        throw new Error(
+          `The v2 catalog differs between regions (${drift.join(", ")}). Retry sync first.`,
+        )
+    }
+    return fanOut(Object.keys(catalogs), (region) =>
+      adminBillingRequest({
+        region,
+        path: "/internal/billing/pricing-version",
+        method: "POST",
+        body: { pricing_version: pricingVersion, reason },
+        schema: anyBody,
+      }),
     )
   } catch (error) {
     return failure(error)

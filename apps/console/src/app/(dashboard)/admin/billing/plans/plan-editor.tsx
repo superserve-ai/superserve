@@ -10,7 +10,12 @@ import {
   updateDraftAction,
   type FanOutResult,
 } from "@/lib/admin/billing-catalog-actions"
-import { formatUsdCents, type PlanGrant } from "@/lib/billing/plans"
+import {
+  formatUsdCents,
+  type PlanGrant,
+  type PlanKind,
+  type PricingVersion,
+} from "@/lib/billing/plans"
 
 export function centsFromDollars(value: string): number | null {
   if (!/^\d+(\.\d{1,2})?$/.test(value.trim())) return null
@@ -37,10 +42,23 @@ interface GrantForm {
   expires: string
 }
 
+interface AllowanceForm {
+  basis: "usage" | "compute"
+  amount: string
+  hours: string
+  vcpu: string
+  memory_gib: string
+  period: "day_window" | "month"
+  on_exhausted: "pause" | "payg"
+}
+
 interface DraftForm {
+  pricing_version: PricingVersion
   family: string
+  kind: PlanKind
   public: boolean
   display_name: string
+  price_label: string
   tagline: string
   features: string
   sort_order: string
@@ -50,14 +68,52 @@ interface DraftForm {
   annual_fee: string
   grants: GrantForm[]
   matching: { percent: string; cap: string } | null
+  allowance: AllowanceForm | null
   limits: Record<keyof PlanDraft["limits"], string>
+}
+
+const KINDS: [PlanKind, string][] = [
+  ["subscription", "Subscription"],
+  ["prepaid", "Prepaid credit"],
+  ["free", "Free"],
+  ["legacy_payg", "Legacy pay as you go"],
+  ["custom", "Custom (staff assigned)"],
+]
+
+const LIMITS = [
+  ["max_concurrent", "Running sandboxes"],
+  ["max_vcpu", "vCPU per sandbox"],
+  ["max_memory_mib", "Memory MiB"],
+  ["max_disk_mib", "Disk MiB"],
+  ["max_templates", "Templates"],
+] as const
+
+const NO_LIMITS: PlanDraft["limits"] = {
+  max_concurrent: null,
+  max_vcpu: null,
+  max_memory_mib: null,
+  max_disk_mib: null,
+  max_templates: null,
+}
+
+const NEW_ALLOWANCE: AllowanceForm = {
+  basis: "usage",
+  amount: "",
+  hours: "2",
+  vcpu: "1",
+  memory_gib: "1",
+  period: "month",
+  on_exhausted: "payg",
 }
 
 function formFrom(draft: PlanDraft): DraftForm {
   return {
+    pricing_version: draft.pricing_version,
     family: draft.family,
+    kind: draft.kind,
     public: draft.public,
     display_name: draft.display_name,
+    price_label: draft.price_label,
     tagline: draft.tagline,
     features: draft.features.join("\n"),
     sort_order: String(draft.sort_order),
@@ -78,12 +134,56 @@ function formFrom(draft: PlanDraft): DraftForm {
           cap: dollars(draft.matching.cap_cents),
         }
       : null,
+    allowance: draft.allowance
+      ? {
+          basis: draft.allowance.compute ? "compute" : "usage",
+          amount: draft.allowance.compute
+            ? ""
+            : dollars(draft.allowance.amount_cents),
+          hours: draft.allowance.compute
+            ? String(draft.allowance.compute.seconds / 3600)
+            : NEW_ALLOWANCE.hours,
+          vcpu: String(draft.allowance.compute?.vcpu ?? NEW_ALLOWANCE.vcpu),
+          memory_gib: String(
+            draft.allowance.compute?.memory_gib ?? NEW_ALLOWANCE.memory_gib,
+          ),
+          period: draft.allowance.period,
+          on_exhausted: draft.allowance.on_exhausted,
+        }
+      : null,
     limits: {
-      max_sandboxes: text(draft.limits.max_sandboxes),
-      max_template_vcpu: text(draft.limits.max_template_vcpu),
-      max_template_memory_mib: text(draft.limits.max_template_memory_mib),
-      max_template_disk_mib: text(draft.limits.max_template_disk_mib),
+      max_concurrent: text(draft.limits.max_concurrent),
+      max_vcpu: text(draft.limits.max_vcpu),
+      max_memory_mib: text(draft.limits.max_memory_mib),
+      max_disk_mib: text(draft.limits.max_disk_mib),
+      max_templates: text(draft.limits.max_templates),
     },
+  }
+}
+
+function allowanceFrom(form: AllowanceForm): PlanDraft["allowance"] | string {
+  if (form.basis === "usage") {
+    const cents = centsFromDollars(form.amount)
+    if (!cents) return "The included usage needs a dollar amount."
+    return {
+      amount_cents: cents,
+      period: form.period,
+      on_exhausted: form.on_exhausted,
+    }
+  }
+  const hours = /^\d+(\.\d+)?$/.test(form.hours.trim())
+    ? Number(form.hours)
+    : null
+  const vcpu = wholeFrom(form.vcpu)
+  const memory = wholeFrom(form.memory_gib)
+  const seconds = hours === null ? 0 : Math.round(hours * 3600)
+  if (!seconds || !vcpu || !memory)
+    return "The compute allowance needs hours, whole vCPUs and whole GiB."
+  return {
+    amount_cents: 0,
+    period: form.period,
+    on_exhausted: form.on_exhausted,
+    compute: { seconds, vcpu, memory_gib: memory },
   }
 }
 
@@ -140,10 +240,19 @@ function draftFrom(form: DraftForm): PlanDraft | string {
         return "Matching needs a percent between 0.01 and 100 and a dollar cap."
       matching = { matching_bps: bps, cap_cents: cap }
     }
+    let allowance: PlanDraft["allowance"] = null
+    if (form.allowance && !form.display_only) {
+      const parsed = allowanceFrom(form.allowance)
+      if (typeof parsed === "string") return parsed
+      allowance = parsed
+    }
     return {
+      pricing_version: form.pricing_version,
       family: form.family.trim(),
+      kind: form.kind,
       public: form.public,
       display_name: form.display_name.trim(),
+      price_label: form.price_label.trim(),
       tagline: form.tagline.trim(),
       features: form.features
         .split("\n")
@@ -160,31 +269,15 @@ function draftFrom(form: DraftForm): PlanDraft | string {
         : optionalCents(form.annual_fee, "Annual fee"),
       credit_schedule: schedule,
       matching,
+      allowance,
       limits: form.display_only
-        ? {
-            max_sandboxes: null,
-            max_template_vcpu: null,
-            max_template_memory_mib: null,
-            max_template_disk_mib: null,
-          }
-        : {
-            max_sandboxes: optionalWhole(
-              form.limits.max_sandboxes,
-              "Concurrent sandboxes",
-            ),
-            max_template_vcpu: optionalWhole(
-              form.limits.max_template_vcpu,
-              "vCPU",
-            ),
-            max_template_memory_mib: optionalWhole(
-              form.limits.max_template_memory_mib,
-              "Memory",
-            ),
-            max_template_disk_mib: optionalWhole(
-              form.limits.max_template_disk_mib,
-              "Disk",
-            ),
-          },
+        ? NO_LIMITS
+        : (Object.fromEntries(
+            LIMITS.map(([key, label]) => [
+              key,
+              optionalWhole(form.limits[key], label),
+            ]),
+          ) as PlanDraft["limits"]),
     }
   } catch (cause) {
     return cause instanceof Error ? cause.message : "Check the fields"
@@ -381,6 +474,42 @@ export function PlanEditor({
           </p>
         ) : null}
         <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="Pricing model" htmlFor="plan-pricing">
+            <select
+              id="plan-pricing"
+              className="block w-full border border-dashed border-border bg-transparent p-2 text-sm"
+              value={form.pricing_version}
+              disabled={initial.family !== ""}
+              onChange={(event) =>
+                set("pricing_version", event.target.value as PricingVersion)
+              }
+            >
+              <option value="legacy">Legacy</option>
+              <option value="v2">v2</option>
+            </select>
+          </Field>
+          <Field label="Kind" htmlFor="plan-kind">
+            <select
+              id="plan-kind"
+              className="block w-full border border-dashed border-border bg-transparent p-2 text-sm"
+              value={form.kind}
+              onChange={(event) => set("kind", event.target.value as PlanKind)}
+            >
+              {KINDS.map(([kind, label]) => (
+                <option key={kind} value={kind}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Price label" htmlFor="plan-price-label">
+            <Input
+              id="plan-price-label"
+              placeholder="$250/month"
+              value={form.price_label}
+              onChange={(event) => set("price_label", event.target.value)}
+            />
+          </Field>
           <Field label="Family" htmlFor="plan-family">
             <Input
               id="plan-family"
@@ -482,8 +611,8 @@ export function PlanEditor({
                 Leave both fees empty for a staff-assigned arrangement of
                 credits and/or matching with no subscription fee (use a family
                 such as custom_example). Self-serve checkout sells only public
-                plans with a fee, one ongoing monthly grant expiring after a
-                month, and no matching rule.
+                subscription plans with a fee, one ongoing monthly grant
+                expiring after a month, and no matching rule.
               </p>
               {form.grants.map((grant, index) => (
                 <div
@@ -623,16 +752,124 @@ export function PlanEditor({
                 </div>
               ) : null}
             </fieldset>
-            <fieldset className="grid gap-4 sm:grid-cols-4">
+            <fieldset className="space-y-3">
+              <legend className="text-sm font-medium">Usage allowance</legend>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="accent-brand"
+                  checked={form.allowance !== null}
+                  onChange={(event) =>
+                    set(
+                      "allowance",
+                      event.target.checked ? NEW_ALLOWANCE : null,
+                    )
+                  }
+                />
+                Include usage in the plan
+              </label>
+              {form.allowance ? (
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <Field label="Measured as" htmlFor="allowance-basis">
+                    <select
+                      id="allowance-basis"
+                      className="block w-full border border-dashed border-border bg-transparent p-2 text-sm"
+                      value={form.allowance.basis}
+                      onChange={(event) =>
+                        set("allowance", {
+                          ...form.allowance!,
+                          basis: event.target.value as AllowanceForm["basis"],
+                        })
+                      }
+                    >
+                      <option value="usage">Dollars of usage</option>
+                      <option value="compute">
+                        Compute time, priced at the rate card
+                      </option>
+                    </select>
+                  </Field>
+                  <Field label="Every" htmlFor="allowance-period">
+                    <select
+                      id="allowance-period"
+                      className="block w-full border border-dashed border-border bg-transparent p-2 text-sm"
+                      value={form.allowance.period}
+                      onChange={(event) =>
+                        set("allowance", {
+                          ...form.allowance!,
+                          period: event.target.value as AllowanceForm["period"],
+                        })
+                      }
+                    >
+                      <option value="month">Month</option>
+                      <option value="day_window">
+                        24 hours from first start
+                      </option>
+                    </select>
+                  </Field>
+                  <Field label="When used up" htmlFor="allowance-exhausted">
+                    <select
+                      id="allowance-exhausted"
+                      className="block w-full border border-dashed border-border bg-transparent p-2 text-sm"
+                      value={form.allowance.on_exhausted}
+                      onChange={(event) =>
+                        set("allowance", {
+                          ...form.allowance!,
+                          on_exhausted: event.target
+                            .value as AllowanceForm["on_exhausted"],
+                        })
+                      }
+                    >
+                      <option value="payg">Pay as you go</option>
+                      <option value="pause">Pause sandboxes</option>
+                    </select>
+                  </Field>
+                  {form.allowance.basis === "usage" ? (
+                    <Field label="Amount (USD)" htmlFor="allowance-amount">
+                      <Input
+                        id="allowance-amount"
+                        inputMode="decimal"
+                        value={form.allowance.amount}
+                        onChange={(event) =>
+                          set("allowance", {
+                            ...form.allowance!,
+                            amount: event.target.value,
+                          })
+                        }
+                      />
+                    </Field>
+                  ) : (
+                    (
+                      [
+                        ["hours", "Hours"],
+                        ["vcpu", "vCPU"],
+                        ["memory_gib", "Memory GiB"],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <Field
+                        key={key}
+                        label={label}
+                        htmlFor={`allowance-${key}`}
+                      >
+                        <Input
+                          id={`allowance-${key}`}
+                          inputMode="decimal"
+                          value={form.allowance![key]}
+                          onChange={(event) =>
+                            set("allowance", {
+                              ...form.allowance!,
+                              [key]: event.target.value,
+                            })
+                          }
+                        />
+                      </Field>
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </fieldset>
+            <fieldset className="grid gap-4 sm:grid-cols-5">
               <legend className="mb-2 text-sm font-medium">Limits</legend>
-              {(
-                [
-                  ["max_sandboxes", "Concurrent sandboxes"],
-                  ["max_template_vcpu", "vCPU per sandbox"],
-                  ["max_template_memory_mib", "Memory MiB"],
-                  ["max_template_disk_mib", "Disk MiB"],
-                ] as const
-              ).map(([key, label]) => (
+              {LIMITS.map(([key, label]) => (
                 <Field key={key} label={label} htmlFor={`limit-${key}`}>
                   <Input
                     id={`limit-${key}`}

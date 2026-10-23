@@ -4,12 +4,6 @@ import { Button, cn } from "@superserve/ui"
 import type { ReactNode } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
-import {
-  formatUsdCents,
-  planCard,
-  planSandboxSize,
-  type PublicBillingPlans,
-} from "@/lib/billing/plans"
 
 export type PlanCadence = "monthly" | "annual"
 export type PlanStep = "plans" | "free-billing" | "payment-pending"
@@ -20,7 +14,6 @@ export interface PlanSelectionViewProps {
   cadence: PlanCadence
   busy: boolean
   error?: string | null
-  plans?: PublicBillingPlans | null
   onCadence: (cadence: PlanCadence) => void
   onFree: () => void
   onPro: () => void
@@ -64,36 +57,10 @@ function Card({
   )
 }
 
-function SignupCredit({ plans }: { plans?: PublicBillingPlans | null }) {
-  if (!plans)
-    return <li>Signup credit to start, plus more when you add billing</li>
-  return (
-    <li>
-      {formatUsdCents(plans.signup.trial_credit_cents)} to start, plus{" "}
-      {formatUsdCents(plans.signup.card_bonus_cents)} when you add billing, if
-      eligible
-    </li>
-  )
-}
-
-function annualSavings(monthly: number, annual: number): number {
-  return Math.round((1 - annual / (monthly * 12)) * 100)
-}
-
 export function PlanSelectionView(props: PlanSelectionViewProps) {
-  const { step, selection, cadence, busy, error, plans } = props
+  const { step, selection, cadence, busy, error } = props
   const choosing = step === "plans"
   const pending = step === "payment-pending"
-  const pro = planCard(plans, "pro")
-  const enterprise = planCard(plans, "enterprise")
-  const proPrice = cadence === "annual" ? pro?.annual : pro?.monthly
-  const proSavings =
-    pro?.monthly && pro.annual
-      ? annualSavings(pro.monthly.price_cents, pro.annual.price_cents)
-      : 0
-  const proSize = pro ? planSandboxSize(pro.limits) : null
-  const trial = plans ? formatUsdCents(plans.signup.trial_credit_cents) : null
-  const bonus = plans ? formatUsdCents(plans.signup.card_bonus_cents) : null
   return (
     <main className="min-h-dvh bg-background px-5 py-10 text-foreground sm:px-10 sm:py-14">
       <div className="mx-auto max-w-6xl">
@@ -153,7 +120,7 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
             ? "Start small or build at scale. Choose the plan that fits your team."
             : pending
               ? "Your account is ready. We’re confirming your Pro payment before finishing setup."
-              : `Add a payment method for pay-as-you-go usage, or start with your ${trial ? `${trial} ` : ""}trial credit. No subscription fee.`}
+              : "Add a payment method for pay-as-you-go usage, or start with your $5 trial credit. No subscription fee."}
         </p>
 
         {error ? (
@@ -187,7 +154,9 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
               </Button>
               <div className="mt-8 border-t border-dashed border-border pt-6">
                 <Benefits>
-                  <SignupCredit plans={plans} />
+                  <li>
+                    $5 to start, plus $95 when you add billing, if eligible
+                  </li>
                   <li>Up to 20 concurrent sandboxes</li>
                   <li>No time limit on sandboxes</li>
                   <li>Standard usage rates after credit</li>
@@ -196,14 +165,12 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
               </div>
             </Card>
 
-            <Card title={pro?.name ?? "Pro"} selected={selection === "pro"}>
+            <Card title="Pro" selected={selection === "pro"}>
               <fieldset
                 className="mt-4 flex gap-4 font-mono text-xs uppercase"
                 disabled={busy}
               >
-                <legend className="sr-only">
-                  {pro?.name ?? "Pro"} billing frequency
-                </legend>
+                <legend className="sr-only">Pro billing frequency</legend>
                 {(["monthly", "annual"] as const).map((value) => (
                   <label
                     key={value}
@@ -222,37 +189,26 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
                 ))}
               </fieldset>
               <div className="mt-4 min-h-16">
-                {proPrice ? (
-                  <>
-                    <p>
-                      <span className="text-4xl font-medium">
-                        {formatUsdCents(proPrice.monthly_equivalent_cents)}
-                      </span>
-                      <span className="text-muted-foreground ml-2 font-mono text-xs">
-                        / MONTH
-                      </span>
-                    </p>
-                    <p className="text-muted-foreground mt-2 font-mono text-xs uppercase">
-                      {cadence === "annual"
-                        ? `${formatUsdCents(proPrice.price_cents)} billed annually${proSavings > 0 ? ` · Save ${proSavings}%` : ""}`
-                        : `${formatUsdCents(proPrice.price_cents)} billed monthly`}
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-muted-foreground font-mono text-xs uppercase">
-                    {plans === undefined
-                      ? "Pricing is loading"
-                      : "Pricing is unavailable. Reload or contact our team."}
-                  </p>
-                )}
+                <p>
+                  <span className="text-4xl font-medium">
+                    {cadence === "annual" ? "$1,000" : "$1,200"}
+                  </span>
+                  <span className="text-muted-foreground ml-2 font-mono text-xs">
+                    / MONTH
+                  </span>
+                </p>
+                <p className="text-muted-foreground mt-2 font-mono text-xs uppercase">
+                  {cadence === "annual"
+                    ? "$12,000 billed annually · Save 17%"
+                    : "$1,200 billed monthly"}
+                </p>
               </div>
               <p className="text-muted-foreground mt-2 min-h-16 text-sm leading-relaxed">
-                {pro?.tagline ||
-                  "For teams running agents in production at scale."}
+                For teams running agents in production at scale.
               </p>
               <Button
                 className="mt-6 w-full"
-                disabled={busy || !proPrice?.available}
+                disabled={busy}
                 onClick={props.onPro}
               >
                 Continue to payment
@@ -262,23 +218,10 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
                   Everything in Free, plus:
                 </p>
                 <Benefits>
-                  {pro ? (
-                    <li>
-                      {pro.monthly_credit_cents
-                        ? `${formatUsdCents(pro.monthly_credit_cents)} in metered usage included each month`
-                        : `Included usage: ${pro.credit_summary}`}
-                    </li>
-                  ) : null}
-                  {pro?.features.map((feature, index) => (
-                    <li key={`${index}-${feature}`}>{feature}</li>
-                  ))}
-                  {pro?.limits.max_sandboxes ? (
-                    <li>
-                      Up to {pro.limits.max_sandboxes.toLocaleString("en-US")}{" "}
-                      concurrent sandboxes
-                    </li>
-                  ) : null}
-                  {proSize ? <li>{proSize}</li> : null}
+                  <li>$1,000 in metered usage included each month</li>
+                  <li>Priority support</li>
+                  <li>Up to 1,000 concurrent sandboxes</li>
+                  <li>Up to 16 vCPU, 64 GiB memory, 64 GiB disk per sandbox</li>
                 </Benefits>
                 <p className="text-muted-foreground mt-6 text-xs leading-relaxed">
                   Free signup credits do not stack with Pro. Usage beyond the
@@ -287,7 +230,7 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
               </div>
             </Card>
 
-            <Card title={enterprise?.name ?? "Enterprise"}>
+            <Card title="Enterprise">
               <div className="mt-6 min-h-24">
                 <p className="text-4xl font-medium">Custom</p>
                 <p className="text-muted-foreground mt-2 font-mono text-xs uppercase">
@@ -295,8 +238,7 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
                 </p>
               </div>
               <p className="text-muted-foreground min-h-16 text-sm leading-relaxed">
-                {enterprise?.tagline ||
-                  "For teams that need self-hosting and dedicated support."}
+                For teams that need self-hosting and dedicated support.
               </p>
               <Button
                 className="mt-6 w-full"
@@ -312,9 +254,9 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
                   Everything in Pro, plus:
                 </p>
                 <Benefits>
-                  {enterprise?.features.map((feature, index) => (
-                    <li key={`${index}-${feature}`}>{feature}</li>
-                  ))}
+                  <li>Self-host in your AWS, GCP, or Azure account</li>
+                  <li>Custom concurrency and sandbox sizes</li>
+                  <li>Dedicated support</li>
                 </Benefits>
                 <p className="text-muted-foreground mt-6 text-xs leading-relaxed">
                   Continue on Free while you talk with our team.
@@ -370,9 +312,8 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
             <h2 className="text-xl font-medium">Free · Pay as you go</h2>
             <p className="text-muted-foreground mt-4 text-sm leading-relaxed">
               Adding a payment method activates pay-as-you-go billing and
-              replaces your {trial ? `${trial} ` : ""}trial with{" "}
-              {bonus ? `${bonus} in ` : ""}promotional credit, if eligible. You
-              can also skip and add billing later.
+              replaces your $5 trial with $95 in promotional credit, if
+              eligible. You can also skip and add billing later.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Button disabled={busy} onClick={props.onAddCard}>

@@ -2,7 +2,11 @@
 
 import { cellFor, configuredRegions, DEFAULT_REGION } from "@/lib/cells"
 
-import { publicBillingPlansSchema, type PublicBillingPlans } from "./plans"
+import {
+  publicBillingPlansSchema,
+  type PricingVersion,
+  type PublicBillingPlans,
+} from "./plans"
 
 export async function getPublicBillingPlansAction(
   region: string = DEFAULT_REGION,
@@ -12,8 +16,20 @@ export async function getPublicBillingPlansAction(
     : cellFor(DEFAULT_REGION)
   const response = await fetch(
     new URL("/billing/plans/public", cell.apiBaseUrl),
-    { next: { revalidate: 300 }, signal: AbortSignal.timeout(2000) },
+    { next: { revalidate: 60 }, signal: AbortSignal.timeout(2000) },
   )
   if (!response.ok) throw new Error("Plans are unavailable")
   return publicBillingPlansSchema.parse(await response.json())
+}
+
+// The live pricing model of a region. Anything short of a confirmed "v2"
+// counts as legacy, so today's flows stay in place if the read fails.
+export async function getPricingVersionAction(
+  region: string = DEFAULT_REGION,
+): Promise<PricingVersion> {
+  try {
+    return (await getPublicBillingPlansAction(region)).pricing_version
+  } catch {
+    return "legacy"
+  }
 }

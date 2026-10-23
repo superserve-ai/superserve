@@ -6,8 +6,6 @@ import { useEffect, useState } from "react"
 import type { SignupPlanContext } from "@/lib/api/signup-plan"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { setActiveTeamAction } from "@/lib/api/teams-actions"
-import { teamRegion, type PublicBillingPlans } from "@/lib/billing/plans"
-import { getPublicBillingPlansAction } from "@/lib/billing/plans-actions"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 import { PlanSelection } from "./plan-selection"
@@ -17,37 +15,21 @@ export function PlanSelectionLoader({
   billingReturn,
   expectedTeam,
   expectedUser,
-  initialPlans,
 }: {
   initialContext: SignupPlanContext | null
   billingReturn?: string
   expectedTeam?: string
   expectedUser?: string
-  initialPlans?: PublicBillingPlans | null
 }) {
   const [initial, setInitial] = useState<SignupPlanContext | null>(
     initialContext,
   )
-  const [plans, setPlans] = useState(initialPlans)
   const [failed, setFailed] = useState(!initialContext)
   const [attempt, setAttempt] = useState(0)
   const [retrying, setRetrying] = useState(false)
   const [switchingAccount, setSwitchingAccount] = useState(false)
   const [recoveryError, setRecoveryError] = useState<string | null>(null)
   const returnPath = `/onboarding/plan/?${new URLSearchParams({ ...(expectedTeam ? { team: expectedTeam } : {}), ...(expectedUser ? { account: expectedUser } : {}), ...(billingReturn ? { billing: billingReturn } : {}) })}`
-  const teamKey = initial?.teamKey
-  useEffect(() => {
-    if (plans !== undefined || !teamKey) return
-    let active = true
-    void getPublicBillingPlansAction(teamRegion(teamKey))
-      .catch(() => null)
-      .then((value) => {
-        if (active) setPlans(value)
-      })
-    return () => {
-      active = false
-    }
-  }, [plans, teamKey])
   useEffect(() => {
     if (!attempt) return
     let active = true
@@ -140,7 +122,6 @@ export function PlanSelectionLoader({
       key={`${initial.userId}:${initial.teamKey}`}
       initial={initial}
       billingReturn={billingReturn}
-      plans={plans}
     />
   )
 }

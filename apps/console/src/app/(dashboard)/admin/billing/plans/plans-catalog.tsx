@@ -4,7 +4,6 @@ import {
   Alert,
   Badge,
   Button,
-  Input,
   Table,
   TableCell,
   TableHead,
@@ -21,26 +20,25 @@ import {
   mergeCatalogs,
   needsSync,
   outOfStep,
+  planSet,
+  pricingVersions,
   type BillingCatalog,
-  type MergedPromotion,
   type PlanDraft,
   type PlanVersion,
   type RegionState,
 } from "@/lib/admin/billing-catalog"
 import {
   deleteDraftAction,
-  publishSignupPromotionAction,
   publishVersionAction,
   retireVersionAction,
-  syncPromotionAction,
+  setPricingVersionAction,
   syncVersionAction,
   type CatalogResult,
   type FanOutResult,
 } from "@/lib/admin/billing-catalog-actions"
-import { formatUsdCents } from "@/lib/billing/plans"
-import { formatDate } from "@/lib/format"
+import { formatUsdCents, type PricingVersion } from "@/lib/billing/plans"
 
-import { centsFromDollars, PlanEditor } from "./plan-editor"
+import { PlanEditor } from "./plan-editor"
 import { ReasonDialog } from "./reason-dialog"
 
 const STATE_BADGE = {
@@ -50,15 +48,18 @@ const STATE_BADGE = {
   missing: "destructive",
 } as const
 
-const PROMOTION_LABEL = {
-  trial: "Trial credit (no card)",
-  card_bonus: "Card bonus (replaces the trial)",
+const PRICING_LABEL = {
+  legacy: "Legacy pricing",
+  v2: "Pricing v2",
 } as const
 
 export const EMPTY_DRAFT: PlanDraft = {
+  pricing_version: "legacy",
   family: "",
+  kind: "subscription",
   public: false,
   display_name: "",
+  price_label: "",
   tagline: "",
   features: [],
   sort_order: 0,
@@ -68,11 +69,13 @@ export const EMPTY_DRAFT: PlanDraft = {
   annual_fee_cents: null,
   credit_schedule: [],
   matching: null,
+  allowance: null,
   limits: {
-    max_sandboxes: null,
-    max_template_vcpu: null,
-    max_template_memory_mib: null,
-    max_template_disk_mib: null,
+    max_concurrent: null,
+    max_vcpu: null,
+    max_memory_mib: null,
+    max_disk_mib: null,
+    max_templates: null,
   },
 }
 
@@ -87,6 +90,7 @@ type Confirmation = {
 type Editing = { draft: PlanDraft; id?: string; key: number }
 
 function fees(version: PlanVersion) {
+  if (version.price_label) return version.price_label
   if (version.display_only) return "Custom"
   if (version.monthly_fee_cents === null && version.annual_fee_cents === null)
     return "No fee"
@@ -96,6 +100,27 @@ function fees(version: PlanVersion) {
       : null,
     version.annual_fee_cents !== null
       ? `${formatUsdCents(version.annual_fee_cents)} / yr`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ")
+}
+
+function allowanceText(allowance: NonNullable<PlanVersion["allowance"]>) {
+  const amount = allowance.compute
+    ? `${allowance.compute.seconds / 3600}h of ${allowance.compute.vcpu} vCPU + ${allowance.compute.memory_gib} GiB`
+    : `${formatUsdCents(allowance.amount_cents)} of usage`
+  const period = allowance.period === "month" ? "a month" : "every 24 hours"
+  const then = allowance.on_exhausted === "pause" ? "pause" : "pay as you go"
+  return `${amount} ${period}, then ${then}`
+}
+
+function credits(version: PlanVersion) {
+  return [
+    version.preview.summary,
+    version.allowance ? allowanceText(version.allowance) : null,
+    version.matching
+      ? `${version.matching.matching_bps / 100}% match up to ${formatUsdCents(version.matching.cap_cents)}`
       : null,
   ]
     .filter(Boolean)
@@ -135,110 +160,64 @@ function RegionStates({
   )
 }
 
-function PromotionRow({
-  promotion,
-  merged,
-  regions,
+function PricingSwitch({
+  live,
   canWrite,
   locked,
   confirm,
-  sync,
 }: {
-  promotion: "trial" | "card_bonus"
-  merged: MergedPromotion[]
-  regions: string[]
+  live: Record<string, PricingVersion>
   canWrite: boolean
   locked: boolean
   confirm: (confirmation: Confirmation) => void
-  sync: (id: string) => void
 }) {
-  const versions = merged.filter((m) => m.promotion.promotion === promotion)
-  const current = versions.find((m) =>
-    Object.values(m.states).includes("published"),
-  )
-  const earlier = versions.filter((m) => m !== current)
-  const [amount, setAmount] = useState("")
-  const cents = centsFromDollars(amount)
+  const values = new Set(Object.values(live))
+  const current = values.size === 1 ? [...values][0]! : null
+  const target: PricingVersion = current === "v2" ? "legacy" : "v2"
   return (
-    <div className="space-y-3 border border-dashed border-border p-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="font-mono text-xs text-muted uppercase">
-            {PROMOTION_LABEL[promotion]}
-          </p>
-          <p className="mt-1 text-2xl font-medium">
-            {current ? formatUsdCents(current.promotion.amount_cents) : "—"}
-          </p>
-          <p className="mt-1 text-xs text-muted">
-            {current
-              ? `v${current.promotion.version}${current.promotion.published_at ? ` · since ${formatDate(new Date(current.promotion.published_at))}` : ""}`
-              : "No published amount"}
-            {earlier.length
-              ? ` · earlier: ${earlier.map((m) => `v${m.promotion.version} ${formatUsdCents(m.promotion.amount_cents)}`).join(", ")}`
-              : ""}
-          </p>
-        </div>
-        {canWrite ? (
-          <form
-            className="flex items-end gap-2"
-            onSubmit={(event) => {
-              event.preventDefault()
-              if (cents === null) return
-              confirm({
-                title: `Change the ${PROMOTION_LABEL[promotion].toLowerCase()}?`,
-                description: `New grants in every region use ${formatUsdCents(cents)} instead of ${current ? formatUsdCents(current.promotion.amount_cents) : "the current amount"}. Credits already granted keep the amount they were granted with.`,
-                action: (reason) =>
-                  publishSignupPromotionAction(promotion, cents, reason),
-                done: `${PROMOTION_LABEL[promotion]} set to ${formatUsdCents(cents)}`,
-                onDone: () => setAmount(""),
-              })
-            }}
-          >
-            <Input
-              aria-label={`New ${PROMOTION_LABEL[promotion]} in USD`}
-              inputMode="decimal"
-              placeholder="USD"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              className="w-28"
-            />
-            <Button
-              size="sm"
-              type="submit"
-              disabled={
-                locked || !cents || cents === current?.promotion.amount_cents
-              }
+    <section
+      aria-label="Pricing model"
+      className="flex flex-wrap items-center justify-between gap-4 border border-dashed border-border p-4"
+    >
+      <div className="space-y-1">
+        <p className="font-mono text-xs text-muted uppercase">Pricing model</p>
+        <p className="text-2xl font-medium">
+          {current ? PRICING_LABEL[current] : "Regions differ"}
+        </p>
+        <span className="flex flex-wrap gap-1">
+          {Object.entries(live).map(([region, version]) => (
+            <Badge
+              key={region}
+              variant={version === "v2" ? "success" : "muted"}
             >
-              Publish
-            </Button>
-          </form>
-        ) : null}
+              {region}: {version}
+            </Badge>
+          ))}
+        </span>
       </div>
-      {versions
-        .filter((m) => needsSync(m.steps) || outOfStep(m.states))
-        .map((m) => (
-          <div
-            key={m.promotion.id}
-            className="flex flex-wrap items-center gap-2 text-xs"
-          >
-            <span>
-              v{m.promotion.version} {formatUsdCents(m.promotion.amount_cents)}{" "}
-              is not in the same state in every region
-            </span>
-            <RegionStates states={m.states} regions={regions} />
-            {canWrite && needsSync(m.steps) ? (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={locked}
-                onClick={() => sync(m.promotion.id)}
-              >
-                Retry sync
-              </Button>
-            ) : null}
-          </div>
-        ))}
-    </div>
+      {canWrite ? (
+        <Button
+          size="sm"
+          variant={target === "v2" ? "default" : "outline"}
+          disabled={locked}
+          onClick={() =>
+            confirm({
+              title: `Switch every region to ${PRICING_LABEL[target].toLowerCase()}?`,
+              description:
+                target === "v2"
+                  ? "Signup, checkout and the pricing cards use the published v2 plans immediately. Existing contracts keep their terms."
+                  : "Signup, checkout and the pricing cards go back to the published legacy plans immediately. Existing contracts keep their terms.",
+              action: (reason) => setPricingVersionAction(target, reason),
+              done: `${PRICING_LABEL[target]} is live`,
+            })
+          }
+        >
+          {current
+            ? `Switch to ${PRICING_LABEL[target]}`
+            : "Switch every region to v2"}
+        </Button>
+      ) : null}
+    </section>
   )
 }
 
@@ -265,9 +244,7 @@ export function PlansCatalog({
   )
   const merged = unavailable.length === 0 ? mergeCatalogs(loaded) : null
   const drift = merged && regions.length > 1 ? catalogDrift(loaded) : []
-  const families = merged
-    ? [...new Set(merged.versions.map((m) => m.version.family))]
-    : []
+  const sets = merged ? [...new Set(merged.map((m) => planSet(m.version)))] : []
   const locked = pending || editing !== null
 
   const openEditor = (draft: PlanDraft, id?: string) =>
@@ -348,49 +325,28 @@ export function PlansCatalog({
         ) : null}
         {merged ? (
           <>
-            <section aria-label="Signup credits" className="space-y-3">
-              <h3 className="font-mono text-xs text-muted uppercase">
-                Signup credits
-              </h3>
-              <p className="max-w-3xl text-sm text-muted">
-                New amounts apply to grants made after publishing. Credits
-                already granted keep the amount recorded when they were granted.
-              </p>
-              <div className="grid gap-3 md:grid-cols-2">
-                {(["trial", "card_bonus"] as const).map((promotion) => (
-                  <PromotionRow
-                    key={promotion}
-                    promotion={promotion}
-                    merged={merged.promotions}
-                    regions={regions}
-                    canWrite={canWrite}
-                    locked={locked}
-                    confirm={setConfirm}
-                    sync={(id) =>
-                      requestSync(
-                        id,
-                        PROMOTION_LABEL[promotion].toLowerCase(),
-                        syncPromotionAction,
-                      )
-                    }
-                  />
-                ))}
-              </div>
-            </section>
-            {families.map((family) => (
+            <PricingSwitch
+              live={pricingVersions(loaded)}
+              canWrite={canWrite}
+              locked={locked}
+              confirm={setConfirm}
+            />
+            {sets.map((set) => (
               <section
-                key={family}
-                aria-label={`${family} versions`}
+                key={set}
+                aria-label={`${set} versions`}
                 className="space-y-3"
               >
                 <h3 className="font-mono text-xs text-muted uppercase">
-                  {family}
+                  {PRICING_LABEL[set.startsWith("v2:") ? "v2" : "legacy"]} ·{" "}
+                  {set.slice(set.indexOf(":") + 1)}
                 </h3>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Version</TableHead>
                       <TableHead>Name</TableHead>
+                      <TableHead>Kind</TableHead>
                       <TableHead>Fees</TableHead>
                       <TableHead>Credits</TableHead>
                       <TableHead>Checkout</TableHead>
@@ -398,8 +354,8 @@ export function PlansCatalog({
                     </TableRow>
                   </TableHeader>
                   <tbody>
-                    {merged.versions
-                      .filter((m) => m.version.family === family)
+                    {merged
+                      .filter((m) => planSet(m.version) === set)
                       .map(({ version, states, steps }) => (
                         <TableRow key={version.id}>
                           <TableCell className="space-y-1 font-mono text-xs">
@@ -422,14 +378,14 @@ export function PlansCatalog({
                             ) : null}
                           </TableCell>
                           <TableCell>{version.display_name}</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {version.kind}
+                          </TableCell>
                           <TableCell className="tabular-nums">
                             {fees(version)}
                           </TableCell>
                           <TableCell className="text-sm text-muted">
-                            {version.preview.summary}
-                            {version.matching
-                              ? ` · ${version.matching.matching_bps / 100}% match up to ${formatUsdCents(version.matching.cap_cents)}`
-                              : ""}
+                            {credits(version)}
                           </TableCell>
                           <TableCell className="text-xs text-muted">
                             {checkoutLabel(version)}
@@ -443,7 +399,7 @@ export function PlansCatalog({
                                 onClick={() =>
                                   requestSync(
                                     version.id,
-                                    `${family} v${version.version}`,
+                                    `${version.family} v${version.version}`,
                                     syncVersionAction,
                                   )
                                 }
@@ -471,15 +427,17 @@ export function PlansCatalog({
                                   disabled={locked}
                                   onClick={() =>
                                     setConfirm({
-                                      title: `Publish ${family} v${version.version}?`,
+                                      title: `Publish ${version.family} v${version.version}?`,
                                       description:
-                                        "New checkouts and assignments in every region use this version immediately. The current version is retired; existing contracts keep their terms. Published versions cannot be edited.",
+                                        version.pricing_version === "v2"
+                                          ? "Every region holds this version for pricing v2; it goes live when v2 is switched on, or immediately if it already is. The current v2 version is retired; existing contracts keep their terms. Published versions cannot be edited."
+                                          : "New checkouts and assignments in every region use this version while legacy pricing is live. The current version is retired; existing contracts keep their terms. Published versions cannot be edited.",
                                       action: (reason) =>
                                         publishVersionAction(
                                           version.id,
                                           reason,
                                         ),
-                                      done: `${family} v${version.version} published`,
+                                      done: `${version.family} v${version.version} published`,
                                     })
                                   }
                                 >
@@ -491,7 +449,7 @@ export function PlansCatalog({
                                   disabled={locked}
                                   onClick={() =>
                                     setConfirm({
-                                      title: `Delete the ${family} v${version.version} draft?`,
+                                      title: `Delete the ${version.family} v${version.version} draft?`,
                                       description:
                                         "The draft is discarded in every region. Published versions are not affected.",
                                       action: (reason) =>
@@ -523,12 +481,12 @@ export function PlansCatalog({
                                 disabled={locked}
                                 onClick={() =>
                                   setConfirm({
-                                    title: `Retire ${family}?`,
+                                    title: `Retire ${version.family}?`,
                                     description:
                                       "The family stops being offered to new customers in every region and disappears from the pricing cards. Existing contracts and checkouts already started keep their terms.",
                                     action: (reason) =>
                                       retireVersionAction(version.id, reason),
-                                    done: `${family} retired`,
+                                    done: `${version.family} retired`,
                                   })
                                 }
                               >

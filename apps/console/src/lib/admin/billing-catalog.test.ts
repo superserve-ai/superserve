@@ -5,7 +5,6 @@ import {
   mergeCatalogs,
   needsSync,
   planGroupSync,
-  promotionGroupSync,
   type BillingCatalog,
   type PlanVersion,
   type RegionState,
@@ -14,11 +13,14 @@ import {
 function version(overrides: Partial<PlanVersion> = {}): PlanVersion {
   return {
     id: "v1",
+    pricing_version: "legacy",
     family: "pro",
     version: 1,
     state: "published",
+    kind: "subscription",
     public: true,
     display_name: "Pro",
+    price_label: "",
     tagline: "",
     features: [],
     sort_order: 2,
@@ -28,11 +30,13 @@ function version(overrides: Partial<PlanVersion> = {}): PlanVersion {
     annual_fee_cents: 1200000,
     credit_schedule: [],
     matching: null,
+    allowance: null,
     limits: {
-      max_sandboxes: 1000,
-      max_template_vcpu: null,
-      max_template_memory_mib: null,
-      max_template_disk_mib: null,
+      max_concurrent: 1000,
+      max_vcpu: null,
+      max_memory_mib: null,
+      max_disk_mib: null,
+      max_templates: null,
     },
     created_at: "2026-10-01T00:00:00Z",
     published_at: "2026-10-01T00:00:00Z",
@@ -42,21 +46,8 @@ function version(overrides: Partial<PlanVersion> = {}): PlanVersion {
   }
 }
 
-function catalog(plans: PlanVersion[], bonus = 10000): BillingCatalog {
-  return {
-    plans,
-    promotions: [
-      {
-        id: "p1",
-        promotion: "card_bonus",
-        version: 1,
-        state: "published",
-        amount_cents: bonus,
-        published_at: null,
-        retired_at: null,
-      },
-    ],
-  }
+function catalog(plans: PlanVersion[]): BillingCatalog {
+  return { plans, pricing_version: "legacy" }
 }
 
 describe("catalogDrift", () => {
@@ -75,13 +66,13 @@ describe("catalogDrift", () => {
     ).toEqual([])
   })
 
-  it("flags families and promotions whose published terms differ", () => {
+  it("flags families whose published terms differ", () => {
     expect(
       catalogDrift({
-        use: catalog([version()], 10000),
-        usw: catalog([version({ monthly_fee_cents: 150000 })], 9500),
+        use: catalog([version()]),
+        usw: catalog([version({ monthly_fee_cents: 150000 })]),
       }),
-    ).toEqual(["pro", "card_bonus"])
+    ).toEqual(["legacy:pro"])
   })
 
   it("flags a family published in only one region", () => {
@@ -90,7 +81,7 @@ describe("catalogDrift", () => {
         use: catalog([version(), version({ family: "starter", id: "s" })]),
         usw: catalog([version()]),
       }),
-    ).toEqual(["starter"])
+    ).toEqual(["legacy:starter"])
   })
 })
 
@@ -152,46 +143,31 @@ describe("planGroupSync", () => {
   })
 })
 
-describe("promotionGroupSync", () => {
-  it("creates only the newest published promotion where it is missing", () => {
-    expect(
-      promotionGroupSync([
-        { version: 2, states: { use: "published", usw: "missing" } },
-        { version: 3, states: { use: "missing", usw: "published" } },
-      ]),
-    ).toEqual([
-      { use: [], usw: [] },
-      { use: ["create"], usw: [] },
-    ])
-  })
-})
-
-describe("promotion ties", () => {
-  it("does not sync promotions that share a version number", () => {
-    expect(
-      promotionGroupSync([
-        { version: 3, states: { use: "published", usw: "missing" } },
-        { version: 3, states: { use: "missing", usw: "published" } },
-      ]),
-    ).toEqual([
-      { use: [], usw: [] },
-      { use: [], usw: [] },
-    ])
-  })
-})
-
 describe("mergeCatalogs", () => {
   it("joins versions by id and reports their state per region", () => {
     const merged = mergeCatalogs({
       use: catalog([version({ state: "published" })]),
       usw: catalog([version({ state: "draft" })]),
     })
-    expect(merged.versions).toHaveLength(1)
-    expect(merged.versions[0]!.version.state).toBe("published")
-    expect(merged.versions[0]!.states).toEqual({
+    expect(merged).toHaveLength(1)
+    expect(merged[0]!.version.state).toBe("published")
+    expect(merged[0]!.states).toEqual({
       use: "published",
       usw: "draft",
     })
-    expect(needsSync(merged.versions[0]!.steps)).toBe(true)
+    expect(needsSync(merged[0]!.steps)).toBe(true)
+  })
+
+  it("syncs each pricing model's version of a family on its own", () => {
+    const legacy = version()
+    const v2 = version({ id: "v2", pricing_version: "v2", version: 2 })
+    const merged = mergeCatalogs({
+      use: catalog([legacy, v2]),
+      usw: catalog([legacy]),
+    })
+    expect(merged.map((m) => [m.version.id, m.steps])).toEqual([
+      ["v1", { use: [], usw: [] }],
+      ["v2", { use: [], usw: ["create", "publish"] }],
+    ])
   })
 })

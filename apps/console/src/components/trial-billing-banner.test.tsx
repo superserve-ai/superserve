@@ -3,7 +3,6 @@ import { act, cleanup, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { BillingSummaryResponse } from "@/lib/api/billing"
-import { publicBillingPlansFixture } from "@/lib/billing/plans.fixture"
 
 import { TrialBillingBanner } from "./trial-billing-banner"
 
@@ -12,7 +11,6 @@ const mocks = vi.hoisted(() => ({
   payment: vi.fn(),
   context: vi.fn(),
   toast: vi.fn(),
-  plans: vi.fn(),
 }))
 vi.mock("@superserve/ui", async () => ({
   ...(await vi.importActual<typeof import("@superserve/ui")>("@superserve/ui")),
@@ -26,9 +24,6 @@ vi.mock("@/hooks/use-billing-payment", () => ({
 }))
 vi.mock("@/hooks/use-billing-context", () => ({
   useBillingContext: mocks.context,
-}))
-vi.mock("@/hooks/use-public-billing-plans", () => ({
-  usePublicBillingPlans: mocks.plans,
 }))
 vi.mock("next/navigation", () => ({
   usePathname: () => window.location.pathname,
@@ -58,7 +53,6 @@ beforeEach(() => {
   mocks.toast.mockClear()
   mocks.summary.mockReturnValue({ data: summary(), isError: false })
   mocks.context.mockReturnValue({ teamKey: "use:a", ready: true })
-  mocks.plans.mockReturnValue({ data: publicBillingPlansFixture })
   mocks.payment.mockReturnValue({
     submitting: null,
     available: true,
@@ -72,25 +66,6 @@ afterEach(() => {
 })
 
 describe("TrialBillingBanner", () => {
-  it("names the card bonus from the plan catalog for the team's region", () => {
-    mocks.plans.mockReturnValue({
-      data: {
-        ...publicBillingPlansFixture,
-        signup: { trial_credit_cents: 500, card_bonus_cents: 12000 },
-      },
-    })
-    mount()
-    expect(mocks.plans).toHaveBeenCalledWith("use", true)
-    expect(screen.getByText("$120 in additional credits")).toBeInTheDocument()
-  })
-
-  it("omits the amount until the plan catalog loads", () => {
-    mocks.plans.mockReturnValue({ data: undefined })
-    mount()
-    expect(screen.getByText("additional credits")).toBeInTheDocument()
-    expect(screen.queryByText(/\$95/)).not.toBeInTheDocument()
-  })
-
   it("shows full trial balance and incentive without a dismiss action", () => {
     mount()
     expect(screen.getByRole("status")).toHaveClass("bg-yellow-100")

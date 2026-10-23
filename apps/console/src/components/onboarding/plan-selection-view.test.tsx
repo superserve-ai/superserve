@@ -1,9 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
-import type { PublicBillingPlans } from "@/lib/billing/plans"
-import { publicBillingPlansFixture } from "@/lib/billing/plans.fixture"
-
 import {
   PlanSelectionView,
   type PlanSelectionViewProps,
@@ -17,7 +14,6 @@ function props(
     selection: "free",
     cadence: "annual",
     busy: false,
-    plans: publicBillingPlansFixture,
     onCadence: vi.fn(),
     onFree: vi.fn(),
     onPro: vi.fn(),
@@ -32,77 +28,6 @@ function props(
 }
 
 describe("Plan selection", () => {
-  it("renders prices, credits and limits from the plan catalog", () => {
-    const [starter, pro, enterprise] = publicBillingPlansFixture.cards
-    const plans: PublicBillingPlans = {
-      cards: [
-        starter!,
-        {
-          ...pro!,
-          name: "Pro Plus",
-          features: ["Slack support"],
-          monthly: {
-            ...pro!.monthly!,
-            price_cents: 150000,
-            monthly_equivalent_cents: 150000,
-          },
-          annual: {
-            ...pro!.annual!,
-            price_cents: 1440000,
-            monthly_equivalent_cents: 120000,
-          },
-          monthly_credit_cents: 125000,
-          limits: { ...pro!.limits, max_sandboxes: 2000 },
-        },
-        enterprise!,
-      ],
-      signup: { trial_credit_cents: 700, card_bonus_cents: 12000 },
-    }
-    render(<PlanSelectionView {...props({ plans })} />)
-    const card = within(screen.getByRole("region", { name: "Pro Plus plan" }))
-    expect(card.getByText("$1,200")).toBeVisible()
-    expect(card.getByText(/14,400 billed annually · Save 20%/)).toBeVisible()
-    expect(
-      card.getByText("$1,250 in metered usage included each month"),
-    ).toBeVisible()
-    expect(card.getByText("Slack support")).toBeVisible()
-    expect(card.getByText("Up to 2,000 concurrent sandboxes")).toBeVisible()
-    expect(
-      screen.getByText(
-        "$7 to start, plus $120 when you add billing, if eligible",
-      ),
-    ).toBeVisible()
-  })
-
-  it("does not show stale amounts when the catalog is unavailable", () => {
-    render(<PlanSelectionView {...props({ plans: null })} />)
-    expect(
-      screen.queryByText(/\$1,200|\$95|\$5 to start/),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.getByText("Pricing is unavailable. Reload or contact our team."),
-    ).toBeVisible()
-    expect(
-      screen.getByRole("button", { name: "Continue to payment" }),
-    ).toBeDisabled()
-  })
-
-  it("does not sell a plan the catalog marks unavailable", () => {
-    const [starter, pro, enterprise] = publicBillingPlansFixture.cards
-    const plans: PublicBillingPlans = {
-      ...publicBillingPlansFixture,
-      cards: [
-        starter!,
-        { ...pro!, monthly: { ...pro!.monthly!, available: false } },
-        enterprise!,
-      ],
-    }
-    render(<PlanSelectionView {...props({ plans, cadence: "monthly" })} />)
-    expect(
-      screen.getByRole("button", { name: "Continue to payment" }),
-    ).toBeDisabled()
-  })
-
   it("shows three plans, with cadence only in Pro and incremental Enterprise benefits", () => {
     render(<PlanSelectionView {...props()} />)
     const pro = within(screen.getByRole("region", { name: "Pro plan" }))
