@@ -109,7 +109,9 @@ export function PlanAwareBanner({
                 href={PLAN_ACTION_LINKS.starter}
                 className="self-center underline underline-offset-4"
               >
-                Set up auto-recharge
+                {prepaid.auto_recharge.disabled_reason
+                  ? "Turn auto-recharge back on"
+                  : "Set up auto-recharge"}
               </Link>
             )}
           </ManageAction>
@@ -117,8 +119,10 @@ export function PlanAwareBanner({
       >
         {empty ? (
           <>
-            Your Starter balance has run out. Running sandboxes are paused until
-            you add credit.
+            Your Starter balance has run out. Running sandboxes are paused
+            {prepaid.auto_recharge.in_flight
+              ? " while a top-up is being processed."
+              : " until you add credit."}
           </>
         ) : (
           <>

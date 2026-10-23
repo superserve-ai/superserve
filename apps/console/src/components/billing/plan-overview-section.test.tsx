@@ -195,8 +195,6 @@ describe("PlanOverviewSection with pricing v2 on", () => {
           disabled_at: null,
           in_flight: false,
         },
-        has_saved_card: true,
-        purchases: [],
       },
     })
     render(<PlanOverviewSection summary={summary} />)
@@ -269,8 +267,6 @@ describe("PlanOverviewSection with pricing v2 on", () => {
           disabled_at: "2026-10-22T00:00:00Z",
           in_flight: true,
         },
-        has_saved_card: true,
-        purchases: [],
       },
     })
     render(<PlanOverviewSection summary={summary} />)

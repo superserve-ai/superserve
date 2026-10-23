@@ -113,8 +113,6 @@ describe("PlanBanner with pricing v2 on", () => {
           disabled_at: null,
           in_flight: false,
         },
-        has_saved_card: true,
-        purchases: [],
       },
     })
     mount()
@@ -140,8 +138,6 @@ describe("PlanBanner with pricing v2 on", () => {
           disabled_at: null,
           in_flight: false,
         },
-        has_saved_card: true,
-        purchases: [],
       },
     })
     mount()
@@ -166,8 +162,6 @@ describe("PlanBanner with pricing v2 on", () => {
           disabled_at: null,
           in_flight: false,
         },
-        has_saved_card: true,
-        purchases: [],
       },
     })
     mount()
@@ -191,8 +185,6 @@ describe("PlanBanner with pricing v2 on", () => {
             disabled_at: null,
             in_flight: false,
           },
-          has_saved_card: true,
-          purchases: [],
         },
       ],
       ["subscription", undefined],
@@ -204,6 +196,28 @@ describe("PlanBanner with pricing v2 on", () => {
       expect(container.textContent).toBe("")
       unmount()
     }
+  })
+
+  it("mentions a top-up in flight and offers to turn auto-recharge back on", () => {
+    mocks.plan.mockReturnValue({ data: plan("prepaid") })
+    mocks.prepaid.mockReturnValue({
+      data: {
+        balance_cents: 0,
+        auto_recharge: {
+          enabled: false,
+          threshold_cents: 500,
+          amount_cents: 2000,
+          disabled_reason: "card_declined",
+          disabled_at: "2026-10-22T00:00:00Z",
+          in_flight: true,
+        },
+      },
+    })
+    mount()
+    expect(screen.getByText(/while a top-up is being processed/)).toBeTruthy()
+    expect(
+      screen.getByRole("link", { name: "Turn auto-recharge back on" }),
+    ).toBeTruthy()
   })
 
   it("stays quiet on a low balance when auto-recharge will top it up", () => {
@@ -219,8 +233,6 @@ describe("PlanBanner with pricing v2 on", () => {
           disabled_at: null,
           in_flight: true,
         },
-        has_saved_card: true,
-        purchases: [],
       },
     })
     const { container } = mount()
