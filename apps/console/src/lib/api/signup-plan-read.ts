@@ -7,7 +7,6 @@ import {
 } from "@/lib/api/signup-plan"
 import type { TeamMembership } from "@/lib/api/team-directory"
 import { PLAN_OFFER_COOKIE, readPlanOffer } from "@/lib/auth/plan-preselection"
-import { getPricingVersionAction } from "@/lib/billing/plans-actions"
 import { cellFor } from "@/lib/cells"
 
 async function hasPlanAssignment(
@@ -50,7 +49,6 @@ export async function readSignupPlan(
   const choice = parseSignupChoice(error ? null : data)
   if (
     (choice.state === "selecting" || choice.state === "pending") &&
-    (await getPricingVersionAction(team.region)) === "v2" &&
     (await hasPlanAssignment(admin, team.teamId))
   ) {
     // Pricing v2 assigns every plan directly; the signup picker doesn't apply.
