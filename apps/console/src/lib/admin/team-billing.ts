@@ -279,13 +279,19 @@ export function grantStaffCredit(
   })
 }
 
-const planChangePreviewSchema = z.object({
-  target_offer: z.string(),
-  terms: planTermsSchema,
-  effective_at: z.string(),
-  timing: z.string(),
-  blocked: z.string().optional(),
-})
+const planChangePreviewSchema = z.union([
+  z.object({
+    target_offer: z.string(),
+    terms: planTermsSchema,
+    blocked: z.string(),
+  }),
+  z.object({
+    target_offer: z.string(),
+    terms: planTermsSchema,
+    effective_at: z.string().datetime({ offset: true }),
+    timing: z.string(),
+  }),
+])
 
 export type PlanChangePreview = z.infer<typeof planChangePreviewSchema>
 

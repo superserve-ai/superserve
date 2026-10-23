@@ -15,12 +15,17 @@ import {
 } from "./actions"
 import { FailureNotice } from "./failure-notice"
 
-const TIMING: Record<string, string> = {
-  next_anniversary: "the team's next billing anniversary",
-  end_of_paid_year: "the end of the team's current paid year",
-  annual_fee_starts_on_yearly_anniversary:
-    "an annual fee starts on a yearly anniversary of the team's billing",
-}
+const TIMING = new Map([
+  [
+    "next_anniversary",
+    "Plan changes apply at the team's next billing anniversary.",
+  ],
+  ["end_of_paid_year", "The team's current paid year ends then."],
+  [
+    "annual_fee_starts_on_yearly_anniversary",
+    "An annual fee starts only on a yearly anniversary of the team's billing.",
+  ],
+])
 
 export function formatEffectiveDate(value: string): string {
   return new Date(value).toLocaleDateString("en-US", {
@@ -33,8 +38,10 @@ export function formatEffectiveDate(value: string): string {
 
 function PlanChangePreviewNotice({
   result,
+  onRetry,
 }: {
   result: PlanChangePreviewResult | "loading" | null
+  onRetry: () => void
 }) {
   if (result === null) return null
   if (result === "loading")
@@ -43,12 +50,21 @@ function PlanChangePreviewNotice({
     return (
       <Alert variant="warning">
         <FailureNotice
-          message="The effective date could not be checked. Try choosing the plan again."
+          message="The effective date could not be checked."
           detail={result.detail}
         />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="mt-2"
+          onClick={onRetry}
+        >
+          Check again
+        </Button>
       </Alert>
     )
-  if (result.preview.blocked)
+  if ("blocked" in result.preview)
     return (
       <Alert variant="destructive">
         This team cannot move to this plan: {result.preview.blocked}
@@ -60,8 +76,8 @@ function PlanChangePreviewNotice({
         Takes effect {formatEffectiveDate(result.preview.effective_at)}
       </span>
       <span className="text-sm text-muted">
-        Because{" "}
-        {TIMING[result.preview.timing] ?? "of the team's billing anniversary"}.
+        {TIMING.get(result.preview.timing) ??
+          "Plan changes apply at a billing anniversary."}
       </span>
     </Alert>
   )
@@ -122,7 +138,7 @@ export function SchedulePlanChangeForm({
     preview !== null &&
     preview !== "loading" &&
     preview.kind === "preview" &&
-    !preview.preview.blocked
+    !("blocked" in preview.preview)
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -175,7 +191,10 @@ export function SchedulePlanChangeForm({
           placeholder="Why this team is changing plans"
         />
       </Field>
-      <PlanChangePreviewNotice result={preview} />
+      <PlanChangePreviewNotice
+        result={preview}
+        onRetry={() => void choose(target)}
+      />
       <p className="text-xs text-muted">
         Plan changes apply only at a billing anniversary. Nothing is refunded or
         prorated.

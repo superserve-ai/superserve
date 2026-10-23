@@ -166,7 +166,7 @@ it("shows the effective date and why before scheduling", async () => {
   )
   await fill()
   expect(
-    screen.getByText(/an annual fee starts on a yearly anniversary/),
+    screen.getByText(/annual fee starts only on a yearly anniversary/),
   ).toBeInTheDocument()
   expect(previewPlanChangeAction).toHaveBeenCalledWith({
     region: "use",
@@ -179,7 +179,8 @@ it("blocks scheduling when the preview refuses the change", async () => {
   vi.mocked(previewPlanChangeAction).mockResolvedValue({
     kind: "preview",
     preview: {
-      ...preview.preview,
+      target_offer: "pro_annual",
+      terms: preview.preview.terms,
       blocked: "a sponsorship is active",
     },
   })
@@ -194,4 +195,55 @@ it("blocks scheduling when the preview refuses the change", async () => {
     target: { value: "upgrade" },
   })
   expect(screen.getByRole("button", { name: "Schedule change" })).toBeDisabled()
+})
+
+it("ignores a slow preview for a plan the user moved away from", async () => {
+  let resolveSlow: (value: typeof preview) => void = () => {}
+  vi.mocked(previewPlanChangeAction)
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSlow = resolve
+        }),
+    )
+    .mockResolvedValueOnce({
+      kind: "preview",
+      preview: {
+        target_offer: "free",
+        terms: { ...preview.preview.terms, offer_key: "free", fee_cents: 0 },
+        blocked: "the team is already on this plan",
+      },
+    })
+  render(
+    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
+  )
+  fireEvent.change(screen.getByLabelText(/New plan/), {
+    target: { value: "pro_annual" },
+  })
+  fireEvent.change(screen.getByLabelText(/New plan/), {
+    target: { value: "free" },
+  })
+  await screen.findByText(/already on this plan/)
+  resolveSlow(preview)
+  await waitFor(() =>
+    expect(screen.queryByText(/Takes effect/)).not.toBeInTheDocument(),
+  )
+  fireEvent.change(screen.getByLabelText(/Reason/), {
+    target: { value: "downgrade" },
+  })
+  expect(screen.getByRole("button", { name: "Schedule change" })).toBeDisabled()
+})
+
+it("lets staff check the effective date again after a failed preview", async () => {
+  vi.mocked(previewPlanChangeAction).mockResolvedValueOnce({
+    kind: "unavailable",
+  })
+  render(
+    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
+  )
+  fireEvent.change(screen.getByLabelText(/New plan/), {
+    target: { value: "pro_annual" },
+  })
+  fireEvent.click(await screen.findByRole("button", { name: "Check again" }))
+  await screen.findByText("Takes effect March 14, 2027")
 })
