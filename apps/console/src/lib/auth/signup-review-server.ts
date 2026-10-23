@@ -20,9 +20,6 @@ const DETAILS_PURPOSE = "signup_details_v1"
 // Covers the Google consent round trip only; the callback consumes it.
 const DETAILS_TTL_SECONDS = 15 * 60
 const PENDING_PROFILE_TTL_SECONDS = 24 * 60 * 60
-// The callback sees an OAuth account seconds after Auth creates it; anything
-// older without a review state is an existing account and passes unchanged.
-const NEW_ACCOUNT_WINDOW_MS = 10 * 60 * 1000
 
 /** Merged into app_metadata; Auth keeps keys that are not listed. */
 export async function updateSignupReviewMetadata(
@@ -37,19 +34,16 @@ export async function updateSignupReviewMetadata(
 }
 
 /**
- * A brand-new OAuth account that has not entered review. Staff (Google on the
- * staff domain) and invited teammates are not signups and skip review.
+ * An OAuth account without a team that has not entered review. Callers only
+ * ask for first-time accounts, so age is deliberately ignored: an abandoned
+ * first callback must not let a later sign-in skip review. Staff (Google on
+ * the staff domain) and invited teammates are not signups and skip review.
  */
 export function requiresSignupReview(
-  user: Pick<User, "app_metadata" | "created_at" | "email"> & {
-    invited_at?: string
-  },
-  now = Date.now(),
+  user: Pick<User, "app_metadata" | "email"> & { invited_at?: string },
 ): boolean {
   if (signupReviewStatus(user) || user.invited_at) return false
-  if (isStaff(user as User)) return false
-  const createdAt = Date.parse(user.created_at)
-  return Number.isFinite(createdAt) && now - createdAt < NEW_ACCOUNT_WINDOW_MS
+  return !isStaff(user as User)
 }
 
 function secret(): string {

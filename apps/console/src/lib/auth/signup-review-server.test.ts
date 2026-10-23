@@ -6,12 +6,9 @@ vi.mock("@/lib/supabase/server", () => ({ createServerClient: vi.fn() }))
 
 import { requiresSignupReview } from "./signup-review-server"
 
-const now = Date.parse("2026-10-01T12:00:00Z")
-
 function account(overrides: Record<string, unknown> = {}) {
   return {
     email: "new-user@example.com",
-    created_at: "2026-10-01T11:59:30Z",
     app_metadata: { provider: "google", providers: ["google"] },
     ...overrides,
   }
@@ -21,12 +18,14 @@ describe("requiresSignupReview", () => {
   beforeEach(() => vi.stubEnv("STAFF_EMAIL_DOMAIN", "staff.example.com"))
   afterEach(() => vi.unstubAllEnvs())
 
-  it("holds an account Auth just created", () => {
-    expect(requiresSignupReview(account(), now)).toBe(true)
+  it("holds a first-time account however long ago Auth created it", () => {
+    expect(requiresSignupReview(account())).toBe(true)
+    expect(
+      requiresSignupReview(account({ created_at: "2025-01-01T00:00:00Z" })),
+    ).toBe(true)
   })
 
   it.each([
-    ["an existing account", { created_at: "2025-01-01T00:00:00Z" }],
     [
       "an already reviewed account",
       {
@@ -36,6 +35,6 @@ describe("requiresSignupReview", () => {
     ["an invited teammate", { invited_at: "2026-10-01T11:00:00Z" }],
     ["staff", { email: "person@staff.example.com" }],
   ])("lets %s through unchanged", (_label, overrides) => {
-    expect(requiresSignupReview(account(overrides), now)).toBe(false)
+    expect(requiresSignupReview(account(overrides))).toBe(false)
   })
 })
