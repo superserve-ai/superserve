@@ -31,14 +31,14 @@ import {
   deleteDraftAction,
   publishVersionAction,
   retireVersionAction,
-  setPricingVersionAction,
   syncVersionAction,
   type CatalogResult,
   type FanOutResult,
 } from "@/lib/admin/billing-catalog-actions"
-import { formatUsdCents, type PricingVersion } from "@/lib/billing/plans"
+import { formatUsdCents } from "@/lib/billing/plans"
 
 import { PlanEditor } from "./plan-editor"
+import { PRICING_LABEL, PricingActivation } from "./pricing-activation"
 import { ReasonDialog } from "./reason-dialog"
 
 const STATE_BADGE = {
@@ -46,11 +46,6 @@ const STATE_BADGE = {
   published: "success",
   retired: "muted",
   missing: "destructive",
-} as const
-
-const PRICING_LABEL = {
-  legacy: "Legacy pricing",
-  v2: "Pricing v2",
 } as const
 
 export const EMPTY_DRAFT: PlanDraft = {
@@ -79,7 +74,7 @@ export const EMPTY_DRAFT: PlanDraft = {
   },
 }
 
-type Confirmation = {
+export type Confirmation = {
   title: string
   description: string
   action: (reason: string) => Promise<FanOutResult>
@@ -157,72 +152,6 @@ function RegionStates({
         </Badge>
       ))}
     </span>
-  )
-}
-
-function PricingSwitch({
-  live,
-  canWrite,
-  locked,
-  confirm,
-}: {
-  live: Record<string, PricingVersion>
-  canWrite: boolean
-  locked: boolean
-  confirm: (confirmation: Confirmation) => void
-}) {
-  const values = new Set(Object.values(live))
-  const current = values.size === 1 ? [...values][0]! : null
-  const target: PricingVersion = current === "v2" ? "legacy" : "v2"
-  return (
-    <section
-      aria-label="Pricing model"
-      className="flex flex-wrap items-center justify-between gap-4 border border-dashed border-border p-4"
-    >
-      <div className="space-y-1">
-        <p className="font-mono text-xs text-muted uppercase">Pricing model</p>
-        <p className="text-2xl font-medium">
-          {current ? PRICING_LABEL[current] : "Regions differ"}
-        </p>
-        <span className="flex flex-wrap gap-1">
-          {Object.entries(live).map(([region, version]) => (
-            <Badge
-              key={region}
-              variant={version === "v2" ? "success" : "muted"}
-            >
-              {region}: {version}
-            </Badge>
-          ))}
-        </span>
-      </div>
-      {canWrite ? (
-        <span className="flex gap-2">
-          {(current ? [target] : (["legacy", "v2"] as const)).map((to) => (
-            <Button
-              key={to}
-              size="sm"
-              variant={to === "v2" ? "default" : "outline"}
-              disabled={locked}
-              onClick={() =>
-                confirm({
-                  title: `Switch every region to ${PRICING_LABEL[to].toLowerCase()}?`,
-                  description:
-                    to === "v2"
-                      ? "Signup, checkout and the pricing cards use the published v2 plans immediately. Existing contracts keep their terms."
-                      : "Signup, checkout and the pricing cards go back to the published legacy plans immediately. Existing contracts keep their terms.",
-                  action: (reason) => setPricingVersionAction(to, reason),
-                  done: `${PRICING_LABEL[to]} is live`,
-                })
-              }
-            >
-              {current
-                ? `Switch to ${PRICING_LABEL[to]}`
-                : `Switch every region to ${to}`}
-            </Button>
-          ))}
-        </span>
-      ) : null}
-    </section>
   )
 }
 
@@ -330,7 +259,7 @@ export function PlansCatalog({
         ) : null}
         {merged ? (
           <>
-            <PricingSwitch
+            <PricingActivation
               live={pricingVersions(loaded)}
               canWrite={canWrite}
               locked={locked}

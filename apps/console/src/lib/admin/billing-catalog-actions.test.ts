@@ -316,6 +316,15 @@ describe("billing catalog fan-out", () => {
     expect(writes()).toEqual([])
   })
 
+  it("switches only the region staff chose", async () => {
+    signIn(["platform:billing:read", "platform:billing:write"])
+    const v2 = plan({ pricing_version: "v2", state: "published" })
+    serve({ "use.example.com": [v2], "usw.example.com": [v2] })
+    const result = await setPricingVersionAction("v2", "Launch west", ["usw"])
+    expect(result.errors).toEqual({})
+    expect(writes().map((w) => w.host)).toEqual(["usw.example.com"])
+  })
+
   it("refuses to switch to v2 while regions publish different v2 plans", async () => {
     signIn(["platform:billing:read", "platform:billing:write"])
     serve({

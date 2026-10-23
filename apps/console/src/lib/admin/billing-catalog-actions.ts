@@ -394,15 +394,20 @@ export async function syncVersionAction(
   }
 }
 
-// Switches the live pricing model in every region. Turning v2 on requires
-// every region to publish the same v2 catalog, so no region sells different
-// terms. Repeating the switch is a no-op where it already took effect.
+// Switches the live pricing model in the given regions, or every region.
+// Turning v2 on anywhere requires every region to publish the same v2
+// catalog, so no region sells different terms. Repeating the switch is a
+// no-op where it already took effect.
 export async function setPricingVersionAction(
   pricingVersion: PricingVersion,
   reason: string,
+  regions?: string[],
 ): Promise<FanOutResult> {
   try {
     const catalogs = await loadCatalogs()
+    const targets = regions ?? Object.keys(catalogs)
+    if (!targets.length || targets.some((region) => !(region in catalogs)))
+      throw new Error("Choose configured regions to switch")
     if (pricingVersion === "v2") {
       const drift = catalogDrift(catalogs).filter((set) =>
         set.startsWith("v2:"),
@@ -412,7 +417,7 @@ export async function setPricingVersionAction(
           `The v2 catalog differs between regions (${drift.join(", ")}). Retry sync first.`,
         )
     }
-    return fanOut(Object.keys(catalogs), (region) =>
+    return fanOut(targets, (region) =>
       adminBillingRequest({
         region,
         path: "/internal/billing/pricing-version",
