@@ -43,11 +43,15 @@ async function errorDetail(response: Response): Promise<string | undefined> {
   )
   if (!parsed.success) return undefined
   const detail = parsed.data.error.message
-    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(
+      /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]+/g,
+      " ",
+    )
     .trim()
   if (!detail) return undefined
-  return detail.length > MAX_DETAIL_LENGTH
-    ? `${detail.slice(0, MAX_DETAIL_LENGTH - 1)}…`
+  const chars = [...detail]
+  return chars.length > MAX_DETAIL_LENGTH
+    ? `${chars.slice(0, MAX_DETAIL_LENGTH - 1).join("")}…`
     : detail
 }
 

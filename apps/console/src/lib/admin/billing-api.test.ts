@@ -427,6 +427,18 @@ describe("adminBillingRequest error detail", () => {
     expect(long.detail).toHaveLength(300)
     expect(long.detail?.startsWith("a b")).toBe(true)
     expect(long.detail?.endsWith("…")).toBe(true)
+    expect(
+      (
+        await failWith(409, {
+          error: { code: "x", message: "a\u202eb\u2028c\u0085d" },
+        })
+      ).detail,
+    ).toBe("a b c d")
+    const emoji = await failWith(409, {
+      error: { code: "x", message: "😀".repeat(400) },
+    })
+    expect([...(emoji.detail ?? "")]).toHaveLength(300)
+    expect(emoji.detail?.endsWith("😀…")).toBe(true)
     expect((await failWith(409, { message: "flat" })).detail).toBeUndefined()
     fetchMock.mockResolvedValue(new Response("not json", { status: 409 }))
     const text = await adminBillingRequest({
