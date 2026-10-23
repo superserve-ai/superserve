@@ -216,6 +216,43 @@ describe("middleware", () => {
       mockClient.response,
     )
   })
+
+  it.each([
+    [
+      "holds an unmarked account created after review started",
+      "2999-06-01T00:00:00Z",
+      true,
+    ],
+    [
+      "lets an unmarked account created before review started through",
+      "2026-01-01T00:00:00Z",
+      false,
+    ],
+  ])("%s", async (_label, createdAt, held) => {
+    const signOut = vi.fn().mockResolvedValue({ error: null })
+    Object.assign(mockClient.supabase!.auth, { signOut })
+    mockClient.supabase!.auth.getUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-123",
+          email: "u@e.com",
+          created_at: createdAt,
+          app_metadata: {},
+        },
+      },
+      error: null,
+    })
+
+    const res = await middleware(buildRequest("/sandboxes"))
+    if (held) {
+      expect(signOut).toHaveBeenCalled()
+      expect(new URL(res.headers.get("location")!).pathname).toBe(
+        "/auth/pending",
+      )
+    } else {
+      expect(res).toBe(mockClient.response)
+    }
+  })
 })
 
 describe("middleware matcher", () => {

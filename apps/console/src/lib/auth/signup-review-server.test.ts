@@ -18,11 +18,21 @@ describe("requiresSignupReview", () => {
   beforeEach(() => vi.stubEnv("STAFF_EMAIL_DOMAIN", "staff.example.com"))
   afterEach(() => vi.unstubAllEnvs())
 
-  it("holds a first-time account however long ago Auth created it", () => {
-    expect(requiresSignupReview(account())).toBe(true)
+  it("holds a first-time account created since review started, however long ago", () => {
+    vi.stubEnv("SIGNUP_REVIEW_STARTS_AT", "2026-01-01T00:00:00Z")
     expect(
-      requiresSignupReview(account({ created_at: "2025-01-01T00:00:00Z" })),
+      requiresSignupReview(account({ created_at: "2026-01-01T00:00:00Z" })),
     ).toBe(true)
+    expect(
+      requiresSignupReview(account({ created_at: "2026-03-01T00:00:00Z" })),
+    ).toBe(true)
+  })
+
+  it("leaves accounts created before review started alone", () => {
+    vi.stubEnv("SIGNUP_REVIEW_STARTS_AT", "2026-01-01T00:00:00Z")
+    expect(
+      requiresSignupReview(account({ created_at: "2025-12-31T23:59:59Z" })),
+    ).toBe(false)
   })
 
   it.each([
@@ -35,6 +45,11 @@ describe("requiresSignupReview", () => {
     ["an invited teammate", { invited_at: "2026-10-01T11:00:00Z" }],
     ["staff", { email: "person@staff.example.com" }],
   ])("lets %s through unchanged", (_label, overrides) => {
-    expect(requiresSignupReview(account(overrides))).toBe(false)
+    vi.stubEnv("SIGNUP_REVIEW_STARTS_AT", "2026-01-01T00:00:00Z")
+    expect(
+      requiresSignupReview(
+        account({ created_at: "2026-03-01T00:00:00Z", ...overrides }),
+      ),
+    ).toBe(false)
   })
 })

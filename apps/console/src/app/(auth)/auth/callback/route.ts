@@ -36,9 +36,10 @@ import {
   SignupRestrictedError,
 } from "@/lib/auth/signup-restrictions"
 import {
+  isSignupReviewBlocked,
   readSignupRequest,
   signupDetailsOffer,
-  signupReviewStatus,
+  signupReviewMarker,
   storedSignupRequest,
 } from "@/lib/auth/signup-review"
 import {
@@ -265,7 +266,7 @@ export async function GET(request: Request) {
           ? user.app_metadata?.provider || "google"
           : "email"
 
-        const review = signupReviewStatus(user)
+        const review = signupReviewMarker(user)
         if (review === "pending" || review === "rejected") {
           // A Google account first seen from sign-in returns here from the
           // signup page with its details; record them and announce it now.
@@ -298,6 +299,19 @@ export async function GET(request: Request) {
             { requestedOffer, next },
           )
         }
+        // An account created outside the console's signup flows has no marker
+        // but is still held; first-time Google accounts are held below.
+        if (
+          isSignupReviewBlocked(user) &&
+          !(code && requiresSignupReview(user))
+        )
+          return signupReviewResponse(
+            supabase,
+            origin,
+            user,
+            !readSignupRequest(user),
+            { requestedOffer, next },
+          )
         // Approval mints a magic link (signup links need the password), which
         // confirms the address exactly like the original signup link.
         const signupLink =

@@ -6,6 +6,13 @@ import { defaultSandboxOrigin } from "./src/lib/sandbox-url"
 // NEXT_PUBLIC_SANDBOX_* value.
 defaultSandboxOrigin()
 
+// Signup review fails closed at runtime without a start; fail the deploy first.
+if (
+  process.env.VERCEL &&
+  Number.isNaN(Date.parse(process.env.SIGNUP_REVIEW_STARTS_AT ?? ""))
+)
+  throw new Error("SIGNUP_REVIEW_STARTS_AT must be set to an ISO timestamp")
+
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },

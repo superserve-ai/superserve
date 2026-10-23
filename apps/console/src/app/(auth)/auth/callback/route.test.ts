@@ -959,6 +959,22 @@ describe("auth callback", () => {
       expect(location.searchParams.get("details")).toBe("required")
     })
 
+    it("holds an unmarked account created since review started outside the signup flow", async () => {
+      Object.assign(currentUser!, { created_at: "2999-06-01T00:00:00Z" })
+
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?token_hash=token&type=magiclink",
+        ),
+      )
+
+      expect(mockSignOut).toHaveBeenCalled()
+      expect(mockSendWelcomeEmail).not.toHaveBeenCalled()
+      const location = new URL(response.headers.get("location")!)
+      expect(location.pathname).toBe("/auth/signup")
+      expect(location.searchParams.get("details")).toBe("required")
+    })
+
     it("records details when a pending account returns from the signup page", async () => {
       currentUser!.app_metadata.signup_review = "pending"
       mockReadStashedSignupDetails.mockResolvedValue(details)

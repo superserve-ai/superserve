@@ -314,7 +314,7 @@ describe("reviewed signup billing step", () => {
       "Billing unavailable",
     )
     expect(
-      screen.getByRole("button", { name: "Continue without credit" }),
+      screen.getByRole("button", { name: "Continue with $5 trial credit" }),
     ).toBeEnabled()
     expect(assign).not.toHaveBeenCalled()
   })
@@ -322,7 +322,7 @@ describe("reviewed signup billing step", () => {
   it("starts on the trial credit without a card", async () => {
     render(<PlanSelection initial={reviewed("enterprise")} />)
     fireEvent.click(
-      screen.getByRole("button", { name: "Continue without credit" }),
+      screen.getByRole("button", { name: "Continue with $5 trial credit" }),
     )
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/sandboxes"))
     expect(commitFreePlan).toHaveBeenCalledWith("use:team")

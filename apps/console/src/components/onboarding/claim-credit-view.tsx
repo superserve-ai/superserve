@@ -57,11 +57,8 @@ export function ClaimCreditView({
               disabled={busy}
               onClick={onSkip}
             >
-              Continue without credit
+              Continue with ${TRIAL_CREDIT_USD} trial credit
             </button>
-            <p className="mt-2 text-xs text-muted">
-              You&apos;ll start with ${TRIAL_CREDIT_USD} in credit.
-            </p>
           </div>
         </section>
       </div>

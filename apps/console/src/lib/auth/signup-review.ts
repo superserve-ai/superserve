@@ -1,12 +1,15 @@
 import type { User } from "@supabase/supabase-js"
 import * as z from "zod"
 
+import { isStaff } from "@/lib/admin/staff-identity"
 import type { PlanCadence } from "@/lib/api/signup-plan"
 
 import type { RequestedOffer } from "./requested-offer"
 
 // Review state lives in app_metadata, which only the service role can write.
-// Accounts without `signup_review` predate review and are never gated.
+// Accounts created before SIGNUP_REVIEW_STARTS_AT without `signup_review`
+// predate review and are never gated; later ones without it are pending, so
+// an account created outside the console's signup flows cannot skip review.
 export type SignupReviewStatus = "pending" | "approved" | "rejected"
 
 export type SignupPlanChoice = "starter" | "pro" | "enterprise"
@@ -146,8 +149,24 @@ export function storedSignupRequest(
 }
 
 type MetadataUser = Pick<User, "app_metadata"> | null | undefined
+export type ReviewUser =
+  | (Pick<User, "app_metadata"> &
+      Partial<Pick<User, "created_at" | "email" | "invited_at">>)
+  | null
+  | undefined
 
-export function signupReviewStatus(
+/** Fails closed: without a valid cutoff every unmarked account would be ungated. */
+export function signupReviewStartsAt(
+  raw = process.env.SIGNUP_REVIEW_STARTS_AT,
+): Date {
+  const startsAt = raw ? new Date(raw) : undefined
+  if (!startsAt || Number.isNaN(startsAt.getTime()))
+    throw new Error("SIGNUP_REVIEW_STARTS_AT must be set to an ISO timestamp")
+  return startsAt
+}
+
+/** The review decision recorded on the account, if any. */
+export function signupReviewMarker(
   user: MetadataUser,
 ): SignupReviewStatus | undefined {
   const status = user?.app_metadata?.signup_review
@@ -156,8 +175,26 @@ export function signupReviewStatus(
     : undefined
 }
 
+/**
+ * Whether an account without a recorded decision is a signup that needs one.
+ * Staff (Google on the staff domain) and invited teammates are not signups.
+ */
+export function isReviewableSignup(user: ReviewUser): boolean {
+  if (!user?.created_at || user.invited_at || isStaff(user)) return false
+  return !(Date.parse(user.created_at) < signupReviewStartsAt().getTime())
+}
+
+export function signupReviewStatus(
+  user: ReviewUser,
+): SignupReviewStatus | undefined {
+  return (
+    signupReviewMarker(user) ??
+    (isReviewableSignup(user) ? "pending" : undefined)
+  )
+}
+
 /** Pending and rejected accounts get the same treatment, so neither is revealed. */
-export function isSignupReviewBlocked(user: MetadataUser): boolean {
+export function isSignupReviewBlocked(user: ReviewUser): boolean {
   const status = signupReviewStatus(user)
   return status === "pending" || status === "rejected"
 }
@@ -198,6 +235,6 @@ export class SignupReviewPendingError extends Error {
   }
 }
 
-export function assertSignupReviewCleared(user: MetadataUser): void {
+export function assertSignupReviewCleared(user: ReviewUser): void {
   if (isSignupReviewBlocked(user)) throw new SignupReviewPendingError()
 }

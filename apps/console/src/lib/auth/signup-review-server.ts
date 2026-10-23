@@ -1,15 +1,15 @@
 import "server-only"
 import crypto from "node:crypto"
 
-import type { User } from "@supabase/supabase-js"
 import { cookies } from "next/headers"
 
-import { isStaff } from "@/lib/admin/staff"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 import {
+  isReviewableSignup,
   parseSignupDetails,
-  signupReviewStatus,
+  signupReviewMarker,
+  type ReviewUser,
   type SignupDetails,
 } from "./signup-review"
 
@@ -35,15 +35,11 @@ export async function updateSignupReviewMetadata(
 
 /**
  * An OAuth account without a team that has not entered review. Callers only
- * ask for first-time accounts, so age is deliberately ignored: an abandoned
- * first callback must not let a later sign-in skip review. Staff (Google on
- * the staff domain) and invited teammates are not signups and skip review.
+ * ask for first-time accounts, so age within the review period is ignored: an
+ * abandoned first callback must not let a later sign-in skip review.
  */
-export function requiresSignupReview(
-  user: Pick<User, "app_metadata" | "email"> & { invited_at?: string },
-): boolean {
-  if (signupReviewStatus(user) || user.invited_at) return false
-  return !isStaff(user as User)
+export function requiresSignupReview(user: ReviewUser): boolean {
+  return !signupReviewMarker(user) && isReviewableSignup(user)
 }
 
 function secret(): string {
