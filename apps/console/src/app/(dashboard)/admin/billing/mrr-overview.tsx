@@ -17,6 +17,7 @@ const count = new Intl.NumberFormat("en-US")
 const FAILURE_REASON: Record<AdminBillingErrorKind, string> = {
   unavailable: "unreachable or misconfigured",
   forbidden: "billing access refused",
+  read_only_impersonation: "read-only while impersonating a team",
   not_found: "endpoint not found",
   conflict: "request conflict",
   invalid: "request rejected",
