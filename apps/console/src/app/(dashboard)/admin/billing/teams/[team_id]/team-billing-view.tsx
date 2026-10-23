@@ -111,7 +111,7 @@ export function TeamBillingView({
   const current = plans?.current ?? null
   const pending = plans?.pending_change
   const pricingV2 = catalog?.pricingV2 === true
-  const canAssign = canWrite && (pricingV2 || current !== null)
+  const canAssign = canWrite && pricingV2
   const changeOptions = current ? (DOWNGRADES[current.kind] ?? []) : []
 
   return (
