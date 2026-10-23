@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import type { AdminBillingErrorKind } from "./billing-api"
+
 export const mrrPlanSchema = z.object({
   key: z.string(),
   name: z.string(),
@@ -24,41 +26,42 @@ export interface CombinedMRR {
   mrrCents: number
   teams: number
   revenueTeams: number
-  asOf: string | null
   plans: MRRPlan[]
   regions: string[]
-  unavailableRegions: string[]
+  failures: RegionFailure[]
 }
+
+export interface RegionFailure {
+  region: string
+  kind: AdminBillingErrorKind
+}
+
+export type RegionMRR =
+  | { region: string; overview: MRROverview }
+  | RegionFailure
 
 const PAYG_KEY = "payg"
 
-export function combineMRR(
-  results: { region: string; overview: MRROverview | null }[],
-): CombinedMRR {
+export function combineMRR(results: RegionMRR[]): CombinedMRR {
   const plans = new Map<string, MRRPlan>()
   const combined: CombinedMRR = {
     mrrCents: 0,
     teams: 0,
     revenueTeams: 0,
-    asOf: null,
     plans: [],
     regions: [],
-    unavailableRegions: [],
+    failures: [],
   }
-  for (const { region, overview } of results) {
-    if (!overview) {
-      combined.unavailableRegions.push(region)
+  for (const result of results) {
+    if ("kind" in result) {
+      combined.failures.push(result)
       continue
     }
+    const { region, overview } = result
     combined.regions.push(region)
     combined.mrrCents += overview.mrr_cents
     combined.teams += overview.teams
     combined.revenueTeams += overview.revenue_teams
-    if (
-      !combined.asOf ||
-      Date.parse(overview.as_of) < Date.parse(combined.asOf)
-    )
-      combined.asOf = overview.as_of
     for (const plan of overview.plans) {
       const current = plans.get(plan.key)
       plans.set(
@@ -83,14 +86,16 @@ export function combineMRR(
   return combined
 }
 
-export function formatUSD(cents: number): string {
+export function formatUSD(cents: number, withCents = cents % 100 !== 0) {
+  const digits = withCents ? 2 : 0
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: cents % 100 === 0 ? 0 : 2,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   }).format(cents / 100)
 }
 
 export function mrrShare(planCents: number, totalCents: number): number {
-  return totalCents > 0 ? planCents / totalCents : 0
+  return totalCents > 0 ? Math.min(Math.max(planCents / totalCents, 0), 1) : 0
 }

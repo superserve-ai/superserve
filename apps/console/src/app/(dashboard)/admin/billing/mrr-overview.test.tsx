@@ -36,21 +36,31 @@ describe("MRROverviewView", () => {
               ],
             },
           },
-          { region: "usw", overview: null },
+          { region: "usw", kind: "unavailable" },
         ])}
       />,
     )
     expect(screen.getByText("$2,200")).toBeTruthy()
     expect(screen.getByText("$26,400")).toBeTruthy()
-    expect(screen.getByText(/Excludes usw/)).toBeTruthy()
+    expect(screen.getByText(/Missing: usw \(no response\)/)).toBeTruthy()
     expect(screen.getByText("55%")).toBeTruthy()
     expect(screen.getByText("Pay as you go")).toBeTruthy()
   })
 
-  it("shows an error when no region answered", () => {
-    render(
-      <MRROverviewView mrr={combineMRR([{ region: "use", overview: null }])} />,
+  it("only suggests retrying when every failure is transient", () => {
+    const { unmount } = render(
+      <MRROverviewView
+        mrr={combineMRR([{ region: "use", kind: "unavailable" }])}
+      />,
     )
-    expect(screen.getByText(/Recurring revenue is unavailable/)).toBeTruthy()
+    expect(screen.getByText(/Retry in a moment/)).toBeTruthy()
+    unmount()
+    render(
+      <MRROverviewView
+        mrr={combineMRR([{ region: "use", kind: "forbidden" }])}
+      />,
+    )
+    expect(screen.getByText(/use \(billing access refused\)/)).toBeTruthy()
+    expect(screen.queryByText(/Retry in a moment/)).toBeNull()
   })
 })

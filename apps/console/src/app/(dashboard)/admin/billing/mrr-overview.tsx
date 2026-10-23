@@ -1,7 +1,12 @@
 import { Alert } from "@superserve/ui"
 
-import { type CombinedMRR, formatUSD, mrrShare } from "@/lib/admin/billing-mrr"
-import { formatDate } from "@/lib/format"
+import type { AdminBillingErrorKind } from "@/lib/admin/billing-api"
+import {
+  type CombinedMRR,
+  formatUSD,
+  mrrShare,
+  type RegionFailure,
+} from "@/lib/admin/billing-mrr"
 
 const percent = new Intl.NumberFormat("en-US", {
   style: "percent",
@@ -9,10 +14,24 @@ const percent = new Intl.NumberFormat("en-US", {
 })
 const count = new Intl.NumberFormat("en-US")
 
+const FAILURE_REASON: Record<AdminBillingErrorKind, string> = {
+  unavailable: "no response",
+  forbidden: "billing access refused",
+  not_found: "endpoint not found",
+  conflict: "request conflict",
+  invalid: "request rejected",
+}
+
+function describeFailures(failures: RegionFailure[]): string {
+  return failures
+    .map(({ region, kind }) => `${region} (${FAILURE_REASON[kind]})`)
+    .join(", ")
+}
+
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
     <div className="border border-dashed border-border p-4">
-      <p className="text-xs text-muted">{label}</p>
+      <p className="font-mono text-xs text-muted uppercase">{label}</p>
       <p className="mt-2 text-2xl font-semibold text-foreground">{value}</p>
     </div>
   )
@@ -20,27 +39,29 @@ function StatTile({ label, value }: { label: string; value: string }) {
 
 export function MRROverviewView({ mrr }: { mrr: CombinedMRR }) {
   if (mrr.regions.length === 0) {
+    const transient = mrr.failures.every((f) => f.kind === "unavailable")
     return (
       <div className="p-6">
         <Alert variant="destructive">
-          Recurring revenue is unavailable. Retry in a moment.
+          Recurring revenue is unavailable: {describeFailures(mrr.failures)}.
+          {transient ? " Retry in a moment." : ""}
         </Alert>
       </div>
     )
   }
+  const withCents = mrr.plans.some((plan) => plan.mrr_cents % 100 !== 0)
   return (
     <div className="space-y-6 p-6">
-      {mrr.unavailableRegions.length > 0 && (
+      {mrr.failures.length > 0 && (
         <Alert variant="warning">
-          Excludes {mrr.unavailableRegions.join(", ")}: that region did not
-          respond, so totals are incomplete.
+          Totals are incomplete. Missing: {describeFailures(mrr.failures)}.
         </Alert>
       )}
 
       <section aria-labelledby="mrr-total">
-        <p id="mrr-total" className="text-xs text-muted">
+        <h2 id="mrr-total" className="font-mono text-xs text-muted uppercase">
           Monthly recurring revenue
-        </p>
+        </h2>
         <p className="mt-1 text-5xl font-semibold tracking-tight text-foreground">
           {formatUSD(mrr.mrrCents)}
         </p>
@@ -48,7 +69,6 @@ export function MRROverviewView({ mrr }: { mrr: CombinedMRR }) {
           Contracted plan fees normalised to a month, from contract terms. YC
           and sponsored annual Pro count at the Pro annual list price. Usage is
           excluded.
-          {mrr.asOf && ` As of ${formatDate(new Date(mrr.asOf))}.`}
         </p>
       </section>
 
@@ -83,20 +103,23 @@ export function MRROverviewView({ mrr }: { mrr: CombinedMRR }) {
               return (
                 <tr
                   key={plan.key}
-                  className="border-b border-dashed border-border hover:bg-surface-hover"
+                  className="border-b border-dashed border-border"
                 >
                   <td className="py-2.5 pr-4 text-foreground">{plan.name}</td>
                   <td className="py-2.5 pr-4 text-right text-foreground tabular-nums">
                     {count.format(plan.teams)}
                   </td>
                   <td className="py-2.5 pr-4 text-right text-foreground tabular-nums">
-                    {formatUSD(plan.mrr_cents)}
+                    {formatUSD(plan.mrr_cents, withCents)}
                   </td>
                   <td className="py-2.5">
                     <div className="flex items-center gap-3">
-                      <div className="h-1.5 flex-1 bg-brand/15" aria-hidden>
+                      <div
+                        className="h-1.5 flex-1 overflow-hidden bg-foreground/10"
+                        aria-hidden
+                      >
                         <div
-                          className="h-full bg-brand"
+                          className="h-full bg-foreground/70"
                           style={{ width: `${share * 100}%` }}
                         />
                       </div>

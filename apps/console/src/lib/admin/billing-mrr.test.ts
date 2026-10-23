@@ -10,7 +10,7 @@ import {
 
 function overview(region: string, plans: MRROverview["plans"]): MRROverview {
   return {
-    as_of: region === "use" ? "2026-10-23T16:00:00.5Z" : "2026-10-23T15:59:59Z",
+    as_of: "2026-10-23T16:00:00Z",
     region,
     currency: "usd",
     mrr_cents: plans.reduce((sum, p) => sum + p.mrr_cents, 0),
@@ -60,7 +60,6 @@ describe("combineMRR", () => {
     expect(combined.mrrCents).toBe(660000)
     expect(combined.teams).toBe(70)
     expect(combined.revenueTeams).toBe(6)
-    expect(combined.asOf).toBe("2026-10-23T15:59:59Z")
     expect(combined.plans.map((p) => [p.key, p.teams, p.mrr_cents])).toEqual([
       ["pro_monthly", 3, 360000],
       ["yc_2026", 3, 300000],
@@ -72,10 +71,10 @@ describe("combineMRR", () => {
   it("reports regions that did not answer instead of counting them as zero", () => {
     const combined = combineMRR([
       { region: "use", overview: overview("use", []) },
-      { region: "usw", overview: null },
+      { region: "usw", kind: "forbidden" },
     ])
     expect(combined.regions).toEqual(["use"])
-    expect(combined.unavailableRegions).toEqual(["usw"])
+    expect(combined.failures).toEqual([{ region: "usw", kind: "forbidden" }])
   })
 })
 
@@ -98,10 +97,12 @@ describe("formatting", () => {
   it("formats whole and fractional dollars", () => {
     expect(formatUSD(100000)).toBe("$1,000")
     expect(formatUSD(833333)).toBe("$8,333.33")
+    expect(formatUSD(100000, true)).toBe("$1,000.00")
   })
 
   it("has no share when there is no revenue", () => {
     expect(mrrShare(0, 0)).toBe(0)
     expect(mrrShare(25, 100)).toBe(0.25)
+    expect(mrrShare(150, 100)).toBe(1)
   })
 })
