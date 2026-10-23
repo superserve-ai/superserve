@@ -10,15 +10,19 @@ vi.mock("@/hooks/use-billing-context", () => ({
     ready: true,
   }),
 }))
-vi.mock("@/lib/api/client", () => ({ apiClient: vi.fn() }))
+vi.mock("@/lib/billing/plans-actions", () => ({
+  getPublicBillingPlansAction: vi.fn(),
+}))
 
-import { apiClient } from "@/lib/api/client"
+import { getPublicBillingPlansAction } from "@/lib/billing/plans-actions"
 
 import { usePricingVersion } from "./use-pricing-version"
 
 describe("pricing version", () => {
   it("distinguishes exhausted loading failures from pending requests", async () => {
-    vi.mocked(apiClient).mockRejectedValue(new Error("unavailable"))
+    vi.mocked(getPublicBillingPlansAction).mockRejectedValue(
+      new Error("unavailable"),
+    )
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     })
@@ -28,5 +32,6 @@ describe("pricing version", () => {
     const { result } = renderHook(() => usePricingVersion(), { wrapper })
     expect(result.current).toBeUndefined()
     await waitFor(() => expect(result.current).toBeNull())
+    expect(getPublicBillingPlansAction).toHaveBeenCalledWith("us")
   })
 })

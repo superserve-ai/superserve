@@ -24,6 +24,12 @@ export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
   }
 }
 
+export async function getPublicBillingPlansAction(): Promise<{
+  pricing_version: "v2"
+}> {
+  return { pricing_version: "v2" }
+}
+
 function unsupported(): never {
   throw new Error("This UI fixture does not support this action")
 }

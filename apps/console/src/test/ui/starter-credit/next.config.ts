@@ -14,7 +14,7 @@ const config: NextConfig = {
     config.resolve.alias["@"] = sourceRoot
     config.plugins.push(
       new webpack.NormalModuleReplacementPlugin(
-        /^(@\/hooks\/use-user|@\/lib\/supabase\/client|@\/lib\/api\/teams-actions|posthog-js\/react)$/,
+        /^(@\/hooks\/use-user|@\/lib\/supabase\/client|@\/lib\/api\/teams-actions|@\/lib\/billing\/plans-actions|posthog-js\/react)$/,
         dependencies,
       ),
     )

@@ -3,9 +3,8 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { useBillingContext } from "@/hooks/use-billing-context"
-import { apiClient } from "@/lib/api/client"
-
-export type PricingVersion = "legacy" | "v2"
+import type { PricingVersion } from "@/lib/billing/plans"
+import { getPublicBillingPlansAction } from "@/lib/billing/plans-actions"
 
 export function usePricingVersion(): PricingVersion | null | undefined {
   const { cacheScope, teamKey, ready } = useBillingContext()
@@ -16,13 +15,12 @@ export function usePricingVersion(): PricingVersion | null | undefined {
       cacheScope,
       teamKey ?? "unresolved",
     ],
-    queryFn: () =>
-      apiClient<{ pricing_version?: string }>("/billing/plans/public", {
-        cache: "no-store",
-      }),
+    queryFn: async () =>
+      (await getPublicBillingPlansAction(teamKey?.split(":")[0]))
+        .pricing_version,
     enabled: ready,
     staleTime: 60_000,
   })
   if (!data) return isError ? null : undefined
-  return data.pricing_version === "v2" ? "v2" : "legacy"
+  return data
 }

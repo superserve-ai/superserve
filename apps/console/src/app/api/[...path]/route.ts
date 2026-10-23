@@ -40,7 +40,6 @@ const ALLOWED_PREFIXES = [
   "billing/summary",
   "billing/pricing",
   "billing/usage-series",
-  "billing/plans/public",
 ]
 
 function isTeamBillingPath(path: string): boolean {
