@@ -139,6 +139,12 @@ describe("planGroupSync", () => {
     ])
   })
 
+  it("finishes a retire that only reached some regions", () => {
+    expect(planGroupSync([m(1, { use: "retired", usw: "published" })])).toEqual(
+      [{ use: [], usw: ["retire"] }],
+    )
+  })
+
   it("leaves drafts alone so a partial delete is not undone", () => {
     expect(planGroupSync([m(4, { use: "missing", usw: "draft" })])).toEqual([
       { use: [], usw: [] },
@@ -156,6 +162,20 @@ describe("promotionGroupSync", () => {
     ).toEqual([
       { use: [], usw: [] },
       { use: ["create"], usw: [] },
+    ])
+  })
+})
+
+describe("promotion ties", () => {
+  it("does not sync promotions that share a version number", () => {
+    expect(
+      promotionGroupSync([
+        { version: 3, states: { use: "published", usw: "missing" } },
+        { version: 3, states: { use: "missing", usw: "published" } },
+      ]),
+    ).toEqual([
+      { use: [], usw: [] },
+      { use: [], usw: [] },
     ])
   })
 })

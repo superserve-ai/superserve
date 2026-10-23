@@ -143,7 +143,9 @@ export function planGroupSync(group: SyncMember[]): Steps[] {
     .toSorted(([a], [b]) => b.version - a.version)
   if (!settled.length) return steps
   const [newest, index] = settled[0]!
-  if (reached(newest, "published")) {
+  // Retired is terminal, and a version retired by a newer publish is never
+  // the newest settled one, so retired anywhere means it is being withdrawn.
+  if (reached(newest, "published") && !reached(newest, "retired")) {
     steps[index] = Object.fromEntries(
       Object.entries(newest.states).map(([region, state]) => [
         region,
@@ -170,11 +172,15 @@ export function planGroupSync(group: SyncMember[]): Steps[] {
 // published promotion is created where it is missing.
 export function promotionGroupSync(group: SyncMember[]): Steps[] {
   const steps = group.map((m) => noSteps(m.states))
-  const newest = group
+  const published = group
     .map((m, i) => [m, i] as const)
     .filter(([m]) => reached(m, "published"))
-    .toSorted(([a], [b]) => b.version - a.version)[0]
-  if (newest)
+    .toSorted(([a], [b]) => b.version - a.version)
+  const newest = published[0]
+  // Two promotions published concurrently can share a number; syncing either
+  // would collide, so staff publish a new amount instead.
+  const tied = published[1] && published[1][0].version === newest?.[0].version
+  if (newest && !tied)
     steps[newest[1]] = Object.fromEntries(
       Object.entries(newest[0].states).map(([region, state]) => [
         region,
