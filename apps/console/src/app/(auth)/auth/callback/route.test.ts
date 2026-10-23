@@ -4,7 +4,12 @@ let currentUser: {
   id: string
   email: string
   created_at: string
-  app_metadata: { provider: string; providers?: string[] }
+  app_metadata: {
+    provider: string
+    providers?: string[]
+    signup_review?: string
+    signup_request?: Record<string, unknown>
+  }
   user_metadata: { full_name?: string }
 } | null = null
 
@@ -203,9 +208,26 @@ vi.mock("@/lib/posthog/events", () => ({
   },
 }))
 
+// Review entry is covered by its own cases below; the rest of this suite
+// exercises accounts that are not (or are no longer) awaiting review.
+const mockRequiresSignupReview = vi.fn()
+const mockReadStashedSignupDetails = vi.fn()
+const mockUpdateSignupReview = vi.fn()
+vi.mock("@/lib/auth/signup-review-server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/signup-review-server")>()),
+  requiresSignupReview: (...args: unknown[]) =>
+    mockRequiresSignupReview(...args),
+  readStashedSignupDetails: (...args: unknown[]) =>
+    mockReadStashedSignupDetails(...args),
+  updateSignupReviewMetadata: (...args: unknown[]) =>
+    mockUpdateSignupReview(...args),
+}))
+
+const mockSignOut = vi.fn()
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({
     auth: {
+      signOut: (...args: unknown[]) => mockSignOut(...args),
       exchangeCodeForSession: async () => ({
         error: authExchangeError,
         data: {
@@ -325,6 +347,10 @@ describe("auth callback", () => {
       .mockReset()
       .mockImplementation(async () => googleMembershipState)
     mockTrackEvent.mockReset()
+    mockRequiresSignupReview.mockReset().mockReturnValue(false)
+    mockReadStashedSignupDetails.mockReset().mockResolvedValue(undefined)
+    mockUpdateSignupReview.mockReset().mockResolvedValue(undefined)
+    mockSignOut.mockReset().mockResolvedValue({ error: null })
   })
 
   it.each(["first_time", "indeterminate"] as const)(
@@ -861,6 +887,144 @@ describe("auth callback", () => {
       provider: "google",
       email: "user@example.com",
       is_new_user: true,
+    })
+  })
+
+  describe("signup review", () => {
+    const details = {
+      company: "Example Co",
+      affiliation: "yc" as const,
+      ycLink: "https://example.com/yc",
+      plan: "pro" as const,
+      cadence: "annual" as const,
+    }
+
+    it("holds a new Google signup for review with its stashed details and ends the session", async () => {
+      googleMembershipState = { kind: "first_time" }
+      mockRequiresSignupReview.mockReturnValue(true)
+      mockReadStashedSignupDetails.mockResolvedValue(details)
+
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1&offer=pro_annual",
+        ),
+      )
+
+      expect(mockReadStashedSignupDetails).toHaveBeenCalledWith("attempt-1")
+      expect(mockUpdateSignupReview).toHaveBeenCalledWith("u1", {
+        signup_review: "pending",
+        signup_request: expect.objectContaining({
+          company: "Example Co",
+          yc_link: "https://example.com/yc",
+          plan: "pro",
+          cadence: "annual",
+        }),
+      })
+      expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
+        "user@example.com",
+        "Test User",
+        "google",
+        { kind: "unavailable" },
+        "pro_annual",
+        details,
+      )
+      expect(mockSignOut).toHaveBeenCalled()
+      expect(mockSendWelcomeEmail).not.toHaveBeenCalled()
+      expect(new URL(response.headers.get("location")!).pathname).toBe(
+        "/auth/pending",
+      )
+      expect(response.headers.get("set-cookie")).not.toMatch(
+        /ss-plan-offer=[^;]/,
+      )
+    })
+
+    it("asks a new Google account from sign-in for its details before announcing it", async () => {
+      googleMembershipState = { kind: "first_time" }
+      proofAvailable = false
+      mockRequiresSignupReview.mockReturnValue(true)
+
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&google_signin_intent=pre-auth-intent",
+        ),
+      )
+
+      expect(mockUpdateSignupReview).toHaveBeenCalledWith("u1", {
+        signup_review: "pending",
+      })
+      expect(mockSignOut).toHaveBeenCalled()
+      expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+      const location = new URL(response.headers.get("location")!)
+      expect(location.pathname).toBe("/auth/signup")
+      expect(location.searchParams.get("details")).toBe("required")
+    })
+
+    it("records details when a pending account returns from the signup page", async () => {
+      currentUser!.app_metadata.signup_review = "pending"
+      mockReadStashedSignupDetails.mockResolvedValue(details)
+
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-2",
+        ),
+      )
+
+      expect(mockUpdateSignupReview).toHaveBeenCalledWith("u1", {
+        signup_request: expect.objectContaining({ company: "Example Co" }),
+      })
+      expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
+        "user@example.com",
+        "Test User",
+        "google",
+        { kind: "unavailable" },
+        "pro_annual",
+        details,
+      )
+      expect(mockSignOut).toHaveBeenCalled()
+      expect(new URL(response.headers.get("location")!).pathname).toBe(
+        "/auth/pending",
+      )
+    })
+
+    it.each(["pending", "rejected"])(
+      "signs a %s account out before any onboarding work",
+      async (status) => {
+        currentUser!.app_metadata.signup_review = status
+        currentUser!.app_metadata.signup_request = {
+          company: "Example Co",
+          affiliation: "other",
+          plan: "starter",
+          cadence: "monthly",
+        }
+
+        const response = await GET(
+          new Request("https://console.superserve.ai/auth/callback?code=abc"),
+        )
+
+        expect(mockSignOut).toHaveBeenCalled()
+        expect(mockClassifyGoogleMembershipState).not.toHaveBeenCalled()
+        expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+        expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+        expect(new URL(response.headers.get("location")!).pathname).toBe(
+          "/auth/pending",
+        )
+      },
+    )
+
+    it("lets an approved Google account finish onboarding without a second announcement", async () => {
+      googleMembershipState = { kind: "first_time" }
+      currentUser!.app_metadata.signup_review = "approved"
+
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-3",
+        ),
+      )
+
+      expect(mockSignOut).not.toHaveBeenCalled()
+      expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+      expect(mockSendWelcomeEmail).toHaveBeenCalled()
+      expect(response.headers.get("location")).toContain("/sandboxes")
     })
   })
 
@@ -1505,13 +1669,16 @@ describe("auth callback", () => {
     )
   })
 
-  it("hands an email signup's active attempt and verified visitor to its confirmation callback", async () => {
+  it("hands an email signup's active attempt and verified visitor to its approval link callback", async () => {
     const evidence = await vi.importActual<
       typeof import("@/lib/auth/signup-evidence")
     >("@/lib/auth/signup-evidence")
     const { signUpWithEmail } = await vi.importActual<
       typeof import("@/app/(auth)/auth/signup/action")
     >("@/app/(auth)/auth/signup/action")
+    const { signupConfirmationUrl } = await vi.importActual<
+      typeof import("@/lib/admin/signup-approval")
+    >("@/lib/admin/signup-approval")
     const previousSecret = process.env.GOOGLE_SIGNUP_PROOF_SECRET
     process.env.GOOGLE_SIGNUP_PROOF_SECRET =
       "a-secret-with-at-least-thirty-two-characters"
@@ -1544,11 +1711,33 @@ describe("auth callback", () => {
           undefined,
           undefined,
           "pro_monthly",
+          undefined,
+          undefined,
+          {
+            company: "Example Co",
+            affiliation: "other",
+            plan: "pro",
+            cadence: "monthly",
+          },
         ),
       ).toEqual({ success: true })
+      expect(mockSendConfirmationEmail).not.toHaveBeenCalled()
+      const [reviewedUserId, metadata] = mockUpdateSignupReview.mock.lastCall!
+      expect(reviewedUserId).toBe("u1")
+      expect(metadata.signup_review).toBe("pending")
+      // Staff approval later sends a magic link built from the stored inputs.
+      currentUser!.app_metadata = {
+        provider: "email",
+        signup_review: "approved",
+      }
       const confirmationUrl = new URL(
-        mockSendConfirmationEmail.mock.lastCall![0].react,
+        signupConfirmationUrl(
+          "u1",
+          metadata.signup_confirmation,
+          "approval-token",
+        ),
       )
+      expect(confirmationUrl.searchParams.get("type")).toBe("magiclink")
       expect(confirmationUrl.searchParams.get("offer")).toBe("pro_monthly")
       const attemptId = confirmationUrl.searchParams.get("signup_attempt_id")
       expect(attemptId).toEqual(expect.any(String))
@@ -1563,8 +1752,10 @@ describe("auth callback", () => {
       mockEvaluateSignupRestriction.mockClear()
       mockNotifySlackOfNewUser.mockClear()
       const response = await GET(new Request(confirmationUrl))
-      expect(mockNotifySlackOfNewUser.mock.lastCall![4]).toBe("pro_monthly")
+      // Announced when the account entered review, not again on confirmation.
+      expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
       expect(response.headers.get("location")).toContain("/sandboxes")
+      expect(response.headers.get("set-cookie")).toContain("ss-plan-offer")
       expect(mockEvaluateSignupRestriction).toHaveBeenCalledExactlyOnceWith(
         "use",
         "u1",

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 
+import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
 import { createMiddlewareClient, matchesRoute } from "@/lib/supabase/middleware"
 import { ycReturnPath } from "@/lib/yc/return-path"
 import { staffReturnPath } from "@/lib/yc/staff-return-path"
@@ -45,6 +46,20 @@ export async function middleware(request: NextRequest) {
     // Build the redirect on top of client.response so any refreshed Supabase
     // auth cookies (written by getUser() via setAll) survive the redirect.
     const redirect = NextResponse.redirect(signinUrl)
+    for (const cookie of client.response.cookies.getAll()) {
+      redirect.cookies.set(cookie)
+    }
+    return redirect
+  }
+
+  // Review state rides on the user getUser() already returned, so this adds
+  // no Auth round trip for anyone else.
+  if (user && !isPublicRoute && isSignupReviewBlocked(user)) {
+    await client.supabase.auth.signOut().catch(() => {})
+    const pendingUrl = request.nextUrl.clone()
+    pendingUrl.pathname = "/auth/pending"
+    pendingUrl.search = ""
+    const redirect = NextResponse.redirect(pendingUrl)
     for (const cookie of client.response.cookies.getAll()) {
       redirect.cookies.set(cookie)
     }

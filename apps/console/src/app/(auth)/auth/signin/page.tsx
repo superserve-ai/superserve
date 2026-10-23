@@ -17,6 +17,9 @@ import { createBrowserClient } from "@/lib/supabase/client"
 
 import { beginGoogleSignIn } from "./google-action"
 
+const UNCONFIRMED_SIGNIN_MESSAGE =
+  "Your account is pending review. We'll email you as soon as it's approved. If you already received a confirmation email, use its link to finish signing up."
+
 function SignInContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [isEmailLoading, setIsEmailLoading] = useState(false)
@@ -95,7 +98,8 @@ function SignInContent() {
         if (error.message.includes("Invalid login credentials")) {
           setErrors({ form: "Invalid email or password." })
         } else if (error.message.includes("Email not confirmed")) {
-          setErrors({ form: "Please verify your email before signing in." })
+          // New accounts stay unconfirmed until review approves them.
+          setErrors({ form: UNCONFIRMED_SIGNIN_MESSAGE })
         } else {
           setErrors({ form: "Error signing in. Please try again." })
         }

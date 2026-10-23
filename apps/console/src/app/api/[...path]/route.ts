@@ -23,6 +23,10 @@ import {
   SignupRestrictedError,
   SIGNUP_RESTRICTED_MESSAGE,
 } from "@/lib/auth/signup-restrictions"
+import {
+  isSignupReviewBlocked,
+  SIGNUP_REVIEW_PENDING_MESSAGE,
+} from "@/lib/auth/signup-review"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -163,6 +167,16 @@ async function proxyRequest(
       data: { user: authUser },
     } = await supabase.auth.getUser()
     user = authUser
+    if (isSignupReviewBlocked(user))
+      return NextResponse.json(
+        {
+          error: {
+            code: "signup_review_pending",
+            message: SIGNUP_REVIEW_PENDING_MESSAGE,
+          },
+        },
+        { status: 403 },
+      )
     authObservedAt = new Date().toISOString()
     impersonationContext = await getImpersonationContext(user)
     impersonating = impersonationContext !== null

@@ -8,6 +8,7 @@ import { readSignupPlan } from "@/lib/api/signup-plan-read"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { completedMemberships } from "@/lib/api/team-provisioning"
 import { listTeamsAction } from "@/lib/api/teams-actions"
+import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
 import { createServerClient } from "@/lib/supabase/server"
 
 export interface SignupPlanPageParams {
@@ -41,6 +42,8 @@ export async function getSignupPlanPage(params: SignupPlanPageParams = {}) {
       redirect(
         `/auth/signin?next=${encodeURIComponent(signupPlanPath(params))}`,
       )
+    // Covers the dashboard layout too; the pending page ends the session.
+    if (isSignupReviewBlocked(user)) redirect("/auth/pending")
     if (params.account && params.account !== user.id)
       throw new Error("Your account changed")
     if (await getImpersonationContext(user))

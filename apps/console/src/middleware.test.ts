@@ -194,6 +194,28 @@ describe("middleware", () => {
     const res = await middleware(buildRequest("/sandboxes"))
     expect(res).toBe(mockClient.response)
   })
+
+  it("signs out an account awaiting review and sends it to the pending page", async () => {
+    const signOut = vi.fn().mockResolvedValue({ error: null })
+    Object.assign(mockClient.supabase!.auth, { signOut })
+    mockClient.supabase!.auth.getUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-123",
+          email: "u@e.com",
+          app_metadata: { signup_review: "pending" },
+        },
+      },
+      error: null,
+    })
+
+    const res = await middleware(buildRequest("/onboarding/plan"))
+    expect(signOut).toHaveBeenCalled()
+    expect(new URL(res.headers.get("location")!).pathname).toBe("/auth/pending")
+    expect(await middleware(buildRequest("/auth/pending"))).toBe(
+      mockClient.response,
+    )
+  })
 })
 
 describe("middleware matcher", () => {
