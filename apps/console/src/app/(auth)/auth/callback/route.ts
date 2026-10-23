@@ -22,6 +22,7 @@ import {
   markGoogleSignupAttempt,
   readGooglePromotionEvidence,
   retainOriginalGoogleSignup,
+  revokeGoogleSignupAuthorization,
 } from "@/lib/auth/google-signup-proof"
 import { PLAN_OFFER_COOKIE } from "@/lib/auth/plan-preselection"
 import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
@@ -303,7 +304,8 @@ export async function GET(request: Request) {
               )
             }
             console.info("Google OAuth signup proof validated at callback")
-            await markGoogleSignupAttempt(signupAttemptId, user.id)
+            if (signupOffer !== "enterprise")
+              await markGoogleSignupAttempt(signupAttemptId, user.id)
           }
 
           if (isNewUser && signupAttemptId) {
@@ -489,6 +491,12 @@ export async function GET(request: Request) {
             })
           } catch (holdError) {
             console.error("Enterprise signup hold failed", holdError)
+            await revokeGoogleSignupAuthorization(
+              user.id,
+              signupAttemptId,
+            ).catch((error) =>
+              console.error("Enterprise signup proof cleanup failed", error),
+            )
             await supabase.auth.signOut().catch(() => {})
             return NextResponse.redirect(
               buildRedirectUrl(origin, "/auth/auth-code-error"),

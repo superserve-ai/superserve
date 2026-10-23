@@ -128,6 +128,7 @@ const mockHasValidGoogleSignupProof = vi.fn()
 const mockHasValidLegacyGoogleSignupProof = vi.fn()
 const mockConsumeGoogleSignupProof = vi.fn()
 const mockMarkGoogleSignupAttempt = vi.fn()
+const mockRevokeGoogleSignupAuthorization = vi.fn()
 const mockRetainGoogleSignupVisitor = vi.fn()
 const mockReadGoogleSignupVisitors = vi.fn()
 const mockReadGooglePromotionEvidence = vi.fn()
@@ -163,6 +164,8 @@ vi.mock("@/lib/auth/google-signup-proof", () => ({
     mockRetainOriginalGoogleSignup(...args),
   readGooglePromotionEvidence: (...args: unknown[]) =>
     mockReadGooglePromotionEvidence(...args),
+  revokeGoogleSignupAuthorization: (...args: unknown[]) =>
+    mockRevokeGoogleSignupAuthorization(...args),
   markGoogleSignupAttempt: (...args: unknown[]) =>
     mockMarkGoogleSignupAttempt(...args),
   retainGoogleSignupVisitor: (...args: unknown[]) =>
@@ -335,6 +338,7 @@ describe("auth callback", () => {
       .mockReset()
       .mockImplementation(async () => proofAvailable)
     mockConsumeGoogleSignupProof.mockReset()
+    mockRevokeGoogleSignupAuthorization.mockReset().mockResolvedValue(undefined)
     mockMarkGoogleSignupAttempt.mockReset().mockResolvedValue(undefined)
     mockRetainOriginalGoogleSignup.mockReset().mockResolvedValue(undefined)
     mockRequireGoogleSignupProof.mockReset()
@@ -896,11 +900,48 @@ describe("auth callback", () => {
 
       const response = await firstTimeGoogle("enterprise")
 
+      expect(mockMarkGoogleSignupAttempt).not.toHaveBeenCalled()
+      expect(mockRevokeGoogleSignupAuthorization).toHaveBeenCalledWith(
+        "u1",
+        "attempt-1",
+      )
       expect(mockSignOut).toHaveBeenCalled()
       expect(mockSendWelcomeEmail).not.toHaveBeenCalled()
       expect(new URL(response.headers.get("location")!).pathname).toBe(
         "/auth/auth-code-error",
       )
+    })
+
+    it("revokes provisioning proof when recording the Enterprise hold fails", async () => {
+      const proofs = await vi.importActual<
+        typeof import("@/lib/auth/google-signup-proof")
+      >("@/lib/auth/google-signup-proof")
+      const previousSecret = process.env.GOOGLE_SIGNUP_PROOF_SECRET
+      process.env.GOOGLE_SIGNUP_PROOF_SECRET =
+        "a-secret-with-at-least-thirty-two-characters"
+      try {
+        await proofs.issueGoogleSignupProof("attempt-1")
+        await proofs.markGoogleSignupAttempt("attempt-1", "u1")
+        mockHasValidGoogleSignupProof.mockImplementation(
+          proofs.hasValidGoogleSignupProof,
+        )
+        mockMarkGoogleSignupAttempt.mockImplementation(
+          proofs.markGoogleSignupAttempt,
+        )
+        mockRevokeGoogleSignupAuthorization.mockImplementation(
+          proofs.revokeGoogleSignupAuthorization,
+        )
+        mockPricingVersion.mockResolvedValue("v2")
+        mockUpdateSignupReview.mockRejectedValue(new Error("auth down"))
+        await firstTimeGoogle("enterprise")
+        await expect(proofs.requireGoogleSignupProof("u1")).rejects.toThrow()
+        expect(mockMarkGoogleSignupAttempt).not.toHaveBeenCalled()
+        expect(mockSignOut).toHaveBeenCalled()
+      } finally {
+        if (previousSecret === undefined)
+          delete process.env.GOOGLE_SIGNUP_PROOF_SECRET
+        else process.env.GOOGLE_SIGNUP_PROOF_SECRET = previousSecret
+      }
     })
 
     it("does not ask for the switch without an offer", async () => {
