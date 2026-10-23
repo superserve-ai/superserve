@@ -940,9 +940,9 @@ describe("auth callback", () => {
     it.each([
       ["free", "/sandboxes"],
       ["starter", "/plan-usage/buy-credit"],
-      ["pro_monthly", "/billing/pro"],
-      ["pro_annual", "/billing/pro"],
-      ["retired_offer", "/billing/pro"],
+      ["pro_monthly", "/billing/pro/"],
+      ["pro_annual", "/billing/pro/"],
+      ["retired_offer", "/billing/pro/"],
     ])("routes a new %s signup to %s", async (offer, destination) => {
       mockPricingV2.mockResolvedValue(true)
 
@@ -963,7 +963,7 @@ describe("auth callback", () => {
         ),
       )
       expect(new URL(response.headers.get("location")!).pathname).toBe(
-        "/billing/pro",
+        "/billing/pro/",
       )
     })
 

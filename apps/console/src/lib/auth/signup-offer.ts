@@ -17,6 +17,6 @@ export function parseSignupOffer(value: unknown): SignupOffer {
 export const SIGNUP_OFFER_DESTINATIONS: Record<SignupOffer, string> = {
   free: "/sandboxes",
   starter: "/plan-usage/buy-credit",
-  pro_monthly: "/billing/pro",
+  pro_monthly: "/billing/pro/",
   enterprise: "/auth/pending",
 }
