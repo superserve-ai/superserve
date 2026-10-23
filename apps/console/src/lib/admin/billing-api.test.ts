@@ -25,6 +25,8 @@ function signIn(user: unknown) {
 }
 
 const schema = z.object({ ok: z.boolean() })
+const TEAM = "11111111-1111-4111-8111-111111111111"
+const WRITE_PATH = `/internal/teams/${TEAM}/billing/matching` as const
 const fetchMock = vi.fn()
 
 beforeEach(() => {
@@ -95,7 +97,7 @@ describe("adminBillingRequest", () => {
       await kind(
         adminBillingRequest({
           region: "use",
-          path: "/internal/billing/x",
+          path: WRITE_PATH,
           schema,
           method: "POST",
           body: {},
@@ -250,7 +252,7 @@ describe("adminBillingRequest credentials", () => {
     fetchMock.mockResolvedValue(Response.json({ ok: true }))
     await adminBillingRequest({
       region: "use",
-      path: "/internal/billing/x",
+      path: WRITE_PATH,
       schema,
       method: "POST",
       body: { reason: "r" },
@@ -267,7 +269,7 @@ describe("adminBillingRequest credentials", () => {
       await kind(
         adminBillingRequest({
           region: "use",
-          path: "/internal/billing/x",
+          path: WRITE_PATH,
           schema,
           method: "POST",
           body: {},
@@ -284,7 +286,7 @@ describe("adminBillingRequest credentials", () => {
       await kind(
         adminBillingRequest({
           region: "use",
-          path: "/internal/billing/x",
+          path: WRITE_PATH,
           schema,
           method: "POST",
           body: {},
@@ -303,12 +305,51 @@ describe("adminBillingRequest credentials", () => {
     fetchMock.mockResolvedValue(Response.json({ ok: true }))
     await adminBillingRequest({
       region: "usw",
-      path: "/internal/billing/x",
+      path: WRITE_PATH,
       schema,
       method: "DELETE",
     })
     const [url, init] = fetchMock.mock.calls[0]
-    expect(String(url)).toBe("https://api-usw.example.com/internal/billing/x")
+    expect(String(url)).toBe(`https://api-usw.example.com${WRITE_PATH}`)
     expect(init.headers.Authorization).toBe("Bearer west-operator")
+  })
+})
+
+describe("admin billing write routes", () => {
+  it("only allows writes to listed routes", () => {
+    for (const path of [
+      `/internal/teams/${TEAM}/billing/matching`,
+      `/internal/teams/${TEAM}/billing/matching/revoke`,
+      `/internal/teams/${TEAM}/billing/matching/credits/${TEAM}/acknowledge`,
+    ]) {
+      expect(isAdminBillingPath(path, "POST"), path).toBe(true)
+    }
+    for (const path of [
+      `/internal/teams/${TEAM}/billing/sponsored-entitlements`,
+      `/internal/teams/${TEAM}/billing/sponsored-annual`,
+      `/internal/teams/${TEAM}/billing/yc/approve`,
+      `/internal/teams/${TEAM}/billing/anchor`,
+      "/internal/billing/cutover",
+      `/internal/teams/${TEAM}/billing/matching/extra`,
+    ]) {
+      expect(isAdminBillingPath(path, "POST"), path).toBe(false)
+      expect(isAdminBillingPath(path, "GET"), path).toBe(true)
+    }
+  })
+
+  it("refuses an unlisted write before calling the API", async () => {
+    signIn(staff(["platform:billing:read", "platform:billing:write"]))
+    expect(
+      await kind(
+        adminBillingRequest({
+          region: "use",
+          path: `/internal/teams/${TEAM}/billing/yc/approve`,
+          schema,
+          method: "POST",
+          body: {},
+        }),
+      ),
+    ).toBe("invalid")
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

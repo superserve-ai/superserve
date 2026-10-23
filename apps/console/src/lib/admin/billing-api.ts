@@ -51,8 +51,19 @@ function errorKind(status: number): AdminBillingErrorKind {
 const BILLING_PATH =
   /^\/internal\/(billing|teams\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/billing)(\/[A-Za-z0-9_-]+)*$/
 
-export function isAdminBillingPath(path: string): boolean {
-  return BILLING_PATH.test(path)
+const TEAM_BILLING =
+  "/internal/teams/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/billing"
+const SEGMENT = "[A-Za-z0-9_-]+"
+
+const WRITE_ROUTES = [
+  `${TEAM_BILLING}/matching`,
+  `${TEAM_BILLING}/matching/revoke`,
+  `${TEAM_BILLING}/matching/credits/${SEGMENT}/acknowledge`,
+].map((route) => new RegExp(`^${route}$`))
+
+export function isAdminBillingPath(path: string, method = "GET"): boolean {
+  if (!BILLING_PATH.test(path)) return false
+  return method === "GET" || WRITE_ROUTES.some((route) => route.test(path))
 }
 
 export interface AdminBillingRequest<T> {
@@ -73,7 +84,8 @@ export async function adminBillingRequest<T>({
   body,
 }: AdminBillingRequest<T>): Promise<T> {
   const user = await requireAdminBilling(method === "GET" ? "read" : "write")
-  if (!isAdminBillingPath(path)) throw new AdminBillingRequestError("invalid")
+  if (!isAdminBillingPath(path, method))
+    throw new AdminBillingRequestError("invalid")
   const internalToken = internalApiTokenFor(region)
   const token = method === "GET" ? internalToken : operatorApiTokenFor(region)
   if (
