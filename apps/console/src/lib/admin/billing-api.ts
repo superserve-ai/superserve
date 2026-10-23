@@ -16,6 +16,7 @@ import { createServerClient } from "@/lib/supabase/server"
 
 export type AdminBillingErrorKind =
   | "forbidden"
+  | "read_only_impersonation"
   | "not_found"
   | "conflict"
   | "invalid"
@@ -68,7 +69,7 @@ export async function requireAdminBilling(access: Access = "read") {
     access === "write" ? canWriteAdminBilling(user) : canReadAdminBilling(user)
   if (!user || !allowed) throw new AdminBillingRequestError("forbidden")
   if (access === "write" && (await getImpersonationTeamId(user)))
-    throw new AdminBillingRequestError("forbidden")
+    throw new AdminBillingRequestError("read_only_impersonation")
   return user
 }
 
