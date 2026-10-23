@@ -25,10 +25,13 @@ function escapeSlack(value: string): string {
 function detailFields(details: SignupDetails | undefined) {
   if (!details) return []
   return [
-    { type: "mrkdwn", text: `*Company:* ${escapeSlack(details.company)}` },
     {
       type: "mrkdwn",
-      text: `*Affiliation:* ${SIGNUP_AFFILIATION_LABELS[details.affiliation]}`,
+      text: `*Company:* ${details.company ? escapeSlack(details.company) : "—"}`,
+    },
+    {
+      type: "mrkdwn",
+      text: `*Affiliation:* ${details.affiliation ? SIGNUP_AFFILIATION_LABELS[details.affiliation] : "—"}`,
     },
     ...(details.ycLink
       ? [{ type: "mrkdwn", text: `*YC link:* ${escapeSlack(details.ycLink)}` }]
@@ -74,7 +77,7 @@ export const notifySlackOfNewUser = async (
               ? [
                   {
                     type: "mrkdwn",
-                    text: `*Requested offer:* ${REQUESTED_OFFER_LABELS[requestedOffer]}`,
+                    text: `*Interested in:* ${REQUESTED_OFFER_LABELS[requestedOffer]}`,
                   },
                 ]
               : []),

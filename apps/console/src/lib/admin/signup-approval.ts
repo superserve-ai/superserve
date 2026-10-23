@@ -12,8 +12,10 @@ import {
 } from "@/lib/auth/signup-review"
 import { updateSignupReviewMetadata } from "@/lib/auth/signup-review-server"
 import { sendEmail } from "@/lib/email/send"
-import { ConfirmationEmail } from "@/lib/email/templates/confirmation"
-import { SignupApprovedEmail } from "@/lib/email/templates/signup-approved"
+import {
+  SignupApprovedEmail,
+  signupApprovedSubject,
+} from "@/lib/email/templates/signup-approved"
 import { signSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import { createAdminClient } from "@/lib/supabase/admin"
 
@@ -109,7 +111,7 @@ function reviewRow(user: User): SignupReviewRow {
     email: user.email ?? null,
     provider: isGoogleUser(user) ? "google" : "email",
     company: request?.company ?? null,
-    affiliation: request
+    affiliation: request?.affiliation
       ? SIGNUP_AFFILIATION_LABELS[request.affiliation]
       : null,
     ycLink: request?.ycLink ?? null,
@@ -169,13 +171,11 @@ async function sendApprovalEmail(user: User): Promise<void> {
       throw new Error("Unable to generate a confirmation link")
     const result = await sendEmail({
       to: user.email,
-      subject: "Confirm your Superserve account",
-      react: ConfirmationEmail({
-        confirmationUrl: signupConfirmationUrl(
-          user.id,
-          confirmation,
-          tokenHash,
-        ),
+      subject: signupApprovedSubject(),
+      react: SignupApprovedEmail({
+        url: signupConfirmationUrl(user.id, confirmation, tokenHash),
+        provider: "email",
+        confirm: true,
       }),
     })
     if (!result.success) throw new Error("Unable to send the approval email")
@@ -186,9 +186,9 @@ async function sendApprovalEmail(user: User): Promise<void> {
   signIn.searchParams.set("utm_medium", "signup_approved")
   const result = await sendEmail({
     to: user.email,
-    subject: "Your Superserve account is approved",
+    subject: signupApprovedSubject(),
     react: SignupApprovedEmail({
-      signInUrl: signIn.toString(),
+      url: signIn.toString(),
       provider: isGoogleUser(user) ? "google" : "email",
     }),
   })

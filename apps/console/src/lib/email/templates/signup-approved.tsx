@@ -1,27 +1,47 @@
 import { Button, Heading, Text } from "@react-email/components"
 
+import { CARD_BONUS_USD } from "@/lib/api/plan-catalog"
+
 import { EmailLayout } from "./components/email-layout"
 
 interface SignupApprovedEmailProps {
-  signInUrl: string
+  // A confirmation magic link for unconfirmed email signups, else sign-in.
+  url: string
   provider: "google" | "email"
+  confirm?: boolean
 }
 
+export const signupApprovedSubject = () =>
+  `You're approved — claim $${CARD_BONUS_USD} in free compute`
+
+const claimCopy = () =>
+  `Add your payment method to claim $${CARD_BONUS_USD} in free compute. You won't be charged.`
+
 export const SignupApprovedEmail = ({
-  signInUrl,
+  url,
   provider,
+  confirm = false,
 }: SignupApprovedEmailProps) => (
-  <EmailLayout preview="Your Superserve account is approved">
-    <Heading style={heading}>You&apos;re approved</Heading>
-    <Text style={paragraph}>
-      Your Superserve account has been approved.{" "}
-      {provider === "google"
-        ? "Sign in with Google using this email address to finish setting up your account."
-        : "Sign in to finish setting up your account."}
-    </Text>
-    <Button style={button} href={signInUrl}>
-      {provider === "google" ? "Sign in with Google" : "Sign in"}
+  <EmailLayout preview={signupApprovedSubject()}>
+    <Heading style={heading}>{signupApprovedSubject()}</Heading>
+    <Text style={paragraph}>{claimCopy()}</Text>
+    {provider === "google" && !confirm ? (
+      <Text style={paragraph}>
+        Sign in with Google using this email address to get started.
+      </Text>
+    ) : null}
+    <Button style={button} href={url}>
+      {confirm
+        ? "Confirm email and get started"
+        : provider === "google"
+          ? "Sign in with Google"
+          : "Sign in"}
     </Button>
+    {confirm ? (
+      <Text style={disclaimer}>
+        Didn&apos;t create an account? You can safely ignore this email.
+      </Text>
+    ) : null}
   </EmailLayout>
 )
 
@@ -56,8 +76,15 @@ const button: React.CSSProperties = {
   margin: "28px 0 0 0",
 }
 
+const disclaimer: React.CSSProperties = {
+  color: "#737373",
+  fontSize: "12px",
+  lineHeight: "20px",
+  margin: "28px 0 0 0",
+}
+
 SignupApprovedEmail.PreviewProps = {
-  signInUrl: "https://console.superserve.ai/auth/signin",
+  url: "https://console.superserve.ai/auth/signin",
   provider: "google",
 } satisfies SignupApprovedEmailProps
 

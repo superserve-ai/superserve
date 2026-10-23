@@ -17,12 +17,9 @@ const mockSendEmail = vi.fn()
 vi.mock("@/lib/email/send", () => ({
   sendEmail: (...args: unknown[]) => mockSendEmail(...args),
 }))
-vi.mock("@/lib/email/templates/confirmation", () => ({
-  ConfirmationEmail: ({ confirmationUrl }: { confirmationUrl: string }) =>
-    confirmationUrl,
-}))
 vi.mock("@/lib/email/templates/signup-approved", () => ({
   SignupApprovedEmail: (props: unknown) => props,
+  signupApprovedSubject: () => "approved",
 }))
 vi.mock("next/headers", () => ({ cookies: async () => new Map() }))
 
@@ -99,7 +96,7 @@ describe("signup approval", () => {
           "https://console.example.com/auth/callback?next=%2Fyc%2Fclaim&offer=starter_annual",
       },
     })
-    const link = new URL(mockSendEmail.mock.lastCall![0].react)
+    const link = new URL(mockSendEmail.mock.lastCall![0].react.url)
     expect(link.pathname).toBe("/auth/callback")
     expect(Object.fromEntries(link.searchParams)).toMatchObject({
       next: "/yc/claim",

@@ -1,5 +1,10 @@
 import type { PlanCadence, PlanFamily, PurchaseOffer } from "./signup-plan"
 
+// Promotional credit for adding a card on the default pay-as-you-go plan. It
+// replaces the trial credit rather than adding to it.
+export const CARD_BONUS_USD = 95
+export const TRIAL_CREDIT_USD = 5
+
 export interface CatalogPlan {
   key: PurchaseOffer
   family: PlanFamily

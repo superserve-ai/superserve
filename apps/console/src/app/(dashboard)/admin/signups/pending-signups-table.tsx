@@ -101,7 +101,7 @@ function ReviewTable({
           <TableHead>Provider</TableHead>
           <TableHead>Company</TableHead>
           <TableHead>Affiliation</TableHead>
-          <TableHead>Plan</TableHead>
+          <TableHead>Interested in</TableHead>
           <TableHead>Signed up</TableHead>
           <TableHead />
         </TableRow>

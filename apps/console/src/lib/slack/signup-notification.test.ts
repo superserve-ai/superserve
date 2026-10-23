@@ -32,9 +32,9 @@ describe("requested offer in signup notification", () => {
         text: string
       }>
       expect(
-        fields.filter(({ text }) => text.startsWith("*Requested offer:*")),
+        fields.filter(({ text }) => text.startsWith("*Interested in:*")),
       ).toEqual(
-        label ? [{ type: "mrkdwn", text: `*Requested offer:* ${label}` }] : [],
+        label ? [{ type: "mrkdwn", text: `*Interested in:* ${label}` }] : [],
       )
       expect(fields).toContainEqual({
         type: "mrkdwn",
@@ -65,13 +65,32 @@ describe("signup review details in signup notification", () => {
     const fields = send.mock.lastCall![0].blocks[1].fields
     expect(fields).toEqual(
       expect.arrayContaining([
-        { type: "mrkdwn", text: "*Requested offer:* Starter Monthly" },
+        { type: "mrkdwn", text: "*Interested in:* Starter Monthly" },
         { type: "mrkdwn", text: "*Company:* &lt;!channel&gt; &amp; Co" },
         { type: "mrkdwn", text: "*Affiliation:* YC" },
         {
           type: "mrkdwn",
           text: "*YC link:* https://example.com/&lt;@U123&gt;",
         },
+      ]),
+    )
+  })
+
+  it("shows skipped optional details as blanks", async () => {
+    await notifySlackOfNewUser(
+      "user@example.com",
+      "User",
+      "email",
+      { kind: "unavailable" },
+      "pro_monthly",
+      { plan: "pro", cadence: "monthly" },
+    )
+    const fields = send.mock.lastCall![0].blocks[1].fields
+    expect(fields).toEqual(
+      expect.arrayContaining([
+        { type: "mrkdwn", text: "*Interested in:* Pro Monthly" },
+        { type: "mrkdwn", text: "*Company:* —" },
+        { type: "mrkdwn", text: "*Affiliation:* —" },
       ]),
     )
   })
