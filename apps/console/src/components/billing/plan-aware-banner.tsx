@@ -80,7 +80,8 @@ export function PlanAwareBanner({
           </ManageAction>
         }
       >
-        You&apos;re on <strong>Free</strong>: {running} sandbox
+        You&apos;re on <strong>Free</strong>: {running ?? "Default number of"}{" "}
+        sandbox
         {running === 1 ? "" : "es"} running at a time
         {size ? `, up to ${size} each` : ""}, with a runtime allowance per
         24-hour window. When it runs out, running sandboxes pause until the

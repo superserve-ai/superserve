@@ -17,37 +17,47 @@ function toCents(usd: number | null | undefined): number | null {
     : null
 }
 
-function PricingV2Overview({ summary }: { summary: BillingSummaryResponse }) {
-  const plan = useTeamPlan(true).data
-  const allowance = useFreeAllowance(plan?.kind === "free").data
-  const prepaid = usePrepaidBalance(plan?.kind === "prepaid").data
-  if (!plan || plan.kind === "legacy_payg")
-    return <CurrentPlan summary={summary} />
-  return (
-    <PlanOverview
-      plan={plan}
-      allowance={allowance ?? null}
-      prepaid={prepaid ?? null}
-      usageCents={
-        plan.period_start !== null &&
-        Date.parse(plan.period_start) ===
-          Date.parse(summary.billing_period?.start ?? "")
-          ? toCents(summary.current_charges_usd)
-          : null
-      }
-      canManage={summary.permissions?.can_manage ?? false}
-    />
-  )
-}
-
 export function PlanOverviewSection({
   summary,
 }: {
   summary: BillingSummaryResponse
 }) {
-  return usePricingVersion() === "v2" ? (
-    <PricingV2Overview summary={summary} />
-  ) : (
-    <CurrentPlan summary={summary} />
+  const version = usePricingVersion()
+  const plan = useTeamPlan(true).data
+  const allowance = useFreeAllowance(
+    version === "v2" && plan?.kind === "free",
+  ).data
+  const prepaid = usePrepaidBalance(plan?.kind === "prepaid").data
+  if (!plan || plan.kind === "legacy_payg")
+    return <CurrentPlan summary={summary} />
+  const commercial = summary.plan?.key === plan.key ? summary.plan : null
+  const matchingPeriod =
+    Date.parse(plan.period_start ?? "") ===
+      Date.parse(summary.billing_period?.start ?? "") &&
+    Date.parse(plan.period_end ?? "") ===
+      Date.parse(summary.billing_period?.end ?? "")
+  const included = commercial?.included_usage
+  const includedCents =
+    included &&
+    matchingPeriod &&
+    Date.parse(included.period_start) === Date.parse(plan.period_start ?? "") &&
+    Date.parse(included.period_end) === Date.parse(plan.period_end ?? "")
+      ? toCents(included.amount_usd)
+      : null
+  return (
+    <PlanOverview
+      plan={{
+        ...plan,
+        fee_cents:
+          commercial?.billing_interval_months === 1
+            ? toCents(commercial.price_usd)
+            : null,
+        included_cents: includedCents,
+      }}
+      allowance={allowance ?? null}
+      prepaid={prepaid ?? null}
+      usageCents={matchingPeriod ? toCents(summary.current_charges_usd) : null}
+      canManage={summary.permissions?.can_manage ?? false}
+    />
   )
 }

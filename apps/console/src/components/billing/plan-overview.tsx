@@ -188,10 +188,10 @@ export function IncludedUsagePanel({
   plan: TeamPlan
   usageCents: number | null
 }) {
-  const included = plan.included_cents ?? 0
+  const included = plan.included_cents
   return (
     <Panel title="Included usage this period">
-      {usageCents === null ? (
+      {usageCents === null || included === null ? (
         <p className="text-sm text-muted">Usage couldn&apos;t be loaded.</p>
       ) : (
         <>
@@ -257,7 +257,7 @@ export function PlanOverview({
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 pt-2 text-sm">
           <dt className="text-muted">Running at once</dt>
           <dd className="text-foreground">
-            {plan.limits.max_concurrent.toLocaleString("en-US")}
+            {plan.limits.max_concurrent?.toLocaleString("en-US") ?? "Default"}
           </dd>
           {size ? (
             <>
@@ -274,7 +274,7 @@ export function PlanOverview({
             </>
           ) : null}
         </dl>
-        {canManage && plan.kind !== "custom" ? (
+        {canManage ? (
           <Button
             size="sm"
             variant={plan.kind === "free" ? "default" : "outline"}

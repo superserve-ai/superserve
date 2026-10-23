@@ -16,7 +16,7 @@ import { useBillingContext } from "./use-billing-context"
 
 function useBillingV2Resource<T>(
   resource: keyof typeof BILLING_V2_PATHS,
-  schema: z.ZodType<T>,
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   enabled: boolean,
 ) {
   const { cacheScope, teamKey, ready } = useBillingContext()

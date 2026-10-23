@@ -27,6 +27,16 @@ import { PlanOverviewSection } from "./plan-overview-section"
 const summary = {
   permissions: { can_view: true, can_manage: true },
   current_charges_usd: 312.5,
+  plan: {
+    key: "pro_monthly",
+    billing_interval_months: 1,
+    price_usd: 250,
+    included_usage: {
+      amount_usd: 250,
+      period_start: "2026-10-01T00:00:00Z",
+      period_end: "2026-11-01T00:00:00Z",
+    },
+  },
   billing_period: {
     start: "2026-10-01T00:00:00Z",
     end: "2026-11-01T00:00:00Z",
@@ -76,13 +86,20 @@ beforeEach(() => {
 })
 
 describe("PlanOverviewSection with pricing v2 off", () => {
-  it("renders today's plan card and requests no v2 data", () => {
+  it("keeps an assigned team's change-plan link available after rollback", () => {
+    mocks.version.mockReturnValue("legacy")
+    mocks.plan.mockReturnValue({ data: plan({}), isError: false })
+    render(<PlanOverviewSection summary={summary} />)
+    expect(screen.getByRole("link", { name: "Change plan" })).toBeTruthy()
+  })
+
+  it("renders today's plan card when there is no assigned plan", () => {
     mocks.version.mockReturnValue("legacy")
     render(<PlanOverviewSection summary={summary} />)
     expect(screen.getByTestId("legacy-plan")).toBeTruthy()
-    expect(mocks.plan).not.toHaveBeenCalled()
-    expect(mocks.allowance).not.toHaveBeenCalled()
-    expect(mocks.prepaid).not.toHaveBeenCalled()
+    expect(mocks.plan).toHaveBeenCalledWith(true)
+    expect(mocks.allowance).toHaveBeenCalledWith(false)
+    expect(mocks.prepaid).toHaveBeenCalledWith(false)
   })
 })
 
@@ -108,6 +125,17 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     expect(screen.getByText("Usage couldn't be loaded.")).toBeTruthy()
   })
 
+  it("doesn't substitute monetary terms from another plan", () => {
+    mocks.plan.mockReturnValue({
+      data: plan({ key: "frozen-plan" }),
+      isError: false,
+    })
+    render(<PlanOverviewSection summary={summary} />)
+    expect(screen.getByText("Monthly subscription")).toBeTruthy()
+    expect(screen.getByText("Usage couldn't be loaded.")).toBeTruthy()
+    expect(screen.queryByText(/of \$250 used/)).toBeNull()
+  })
+
   it("keeps today's plan card while the plan is loading", () => {
     render(<PlanOverviewSection summary={summary} />)
     expect(screen.getByTestId("legacy-plan")).toBeTruthy()
@@ -120,7 +148,7 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     })
     render(<PlanOverviewSection summary={summary} />)
     expect(screen.getByRole("link", { name: "Contact us" })).toBeTruthy()
-    expect(screen.queryByRole("link", { name: "Change plan" })).toBeNull()
+    expect(screen.getByRole("link", { name: "Change plan" })).toBeTruthy()
   })
 
   it("shows the Free allowance window and its reset time", () => {
@@ -279,6 +307,8 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     mocks.plan.mockReturnValue({
       data: plan({
         pending_change: {
+          id: "34971786-dd50-492b-b934-306b63764c4b",
+          pauses_running: false,
           plan_key: "free",
           plan_name: "Free",
           effective_at: "2026-11-01T00:00:00Z",

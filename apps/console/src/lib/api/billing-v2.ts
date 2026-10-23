@@ -1,41 +1,61 @@
 import { z } from "zod"
 
+import { planKindSchema, planLimitsSchema } from "@/lib/billing/plans"
+
+export { planKindSchema, planLimitsSchema } from "@/lib/billing/plans"
+
 const cents = z.number().int().nonnegative()
 
-export const planKindSchema = z.enum([
-  "free",
-  "prepaid",
-  "subscription",
-  "legacy_payg",
-  "custom",
-])
-
-export const planLimitsSchema = z.object({
-  max_concurrent: z.number().int().nonnegative(),
-  max_vcpu: z.number().int().positive().nullable(),
-  max_memory_mib: z.number().int().positive().nullable(),
-  max_disk_mib: z.number().int().positive().nullable(),
-  max_templates: z.number().int().nonnegative().nullable(),
-})
-
-export const teamPlanSchema = z.object({
-  key: z.string(),
-  kind: planKindSchema,
-  name: z.string(),
-  limits: planLimitsSchema,
-  fee_cents: cents.nullable(),
-  included_cents: cents.nullable(),
-  period_start: z.string().nullable(),
-  period_end: z.string().nullable(),
-  pending_change: z
-    .object({
-      plan_key: z.string(),
-      plan_name: z.string(),
-      effective_at: z.string(),
-      undoable: z.boolean(),
-    })
-    .nullable(),
-})
+export const teamPlanSchema = z
+  .object({
+    plan: z
+      .object({
+        plan_key: z.string(),
+        kind: planKindSchema,
+        display_name: z.string(),
+        limits: planLimitsSchema.extend({
+          max_concurrent: z.number().int().nonnegative().nullable(),
+          max_templates: z.number().int().nonnegative().nullable(),
+        }),
+        effective_from: z.string(),
+      })
+      .nullable(),
+    period: z.object({ start: z.string(), end: z.string() }),
+    pending_change: z
+      .object({
+        id: z.string().uuid(),
+        target_plan_key: z.string(),
+        target_display_name: z.string(),
+        effective_at: z.string(),
+        undoable: z.boolean(),
+        pauses_running: z.boolean(),
+      })
+      .nullable(),
+  })
+  .transform(({ plan, period, pending_change }) =>
+    plan === null
+      ? null
+      : {
+          key: plan.plan_key,
+          kind: plan.kind,
+          name: plan.display_name,
+          limits: plan.limits,
+          fee_cents: null as number | null,
+          included_cents: null as number | null,
+          period_start: period.start as string | null,
+          period_end: period.end as string | null,
+          pending_change: pending_change
+            ? {
+                id: pending_change.id,
+                plan_key: pending_change.target_plan_key,
+                plan_name: pending_change.target_display_name,
+                effective_at: pending_change.effective_at,
+                undoable: pending_change.undoable,
+                pauses_running: pending_change.pauses_running,
+              }
+            : null,
+        },
+  )
 
 const decimalCents = z.number().nonnegative()
 
@@ -65,7 +85,7 @@ export const prepaidBalanceSchema = z.object({
 
 export type PlanKind = z.infer<typeof planKindSchema>
 export type PlanLimits = z.infer<typeof planLimitsSchema>
-export type TeamPlan = z.infer<typeof teamPlanSchema>
+export type TeamPlan = NonNullable<z.infer<typeof teamPlanSchema>>
 export type FreeAllowance = z.infer<typeof freeAllowanceSchema>
 export type PrepaidBalance = z.infer<typeof prepaidBalanceSchema>
 
@@ -82,7 +102,7 @@ export function isLowBalance(prepaid: PrepaidBalance): boolean {
 export const UPGRADE_PATH = "/plan-usage/upgrade"
 
 export const PLAN_ACTION_LINKS = {
-  starter: "/plan-usage/starter",
+  starter: "/plan-usage/buy-credit",
   pro: "/plan-usage/pro",
   enterprise: "/plan-usage/enterprise",
 } as const

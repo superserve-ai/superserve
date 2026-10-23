@@ -37,10 +37,10 @@ describe("billing data after a failed refresh", () => {
           max_disk_mib: 4096,
           max_templates: null,
         },
-        fee_cents: 0,
+        fee_cents: null,
         included_cents: null,
-        period_start: null,
-        period_end: null,
+        period_start: "2026-10-01T00:00:00Z",
+        period_end: "2026-11-01T00:00:00Z",
         pending_change: null,
       },
     },
@@ -77,7 +77,24 @@ describe("billing data after a failed refresh", () => {
   ])(
     "hides the retained $name and recovers on success",
     async ({ hook, data }) => {
-      mocks.api.mockResolvedValue(data)
+      mocks.api.mockResolvedValue(
+        hook === useTeamPlan
+          ? {
+              plan: {
+                plan_key: "free",
+                kind: "free",
+                display_name: "Free",
+                limits: (data as { limits: unknown }).limits,
+                effective_from: "2026-10-23T00:00:00Z",
+              },
+              period: {
+                start: "2026-10-01T00:00:00Z",
+                end: "2026-11-01T00:00:00Z",
+              },
+              pending_change: null,
+            }
+          : data,
+      )
       const client = new QueryClient({
         defaultOptions: { queries: { retry: false } },
       })
@@ -93,7 +110,24 @@ describe("billing data after a failed refresh", () => {
       await waitFor(() => expect(result.current.isError).toBe(true))
       expect(client.getQueryCache().getAll()[0].state.data).toEqual(data)
       expect(result.current.data).toBeUndefined()
-      mocks.api.mockResolvedValue(data)
+      mocks.api.mockResolvedValue(
+        hook === useTeamPlan
+          ? {
+              plan: {
+                plan_key: "free",
+                kind: "free",
+                display_name: "Free",
+                limits: (data as { limits: unknown }).limits,
+                effective_from: "2026-10-23T00:00:00Z",
+              },
+              period: {
+                start: "2026-10-01T00:00:00Z",
+                end: "2026-11-01T00:00:00Z",
+              },
+              pending_change: null,
+            }
+          : data,
+      )
       await act(async () => {
         await result.current.refetch()
       })
