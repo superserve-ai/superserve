@@ -199,6 +199,10 @@ async function buildCreateBody(
   opts: CreateOpts,
   flagSteps: Step[],
 ): Promise<Record<string, unknown>> {
+  // References that look like UUIDs are treated as IDs, never looked up by name.
+  if (isUuid(name)) {
+    throw usageError(`Template name "${name}" can't look like a template ID.`)
+  }
   if (name.length > 128 || !NAME_RE.test(name)) {
     throw usageError(
       `Invalid template name "${name}".`,

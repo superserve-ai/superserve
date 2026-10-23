@@ -334,4 +334,17 @@ describe("poll sleep", () => {
     expect(r.exitCode).toBe(0)
     expect(r.stdout).toContain("two")
   })
+
+  test("create rejects a UUID-shaped template name", async () => {
+    const r = await runCli([
+      "template",
+      "create",
+      TPL,
+      "--from",
+      "python:3.11",
+      "--no-wait",
+    ])
+    expect(r.exitCode).toBe(2)
+    expect(r.requests).toHaveLength(0)
+  })
 })

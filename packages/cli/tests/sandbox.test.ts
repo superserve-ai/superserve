@@ -352,3 +352,13 @@ describe("update metadata", () => {
     expect(JSON.parse(r.stdout).status).toBe("deleted")
   })
 })
+
+describe("ID-shaped names", () => {
+  test("create rejects a name that would be read as an ID", async () => {
+    for (const name of [SANDBOX_ID, `sb-usw-${SANDBOX_ID}`]) {
+      const r = await runCli(["sandbox", "create", "--name", name])
+      expect(r.exitCode).toBe(2)
+      expect(r.requests).toHaveLength(0)
+    }
+  })
+})

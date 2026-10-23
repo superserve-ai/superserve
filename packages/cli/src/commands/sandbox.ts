@@ -1,7 +1,14 @@
 import { ConflictError, NotFoundError, Sandbox } from "@superserve/sdk"
 import { type Command, Option } from "commander"
 
-import { apiFetch, apiJson, apiRequest, isUuid, resolveSandboxId } from "../api"
+import {
+  apiFetch,
+  apiJson,
+  apiRequest,
+  isSandboxId,
+  isUuid,
+  resolveSandboxId,
+} from "../api"
 import {
   collect,
   confirm,
@@ -306,6 +313,11 @@ Examples:
           `sandbox-${Buffer.from(crypto.getRandomValues(new Uint8Array(3))).toString("hex")}`
         if (name.length < 1 || name.length > 64) {
           throw usageError("--name must be 1-64 characters.")
+        }
+        // Commands treat an ID-shaped reference as an ID, so such a name
+        // could never be looked up by name.
+        if (isSandboxId(name)) {
+          throw usageError("--name can't look like a sandbox ID.")
         }
         const body = {
           name,
