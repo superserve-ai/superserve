@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { type CatalogPlan, catalogPlansOf } from "@/lib/api/billing-v2"
 import {
   fetchPublicPlans,
   type PricingVersion,
@@ -11,7 +12,7 @@ import { billingKeys } from "@/lib/api/query-keys"
 
 import { useBillingContext } from "./use-billing-context"
 
-function usePublicPlans() {
+function usePublicPlans<T = unknown>(select?: (body: unknown) => T) {
   const { cacheScope, teamKey, ready } = useBillingContext()
   const queryClient = useQueryClient()
   const queryKey = billingKeys.pricingVersion({
@@ -21,6 +22,7 @@ function usePublicPlans() {
   return useQuery({
     queryKey,
     queryFn: () => fetchPublicPlans(queryClient.getQueryData(queryKey)),
+    select,
     enabled: ready && teamKey !== null,
     retry: false,
     staleTime: 60_000,
@@ -36,4 +38,8 @@ export function usePricingVersionState(): PricingVersion | "unknown" {
 
 export function usePricingVersion(): PricingVersion {
   return usePricingVersionState() === "v2" ? "v2" : "legacy"
+}
+
+export function useCatalogPlans() {
+  return usePublicPlans<CatalogPlan[]>(catalogPlansOf)
 }

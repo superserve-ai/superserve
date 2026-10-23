@@ -13,6 +13,7 @@ vi.mock("@/lib/api/client", async (importOriginal) => ({
 }))
 
 import {
+  useCatalogPlans,
   usePricingVersion,
   usePricingVersionState,
 } from "./use-pricing-version"
@@ -133,5 +134,45 @@ describe("usePricingVersion", () => {
     mocks.api.mockRejectedValue(new Error("down"))
     await client.refetchQueries()
     expect(result.current).toBe("v2")
+  })
+
+  it("shares one request with the plan catalog", async () => {
+    mocks.api.mockResolvedValue({
+      pricing_version: "v2",
+      cards: [
+        {
+          family: "free",
+          version: 1,
+          price_label: "$0",
+          tagline: "",
+          features: [],
+          display_only: false,
+          monthly: null,
+          annual: null,
+          credit_summary: "",
+          monthly_credit_cents: null,
+          allowance: null,
+          matching: null,
+          kind: "free",
+          name: "Free",
+          fee_cents: 0,
+          included_cents: null,
+          limits: {
+            max_concurrent: 1,
+            max_vcpu: 1,
+            max_memory_mib: 1024,
+            max_disk_mib: 4096,
+            max_templates: null,
+          },
+        },
+      ],
+    })
+    const { result } = renderHook(
+      () => ({ version: usePricingVersion(), catalog: useCatalogPlans() }),
+      { wrapper },
+    )
+    await waitFor(() => expect(result.current.catalog.data).toHaveLength(1))
+    expect(result.current.version).toBe("v2")
+    expect(mocks.api).toHaveBeenCalledTimes(1)
   })
 })

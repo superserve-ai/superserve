@@ -1,6 +1,10 @@
 import { z } from "zod"
 
-import { planKindSchema, planLimitsSchema } from "@/lib/billing/plans"
+import {
+  planCardSchema,
+  planKindSchema,
+  planLimitsSchema,
+} from "@/lib/billing/plans"
 
 export { planKindSchema, planLimitsSchema } from "@/lib/billing/plans"
 
@@ -135,3 +139,122 @@ export const BILLING_V2_PATHS = {
   "free-allowance": "/billing/free-allowance",
   prepaid: "/billing/prepaid",
 } as const
+
+export const catalogPlanSchema = planCardSchema.transform((card) => ({
+  key: card.monthly?.offer_key ?? card.family,
+  kind: card.kind,
+  name: card.name,
+  price_label: card.price_label,
+  fee_cents: card.monthly?.price_cents ?? null,
+  included_cents:
+    card.allowance?.period === "month"
+      ? card.allowance.amount_cents
+      : card.monthly_credit_cents,
+  limits: card.limits,
+  available:
+    card.kind === "prepaid" ||
+    card.kind === "free" ||
+    card.display_only ||
+    card.monthly?.available === true,
+}))
+
+const catalogSchema = z.object({ cards: z.array(catalogPlanSchema) })
+export type CatalogPlan = z.infer<typeof catalogPlanSchema>
+
+export function catalogPlansOf(body: unknown): CatalogPlan[] {
+  return catalogSchema
+    .parse(body)
+    .cards.filter((card) => card.kind !== "legacy_payg")
+}
+
+export const planChangePreviewSchema = z.object({
+  target_plan_key: z.string(),
+  target_display_name: z.string(),
+  target_kind: planKindSchema,
+  timing: z
+    .enum(["immediate", "end_of_billing_period", "after_purchase"])
+    .optional(),
+  effective_at: z.string().optional(),
+  pauses_running: z.boolean(),
+  limits: planLimitsSchema.extend({
+    max_concurrent: z.number().int().nonnegative().nullable(),
+    max_templates: z.number().int().nonnegative().nullable(),
+  }),
+  blocked: z.string().optional(),
+  preview_token: z.string().length(64).optional(),
+})
+
+export const planChangeSchema = planChangePreviewSchema
+  .omit({ timing: true, blocked: true, preview_token: true })
+  .extend({
+    id: z.string().uuid(),
+    effective_at: z.string(),
+    state: z.enum(["scheduled", "applied", "completed", "undone"]),
+    undoable: z.boolean(),
+  })
+
+export type PlanChange = z.infer<typeof planChangeSchema>
+
+export type PlanChangePreview = z.infer<typeof planChangePreviewSchema>
+
+export const PLAN_CHANGE_PATHS = {
+  preview: "/billing/plan-change-preview",
+  schedule: "/billing/plan-changes",
+  undo: (id: string) => `/billing/plan-changes/${encodeURIComponent(id)}/undo`,
+} as const
+
+const PLAN_RANK: Record<PlanKind, number> = {
+  free: 0,
+  prepaid: 1,
+  legacy_payg: 1,
+  subscription: 2,
+  custom: 3,
+}
+
+export type PlanAction =
+  | { type: "current" }
+  | { type: "scheduled" }
+  | { type: "link"; href: string; label: string }
+  | { type: "downgrade"; label: string }
+  | { type: "blocked"; undoable: boolean; effectiveAt: string }
+  | { type: "contact" }
+  | { type: "unavailable" }
+
+export function planAction(current: TeamPlan, target: CatalogPlan): PlanAction {
+  if (target.key === current.key) return { type: "current" }
+  if (current.pending_change?.plan_key === target.key)
+    return { type: "scheduled" }
+  if (target.kind === current.kind)
+    return target.kind === "free" ? { type: "current" } : { type: "contact" }
+  if (target.kind === "free")
+    return { type: "downgrade", label: "Switch to Free" }
+  if (current.kind === "custom") return { type: "contact" }
+  if (target.kind === "custom")
+    return {
+      type: "link",
+      href: PLAN_ACTION_LINKS.enterprise,
+      label: "Book a meeting",
+    }
+  if (
+    PLAN_RANK[target.kind] > PLAN_RANK[current.kind] ||
+    current.kind === "legacy_payg"
+  ) {
+    if (!target.available) return { type: "unavailable" }
+    const label = `Get ${target.name}`
+    if (current.pending_change)
+      return {
+        type: "blocked",
+        undoable: current.pending_change.undoable,
+        effectiveAt: current.pending_change.effective_at,
+      }
+    return {
+      type: "link",
+      href:
+        target.kind === "prepaid"
+          ? PLAN_ACTION_LINKS.starter
+          : PLAN_ACTION_LINKS.pro,
+      label,
+    }
+  }
+  return { type: "downgrade", label: `Switch to ${target.name}` }
+}

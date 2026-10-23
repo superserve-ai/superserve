@@ -120,6 +120,19 @@ export const billingKeys = {
         context.periodEnd,
       ] as const,
   },
+  planChangePreview: (context: {
+    cacheScope: string
+    teamKey: string
+    target: string
+  }) =>
+    [
+      ...billingKeys.all,
+      "v2",
+      "plan-change-preview",
+      context.cacheScope,
+      context.teamKey,
+      context.target,
+    ] as const,
   v2: (
     resource: "plan" | "free-allowance" | "prepaid",
     context: { cacheScope: string; teamKey: string },
