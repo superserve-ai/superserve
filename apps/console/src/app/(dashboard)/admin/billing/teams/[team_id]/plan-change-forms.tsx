@@ -16,6 +16,8 @@ const FAILURES: Record<
     "The team's billing state does not allow this change. Reload to see the current state.",
   invalid: "Check the plan and reason and try again.",
   unavailable: "Billing is unavailable. Retry to send the same request.",
+  impersonating:
+    "Billing changes are disabled while viewing another team. Stop viewing it first.",
 }
 
 export interface PlanOption {

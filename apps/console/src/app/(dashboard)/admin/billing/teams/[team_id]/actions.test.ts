@@ -3,12 +3,16 @@ import { beforeEach, expect, it, vi } from "vitest"
 vi.mock("server-only", () => ({}))
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
 vi.mock("@/lib/cells", () => ({ configuredRegions: () => ["use"] }))
+vi.mock("@/lib/admin/impersonation", () => ({
+  hasImpersonationCookie: vi.fn(async () => false),
+}))
 vi.mock("@/lib/admin/team-billing", async () => {
   const actual = await vi.importActual<object>("@/lib/admin/team-billing")
   return { ...actual, schedulePlanChange: vi.fn(), cancelPlanChange: vi.fn() }
 })
 
 import { AdminBillingRequestError } from "@/lib/admin/billing-api"
+import { hasImpersonationCookie } from "@/lib/admin/impersonation"
 import { cancelPlanChange, schedulePlanChange } from "@/lib/admin/team-billing"
 
 import { cancelPlanChangeAction, schedulePlanChangeAction } from "./actions"
@@ -62,4 +66,22 @@ it("maps backend failures to their kind", async () => {
     targetOffer: "pro_monthly",
     reason: "upgrade",
   })
+})
+
+it("refuses billing writes while impersonating a team", async () => {
+  vi.mocked(hasImpersonationCookie).mockResolvedValueOnce(true)
+  expect(await schedulePlanChangeAction(valid)).toEqual({
+    kind: "impersonating",
+  })
+  vi.mocked(hasImpersonationCookie).mockResolvedValueOnce(true)
+  expect(
+    await cancelPlanChangeAction({
+      region: "use",
+      teamId: team,
+      changeId: "33333333-3333-4333-8333-333333333333",
+      reason: "r",
+    }),
+  ).toEqual({ kind: "impersonating" })
+  expect(schedulePlanChange).not.toHaveBeenCalled()
+  expect(cancelPlanChange).not.toHaveBeenCalled()
 })

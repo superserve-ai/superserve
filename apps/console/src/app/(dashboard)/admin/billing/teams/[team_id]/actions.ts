@@ -6,6 +6,7 @@ import {
   AdminBillingRequestError,
   type AdminBillingErrorKind,
 } from "@/lib/admin/billing-api"
+import { hasImpersonationCookie } from "@/lib/admin/impersonation"
 import {
   cancelPlanChange,
   isUuid,
@@ -15,7 +16,7 @@ import { configuredRegions } from "@/lib/cells"
 
 export type PlanChangeActionResult =
   | { kind: "saved" }
-  | { kind: AdminBillingErrorKind }
+  | { kind: AdminBillingErrorKind | "impersonating" }
 
 function validTarget(region: string, teamId: string): boolean {
   return isUuid(teamId) && configuredRegions().includes(region)
@@ -25,6 +26,7 @@ async function run(
   teamId: string,
   action: () => Promise<unknown>,
 ): Promise<PlanChangeActionResult> {
+  if (await hasImpersonationCookie()) return { kind: "impersonating" }
   try {
     await action()
   } catch (error) {
