@@ -148,10 +148,16 @@ const DETAILS_PAYLOAD = {
 }
 
 async function fillDetails(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(await screen.findByPlaceholderText("Company"), "Example Co")
-  await user.selectOptions(screen.getByLabelText("Affiliation"), "other")
+  await user.type(
+    await screen.findByPlaceholderText("Company (optional)"),
+    "Example Co",
+  )
+  await user.selectOptions(
+    screen.getByLabelText("Affiliation (optional)"),
+    "other",
+  )
   await user.click(screen.getByRole("radio", { name: /Starter/ }))
-  await user.click(screen.getByRole("radio", { name: /monthly/i }))
+  await user.click(screen.getByRole("button", { name: /monthly/i }))
 }
 
 describe("SignUpPage", () => {
@@ -192,10 +198,10 @@ describe("SignUpPage", () => {
     expect(
       await screen.findByText("Create your Superserve account"),
     ).toBeInTheDocument()
-    expect(screen.getByPlaceholderText("Full Name")).toBeInTheDocument()
+    expect(screen.getByPlaceholderText("Full name")).toBeInTheDocument()
     expect(screen.getByPlaceholderText("Email")).toBeInTheDocument()
     expect(screen.getByPlaceholderText("Password")).toBeInTheDocument()
-    expect(screen.getByPlaceholderText("Confirm Password")).toBeInTheDocument()
+    expect(screen.getByPlaceholderText("Confirm password")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Sign Up" })).toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: /Continue with Google/ }),
@@ -211,7 +217,7 @@ describe("SignUpPage", () => {
     expect(
       screen.getByRole("button", { name: /Complete signup with Google/ }),
     ).toBeInTheDocument()
-    expect(screen.queryByPlaceholderText("Full Name")).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText("Full name")).not.toBeInTheDocument()
     expect(screen.queryByPlaceholderText("Email")).not.toBeInTheDocument()
     expect(screen.queryByPlaceholderText("Password")).not.toBeInTheDocument()
     expect(
@@ -235,12 +241,12 @@ describe("SignUpPage", () => {
 
     await fillDetails(user)
     await user.type(
-      await screen.findByPlaceholderText("Full Name"),
+      await screen.findByPlaceholderText("Full name"),
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
     await user.type(screen.getByPlaceholderText("Password"), "1234567")
-    await user.type(screen.getByPlaceholderText("Confirm Password"), "1234567")
+    await user.type(screen.getByPlaceholderText("Confirm password"), "1234567")
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
     expect(
@@ -253,13 +259,13 @@ describe("SignUpPage", () => {
 
     await fillDetails(user)
     await user.type(
-      await screen.findByPlaceholderText("Full Name"),
+      await screen.findByPlaceholderText("Full name"),
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
     await user.type(screen.getByPlaceholderText("Password"), "password123")
     await user.type(
-      screen.getByPlaceholderText("Confirm Password"),
+      screen.getByPlaceholderText("Confirm password"),
       "different",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
@@ -291,13 +297,13 @@ describe("SignUpPage", () => {
 
     await fillDetails(user)
     await user.type(
-      await screen.findByPlaceholderText("Full Name"),
+      await screen.findByPlaceholderText("Full name"),
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
     await user.type(screen.getByPlaceholderText("Password"), "password123")
     await user.type(
-      screen.getByPlaceholderText("Confirm Password"),
+      screen.getByPlaceholderText("Confirm password"),
       "password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
@@ -334,7 +340,7 @@ describe("SignUpPage", () => {
 
     await fillDetails(user)
     await user.type(
-      await screen.findByPlaceholderText("Full Name"),
+      await screen.findByPlaceholderText("Full name"),
       syntheticSignupValues.fullName,
     )
     await user.type(
@@ -346,7 +352,7 @@ describe("SignUpPage", () => {
       syntheticSignupValues.password,
     )
     await user.type(
-      screen.getByPlaceholderText("Confirm Password"),
+      screen.getByPlaceholderText("Confirm password"),
       syntheticSignupValues.confirmPassword,
     )
     await user.click(await screen.findByRole("button", { name: "Sign Up" }))
@@ -367,13 +373,13 @@ describe("SignUpPage", () => {
 
     await fillDetails(user)
     await user.type(
-      await screen.findByPlaceholderText("Full Name"),
+      await screen.findByPlaceholderText("Full name"),
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
     await user.type(screen.getByPlaceholderText("Password"), "password123")
     await user.type(
-      screen.getByPlaceholderText("Confirm Password"),
+      screen.getByPlaceholderText("Confirm password"),
       "password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
@@ -398,6 +404,30 @@ describe("SignUpPage", () => {
     })
   })
 
+  it("submits the default plan of interest when optional details are skipped", async () => {
+    mockSignUpWithEmail.mockResolvedValue({ success: true })
+    render(await SignUpPage())
+
+    await user.type(
+      await screen.findByPlaceholderText("Full name"),
+      "Test User",
+    )
+    await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
+    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(
+      screen.getByPlaceholderText("Confirm password"),
+      "password123",
+    )
+    await user.click(screen.getByRole("button", { name: "Sign Up" }))
+
+    await waitFor(() =>
+      expect(mockSignUpWithEmail.mock.lastCall?.at(-1)).toEqual({
+        plan: "pro",
+        cadence: "monthly",
+      }),
+    )
+  })
+
   it("shows inline form error when signUpWithEmail returns an error", async () => {
     mockSignUpWithEmail.mockResolvedValue({
       success: false,
@@ -407,13 +437,13 @@ describe("SignUpPage", () => {
 
     await fillDetails(user)
     await user.type(
-      await screen.findByPlaceholderText("Full Name"),
+      await screen.findByPlaceholderText("Full name"),
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
     await user.type(screen.getByPlaceholderText("Password"), "password123")
     await user.type(
-      screen.getByPlaceholderText("Confirm Password"),
+      screen.getByPlaceholderText("Confirm password"),
       "password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
@@ -433,13 +463,13 @@ describe("SignUpPage", () => {
 
     await fillDetails(user)
     await user.type(
-      await screen.findByPlaceholderText("Full Name"),
+      await screen.findByPlaceholderText("Full name"),
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
     await user.type(screen.getByPlaceholderText("Password"), "password123")
     await user.type(
-      screen.getByPlaceholderText("Confirm Password"),
+      screen.getByPlaceholderText("Confirm password"),
       "password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
@@ -457,13 +487,13 @@ describe("SignUpPage", () => {
 
     await fillDetails(user)
     await user.type(
-      await screen.findByPlaceholderText("Full Name"),
+      await screen.findByPlaceholderText("Full name"),
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
     await user.type(screen.getByPlaceholderText("Password"), "password123")
     await user.type(
-      screen.getByPlaceholderText("Confirm Password"),
+      screen.getByPlaceholderText("Confirm password"),
       "password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
@@ -623,13 +653,13 @@ describe("SignUpPage with reCAPTCHA configured", () => {
 
     await fillDetails(user)
     await user.type(
-      await screen.findByPlaceholderText("Full Name"),
+      await screen.findByPlaceholderText("Full name"),
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
     await user.type(screen.getByPlaceholderText("Password"), "password123")
     await user.type(
-      screen.getByPlaceholderText("Confirm Password"),
+      screen.getByPlaceholderText("Confirm password"),
       "password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
@@ -786,13 +816,13 @@ describe("SignUpPage with reCAPTCHA configured", () => {
 
     await fillDetails(user)
     await user.type(
-      await screen.findByPlaceholderText("Full Name"),
+      await screen.findByPlaceholderText("Full name"),
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
     await user.type(screen.getByPlaceholderText("Password"), "password123")
     await user.type(
-      screen.getByPlaceholderText("Confirm Password"),
+      screen.getByPlaceholderText("Confirm password"),
       "password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))

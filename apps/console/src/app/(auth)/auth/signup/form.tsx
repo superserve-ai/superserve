@@ -10,8 +10,6 @@ import { usePostHog } from "posthog-js/react"
 import { useEffect, useState } from "react"
 
 import { PendingReview } from "@/components/auth/pending-review"
-import { CornerBrackets } from "@/components/corner-brackets"
-import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { FALLBACK_PLAN_CATALOG, type PlanCatalog } from "@/lib/api/plan-catalog"
 import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
@@ -30,6 +28,7 @@ import {
 } from "./action"
 import {
   initialSignupDetails,
+  PlanInterestCards,
   SignupDetailsFields,
   signupDetailsPayload,
   signupValuesOffer,
@@ -280,7 +279,7 @@ export default function SignUpContent({
       if (Object.keys(detailErrors).length > 0) {
         setErrors({
           ...detailErrors,
-          form: "Complete your details above before continuing with Google.",
+          form: "Fix your details above before continuing with Google.",
         })
         return
       }
@@ -342,30 +341,55 @@ export default function SignUpContent({
 
   if (pendingReview) return <PendingReview name={fullName} email={email} />
 
+  const busy = isLoading || isGoogleLoading
   const googleButton = (label: string, loadingLabel: string) => (
     <Button
       type="button"
       variant="outline"
       onClick={() => handleGoogleSignIn(!isCompleteGoogleSignup)}
-      disabled={isGoogleLoading || isLoading}
+      disabled={busy}
       className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
     >
       {isGoogleLoading ? <Spinner /> : <GoogleIcon />}
       {isGoogleLoading ? loadingLabel : label}
     </Button>
   )
+  const planCards = (
+    <PlanInterestCards
+      values={details}
+      catalog={catalog}
+      disabled={busy}
+      onChange={setDetail}
+    />
+  )
   const detailsFields = (
     <SignupDetailsFields
       values={details}
       errors={errors}
-      catalog={catalog}
-      disabled={isLoading || isGoogleLoading}
+      disabled={busy}
       onChange={setDetail}
     />
   )
+  const formError = errors.form && (
+    <p className="text-xs text-destructive">{errors.form}</p>
+  )
+  const passwordToggle = (shown: boolean, toggle: () => void) => (
+    <button
+      type="button"
+      onClick={toggle}
+      className="text-muted"
+      aria-label={shown ? "Hide password" : "Show password"}
+    >
+      {shown ? (
+        <EyeSlashIcon className="size-4" weight="light" />
+      ) : (
+        <EyeIcon className="size-4" weight="light" />
+      )}
+    </button>
+  )
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-6">
+    <main className="min-h-dvh bg-background text-foreground">
       {RECAPTCHA_SITE_KEY && (
         <Script
           src={`https://www.google.com/recaptcha/enterprise.js?render=${RECAPTCHA_SITE_KEY}`}
@@ -378,26 +402,22 @@ export default function SignUpContent({
           strategy="afterInteractive"
         />
       )}
-      <DitherBackground />
-      <div className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6">
-        <CornerBrackets size="lg" />
-        <div className="mb-8 flex justify-center">
-          <Link href="/">
-            <Image
-              src="/logo.svg"
-              alt="Superserve"
-              width={120}
-              height={24}
-              className="h-6 w-auto"
-            />
-          </Link>
-        </div>
+      <div className="mx-auto w-full max-w-7xl px-5 py-8 sm:px-10 lg:px-12">
+        <Link href="/" className="inline-block">
+          <Image
+            src="/logo.svg"
+            alt="Superserve"
+            width={120}
+            height={24}
+            className="h-6 w-auto"
+          />
+        </Link>
         {isCompleteGoogleSignup ? (
-          <>
-            <h1 className="mb-4 text-center text-sm font-medium text-foreground">
+          <div className="mx-auto mt-24 max-w-sm text-center">
+            <h1 className="mb-4 text-sm font-medium text-foreground">
               Complete signup
             </h1>
-            <p className="mb-6 text-center text-xs leading-relaxed text-muted">
+            <p className="mb-6 text-xs leading-relaxed text-muted">
               Google sign-in succeeded. Complete signup to finish verification
               and provision your Superserve account.
             </p>
@@ -408,133 +428,113 @@ export default function SignUpContent({
               "Complete signup with Google",
               "Completing signup...",
             )}
-          </>
-        ) : detailsRequired ? (
-          <>
-            <h1 className="mb-4 text-center text-sm font-medium text-foreground">
-              Complete your details
-            </h1>
-            <p className="mb-6 text-center text-xs leading-relaxed text-muted">
-              We need a few details before we can review your account. Fill them
-              in and continue with Google again.
-            </p>
-            {detailsFields}
-            {errors.form && (
-              <p className="mt-4 text-xs text-destructive">{errors.form}</p>
-            )}
-            <div className="mt-6">
-              {googleButton("Continue with Google", "Signing up...")}
-            </div>
-          </>
+          </div>
         ) : (
           <>
-            <h1 className="mb-6 text-center text-sm font-medium text-foreground">
-              Create your Superserve account
-            </h1>
-            {detailsFields}
-            <div className="mt-6">
-              {googleButton("Continue with Google", "Signing up...")}
-            </div>
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-dashed border-border" />
-              </div>
-              <div className="relative flex justify-center text-xs">
-                <span className="bg-surface px-3 text-muted">or</span>
-              </div>
-            </div>
-            <form onSubmit={handleSignUp} className="space-y-3">
-              <Input
-                type="text"
-                placeholder="Full Name"
-                value={fullName}
-                onChange={(e) => setFormValue("fullName", e.target.value)}
-                error={errors.fullName}
-              />
-              <Input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setFormValue("email", e.target.value)}
-                error={errors.email}
-              />
-              <Input
-                type={showPassword ? "text" : "password"}
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setFormValue("password", e.target.value)}
-                error={errors.password}
-                suffix={
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="text-muted"
-                  >
-                    {showPassword ? (
-                      <EyeSlashIcon className="size-4" weight="light" />
-                    ) : (
-                      <EyeIcon className="size-4" weight="light" />
-                    )}
-                  </button>
-                }
-              />
-              <Input
-                type={showConfirmPassword ? "text" : "password"}
-                placeholder="Confirm Password"
-                value={confirmPassword}
-                onChange={(e) =>
-                  setFormValue("confirmPassword", e.target.value)
-                }
-                error={errors.confirmPassword}
-                suffix={
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="text-muted"
-                  >
-                    {showConfirmPassword ? (
-                      <EyeSlashIcon className="size-4" weight="light" />
-                    ) : (
-                      <EyeIcon className="size-4" weight="light" />
-                    )}
-                  </button>
-                }
-              />
-              {errors.form && (
-                <p className="text-xs text-destructive">{errors.form}</p>
+            <div className="mt-14">{planCards}</div>
+            <div className="mx-auto mt-14 max-w-md">
+              {detailsRequired ? (
+                <>
+                  <h2 className="text-sm font-medium text-foreground">
+                    Complete your details
+                  </h2>
+                  <p className="mt-2 mb-6 text-xs leading-relaxed text-muted">
+                    We need a few details before we can review your account.
+                    Fill them in and continue with Google again.
+                  </p>
+                  <div className="space-y-3">{detailsFields}</div>
+                  {errors.form && <div className="mt-4">{formError}</div>}
+                  <div className="mt-6">
+                    {googleButton("Continue with Google", "Signing up...")}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <form onSubmit={handleSignUp} className="space-y-3">
+                    <Input
+                      type="text"
+                      placeholder="Full name"
+                      aria-label="Full name"
+                      value={fullName}
+                      onChange={(e) => setFormValue("fullName", e.target.value)}
+                      error={errors.fullName}
+                    />
+                    <Input
+                      type="email"
+                      placeholder="Email"
+                      aria-label="Email"
+                      value={email}
+                      onChange={(e) => setFormValue("email", e.target.value)}
+                      error={errors.email}
+                    />
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Password"
+                      aria-label="Password"
+                      value={password}
+                      onChange={(e) => setFormValue("password", e.target.value)}
+                      error={errors.password}
+                      suffix={passwordToggle(showPassword, () =>
+                        setShowPassword(!showPassword),
+                      )}
+                    />
+                    <Input
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder="Confirm password"
+                      aria-label="Confirm password"
+                      value={confirmPassword}
+                      onChange={(e) =>
+                        setFormValue("confirmPassword", e.target.value)
+                      }
+                      error={errors.confirmPassword}
+                      suffix={passwordToggle(showConfirmPassword, () =>
+                        setShowConfirmPassword(!showConfirmPassword),
+                      )}
+                    />
+                    <div className="space-y-3 pt-3">{detailsFields}</div>
+                    {formError}
+                    <div className="pt-3">
+                      <Button type="submit" disabled={busy} className="w-full">
+                        {isLoading ? <Spinner /> : null}
+                        {isLoading ? "Creating account..." : "Sign Up"}
+                      </Button>
+                    </div>
+                  </form>
+                  <div className="relative my-6">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-dashed border-border" />
+                    </div>
+                    <div className="relative flex justify-center text-xs">
+                      <span className="bg-background px-3 text-muted">or</span>
+                    </div>
+                  </div>
+                  {googleButton("Continue with Google", "Signing up...")}
+                  <p className="mt-6 text-center text-xs text-muted">
+                    Already have an account?{" "}
+                    <Link
+                      href={signInHref}
+                      className="font-medium text-foreground hover:underline"
+                    >
+                      Sign in
+                    </Link>
+                  </p>
+                </>
               )}
-              <Button
-                type="submit"
-                disabled={isLoading || isGoogleLoading}
-                className="w-full"
-              >
-                {isLoading ? <Spinner /> : null}
-                {isLoading ? "Creating account..." : "Sign Up"}
-              </Button>
-            </form>
-            <p className="mt-5 text-center text-xs text-muted">
-              Already have an account?{" "}
-              <Link
-                href={signInHref}
-                className="font-medium text-foreground hover:underline"
-              >
-                Sign in
-              </Link>
-            </p>
-            <p className="mt-6 text-center text-xs leading-relaxed text-muted/60">
-              By continuing, you agree to our{" "}
-              <a
-                href={`${process.env.NEXT_PUBLIC_WEBSITE_URL}/privacy`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-foreground underline-offset-2 hover:underline"
-              >
-                Privacy Policy
-              </a>
-            </p>
+              <p className="mt-6 text-center text-xs leading-relaxed text-muted/60">
+                By continuing, you agree to our{" "}
+                <a
+                  href={`${process.env.NEXT_PUBLIC_WEBSITE_URL}/privacy`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-foreground underline-offset-2 hover:underline"
+                >
+                  Privacy Policy
+                </a>
+              </p>
+            </div>
           </>
         )}
       </div>
-    </div>
+    </main>
   )
 }

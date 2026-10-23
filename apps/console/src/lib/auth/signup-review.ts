@@ -39,30 +39,39 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
+// Blank optional answers arrive as "" from the form; treat them as absent.
+const blankAsUndefined = (value: unknown) =>
+  typeof value === "string" && !value.trim() ? undefined : value
+
 export const signupDetailsSchema = z
   .object({
-    company: z
-      .string()
-      .trim()
-      .min(1, "Company is required.")
-      .max(200, "Company must be 200 characters or fewer."),
-    affiliation: z.enum(["yc", "other"], {
-      errorMap: () => ({ message: "Choose an affiliation." }),
-    }),
-    ycLink: z.string().trim().max(2048).optional(),
+    company: z.preprocess(
+      blankAsUndefined,
+      z
+        .string()
+        .trim()
+        .max(200, "Company must be 200 characters or fewer.")
+        .optional(),
+    ),
+    affiliation: z.preprocess(
+      blankAsUndefined,
+      z
+        .enum(["yc", "other"], {
+          errorMap: () => ({ message: "Choose an affiliation." }),
+        })
+        .optional(),
+    ),
+    ycLink: z.preprocess(
+      blankAsUndefined,
+      z.string().trim().max(2048).optional(),
+    ),
     plan: z.enum(["starter", "pro", "enterprise"], {
       errorMap: () => ({ message: "Choose a plan." }),
     }),
     cadence: z.enum(["monthly", "annual"]).optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.affiliation === "yc" && !value.ycLink)
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["ycLink"],
-        message: "YC validation link is required.",
-      })
-    else if (value.affiliation === "yc" && !isHttpUrl(value.ycLink!))
+    if (value.affiliation === "yc" && value.ycLink && !isHttpUrl(value.ycLink))
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["ycLink"],
@@ -77,17 +86,20 @@ export const signupDetailsSchema = z
   })
   .transform(
     (value): SignupDetails => ({
-      company: value.company,
-      affiliation: value.affiliation,
-      ...(value.affiliation === "yc" ? { ycLink: value.ycLink } : {}),
+      ...(value.company ? { company: value.company } : {}),
+      ...(value.affiliation ? { affiliation: value.affiliation } : {}),
+      ...(value.affiliation === "yc" && value.ycLink
+        ? { ycLink: value.ycLink }
+        : {}),
       plan: value.plan,
       ...(value.plan !== "enterprise" ? { cadence: value.cadence } : {}),
     }),
   )
 
+// Only the plan of interest is required; the rest helps staff review.
 export interface SignupDetails {
-  company: string
-  affiliation: SignupAffiliation
+  company?: string
+  affiliation?: SignupAffiliation
   ycLink?: string
   plan: SignupPlanChoice
   cadence?: PlanCadence
@@ -95,8 +107,8 @@ export interface SignupDetails {
 
 /** Stored shape under `app_metadata.signup_request`. */
 export interface StoredSignupRequest {
-  company: string
-  affiliation: SignupAffiliation
+  company?: string
+  affiliation?: SignupAffiliation
   yc_link?: string
   plan: SignupPlanChoice
   cadence?: PlanCadence
@@ -124,8 +136,8 @@ export function storedSignupRequest(
   submittedAt = new Date(),
 ): StoredSignupRequest {
   return {
-    company: details.company,
-    affiliation: details.affiliation,
+    ...(details.company ? { company: details.company } : {}),
+    ...(details.affiliation ? { affiliation: details.affiliation } : {}),
     ...(details.ycLink ? { yc_link: details.ycLink } : {}),
     plan: details.plan,
     ...(details.cadence ? { cadence: details.cadence } : {}),
