@@ -7,7 +7,10 @@ import { getAuthApiKeyAndTeamForUser } from "@/lib/api/proxy-auth"
 import type { SignupPlanContext } from "@/lib/api/signup-plan"
 import { readSignupPlan } from "@/lib/api/signup-plan-read"
 import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
-import { SignupReviewPendingError } from "@/lib/auth/signup-review"
+import {
+  reviewedSignupPlan,
+  SignupReviewPendingError,
+} from "@/lib/auth/signup-review"
 import { createServerClient } from "@/lib/supabase/server"
 
 export async function getSignupPlanAction(
@@ -44,5 +47,5 @@ export async function getSignupPlanAction(
     if (error instanceof SignupReviewPendingError) redirect("/auth/pending")
     throw error
   })
-  return readSignupPlan(user.id, team, expectedTeam)
+  return readSignupPlan(user.id, team, expectedTeam, reviewedSignupPlan(user))
 }

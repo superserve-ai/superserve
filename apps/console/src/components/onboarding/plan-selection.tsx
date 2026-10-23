@@ -5,29 +5,60 @@ import posthog from "posthog-js"
 import { useCallback, useEffect, useRef, useState } from "react"
 
 import { createStripeCheckoutSession } from "@/lib/api/billing-stripe"
+import { FALLBACK_PLAN_CATALOG, type PlanCatalog } from "@/lib/api/plan-catalog"
 import {
   commitFreePlan,
   isStripeCheckoutUrl,
   recoverProPayment,
   startProCheckout,
 } from "@/lib/api/plan-checkout"
-import type { SignupPlanContext } from "@/lib/api/signup-plan"
+import {
+  offerCadence,
+  purchaseOffer,
+  type SignupPlanContext,
+} from "@/lib/api/signup-plan"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { initialPlanSelection } from "@/lib/auth/plan-preselection"
+import type { RequestedOffer } from "@/lib/auth/requested-offer"
 
 import { PlanSelectionView, type PlanCadence } from "./plan-selection-view"
+import { ReviewedPlanView, type ReviewedPlan } from "./reviewed-plan-view"
+
+/** The plan an approved account chose at signup, if it named one. */
+function reviewedChoice(
+  offer: RequestedOffer | undefined,
+): { plan: ReviewedPlan; cadence: PlanCadence } | undefined {
+  if (offer === "enterprise") return { plan: "enterprise", cadence: "monthly" }
+  const cadence = offerCadence(offer)
+  if (!cadence) return undefined
+  return { plan: offer!.startsWith("starter_") ? "starter" : "pro", cadence }
+}
 
 export function PlanSelection({
   initial,
   billingReturn,
+  catalog = FALLBACK_PLAN_CATALOG,
 }: {
   initial: SignupPlanContext
   billingReturn?: string
+  catalog?: PlanCatalog
 }) {
   const defaults = initialPlanSelection(initial.requestedOffer)
+  const chosen = initial.reviewed
+    ? reviewedChoice(initial.requestedOffer)
+    : undefined
   const [context, setContext] = useState(initial)
   const [selection, setSelection] = useState(defaults.selection)
-  const [cadence, setCadence] = useState<PlanCadence>(defaults.cadence)
+  const [cadence, setCadence] = useState<PlanCadence>(
+    chosen?.cadence ?? defaults.cadence,
+  )
+  const [reviewedPlan, setReviewedPlan] = useState<ReviewedPlan | null>(
+    chosen?.plan ?? null,
+  )
+  const [reviewedMode, setReviewedMode] = useState<"confirm" | "plans">(
+    chosen ? "confirm" : "plans",
+  )
+  const autoContinued = useRef(false)
   const [freeBilling, setFreeBilling] = useState(
     initial.offer === "free" && Boolean(billingReturn),
   )
@@ -52,9 +83,7 @@ export function PlanSelection({
           action,
           requested_offer: initial.requestedOffer ?? "not_specified",
           selected_offer: selected,
-          billing_cadence: selected?.startsWith("pro_")
-            ? selected.slice(4)
-            : undefined,
+          billing_cadence: offerCadence(selected),
         })
       } catch {
         /* Analytics never controls onboarding. */
@@ -218,6 +247,43 @@ export function PlanSelection({
     return true
   }
 
+  // Reviewed signups already chose a plan: Starter/Pro go to checkout and
+  // Enterprise starts on the default plan while staff set custom terms.
+  const continueReviewed = (plan: ReviewedPlan, planCadence = cadence) =>
+    void run(async () => {
+      if (!(await confirmSelecting())) return
+      setReviewedPlan(plan)
+      if (plan === "enterprise") {
+        await commitFreePlan(initial.teamKey)
+        track("enterprise_selected", "enterprise")
+        finish("free")
+        return
+      }
+      const offer = purchaseOffer(plan, planCadence)
+      track("continue_to_payment", offer)
+      const url = await startProCheckout(
+        initial.teamKey,
+        offer,
+        checkoutReturnUrl().toString(),
+      )
+      if (url) navigate(url)
+      else await refresh()
+    })
+
+  useEffect(() => {
+    // A checkout return (including cancel) shows the plan instead of
+    // reopening payment; so does any later visit after the first attempt.
+    if (
+      !chosen ||
+      autoContinued.current ||
+      billingReturn ||
+      context.state !== "selecting"
+    )
+      return
+    autoContinued.current = true
+    continueReviewed(chosen.plan, chosen.cadence)
+  })
+
   if (context.state === "yc_claim")
     return <main className="p-10">Opening your YC claim…</main>
 
@@ -242,8 +308,30 @@ export function PlanSelection({
       </main>
     )
 
+  if (initial.reviewed && step === "plans")
+    return (
+      <ReviewedPlanView
+        mode={reviewedMode}
+        plan={reviewedPlan}
+        cadence={cadence}
+        catalog={catalog}
+        busy={busy}
+        error={error}
+        onCadence={(value) => {
+          setCadence(value)
+          track("cadence_changed", value)
+        }}
+        onContinue={(plan) => continueReviewed(plan)}
+        onChangePlan={() => {
+          setReviewedMode("plans")
+          track("change_plan")
+        }}
+      />
+    )
+
   return (
     <PlanSelectionView
+      paymentPlan={context.offer?.startsWith("starter_") ? "Starter" : "Pro"}
       step={step}
       selection={selection}
       cadence={cadence}

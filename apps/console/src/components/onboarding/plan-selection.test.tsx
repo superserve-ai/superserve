@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { createStripeCheckoutSession } from "@/lib/api/billing-stripe"
 import {
   commitFreePlan,
+  PLAN_UNAVAILABLE_MESSAGE,
   recoverProPayment,
   startProCheckout,
 } from "@/lib/api/plan-checkout"
@@ -259,4 +260,75 @@ it("rechecks checkout after browser Back restores the previous page", async () =
     reads,
   )
   expect(startProCheckout).toHaveBeenCalledTimes(1)
+})
+
+describe("reviewed signup plan step", () => {
+  const reviewed = (requestedOffer: SignupPlanContext["requestedOffer"]) => ({
+    ...selecting,
+    reviewed: true,
+    requestedOffer,
+  })
+
+  it("opens checkout for the plan chosen at signup without asking again", async () => {
+    vi.mocked(startProCheckout).mockResolvedValue(
+      "https://checkout.stripe.com/c/pay/test",
+    )
+    render(<PlanSelection initial={reviewed("starter_annual")} />)
+    await waitFor(() =>
+      expect(startProCheckout).toHaveBeenCalledWith(
+        "use:team",
+        "starter_annual",
+        expect.stringContaining("/onboarding/plan/"),
+      ),
+    )
+    expect(startProCheckout).toHaveBeenCalledTimes(1)
+    expect(assign).toHaveBeenCalledWith(
+      "https://checkout.stripe.com/c/pay/test",
+    )
+    expect(
+      screen.queryByRole("button", { name: "Continue with Free" }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("commits Enterprise on the default plan and opens the console", async () => {
+    render(<PlanSelection initial={reviewed("enterprise")} />)
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("/sandboxes"))
+    expect(commitFreePlan).toHaveBeenCalledWith("use:team")
+    expect(startProCheckout).not.toHaveBeenCalled()
+  })
+
+  it("shows the chosen plan after a cancelled checkout and lets the user switch", async () => {
+    vi.mocked(startProCheckout).mockResolvedValue(
+      "https://checkout.stripe.com/c/pay/test",
+    )
+    render(
+      <PlanSelection
+        initial={reviewed("pro_monthly")}
+        billingReturn="cancel"
+      />,
+    )
+    expect(
+      screen.getByRole("heading", { name: "Finish setting up your plan." }),
+    ).toBeVisible()
+    expect(startProCheckout).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole("button", { name: "Change plan" }))
+    expect(screen.queryByText(/Free/)).not.toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue with Enterprise" }),
+    )
+    await waitFor(() => expect(commitFreePlan).toHaveBeenCalledWith("use:team"))
+    expect(startProCheckout).not.toHaveBeenCalled()
+  })
+
+  it("explains when the chosen plan cannot be bought yet", async () => {
+    vi.mocked(startProCheckout).mockRejectedValue(
+      new Error(PLAN_UNAVAILABLE_MESSAGE),
+    )
+    render(<PlanSelection initial={reviewed("starter_monthly")} />)
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      PLAN_UNAVAILABLE_MESSAGE,
+    )
+    expect(screen.getByRole("button", { name: "Change plan" })).toBeVisible()
+  })
 })

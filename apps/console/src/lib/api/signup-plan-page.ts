@@ -8,7 +8,10 @@ import { readSignupPlan } from "@/lib/api/signup-plan-read"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { completedMemberships } from "@/lib/api/team-provisioning"
 import { listTeamsAction } from "@/lib/api/teams-actions"
-import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
+import {
+  isSignupReviewBlocked,
+  reviewedSignupPlan,
+} from "@/lib/auth/signup-review"
 import { createServerClient } from "@/lib/supabase/server"
 
 export interface SignupPlanPageParams {
@@ -63,7 +66,7 @@ export async function getSignupPlanPage(params: SignupPlanPageParams = {}) {
       redirect(`/api/onboarding/prepare/?${query}`)
     }
     const [context, directory] = await Promise.all([
-      readSignupPlan(user.id, team, params.team),
+      readSignupPlan(user.id, team, params.team, reviewedSignupPlan(user)),
       listTeamsAction(),
     ])
     if (

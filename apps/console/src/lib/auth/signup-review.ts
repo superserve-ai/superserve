@@ -167,6 +167,18 @@ export function readSignupRequest(
   return parsed.success ? parsed.data : undefined
 }
 
+/**
+ * Plan preference for accounts that chose a plan during reviewed signup;
+ * undefined for accounts that predate review.
+ */
+export function reviewedSignupPlan(
+  user: MetadataUser,
+): { offer?: RequestedOffer } | undefined {
+  if (!signupReviewStatus(user)) return undefined
+  const request = readSignupRequest(user)
+  return { offer: request ? signupDetailsOffer(request) : undefined }
+}
+
 export class SignupReviewPendingError extends Error {
   constructor() {
     super(SIGNUP_REVIEW_PENDING_MESSAGE)

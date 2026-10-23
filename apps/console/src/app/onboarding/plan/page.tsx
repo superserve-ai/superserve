@@ -3,6 +3,8 @@ import { redirect } from "next/navigation"
 import { after } from "next/server"
 
 import { PlanSelectionLoader } from "@/components/onboarding/plan-selection-loader"
+import { readPlanCatalog } from "@/lib/api/plan-catalog-read"
+import { offerCadence } from "@/lib/api/signup-plan"
 import {
   getSignupPlanPage,
   type SignupPlanPageParams,
@@ -55,9 +57,7 @@ export default async function PlanSelectionPage({
       const properties = {
         requested_offer: context.requestedOffer ?? "not_specified",
         selected_offer: context.offer ?? "free",
-        billing_cadence: context.offer?.startsWith("pro_")
-          ? context.offer.slice(4)
-          : undefined,
+        billing_cadence: offerCadence(context.offer),
       }
       if (params.billing)
         await trackEvent("signup_plan_action", context.userId, {
@@ -71,10 +71,12 @@ export default async function PlanSelectionPage({
     })
     redirect("/sandboxes")
   }
+  const catalog = context?.reviewed ? await readPlanCatalog() : undefined
   return (
     <PlanSelectionLoader
       key={JSON.stringify([context, params])}
       initialContext={context ?? null}
+      catalog={catalog}
       billingReturn={params.billing}
       expectedTeam={params.team}
       expectedUser={params.account}

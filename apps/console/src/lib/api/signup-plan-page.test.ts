@@ -79,6 +79,7 @@ it("resolves the context and directory before rendering", async () => {
     "owner",
     { teamId: "team", region: "use" },
     "use:team",
+    undefined,
   )
   expect(m.memberships).toHaveBeenCalledWith("owner", { maxAgeMs: 0 })
 })
