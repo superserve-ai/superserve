@@ -42,6 +42,28 @@ const ALLOWED_PREFIXES = [
   "billing/usage-series",
 ]
 
+const BILLING_V2_READ_PATHS = new Set([
+  "billing/plans/public",
+  "billing/plan",
+  "billing/free-allowance",
+  "billing/prepaid",
+])
+
+function isBillingV2ReadPath(path: string): boolean {
+  return (
+    BILLING_V2_READ_PATHS.has(path) || path === "billing/plan-change-preview"
+  )
+}
+
+function isPlanChangeWritePath(path: string): boolean {
+  return (
+    path === "billing/plan-changes" ||
+    /^billing\/plan-changes\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/undo$/i.test(
+      path,
+    )
+  )
+}
+
 function isTeamBillingPath(path: string): boolean {
   return (
     /^teams\/[^/]+\/billing\/usage$/.test(path) ||
@@ -87,6 +109,7 @@ const FORWARD_REQUEST_HEADERS = new Set([
 ])
 
 function isAllowedPath(path: string): boolean {
+  if (isBillingV2ReadPath(path) || isPlanChangeWritePath(path)) return true
   if (isTeamBillingPath(path)) return true
   if (isStripeBillingPath(path)) return true
   return ALLOWED_PREFIXES.some(
@@ -146,6 +169,10 @@ async function proxyRequest(
   const skipKeyInjection = shouldSkipKeyInjection(joinedPath)
   const planRequest = isPlanBillingPath(joinedPath)
   if (planRequest && request.method !== "POST")
+    return NextResponse.json({ error: "Method not allowed" }, { status: 405 })
+  if (isBillingV2ReadPath(joinedPath) && request.method !== "GET")
+    return NextResponse.json({ error: "Method not allowed" }, { status: 405 })
+  if (isPlanChangeWritePath(joinedPath) && request.method !== "POST")
     return NextResponse.json({ error: "Method not allowed" }, { status: 405 })
   const checkoutRequest =
     joinedPath === "stripe/checkout-session" && request.method === "POST"
@@ -243,7 +270,12 @@ async function proxyRequest(
           )
         }
       }
-      if (checkoutRequest || planRequest)
+      if (
+        checkoutRequest ||
+        planRequest ||
+        isPlanChangeWritePath(joinedPath) ||
+        joinedPath === "billing/plan-change-preview"
+      )
         checkoutTeam = selfContext?.team ?? null
       apiKey = impersonationContext
         ? await getAuthApiKeyForUser(
@@ -296,6 +328,73 @@ async function proxyRequest(
     request.method !== "GET" && request.method !== "HEAD"
       ? await request.arrayBuffer()
       : undefined
+
+  if (joinedPath === "billing/plan-change-preview") {
+    if (
+      !checkoutTeam ||
+      request.nextUrl.searchParams.get("expected_team") !==
+        `${checkoutTeam.region}:${checkoutTeam.teamId}`
+    ) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "plan_team_changed",
+            message: "Your active team changed. Reload to continue.",
+          },
+        },
+        { status: 409 },
+      )
+    }
+    upstreamUrl.searchParams.delete("expected_team")
+  }
+
+  if (isPlanChangeWritePath(joinedPath)) {
+    let input: Record<string, unknown>
+    try {
+      input = JSON.parse(new TextDecoder().decode(body as ArrayBuffer))
+      if (!input || typeof input !== "object" || Array.isArray(input))
+        throw new Error("Invalid request")
+    } catch {
+      return NextResponse.json(
+        {
+          error: {
+            code: "invalid_request",
+            message: "Invalid plan change request",
+          },
+        },
+        { status: 400 },
+      )
+    }
+    if (
+      !checkoutTeam ||
+      input.expected_team !== `${checkoutTeam.region}:${checkoutTeam.teamId}`
+    ) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "plan_team_changed",
+            message: "Your active team changed. Reload to continue.",
+          },
+        },
+        { status: 409 },
+      )
+    }
+    body =
+      joinedPath === "billing/plan-changes"
+        ? JSON.stringify({
+            target_plan: input.target_plan,
+            idempotency_key: input.idempotency_key,
+            preview_token: input.preview_token,
+            expected_effective_at: input.expected_effective_at,
+            confirm_pauses_running: input.confirm_pauses_running,
+            ...(typeof input.reason === "string"
+              ? { reason: input.reason }
+              : {}),
+          })
+        : "{}"
+    headers.delete("content-length")
+    headers.set("content-type", "application/json")
+  }
 
   if (planRequest) {
     let input: Record<string, unknown>
@@ -659,7 +758,11 @@ async function forwardResponse(
     }
     responseHeaders.set(key, value)
   }
-  if (joinedPath === "billing/summary" || isPlanBillingPath(joinedPath)) {
+  if (
+    joinedPath === "billing/summary" ||
+    isPlanBillingPath(joinedPath) ||
+    isBillingV2ReadPath(joinedPath)
+  ) {
     responseHeaders.set("cache-control", "private, no-store")
   }
   setImpersonationDebugHeaders(

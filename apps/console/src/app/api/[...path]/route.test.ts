@@ -47,6 +47,7 @@ vi.stubGlobal("fetch", fetchSpy)
 // SANDBOX_API_URL is pre-stubbed in src/test/setup.ts; the route reads it at module load.
 
 import { getImpersonationContext } from "@/lib/admin/impersonation"
+import { previewPlanChange, schedulePlanChange } from "@/lib/api/plan-changes"
 import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
 import {
   ensureAuthApiKeyForTeam,
@@ -57,6 +58,7 @@ import {
 } from "@/lib/api/proxy-auth"
 import { SignupRestrictedError } from "@/lib/auth/signup-restrictions"
 import { createServerClient } from "@/lib/supabase/server"
+import consentWire from "@/test/fixtures/billing-plan-change-wire.json"
 
 import { DELETE, GET, POST, PUT } from "./route"
 
@@ -328,6 +330,187 @@ describe("api proxy /api/[...path]", () => {
       expect.objectContaining({ method: "GET" }),
     )
   })
+
+  it("forwards the plan, allowance and balance reads, GET only", async () => {
+    vi.mocked(publishPromotionIdentity).mockRejectedValue(
+      new Error("writer unavailable"),
+    )
+    fetchSpy.mockImplementation(() =>
+      Promise.resolve(
+        new Response("{}", {
+          status: 200,
+          headers: { "cache-control": "max-age=300" },
+        }),
+      ),
+    )
+    for (const path of [
+      ["billing", "plans", "public"],
+      ["billing", "plan"],
+      ["billing", "free-allowance"],
+      ["billing", "prepaid"],
+    ]) {
+      const res = await GET(req("GET", path), params(path))
+      expect(res.status).toBe(200)
+      expect(res.headers.get("cache-control")).toBe("private, no-store")
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        `https://api.test.superserve.ai/${path.join("/")}`,
+        expect.objectContaining({ method: "GET" }),
+      )
+      const write = await POST(req("POST", path), params(path))
+      expect(write.status).toBe(405)
+    }
+    for (const path of [
+      ["billing", "plans"],
+      ["billing", "plan", "x"],
+      ["billing", "prepaid", "recharge"],
+    ]) {
+      const res = await GET(req("GET", path), params(path))
+      expect(res.status).toBe(404)
+    }
+  })
+
+  it.each([
+    ["delayed", consentWire],
+    ["immediate", consentWire.immediate],
+  ])(
+    "round-trips a backend-captured %s preview into its accepted consent DTO",
+    async (_, wire) => {
+      vi.mocked(getAuthApiKeyAndTeamForUser).mockResolvedValue({
+        apiKey: "ss_live_test_key",
+        team: { teamId: wire.team_id, region: "use" },
+      } as never)
+      let upstreamWrites = 0
+      fetchSpy.mockImplementation(
+        async (input: string, init: RequestInit = {}) => {
+          if (input.startsWith("/api/")) {
+            const url = new URL(input, "https://console.test")
+            const path = url.pathname.split("/").filter(Boolean).slice(1)
+            const request = new NextRequest(url, {
+              ...init,
+              signal: init.signal ?? undefined,
+            })
+            return (init.method === "POST" ? POST : GET)(request, params(path))
+          }
+          const url = new URL(input)
+          expect(url.origin).toBe("https://api.test.superserve.ai")
+          if (url.pathname === "/billing/plan-change-preview") {
+            expect(url.search).toBe("?target_plan=free")
+            return new Response(JSON.stringify(wire.preview))
+          }
+          expect(url.pathname).toBe("/billing/plan-changes")
+          expect(init.method).toBe("POST")
+          expect(JSON.parse(init.body as string)).toEqual(wire.accepted_request)
+          upstreamWrites++
+          return new Response(JSON.stringify(wire.change))
+        },
+      )
+      const expectedTeam = `use:${wire.team_id}`
+      const preview = await previewPlanChange("free", expectedTeam)
+      expect(preview.preview_token).toBe(wire.preview.preview_token)
+      const result = await schedulePlanChange(
+        preview.target_plan_key,
+        expectedTeam,
+        wire.accepted_request.idempotency_key,
+        preview.preview_token!,
+        preview.pauses_running,
+        preview.timing === "end_of_billing_period"
+          ? preview.effective_at
+          : undefined,
+      )
+      expect(result).toEqual(wire.change)
+      expect(upstreamWrites).toBe(1)
+    },
+  )
+
+  it("forwards bound previews and writes on the actual customer paths", async () => {
+    fetchSpy.mockImplementation(() =>
+      Promise.resolve(new Response("{}", { status: 200 })),
+    )
+    const preview = ["billing", "plan-change-preview"]
+    const previewRequest = new NextRequest(
+      "https://console.test/api/billing/plan-change-preview?target_plan=free&expected_team=use%3Ateam-east",
+    )
+    expect((await GET(previewRequest, params(preview))).status).toBe(200)
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      "https://api.test.superserve.ai/billing/plan-change-preview?target_plan=free",
+      expect.objectContaining({ method: "GET" }),
+    )
+    expect((await POST(req("POST", preview), params(preview))).status).toBe(405)
+    const paths = [
+      ["billing", "plan-changes"],
+      [
+        "billing",
+        "plan-changes",
+        "34971786-dd50-492b-b934-306b63764c4b",
+        "undo",
+      ],
+    ]
+    for (const path of paths) {
+      const body = JSON.stringify({
+        expected_team: "use:team-east",
+        target_plan: "free",
+        expected_effective_at: "2026-11-01T00:00:00.123456789Z",
+        target: "discard-this-alias",
+        preview_token: "a".repeat(64),
+        confirm_pauses_running: true,
+        idempotency_key: "request-1",
+        ignored: true,
+      })
+      expect(
+        (await POST(req("POST", path, { body }), params(path))).status,
+      ).toBe(200)
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        `https://api.test.superserve.ai/${path.join("/")}`,
+        expect.objectContaining({
+          method: "POST",
+          body:
+            path.length === 2
+              ? JSON.stringify({
+                  target_plan: "free",
+                  idempotency_key: "request-1",
+                  preview_token: "a".repeat(64),
+                  expected_effective_at: "2026-11-01T00:00:00.123456789Z",
+                  confirm_pauses_running: true,
+                })
+              : "{}",
+        }),
+      )
+      expect((await GET(req("GET", path), params(path))).status).toBe(405)
+      expect((await DELETE(req("DELETE", path), params(path))).status).toBe(405)
+    }
+  })
+
+  it.each([undefined, "use:previous-team"])(
+    "rejects missing or stale team binding: %s",
+    async (expectedTeam) => {
+      const preview = ["billing", "plan-change-preview"]
+      const request = new NextRequest(
+        `https://console.test/api/billing/plan-change-preview?target_plan=free${expectedTeam ? `&expected_team=${encodeURIComponent(expectedTeam)}` : ""}`,
+      )
+      expect((await GET(request, params(preview))).status).toBe(409)
+      for (const path of [
+        ["billing", "plan-changes"],
+        [
+          "billing",
+          "plan-changes",
+          "34971786-dd50-492b-b934-306b63764c4b",
+          "undo",
+        ],
+      ]) {
+        expect(
+          (
+            await POST(
+              req("POST", path, {
+                body: JSON.stringify({ expected_team: expectedTeam }),
+              }),
+              params(path),
+            )
+          ).status,
+        ).toBe(409)
+      }
+      expect(fetchSpy).not.toHaveBeenCalled()
+    },
+  )
 
   it("forwards the authenticated billing pricing endpoint", async () => {
     vi.mocked(publishPromotionIdentity).mockRejectedValue(
