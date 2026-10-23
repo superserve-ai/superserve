@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest"
 
 import type { StaffCredit } from "@/lib/admin/team-billing"
@@ -45,12 +45,21 @@ it("parses credit amounts in dollars to cents exactly", () => {
 })
 
 it("freezes a request whose outcome is unknown until it is retried as-is", async () => {
+  let loseResponse!: (reason: Error) => void
   vi.mocked(grantStaffCreditAction)
-    .mockRejectedValueOnce(new Error("lost response"))
+    .mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          loseResponse = reject
+        }),
+    )
     .mockResolvedValueOnce({ kind: "saved" })
   render(<StaffCreditForm region="use" teamId={team} />)
   fill("125.50", "Outage goodwill")
   fireEvent.click(screen.getByRole("button", { name: "Grant $125.50" }))
+  expect(screen.getByLabelText(/Credit amount/)).toBeDisabled()
+  expect(screen.getByLabelText(/Reason/)).toBeDisabled()
+  await act(async () => loseResponse(new Error("lost response")))
   await screen.findByText(/Stripe may have granted the credit/)
   expect(screen.getByLabelText(/Credit amount/)).toBeDisabled()
   expect(screen.getByLabelText(/Reason/)).toBeDisabled()

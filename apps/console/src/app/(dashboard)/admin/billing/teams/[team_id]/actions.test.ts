@@ -55,14 +55,20 @@ beforeEach(() => {
   })
 })
 
-it("refuses plan writes while the region's pricing v2 switch is off", async () => {
+it("allows downgrades and undo but refuses new assignments while pricing v2 is off", async () => {
   vi.mocked(getPlanCatalog).mockResolvedValue({
     pricingV2: false,
     assignablePlans: [],
     freeLimits: null,
   })
   const off = { kind: "conflict", detail: "pricing v2 is off in this region" }
-  expect(await requestPlanChangeAction(valid)).toEqual(off)
+  vi.mocked(requestPlanChange).mockResolvedValue({
+    effective_at: "2026-12-05T14:20:00Z",
+  } as never)
+  expect(await requestPlanChangeAction(valid)).toEqual({
+    kind: "saved",
+    effectiveAt: "2026-12-05T14:20:00Z",
+  })
   expect(
     await undoPlanChangeAction({
       region: "use",
@@ -70,7 +76,7 @@ it("refuses plan writes while the region's pricing v2 switch is off", async () =
       changeId: "33333333-3333-4333-8333-333333333333",
       reason: "r",
     }),
-  ).toEqual(off)
+  ).toEqual({ kind: "saved" })
   expect(
     await assignTeamPlanAction({
       region: "use",
@@ -80,8 +86,8 @@ it("refuses plan writes while the region's pricing v2 switch is off", async () =
       reason: "enterprise agreement",
     }),
   ).toEqual(off)
-  expect(requestPlanChange).not.toHaveBeenCalled()
-  expect(undoPlanChange).not.toHaveBeenCalled()
+  expect(requestPlanChange).toHaveBeenCalled()
+  expect(undoPlanChange).toHaveBeenCalled()
   expect(assignTeamPlan).not.toHaveBeenCalled()
 })
 

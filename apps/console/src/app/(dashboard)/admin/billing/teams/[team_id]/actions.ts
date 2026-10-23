@@ -97,7 +97,6 @@ export async function requestPlanChangeAction(input: {
     return { kind: "invalid" }
   let effectiveAt: string | undefined
   const result = await run(input.teamId, async () => {
-    await requirePricingV2(input.region)
     const change = await requestPlanChange(input.region, input.teamId, {
       idempotencyKey: input.idempotencyKey,
       targetPlan: input.targetPlan,
@@ -125,7 +124,6 @@ export async function undoPlanChangeAction(input: {
   )
     return { kind: "invalid" }
   return run(input.teamId, async () => {
-    await requirePricingV2(input.region)
     await undoPlanChange(input.region, input.teamId, input.changeId, reason)
   })
 }

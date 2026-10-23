@@ -111,7 +111,7 @@ export function TeamBillingView({
   const current = plans?.current ?? null
   const pending = plans?.pending_change
   const pricingV2 = catalog?.pricingV2 === true
-  const planWrites = canWrite && pricingV2
+  const canAssign = canWrite && pricingV2
   const changeOptions = current ? (DOWNGRADES[current.kind] ?? []) : []
 
   return (
@@ -147,8 +147,8 @@ export function TeamBillingView({
           <div className="space-y-3">
             {pricingV2 ? null : (
               <p className="text-sm text-muted">
-                Pricing v2 is off in this region, so this plan is not in effect.
-                The team bills on its existing terms.
+                New entry into pricing v2 is off in this region. Existing plans
+                remain in effect; downgrades and undo are still available.
               </p>
             )}
             <Facts
@@ -189,7 +189,7 @@ export function TeamBillingView({
                   ],
                 ]}
               />
-              {planWrites && pending.undoable ? (
+              {canWrite && pending.undoable ? (
                 <UndoPlanChangeForm
                   region={region}
                   teamId={teamId}
@@ -200,7 +200,7 @@ export function TeamBillingView({
           ) : (
             <div className="space-y-4">
               <p className="text-sm text-muted">No plan change is pending.</p>
-              {planWrites && changeOptions.length > 0 ? (
+              {canWrite && changeOptions.length > 0 ? (
                 <PlanChangeForm
                   region={region}
                   teamId={teamId}
@@ -213,7 +213,7 @@ export function TeamBillingView({
         </Section>
       ) : null}
 
-      {planWrites ? (
+      {canAssign ? (
         <Section title="Assign Enterprise or custom plan">
           <AssignPlanForm
             region={region}

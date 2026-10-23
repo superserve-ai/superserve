@@ -131,9 +131,9 @@ for (const s of [states.pro, states.starter])
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ state?: string }>
+  searchParams: Promise<{ state?: string; switch?: string }>
 }) {
-  const { state = "pro" } = await searchParams
+  const { state = "pro", switch: pricingSwitch } = await searchParams
   return (
     <main className="mx-auto max-w-5xl bg-background text-foreground">
       <TeamBillingView
@@ -141,7 +141,7 @@ export default async function Page({
         catalog={
           state === "legacy"
             ? { pricingV2: false, assignablePlans: [], freeLimits: null }
-            : catalog
+            : { ...catalog, pricingV2: pricingSwitch !== "off" }
         }
         staffCredits={
           state === "legacy"

@@ -87,7 +87,7 @@ export function StaffCreditForm({
           id="staff-credit-amount"
           inputMode="decimal"
           value={amount}
-          disabled={unknown}
+          disabled={pending || unknown}
           onChange={(e) => setAmount(e.target.value)}
           placeholder="250.00"
         />
@@ -97,7 +97,7 @@ export function StaffCreditForm({
           id="staff-credit-reason"
           value={reason}
           maxLength={2000}
-          disabled={unknown}
+          disabled={pending || unknown}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Why this team is receiving credit"
         />

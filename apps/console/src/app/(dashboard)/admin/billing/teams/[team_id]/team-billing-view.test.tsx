@@ -86,24 +86,30 @@ it("offers no plan writes while pricing v2 is off", () => {
   expect(screen.getByRole("button", { name: /Grant credit/ })).toBeTruthy()
 })
 
-it("marks a leftover assignment inactive and offers no writes after switch-off", () => {
+it("keeps an existing assignment and undo available after switch-off", () => {
   renderView({
     plans: { current: pro, history: [pro], pending_change: pending },
     pricingV2: false,
   })
-  expect(screen.getByText(/this plan is not in effect/)).toBeTruthy()
-  expectNoPlanWrites()
+  expect(screen.getByText(/Existing plans remain in effect/)).toBeTruthy()
+  expect(screen.getByLabelText(/Undo reason/)).toBeTruthy()
+  expect(screen.queryByRole("button", { name: "Assign plan" })).toBeNull()
 })
 
-it("offers the downgrades the plan change engine accepts for the plan's kind", () => {
-  renderView({})
-  const select = screen.getByLabelText(/Move to/)
-  const options = [...select.querySelectorAll("option")]
-    .map((o) => o.textContent)
-    .slice(1)
-  expect(options).toEqual(["Starter", "Free"])
-  expect(screen.getByRole("button", { name: "Assign plan" })).toBeTruthy()
-})
+it.each([true, false])(
+  "offers accepted downgrades with pricing v2 on=%s",
+  (pricingV2) => {
+    renderView({ pricingV2 })
+    const select = screen.getByLabelText(/Move to/)
+    const options = [...select.querySelectorAll("option")]
+      .map((o) => o.textContent)
+      .slice(1)
+    expect(options).toEqual(["Starter", "Free"])
+    expect(Boolean(screen.queryByRole("button", { name: "Assign plan" }))).toBe(
+      pricingV2,
+    )
+  },
+)
 
 it("offers undo for an undoable pending change", () => {
   renderView({
