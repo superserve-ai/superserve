@@ -199,7 +199,7 @@ to rediscover boxes you created earlier.
 A sandbox **inherits its VM shape from its template** — there is **no `vcpu`, `memory`,
 or `disk` argument on `create()`**. To change the shape, boot from (or build) a different
 template. The default template `superserve/base` (`ubuntu:24.04`) is **1 vCPU · 1024 MiB
-memory · 4096 MiB disk**.
+memory · 8192 MiB disk**.
 
 | Shape field | Min  | Max (platform ceiling) | Default |
 | ----------- | ---- | ---------------------- | ------- |
