@@ -195,7 +195,9 @@ describe("PlanOverviewSection with pricing v2 on", () => {
       isError: false,
     })
     render(<PlanOverviewSection summary={summary} />)
-    expect(screen.getByRole("link", { name: "Contact us" })).toBeTruthy()
+    expect(
+      screen.getByRole("link", { name: "Contact us" }).getAttribute("href"),
+    ).toBe("https://calendly.com/superserve-ai/25-min")
     expect(screen.getByRole("link", { name: "Change plan" })).toBeTruthy()
   })
 

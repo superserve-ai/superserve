@@ -103,8 +103,8 @@ export const UPGRADE_PATH = "/plan-usage/upgrade"
 
 export const PLAN_ACTION_LINKS = {
   starter: "/plan-usage/buy-credit",
-  pro: "/plan-usage/pro",
-  enterprise: "/plan-usage/enterprise",
+  pro: "/billing/pro",
+  enterprise: "https://calendly.com/superserve-ai/25-min",
 } as const
 
 export function formatCents(amount: number): string {
