@@ -37,6 +37,8 @@ const backendErrorSchema = z.object({
   error: z.object({ message: z.string() }),
 })
 
+// Backend 400/409/422 messages reach staff verbatim, so only routes whose
+// handlers return fixed operator-facing messages may be called through here.
 async function errorDetail(response: Response): Promise<string | undefined> {
   const parsed = backendErrorSchema.safeParse(
     await response.json().catch(() => null),
@@ -86,6 +88,8 @@ const TEAM_BILLING = `/internal/teams/${UUID}/billing`
 
 type WriteMethod = "POST" | "PUT" | "DELETE"
 
+// Each write route must be an operator-group handler that re-checks
+// platform:billing:write and never puts raw internal errors in 400/409/422.
 const WRITE_ROUTES: [WriteMethod, string][] = [
   ["POST", `${TEAM_BILLING}/matching`],
   ["POST", `${TEAM_BILLING}/matching/revoke`],
