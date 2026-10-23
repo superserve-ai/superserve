@@ -31,10 +31,11 @@ async function run(
   try {
     await action()
   } catch (error) {
-    return {
-      kind:
-        error instanceof AdminBillingRequestError ? error.kind : "unavailable",
-    }
+    const kind =
+      error instanceof AdminBillingRequestError ? error.kind : "unavailable"
+    if (kind === "conflict" || kind === "unavailable")
+      revalidatePath(`/admin/billing/teams/${teamId}`)
+    return { kind }
   }
   revalidatePath(`/admin/billing/teams/${teamId}`)
   return { kind: "saved" }

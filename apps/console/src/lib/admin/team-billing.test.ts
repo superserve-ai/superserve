@@ -75,8 +75,20 @@ describe("plan change writes", () => {
     const [schedule, cancel] = vi
       .mocked(adminBillingRequest)
       .mock.calls.map(([request]) => request)
-    expect(isAdminBillingPath(schedule.path)).toBe(true)
-    expect(isAdminBillingPath(cancel.path)).toBe(true)
+    expect(isAdminBillingPath(schedule.path, "POST")).toBe(true)
+    expect(isAdminBillingPath(cancel.path, "POST")).toBe(true)
+    expect(
+      isAdminBillingPath(
+        `/internal/teams/${team}/billing/credit-grants`,
+        "POST",
+      ),
+    ).toBe(true)
+    expect(
+      isAdminBillingPath(
+        `/internal/teams/${team}/billing/sponsored-entitlements`,
+        "POST",
+      ),
+    ).toBe(false)
     expect(schedule).toMatchObject({
       region: "use",
       method: "POST",

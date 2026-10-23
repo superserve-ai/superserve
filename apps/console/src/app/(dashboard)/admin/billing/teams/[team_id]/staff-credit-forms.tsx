@@ -22,7 +22,7 @@ const CREDIT_FAILURES: Record<
   forbidden: "You do not have permission to grant credit.",
   not_found: "The team no longer exists.",
   conflict:
-    "Stripe was not asked to grant this credit. The team may have no billing customer, its previous invoice may still be closing, or the credit needs operator review. Check the team before trying again.",
+    "The credit was not granted. It may be recorded as pending (for example while the team's previous invoice is closing) or need operator review. Check the staff credit list before trying again.",
   invalid: "Enter an amount between $0.01 and $1,000,000.00 and a reason.",
   unavailable:
     "The outcome is unknown: Stripe may have granted the credit. Retry the same request; do not start a new one.",
@@ -55,9 +55,7 @@ export function StaffCreditForm({
     null,
   )
   const cents = parseDollarsToCents(amount)
-  // An unknown outcome may already have granted credit; the request is frozen
-  // until it is retried as-is or deliberately abandoned.
-  const unknown = result?.kind === "unavailable"
+  const unknown = result?.kind === "unavailable" || result?.kind === "conflict"
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()

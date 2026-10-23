@@ -106,3 +106,15 @@ it("resumes a pending credit with its original request", async () => {
     reason: "Goodwill",
   })
 })
+
+it("freezes a request after a conflict too", async () => {
+  vi.mocked(grantStaffCreditAction).mockResolvedValueOnce({ kind: "conflict" })
+  render(<StaffCreditForm region="use" teamId={team} />)
+  fill("10", "First")
+  fireEvent.click(screen.getByRole("button", { name: "Grant $10.00" }))
+  await screen.findByText(/Check the staff credit list/)
+  expect(screen.getByLabelText(/Credit amount/)).toBeDisabled()
+  expect(
+    screen.getByRole("button", { name: "Start a new request" }),
+  ).toBeInTheDocument()
+})
