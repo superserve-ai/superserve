@@ -126,9 +126,21 @@ jobs:
               -e "s|__SHA256_LINUX_X64__|${LINUX_X64}|g" \
               packages/cli/Formula/superserve.rb > /tmp/superserve.rb
 
+      # Short-lived token from the org's superserve-release app, which can only
+      # write to homebrew-tap: nothing to rotate, nothing tied to a person.
+      - name: Token for the tap
+        id: tap-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: superserve-ai
+          repositories: homebrew-tap
+          permission-contents: write
+
       - name: Push to tap repo
         env:
-          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          TAP_GITHUB_TOKEN: ${{ steps.tap-token.outputs.token }}
         run: |
           set -euo pipefail
           git clone "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/superserve-ai/homebrew-tap.git" tap
