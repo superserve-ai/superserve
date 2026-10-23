@@ -8,14 +8,27 @@ vi.mock("@/lib/admin/impersonation", () => ({
 }))
 vi.mock("@/lib/admin/team-billing", async () => {
   const actual = await vi.importActual<object>("@/lib/admin/team-billing")
-  return { ...actual, schedulePlanChange: vi.fn(), cancelPlanChange: vi.fn() }
+  return {
+    ...actual,
+    schedulePlanChange: vi.fn(),
+    cancelPlanChange: vi.fn(),
+    grantStaffCredit: vi.fn(),
+  }
 })
 
 import { AdminBillingRequestError } from "@/lib/admin/billing-api"
 import { hasImpersonationCookie } from "@/lib/admin/impersonation"
-import { cancelPlanChange, schedulePlanChange } from "@/lib/admin/team-billing"
+import {
+  cancelPlanChange,
+  grantStaffCredit,
+  schedulePlanChange,
+} from "@/lib/admin/team-billing"
 
-import { cancelPlanChangeAction, schedulePlanChangeAction } from "./actions"
+import {
+  cancelPlanChangeAction,
+  grantStaffCreditAction,
+  schedulePlanChangeAction,
+} from "./actions"
 
 const team = "22222222-2222-4222-8222-222222222222"
 const valid = {
@@ -84,4 +97,27 @@ it("refuses billing writes while impersonating a team", async () => {
   ).toEqual({ kind: "impersonating" })
   expect(schedulePlanChange).not.toHaveBeenCalled()
   expect(cancelPlanChange).not.toHaveBeenCalled()
+})
+
+it("validates staff credit amounts before calling the backend", async () => {
+  const credit = {
+    region: "use",
+    teamId: team,
+    idempotencyKey: "k",
+    amountCents: 2500,
+    reason: "goodwill",
+  }
+  for (const amountCents of [0, -1, 1.5, 100_000_001]) {
+    expect(await grantStaffCreditAction({ ...credit, amountCents })).toEqual({
+      kind: "invalid",
+    })
+  }
+  expect(grantStaffCredit).not.toHaveBeenCalled()
+  vi.mocked(grantStaffCredit).mockResolvedValue({} as never)
+  expect(await grantStaffCreditAction(credit)).toEqual({ kind: "saved" })
+  expect(grantStaffCredit).toHaveBeenCalledWith("use", team, {
+    idempotencyKey: "k",
+    amountCents: 2500,
+    reason: "goodwill",
+  })
 })

@@ -160,6 +160,23 @@ export default async function Page({
     <main className="mx-auto max-w-5xl bg-background text-foreground">
       <TeamBillingView
         view={state === "payg" ? payg : pro}
+        staffCredits={
+          state === "payg"
+            ? []
+            : [
+                {
+                  id: "c0ffee00-0000-4000-8000-000000000010",
+                  amount_cents: 25000,
+                  reason: "Usage billed twice during the September outage.",
+                  requested_by: "11111111-1111-4111-8111-111111111111",
+                  requested_at: "2026-10-02T10:00:00Z",
+                  state: "issued",
+                  stripe_credit_grant_id: "credgr_example",
+                  issued_at: "2026-10-02T10:00:03Z",
+                  last_error: null,
+                },
+              ]
+        }
         region="use"
         teamId={team}
         canWrite

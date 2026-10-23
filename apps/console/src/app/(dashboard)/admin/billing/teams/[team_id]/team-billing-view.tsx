@@ -10,13 +10,18 @@ import {
 } from "@superserve/ui"
 import Link from "next/link"
 
-import type { PlanChange, TeamPlanBilling } from "@/lib/admin/team-billing"
+import type {
+  PlanChange,
+  StaffCredit,
+  TeamPlanBilling,
+} from "@/lib/admin/team-billing"
 import { regionLabel } from "@/lib/format"
 
 import { formatCents, formatDay, formatPlanFee, planLabel } from "../format"
 import {
   CancelPlanChangeForm,
   SchedulePlanChangeForm,
+  StaffCreditForm,
 } from "./plan-change-forms"
 
 const CHANGE_STATE: Record<
@@ -68,11 +73,13 @@ function changeSummary(change: PlanChange, view: TeamPlanBilling) {
 
 export function TeamBillingView({
   view,
+  staffCredits,
   region,
   teamId,
   canWrite,
 }: {
   view: TeamPlanBilling
+  staffCredits: StaffCredit[] | null
   region: string
   teamId: string
   canWrite: boolean
@@ -253,6 +260,56 @@ export function TeamBillingView({
             ["Remaining", remaining === null ? "—" : formatCents(remaining)],
           ]}
         />
+      </Section>
+
+      <Section title="Staff credit">
+        <div className="space-y-4">
+          {staffCredits === null ? (
+            <p className="text-sm text-muted">
+              Staff credit history is unavailable.
+            </p>
+          ) : staffCredits.length === 0 ? (
+            <p className="text-sm text-muted">No staff credit granted yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>State</TableHead>
+                  <TableHead>Granted</TableHead>
+                  <TableHead>Reason</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {staffCredits.map((credit) => (
+                  <TableRow key={credit.id}>
+                    <TableCell className="font-mono text-xs tabular-nums">
+                      {formatCents(credit.amount_cents)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          credit.state === "issued" ? "active" : "warning"
+                        }
+                      >
+                        {credit.state === "issued" ? "Issued" : "Pending"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted">
+                      {formatDay(credit.issued_at ?? credit.requested_at)}
+                    </TableCell>
+                    <TableCell className="text-muted">
+                      {credit.reason}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+          {canWrite && view.customer_id ? (
+            <StaffCreditForm region={region} teamId={teamId} />
+          ) : null}
+        </div>
       </Section>
 
       <Section title="Card on file">

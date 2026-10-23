@@ -230,3 +230,50 @@ export function cancelPlanChange(
     schema: planChangeSchema,
   })
 }
+
+const staffCreditSchema = z.object({
+  id: z.string(),
+  amount_cents: z.number(),
+  reason: z.string(),
+  requested_by: z.string(),
+  requested_at: z.string(),
+  state: z.enum(["pending", "issued"]),
+  stripe_credit_grant_id: z.string().nullable(),
+  issued_at: z.string().nullable(),
+  last_error: z.string().nullable(),
+})
+
+export type StaffCredit = z.infer<typeof staffCreditSchema>
+
+export async function listStaffCredits(region: string, teamId: string) {
+  const result = await adminBillingRequest({
+    region,
+    path: `/internal/teams/${teamId}/billing/credit-grants`,
+    schema: z.object({ credits: z.array(staffCreditSchema) }),
+  })
+  return result.credits
+}
+
+export interface GrantStaffCreditInput {
+  idempotencyKey: string
+  amountCents: number
+  reason: string
+}
+
+export function grantStaffCredit(
+  region: string,
+  teamId: string,
+  input: GrantStaffCreditInput,
+) {
+  return adminBillingRequest({
+    region,
+    method: "POST",
+    path: `/internal/teams/${teamId}/billing/credit-grants`,
+    body: {
+      idempotency_key: input.idempotencyKey,
+      amount_cents: input.amountCents,
+      reason: input.reason,
+    },
+    schema: staffCreditSchema,
+  })
+}

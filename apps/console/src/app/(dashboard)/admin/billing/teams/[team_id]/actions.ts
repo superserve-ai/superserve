@@ -9,6 +9,7 @@ import {
 import { hasImpersonationCookie } from "@/lib/admin/impersonation"
 import {
   cancelPlanChange,
+  grantStaffCredit,
   isUuid,
   schedulePlanChange,
 } from "@/lib/admin/team-billing"
@@ -89,5 +90,39 @@ export async function cancelPlanChangeAction(input: {
     return { kind: "invalid" }
   return run(input.teamId, () =>
     cancelPlanChange(input.region, input.teamId, input.changeId, reason),
+  )
+}
+
+export async function grantStaffCreditAction(input: {
+  region: string
+  teamId: string
+  idempotencyKey: string
+  amountCents: number
+  reason: string
+}): Promise<PlanChangeActionResult> {
+  if (
+    typeof input.reason !== "string" ||
+    typeof input.idempotencyKey !== "string" ||
+    typeof input.amountCents !== "number"
+  )
+    return { kind: "invalid" }
+  const reason = input.reason.trim()
+  if (
+    !validTarget(input.region, input.teamId) ||
+    !input.idempotencyKey ||
+    input.idempotencyKey.length > 200 ||
+    !Number.isSafeInteger(input.amountCents) ||
+    input.amountCents < 1 ||
+    input.amountCents > 100_000_000 ||
+    !reason ||
+    reason.length > 2000
+  )
+    return { kind: "invalid" }
+  return run(input.teamId, () =>
+    grantStaffCredit(input.region, input.teamId, {
+      idempotencyKey: input.idempotencyKey,
+      amountCents: input.amountCents,
+      reason,
+    }),
   )
 }

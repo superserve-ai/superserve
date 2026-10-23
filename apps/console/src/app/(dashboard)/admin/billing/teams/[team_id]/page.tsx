@@ -7,6 +7,7 @@ import { canWriteAdminBilling } from "@/lib/admin/permissions"
 import {
   getTeamPlanBilling,
   isUuid,
+  listStaffCredits,
   type TeamPlanBilling,
 } from "@/lib/admin/team-billing"
 import { configuredRegions } from "@/lib/cells"
@@ -31,6 +32,7 @@ export default async function AdminBillingTeamPage({
   } = await supabase.auth.getUser()
   const canWrite = canWriteAdminBilling(user)
 
+  const credits = listStaffCredits(region, teamId).catch(() => null)
   let view: TeamPlanBilling
   try {
     view = await getTeamPlanBilling(region, teamId)
@@ -59,6 +61,7 @@ export default async function AdminBillingTeamPage({
   return (
     <TeamBillingView
       view={view}
+      staffCredits={await credits}
       region={region}
       teamId={teamId}
       canWrite={canWrite}
