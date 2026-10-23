@@ -154,6 +154,18 @@ describe("planGroupSync", () => {
     ])
   })
 
+  it("preserves a lower publication while completing a newer partial withdrawal", () => {
+    expect(
+      planGroupSync([
+        m(3, { use: "retired", usw: "published" }),
+        m(2, { use: "published", usw: "draft" }),
+      ]),
+    ).toEqual([
+      { use: [], usw: ["retire"] },
+      { use: [], usw: [] },
+    ])
+  })
+
   it("finishes a retire that only reached some regions", () => {
     expect(planGroupSync([m(1, { use: "retired", usw: "published" })])).toEqual(
       [{ use: [], usw: ["retire"] }],

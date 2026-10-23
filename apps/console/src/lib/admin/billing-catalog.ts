@@ -140,8 +140,6 @@ export function planGroupSync(group: SyncMember[]): Steps[] {
   if (!settled.length) return steps
   const [newest, index] =
     settled.find(([member]) => reached(member, "published")) ?? settled[0]!
-  // Retired is terminal, and a version retired by a newer publish is never
-  // the newest settled one, so retired anywhere means it is being withdrawn.
   if (reached(newest, "published") && !reached(newest, "retired")) {
     steps[index] = Object.fromEntries(
       Object.entries(newest.states).map(([region, state]) => [
@@ -155,13 +153,12 @@ export function planGroupSync(group: SyncMember[]): Steps[] {
     )
     return steps
   }
-  for (const [member, i] of settled)
-    steps[i] = Object.fromEntries(
-      Object.entries(member.states).map(([region, state]) => [
-        region,
-        state === "published" ? ["retire"] : [],
-      ]),
-    )
+  steps[index] = Object.fromEntries(
+    Object.entries(newest.states).map(([region, state]) => [
+      region,
+      state === "published" ? ["retire"] : [],
+    ]),
+  )
   return steps
 }
 
