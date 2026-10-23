@@ -7,9 +7,9 @@ import { apiClient } from "@/lib/api/client"
 
 export type PricingVersion = "legacy" | "v2"
 
-export function usePricingVersion(): PricingVersion | undefined {
+export function usePricingVersion(): PricingVersion | null | undefined {
   const { cacheScope, teamKey, ready } = useBillingContext()
-  const { data } = useQuery({
+  const { data, isError } = useQuery({
     queryKey: [
       "billing",
       "pricing-version",
@@ -23,6 +23,6 @@ export function usePricingVersion(): PricingVersion | undefined {
     enabled: ready,
     staleTime: 60_000,
   })
-  if (!data) return undefined
+  if (!data) return isError ? null : undefined
   return data.pricing_version === "v2" ? "v2" : "legacy"
 }

@@ -41,6 +41,15 @@ describe("buy credit amounts", () => {
 })
 
 describe("buy credit route", () => {
+  it("shows an error when pricing cannot be loaded", () => {
+    vi.mocked(usePricingVersion).mockReturnValue(null)
+    render(<BuyCreditRoute />)
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Pricing is unavailable",
+    )
+    expect(screen.queryByText("buy credit")).toBeNull()
+  })
+
   it("shows the existing plan and usage page while pricing v2 is off", () => {
     vi.mocked(usePricingVersion).mockReturnValue("legacy")
     render(<BuyCreditRoute />)

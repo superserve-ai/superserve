@@ -74,7 +74,16 @@ export function BuyCreditPageClient() {
           <>
             <BalanceCard data={data} />
             <PurchaseCard canManage={canManage} />
-            <AutoRechargeCard data={data} canManage={canManage} />
+            <AutoRechargeCard
+              key={[
+                data.auto_recharge.enabled,
+                data.auto_recharge.threshold_cents,
+                data.auto_recharge.amount_cents,
+                data.auto_recharge.disabled_at,
+              ].join(":")}
+              data={data}
+              canManage={canManage}
+            />
             <PurchaseHistory purchases={data.purchases} />
           </>
         )}
