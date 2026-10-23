@@ -843,13 +843,13 @@ describe("api proxy /api/[...path]", () => {
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
-  it("forwards a /v1/auth/ request whose token can't be resolved, as before", async () => {
+  it("rejects an explicitly invalid CLI bearer without forwarding it", async () => {
     fetchSpy.mockResolvedValue(new Response("{}", { status: 401 }))
     vi.mocked(createServerClient).mockResolvedValue({
       auth: {
         getUser: async () => ({
           data: { user: null },
-          error: { status: 401, message: "bad jwt" },
+          error: { status: 401, code: "bad_jwt", message: "bad jwt" },
         }),
       },
     } as never)
@@ -863,9 +863,41 @@ describe("api proxy /api/[...path]", () => {
       }),
       params(["v1", "auth", "device-authorize"]),
     )
-    expect(fetchSpy).toHaveBeenCalled()
+    expect(fetchSpy).not.toHaveBeenCalled()
     expect(res.status).toBe(401)
   })
+
+  it.each([429, 503, "throw", "missing_user"])(
+    "does not authorize a CLI bearer when Auth lookup fails with %s",
+    async (failure) => {
+      const getUser = vi.fn(async () => {
+        if (failure === "throw") throw new Error("lookup timed out")
+        return {
+          data: { user: null },
+          error:
+            typeof failure === "number"
+              ? { status: failure, message: "unavailable" }
+              : null,
+        }
+      })
+      vi.mocked(createServerClient).mockResolvedValue({
+        auth: { getUser },
+      } as never)
+      const res = await POST(
+        req("POST", ["v1", "auth", "device-authorize"], {
+          headers: {
+            authorization: "Bearer user-token",
+            "content-type": "application/json",
+          },
+          body: "{}",
+        }),
+        params(["v1", "auth", "device-authorize"]),
+      )
+      expect(res.status).toBe(503)
+      expect(res.headers.get("retry-after")).toBe("5")
+      expect(fetchSpy).not.toHaveBeenCalled()
+    },
+  )
 
   it("strips disallowed client-supplied headers (cookie, x-api-key)", async () => {
     fetchSpy.mockResolvedValue(new Response("[]", { status: 200 }))

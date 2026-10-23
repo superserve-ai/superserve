@@ -177,11 +177,27 @@ async function proxyRequest(
     .get("authorization")
     ?.match(/^bearer\s+(\S+)$/i)
   if (skipKeyInjection && bearer) {
-    // These paths act for the bearer's account, e.g. authorising a CLI login.
-    // Unresolvable tokens go upstream unchanged, which rejects them as before.
-    const supabase = await createServerClient()
-    const { data } = await supabase.auth.getUser(bearer[1])
-    if (isSignupReviewBlocked(data?.user)) return signupReviewPendingResponse()
+    try {
+      const supabase = await createServerClient()
+      const { data, error } = await supabase.auth.getUser(bearer[1])
+      if (error?.code === "bad_jwt")
+        return NextResponse.json(
+          { error: "Invalid bearer token" },
+          { status: 401 },
+        )
+      if (error || !data?.user) throw new Error("Bearer lookup unavailable")
+      if (isSignupReviewBlocked(data.user)) return signupReviewPendingResponse()
+    } catch {
+      return NextResponse.json(
+        {
+          error: {
+            code: "authentication_unavailable",
+            message: "Authentication is temporarily unavailable. Please retry.",
+          },
+        },
+        { status: 503, headers: { "retry-after": "5" } },
+      )
+    }
   }
 
   if (!skipKeyInjection) {
