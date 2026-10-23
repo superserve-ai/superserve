@@ -81,6 +81,17 @@ describe("PlanBanner with pricing v2 off", () => {
 describe("PlanBanner with pricing v2 on", () => {
   beforeEach(() => mocks.version.mockReturnValue("v2"))
 
+  it("hides retained permissions when the billing summary refresh fails", () => {
+    mocks.plan.mockReturnValue({ data: plan("free") })
+    mocks.summary.mockReturnValue({
+      data: { permissions: { can_view: true, can_manage: true } },
+      isError: true,
+    })
+    const { container } = mount()
+    expect(container.textContent).toBe("")
+    expect(screen.queryByRole("link", { name: "Upgrade" })).toBeNull()
+  })
+
   it("pitches an upgrade on Free using the plan's own limits", () => {
     mocks.plan.mockReturnValue({ data: plan("free") })
     mount()

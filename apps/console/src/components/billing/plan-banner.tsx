@@ -11,7 +11,8 @@ import { PlanAwareBanner } from "./plan-aware-banner"
 
 function PricingV2Banner({ plan }: { plan: TeamPlan }) {
   useBillingReturnNotice()
-  const summary = useBillingSummary().data
+  const summaryQuery = useBillingSummary()
+  const summary = summaryQuery.isError ? undefined : summaryQuery.data
   const prepaid = usePrepaidBalance(plan.kind === "prepaid").data
   if (!summary?.permissions?.can_view) return null
   return (

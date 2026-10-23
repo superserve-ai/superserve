@@ -20,7 +20,7 @@ function useBillingV2Resource<T>(
   enabled: boolean,
 ) {
   const { cacheScope, teamKey, ready } = useBillingContext()
-  return useQuery({
+  const query = useQuery({
     queryKey: billingKeys.v2(resource, { cacheScope, teamKey: teamKey ?? "" }),
     queryFn: async () =>
       schema.parse(await apiClient<unknown>(BILLING_V2_PATHS[resource])),
@@ -28,6 +28,7 @@ function useBillingV2Resource<T>(
     staleTime: 30_000,
     refetchInterval: 60_000,
   })
+  return { ...query, data: query.isError ? undefined : query.data }
 }
 
 export function useTeamPlan(enabled: boolean) {
