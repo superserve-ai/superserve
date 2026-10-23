@@ -4,6 +4,7 @@ import {
   CameraIcon,
   ChartBarIcon,
   ClipboardTextIcon,
+  CurrencyDollarIcon,
   CubeIcon,
   GearIcon,
   KeyIcon,
@@ -38,6 +39,12 @@ export const pendingSignupsNavItem: NavItem = {
   label: "Pending Signups",
   href: "/admin/signups",
   icon: UserCheckIcon,
+}
+
+export const adminBillingNavItem: NavItem = {
+  label: "Billing Admin",
+  href: "/admin/billing",
+  icon: CurrencyDollarIcon,
 }
 
 export const mainNavItems: NavItem[] = [

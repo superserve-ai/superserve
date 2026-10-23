@@ -1,0 +1,95 @@
+---
+title: "Docker"
+sidebarTitle: Docker
+description: Run Docker inside a sandbox to build images and run containers, with no special setup.
+---
+
+Every Superserve sandbox is a full Firecracker microVM with its own kernel, so Docker runs **inside** the sandbox the same way it does on any Linux machine: install it, start the daemon, and use `docker` as usual.
+
+## 1. Bake Docker into a template
+
+Install Docker at build time with the official install script, and start the daemon with [`startCmd`](/templates/build-spec#startcmd-process-to-start-after-build). `readyCmd` waits until it answers before the template is snapshotted, and the snapshot captures the running daemon, so every sandbox from the template starts with Docker ready. The sizes below fit every plan; raise `diskMib` if you pull large images (see [resource limits](/templates/build-spec#resource-limits)).
+
+<CodeGroup>
+```typescript TypeScript
+import { Template } from "@superserve/sdk"
+
+const template = await Template.create({
+  name: "docker",
+  from: "ubuntu:24.04",
+  vcpu: 2,
+  memoryMib: 2048,
+  diskMib: 8192,
+  steps: [
+    { run: "apt-get update && apt-get install -y curl ca-certificates" },
+    { run: "curl -fsSL https://get.docker.com -o /tmp/get-docker.sh && sh /tmp/get-docker.sh" },
+  ],
+  startCmd: "dockerd > /var/log/dockerd.log 2>&1",
+  readyCmd: "docker info",
+})
+
+await template.waitUntilReady()
+```
+
+```python Python
+from superserve import Template, RunStep
+
+template = Template.create(
+    name="docker",
+    from_="ubuntu:24.04",
+    vcpu=2,
+    memory_mib=2048,
+    disk_mib=8192,
+    steps=[
+        RunStep(run="apt-get update && apt-get install -y curl ca-certificates"),
+        RunStep(run="curl -fsSL https://get.docker.com -o /tmp/get-docker.sh && sh /tmp/get-docker.sh"),
+    ],
+    start_cmd="dockerd > /var/log/dockerd.log 2>&1",
+    ready_cmd="docker info",
+)
+
+template.wait_until_ready()
+```
+</CodeGroup>
+
+## 2. Use it
+
+Create a sandbox from the template and use `docker` right away. Run containers, build images, and use Compose as you would anywhere else. Published ports are reachable from inside the sandbox, and containers can reach the internet.
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({ name: "docker-box", fromTemplate: "docker" })
+
+await sandbox.commands.run("docker run --rm hello-world")
+
+await sandbox.commands.run("docker run -d --name web -p 8080:80 nginx:alpine")
+const page = await sandbox.commands.run(
+  "curl -s --retry 5 --retry-connrefused --retry-delay 1 localhost:8080",
+)
+console.log(page.stdout)
+```
+
+```python Python
+from superserve import Sandbox
+
+sandbox = Sandbox.create(name="docker-box", from_template="docker")
+
+sandbox.commands.run("docker run --rm hello-world")
+
+sandbox.commands.run("docker run -d --name web -p 8080:80 nginx:alpine")
+page = sandbox.commands.run(
+    "curl -s --retry 5 --retry-connrefused --retry-delay 1 localhost:8080"
+)
+print(page.stdout)
+```
+</CodeGroup>
+
+`docker run -d` returns once the container starts, before the server inside it is listening, so the `curl` retries until nginx answers.
+
+Running containers are part of the sandbox, so they keep running across a [pause and resume](/sandbox/lifecycle).
+
+<Note>
+Commands run without `HOME` set. If the Docker CLI warns that it can't load its config, prefix the command with `HOME=/root`.
+</Note>

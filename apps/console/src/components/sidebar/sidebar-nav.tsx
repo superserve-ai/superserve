@@ -20,6 +20,13 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
   const pathname = usePathname()
   const { isCollapsed } = useSidebar()
   const [hoveredHref, setHoveredHref] = useState<string | null>(null)
+  const activeHref = items
+    .filter((item) => !item.external && pathname.startsWith(item.href))
+    .reduce<string | null>(
+      (longest, item) =>
+        longest && longest.length >= item.href.length ? longest : item.href,
+      null,
+    )
 
   return (
     <div
@@ -27,7 +34,7 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
       onMouseLeave={() => setHoveredHref(null)}
     >
       {items.map((item) => {
-        const isActive = !item.external && pathname.startsWith(item.href)
+        const isActive = item.href === activeHref
         const isHovered = hoveredHref === item.href
         const Icon = item.icon
 
