@@ -921,7 +921,6 @@ describe("auth callback", () => {
         "a-secret-with-at-least-thirty-two-characters"
       try {
         await proofs.issueGoogleSignupProof("attempt-1")
-        await proofs.markGoogleSignupAttempt("attempt-1", "u1")
         mockHasValidGoogleSignupProof.mockImplementation(
           proofs.hasValidGoogleSignupProof,
         )
@@ -963,6 +962,14 @@ describe("auth callback", () => {
       expect(mockUpdateSignupReview).toHaveBeenCalledWith("u1", {
         signup_review: "pending",
       })
+      expect(mockUpdateSignupReview.mock.invocationCallOrder[0]).toBeLessThan(
+        mockMarkGoogleSignupAttempt.mock.invocationCallOrder[0],
+      )
+      expect(
+        mockMarkGoogleSignupAttempt.mock.invocationCallOrder[0],
+      ).toBeLessThan(
+        mockReadGooglePromotionEvidence.mock.invocationCallOrder[0],
+      )
       expect(mockSignOut).toHaveBeenCalled()
       expect(mockSendWelcomeEmail).not.toHaveBeenCalled()
       expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(

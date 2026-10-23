@@ -304,8 +304,29 @@ export async function GET(request: Request) {
               )
             }
             console.info("Google OAuth signup proof validated at callback")
-            if (signupOffer !== "enterprise")
-              await markGoogleSignupAttempt(signupAttemptId, user.id)
+            if (signupOffer === "enterprise") {
+              try {
+                await updateSignupReviewMetadata(user.id, {
+                  signup_review: "pending",
+                })
+              } catch (holdError) {
+                console.error("Enterprise signup hold failed", holdError)
+                await revokeGoogleSignupAuthorization(
+                  user.id,
+                  signupAttemptId,
+                ).catch((error) =>
+                  console.error(
+                    "Enterprise signup proof cleanup failed",
+                    error,
+                  ),
+                )
+                await supabase.auth.signOut().catch(() => {})
+                return NextResponse.redirect(
+                  buildRedirectUrl(origin, "/auth/auth-code-error"),
+                )
+              }
+            }
+            await markGoogleSignupAttempt(signupAttemptId, user.id)
           }
 
           if (isNewUser && signupAttemptId) {
@@ -485,23 +506,6 @@ export async function GET(request: Request) {
         }
 
         if (code && isNewUser && signupOffer === "enterprise") {
-          try {
-            await updateSignupReviewMetadata(user.id, {
-              signup_review: "pending",
-            })
-          } catch (holdError) {
-            console.error("Enterprise signup hold failed", holdError)
-            await revokeGoogleSignupAuthorization(
-              user.id,
-              signupAttemptId,
-            ).catch((error) =>
-              console.error("Enterprise signup proof cleanup failed", error),
-            )
-            await supabase.auth.signOut().catch(() => {})
-            return NextResponse.redirect(
-              buildRedirectUrl(origin, "/auth/auth-code-error"),
-            )
-          }
           await notifySlackOfNewUser(
             user.email || "",
             user.user_metadata?.full_name || null,
