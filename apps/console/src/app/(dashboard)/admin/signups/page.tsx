@@ -1,5 +1,9 @@
 import { notFound } from "next/navigation"
 
+import {
+  type EnterprisePlanVersion,
+  listEnterprisePlanVersions,
+} from "@/lib/admin/enterprise-plan"
 import { canApprovePlatformSignups } from "@/lib/admin/permissions"
 import { listPendingSignups } from "@/lib/admin/signup-approval"
 import {
@@ -22,10 +26,14 @@ export default async function PendingSignupsPage() {
     notFound()
   }
 
-  const pending = await listPendingSignups()
+  const [pending, versions] = await Promise.all([
+    listPendingSignups(),
+    listEnterprisePlanVersions().catch((): EnterprisePlanVersion[] => []),
+  ])
   return (
     <PendingSignupsTable
       pending={pending}
+      versions={versions}
       onApprove={approveSignupAction}
       onReject={rejectSignupAction}
     />

@@ -14,12 +14,17 @@ import { useState, useTransition } from "react"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
+import type { EnterprisePlanVersion } from "@/lib/admin/enterprise-plan"
 import type {
   SignupReviewResult,
   SignupReviewRow,
 } from "@/lib/admin/signup-approval"
 import { formatDate } from "@/lib/format"
 
+type ApproveAction = (
+  userId: string,
+  planVersionId: string,
+) => Promise<SignupReviewResult>
 type ReviewAction = (userId: string) => Promise<SignupReviewResult>
 
 const actionButton =
@@ -32,20 +37,24 @@ const OUTCOME_LABELS = {
 
 function ReviewButtons({
   row,
+  versions,
   onApprove,
   onReject,
 }: {
   row: SignupReviewRow
-  onApprove: ReviewAction
+  versions: EnterprisePlanVersion[]
+  onApprove: ApproveAction
   onReject: ReviewAction
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [message, setMessage] = useState<string | null>(null)
-  const run = (action: ReviewAction) =>
+  const [versionId, setVersionId] = useState(versions[0]?.id ?? "")
+  const resend = row.status === "approved"
+  const run = (action: () => Promise<SignupReviewResult>) =>
     startTransition(async () => {
       try {
-        const result = await action(row.id)
+        const result = await action()
         setMessage(result.ok ? OUTCOME_LABELS[result.outcome] : result.error)
         router.refresh()
       } catch {
@@ -55,22 +64,43 @@ function ReviewButtons({
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex gap-2">
+        {!resend && (
+          <select
+            aria-label="Enterprise plan"
+            className="h-8 border border-dashed border-border bg-background px-2 text-xs"
+            value={versionId}
+            disabled={pending || versions.length === 0}
+            onChange={(event) => setVersionId(event.target.value)}
+          >
+            {versions.length === 0 ? (
+              <option value="">No Enterprise plans published</option>
+            ) : (
+              versions.map((version) => (
+                <option key={version.id} value={version.id}>
+                  {version.name}
+                </option>
+              ))
+            )}
+          </select>
+        )}
         <button
           type="button"
           className={actionButton}
-          disabled={pending}
-          onClick={() => run(onApprove)}
+          disabled={pending || (!resend && !versionId)}
+          onClick={() => run(() => onApprove(row.id, resend ? "" : versionId))}
         >
-          Grant access
+          {resend ? "Resend email" : "Grant access"}
         </button>
-        <button
-          type="button"
-          className={actionButton}
-          disabled={pending}
-          onClick={() => run(onReject)}
-        >
-          Reject
-        </button>
+        {!resend && (
+          <button
+            type="button"
+            className={actionButton}
+            disabled={pending}
+            onClick={() => run(() => onReject(row.id))}
+          >
+            Reject
+          </button>
+        )}
       </div>
       {message && (
         <output className="text-xs text-muted" aria-live="polite">
@@ -83,11 +113,13 @@ function ReviewButtons({
 
 function ReviewTable({
   rows,
+  versions,
   onApprove,
   onReject,
 }: {
   rows: SignupReviewRow[]
-  onApprove: ReviewAction
+  versions: EnterprisePlanVersion[]
+  onApprove: ApproveAction
   onReject: ReviewAction
 }) {
   return (
@@ -116,6 +148,7 @@ function ReviewTable({
             <TableCell className="text-right">
               <ReviewButtons
                 row={row}
+                versions={versions}
                 onApprove={onApprove}
                 onReject={onReject}
               />
@@ -129,11 +162,13 @@ function ReviewTable({
 
 export function PendingSignupsTable({
   pending,
+  versions,
   onApprove,
   onReject,
 }: {
   pending: SignupReviewRow[]
-  onApprove: ReviewAction
+  versions: EnterprisePlanVersion[]
+  onApprove: ApproveAction
   onReject: ReviewAction
 }) {
   return (
@@ -149,6 +184,7 @@ export function PendingSignupsTable({
         ) : (
           <ReviewTable
             rows={pending}
+            versions={versions}
             onApprove={onApprove}
             onReject={onReject}
           />

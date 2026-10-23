@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { createServerClient } from "@/lib/supabase/server"
 
+import { AdminBillingRequestError } from "./billing-api"
 import { assignEnterprisePlan } from "./enterprise-plan"
 import { canApprovePlatformSignups, canWriteAdminBilling } from "./permissions"
 import {
@@ -11,6 +12,8 @@ import {
   rejectSignup,
   type SignupReviewResult,
 } from "./signup-approval"
+
+class MissingEnterprisePlanError extends Error {}
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -28,20 +31,31 @@ async function requireSignupApprover() {
 
 export async function approveSignupAction(
   userId: string,
+  planVersionId: string,
 ): Promise<SignupReviewResult> {
   const staff = await requireSignupApprover()
   if (!canWriteAdminBilling(staff))
     return { ok: false, error: "Granting access needs billing write access." }
   if (!UUID_RE.test(userId)) return { ok: false, error: "Invalid user id" }
+  if (planVersionId && !UUID_RE.test(planVersionId))
+    return { ok: false, error: "Choose the Enterprise plan to assign." }
   let result: SignupReviewResult
   try {
-    result = await approveSignup(userId, staff.id, assignEnterprisePlan)
+    result = await approveSignup(userId, staff.id, async (team) => {
+      if (!planVersionId) throw new MissingEnterprisePlanError()
+      await assignEnterprisePlan(team, userId, planVersionId)
+    })
   } catch (error) {
     console.error("Enterprise access grant failed", error)
     result = {
       ok: false,
       error:
-        "Access was not granted yet. The applicant is still held; try again.",
+        error instanceof MissingEnterprisePlanError
+          ? "Choose the Enterprise plan to assign. The applicant is still held."
+          : error instanceof AdminBillingRequestError &&
+              error.kind === "conflict"
+            ? "The plan can't be assigned: pricing v2 is off, the plan was retired, or this applicant was already given a different plan. The applicant is still held."
+            : "Access was not granted yet. The applicant is still held; try again.",
     }
   }
   revalidatePath("/admin/signups")

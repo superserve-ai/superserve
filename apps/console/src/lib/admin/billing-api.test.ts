@@ -170,6 +170,18 @@ describe("isAdminBillingPath", () => {
     )
   })
 
+  it("allows staff plan assignment writes only on a team's billing", () => {
+    expect(
+      isAdminBillingPath(
+        `/internal/teams/${team}/billing/plan-assignments`,
+        "POST",
+      ),
+    ).toBe(true)
+    expect(
+      isAdminBillingPath("/internal/billing/plan-assignments", "POST"),
+    ).toBe(false)
+  })
+
   it("rejects other internal routes and traversal", () => {
     for (const path of [
       "/internal/jwks",
