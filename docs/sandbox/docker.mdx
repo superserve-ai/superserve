@@ -22,7 +22,7 @@ const template = await Template.create({
   diskMib: 8192,
   steps: [
     { run: "apt-get update && apt-get install -y curl ca-certificates" },
-    { run: "curl -fsSL https://get.docker.com | sh" },
+    { run: "curl -fsSL https://get.docker.com -o /tmp/get-docker.sh && sh /tmp/get-docker.sh" },
   ],
 })
 
@@ -40,7 +40,7 @@ template = Template.create(
     disk_mib=8192,
     steps=[
         RunStep(run="apt-get update && apt-get install -y curl ca-certificates"),
-        RunStep(run="curl -fsSL https://get.docker.com | sh"),
+        RunStep(run="curl -fsSL https://get.docker.com -o /tmp/get-docker.sh && sh /tmp/get-docker.sh"),
     ],
 )
 
@@ -50,7 +50,7 @@ template.wait_until_ready()
 
 ## 2. Start the Docker daemon
 
-Create a sandbox from the template and start `dockerd` in the background, then wait until it answers. `run()` doesn't throw on a non-zero exit, so check that the daemon came up.
+Create a sandbox from the template and start `dockerd` in the background, then wait until it answers. `run()` doesn't throw on a non-zero exit, so check that the daemon came up; the request timeout is longer than the 30-second wait so that check is reached.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -61,6 +61,7 @@ const sandbox = await Sandbox.create({ name: "docker-box", fromTemplate: "docker
 const started = await sandbox.commands.run(
   "nohup dockerd > /var/log/dockerd.log 2>&1 & " +
     "timeout 30 sh -c 'until docker info > /dev/null 2>&1; do sleep 1; done'",
+  { timeoutMs: 60_000 },
 )
 if (started.exitCode !== 0) {
   throw new Error("dockerd did not start; see /var/log/dockerd.log")
@@ -74,7 +75,8 @@ sandbox = Sandbox.create(name="docker-box", from_template="docker")
 
 started = sandbox.commands.run(
     "nohup dockerd > /var/log/dockerd.log 2>&1 & "
-    "timeout 30 sh -c 'until docker info > /dev/null 2>&1; do sleep 1; done'"
+    "timeout 30 sh -c 'until docker info > /dev/null 2>&1; do sleep 1; done'",
+    timeout_seconds=60,
 )
 if started.exit_code != 0:
     raise RuntimeError("dockerd did not start; see /var/log/dockerd.log")
