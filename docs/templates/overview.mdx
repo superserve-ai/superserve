@@ -13,7 +13,7 @@ Curated by Superserve and available to every team. Identified by the `superserve
 
 | Name | Base image | Shape (vCPU · mem · disk) | Adds on top of the base toolkit |
 |---|---|---|---|
-| `superserve/base` | `ubuntu:24.04` | 1 · 1024 MiB · 4096 MiB | Nothing — just the base toolkit. Default when `fromTemplate` is omitted. |
+| `superserve/base` | `ubuntu:24.04` | 1 · 1024 MiB · 8192 MiB | `build-essential`, `pkg-config`, `python3` (3.12), `python3-dev`, `python3-pip`, `python3-venv` (apt); Node.js 22 with `npm`. Default when `fromTemplate` is omitted. |
 | `superserve/python-3.11` | `python:3.11-slim` | 1 · 1024 MiB · 4096 MiB | `requests` (pip). |
 | `superserve/node-22` | `node:22-slim` | 1 · 1024 MiB · 4096 MiB | `pnpm`, `typescript` (npm global). |
 | `superserve/python-ml` | `python:3.11` | 2 · 2048 MiB · 4096 MiB | `build-essential` (apt); numpy, pandas, scikit-learn, matplotlib, jupyter, ipython, requests (pip). |
