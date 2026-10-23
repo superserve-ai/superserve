@@ -16,6 +16,7 @@ import {
   repairRecoveryAuthApiKeyForTeam,
 } from "@/lib/api/proxy-auth"
 import { redactAccessTokens } from "@/lib/api/redact"
+import { isPurchaseOffer } from "@/lib/api/signup-plan"
 import type { TeamMembership } from "@/lib/api/team-directory"
 import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
 import {
@@ -324,12 +325,12 @@ async function proxyRequest(
       )
     }
     if (joinedPath === "stripe/pro-checkout") {
-      if (!["pro_monthly", "pro_annual"].includes(input.offer as string))
+      if (!isPurchaseOffer(input.offer))
         return NextResponse.json(
           {
             error: {
               code: "invalid_offer",
-              message: "Select a Pro billing frequency",
+              message: "Select a plan billing frequency",
             },
           },
           { status: 400 },
