@@ -16,6 +16,7 @@ export function prepaidFixture(scenario: Scenario) {
   if (scenario === "first")
     return {
       balance_cents: 0,
+      low_balance: true,
       has_saved_card: false,
       auto_recharge: {
         enabled: false,
@@ -64,6 +65,7 @@ export function prepaidFixture(scenario: Scenario) {
   ]
   return {
     balance_cents: scenario === "declined" ? 350 : 4250,
+    low_balance: scenario === "declined",
     has_saved_card: true,
     auto_recharge:
       scenario === "declined"

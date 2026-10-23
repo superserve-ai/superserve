@@ -25,6 +25,7 @@ export interface PrepaidPurchase {
 
 export interface PrepaidCreditSummary {
   balance_cents: number
+  low_balance: boolean
   auto_recharge: PrepaidAutoRecharge
   has_saved_card: boolean
   purchases: PrepaidPurchase[]
