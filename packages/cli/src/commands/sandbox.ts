@@ -163,12 +163,24 @@ async function postPause(id: string, async: boolean): Promise<number> {
 async function waitPaused(id: string): Promise<"paused" | "deleted"> {
   const started = Date.now()
   const deadline = started + PAUSE_WAIT_MS
+  const stillPausing = () =>
+    new CliError(
+      `Sandbox ${id} is still pausing; it will finish in the background.`,
+      EXIT.TIMEOUT,
+      `Check with: superserve sandbox get ${id}`,
+      "timeout",
+    )
   for (;;) {
     let status: string
     try {
-      status = (await apiRequest<SandboxItem>("GET", path(id))).status
+      status = (
+        await apiRequest<SandboxItem>("GET", path(id), {
+          signal: AbortSignal.timeout(Math.max(deadline - Date.now(), 1)),
+        })
+      ).status
     } catch (err) {
       if (err instanceof NotFoundError) return "deleted"
+      if (Date.now() >= deadline) throw stillPausing()
       throw err
     }
     if (status === "paused" || status === "deleted") return status
@@ -177,15 +189,9 @@ async function waitPaused(id: string): Promise<"paused" | "deleted"> {
     if (status !== "pausing" && !early) {
       throw new CliError(`Sandbox ${id} did not pause: status is ${status}.`)
     }
-    if (Date.now() > deadline) {
-      throw new CliError(
-        `Sandbox ${id} is still pausing; it will finish in the background.`,
-        EXIT.TIMEOUT,
-        `Check with: superserve sandbox get ${id}`,
-        "timeout",
-      )
-    }
-    await sleep(1_000)
+    const left = deadline - Date.now()
+    if (left <= 0) throw stillPausing()
+    await sleep(Math.min(1_000, left))
   }
 }
 

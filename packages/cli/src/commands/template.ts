@@ -329,7 +329,11 @@ async function waitForBuild(
   ref: string,
   templateId: string,
   buildId: string,
-  { logs, timeoutSec }: { logs: boolean; timeoutSec?: number },
+  {
+    logs,
+    timeoutSec,
+    known,
+  }: { logs: boolean; timeoutSec?: number; known?: BuildRow },
 ): Promise<TemplateRow> {
   const deadline =
     timeoutSec === undefined ? Infinity : Date.now() + timeoutSec * 1000
@@ -359,28 +363,26 @@ async function waitForBuild(
     }
     const spin = logs ? undefined : spinner("Waiting for the build")
     try {
-      let polled = false
+      // A row the caller already fetched answers the first check, so
+      // --timeout 0 still reports a build that has already finished.
+      let first = known
       for (;;) {
         if (interrupted.aborted) throw stoppedFollowing(ref, buildId)
-        // Ctrl-C and the deadline also cut a slow poll short; the first poll
-        // always gets an answer, so --timeout 0 still reports a finished build.
-        const signal =
-          Number.isFinite(deadline) && polled
-            ? AbortSignal.any([
-                interrupted,
-                AbortSignal.timeout(Math.max(deadline - Date.now(), 0)),
-              ])
-            : interrupted
-        polled = true
+        // Ctrl-C and the deadline also cut a slow poll short.
+        const signal = Number.isFinite(deadline)
+          ? AbortSignal.any([
+              interrupted,
+              AbortSignal.timeout(Math.max(deadline - Date.now(), 0)),
+            ])
+          : interrupted
         let build: BuildRow
         try {
-          build = await apiRequest<BuildRow>(
-            "GET",
-            bpath(templateId, buildId),
-            {
+          build =
+            first ??
+            (await apiRequest<BuildRow>("GET", bpath(templateId, buildId), {
               signal,
-            },
-          )
+            }))
+          first = undefined
         } catch (err) {
           if (interrupted.aborted) throw stoppedFollowing(ref, buildId)
           if (Date.now() >= deadline) throw timedOut("building")
@@ -887,7 +889,11 @@ Examples:
       const build = await latestBuild(id)
       if (!build) throw noBuilds(ref)
       reportReady(
-        await waitForBuild(ref, id, build.id, { logs: false, timeoutSec }),
+        await waitForBuild(ref, id, build.id, {
+          logs: false,
+          timeoutSec,
+          known: build,
+        }),
       )
     })
 }
