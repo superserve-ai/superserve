@@ -130,6 +130,18 @@ describe("planGroupSync", () => {
     ])
   })
 
+  it("preserves a consistently published version below a retired one", () => {
+    expect(
+      planGroupSync([
+        m(3, { use: "retired", usw: "retired" }),
+        m(2, { use: "published", usw: "published" }),
+      ]),
+    ).toEqual([
+      { use: [], usw: [] },
+      { use: [], usw: [] },
+    ])
+  })
+
   it("finishes a retire that only reached some regions", () => {
     expect(planGroupSync([m(1, { use: "retired", usw: "published" })])).toEqual(
       [{ use: [], usw: ["retire"] }],

@@ -138,7 +138,10 @@ export function planGroupSync(group: SyncMember[]): Steps[] {
     .filter(([m]) => reached(m, "published", "retired"))
     .toSorted(([a], [b]) => b.version - a.version)
   if (!settled.length) return steps
-  const [newest, index] = settled[0]!
+  const consistentPublished = settled.find(([member]) =>
+    Object.values(member.states).every((state) => state === "published"),
+  )
+  const [newest, index] = consistentPublished ?? settled[0]!
   // Retired is terminal, and a version retired by a newer publish is never
   // the newest settled one, so retired anywhere means it is being withdrawn.
   if (reached(newest, "published") && !reached(newest, "retired")) {
