@@ -21,10 +21,10 @@ import { formatUsd } from "./format"
 export default async function AdminBillingTeamsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>
+  searchParams: Promise<{ q?: string | string[] }>
 }) {
-  const { q = "" } = await searchParams
-  const search = q.trim().slice(0, 200)
+  const { q } = await searchParams
+  const search = typeof q === "string" ? q.trim().slice(0, 200) : ""
   let result: Awaited<ReturnType<typeof listBillingTeams>>
   try {
     result = await listBillingTeams(search)

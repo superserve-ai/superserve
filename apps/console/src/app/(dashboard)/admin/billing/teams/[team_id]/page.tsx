@@ -20,11 +20,16 @@ export default async function AdminBillingTeamPage({
   searchParams,
 }: {
   params: Promise<{ team_id: string }>
-  searchParams: Promise<{ region?: string }>
+  searchParams: Promise<{ region?: string | string[] }>
 }) {
   const { team_id: teamId } = await params
-  const { region = "" } = await searchParams
-  if (!isUuid(teamId) || !configuredRegions().includes(region)) notFound()
+  const { region } = await searchParams
+  if (
+    !isUuid(teamId) ||
+    typeof region !== "string" ||
+    !configuredRegions().includes(region)
+  )
+    notFound()
 
   const supabase = await createServerClient()
   const {
