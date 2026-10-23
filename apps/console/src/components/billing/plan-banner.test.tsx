@@ -105,12 +105,16 @@ describe("PlanBanner with pricing v2 on", () => {
     mocks.prepaid.mockReturnValue({
       data: {
         balance_cents: 0,
-        low_balance: false,
         auto_recharge: {
           enabled: false,
           threshold_cents: null,
           amount_cents: null,
+          disabled_reason: null,
+          disabled_at: null,
+          in_flight: false,
         },
+        has_saved_card: true,
+        purchases: [],
       },
     })
     mount()
@@ -128,12 +132,16 @@ describe("PlanBanner with pricing v2 on", () => {
     mocks.prepaid.mockReturnValue({
       data: {
         balance_cents: 250,
-        low_balance: true,
         auto_recharge: {
           enabled: false,
           threshold_cents: null,
           amount_cents: null,
+          disabled_reason: null,
+          disabled_at: null,
+          in_flight: false,
         },
+        has_saved_card: true,
+        purchases: [],
       },
     })
     mount()
@@ -150,12 +158,16 @@ describe("PlanBanner with pricing v2 on", () => {
     mocks.prepaid.mockReturnValue({
       data: {
         balance_cents: 0,
-        low_balance: true,
         auto_recharge: {
           enabled: true,
           threshold_cents: 500,
           amount_cents: 2000,
+          disabled_reason: null,
+          disabled_at: null,
+          in_flight: false,
         },
+        has_saved_card: true,
+        purchases: [],
       },
     })
     mount()
@@ -171,12 +183,16 @@ describe("PlanBanner with pricing v2 on", () => {
         "prepaid",
         {
           balance_cents: 9000,
-          low_balance: false,
           auto_recharge: {
             enabled: false,
             threshold_cents: null,
             amount_cents: null,
+            disabled_reason: null,
+            disabled_at: null,
+            in_flight: false,
           },
+          has_saved_card: true,
+          purchases: [],
         },
       ],
       ["subscription", undefined],
@@ -188,6 +204,27 @@ describe("PlanBanner with pricing v2 on", () => {
       expect(container.textContent).toBe("")
       unmount()
     }
+  })
+
+  it("stays quiet on a low balance when auto-recharge will top it up", () => {
+    mocks.plan.mockReturnValue({ data: plan("prepaid") })
+    mocks.prepaid.mockReturnValue({
+      data: {
+        balance_cents: 400,
+        auto_recharge: {
+          enabled: true,
+          threshold_cents: 500,
+          amount_cents: 2000,
+          disabled_reason: null,
+          disabled_at: null,
+          in_flight: true,
+        },
+        has_saved_card: true,
+        purchases: [],
+      },
+    })
+    const { container } = mount()
+    expect(container.textContent).toBe("")
   })
 
   it("hides actions from members who cannot manage billing", () => {

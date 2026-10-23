@@ -187,12 +187,16 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     mocks.prepaid.mockReturnValue({
       data: {
         balance_cents: 4250,
-        low_balance: false,
         auto_recharge: {
           enabled: true,
           threshold_cents: 500,
           amount_cents: 2000,
+          disabled_reason: null,
+          disabled_at: null,
+          in_flight: false,
         },
+        has_saved_card: true,
+        purchases: [],
       },
     })
     render(<PlanOverviewSection summary={summary} />)
@@ -242,6 +246,37 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     })
     render(<PlanOverviewSection summary={summary} />)
     expect(screen.getByText("1%")).toBeTruthy()
+  })
+
+  it("says when auto-recharge was turned off and when a top-up is in flight", () => {
+    mocks.plan.mockReturnValue({
+      data: plan({
+        key: "starter",
+        kind: "prepaid",
+        name: "Starter",
+        fee_cents: null,
+      }),
+      isError: false,
+    })
+    mocks.prepaid.mockReturnValue({
+      data: {
+        balance_cents: 1000,
+        auto_recharge: {
+          enabled: false,
+          threshold_cents: 500,
+          amount_cents: 2000,
+          disabled_reason: "card_declined",
+          disabled_at: "2026-10-22T00:00:00Z",
+          in_flight: true,
+        },
+        has_saved_card: true,
+        purchases: [],
+      },
+    })
+    render(<PlanOverviewSection summary={summary} />)
+    expect(screen.getByText(/Auto-recharge was turned off\./)).toBeTruthy()
+    expect(screen.queryByText(/card_declined/)).toBeNull()
+    expect(screen.getByText("A top-up is being processed.")).toBeTruthy()
   })
 
   it("shows a scheduled downgrade", () => {

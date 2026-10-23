@@ -4,6 +4,7 @@ import Link from "next/link"
 import {
   describeSandboxSize,
   formatCents,
+  isLowBalance,
   PLAN_ACTION_LINKS,
   type PrepaidBalance,
   type TeamPlan,
@@ -89,11 +90,7 @@ export function PlanAwareBanner({
     )
   }
 
-  if (
-    plan.kind === "prepaid" &&
-    prepaid &&
-    (prepaid.low_balance || prepaid.balance_cents <= 0)
-  ) {
+  if (plan.kind === "prepaid" && prepaid && isLowBalance(prepaid)) {
     const empty = prepaid.balance_cents <= 0
     return (
       <BannerShell

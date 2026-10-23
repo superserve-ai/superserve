@@ -51,14 +51,29 @@ export const freeAllowanceSchema = z.object({
   as_of: z.string().nullable(),
 })
 
+export const prepaidPurchaseSchema = z.object({
+  id: z.string(),
+  source: z.string(),
+  amount_cents: cents,
+  state: z.string(),
+  failure_reason: z.string().nullable(),
+  paid_at: z.string().nullable(),
+  credited_at: z.string().nullable(),
+  created_at: z.string(),
+})
+
 export const prepaidBalanceSchema = z.object({
   balance_cents: z.number().int(),
-  low_balance: z.boolean(),
   auto_recharge: z.object({
     enabled: z.boolean(),
     threshold_cents: cents.nullable(),
     amount_cents: cents.nullable(),
+    disabled_reason: z.string().nullable(),
+    disabled_at: z.string().nullable(),
+    in_flight: z.boolean(),
   }),
+  has_saved_card: z.boolean(),
+  purchases: z.array(prepaidPurchaseSchema),
 })
 
 export type PlanKind = z.infer<typeof planKindSchema>
@@ -66,6 +81,17 @@ export type PlanLimits = z.infer<typeof planLimitsSchema>
 export type TeamPlan = z.infer<typeof teamPlanSchema>
 export type FreeAllowance = z.infer<typeof freeAllowanceSchema>
 export type PrepaidBalance = z.infer<typeof prepaidBalanceSchema>
+export type PrepaidPurchase = z.infer<typeof prepaidPurchaseSchema>
+
+export const LOW_BALANCE_CENTS = 500
+
+export function isLowBalance(prepaid: PrepaidBalance): boolean {
+  return (
+    prepaid.balance_cents <= 0 ||
+    (prepaid.balance_cents <= LOW_BALANCE_CENTS &&
+      !prepaid.auto_recharge.enabled)
+  )
+}
 
 export const UPGRADE_PATH = "/plan-usage/upgrade"
 

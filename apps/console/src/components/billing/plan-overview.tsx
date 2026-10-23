@@ -169,9 +169,14 @@ export function PrepaidPanel({ prepaid }: { prepaid: PrepaidBalance | null }) {
         recharge.amount_cents !== null &&
         recharge.threshold_cents !== null
           ? `Auto-recharge is on: adds ${formatCents(recharge.amount_cents)} when the balance drops below ${formatCents(recharge.threshold_cents)}.`
-          : "Auto-recharge is off. Running sandboxes pause when the balance reaches $0."}{" "}
+          : recharge.disabled_reason
+            ? "Auto-recharge was turned off. Running sandboxes pause when the balance reaches $0."
+            : "Auto-recharge is off. Running sandboxes pause when the balance reaches $0."}{" "}
         Credit never expires.
       </p>
+      {recharge.in_flight ? (
+        <p className="text-sm text-muted">A top-up is being processed.</p>
+      ) : null}
     </Panel>
   )
 }
