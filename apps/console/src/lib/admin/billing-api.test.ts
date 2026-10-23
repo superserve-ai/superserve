@@ -3,7 +3,11 @@ import { z } from "zod"
 
 vi.mock("server-only", () => ({}))
 vi.mock("@/lib/supabase/server", () => ({ createServerClient: vi.fn() }))
+vi.mock("@/lib/admin/impersonation", () => ({
+  getImpersonationContext: vi.fn(async () => null),
+}))
 
+import { getImpersonationContext } from "@/lib/admin/impersonation"
 import { createServerClient } from "@/lib/supabase/server"
 
 import {
@@ -260,6 +264,27 @@ describe("adminBillingRequest credentials", () => {
     const [, init] = fetchMock.mock.calls[0]
     expect(init.headers.Authorization).toBe("Bearer operator-token")
     expect(init.body).toBe('{"reason":"r"}')
+  })
+
+  it("refuses writes while impersonating another team", async () => {
+    writer()
+    vi.mocked(getImpersonationContext).mockResolvedValueOnce({
+      teamId: TEAM,
+      region: "use",
+      teamName: "Example team",
+    })
+    expect(
+      await kind(
+        adminBillingRequest({
+          region: "use",
+          path: WRITE_PATH,
+          schema,
+          method: "POST",
+          body: {},
+        }),
+      ),
+    ).toBe("forbidden")
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it("fails closed when the operator token is missing", async () => {

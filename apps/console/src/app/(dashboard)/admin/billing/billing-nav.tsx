@@ -11,8 +11,9 @@ export const BILLING_TABS = [
 ] as const
 
 export function isActiveBillingTab(pathname: string, href: string): boolean {
-  if (href === "/admin/billing") return pathname === href
-  return pathname === href || pathname.startsWith(`${href}/`)
+  const path = pathname.replace(/\/+$/, "")
+  if (href === "/admin/billing") return path === href
+  return path === href || path.startsWith(`${href}/`)
 }
 
 export function BillingNav() {

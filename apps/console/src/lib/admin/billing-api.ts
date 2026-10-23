@@ -1,6 +1,7 @@
 import "server-only"
 import type { z } from "zod"
 
+import { getImpersonationContext } from "@/lib/admin/impersonation"
 import {
   canReadAdminBilling,
   canWriteAdminBilling,
@@ -37,6 +38,8 @@ export async function requireAdminBilling(access: Access = "read") {
   const allowed =
     access === "write" ? canWriteAdminBilling(user) : canReadAdminBilling(user)
   if (!user || !allowed) throw new AdminBillingRequestError("forbidden")
+  if (access === "write" && (await getImpersonationContext(user)))
+    throw new AdminBillingRequestError("forbidden")
   return user
 }
 
