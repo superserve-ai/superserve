@@ -325,11 +325,18 @@ export async function retireVersionAction(
 ): Promise<FanOutResult> {
   try {
     const catalogs = await loadCatalogs()
-    const regions = Object.entries(catalogs)
-      .filter(([, catalog]) =>
-        catalog.plans.some((plan) => plan.id === id && plan.state !== "draft"),
+    if (
+      Object.values(catalogs).some(
+        (catalog) =>
+          !catalog.plans.some(
+            (plan) => plan.id === id && plan.state !== "draft",
+          ),
       )
-      .map(([region]) => region)
+    )
+      throw new Error(
+        "This version is not published in every region. Use Retry sync first.",
+      )
+    const regions = Object.keys(catalogs)
     return fanOut(
       regions,
       (region) => transition(region, id, "/retire", reason),

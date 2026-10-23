@@ -196,26 +196,31 @@ function PricingSwitch({
         </span>
       </div>
       {canWrite ? (
-        <Button
-          size="sm"
-          variant={target === "v2" ? "default" : "outline"}
-          disabled={locked}
-          onClick={() =>
-            confirm({
-              title: `Switch every region to ${PRICING_LABEL[target].toLowerCase()}?`,
-              description:
-                target === "v2"
-                  ? "Signup, checkout and the pricing cards use the published v2 plans immediately. Existing contracts keep their terms."
-                  : "Signup, checkout and the pricing cards go back to the published legacy plans immediately. Existing contracts keep their terms.",
-              action: (reason) => setPricingVersionAction(target, reason),
-              done: `${PRICING_LABEL[target]} is live`,
-            })
-          }
-        >
-          {current
-            ? `Switch to ${PRICING_LABEL[target]}`
-            : "Switch every region to v2"}
-        </Button>
+        <span className="flex gap-2">
+          {(current ? [target] : (["legacy", "v2"] as const)).map((to) => (
+            <Button
+              key={to}
+              size="sm"
+              variant={to === "v2" ? "default" : "outline"}
+              disabled={locked}
+              onClick={() =>
+                confirm({
+                  title: `Switch every region to ${PRICING_LABEL[to].toLowerCase()}?`,
+                  description:
+                    to === "v2"
+                      ? "Signup, checkout and the pricing cards use the published v2 plans immediately. Existing contracts keep their terms."
+                      : "Signup, checkout and the pricing cards go back to the published legacy plans immediately. Existing contracts keep their terms.",
+                  action: (reason) => setPricingVersionAction(to, reason),
+                  done: `${PRICING_LABEL[to]} is live`,
+                })
+              }
+            >
+              {current
+                ? `Switch to ${PRICING_LABEL[to]}`
+                : `Switch every region to ${to}`}
+            </Button>
+          ))}
+        </span>
       ) : null}
     </section>
   )
@@ -254,7 +259,7 @@ export function PlansCatalog({
     const failed = failedRegions(result)
     if (failed) {
       addToast(
-        `Not applied everywhere (${failed}). Use Retry sync to finish.`,
+        `Not applied everywhere (${failed}). Repeat the change, or use Retry sync where it is offered.`,
         "error",
       )
     } else {

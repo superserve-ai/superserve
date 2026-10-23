@@ -570,7 +570,13 @@ export function PlanEditor({
               type="checkbox"
               className="accent-brand"
               checked={form.display_only}
-              onChange={(event) => set("display_only", event.target.checked)}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  display_only: event.target.checked,
+                  kind: event.target.checked ? "custom" : current.kind,
+                }))
+              }
             />
             Display only (Custom pricing, contact sales)
           </label>

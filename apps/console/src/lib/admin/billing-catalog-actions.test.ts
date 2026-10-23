@@ -15,6 +15,7 @@ import {
   updateDraftAction,
   previewScheduleAction,
   publishVersionAction,
+  retireVersionAction,
   setPricingVersionAction,
   syncVersionAction,
 } from "./billing-catalog-actions"
@@ -288,6 +289,31 @@ describe("billing catalog fan-out", () => {
         { pricing_version: "v2", reason: "Launch v2" },
       ]),
     )
+  })
+
+  it("switches back to legacy even while v2 plans differ between regions", async () => {
+    signIn(["platform:billing:read", "platform:billing:write"])
+    serve({
+      "use.example.com": [plan({ pricing_version: "v2", state: "published" })],
+      "usw.example.com": [],
+    })
+    const result = await setPricingVersionAction("legacy", "Roll back")
+    expect(result.errors).toEqual({})
+    expect(writes().map((w) => w.host)).toEqual([
+      "use.example.com",
+      "usw.example.com",
+    ])
+  })
+
+  it("refuses to retire a version that is still a draft in a region", async () => {
+    signIn(["platform:billing:read", "platform:billing:write"])
+    serve({
+      "use.example.com": [plan({ state: "published" })],
+      "usw.example.com": [plan()],
+    })
+    const result = await retireVersionAction(VERSION, "Withdraw")
+    expect(result.errors).toHaveProperty("all")
+    expect(writes()).toEqual([])
   })
 
   it("refuses to switch to v2 while regions publish different v2 plans", async () => {
