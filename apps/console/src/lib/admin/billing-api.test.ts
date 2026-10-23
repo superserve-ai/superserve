@@ -4,10 +4,10 @@ import { z } from "zod"
 vi.mock("server-only", () => ({}))
 vi.mock("@/lib/supabase/server", () => ({ createServerClient: vi.fn() }))
 vi.mock("@/lib/admin/impersonation", () => ({
-  getImpersonationContext: vi.fn(async () => null),
+  getImpersonationTeamId: vi.fn(async () => null),
 }))
 
-import { getImpersonationContext } from "@/lib/admin/impersonation"
+import { getImpersonationTeamId } from "@/lib/admin/impersonation"
 import { createServerClient } from "@/lib/supabase/server"
 
 import {
@@ -268,11 +268,7 @@ describe("adminBillingRequest credentials", () => {
 
   it("refuses writes while impersonating another team", async () => {
     writer()
-    vi.mocked(getImpersonationContext).mockResolvedValueOnce({
-      teamId: TEAM,
-      region: "use",
-      teamName: "Example team",
-    })
+    vi.mocked(getImpersonationTeamId).mockResolvedValueOnce(TEAM)
     expect(
       await kind(
         adminBillingRequest({
