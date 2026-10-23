@@ -1,14 +1,11 @@
-import { UsersIcon } from "@phosphor-icons/react/dist/ssr"
 import { notFound } from "next/navigation"
 
-import { EmptyState } from "@/components/empty-state"
-import { AdminBillingRequestError } from "@/lib/admin/billing-api"
 import { canWriteAdminBilling } from "@/lib/admin/permissions"
 import {
-  getTeamPlanBilling,
+  getPlanCatalog,
+  getTeamPlanAssignments,
   isUuid,
   listStaffCredits,
-  type TeamPlanBilling,
 } from "@/lib/admin/team-billing"
 import { configuredRegions } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
@@ -35,41 +32,21 @@ export default async function AdminBillingTeamPage({
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  const canWrite = canWriteAdminBilling(user)
 
-  const credits = listStaffCredits(region, teamId).catch(() => null)
-  let view: TeamPlanBilling
-  try {
-    view = await getTeamPlanBilling(region, teamId)
-  } catch (error) {
-    if (error instanceof AdminBillingRequestError) {
-      if (error.kind === "not_found") notFound()
-      return (
-        <EmptyState
-          icon={UsersIcon}
-          title={
-            error.kind === "forbidden"
-              ? "Billing access required"
-              : "Team billing is unavailable"
-          }
-          description={
-            error.kind === "forbidden"
-              ? "Your staff session cannot read platform billing. Sign in again with your staff Google account."
-              : "Billing details could not be loaded. Try again shortly."
-          }
-        />
-      )
-    }
-    throw error
-  }
+  const [plans, catalog, staffCredits] = await Promise.all([
+    getTeamPlanAssignments(region, teamId).catch(() => null),
+    getPlanCatalog(region).catch(() => null),
+    listStaffCredits(region, teamId).catch(() => null),
+  ])
 
   return (
     <TeamBillingView
-      view={view}
-      staffCredits={await credits}
+      plans={plans}
+      catalog={catalog}
+      staffCredits={staffCredits}
       region={region}
       teamId={teamId}
-      canWrite={canWrite}
+      canWrite={canWriteAdminBilling(user)}
     />
   )
 }

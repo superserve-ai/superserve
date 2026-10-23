@@ -90,118 +90,131 @@ export async function listBillingTeams(search: string): Promise<{
   }
 }
 
-const planTermsSchema = z.object({
-  offer_key: z.string(),
-  fee_cents: z.number(),
-  interval_months: z.number(),
-  monthly_credit_cents: z.number(),
+const limitSchema = z.number().nullable().optional()
+
+const planLimitsSchema = z.object({
+  max_concurrent: limitSchema,
+  max_vcpu: limitSchema,
+  max_memory_mib: limitSchema,
+  max_disk_mib: limitSchema,
+  max_templates: limitSchema,
 })
 
-const planChangeSchema = z.object({
+export type PlanLimits = z.infer<typeof planLimitsSchema>
+
+const teamPlanSchema = z.object({
   id: z.string(),
-  target_offer: z.string(),
-  terms: planTermsSchema.partial(),
-  effective_at: z.string(),
-  state: z.enum([
-    "scheduled",
-    "prepared",
-    "switched",
-    "completed",
-    "canceled",
-    "failed",
-  ]),
-  requested_by: z.string(),
-  requested_at: z.string(),
+  plan_key: z.string(),
+  kind: z.string(),
+  terms: z.object({ display_name: z.string().optional() }),
+  limits: planLimitsSchema,
+  effective_from: z.string(),
+  effective_to: z.string().nullable(),
+  source: z.string(),
   reason: z.string(),
-  deferrals: z.number(),
-  cancelable: z.boolean(),
-  canceled_at: z.string().nullable(),
-  cancel_reason: z.string().nullable(),
-  last_error: z.string().nullable(),
 })
 
-const contractSchema = z.object({
+const pendingPlanChangeSchema = z.object({
   id: z.string(),
-  offer_key: z.string(),
-  status: z.string(),
-  starts_at: z.string(),
-  ends_at: z.string().nullable(),
-  charge_kind: z.string(),
-  charge_amount_cents: z.number(),
-  charge_interval_months: z.number(),
-  entitlement_amount_cents: z.number(),
-  entitlement_cadence: z.string(),
+  target_plan_key: z.string(),
+  target_display_name: z.string(),
+  effective_at: z.string(),
+  undoable: z.boolean(),
+  pauses_running: z.boolean(),
 })
 
-export const teamPlanBillingSchema = z.object({
-  team_id: z.string(),
-  customer_id: z.string().nullable(),
-  subscription_id: z.string().nullable(),
-  subscription_status: z.string().nullable(),
-  billing_anchor: z.string().nullable(),
-  period_start: z.string().nullable(),
-  period_end: z.string().nullable(),
-  contract: contractSchema.nullable(),
-  pending_change: planChangeSchema.nullable(),
-  changes: z.array(planChangeSchema),
-  credits: z.array(
-    z.object({
-      period_start: z.string(),
-      period_end: z.string(),
-      amount_cents: z.number(),
-      state: z.string(),
-      grant_id: z.string().nullable(),
-      remaining_cents: z.number().nullable(),
-    }),
-  ),
-  card: z
-    .object({
-      brand: z.string(),
-      last4: z.string(),
-      exp_month: z.number(),
-      exp_year: z.number(),
-    })
-    .nullable(),
-  invoices: z.array(
-    z.object({
-      id: z.string(),
-      number: z.string(),
-      status: z.string(),
-      total_cents: z.number(),
-      amount_paid_cents: z.number(),
-      created: z.number(),
-      period_start: z.number(),
-      period_end: z.number(),
-      hosted_invoice_url: z.string(),
-    }),
-  ),
-  plan_options: z.array(
-    planTermsSchema.extend({ name: z.string(), available: z.boolean() }),
-  ),
-  provider_error: z.string().optional(),
+export const teamPlanAssignmentsSchema = z.object({
+  current: teamPlanSchema.nullable(),
+  history: z.array(teamPlanSchema),
+  pending_change: pendingPlanChangeSchema.nullable().optional(),
 })
 
-export type TeamPlanBilling = z.infer<typeof teamPlanBillingSchema>
-export type PlanChange = z.infer<typeof planChangeSchema>
+export type TeamPlan = z.infer<typeof teamPlanSchema>
+export type TeamPlanAssignments = z.infer<typeof teamPlanAssignmentsSchema>
+export type PendingPlanChange = z.infer<typeof pendingPlanChangeSchema>
 
-export function getTeamPlanBilling(region: string, teamId: string) {
+export function getTeamPlanAssignments(region: string, teamId: string) {
   return adminBillingRequest({
     region,
-    path: `/internal/teams/${teamId}/billing/plan`,
-    schema: teamPlanBillingSchema,
+    path: `/internal/teams/${teamId}/billing/plan-assignments`,
+    schema: teamPlanAssignmentsSchema,
   })
 }
 
-export interface SchedulePlanChangeInput {
+export const billingCatalogSchema = z.object({
+  pricing_version: z.string().optional(),
+  plans: z.array(
+    z.object({
+      id: z.string(),
+      family: z.string(),
+      version: z.number(),
+      state: z.string(),
+      kind: z.string().optional(),
+      display_name: z.string(),
+      limits: planLimitsSchema,
+    }),
+  ),
+})
+
+export type CatalogPlan = z.infer<typeof billingCatalogSchema>["plans"][number]
+
+export async function getPlanCatalog(region: string) {
+  const catalog = await adminBillingRequest({
+    region,
+    path: "/internal/billing/catalog",
+    schema: billingCatalogSchema,
+  })
+  return {
+    pricingV2: catalog.pricing_version === "v2",
+    plans: catalog.plans.filter((p) => p.state === "published"),
+  }
+}
+
+export interface AssignTeamPlanInput {
   idempotencyKey: string
-  targetOffer: string
+  versionId: string
   reason: string
 }
 
-export function schedulePlanChange(
+export function assignTeamPlan(
   region: string,
   teamId: string,
-  input: SchedulePlanChangeInput,
+  input: AssignTeamPlanInput,
+) {
+  return adminBillingRequest({
+    region,
+    method: "POST",
+    path: `/internal/teams/${teamId}/billing/plan-assignments`,
+    body: {
+      idempotency_key: input.idempotencyKey,
+      version_id: input.versionId,
+      reason: input.reason,
+    },
+    schema: teamPlanSchema,
+  })
+}
+
+export const PLAN_CHANGE_TARGETS = ["free", "starter", "pro_monthly"] as const
+
+export type PlanChangeTarget = (typeof PLAN_CHANGE_TARGETS)[number]
+
+const planChangeSchema = z.object({
+  id: z.string(),
+  target_plan_key: z.string(),
+  effective_at: z.string(),
+  pauses_running: z.boolean(),
+})
+
+export interface RequestPlanChangeInput {
+  idempotencyKey: string
+  targetPlan: PlanChangeTarget
+  reason: string
+}
+
+export function requestPlanChange(
+  region: string,
+  teamId: string,
+  input: RequestPlanChangeInput,
 ) {
   return adminBillingRequest({
     region,
@@ -209,14 +222,14 @@ export function schedulePlanChange(
     path: `/internal/teams/${teamId}/billing/plan-changes`,
     body: {
       idempotency_key: input.idempotencyKey,
-      target_offer: input.targetOffer,
+      target_plan: input.targetPlan,
       reason: input.reason,
     },
     schema: planChangeSchema,
   })
 }
 
-export function cancelPlanChange(
+export function undoPlanChange(
   region: string,
   teamId: string,
   changeId: string,
@@ -225,7 +238,7 @@ export function cancelPlanChange(
   return adminBillingRequest({
     region,
     method: "POST",
-    path: `/internal/teams/${teamId}/billing/plan-changes/${changeId}/cancel`,
+    path: `/internal/teams/${teamId}/billing/plan-changes/${changeId}/undo`,
     body: { reason },
     schema: planChangeSchema,
   })
@@ -276,34 +289,5 @@ export function grantStaffCredit(
       reason: input.reason,
     },
     schema: staffCreditSchema,
-  })
-}
-
-const planChangePreviewSchema = z.union([
-  z.object({
-    target_offer: z.string(),
-    terms: planTermsSchema,
-    blocked: z.string(),
-  }),
-  z.object({
-    target_offer: z.string(),
-    terms: planTermsSchema,
-    effective_at: z.string().datetime({ offset: true }),
-    timing: z.string(),
-  }),
-])
-
-export type PlanChangePreview = z.infer<typeof planChangePreviewSchema>
-
-export function previewPlanChange(
-  region: string,
-  teamId: string,
-  targetOffer: string,
-) {
-  return adminBillingRequest({
-    region,
-    path: `/internal/teams/${teamId}/billing/plan-change-preview`,
-    query: new URLSearchParams({ target_offer: targetOffer }),
-    schema: planChangePreviewSchema,
   })
 }

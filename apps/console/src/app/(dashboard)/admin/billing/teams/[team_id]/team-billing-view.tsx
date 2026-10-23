@@ -1,5 +1,4 @@
 import {
-  Alert,
   Badge,
   Table,
   TableBody,
@@ -11,32 +10,43 @@ import {
 import Link from "next/link"
 
 import type {
-  PlanChange,
+  CatalogPlan,
   StaffCredit,
-  TeamPlanBilling,
+  TeamPlan,
+  TeamPlanAssignments,
 } from "@/lib/admin/team-billing"
 import { regionLabel } from "@/lib/format"
 
-import { formatCents, formatDay, formatPlanFee, planLabel } from "../format"
+import { describeLimits, formatCents, formatDay } from "../format"
 import {
-  CancelPlanChangeForm,
-  SchedulePlanChangeForm,
+  AssignPlanForm,
+  type PlanChangeOption,
+  PlanChangeForm,
+  UndoPlanChangeForm,
 } from "./plan-change-forms"
 import { ResumeStaffCreditButton, StaffCreditForm } from "./staff-credit-forms"
 
-const CHANGE_STATE: Record<
-  PlanChange["state"],
-  {
-    label: string
-    variant: "default" | "active" | "warning" | "destructive" | "muted"
-  }
-> = {
-  scheduled: { label: "Scheduled", variant: "default" },
-  prepared: { label: "Applying", variant: "warning" },
-  switched: { label: "Awaiting payment", variant: "warning" },
-  completed: { label: "Completed", variant: "active" },
-  canceled: { label: "Canceled", variant: "muted" },
-  failed: { label: "Failed", variant: "destructive" },
+const CHANGE_TARGETS: PlanChangeOption[] = [
+  { target: "free", label: "Free" },
+  { target: "starter", label: "Starter" },
+  { target: "pro_monthly", label: "Pro" },
+]
+
+const KINDS: Record<string, string> = {
+  free: "Free",
+  prepaid: "Prepaid credit",
+  subscription: "Subscription",
+  legacy_payg: "Legacy pay as you go",
+  custom: "Custom",
+}
+
+const SOURCES: Record<string, string> = {
+  signup: "Signup",
+  migration: "Pricing v2 migration",
+  checkout: "Checkout",
+  credit_purchase: "Credit purchase",
+  plan_change: "Plan change",
+  staff: "Staff",
 }
 
 function Section({
@@ -67,47 +77,39 @@ function Facts({ items }: { items: [string, React.ReactNode][] }) {
   )
 }
 
-function changeSummary(change: PlanChange, view: TeamPlanBilling) {
-  return `${planLabel(change.target_offer, view.plan_options)} on ${formatDay(change.effective_at)}`
+function planName(plan: TeamPlan): string {
+  return plan.terms.display_name || plan.plan_key
+}
+
+export interface TeamCatalog {
+  pricingV2: boolean
+  plans: CatalogPlan[]
 }
 
 export function TeamBillingView({
-  view,
+  plans,
+  catalog,
   staffCredits,
   region,
   teamId,
   canWrite,
 }: {
-  view: TeamPlanBilling
+  plans: TeamPlanAssignments | null
+  catalog: TeamCatalog | null
   staffCredits: StaffCredit[] | null
   region: string
   teamId: string
   canWrite: boolean
 }) {
-  const contract = view.contract?.status === "ended" ? null : view.contract
-  const pending = view.pending_change
-  const issuedCredits = view.credits.filter((c) => c.state === "issued")
-  const issued = issuedCredits.reduce((sum, c) => sum + c.amount_cents, 0)
-  const unconfirmed = view.credits
-    .filter((c) => c.state !== "issued")
-    .reduce((sum, c) => sum + c.amount_cents, 0)
-  const remaining =
-    !view.provider_error &&
-    issuedCredits.every((c) => c.remaining_cents !== null)
-      ? issuedCredits.reduce((sum, c) => sum + (c.remaining_cents ?? 0), 0)
-      : null
-  const options = [
-    {
-      offerKey: "free",
-      label: "Pay as you go",
-      description: "No fee, usage at standard rates",
-    },
-    ...view.plan_options.map((o) => ({
-      offerKey: o.offer_key,
-      label: planLabel(o.offer_key, view.plan_options),
-      description: `${formatPlanFee(o.fee_cents, o.interval_months)}, ${formatCents(o.monthly_credit_cents)} credit / month${o.available ? "" : " (not offered at checkout)"}`,
-    })),
-  ].filter((o) => o.offerKey !== (contract?.offer_key ?? "free"))
+  const current = plans?.current ?? null
+  const pending = plans?.pending_change ?? null
+  const planWrites = canWrite && catalog?.pricingV2 === true
+  const freeLimits =
+    catalog?.plans.find((p) => p.kind === "free")?.limits ?? null
+  const customPlans = catalog?.plans.filter((p) => p.kind === "custom") ?? []
+  const changeOptions = CHANGE_TARGETS.filter(
+    (o) => o.target !== current?.plan_key,
+  )
 
   return (
     <div className="flex flex-col">
@@ -121,145 +123,86 @@ export function TeamBillingView({
         <span className="text-muted">/</span>
         <span className="font-mono text-xs">{teamId}</span>
         <Badge variant="muted">{regionLabel(region)}</Badge>
+        {catalog ? (
+          <Badge variant={catalog.pricingV2 ? "active" : "muted"}>
+            {catalog.pricingV2 ? "Pricing v2" : "Legacy pricing"}
+          </Badge>
+        ) : null}
       </div>
 
-      {view.provider_error ? (
-        <Alert variant="warning" className="mx-6 mt-4">
-          Stripe details (card, credit balance, invoices) are temporarily
-          unavailable.
-        </Alert>
-      ) : null}
-
-      <Section title="Current plan">
-        <Facts
-          items={[
-            [
-              "Plan",
-              contract
-                ? planLabel(contract.offer_key, view.plan_options)
-                : "Pay as you go",
-            ],
-            [
-              "Status",
-              contract ? (
-                <Badge
-                  key="status"
-                  variant={contract.status === "active" ? "active" : "warning"}
-                >
-                  {contract.status}
-                </Badge>
-              ) : (
-                "—"
-              ),
-            ],
-            [
-              "Fee",
-              contract
-                ? formatPlanFee(
-                    contract.charge_amount_cents,
-                    contract.charge_interval_months,
-                  )
-                : "No fee",
-            ],
-            [
-              contract?.entitlement_cadence === "scheduled"
-                ? "Credit schedule"
-                : "Monthly credit",
-              contract
-                ? contract.entitlement_cadence === "scheduled"
-                  ? "Varies by month"
-                  : formatCents(contract.entitlement_amount_cents)
-                : "—",
-            ],
-            ["Started", contract ? formatDay(contract.starts_at) : "—"],
-            ["Ends", contract?.ends_at ? formatDay(contract.ends_at) : "—"],
-            ["Billing anniversary", formatDay(view.billing_anchor)],
-            [
-              "Current period",
-              view.period_start
-                ? `${formatDay(view.period_start)} – ${formatDay(view.period_end)}`
-                : "—",
-            ],
-            ["Subscription", view.subscription_status ?? "None"],
-          ]}
-        />
-      </Section>
-
-      <Section title="Scheduled change">
-        {pending ? (
-          <div className="space-y-4">
-            <Facts
-              items={[
-                ["Change", changeSummary(pending, view)],
-                [
-                  "State",
-                  <Badge
-                    key="state"
-                    variant={CHANGE_STATE[pending.state].variant}
-                  >
-                    {CHANGE_STATE[pending.state].label}
-                  </Badge>,
-                ],
-                ["Reason", pending.reason],
-                ["Requested", formatDay(pending.requested_at)],
-                ...(pending.deferrals > 0
-                  ? ([
-                      [
-                        "Deferred",
-                        `${pending.deferrals} time(s) after missing its window`,
-                      ],
-                    ] as [string, React.ReactNode][])
-                  : []),
-                ...(pending.last_error
-                  ? ([["Last error", pending.last_error]] as [
-                      string,
-                      React.ReactNode,
-                    ][])
-                  : []),
-              ]}
-            />
-            {canWrite && pending.cancelable ? (
-              <CancelPlanChangeForm
-                region={region}
-                teamId={teamId}
-                changeId={pending.id}
-              />
-            ) : null}
-          </div>
+      <Section title="Plan">
+        {plans === null ? (
+          <p className="text-sm text-muted">
+            The team's plan is unavailable. Try again shortly.
+          </p>
+        ) : current === null ? (
+          <p className="text-sm text-muted">
+            No plan assigned. Teams are assigned plans once pricing v2 is on;
+            until then this team bills on its existing terms.
+          </p>
         ) : (
-          <div className="space-y-4">
-            <p className="text-sm text-muted">No plan change is scheduled.</p>
-            {canWrite && view.subscription_id ? (
-              <SchedulePlanChangeForm
-                region={region}
-                teamId={teamId}
-                options={options}
-              />
-            ) : null}
-            {canWrite && !view.subscription_id ? (
-              <p className="text-sm text-muted">
-                This team has no billing subscription yet. Paid plans start
-                through checkout.
-              </p>
-            ) : null}
-          </div>
+          <Facts
+            items={[
+              ["Plan", planName(current)],
+              ["Kind", KINDS[current.kind] ?? current.kind],
+              ["Since", formatDay(current.effective_from)],
+              ["Limits", describeLimits(current.limits)],
+              ["Assigned by", SOURCES[current.source] ?? current.source],
+              ["Reason", current.reason || "—"],
+            ]}
+          />
         )}
       </Section>
 
-      <Section title="Credits this period">
-        <Facts
-          items={[
-            ["Issued", formatCents(issued)],
-            ...(unconfirmed > 0
-              ? ([["Being issued", formatCents(unconfirmed)]] as [
-                  string,
-                  React.ReactNode,
-                ][])
-              : []),
-            ["Remaining", remaining === null ? "—" : formatCents(remaining)],
-          ]}
-        />
-      </Section>
+      {current ? (
+        <Section title="Pending change">
+          {pending ? (
+            <div className="space-y-4">
+              <Facts
+                items={[
+                  ["Moves to", pending.target_display_name],
+                  ["Takes effect", formatDay(pending.effective_at)],
+                  [
+                    "Running sandboxes",
+                    pending.pauses_running
+                      ? "Paused when it takes effect"
+                      : "Unchanged",
+                  ],
+                  [
+                    "Undo",
+                    pending.undoable ? "Still possible" : "No longer possible",
+                  ],
+                ]}
+              />
+              {planWrites && pending.undoable ? (
+                <UndoPlanChangeForm
+                  region={region}
+                  teamId={teamId}
+                  changeId={pending.id}
+                />
+              ) : null}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-muted">No plan change is pending.</p>
+              {planWrites ? (
+                <PlanChangeForm
+                  region={region}
+                  teamId={teamId}
+                  options={changeOptions}
+                  freeLimits={freeLimits}
+                />
+              ) : null}
+            </div>
+          )}
+        </Section>
+      ) : null}
+
+      {planWrites ? (
+        <Section title="Assign Enterprise or custom plan">
+          <AssignPlanForm region={region} teamId={teamId} plans={customPlans} />
+        </Section>
+      ) : null}
 
       <Section title="Staff credit">
         <div className="space-y-4">
@@ -320,100 +263,43 @@ export function TeamBillingView({
               </TableBody>
             </Table>
           )}
-          {canWrite && view.customer_id ? (
+          {canWrite ? (
             <StaffCreditForm region={region} teamId={teamId} />
           ) : null}
         </div>
       </Section>
 
-      <Section title="Card on file">
-        <p className="text-sm">
-          {view.card
-            ? `${view.card.brand.toUpperCase()} •••• ${view.card.last4}, expires ${String(view.card.exp_month).padStart(2, "0")}/${view.card.exp_year}`
-            : view.provider_error
-              ? "Unavailable"
-              : "No card on file"}
-        </p>
-      </Section>
-
-      <Section title="Recent invoices">
-        {view.invoices.length === 0 ? (
-          <p className="text-sm text-muted">No invoices yet.</p>
+      <Section title="Plan history">
+        {!plans || plans.history.length === 0 ? (
+          <p className="text-sm text-muted">No plan history yet.</p>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Invoice</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Period</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>Paid</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {view.invoices.map((invoice) => (
-                <TableRow key={invoice.id}>
-                  <TableCell className="font-mono text-xs">
-                    {invoice.hosted_invoice_url ? (
-                      <a
-                        href={invoice.hosted_invoice_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="hover:underline"
-                      >
-                        {invoice.number || invoice.id}
-                      </a>
-                    ) : (
-                      invoice.number || invoice.id
-                    )}
-                  </TableCell>
-                  <TableCell>{invoice.status}</TableCell>
-                  <TableCell className="text-muted">
-                    {formatDay(invoice.period_start)} –{" "}
-                    {formatDay(invoice.period_end)}
-                  </TableCell>
-                  <TableCell className="font-mono text-xs tabular-nums">
-                    {formatCents(invoice.total_cents)}
-                  </TableCell>
-                  <TableCell className="font-mono text-xs tabular-nums">
-                    {formatCents(invoice.amount_paid_cents)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </Section>
-
-      <Section title="Plan change history">
-        {view.changes.length === 0 ? (
-          <p className="text-sm text-muted">No plan changes yet.</p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Change</TableHead>
-                <TableHead>State</TableHead>
-                <TableHead>Requested</TableHead>
+                <TableHead>Plan</TableHead>
+                <TableHead>From</TableHead>
+                <TableHead>To</TableHead>
+                <TableHead>Source</TableHead>
                 <TableHead>Reason</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {view.changes.map((change) => (
-                <TableRow key={change.id}>
-                  <TableCell>{changeSummary(change, view)}</TableCell>
-                  <TableCell>
-                    <Badge variant={CHANGE_STATE[change.state].variant}>
-                      {CHANGE_STATE[change.state].label}
-                    </Badge>
+              {plans.history.map((plan) => (
+                <TableRow key={plan.id}>
+                  <TableCell>{planName(plan)}</TableCell>
+                  <TableCell className="text-muted">
+                    {formatDay(plan.effective_from)}
                   </TableCell>
                   <TableCell className="text-muted">
-                    {formatDay(change.requested_at)}
+                    {plan.effective_to
+                      ? formatDay(plan.effective_to)
+                      : "Current"}
                   </TableCell>
                   <TableCell className="text-muted">
-                    {change.state === "canceled" && change.cancel_reason
-                      ? `${change.reason} (canceled: ${change.cancel_reason})`
-                      : change.reason}
+                    {SOURCES[plan.source] ?? plan.source}
+                  </TableCell>
+                  <TableCell className="text-muted">
+                    {plan.reason || "—"}
                   </TableCell>
                 </TableRow>
               ))}

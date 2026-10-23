@@ -7,23 +7,26 @@ vi.mock("@/lib/admin/team-billing", async () => {
   const actual = await vi.importActual<object>("@/lib/admin/team-billing")
   return {
     ...actual,
-    schedulePlanChange: vi.fn(),
-    cancelPlanChange: vi.fn(),
+    requestPlanChange: vi.fn(),
+    undoPlanChange: vi.fn(),
+    assignTeamPlan: vi.fn(),
     grantStaffCredit: vi.fn(),
   }
 })
 
 import { AdminBillingRequestError } from "@/lib/admin/billing-api"
 import {
-  cancelPlanChange,
+  assignTeamPlan,
   grantStaffCredit,
-  schedulePlanChange,
+  requestPlanChange,
+  undoPlanChange,
 } from "@/lib/admin/team-billing"
 
 import {
-  cancelPlanChangeAction,
+  assignTeamPlanAction,
   grantStaffCreditAction,
-  schedulePlanChangeAction,
+  requestPlanChangeAction,
+  undoPlanChangeAction,
 } from "./actions"
 
 const team = "22222222-2222-4222-8222-222222222222"
@@ -31,13 +34,14 @@ const valid = {
   region: "use",
   teamId: team,
   idempotencyKey: "key-1",
-  targetOffer: "pro_monthly",
-  reason: "upgrade",
+  targetPlan: "free" as const,
+  reason: "downgrade",
 }
 
 beforeEach(() => {
-  vi.mocked(schedulePlanChange).mockReset()
-  vi.mocked(cancelPlanChange).mockReset()
+  vi.mocked(requestPlanChange).mockReset()
+  vi.mocked(undoPlanChange).mockReset()
+  vi.mocked(assignTeamPlan).mockReset()
 })
 
 it("rejects malformed targets before calling the backend", async () => {
@@ -46,44 +50,58 @@ it("rejects malformed targets before calling the backend", async () => {
     { ...valid, teamId: "../billing" },
     { ...valid, reason: "   " },
     { ...valid, idempotencyKey: "" },
+    { ...valid, targetPlan: "pro_annual" as never },
   ]) {
-    expect(await schedulePlanChangeAction(input)).toEqual({ kind: "invalid" })
+    expect(await requestPlanChangeAction(input)).toEqual({ kind: "invalid" })
   }
   expect(
-    await cancelPlanChangeAction({
+    await assignTeamPlanAction({
+      region: "use",
+      teamId: team,
+      idempotencyKey: "k",
+      versionId: "enterprise",
+      reason: "r",
+    }),
+  ).toEqual({ kind: "invalid" })
+  expect(
+    await undoPlanChangeAction({
       region: "use",
       teamId: team,
       changeId: "x",
       reason: "r",
     }),
   ).toEqual({ kind: "invalid" })
-  expect(schedulePlanChange).not.toHaveBeenCalled()
-  expect(cancelPlanChange).not.toHaveBeenCalled()
+  expect(requestPlanChange).not.toHaveBeenCalled()
+  expect(undoPlanChange).not.toHaveBeenCalled()
+  expect(assignTeamPlan).not.toHaveBeenCalled()
 })
 
 it("maps backend failures to their kind", async () => {
-  vi.mocked(schedulePlanChange).mockRejectedValue(
+  vi.mocked(requestPlanChange).mockRejectedValue(
     new AdminBillingRequestError("conflict"),
   )
-  expect(await schedulePlanChangeAction(valid)).toEqual({ kind: "conflict" })
-  vi.mocked(schedulePlanChange).mockRejectedValue(new Error("socket hang up"))
-  expect(await schedulePlanChangeAction(valid)).toEqual({ kind: "unavailable" })
-  vi.mocked(schedulePlanChange).mockResolvedValue({} as never)
-  expect(await schedulePlanChangeAction(valid)).toEqual({ kind: "saved" })
-  expect(schedulePlanChange).toHaveBeenLastCalledWith("use", team, {
+  expect(await requestPlanChangeAction(valid)).toEqual({ kind: "conflict" })
+  vi.mocked(requestPlanChange).mockRejectedValue(new Error("socket hang up"))
+  expect(await requestPlanChangeAction(valid)).toEqual({ kind: "unavailable" })
+  vi.mocked(requestPlanChange).mockResolvedValue({} as never)
+  expect(await requestPlanChangeAction(valid)).toEqual({ kind: "saved" })
+  expect(requestPlanChange).toHaveBeenLastCalledWith("use", team, {
     idempotencyKey: "key-1",
-    targetOffer: "pro_monthly",
-    reason: "upgrade",
+    targetPlan: "free",
+    reason: "downgrade",
   })
 })
 
 it("passes the backend's reason through with the failure kind", async () => {
-  vi.mocked(schedulePlanChange).mockRejectedValue(
-    new AdminBillingRequestError("conflict", "a checkout is in progress"),
+  vi.mocked(requestPlanChange).mockRejectedValue(
+    new AdminBillingRequestError(
+      "conflict",
+      "the team already has a pending plan change",
+    ),
   )
-  expect(await schedulePlanChangeAction(valid)).toEqual({
+  expect(await requestPlanChangeAction(valid)).toEqual({
     kind: "conflict",
-    detail: "a checkout is in progress",
+    detail: "the team already has a pending plan change",
   })
 })
 

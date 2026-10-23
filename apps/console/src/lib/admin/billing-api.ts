@@ -96,7 +96,8 @@ const WRITE_ROUTES: [WriteMethod, string][] = [
   ["POST", `${TEAM_BILLING}/matching/revoke`],
   ["POST", `${TEAM_BILLING}/matching/credits/${UUID}/acknowledge`],
   ["POST", `${TEAM_BILLING}/plan-changes`],
-  ["POST", `${TEAM_BILLING}/plan-changes/${UUID}/cancel`],
+  ["POST", `${TEAM_BILLING}/plan-changes/${UUID}/undo`],
+  ["POST", `${TEAM_BILLING}/plan-assignments`],
   ["POST", `${TEAM_BILLING}/credit-grants`],
 ]
 

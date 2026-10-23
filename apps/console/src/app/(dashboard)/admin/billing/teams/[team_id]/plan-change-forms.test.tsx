@@ -2,248 +2,156 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest"
 
 import {
-  cancelPlanChangeAction,
-  previewPlanChangeAction,
-  schedulePlanChangeAction,
+  assignTeamPlanAction,
+  requestPlanChangeAction,
+  undoPlanChangeAction,
 } from "./actions"
 import {
-  CancelPlanChangeForm,
-  SchedulePlanChangeForm,
+  AssignPlanForm,
+  PlanChangeForm,
+  UndoPlanChangeForm,
 } from "./plan-change-forms"
 
 vi.mock("./actions", () => ({
-  schedulePlanChangeAction: vi.fn(),
-  cancelPlanChangeAction: vi.fn(),
-  previewPlanChangeAction: vi.fn(),
+  requestPlanChangeAction: vi.fn(),
+  undoPlanChangeAction: vi.fn(),
+  assignTeamPlanAction: vi.fn(),
 }))
-
-const preview = {
-  kind: "preview" as const,
-  preview: {
-    target_offer: "pro_annual",
-    terms: {
-      offer_key: "pro_annual",
-      fee_cents: 1200000,
-      interval_months: 12,
-      monthly_credit_cents: 100000,
-    },
-    effective_at: "2027-03-14T09:00:00Z",
-    timing: "annual_fee_starts_on_yearly_anniversary",
-  },
-}
 
 const team = "22222222-2222-4222-8222-222222222222"
 const options = [
-  { offerKey: "free", label: "Pay as you go", description: "No fee" },
-  { offerKey: "pro_annual", label: "Pro annual", description: "$12,000.00" },
+  { target: "free" as const, label: "Free" },
+  { target: "starter" as const, label: "Starter" },
 ]
-
-beforeEach(() => {
-  vi.mocked(schedulePlanChangeAction).mockReset()
-  vi.mocked(cancelPlanChangeAction).mockReset()
-  vi.mocked(previewPlanChangeAction).mockReset()
-  vi.mocked(previewPlanChangeAction).mockResolvedValue(preview)
-})
-
-async function fill(reason = "Customer asked for annual billing") {
-  fireEvent.change(screen.getByLabelText(/New plan/), {
-    target: { value: "pro_annual" },
-  })
-  await screen.findByText("Takes effect March 14, 2027")
-  fireEvent.change(screen.getByLabelText(/Reason/), {
-    target: { value: reason },
-  })
+const freeLimits = {
+  max_concurrent: 1,
+  max_vcpu: 1,
+  max_memory_mib: 1024,
+  max_disk_mib: 4096,
+  max_templates: null,
+}
+const enterprise = {
+  id: "44444444-4444-4444-8444-444444444444",
+  family: "enterprise_example",
+  version: 2,
+  state: "published",
+  kind: "custom",
+  display_name: "Enterprise",
+  limits: { max_concurrent: 5000, max_vcpu: 16 },
 }
 
-it("retries a lost request with the same idempotency key", async () => {
-  vi.mocked(schedulePlanChangeAction)
+beforeEach(() => {
+  vi.mocked(requestPlanChangeAction).mockReset()
+  vi.mocked(undoPlanChangeAction).mockReset()
+  vi.mocked(assignTeamPlanAction).mockReset()
+})
+
+function renderChange() {
+  render(
+    <PlanChangeForm
+      region="use"
+      teamId={team}
+      options={options}
+      freeLimits={freeLimits}
+    />,
+  )
+}
+
+function choose(label: RegExp, value: string) {
+  fireEvent.change(screen.getByLabelText(label), { target: { value } })
+}
+
+it("retries a lost plan change with the same idempotency key", async () => {
+  vi.mocked(requestPlanChangeAction)
     .mockRejectedValueOnce(new Error("lost response"))
     .mockResolvedValueOnce({ kind: "unavailable" })
     .mockResolvedValueOnce({ kind: "saved" })
-  render(
-    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
-  )
-  await fill()
-  fireEvent.click(screen.getByRole("button", { name: "Schedule change" }))
+  renderChange()
+  choose(/Move to/, "starter")
+  choose(/Reason/, "Customer asked")
+  fireEvent.click(screen.getByRole("button", { name: "Request change" }))
   await screen.findByText(/Retry to send the same request/)
   fireEvent.click(screen.getByRole("button", { name: "Retry" }))
-  await waitFor(() => expect(schedulePlanChangeAction).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(requestPlanChangeAction).toHaveBeenCalledTimes(2))
   fireEvent.click(screen.getByRole("button", { name: "Retry" }))
-  await screen.findByText("Plan change scheduled.")
-  const keys = vi
-    .mocked(schedulePlanChangeAction)
-    .mock.calls.map(([input]) => input.idempotencyKey)
-  expect(new Set(keys).size).toBe(1)
-  expect(vi.mocked(schedulePlanChangeAction).mock.calls[0][0]).toMatchObject({
+  await screen.findByText("Plan change requested.")
+  const calls = vi.mocked(requestPlanChangeAction).mock.calls
+  expect(new Set(calls.map(([input]) => input.idempotencyKey)).size).toBe(1)
+  expect(calls[0][0]).toMatchObject({
     region: "use",
     teamId: team,
-    targetOffer: "pro_annual",
-    reason: "Customer asked for annual billing",
+    targetPlan: "starter",
+    reason: "Customer asked",
   })
 })
 
-it("uses a new idempotency key for the next change", async () => {
-  vi.mocked(schedulePlanChangeAction).mockResolvedValue({ kind: "saved" })
-  render(
-    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
-  )
-  await fill()
-  fireEvent.click(screen.getByRole("button", { name: "Schedule change" }))
-  await screen.findByText("Plan change scheduled.")
-  fireEvent.change(screen.getByLabelText(/New plan/), {
-    target: { value: "pro_annual" },
-  })
-  await screen.findByText("Takes effect March 14, 2027")
-  const first = vi.mocked(schedulePlanChangeAction).mock.calls[0][0]
-  fireEvent.change(screen.getByLabelText(/Reason/), {
-    target: { value: first.reason },
-  })
-  fireEvent.click(screen.getByRole("button", { name: "Schedule change" }))
-  await waitFor(() => expect(schedulePlanChangeAction).toHaveBeenCalledTimes(2))
-  const second = vi.mocked(schedulePlanChangeAction).mock.calls[1][0]
-  expect(second.idempotencyKey).not.toBe(first.idempotencyKey)
-})
-
-it("does not reuse an unconfirmed request's key for edited input", async () => {
-  vi.mocked(schedulePlanChangeAction)
-    .mockResolvedValueOnce({ kind: "unavailable" })
-    .mockResolvedValueOnce({ kind: "conflict" })
-  render(
-    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
-  )
-  await fill()
-  fireEvent.click(screen.getByRole("button", { name: "Schedule change" }))
+it("sends a new request once the input changes", async () => {
+  vi.mocked(requestPlanChangeAction).mockResolvedValue({ kind: "unavailable" })
+  renderChange()
+  choose(/Move to/, "starter")
+  choose(/Reason/, "Customer asked")
+  fireEvent.click(screen.getByRole("button", { name: "Request change" }))
   await screen.findByText(/Retry to send the same request/)
-  fireEvent.change(screen.getByLabelText(/Reason/), {
-    target: { value: "A different reason" },
-  })
-  fireEvent.click(screen.getByRole("button", { name: "Retry" }))
-  await waitFor(() => expect(schedulePlanChangeAction).toHaveBeenCalledTimes(2))
-  const [first, second] = vi
-    .mocked(schedulePlanChangeAction)
-    .mock.calls.map(([input]) => input)
-  expect(second.idempotencyKey).not.toBe(first.idempotencyKey)
+  choose(/Reason/, "Customer asked by email")
+  fireEvent.click(screen.getByRole("button", { name: "Request change" }))
+  await waitFor(() => expect(requestPlanChangeAction).toHaveBeenCalledTimes(2))
+  const keys = vi
+    .mocked(requestPlanChangeAction)
+    .mock.calls.map(([input]) => input.idempotencyKey)
+  expect(keys[0]).not.toBe(keys[1])
 })
 
-it("explains a conflicting billing state", async () => {
-  vi.mocked(schedulePlanChangeAction).mockResolvedValue({ kind: "conflict" })
-  render(
-    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
-  )
-  await fill()
-  fireEvent.click(screen.getByRole("button", { name: "Schedule change" }))
-  await screen.findByText(/does not allow this change/)
+it("warns that a move to Free pauses running compute", () => {
+  renderChange()
+  choose(/Move to/, "starter")
+  expect(screen.queryByText(/will be paused/)).toBeNull()
+  choose(/Move to/, "free")
+  expect(screen.getByText(/All running compute will be paused/)).toBeTruthy()
+  expect(
+    screen.getByText("1 running at once · 1 vCPU · 1 GiB RAM · 4 GiB disk"),
+  ).toBeTruthy()
 })
 
-it("requires a reason to cancel", async () => {
-  vi.mocked(cancelPlanChangeAction).mockResolvedValue({ kind: "saved" })
+it("undoes the pending change with a reason", async () => {
+  vi.mocked(undoPlanChangeAction).mockResolvedValue({ kind: "saved" })
   render(
-    <CancelPlanChangeForm
+    <UndoPlanChangeForm
       region="use"
       teamId={team}
       changeId="33333333-3333-4333-8333-333333333333"
     />,
   )
-  const button = screen.getByRole("button", { name: "Cancel scheduled change" })
-  expect(button).toBeDisabled()
-  fireEvent.change(screen.getByLabelText(/Cancellation reason/), {
-    target: { value: "Customer changed their mind" },
-  })
-  fireEvent.click(button)
-  await waitFor(() =>
-    expect(cancelPlanChangeAction).toHaveBeenCalledWith({
-      region: "use",
-      teamId: team,
-      changeId: "33333333-3333-4333-8333-333333333333",
-      reason: "Customer changed their mind",
-    }),
-  )
-})
-
-it("shows the effective date and why before scheduling", async () => {
-  render(
-    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
-  )
-  await fill()
-  expect(
-    screen.getByText(/annual fee starts only on a yearly anniversary/),
-  ).toBeInTheDocument()
-  expect(previewPlanChangeAction).toHaveBeenCalledWith({
+  choose(/Undo reason/, "Customer changed their mind")
+  fireEvent.click(screen.getByRole("button", { name: "Undo change" }))
+  await screen.findByText("Plan change undone.")
+  expect(undoPlanChangeAction).toHaveBeenCalledWith({
     region: "use",
     teamId: team,
-    targetOffer: "pro_annual",
+    changeId: "33333333-3333-4333-8333-333333333333",
+    reason: "Customer changed their mind",
   })
 })
 
-it("blocks scheduling when the preview refuses the change", async () => {
-  vi.mocked(previewPlanChangeAction).mockResolvedValue({
-    kind: "preview",
-    preview: {
-      target_offer: "pro_annual",
-      terms: preview.preview.terms,
-      blocked: "a sponsorship is active",
-    },
+it("assigns a custom plan version and shows the backend's refusal", async () => {
+  vi.mocked(assignTeamPlanAction).mockResolvedValue({
+    kind: "conflict",
+    detail: "this plan version is retired",
   })
-  render(
-    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
-  )
-  fireEvent.change(screen.getByLabelText(/New plan/), {
-    target: { value: "pro_annual" },
+  render(<AssignPlanForm region="use" teamId={team} plans={[enterprise]} />)
+  choose(/Plan/, enterprise.id)
+  choose(/Reason/, "Signed Enterprise agreement")
+  fireEvent.click(screen.getByRole("button", { name: "Assign plan" }))
+  await screen.findByText("Reason: this plan version is retired")
+  expect(vi.mocked(assignTeamPlanAction).mock.calls[0][0]).toMatchObject({
+    region: "use",
+    teamId: team,
+    versionId: enterprise.id,
+    reason: "Signed Enterprise agreement",
   })
-  await screen.findByText(/a sponsorship is active/)
-  fireEvent.change(screen.getByLabelText(/Reason/), {
-    target: { value: "upgrade" },
-  })
-  expect(screen.getByRole("button", { name: "Schedule change" })).toBeDisabled()
 })
 
-it("ignores a slow preview for a plan the user moved away from", async () => {
-  let resolveSlow: (value: typeof preview) => void = () => {}
-  vi.mocked(previewPlanChangeAction)
-    .mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveSlow = resolve
-        }),
-    )
-    .mockResolvedValueOnce({
-      kind: "preview",
-      preview: {
-        target_offer: "free",
-        terms: { ...preview.preview.terms, offer_key: "free", fee_cents: 0 },
-        blocked: "the team is already on this plan",
-      },
-    })
-  render(
-    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
-  )
-  fireEvent.change(screen.getByLabelText(/New plan/), {
-    target: { value: "pro_annual" },
-  })
-  fireEvent.change(screen.getByLabelText(/New plan/), {
-    target: { value: "free" },
-  })
-  await screen.findByText(/already on this plan/)
-  resolveSlow(preview)
-  await waitFor(() =>
-    expect(screen.queryByText(/Takes effect/)).not.toBeInTheDocument(),
-  )
-  fireEvent.change(screen.getByLabelText(/Reason/), {
-    target: { value: "downgrade" },
-  })
-  expect(screen.getByRole("button", { name: "Schedule change" })).toBeDisabled()
-})
-
-it("lets staff check the effective date again after a failed preview", async () => {
-  vi.mocked(previewPlanChangeAction).mockResolvedValueOnce({
-    kind: "unavailable",
-  })
-  render(
-    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
-  )
-  fireEvent.change(screen.getByLabelText(/New plan/), {
-    target: { value: "pro_annual" },
-  })
-  fireEvent.click(await screen.findByRole("button", { name: "Check again" }))
-  await screen.findByText("Takes effect March 14, 2027")
+it("explains when no custom plan can be assigned", () => {
+  render(<AssignPlanForm region="use" teamId={team} plans={[]} />)
+  expect(screen.getByText(/No custom plan is published/)).toBeTruthy()
+  expect(screen.queryByRole("button", { name: "Assign plan" })).toBeNull()
 })

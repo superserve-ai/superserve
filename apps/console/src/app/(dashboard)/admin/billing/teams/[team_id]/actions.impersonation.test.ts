@@ -11,9 +11,10 @@ import { getImpersonationTeamId } from "@/lib/admin/impersonation"
 import { createServerClient } from "@/lib/supabase/server"
 
 import {
-  cancelPlanChangeAction,
+  assignTeamPlanAction,
   grantStaffCreditAction,
-  schedulePlanChangeAction,
+  requestPlanChangeAction,
+  undoPlanChangeAction,
 } from "./actions"
 
 const team = "22222222-2222-4222-8222-222222222222"
@@ -53,16 +54,25 @@ afterEach(() => {
 it("refuses every billing write while impersonating a team", async () => {
   const refused = { kind: "read_only_impersonation" }
   expect(
-    await schedulePlanChangeAction({
+    await requestPlanChangeAction({
       region: "use",
       teamId: team,
       idempotencyKey: "key-1",
-      targetOffer: "pro_monthly",
-      reason: "upgrade",
+      targetPlan: "free",
+      reason: "downgrade",
     }),
   ).toEqual(refused)
   expect(
-    await cancelPlanChangeAction({
+    await assignTeamPlanAction({
+      region: "use",
+      teamId: team,
+      idempotencyKey: "key-2",
+      versionId: "44444444-4444-4444-8444-444444444444",
+      reason: "enterprise agreement",
+    }),
+  ).toEqual(refused)
+  expect(
+    await undoPlanChangeAction({
       region: "use",
       teamId: team,
       changeId: "33333333-3333-4333-8333-333333333333",

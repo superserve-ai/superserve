@@ -14,10 +14,13 @@ import {
 } from "@/lib/admin/billing-api"
 
 import {
-  cancelPlanChange,
+  assignTeamPlan,
+  billingCatalogSchema,
+  getPlanCatalog,
   listBillingTeams,
-  schedulePlanChange,
-  teamPlanBillingSchema,
+  requestPlanChange,
+  teamPlanAssignmentsSchema,
+  undoPlanChange,
 } from "./team-billing"
 
 const team = "22222222-2222-4222-8222-222222222222"
@@ -58,130 +61,146 @@ describe("listBillingTeams", () => {
   })
 })
 
-describe("plan change writes", () => {
-  it("posts the frozen request to the team's billing route", async () => {
+describe("plan writes", () => {
+  it("posts each request to an allowlisted operator route", async () => {
     vi.mocked(adminBillingRequest).mockResolvedValue({})
-    await schedulePlanChange("use", team, {
+    const change = "33333333-3333-4333-8333-333333333333"
+    const version = "44444444-4444-4444-8444-444444444444"
+    await requestPlanChange("use", team, {
       idempotencyKey: "key-1",
-      targetOffer: "pro_monthly",
-      reason: "upgrade",
+      targetPlan: "free",
+      reason: "customer asked",
     })
-    await cancelPlanChange(
-      "use",
-      team,
-      "33333333-3333-4333-8333-333333333333",
-      "mistake",
-    )
-    const [schedule, cancel] = vi
+    await undoPlanChange("use", team, change, "mistake")
+    await assignTeamPlan("use", team, {
+      idempotencyKey: "key-2",
+      versionId: version,
+      reason: "enterprise agreement",
+    })
+    const [request, undo, assign] = vi
       .mocked(adminBillingRequest)
-      .mock.calls.map(([request]) => request)
-    expect(isAdminBillingPath(schedule.path, "POST")).toBe(true)
-    expect(isAdminBillingPath(cancel.path, "POST")).toBe(true)
+      .mock.calls.map(([call]) => call)
+    for (const call of [request, undo, assign])
+      expect(isAdminBillingPath(call.path, "POST")).toBe(true)
     expect(
       isAdminBillingPath(
-        `/internal/teams/${team}/billing/credit-grants`,
+        `/internal/teams/${team}/billing/plan-changes/${change}/cancel`,
         "POST",
       ),
-    ).toBe(true)
+    ).toBe(false)
     expect(
       isAdminBillingPath(
         `/internal/teams/${team}/billing/sponsored-entitlements`,
         "POST",
       ),
     ).toBe(false)
-    expect(schedule).toMatchObject({
+    expect(request).toMatchObject({
       region: "use",
       method: "POST",
       path: `/internal/teams/${team}/billing/plan-changes`,
       body: {
         idempotency_key: "key-1",
-        target_offer: "pro_monthly",
-        reason: "upgrade",
+        target_plan: "free",
+        reason: "customer asked",
       },
     })
-    expect(cancel).toMatchObject({
+    expect(undo).toMatchObject({
       method: "POST",
-      path: `/internal/teams/${team}/billing/plan-changes/33333333-3333-4333-8333-333333333333/cancel`,
+      path: `/internal/teams/${team}/billing/plan-changes/${change}/undo`,
       body: { reason: "mistake" },
+    })
+    expect(assign).toMatchObject({
+      method: "POST",
+      path: `/internal/teams/${team}/billing/plan-assignments`,
+      body: {
+        idempotency_key: "key-2",
+        version_id: version,
+        reason: "enterprise agreement",
+      },
     })
   })
 })
 
-describe("teamPlanBillingSchema", () => {
-  it("accepts the backend team view", () => {
-    const parsed = teamPlanBillingSchema.safeParse({
-      team_id: team,
-      customer_id: "cus_example",
-      subscription_id: "sub_example",
-      subscription_status: "active",
-      billing_anchor: "2026-09-23T16:00:00Z",
-      period_start: "2026-10-23T16:00:00Z",
-      period_end: "2026-11-23T16:00:00Z",
-      contract: {
-        id: "c1",
-        team_id: team,
-        offer_key: "pro_monthly",
-        status: "active",
-        starts_at: "2026-10-23T16:00:00Z",
-        ends_at: null,
-        charge_kind: "subscription",
-        charge_amount_cents: 120000,
-        charge_interval_months: 1,
-        entitlement_amount_cents: 100000,
-        entitlement_cadence: "monthly",
-      },
-      pending_change: null,
-      changes: [
-        {
-          id: "p1",
-          target_offer: "pro_monthly",
-          terms: {
-            offer_key: "pro_monthly",
-            fee_cents: 120000,
-            interval_months: 1,
-            monthly_credit_cents: 100000,
-          },
-          effective_at: "2026-10-23T16:00:00Z",
-          state: "completed",
-          requested_by: "u1",
-          requested_at: "2026-10-20T16:00:00Z",
-          reason: "upgrade",
-          deferrals: 0,
-          cancelable: false,
-          canceled_at: null,
-          canceled_by: null,
-          cancel_reason: null,
-          from_contract_id: null,
-          to_contract_id: "c1",
-          prepared_at: null,
-          switched_at: null,
-          completed_at: null,
-          last_error: null,
+describe("getPlanCatalog", () => {
+  const plans = [
+    {
+      id: "a",
+      family: "free",
+      version: 1,
+      state: "published",
+      kind: "free",
+      display_name: "Free",
+      limits: {},
+    },
+    {
+      id: "b",
+      family: "acme",
+      version: 1,
+      state: "draft",
+      kind: "custom",
+      display_name: "Acme",
+      limits: {},
+    },
+  ]
+
+  it("keeps plan writes off unless the region reports pricing v2", async () => {
+    for (const [body, v2] of [
+      [{ plans }, false],
+      [{ plans, pricing_version: "legacy" }, false],
+      [{ plans, pricing_version: "v2" }, true],
+    ] as const) {
+      vi.mocked(adminBillingRequest).mockResolvedValue(
+        billingCatalogSchema.parse(body),
+      )
+      const catalog = await getPlanCatalog("use")
+      expect(catalog.pricingV2).toBe(v2)
+      expect(catalog.plans.map((p) => p.id)).toEqual(["a"])
+    }
+  })
+})
+
+describe("teamPlanAssignmentsSchema", () => {
+  const assignment = {
+    id: "55555555-5555-4555-8555-555555555555",
+    team_id: team,
+    plan_key: "pro_monthly",
+    kind: "subscription",
+    plan_version_id: null,
+    terms: { offer_key: "pro_monthly", display_name: "Pro", fee_cents: 25000 },
+    limits: {
+      max_concurrent: 1000,
+      max_vcpu: 8,
+      max_memory_mib: 32768,
+      max_disk_mib: 102400,
+      max_templates: null,
+    },
+    effective_from: "2026-11-05T14:20:00Z",
+    effective_to: null,
+    contract_id: null,
+    source: "checkout",
+    assigned_by: null,
+    reason: "",
+    idempotency_key: null,
+  }
+
+  it("accepts the backend's staff read with and without a pending change", () => {
+    expect(
+      teamPlanAssignmentsSchema.safeParse({ current: null, history: [] })
+        .success,
+    ).toBe(true)
+    expect(
+      teamPlanAssignmentsSchema.safeParse({
+        current: assignment,
+        history: [assignment],
+        pending_change: {
+          id: "66666666-6666-4666-8666-666666666666",
+          target_plan_key: "free",
+          target_display_name: "Free",
+          effective_at: "2026-12-05T14:20:00Z",
+          undoable: true,
+          pauses_running: true,
         },
-      ],
-      credits: [
-        {
-          period_start: "2026-10-23T16:00:00Z",
-          period_end: "2026-11-23T16:00:00Z",
-          amount_cents: 100000,
-          state: "issued",
-          grant_id: "credgr_example",
-          remaining_cents: 25000,
-        },
-      ],
-      card: { brand: "visa", last4: "4242", exp_month: 12, exp_year: 2030 },
-      invoices: [],
-      plan_options: [
-        {
-          offer_key: "pro_monthly",
-          fee_cents: 120000,
-          interval_months: 1,
-          monthly_credit_cents: 100000,
-          name: "Pro",
-          available: true,
-        },
-      ],
-    })
-    expect(parsed.success).toBe(true)
+      }).success,
+    ).toBe(true)
   })
 })

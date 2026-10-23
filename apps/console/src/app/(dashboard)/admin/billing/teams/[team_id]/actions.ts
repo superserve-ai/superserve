@@ -7,12 +7,13 @@ import {
   type AdminBillingErrorKind,
 } from "@/lib/admin/billing-api"
 import {
-  cancelPlanChange,
+  assignTeamPlan,
   grantStaffCredit,
   isUuid,
-  previewPlanChange,
-  schedulePlanChange,
-  type PlanChangePreview,
+  PLAN_CHANGE_TARGETS,
+  type PlanChangeTarget,
+  requestPlanChange,
+  undoPlanChange,
 } from "@/lib/admin/team-billing"
 import { configuredRegions } from "@/lib/cells"
 
@@ -48,39 +49,49 @@ async function run(
   return { kind: "saved" }
 }
 
-export async function schedulePlanChangeAction(input: {
+function validWrite(input: {
   region: string
   teamId: string
   idempotencyKey: string
-  targetOffer: string
   reason: string
-}): Promise<PlanChangeActionResult> {
+}): string | null {
   if (
     typeof input.reason !== "string" ||
-    typeof input.idempotencyKey !== "string" ||
-    typeof input.targetOffer !== "string"
+    typeof input.idempotencyKey !== "string"
   )
-    return { kind: "invalid" }
+    return null
   const reason = input.reason.trim()
   if (
     !validTarget(input.region, input.teamId) ||
     !input.idempotencyKey ||
     input.idempotencyKey.length > 200 ||
-    !input.targetOffer ||
     !reason ||
     reason.length > 2000
   )
+    return null
+  return reason
+}
+
+export async function requestPlanChangeAction(input: {
+  region: string
+  teamId: string
+  idempotencyKey: string
+  targetPlan: PlanChangeTarget
+  reason: string
+}): Promise<PlanChangeActionResult> {
+  const reason = validWrite(input)
+  if (reason === null || !PLAN_CHANGE_TARGETS.includes(input.targetPlan))
     return { kind: "invalid" }
   return run(input.teamId, () =>
-    schedulePlanChange(input.region, input.teamId, {
+    requestPlanChange(input.region, input.teamId, {
       idempotencyKey: input.idempotencyKey,
-      targetOffer: input.targetOffer,
+      targetPlan: input.targetPlan,
       reason,
     }),
   )
 }
 
-export async function cancelPlanChangeAction(input: {
+export async function undoPlanChangeAction(input: {
   region: string
   teamId: string
   changeId: string
@@ -97,7 +108,30 @@ export async function cancelPlanChangeAction(input: {
   )
     return { kind: "invalid" }
   return run(input.teamId, () =>
-    cancelPlanChange(input.region, input.teamId, input.changeId, reason),
+    undoPlanChange(input.region, input.teamId, input.changeId, reason),
+  )
+}
+
+export async function assignTeamPlanAction(input: {
+  region: string
+  teamId: string
+  idempotencyKey: string
+  versionId: string
+  reason: string
+}): Promise<PlanChangeActionResult> {
+  const reason = validWrite(input)
+  if (
+    reason === null ||
+    typeof input.versionId !== "string" ||
+    !isUuid(input.versionId)
+  )
+    return { kind: "invalid" }
+  return run(input.teamId, () =>
+    assignTeamPlan(input.region, input.teamId, {
+      idempotencyKey: input.idempotencyKey,
+      versionId: input.versionId,
+      reason,
+    }),
   )
 }
 
@@ -108,22 +142,13 @@ export async function grantStaffCreditAction(input: {
   amountCents: number
   reason: string
 }): Promise<PlanChangeActionResult> {
+  const reason = validWrite(input)
   if (
-    typeof input.reason !== "string" ||
-    typeof input.idempotencyKey !== "string" ||
-    typeof input.amountCents !== "number"
-  )
-    return { kind: "invalid" }
-  const reason = input.reason.trim()
-  if (
-    !validTarget(input.region, input.teamId) ||
-    !input.idempotencyKey ||
-    input.idempotencyKey.length > 200 ||
+    reason === null ||
+    typeof input.amountCents !== "number" ||
     !Number.isSafeInteger(input.amountCents) ||
     input.amountCents < 1 ||
-    input.amountCents > 100_000_000 ||
-    !reason ||
-    reason.length > 2000
+    input.amountCents > 100_000_000
   )
     return { kind: "invalid" }
   return run(input.teamId, () =>
@@ -133,34 +158,4 @@ export async function grantStaffCreditAction(input: {
       reason,
     }),
   )
-}
-
-export type PlanChangePreviewResult =
-  | { kind: "preview"; preview: PlanChangePreview }
-  | ActionFailure
-
-export async function previewPlanChangeAction(input: {
-  region: string
-  teamId: string
-  targetOffer: string
-}): Promise<PlanChangePreviewResult> {
-  if (
-    typeof input.targetOffer !== "string" ||
-    !input.targetOffer ||
-    input.targetOffer.length > 100 ||
-    !validTarget(input.region, input.teamId)
-  )
-    return { kind: "invalid" }
-  try {
-    return {
-      kind: "preview",
-      preview: await previewPlanChange(
-        input.region,
-        input.teamId,
-        input.targetOffer,
-      ),
-    }
-  } catch (error) {
-    return failure(error)
-  }
 }

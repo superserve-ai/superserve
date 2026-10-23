@@ -1,3 +1,5 @@
+import type { PlanLimits } from "@/lib/admin/team-billing"
+
 const usd = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -9,17 +11,6 @@ export function formatUsd(amount: number): string {
 
 export function formatCents(cents: number): string {
   return usd.format(cents / 100)
-}
-
-export function formatInterval(months: number): string {
-  if (months === 1) return "month"
-  if (months === 12) return "year"
-  return `${months} months`
-}
-
-export function formatPlanFee(feeCents: number, months: number): string {
-  if (feeCents <= 0) return "No fee"
-  return `${formatCents(feeCents)} / ${formatInterval(months)}`
 }
 
 export function formatDay(value: string | number | null): string {
@@ -34,12 +25,19 @@ export function formatDay(value: string | number | null): string {
   })
 }
 
-export function planLabel(
-  offerKey: string,
-  options: { offer_key: string; name: string; interval_months: number }[],
-): string {
-  if (offerKey === "free") return "Pay as you go"
-  const option = options.find((o) => o.offer_key === offerKey)
-  if (!option) return offerKey
-  return `${option.name} ${option.interval_months === 12 ? "annual" : "monthly"}`
+function gib(mib: number): string {
+  return `${Number((mib / 1024).toFixed(1))} GiB`
+}
+
+export function describeLimits(limits: PlanLimits): string {
+  const parts = [
+    limits.max_concurrent == null
+      ? null
+      : `${limits.max_concurrent} running at once`,
+    limits.max_vcpu == null ? null : `${limits.max_vcpu} vCPU`,
+    limits.max_memory_mib == null ? null : `${gib(limits.max_memory_mib)} RAM`,
+    limits.max_disk_mib == null ? null : `${gib(limits.max_disk_mib)} disk`,
+    limits.max_templates == null ? null : `${limits.max_templates} templates`,
+  ].filter((part) => part !== null)
+  return parts.length ? parts.join(" · ") : "Default limits"
 }

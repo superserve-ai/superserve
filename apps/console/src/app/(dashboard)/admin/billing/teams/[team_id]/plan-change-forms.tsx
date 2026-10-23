@@ -4,179 +4,135 @@ import { Alert, Button, Field, Textarea } from "@superserve/ui"
 import * as React from "react"
 
 import type {
-  ActionFailure,
-  PlanChangeActionResult,
-  PlanChangePreviewResult,
-} from "./actions"
+  CatalogPlan,
+  PlanChangeTarget,
+  PlanLimits,
+} from "@/lib/admin/team-billing"
+
+import { describeLimits } from "../format"
+import type { ActionFailure, PlanChangeActionResult } from "./actions"
 import {
-  cancelPlanChangeAction,
-  previewPlanChangeAction,
-  schedulePlanChangeAction,
+  assignTeamPlanAction,
+  requestPlanChangeAction,
+  undoPlanChangeAction,
 } from "./actions"
 import { FailureNotice } from "./failure-notice"
-
-const TIMING = new Map([
-  [
-    "next_anniversary",
-    "Plan changes apply at the team's next billing anniversary.",
-  ],
-  ["end_of_paid_year", "The team's current paid year ends then."],
-  [
-    "annual_fee_starts_on_yearly_anniversary",
-    "An annual fee starts only on a yearly anniversary of the team's billing.",
-  ],
-])
-
-export function formatEffectiveDate(value: string): string {
-  return new Date(value).toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  })
-}
-
-function PlanChangePreviewNotice({
-  result,
-  onRetry,
-}: {
-  result: PlanChangePreviewResult | "loading" | null
-  onRetry: () => void
-}) {
-  if (result === null) return null
-  if (result === "loading")
-    return <p className="text-sm text-muted">Checking when this would apply…</p>
-  if (result.kind !== "preview")
-    return (
-      <Alert variant="warning">
-        <FailureNotice
-          message="The effective date could not be checked."
-          detail={result.detail}
-        />
-        {result.kind === "unavailable" ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="mt-2"
-            onClick={onRetry}
-          >
-            Check again
-          </Button>
-        ) : null}
-      </Alert>
-    )
-  if ("blocked" in result.preview)
-    return (
-      <Alert variant="destructive">
-        This team cannot move to this plan: {result.preview.blocked}
-      </Alert>
-    )
-  return (
-    <Alert variant="default">
-      <span className="block text-base font-medium text-foreground">
-        Takes effect {formatEffectiveDate(result.preview.effective_at)}
-      </span>
-      <span className="text-sm text-muted">
-        {TIMING.get(result.preview.timing) ??
-          "Plan changes apply at a billing anniversary."}
-      </span>
-    </Alert>
-  )
-}
 
 const FAILURES: Record<ActionFailure["kind"], string> = {
   forbidden: "You do not have permission to change billing.",
   not_found: "The team or plan change no longer exists.",
   conflict:
-    "The team's billing state does not allow this change. Reload to see the current state.",
+    "The team's plan does not allow this change. Reload to see the current state.",
   invalid: "Check the plan and reason and try again.",
   unavailable: "Billing is unavailable. Retry to send the same request.",
   read_only_impersonation:
     "Billing changes are disabled while viewing another team. Stop viewing it first.",
 }
 
-export interface PlanOption {
-  offerKey: string
-  label: string
-  description: string
+const selectClass =
+  "flex h-9 w-full border border-input bg-background px-3 text-sm text-foreground focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none"
+
+function Outcome({
+  result,
+  saved,
+}: {
+  result: PlanChangeActionResult | null
+  saved: string
+}) {
+  if (result === null) return null
+  if (result.kind === "saved") return <Alert variant="success">{saved}</Alert>
+  return (
+    <Alert variant="destructive">
+      <FailureNotice message={FAILURES[result.kind]} detail={result.detail} />
+    </Alert>
+  )
 }
 
-export function SchedulePlanChangeForm({
-  region,
-  teamId,
-  options,
-}: {
-  region: string
-  teamId: string
-  options: PlanOption[]
-}) {
-  const [target, setTarget] = React.useState("")
-  const [reason, setReason] = React.useState("")
+function useWrite() {
   const [key, setKey] = React.useState(() => crypto.randomUUID())
   const [pending, setPending] = React.useState(false)
   const [result, setResult] = React.useState<PlanChangeActionResult | null>(
     null,
   )
-  const [preview, setPreview] = React.useState<
-    PlanChangePreviewResult | "loading" | null
-  >(null)
-  const latest = React.useRef(0)
-
-  async function choose(offer: string) {
-    setTarget(offer)
-    setKey(crypto.randomUUID())
-    const request = ++latest.current
-    setPreview("loading")
-    const next: PlanChangePreviewResult = await previewPlanChangeAction({
-      region,
-      teamId,
-      targetOffer: offer,
-    }).catch(() => ({ kind: "unavailable" as const }))
-    if (latest.current === request) setPreview(next)
+  async function send(
+    action: (key: string) => Promise<PlanChangeActionResult>,
+  ) {
+    setPending(true)
+    const outcome = await action(key).catch(() => ({
+      kind: "unavailable" as const,
+    }))
+    setPending(false)
+    setResult(outcome)
+    if (outcome.kind === "saved") setKey(crypto.randomUUID())
+    return outcome
   }
+  return {
+    pending,
+    result,
+    send,
+    reset: () => {
+      setKey(crypto.randomUUID())
+      setResult(null)
+    },
+  }
+}
 
-  const ready =
-    preview !== null &&
-    preview !== "loading" &&
-    preview.kind === "preview" &&
-    !("blocked" in preview.preview)
+export interface PlanChangeOption {
+  target: PlanChangeTarget
+  label: string
+}
+
+export function PlanChangeForm({
+  region,
+  teamId,
+  options,
+  freeLimits,
+}: {
+  region: string
+  teamId: string
+  options: PlanChangeOption[]
+  freeLimits: PlanLimits | null
+}) {
+  const [target, setTarget] = React.useState<PlanChangeTarget | "">("")
+  const [reason, setReason] = React.useState("")
+  const write = useWrite()
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
-    setPending(true)
-    const outcome: PlanChangeActionResult = await schedulePlanChangeAction({
-      region,
-      teamId,
-      idempotencyKey: key,
-      targetOffer: target,
-      reason,
-    }).catch(() => ({ kind: "unavailable" as const }))
-    setPending(false)
-    setResult(outcome)
+    if (!target) return
+    const outcome = await write.send((idempotencyKey) =>
+      requestPlanChangeAction({
+        region,
+        teamId,
+        idempotencyKey,
+        targetPlan: target,
+        reason,
+      }),
+    )
     if (outcome.kind === "saved") {
-      setKey(crypto.randomUUID())
-      setReason("")
       setTarget("")
-      setPreview(null)
+      setReason("")
     }
   }
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      <Field label="New plan" htmlFor="plan-change-target" required>
+      <Field label="Move to" htmlFor="plan-change-target" required>
         <select
           id="plan-change-target"
           value={target}
-          onChange={(e) => void choose(e.target.value)}
-          className="flex h-9 w-full border border-input bg-background px-3 text-sm text-foreground focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none"
+          onChange={(e) => {
+            setTarget(e.target.value as PlanChangeTarget)
+            write.reset()
+          }}
+          className={selectClass}
         >
           <option value="" disabled>
             Choose a plan
           </option>
           {options.map((o) => (
-            <option key={o.offerKey} value={o.offerKey}>
-              {o.label} — {o.description}
+            <option key={o.target} value={o.target}>
+              {o.label}
             </option>
           ))}
         </select>
@@ -188,42 +144,40 @@ export function SchedulePlanChangeForm({
           maxLength={2000}
           onChange={(e) => {
             setReason(e.target.value)
-            setKey(crypto.randomUUID())
+            write.reset()
           }}
           placeholder="Why this team is changing plans"
         />
       </Field>
-      <PlanChangePreviewNotice
-        result={preview}
-        onRetry={() => void choose(target)}
-      />
-      <p className="text-xs text-muted">
-        Plan changes apply only at a billing anniversary. Nothing is refunded or
-        prorated.
-      </p>
-      {result && result.kind !== "saved" ? (
-        <Alert variant="destructive">
-          <FailureNotice
-            message={FAILURES[result.kind]}
-            detail={result.detail}
-          />
+      {target === "free" ? (
+        <Alert variant="warning">
+          <span className="block font-medium">
+            All running compute will be paused, and these will be the team's new
+            limits:
+          </span>
+          <span className="block">
+            {freeLimits ? describeLimits(freeLimits) : "Free plan limits"}
+          </span>
         </Alert>
       ) : null}
-      {result?.kind === "saved" ? (
-        <Alert variant="success">Plan change scheduled.</Alert>
-      ) : null}
+      <p className="text-xs text-muted">
+        Downgrades from a paid plan take effect at the end of the billing period
+        and can be undone until shortly before. Upgrades happen through checkout
+        or a credit purchase.
+      </p>
+      <Outcome result={write.result} saved="Plan change requested." />
       <Button
         type="submit"
         size="sm"
-        disabled={pending || !target || !ready || !reason.trim()}
+        disabled={write.pending || !target || !reason.trim()}
       >
-        {result?.kind === "unavailable" ? "Retry" : "Schedule change"}
+        {write.result?.kind === "unavailable" ? "Retry" : "Request change"}
       </Button>
     </form>
   )
 }
 
-export function CancelPlanChangeForm({
+export function UndoPlanChangeForm({
   region,
   teamId,
   changeId,
@@ -233,47 +187,121 @@ export function CancelPlanChangeForm({
   changeId: string
 }) {
   const [reason, setReason] = React.useState("")
-  const [pending, setPending] = React.useState(false)
-  const [result, setResult] = React.useState<PlanChangeActionResult | null>(
-    null,
-  )
+  const write = useWrite()
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
-    setPending(true)
-    setResult(
-      await cancelPlanChangeAction({ region, teamId, changeId, reason }).catch(
-        () => ({ kind: "unavailable" as const }),
-      ),
+    await write.send(() =>
+      undoPlanChangeAction({ region, teamId, changeId, reason }),
     )
-    setPending(false)
   }
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      <Field label="Cancellation reason" htmlFor="plan-change-cancel" required>
+      <Field label="Undo reason" htmlFor="plan-change-undo" required>
         <Textarea
-          id="plan-change-cancel"
+          id="plan-change-undo"
           value={reason}
           maxLength={2000}
           onChange={(e) => setReason(e.target.value)}
         />
       </Field>
-      {result && result.kind !== "saved" ? (
-        <Alert variant="destructive">
-          <FailureNotice
-            message={FAILURES[result.kind]}
-            detail={result.detail}
-          />
-        </Alert>
-      ) : null}
+      <Outcome result={write.result} saved="Plan change undone." />
       <Button
         type="submit"
         size="sm"
         variant="outline"
-        disabled={pending || !reason.trim() || result?.kind === "saved"}
+        disabled={
+          write.pending || !reason.trim() || write.result?.kind === "saved"
+        }
       >
-        Cancel scheduled change
+        Undo change
+      </Button>
+    </form>
+  )
+}
+
+export function AssignPlanForm({
+  region,
+  teamId,
+  plans,
+}: {
+  region: string
+  teamId: string
+  plans: CatalogPlan[]
+}) {
+  const [versionId, setVersionId] = React.useState("")
+  const [reason, setReason] = React.useState("")
+  const write = useWrite()
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault()
+    const outcome = await write.send((idempotencyKey) =>
+      assignTeamPlanAction({
+        region,
+        teamId,
+        idempotencyKey,
+        versionId,
+        reason,
+      }),
+    )
+    if (outcome.kind === "saved") {
+      setVersionId("")
+      setReason("")
+    }
+  }
+
+  if (plans.length === 0)
+    return (
+      <p className="text-sm text-muted">
+        No custom plan is published. Create one in the plan catalog first.
+      </p>
+    )
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <Field label="Plan" htmlFor="plan-assign-version" required>
+        <select
+          id="plan-assign-version"
+          value={versionId}
+          onChange={(e) => {
+            setVersionId(e.target.value)
+            write.reset()
+          }}
+          className={selectClass}
+        >
+          <option value="" disabled>
+            Choose a custom plan
+          </option>
+          {plans.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.display_name} v{p.version} — {describeLimits(p.limits)}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Reason" htmlFor="plan-assign-reason" required>
+        <Textarea
+          id="plan-assign-reason"
+          value={reason}
+          maxLength={2000}
+          onChange={(e) => {
+            setReason(e.target.value)
+            write.reset()
+          }}
+          placeholder="For example, the signed Enterprise agreement"
+        />
+      </Field>
+      <p className="text-xs text-muted">
+        Applies immediately and replaces the team's current plan and limits.
+      </p>
+      <Outcome result={write.result} saved="Plan assigned." />
+      <Button
+        type="submit"
+        size="sm"
+        disabled={write.pending || !versionId || !reason.trim()}
+      >
+        {write.result?.kind === "unavailable" ? "Retry" : "Assign plan"}
       </Button>
     </form>
   )
