@@ -5,8 +5,6 @@ import Link from "next/link"
 import Script from "next/script"
 import { useEffect, useRef, useState } from "react"
 
-import { CornerBrackets } from "@/components/corner-brackets"
-import { DitherBackground } from "@/components/dither-background"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 // superserve.ai/meet points here.
@@ -28,6 +26,7 @@ declare global {
 
 export function calendlyBookingUrl(name?: string, email?: string): string {
   const url = new URL(CALENDLY_URL)
+  url.searchParams.set("hide_gdpr_banner", "1")
   if (name) url.searchParams.set("name", name)
   if (email) url.searchParams.set("email", email)
   return url.toString()
@@ -72,7 +71,7 @@ function CalendlyEmbed({ url }: { url: string }) {
         onError={() => setStatus("failed")}
       />
       {status === "failed" ? (
-        <p className="mt-6 text-center text-xs text-muted">
+        <p className="mt-10 text-sm text-muted">
           <a
             href={url}
             target="_blank"
@@ -86,7 +85,8 @@ function CalendlyEmbed({ url }: { url: string }) {
         <div
           ref={container}
           aria-label="Book a meeting with the Superserve team"
-          className="mt-6 h-[660px] min-w-[320px] border border-dashed border-border"
+          // Calendly switches to its two-column layout at about 1000px wide.
+          className="mt-10 h-[720px] w-full min-w-[320px] border border-dashed border-border"
         />
       )}
     </>
@@ -111,39 +111,37 @@ export function PendingReview({
   }, [signOut])
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-6">
-      <DitherBackground />
-      <div className="relative w-full max-w-2xl border border-dashed border-border bg-surface p-6">
-        <CornerBrackets size="lg" />
-        <div className="mb-8 flex justify-center">
-          <Link href="/">
-            <Image
-              src="/logo.svg"
-              alt="Superserve"
-              width={120}
-              height={24}
-              className="h-6 w-auto"
-            />
-          </Link>
+    <main className="min-h-dvh bg-background text-foreground">
+      <div className="mx-auto w-full max-w-[1120px] px-5 py-8 sm:px-10">
+        <Link href="/" className="inline-block">
+          <Image
+            src="/logo.svg"
+            alt="Superserve"
+            width={120}
+            height={24}
+            className="h-6 w-auto"
+          />
+        </Link>
+        <div className="mt-14">
+          <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
+            Pending review
+          </h1>
+          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted">
+            Thanks for signing up. We&apos;ll review your request and email
+            {email ? (
+              <>
+                {" "}
+                <strong className="text-foreground">{email}</strong>
+              </>
+            ) : (
+              " you"
+            )}{" "}
+            when it&apos;s approved. Want to get started sooner? Book a time
+            with our team below.
+          </p>
         </div>
-        <h1 className="text-center text-sm font-medium text-foreground">
-          Pending review
-        </h1>
-        <p className="mx-auto mt-2 max-w-md text-center text-xs leading-relaxed text-muted">
-          Thanks for signing up. We&apos;ll review your request and email
-          {email ? (
-            <>
-              {" "}
-              <strong className="text-foreground">{email}</strong>
-            </>
-          ) : (
-            " you"
-          )}{" "}
-          when it&apos;s approved. Want to get started sooner? Book a time with
-          our team below.
-        </p>
         <CalendlyEmbed url={calendlyBookingUrl(name, email)} />
       </div>
-    </div>
+    </main>
   )
 }
