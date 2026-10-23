@@ -406,7 +406,10 @@ export async function setPricingVersionAction(
   try {
     const catalogs = await loadCatalogs()
     const targets = regions ?? Object.keys(catalogs)
-    if (!targets.length || targets.some((region) => !(region in catalogs)))
+    if (
+      !targets.length ||
+      targets.some((region) => !Object.hasOwn(catalogs, region))
+    )
       throw new Error("Choose configured regions to switch")
     if (pricingVersion === "v2") {
       const drift = catalogDrift(catalogs).filter((set) =>
