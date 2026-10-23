@@ -3,7 +3,6 @@ import { redirect } from "next/navigation"
 import { after } from "next/server"
 
 import { PlanSelectionLoader } from "@/components/onboarding/plan-selection-loader"
-import { readPlanCatalog } from "@/lib/api/plan-catalog-read"
 import { offerCadence } from "@/lib/api/signup-plan"
 import {
   getSignupPlanPage,
@@ -51,7 +50,8 @@ export default async function PlanSelectionPage({
       (context.state === "committed" &&
         (context.offer !== "free" ||
           !params.billing ||
-          params.billing === "success")))
+          params.billing === "success" ||
+          context.reviewed)))
   ) {
     after(async () => {
       const properties = {
@@ -71,12 +71,10 @@ export default async function PlanSelectionPage({
     })
     redirect("/sandboxes")
   }
-  const catalog = context?.reviewed ? await readPlanCatalog() : undefined
   return (
     <PlanSelectionLoader
       key={JSON.stringify([context, params])}
       initialContext={context ?? null}
-      catalog={catalog}
       billingReturn={params.billing}
       expectedTeam={params.team}
       expectedUser={params.account}

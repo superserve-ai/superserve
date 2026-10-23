@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { createStripeCheckoutSession } from "@/lib/api/billing-stripe"
 import {
   commitFreePlan,
-  PLAN_UNAVAILABLE_MESSAGE,
   recoverProPayment,
   startProCheckout,
 } from "@/lib/api/plan-checkout"
@@ -262,73 +261,85 @@ it("rechecks checkout after browser Back restores the previous page", async () =
   expect(startProCheckout).toHaveBeenCalledTimes(1)
 })
 
-describe("reviewed signup plan step", () => {
+describe("reviewed signup billing step", () => {
   const reviewed = (requestedOffer: SignupPlanContext["requestedOffer"]) => ({
     ...selecting,
     reviewed: true,
     requestedOffer,
   })
 
-  it("opens checkout for the plan chosen at signup without asking again", async () => {
-    vi.mocked(startProCheckout).mockResolvedValue(
-      "https://checkout.stripe.com/c/pay/test",
-    )
-    render(<PlanSelection initial={reviewed("starter_annual")} />)
+  it("offers the card credit instead of buying the plan chosen at signup", async () => {
+    vi.mocked(createStripeCheckoutSession).mockResolvedValue({
+      id: "session",
+      url: "https://checkout.stripe.com/c/pay/test",
+    })
+    render(<PlanSelection initial={reviewed("pro_annual")} />)
+    expect(
+      screen.queryByRole("button", { name: "Continue to payment" }),
+    ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Add payment method" }))
     await waitFor(() =>
-      expect(startProCheckout).toHaveBeenCalledWith(
-        "use:team",
-        "starter_annual",
-        expect.stringContaining("/onboarding/plan/"),
+      expect(assign).toHaveBeenCalledWith(
+        "https://checkout.stripe.com/c/pay/test",
       ),
     )
-    expect(startProCheckout).toHaveBeenCalledTimes(1)
-    expect(assign).toHaveBeenCalledWith(
-      "https://checkout.stripe.com/c/pay/test",
+    expect(commitFreePlan).toHaveBeenCalledWith("use:team")
+    expect(vi.mocked(commitFreePlan).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(createStripeCheckoutSession).mock.invocationCallOrder[0],
     )
-    expect(
-      screen.queryByRole("button", { name: "Continue with Free" }),
-    ).not.toBeInTheDocument()
+    expect(createStripeCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedTeam: "use:team",
+        successUrl: expect.stringContaining("billing=success"),
+        cancelUrl: expect.stringContaining("billing=cancel"),
+      }),
+    )
+    expect(startProCheckout).not.toHaveBeenCalled()
   })
 
-  it("commits Enterprise on the default plan and opens the console", async () => {
+  it("keeps the user on the card step when billing cannot open", async () => {
+    vi.mocked(createStripeCheckoutSession).mockRejectedValue(
+      new Error("Billing unavailable"),
+    )
+    vi.mocked(getSignupPlanAction)
+      .mockResolvedValueOnce(reviewed("pro_monthly"))
+      .mockResolvedValue({
+        ...reviewed("pro_monthly"),
+        state: "committed",
+        offer: "free",
+      })
+    render(<PlanSelection initial={reviewed("pro_monthly")} />)
+    fireEvent.click(screen.getByRole("button", { name: "Add payment method" }))
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Billing unavailable",
+    )
+    expect(
+      screen.getByRole("button", { name: "Continue without credit" }),
+    ).toBeEnabled()
+    expect(assign).not.toHaveBeenCalled()
+  })
+
+  it("starts on the trial credit without a card", async () => {
     render(<PlanSelection initial={reviewed("enterprise")} />)
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue without credit" }),
+    )
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/sandboxes"))
     expect(commitFreePlan).toHaveBeenCalledWith("use:team")
-    expect(startProCheckout).not.toHaveBeenCalled()
+    expect(createStripeCheckoutSession).not.toHaveBeenCalled()
   })
 
-  it("shows the chosen plan after a cancelled checkout and lets the user switch", async () => {
-    vi.mocked(startProCheckout).mockResolvedValue(
-      "https://checkout.stripe.com/c/pay/test",
-    )
-    render(
-      <PlanSelection
-        initial={reviewed("pro_monthly")}
-        billingReturn="cancel"
-      />,
-    )
+  it("opens the console after leaving card checkout", async () => {
+    const committed = {
+      ...reviewed("pro_monthly"),
+      state: "committed" as const,
+      offer: "free" as const,
+    }
+    vi.mocked(getSignupPlanAction).mockResolvedValue(committed)
+    render(<PlanSelection initial={committed} billingReturn="cancel" />)
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("/sandboxes"))
     expect(
-      screen.getByRole("heading", { name: "Finish setting up your plan." }),
-    ).toBeVisible()
-    expect(startProCheckout).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole("button", { name: "Change plan" }))
-    expect(screen.queryByText(/Free/)).not.toBeInTheDocument()
-    fireEvent.click(
-      screen.getByRole("button", { name: "Continue with Enterprise" }),
-    )
-    await waitFor(() => expect(commitFreePlan).toHaveBeenCalledWith("use:team"))
-    expect(startProCheckout).not.toHaveBeenCalled()
-  })
-
-  it("explains when the chosen plan cannot be bought yet", async () => {
-    vi.mocked(startProCheckout).mockRejectedValue(
-      new Error(PLAN_UNAVAILABLE_MESSAGE),
-    )
-    render(<PlanSelection initial={reviewed("starter_monthly")} />)
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      PLAN_UNAVAILABLE_MESSAGE,
-    )
-    expect(screen.getByRole("button", { name: "Change plan" })).toBeVisible()
+      screen.queryByRole("button", { name: "Skip for now" }),
+    ).not.toBeInTheDocument()
   })
 })

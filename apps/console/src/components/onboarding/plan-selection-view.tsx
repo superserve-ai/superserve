@@ -27,7 +27,7 @@ export interface PlanSelectionViewProps {
   paymentPlan?: string
 }
 
-export function Benefits({ children }: { children: ReactNode }) {
+function Benefits({ children }: { children: ReactNode }) {
   return (
     <ul className="text-muted-foreground space-y-4 text-sm leading-relaxed [&>li]:flex [&>li]:gap-3 [&>li]:before:text-brand [&>li]:before:content-['✓']">
       {children}
@@ -35,7 +35,7 @@ export function Benefits({ children }: { children: ReactNode }) {
   )
 }
 
-export function Card({
+function Card({
   title,
   selected = false,
   children,

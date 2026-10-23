@@ -3,7 +3,6 @@
 import { Button } from "@superserve/ui"
 import { useEffect, useState } from "react"
 
-import type { PlanCatalog } from "@/lib/api/plan-catalog"
 import type { SignupPlanContext } from "@/lib/api/signup-plan"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { setActiveTeamAction } from "@/lib/api/teams-actions"
@@ -16,13 +15,11 @@ export function PlanSelectionLoader({
   billingReturn,
   expectedTeam,
   expectedUser,
-  catalog,
 }: {
   initialContext: SignupPlanContext | null
   billingReturn?: string
   expectedTeam?: string
   expectedUser?: string
-  catalog?: PlanCatalog
 }) {
   const [initial, setInitial] = useState<SignupPlanContext | null>(
     initialContext,
@@ -125,7 +122,6 @@ export function PlanSelectionLoader({
       key={`${initial.userId}:${initial.teamKey}`}
       initial={initial}
       billingReturn={billingReturn}
-      catalog={catalog}
     />
   )
 }

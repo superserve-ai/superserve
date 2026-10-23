@@ -1,8 +1,5 @@
-import { ApiError, apiClient } from "./client"
+import { apiClient } from "./client"
 import type { PurchaseOffer } from "./signup-plan"
-
-export const PLAN_UNAVAILABLE_MESSAGE =
-  "This plan isn’t available for purchase yet. Choose another plan, or contact us to get started."
 
 export async function startProCheckout(
   teamKey: string,
@@ -25,13 +22,7 @@ export async function startProCheckout(
         cancel_url: cancel.toString(),
       }),
     },
-  ).catch((error: unknown) => {
-    // Billing lists a plan before it can be bought; say so instead of a
-    // generic payment failure.
-    if (error instanceof ApiError && error.code === "invalid_offer")
-      throw new Error(PLAN_UNAVAILABLE_MESSAGE)
-    throw error
-  })
+  )
   if (response.error?.code === "payment_confirmation_pending") return null
   if (!response.url || !isStripeCheckoutUrl(response.url))
     throw new Error(

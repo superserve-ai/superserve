@@ -5,62 +5,34 @@ import posthog from "posthog-js"
 import { useCallback, useEffect, useRef, useState } from "react"
 
 import { createStripeCheckoutSession } from "@/lib/api/billing-stripe"
-import { FALLBACK_PLAN_CATALOG, type PlanCatalog } from "@/lib/api/plan-catalog"
 import {
   commitFreePlan,
   isStripeCheckoutUrl,
   recoverProPayment,
   startProCheckout,
 } from "@/lib/api/plan-checkout"
-import {
-  offerCadence,
-  purchaseOffer,
-  type SignupPlanContext,
-} from "@/lib/api/signup-plan"
+import { offerCadence, type SignupPlanContext } from "@/lib/api/signup-plan"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { initialPlanSelection } from "@/lib/auth/plan-preselection"
-import type { RequestedOffer } from "@/lib/auth/requested-offer"
 
+import { ClaimCreditView } from "./claim-credit-view"
 import { PlanSelectionView, type PlanCadence } from "./plan-selection-view"
-import { ReviewedPlanView, type ReviewedPlan } from "./reviewed-plan-view"
-
-/** The plan an approved account chose at signup, if it named one. */
-function reviewedChoice(
-  offer: RequestedOffer | undefined,
-): { plan: ReviewedPlan; cadence: PlanCadence } | undefined {
-  if (offer === "enterprise") return { plan: "enterprise", cadence: "monthly" }
-  const cadence = offerCadence(offer)
-  if (!cadence) return undefined
-  return { plan: offer!.startsWith("starter_") ? "starter" : "pro", cadence }
-}
 
 export function PlanSelection({
   initial,
   billingReturn,
-  catalog = FALLBACK_PLAN_CATALOG,
 }: {
   initial: SignupPlanContext
   billingReturn?: string
-  catalog?: PlanCatalog
 }) {
   const defaults = initialPlanSelection(initial.requestedOffer)
-  const chosen = initial.reviewed
-    ? reviewedChoice(initial.requestedOffer)
-    : undefined
   const [context, setContext] = useState(initial)
   const [selection, setSelection] = useState(defaults.selection)
-  const [cadence, setCadence] = useState<PlanCadence>(
-    chosen?.cadence ?? defaults.cadence,
-  )
-  const [reviewedPlan, setReviewedPlan] = useState<ReviewedPlan | null>(
-    chosen?.plan ?? null,
-  )
-  const [reviewedMode, setReviewedMode] = useState<"confirm" | "plans">(
-    chosen ? "confirm" : "plans",
-  )
-  const autoContinued = useRef(false)
+  const [cadence, setCadence] = useState<PlanCadence>(defaults.cadence)
+  // Reviewed accounts commit the default plan before card checkout, so
+  // leaving checkout keeps it and opens the console.
   const [freeBilling, setFreeBilling] = useState(
-    initial.offer === "free" && Boolean(billingReturn),
+    initial.offer === "free" && Boolean(billingReturn) && !initial.reviewed,
   )
   const [busy, setBusy] = useState(false)
   const [uncertain, setUncertain] = useState(false)
@@ -247,42 +219,44 @@ export function PlanSelection({
     return true
   }
 
-  // Reviewed signups already chose a plan: Starter/Pro go to checkout and
-  // Enterprise starts on the default plan while staff set custom terms.
-  const continueReviewed = (plan: ReviewedPlan, planCadence = cadence) =>
+  // The default plan with an optional card; its credit replaces the trial.
+  const addCard = () =>
     void run(async () => {
-      if (!(await confirmSelecting())) return
-      setReviewedPlan(plan)
-      if (plan === "enterprise") {
-        await commitFreePlan(initial.teamKey)
-        track("enterprise_selected", "enterprise")
-        finish("free")
-        return
-      }
-      const offer = purchaseOffer(plan, planCadence)
-      track("continue_to_payment", offer)
-      const url = await startProCheckout(
-        initial.teamKey,
-        offer,
-        checkoutReturnUrl().toString(),
+      const latest = await refresh()
+      if (
+        latest.state === "pending" ||
+        (latest.offer && latest.offer !== "free") ||
+        latest.state === "legacy"
       )
-      if (url) navigate(url)
-      else await refresh()
+        return
+      // Stay on the billing step if checkout fails after the plan commits.
+      setFreeBilling(true)
+      await commitFreePlan(initial.teamKey)
+      track("add_payment_method", "free")
+      const url = checkoutReturnUrl()
+      const success = new URL(url)
+      success.searchParams.set("billing", "success")
+      const cancel = new URL(url)
+      cancel.searchParams.set("billing", "cancel")
+      const session = await createStripeCheckoutSession({
+        intentScope: `${initial.userId}:${initial.teamKey}`,
+        expectedTeam: initial.teamKey,
+        successUrl: success.toString(),
+        cancelUrl: cancel.toString(),
+      })
+      if (!isStripeCheckoutUrl(session.url))
+        throw new Error(
+          "Unable to open billing. Please try again or skip for now.",
+        )
+      navigate(session.url)
     })
 
-  useEffect(() => {
-    // A checkout return (including cancel) shows the plan instead of
-    // reopening payment; so does any later visit after the first attempt.
-    if (
-      !chosen ||
-      autoContinued.current ||
-      billingReturn ||
-      context.state !== "selecting"
-    )
-      return
-    autoContinued.current = true
-    continueReviewed(chosen.plan, chosen.cadence)
-  })
+  const skipBilling = () =>
+    void run(async () => {
+      await commitFreePlan(initial.teamKey)
+      track("skip_billing", "free")
+      finish("free")
+    })
 
   if (context.state === "yc_claim")
     return <main className="p-10">Opening your YC claim…</main>
@@ -308,24 +282,15 @@ export function PlanSelection({
       </main>
     )
 
-  if (initial.reviewed && step === "plans")
+  // Approved signups start on the default plan; staff move them to a paid
+  // plan after talking with them.
+  if (initial.reviewed && step !== "payment-pending")
     return (
-      <ReviewedPlanView
-        mode={reviewedMode}
-        plan={reviewedPlan}
-        cadence={cadence}
-        catalog={catalog}
+      <ClaimCreditView
         busy={busy}
         error={error}
-        onCadence={(value) => {
-          setCadence(value)
-          track("cadence_changed", value)
-        }}
-        onContinue={(plan) => continueReviewed(plan)}
-        onChangePlan={() => {
-          setReviewedMode("plans")
-          track("change_plan")
-        }}
+        onAddCard={addCard}
+        onSkip={skipBilling}
       />
     )
 
@@ -387,42 +352,8 @@ export function PlanSelection({
           }
         })
       }}
-      onAddCard={() =>
-        void run(async () => {
-          const latest = await refresh()
-          if (
-            latest.state === "pending" ||
-            (latest.offer && latest.offer !== "free") ||
-            latest.state === "legacy"
-          )
-            return
-          await commitFreePlan(initial.teamKey)
-          track("add_payment_method", "free")
-          const url = checkoutReturnUrl()
-          const success = new URL(url)
-          success.searchParams.set("billing", "success")
-          const cancel = new URL(url)
-          cancel.searchParams.set("billing", "cancel")
-          const session = await createStripeCheckoutSession({
-            intentScope: `${initial.userId}:${initial.teamKey}`,
-            expectedTeam: initial.teamKey,
-            successUrl: success.toString(),
-            cancelUrl: cancel.toString(),
-          })
-          if (!isStripeCheckoutUrl(session.url))
-            throw new Error(
-              "Unable to open billing. Please try again or skip for now.",
-            )
-          navigate(session.url)
-        })
-      }
-      onSkip={() =>
-        void run(async () => {
-          await commitFreePlan(initial.teamKey)
-          track("skip_billing", "free")
-          finish("free")
-        })
-      }
+      onAddCard={addCard}
+      onSkip={skipBilling}
       onBack={() =>
         void run(async () => {
           if (await confirmSelecting()) setFreeBilling(false)
