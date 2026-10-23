@@ -16,7 +16,7 @@ export function parseSignupOffer(value: unknown): SignupOffer {
 // Where a new account lands after signup under pricing v2.
 export const SIGNUP_OFFER_DESTINATIONS: Record<SignupOffer, string> = {
   free: "/sandboxes",
-  starter: "/billing/starter",
+  starter: "/plan-usage/buy-credit",
   pro_monthly: "/billing/pro",
   enterprise: "/auth/pending",
 }
