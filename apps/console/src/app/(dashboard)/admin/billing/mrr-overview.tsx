@@ -15,7 +15,7 @@ const percent = new Intl.NumberFormat("en-US", {
 const count = new Intl.NumberFormat("en-US")
 
 const FAILURE_REASON: Record<AdminBillingErrorKind, string> = {
-  unavailable: "no response",
+  unavailable: "unreachable or misconfigured",
   forbidden: "billing access refused",
   not_found: "endpoint not found",
   conflict: "request conflict",
@@ -39,12 +39,10 @@ function StatTile({ label, value }: { label: string; value: string }) {
 
 export function MRROverviewView({ mrr }: { mrr: CombinedMRR }) {
   if (mrr.regions.length === 0) {
-    const transient = mrr.failures.every((f) => f.kind === "unavailable")
     return (
       <div className="p-6">
         <Alert variant="destructive">
           Recurring revenue is unavailable: {describeFailures(mrr.failures)}.
-          {transient ? " Retry in a moment." : ""}
         </Alert>
       </div>
     )

@@ -42,25 +42,27 @@ describe("MRROverviewView", () => {
     )
     expect(screen.getByText("$2,200")).toBeTruthy()
     expect(screen.getByText("$26,400")).toBeTruthy()
-    expect(screen.getByText(/Missing: usw \(no response\)/)).toBeTruthy()
+    expect(
+      screen.getByText(/Missing: usw \(unreachable or misconfigured/),
+    ).toBeTruthy()
     expect(screen.getByText("55%")).toBeTruthy()
     expect(screen.getByText("Pay as you go")).toBeTruthy()
   })
 
-  it("only suggests retrying when every failure is transient", () => {
-    const { unmount } = render(
-      <MRROverviewView
-        mrr={combineMRR([{ region: "use", kind: "unavailable" }])}
-      />,
-    )
-    expect(screen.getByText(/Retry in a moment/)).toBeTruthy()
-    unmount()
+  it("names the reason when no region answered", () => {
     render(
       <MRROverviewView
-        mrr={combineMRR([{ region: "use", kind: "forbidden" }])}
+        mrr={combineMRR([
+          { region: "use", kind: "unavailable" },
+          { region: "usw", kind: "forbidden" },
+        ])}
       />,
     )
-    expect(screen.getByText(/use \(billing access refused\)/)).toBeTruthy()
-    expect(screen.queryByText(/Retry in a moment/)).toBeNull()
+    expect(
+      screen.getByText(
+        /use \(unreachable or misconfigured\), usw \(billing access refused\)/,
+      ),
+    ).toBeTruthy()
+    expect(screen.queryByText(/Retry/)).toBeNull()
   })
 })
