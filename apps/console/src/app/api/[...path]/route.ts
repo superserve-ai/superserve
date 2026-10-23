@@ -16,7 +16,6 @@ import {
   repairRecoveryAuthApiKeyForTeam,
 } from "@/lib/api/proxy-auth"
 import { redactAccessTokens } from "@/lib/api/redact"
-import { isPurchaseOffer } from "@/lib/api/signup-plan"
 import type { TeamMembership } from "@/lib/api/team-directory"
 import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
 import {
@@ -121,19 +120,6 @@ function hasUnsafePathSegment(path: string[]): boolean {
   })
 }
 
-function authResponse(status: 401 | 503, message: string) {
-  return NextResponse.json(
-    {
-      error: {
-        code: status === 401 ? "unauthorized" : "service_unavailable",
-        message,
-      },
-      detail: message,
-    },
-    { status },
-  )
-}
-
 function signupReviewPendingResponse() {
   return NextResponse.json(
     {
@@ -187,18 +173,15 @@ async function proxyRequest(
   let impersonationContext: { teamId: string; region: string } | null = null
   let impersonating = false
 
-  const authorization = request.headers.get("authorization")
-  if (skipKeyInjection && authorization) {
+  const bearer = request.headers
+    .get("authorization")
+    ?.match(/^bearer\s+(\S+)$/i)
+  if (skipKeyInjection && bearer) {
     // These paths act for the bearer's account, e.g. authorising a CLI login.
-    const token = authorization.match(/^bearer\s+(\S+)$/i)?.[1]
-    if (!token) return authResponse(401, "Sign in again.")
+    // Unresolvable tokens go upstream unchanged, which rejects them as before.
     const supabase = await createServerClient()
-    const { data, error } = await supabase.auth.getUser(token)
-    if (error && !data.user)
-      return error.status && error.status < 500
-        ? authResponse(401, "Sign in again.")
-        : authResponse(503, "Sign-in check is unavailable. Try again.")
-    if (isSignupReviewBlocked(data.user)) return signupReviewPendingResponse()
+    const { data } = await supabase.auth.getUser(bearer[1])
+    if (isSignupReviewBlocked(data?.user)) return signupReviewPendingResponse()
   }
 
   if (!skipKeyInjection) {
@@ -370,12 +353,12 @@ async function proxyRequest(
       )
     }
     if (joinedPath === "stripe/pro-checkout") {
-      if (!isPurchaseOffer(input.offer))
+      if (!["pro_monthly", "pro_annual"].includes(input.offer as string))
         return NextResponse.json(
           {
             error: {
               code: "invalid_offer",
-              message: "Select a plan billing frequency",
+              message: "Select a Pro billing frequency",
             },
           },
           { status: 400 },

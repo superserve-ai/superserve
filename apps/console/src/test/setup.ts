@@ -3,9 +3,6 @@ import type { TestingLibraryMatchers } from "@testing-library/jest-dom/matchers"
 import { cleanup } from "@testing-library/react"
 import { afterEach, beforeEach, expect, vi } from "vitest"
 
-// Accounts in fixtures predate signup review unless a test moves the cutoff.
-process.env.SIGNUP_REVIEW_STARTS_AT ??= "2999-01-01T00:00:00Z"
-
 // Register against Console's Vitest; jest-dom's adapter can resolve the root's
 // different Vitest version under Bun's isolated dependency layout.
 expect.extend(matchers)

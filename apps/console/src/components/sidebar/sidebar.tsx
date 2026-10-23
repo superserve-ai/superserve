@@ -21,10 +21,10 @@ import {
 
 import {
   adminBillingNavItem,
+  pendingSignupsNavItem,
   adminNavItem,
   bottomNavItems,
   mainNavItems,
-  pendingSignupsNavItem,
   userManagementNavItem,
 } from "./nav-config"
 import { useSidebar } from "./sidebar-context"

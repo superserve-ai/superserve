@@ -1,11 +1,10 @@
-import { Suspense } from "react"
+"use client"
 
-import { readPlanCatalog } from "@/lib/api/plan-catalog-read"
+import { Suspense } from "react"
 
 import SignUpContent from "./form"
 
-export default async function SignUpPage() {
-  const catalog = await readPlanCatalog()
+export default function SignUpPage() {
   return (
     <Suspense
       fallback={
@@ -14,7 +13,7 @@ export default async function SignUpPage() {
         </div>
       }
     >
-      <SignUpContent catalog={catalog} />
+      <SignUpContent />
     </Suspense>
   )
 }

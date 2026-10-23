@@ -7,7 +7,6 @@ import {
 } from "@/lib/api/signup-plan"
 import type { TeamMembership } from "@/lib/api/team-directory"
 import { PLAN_OFFER_COOKIE, readPlanOffer } from "@/lib/auth/plan-preselection"
-import type { RequestedOffer } from "@/lib/auth/requested-offer"
 import { cellFor } from "@/lib/cells"
 
 // The caller must authenticate the user and resolve their team membership.
@@ -15,8 +14,6 @@ export async function readSignupPlan(
   userId: string,
   team: TeamMembership,
   expectedTeam?: string,
-  // From `reviewedSignupPlan`; the plan chosen at signup outranks the cookie.
-  review?: { offer?: RequestedOffer },
 ): Promise<SignupPlanContext> {
   const teamKey = `${team.region}:${team.teamId}`
   if (expectedTeam && expectedTeam !== teamKey)
@@ -67,14 +64,14 @@ export async function readSignupPlan(
       choice.offer = null
     }
   }
-  const requestedOffer =
-    review?.offer ??
-    readPlanOffer((await cookies()).get(PLAN_OFFER_COOKIE)?.value, userId)
+  const requestedOffer = readPlanOffer(
+    (await cookies()).get(PLAN_OFFER_COOKIE)?.value,
+    userId,
+  )
   return {
     userId,
     teamKey,
     ...choice,
     requestedOffer,
-    ...(review ? { reviewed: true } : {}),
   }
 }

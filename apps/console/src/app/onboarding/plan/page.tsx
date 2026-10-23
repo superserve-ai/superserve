@@ -3,7 +3,6 @@ import { redirect } from "next/navigation"
 import { after } from "next/server"
 
 import { PlanSelectionLoader } from "@/components/onboarding/plan-selection-loader"
-import { offerCadence } from "@/lib/api/signup-plan"
 import {
   getSignupPlanPage,
   type SignupPlanPageParams,
@@ -50,14 +49,15 @@ export default async function PlanSelectionPage({
       (context.state === "committed" &&
         (context.offer !== "free" ||
           !params.billing ||
-          params.billing === "success" ||
-          context.reviewed)))
+          params.billing === "success")))
   ) {
     after(async () => {
       const properties = {
         requested_offer: context.requestedOffer ?? "not_specified",
         selected_offer: context.offer ?? "free",
-        billing_cadence: offerCadence(context.offer),
+        billing_cadence: context.offer?.startsWith("pro_")
+          ? context.offer.slice(4)
+          : undefined,
       }
       if (params.billing)
         await trackEvent("signup_plan_action", context.userId, {

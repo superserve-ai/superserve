@@ -100,7 +100,7 @@ export function PendingReview({
 }: {
   name?: string
   email?: string
-  // Clears any session left in the browser; review gates every route anyway.
+  // Clears any session left in the browser; setup gates every route anyway.
   signOut?: boolean
 }) {
   useEffect(() => {
@@ -124,10 +124,11 @@ export function PendingReview({
         </Link>
         <div className="mt-14">
           <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
-            Pending review
+            Let&apos;s set up your Enterprise plan
           </h1>
           <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted">
-            Thanks for signing up. We&apos;ll review your request and email
+            Thanks for signing up. Book a time with our team below to set up
+            your plan. We&apos;ll email
             {email ? (
               <>
                 {" "}
@@ -136,8 +137,7 @@ export function PendingReview({
             ) : (
               " you"
             )}{" "}
-            when it&apos;s approved. Want to get started sooner? Book a time
-            with our team below.
+            as soon as your account is ready.
           </p>
         </div>
         <CalendlyEmbed url={calendlyBookingUrl(name, email)} />

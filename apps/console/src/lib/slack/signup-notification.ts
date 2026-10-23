@@ -3,40 +3,19 @@ import {
   normalizeRequestedOffer,
   REQUESTED_OFFER_LABELS,
 } from "@/lib/auth/requested-offer"
-import {
-  SIGNUP_AFFILIATION_LABELS,
-  type SignupDetails,
-} from "@/lib/auth/signup-review"
 import sendToSlackHook from "@/lib/slack/send-to-webhook"
 import {
   formatSignupEligibility,
   type SignupEligibilityPresentationOutcome,
 } from "@/lib/slack/signup-eligibility"
 
-// Names, emails and signup details are user-controlled; keep Slack from
-// parsing them as mentions or links.
+// Names and emails are user-controlled; keep Slack from parsing them as
+// mentions or links.
 function escapeSlack(value: string): string {
   return value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-}
-
-function detailFields(details: SignupDetails | undefined) {
-  if (!details) return []
-  return [
-    {
-      type: "mrkdwn",
-      text: `*Company:* ${details.company ? escapeSlack(details.company) : "—"}`,
-    },
-    {
-      type: "mrkdwn",
-      text: `*Affiliation:* ${details.affiliation ? SIGNUP_AFFILIATION_LABELS[details.affiliation] : "—"}`,
-    },
-    ...(details.ycLink
-      ? [{ type: "mrkdwn", text: `*YC link:* ${escapeSlack(details.ycLink)}` }]
-      : []),
-  ]
 }
 
 /**
@@ -52,7 +31,7 @@ export const notifySlackOfNewUser = async (
   provider: string | null,
   outcome?: SignupEligibilityPresentationOutcome,
   offer?: string,
-  details?: SignupDetails,
+  awaitingEnterpriseSetup = false,
 ) => {
   try {
     const requestedOffer = normalizeRequestedOffer(offer)
@@ -83,11 +62,18 @@ export const notifySlackOfNewUser = async (
               ? [
                   {
                     type: "mrkdwn",
-                    text: `*Interested in:* ${REQUESTED_OFFER_LABELS[requestedOffer]}`,
+                    text: `*Requested offer:* ${REQUESTED_OFFER_LABELS[requestedOffer]}`,
                   },
                 ]
               : []),
-            ...detailFields(details),
+            ...(awaitingEnterpriseSetup
+              ? [
+                  {
+                    type: "mrkdwn",
+                    text: "*Enterprise:* no access until a plan is assigned in Admin › Pending signups",
+                  },
+                ]
+              : []),
             {
               type: "mrkdwn",
               text: `*Signup Eligibility:* ${annotationText}`,

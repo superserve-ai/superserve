@@ -21,7 +21,7 @@ describe("plan preselection", () => {
       readPlanOffer(JSON.stringify({ userId: "a", offer: "pro_annual" }), "b"),
     ).toBeUndefined()
     expect(
-      readPlanOffer(JSON.stringify({ userId: "a", offer: "platinum" }), "a"),
+      readPlanOffer(JSON.stringify({ userId: "a", offer: "enterprise" }), "a"),
     ).toBeUndefined()
     expect(readPlanOffer("broken", "a")).toBeUndefined()
   })

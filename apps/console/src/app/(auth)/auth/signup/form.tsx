@@ -9,10 +9,11 @@ import Script from "next/script"
 import { usePostHog } from "posthog-js/react"
 import { useEffect, useState } from "react"
 
-import { PendingReview } from "@/components/auth/pending-review"
+import { CornerBrackets } from "@/components/corner-brackets"
+import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
-import { FALLBACK_PLAN_CATALOG, type PlanCatalog } from "@/lib/api/plan-catalog"
 import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
+import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
 import {
   clearFingerprintSignupCapture,
   ensureFingerprintSignupCapture,
@@ -26,15 +27,6 @@ import {
   isCloudflareSignupObservationEnabled,
   signUpWithEmail,
 } from "./action"
-import {
-  initialSignupDetails,
-  PlanInterestCards,
-  SignupDetailsFields,
-  signupDetailsPayload,
-  signupValuesOffer,
-  validateSignupDetails,
-  type SignupDetailsValues,
-} from "./details-fields"
 
 const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
 const TRUSTED_REDIRECT_PATTERN =
@@ -158,11 +150,7 @@ function sanitizeNext(raw: string | null): string {
   return "/"
 }
 
-export default function SignUpContent({
-  catalog = FALLBACK_PLAN_CATALOG,
-}: {
-  catalog?: PlanCatalog
-}) {
+export default function SignUpContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
   const [formValues, setFormValues] = useState({
@@ -176,27 +164,24 @@ export default function SignUpContent({
     setFormValues((current) => ({ ...current, [key]: value }))
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [pendingReview, setPendingReview] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const posthog = usePostHog()
   const router = useRouter()
   const searchParams = useSearchParams()
   const nextUrl = sanitizeNext(searchParams.get("next"))
-  const requestedOffer = normalizeRequestedOffer(searchParams.get("offer"))
-  const [details, setDetails] = useState(() =>
-    initialSignupDetails(requestedOffer),
-  )
-  const setDetail = <K extends keyof SignupDetailsValues>(
-    key: K,
-    value: SignupDetailsValues[K],
-  ) => setDetails((current) => ({ ...current, [key]: value }))
+  const rawOffer =
+    searchParams.get(SIGNUP_OFFER_PARAM) ||
+    searchParams.get("offer") ||
+    undefined
+  const requestedOffer = normalizeRequestedOffer(rawOffer)
   const signInParams = new URLSearchParams()
   if (requestedOffer) signInParams.set("offer", requestedOffer)
+  if (rawOffer && rawOffer !== requestedOffer)
+    signInParams.set(SIGNUP_OFFER_PARAM, rawOffer)
   if (nextUrl !== "/") signInParams.set("next", nextUrl)
   const signInHref = `/auth/signin${signInParams.size ? `?${signInParams}` : ""}`
   const isCompleteGoogleSignup = searchParams.get("complete_google") === "1"
-  // A new Google account that started from sign-in has no signup details yet.
-  const detailsRequired = searchParams.get("details") === "required"
 
   useEffect(() => {
     if (searchParams.get("error") === "link_expired") {
@@ -207,7 +192,7 @@ export default function SignUpContent({
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrors({})
-    const newErrors: Record<string, string> = validateSignupDetails(details)
+    const newErrors: Record<string, string> = {}
     if (!fullName) newErrors.fullName = "Name is required."
     if (!email) newErrors.email = "Email is required."
     if (!password) newErrors.password = "Password is required."
@@ -244,7 +229,7 @@ export default function SignUpContent({
         requestedOffer,
         fingerprintDiagnostics,
         nextUrl,
-        signupDetailsPayload(details),
+        ...(rawOffer && rawOffer !== requestedOffer ? [rawOffer] : []),
       )
       if (!result.success) {
         posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
@@ -260,10 +245,10 @@ export default function SignUpContent({
       }
       posthog.capture(AUTH_EVENTS.SIGN_UP_COMPLETED, {
         method: "email",
-        requested_offer: signupValuesOffer(details),
+        ...(requestedOffer ? { requested_offer: requestedOffer } : {}),
       })
       clearFingerprintSignupCapture()
-      setPendingReview(true)
+      setEmailSent(true)
     } catch {
       setErrors({ form: "Error creating account. Please try again." })
     } finally {
@@ -271,21 +256,9 @@ export default function SignUpContent({
     }
   }
 
-  // Recovery for an existing account carries no details; new signups must.
-  const handleGoogleSignIn = async (withDetails: boolean) => {
-    setErrors({})
-    if (withDetails) {
-      const detailErrors = validateSignupDetails(details)
-      if (Object.keys(detailErrors).length > 0) {
-        setErrors({
-          ...detailErrors,
-          form: "Fix your details above before continuing with Google.",
-        })
-        return
-      }
-    }
-    const offer = withDetails ? signupValuesOffer(details) : requestedOffer
+  const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true)
+    setErrors({})
     try {
       const capture = await ensureFingerprintSignupCapture()
       const fingerprintDiagnostics = getFingerprintSignupDiagnostics()
@@ -306,7 +279,6 @@ export default function SignUpContent({
         turnstileToken,
         capture,
         fingerprintDiagnostics,
-        ...(withDetails ? [signupDetailsPayload(details)] : []),
       )
       if (!proof.success) {
         setErrors({ form: proof.error || "Google signup verification failed." })
@@ -316,7 +288,9 @@ export default function SignUpContent({
       const supabase = createBrowserClient()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
       callbackUrl.searchParams.set("signup_attempt_id", proof.signupAttemptId)
-      if (offer) callbackUrl.searchParams.set("offer", offer)
+      if (requestedOffer) callbackUrl.searchParams.set("offer", requestedOffer)
+      if (rawOffer && rawOffer !== requestedOffer)
+        callbackUrl.searchParams.set(SIGNUP_OFFER_PARAM, rawOffer)
       if (nextUrl && nextUrl !== "/") {
         callbackUrl.searchParams.set("next", nextUrl)
       }
@@ -339,57 +313,8 @@ export default function SignUpContent({
     }
   }
 
-  if (pendingReview) return <PendingReview name={fullName} email={email} />
-
-  const busy = isLoading || isGoogleLoading
-  const googleButton = (label: string, loadingLabel: string) => (
-    <Button
-      type="button"
-      variant="outline"
-      onClick={() => handleGoogleSignIn(!isCompleteGoogleSignup)}
-      disabled={busy}
-      className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
-    >
-      {isGoogleLoading ? <Spinner /> : <GoogleIcon />}
-      {isGoogleLoading ? loadingLabel : label}
-    </Button>
-  )
-  const planCards = (
-    <PlanInterestCards
-      values={details}
-      catalog={catalog}
-      disabled={busy}
-      onChange={setDetail}
-    />
-  )
-  const detailsFields = (
-    <SignupDetailsFields
-      values={details}
-      errors={errors}
-      disabled={busy}
-      onChange={setDetail}
-    />
-  )
-  const formError = errors.form && (
-    <p className="text-xs text-destructive">{errors.form}</p>
-  )
-  const passwordToggle = (shown: boolean, toggle: () => void) => (
-    <button
-      type="button"
-      onClick={toggle}
-      className="text-muted"
-      aria-label={shown ? "Hide password" : "Show password"}
-    >
-      {shown ? (
-        <EyeSlashIcon className="size-4" weight="light" />
-      ) : (
-        <EyeIcon className="size-4" weight="light" />
-      )}
-    </button>
-  )
-
   return (
-    <main className="min-h-dvh bg-background text-foreground">
+    <div className="flex min-h-screen flex-col items-center justify-center p-6">
       {RECAPTCHA_SITE_KEY && (
         <Script
           src={`https://www.google.com/recaptcha/enterprise.js?render=${RECAPTCHA_SITE_KEY}`}
@@ -402,139 +327,180 @@ export default function SignUpContent({
           strategy="afterInteractive"
         />
       )}
-      <div className="mx-auto w-full max-w-7xl px-5 py-8 sm:px-10 lg:px-12">
-        <Link href="/" className="inline-block">
-          <Image
-            src="/logo.svg"
-            alt="Superserve"
-            width={120}
-            height={24}
-            className="h-6 w-auto"
-          />
-        </Link>
-        {isCompleteGoogleSignup ? (
-          <div className="mx-auto mt-24 max-w-sm text-center">
-            <h1 className="mb-4 text-sm font-medium text-foreground">
+      <DitherBackground />
+      <div className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6">
+        <CornerBrackets size="lg" />
+        <div className="mb-8 flex justify-center">
+          <Link href="/">
+            <Image
+              src="/logo.svg"
+              alt="Superserve"
+              width={120}
+              height={24}
+              className="h-6 w-auto"
+            />
+          </Link>
+        </div>
+        {emailSent ? (
+          <>
+            <h1 className="text-center text-sm font-medium text-foreground">
+              Check Your Email
+            </h1>
+            <p className="mt-2 text-center text-xs leading-relaxed text-muted">
+              We&apos;ve sent a verification link to{" "}
+              <strong className="text-foreground">{email}</strong>. Check your
+              inbox and click the link to verify your account.
+            </p>
+            <p className="mt-5 text-center text-xs text-muted">
+              Already verified?{" "}
+              <Link
+                href={signInHref}
+                className="font-medium text-foreground hover:underline"
+              >
+                Sign in
+              </Link>
+            </p>
+          </>
+        ) : isCompleteGoogleSignup ? (
+          <>
+            <h1 className="mb-4 text-center text-sm font-medium text-foreground">
               Complete signup
             </h1>
-            <p className="mb-6 text-xs leading-relaxed text-muted">
+            <p className="mb-6 text-center text-xs leading-relaxed text-muted">
               Google sign-in succeeded. Complete signup to finish verification
               and provision your Superserve account.
             </p>
             {errors.form && (
               <p className="mb-4 text-xs text-destructive">{errors.form}</p>
             )}
-            {googleButton(
-              "Complete signup with Google",
-              "Completing signup...",
-            )}
-          </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleGoogleSignIn}
+              disabled={isGoogleLoading || isLoading}
+              className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
+            >
+              {isGoogleLoading ? <Spinner /> : <GoogleIcon />}
+              {isGoogleLoading
+                ? "Completing signup..."
+                : "Complete signup with Google"}
+            </Button>
+          </>
         ) : (
           <>
-            <div className="mt-14">{planCards}</div>
-            <div className="mx-auto mt-14 max-w-md">
-              {detailsRequired ? (
-                <>
-                  <h2 className="text-sm font-medium text-foreground">
-                    Complete your details
-                  </h2>
-                  <p className="mt-2 mb-6 text-xs leading-relaxed text-muted">
-                    We need a few details before we can review your account.
-                    Fill them in and continue with Google again.
-                  </p>
-                  <div className="space-y-3">{detailsFields}</div>
-                  {errors.form && <div className="mt-4">{formError}</div>}
-                  <div className="mt-6">
-                    {googleButton("Continue with Google", "Signing up...")}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <form onSubmit={handleSignUp} className="space-y-3">
-                    <Input
-                      type="text"
-                      placeholder="Full name"
-                      aria-label="Full name"
-                      value={fullName}
-                      onChange={(e) => setFormValue("fullName", e.target.value)}
-                      error={errors.fullName}
-                    />
-                    <Input
-                      type="email"
-                      placeholder="Email"
-                      aria-label="Email"
-                      value={email}
-                      onChange={(e) => setFormValue("email", e.target.value)}
-                      error={errors.email}
-                    />
-                    <Input
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Password"
-                      aria-label="Password"
-                      value={password}
-                      onChange={(e) => setFormValue("password", e.target.value)}
-                      error={errors.password}
-                      suffix={passwordToggle(showPassword, () =>
-                        setShowPassword(!showPassword),
-                      )}
-                    />
-                    <Input
-                      type={showConfirmPassword ? "text" : "password"}
-                      placeholder="Confirm password"
-                      aria-label="Confirm password"
-                      value={confirmPassword}
-                      onChange={(e) =>
-                        setFormValue("confirmPassword", e.target.value)
-                      }
-                      error={errors.confirmPassword}
-                      suffix={passwordToggle(showConfirmPassword, () =>
-                        setShowConfirmPassword(!showConfirmPassword),
-                      )}
-                    />
-                    <div className="space-y-3 pt-3">{detailsFields}</div>
-                    {formError}
-                    <div className="pt-3">
-                      <Button type="submit" disabled={busy} className="w-full">
-                        {isLoading ? <Spinner /> : null}
-                        {isLoading ? "Creating account..." : "Sign Up"}
-                      </Button>
-                    </div>
-                  </form>
-                  <div className="relative my-6">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-dashed border-border" />
-                    </div>
-                    <div className="relative flex justify-center text-xs">
-                      <span className="bg-background px-3 text-muted">or</span>
-                    </div>
-                  </div>
-                  {googleButton("Continue with Google", "Signing up...")}
-                  <p className="mt-6 text-center text-xs text-muted">
-                    Already have an account?{" "}
-                    <Link
-                      href={signInHref}
-                      className="font-medium text-foreground hover:underline"
-                    >
-                      Sign in
-                    </Link>
-                  </p>
-                </>
-              )}
-              <p className="mt-6 text-center text-xs leading-relaxed text-muted/60">
-                By continuing, you agree to our{" "}
-                <a
-                  href={`${process.env.NEXT_PUBLIC_WEBSITE_URL}/privacy`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-foreground underline-offset-2 hover:underline"
-                >
-                  Privacy Policy
-                </a>
-              </p>
+            <h1 className="mb-6 text-center text-sm font-medium text-foreground">
+              Create your Superserve account
+            </h1>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleGoogleSignIn}
+              disabled={isGoogleLoading || isLoading}
+              className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
+            >
+              {isGoogleLoading ? <Spinner /> : <GoogleIcon />}
+              {isGoogleLoading ? "Signing up..." : "Continue with Google"}
+            </Button>
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-dashed border-border" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-surface px-3 text-muted">or</span>
+              </div>
             </div>
+            <form onSubmit={handleSignUp} className="space-y-3">
+              <Input
+                type="text"
+                placeholder="Full Name"
+                value={fullName}
+                onChange={(e) => setFormValue("fullName", e.target.value)}
+                error={errors.fullName}
+              />
+              <Input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setFormValue("email", e.target.value)}
+                error={errors.email}
+              />
+              <Input
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setFormValue("password", e.target.value)}
+                error={errors.password}
+                suffix={
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-muted"
+                  >
+                    {showPassword ? (
+                      <EyeSlashIcon className="size-4" weight="light" />
+                    ) : (
+                      <EyeIcon className="size-4" weight="light" />
+                    )}
+                  </button>
+                }
+              />
+              <Input
+                type={showConfirmPassword ? "text" : "password"}
+                placeholder="Confirm Password"
+                value={confirmPassword}
+                onChange={(e) =>
+                  setFormValue("confirmPassword", e.target.value)
+                }
+                error={errors.confirmPassword}
+                suffix={
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="text-muted"
+                  >
+                    {showConfirmPassword ? (
+                      <EyeSlashIcon className="size-4" weight="light" />
+                    ) : (
+                      <EyeIcon className="size-4" weight="light" />
+                    )}
+                  </button>
+                }
+              />
+              {errors.form && (
+                <p className="text-xs text-destructive">{errors.form}</p>
+              )}
+              <Button
+                type="submit"
+                disabled={isLoading || isGoogleLoading}
+                className="w-full"
+              >
+                {isLoading ? <Spinner /> : null}
+                {isLoading ? "Creating account..." : "Sign Up"}
+              </Button>
+            </form>
+            <p className="mt-5 text-center text-xs text-muted">
+              Already have an account?{" "}
+              <Link
+                href={signInHref}
+                className="font-medium text-foreground hover:underline"
+              >
+                Sign in
+              </Link>
+            </p>
+            <p className="mt-6 text-center text-xs leading-relaxed text-muted/60">
+              By continuing, you agree to our{" "}
+              <a
+                href={`${process.env.NEXT_PUBLIC_WEBSITE_URL}/privacy`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-foreground underline-offset-2 hover:underline"
+              >
+                Privacy Policy
+              </a>
+            </p>
           </>
         )}
       </div>
-    </main>
+    </div>
   )
 }

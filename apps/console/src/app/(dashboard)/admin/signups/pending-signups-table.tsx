@@ -26,8 +26,7 @@ const actionButton =
   "inline-flex h-8 items-center justify-center border border-dashed border-border px-3 font-mono text-xs text-foreground uppercase transition-colors hover:bg-muted/30 disabled:opacity-50"
 
 const OUTCOME_LABELS = {
-  approved: "Approved — link sent",
-  resent: "Link resent",
+  approved: "Access granted — email sent",
   rejected: "Rejected",
 } as const
 
@@ -62,18 +61,16 @@ function ReviewButtons({
           disabled={pending}
           onClick={() => run(onApprove)}
         >
-          {row.status === "pending" ? "Approve & send link" : "Resend link"}
+          Grant access
         </button>
-        {row.status === "pending" && (
-          <button
-            type="button"
-            className={actionButton}
-            disabled={pending}
-            onClick={() => run(onReject)}
-          >
-            Reject
-          </button>
-        )}
+        <button
+          type="button"
+          className={actionButton}
+          disabled={pending}
+          onClick={() => run(onReject)}
+        >
+          Reject
+        </button>
       </div>
       {message && (
         <output className="text-xs text-muted" aria-live="polite">
@@ -99,9 +96,6 @@ function ReviewTable({
         <TableRow>
           <TableHead>User</TableHead>
           <TableHead>Provider</TableHead>
-          <TableHead>Company</TableHead>
-          <TableHead>Affiliation</TableHead>
-          <TableHead>Interested in</TableHead>
           <TableHead>Signed up</TableHead>
           <TableHead />
         </TableRow>
@@ -116,21 +110,6 @@ function ReviewTable({
             <TableCell className="font-mono text-xs text-muted uppercase">
               {row.provider}
             </TableCell>
-            <TableCell>{row.company ?? "—"}</TableCell>
-            <TableCell>
-              <div>{row.affiliation ?? "—"}</div>
-              {row.ycLink && (
-                <a
-                  href={row.ycLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-muted underline underline-offset-2 hover:text-foreground"
-                >
-                  YC link
-                </a>
-              )}
-            </TableCell>
-            <TableCell>{row.plan ?? "—"}</TableCell>
             <TableCell className="text-muted tabular-nums">
               {formatDate(new Date(row.createdAt))}
             </TableCell>
@@ -150,24 +129,22 @@ function ReviewTable({
 
 export function PendingSignupsTable({
   pending,
-  awaiting,
   onApprove,
   onReject,
 }: {
   pending: SignupReviewRow[]
-  awaiting: SignupReviewRow[]
   onApprove: ReviewAction
   onReject: ReviewAction
 }) {
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Pending Signups" />
+      <PageHeader title="Pending Enterprise Signups" />
       <div className="flex-1 overflow-y-auto">
         {pending.length === 0 ? (
           <EmptyState
             icon={UserCheckIcon}
             title="No Pending Signups"
-            description="New signups awaiting review will appear here."
+            description="Enterprise signups waiting for setup will appear here."
           />
         ) : (
           <ReviewTable
@@ -175,18 +152,6 @@ export function PendingSignupsTable({
             onApprove={onApprove}
             onReject={onReject}
           />
-        )}
-        {awaiting.length > 0 && (
-          <section className="mt-8">
-            <h2 className="border-y border-dashed border-border px-4 py-2 font-mono text-xs text-muted uppercase">
-              Approved — awaiting first sign-in
-            </h2>
-            <ReviewTable
-              rows={awaiting}
-              onApprove={onApprove}
-              onReject={onReject}
-            />
-          </section>
         )}
       </div>
     </div>

@@ -781,11 +781,24 @@ describe("api proxy /api/[...path]", () => {
     expect(headers.get("authorization")).toBe("Bearer user-token")
   })
 
-  it("refuses a /v1/auth/ request whose bearer account is awaiting review", async () => {
-    const getUser = vi.fn(async () => ({
-      data: {
-        user: { id: "u1", app_metadata: { signup_review: "pending" } },
+  it("refuses an account awaiting Enterprise setup", async () => {
+    vi.mocked(createServerClient).mockResolvedValue({
+      auth: {
+        getUser: async () => ({
+          data: {
+            user: { id: "u1", app_metadata: { signup_review: "pending" } },
+          },
+        }),
       },
+    } as never)
+    const res = await GET(req("GET", ["sandboxes"]), params(["sandboxes"]))
+    expect(res.status).toBe(403)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("refuses a CLI authorisation for an account awaiting Enterprise setup", async () => {
+    const getUser = vi.fn(async () => ({
+      data: { user: { id: "u1", app_metadata: { signup_review: "pending" } } },
       error: null,
     }))
     vi.mocked(createServerClient).mockResolvedValue({
@@ -803,33 +816,33 @@ describe("api proxy /api/[...path]", () => {
     )
     expect(getUser).toHaveBeenCalledWith("user-token")
     expect(res.status).toBe(403)
+    await expect(res.json()).resolves.toHaveProperty("detail")
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
-  it.each([
-    ["an unparseable Authorization header", "Token user-token", null, 401],
-    ["a rejected token", "bearer user-token", { status: 401 }, 401],
-    ["an Auth outage", "Bearer user-token", { status: 503 }, 503],
-  ])(
-    "does not forward a /v1/auth/ request with %s",
-    async (_label, authorization, error, status) => {
-      vi.mocked(createServerClient).mockResolvedValue({
-        auth: {
-          getUser: async () => ({ data: { user: null }, error }),
-        },
-      } as never)
-      const res = await POST(
-        req("POST", ["v1", "auth", "device-authorize"], {
-          headers: { authorization, "content-type": "application/json" },
-          body: "{}",
+  it("forwards a /v1/auth/ request whose token can't be resolved, as before", async () => {
+    fetchSpy.mockResolvedValue(new Response("{}", { status: 401 }))
+    vi.mocked(createServerClient).mockResolvedValue({
+      auth: {
+        getUser: async () => ({
+          data: { user: null },
+          error: { status: 401, message: "bad jwt" },
         }),
-        params(["v1", "auth", "device-authorize"]),
-      )
-      expect(res.status).toBe(status)
-      await expect(res.json()).resolves.toHaveProperty("detail")
-      expect(fetchSpy).not.toHaveBeenCalled()
-    },
-  )
+      },
+    } as never)
+    const res = await POST(
+      req("POST", ["v1", "auth", "device-authorize"], {
+        headers: {
+          authorization: "Bearer stale-token",
+          "content-type": "application/json",
+        },
+        body: "{}",
+      }),
+      params(["v1", "auth", "device-authorize"]),
+    )
+    expect(fetchSpy).toHaveBeenCalled()
+    expect(res.status).toBe(401)
+  })
 
   it("strips disallowed client-supplied headers (cookie, x-api-key)", async () => {
     fetchSpy.mockResolvedValue(new Response("[]", { status: 200 }))

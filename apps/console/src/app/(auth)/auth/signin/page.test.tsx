@@ -254,7 +254,7 @@ describe("SignInPage", () => {
     await user.click(screen.getByRole("button", { name: "Sign In" }))
 
     expect(
-      await screen.findByText(/Your account is pending review/),
+      await screen.findByText("Please verify your email before signing in."),
     ).toBeInTheDocument()
   })
 

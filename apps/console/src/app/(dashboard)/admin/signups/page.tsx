@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation"
 
 import { canApprovePlatformSignups } from "@/lib/admin/permissions"
-import { listSignupReviews } from "@/lib/admin/signup-approval"
+import { listPendingSignups } from "@/lib/admin/signup-approval"
 import {
   approveSignupAction,
   rejectSignupAction,
@@ -22,11 +22,10 @@ export default async function PendingSignupsPage() {
     notFound()
   }
 
-  const { pending, awaiting } = await listSignupReviews()
+  const pending = await listPendingSignups()
   return (
     <PendingSignupsTable
       pending={pending}
-      awaiting={awaiting}
       onApprove={approveSignupAction}
       onReject={rejectSignupAction}
     />

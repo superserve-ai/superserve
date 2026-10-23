@@ -7,7 +7,7 @@ import { createServerClient } from "@/lib/supabase/server"
 import { canApprovePlatformSignups } from "./permissions"
 import {
   approveSignup,
-  listSignupReviews,
+  listPendingSignups,
   rejectSignup,
   type SignupReviewResult,
 } from "./signup-approval"
@@ -26,9 +26,9 @@ async function requireSignupApprover() {
   return user
 }
 
-export async function listSignupReviewsAction() {
+export async function listPendingSignupsAction() {
   await requireSignupApprover()
-  return listSignupReviews()
+  return listPendingSignups()
 }
 
 export async function approveSignupAction(

@@ -11,11 +11,10 @@ import {
   recoverProPayment,
   startProCheckout,
 } from "@/lib/api/plan-checkout"
-import { offerCadence, type SignupPlanContext } from "@/lib/api/signup-plan"
+import type { SignupPlanContext } from "@/lib/api/signup-plan"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { initialPlanSelection } from "@/lib/auth/plan-preselection"
 
-import { ClaimCreditView } from "./claim-credit-view"
 import { PlanSelectionView, type PlanCadence } from "./plan-selection-view"
 
 export function PlanSelection({
@@ -29,10 +28,8 @@ export function PlanSelection({
   const [context, setContext] = useState(initial)
   const [selection, setSelection] = useState(defaults.selection)
   const [cadence, setCadence] = useState<PlanCadence>(defaults.cadence)
-  // Reviewed accounts commit the default plan before card checkout, so
-  // leaving checkout keeps it and opens the console.
   const [freeBilling, setFreeBilling] = useState(
-    initial.offer === "free" && Boolean(billingReturn) && !initial.reviewed,
+    initial.offer === "free" && Boolean(billingReturn),
   )
   const [busy, setBusy] = useState(false)
   const [uncertain, setUncertain] = useState(false)
@@ -55,7 +52,9 @@ export function PlanSelection({
           action,
           requested_offer: initial.requestedOffer ?? "not_specified",
           selected_offer: selected,
-          billing_cadence: offerCadence(selected),
+          billing_cadence: selected?.startsWith("pro_")
+            ? selected.slice(4)
+            : undefined,
         })
       } catch {
         /* Analytics never controls onboarding. */
@@ -219,45 +218,6 @@ export function PlanSelection({
     return true
   }
 
-  // The default plan with an optional card; its credit replaces the trial.
-  const addCard = () =>
-    void run(async () => {
-      const latest = await refresh()
-      if (
-        latest.state === "pending" ||
-        (latest.offer && latest.offer !== "free") ||
-        latest.state === "legacy"
-      )
-        return
-      // Stay on the billing step if checkout fails after the plan commits.
-      setFreeBilling(true)
-      await commitFreePlan(initial.teamKey)
-      track("add_payment_method", "free")
-      const url = checkoutReturnUrl()
-      const success = new URL(url)
-      success.searchParams.set("billing", "success")
-      const cancel = new URL(url)
-      cancel.searchParams.set("billing", "cancel")
-      const session = await createStripeCheckoutSession({
-        intentScope: `${initial.userId}:${initial.teamKey}`,
-        expectedTeam: initial.teamKey,
-        successUrl: success.toString(),
-        cancelUrl: cancel.toString(),
-      })
-      if (!isStripeCheckoutUrl(session.url))
-        throw new Error(
-          "Unable to open billing. Please try again or skip for now.",
-        )
-      navigate(session.url)
-    })
-
-  const skipBilling = () =>
-    void run(async () => {
-      await commitFreePlan(initial.teamKey)
-      track("skip_billing", "free")
-      finish("free")
-    })
-
   if (context.state === "yc_claim")
     return <main className="p-10">Opening your YC claim…</main>
 
@@ -282,21 +242,8 @@ export function PlanSelection({
       </main>
     )
 
-  // Approved signups start on the default plan; staff move them to a paid
-  // plan after talking with them.
-  if (initial.reviewed && step !== "payment-pending")
-    return (
-      <ClaimCreditView
-        busy={busy}
-        error={error}
-        onAddCard={addCard}
-        onSkip={skipBilling}
-      />
-    )
-
   return (
     <PlanSelectionView
-      paymentPlan={context.offer?.startsWith("starter_") ? "Starter" : "Pro"}
       step={step}
       selection={selection}
       cadence={cadence}
@@ -352,8 +299,42 @@ export function PlanSelection({
           }
         })
       }}
-      onAddCard={addCard}
-      onSkip={skipBilling}
+      onAddCard={() =>
+        void run(async () => {
+          const latest = await refresh()
+          if (
+            latest.state === "pending" ||
+            (latest.offer && latest.offer !== "free") ||
+            latest.state === "legacy"
+          )
+            return
+          await commitFreePlan(initial.teamKey)
+          track("add_payment_method", "free")
+          const url = checkoutReturnUrl()
+          const success = new URL(url)
+          success.searchParams.set("billing", "success")
+          const cancel = new URL(url)
+          cancel.searchParams.set("billing", "cancel")
+          const session = await createStripeCheckoutSession({
+            intentScope: `${initial.userId}:${initial.teamKey}`,
+            expectedTeam: initial.teamKey,
+            successUrl: success.toString(),
+            cancelUrl: cancel.toString(),
+          })
+          if (!isStripeCheckoutUrl(session.url))
+            throw new Error(
+              "Unable to open billing. Please try again or skip for now.",
+            )
+          navigate(session.url)
+        })
+      }
+      onSkip={() =>
+        void run(async () => {
+          await commitFreePlan(initial.teamKey)
+          track("skip_billing", "free")
+          finish("free")
+        })
+      }
       onBack={() =>
         void run(async () => {
           if (await confirmSelecting()) setFreeBilling(false)

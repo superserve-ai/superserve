@@ -23,8 +23,6 @@ export interface PlanSelectionViewProps {
   onBack: () => void
   onCheckPayment: () => void
   onCancelPayment: () => void
-  // Plan named in the payment-pending copy.
-  paymentPlan?: string
 }
 
 function Benefits({ children }: { children: ReactNode }) {
@@ -121,7 +119,7 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
           {choosing
             ? "Start small or build at scale. Choose the plan that fits your team."
             : pending
-              ? `Your account is ready. We’re confirming your ${props.paymentPlan ?? "Pro"} payment before finishing setup.`
+              ? "Your account is ready. We’re confirming your Pro payment before finishing setup."
               : "Add a payment method for pay-as-you-go usage, or start with your $5 trial credit. No subscription fee."}
         </p>
 

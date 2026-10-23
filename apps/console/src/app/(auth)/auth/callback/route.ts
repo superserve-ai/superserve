@@ -32,25 +32,22 @@ import {
   saveSignupEvidence,
 } from "@/lib/auth/signup-evidence"
 import {
+  parseSignupOffer,
+  SIGNUP_OFFER_DESTINATIONS,
+  SIGNUP_OFFER_PARAM,
+} from "@/lib/auth/signup-offer"
+import {
   evaluateSignupRestriction,
   SignupRestrictedError,
 } from "@/lib/auth/signup-restrictions"
-import {
-  isSignupReviewBlocked,
-  readSignupRequest,
-  signupDetailsOffer,
-  signupReviewMarker,
-  storedSignupRequest,
-} from "@/lib/auth/signup-review"
+import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
 import {
   encodePendingProfile,
   PENDING_PROFILE_COOKIE,
   pendingProfileCookieOptions,
-  readStashedSignupDetails,
-  requiresSignupReview,
-  SIGNUP_DETAILS_COOKIE,
   updateSignupReviewMetadata,
 } from "@/lib/auth/signup-review-server"
+import { isPricingV2Enabled } from "@/lib/billing/pricing-version"
 import { DEFAULT_REGION } from "@/lib/cells"
 import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import { fingerprintDiagnostics } from "@/lib/fingerprint/diagnostics-server"
@@ -87,86 +84,30 @@ function sanitizeNext(raw: string | null): string {
   return "/"
 }
 
-type CallbackSupabase = Awaited<ReturnType<typeof createServerClient>>
-
-/**
- * Ends the session of an account awaiting review and sends it to the pending
- * page, or back to signup when its review details are still missing.
- */
-async function signupReviewResponse(
-  supabase: CallbackSupabase,
+/** Ends the session of an account awaiting Enterprise setup. */
+async function pendingSignupResponse(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
   origin: string,
   user: User,
-  detailsMissing: boolean,
-  params: { requestedOffer?: string; next: string },
 ) {
   try {
     await supabase.auth.signOut()
   } catch {
-    console.warn("Signup review sign-out failed")
+    console.warn("Pending signup sign-out failed")
   }
-  let path = "/auth/pending"
-  if (detailsMissing) {
-    const signup = new URLSearchParams({ details: "required" })
-    if (params.requestedOffer) signup.set("offer", params.requestedOffer)
-    if (params.next !== "/") signup.set("next", params.next)
-    path = `/auth/signup?${signup}`
-  }
-  const response = NextResponse.redirect(buildRedirectUrl(origin, path))
+  const response = NextResponse.redirect(
+    buildRedirectUrl(origin, "/auth/pending"),
+  )
   response.cookies.delete(PLAN_OFFER_COOKIE)
-  response.cookies.delete(SIGNUP_DETAILS_COOKIE)
-  if (!detailsMissing)
-    response.cookies.set(
-      PENDING_PROFILE_COOKIE,
-      encodePendingProfile({
-        name: user.user_metadata?.full_name,
-        email: user.email,
-      }),
-      pendingProfileCookieOptions,
-    )
+  response.cookies.set(
+    PENDING_PROFILE_COOKIE,
+    encodePendingProfile({
+      name: user.user_metadata?.full_name,
+      email: user.email,
+    }),
+    pendingProfileCookieOptions,
+  )
   return response
-}
-
-/**
- * Puts a new OAuth account into review with the details stashed on the signup
- * page, if any. The Slack notification waits until the details exist.
- */
-async function holdForSignupReview(
-  supabase: CallbackSupabase,
-  origin: string,
-  user: User,
-  provider: string,
-  signupAttemptId: string | undefined,
-  eligibility: unknown,
-  params: { requestedOffer?: string; next: string },
-) {
-  const details = await readStashedSignupDetails(signupAttemptId)
-  try {
-    await updateSignupReviewMetadata(user.id, {
-      signup_review: "pending",
-      ...(details ? { signup_request: storedSignupRequest(details) } : {}),
-    })
-  } catch (error) {
-    console.error("Signup review hold failed", error)
-    try {
-      await supabase.auth.signOut()
-    } catch {
-      // The account is unusable until review succeeds; keep the error page.
-    }
-    return NextResponse.redirect(
-      buildRedirectUrl(origin, "/auth/auth-code-error"),
-    )
-  }
-  if (details)
-    await notifySlackOfNewUser(
-      user.email || "",
-      user.user_metadata?.full_name || null,
-      provider,
-      normalizeSignupEligibilitySnapshot(eligibility),
-      signupDetailsOffer(details),
-      details,
-    ).catch(() => {})
-  return signupReviewResponse(supabase, origin, user, !details, params)
 }
 
 export async function GET(request: Request) {
@@ -260,62 +201,19 @@ export async function GET(request: Request) {
             return response
           }
         }
+        if (isSignupReviewBlocked(user))
+          return pendingSignupResponse(supabase, origin, user)
+        const offerIntent =
+          searchParams.get(SIGNUP_OFFER_PARAM) ?? searchParams.get("offer")
+        const signupOffer =
+          offerIntent && (await isPricingV2Enabled())
+            ? parseSignupOffer(offerIntent)
+            : undefined
         const signupAttemptId =
           searchParams.get("signup_attempt_id") || undefined
         const provider = code
           ? user.app_metadata?.provider || "google"
           : "email"
-
-        const review = signupReviewMarker(user)
-        if (review === "pending" || review === "rejected") {
-          // A Google account first seen from sign-in returns here from the
-          // signup page with its details; record them and announce it now.
-          const details =
-            review === "pending" && code && !readSignupRequest(user)
-              ? await readStashedSignupDetails(signupAttemptId)
-              : undefined
-          if (details) {
-            try {
-              await updateSignupReviewMetadata(user.id, {
-                signup_request: storedSignupRequest(details),
-              })
-              await notifySlackOfNewUser(
-                user.email || "",
-                user.user_metadata?.full_name || null,
-                provider,
-                { kind: "unavailable" },
-                signupDetailsOffer(details),
-                details,
-              ).catch(() => {})
-            } catch (error) {
-              console.error("Signup review details update failed", error)
-            }
-          }
-          return signupReviewResponse(
-            supabase,
-            origin,
-            user,
-            review === "pending" && !details && !readSignupRequest(user),
-            { requestedOffer, next },
-          )
-        }
-        // An account created outside the console's signup flows has no marker
-        // but is still held; Google accounts go through the hold below first.
-        if (
-          isSignupReviewBlocked(user) &&
-          !(code && isGoogleUser(user) && requiresSignupReview(user))
-        )
-          return signupReviewResponse(
-            supabase,
-            origin,
-            user,
-            isGoogleUser(user) && !readSignupRequest(user),
-            { requestedOffer, next },
-          )
-        // Approval mints a magic link (signup links need the password), which
-        // confirms the address exactly like the original signup link.
-        const signupLink =
-          type === "signup" || (type === "magiclink" && review === "approved")
         let isNewUser = false
         let signupEligibilitySnapshot: unknown
 
@@ -386,16 +284,6 @@ export async function GET(request: Request) {
               console.warn("Google OAuth onboarding blocked", {
                 reason: "missing_or_invalid_proof",
               })
-              if (requiresSignupReview(user))
-                return holdForSignupReview(
-                  supabase,
-                  origin,
-                  user,
-                  provider,
-                  signupAttemptId,
-                  undefined,
-                  { requestedOffer, next },
-                )
               const recoveryUrl = new URL("/auth/signup", origin)
               recoveryUrl.searchParams.set("complete_google", "1")
               if (requestedOffer)
@@ -511,7 +399,7 @@ export async function GET(request: Request) {
           isNewUser = Date.now() - createdAt.getTime() < 30000
         }
 
-        if (signupLink) {
+        if (type === "signup") {
           const attempt = searchParams.get("device_attempt_id")
           const proof = searchParams.get("device_bind_proof")
           if (
@@ -531,8 +419,8 @@ export async function GET(request: Request) {
           }
         }
 
-        newSignup = type !== "invite" && (signupLink || isNewUser)
-        if (type !== "invite" && (signupLink || (code && isNewUser))) {
+        newSignup = type !== "invite" && (type === "signup" || isNewUser)
+        if (type !== "invite" && (type === "signup" || (code && isNewUser))) {
           const directory = await completedMemberships(
             user.id,
             await listTeamMembershipsForUserDetailed(user.id, {
@@ -588,27 +476,29 @@ export async function GET(request: Request) {
           }
         }
 
-        if (code && requiresSignupReview(user))
-          return holdForSignupReview(
-            supabase,
-            origin,
-            user,
+        if (code && isNewUser && signupOffer === "enterprise") {
+          await updateSignupReviewMetadata(user.id, {
+            signup_review: "pending",
+          })
+          await notifySlackOfNewUser(
+            user.email || "",
+            user.user_metadata?.full_name || null,
             provider,
-            signupAttemptId,
-            signupEligibilitySnapshot,
-            { requestedOffer, next },
-          )
+            normalizeSignupEligibilitySnapshot(signupEligibilitySnapshot),
+            requestedOffer,
+            true,
+          ).catch(() => {})
+          return pendingSignupResponse(supabase, origin, user)
+        }
 
         if (isNewUser) {
-          // Reviewed accounts were announced when they entered review.
-          if (!review)
-            await notifySlackOfNewUser(
-              user.email || "",
-              user.user_metadata?.full_name || null,
-              provider,
-              normalizeSignupEligibilitySnapshot(signupEligibilitySnapshot),
-              requestedOffer,
-            ).catch(() => {})
+          await notifySlackOfNewUser(
+            user.email || "",
+            user.user_metadata?.full_name || null,
+            provider,
+            normalizeSignupEligibilitySnapshot(signupEligibilitySnapshot),
+            requestedOffer,
+          ).catch(() => {})
           Promise.resolve(
             sendWelcomeEmail(
               user.email || "",
@@ -652,6 +542,8 @@ export async function GET(request: Request) {
         ) {
           next = "/yc/claim"
         }
+        if (newSignup && signupOffer && next === "/sandboxes")
+          next = SIGNUP_OFFER_DESTINATIONS[signupOffer]
       }
 
       const response = NextResponse.redirect(

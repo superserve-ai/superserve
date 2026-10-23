@@ -12,13 +12,11 @@ import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
+import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 import { beginGoogleSignIn } from "./google-action"
-
-const UNCONFIRMED_SIGNIN_MESSAGE =
-  "Your account is pending review. We'll email you as soon as it's approved. If you already received a confirmation email, use its link to finish signing up."
 
 function SignInContent() {
   const [isLoading, setIsLoading] = useState(false)
@@ -28,7 +26,11 @@ function SignInContent() {
   const [showPassword, setShowPassword] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const searchParams = useSearchParams()
-  const requestedOffer = normalizeRequestedOffer(searchParams.get("offer"))
+  const rawOffer =
+    searchParams.get(SIGNUP_OFFER_PARAM) ||
+    searchParams.get("offer") ||
+    undefined
+  const requestedOffer = normalizeRequestedOffer(rawOffer)
   const posthog = usePostHog()
 
   const rawNext = searchParams.get("next") || "/"
@@ -41,6 +43,8 @@ function SignInContent() {
 
   const signUpParams = new URLSearchParams()
   if (requestedOffer) signUpParams.set("offer", requestedOffer)
+  if (rawOffer && rawOffer !== requestedOffer)
+    signUpParams.set(SIGNUP_OFFER_PARAM, rawOffer)
   if (nextUrl !== "/") signUpParams.set("next", nextUrl)
   const signUpHref = `/auth/signup${signUpParams.size ? `?${signUpParams}` : ""}`
 
@@ -98,8 +102,7 @@ function SignInContent() {
         if (error.message.includes("Invalid login credentials")) {
           setErrors({ form: "Invalid email or password." })
         } else if (error.message.includes("Email not confirmed")) {
-          // New accounts stay unconfirmed until review approves them.
-          setErrors({ form: UNCONFIRMED_SIGNIN_MESSAGE })
+          setErrors({ form: "Please verify your email before signing in." })
         } else {
           setErrors({ form: "Error signing in. Please try again." })
         }
@@ -124,6 +127,8 @@ function SignInContent() {
       const intentId = await beginGoogleSignIn()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
       if (requestedOffer) callbackUrl.searchParams.set("offer", requestedOffer)
+      if (rawOffer && rawOffer !== requestedOffer)
+        callbackUrl.searchParams.set(SIGNUP_OFFER_PARAM, rawOffer)
       if (intentId)
         callbackUrl.searchParams.set("google_signin_intent", intentId)
       if (nextUrl && nextUrl !== "/") {

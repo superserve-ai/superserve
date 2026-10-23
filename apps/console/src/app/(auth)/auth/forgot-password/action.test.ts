@@ -31,12 +31,6 @@ vi.mock("@/lib/email/templates/password-reset", () => ({
 
 import { sendPasswordResetEmail } from "./action"
 
-const CONFIRMED_USER = {
-  id: "user-1",
-  email_confirmed_at: "2026-01-01T00:00:00Z",
-  app_metadata: {},
-}
-
 describe("sendPasswordResetEmail", () => {
   beforeEach(() => {
     mockGenerateLink.mockReset()
@@ -45,7 +39,7 @@ describe("sendPasswordResetEmail", () => {
 
   it("returns success for a valid email + happy path", async () => {
     mockGenerateLink.mockResolvedValue({
-      data: { user: CONFIRMED_USER, properties: { hashed_token: "token-abc" } },
+      data: { properties: { hashed_token: "token-abc" } },
       error: null,
     })
     mockSendEmail.mockResolvedValue(undefined)
@@ -95,7 +89,7 @@ describe("sendPasswordResetEmail", () => {
 
   it("returns success when sendEmail throws", async () => {
     mockGenerateLink.mockResolvedValue({
-      data: { user: CONFIRMED_USER, properties: { hashed_token: "token-abc" } },
+      data: { properties: { hashed_token: "token-abc" } },
       error: null,
     })
     mockSendEmail.mockRejectedValue(new Error("SMTP down"))
@@ -117,7 +111,7 @@ describe("sendPasswordResetEmail", () => {
 
   it("builds the reset URL with token_hash + type=recovery", async () => {
     mockGenerateLink.mockResolvedValue({
-      data: { user: CONFIRMED_USER, properties: { hashed_token: "hash-xyz" } },
+      data: { properties: { hashed_token: "hash-xyz" } },
       error: null,
     })
     mockSendEmail.mockResolvedValue(undefined)
@@ -134,27 +128,16 @@ describe("sendPasswordResetEmail", () => {
   })
 
   it.each([
-    [
-      "an unconfirmed account created since review started",
-      {
-        ...CONFIRMED_USER,
-        email_confirmed_at: null,
-        created_at: "2999-06-01T00:00:00Z",
-      },
-    ],
-    [
-      "an account awaiting review",
-      { ...CONFIRMED_USER, app_metadata: { signup_review: "pending" } },
-    ],
-    [
-      "a rejected account",
-      { ...CONFIRMED_USER, app_metadata: { signup_review: "rejected" } },
-    ],
+    ["an account awaiting Enterprise setup", { signup_review: "pending" }],
+    ["a rejected account", { signup_review: "rejected" }],
   ])(
-    "returns success without sending a confirming link to %s",
-    async (_label, user) => {
+    "returns success without sending a link to %s",
+    async (_label, app_metadata) => {
       mockGenerateLink.mockResolvedValue({
-        data: { user, properties: { hashed_token: "token-abc" } },
+        data: {
+          user: { id: "user-1", app_metadata },
+          properties: { hashed_token: "token-abc" },
+        },
         error: null,
       })
 
@@ -165,18 +148,15 @@ describe("sendPasswordResetEmail", () => {
     },
   )
 
-  it("still sends recovery to an unconfirmed account that predates review", async () => {
+  it("still sends recovery to an unconfirmed account without a hold", async () => {
     mockGenerateLink.mockResolvedValue({
       data: {
-        user: {
-          ...CONFIRMED_USER,
-          email_confirmed_at: null,
-          created_at: "2026-01-01T00:00:00Z",
-        },
+        user: { id: "user-1", email_confirmed_at: null, app_metadata: {} },
         properties: { hashed_token: "token-abc" },
       },
       error: null,
     })
+    mockSendEmail.mockResolvedValue(undefined)
 
     await sendPasswordResetEmail("user@example.com")
 

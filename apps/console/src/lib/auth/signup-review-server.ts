@@ -1,24 +1,10 @@
 import "server-only"
-import crypto from "node:crypto"
-
 import { cookies } from "next/headers"
 
 import { createAdminClient } from "@/lib/supabase/admin"
 
-import {
-  isReviewableSignup,
-  parseSignupDetails,
-  signupReviewMarker,
-  type ReviewUser,
-  type SignupDetails,
-} from "./signup-review"
-
-export const SIGNUP_DETAILS_COOKIE = "__Host-superserve-signup-details"
 export const PENDING_PROFILE_COOKIE = "ss-signup-pending"
 
-const DETAILS_PURPOSE = "signup_details_v1"
-// Covers the Google consent round trip only; the callback consumes it.
-const DETAILS_TTL_SECONDS = 15 * 60
 const PENDING_PROFILE_TTL_SECONDS = 24 * 60 * 60
 
 /** Merged into app_metadata; Auth keeps keys that are not listed. */
@@ -31,83 +17,6 @@ export async function updateSignupReviewMetadata(
     { app_metadata: metadata },
   )
   if (error) throw new Error(`Signup review update failed: ${error.message}`)
-}
-
-/**
- * An OAuth account without a team that has not entered review. Callers only
- * ask for first-time accounts, so age within the review period is ignored: an
- * abandoned first callback must not let a later sign-in skip review.
- */
-export function requiresSignupReview(user: ReviewUser): boolean {
-  return !signupReviewMarker(user) && isReviewableSignup(user)
-}
-
-function secret(): string {
-  const value = process.env.GOOGLE_SIGNUP_PROOF_SECRET
-  if (!value || value.length < 32)
-    throw new Error("Signup details signing secret is not configured")
-  return value
-}
-
-function sign(encoded: string): string {
-  return crypto
-    .createHmac("sha256", secret())
-    .update(`${DETAILS_PURPOSE}:${encoded}`)
-    .digest("base64url")
-}
-
-/** Holds Google signup details across the OAuth redirect, bound to one attempt. */
-export async function stashSignupDetails(
-  signupAttemptId: string,
-  details: SignupDetails,
-): Promise<void> {
-  const encoded = Buffer.from(
-    JSON.stringify({
-      attempt: signupAttemptId,
-      exp: Math.floor(Date.now() / 1000) + DETAILS_TTL_SECONDS,
-      details,
-    }),
-  ).toString("base64url")
-  ;(await cookies()).set(SIGNUP_DETAILS_COOKIE, `${encoded}.${sign(encoded)}`, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: DETAILS_TTL_SECONDS,
-  })
-}
-
-export async function readStashedSignupDetails(
-  signupAttemptId: string | undefined,
-): Promise<SignupDetails | undefined> {
-  if (!signupAttemptId) return undefined
-  try {
-    const value = (await cookies()).get(SIGNUP_DETAILS_COOKIE)?.value
-    if (!value || value.length > 8192) return undefined
-    const [encoded, supplied, extra] = value.split(".")
-    if (!encoded || !supplied || extra) return undefined
-    const expected = Buffer.from(sign(encoded), "base64url")
-    const actual = Buffer.from(supplied, "base64url")
-    if (
-      actual.toString("base64url") !== supplied ||
-      actual.length !== expected.length ||
-      !crypto.timingSafeEqual(actual, expected)
-    )
-      return undefined
-    const payload = JSON.parse(
-      Buffer.from(encoded, "base64url").toString("utf8"),
-    ) as { attempt?: unknown; exp?: unknown; details?: unknown }
-    if (
-      payload.attempt !== signupAttemptId ||
-      typeof payload.exp !== "number" ||
-      payload.exp < Math.floor(Date.now() / 1000)
-    )
-      return undefined
-    const parsed = parseSignupDetails(payload.details)
-    return parsed.success ? parsed.data : undefined
-  } catch {
-    return undefined
-  }
 }
 
 export interface PendingProfile {

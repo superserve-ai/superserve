@@ -1,7 +1,5 @@
 import { Button, Heading, Text } from "@react-email/components"
 
-import { CARD_BONUS_USD } from "@/lib/api/plan-catalog"
-
 import { EmailLayout } from "./components/email-layout"
 
 interface SignupApprovedEmailProps {
@@ -12,10 +10,10 @@ interface SignupApprovedEmailProps {
 }
 
 export const signupApprovedSubject = () =>
-  `You're approved — claim $${CARD_BONUS_USD} in free compute`
+  "Your Superserve Enterprise account is ready"
 
-const claimCopy = () =>
-  `Add your payment method to claim $${CARD_BONUS_USD} in free compute. You won't be charged.`
+const readyCopy = () =>
+  "Your Enterprise plan is set up. Sign in to start running sandboxes."
 
 export const SignupApprovedEmail = ({
   url,
@@ -24,7 +22,7 @@ export const SignupApprovedEmail = ({
 }: SignupApprovedEmailProps) => (
   <EmailLayout preview={signupApprovedSubject()}>
     <Heading style={heading}>{signupApprovedSubject()}</Heading>
-    <Text style={paragraph}>{claimCopy()}</Text>
+    <Text style={paragraph}>{readyCopy()}</Text>
     {provider === "google" && !confirm ? (
       <Text style={paragraph}>
         Sign in with Google using this email address to get started.
