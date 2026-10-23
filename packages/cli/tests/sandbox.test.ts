@@ -362,3 +362,31 @@ describe("ID-shaped names", () => {
     }
   })
 })
+
+describe("edge inputs", () => {
+  test("--metadata __proto__=x reaches the API as a real key", async () => {
+    const r = await runCli(
+      ["sandbox", "update", SANDBOX_ID, "-m", "__proto__=x"],
+      {
+        fetch: () => new Response(null, { status: 204 }),
+      },
+    )
+    expect(r.exitCode).toBe(0)
+    expect(r.requests[0].body).toContain('"__proto__":"x"')
+  })
+
+  test("resume retries when a conflict turns out to be a finished pause", async () => {
+    let posts = 0
+    const r = await runCli(["sandbox", "resume", SANDBOX_ID], {
+      fetch: (req) => {
+        if (req.method === "POST")
+          return ++posts === 1
+            ? apiError(409, "conflict", "busy")
+            : json({ id: SANDBOX_ID, name: "box", status: "active" })
+        return json({ id: SANDBOX_ID, name: "box", status: "paused" })
+      },
+    })
+    expect(r.exitCode).toBe(0)
+    expect(posts).toBe(2)
+  })
+})

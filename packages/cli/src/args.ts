@@ -11,15 +11,16 @@ export function parseKeyValues(
   flag: string,
 ): Record<string, string> | undefined {
   if (!pairs?.length) return undefined
-  const out: Record<string, string> = {}
-  for (const pair of pairs) {
-    const eq = pair.indexOf("=")
-    if (eq <= 0) {
-      throw usageError(`Invalid ${flag} "${pair}": expected KEY=VALUE.`)
-    }
-    out[pair.slice(0, eq)] = pair.slice(eq + 1)
-  }
-  return out
+  // fromEntries defines own properties, so a key like __proto__ is kept.
+  return Object.fromEntries(
+    pairs.map((pair) => {
+      const eq = pair.indexOf("=")
+      if (eq <= 0) {
+        throw usageError(`Invalid ${flag} "${pair}": expected KEY=VALUE.`)
+      }
+      return [pair.slice(0, eq), pair.slice(eq + 1)]
+    }),
+  )
 }
 
 const UNIT_SECONDS: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86_400 }

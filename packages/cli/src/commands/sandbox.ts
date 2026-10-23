@@ -740,6 +740,14 @@ A paused sandbox uses no compute. Resume it with \`superserve sandbox resume\`;
             }
             const { status } = await apiRequest<SandboxItem>("GET", path(id))
             if (status === "active") return undefined
+            // A pause that has (or is about to) land: resuming is still valid.
+            if (
+              (status === "paused" || status === "pausing") &&
+              Date.now() < deadline
+            ) {
+              await sleep(1_000)
+              continue
+            }
             throw err
           }
         }
