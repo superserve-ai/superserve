@@ -82,3 +82,9 @@ export function internalApiTokenFor(region: string): string | undefined {
   if (region === "usw") return process.env.INTERNAL_API_TOKEN_USWEST
   return undefined
 }
+
+export function operatorApiTokenFor(region: string): string | undefined {
+  if (region === DEFAULT_REGION) return process.env.OPERATOR_API_TOKEN
+  if (region === "usw") return process.env.OPERATOR_API_TOKEN_USWEST
+  return undefined
+}

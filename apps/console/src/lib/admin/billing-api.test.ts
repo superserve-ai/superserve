@@ -30,6 +30,7 @@ const fetchMock = vi.fn()
 beforeEach(() => {
   vi.stubEnv("SANDBOX_API_URL", "https://api.example.com")
   vi.stubEnv("INTERNAL_API_TOKEN", "internal-token")
+  vi.stubEnv("OPERATOR_API_TOKEN", "operator-token")
   vi.stubGlobal("fetch", fetchMock)
   fetchMock.mockReset()
 })
@@ -237,5 +238,77 @@ describe("adminBillingRequest configuration", () => {
     expect(String(fetchMock.mock.calls[0][0])).toBe(
       "https://api.example.com/internal/billing/x?q=a%2F..%2Fb",
     )
+  })
+})
+
+describe("adminBillingRequest credentials", () => {
+  const writer = () =>
+    signIn(staff(["platform:billing:read", "platform:billing:write"]))
+
+  it("sends writes with the operator token, never the internal token", async () => {
+    writer()
+    fetchMock.mockResolvedValue(Response.json({ ok: true }))
+    await adminBillingRequest({
+      region: "use",
+      path: "/internal/billing/x",
+      schema,
+      method: "POST",
+      body: { reason: "r" },
+    })
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init.headers.Authorization).toBe("Bearer operator-token")
+    expect(init.body).toBe('{"reason":"r"}')
+  })
+
+  it("fails closed when the operator token is missing", async () => {
+    writer()
+    vi.stubEnv("OPERATOR_API_TOKEN", "")
+    expect(
+      await kind(
+        adminBillingRequest({
+          region: "use",
+          path: "/internal/billing/x",
+          schema,
+          method: "POST",
+          body: {},
+        }),
+      ),
+    ).toBe("unavailable")
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("refuses writes when the operator token equals the internal token", async () => {
+    writer()
+    vi.stubEnv("OPERATOR_API_TOKEN", "internal-token")
+    expect(
+      await kind(
+        adminBillingRequest({
+          region: "use",
+          path: "/internal/billing/x",
+          schema,
+          method: "POST",
+          body: {},
+        }),
+      ),
+    ).toBe("unavailable")
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("uses the region's own operator token", async () => {
+    writer()
+    vi.stubEnv("SUPABASE_USWEST_URL", "https://usw.example.com")
+    vi.stubEnv("SUPABASE_USWEST_SERVICE_ROLE_KEY", "service-role")
+    vi.stubEnv("SANDBOX_API_URL_USWEST", "https://api-usw.example.com")
+    vi.stubEnv("OPERATOR_API_TOKEN_USWEST", "west-operator")
+    fetchMock.mockResolvedValue(Response.json({ ok: true }))
+    await adminBillingRequest({
+      region: "usw",
+      path: "/internal/billing/x",
+      schema,
+      method: "DELETE",
+    })
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(String(url)).toBe("https://api-usw.example.com/internal/billing/x")
+    expect(init.headers.Authorization).toBe("Bearer west-operator")
   })
 })

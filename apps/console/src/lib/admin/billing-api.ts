@@ -5,7 +5,12 @@ import {
   canReadAdminBilling,
   canWriteAdminBilling,
 } from "@/lib/admin/permissions"
-import { cellFor, configuredRegions, internalApiTokenFor } from "@/lib/cells"
+import {
+  cellFor,
+  configuredRegions,
+  internalApiTokenFor,
+  operatorApiTokenFor,
+} from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
 export type AdminBillingErrorKind =
@@ -69,8 +74,13 @@ export async function adminBillingRequest<T>({
 }: AdminBillingRequest<T>): Promise<T> {
   const user = await requireAdminBilling(method === "GET" ? "read" : "write")
   if (!isAdminBillingPath(path)) throw new AdminBillingRequestError("invalid")
-  const token = internalApiTokenFor(region)
-  if (!token || !configuredRegions().includes(region))
+  const internalToken = internalApiTokenFor(region)
+  const token = method === "GET" ? internalToken : operatorApiTokenFor(region)
+  if (
+    !token ||
+    (method !== "GET" && token === internalToken) ||
+    !configuredRegions().includes(region)
+  )
     throw new AdminBillingRequestError("unavailable")
   const url = new URL(path, cellFor(region).apiBaseUrl)
   if (query) url.search = query.toString()
