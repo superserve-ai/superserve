@@ -3,11 +3,38 @@ import {
   normalizeRequestedOffer,
   REQUESTED_OFFER_LABELS,
 } from "@/lib/auth/requested-offer"
+import {
+  SIGNUP_AFFILIATION_LABELS,
+  type SignupDetails,
+} from "@/lib/auth/signup-review"
 import sendToSlackHook from "@/lib/slack/send-to-webhook"
 import {
   formatSignupEligibility,
   type SignupEligibilityPresentationOutcome,
 } from "@/lib/slack/signup-eligibility"
+
+// Signup details are free text from the form; keep Slack from parsing them as
+// mentions or links.
+function escapeSlack(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+}
+
+function detailFields(details: SignupDetails | undefined) {
+  if (!details) return []
+  return [
+    { type: "mrkdwn", text: `*Company:* ${escapeSlack(details.company)}` },
+    {
+      type: "mrkdwn",
+      text: `*Affiliation:* ${SIGNUP_AFFILIATION_LABELS[details.affiliation]}`,
+    },
+    ...(details.ycLink
+      ? [{ type: "mrkdwn", text: `*YC link:* ${escapeSlack(details.ycLink)}` }]
+      : []),
+  ]
+}
 
 /**
  * Send the original signup notification from a server-only continuation.
@@ -22,6 +49,7 @@ export const notifySlackOfNewUser = async (
   provider: string | null,
   outcome?: SignupEligibilityPresentationOutcome,
   offer?: string,
+  details?: SignupDetails,
 ) => {
   try {
     const requestedOffer = normalizeRequestedOffer(offer)
@@ -50,6 +78,7 @@ export const notifySlackOfNewUser = async (
                   },
                 ]
               : []),
+            ...detailFields(details),
             {
               type: "mrkdwn",
               text: `*Signup Eligibility:* ${annotationText}`,

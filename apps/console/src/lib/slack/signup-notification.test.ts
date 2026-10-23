@@ -12,6 +12,8 @@ describe("requested offer in signup notification", () => {
     ["free", "Free"],
     ["pro_monthly", "Pro Monthly"],
     ["pro_annual", "Pro Annual"],
+    ["starter_annual", "Starter Annual"],
+    ["enterprise", "Enterprise"],
     ["yc_2026", "YC"],
     ["arbitrary_plan", undefined],
     ["__proto__", undefined],
@@ -40,4 +42,37 @@ describe("requested offer in signup notification", () => {
       })
     },
   )
+})
+
+describe("signup review details in signup notification", () => {
+  beforeEach(() => send.mockClear())
+
+  it("adds the review details without letting free text trigger Slack mentions", async () => {
+    await notifySlackOfNewUser(
+      "user@example.com",
+      "User",
+      "google",
+      { kind: "unavailable" },
+      "starter_monthly",
+      {
+        company: "<!channel> & Co",
+        affiliation: "yc",
+        ycLink: "https://example.com/<@U123>",
+        plan: "starter",
+        cadence: "monthly",
+      },
+    )
+    const fields = send.mock.lastCall![0].blocks[1].fields
+    expect(fields).toEqual(
+      expect.arrayContaining([
+        { type: "mrkdwn", text: "*Requested offer:* Starter Monthly" },
+        { type: "mrkdwn", text: "*Company:* &lt;!channel&gt; &amp; Co" },
+        { type: "mrkdwn", text: "*Affiliation:* YC" },
+        {
+          type: "mrkdwn",
+          text: "*YC link:* https://example.com/&lt;@U123&gt;",
+        },
+      ]),
+    )
+  })
 })

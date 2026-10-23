@@ -59,6 +59,11 @@ vi.mock("next/script", () => ({
   default: () => null,
 }))
 
+vi.mock("@/lib/api/plan-catalog-read", async () => ({
+  readPlanCatalog: async () =>
+    (await import("@/lib/api/plan-catalog")).FALLBACK_PLAN_CATALOG,
+}))
+
 const mockSignInWithOAuth = vi.fn()
 vi.mock("@/lib/supabase/client", () => ({
   createBrowserClient: () => ({
@@ -135,6 +140,20 @@ function restoreRecaptchaSiteKey() {
   }
 }
 
+const DETAILS_PAYLOAD = {
+  company: "Example Co",
+  affiliation: "other",
+  plan: "starter",
+  cadence: "monthly",
+}
+
+async function fillDetails(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(await screen.findByPlaceholderText("Company"), "Example Co")
+  await user.selectOptions(screen.getByLabelText("Affiliation"), "other")
+  await user.click(screen.getByRole("radio", { name: /Starter/ }))
+  await user.click(screen.getByRole("radio", { name: /monthly/i }))
+}
+
 describe("SignUpPage", () => {
   let user: ReturnType<typeof userEvent.setup>
   // RECAPTCHA_SITE_KEY is read from process.env at module load. A static
@@ -168,7 +187,7 @@ describe("SignUpPage", () => {
   })
 
   it("renders the signup form", async () => {
-    render(<SignUpPage />)
+    render(await SignUpPage())
 
     expect(
       await screen.findByText("Create your Superserve account"),
@@ -186,7 +205,7 @@ describe("SignUpPage", () => {
   it("renders Complete signup mode without the account-creation form", async () => {
     mockSearchParams = new URLSearchParams("complete_google=1")
     const { default: RecoverySignUpPage } = await import("./page")
-    render(<RecoverySignUpPage />)
+    render(await RecoverySignUpPage())
 
     expect(await screen.findByText("Complete signup")).toBeInTheDocument()
     expect(
@@ -201,7 +220,7 @@ describe("SignUpPage", () => {
   })
 
   it("shows inline errors when submitting with empty fields", async () => {
-    render(<SignUpPage />)
+    render(await SignUpPage())
 
     await user.click(await screen.findByRole("button", { name: "Sign Up" }))
 
@@ -212,8 +231,9 @@ describe("SignUpPage", () => {
   })
 
   it("shows an inline error when password is too short", async () => {
-    render(<SignUpPage />)
+    render(await SignUpPage())
 
+    await fillDetails(user)
     await user.type(
       await screen.findByPlaceholderText("Full Name"),
       "Test User",
@@ -229,8 +249,9 @@ describe("SignUpPage", () => {
   })
 
   it("shows an inline error when passwords do not match", async () => {
-    render(<SignUpPage />)
+    render(await SignUpPage())
 
+    await fillDetails(user)
     await user.type(
       await screen.findByPlaceholderText("Full Name"),
       "Test User",
@@ -250,7 +271,7 @@ describe("SignUpPage", () => {
 
   it("preserves the claim destination when switching to sign in", async () => {
     mockSearchParams = new URLSearchParams("offer=yc_2026&next=%2Fyc%2Fclaim")
-    render(<SignUpPage />)
+    render(await SignUpPage())
     const link = await screen.findByRole("link", { name: "Sign in" })
     const url = new URL(
       link.getAttribute("href")!,
@@ -260,14 +281,15 @@ describe("SignUpPage", () => {
     expect(url.searchParams.get("offer")).toBe("yc_2026")
   })
 
-  it("submits diagnostics and the YC return path together before showing email-sent state", async () => {
+  it("submits diagnostics, details, and the YC return path together before showing pending review", async () => {
     mockSignUpWithEmail.mockResolvedValue({ success: true })
     mockSearchParams = new URLSearchParams({
       offer: "pro_monthly",
       next: "/yc/claim",
     })
-    render(<SignUpPage />)
+    render(await SignUpPage())
 
+    await fillDetails(user)
     await user.type(
       await screen.findByPlaceholderText("Full Name"),
       "Test User",
@@ -281,12 +303,9 @@ describe("SignUpPage", () => {
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
     await waitFor(() => {
-      expect(screen.getByText("Check Your Email")).toBeInTheDocument()
+      expect(screen.getByText("Pending review")).toBeInTheDocument()
     })
-    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
-      "href",
-      "/auth/signin?offer=pro_monthly&next=%2Fyc%2Fclaim",
-    )
+    expect(screen.getByText("test@test.com")).toBeInTheDocument()
     expect(mockSignUpWithEmail).toHaveBeenCalledWith(
       "test@test.com",
       "password123",
@@ -297,6 +316,7 @@ describe("SignUpPage", () => {
       "pro_monthly",
       { schema_version: 1, events: [] },
       "/yc/claim",
+      DETAILS_PAYLOAD,
     )
   })
 
@@ -312,6 +332,7 @@ describe("SignUpPage", () => {
       </StrictMode>,
     )
 
+    await fillDetails(user)
     await user.type(
       await screen.findByPlaceholderText("Full Name"),
       syntheticSignupValues.fullName,
@@ -330,10 +351,9 @@ describe("SignUpPage", () => {
     )
     await user.click(await screen.findByRole("button", { name: "Sign Up" }))
 
-    expect(await screen.findByText("Check Your Email")).toBeInTheDocument()
+    expect(await screen.findByText("Pending review")).toBeInTheDocument()
     expect(signupTrace.submissions).toHaveLength(1)
     expect(screen.queryByRole("button", { name: "Sign Up" })).toBeNull()
-    expect(screen.getByRole("link", { name: "Sign in" })).toBeInTheDocument()
   })
 
   it("waits for capture to finish before submitting email signup", async () => {
@@ -343,8 +363,9 @@ describe("SignUpPage", () => {
     })
     mockEnsureFingerprintSignupEventId.mockReturnValueOnce(fingerprintPromise)
     mockSignUpWithEmail.mockResolvedValue({ success: true })
-    render(<SignUpPage />)
+    render(await SignUpPage())
 
+    await fillDetails(user)
     await user.type(
       await screen.findByPlaceholderText("Full Name"),
       "Test User",
@@ -372,6 +393,7 @@ describe("SignUpPage", () => {
         undefined,
         { schema_version: 1, events: [] },
         "/",
+        DETAILS_PAYLOAD,
       )
     })
   })
@@ -381,8 +403,9 @@ describe("SignUpPage", () => {
       success: false,
       error: "An account with this email already exists.",
     })
-    render(<SignUpPage />)
+    render(await SignUpPage())
 
+    await fillDetails(user)
     await user.type(
       await screen.findByPlaceholderText("Full Name"),
       "Test User",
@@ -406,8 +429,9 @@ describe("SignUpPage", () => {
       error: "Database error saving new user",
       errorCode: "blocked_email",
     })
-    render(<SignUpPage />)
+    render(await SignUpPage())
 
+    await fillDetails(user)
     await user.type(
       await screen.findByPlaceholderText("Full Name"),
       "Test User",
@@ -429,8 +453,9 @@ describe("SignUpPage", () => {
 
   it("shows generic error when signUpWithEmail throws", async () => {
     mockSignUpWithEmail.mockRejectedValue(new Error("network error"))
-    render(<SignUpPage />)
+    render(await SignUpPage())
 
+    await fillDetails(user)
     await user.type(
       await screen.findByPlaceholderText("Full Name"),
       "Test User",
@@ -452,11 +477,11 @@ describe("SignUpPage", () => {
     ["pro_annual", "pro_annual"],
     ["arbitrary_plan", null],
   ])(
-    "carries only a valid offer through Google signup and the signin link: %s",
+    "carries only a valid offer to the signin link and the chosen plan through Google signup: %s",
     async (offer, expected) => {
       mockSearchParams = new URLSearchParams({ offer: offer! })
       mockSignInWithOAuth.mockResolvedValue({ error: null })
-      render(<SignUpPage />)
+      render(await SignUpPage())
       const link = await screen.findByRole("link", { name: "Sign in" })
       expect(
         new URL(
@@ -464,6 +489,7 @@ describe("SignUpPage", () => {
           "https://console.superserve.ai",
         ).searchParams.get("offer"),
       ).toBe(expected)
+      await fillDetails(user)
       await user.click(
         screen.getByRole("button", { name: /Continue with Google/ }),
       )
@@ -472,7 +498,7 @@ describe("SignUpPage", () => {
         new URL(
           mockSignInWithOAuth.mock.lastCall![0].options.redirectTo,
         ).searchParams.get("offer"),
-      ).toBe(expected)
+      ).toBe("starter_monthly")
     },
   )
 
@@ -482,8 +508,9 @@ describe("SignUpPage", () => {
       signupAttemptId: "attempt-123",
     })
     mockSignInWithOAuth.mockResolvedValue({ error: null })
-    render(<SignUpPage />)
+    render(await SignUpPage())
 
+    await fillDetails(user)
     await user.click(
       await screen.findByRole("button", { name: /Continue with Google/ }),
     )
@@ -494,6 +521,7 @@ describe("SignUpPage", () => {
         undefined,
         undefined,
         { schema_version: 1, events: [] },
+        DETAILS_PAYLOAD,
       )
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
@@ -517,8 +545,9 @@ describe("SignUpPage", () => {
       success: true,
       signupAttemptId: "attempt-456",
     })
-    render(<SignUpPage />)
+    render(await SignUpPage())
 
+    await fillDetails(user)
     await user.click(
       await screen.findByRole("button", { name: /Continue with Google/ }),
     )
@@ -533,6 +562,7 @@ describe("SignUpPage", () => {
         undefined,
         undefined,
         { schema_version: 1, events: [] },
+        DETAILS_PAYLOAD,
       )
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({
         provider: "google",
@@ -547,7 +577,7 @@ describe("SignUpPage", () => {
   })
 
   it("has a link to sign in page", async () => {
-    render(<SignUpPage />)
+    render(await SignUpPage())
 
     const signInLink = await screen.findByRole("link", { name: "Sign in" })
     expect(signInLink).toHaveAttribute("href", "/auth/signin")
@@ -589,8 +619,9 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       },
     }
     const { default: ConfiguredSignUpPage } = await import("./page")
-    render(<ConfiguredSignUpPage />)
+    render(await ConfiguredSignUpPage())
 
+    await fillDetails(user)
     await user.type(
       await screen.findByPlaceholderText("Full Name"),
       "Test User",
@@ -621,8 +652,9 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       },
     }
     const { default: ConfiguredSignUpPage } = await import("./page")
-    render(<ConfiguredSignUpPage />)
+    render(await ConfiguredSignUpPage())
 
+    await fillDetails(user)
     await user.click(
       await screen.findByRole("button", { name: /Continue with Google/ }),
     )
@@ -632,6 +664,7 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       undefined,
       undefined,
       { schema_version: 1, events: [] },
+      DETAILS_PAYLOAD,
     )
     expect(mockSignInWithOAuth).not.toHaveBeenCalled()
     expect(await screen.findByText(/couldn't verify/i)).toBeInTheDocument()
@@ -655,8 +688,9 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       },
     }
     const { default: ConfiguredSignUpPage } = await import("./page")
-    render(<ConfiguredSignUpPage />)
+    render(await ConfiguredSignUpPage())
 
+    await fillDetails(user)
     await user.click(
       await screen.findByRole("button", { name: /Continue with Google/ }),
     )
@@ -670,6 +704,7 @@ describe("SignUpPage with reCAPTCHA configured", () => {
         undefined,
         undefined,
         { schema_version: 1, events: [] },
+        DETAILS_PAYLOAD,
       )
     })
     expect(mockSignInWithOAuth).not.toHaveBeenCalled()
@@ -703,7 +738,7 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       },
     }
     const { default: ConfiguredSignUpPage } = await import("./page")
-    render(<ConfiguredSignUpPage />)
+    render(await ConfiguredSignUpPage())
 
     await user.click(
       await screen.findByRole("button", {
@@ -747,8 +782,9 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       },
     }
     const { default: ConfiguredSignUpPage } = await import("./page")
-    render(<ConfiguredSignUpPage />)
+    render(await ConfiguredSignUpPage())
 
+    await fillDetails(user)
     await user.type(
       await screen.findByPlaceholderText("Full Name"),
       "Test User",
@@ -772,6 +808,7 @@ describe("SignUpPage with reCAPTCHA configured", () => {
         undefined,
         { schema_version: 1, events: [] },
         "/",
+        DETAILS_PAYLOAD,
       )
     })
   })

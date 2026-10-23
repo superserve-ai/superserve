@@ -41,6 +41,14 @@ vi.mock("@/lib/email/templates/welcome", () => ({
     `WelcomeEmail:${props.name}`,
 }))
 
+const mockUpdateSignupReview = vi.fn()
+const mockStashSignupDetails = vi.fn()
+vi.mock("@/lib/auth/signup-review-server", () => ({
+  updateSignupReviewMetadata: (...args: unknown[]) =>
+    mockUpdateSignupReview(...args),
+  stashSignupDetails: (...args: unknown[]) => mockStashSignupDetails(...args),
+}))
+
 const mockSlack = vi.fn().mockResolvedValue(undefined)
 vi.mock("@/lib/slack/signup-notification", () => ({
   notifySlackOfNewUser: (...args: unknown[]) => mockSlack(...args),
@@ -135,7 +143,27 @@ vi.mock("next/server", () => ({
 
 import { SignupRestrictedError } from "@/lib/auth/signup-restrictions"
 
-import { beginGoogleSignup, signUpWithEmail } from "./action"
+import {
+  beginGoogleSignup,
+  signUpWithEmail as signUpWithEmailAction,
+} from "./action"
+
+const SIGNUP_DETAILS = {
+  company: "Example Co",
+  affiliation: "other",
+  plan: "starter",
+  cadence: "monthly",
+}
+
+// Every email signup now carries the review details as its last argument.
+type SignupArgs = Parameters<typeof signUpWithEmailAction>
+
+function signUpWithEmail(...args: Partial<SignupArgs>) {
+  const padded = Array.from({ length: 9 }, (_, index) => args[index])
+  return signUpWithEmailAction(
+    ...([...padded, SIGNUP_DETAILS] as unknown as SignupArgs),
+  )
+}
 
 // verifyRecaptcha reads these at call time (not module load), so these
 // tests — which assert unconfigured (fail-open) behavior and never pass a
@@ -160,10 +188,11 @@ describe("post-trial signup with the real Cloudflare observer", () => {
       .mockReset()
       .mockResolvedValue({ data: true, error: null })
     mockGenerateLink.mockReset().mockResolvedValue({
-      data: { properties: { hashed_token: "abc123" } },
+      data: { user: { id: "user-1" }, properties: { hashed_token: "abc123" } },
       error: null,
     })
     mockSendEmail.mockReset().mockResolvedValue({ success: true })
+    mockUpdateSignupReview.mockReset().mockResolvedValue(undefined)
     mockSlack.mockReset().mockResolvedValue(undefined)
     mockVerifyRecaptcha.mockReset().mockResolvedValue({ verified: true })
     mockIssueGoogleSignupProof.mockReset().mockResolvedValue(undefined)
@@ -248,7 +277,9 @@ describe("post-trial signup with the real Cloudflare observer", () => {
         expect(mockGenerateLink).toHaveBeenCalledTimes(
           method === "email" ? 2 : 0,
         )
-        expect(mockSendEmail).toHaveBeenCalledTimes(method === "email" ? 2 : 0)
+        expect(mockUpdateSignupReview).toHaveBeenCalledTimes(
+          method === "email" ? 2 : 0,
+        )
         expect(mockIssueGoogleSignupProof).toHaveBeenCalledTimes(
           method === "google" ? 2 : 0,
         )
@@ -262,6 +293,7 @@ describe("signUpWithEmail", () => {
     mockAfter.mockReset().mockImplementation((callback) => callback())
     mockGenerateLink.mockReset()
     mockSendEmail.mockReset()
+    mockUpdateSignupReview.mockReset().mockResolvedValue(undefined)
     mockSlack.mockReset().mockResolvedValue(undefined)
     mockVerifyRecaptcha.mockReset().mockResolvedValue({ verified: true })
     mockIssueGoogleSignupProof.mockReset().mockResolvedValue(undefined)
@@ -319,13 +351,15 @@ describe("signUpWithEmail", () => {
   })
 
   it.each([undefined, "pro_monthly", "arbitrary_plan"])(
-    "sends confirmation and Slack with only a valid offer: %s",
+    "holds the account for review with the chosen plan instead of a link offer: %s",
     async (offer) => {
       mockGenerateLink.mockResolvedValue({
-        data: { properties: { hashed_token: "abc123" } },
+        data: {
+          user: { id: "user-1" },
+          properties: { hashed_token: "abc123" },
+        },
         error: null,
       })
-      mockSendEmail.mockResolvedValue({ success: true })
 
       const result = await signUpWithEmail(
         "user@test.com",
@@ -335,22 +369,10 @@ describe("signUpWithEmail", () => {
         undefined,
         undefined,
         offer,
+        undefined,
+        "/yc/accept?claim=11111111-1111-4111-8111-111111111111",
       )
 
-      const expected = offer === "pro_monthly" ? offer : undefined
-      expect(
-        new URL(
-          mockGenerateLink.mock.lastCall![0].options.redirectTo,
-        ).searchParams.get("offer"),
-      ).toBe(expected ?? null)
-      const confirmationUrl = mockSendEmail.mock.lastCall![0].react.replace(
-        "ConfirmationEmail:",
-        "",
-      )
-      expect(new URL(confirmationUrl).searchParams.get("offer")).toBe(
-        expected ?? null,
-      )
-      expect(mockSlack.mock.lastCall![4]).toBe(expected)
       expect(result).toEqual({ success: true })
       expect(mockGenerateLink).toHaveBeenCalledWith({
         type: "signup",
@@ -364,14 +386,70 @@ describe("signUpWithEmail", () => {
           redirectTo: expect.stringContaining("/auth/callback"),
         },
       })
-      expect(mockSendEmail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          to: "user@test.com",
-          subject: "Confirm your Superserve account",
-        }),
+      const redirectTo = new URL(
+        mockGenerateLink.mock.lastCall![0].options.redirectTo,
+      )
+      expect(redirectTo.searchParams.get("offer")).toBe("starter_monthly")
+      expect(mockSendEmail).not.toHaveBeenCalled()
+      expect(mockUpdateSignupReview).toHaveBeenCalledExactlyOnceWith("user-1", {
+        signup_review: "pending",
+        signup_request: {
+          company: "Example Co",
+          affiliation: "other",
+          plan: "starter",
+          cadence: "monthly",
+          submitted_at: expect.any(String),
+        },
+        signup_confirmation: {
+          signup_attempt_id:
+            mockGenerateLink.mock.lastCall![0].options.data.signup_attempt_id,
+          offer: "starter_monthly",
+          next: "/yc/accept?claim=11111111-1111-4111-8111-111111111111",
+        },
+      })
+      expect(mockSlack.mock.lastCall![4]).toBe("starter_monthly")
+      expect(mockSlack.mock.lastCall![5]).toEqual(
+        expect.objectContaining({ company: "Example Co" }),
       )
     },
   )
+
+  it("rejects signups without valid review details before creating an account", async () => {
+    const result = await signUpWithEmailAction(
+      "user@test.com",
+      "password123",
+      "Test User",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { ...SIGNUP_DETAILS, affiliation: "yc", ycLink: "javascript:alert(1)" },
+    )
+
+    expect(result).toEqual({
+      success: false,
+      error: "Enter a valid http(s) URL.",
+    })
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+  })
+
+  it("keeps an earlier review decision when a rejected address signs up again", async () => {
+    mockGenerateLink.mockResolvedValue({
+      data: {
+        user: { id: "user-1", app_metadata: { signup_review: "rejected" } },
+        properties: { hashed_token: "abc123" },
+      },
+      error: null,
+    })
+
+    await expect(
+      signUpWithEmail("user@test.com", "password123", "Test User"),
+    ).resolves.toEqual({ success: true })
+    expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
 
   it("consumes the fingerprint event after lookup so a later attempt cannot reuse it", async () => {
     fingerprintSignupEventId = encodeURIComponent("event-123")
@@ -504,7 +582,7 @@ describe("signUpWithEmail", () => {
         signupAttemptId,
         "VisitorCase",
       )
-      expect(mockSendEmail).toHaveBeenCalledTimes(1)
+      expect(mockUpdateSignupReview).toHaveBeenCalledTimes(1)
     },
   )
 
@@ -538,7 +616,7 @@ describe("signUpWithEmail", () => {
     expect(mockEvaluateSignupRestriction).toHaveBeenCalledTimes(1)
     expect(fingerprintSignupEventId).toBeUndefined()
     expect(mockSaveSignupEvidence).not.toHaveBeenCalled()
-    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+    expect(mockUpdateSignupReview).toHaveBeenCalledTimes(1)
   })
 
   it("skips restriction evaluation for an attempt superseded by a signed context", async () => {
@@ -616,7 +694,7 @@ describe("signUpWithEmail", () => {
         await expect(
           signUpWithEmail("user@test.com", "password123", "Test User"),
         ).resolves.toEqual({ success: true })
-        expect(mockSendEmail).toHaveBeenCalledTimes(1)
+        expect(mockUpdateSignupReview).toHaveBeenCalledTimes(1)
         expect(fetchSpy).toHaveBeenCalledTimes(policy === "off" ? 1 : 0)
       } finally {
         globalThis.fetch = previousFetch
@@ -634,7 +712,10 @@ describe("signUpWithEmail", () => {
       })
       mockVerifyRecaptcha.mockResolvedValue({ verified, reason: "low_score" })
       mockGenerateLink.mockResolvedValue({
-        data: { properties: { hashed_token: "abc123" } },
+        data: {
+          user: { id: "user-1" },
+          properties: { hashed_token: "abc123" },
+        },
         error: null,
       })
       mockSendEmail.mockResolvedValue({ success: true })
@@ -663,7 +744,7 @@ describe("signUpWithEmail", () => {
             },
       )
       expect(mockGenerateLink).toHaveBeenCalledTimes(verified ? 1 : 0)
-      expect(mockSendEmail).toHaveBeenCalledTimes(verified ? 1 : 0)
+      expect(mockUpdateSignupReview).toHaveBeenCalledTimes(verified ? 1 : 0)
     },
   )
 
@@ -723,11 +804,12 @@ describe("signUpWithEmail", () => {
       "Test User",
       "email",
       { kind: "unavailable" },
-      undefined,
+      "starter_monthly",
+      expect.objectContaining({ company: "Example Co" }),
     )
   })
 
-  it("returns error when token hash is missing", async () => {
+  it("returns error when Auth returns no account", async () => {
     mockGenerateLink.mockResolvedValue({
       data: { properties: {} },
       error: null,
@@ -741,8 +823,9 @@ describe("signUpWithEmail", () => {
 
     expect(result).toEqual({
       success: false,
-      error: "Failed to generate confirmation link.",
+      error: "Failed to create account.",
     })
+    expect(mockUpdateSignupReview).not.toHaveBeenCalled()
   })
 
   it("returns generic error on unexpected exception", async () => {
@@ -762,7 +845,7 @@ describe("signUpWithEmail", () => {
 
   it("notifies slack after successful signup (fire and forget)", async () => {
     mockGenerateLink.mockResolvedValue({
-      data: { properties: { hashed_token: "abc123" } },
+      data: { user: { id: "user-1" }, properties: { hashed_token: "abc123" } },
       error: null,
     })
     mockSendEmail.mockResolvedValue({ success: true })
@@ -777,7 +860,7 @@ describe("signUpWithEmail", () => {
 
   it("preserves signup when the notification boundary rejects", async () => {
     mockGenerateLink.mockResolvedValue({
-      data: { properties: { hashed_token: "abc123" } },
+      data: { user: { id: "user-1" }, properties: { hashed_token: "abc123" } },
       error: null,
     })
     mockSendEmail.mockResolvedValue({ success: true })
@@ -786,7 +869,7 @@ describe("signUpWithEmail", () => {
     await expect(
       signUpWithEmail("user@test.com", "password123", "Test User"),
     ).resolves.toEqual({ success: true })
-    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+    expect(mockUpdateSignupReview).toHaveBeenCalledTimes(1)
   })
 
   it("preserves the original rejection when a blocked notification rejects", async () => {
@@ -808,7 +891,8 @@ describe("signUpWithEmail", () => {
       "Test User",
       "email",
       { kind: "blocked" },
-      undefined,
+      "starter_monthly",
+      expect.objectContaining({ company: "Example Co" }),
     )
   })
 })
@@ -995,6 +1079,7 @@ describe("original signup promotion evidence", () => {
     mockOriginalPublication.mockReset().mockResolvedValue(undefined)
     mockVerifyRecaptcha.mockReset().mockResolvedValue({ verified: true })
     mockSendEmail.mockReset().mockResolvedValue({ success: true })
+    mockUpdateSignupReview.mockReset().mockResolvedValue(undefined)
     mockSlack.mockReset().mockResolvedValue(undefined)
     mockEvaluateSignupRestriction.mockReset().mockResolvedValue(undefined)
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
@@ -1061,8 +1146,12 @@ describe("original signup promotion evidence", () => {
       expect.any(String),
     )
     expect(mockOriginalPublication.mock.invocationCallOrder[0]).toBeLessThan(
-      mockSendEmail.mock.invocationCallOrder[0],
+      mockUpdateSignupReview.mock.invocationCallOrder[0],
     )
+    // Approval rebuilds the device binding from this attempt.
+    expect(mockUpdateSignupReview.mock.lastCall![1]).toMatchObject({
+      signup_confirmation: { device_attempt_id: "original-attempt" },
+    })
     expect(mockEvaluateSignupRestriction).toHaveBeenCalledWith(
       "use",
       expect.any(String),
@@ -1182,7 +1271,8 @@ describe("original signup promotion evidence", () => {
         "Name",
         "email",
         expected,
-        undefined,
+        "starter_monthly",
+        expect.objectContaining({ company: "Example Co" }),
       )
       expect(mockOriginalPublication).toHaveBeenCalledWith(
         expect.objectContaining({ id: "actual-auth-user" }),
@@ -1214,7 +1304,8 @@ describe("original signup promotion evidence", () => {
       "Name",
       "email",
       { kind: "unavailable" },
-      undefined,
+      "starter_monthly",
+      expect.objectContaining({ company: "Example Co" }),
     )
   })
 
@@ -1233,13 +1324,14 @@ describe("original signup promotion evidence", () => {
         capture,
       ),
     ).resolves.toEqual({ success: true })
-    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+    expect(mockUpdateSignupReview).toHaveBeenCalledTimes(1)
     expect(mockSlack).toHaveBeenCalledWith(
       "user@example.com",
       "Name",
       "email",
       { kind: "unavailable" },
-      undefined,
+      "starter_monthly",
+      expect.objectContaining({ company: "Example Co" }),
     )
   })
 

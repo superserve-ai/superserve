@@ -9,9 +9,11 @@ import Script from "next/script"
 import { usePostHog } from "posthog-js/react"
 import { useEffect, useState } from "react"
 
+import { PendingReview } from "@/components/auth/pending-review"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
+import { FALLBACK_PLAN_CATALOG, type PlanCatalog } from "@/lib/api/plan-catalog"
 import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
 import {
   clearFingerprintSignupCapture,
@@ -26,6 +28,14 @@ import {
   isCloudflareSignupObservationEnabled,
   signUpWithEmail,
 } from "./action"
+import {
+  initialSignupDetails,
+  SignupDetailsFields,
+  signupDetailsPayload,
+  signupValuesOffer,
+  validateSignupDetails,
+  type SignupDetailsValues,
+} from "./details-fields"
 
 const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
 const TRUSTED_REDIRECT_PATTERN =
@@ -149,7 +159,11 @@ function sanitizeNext(raw: string | null): string {
   return "/"
 }
 
-export default function SignUpContent() {
+export default function SignUpContent({
+  catalog = FALLBACK_PLAN_CATALOG,
+}: {
+  catalog?: PlanCatalog
+}) {
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
   const [formValues, setFormValues] = useState({
@@ -163,18 +177,27 @@ export default function SignUpContent() {
     setFormValues((current) => ({ ...current, [key]: value }))
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [emailSent, setEmailSent] = useState(false)
+  const [pendingReview, setPendingReview] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const posthog = usePostHog()
   const router = useRouter()
   const searchParams = useSearchParams()
   const nextUrl = sanitizeNext(searchParams.get("next"))
   const requestedOffer = normalizeRequestedOffer(searchParams.get("offer"))
+  const [details, setDetails] = useState(() =>
+    initialSignupDetails(requestedOffer),
+  )
+  const setDetail = <K extends keyof SignupDetailsValues>(
+    key: K,
+    value: SignupDetailsValues[K],
+  ) => setDetails((current) => ({ ...current, [key]: value }))
   const signInParams = new URLSearchParams()
   if (requestedOffer) signInParams.set("offer", requestedOffer)
   if (nextUrl !== "/") signInParams.set("next", nextUrl)
   const signInHref = `/auth/signin${signInParams.size ? `?${signInParams}` : ""}`
   const isCompleteGoogleSignup = searchParams.get("complete_google") === "1"
+  // A new Google account that started from sign-in has no signup details yet.
+  const detailsRequired = searchParams.get("details") === "required"
 
   useEffect(() => {
     if (searchParams.get("error") === "link_expired") {
@@ -185,7 +208,7 @@ export default function SignUpContent() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrors({})
-    const newErrors: Record<string, string> = {}
+    const newErrors: Record<string, string> = validateSignupDetails(details)
     if (!fullName) newErrors.fullName = "Name is required."
     if (!email) newErrors.email = "Email is required."
     if (!password) newErrors.password = "Password is required."
@@ -222,6 +245,7 @@ export default function SignUpContent() {
         requestedOffer,
         fingerprintDiagnostics,
         nextUrl,
+        signupDetailsPayload(details),
       )
       if (!result.success) {
         posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
@@ -237,10 +261,10 @@ export default function SignUpContent() {
       }
       posthog.capture(AUTH_EVENTS.SIGN_UP_COMPLETED, {
         method: "email",
-        ...(requestedOffer ? { requested_offer: requestedOffer } : {}),
+        requested_offer: signupValuesOffer(details),
       })
       clearFingerprintSignupCapture()
-      setEmailSent(true)
+      setPendingReview(true)
     } catch {
       setErrors({ form: "Error creating account. Please try again." })
     } finally {
@@ -248,9 +272,21 @@ export default function SignUpContent() {
     }
   }
 
-  const handleGoogleSignIn = async () => {
-    setIsGoogleLoading(true)
+  // Recovery for an existing account carries no details; new signups must.
+  const handleGoogleSignIn = async (withDetails: boolean) => {
     setErrors({})
+    if (withDetails) {
+      const detailErrors = validateSignupDetails(details)
+      if (Object.keys(detailErrors).length > 0) {
+        setErrors({
+          ...detailErrors,
+          form: "Complete your details above before continuing with Google.",
+        })
+        return
+      }
+    }
+    const offer = withDetails ? signupValuesOffer(details) : requestedOffer
+    setIsGoogleLoading(true)
     try {
       const capture = await ensureFingerprintSignupCapture()
       const fingerprintDiagnostics = getFingerprintSignupDiagnostics()
@@ -271,6 +307,7 @@ export default function SignUpContent() {
         turnstileToken,
         capture,
         fingerprintDiagnostics,
+        ...(withDetails ? [signupDetailsPayload(details)] : []),
       )
       if (!proof.success) {
         setErrors({ form: proof.error || "Google signup verification failed." })
@@ -280,7 +317,7 @@ export default function SignUpContent() {
       const supabase = createBrowserClient()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
       callbackUrl.searchParams.set("signup_attempt_id", proof.signupAttemptId)
-      if (requestedOffer) callbackUrl.searchParams.set("offer", requestedOffer)
+      if (offer) callbackUrl.searchParams.set("offer", offer)
       if (nextUrl && nextUrl !== "/") {
         callbackUrl.searchParams.set("next", nextUrl)
       }
@@ -302,6 +339,30 @@ export default function SignUpContent() {
       setIsGoogleLoading(false)
     }
   }
+
+  if (pendingReview) return <PendingReview name={fullName} email={email} />
+
+  const googleButton = (label: string, loadingLabel: string) => (
+    <Button
+      type="button"
+      variant="outline"
+      onClick={() => handleGoogleSignIn(!isCompleteGoogleSignup)}
+      disabled={isGoogleLoading || isLoading}
+      className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
+    >
+      {isGoogleLoading ? <Spinner /> : <GoogleIcon />}
+      {isGoogleLoading ? loadingLabel : label}
+    </Button>
+  )
+  const detailsFields = (
+    <SignupDetailsFields
+      values={details}
+      errors={errors}
+      catalog={catalog}
+      disabled={isLoading || isGoogleLoading}
+      onChange={setDetail}
+    />
+  )
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
@@ -331,27 +392,7 @@ export default function SignUpContent() {
             />
           </Link>
         </div>
-        {emailSent ? (
-          <>
-            <h1 className="text-center text-sm font-medium text-foreground">
-              Check Your Email
-            </h1>
-            <p className="mt-2 text-center text-xs leading-relaxed text-muted">
-              We&apos;ve sent a verification link to{" "}
-              <strong className="text-foreground">{email}</strong>. Check your
-              inbox and click the link to verify your account.
-            </p>
-            <p className="mt-5 text-center text-xs text-muted">
-              Already verified?{" "}
-              <Link
-                href={signInHref}
-                className="font-medium text-foreground hover:underline"
-              >
-                Sign in
-              </Link>
-            </p>
-          </>
-        ) : isCompleteGoogleSignup ? (
+        {isCompleteGoogleSignup ? (
           <>
             <h1 className="mb-4 text-center text-sm font-medium text-foreground">
               Complete signup
@@ -363,34 +404,37 @@ export default function SignUpContent() {
             {errors.form && (
               <p className="mb-4 text-xs text-destructive">{errors.form}</p>
             )}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleGoogleSignIn}
-              disabled={isGoogleLoading || isLoading}
-              className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
-            >
-              {isGoogleLoading ? <Spinner /> : <GoogleIcon />}
-              {isGoogleLoading
-                ? "Completing signup..."
-                : "Complete signup with Google"}
-            </Button>
+            {googleButton(
+              "Complete signup with Google",
+              "Completing signup...",
+            )}
+          </>
+        ) : detailsRequired ? (
+          <>
+            <h1 className="mb-4 text-center text-sm font-medium text-foreground">
+              Complete your details
+            </h1>
+            <p className="mb-6 text-center text-xs leading-relaxed text-muted">
+              We need a few details before we can review your account. Fill them
+              in and continue with Google again.
+            </p>
+            {detailsFields}
+            {errors.form && (
+              <p className="mt-4 text-xs text-destructive">{errors.form}</p>
+            )}
+            <div className="mt-6">
+              {googleButton("Continue with Google", "Signing up...")}
+            </div>
           </>
         ) : (
           <>
             <h1 className="mb-6 text-center text-sm font-medium text-foreground">
               Create your Superserve account
             </h1>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleGoogleSignIn}
-              disabled={isGoogleLoading || isLoading}
-              className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
-            >
-              {isGoogleLoading ? <Spinner /> : <GoogleIcon />}
-              {isGoogleLoading ? "Signing up..." : "Continue with Google"}
-            </Button>
+            {detailsFields}
+            <div className="mt-6">
+              {googleButton("Continue with Google", "Signing up...")}
+            </div>
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-dashed border-border" />

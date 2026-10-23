@@ -11,7 +11,6 @@ import { createPromotionSignupAttempt } from "@/lib/api/promotion-device-evidenc
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
 import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
 import { issueGoogleSignupProof } from "@/lib/auth/google-signup-proof"
-import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
 import {
   beginSignupEvidenceAttempt,
   isSupersededSignupEvidenceAttempt,
@@ -22,15 +21,23 @@ import {
   SignupRestrictedError,
   SIGNUP_RESTRICTED_MESSAGE,
 } from "@/lib/auth/signup-restrictions"
+import {
+  parseSignupDetails,
+  signupDetailsOffer,
+  signupReviewStatus,
+  storedSignupRequest,
+} from "@/lib/auth/signup-review"
+import {
+  stashSignupDetails,
+  updateSignupReviewMetadata,
+} from "@/lib/auth/signup-review-server"
 import { DEFAULT_REGION } from "@/lib/cells"
 import {
   isCloudflareSignupObservationEnabled as readCloudflareObservationFlag,
   observeCloudflareSignup,
 } from "@/lib/cloudflare/signup-observe"
 import { sendEmail } from "@/lib/email/send"
-import { ConfirmationEmail } from "@/lib/email/templates/confirmation"
 import { WelcomeEmail } from "@/lib/email/templates/welcome"
-import { signSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import type { SignupFingerprintResult } from "@/lib/fingerprint/client"
 import { FINGERPRINT_SIGNUP_COOKIE } from "@/lib/fingerprint/constants"
 import type { BrowserFingerprintDiagnostics } from "@/lib/fingerprint/diagnostics"
@@ -167,14 +174,24 @@ export const beginGoogleSignup = async (
   turnstileToken?: string,
   captureResult?: SignupFingerprintResult,
   browserDiagnostics?: BrowserFingerprintDiagnostics,
+  // Absent only when an existing account completes Google signup recovery.
+  details?: unknown,
 ): Promise<
   | { success: true; signupAttemptId: string }
   | {
       success: false
       error: string
-      errorCode: "captcha_failed" | "proof_unavailable"
+      errorCode: "captcha_failed" | "proof_unavailable" | "invalid_details"
     }
 > => {
+  const parsedDetails =
+    details === undefined ? undefined : parseSignupDetails(details)
+  if (parsedDetails && !parsedDetails.success)
+    return {
+      success: false,
+      error: parsedDetails.error,
+      errorCode: "invalid_details" as const,
+    }
   const capture =
     captureResult && "attemptId" in captureResult ? captureResult : undefined
   const signupAttemptId = crypto.randomUUID()
@@ -273,6 +290,8 @@ export const beginGoogleSignup = async (
       // Attestation or publication outages remain authority failures.
       routineMissing: !verified && !attestationFailed,
     })
+    if (parsedDetails?.success)
+      await stashSignupDetails(signupAttemptId, parsedDetails.data)
     await trackEvent(
       AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_VERIFIED,
       signupAttemptId,
@@ -310,14 +329,20 @@ export const signUpWithEmail = async (
   recaptchaToken?: string,
   turnstileToken?: string,
   captureResult?: SignupFingerprintResult,
-  offer?: string,
+  // Superseded by the plan chosen on the form; kept for argument positions.
+  _offer?: string,
   browserDiagnostics?: BrowserFingerprintDiagnostics,
   ycNext?: string,
+  details?: unknown,
 ) => {
-  const requestedOffer = normalizeRequestedOffer(offer)
   const parsed = signUpSchema.safeParse({ email, password, fullName })
   if (!parsed.success)
     return { success: false, error: parsed.error.issues[0].message }
+  const parsedDetails = parseSignupDetails(details)
+  if (!parsedDetails.success)
+    return { success: false, error: parsedDetails.error }
+  const signupDetails = parsedDetails.data
+  const requestedOffer = signupDetailsOffer(signupDetails)
 
   const capture =
     captureResult && "attemptId" in captureResult ? captureResult : undefined
@@ -435,6 +460,7 @@ export const signUpWithEmail = async (
             "email",
             { kind: "blocked" },
             requestedOffer,
+            signupDetails,
           ).catch(() => {})
           return { success: false, error: SIGNUP_RESTRICTED_MESSAGE }
         }
@@ -486,6 +512,7 @@ export const signUpWithEmail = async (
           "email",
           { kind: "unavailable" },
           requestedOffer,
+          signupDetails,
         ).catch(() => {})
         return {
           success: false,
@@ -538,35 +565,36 @@ export const signUpWithEmail = async (
       },
     )
 
-    const tokenHash = data?.properties?.hashed_token
-    if (!tokenHash)
-      return { success: false, error: "Failed to generate confirmation link." }
+    if (!data?.user?.id)
+      return { success: false, error: "Failed to create account." }
 
-    const confirmation = new URL(redirectTo)
-    confirmation.searchParams.set("token_hash", tokenHash)
-    confirmation.searchParams.set("type", "signup")
-    confirmation.searchParams.set("signup_attempt_id", signupAttemptId)
-    confirmation.searchParams.set("utm_source", "email")
-    confirmation.searchParams.set("utm_medium", "signup_confirmation")
-    if (originalSignup && deviceVerified && capture) {
-      const proof = signSignupDeviceBinding(data.user.id, capture.attemptId)
-      if (proof) {
-        confirmation.searchParams.set("device_attempt_id", capture.attemptId)
-        confirmation.searchParams.set("device_bind_proof", proof)
-      }
+    // No email until staff approve. Approval mints a fresh link from these
+    // inputs so it reaches the callback exactly as the signup link would.
+    // A rejected or already-approved account keeps its decision.
+    const review = signupReviewStatus(data.user)
+    if (!review || review === "pending") {
+      const deviceAttemptId =
+        originalSignup && deviceVerified && capture
+          ? capture.attemptId
+          : undefined
+      await updateSignupReviewMetadata(data.user.id, {
+        signup_review: "pending",
+        signup_request: storedSignupRequest(signupDetails),
+        signup_confirmation: {
+          signup_attempt_id: signupAttemptId,
+          offer: requestedOffer,
+          ...(next ? { next } : {}),
+          ...(deviceAttemptId ? { device_attempt_id: deviceAttemptId } : {}),
+        },
+      })
     }
-    const confirmationUrl = confirmation.toString()
-    await sendEmail({
-      to: parsed.data.email,
-      subject: "Confirm your Superserve account",
-      react: ConfirmationEmail({ confirmationUrl }),
-    })
     notifySlackOfNewUser(
       parsed.data.email,
       parsed.data.fullName,
       "email",
       normalizeSignupEligibilitySnapshot(signupEligibilitySnapshot),
       requestedOffer,
+      signupDetails,
     ).catch(() => {})
     return { success: true }
   } catch (err) {
