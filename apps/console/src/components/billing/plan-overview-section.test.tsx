@@ -138,10 +138,7 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     })
     render(<PlanOverviewSection summary={summary} />)
     expect(mocks.allowance).toHaveBeenCalledWith(true)
-    expect(screen.getByText("63%")).toBeTruthy()
-    expect(
-      screen.getByText(/of this window left \(\$0\.08 of \$0\.13\)/),
-    ).toBeTruthy()
+    expect(screen.getByText("64%")).toBeTruthy()
     expect(screen.getByText(/resets Oct 24, 8:00 AM UTC/)).toBeTruthy()
     expect(screen.getByRole("link", { name: "Upgrade" })).toBeTruthy()
   })
@@ -224,7 +221,27 @@ describe("PlanOverviewSection with pricing v2 on", () => {
       },
     })
     render(<PlanOverviewSection summary={summary} />)
-    expect(screen.getByText("Allowance couldn't be loaded.")).toBeTruthy()
+    expect(
+      screen.getByText("No runtime allowance applies to your team right now."),
+    ).toBeTruthy()
+    expect(screen.queryByText(/couldn't be loaded/)).toBeNull()
+  })
+
+  it("never rounds an unspent allowance down to zero", () => {
+    mocks.plan.mockReturnValue({
+      data: plan({ key: "free", kind: "free", name: "Free" }),
+      isError: false,
+    })
+    mocks.allowance.mockReturnValue({
+      data: allowance({
+        window_started_at: "2026-10-23T08:00:00Z",
+        resets_at: "2026-10-24T08:00:00Z",
+        used_cents: 13.3,
+        remaining_cents: 0.02,
+      }),
+    })
+    render(<PlanOverviewSection summary={summary} />)
+    expect(screen.getByText("1%")).toBeTruthy()
   })
 
   it("shows a scheduled downgrade", () => {

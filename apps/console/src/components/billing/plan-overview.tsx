@@ -97,11 +97,19 @@ export function FreeAllowancePanel({
 }: {
   allowance: FreeAllowance | null
 }) {
-  const total = allowance?.allowance_cents ?? null
-  if (!allowance?.applies || total === null)
+  if (!allowance)
     return (
       <Panel title="Runtime allowance">
         <p className="text-sm text-muted">Allowance couldn&apos;t be loaded.</p>
+      </Panel>
+    )
+  const total = allowance.allowance_cents
+  if (!allowance.applies || total === null)
+    return (
+      <Panel title="Runtime allowance">
+        <p className="text-sm text-muted">
+          No runtime allowance applies to your team right now.
+        </p>
       </Panel>
     )
   const open = allowance.window_started_at !== null
@@ -114,9 +122,9 @@ export function FreeAllowancePanel({
   return (
     <Panel title="Runtime allowance">
       <p className="text-3xl font-medium tracking-tight text-foreground">
-        {Math.floor(share * 100)}%{" "}
+        {remaining > 0 ? Math.max(Math.ceil(share * 100), 1) : 0}%{" "}
         <span className="text-sm font-normal text-muted">
-          of this window left ({formatCents(remaining)} of {formatCents(total)})
+          of this window&apos;s allowance left
         </span>
       </p>
       <Meter

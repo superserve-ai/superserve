@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { apiClient } from "./client"
+import { ApiError, apiClient } from "./client"
 
 export type PricingVersion = "legacy" | "v2"
 
@@ -15,6 +15,11 @@ export function pricingVersionOf(body: unknown): PricingVersion {
     : "legacy"
 }
 
-export function fetchPublicPlans(): Promise<unknown> {
-  return apiClient<unknown>("/billing/plans/public")
+export async function fetchPublicPlans(): Promise<unknown> {
+  try {
+    return await apiClient<unknown>("/billing/plans/public")
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return {}
+    throw error
+  }
 }

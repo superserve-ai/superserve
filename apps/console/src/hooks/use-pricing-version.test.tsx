@@ -3,9 +3,14 @@ import { renderHook, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { ApiError } from "@/lib/api/client"
+
 const mocks = vi.hoisted(() => ({ context: vi.fn(), api: vi.fn() }))
 vi.mock("./use-billing-context", () => ({ useBillingContext: mocks.context }))
-vi.mock("@/lib/api/client", () => ({ apiClient: mocks.api }))
+vi.mock("@/lib/api/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/client")>()),
+  apiClient: mocks.api,
+}))
 
 import {
   usePricingVersion,
@@ -40,6 +45,23 @@ describe("usePricingVersion", () => {
     await waitFor(() => expect(mocks.api).toHaveBeenCalledTimes(1))
     expect(mocks.api).toHaveBeenCalledWith("/billing/plans/public")
     expect(result.current).toBe("legacy")
+  })
+
+  it("caches today's missing endpoint as a definite legacy answer", async () => {
+    mocks.api.mockRejectedValue(new ApiError(404, "not_found", "Not found"))
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const { result } = renderHook(() => usePricingVersionState(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    })
+    await waitFor(() => expect(result.current).toBe("legacy"))
+    expect(
+      client.getQueryState(["billing", "pricing-version", "self", "use:team-a"])
+        ?.status,
+    ).toBe("success")
   })
 
   it("is legacy when the catalog request fails", async () => {
