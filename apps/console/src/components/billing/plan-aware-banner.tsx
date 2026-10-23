@@ -84,7 +84,7 @@ export function PlanAwareBanner({
         {size ? `, up to ${size} each` : ""}, with a runtime allowance per
         24-hour window. When it runs out, running sandboxes pause until the
         window resets. Upgrade for higher limits, bigger sandboxes, more running
-        at once and no daily pause.
+        at once and no allowance pauses.
       </BannerShell>
     )
   }

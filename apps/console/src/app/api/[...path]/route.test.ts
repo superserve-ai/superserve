@@ -334,7 +334,12 @@ describe("api proxy /api/[...path]", () => {
       new Error("writer unavailable"),
     )
     fetchSpy.mockImplementation(() =>
-      Promise.resolve(new Response("{}", { status: 200 })),
+      Promise.resolve(
+        new Response("{}", {
+          status: 200,
+          headers: { "cache-control": "max-age=300" },
+        }),
+      ),
     )
     for (const path of [
       ["billing", "plans", "public"],
@@ -344,6 +349,7 @@ describe("api proxy /api/[...path]", () => {
     ]) {
       const res = await GET(req("GET", path), params(path))
       expect(res.status).toBe(200)
+      expect(res.headers.get("cache-control")).toBe("private, no-store")
       expect(fetchSpy).toHaveBeenLastCalledWith(
         `https://api.test.superserve.ai/${path.join("/")}`,
         expect.objectContaining({ method: "GET" }),

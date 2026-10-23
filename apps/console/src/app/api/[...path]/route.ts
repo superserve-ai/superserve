@@ -673,7 +673,11 @@ async function forwardResponse(
     }
     responseHeaders.set(key, value)
   }
-  if (joinedPath === "billing/summary" || isPlanBillingPath(joinedPath)) {
+  if (
+    joinedPath === "billing/summary" ||
+    isPlanBillingPath(joinedPath) ||
+    isBillingV2ReadPath(joinedPath)
+  ) {
     responseHeaders.set("cache-control", "private, no-store")
   }
   setImpersonationDebugHeaders(
