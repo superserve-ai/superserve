@@ -22,8 +22,6 @@ export async function getPublicBillingPlansAction(
   return publicBillingPlansSchema.parse(await response.json())
 }
 
-// The live pricing model of a region. Anything short of a confirmed "v2"
-// counts as legacy, so today's flows stay in place if the read fails.
 export async function getPricingVersionAction(
   region: string = DEFAULT_REGION,
 ): Promise<PricingVersion> {
