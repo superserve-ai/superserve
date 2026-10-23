@@ -51,19 +51,29 @@ function errorKind(status: number): AdminBillingErrorKind {
 const BILLING_PATH =
   /^\/internal\/(billing|teams\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/billing)(\/[A-Za-z0-9_-]+)*$/
 
-const TEAM_BILLING =
-  "/internal/teams/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/billing"
-const SEGMENT = "[A-Za-z0-9_-]+"
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+const TEAM_BILLING = `/internal/teams/${UUID}/billing`
 
-const WRITE_ROUTES = [
-  `${TEAM_BILLING}/matching`,
-  `${TEAM_BILLING}/matching/revoke`,
-  `${TEAM_BILLING}/matching/credits/${SEGMENT}/acknowledge`,
-].map((route) => new RegExp(`^${route}$`))
+type WriteMethod = "POST" | "PUT" | "DELETE"
+
+const WRITE_ROUTES: [WriteMethod, string][] = [
+  ["POST", `${TEAM_BILLING}/matching`],
+  ["POST", `${TEAM_BILLING}/matching/revoke`],
+  ["POST", `${TEAM_BILLING}/matching/credits/${UUID}/acknowledge`],
+]
+
+const WRITE_ROUTE_PATTERNS = WRITE_ROUTES.map(
+  ([method, route]) => [method, new RegExp(`^${route}$`)] as const,
+)
 
 export function isAdminBillingPath(path: string, method = "GET"): boolean {
   if (!BILLING_PATH.test(path)) return false
-  return method === "GET" || WRITE_ROUTES.some((route) => route.test(path))
+  return (
+    method === "GET" ||
+    WRITE_ROUTE_PATTERNS.some(
+      ([routeMethod, route]) => routeMethod === method && route.test(path),
+    )
+  )
 }
 
 export interface AdminBillingRequest<T> {
@@ -71,7 +81,7 @@ export interface AdminBillingRequest<T> {
   path: `/internal/${string}`
   query?: URLSearchParams
   schema: z.ZodType<T>
-  method?: "GET" | "POST" | "PUT" | "DELETE"
+  method?: "GET" | WriteMethod
   body?: unknown
 }
 

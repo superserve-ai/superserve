@@ -307,7 +307,8 @@ describe("adminBillingRequest credentials", () => {
       region: "usw",
       path: WRITE_PATH,
       schema,
-      method: "DELETE",
+      method: "POST",
+      body: {},
     })
     const [url, init] = fetchMock.mock.calls[0]
     expect(String(url)).toBe(`https://api-usw.example.com${WRITE_PATH}`)
@@ -331,10 +332,17 @@ describe("admin billing write routes", () => {
       `/internal/teams/${TEAM}/billing/anchor`,
       "/internal/billing/cutover",
       `/internal/teams/${TEAM}/billing/matching/extra`,
+      `/internal/teams/${TEAM}/billing/matching/credits/not-a-uuid/acknowledge`,
     ]) {
       expect(isAdminBillingPath(path, "POST"), path).toBe(false)
       expect(isAdminBillingPath(path, "GET"), path).toBe(true)
     }
+  })
+
+  it("only allows the method each route is listed with", () => {
+    expect(
+      isAdminBillingPath(`/internal/teams/${TEAM}/billing/matching`, "DELETE"),
+    ).toBe(false)
   })
 
   it("refuses an unlisted write before calling the API", async () => {
