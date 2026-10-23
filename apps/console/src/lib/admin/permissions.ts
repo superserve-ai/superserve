@@ -6,6 +6,7 @@ export const PLATFORM_SANDBOX_READ_PERMISSION = "platform:sandbox:read"
 export const PLATFORM_TEMPLATE_READ_PERMISSION = "platform:template:read"
 export const PLATFORM_ACTIVITY_READ_PERMISSION = "platform:activity:read"
 export const PLATFORM_BILLING_READ_PERMISSION = "platform:billing:read"
+export const PLATFORM_BILLING_WRITE_PERMISSION = "platform:billing:write"
 export const PLATFORM_TEAMS_READ_PERMISSION = "platform:teams:read"
 export type PlatformImpersonationReadScope =
   | typeof PLATFORM_SANDBOX_READ_PERMISSION
@@ -62,6 +63,17 @@ export function canReadPlatformActivity(
 
 export function canReadPlatformBilling(user: User | null | undefined): boolean {
   return hasPermission(user, PLATFORM_BILLING_READ_PERMISSION)
+}
+
+export function canReadAdminBilling(user: User | null | undefined): boolean {
+  return isStaff(user) && hasPermission(user, PLATFORM_BILLING_READ_PERMISSION)
+}
+
+export function canWriteAdminBilling(user: User | null | undefined): boolean {
+  return (
+    canReadAdminBilling(user) &&
+    hasPermission(user, PLATFORM_BILLING_WRITE_PERMISSION)
+  )
 }
 
 export function canReadPlatformTeams(user: User | null | undefined): boolean {
