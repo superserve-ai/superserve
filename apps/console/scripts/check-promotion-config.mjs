@@ -13,6 +13,15 @@ if (
     throw new Error(
       "Set the fixed PROMOTION_SIGNUP_EVIDENCE_SINCE rollout timestamp before deploying",
     )
+  if (
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(
+      process.env.SIGNUP_REVIEW_STARTS_AT ?? "",
+    ) ||
+    !Number.isFinite(Date.parse(process.env.SIGNUP_REVIEW_STARTS_AT))
+  )
+    throw new Error(
+      "Set SIGNUP_REVIEW_STARTS_AT to the signup review rollout time before deploying",
+    )
   const tokens = [
     process.env.PROMOTION_CAPTURE_TOKEN,
     process.env.PROMOTION_ACCOUNT_TOKEN,

@@ -781,6 +781,31 @@ describe("api proxy /api/[...path]", () => {
     expect(headers.get("authorization")).toBe("Bearer user-token")
   })
 
+  it("refuses a /v1/auth/ request whose bearer account is awaiting review", async () => {
+    const getUser = vi.fn(async () => ({
+      data: {
+        user: { id: "u1", app_metadata: { signup_review: "pending" } },
+      },
+      error: null,
+    }))
+    vi.mocked(createServerClient).mockResolvedValue({
+      auth: { getUser },
+    } as never)
+    const res = await POST(
+      req("POST", ["v1", "auth", "device-authorize"], {
+        headers: {
+          authorization: "Bearer user-token",
+          "content-type": "application/json",
+        },
+        body: "{}",
+      }),
+      params(["v1", "auth", "device-authorize"]),
+    )
+    expect(getUser).toHaveBeenCalledWith("user-token")
+    expect(res.status).toBe(403)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
   it("strips disallowed client-supplied headers (cookie, x-api-key)", async () => {
     fetchSpy.mockResolvedValue(new Response("[]", { status: 200 }))
     await GET(

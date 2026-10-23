@@ -155,13 +155,18 @@ export type ReviewUser =
   | null
   | undefined
 
+const UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/
+
 /** Fails closed: without a valid cutoff every unmarked account would be ungated. */
 export function signupReviewStartsAt(
   raw = process.env.SIGNUP_REVIEW_STARTS_AT,
 ): Date {
-  const startsAt = raw ? new Date(raw) : undefined
-  if (!startsAt || Number.isNaN(startsAt.getTime()))
-    throw new Error("SIGNUP_REVIEW_STARTS_AT must be set to an ISO timestamp")
+  const startsAt =
+    raw && UTC_TIMESTAMP.test(raw) ? new Date(raw) : new Date(Number.NaN)
+  if (Number.isNaN(startsAt.getTime()))
+    throw new Error(
+      "SIGNUP_REVIEW_STARTS_AT must be a UTC timestamp such as 2026-10-23T18:00:00Z",
+    )
   return startsAt
 }
 

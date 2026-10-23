@@ -959,8 +959,11 @@ describe("auth callback", () => {
       expect(location.searchParams.get("details")).toBe("required")
     })
 
-    it("holds an unmarked account created since review started outside the signup flow", async () => {
-      Object.assign(currentUser!, { created_at: "2999-06-01T00:00:00Z" })
+    it("holds an unmarked email account created since review started outside the signup flow", async () => {
+      Object.assign(currentUser!, {
+        created_at: "2999-06-01T00:00:00Z",
+        app_metadata: { provider: "email", providers: ["email"] },
+      })
 
       const response = await GET(
         new Request(
@@ -970,6 +973,23 @@ describe("auth callback", () => {
 
       expect(mockSignOut).toHaveBeenCalled()
       expect(mockSendWelcomeEmail).not.toHaveBeenCalled()
+      expect(new URL(response.headers.get("location")!).pathname).toBe(
+        "/auth/pending",
+      )
+    })
+
+    it("holds an unmarked Google account created since review started that already has a team", async () => {
+      Object.assign(currentUser!, { created_at: "2999-06-01T00:00:00Z" })
+      mockRequiresSignupReview.mockReturnValue(true)
+
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&next=/device",
+        ),
+      )
+
+      expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+      expect(mockSignOut).toHaveBeenCalled()
       const location = new URL(response.headers.get("location")!)
       expect(location.pathname).toBe("/auth/signup")
       expect(location.searchParams.get("details")).toBe("required")

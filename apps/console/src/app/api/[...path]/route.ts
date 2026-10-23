@@ -121,6 +121,19 @@ function hasUnsafePathSegment(path: string[]): boolean {
   })
 }
 
+function signupReviewPendingResponse() {
+  return NextResponse.json(
+    {
+      error: {
+        code: "signup_review_pending",
+        message: SIGNUP_REVIEW_PENDING_MESSAGE,
+      },
+      detail: SIGNUP_REVIEW_PENDING_MESSAGE,
+    },
+    { status: 403 },
+  )
+}
+
 function shouldSkipKeyInjection(path: string): boolean {
   return SKIP_KEY_INJECTION.some((prefix) => path.startsWith(prefix))
 }
@@ -161,22 +174,26 @@ async function proxyRequest(
   let impersonationContext: { teamId: string; region: string } | null = null
   let impersonating = false
 
+  const bearer = request.headers.get("authorization")?.match(/^Bearer (.+)$/)
+  if (skipKeyInjection && bearer) {
+    // These paths act for the bearer's account, e.g. authorising a CLI login.
+    const supabase = await createServerClient()
+    const { data, error } = await supabase.auth.getUser(bearer[1])
+    if (error && !data.user)
+      return NextResponse.json(
+        { error: { code: "unauthorized", message: "Sign in again." } },
+        { status: 401 },
+      )
+    if (isSignupReviewBlocked(data.user)) return signupReviewPendingResponse()
+  }
+
   if (!skipKeyInjection) {
     const supabase = await createServerClient()
     const {
       data: { user: authUser },
     } = await supabase.auth.getUser()
     user = authUser
-    if (isSignupReviewBlocked(user))
-      return NextResponse.json(
-        {
-          error: {
-            code: "signup_review_pending",
-            message: SIGNUP_REVIEW_PENDING_MESSAGE,
-          },
-        },
-        { status: 403 },
-      )
+    if (isSignupReviewBlocked(user)) return signupReviewPendingResponse()
     authObservedAt = new Date().toISOString()
     impersonationContext = await getImpersonationContext(user)
     impersonating = impersonationContext !== null

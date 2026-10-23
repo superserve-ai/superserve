@@ -61,12 +61,16 @@ describe("signup review status", () => {
     expect(isSignupReviewBlocked(account(overrides))).toBe(false)
   })
 
-  it.each([undefined, "", "not a date"])(
-    "refuses to decide without a valid start (%s)",
-    (raw) => {
-      vi.stubEnv("SIGNUP_REVIEW_STARTS_AT", raw as string)
-      expect(() => signupReviewStartsAt()).toThrow("SIGNUP_REVIEW_STARTS_AT")
-      expect(() => isSignupReviewBlocked(account())).toThrow()
-    },
-  )
+  it.each([
+    undefined,
+    "",
+    "not a date",
+    "1",
+    "10/23/2026",
+    "2026-10-23T00:00:00",
+  ])("refuses to decide without a valid start (%s)", (raw) => {
+    vi.stubEnv("SIGNUP_REVIEW_STARTS_AT", raw as string)
+    expect(() => signupReviewStartsAt()).toThrow("SIGNUP_REVIEW_STARTS_AT")
+    expect(() => isSignupReviewBlocked(account())).toThrow()
+  })
 })
