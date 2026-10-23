@@ -42,6 +42,17 @@ const ALLOWED_PREFIXES = [
   "billing/usage-series",
 ]
 
+const BILLING_V2_READ_PATHS = new Set([
+  "billing/plans/public",
+  "billing/plan",
+  "billing/free-allowance",
+  "billing/prepaid",
+])
+
+function isBillingV2ReadPath(path: string): boolean {
+  return BILLING_V2_READ_PATHS.has(path)
+}
+
 function isTeamBillingPath(path: string): boolean {
   return (
     /^teams\/[^/]+\/billing\/usage$/.test(path) ||
@@ -87,6 +98,7 @@ const FORWARD_REQUEST_HEADERS = new Set([
 ])
 
 function isAllowedPath(path: string): boolean {
+  if (isBillingV2ReadPath(path)) return true
   if (isTeamBillingPath(path)) return true
   if (isStripeBillingPath(path)) return true
   return ALLOWED_PREFIXES.some(
@@ -146,6 +158,8 @@ async function proxyRequest(
   const skipKeyInjection = shouldSkipKeyInjection(joinedPath)
   const planRequest = isPlanBillingPath(joinedPath)
   if (planRequest && request.method !== "POST")
+    return NextResponse.json({ error: "Method not allowed" }, { status: 405 })
+  if (isBillingV2ReadPath(joinedPath) && request.method !== "GET")
     return NextResponse.json({ error: "Method not allowed" }, { status: 405 })
   const checkoutRequest =
     joinedPath === "stripe/checkout-session" && request.method === "POST"

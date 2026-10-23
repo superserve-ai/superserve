@@ -6,6 +6,7 @@ import {
   describeSandboxSize,
   formatCents,
   type FreeAllowance,
+  PLAN_ACTION_LINKS,
   type PrepaidBalance,
   type TeamPlan,
   UPGRADE_PATH,
@@ -283,9 +284,20 @@ export function PlanOverview({
         ) : (
           <Panel title="Billing">
             <p className="text-sm text-muted">
-              {plan.kind === "custom"
-                ? "Billed under your agreement. Contact us to change your plan."
-                : "Usage is billed monthly at usage rates."}
+              {plan.kind === "custom" ? (
+                <>
+                  Billed under your agreement.{" "}
+                  <Link
+                    href={PLAN_ACTION_LINKS.enterprise}
+                    className="underline underline-offset-4"
+                  >
+                    Contact us
+                  </Link>{" "}
+                  to change it.
+                </>
+              ) : (
+                "Usage is billed monthly at usage rates."
+              )}
             </p>
           </Panel>
         )}

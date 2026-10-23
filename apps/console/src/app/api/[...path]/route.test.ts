@@ -329,6 +329,38 @@ describe("api proxy /api/[...path]", () => {
     )
   })
 
+  it("forwards the plan, allowance and balance reads, GET only", async () => {
+    vi.mocked(publishPromotionIdentity).mockRejectedValue(
+      new Error("writer unavailable"),
+    )
+    fetchSpy.mockImplementation(() =>
+      Promise.resolve(new Response("{}", { status: 200 })),
+    )
+    for (const path of [
+      ["billing", "plans", "public"],
+      ["billing", "plan"],
+      ["billing", "free-allowance"],
+      ["billing", "prepaid"],
+    ]) {
+      const res = await GET(req("GET", path), params(path))
+      expect(res.status).toBe(200)
+      expect(fetchSpy).toHaveBeenLastCalledWith(
+        `https://api.test.superserve.ai/${path.join("/")}`,
+        expect.objectContaining({ method: "GET" }),
+      )
+      const write = await POST(req("POST", path), params(path))
+      expect(write.status).toBe(405)
+    }
+    for (const path of [
+      ["billing", "plans"],
+      ["billing", "plan", "x"],
+      ["billing", "prepaid", "recharge"],
+    ]) {
+      const res = await GET(req("GET", path), params(path))
+      expect(res.status).toBe(404)
+    }
+  })
+
   it("forwards the authenticated billing pricing endpoint", async () => {
     vi.mocked(publishPromotionIdentity).mockRejectedValue(
       new Error("writer unavailable"),

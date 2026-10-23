@@ -86,12 +86,35 @@ describe("PlanBanner with pricing v2 on", () => {
     mount()
     expect(screen.queryByTestId("legacy-banner")).toBeNull()
     expect(
-      screen.getByRole("status", { name: "Free plan" }).textContent,
+      screen.getByRole("region", { name: "Free plan" }).textContent,
     ).toMatch(
       /1 sandbox running at a time, up to 1 vCPU, 1 GiB memory, 4 GiB disk each/,
     )
     expect(screen.getByRole("link", { name: "Upgrade" })).toBeTruthy()
     expect(mocks.returnNotice).toHaveBeenCalled()
+  })
+
+  it("keeps today's banner while the plan loads or if it fails", () => {
+    mocks.plan.mockReturnValue({ data: undefined, isError: true })
+    mount()
+    expect(screen.getByTestId("legacy-banner")).toBeTruthy()
+  })
+
+  it("says compute is paused at a zero balance even without the low flag", () => {
+    mocks.plan.mockReturnValue({ data: plan("prepaid") })
+    mocks.prepaid.mockReturnValue({
+      data: {
+        balance_cents: 0,
+        low_balance: false,
+        auto_recharge: {
+          enabled: false,
+          threshold_cents: null,
+          amount_cents: null,
+        },
+      },
+    })
+    mount()
+    expect(screen.getByText(/has run out/)).toBeTruthy()
   })
 
   it("keeps today's banner for teams staying on legacy pay as you go", () => {
@@ -115,7 +138,7 @@ describe("PlanBanner with pricing v2 on", () => {
     })
     mount()
     expect(
-      screen.getByRole("status", { name: "Starter balance" }).textContent,
+      screen.getByRole("region", { name: "Starter balance" }).textContent,
     ).toMatch(/Your Starter balance is \$2\.50/)
     expect(
       screen.getByRole("link", { name: "Set up auto-recharge" }),

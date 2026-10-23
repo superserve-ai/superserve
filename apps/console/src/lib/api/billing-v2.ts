@@ -63,6 +63,12 @@ export type PrepaidBalance = z.infer<typeof prepaidBalanceSchema>
 
 export const UPGRADE_PATH = "/plan-usage/upgrade"
 
+export const PLAN_ACTION_LINKS = {
+  starter: "/plan-usage/starter",
+  pro: "/plan-usage/pro",
+  enterprise: "/plan-usage/enterprise",
+} as const
+
 export function formatCents(amount: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",

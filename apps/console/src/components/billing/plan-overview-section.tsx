@@ -18,20 +18,23 @@ function toCents(usd: number | null | undefined): number | null {
 }
 
 function PricingV2Overview({ summary }: { summary: BillingSummaryResponse }) {
-  const planQuery = useTeamPlan(true)
-  const plan = planQuery.data
+  const plan = useTeamPlan(true).data
   const allowance = useFreeAllowance(plan?.kind === "free").data
   const prepaid = usePrepaidBalance(plan?.kind === "prepaid").data
-  if (!plan) {
-    return planQuery.isError ? <CurrentPlan summary={summary} /> : null
-  }
-  if (plan.kind === "legacy_payg") return <CurrentPlan summary={summary} />
+  if (!plan || plan.kind === "legacy_payg")
+    return <CurrentPlan summary={summary} />
   return (
     <PlanOverview
       plan={plan}
       allowance={allowance ?? null}
       prepaid={prepaid ?? null}
-      usageCents={toCents(summary.current_charges_usd)}
+      usageCents={
+        plan.period_start !== null &&
+        Date.parse(plan.period_start) ===
+          Date.parse(summary.billing_period?.start ?? "")
+          ? toCents(summary.current_charges_usd)
+          : null
+      }
       canManage={summary.permissions?.can_manage ?? false}
     />
   )

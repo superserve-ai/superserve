@@ -27,6 +27,10 @@ import { PlanOverviewSection } from "./plan-overview-section"
 const summary = {
   permissions: { can_view: true, can_manage: true },
   current_charges_usd: 312.5,
+  billing_period: {
+    start: "2026-10-01T00:00:00Z",
+    end: "2026-11-01T00:00:00Z",
+  },
 } as unknown as BillingSummaryResponse
 
 function plan(overrides: Partial<TeamPlan>): TeamPlan {
@@ -78,6 +82,30 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     expect(screen.getByText(/\$62\.50 beyond the included usage/)).toBeTruthy()
     expect(screen.getByText("8 vCPU, 32 GiB memory, 100 GiB disk")).toBeTruthy()
     expect(screen.getByRole("link", { name: "Change plan" })).toBeTruthy()
+  })
+
+  it("doesn't report usage from a different billing period", () => {
+    mocks.plan.mockReturnValue({
+      data: plan({ period_start: "2026-10-15T00:00:00Z" }),
+      isError: false,
+    })
+    render(<PlanOverviewSection summary={summary} />)
+    expect(screen.getByText("Usage couldn't be loaded.")).toBeTruthy()
+  })
+
+  it("keeps today's plan card while the plan is loading", () => {
+    render(<PlanOverviewSection summary={summary} />)
+    expect(screen.getByTestId("legacy-plan")).toBeTruthy()
+  })
+
+  it("links Enterprise teams to contact us", () => {
+    mocks.plan.mockReturnValue({
+      data: plan({ key: "acme", kind: "custom", name: "Enterprise" }),
+      isError: false,
+    })
+    render(<PlanOverviewSection summary={summary} />)
+    expect(screen.getByRole("link", { name: "Contact us" })).toBeTruthy()
+    expect(screen.queryByRole("link", { name: "Change plan" })).toBeNull()
   })
 
   it("shows the Free allowance window and its reset time", () => {

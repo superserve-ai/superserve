@@ -4,6 +4,7 @@ import Link from "next/link"
 import {
   describeSandboxSize,
   formatCents,
+  PLAN_ACTION_LINKS,
   type PrepaidBalance,
   type TeamPlan,
   UPGRADE_PATH,
@@ -27,10 +28,10 @@ function BannerShell({
   action: React.ReactNode
 }) {
   return (
-    <output
+    <section
       aria-label={label}
       className={cn(
-        "flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b px-4 py-3 text-sm",
+        "flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-dashed px-4 py-3 text-sm",
         tone === "info" && "border-border bg-surface text-foreground",
         tone === "warning" &&
           "border-yellow-500/40 bg-yellow-100 text-yellow-950 dark:bg-yellow-950 dark:text-yellow-100",
@@ -40,7 +41,7 @@ function BannerShell({
     >
       <p className="min-w-0 flex-1 basis-72">{children}</p>
       {action}
-    </output>
+    </section>
   )
 }
 
@@ -80,14 +81,19 @@ export function PlanAwareBanner({
       >
         You&apos;re on <strong>Free</strong>: {running} sandbox
         {running === 1 ? "" : "es"} running at a time
-        {size ? `, up to ${size} each` : ""}, with a daily runtime allowance.
-        Upgrade for higher limits, bigger sandboxes, more running at once and no
-        daily pause.
+        {size ? `, up to ${size} each` : ""}, with a runtime allowance per
+        24-hour window. When it runs out, running sandboxes pause until the
+        window resets. Upgrade for higher limits, bigger sandboxes, more running
+        at once and no daily pause.
       </BannerShell>
     )
   }
 
-  if (plan.kind === "prepaid" && prepaid && prepaid.low_balance) {
+  if (
+    plan.kind === "prepaid" &&
+    prepaid &&
+    (prepaid.low_balance || prepaid.balance_cents <= 0)
+  ) {
     const empty = prepaid.balance_cents <= 0
     return (
       <BannerShell
@@ -95,12 +101,15 @@ export function PlanAwareBanner({
         label="Starter balance"
         action={
           <ManageAction canManage={canManage}>
-            <Button size="sm" render={<Link href="/plan-usage#credit" />}>
+            <Button
+              size="sm"
+              render={<Link href={PLAN_ACTION_LINKS.starter} />}
+            >
               Buy credit
             </Button>
             {!prepaid.auto_recharge.enabled && (
               <Link
-                href="/plan-usage#auto-recharge"
+                href={PLAN_ACTION_LINKS.starter}
                 className="self-center underline underline-offset-4"
               >
                 Set up auto-recharge
