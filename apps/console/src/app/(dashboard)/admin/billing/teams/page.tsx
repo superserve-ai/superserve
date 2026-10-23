@@ -13,7 +13,7 @@ import Link from "next/link"
 
 import { EmptyState } from "@/components/empty-state"
 import { AdminBillingRequestError } from "@/lib/admin/billing-api"
-import { listBillingTeams } from "@/lib/admin/team-billing"
+import { BILLING_TEAMS_PAGE, listBillingTeams } from "@/lib/admin/team-billing"
 import { regionLabel } from "@/lib/format"
 
 import { formatUsd } from "./format"
@@ -40,7 +40,17 @@ export default async function AdminBillingTeamsPage({
     }
     throw error
   }
-  const { teams, unavailableRegions } = result
+  const { teams, unavailableRegions, hiddenTeams, allRegionsUnavailable } =
+    result
+  if (allRegionsUnavailable) {
+    return (
+      <EmptyState
+        icon={UsersIcon}
+        title="Team billing is unavailable"
+        description="Billing details could not be loaded. Try again shortly."
+      />
+    )
+  }
 
   return (
     <div className="flex flex-col">
@@ -58,6 +68,12 @@ export default async function AdminBillingTeamsPage({
           Teams in {unavailableRegions.map(regionLabel).join(", ")} could not be
           loaded.
         </Alert>
+      ) : null}
+      {hiddenTeams > 0 ? (
+        <p className="px-4 pt-3 text-xs text-muted">
+          Showing the first {BILLING_TEAMS_PAGE} teams per region; {hiddenTeams}{" "}
+          more match. Search by name to find a team.
+        </p>
       ) : null}
       {teams.length === 0 ? (
         <EmptyState

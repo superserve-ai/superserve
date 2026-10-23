@@ -44,6 +44,12 @@ export async function schedulePlanChangeAction(input: {
   targetOffer: string
   reason: string
 }): Promise<PlanChangeActionResult> {
+  if (
+    typeof input.reason !== "string" ||
+    typeof input.idempotencyKey !== "string" ||
+    typeof input.targetOffer !== "string"
+  )
+    return { kind: "invalid" }
   const reason = input.reason.trim()
   if (
     !validTarget(input.region, input.teamId) ||
@@ -69,6 +75,8 @@ export async function cancelPlanChangeAction(input: {
   changeId: string
   reason: string
 }): Promise<PlanChangeActionResult> {
+  if (typeof input.reason !== "string" || typeof input.changeId !== "string")
+    return { kind: "invalid" }
   const reason = input.reason.trim()
   if (
     !validTarget(input.region, input.teamId) ||

@@ -11,6 +11,7 @@ export function isUuid(value: string): boolean {
 }
 
 const billingTeamsSchema = z.object({
+  pagination: z.object({ total: z.number() }),
   rows: z.array(
     z.object({
       team_id: z.string(),
@@ -33,13 +34,17 @@ export interface BillingTeamRow {
   creditsRemainingUsd: number | null
 }
 
+export const BILLING_TEAMS_PAGE = 50
+
 export async function listBillingTeams(search: string): Promise<{
   teams: BillingTeamRow[]
   unavailableRegions: string[]
+  hiddenTeams: number
+  allRegionsUnavailable: boolean
 }> {
   const regions = configuredRegions()
   const query = new URLSearchParams({
-    limit: "50",
+    limit: String(BILLING_TEAMS_PAGE),
     sort: "team_name",
     order: "asc",
   })
@@ -56,11 +61,16 @@ export async function listBillingTeams(search: string): Promise<{
   )
   const teams: BillingTeamRow[] = []
   const unavailableRegions: string[] = []
+  let hiddenTeams = 0
   settled.forEach((result, i) => {
     if (result.status === "rejected") {
       unavailableRegions.push(regions[i])
       return
     }
+    hiddenTeams += Math.max(
+      0,
+      result.value.pagination.total - result.value.rows.length,
+    )
     for (const row of result.value.rows) {
       teams.push({
         teamId: row.team_id,
@@ -72,7 +82,12 @@ export async function listBillingTeams(search: string): Promise<{
     }
   })
   teams.sort((a, b) => a.teamName.localeCompare(b.teamName))
-  return { teams, unavailableRegions }
+  return {
+    teams,
+    unavailableRegions,
+    hiddenTeams,
+    allRegionsUnavailable: unavailableRegions.length === regions.length,
+  }
 }
 
 const planTermsSchema = z.object({

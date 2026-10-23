@@ -38,7 +38,12 @@ it("retries a lost request with the same idempotency key", async () => {
     .mockResolvedValueOnce({ kind: "unavailable" })
     .mockResolvedValueOnce({ kind: "saved" })
   render(
-    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
+    <SchedulePlanChangeForm
+      region="use"
+      teamId={team}
+      options={options}
+      nextAnniversary="Nov 23, 2026"
+    />,
   )
   fill()
   fireEvent.click(screen.getByRole("button", { name: "Schedule change" }))
@@ -62,22 +67,64 @@ it("retries a lost request with the same idempotency key", async () => {
 it("uses a new idempotency key for the next change", async () => {
   vi.mocked(schedulePlanChangeAction).mockResolvedValue({ kind: "saved" })
   render(
-    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
+    <SchedulePlanChangeForm
+      region="use"
+      teamId={team}
+      options={options}
+      nextAnniversary="Nov 23, 2026"
+    />,
   )
   fill()
   fireEvent.click(screen.getByRole("button", { name: "Schedule change" }))
   await screen.findByText("Plan change scheduled.")
-  fill("Second request")
+  fireEvent.change(screen.getByLabelText(/New plan/), {
+    target: { value: "pro_annual" },
+  })
+  const first = vi.mocked(schedulePlanChangeAction).mock.calls[0][0]
+  fireEvent.change(screen.getByLabelText(/Reason/), {
+    target: { value: first.reason },
+  })
   fireEvent.click(screen.getByRole("button", { name: "Schedule change" }))
   await waitFor(() => expect(schedulePlanChangeAction).toHaveBeenCalledTimes(2))
-  const [first, second] = vi.mocked(schedulePlanChangeAction).mock.calls
-  expect(first[0].idempotencyKey).not.toBe(second[0].idempotencyKey)
+  const second = vi.mocked(schedulePlanChangeAction).mock.calls[1][0]
+  expect(second.idempotencyKey).not.toBe(first.idempotencyKey)
+})
+
+it("does not reuse an unconfirmed request's key for edited input", async () => {
+  vi.mocked(schedulePlanChangeAction)
+    .mockResolvedValueOnce({ kind: "unavailable" })
+    .mockResolvedValueOnce({ kind: "conflict" })
+  render(
+    <SchedulePlanChangeForm
+      region="use"
+      teamId={team}
+      options={options}
+      nextAnniversary="Nov 23, 2026"
+    />,
+  )
+  fill()
+  fireEvent.click(screen.getByRole("button", { name: "Schedule change" }))
+  await screen.findByText(/Retry to send the same request/)
+  fireEvent.change(screen.getByLabelText(/Reason/), {
+    target: { value: "A different reason" },
+  })
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }))
+  await waitFor(() => expect(schedulePlanChangeAction).toHaveBeenCalledTimes(2))
+  const [first, second] = vi
+    .mocked(schedulePlanChangeAction)
+    .mock.calls.map(([input]) => input)
+  expect(second.idempotencyKey).not.toBe(first.idempotencyKey)
 })
 
 it("explains a conflicting billing state", async () => {
   vi.mocked(schedulePlanChangeAction).mockResolvedValue({ kind: "conflict" })
   render(
-    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
+    <SchedulePlanChangeForm
+      region="use"
+      teamId={team}
+      options={options}
+      nextAnniversary="Nov 23, 2026"
+    />,
   )
   fill()
   fireEvent.click(screen.getByRole("button", { name: "Schedule change" }))

@@ -28,10 +28,12 @@ export function SchedulePlanChangeForm({
   region,
   teamId,
   options,
+  nextAnniversary,
 }: {
   region: string
   teamId: string
   options: PlanOption[]
+  nextAnniversary: string
 }) {
   const [target, setTarget] = React.useState("")
   const [reason, setReason] = React.useState("")
@@ -87,13 +89,18 @@ export function SchedulePlanChangeForm({
           id="plan-change-reason"
           value={reason}
           maxLength={2000}
-          onChange={(e) => setReason(e.target.value)}
+          onChange={(e) => {
+            setReason(e.target.value)
+            setKey(crypto.randomUUID())
+          }}
           placeholder="Why this team is changing plans"
         />
       </Field>
       <p className="text-xs text-muted">
-        The change takes effect at the team's next billing anniversary (the end
-        of the paid year for annual plans). Nothing is refunded or prorated.
+        The change takes effect at the team's next billing anniversary (
+        {nextAnniversary}). An annual plan ends at the end of its paid year, and
+        a new annual fee starts on the next yearly anniversary of the team's
+        billing. Nothing is refunded or prorated.
       </p>
       {result && result.kind !== "saved" ? (
         <Alert variant="destructive">{FAILURES[result.kind]}</Alert>

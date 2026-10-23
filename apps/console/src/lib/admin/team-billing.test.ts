@@ -10,6 +10,7 @@ vi.mock("@/lib/cells", () => ({ configuredRegions: () => ["use", "usw"] }))
 import {
   adminBillingRequest,
   AdminBillingRequestError,
+  isAdminBillingPath,
 } from "@/lib/admin/billing-api"
 
 import {
@@ -29,6 +30,7 @@ describe("listBillingTeams", () => {
       if (request?.region === "usw")
         throw new AdminBillingRequestError("unavailable")
       return {
+        pagination: { total: 52 },
         rows: [
           { team_id: team, team_name: "Zeta", summary: null },
           {
@@ -39,8 +41,11 @@ describe("listBillingTeams", () => {
         ],
       }
     })
-    const { teams, unavailableRegions } = await listBillingTeams("a")
+    const { teams, unavailableRegions, hiddenTeams, allRegionsUnavailable } =
+      await listBillingTeams("a")
     expect(unavailableRegions).toEqual(["usw"])
+    expect(hiddenTeams).toBe(50)
+    expect(allRegionsUnavailable).toBe(false)
     expect(
       teams.map((t) => [t.teamName, t.region, t.currentChargesUsd]),
     ).toEqual([
@@ -61,10 +66,17 @@ describe("plan change writes", () => {
       targetOffer: "pro_monthly",
       reason: "upgrade",
     })
-    await cancelPlanChange("use", team, "change-1", "mistake")
+    await cancelPlanChange(
+      "use",
+      team,
+      "33333333-3333-4333-8333-333333333333",
+      "mistake",
+    )
     const [schedule, cancel] = vi
       .mocked(adminBillingRequest)
       .mock.calls.map(([request]) => request)
+    expect(isAdminBillingPath(schedule.path)).toBe(true)
+    expect(isAdminBillingPath(cancel.path)).toBe(true)
     expect(schedule).toMatchObject({
       region: "use",
       method: "POST",
@@ -77,7 +89,7 @@ describe("plan change writes", () => {
     })
     expect(cancel).toMatchObject({
       method: "POST",
-      path: `/internal/teams/${team}/billing/plan-changes/change-1/cancel`,
+      path: `/internal/teams/${team}/billing/plan-changes/33333333-3333-4333-8333-333333333333/cancel`,
       body: { reason: "mistake" },
     })
   })
