@@ -1,7 +1,7 @@
 import { after } from "next/server"
 
 import { SIGNUP_RESTRICTED_MESSAGE } from "@/lib/auth/signup-restricted-message"
-import { cellFor } from "@/lib/cells"
+import { cellFor, internalApiTokenFor } from "@/lib/cells"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 
@@ -97,12 +97,7 @@ export async function evaluateSignupRestriction(
     })
     return
   }
-  const token =
-    region === "use"
-      ? process.env.INTERNAL_API_TOKEN
-      : region === "usw"
-        ? process.env.INTERNAL_API_TOKEN_USWEST
-        : undefined
+  const token = internalApiTokenFor(region)
   if (!token) {
     record(actor, {
       outcome: "unavailable",

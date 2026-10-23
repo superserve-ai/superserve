@@ -1,0 +1,39 @@
+name: CLI release check
+
+# Catches a broken release credential before a cli-v* tag does: the tap token
+# comes from the superserve-release app, so this fails if the app is
+# uninstalled, suspended or loses write access to homebrew-tap.
+on:
+  pull_request:
+    paths:
+      - "packages/cli/**"
+      - ".github/workflows/cli-publish.yml"
+      - ".github/workflows/cli-release-check.yml"
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tap-credential:
+    name: Homebrew tap credential
+    # Secrets aren't available to pull requests from forks.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Token for the tap
+        id: tap-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: superserve-ai
+          repositories: homebrew-tap
+          permission-contents: write
+
+      - name: Read the tap with it
+        env:
+          GH_TOKEN: ${{ steps.tap-token.outputs.token }}
+        run: git ls-remote "https://x-access-token:${GH_TOKEN}@github.com/superserve-ai/homebrew-tap.git" HEAD

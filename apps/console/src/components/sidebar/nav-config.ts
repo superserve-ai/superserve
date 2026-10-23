@@ -4,6 +4,7 @@ import {
   CameraIcon,
   ChartBarIcon,
   ClipboardTextIcon,
+  CurrencyDollarIcon,
   CubeIcon,
   GearIcon,
   KeyIcon,
@@ -31,6 +32,12 @@ export const adminNavItem: NavItem = {
   label: "Admin",
   href: "/admin",
   icon: ShieldCheckIcon,
+}
+
+export const adminBillingNavItem: NavItem = {
+  label: "Billing Admin",
+  href: "/admin/billing",
+  icon: CurrencyDollarIcon,
 }
 
 export const mainNavItems: NavItem[] = [
