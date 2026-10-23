@@ -37,12 +37,18 @@ export const teamPlanSchema = z.object({
     .nullable(),
 })
 
+const decimalCents = z.number().nonnegative()
+
 export const freeAllowanceSchema = z.object({
-  allowance_cents: cents,
-  used_cents: cents,
+  applies: z.boolean(),
   window_started_at: z.string().nullable(),
   resets_at: z.string().nullable(),
-  paused: z.boolean(),
+  allowance_cents: decimalCents.nullable(),
+  used_cents: decimalCents.nullable(),
+  remaining_cents: decimalCents.nullable(),
+  paused: z.boolean().nullable(),
+  paused_reason: z.string().nullable(),
+  as_of: z.string().nullable(),
 })
 
 export const prepaidBalanceSchema = z.object({

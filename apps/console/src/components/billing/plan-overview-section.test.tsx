@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { BillingSummaryResponse } from "@/lib/api/billing"
-import type { TeamPlan } from "@/lib/api/billing-v2"
+import type { FreeAllowance, TeamPlan } from "@/lib/api/billing-v2"
 
 const mocks = vi.hoisted(() => ({
   version: vi.fn(),
@@ -32,6 +32,21 @@ const summary = {
     end: "2026-11-01T00:00:00Z",
   },
 } as unknown as BillingSummaryResponse
+
+function allowance(overrides: Partial<FreeAllowance>): FreeAllowance {
+  return {
+    applies: true,
+    window_started_at: null,
+    resets_at: null,
+    allowance_cents: 13.32,
+    used_cents: 0,
+    remaining_cents: 13.32,
+    paused: false,
+    paused_reason: null,
+    as_of: "2026-10-23T11:00:00Z",
+    ...overrides,
+  }
+}
 
 function plan(overrides: Partial<TeamPlan>): TeamPlan {
   return {
@@ -114,17 +129,19 @@ describe("PlanOverviewSection with pricing v2 on", () => {
       isError: false,
     })
     mocks.allowance.mockReturnValue({
-      data: {
-        allowance_cents: 271,
-        used_cents: 100,
+      data: allowance({
         window_started_at: "2026-10-23T08:00:00Z",
         resets_at: "2026-10-24T08:00:00Z",
-        paused: false,
-      },
+        used_cents: 4.87,
+        remaining_cents: 8.45,
+      }),
     })
     render(<PlanOverviewSection summary={summary} />)
     expect(mocks.allowance).toHaveBeenCalledWith(true)
-    expect(screen.getByText(/\$1\.71/)).toBeTruthy()
+    expect(screen.getByText("63%")).toBeTruthy()
+    expect(
+      screen.getByText(/of this window left \(\$0\.08 of \$0\.13\)/),
+    ).toBeTruthy()
     expect(screen.getByText(/resets Oct 24, 8:00 AM UTC/)).toBeTruthy()
     expect(screen.getByRole("link", { name: "Upgrade" })).toBeTruthy()
   })
@@ -135,27 +152,24 @@ describe("PlanOverviewSection with pricing v2 on", () => {
       isError: false,
     })
     mocks.allowance.mockReturnValue({
-      data: {
-        allowance_cents: 271,
-        used_cents: 271,
+      data: allowance({
         window_started_at: "2026-10-23T08:00:00Z",
         resets_at: "2026-10-24T08:00:00Z",
+        used_cents: 13.32,
+        remaining_cents: 0,
         paused: true,
-      },
+        paused_reason: "free_allowance_exhausted",
+      }),
     })
     const { unmount } = render(<PlanOverviewSection summary={summary} />)
     expect(
-      screen.getByText(/Running sandboxes are paused until Oct 24/),
+      screen.getByText(
+        /Running sandboxes are paused and can.t start until Oct 24/,
+      ),
     ).toBeTruthy()
     unmount()
     mocks.allowance.mockReturnValue({
-      data: {
-        allowance_cents: 271,
-        used_cents: 0,
-        window_started_at: null,
-        resets_at: null,
-        paused: false,
-      },
+      data: allowance({ used_cents: 9, remaining_cents: 4.32 }),
     })
     render(<PlanOverviewSection summary={summary} />)
     expect(
@@ -189,6 +203,28 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     expect(
       screen.getByText(/adds \$20 when the balance drops below \$5/),
     ).toBeTruthy()
+  })
+
+  it("doesn't show allowance figures that don't apply to the team", () => {
+    mocks.plan.mockReturnValue({
+      data: plan({ key: "free", kind: "free", name: "Free" }),
+      isError: false,
+    })
+    mocks.allowance.mockReturnValue({
+      data: {
+        applies: false,
+        window_started_at: null,
+        resets_at: null,
+        allowance_cents: null,
+        used_cents: null,
+        remaining_cents: null,
+        paused: null,
+        paused_reason: null,
+        as_of: null,
+      },
+    })
+    render(<PlanOverviewSection summary={summary} />)
+    expect(screen.getByText("Allowance couldn't be loaded.")).toBeTruthy()
   })
 
   it("shows a scheduled downgrade", () => {

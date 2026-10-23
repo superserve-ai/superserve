@@ -97,44 +97,41 @@ export function FreeAllowancePanel({
 }: {
   allowance: FreeAllowance | null
 }) {
-  if (!allowance)
+  const total = allowance?.allowance_cents ?? null
+  if (!allowance?.applies || total === null)
     return (
-      <Panel title="Daily runtime allowance">
+      <Panel title="Runtime allowance">
         <p className="text-sm text-muted">Allowance couldn&apos;t be loaded.</p>
       </Panel>
     )
-  const remaining = Math.max(
-    allowance.allowance_cents - allowance.used_cents,
-    0,
-  )
-  const used = allowance.allowance_cents
-    ? allowance.used_cents / allowance.allowance_cents
-    : 1
+  const open = allowance.window_started_at !== null
+  const used = open ? Math.min(allowance.used_cents ?? 0, total) : 0
+  const remaining = open
+    ? Math.max(allowance.remaining_cents ?? total - used, 0)
+    : total
+  const share = total > 0 ? remaining / total : 0
+  const paused = open && allowance.paused === true
   return (
-    <Panel title="Daily runtime allowance">
+    <Panel title="Runtime allowance">
       <p className="text-3xl font-medium tracking-tight text-foreground">
-        {formatCents(remaining)}{" "}
+        {Math.floor(share * 100)}%{" "}
         <span className="text-sm font-normal text-muted">
-          of {formatCents(allowance.allowance_cents)} left
+          of this window left ({formatCents(remaining)} of {formatCents(total)})
         </span>
       </p>
       <Meter
-        value={allowance.used_cents}
-        max={allowance.allowance_cents}
+        value={used}
+        max={total}
         tone={
-          allowance.paused || used >= 1
-            ? "danger"
-            : used >= 0.8
-              ? "warning"
-              : "normal"
+          paused || share <= 0 ? "danger" : share <= 0.2 ? "warning" : "normal"
         }
       />
       <p className="text-sm text-muted">
-        {allowance.paused
-          ? "Allowance used up. Running sandboxes are paused"
+        {paused
+          ? "Allowance used up. Running sandboxes are paused and can't start"
           : "Compute and memory at usage rates. Disk isn't counted"}
-        {allowance.resets_at
-          ? `${allowance.paused ? " until" : "; resets"} ${dateTime(allowance.resets_at)}.`
+        {open && allowance.resets_at
+          ? `${paused ? " until" : "; resets"} ${dateTime(allowance.resets_at)}.`
           : ". The 24-hour window starts when you next start a sandbox."}
       </p>
     </Panel>
