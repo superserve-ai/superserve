@@ -121,6 +121,19 @@ function hasUnsafePathSegment(path: string[]): boolean {
   })
 }
 
+function authResponse(status: 401 | 503, message: string) {
+  return NextResponse.json(
+    {
+      error: {
+        code: status === 401 ? "unauthorized" : "service_unavailable",
+        message,
+      },
+      detail: message,
+    },
+    { status },
+  )
+}
+
 function signupReviewPendingResponse() {
   return NextResponse.json(
     {
@@ -174,16 +187,17 @@ async function proxyRequest(
   let impersonationContext: { teamId: string; region: string } | null = null
   let impersonating = false
 
-  const bearer = request.headers.get("authorization")?.match(/^Bearer (.+)$/)
-  if (skipKeyInjection && bearer) {
+  const authorization = request.headers.get("authorization")
+  if (skipKeyInjection && authorization) {
     // These paths act for the bearer's account, e.g. authorising a CLI login.
+    const token = authorization.match(/^bearer\s+(\S+)$/i)?.[1]
+    if (!token) return authResponse(401, "Sign in again.")
     const supabase = await createServerClient()
-    const { data, error } = await supabase.auth.getUser(bearer[1])
+    const { data, error } = await supabase.auth.getUser(token)
     if (error && !data.user)
-      return NextResponse.json(
-        { error: { code: "unauthorized", message: "Sign in again." } },
-        { status: 401 },
-      )
+      return error.status && error.status < 500
+        ? authResponse(401, "Sign in again.")
+        : authResponse(503, "Sign-in check is unavailable. Try again.")
     if (isSignupReviewBlocked(data.user)) return signupReviewPendingResponse()
   }
 

@@ -6,6 +6,18 @@ import { defaultSandboxOrigin } from "./src/lib/sandbox-url"
 // NEXT_PUBLIC_SANDBOX_* value.
 defaultSandboxOrigin()
 
+// Production must name its signup review cutoff (checked before the build).
+// Other builds without one hold every unmarked account created after the build.
+const signupReviewStartsAt =
+  process.env.SIGNUP_REVIEW_STARTS_AT ||
+  (process.env.VERCEL_ENV === "production"
+    ? ""
+    : new Date().toISOString().replace(/\.\d{3}Z$/, "Z"))
+if (!process.env.SIGNUP_REVIEW_STARTS_AT && signupReviewStartsAt)
+  console.warn(
+    `SIGNUP_REVIEW_STARTS_AT is unset; using the build time ${signupReviewStartsAt}`,
+  )
+
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
@@ -22,6 +34,7 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
+  env: { SIGNUP_REVIEW_STARTS_AT: signupReviewStartsAt },
   reactCompiler: true,
   trailingSlash: true,
   reactStrictMode: true,

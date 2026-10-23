@@ -988,7 +988,9 @@ describe("auth callback", () => {
         ),
       )
 
-      expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+      expect(mockUpdateSignupReview).toHaveBeenCalledWith("u1", {
+        signup_review: "pending",
+      })
       expect(mockSignOut).toHaveBeenCalled()
       const location = new URL(response.headers.get("location")!)
       expect(location.pathname).toBe("/auth/signup")

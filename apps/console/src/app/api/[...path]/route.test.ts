@@ -806,6 +806,31 @@ describe("api proxy /api/[...path]", () => {
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ["an unparseable Authorization header", "Token user-token", null, 401],
+    ["a rejected token", "bearer user-token", { status: 401 }, 401],
+    ["an Auth outage", "Bearer user-token", { status: 503 }, 503],
+  ])(
+    "does not forward a /v1/auth/ request with %s",
+    async (_label, authorization, error, status) => {
+      vi.mocked(createServerClient).mockResolvedValue({
+        auth: {
+          getUser: async () => ({ data: { user: null }, error }),
+        },
+      } as never)
+      const res = await POST(
+        req("POST", ["v1", "auth", "device-authorize"], {
+          headers: { authorization, "content-type": "application/json" },
+          body: "{}",
+        }),
+        params(["v1", "auth", "device-authorize"]),
+      )
+      expect(res.status).toBe(status)
+      await expect(res.json()).resolves.toHaveProperty("detail")
+      expect(fetchSpy).not.toHaveBeenCalled()
+    },
+  )
+
   it("strips disallowed client-supplied headers (cookie, x-api-key)", async () => {
     fetchSpy.mockResolvedValue(new Response("[]", { status: 200 }))
     await GET(

@@ -128,25 +128,6 @@ async function signupReviewResponse(
 }
 
 /**
- * Holds an account that is awaiting review without a recorded decision. Only
- * the Google signup flow can collect missing details afterwards.
- */
-function heldSignupResponse(
-  supabase: CallbackSupabase,
-  origin: string,
-  user: User,
-  params: { requestedOffer?: string; next: string },
-) {
-  return signupReviewResponse(
-    supabase,
-    origin,
-    user,
-    isGoogleUser(user) && !readSignupRequest(user),
-    params,
-  )
-}
-
-/**
  * Puts a new OAuth account into review with the details stashed on the signup
  * page, if any. The Slack notification waits until the details exist.
  */
@@ -324,10 +305,13 @@ export async function GET(request: Request) {
           isSignupReviewBlocked(user) &&
           !(code && isGoogleUser(user) && requiresSignupReview(user))
         )
-          return heldSignupResponse(supabase, origin, user, {
-            requestedOffer,
-            next,
-          })
+          return signupReviewResponse(
+            supabase,
+            origin,
+            user,
+            isGoogleUser(user) && !readSignupRequest(user),
+            { requestedOffer, next },
+          )
         // Approval mints a magic link (signup links need the password), which
         // confirms the address exactly like the original signup link.
         const signupLink =
@@ -604,7 +588,7 @@ export async function GET(request: Request) {
           }
         }
 
-        if (code && isNewUser && requiresSignupReview(user))
+        if (code && requiresSignupReview(user))
           return holdForSignupReview(
             supabase,
             origin,
@@ -614,11 +598,6 @@ export async function GET(request: Request) {
             signupEligibilitySnapshot,
             { requestedOffer, next },
           )
-        if (isSignupReviewBlocked(user))
-          return heldSignupResponse(supabase, origin, user, {
-            requestedOffer,
-            next,
-          })
 
         if (isNewUser) {
           // Reviewed accounts were announced when they entered review.
