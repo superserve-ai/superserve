@@ -33,6 +33,7 @@ const summary = {
     price_usd: 250,
     included_usage: {
       amount_usd: 250,
+      status: "issued",
       period_start: "2026-10-01T00:00:00Z",
       period_end: "2026-11-01T00:00:00Z",
     },
@@ -106,6 +107,53 @@ describe("PlanOverviewSection with pricing v2 off", () => {
 describe("PlanOverviewSection with pricing v2 on", () => {
   beforeEach(() => mocks.version.mockReturnValue("v2"))
 
+  it("doesn't label an annual subscription as monthly", () => {
+    mocks.plan.mockReturnValue({
+      data: plan({ key: "pro_annual" }),
+      isError: false,
+    })
+    render(
+      <PlanOverviewSection
+        summary={{
+          ...summary,
+          plan: {
+            ...summary.plan!,
+            key: "pro_annual",
+            billing_interval_months: 12,
+            price_usd: 3000,
+          },
+        }}
+      />,
+    )
+    expect(screen.getByText("Subscription")).toBeTruthy()
+    expect(screen.queryByText(/Monthly subscription|\$250 \/ month/)).toBeNull()
+  })
+
+  it.each([
+    ["pending", "Included usage is being added."],
+    ["not_issued", "Included usage is added once payment is confirmed."],
+  ] as const)(
+    "doesn't present %s included usage as active",
+    (status, message) => {
+      mocks.plan.mockReturnValue({ data: plan({}), isError: false })
+      render(
+        <PlanOverviewSection
+          summary={{
+            ...summary,
+            plan: {
+              ...summary.plan!,
+              included_usage: { ...summary.plan!.included_usage!, status },
+            },
+          }}
+        />,
+      )
+      expect(screen.getByText(message)).toBeTruthy()
+      expect(
+        screen.queryByText(/of \$250 used|beyond the included usage/),
+      ).toBeNull()
+    },
+  )
+
   it("shows Pro usage against the included amount", () => {
     mocks.plan.mockReturnValue({ data: plan({}), isError: false })
     render(<PlanOverviewSection summary={summary} />)
@@ -131,7 +179,7 @@ describe("PlanOverviewSection with pricing v2 on", () => {
       isError: false,
     })
     render(<PlanOverviewSection summary={summary} />)
-    expect(screen.getByText("Monthly subscription")).toBeTruthy()
+    expect(screen.getByText("Subscription")).toBeTruthy()
     expect(screen.getByText("Usage couldn't be loaded.")).toBeTruthy()
     expect(screen.queryByText(/of \$250 used/)).toBeNull()
   })

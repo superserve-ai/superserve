@@ -2,6 +2,7 @@ import { Badge, Button, cn } from "@superserve/ui"
 import Link from "next/link"
 
 import { CornerBrackets } from "@/components/corner-brackets"
+import type { BillingIncludedUsage } from "@/lib/api/billing"
 import {
   describeSandboxSize,
   formatCents,
@@ -41,7 +42,7 @@ export function planPriceLabel(plan: TeamPlan): string {
       return "Prepaid credit"
     case "subscription":
       return plan.fee_cents === null
-        ? "Monthly subscription"
+        ? "Subscription"
         : `${formatCents(plan.fee_cents)} / month`
     case "legacy_payg":
       return "Pay as you go"
@@ -184,14 +185,22 @@ export function PrepaidPanel({ prepaid }: { prepaid: PrepaidBalance | null }) {
 export function IncludedUsagePanel({
   plan,
   usageCents,
+  status,
 }: {
   plan: TeamPlan
   usageCents: number | null
+  status?: BillingIncludedUsage["status"]
 }) {
   const included = plan.included_cents
   return (
     <Panel title="Included usage this period">
-      {usageCents === null || included === null ? (
+      {status === "pending" || status === "not_issued" ? (
+        <p className="text-sm text-muted">
+          {status === "pending"
+            ? "Included usage is being added."
+            : "Included usage is added once payment is confirmed."}
+        </p>
+      ) : usageCents === null || included === null ? (
         <p className="text-sm text-muted">Usage couldn&apos;t be loaded.</p>
       ) : (
         <>
@@ -221,6 +230,7 @@ export interface PlanOverviewProps {
   allowance: FreeAllowance | null
   prepaid: PrepaidBalance | null
   usageCents: number | null
+  includedUsageStatus?: BillingIncludedUsage["status"]
   canManage: boolean
 }
 
@@ -229,6 +239,7 @@ export function PlanOverview({
   allowance,
   prepaid,
   usageCents,
+  includedUsageStatus,
   canManage,
 }: PlanOverviewProps) {
   const size = describeSandboxSize(plan.limits)
@@ -290,7 +301,11 @@ export function PlanOverview({
         ) : plan.kind === "prepaid" ? (
           <PrepaidPanel prepaid={prepaid} />
         ) : plan.kind === "subscription" ? (
-          <IncludedUsagePanel plan={plan} usageCents={usageCents} />
+          <IncludedUsagePanel
+            plan={plan}
+            usageCents={usageCents}
+            status={includedUsageStatus}
+          />
         ) : (
           <Panel title="Billing">
             <p className="text-sm text-muted">

@@ -37,12 +37,16 @@ export function PlanOverviewSection({
     Date.parse(plan.period_end ?? "") ===
       Date.parse(summary.billing_period?.end ?? "")
   const included = commercial?.included_usage
-  const includedCents =
+  const matchingIncluded =
     included &&
     matchingPeriod &&
     Date.parse(included.period_start) === Date.parse(plan.period_start ?? "") &&
     Date.parse(included.period_end) === Date.parse(plan.period_end ?? "")
-      ? toCents(included.amount_usd)
+      ? included
+      : null
+  const includedCents =
+    matchingIncluded?.status === "issued"
+      ? toCents(matchingIncluded.amount_usd)
       : null
   return (
     <PlanOverview
@@ -54,6 +58,7 @@ export function PlanOverviewSection({
             : null,
         included_cents: includedCents,
       }}
+      includedUsageStatus={matchingIncluded?.status}
       allowance={allowance ?? null}
       prepaid={prepaid ?? null}
       usageCents={matchingPeriod ? toCents(summary.current_charges_usd) : null}
