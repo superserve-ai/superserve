@@ -127,6 +127,13 @@ export const billingKeys = {
       context.cacheScope,
       context.teamKey,
     ] as const,
+  prepaid: (context: { cacheScope: string; teamKey: string }) =>
+    [
+      ...billingKeys.all,
+      "prepaid",
+      context.cacheScope,
+      context.teamKey,
+    ] as const,
   settings: (context: { cacheScope: string; teamKey: string }) =>
     [
       ...billingKeys.all,

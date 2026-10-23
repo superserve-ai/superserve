@@ -40,6 +40,7 @@ const ALLOWED_PREFIXES = [
   "billing/summary",
   "billing/pricing",
   "billing/usage-series",
+  "billing/plans/public",
 ]
 
 function isTeamBillingPath(path: string): boolean {
@@ -56,6 +57,29 @@ function isStripeBillingPath(path: string): boolean {
     path === "stripe/customer-portal-session" ||
     isPlanBillingPath(path)
   )
+}
+
+const PREPAID_BILLING_METHODS: Record<string, string> = {
+  "billing/prepaid": "GET",
+  "billing/prepaid/checkout": "POST",
+  "billing/prepaid/auto-recharge": "PUT",
+}
+
+const PREPAID_WRITE_FIELDS: Record<string, string[]> = {
+  "billing/prepaid/checkout": ["amount_cents", "success_url", "cancel_url"],
+  "billing/prepaid/auto-recharge": [
+    "enabled",
+    "threshold_cents",
+    "amount_cents",
+  ],
+}
+
+function isPrepaidBillingPath(path: string): boolean {
+  return Object.hasOwn(PREPAID_BILLING_METHODS, path)
+}
+
+function isPrepaidBillingWrite(path: string): boolean {
+  return isPrepaidBillingPath(path) && PREPAID_BILLING_METHODS[path] !== "GET"
 }
 
 function isPlanBillingPath(path: string): boolean {
@@ -89,6 +113,7 @@ const FORWARD_REQUEST_HEADERS = new Set([
 function isAllowedPath(path: string): boolean {
   if (isTeamBillingPath(path)) return true
   if (isStripeBillingPath(path)) return true
+  if (isPrepaidBillingPath(path)) return true
   return ALLOWED_PREFIXES.some(
     (prefix) => path === prefix || path.startsWith(`${prefix}/`),
   )
@@ -147,6 +172,12 @@ async function proxyRequest(
   const planRequest = isPlanBillingPath(joinedPath)
   if (planRequest && request.method !== "POST")
     return NextResponse.json({ error: "Method not allowed" }, { status: 405 })
+  if (
+    isPrepaidBillingPath(joinedPath) &&
+    request.method !== PREPAID_BILLING_METHODS[joinedPath]
+  )
+    return NextResponse.json({ error: "Method not allowed" }, { status: 405 })
+  const prepaidWrite = isPrepaidBillingWrite(joinedPath)
   const checkoutRequest =
     joinedPath === "stripe/checkout-session" && request.method === "POST"
   const debugImpersonation =
@@ -243,7 +274,7 @@ async function proxyRequest(
           )
         }
       }
-      if (checkoutRequest || planRequest)
+      if (checkoutRequest || planRequest || prepaidWrite)
         checkoutTeam = selfContext?.team ?? null
       apiKey = impersonationContext
         ? await getAuthApiKeyForUser(
@@ -296,6 +327,41 @@ async function proxyRequest(
     request.method !== "GET" && request.method !== "HEAD"
       ? await request.arrayBuffer()
       : undefined
+
+  if (prepaidWrite) {
+    let input: unknown
+    try {
+      input = JSON.parse(new TextDecoder().decode(body as ArrayBuffer))
+    } catch {
+      input = null
+    }
+    if (
+      !checkoutTeam ||
+      !input ||
+      typeof input !== "object" ||
+      Array.isArray(input) ||
+      (input as Record<string, unknown>).expected_team !==
+        `${checkoutTeam.region}:${checkoutTeam.teamId}`
+    ) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "plan_team_changed",
+            message: "Your active team changed. Reload to continue.",
+          },
+        },
+        { status: 409 },
+      )
+    }
+    const fields = PREPAID_WRITE_FIELDS[joinedPath] ?? []
+    body = JSON.stringify(
+      Object.fromEntries(
+        fields
+          .filter((field) => field in (input as Record<string, unknown>))
+          .map((field) => [field, (input as Record<string, unknown>)[field]]),
+      ),
+    )
+  }
 
   if (planRequest) {
     let input: Record<string, unknown>
@@ -659,7 +725,11 @@ async function forwardResponse(
     }
     responseHeaders.set(key, value)
   }
-  if (joinedPath === "billing/summary" || isPlanBillingPath(joinedPath)) {
+  if (
+    joinedPath === "billing/summary" ||
+    isPlanBillingPath(joinedPath) ||
+    isPrepaidBillingPath(joinedPath)
+  ) {
     responseHeaders.set("cache-control", "private, no-store")
   }
   setImpersonationDebugHeaders(
