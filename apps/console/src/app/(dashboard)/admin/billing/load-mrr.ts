@@ -1,4 +1,6 @@
 import "server-only"
+import { unstable_rethrow } from "next/navigation"
+
 import {
   adminBillingRequest,
   AdminBillingRequestError,
@@ -16,6 +18,7 @@ export async function loadRegionMRR(region: string): Promise<RegionMRR> {
       }),
     }
   } catch (error) {
+    unstable_rethrow(error)
     const kind =
       error instanceof AdminBillingRequestError ? error.kind : "unavailable"
     console.error("admin billing MRR request failed", { region, kind })
