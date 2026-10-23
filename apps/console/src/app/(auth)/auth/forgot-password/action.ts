@@ -2,6 +2,7 @@
 
 import * as z from "zod"
 
+import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
 import { sendEmail } from "@/lib/email/send"
 import { PasswordResetEmail } from "@/lib/email/templates/password-reset"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -31,6 +32,12 @@ export const sendPasswordResetEmail = async (email: string) => {
 
     if (error || !data?.properties?.hashed_token) {
       console.error("Error generating reset link:", error?.message)
+      return { success: true } // Always return success to prevent email enumeration
+    }
+
+    // Using a recovery link confirms the address, which would bypass signup
+    // review. Unconfirmed and unreviewed accounts silently get nothing.
+    if (!data.user?.email_confirmed_at || isSignupReviewBlocked(data.user)) {
       return { success: true } // Always return success to prevent email enumeration
     }
 
