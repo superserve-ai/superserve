@@ -278,3 +278,26 @@ export function grantStaffCredit(
     schema: staffCreditSchema,
   })
 }
+
+const planChangePreviewSchema = z.object({
+  target_offer: z.string(),
+  terms: planTermsSchema,
+  effective_at: z.string(),
+  timing: z.string(),
+  blocked: z.string().optional(),
+})
+
+export type PlanChangePreview = z.infer<typeof planChangePreviewSchema>
+
+export function previewPlanChange(
+  region: string,
+  teamId: string,
+  targetOffer: string,
+) {
+  return adminBillingRequest({
+    region,
+    path: `/internal/teams/${teamId}/billing/plan-change-preview`,
+    query: new URLSearchParams({ target_offer: targetOffer }),
+    schema: planChangePreviewSchema,
+  })
+}

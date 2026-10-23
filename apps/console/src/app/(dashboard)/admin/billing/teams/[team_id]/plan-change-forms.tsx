@@ -3,8 +3,61 @@
 import { Alert, Button, Field, Textarea } from "@superserve/ui"
 import * as React from "react"
 
-import type { PlanChangeActionResult } from "./actions"
-import { cancelPlanChangeAction, schedulePlanChangeAction } from "./actions"
+import type { PlanChangeActionResult, PlanChangePreviewResult } from "./actions"
+import {
+  cancelPlanChangeAction,
+  previewPlanChangeAction,
+  schedulePlanChangeAction,
+} from "./actions"
+
+const TIMING: Record<string, string> = {
+  next_anniversary: "the team's next billing anniversary",
+  end_of_paid_year: "the end of the team's current paid year",
+  annual_fee_starts_on_yearly_anniversary:
+    "an annual fee starts on a yearly anniversary of the team's billing",
+}
+
+export function formatEffectiveDate(value: string): string {
+  return new Date(value).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  })
+}
+
+function PlanChangePreviewNotice({
+  result,
+}: {
+  result: PlanChangePreviewResult | "loading" | null
+}) {
+  if (result === null) return null
+  if (result === "loading")
+    return <p className="text-sm text-muted">Checking when this would apply…</p>
+  if (result.kind !== "preview")
+    return (
+      <Alert variant="warning">
+        The effective date could not be checked. Try choosing the plan again.
+      </Alert>
+    )
+  if (result.preview.blocked)
+    return (
+      <Alert variant="destructive">
+        This team cannot move to this plan: {result.preview.blocked}
+      </Alert>
+    )
+  return (
+    <Alert variant="default">
+      <span className="block text-base font-medium text-foreground">
+        Takes effect {formatEffectiveDate(result.preview.effective_at)}
+      </span>
+      <span className="text-sm text-muted">
+        Because{" "}
+        {TIMING[result.preview.timing] ?? "of the team's billing anniversary"}.
+      </span>
+    </Alert>
+  )
+}
 
 const FAILURES: Record<
   Exclude<PlanChangeActionResult["kind"], "saved">,
@@ -42,6 +95,29 @@ export function SchedulePlanChangeForm({
   const [result, setResult] = React.useState<PlanChangeActionResult | null>(
     null,
   )
+  const [preview, setPreview] = React.useState<
+    PlanChangePreviewResult | "loading" | null
+  >(null)
+  const latest = React.useRef("")
+
+  async function choose(offer: string) {
+    setTarget(offer)
+    setKey(crypto.randomUUID())
+    latest.current = offer
+    setPreview("loading")
+    const next: PlanChangePreviewResult = await previewPlanChangeAction({
+      region,
+      teamId,
+      targetOffer: offer,
+    }).catch(() => ({ kind: "unavailable" as const }))
+    if (latest.current === offer) setPreview(next)
+  }
+
+  const ready =
+    preview !== null &&
+    preview !== "loading" &&
+    preview.kind === "preview" &&
+    !preview.preview.blocked
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -59,6 +135,7 @@ export function SchedulePlanChangeForm({
       setKey(crypto.randomUUID())
       setReason("")
       setTarget("")
+      setPreview(null)
     }
   }
 
@@ -68,10 +145,7 @@ export function SchedulePlanChangeForm({
         <select
           id="plan-change-target"
           value={target}
-          onChange={(e) => {
-            setTarget(e.target.value)
-            setKey(crypto.randomUUID())
-          }}
+          onChange={(e) => void choose(e.target.value)}
           className="flex h-9 w-full border border-input bg-background px-3 text-sm text-foreground focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none"
         >
           <option value="" disabled>
@@ -96,12 +170,10 @@ export function SchedulePlanChangeForm({
           placeholder="Why this team is changing plans"
         />
       </Field>
+      <PlanChangePreviewNotice result={preview} />
       <p className="text-xs text-muted">
-        The change takes effect at a billing anniversary: the next one for
-        monthly plans and pay-as-you-go, the end of the paid year when leaving
-        an annual plan, and a yearly anniversary of the team's billing when
-        starting an annual fee. The scheduled date is shown once saved. Nothing
-        is refunded or prorated.
+        Plan changes apply only at a billing anniversary. Nothing is refunded or
+        prorated.
       </p>
       {result && result.kind !== "saved" ? (
         <Alert variant="destructive">{FAILURES[result.kind]}</Alert>
@@ -112,7 +184,7 @@ export function SchedulePlanChangeForm({
       <Button
         type="submit"
         size="sm"
-        disabled={pending || !target || !reason.trim()}
+        disabled={pending || !target || !ready || !reason.trim()}
       >
         {result?.kind === "unavailable" ? "Retry" : "Schedule change"}
       </Button>

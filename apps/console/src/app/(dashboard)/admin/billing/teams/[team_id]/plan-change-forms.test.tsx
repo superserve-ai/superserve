@@ -1,7 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest"
 
-import { cancelPlanChangeAction, schedulePlanChangeAction } from "./actions"
+import {
+  cancelPlanChangeAction,
+  previewPlanChangeAction,
+  schedulePlanChangeAction,
+} from "./actions"
 import {
   CancelPlanChangeForm,
   SchedulePlanChangeForm,
@@ -10,7 +14,23 @@ import {
 vi.mock("./actions", () => ({
   schedulePlanChangeAction: vi.fn(),
   cancelPlanChangeAction: vi.fn(),
+  previewPlanChangeAction: vi.fn(),
 }))
+
+const preview = {
+  kind: "preview" as const,
+  preview: {
+    target_offer: "pro_annual",
+    terms: {
+      offer_key: "pro_annual",
+      fee_cents: 1200000,
+      interval_months: 12,
+      monthly_credit_cents: 100000,
+    },
+    effective_at: "2027-03-14T09:00:00Z",
+    timing: "annual_fee_starts_on_yearly_anniversary",
+  },
+}
 
 const team = "22222222-2222-4222-8222-222222222222"
 const options = [
@@ -21,12 +41,15 @@ const options = [
 beforeEach(() => {
   vi.mocked(schedulePlanChangeAction).mockReset()
   vi.mocked(cancelPlanChangeAction).mockReset()
+  vi.mocked(previewPlanChangeAction).mockReset()
+  vi.mocked(previewPlanChangeAction).mockResolvedValue(preview)
 })
 
-function fill(reason = "Customer asked for annual billing") {
+async function fill(reason = "Customer asked for annual billing") {
   fireEvent.change(screen.getByLabelText(/New plan/), {
     target: { value: "pro_annual" },
   })
+  await screen.findByText("Takes effect March 14, 2027")
   fireEvent.change(screen.getByLabelText(/Reason/), {
     target: { value: reason },
   })
@@ -40,7 +63,7 @@ it("retries a lost request with the same idempotency key", async () => {
   render(
     <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
   )
-  fill()
+  await fill()
   fireEvent.click(screen.getByRole("button", { name: "Schedule change" }))
   await screen.findByText(/Retry to send the same request/)
   fireEvent.click(screen.getByRole("button", { name: "Retry" }))
@@ -64,12 +87,13 @@ it("uses a new idempotency key for the next change", async () => {
   render(
     <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
   )
-  fill()
+  await fill()
   fireEvent.click(screen.getByRole("button", { name: "Schedule change" }))
   await screen.findByText("Plan change scheduled.")
   fireEvent.change(screen.getByLabelText(/New plan/), {
     target: { value: "pro_annual" },
   })
+  await screen.findByText("Takes effect March 14, 2027")
   const first = vi.mocked(schedulePlanChangeAction).mock.calls[0][0]
   fireEvent.change(screen.getByLabelText(/Reason/), {
     target: { value: first.reason },
@@ -87,7 +111,7 @@ it("does not reuse an unconfirmed request's key for edited input", async () => {
   render(
     <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
   )
-  fill()
+  await fill()
   fireEvent.click(screen.getByRole("button", { name: "Schedule change" }))
   await screen.findByText(/Retry to send the same request/)
   fireEvent.change(screen.getByLabelText(/Reason/), {
@@ -106,7 +130,7 @@ it("explains a conflicting billing state", async () => {
   render(
     <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
   )
-  fill()
+  await fill()
   fireEvent.click(screen.getByRole("button", { name: "Schedule change" }))
   await screen.findByText(/does not allow this change/)
 })
@@ -134,4 +158,40 @@ it("requires a reason to cancel", async () => {
       reason: "Customer changed their mind",
     }),
   )
+})
+
+it("shows the effective date and why before scheduling", async () => {
+  render(
+    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
+  )
+  await fill()
+  expect(
+    screen.getByText(/an annual fee starts on a yearly anniversary/),
+  ).toBeInTheDocument()
+  expect(previewPlanChangeAction).toHaveBeenCalledWith({
+    region: "use",
+    teamId: team,
+    targetOffer: "pro_annual",
+  })
+})
+
+it("blocks scheduling when the preview refuses the change", async () => {
+  vi.mocked(previewPlanChangeAction).mockResolvedValue({
+    kind: "preview",
+    preview: {
+      ...preview.preview,
+      blocked: "a sponsorship is active",
+    },
+  })
+  render(
+    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
+  )
+  fireEvent.change(screen.getByLabelText(/New plan/), {
+    target: { value: "pro_annual" },
+  })
+  await screen.findByText(/a sponsorship is active/)
+  fireEvent.change(screen.getByLabelText(/Reason/), {
+    target: { value: "upgrade" },
+  })
+  expect(screen.getByRole("button", { name: "Schedule change" })).toBeDisabled()
 })

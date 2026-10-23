@@ -11,7 +11,9 @@ import {
   cancelPlanChange,
   grantStaffCredit,
   isUuid,
+  previewPlanChange,
   schedulePlanChange,
+  type PlanChangePreview,
 } from "@/lib/admin/team-billing"
 import { configuredRegions } from "@/lib/cells"
 
@@ -126,4 +128,37 @@ export async function grantStaffCreditAction(input: {
       reason,
     }),
   )
+}
+
+export type PlanChangePreviewResult =
+  | { kind: "preview"; preview: PlanChangePreview }
+  | { kind: AdminBillingErrorKind }
+
+export async function previewPlanChangeAction(input: {
+  region: string
+  teamId: string
+  targetOffer: string
+}): Promise<PlanChangePreviewResult> {
+  if (
+    typeof input.targetOffer !== "string" ||
+    !input.targetOffer ||
+    input.targetOffer.length > 100 ||
+    !validTarget(input.region, input.teamId)
+  )
+    return { kind: "invalid" }
+  try {
+    return {
+      kind: "preview",
+      preview: await previewPlanChange(
+        input.region,
+        input.teamId,
+        input.targetOffer,
+      ),
+    }
+  } catch (error) {
+    return {
+      kind:
+        error instanceof AdminBillingRequestError ? error.kind : "unavailable",
+    }
+  }
 }
