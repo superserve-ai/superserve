@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { getPricingVersionAction } from "./plans-actions"
+import {
+  getPricingVersionAction,
+  getPublicBillingPlansAction,
+} from "./plans-actions"
 
 const fetchMock = vi.fn()
 
@@ -36,5 +39,17 @@ describe("getPricingVersionAction", () => {
       }),
     )
     await expect(getPricingVersionAction("use")).resolves.toBe("legacy")
+  })
+  it("does not substitute another cell for an unavailable region", async () => {
+    vi.stubEnv("SUPABASE_USWEST_URL", "")
+    vi.stubEnv("SUPABASE_USWEST_SERVICE_ROLE_KEY", "")
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ pricing_version: "v2", cards: [] })),
+    )
+    await expect(getPublicBillingPlansAction("usw")).rejects.toThrow(
+      "not configured",
+    )
+    await expect(getPricingVersionAction("usw")).resolves.toBe("legacy")
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
