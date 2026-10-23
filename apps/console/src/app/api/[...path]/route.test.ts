@@ -931,6 +931,82 @@ describe("api proxy prepaid credit", () => {
   })
 
   it.each([
+    ["checkout", POST],
+    ["auto-recharge", PUT],
+  ] as const)(
+    "normalizes rewritten %s body headers",
+    async (suffix, handler) => {
+      fetchSpy.mockResolvedValue(new Response("{}", { status: 200 }))
+      const path = ["billing", "prepaid", suffix]
+      const body = JSON.stringify({
+        expected_team: "use:team-east",
+        amount_cents: 500,
+        enabled: false,
+        success_url:
+          "https://console.test/plan-usage/buy-credit?purchase=success",
+        cancel_url:
+          "https://console.test/plan-usage/buy-credit/?purchase=cancel",
+      })
+      const res = await handler(
+        req(suffix === "checkout" ? "POST" : "PUT", path, {
+          body,
+          headers: {
+            "content-length": String(Buffer.byteLength(body)),
+            "content-type": "text/plain",
+          },
+        }),
+        params(path),
+      )
+      expect(res.status).toBe(200)
+      const init = fetchSpy.mock.calls[0][1]
+      expect(init.headers.has("content-length")).toBe(false)
+      expect(init.headers.get("content-type")).toBe("application/json")
+      expect(JSON.parse(init.body)).not.toHaveProperty("expected_team")
+      expect(init.body.length).toBeLessThan(body.length)
+    },
+  )
+
+  it.each([
+    [
+      "https://other.test/plan-usage/buy-credit",
+      "https://console.test/plan-usage/buy-credit",
+    ],
+    [
+      "https://console.test/plan-usage/buy-credit",
+      "https://other.test/plan-usage/buy-credit",
+    ],
+    [
+      "https://console.test/plan-usage",
+      "https://console.test/plan-usage/buy-credit",
+    ],
+    [
+      "https://console.test/plan-usage/buy-credit",
+      "https://console.test/onboarding/plan",
+    ],
+    ["invalid", "https://console.test/plan-usage/buy-credit"],
+    [undefined, "https://console.test/plan-usage/buy-credit"],
+    ["https://console.test/plan-usage/buy-credit", undefined],
+  ])(
+    "rejects unowned prepaid payment returns %s / %s",
+    async (success_url, cancel_url) => {
+      const path = ["billing", "prepaid", "checkout"]
+      const res = await POST(
+        req("POST", path, {
+          body: JSON.stringify({
+            expected_team: "use:team-east",
+            amount_cents: 500,
+            success_url,
+            cancel_url,
+          }),
+        }),
+        params(path),
+      )
+      expect(res.status).toBe(400)
+      expect(fetchSpy).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each([
     ["billing/prepaid/checkout", "POST"],
     ["billing/prepaid/auto-recharge", "PUT"],
   ])("rejects a stale team's %s request before dispatch", async (p, method) => {

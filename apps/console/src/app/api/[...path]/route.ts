@@ -156,6 +156,20 @@ function setImpersonationDebugHeaders(
   headers.set("x-console-impersonated-team", impersonatedTeamId ?? "")
 }
 
+function validPaymentReturn(
+  value: unknown,
+  origin: string,
+  path: string,
+): boolean {
+  if (typeof value !== "string") return false
+  try {
+    const url = new URL(value)
+    return url.origin === origin && url.pathname.replace(/\/$/, "") === path
+  } catch {
+    return false
+  }
+}
+
 async function proxyRequest(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
@@ -352,6 +366,30 @@ async function proxyRequest(
         { status: 409 },
       )
     }
+    const purchase = input as Record<string, unknown>
+    if (
+      joinedPath === "billing/prepaid/checkout" &&
+      (!validPaymentReturn(
+        purchase.success_url,
+        request.nextUrl.origin,
+        "/plan-usage/buy-credit",
+      ) ||
+        !validPaymentReturn(
+          purchase.cancel_url,
+          request.nextUrl.origin,
+          "/plan-usage/buy-credit",
+        ))
+    ) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "invalid_request",
+            message: "Invalid payment return URL",
+          },
+        },
+        { status: 400 },
+      )
+    }
     const fields = PREPAID_WRITE_FIELDS[joinedPath] ?? []
     body = JSON.stringify(
       Object.fromEntries(
@@ -399,18 +437,18 @@ async function proxyRequest(
           },
           { status: 400 },
         )
-      const validReturn = (value: unknown) => {
-        try {
-          const url = new URL(value as string)
-          return (
-            url.origin === request.nextUrl.origin &&
-            url.pathname.replace(/\/$/, "") === "/onboarding/plan"
-          )
-        } catch {
-          return false
-        }
-      }
-      if (!validReturn(input.success_url) || !validReturn(input.cancel_url))
+      if (
+        !validPaymentReturn(
+          input.success_url,
+          request.nextUrl.origin,
+          "/onboarding/plan",
+        ) ||
+        !validPaymentReturn(
+          input.cancel_url,
+          request.nextUrl.origin,
+          "/onboarding/plan",
+        )
+      )
         return NextResponse.json(
           {
             error: {
@@ -451,8 +489,6 @@ async function proxyRequest(
         )
       body = JSON.stringify({ restart: input.restart })
     }
-    headers.delete("content-length")
-    headers.set("content-type", "application/json")
     upstreamUrl.search = ""
   }
 
@@ -670,8 +706,6 @@ async function proxyRequest(
       await ensureCheckoutKey()
       const { actor: _actor, team: _team, ...fields } = intent
       body = JSON.stringify(fields)
-      headers.delete("content-length")
-      headers.set("content-type", "application/json")
       headers.set("X-Promotion-Account-Assertion", checkoutAssertion(intent))
       upstreamUrl.pathname = "/stripe/checkout-session/publication-decision"
     } catch {
@@ -691,6 +725,11 @@ async function proxyRequest(
         { status: 503 },
       )
     }
+  }
+
+  if (typeof body === "string") {
+    headers.delete("content-length")
+    headers.set("content-type", "application/json")
   }
 
   const response = await fetch(upstreamUrl.toString(), {
