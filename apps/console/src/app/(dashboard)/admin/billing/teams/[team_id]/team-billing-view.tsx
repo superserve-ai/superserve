@@ -10,7 +10,7 @@ import {
 import Link from "next/link"
 
 import type {
-  CatalogPlan,
+  PlanCatalog,
   StaffCredit,
   TeamPlan,
   TeamPlanAssignments,
@@ -26,11 +26,23 @@ import {
 } from "./plan-change-forms"
 import { ResumeStaffCreditButton, StaffCreditForm } from "./staff-credit-forms"
 
-const CHANGE_TARGETS: PlanChangeOption[] = [
-  { target: "free", label: "Free" },
-  { target: "starter", label: "Starter" },
-  { target: "pro_monthly", label: "Pro" },
-]
+const END_OF_PERIOD =
+  "Takes effect at the end of the team's billing period, or the next one if that is less than an hour away or the subscription already renewed. Can be undone until 10 minutes before."
+
+const DOWNGRADES: Record<string, PlanChangeOption[]> = {
+  subscription: [
+    { target: "starter", label: "Starter", timing: END_OF_PERIOD },
+    { target: "free", label: "Free", timing: END_OF_PERIOD },
+  ],
+  custom: [{ target: "free", label: "Free", timing: END_OF_PERIOD }],
+  prepaid: [
+    {
+      target: "free",
+      label: "Free",
+      timing: "Takes effect immediately and cannot be undone.",
+    },
+  ],
+}
 
 const KINDS: Record<string, string> = {
   free: "Free",
@@ -81,11 +93,6 @@ function planName(plan: TeamPlan): string {
   return plan.terms.display_name || plan.plan_key
 }
 
-export interface TeamCatalog {
-  pricingV2: boolean
-  plans: CatalogPlan[]
-}
-
 export function TeamBillingView({
   plans,
   catalog,
@@ -95,21 +102,17 @@ export function TeamBillingView({
   canWrite,
 }: {
   plans: TeamPlanAssignments | null
-  catalog: TeamCatalog | null
+  catalog: PlanCatalog | null
   staffCredits: StaffCredit[] | null
   region: string
   teamId: string
   canWrite: boolean
 }) {
   const current = plans?.current ?? null
-  const pending = plans?.pending_change ?? null
-  const planWrites = canWrite && catalog?.pricingV2 === true
-  const freeLimits =
-    catalog?.plans.find((p) => p.kind === "free")?.limits ?? null
-  const customPlans = catalog?.plans.filter((p) => p.kind === "custom") ?? []
-  const changeOptions = CHANGE_TARGETS.filter(
-    (o) => o.target !== current?.plan_key,
-  )
+  const pending = plans?.pending_change
+  const pricingV2 = catalog?.pricingV2 === true
+  const planWrites = canWrite && pricingV2
+  const changeOptions = current ? (DOWNGRADES[current.kind] ?? []) : []
 
   return (
     <div className="flex flex-col">
@@ -141,22 +144,34 @@ export function TeamBillingView({
             until then this team bills on its existing terms.
           </p>
         ) : (
-          <Facts
-            items={[
-              ["Plan", planName(current)],
-              ["Kind", KINDS[current.kind] ?? current.kind],
-              ["Since", formatDay(current.effective_from)],
-              ["Limits", describeLimits(current.limits)],
-              ["Assigned by", SOURCES[current.source] ?? current.source],
-              ["Reason", current.reason || "—"],
-            ]}
-          />
+          <div className="space-y-3">
+            {pricingV2 ? null : (
+              <p className="text-sm text-muted">
+                Pricing v2 is off in this region, so this plan is not in effect.
+                The team bills on its existing terms.
+              </p>
+            )}
+            <Facts
+              items={[
+                ["Plan", planName(current)],
+                ["Kind", KINDS[current.kind] ?? current.kind],
+                ["Since", formatDay(current.effective_from)],
+                ["Limits", describeLimits(current.limits)],
+                ["Assigned by", SOURCES[current.source] ?? current.source],
+                ["Reason", current.reason || "—"],
+              ]}
+            />
+          </div>
         )}
       </Section>
 
       {current ? (
         <Section title="Pending change">
-          {pending ? (
+          {pending === undefined ? (
+            <p className="text-sm text-muted">
+              Pending change status is unavailable.
+            </p>
+          ) : pending ? (
             <div className="space-y-4">
               <Facts
                 items={[
@@ -185,12 +200,12 @@ export function TeamBillingView({
           ) : (
             <div className="space-y-4">
               <p className="text-sm text-muted">No plan change is pending.</p>
-              {planWrites ? (
+              {planWrites && changeOptions.length > 0 ? (
                 <PlanChangeForm
                   region={region}
                   teamId={teamId}
                   options={changeOptions}
-                  freeLimits={freeLimits}
+                  freeLimits={catalog?.freeLimits ?? null}
                 />
               ) : null}
             </div>
@@ -200,7 +215,11 @@ export function TeamBillingView({
 
       {planWrites ? (
         <Section title="Assign Enterprise or custom plan">
-          <AssignPlanForm region={region} teamId={teamId} plans={customPlans} />
+          <AssignPlanForm
+            region={region}
+            teamId={teamId}
+            plans={catalog?.assignablePlans ?? []}
+          />
         </Section>
       ) : null}
 

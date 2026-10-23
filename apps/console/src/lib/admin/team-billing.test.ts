@@ -122,25 +122,26 @@ describe("plan writes", () => {
 })
 
 describe("getPlanCatalog", () => {
+  const limits = { max_concurrent: 5000, max_vcpu: 16 }
+  const plan = (id: string, extra: object) => ({
+    id,
+    pricing_version: "v2",
+    family: id,
+    version: 1,
+    state: "published",
+    kind: "custom",
+    display_name: id,
+    limits,
+    ...extra,
+  })
   const plans = [
-    {
-      id: "a",
-      family: "free",
-      version: 1,
-      state: "published",
-      kind: "free",
-      display_name: "Free",
-      limits: {},
-    },
-    {
-      id: "b",
-      family: "acme",
-      version: 1,
-      state: "draft",
-      kind: "custom",
-      display_name: "Acme",
-      limits: {},
-    },
+    plan("free", { kind: "free", limits: { max_concurrent: 1, max_vcpu: 1 } }),
+    plan("acme", {}),
+    plan("draft", { state: "draft" }),
+    plan("legacy", { pricing_version: "legacy" }),
+    plan("fee", { monthly_fee_cents: 100000 }),
+    plan("shown", { display_only: true }),
+    plan("unbounded", { limits: { max_concurrent: null } }),
   ]
 
   it("keeps plan writes off unless the region reports pricing v2", async () => {
@@ -152,10 +153,17 @@ describe("getPlanCatalog", () => {
       vi.mocked(adminBillingRequest).mockResolvedValue(
         billingCatalogSchema.parse(body),
       )
-      const catalog = await getPlanCatalog("use")
-      expect(catalog.pricingV2).toBe(v2)
-      expect(catalog.plans.map((p) => p.id)).toEqual(["a"])
+      expect((await getPlanCatalog("use")).pricingV2).toBe(v2)
     }
+  })
+
+  it("offers only custom plans the backend will assign", async () => {
+    vi.mocked(adminBillingRequest).mockResolvedValue(
+      billingCatalogSchema.parse({ plans, pricing_version: "v2" }),
+    )
+    const catalog = await getPlanCatalog("use")
+    expect(catalog.assignablePlans.map((p) => p.id)).toEqual(["acme"])
+    expect(catalog.freeLimits).toEqual({ max_concurrent: 1, max_vcpu: 1 })
   })
 })
 
@@ -182,6 +190,15 @@ describe("teamPlanAssignmentsSchema", () => {
     reason: "",
     idempotency_key: null,
   }
+
+  it("rejects limits under other names instead of showing them as defaults", () => {
+    expect(
+      teamPlanAssignmentsSchema.safeParse({
+        current: { ...assignment, limits: { max_sandboxes: 1000 } },
+        history: [],
+      }).success,
+    ).toBe(false)
+  })
 
   it("accepts the backend's staff read with and without a pending change", () => {
     expect(

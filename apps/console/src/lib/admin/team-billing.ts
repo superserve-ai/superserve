@@ -90,7 +90,7 @@ export async function listBillingTeams(search: string): Promise<{
   }
 }
 
-const limitSchema = z.number().nullable().optional()
+const limitSchema = z.number().nullable()
 
 const planLimitsSchema = z.object({
   max_concurrent: limitSchema,
@@ -131,7 +131,6 @@ export const teamPlanAssignmentsSchema = z.object({
 
 export type TeamPlan = z.infer<typeof teamPlanSchema>
 export type TeamPlanAssignments = z.infer<typeof teamPlanAssignmentsSchema>
-export type PendingPlanChange = z.infer<typeof pendingPlanChangeSchema>
 
 export function getTeamPlanAssignments(region: string, teamId: string) {
   return adminBillingRequest({
@@ -146,27 +145,51 @@ export const billingCatalogSchema = z.object({
   plans: z.array(
     z.object({
       id: z.string(),
+      pricing_version: z.string().optional(),
       family: z.string(),
       version: z.number(),
       state: z.string(),
       kind: z.string().optional(),
       display_name: z.string(),
-      limits: planLimitsSchema,
+      display_only: z.boolean().optional(),
+      monthly_fee_cents: z.number().nullable().optional(),
+      annual_fee_cents: z.number().nullable().optional(),
+      limits: planLimitsSchema.partial(),
     }),
   ),
 })
 
 export type CatalogPlan = z.infer<typeof billingCatalogSchema>["plans"][number]
 
-export async function getPlanCatalog(region: string) {
+function isAssignablePlan(plan: CatalogPlan): boolean {
+  return (
+    plan.kind === "custom" &&
+    !plan.display_only &&
+    !plan.monthly_fee_cents &&
+    !plan.annual_fee_cents &&
+    plan.limits.max_concurrent != null
+  )
+}
+
+export interface PlanCatalog {
+  pricingV2: boolean
+  assignablePlans: CatalogPlan[]
+  freeLimits: Partial<PlanLimits> | null
+}
+
+export async function getPlanCatalog(region: string): Promise<PlanCatalog> {
   const catalog = await adminBillingRequest({
     region,
     path: "/internal/billing/catalog",
     schema: billingCatalogSchema,
   })
+  const plans = catalog.plans.filter(
+    (p) => p.state === "published" && p.pricing_version === "v2",
+  )
   return {
     pricingV2: catalog.pricing_version === "v2",
-    plans: catalog.plans.filter((p) => p.state === "published"),
+    assignablePlans: plans.filter(isAssignablePlan),
+    freeLimits: plans.find((p) => p.family === "free")?.limits ?? null,
   }
 }
 

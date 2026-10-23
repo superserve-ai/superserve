@@ -9,7 +9,7 @@ import type {
   PlanLimits,
 } from "@/lib/admin/team-billing"
 
-import { describeLimits } from "../format"
+import { describeLimits, formatDay } from "../format"
 import type { ActionFailure, PlanChangeActionResult } from "./actions"
 import {
   assignTeamPlanAction,
@@ -66,20 +66,60 @@ function useWrite() {
     if (outcome.kind === "saved") setKey(crypto.randomUUID())
     return outcome
   }
+  const unknown = result?.kind === "unavailable"
   return {
     pending,
     result,
     send,
-    reset: () => {
+    locked: pending || unknown,
+    unknown,
+    startOver: () => {
       setKey(crypto.randomUUID())
       setResult(null)
     },
   }
 }
 
+function SubmitRow({
+  write,
+  label,
+  disabled,
+  variant,
+}: {
+  write: ReturnType<typeof useWrite>
+  label: string
+  disabled: boolean
+  variant?: "outline"
+}) {
+  return (
+    <div className="flex gap-2">
+      <Button
+        type="submit"
+        size="sm"
+        variant={variant}
+        disabled={write.pending || disabled}
+      >
+        {write.unknown ? "Retry same request" : label}
+      </Button>
+      {write.unknown ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={write.startOver}
+          disabled={write.pending}
+        >
+          Start a new request
+        </Button>
+      ) : null}
+    </div>
+  )
+}
+
 export interface PlanChangeOption {
   target: PlanChangeTarget
   label: string
+  timing: string
 }
 
 export function PlanChangeForm({
@@ -91,11 +131,13 @@ export function PlanChangeForm({
   region: string
   teamId: string
   options: PlanChangeOption[]
-  freeLimits: PlanLimits | null
+  freeLimits: Partial<PlanLimits> | null
 }) {
   const [target, setTarget] = React.useState<PlanChangeTarget | "">("")
   const [reason, setReason] = React.useState("")
+  const [saved, setSaved] = React.useState("Plan change requested.")
   const write = useWrite()
+  const option = options.find((o) => o.target === target)
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -110,6 +152,11 @@ export function PlanChangeForm({
       }),
     )
     if (outcome.kind === "saved") {
+      setSaved(
+        outcome.effectiveAt
+          ? `Plan change requested. It takes effect ${formatDay(outcome.effectiveAt)}.`
+          : "Plan change requested.",
+      )
       setTarget("")
       setReason("")
     }
@@ -121,9 +168,10 @@ export function PlanChangeForm({
         <select
           id="plan-change-target"
           value={target}
+          disabled={write.locked}
           onChange={(e) => {
             setTarget(e.target.value as PlanChangeTarget)
-            write.reset()
+            write.startOver()
           }}
           className={selectClass}
         >
@@ -142,9 +190,10 @@ export function PlanChangeForm({
           id="plan-change-reason"
           value={reason}
           maxLength={2000}
+          disabled={write.locked}
           onChange={(e) => {
             setReason(e.target.value)
-            write.reset()
+            write.startOver()
           }}
           placeholder="Why this team is changing plans"
         />
@@ -161,18 +210,15 @@ export function PlanChangeForm({
         </Alert>
       ) : null}
       <p className="text-xs text-muted">
-        Downgrades from a paid plan take effect at the end of the billing period
-        and can be undone until shortly before. Upgrades happen through checkout
-        or a credit purchase.
+        {option?.timing ??
+          "Upgrades happen through checkout or a credit purchase."}
       </p>
-      <Outcome result={write.result} saved="Plan change requested." />
-      <Button
-        type="submit"
-        size="sm"
-        disabled={write.pending || !target || !reason.trim()}
-      >
-        {write.result?.kind === "unavailable" ? "Retry" : "Request change"}
-      </Button>
+      <Outcome result={write.result} saved={saved} />
+      <SubmitRow
+        write={write}
+        label="Request change"
+        disabled={!target || !reason.trim()}
+      />
     </form>
   )
 }
@@ -203,6 +249,7 @@ export function UndoPlanChangeForm({
           id="plan-change-undo"
           value={reason}
           maxLength={2000}
+          disabled={write.pending || write.result?.kind === "saved"}
           onChange={(e) => setReason(e.target.value)}
         />
       </Field>
@@ -215,7 +262,7 @@ export function UndoPlanChangeForm({
           write.pending || !reason.trim() || write.result?.kind === "saved"
         }
       >
-        Undo change
+        {write.unknown ? "Retry undo" : "Undo change"}
       </Button>
     </form>
   )
@@ -254,7 +301,8 @@ export function AssignPlanForm({
   if (plans.length === 0)
     return (
       <p className="text-sm text-muted">
-        No custom plan is published. Create one in the plan catalog first.
+        No custom plan without fees is published. Create one in the plan catalog
+        first.
       </p>
     )
 
@@ -264,9 +312,10 @@ export function AssignPlanForm({
         <select
           id="plan-assign-version"
           value={versionId}
+          disabled={write.locked}
           onChange={(e) => {
             setVersionId(e.target.value)
-            write.reset()
+            write.startOver()
           }}
           className={selectClass}
         >
@@ -285,9 +334,10 @@ export function AssignPlanForm({
           id="plan-assign-reason"
           value={reason}
           maxLength={2000}
+          disabled={write.locked}
           onChange={(e) => {
             setReason(e.target.value)
-            write.reset()
+            write.startOver()
           }}
           placeholder="For example, the signed Enterprise agreement"
         />
@@ -296,13 +346,11 @@ export function AssignPlanForm({
         Applies immediately and replaces the team's current plan and limits.
       </p>
       <Outcome result={write.result} saved="Plan assigned." />
-      <Button
-        type="submit"
-        size="sm"
-        disabled={write.pending || !versionId || !reason.trim()}
-      >
-        {write.result?.kind === "unavailable" ? "Retry" : "Assign plan"}
-      </Button>
+      <SubmitRow
+        write={write}
+        label="Assign plan"
+        disabled={!versionId || !reason.trim()}
+      />
     </form>
   )
 }

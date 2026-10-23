@@ -20,8 +20,8 @@ vi.mock("./actions", () => ({
 
 const team = "22222222-2222-4222-8222-222222222222"
 const options = [
-  { target: "free" as const, label: "Free" },
-  { target: "starter" as const, label: "Starter" },
+  { target: "free" as const, label: "Free", timing: "At period end." },
+  { target: "starter" as const, label: "Starter", timing: "At period end." },
 ]
 const freeLimits = {
   max_concurrent: 1,
@@ -65,16 +65,22 @@ it("retries a lost plan change with the same idempotency key", async () => {
   vi.mocked(requestPlanChangeAction)
     .mockRejectedValueOnce(new Error("lost response"))
     .mockResolvedValueOnce({ kind: "unavailable" })
-    .mockResolvedValueOnce({ kind: "saved" })
+    .mockResolvedValueOnce({
+      kind: "saved",
+      effectiveAt: "2026-12-05T14:20:00Z",
+    })
   renderChange()
   choose(/Move to/, "starter")
   choose(/Reason/, "Customer asked")
   fireEvent.click(screen.getByRole("button", { name: "Request change" }))
   await screen.findByText(/Retry to send the same request/)
-  fireEvent.click(screen.getByRole("button", { name: "Retry" }))
+  expect(screen.getByLabelText(/Reason/)).toHaveProperty("disabled", true)
+  const retry = () =>
+    fireEvent.click(screen.getByRole("button", { name: "Retry same request" }))
+  retry()
   await waitFor(() => expect(requestPlanChangeAction).toHaveBeenCalledTimes(2))
-  fireEvent.click(screen.getByRole("button", { name: "Retry" }))
-  await screen.findByText("Plan change requested.")
+  retry()
+  await screen.findByText("Plan change requested. It takes effect Dec 5, 2026.")
   const calls = vi.mocked(requestPlanChangeAction).mock.calls
   expect(new Set(calls.map(([input]) => input.idempotencyKey)).size).toBe(1)
   expect(calls[0][0]).toMatchObject({
@@ -85,20 +91,25 @@ it("retries a lost plan change with the same idempotency key", async () => {
   })
 })
 
-it("sends a new request once the input changes", async () => {
-  vi.mocked(requestPlanChangeAction).mockResolvedValue({ kind: "unavailable" })
+it("sends a new request after an edit or a deliberate start over", async () => {
+  vi.mocked(requestPlanChangeAction)
+    .mockResolvedValueOnce({ kind: "conflict" })
+    .mockResolvedValue({ kind: "unavailable" })
   renderChange()
   choose(/Move to/, "starter")
   choose(/Reason/, "Customer asked")
   fireEvent.click(screen.getByRole("button", { name: "Request change" }))
-  await screen.findByText(/Retry to send the same request/)
+  await screen.findByText(/does not allow this change/)
   choose(/Reason/, "Customer asked by email")
   fireEvent.click(screen.getByRole("button", { name: "Request change" }))
-  await waitFor(() => expect(requestPlanChangeAction).toHaveBeenCalledTimes(2))
+  await screen.findByText(/Retry to send the same request/)
+  fireEvent.click(screen.getByRole("button", { name: "Start a new request" }))
+  fireEvent.click(screen.getByRole("button", { name: "Request change" }))
+  await waitFor(() => expect(requestPlanChangeAction).toHaveBeenCalledTimes(3))
   const keys = vi
     .mocked(requestPlanChangeAction)
     .mock.calls.map(([input]) => input.idempotencyKey)
-  expect(keys[0]).not.toBe(keys[1])
+  expect(new Set(keys).size).toBe(3)
 })
 
 it("warns that a move to Free pauses running compute", () => {
@@ -152,6 +163,8 @@ it("assigns a custom plan version and shows the backend's refusal", async () => 
 
 it("explains when no custom plan can be assigned", () => {
   render(<AssignPlanForm region="use" teamId={team} plans={[]} />)
-  expect(screen.getByText(/No custom plan is published/)).toBeTruthy()
+  expect(
+    screen.getByText(/No custom plan without fees is published/),
+  ).toBeTruthy()
   expect(screen.queryByRole("button", { name: "Assign plan" })).toBeNull()
 })

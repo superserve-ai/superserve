@@ -1,8 +1,9 @@
-import {
-  type TeamCatalog,
-  TeamBillingView,
-} from "@/app/(dashboard)/admin/billing/teams/[team_id]/team-billing-view"
-import type { TeamPlan, TeamPlanAssignments } from "@/lib/admin/team-billing"
+import { TeamBillingView } from "@/app/(dashboard)/admin/billing/teams/[team_id]/team-billing-view"
+import type {
+  PlanCatalog,
+  TeamPlan,
+  TeamPlanAssignments,
+} from "@/lib/admin/team-billing"
 
 const team = "7c1e0a52-4b9d-4f3e-9a51-2f6d8c3b1e44"
 const staff = "11111111-1111-4111-8111-111111111111"
@@ -31,27 +32,20 @@ const limits = {
   },
 }
 
-const catalog: TeamCatalog = {
+const catalog: PlanCatalog = {
   pricingV2: true,
-  plans: [
-    ["free", "Free", "free", limits.free],
-    ["starter", "Starter", "prepaid", limits.starter],
-    ["pro_monthly", "Pro", "subscription", limits.pro],
-    [
-      "enterprise_example",
-      "Enterprise (example customer)",
-      "custom",
-      { ...limits.pro, max_concurrent: 5000, max_vcpu: 16 },
-    ],
-  ].map(([family, display_name, kind, planLimits], i) => ({
-    id: `c0ffee00-0000-4000-8000-00000000010${i}`,
-    family: family as string,
-    version: 1,
-    state: "published",
-    kind: kind as string,
-    display_name: display_name as string,
-    limits: planLimits as TeamPlan["limits"],
-  })),
+  freeLimits: limits.free,
+  assignablePlans: [
+    {
+      id: "c0ffee00-0000-4000-8000-000000000103",
+      family: "enterprise_example",
+      version: 1,
+      state: "published",
+      kind: "custom",
+      display_name: "Enterprise (example customer)",
+      limits: { ...limits.pro, max_concurrent: 5000, max_vcpu: 16 },
+    },
+  ],
 }
 
 function plan(
@@ -144,7 +138,11 @@ export default async function Page({
     <main className="mx-auto max-w-5xl bg-background text-foreground">
       <TeamBillingView
         plans={states[state] ?? states.pro}
-        catalog={state === "legacy" ? { pricingV2: false, plans: [] } : catalog}
+        catalog={
+          state === "legacy"
+            ? { pricingV2: false, assignablePlans: [], freeLimits: null }
+            : catalog
+        }
         staffCredits={
           state === "legacy"
             ? []

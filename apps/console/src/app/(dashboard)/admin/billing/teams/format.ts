@@ -29,7 +29,7 @@ function gib(mib: number): string {
   return `${Number((mib / 1024).toFixed(1))} GiB`
 }
 
-export function describeLimits(limits: PlanLimits): string {
+export function describeLimits(limits: Partial<PlanLimits>): string {
   const parts = [
     limits.max_concurrent == null
       ? null

@@ -3,6 +3,10 @@ import { beforeEach, expect, it, vi } from "vitest"
 vi.mock("server-only", () => ({}))
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
 vi.mock("@/lib/cells", () => ({ configuredRegions: () => ["use"] }))
+vi.mock("@/lib/admin/billing-api", async () => {
+  const actual = await vi.importActual<object>("@/lib/admin/billing-api")
+  return { ...actual, requireAdminBilling: vi.fn() }
+})
 vi.mock("@/lib/admin/team-billing", async () => {
   const actual = await vi.importActual<object>("@/lib/admin/team-billing")
   return {
@@ -10,6 +14,7 @@ vi.mock("@/lib/admin/team-billing", async () => {
     requestPlanChange: vi.fn(),
     undoPlanChange: vi.fn(),
     assignTeamPlan: vi.fn(),
+    getPlanCatalog: vi.fn(),
     grantStaffCredit: vi.fn(),
   }
 })
@@ -17,6 +22,7 @@ vi.mock("@/lib/admin/team-billing", async () => {
 import { AdminBillingRequestError } from "@/lib/admin/billing-api"
 import {
   assignTeamPlan,
+  getPlanCatalog,
   grantStaffCredit,
   requestPlanChange,
   undoPlanChange,
@@ -42,6 +48,41 @@ beforeEach(() => {
   vi.mocked(requestPlanChange).mockReset()
   vi.mocked(undoPlanChange).mockReset()
   vi.mocked(assignTeamPlan).mockReset()
+  vi.mocked(getPlanCatalog).mockResolvedValue({
+    pricingV2: true,
+    assignablePlans: [],
+    freeLimits: null,
+  })
+})
+
+it("refuses plan writes while the region's pricing v2 switch is off", async () => {
+  vi.mocked(getPlanCatalog).mockResolvedValue({
+    pricingV2: false,
+    assignablePlans: [],
+    freeLimits: null,
+  })
+  const off = { kind: "conflict", detail: "pricing v2 is off in this region" }
+  expect(await requestPlanChangeAction(valid)).toEqual(off)
+  expect(
+    await undoPlanChangeAction({
+      region: "use",
+      teamId: team,
+      changeId: "33333333-3333-4333-8333-333333333333",
+      reason: "r",
+    }),
+  ).toEqual(off)
+  expect(
+    await assignTeamPlanAction({
+      region: "use",
+      teamId: team,
+      idempotencyKey: "k",
+      versionId: "44444444-4444-4444-8444-444444444444",
+      reason: "enterprise agreement",
+    }),
+  ).toEqual(off)
+  expect(requestPlanChange).not.toHaveBeenCalled()
+  expect(undoPlanChange).not.toHaveBeenCalled()
+  expect(assignTeamPlan).not.toHaveBeenCalled()
 })
 
 it("rejects malformed targets before calling the backend", async () => {
@@ -83,8 +124,13 @@ it("maps backend failures to their kind", async () => {
   expect(await requestPlanChangeAction(valid)).toEqual({ kind: "conflict" })
   vi.mocked(requestPlanChange).mockRejectedValue(new Error("socket hang up"))
   expect(await requestPlanChangeAction(valid)).toEqual({ kind: "unavailable" })
-  vi.mocked(requestPlanChange).mockResolvedValue({} as never)
-  expect(await requestPlanChangeAction(valid)).toEqual({ kind: "saved" })
+  vi.mocked(requestPlanChange).mockResolvedValue({
+    effective_at: "2026-12-05T14:20:00Z",
+  } as never)
+  expect(await requestPlanChangeAction(valid)).toEqual({
+    kind: "saved",
+    effectiveAt: "2026-12-05T14:20:00Z",
+  })
   expect(requestPlanChange).toHaveBeenLastCalledWith("use", team, {
     idempotencyKey: "key-1",
     targetPlan: "free",

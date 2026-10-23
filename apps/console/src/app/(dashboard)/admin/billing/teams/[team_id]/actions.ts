@@ -5,9 +5,11 @@ import { revalidatePath } from "next/cache"
 import {
   AdminBillingRequestError,
   type AdminBillingErrorKind,
+  requireAdminBilling,
 } from "@/lib/admin/billing-api"
 import {
   assignTeamPlan,
+  getPlanCatalog,
   grantStaffCredit,
   isUuid,
   PLAN_CHANGE_TARGETS,
@@ -19,7 +21,9 @@ import { configuredRegions } from "@/lib/cells"
 
 export type ActionFailure = { kind: AdminBillingErrorKind; detail?: string }
 
-export type PlanChangeActionResult = { kind: "saved" } | ActionFailure
+export type PlanChangeActionResult =
+  | { kind: "saved"; effectiveAt?: string }
+  | ActionFailure
 
 function failure(error: unknown): ActionFailure {
   if (!(error instanceof AdminBillingRequestError))
@@ -47,6 +51,15 @@ async function run(
   }
   revalidatePath(`/admin/billing/teams/${teamId}`)
   return { kind: "saved" }
+}
+
+async function requirePricingV2(region: string) {
+  await requireAdminBilling("write")
+  if (!(await getPlanCatalog(region)).pricingV2)
+    throw new AdminBillingRequestError(
+      "conflict",
+      "pricing v2 is off in this region",
+    )
 }
 
 function validWrite(input: {
@@ -82,13 +95,17 @@ export async function requestPlanChangeAction(input: {
   const reason = validWrite(input)
   if (reason === null || !PLAN_CHANGE_TARGETS.includes(input.targetPlan))
     return { kind: "invalid" }
-  return run(input.teamId, () =>
-    requestPlanChange(input.region, input.teamId, {
+  let effectiveAt: string | undefined
+  const result = await run(input.teamId, async () => {
+    await requirePricingV2(input.region)
+    const change = await requestPlanChange(input.region, input.teamId, {
       idempotencyKey: input.idempotencyKey,
       targetPlan: input.targetPlan,
       reason,
-    }),
-  )
+    })
+    effectiveAt = change.effective_at
+  })
+  return result.kind === "saved" ? { kind: "saved", effectiveAt } : result
 }
 
 export async function undoPlanChangeAction(input: {
@@ -107,9 +124,10 @@ export async function undoPlanChangeAction(input: {
     reason.length > 2000
   )
     return { kind: "invalid" }
-  return run(input.teamId, () =>
-    undoPlanChange(input.region, input.teamId, input.changeId, reason),
-  )
+  return run(input.teamId, async () => {
+    await requirePricingV2(input.region)
+    await undoPlanChange(input.region, input.teamId, input.changeId, reason)
+  })
 }
 
 export async function assignTeamPlanAction(input: {
@@ -126,13 +144,14 @@ export async function assignTeamPlanAction(input: {
     !isUuid(input.versionId)
   )
     return { kind: "invalid" }
-  return run(input.teamId, () =>
-    assignTeamPlan(input.region, input.teamId, {
+  return run(input.teamId, async () => {
+    await requirePricingV2(input.region)
+    await assignTeamPlan(input.region, input.teamId, {
       idempotencyKey: input.idempotencyKey,
       versionId: input.versionId,
       reason,
-    }),
-  )
+    })
+  })
 }
 
 export async function grantStaffCreditAction(input: {
