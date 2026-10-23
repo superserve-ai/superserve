@@ -876,6 +876,33 @@ describe("auth callback", () => {
       )
     })
 
+    it("keeps a v2 offer through the Google signup recovery page", async () => {
+      googleMembershipState = { kind: "first_time" }
+      proofAvailable = false
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&google_signin_intent=pre-auth-intent&signup_offer=enterprise",
+        ),
+      )
+      const location = new URL(response.headers.get("location")!)
+      expect(location.searchParams.get("complete_google")).toBe("1")
+      expect(location.searchParams.get("signup_offer")).toBe("enterprise")
+      expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+    })
+
+    it("signs out and reports an error when the Enterprise hold can't be recorded", async () => {
+      mockPricingV2.mockResolvedValue(true)
+      mockUpdateSignupReview.mockRejectedValue(new Error("auth down"))
+
+      const response = await firstTimeGoogle("enterprise")
+
+      expect(mockSignOut).toHaveBeenCalled()
+      expect(mockSendWelcomeEmail).not.toHaveBeenCalled()
+      expect(new URL(response.headers.get("location")!).pathname).toBe(
+        "/auth/auth-code-error",
+      )
+    })
+
     it("does not ask for the switch without an offer", async () => {
       googleMembershipState = { kind: "first_time" }
       mockHasValidGoogleSignupProof.mockResolvedValue(true)

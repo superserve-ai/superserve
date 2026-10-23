@@ -1,6 +1,10 @@
 import "server-only"
 import type { User } from "@supabase/supabase-js"
 
+import {
+  provisionHeldApplicantTeam,
+  type ProvisionedTeam,
+} from "@/lib/api/team-provisioning"
 import { isGoogleUser } from "@/lib/auth/google-signup-proof"
 import {
   signupReviewStatus,
@@ -55,7 +59,12 @@ export async function listPendingSignups(): Promise<SignupReviewRow[]> {
     })
     if (error) throw new Error(`Unable to list users: ${error.message}`)
     for (const user of data.users)
-      if (signupReviewStatus(user) === "pending") pending.push(reviewRow(user))
+      if (
+        signupReviewStatus(user) === "pending" ||
+        (signupReviewStatus(user) === "approved" &&
+          !user.app_metadata?.approval_email_sent_at)
+      )
+        pending.push(reviewRow(user))
     if (data.users.length < LIST_PAGE_SIZE) break
   }
   return pending.toSorted(
@@ -91,29 +100,41 @@ export type SignupReviewResult =
   | { ok: true; outcome: "approved" | "rejected" }
   | { ok: false; error: string }
 
-async function pendingUser(userId: string): Promise<User | null> {
+async function reviewedUser(userId: string): Promise<User> {
   const { data, error } =
     await createAdminClient().auth.admin.getUserById(userId)
   if (error || !data?.user) throw new Error("User not found")
-  return signupReviewStatus(data.user) === "pending" ? data.user : null
+  return data.user
 }
 
+export type AssignEnterprisePlan = (team: ProvisionedTeam) => Promise<void>
+
 /**
- * Gives a held Enterprise applicant access. The decision is recorded before
- * the email goes out so the link never reaches a still-pending account.
+ * Gives a held Enterprise applicant access: provision their team, move it to
+ * the Enterprise plan, then lift the hold and email them. Each step is safe to
+ * repeat, so retrying after any failure finishes the same sequence. The hold
+ * stays until the plan is assigned, so the applicant never sees the team on
+ * another plan.
  */
 export async function approveSignup(
   userId: string,
   staffId: string,
+  assignEnterprisePlan: AssignEnterprisePlan,
 ): Promise<SignupReviewResult> {
-  const user = await pendingUser(userId)
-  if (!user) return { ok: false, error: "This account is not awaiting setup." }
+  const user = await reviewedUser(userId)
+  const status = signupReviewStatus(user)
+  if (status === "pending") {
+    const team = await provisionHeldApplicantTeam(user)
+    await assignEnterprisePlan(team)
+    await updateSignupReviewMetadata(user.id, {
+      signup_review: "approved",
+      approved_by: staffId,
+      approved_at: new Date().toISOString(),
+      approved_team_id: team.id,
+    })
+  } else if (status !== "approved" || user.app_metadata?.approval_email_sent_at)
+    return { ok: false, error: "This account is not awaiting setup." }
   if (!user.email) return { ok: false, error: "This account has no email." }
-  await updateSignupReviewMetadata(user.id, {
-    signup_review: "approved",
-    approved_by: staffId,
-    approved_at: new Date().toISOString(),
-  })
   try {
     const result = await sendEmail({
       to: user.email,
@@ -130,9 +151,12 @@ export async function approveSignup(
     return {
       ok: false,
       error:
-        "The account has access, but the email could not be sent. Let them know directly.",
+        "The account has access, but the email could not be sent. Grant access again to resend it.",
     }
   }
+  await updateSignupReviewMetadata(user.id, {
+    approval_email_sent_at: new Date().toISOString(),
+  })
   return { ok: true, outcome: "approved" }
 }
 
@@ -140,8 +164,9 @@ export async function rejectSignup(
   userId: string,
   staffId: string,
 ): Promise<SignupReviewResult> {
-  const user = await pendingUser(userId)
-  if (!user) return { ok: false, error: "This account is not awaiting setup." }
+  const user = await reviewedUser(userId)
+  if (signupReviewStatus(user) !== "pending")
+    return { ok: false, error: "This account is not awaiting setup." }
   await updateSignupReviewMetadata(user.id, {
     signup_review: "rejected",
     rejected_by: staffId,

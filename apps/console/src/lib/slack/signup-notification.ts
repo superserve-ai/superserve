@@ -70,7 +70,7 @@ export const notifySlackOfNewUser = async (
               ? [
                   {
                     type: "mrkdwn",
-                    text: "*Enterprise:* no access until a plan is assigned in Admin › Pending signups",
+                    text: "*Enterprise:* no access until staff grant it in Admin › Pending Signups",
                   },
                 ]
               : []),

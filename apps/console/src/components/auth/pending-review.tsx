@@ -96,19 +96,16 @@ function CalendlyEmbed({ url }: { url: string }) {
 export function PendingReview({
   name,
   email,
-  signOut = false,
 }: {
   name?: string
   email?: string
-  // Clears any session left in the browser; setup gates every route anyway.
-  signOut?: boolean
 }) {
+  // Clears any session left in the browser; setup gates every route anyway.
   useEffect(() => {
-    if (!signOut) return
     void createBrowserClient()
       .auth.signOut({ scope: "local" })
       .catch(() => {})
-  }, [signOut])
+  }, [])
 
   return (
     <main className="min-h-dvh bg-background text-foreground">

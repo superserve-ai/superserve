@@ -26,6 +26,7 @@ export interface PendingProfile {
 
 export const pendingProfileCookieOptions = {
   httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
   sameSite: "lax" as const,
   path: "/",
   maxAge: PENDING_PROFILE_TTL_SECONDS,

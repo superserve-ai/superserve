@@ -304,6 +304,7 @@ import { createServerClient } from "@/lib/supabase/server"
 
 import {
   completedMemberships,
+  provisionHeldApplicantTeam,
   provisionTeam as provisionActualTeam,
 } from "./team-provisioning"
 
@@ -784,6 +785,38 @@ describe("provisionTeam", () => {
 
       expect(mockPublishPromotionIdentity).not.toHaveBeenCalled()
       expect(clients.usw.writes).toEqual({})
+    },
+  )
+
+  it("lets staff provision a held Google applicant without the browser proof", async () => {
+    const applicant = {
+      ...currentUser!,
+      app_metadata: {
+        provider: "google",
+        providers: ["google"],
+        signup_review: "pending",
+      },
+    }
+
+    await expect(
+      provisionHeldApplicantTeam(applicant as never),
+    ).resolves.toMatchObject({ id: "team-new", region: "use" })
+
+    expect(mockRequireGoogleSignupProof).not.toHaveBeenCalled()
+    expect(clients.use.writes).not.toEqual({})
+  })
+
+  it.each([undefined, "approved", "rejected"])(
+    "refuses staff provisioning for an account that isn't held (%s)",
+    async (review) => {
+      const account = {
+        ...currentUser!,
+        app_metadata: review ? { signup_review: review } : {},
+      }
+      await expect(
+        provisionHeldApplicantTeam(account as never),
+      ).rejects.toThrow("Only held applicants")
+      expect(clients.use.writes).toEqual({})
     },
   )
 

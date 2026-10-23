@@ -2,10 +2,11 @@ import "server-only"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 
 const SWITCH_CACHE_SECONDS = 30
+const SWITCH_TIMEOUT_MS = 2000
 
 /**
  * Whether the region runs pricing v2. Anything but an explicit "v2" from the
- * billing API, including an unreachable API, keeps today's flows.
+ * billing API, including a slow or unreachable API, keeps today's flows.
  */
 export async function isPricingV2Enabled(
   region: string = DEFAULT_REGION,
@@ -13,7 +14,10 @@ export async function isPricingV2Enabled(
   try {
     const response = await fetch(
       `${cellFor(region).apiBaseUrl}/billing/plans/public`,
-      { next: { revalidate: SWITCH_CACHE_SECONDS } },
+      {
+        next: { revalidate: SWITCH_CACHE_SECONDS },
+        signal: AbortSignal.timeout(SWITCH_TIMEOUT_MS),
+      },
     )
     if (!response.ok) return false
     const body = (await response.json()) as { pricing_version?: unknown }

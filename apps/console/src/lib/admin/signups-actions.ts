@@ -4,10 +4,10 @@ import { revalidatePath } from "next/cache"
 
 import { createServerClient } from "@/lib/supabase/server"
 
-import { canApprovePlatformSignups } from "./permissions"
+import { assignEnterprisePlan } from "./enterprise-plan"
+import { canApprovePlatformSignups, canWriteAdminBilling } from "./permissions"
 import {
   approveSignup,
-  listPendingSignups,
   rejectSignup,
   type SignupReviewResult,
 } from "./signup-approval"
@@ -26,17 +26,24 @@ async function requireSignupApprover() {
   return user
 }
 
-export async function listPendingSignupsAction() {
-  await requireSignupApprover()
-  return listPendingSignups()
-}
-
 export async function approveSignupAction(
   userId: string,
 ): Promise<SignupReviewResult> {
   const staff = await requireSignupApprover()
+  if (!canWriteAdminBilling(staff))
+    return { ok: false, error: "Granting access needs billing write access." }
   if (!UUID_RE.test(userId)) return { ok: false, error: "Invalid user id" }
-  const result = await approveSignup(userId, staff.id)
+  let result: SignupReviewResult
+  try {
+    result = await approveSignup(userId, staff.id, assignEnterprisePlan)
+  } catch (error) {
+    console.error("Enterprise access grant failed", error)
+    result = {
+      ok: false,
+      error:
+        "Access was not granted yet. The applicant is still held; try again.",
+    }
+  }
   revalidatePath("/admin/signups")
   return result
 }

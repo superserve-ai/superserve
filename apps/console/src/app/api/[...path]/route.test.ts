@@ -13,6 +13,10 @@ import { NextRequest } from "next/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mocks declared BEFORE the module under test is imported.
+const mockPricingV2 = vi.fn()
+vi.mock("@/lib/billing/pricing-version", () => ({
+  isPricingV2Enabled: () => mockPricingV2(),
+}))
 vi.mock("@/lib/api/proxy-auth", () => ({
   ensureAuthApiKeyForTeam: vi.fn(),
   getAuthApiKeyAndTeamForRecovery: vi.fn(),
@@ -796,7 +800,29 @@ describe("api proxy /api/[...path]", () => {
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
+  it("adds no account lookup to CLI authorisation while pricing v2 is off", async () => {
+    mockPricingV2.mockResolvedValue(false)
+    fetchSpy.mockResolvedValue(new Response("{}", { status: 200 }))
+    const getUser = vi.fn()
+    vi.mocked(createServerClient).mockResolvedValue({
+      auth: { getUser },
+    } as never)
+    await POST(
+      req("POST", ["v1", "auth", "device-authorize"], {
+        headers: {
+          authorization: "Bearer user-token",
+          "content-type": "application/json",
+        },
+        body: "{}",
+      }),
+      params(["v1", "auth", "device-authorize"]),
+    )
+    expect(getUser).not.toHaveBeenCalled()
+    expect(fetchSpy).toHaveBeenCalled()
+  })
+
   it("refuses a CLI authorisation for an account awaiting Enterprise setup", async () => {
+    mockPricingV2.mockResolvedValue(true)
     const getUser = vi.fn(async () => ({
       data: { user: { id: "u1", app_metadata: { signup_review: "pending" } } },
       error: null,
@@ -821,6 +847,7 @@ describe("api proxy /api/[...path]", () => {
   })
 
   it("forwards a /v1/auth/ request whose token can't be resolved, as before", async () => {
+    mockPricingV2.mockResolvedValue(true)
     fetchSpy.mockResolvedValue(new Response("{}", { status: 401 }))
     vi.mocked(createServerClient).mockResolvedValue({
       auth: {

@@ -1,11 +1,13 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi, type MockInstance } from "vitest"
 
 import { isPricingV2Enabled } from "./pricing-version"
 
-const fetchSpy = vi.spyOn(globalThis, "fetch")
+let fetchSpy: MockInstance<typeof fetch>
 
 describe("isPricingV2Enabled", () => {
-  afterEach(() => fetchSpy.mockReset())
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, "fetch")
+  })
 
   it("is on only when the billing API says v2", async () => {
     fetchSpy.mockResolvedValue(Response.json({ pricing_version: "v2" }))
@@ -22,10 +24,18 @@ describe("isPricingV2Enabled", () => {
   ])("keeps legacy flows for %s", async (_label, response) => {
     fetchSpy.mockResolvedValue(response())
     await expect(isPricingV2Enabled()).resolves.toBe(false)
+    expect(fetchSpy).toHaveBeenCalledOnce()
   })
 
   it("keeps legacy flows when the API is unreachable", async () => {
     fetchSpy.mockRejectedValue(new Error("offline"))
     await expect(isPricingV2Enabled()).resolves.toBe(false)
+    expect(fetchSpy).toHaveBeenCalledOnce()
+  })
+
+  it("bounds how long signup waits for the switch", async () => {
+    fetchSpy.mockResolvedValue(Response.json({ pricing_version: "v2" }))
+    await isPricingV2Enabled()
+    expect(fetchSpy.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal)
   })
 })

@@ -288,6 +288,12 @@ export async function GET(request: Request) {
               recoveryUrl.searchParams.set("complete_google", "1")
               if (requestedOffer)
                 recoveryUrl.searchParams.set("offer", requestedOffer)
+              const signupOfferParam = searchParams.get(SIGNUP_OFFER_PARAM)
+              if (signupOfferParam)
+                recoveryUrl.searchParams.set(
+                  SIGNUP_OFFER_PARAM,
+                  signupOfferParam,
+                )
               if (next !== "/") recoveryUrl.searchParams.set("next", next)
               return NextResponse.redirect(
                 buildRedirectUrl(
@@ -477,9 +483,17 @@ export async function GET(request: Request) {
         }
 
         if (code && isNewUser && signupOffer === "enterprise") {
-          await updateSignupReviewMetadata(user.id, {
-            signup_review: "pending",
-          })
+          try {
+            await updateSignupReviewMetadata(user.id, {
+              signup_review: "pending",
+            })
+          } catch (holdError) {
+            console.error("Enterprise signup hold failed", holdError)
+            await supabase.auth.signOut().catch(() => {})
+            return NextResponse.redirect(
+              buildRedirectUrl(origin, "/auth/auth-code-error"),
+            )
+          }
           await notifySlackOfNewUser(
             user.email || "",
             user.user_metadata?.full_name || null,
