@@ -1,7 +1,7 @@
 "use client"
 
 import { Badge, Button } from "@superserve/ui"
-import { useState, type ReactNode } from "react"
+import { useState } from "react"
 
 import { setPricingVersionAction } from "@/lib/admin/billing-catalog-actions"
 import type { PricingVersion } from "@/lib/billing/plans"
@@ -15,21 +15,17 @@ export const PRICING_LABEL = {
 
 const ALL = "all"
 
-// Everything staff need to activate pricing v2 in a region, on one screen:
-// the region's switch state, the activation steps for that region, and the
-// switch itself. Activation steps render through `steps` for a single region.
+// The pricing model of every region, switched per region or all at once.
 export function PricingActivation({
   live,
   canWrite,
   locked,
   confirm,
-  steps,
 }: {
   live: Record<string, PricingVersion>
   canWrite: boolean
   locked: boolean
   confirm: (confirmation: Confirmation) => void
-  steps?: (region: string) => ReactNode
 }) {
   const regions = Object.keys(live)
   const [selected, setSelected] = useState(
@@ -108,7 +104,6 @@ export function PricingActivation({
             : null}
         </div>
       </div>
-      {steps && selected !== ALL ? steps(selected) : null}
     </section>
   )
 }
