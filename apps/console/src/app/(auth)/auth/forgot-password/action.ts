@@ -35,9 +35,9 @@ export const sendPasswordResetEmail = async (email: string) => {
       return { success: true } // Always return success to prevent email enumeration
     }
 
-    // Using a recovery link confirms the address, which would bypass signup
-    // review. Unconfirmed and unreviewed accounts silently get nothing.
-    if (!data.user?.email_confirmed_at || isSignupReviewBlocked(data.user)) {
+    // Using a recovery link confirms the address, so accounts awaiting signup
+    // review silently get nothing; accounts that predate review keep recovery.
+    if (isSignupReviewBlocked(data.user)) {
       return { success: true } // Always return success to prevent email enumeration
     }
 

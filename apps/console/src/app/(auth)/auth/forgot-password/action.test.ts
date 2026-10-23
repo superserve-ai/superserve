@@ -134,7 +134,14 @@ describe("sendPasswordResetEmail", () => {
   })
 
   it.each([
-    ["an unconfirmed account", { ...CONFIRMED_USER, email_confirmed_at: null }],
+    [
+      "an unconfirmed account created since review started",
+      {
+        ...CONFIRMED_USER,
+        email_confirmed_at: null,
+        created_at: "2999-06-01T00:00:00Z",
+      },
+    ],
     [
       "an account awaiting review",
       { ...CONFIRMED_USER, app_metadata: { signup_review: "pending" } },
@@ -157,4 +164,22 @@ describe("sendPasswordResetEmail", () => {
       expect(mockSendEmail).not.toHaveBeenCalled()
     },
   )
+
+  it("still sends recovery to an unconfirmed account that predates review", async () => {
+    mockGenerateLink.mockResolvedValue({
+      data: {
+        user: {
+          ...CONFIRMED_USER,
+          email_confirmed_at: null,
+          created_at: "2026-01-01T00:00:00Z",
+        },
+        properties: { hashed_token: "token-abc" },
+      },
+      error: null,
+    })
+
+    await sendPasswordResetEmail("user@example.com")
+
+    expect(mockSendEmail).toHaveBeenCalledOnce()
+  })
 })
