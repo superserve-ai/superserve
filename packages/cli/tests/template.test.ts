@@ -347,4 +347,19 @@ describe("poll sleep", () => {
     expect(r.exitCode).toBe(2)
     expect(r.requests).toHaveLength(0)
   })
+
+  test("wait --timeout 1 gives up on time, not after a full poll interval", async () => {
+    const started = Date.now()
+    const r = await runCli(["template", "wait", TPL, "--timeout", "1"], {
+      fetch: (req) => {
+        const p = req.url.pathname
+        if (p === `/templates/${TPL}/builds`)
+          return json([{ id: BUILD, template_id: TPL, status: "building" }])
+        if (p === `/templates/${TPL}/builds/${BUILD}`)
+          return json({ id: BUILD, template_id: TPL, status: "building" })
+      },
+    })
+    expect(r.exitCode).toBe(7)
+    expect(Date.now() - started).toBeLessThan(1_800)
+  })
 })

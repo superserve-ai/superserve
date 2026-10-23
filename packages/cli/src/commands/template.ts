@@ -411,7 +411,7 @@ async function waitForBuild(
           })
         }
         if (Date.now() >= deadline) throw timedOut(build.status)
-        await sleep(2000, interrupted)
+        await sleep(Math.min(2000, deadline - Date.now()), interrupted)
       }
     } finally {
       spin?.stop()
