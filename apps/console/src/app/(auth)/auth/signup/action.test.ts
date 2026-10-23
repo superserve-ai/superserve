@@ -41,9 +41,9 @@ vi.mock("@/lib/email/templates/welcome", () => ({
     `WelcomeEmail:${props.name}`,
 }))
 
-const mockPricingV2 = vi.fn().mockResolvedValue(false)
-vi.mock("@/lib/billing/pricing-version", () => ({
-  isPricingV2Enabled: (...args: unknown[]) => mockPricingV2(...args),
+const mockPricingVersion = vi.fn().mockResolvedValue("legacy")
+vi.mock("@/lib/billing/plans-actions", () => ({
+  getPricingVersionAction: (...args: unknown[]) => mockPricingVersion(...args),
 }))
 const mockUpdateSignupReview = vi.fn()
 vi.mock("@/lib/auth/signup-review-server", () => ({
@@ -268,7 +268,7 @@ describe("post-trial signup with the real Cloudflare observer", () => {
 
 describe("signUpWithEmail", () => {
   beforeEach(() => {
-    mockPricingV2.mockReset().mockResolvedValue(false)
+    mockPricingVersion.mockReset().mockResolvedValue("legacy")
     mockUpdateSignupReview.mockReset().mockResolvedValue(undefined)
     mockAfter.mockReset().mockImplementation((callback) => callback())
     mockGenerateLink.mockReset()
@@ -338,11 +338,11 @@ describe("signUpWithEmail", () => {
 
     it("does not ask for the switch without an offer", async () => {
       await signUp(undefined)
-      expect(mockPricingV2).not.toHaveBeenCalled()
+      expect(mockPricingVersion).not.toHaveBeenCalled()
     })
 
     it("holds an Enterprise signup and still confirms the address", async () => {
-      mockPricingV2.mockResolvedValue(true)
+      mockPricingVersion.mockResolvedValue("v2")
 
       const result = await signUp("enterprise")
 
@@ -356,7 +356,7 @@ describe("signUpWithEmail", () => {
     })
 
     it("carries a self-serve offer without holding the account", async () => {
-      mockPricingV2.mockResolvedValue(true)
+      mockPricingVersion.mockResolvedValue("v2")
 
       await signUp("starter")
 

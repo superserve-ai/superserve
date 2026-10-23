@@ -26,7 +26,6 @@ import {
   isSignupReviewBlocked,
   SIGNUP_REVIEW_PENDING_MESSAGE,
 } from "@/lib/auth/signup-review"
-import { isPricingV2Enabled } from "@/lib/billing/pricing-version"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -177,7 +176,7 @@ async function proxyRequest(
   const bearer = request.headers
     .get("authorization")
     ?.match(/^bearer\s+(\S+)$/i)
-  if (skipKeyInjection && bearer && (await isPricingV2Enabled())) {
+  if (skipKeyInjection && bearer) {
     // These paths act for the bearer's account, e.g. authorising a CLI login.
     // Unresolvable tokens go upstream unchanged, which rejects them as before.
     const supabase = await createServerClient()

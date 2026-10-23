@@ -25,7 +25,7 @@ import {
 } from "@/lib/auth/signup-restrictions"
 import { signupReviewStatus } from "@/lib/auth/signup-review"
 import { updateSignupReviewMetadata } from "@/lib/auth/signup-review-server"
-import { isPricingV2Enabled } from "@/lib/billing/pricing-version"
+import { getPricingVersionAction } from "@/lib/billing/plans-actions"
 import { DEFAULT_REGION } from "@/lib/cells"
 import {
   isCloudflareSignupObservationEnabled as readCloudflareObservationFlag,
@@ -456,7 +456,7 @@ export const signUpWithEmail = async (
     if (requestedOffer) callbackUrl.searchParams.set("offer", requestedOffer)
     const offerIntent = rawSignupOffer ?? offer
     const signupOffer =
-      offerIntent && (await isPricingV2Enabled())
+      offerIntent && (await getPricingVersionAction()) === "v2"
         ? parseSignupOffer(offerIntent)
         : undefined
     if (signupOffer)

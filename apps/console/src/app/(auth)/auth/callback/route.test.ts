@@ -193,9 +193,9 @@ vi.mock("@/lib/auth/google-onboarding", () => ({
     mockEnsureGoogleOnboardingMembership(...args),
 }))
 
-const mockPricingV2 = vi.fn()
-vi.mock("@/lib/billing/pricing-version", () => ({
-  isPricingV2Enabled: (...args: unknown[]) => mockPricingV2(...args),
+const mockPricingVersion = vi.fn()
+vi.mock("@/lib/billing/plans-actions", () => ({
+  getPricingVersionAction: (...args: unknown[]) => mockPricingVersion(...args),
 }))
 const mockUpdateSignupReview = vi.fn()
 vi.mock("@/lib/auth/signup-review-server", async (importOriginal) => ({
@@ -244,7 +244,7 @@ import { GET } from "./route"
 describe("auth callback", () => {
   beforeEach(() => {
     vi.stubEnv("YC_STAFF_UI_ENABLED", "false")
-    mockPricingV2.mockReset().mockResolvedValue(false)
+    mockPricingVersion.mockReset().mockResolvedValue("legacy")
     mockSignOut.mockReset().mockResolvedValue({ error: null })
     mockUpdateSignupReview.mockReset().mockResolvedValue(undefined)
     evidenceJar.clear()
@@ -891,7 +891,7 @@ describe("auth callback", () => {
     })
 
     it("signs out and reports an error when the Enterprise hold can't be recorded", async () => {
-      mockPricingV2.mockResolvedValue(true)
+      mockPricingVersion.mockResolvedValue("v2")
       mockUpdateSignupReview.mockRejectedValue(new Error("auth down"))
 
       const response = await firstTimeGoogle("enterprise")
@@ -911,11 +911,11 @@ describe("auth callback", () => {
           "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
         ),
       )
-      expect(mockPricingV2).not.toHaveBeenCalled()
+      expect(mockPricingVersion).not.toHaveBeenCalled()
     })
 
     it("holds a new Enterprise account without access", async () => {
-      mockPricingV2.mockResolvedValue(true)
+      mockPricingVersion.mockResolvedValue("v2")
 
       const response = await firstTimeGoogle("enterprise")
 
@@ -944,7 +944,7 @@ describe("auth callback", () => {
       ["pro_annual", "/billing/pro/"],
       ["retired_offer", "/billing/pro/"],
     ])("routes a new %s signup to %s", async (offer, destination) => {
-      mockPricingV2.mockResolvedValue(true)
+      mockPricingVersion.mockResolvedValue("v2")
 
       const response = await firstTimeGoogle(offer)
 
@@ -955,7 +955,7 @@ describe("auth callback", () => {
     })
 
     it("routes by the legacy offer parameter when no v2 offer was sent", async () => {
-      mockPricingV2.mockResolvedValue(true)
+      mockPricingVersion.mockResolvedValue("v2")
       currentUser!.app_metadata = { provider: "email" }
       const response = await GET(
         new Request(
@@ -968,7 +968,7 @@ describe("auth callback", () => {
     })
 
     it("does not reroute an existing customer", async () => {
-      mockPricingV2.mockResolvedValue(true)
+      mockPricingVersion.mockResolvedValue("v2")
       const response = await GET(
         new Request(
           "https://console.superserve.ai/auth/callback?code=abc&signup_offer=starter",

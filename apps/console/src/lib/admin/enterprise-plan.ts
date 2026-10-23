@@ -3,6 +3,7 @@ import * as z from "zod"
 
 import { adminBillingRequest } from "@/lib/admin/billing-api"
 import type { ProvisionedTeam } from "@/lib/api/team-provisioning"
+import { planKindSchema, pricingVersionSchema } from "@/lib/billing/plans"
 import { DEFAULT_REGION } from "@/lib/cells"
 
 const catalogSchema = z.object({
@@ -10,8 +11,11 @@ const catalogSchema = z.object({
     z.object({
       id: z.string(),
       display_name: z.string(),
+      pricing_version: pricingVersionSchema,
+      kind: planKindSchema,
       state: z.string(),
       self_serve: z.boolean(),
+      display_only: z.boolean(),
       monthly_fee_cents: z.number().nullable(),
       annual_fee_cents: z.number().nullable(),
     }),
@@ -23,7 +27,6 @@ export interface EnterprisePlanVersion {
   name: string
 }
 
-/** Published, staff-assigned versions without a fee: the plans an Enterprise team can be given. */
 export async function listEnterprisePlanVersions(
   region: string = DEFAULT_REGION,
 ): Promise<EnterprisePlanVersion[]> {
@@ -36,17 +39,16 @@ export async function listEnterprisePlanVersions(
     .filter(
       (plan) =>
         plan.state === "published" &&
+        plan.pricing_version === "v2" &&
+        plan.kind === "custom" &&
         !plan.self_serve &&
+        !plan.display_only &&
         !plan.monthly_fee_cents &&
         !plan.annual_fee_cents,
     )
     .map((plan) => ({ id: plan.id, name: plan.display_name }))
 }
 
-/**
- * Moves an approved applicant's new team onto its Enterprise plan. The key is
- * per applicant, so a retried approval replays the same assignment.
- */
 export async function assignEnterprisePlan(
   team: ProvisionedTeam,
   applicantId: string,

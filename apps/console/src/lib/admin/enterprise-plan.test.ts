@@ -45,7 +45,10 @@ describe("Enterprise plan assignment", () => {
       id: "v",
       display_name: "Plan",
       state: "published",
+      pricing_version: "v2",
+      kind: "custom",
       self_serve: false,
+      display_only: false,
       monthly_fee_cents: null,
       annual_fee_cents: null,
       ...overrides,
@@ -53,7 +56,10 @@ describe("Enterprise plan assignment", () => {
     mockRequest.mockResolvedValue({
       plans: [
         plan({ id: "enterprise", display_name: "Enterprise" }),
+        plan({ id: "contact-card", display_only: true }),
         plan({ id: "draft", state: "draft" }),
+        plan({ id: "legacy-enterprise", pricing_version: "legacy" }),
+        plan({ id: "non-custom", kind: "free" }),
         plan({ id: "free", self_serve: true }),
         plan({ id: "pro", monthly_fee_cents: 25000 }),
       ],

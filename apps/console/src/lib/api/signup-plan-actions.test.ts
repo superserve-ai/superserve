@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   intent: vi.fn(),
   billing: vi.fn(),
   assignment: vi.fn(),
+  pricing: vi.fn(),
   from: vi.fn(),
   eq: vi.fn(),
   cookie: vi.fn(),
@@ -15,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   redirect: vi.fn((url: string) => {
     throw new Error(`redirect:${url}`)
   }),
+}))
+vi.mock("@/lib/billing/plans-actions", () => ({
+  getPricingVersionAction: mocks.pricing,
 }))
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }))
 vi.mock("@/lib/auth/google-signup-proof", () => ({
@@ -40,6 +44,7 @@ import { getSignupPlanAction } from "./signup-plan-actions"
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.pricing.mockResolvedValue("v2")
   mocks.user.mockResolvedValue({ data: { user: { id: "user" } } })
   mocks.team.mockResolvedValue({
     team: { teamId: "west-team", region: "usw" },
@@ -114,6 +119,13 @@ describe("authoritative signup plan read", () => {
       expect(needsPlanSelection(result)).toBe(false)
     },
   )
+  it("restores the legacy picker after switching pricing v2 off", async () => {
+    mocks.pricing.mockResolvedValue("legacy")
+    mocks.assignment.mockResolvedValue({ data: [{ id: "a1" }], error: null })
+    expect((await getSignupPlanAction()).state).toBe("selecting")
+    expect(mocks.pricing).toHaveBeenCalledWith("usw")
+    expect(mocks.assignment).not.toHaveBeenCalled()
+  })
   it("keeps today's plan selection when the team has no pricing v2 plan", async () => {
     mocks.assignment.mockResolvedValue({ data: [], error: null })
     expect((await getSignupPlanAction()).state).toBe("selecting")

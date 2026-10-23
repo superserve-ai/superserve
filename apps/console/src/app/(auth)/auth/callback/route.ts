@@ -47,7 +47,7 @@ import {
   pendingProfileCookieOptions,
   updateSignupReviewMetadata,
 } from "@/lib/auth/signup-review-server"
-import { isPricingV2Enabled } from "@/lib/billing/pricing-version"
+import { getPricingVersionAction } from "@/lib/billing/plans-actions"
 import { DEFAULT_REGION } from "@/lib/cells"
 import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import { fingerprintDiagnostics } from "@/lib/fingerprint/diagnostics-server"
@@ -206,7 +206,7 @@ export async function GET(request: Request) {
         const offerIntent =
           searchParams.get(SIGNUP_OFFER_PARAM) ?? searchParams.get("offer")
         const signupOffer =
-          offerIntent && (await isPricingV2Enabled())
+          offerIntent && (await getPricingVersionAction()) === "v2"
             ? parseSignupOffer(offerIntent)
             : undefined
         const signupAttemptId =
