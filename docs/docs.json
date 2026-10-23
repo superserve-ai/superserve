@@ -83,7 +83,8 @@
               "sandbox/networking",
               "sandbox/preview-urls",
               "sandbox/network-log",
-              "sandbox/desktop"
+              "sandbox/desktop",
+              "sandbox/docker"
             ]
           },
           {
