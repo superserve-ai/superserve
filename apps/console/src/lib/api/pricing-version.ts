@@ -15,11 +15,16 @@ export function pricingVersionOf(body: unknown): PricingVersion {
     : "legacy"
 }
 
-export async function fetchPublicPlans(): Promise<unknown> {
+export async function fetchPublicPlans(previous?: unknown): Promise<unknown> {
   try {
     return await apiClient<unknown>("/billing/plans/public")
   } catch (error) {
-    if (error instanceof ApiError && error.status === 404) return {}
+    if (
+      error instanceof ApiError &&
+      error.status === 404 &&
+      pricingVersionOf(previous) !== "v2"
+    )
+      return {}
     throw error
   }
 }

@@ -103,6 +103,22 @@ describe("usePricingVersion", () => {
     expect(mocks.api).toHaveBeenCalledTimes(1)
   })
 
+  it("keeps v2 when a later refresh answers 404", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    mocks.api.mockResolvedValue({ pricing_version: "v2" })
+    const { result } = renderHook(() => usePricingVersion(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    })
+    await waitFor(() => expect(result.current).toBe("v2"))
+    mocks.api.mockRejectedValue(new ApiError(404, "not_found", "Not found"))
+    await client.refetchQueries()
+    expect(result.current).toBe("v2")
+  })
+
   it("keeps v2 when a later refresh fails", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },

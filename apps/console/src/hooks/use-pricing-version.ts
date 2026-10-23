@@ -1,6 +1,6 @@
 "use client"
 
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
   fetchPublicPlans,
@@ -13,12 +13,14 @@ import { useBillingContext } from "./use-billing-context"
 
 function usePublicPlans() {
   const { cacheScope, teamKey, ready } = useBillingContext()
+  const queryClient = useQueryClient()
+  const queryKey = billingKeys.pricingVersion({
+    cacheScope,
+    teamKey: teamKey ?? "",
+  })
   return useQuery({
-    queryKey: billingKeys.pricingVersion({
-      cacheScope,
-      teamKey: teamKey ?? "",
-    }),
-    queryFn: fetchPublicPlans,
+    queryKey,
+    queryFn: () => fetchPublicPlans(queryClient.getQueryData(queryKey)),
     enabled: ready && teamKey !== null,
     retry: false,
     staleTime: 60_000,
