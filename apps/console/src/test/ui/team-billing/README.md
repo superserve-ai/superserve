@@ -19,3 +19,7 @@ billing as unavailable.
 
 Server-side authorization, request shapes and retry behaviour are covered by
 Vitest.
+
+Append `?unavailable=plans` to show a failed assignment read with no assignment
+form, or `?unavailable=credits` to show a failed credit-history read with no new
+grant form. Each independent successful read keeps its own controls available.

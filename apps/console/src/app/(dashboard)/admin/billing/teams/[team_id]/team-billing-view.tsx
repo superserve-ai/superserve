@@ -111,7 +111,7 @@ export function TeamBillingView({
   const current = plans?.current ?? null
   const pending = plans?.pending_change
   const pricingV2 = catalog?.pricingV2 === true
-  const canAssign = canWrite && pricingV2
+  const canAssign = canWrite && pricingV2 && plans !== null
   const changeOptions = current ? (DOWNGRADES[current.kind] ?? []) : []
 
   return (
@@ -282,7 +282,7 @@ export function TeamBillingView({
               </TableBody>
             </Table>
           )}
-          {canWrite ? (
+          {canWrite && staffCredits !== null ? (
             <StaffCreditForm region={region} teamId={teamId} />
           ) : null}
         </div>

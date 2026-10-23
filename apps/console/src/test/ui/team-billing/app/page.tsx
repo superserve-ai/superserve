@@ -131,48 +131,58 @@ for (const s of [states.pro, states.starter])
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ state?: string; switch?: string }>
+  searchParams: Promise<{
+    state?: string
+    switch?: string
+    unavailable?: string
+  }>
 }) {
-  const { state = "pro", switch: pricingSwitch } = await searchParams
+  const {
+    state = "pro",
+    switch: pricingSwitch,
+    unavailable,
+  } = await searchParams
   return (
     <main className="mx-auto max-w-5xl bg-background text-foreground">
       <TeamBillingView
-        plans={states[state] ?? states.pro}
+        plans={unavailable === "plans" ? null : (states[state] ?? states.pro)}
         catalog={
           state === "legacy"
             ? { pricingV2: false, assignablePlans: [], freeLimits: null }
             : { ...catalog, pricingV2: pricingSwitch !== "off" }
         }
         staffCredits={
-          state === "legacy"
-            ? []
-            : [
-                {
-                  id: "c0ffee00-0000-4000-8000-000000000011",
-                  idempotency_key: "fixture-pending",
-                  amount_cents: 5000,
-                  reason: "Correction for a duplicated storage charge.",
-                  requested_by: staff,
-                  requested_at: "2026-10-21T09:30:00Z",
-                  state: "pending" as const,
-                  stripe_credit_grant_id: null,
-                  issued_at: null,
-                  last_error:
-                    "stripe POST /v1/billing/credit_grants returned 503",
-                },
-                {
-                  id: "c0ffee00-0000-4000-8000-000000000010",
-                  idempotency_key: "fixture-issued",
-                  amount_cents: 25000,
-                  reason: "Usage billed twice during the September outage.",
-                  requested_by: staff,
-                  requested_at: "2026-10-02T10:00:00Z",
-                  state: "issued",
-                  stripe_credit_grant_id: "credgr_example",
-                  issued_at: "2026-10-02T10:00:03Z",
-                  last_error: null,
-                },
-              ]
+          unavailable === "credits"
+            ? null
+            : state === "legacy"
+              ? []
+              : [
+                  {
+                    id: "c0ffee00-0000-4000-8000-000000000011",
+                    idempotency_key: "fixture-pending",
+                    amount_cents: 5000,
+                    reason: "Correction for a duplicated storage charge.",
+                    requested_by: staff,
+                    requested_at: "2026-10-21T09:30:00Z",
+                    state: "pending" as const,
+                    stripe_credit_grant_id: null,
+                    issued_at: null,
+                    last_error:
+                      "stripe POST /v1/billing/credit_grants returned 503",
+                  },
+                  {
+                    id: "c0ffee00-0000-4000-8000-000000000010",
+                    idempotency_key: "fixture-issued",
+                    amount_cents: 25000,
+                    reason: "Usage billed twice during the September outage.",
+                    requested_by: staff,
+                    requested_at: "2026-10-02T10:00:00Z",
+                    state: "issued",
+                    stripe_credit_grant_id: "credgr_example",
+                    issued_at: "2026-10-02T10:00:03Z",
+                    last_error: null,
+                  },
+                ]
         }
         region="use"
         teamId={team}

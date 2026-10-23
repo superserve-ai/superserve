@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react"
 import { expect, it, vi } from "vitest"
 
-import type { TeamPlanAssignments } from "@/lib/admin/team-billing"
+import type { StaffCredit, TeamPlanAssignments } from "@/lib/admin/team-billing"
 
 import { TeamBillingView } from "./team-billing-view"
 
@@ -53,8 +53,10 @@ function renderView({
   plans = { current: pro, history: [pro], pending_change: null },
   pricingV2 = true,
   canWrite = true,
+  staffCredits = [],
 }: {
-  plans?: TeamPlanAssignments
+  plans?: TeamPlanAssignments | null
+  staffCredits?: StaffCredit[] | null
   pricingV2?: boolean
   canWrite?: boolean
 }) {
@@ -62,7 +64,7 @@ function renderView({
     <TeamBillingView
       plans={plans}
       catalog={{ pricingV2, assignablePlans: [enterprise], freeLimits: null }}
-      staffCredits={[]}
+      staffCredits={staffCredits}
       region="use"
       teamId={team}
       canWrite={canWrite}
@@ -129,4 +131,19 @@ it("shows billing readers the plan without write forms", () => {
   renderView({ canWrite: false })
   expect(screen.getAllByText("Pro").length).toBeGreaterThan(0)
   expectNoPlanWrites()
+})
+
+it("hides plan assignment when the current plan read fails", () => {
+  renderView({ plans: null })
+  expect(screen.getByText(/The team's plan is unavailable/)).toBeTruthy()
+  expectNoPlanWrites()
+  expect(screen.getByRole("button", { name: /Grant credit/ })).toBeTruthy()
+})
+
+it("hides new credit when its history read fails", () => {
+  renderView({ staffCredits: null })
+  expect(screen.getByText(/Staff credit history is unavailable/)).toBeTruthy()
+  expect(screen.queryByLabelText(/Credit amount/)).toBeNull()
+  expect(screen.queryByRole("button", { name: /Grant credit/ })).toBeNull()
+  expect(screen.getByRole("button", { name: "Assign plan" })).toBeTruthy()
 })
