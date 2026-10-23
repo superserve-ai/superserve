@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
-import { dollarsToCents, formatDollars } from "./page-client"
+import { dollarsToCents, formatDollars, requestedAmount } from "./page-client"
 
 vi.mock("@/hooks/use-pricing-version", () => ({
   usePricingVersion: vi.fn(),
@@ -25,6 +25,13 @@ describe("buy credit amounts", () => {
     expect(dollarsToCents("5.5.5")).toBeNull()
     expect(dollarsToCents("-5")).toBeNull()
     expect(dollarsToCents("1e3")).toBeNull()
+  })
+
+  it("preselects a requested amount only when it is a valid purchase", () => {
+    expect(requestedAmount("5000")).toEqual({ preset: 5000, custom: "" })
+    expect(requestedAmount("7500")).toEqual({ preset: 2500, custom: "75" })
+    expect(requestedAmount("750")).toEqual({ preset: 2500, custom: "" })
+    expect(requestedAmount(null)).toEqual({ preset: 2500, custom: "" })
   })
 
   it("formats whole and fractional dollars", () => {

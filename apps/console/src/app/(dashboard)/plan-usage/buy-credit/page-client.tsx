@@ -98,11 +98,22 @@ function BalanceCard({ data }: { data: PrepaidCreditSummary }) {
   )
 }
 
+export function requestedAmount(value: string | null): {
+  preset: number
+  custom: string
+} {
+  const cents = value === null ? NaN : Number(value)
+  if (!validPrepaidCents(cents)) return { preset: 2500, custom: "" }
+  if (PRESET_CENTS.includes(cents)) return { preset: cents, custom: "" }
+  return { preset: 2500, custom: String(cents / 100) }
+}
+
 function PurchaseCard({ canManage }: { canManage: boolean }) {
   const { teamKey } = useBillingContext()
   const { addToast } = useToast()
-  const [selected, setSelected] = useState(2500)
-  const [custom, setCustom] = useState("")
+  const initial = requestedAmount(useSearchParams().get("amount"))
+  const [selected, setSelected] = useState(initial.preset)
+  const [custom, setCustom] = useState(initial.custom)
   const [submitting, setSubmitting] = useState(false)
   const customCents = custom ? dollarsToCents(custom) : null
   const amount = custom ? customCents : selected
