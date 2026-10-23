@@ -174,6 +174,13 @@ describe("billing catalog fan-out", () => {
     )
     const result = await publishVersionAction(VERSION, "Launch")
     expect(Object.keys(result.errors)).toEqual(["usw"])
+    expect(
+      writes().every(
+        (write) =>
+          JSON.stringify(write.body.expected) ===
+          JSON.stringify(draftOf(plan())),
+      ),
+    ).toBe(true)
     expect(writes().map((w) => w.path)).toEqual([
       `/internal/billing/catalog/plans/${VERSION}/publish`,
       `/internal/billing/catalog/plans/${VERSION}/publish`,
@@ -235,6 +242,13 @@ describe("billing catalog fan-out", () => {
     )
     expect(result.id).toBeUndefined()
     expect(Object.keys(result.errors)).toEqual(["usw"])
+    expect(
+      writes().every(
+        (write) =>
+          JSON.stringify(write.body.expected) ===
+          JSON.stringify(draftOf(plan())),
+      ),
+    ).toBe(true)
     const created = writes().find((w) => w.method === "POST")!.body.id
     expect(
       writes()
@@ -264,6 +278,13 @@ describe("billing catalog fan-out", () => {
     })
     const result = await syncVersionAction(VERSION, "Finish rollout")
     expect(Object.keys(result.errors)).toEqual(["usw"])
+    expect(
+      writes().every(
+        (write) =>
+          JSON.stringify(write.body.expected) ===
+          JSON.stringify(draftOf(plan())),
+      ),
+    ).toBe(true)
     expect(writes()).toEqual([])
   })
 

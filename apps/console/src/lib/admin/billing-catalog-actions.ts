@@ -181,12 +181,13 @@ function transition(
   id: string,
   suffix: "/publish" | "/retire",
   reason: string,
+  expected?: PlanVersion,
 ) {
   return adminBillingRequest({
     region,
     path: versionPath(id, suffix),
     method: "POST",
-    body: { reason },
+    body: { reason, ...(expected ? { expected: draftBody(expected) } : {}) },
     schema: anyBody,
   })
 }
@@ -311,7 +312,7 @@ export async function publishVersionAction(
       throw new Error("The draft differs between regions. Save it again first.")
     return fanOut(
       Object.keys(catalogs),
-      (region) => transition(region, id, "/publish", reason),
+      (region) => transition(region, id, "/publish", reason, copies[0]![1]!),
       id,
     )
   } catch (error) {
@@ -384,6 +385,7 @@ export async function syncVersionAction(
               id,
               step === "publish" ? "/publish" : "/retire",
               reason,
+              step === "publish" ? source : undefined,
             )
         }
       },
