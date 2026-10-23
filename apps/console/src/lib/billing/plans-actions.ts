@@ -1,6 +1,6 @@
 "use server"
 
-import { cellFor, configuredRegions, DEFAULT_REGION } from "@/lib/cells"
+import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 
 import {
   publicBillingPlansSchema,
@@ -11,9 +11,7 @@ import {
 export async function getPublicBillingPlansAction(
   region: string = DEFAULT_REGION,
 ): Promise<PublicBillingPlans> {
-  const cell = configuredRegions().includes(region)
-    ? cellFor(region)
-    : cellFor(DEFAULT_REGION)
+  const cell = cellFor(region)
   const response = await fetch(
     new URL("/billing/plans/public", cell.apiBaseUrl),
     { next: { revalidate: 60 }, signal: AbortSignal.timeout(2000) },
