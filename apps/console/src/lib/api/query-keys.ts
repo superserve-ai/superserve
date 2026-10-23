@@ -120,6 +120,24 @@ export const billingKeys = {
         context.periodEnd,
       ] as const,
   },
+  v2: (
+    resource: "plan" | "free-allowance" | "prepaid",
+    context: { cacheScope: string; teamKey: string },
+  ) =>
+    [
+      ...billingKeys.all,
+      "v2",
+      resource,
+      context.cacheScope,
+      context.teamKey,
+    ] as const,
+  pricingVersion: (context: { cacheScope: string; teamKey: string }) =>
+    [
+      ...billingKeys.all,
+      "pricing-version",
+      context.cacheScope,
+      context.teamKey,
+    ] as const,
   summary: (context: { cacheScope: string; teamKey: string }) =>
     [
       ...billingKeys.all,

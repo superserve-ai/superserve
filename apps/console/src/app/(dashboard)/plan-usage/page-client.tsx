@@ -11,7 +11,7 @@ import {
   BillingSummary,
   billingErrorMessage,
 } from "@/components/billing-summary"
-import { CurrentPlan } from "@/components/current-plan"
+import { PlanOverviewSection } from "@/components/billing/plan-overview-section"
 import { CustomerBillingSection } from "@/components/customer-billing-section"
 import { DateRangeFilter, type DateRange } from "@/components/date-range-filter"
 import { EmptyState } from "@/components/empty-state"
@@ -352,7 +352,7 @@ export function PlanUsagePageClient() {
               />
             ) : summary ? (
               <>
-                <CurrentPlan summary={summary} />
+                <PlanOverviewSection summary={summary} />
                 <BillingSummary summary={summary} />
               </>
             ) : null}
