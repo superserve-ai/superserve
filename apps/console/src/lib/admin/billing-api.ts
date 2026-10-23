@@ -36,16 +36,24 @@ export async function requireAdminBilling(access: Access = "read") {
 }
 
 function errorKind(status: number): AdminBillingErrorKind {
-  if (status === 401 || status === 403) return "forbidden"
+  if (status === 403) return "forbidden"
   if (status === 404) return "not_found"
   if (status === 409) return "conflict"
   if (status === 400 || status === 422) return "invalid"
   return "unavailable"
 }
 
+const BILLING_PATH =
+  /^\/internal\/(billing|teams\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/billing)(\/[A-Za-z0-9_-]+)*$/
+
+export function isAdminBillingPath(path: string): boolean {
+  return BILLING_PATH.test(path)
+}
+
 export interface AdminBillingRequest<T> {
   region: string
   path: `/internal/${string}`
+  query?: URLSearchParams
   schema: z.ZodType<T>
   method?: "GET" | "POST" | "PUT" | "DELETE"
   body?: unknown
@@ -54,17 +62,21 @@ export interface AdminBillingRequest<T> {
 export async function adminBillingRequest<T>({
   region,
   path,
+  query,
   schema,
   method = "GET",
   body,
 }: AdminBillingRequest<T>): Promise<T> {
   const user = await requireAdminBilling(method === "GET" ? "read" : "write")
+  if (!isAdminBillingPath(path)) throw new AdminBillingRequestError("invalid")
   const token = internalApiTokenFor(region)
   if (!token || !configuredRegions().includes(region))
     throw new AdminBillingRequestError("unavailable")
+  const url = new URL(path, cellFor(region).apiBaseUrl)
+  if (query) url.search = query.toString()
   let response: Response
   try {
-    response = await fetch(new URL(path, cellFor(region).apiBaseUrl), {
+    response = await fetch(url, {
       method,
       cache: "no-store",
       redirect: "error",
