@@ -21,8 +21,8 @@ import { formatCents, formatDay, formatPlanFee, planLabel } from "../format"
 import {
   CancelPlanChangeForm,
   SchedulePlanChangeForm,
-  StaffCreditForm,
 } from "./plan-change-forms"
+import { ResumeStaffCreditButton, StaffCreditForm } from "./staff-credit-forms"
 
 const CHANGE_STATE: Record<
   PlanChange["state"],
@@ -234,7 +234,6 @@ export function TeamBillingView({
                 region={region}
                 teamId={teamId}
                 options={options}
-                nextAnniversary={formatDay(view.period_end)}
               />
             ) : null}
             {canWrite && !view.subscription_id ? (
@@ -276,8 +275,9 @@ export function TeamBillingView({
                 <TableRow>
                   <TableHead>Amount</TableHead>
                   <TableHead>State</TableHead>
-                  <TableHead>Granted</TableHead>
+                  <TableHead>Requested</TableHead>
                   <TableHead>Reason</TableHead>
+                  <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -296,10 +296,24 @@ export function TeamBillingView({
                       </Badge>
                     </TableCell>
                     <TableCell className="text-muted">
-                      {formatDay(credit.issued_at ?? credit.requested_at)}
+                      {formatDay(credit.requested_at)}
                     </TableCell>
                     <TableCell className="text-muted">
                       {credit.reason}
+                      {credit.state === "pending" && credit.last_error ? (
+                        <span className="block text-xs text-destructive">
+                          {credit.last_error}
+                        </span>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {canWrite && credit.state === "pending" ? (
+                        <ResumeStaffCreditButton
+                          region={region}
+                          teamId={teamId}
+                          credit={credit}
+                        />
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 ))}

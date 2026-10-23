@@ -233,6 +233,7 @@ export function cancelPlanChange(
 
 const staffCreditSchema = z.object({
   id: z.string(),
+  idempotency_key: z.string(),
   amount_cents: z.number(),
   reason: z.string(),
   requested_by: z.string(),

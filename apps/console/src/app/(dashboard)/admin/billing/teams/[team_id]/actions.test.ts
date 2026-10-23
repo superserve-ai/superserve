@@ -95,8 +95,19 @@ it("refuses billing writes while impersonating a team", async () => {
       reason: "r",
     }),
   ).toEqual({ kind: "impersonating" })
+  vi.mocked(hasImpersonationCookie).mockResolvedValueOnce(true)
+  expect(
+    await grantStaffCreditAction({
+      region: "use",
+      teamId: team,
+      idempotencyKey: "k",
+      amountCents: 100,
+      reason: "r",
+    }),
+  ).toEqual({ kind: "impersonating" })
   expect(schedulePlanChange).not.toHaveBeenCalled()
   expect(cancelPlanChange).not.toHaveBeenCalled()
+  expect(grantStaffCredit).not.toHaveBeenCalled()
 })
 
 it("validates staff credit amounts before calling the backend", async () => {

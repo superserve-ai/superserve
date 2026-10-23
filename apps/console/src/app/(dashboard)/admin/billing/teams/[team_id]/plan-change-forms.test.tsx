@@ -1,22 +1,15 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest"
 
-import {
-  cancelPlanChangeAction,
-  grantStaffCreditAction,
-  schedulePlanChangeAction,
-} from "./actions"
+import { cancelPlanChangeAction, schedulePlanChangeAction } from "./actions"
 import {
   CancelPlanChangeForm,
-  parseDollarsToCents,
   SchedulePlanChangeForm,
-  StaffCreditForm,
 } from "./plan-change-forms"
 
 vi.mock("./actions", () => ({
   schedulePlanChangeAction: vi.fn(),
   cancelPlanChangeAction: vi.fn(),
-  grantStaffCreditAction: vi.fn(),
 }))
 
 const team = "22222222-2222-4222-8222-222222222222"
@@ -28,7 +21,6 @@ const options = [
 beforeEach(() => {
   vi.mocked(schedulePlanChangeAction).mockReset()
   vi.mocked(cancelPlanChangeAction).mockReset()
-  vi.mocked(grantStaffCreditAction).mockReset()
 })
 
 function fill(reason = "Customer asked for annual billing") {
@@ -46,12 +38,7 @@ it("retries a lost request with the same idempotency key", async () => {
     .mockResolvedValueOnce({ kind: "unavailable" })
     .mockResolvedValueOnce({ kind: "saved" })
   render(
-    <SchedulePlanChangeForm
-      region="use"
-      teamId={team}
-      options={options}
-      nextAnniversary="Nov 23, 2026"
-    />,
+    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
   )
   fill()
   fireEvent.click(screen.getByRole("button", { name: "Schedule change" }))
@@ -75,12 +62,7 @@ it("retries a lost request with the same idempotency key", async () => {
 it("uses a new idempotency key for the next change", async () => {
   vi.mocked(schedulePlanChangeAction).mockResolvedValue({ kind: "saved" })
   render(
-    <SchedulePlanChangeForm
-      region="use"
-      teamId={team}
-      options={options}
-      nextAnniversary="Nov 23, 2026"
-    />,
+    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
   )
   fill()
   fireEvent.click(screen.getByRole("button", { name: "Schedule change" }))
@@ -103,12 +85,7 @@ it("does not reuse an unconfirmed request's key for edited input", async () => {
     .mockResolvedValueOnce({ kind: "unavailable" })
     .mockResolvedValueOnce({ kind: "conflict" })
   render(
-    <SchedulePlanChangeForm
-      region="use"
-      teamId={team}
-      options={options}
-      nextAnniversary="Nov 23, 2026"
-    />,
+    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
   )
   fill()
   fireEvent.click(screen.getByRole("button", { name: "Schedule change" }))
@@ -127,12 +104,7 @@ it("does not reuse an unconfirmed request's key for edited input", async () => {
 it("explains a conflicting billing state", async () => {
   vi.mocked(schedulePlanChangeAction).mockResolvedValue({ kind: "conflict" })
   render(
-    <SchedulePlanChangeForm
-      region="use"
-      teamId={team}
-      options={options}
-      nextAnniversary="Nov 23, 2026"
-    />,
+    <SchedulePlanChangeForm region="use" teamId={team} options={options} />,
   )
   fill()
   fireEvent.click(screen.getByRole("button", { name: "Schedule change" }))
@@ -162,35 +134,4 @@ it("requires a reason to cancel", async () => {
       reason: "Customer changed their mind",
     }),
   )
-})
-
-it("parses credit amounts in dollars to cents exactly", () => {
-  expect(parseDollarsToCents("250")).toBe(25000)
-  expect(parseDollarsToCents("0.1")).toBe(10)
-  expect(parseDollarsToCents("19.99")).toBe(1999)
-  for (const bad of ["", "0", "-5", "1.234", "1e3", "abc", "1,000"]) {
-    expect(parseDollarsToCents(bad)).toBeNull()
-  }
-})
-
-it("grants staff credit in cents and keeps the key for a retry", async () => {
-  vi.mocked(grantStaffCreditAction)
-    .mockResolvedValueOnce({ kind: "unavailable" })
-    .mockResolvedValueOnce({ kind: "saved" })
-  render(<StaffCreditForm region="use" teamId={team} />)
-  fireEvent.change(screen.getByLabelText(/Credit amount/), {
-    target: { value: "125.50" },
-  })
-  fireEvent.change(screen.getByLabelText(/Reason/), {
-    target: { value: "Outage goodwill" },
-  })
-  fireEvent.click(screen.getByRole("button", { name: "Grant credit" }))
-  await screen.findByText(/Retry to send the same request/)
-  fireEvent.click(screen.getByRole("button", { name: "Retry" }))
-  await screen.findByText("Credit granted.")
-  const [first, second] = vi
-    .mocked(grantStaffCreditAction)
-    .mock.calls.map(([input]) => input)
-  expect(first).toMatchObject({ amountCents: 12550, reason: "Outage goodwill" })
-  expect(second.idempotencyKey).toBe(first.idempotencyKey)
 })

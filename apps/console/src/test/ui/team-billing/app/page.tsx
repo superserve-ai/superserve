@@ -165,7 +165,21 @@ export default async function Page({
             ? []
             : [
                 {
+                  id: "c0ffee00-0000-4000-8000-000000000011",
+                  idempotency_key: "fixture-pending",
+                  amount_cents: 5000,
+                  reason: "Correction for a duplicated storage charge.",
+                  requested_by: "11111111-1111-4111-8111-111111111111",
+                  requested_at: "2026-10-21T09:30:00Z",
+                  state: "pending" as const,
+                  stripe_credit_grant_id: null,
+                  issued_at: null,
+                  last_error:
+                    "stripe POST /v1/billing/credit_grants returned 503",
+                },
+                {
                   id: "c0ffee00-0000-4000-8000-000000000010",
+                  idempotency_key: "fixture-issued",
                   amount_cents: 25000,
                   reason: "Usage billed twice during the September outage.",
                   requested_by: "11111111-1111-4111-8111-111111111111",
