@@ -45,6 +45,9 @@ vi.mock("@/hooks/use-customer-billing", () => ({
     useCustomerBillingExportPreview(...args),
 }))
 
+vi.mock("@/hooks/use-pricing-version", () => ({
+  usePricingVersion: () => "legacy",
+}))
 vi.mock("@/hooks/use-billing-summary", () => ({
   useBillingSummary: (...args: unknown[]) => useBillingSummary(...args),
 }))
