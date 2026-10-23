@@ -23,6 +23,7 @@ import {
   type SignupEvidenceEntry,
 } from "@/lib/auth/signup-evidence"
 import { evaluateSignupRestriction } from "@/lib/auth/signup-restrictions"
+import { assertSignupReviewCleared } from "@/lib/auth/signup-review"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -196,6 +197,7 @@ export async function provisionTeam(
   if (!user || !observedAt || user.id !== userId) {
     throw new Error("Authenticated user mismatch")
   }
+  assertSignupReviewCleared(user)
   const googleUser = isGoogleUser(user)
   const googleProvisioning = googleUser
     ? await guardFirstGoogleTeam(userId, user)

@@ -13,8 +13,8 @@ import {
   type SignupEligibilityPresentationOutcome,
 } from "@/lib/slack/signup-eligibility"
 
-// Signup details are free text from the form; keep Slack from parsing them as
-// mentions or links.
+// Names, emails and signup details are user-controlled; keep Slack from
+// parsing them as mentions or links.
 function escapeSlack(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -70,8 +70,14 @@ export const notifySlackOfNewUser = async (
         {
           type: "section",
           fields: [
-            { type: "mrkdwn", text: `*Email:* ${email || "N/A"}` },
-            { type: "mrkdwn", text: `*Name:* ${fullName || "N/A"}` },
+            {
+              type: "mrkdwn",
+              text: `*Email:* ${email ? escapeSlack(email) : "N/A"}`,
+            },
+            {
+              type: "mrkdwn",
+              text: `*Name:* ${fullName ? escapeSlack(fullName) : "N/A"}`,
+            },
             { type: "mrkdwn", text: `*Provider:* ${provider || "N/A"}` },
             ...(requestedOffer
               ? [

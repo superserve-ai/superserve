@@ -50,7 +50,7 @@ describe("signup review details in signup notification", () => {
   it("adds the review details without letting free text trigger Slack mentions", async () => {
     await notifySlackOfNewUser(
       "user@example.com",
-      "User",
+      "<!channel> <https://example.com|Approve>",
       "google",
       { kind: "unavailable" },
       "starter_monthly",
@@ -65,6 +65,10 @@ describe("signup review details in signup notification", () => {
     const fields = send.mock.lastCall![0].blocks[1].fields
     expect(fields).toEqual(
       expect.arrayContaining([
+        {
+          type: "mrkdwn",
+          text: "*Name:* &lt;!channel&gt; &lt;https://example.com|Approve&gt;",
+        },
         { type: "mrkdwn", text: "*Interested in:* Starter Monthly" },
         { type: "mrkdwn", text: "*Company:* &lt;!channel&gt; &amp; Co" },
         { type: "mrkdwn", text: "*Affiliation:* YC" },

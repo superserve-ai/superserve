@@ -12,6 +12,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { pickActiveTeam } from "@/lib/api/active-team"
+import { SignupReviewPendingError } from "@/lib/auth/signup-review"
 
 const mockPublishPromotionIdentity = vi.fn(async (..._args: unknown[]) => {})
 let clients: Record<string, ReturnType<typeof recordingClient>> = {}
@@ -20,7 +21,11 @@ let currentUser: {
   email: string
   updated_at?: string
   email_confirmed_at?: string
-  app_metadata?: { provider?: string; providers?: string[] }
+  app_metadata?: {
+    provider?: string
+    providers?: string[]
+    signup_review?: string
+  }
   user_metadata?: { signup_attempt_id?: string }
 } | null = null
 let googleUser = false
@@ -762,6 +767,23 @@ describe("provisionTeam", () => {
       expect(mockPublishPromotionIdentity).not.toHaveBeenCalled()
       expect(clients.usw.writes).toEqual({})
       expect(clients.use.writes).toEqual({})
+    },
+  )
+
+  it.each(["pending", "rejected"])(
+    "refuses a team to an account whose signup review is %s",
+    async (review) => {
+      currentUser = {
+        ...currentUser!,
+        app_metadata: { ...currentUser!.app_metadata, signup_review: review },
+      }
+
+      await expect(
+        provisionTeam("usw", "u1", "user@example.com", "west pilot"),
+      ).rejects.toThrow(SignupReviewPendingError)
+
+      expect(mockPublishPromotionIdentity).not.toHaveBeenCalled()
+      expect(clients.usw.writes).toEqual({})
     },
   )
 
