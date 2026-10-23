@@ -279,7 +279,7 @@ describe("adminBillingRequest credentials", () => {
           body: {},
         }),
       ),
-    ).toBe("forbidden")
+    ).toBe("read_only_impersonation")
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
