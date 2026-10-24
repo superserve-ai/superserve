@@ -20,6 +20,7 @@ import {
   SignupRestrictedError,
   SIGNUP_RESTRICTED_MESSAGE,
 } from "@/lib/auth/signup-restrictions"
+import { assertSignupReviewCleared } from "@/lib/auth/signup-review"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -153,6 +154,7 @@ export async function createApiKeyAction(name: string) {
   } = await supabase.auth.getUser()
   const observedAt = new Date().toISOString()
   if (!user) throw new Error("Not authenticated")
+  assertSignupReviewCleared(user)
 
   let team: TeamMembership
   try {

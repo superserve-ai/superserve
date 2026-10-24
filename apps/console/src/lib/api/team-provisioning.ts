@@ -23,6 +23,10 @@ import {
   type SignupEvidenceEntry,
 } from "@/lib/auth/signup-evidence"
 import { evaluateSignupRestriction } from "@/lib/auth/signup-restrictions"
+import {
+  assertSignupReviewCleared,
+  signupReviewStatus,
+} from "@/lib/auth/signup-review"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -196,12 +200,46 @@ export async function provisionTeam(
   if (!user || !observedAt || user.id !== userId) {
     throw new Error("Authenticated user mismatch")
   }
-  const googleUser = isGoogleUser(user)
-  const googleProvisioning = googleUser
+  assertSignupReviewCleared(user)
+  return provisionTeamFor(region, user, name, observedAt, operationId, {
+    googleProof: isGoogleUser(user),
+  })
+}
+
+/**
+ * Creates the first team of an Enterprise applicant staff are granting access.
+ * The account is still held, and its Google signup proof was checked when the
+ * hold was placed, so neither is checked here. Retries recover the same team.
+ */
+export async function provisionHeldApplicantTeam(
+  user: User,
+): Promise<ProvisionedTeam> {
+  if (signupReviewStatus(user) !== "pending")
+    throw new Error("Only held applicants are provisioned by staff")
+  return provisionTeamFor(
+    DEFAULT_REGION,
+    user,
+    user.email ?? user.id,
+    new Date().toISOString(),
+    undefined,
+    { googleProof: false },
+  )
+}
+
+async function provisionTeamFor(
+  region: string,
+  user: User,
+  name: string,
+  observedAt: string,
+  operationId: string | undefined,
+  { googleProof }: { googleProof: boolean },
+): Promise<ProvisionedTeam> {
+  const userId = user.id
+  const googleProvisioning = googleProof
     ? await guardFirstGoogleTeam(userId, user)
     : null
   let firstTeam = googleProvisioning !== null
-  if (!googleUser) {
+  if (!googleProof) {
     const directory = await completedMemberships(
       userId,
       await listTeamMembershipsForUserDetailed(userId, { maxAgeMs: 0 }),

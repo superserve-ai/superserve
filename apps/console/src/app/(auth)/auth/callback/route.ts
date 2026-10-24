@@ -1,4 +1,4 @@
-import type { Session } from "@supabase/supabase-js"
+import type { Session, User } from "@supabase/supabase-js"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 
@@ -22,6 +22,7 @@ import {
   markGoogleSignupAttempt,
   readGooglePromotionEvidence,
   retainOriginalGoogleSignup,
+  revokeGoogleSignupAuthorization,
 } from "@/lib/auth/google-signup-proof"
 import { PLAN_OFFER_COOKIE } from "@/lib/auth/plan-preselection"
 import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
@@ -32,9 +33,22 @@ import {
   saveSignupEvidence,
 } from "@/lib/auth/signup-evidence"
 import {
+  parseSignupOffer,
+  SIGNUP_OFFER_DESTINATIONS,
+  SIGNUP_OFFER_PARAM,
+} from "@/lib/auth/signup-offer"
+import {
   evaluateSignupRestriction,
   SignupRestrictedError,
 } from "@/lib/auth/signup-restrictions"
+import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
+import {
+  encodePendingProfile,
+  PENDING_PROFILE_COOKIE,
+  pendingProfileCookieOptions,
+  updateSignupReviewMetadata,
+} from "@/lib/auth/signup-review-server"
+import { getPricingVersionAction } from "@/lib/billing/plans-actions"
 import { DEFAULT_REGION } from "@/lib/cells"
 import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import { fingerprintDiagnostics } from "@/lib/fingerprint/diagnostics-server"
@@ -69,6 +83,32 @@ function sanitizeNext(raw: string | null): string {
   if (next.startsWith("/") && !next.startsWith("//")) return next
   if (TRUSTED_REDIRECT_PATTERN.test(next)) return next
   return "/"
+}
+
+/** Ends the session of an account awaiting Enterprise setup. */
+async function pendingSignupResponse(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  origin: string,
+  user: User,
+) {
+  try {
+    await supabase.auth.signOut()
+  } catch {
+    console.warn("Pending signup sign-out failed")
+  }
+  const response = NextResponse.redirect(
+    buildRedirectUrl(origin, "/auth/pending"),
+  )
+  response.cookies.delete(PLAN_OFFER_COOKIE)
+  response.cookies.set(
+    PENDING_PROFILE_COOKIE,
+    encodePendingProfile({
+      name: user.user_metadata?.full_name,
+      email: user.email,
+    }),
+    pendingProfileCookieOptions,
+  )
+  return response
 }
 
 export async function GET(request: Request) {
@@ -162,6 +202,14 @@ export async function GET(request: Request) {
             return response
           }
         }
+        if (isSignupReviewBlocked(user))
+          return pendingSignupResponse(supabase, origin, user)
+        const offerIntent =
+          searchParams.get(SIGNUP_OFFER_PARAM) ?? searchParams.get("offer")
+        const signupOffer =
+          offerIntent && (await getPricingVersionAction()) === "v2"
+            ? parseSignupOffer(offerIntent)
+            : undefined
         const signupAttemptId =
           searchParams.get("signup_attempt_id") || undefined
         const provider = code
@@ -241,6 +289,12 @@ export async function GET(request: Request) {
               recoveryUrl.searchParams.set("complete_google", "1")
               if (requestedOffer)
                 recoveryUrl.searchParams.set("offer", requestedOffer)
+              const signupOfferParam = searchParams.get(SIGNUP_OFFER_PARAM)
+              if (signupOfferParam)
+                recoveryUrl.searchParams.set(
+                  SIGNUP_OFFER_PARAM,
+                  signupOfferParam,
+                )
               if (next !== "/") recoveryUrl.searchParams.set("next", next)
               return NextResponse.redirect(
                 buildRedirectUrl(
@@ -250,6 +304,28 @@ export async function GET(request: Request) {
               )
             }
             console.info("Google OAuth signup proof validated at callback")
+            if (signupOffer === "enterprise") {
+              try {
+                await updateSignupReviewMetadata(user.id, {
+                  signup_review: "pending",
+                })
+              } catch (holdError) {
+                console.error("Enterprise signup hold failed", holdError)
+                await revokeGoogleSignupAuthorization(
+                  user.id,
+                  signupAttemptId,
+                ).catch((error) =>
+                  console.error(
+                    "Enterprise signup proof cleanup failed",
+                    error,
+                  ),
+                )
+                await supabase.auth.signOut().catch(() => {})
+                return NextResponse.redirect(
+                  buildRedirectUrl(origin, "/auth/auth-code-error"),
+                )
+              }
+            }
             await markGoogleSignupAttempt(signupAttemptId, user.id)
           }
 
@@ -429,6 +505,18 @@ export async function GET(request: Request) {
           }
         }
 
+        if (code && isNewUser && signupOffer === "enterprise") {
+          await notifySlackOfNewUser(
+            user.email || "",
+            user.user_metadata?.full_name || null,
+            provider,
+            normalizeSignupEligibilitySnapshot(signupEligibilitySnapshot),
+            requestedOffer,
+            true,
+          ).catch(() => {})
+          return pendingSignupResponse(supabase, origin, user)
+        }
+
         if (isNewUser) {
           await notifySlackOfNewUser(
             user.email || "",
@@ -480,6 +568,8 @@ export async function GET(request: Request) {
         ) {
           next = "/yc/claim"
         }
+        if (newSignup && signupOffer && next === "/sandboxes")
+          next = SIGNUP_OFFER_DESTINATIONS[signupOffer]
       }
 
       const response = NextResponse.redirect(

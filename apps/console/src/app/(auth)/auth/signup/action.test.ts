@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mock dependencies before importing the action
 const mockGenerateLink = vi.fn()
+const mockCreateUser = vi.fn()
 const mockCloudflareFlagRpc = vi.fn()
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
@@ -21,6 +22,7 @@ vi.mock("@/lib/supabase/admin", () => ({
     auth: {
       admin: {
         generateLink: mockGenerateLink,
+        createUser: mockCreateUser,
       },
     },
   }),
@@ -41,6 +43,15 @@ vi.mock("@/lib/email/templates/welcome", () => ({
     `WelcomeEmail:${props.name}`,
 }))
 
+const mockPricingVersion = vi.fn().mockResolvedValue("legacy")
+vi.mock("@/lib/billing/plans-actions", () => ({
+  getPricingVersionAction: (...args: unknown[]) => mockPricingVersion(...args),
+}))
+const mockUpdateSignupReview = vi.fn()
+vi.mock("@/lib/auth/signup-review-server", () => ({
+  updateSignupReviewMetadata: (...args: unknown[]) =>
+    mockUpdateSignupReview(...args),
+}))
 const mockSlack = vi.fn().mockResolvedValue(undefined)
 vi.mock("@/lib/slack/signup-notification", () => ({
   notifySlackOfNewUser: (...args: unknown[]) => mockSlack(...args),
@@ -159,6 +170,9 @@ describe("post-trial signup with the real Cloudflare observer", () => {
     mockCloudflareFlagRpc
       .mockReset()
       .mockResolvedValue({ data: true, error: null })
+    mockCreateUser
+      .mockReset()
+      .mockResolvedValue({ data: { user: { id: "user-1" } }, error: null })
     mockGenerateLink.mockReset().mockResolvedValue({
       data: { properties: { hashed_token: "abc123" } },
       error: null,
@@ -259,7 +273,12 @@ describe("post-trial signup with the real Cloudflare observer", () => {
 
 describe("signUpWithEmail", () => {
   beforeEach(() => {
+    mockPricingVersion.mockReset().mockResolvedValue("legacy")
+    mockUpdateSignupReview.mockReset().mockResolvedValue(undefined)
     mockAfter.mockReset().mockImplementation((callback) => callback())
+    mockCreateUser
+      .mockReset()
+      .mockResolvedValue({ data: { user: { id: "user-1" } }, error: null })
     mockGenerateLink.mockReset()
     mockSendEmail.mockReset()
     mockSlack.mockReset().mockResolvedValue(undefined)
@@ -285,6 +304,119 @@ describe("signUpWithEmail", () => {
       if (value === undefined) delete process.env[name]
       else process.env[name] = value
     }
+  })
+
+  describe("pricing v2 offers", () => {
+    const signUp = (rawOffer: string | undefined) => {
+      mockGenerateLink.mockResolvedValue({
+        data: {
+          user: { id: "user-1", created_at: new Date().toISOString() },
+          properties: {
+            hashed_token: "abc123",
+            verification_type: "magiclink",
+          },
+        },
+        error: null,
+      })
+      mockSendEmail.mockResolvedValue({ success: true })
+      return signUpWithEmail(
+        "user@test.com",
+        "password123",
+        "Test User",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        rawOffer,
+      )
+    }
+    const callbackOffer = () =>
+      new URL(
+        mockGenerateLink.mock.lastCall![0].options.redirectTo,
+      ).searchParams.get("signup_offer")
+
+    it("keeps today's signup when the switch is off", async () => {
+      const result = await signUp("enterprise")
+
+      expect(result).toEqual({ success: true })
+      expect(callbackOffer()).toBeNull()
+      expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+      expect(mockSendEmail).toHaveBeenCalled()
+      expect(mockSlack.mock.lastCall).toHaveLength(5)
+    })
+
+    it("does not ask for the switch without an offer", async () => {
+      await signUp(undefined)
+      expect(mockPricingVersion).not.toHaveBeenCalled()
+    })
+
+    it("holds an Enterprise signup and still confirms the address", async () => {
+      mockPricingVersion.mockResolvedValue("v2")
+
+      const result = await signUp("enterprise")
+
+      expect(result).toEqual({ success: true })
+      expect(callbackOffer()).toBe("enterprise")
+      expect(mockCreateUser).toHaveBeenCalledWith({
+        email: "user@test.com",
+        password: "password123",
+        email_confirm: false,
+        user_metadata: {
+          full_name: "Test User",
+          signup_attempt_id: expect.any(String),
+        },
+        app_metadata: { signup_review: "pending" },
+      })
+      expect(mockGenerateLink.mock.lastCall![0].type).toBe("magiclink")
+      expect(mockSendEmail.mock.lastCall![0].react).toContain("type=magiclink")
+      expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+      expect(mockSendEmail).toHaveBeenCalled()
+      expect(mockSlack.mock.lastCall![5]).toBe(true)
+    })
+
+    it("creates no unheld account or confirmation link when Enterprise creation fails", async () => {
+      mockPricingVersion.mockResolvedValue("v2")
+      mockCreateUser.mockResolvedValue({
+        data: { user: null },
+        error: { message: "database unavailable" },
+      })
+      const result = await signUp("enterprise")
+      expect(result.success).toBe(false)
+      expect(mockCreateUser.mock.lastCall![0].app_metadata).toEqual({
+        signup_review: "pending",
+      })
+      expect(mockGenerateLink).not.toHaveBeenCalled()
+      expect(mockSendEmail).not.toHaveBeenCalled()
+    })
+
+    it("leaves the newly created Enterprise account held when link generation fails", async () => {
+      mockPricingVersion.mockResolvedValue("v2")
+      let createdAccount:
+        | { app_metadata: { signup_review: string } }
+        | undefined
+      mockCreateUser.mockImplementation(async (attributes) => {
+        createdAccount = attributes
+        return { data: { user: { id: "user-1", ...attributes } }, error: null }
+      })
+      mockGenerateLink.mockRejectedValueOnce(new Error("link unavailable"))
+      const result = await signUp("enterprise")
+      expect(result.success).toBe(false)
+      expect(createdAccount?.app_metadata.signup_review).toBe("pending")
+      expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+      expect(mockSendEmail).not.toHaveBeenCalled()
+    })
+
+    it("carries a self-serve offer without holding the account", async () => {
+      mockPricingVersion.mockResolvedValue("v2")
+
+      await signUp("starter")
+
+      expect(callbackOffer()).toBe("starter")
+      expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+      expect(mockSlack.mock.lastCall).toHaveLength(5)
+    })
   })
 
   it("returns error for invalid email", async () => {
@@ -1007,6 +1139,9 @@ describe("original signup promotion evidence", () => {
         input.onAttested?.()
         return "ServerVisitor"
       })
+    mockCreateUser
+      .mockReset()
+      .mockResolvedValue({ data: { user: { id: "user-1" } }, error: null })
     mockGenerateLink.mockReset().mockImplementation(async () => ({
       data: {
         user: { id: "actual-auth-user", created_at: new Date().toISOString() },

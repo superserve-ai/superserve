@@ -22,6 +22,10 @@ import {
   SignupRestrictedError,
   SIGNUP_RESTRICTED_MESSAGE,
 } from "@/lib/auth/signup-restrictions"
+import {
+  isSignupReviewBlocked,
+  SIGNUP_REVIEW_PENDING_MESSAGE,
+} from "@/lib/auth/signup-review"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -116,6 +120,19 @@ function hasUnsafePathSegment(path: string[]): boolean {
   })
 }
 
+function signupReviewPendingResponse() {
+  return NextResponse.json(
+    {
+      error: {
+        code: "signup_review_pending",
+        message: SIGNUP_REVIEW_PENDING_MESSAGE,
+      },
+      detail: SIGNUP_REVIEW_PENDING_MESSAGE,
+    },
+    { status: 403 },
+  )
+}
+
 function shouldSkipKeyInjection(path: string): boolean {
   return SKIP_KEY_INJECTION.some((prefix) => path.startsWith(prefix))
 }
@@ -156,12 +173,40 @@ async function proxyRequest(
   let impersonationContext: { teamId: string; region: string } | null = null
   let impersonating = false
 
+  const bearer = request.headers
+    .get("authorization")
+    ?.match(/^bearer\s+(\S+)$/i)
+  if (skipKeyInjection && bearer) {
+    try {
+      const supabase = await createServerClient()
+      const { data, error } = await supabase.auth.getUser(bearer[1])
+      if (error?.code === "bad_jwt")
+        return NextResponse.json(
+          { error: "Invalid bearer token" },
+          { status: 401 },
+        )
+      if (error || !data?.user) throw new Error("Bearer lookup unavailable")
+      if (isSignupReviewBlocked(data.user)) return signupReviewPendingResponse()
+    } catch {
+      return NextResponse.json(
+        {
+          error: {
+            code: "authentication_unavailable",
+            message: "Authentication is temporarily unavailable. Please retry.",
+          },
+        },
+        { status: 503, headers: { "retry-after": "5" } },
+      )
+    }
+  }
+
   if (!skipKeyInjection) {
     const supabase = await createServerClient()
     const {
       data: { user: authUser },
     } = await supabase.auth.getUser()
     user = authUser
+    if (isSignupReviewBlocked(user)) return signupReviewPendingResponse()
     authObservedAt = new Date().toISOString()
     impersonationContext = await getImpersonationContext(user)
     impersonating = impersonationContext !== null

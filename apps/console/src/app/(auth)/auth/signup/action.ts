@@ -17,11 +17,13 @@ import {
   isSupersededSignupEvidenceAttempt,
   saveSignupEvidence,
 } from "@/lib/auth/signup-evidence"
+import { parseSignupOffer, SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
 import {
   evaluateSignupRestriction,
   SignupRestrictedError,
   SIGNUP_RESTRICTED_MESSAGE,
 } from "@/lib/auth/signup-restrictions"
+import { getPricingVersionAction } from "@/lib/billing/plans-actions"
 import { DEFAULT_REGION } from "@/lib/cells"
 import {
   isCloudflareSignupObservationEnabled as readCloudflareObservationFlag,
@@ -313,6 +315,7 @@ export const signUpWithEmail = async (
   offer?: string,
   browserDiagnostics?: BrowserFingerprintDiagnostics,
   ycNext?: string,
+  rawSignupOffer?: string,
 ) => {
   const requestedOffer = normalizeRequestedOffer(offer)
   const parsed = signUpSchema.safeParse({ email, password, fullName })
@@ -449,20 +452,50 @@ export const signUpWithEmail = async (
     const next = ycReturnPath(ycNext)
     if (next) callbackUrl.searchParams.set("next", next)
     if (requestedOffer) callbackUrl.searchParams.set("offer", requestedOffer)
+    const offerIntent = rawSignupOffer ?? offer
+    const signupOffer =
+      offerIntent && (await getPricingVersionAction()) === "v2"
+        ? parseSignupOffer(offerIntent)
+        : undefined
+    if (signupOffer)
+      callbackUrl.searchParams.set(SIGNUP_OFFER_PARAM, signupOffer)
     const redirectTo = callbackUrl.toString()
     const signupStartedAt = Date.now()
-    const { data, error } = await supabase.auth.admin.generateLink({
-      type: "signup",
-      email: parsed.data.email,
-      password: parsed.data.password,
-      options: {
-        data: {
-          full_name: parsed.data.fullName,
-          signup_attempt_id: signupAttemptId,
-        },
-        redirectTo,
-      },
-    })
+    const awaitingEnterpriseSetup = signupOffer === "enterprise"
+    const created = awaitingEnterpriseSetup
+      ? await supabase.auth.admin.createUser({
+          email: parsed.data.email,
+          password: parsed.data.password,
+          email_confirm: false,
+          user_metadata: {
+            full_name: parsed.data.fullName,
+            signup_attempt_id: signupAttemptId,
+          },
+          app_metadata: { signup_review: "pending" },
+        })
+      : null
+    const { data, error } = created?.error
+      ? { data: { user: null, properties: null }, error: created.error }
+      : await supabase.auth.admin.generateLink(
+          awaitingEnterpriseSetup
+            ? {
+                type: "magiclink",
+                email: parsed.data.email,
+                options: { redirectTo },
+              }
+            : {
+                type: "signup",
+                email: parsed.data.email,
+                password: parsed.data.password,
+                options: {
+                  data: {
+                    full_name: parsed.data.fullName,
+                    signup_attempt_id: signupAttemptId,
+                  },
+                  redirectTo,
+                },
+              },
+        )
     observationUserId = data?.user?.id ?? null
 
     if (error) {
@@ -541,10 +574,12 @@ export const signUpWithEmail = async (
     const tokenHash = data?.properties?.hashed_token
     if (!tokenHash)
       return { success: false, error: "Failed to generate confirmation link." }
-
     const confirmation = new URL(redirectTo)
     confirmation.searchParams.set("token_hash", tokenHash)
-    confirmation.searchParams.set("type", "signup")
+    confirmation.searchParams.set(
+      "type",
+      awaitingEnterpriseSetup ? data.properties.verification_type : "signup",
+    )
     confirmation.searchParams.set("signup_attempt_id", signupAttemptId)
     confirmation.searchParams.set("utm_source", "email")
     confirmation.searchParams.set("utm_medium", "signup_confirmation")
@@ -567,6 +602,7 @@ export const signUpWithEmail = async (
       "email",
       normalizeSignupEligibilitySnapshot(signupEligibilitySnapshot),
       requestedOffer,
+      ...(awaitingEnterpriseSetup ? [true] : []),
     ).catch(() => {})
     return { success: true }
   } catch (err) {

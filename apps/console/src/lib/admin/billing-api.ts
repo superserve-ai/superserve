@@ -95,6 +95,7 @@ const WRITE_ROUTES: [WriteMethod, string][] = [
   ["POST", `${TEAM_BILLING}/matching`],
   ["POST", `${TEAM_BILLING}/matching/revoke`],
   ["POST", `${TEAM_BILLING}/matching/credits/${UUID}/acknowledge`],
+  ["POST", `${TEAM_BILLING}/plan-assignments`],
 ]
 
 const WRITE_ROUTE_PATTERNS = WRITE_ROUTES.map(

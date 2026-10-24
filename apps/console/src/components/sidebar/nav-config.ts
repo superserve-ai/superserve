@@ -10,6 +10,7 @@ import {
   KeyIcon,
   LifebuoyIcon,
   StackIcon,
+  UserCheckIcon,
   LockKeyIcon,
   ShieldCheckIcon,
   UsersIcon,
@@ -32,6 +33,12 @@ export const adminNavItem: NavItem = {
   label: "Admin",
   href: "/admin",
   icon: ShieldCheckIcon,
+}
+
+export const pendingSignupsNavItem: NavItem = {
+  label: "Pending Signups",
+  href: "/admin/signups",
+  icon: UserCheckIcon,
 }
 
 export const adminBillingNavItem: NavItem = {

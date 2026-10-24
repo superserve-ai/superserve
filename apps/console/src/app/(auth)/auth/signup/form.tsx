@@ -13,6 +13,7 @@ import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
+import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
 import {
   clearFingerprintSignupCapture,
   ensureFingerprintSignupCapture,
@@ -169,9 +170,15 @@ export default function SignUpContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const nextUrl = sanitizeNext(searchParams.get("next"))
-  const requestedOffer = normalizeRequestedOffer(searchParams.get("offer"))
+  const rawOffer =
+    searchParams.get(SIGNUP_OFFER_PARAM) ||
+    searchParams.get("offer") ||
+    undefined
+  const requestedOffer = normalizeRequestedOffer(rawOffer)
   const signInParams = new URLSearchParams()
   if (requestedOffer) signInParams.set("offer", requestedOffer)
+  if (rawOffer && rawOffer !== requestedOffer)
+    signInParams.set(SIGNUP_OFFER_PARAM, rawOffer)
   if (nextUrl !== "/") signInParams.set("next", nextUrl)
   const signInHref = `/auth/signin${signInParams.size ? `?${signInParams}` : ""}`
   const isCompleteGoogleSignup = searchParams.get("complete_google") === "1"
@@ -222,6 +229,7 @@ export default function SignUpContent() {
         requestedOffer,
         fingerprintDiagnostics,
         nextUrl,
+        ...(rawOffer && rawOffer !== requestedOffer ? [rawOffer] : []),
       )
       if (!result.success) {
         posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
@@ -281,6 +289,8 @@ export default function SignUpContent() {
       const callbackUrl = new URL("/auth/callback", window.location.origin)
       callbackUrl.searchParams.set("signup_attempt_id", proof.signupAttemptId)
       if (requestedOffer) callbackUrl.searchParams.set("offer", requestedOffer)
+      if (rawOffer && rawOffer !== requestedOffer)
+        callbackUrl.searchParams.set(SIGNUP_OFFER_PARAM, rawOffer)
       if (nextUrl && nextUrl !== "/") {
         callbackUrl.searchParams.set("next", nextUrl)
       }

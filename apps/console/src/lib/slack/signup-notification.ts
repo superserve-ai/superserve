@@ -9,6 +9,15 @@ import {
   type SignupEligibilityPresentationOutcome,
 } from "@/lib/slack/signup-eligibility"
 
+// Names and emails are user-controlled; keep Slack from parsing them as
+// mentions or links.
+function escapeSlack(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+}
+
 /**
  * Send the original signup notification from a server-only continuation.
  *
@@ -22,6 +31,7 @@ export const notifySlackOfNewUser = async (
   provider: string | null,
   outcome?: SignupEligibilityPresentationOutcome,
   offer?: string,
+  awaitingEnterpriseSetup = false,
 ) => {
   try {
     const requestedOffer = normalizeRequestedOffer(offer)
@@ -39,14 +49,28 @@ export const notifySlackOfNewUser = async (
         {
           type: "section",
           fields: [
-            { type: "mrkdwn", text: `*Email:* ${email || "N/A"}` },
-            { type: "mrkdwn", text: `*Name:* ${fullName || "N/A"}` },
+            {
+              type: "mrkdwn",
+              text: `*Email:* ${email ? escapeSlack(email) : "N/A"}`,
+            },
+            {
+              type: "mrkdwn",
+              text: `*Name:* ${fullName ? escapeSlack(fullName) : "N/A"}`,
+            },
             { type: "mrkdwn", text: `*Provider:* ${provider || "N/A"}` },
             ...(requestedOffer
               ? [
                   {
                     type: "mrkdwn",
                     text: `*Requested offer:* ${REQUESTED_OFFER_LABELS[requestedOffer]}`,
+                  },
+                ]
+              : []),
+            ...(awaitingEnterpriseSetup
+              ? [
+                  {
+                    type: "mrkdwn",
+                    text: "*Enterprise:* no access until staff grant it in Admin › Pending Signups",
                   },
                 ]
               : []),

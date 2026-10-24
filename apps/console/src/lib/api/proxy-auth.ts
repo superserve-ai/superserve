@@ -28,6 +28,7 @@ import {
 } from "@/lib/api/team-provisioning"
 import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
 import { isGoogleUser } from "@/lib/auth/google-signup-proof"
+import { assertSignupReviewCleared } from "@/lib/auth/signup-review"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -288,6 +289,8 @@ export async function getAuthApiKeyAndTeamForUser(
   user: User,
   observedAt?: string,
 ): Promise<{ apiKey: string; team: TeamMembership }> {
+  // Accounts awaiting review never get a team or a key.
+  assertSignupReviewCleared(user)
   const team = await getTeamForUser(user, observedAt)
   const apiKey = await ensureAuthApiKeyForTeam(user, team, observedAt)
   return { apiKey, team }
@@ -319,6 +322,7 @@ export async function getAuthApiKeyAndTeamForRecovery(
   user: User,
   _observedAt?: string,
 ): Promise<{ apiKey: string; team: TeamMembership }> {
+  assertSignupReviewCleared(user)
   const [directory, selection] = await Promise.all([
     listTeamMembershipsForUserDetailed(user.id, { maxAgeMs: 0 }).then(
       (directory) => completedMemberships(user.id, directory),
