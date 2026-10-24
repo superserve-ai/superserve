@@ -339,7 +339,11 @@ async function proxyRequest(
           const url = new URL(value as string)
           return (
             url.origin === request.nextUrl.origin &&
-            url.pathname.replace(/\/$/, "") === "/onboarding/plan"
+            !url.username &&
+            !url.password &&
+            (url.pathname.replace(/\/$/, "") === "/onboarding/plan" ||
+              (url.pathname.replace(/\/$/, "") === "/billing/pro" &&
+                url.searchParams.get("team") === input.expected_team))
           )
         } catch {
           return false

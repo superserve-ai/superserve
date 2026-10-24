@@ -10,20 +10,26 @@ export async function startProCheckout(
   success.searchParams.set("billing", "success")
   const cancel = new URL(returnUrl)
   cancel.searchParams.set("billing", "cancel")
-  const response = await apiClient<{ url?: string; error?: { code?: string } }>(
-    "/stripe/pro-checkout",
-    {
-      method: "POST",
-      cache: "no-store",
-      body: JSON.stringify({
-        expected_team: teamKey,
-        offer,
-        success_url: success.toString(),
-        cancel_url: cancel.toString(),
-      }),
-    },
+  const response = await apiClient<{
+    url?: string
+    outcome?: string
+    error?: { code?: string }
+  }>("/stripe/pro-checkout", {
+    method: "POST",
+    cache: "no-store",
+    body: JSON.stringify({
+      expected_team: teamKey,
+      offer,
+      success_url: success.toString(),
+      cancel_url: cancel.toString(),
+    }),
+  })
+  if (
+    response.error?.code === "payment_confirmation_pending" ||
+    response.outcome === "payment_confirmation_pending" ||
+    response.outcome === "active"
   )
-  if (response.error?.code === "payment_confirmation_pending") return null
+    return null
   if (!response.url || !isStripeCheckoutUrl(response.url))
     throw new Error(
       "Unable to open payment. Check your payment status before trying again.",
@@ -59,7 +65,7 @@ export async function commitFreePlan(teamKey: string) {
 }
 
 export async function recoverProPayment(teamKey: string, restart = false) {
-  const response = await apiClient<{ outcome: string }>(
+  const response = await apiClient<{ outcome: string; url?: string }>(
     "/stripe/pro-checkout/recover",
     {
       method: "POST",
@@ -67,6 +73,12 @@ export async function recoverProPayment(teamKey: string, restart = false) {
       body: JSON.stringify({ expected_team: teamKey, restart }),
     },
   )
+  if (
+    response.outcome === "payment_method_required" &&
+    response.url &&
+    isStripeCheckoutUrl(response.url)
+  )
+    return response.url
   if (
     ![
       "active",
