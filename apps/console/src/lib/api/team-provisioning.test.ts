@@ -12,6 +12,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { pickActiveTeam } from "@/lib/api/active-team"
+import { SignupReviewPendingError } from "@/lib/auth/signup-review"
 
 const mockPublishPromotionIdentity = vi.fn(async (..._args: unknown[]) => {})
 let clients: Record<string, ReturnType<typeof recordingClient>> = {}
@@ -20,7 +21,11 @@ let currentUser: {
   email: string
   updated_at?: string
   email_confirmed_at?: string
-  app_metadata?: { provider?: string; providers?: string[] }
+  app_metadata?: {
+    provider?: string
+    providers?: string[]
+    signup_review?: string
+  }
   user_metadata?: { signup_attempt_id?: string }
 } | null = null
 let googleUser = false
@@ -299,6 +304,7 @@ import { createServerClient } from "@/lib/supabase/server"
 
 import {
   completedMemberships,
+  provisionHeldApplicantTeam,
   provisionTeam as provisionActualTeam,
 } from "./team-provisioning"
 
@@ -761,6 +767,55 @@ describe("provisionTeam", () => {
 
       expect(mockPublishPromotionIdentity).not.toHaveBeenCalled()
       expect(clients.usw.writes).toEqual({})
+      expect(clients.use.writes).toEqual({})
+    },
+  )
+
+  it.each(["pending", "rejected"])(
+    "refuses a team to an account whose signup review is %s",
+    async (review) => {
+      currentUser = {
+        ...currentUser!,
+        app_metadata: { ...currentUser!.app_metadata, signup_review: review },
+      }
+
+      await expect(
+        provisionTeam("usw", "u1", "user@example.com", "west pilot"),
+      ).rejects.toThrow(SignupReviewPendingError)
+
+      expect(mockPublishPromotionIdentity).not.toHaveBeenCalled()
+      expect(clients.usw.writes).toEqual({})
+    },
+  )
+
+  it("lets staff provision a held Google applicant without the browser proof", async () => {
+    const applicant = {
+      ...currentUser!,
+      app_metadata: {
+        provider: "google",
+        providers: ["google"],
+        signup_review: "pending",
+      },
+    }
+
+    await expect(
+      provisionHeldApplicantTeam(applicant as never),
+    ).resolves.toMatchObject({ id: "team-new", region: "use" })
+
+    expect(mockRequireGoogleSignupProof).not.toHaveBeenCalled()
+    expect(clients.use.writes).not.toEqual({})
+  })
+
+  it.each([undefined, "approved", "rejected"])(
+    "refuses staff provisioning for an account that isn't held (%s)",
+    async (review) => {
+      const account = {
+        ...currentUser!,
+        app_metadata: review ? { signup_review: review } : {},
+      }
+      await expect(
+        provisionHeldApplicantTeam(account as never),
+      ).rejects.toThrow("Only held applicants")
       expect(clients.use.writes).toEqual({})
     },
   )

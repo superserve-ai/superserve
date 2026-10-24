@@ -9,6 +9,24 @@ import type { TeamMembership } from "@/lib/api/team-directory"
 import { PLAN_OFFER_COOKIE, readPlanOffer } from "@/lib/auth/plan-preselection"
 import { cellFor } from "@/lib/cells"
 
+async function hasPlanAssignment(
+  admin: ReturnType<ReturnType<typeof cellFor>["createAdminClient"]>,
+  teamId: string,
+): Promise<boolean> {
+  const now = new Date().toISOString()
+  const { data, error } = await admin
+    .from("team_plan_assignment")
+    .select("id")
+    .eq("team_id", teamId)
+    .lte("effective_from", now)
+    .or(`effective_to.is.null,effective_to.gt.${now}`)
+    .limit(1)
+  // Cells without pricing v2 have no assignments table; nothing is assigned.
+  if (error && error.code !== "42P01" && error.code !== "PGRST205")
+    throw new Error("Unable to check your plan. Please retry.")
+  return !error && (data?.length ?? 0) > 0
+}
+
 // The caller must authenticate the user and resolve their team membership.
 export async function readSignupPlan(
   userId: string,
@@ -29,6 +47,14 @@ export async function readSignupPlan(
   if (error && error.code !== "42P01" && error.code !== "PGRST205")
     throw new Error("Unable to check your plan. Please retry.")
   const choice = parseSignupChoice(error ? null : data)
+  if (
+    (choice.state === "selecting" || choice.state === "pending") &&
+    (await hasPlanAssignment(admin, team.teamId))
+  ) {
+    // Pricing v2 assigns every plan directly; the signup picker doesn't apply.
+    choice.state = "legacy"
+    choice.offer = null
+  }
   if (choice.state === "selecting" || choice.state === "pending") {
     const [intent, billing] = await Promise.all([
       admin

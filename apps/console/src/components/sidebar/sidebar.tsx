@@ -13,6 +13,7 @@ import Image from "next/image"
 
 import { useUser } from "@/hooks/use-user"
 import {
+  canApprovePlatformSignups,
   canReadAdminBilling,
   canReadPlatformTeams,
   canViewOtherUsersAccount,
@@ -20,6 +21,7 @@ import {
 
 import {
   adminBillingNavItem,
+  pendingSignupsNavItem,
   adminNavItem,
   bottomNavItems,
   mainNavItems,
@@ -42,6 +44,7 @@ export function Sidebar() {
   const navItems = [
     ...mainNavItems,
     ...(canReadPlatformTeams(user) ? [adminNavItem] : []),
+    ...(canApprovePlatformSignups(user) ? [pendingSignupsNavItem] : []),
     ...(canReadAdminBilling(user) ? [adminBillingNavItem] : []),
     ...(canViewOtherUsersAccount(user) ? [userManagementNavItem] : []),
   ]

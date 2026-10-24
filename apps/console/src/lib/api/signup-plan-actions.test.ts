@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   single: vi.fn(),
   intent: vi.fn(),
   billing: vi.fn(),
+  assignment: vi.fn(),
   from: vi.fn(),
   eq: vi.fn(),
   cookie: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock("next/headers", () => ({
   cookies: async () => ({ get: mocks.cookie }),
 }))
 
+import { needsPlanSelection } from "./signup-plan"
 import { getSignupPlanAction } from "./signup-plan-actions"
 
 beforeEach(() => {
@@ -51,21 +53,35 @@ beforeEach(() => {
   })
   mocks.intent.mockResolvedValue({ data: null, error: null })
   mocks.billing.mockResolvedValue({ data: null, error: null })
-  mocks.from.mockImplementation((table: string) => ({
-    select: () => ({
-      eq: (...args: unknown[]) => {
-        mocks.eq(...args)
-        return {
-          maybeSingle:
-            table === "yc_claim_team_intent"
-              ? mocks.intent
-              : table === "billing_yc_operation"
-                ? mocks.billing
-                : mocks.single,
+  mocks.assignment.mockResolvedValue({
+    data: null,
+    error: { code: "PGRST205" },
+  })
+  mocks.from.mockImplementation((table: string) =>
+    table === "team_plan_assignment"
+      ? {
+          select: () => ({
+            eq: () => ({
+              lte: () => ({ or: () => ({ limit: mocks.assignment }) }),
+            }),
+          }),
         }
-      },
-    }),
-  }))
+      : {
+          select: () => ({
+            eq: (...args: unknown[]) => {
+              mocks.eq(...args)
+              return {
+                maybeSingle:
+                  table === "yc_claim_team_intent"
+                    ? mocks.intent
+                    : table === "billing_yc_operation"
+                      ? mocks.billing
+                      : mocks.single,
+              }
+            },
+          }),
+        },
+  )
   mocks.cell.mockReturnValue({
     createAdminClient: () => ({ from: mocks.from }),
   })
@@ -81,6 +97,35 @@ describe("authoritative signup plan read", () => {
     expect(result.state).toBe("yc_claim")
     expect(result.offer).toBeNull()
     expect(mocks.eq).toHaveBeenLastCalledWith("team_id", "west-team")
+  })
+  it.each([
+    ["selecting", null],
+    ["pending", "pro_monthly"],
+  ])(
+    "skips the legacy plan picker for a %s team with a pricing v2 plan",
+    async (state, offer_key) => {
+      mocks.single.mockResolvedValue({
+        data: { state, offer_key },
+        error: null,
+      })
+      mocks.assignment.mockResolvedValue({ data: [{ id: "a1" }], error: null })
+      const result = await getSignupPlanAction()
+      expect(result.state).toBe("legacy")
+      expect(needsPlanSelection(result)).toBe(false)
+    },
+  )
+  it("keeps today's plan selection when the team has no pricing v2 plan", async () => {
+    mocks.assignment.mockResolvedValue({ data: [], error: null })
+    expect((await getSignupPlanAction()).state).toBe("selecting")
+  })
+  it("keeps today's plan selection on cells without plan assignments", async () => {
+    expect((await getSignupPlanAction()).state).toBe("selecting")
+  })
+  it("blocks rather than skipping the picker when assignments can't be read", async () => {
+    mocks.assignment.mockResolvedValue({ data: null, error: { code: "57014" } })
+    await expect(getSignupPlanAction()).rejects.toThrow(
+      "Unable to check your plan",
+    )
   })
   it("returns rejected claims to ordinary plan selection", async () => {
     mocks.intent.mockResolvedValue({

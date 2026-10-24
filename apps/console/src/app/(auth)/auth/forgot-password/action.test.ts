@@ -126,4 +126,40 @@ describe("sendPasswordResetEmail", () => {
     expect(call.to).toBe("user@example.com")
     expect(call.subject).toContain("Reset")
   })
+
+  it.each([
+    ["an account awaiting Enterprise setup", { signup_review: "pending" }],
+    ["a rejected account", { signup_review: "rejected" }],
+  ])(
+    "returns success without sending a link to %s",
+    async (_label, app_metadata) => {
+      mockGenerateLink.mockResolvedValue({
+        data: {
+          user: { id: "user-1", app_metadata },
+          properties: { hashed_token: "token-abc" },
+        },
+        error: null,
+      })
+
+      const result = await sendPasswordResetEmail("user@example.com")
+
+      expect(result).toEqual({ success: true })
+      expect(mockSendEmail).not.toHaveBeenCalled()
+    },
+  )
+
+  it("still sends recovery to an unconfirmed account without a hold", async () => {
+    mockGenerateLink.mockResolvedValue({
+      data: {
+        user: { id: "user-1", email_confirmed_at: null, app_metadata: {} },
+        properties: { hashed_token: "token-abc" },
+      },
+      error: null,
+    })
+    mockSendEmail.mockResolvedValue(undefined)
+
+    await sendPasswordResetEmail("user@example.com")
+
+    expect(mockSendEmail).toHaveBeenCalledOnce()
+  })
 })
