@@ -19,8 +19,9 @@ export function usePrepaidCredit(
     enabled: enabled && ready,
     staleTime: 15_000,
     refetchInterval: (query) =>
-      query.state.data?.purchases.some((p) => p.state === "pending") ||
-      query.state.data?.auto_recharge.in_flight
+      query.state.data?.purchases.some(
+        (p) => p.state === "pending" || p.state === "paid",
+      ) || query.state.data?.auto_recharge.in_flight
         ? 5_000
         : 60_000,
     refetchIntervalInBackground: false,
