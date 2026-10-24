@@ -1,13 +1,10 @@
-import { ChartLineUpIcon } from "@phosphor-icons/react/dist/ssr"
+import { combineMRR } from "@/lib/admin/billing-mrr"
+import { configuredRegions } from "@/lib/cells"
 
-import { EmptyState } from "@/components/empty-state"
+import { loadRegionMRR } from "./load-mrr"
+import { MRROverviewView } from "./mrr-overview"
 
-export default function AdminBillingOverviewPage() {
-  return (
-    <EmptyState
-      icon={ChartLineUpIcon}
-      title="Billing overview"
-      description="Recurring revenue by plan will appear here."
-    />
-  )
+export default async function AdminBillingOverviewPage() {
+  const results = await Promise.all(configuredRegions().map(loadRegionMRR))
+  return <MRROverviewView mrr={combineMRR(results)} />
 }
