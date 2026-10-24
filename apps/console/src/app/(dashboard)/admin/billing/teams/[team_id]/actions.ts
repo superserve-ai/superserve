@@ -10,6 +10,7 @@ import {
   BILLING_KEY_LIMIT,
   BILLING_REASON_LIMIT,
   withinBillingTextLimit,
+  withinBillingByteLimit,
 } from "@/lib/admin/billing-text"
 import {
   assignTeamPlan,
@@ -155,9 +156,8 @@ export async function grantStaffCreditAction(input: {
   const reason = validWrite(input)
   if (
     reason === null ||
-    new TextEncoder().encode(input.idempotencyKey).byteLength >
-      BILLING_KEY_LIMIT ||
-    new TextEncoder().encode(reason).byteLength > BILLING_REASON_LIMIT ||
+    !withinBillingByteLimit(input.idempotencyKey, BILLING_KEY_LIMIT) ||
+    !withinBillingByteLimit(reason, BILLING_REASON_LIMIT) ||
     typeof input.amountCents !== "number" ||
     !Number.isSafeInteger(input.amountCents) ||
     input.amountCents < 1 ||

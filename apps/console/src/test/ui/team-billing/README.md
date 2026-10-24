@@ -36,3 +36,9 @@ disabled. The same rule applies to the undo form in the default fixture. The
 fixture uses canned actions; actual code-point action validation and the
 32 KiB UTF-8 request bound are covered by focused regression tests. Staff
 credit retains its separate backend byte limits.
+
+For staff credit byte-boundary QA, enter an amount and paste 500 astral
+characters into the credit Reason. Submission is enabled at exactly 2,000
+UTF-8 bytes. Append one ASCII character: a specific inline byte-limit error
+appears and submission is disabled. This credit-only byte limit is separate
+from the plan forms' Unicode character limit.

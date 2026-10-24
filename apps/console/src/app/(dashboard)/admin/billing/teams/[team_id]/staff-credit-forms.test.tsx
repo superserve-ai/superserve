@@ -127,3 +127,58 @@ it("freezes a request after a conflict too", async () => {
     screen.getByRole("button", { name: "Start a new request" }),
   ).toBeInTheDocument()
 })
+
+it.each([
+  ["ASCII", "a".repeat(2000)],
+  ["multibyte BMP", "é".repeat(1000)],
+  ["astral", "😀".repeat(500)],
+])(
+  "enforces the trimmed 2000-byte credit reason boundary for %s",
+  async (_, reason) => {
+    vi.mocked(grantStaffCreditAction).mockResolvedValue({ kind: "saved" })
+    render(<StaffCreditForm region="use" teamId={team} />)
+    fill("10", `${reason}a`)
+    const field = screen.getByLabelText(/Reason/)
+    const submit = screen.getByRole("button", { name: "Grant $10.00" })
+    expect(
+      screen.getByText("Use at most 2,000 UTF-8 bytes for the reason."),
+    ).toBeInTheDocument()
+    expect(field).toHaveAccessibleDescription(
+      "Use at most 2,000 UTF-8 bytes for the reason.",
+    )
+    expect(field).toHaveAttribute("aria-invalid", "true")
+    expect(submit).toBeDisabled()
+    fireEvent.submit(field.closest("form")!)
+    expect(grantStaffCreditAction).not.toHaveBeenCalled()
+    fill("10", reason)
+    expect(
+      screen.queryByText("Use at most 2,000 UTF-8 bytes for the reason."),
+    ).toBeNull()
+    expect(field).toHaveValue(reason)
+    expect(submit).toBeEnabled()
+    fireEvent.click(submit)
+    await waitFor(() =>
+      expect(grantStaffCreditAction).toHaveBeenCalledWith(
+        expect.objectContaining({ reason }),
+      ),
+    )
+  },
+)
+
+it("checks the same trimmed reason that the action validates", async () => {
+  vi.mocked(grantStaffCreditAction).mockResolvedValue({ kind: "saved" })
+  render(<StaffCreditForm region="use" teamId={team} />)
+  const reason = ` ${"😀".repeat(500)} `
+  fill("10", reason)
+  expect(
+    screen.queryByText("Use at most 2,000 UTF-8 bytes for the reason."),
+  ).toBeNull()
+  const submit = screen.getByRole("button", { name: "Grant $10.00" })
+  expect(submit).toBeEnabled()
+  fireEvent.click(submit)
+  await waitFor(() =>
+    expect(grantStaffCreditAction).toHaveBeenCalledWith(
+      expect.objectContaining({ reason }),
+    ),
+  )
+})

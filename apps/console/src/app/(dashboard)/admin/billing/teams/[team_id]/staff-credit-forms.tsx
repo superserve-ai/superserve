@@ -3,6 +3,10 @@
 import { Alert, Button, Field, Input, Textarea } from "@superserve/ui"
 import * as React from "react"
 
+import {
+  BILLING_REASON_LIMIT,
+  withinBillingByteLimit,
+} from "@/lib/admin/billing-text"
 import type { StaffCredit } from "@/lib/admin/team-billing"
 
 import type { ActionFailure, PlanChangeActionResult } from "./actions"
@@ -52,12 +56,18 @@ export function StaffCreditForm({
   const [result, setResult] = React.useState<PlanChangeActionResult | null>(
     null,
   )
+  const reasonError = withinBillingByteLimit(
+    reason.trim(),
+    BILLING_REASON_LIMIT,
+  )
+    ? undefined
+    : "Use at most 2,000 UTF-8 bytes for the reason."
   const cents = parseDollarsToCents(amount)
   const unknown = result?.kind === "unavailable" || result?.kind === "conflict"
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
-    if (cents === null) return
+    if (cents === null || !reason.trim() || reasonError) return
     setPending(true)
     const outcome: PlanChangeActionResult = await grantStaffCreditAction({
       region,
@@ -96,11 +106,23 @@ export function StaffCreditForm({
         <Textarea
           id="staff-credit-reason"
           value={reason}
-          maxLength={2000}
+          maxLength={BILLING_REASON_LIMIT}
           disabled={pending || unknown}
           onChange={(e) => setReason(e.target.value)}
+          error={reasonError}
+          aria-describedby={
+            reasonError ? "staff-credit-reason-error" : undefined
+          }
           placeholder="Why this team is receiving credit"
         />
+        {reasonError ? (
+          <p
+            id="staff-credit-reason-error"
+            className="text-xs text-destructive"
+          >
+            {reasonError}
+          </p>
+        ) : null}
       </Field>
       <p className="text-xs text-muted">
         Credit applies to usage only, never to plan fees, and does not expire.
@@ -121,7 +143,9 @@ export function StaffCreditForm({
           type="submit"
           size="sm"
           variant="outline"
-          disabled={pending || cents === null || !reason.trim()}
+          disabled={
+            pending || cents === null || !reason.trim() || !!reasonError
+          }
         >
           {unknown
             ? "Retry same request"
