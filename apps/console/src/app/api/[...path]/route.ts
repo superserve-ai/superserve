@@ -58,6 +58,29 @@ function isStripeBillingPath(path: string): boolean {
   )
 }
 
+const PREPAID_BILLING_METHODS: Record<string, string> = {
+  "billing/prepaid": "GET",
+  "billing/prepaid/checkout": "POST",
+  "billing/prepaid/auto-recharge": "PUT",
+}
+
+const PREPAID_WRITE_FIELDS: Record<string, string[]> = {
+  "billing/prepaid/checkout": ["amount_cents", "success_url", "cancel_url"],
+  "billing/prepaid/auto-recharge": [
+    "enabled",
+    "threshold_cents",
+    "amount_cents",
+  ],
+}
+
+function isPrepaidBillingPath(path: string): boolean {
+  return Object.hasOwn(PREPAID_BILLING_METHODS, path)
+}
+
+function isPrepaidBillingWrite(path: string): boolean {
+  return isPrepaidBillingPath(path) && PREPAID_BILLING_METHODS[path] !== "GET"
+}
+
 function isPlanBillingPath(path: string): boolean {
   return [
     "stripe/pro-checkout",
@@ -89,6 +112,7 @@ const FORWARD_REQUEST_HEADERS = new Set([
 function isAllowedPath(path: string): boolean {
   if (isTeamBillingPath(path)) return true
   if (isStripeBillingPath(path)) return true
+  if (isPrepaidBillingPath(path)) return true
   return ALLOWED_PREFIXES.some(
     (prefix) => path === prefix || path.startsWith(`${prefix}/`),
   )
@@ -132,6 +156,20 @@ function setImpersonationDebugHeaders(
   headers.set("x-console-impersonated-team", impersonatedTeamId ?? "")
 }
 
+function validPaymentReturn(
+  value: unknown,
+  origin: string,
+  path: string,
+): boolean {
+  if (typeof value !== "string") return false
+  try {
+    const url = new URL(value)
+    return url.origin === origin && url.pathname.replace(/\/$/, "") === path
+  } catch {
+    return false
+  }
+}
+
 async function proxyRequest(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
@@ -147,6 +185,12 @@ async function proxyRequest(
   const planRequest = isPlanBillingPath(joinedPath)
   if (planRequest && request.method !== "POST")
     return NextResponse.json({ error: "Method not allowed" }, { status: 405 })
+  if (
+    isPrepaidBillingPath(joinedPath) &&
+    request.method !== PREPAID_BILLING_METHODS[joinedPath]
+  )
+    return NextResponse.json({ error: "Method not allowed" }, { status: 405 })
+  const prepaidWrite = isPrepaidBillingWrite(joinedPath)
   const checkoutRequest =
     joinedPath === "stripe/checkout-session" && request.method === "POST"
   const debugImpersonation =
@@ -243,7 +287,7 @@ async function proxyRequest(
           )
         }
       }
-      if (checkoutRequest || planRequest)
+      if (checkoutRequest || planRequest || prepaidWrite)
         checkoutTeam = selfContext?.team ?? null
       apiKey = impersonationContext
         ? await getAuthApiKeyForUser(
@@ -297,6 +341,65 @@ async function proxyRequest(
       ? await request.arrayBuffer()
       : undefined
 
+  if (prepaidWrite) {
+    let input: unknown
+    try {
+      input = JSON.parse(new TextDecoder().decode(body as ArrayBuffer))
+    } catch {
+      input = null
+    }
+    if (
+      !checkoutTeam ||
+      !input ||
+      typeof input !== "object" ||
+      Array.isArray(input) ||
+      (input as Record<string, unknown>).expected_team !==
+        `${checkoutTeam.region}:${checkoutTeam.teamId}`
+    ) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "plan_team_changed",
+            message: "Your active team changed. Reload to continue.",
+          },
+        },
+        { status: 409 },
+      )
+    }
+    const purchase = input as Record<string, unknown>
+    if (
+      joinedPath === "billing/prepaid/checkout" &&
+      (!validPaymentReturn(
+        purchase.success_url,
+        request.nextUrl.origin,
+        "/plan-usage/buy-credit",
+      ) ||
+        !validPaymentReturn(
+          purchase.cancel_url,
+          request.nextUrl.origin,
+          "/plan-usage/buy-credit",
+        ))
+    ) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "invalid_request",
+            message: "Invalid payment return URL",
+          },
+        },
+        { status: 400 },
+      )
+    }
+    const fields = PREPAID_WRITE_FIELDS[joinedPath] ?? []
+    body = JSON.stringify(
+      Object.fromEntries(
+        fields
+          .filter((field) => field in (input as Record<string, unknown>))
+          .map((field) => [field, (input as Record<string, unknown>)[field]]),
+      ),
+    )
+  }
+
   if (planRequest) {
     let input: Record<string, unknown>
     try {
@@ -334,18 +437,18 @@ async function proxyRequest(
           },
           { status: 400 },
         )
-      const validReturn = (value: unknown) => {
-        try {
-          const url = new URL(value as string)
-          return (
-            url.origin === request.nextUrl.origin &&
-            url.pathname.replace(/\/$/, "") === "/onboarding/plan"
-          )
-        } catch {
-          return false
-        }
-      }
-      if (!validReturn(input.success_url) || !validReturn(input.cancel_url))
+      if (
+        !validPaymentReturn(
+          input.success_url,
+          request.nextUrl.origin,
+          "/onboarding/plan",
+        ) ||
+        !validPaymentReturn(
+          input.cancel_url,
+          request.nextUrl.origin,
+          "/onboarding/plan",
+        )
+      )
         return NextResponse.json(
           {
             error: {
@@ -386,8 +489,6 @@ async function proxyRequest(
         )
       body = JSON.stringify({ restart: input.restart })
     }
-    headers.delete("content-length")
-    headers.set("content-type", "application/json")
     upstreamUrl.search = ""
   }
 
@@ -605,8 +706,6 @@ async function proxyRequest(
       await ensureCheckoutKey()
       const { actor: _actor, team: _team, ...fields } = intent
       body = JSON.stringify(fields)
-      headers.delete("content-length")
-      headers.set("content-type", "application/json")
       headers.set("X-Promotion-Account-Assertion", checkoutAssertion(intent))
       upstreamUrl.pathname = "/stripe/checkout-session/publication-decision"
     } catch {
@@ -626,6 +725,11 @@ async function proxyRequest(
         { status: 503 },
       )
     }
+  }
+
+  if (typeof body === "string") {
+    headers.delete("content-length")
+    headers.set("content-type", "application/json")
   }
 
   const response = await fetch(upstreamUrl.toString(), {
@@ -659,7 +763,11 @@ async function forwardResponse(
     }
     responseHeaders.set(key, value)
   }
-  if (joinedPath === "billing/summary" || isPlanBillingPath(joinedPath)) {
+  if (
+    joinedPath === "billing/summary" ||
+    isPlanBillingPath(joinedPath) ||
+    isPrepaidBillingPath(joinedPath)
+  ) {
     responseHeaders.set("cache-control", "private, no-store")
   }
   setImpersonationDebugHeaders(
