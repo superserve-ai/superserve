@@ -364,7 +364,7 @@ export function PlansCatalog({
                                       title: `Publish ${version.family} v${version.version}?`,
                                       description:
                                         version.pricing_version === "v2"
-                                          ? "Every region holds this version for pricing v2; it goes live when v2 is switched on, or immediately if it already is. The current v2 version is retired; existing contracts keep their terms. Published versions cannot be edited."
+                                          ? "Every region holds this version for pricing v2. New customer entry uses it only after that region completes adoption and is explicitly released. The current v2 version is retired; existing assignments and contracts keep their terms. Published versions cannot be edited."
                                           : "New checkouts and assignments in every region use this version while legacy pricing is live. The current version is retired; existing contracts keep their terms. Published versions cannot be edited.",
                                       action: (reason) =>
                                         publishVersionAction(

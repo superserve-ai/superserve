@@ -90,11 +90,14 @@ export function PricingActivation({
                       title: `Switch ${where} to ${PRICING_LABEL[to].toLowerCase()}?`,
                       description:
                         to === "v2"
-                          ? "Signup, checkout and the pricing cards use the published v2 plans immediately. Existing contracts keep their terms."
-                          : "Signup, checkout and the pricing cards go back to the published legacy plans immediately. Existing contracts keep their terms.",
+                          ? "This starts pricing v2 preparation. Public v2 pricing and new v2 purchases stay closed until regional adoption is complete and an operator explicitly releases the region. Existing assignments and commitments keep their terms."
+                          : "This closes new pricing v2 entry and restores public legacy pricing. Existing assignments and commitments keep their terms.",
                       action: (reason) =>
                         setPricingVersionAction(to, reason, targets),
-                      done: `${PRICING_LABEL[to]} is live in ${where}`,
+                      done:
+                        to === "v2"
+                          ? `Pricing v2 preparation started in ${where}`
+                          : `Legacy pricing restored in ${where}`,
                     })
                   }
                 >
