@@ -58,6 +58,7 @@ describe("buy credit amounts", () => {
 describe("buy credit route", () => {
   beforeEach(() => {
     prepaid.data.purchases = []
+    prepaid.data.balance_cents = 0
     prepaid.data.auto_recharge.enabled = false
     prepaid.isLoading = false
     prepaid.error = null
@@ -70,6 +71,18 @@ describe("buy credit route", () => {
       prepaid.data.auto_recharge.enabled = true
       render(<BuyCreditRoute />)
       expect(screen.getByText("read and disable credit")).toBeTruthy()
+      expect(screen.queryByText("buy credit")).toBeNull()
+    },
+  )
+
+  it.each(["legacy", null] as const)(
+    "keeps a positive balance readable without purchase history when pricing is %s",
+    (version) => {
+      vi.mocked(usePricingVersion).mockReturnValue(version)
+      prepaid.data.balance_cents = 5000
+      render(<BuyCreditRoute />)
+      expect(screen.getByText("read and disable credit")).toBeTruthy()
+      expect(screen.queryByText("plan and usage")).toBeNull()
       expect(screen.queryByText("buy credit")).toBeNull()
     },
   )

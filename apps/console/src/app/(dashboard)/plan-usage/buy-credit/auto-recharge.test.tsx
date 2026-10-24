@@ -99,6 +99,9 @@ describe("auto-recharge rollback", () => {
       </QueryClientProvider>,
     )
     expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
+    expect(screen.getByText("$25")).toBeTruthy()
+    expect(screen.queryByText(/never expires/)).toBeNull()
+    expect(screen.queryByText(/pause sandboxes at/)).toBeNull()
     for (const input of screen.getAllByRole("textbox"))
       expect(input.hasAttribute("disabled")).toBe(true)
     expect(

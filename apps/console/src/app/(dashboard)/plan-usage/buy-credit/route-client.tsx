@@ -12,7 +12,11 @@ export function BuyCreditRoute() {
   const version = usePricingVersion()
   const existing = usePrepaidCredit(version !== undefined && version !== "v2")
   if (version === "v2") return <BuyCreditPageClient />
-  if (existing.data?.auto_recharge.enabled || existing.data?.purchases.length)
+  if (
+    (existing.data?.balance_cents ?? 0) !== 0 ||
+    existing.data?.auto_recharge.enabled ||
+    existing.data?.purchases.length
+  )
     return <BuyCreditPageClient allowEntry={false} />
   if (version === undefined || existing.isLoading) return <Spinner />
   if (version === null)

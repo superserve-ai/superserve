@@ -54,7 +54,7 @@ export function BuyCreditPageClient({
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title={allowEntry ? "Buy credit" : "Prepaid credit"} />
+      <PageHeader title={allowEntry ? "Buy credit" : "Credit balance"} />
       <div className="flex flex-col gap-6 overflow-y-auto p-4">
         {purchase === "success" && (
           <p className="border border-dashed border-border p-3 text-sm text-foreground">
@@ -74,7 +74,7 @@ export function BuyCreditPageClient({
         )}
         {data && (
           <>
-            <BalanceCard data={data} />
+            <BalanceCard data={data} showTerms={allowEntry} />
             {allowEntry ? (
               <PurchaseCard canManage={canManage} />
             ) : (
@@ -103,17 +103,25 @@ export function BuyCreditPageClient({
   )
 }
 
-function BalanceCard({ data }: { data: PrepaidCreditSummary }) {
+function BalanceCard({
+  data,
+  showTerms,
+}: {
+  data: PrepaidCreditSummary
+  showTerms: boolean
+}) {
   return (
     <section className="border border-dashed border-border p-4">
       <p className="font-mono text-xs text-muted uppercase">Credit balance</p>
       <p className="mt-1 text-2xl font-medium text-foreground">
         {formatDollars(data.balance_cents)}
       </p>
-      <p className="mt-1 text-sm text-muted">
-        Credit never expires and pays for usage at normal rates. Prepaid plans
-        pause sandboxes at $0.
-      </p>
+      {showTerms && (
+        <p className="mt-1 text-sm text-muted">
+          Purchased credit never expires and pays for usage at normal rates.
+          Prepaid plans pause sandboxes at $0.
+        </p>
+      )}
     </section>
   )
 }
