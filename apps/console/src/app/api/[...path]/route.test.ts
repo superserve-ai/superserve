@@ -129,6 +129,7 @@ describe("api proxy /api/[...path]", () => {
         body: JSON.stringify({
           expected_team: "use:team-east",
           offer: "pro_annual",
+          operation_id: "11111111-1111-4111-8111-111111111111",
           price_id: "attacker-price",
           success_url: "https://console.test/onboarding/plan/?billing=success",
           cancel_url: "https://console.test/onboarding/plan/?billing=cancel",
@@ -142,6 +143,7 @@ describe("api proxy /api/[...path]", () => {
     expect(url).toBe("https://api.test.superserve.ai/stripe/checkout-session")
     expect(JSON.parse(init.body)).toEqual({
       offer: "pro_annual",
+      operation_id: "11111111-1111-4111-8111-111111111111",
       success_url: "https://console.test/onboarding/plan/?billing=success",
       cancel_url: "https://console.test/onboarding/plan/?billing=cancel",
     })

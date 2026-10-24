@@ -362,6 +362,7 @@ async function proxyRequest(
       upstreamUrl.pathname = "/stripe/checkout-session"
       body = JSON.stringify({
         offer: input.offer,
+        operation_id: input.operation_id,
         success_url: input.success_url,
         cancel_url: input.cancel_url,
       })
