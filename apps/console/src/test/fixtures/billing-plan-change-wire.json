@@ -1,0 +1,108 @@
+{
+  "accepted_request": {
+    "confirm_pauses_running": true,
+    "expected_effective_at": "2026-11-01T00:00:00Z",
+    "idempotency_key": "console-wire-intent",
+    "preview_token": "279d27ac67a3d23088f8c03e1ce05aaac8eff79ab65fd47d9f3c98560ff0d542",
+    "target_plan": "free"
+  },
+  "backend_sha": "e67448bc2c098d2cefad59fd7a3fc904609ba2c9",
+  "blocked_preview": {
+    "target_plan_key": "free",
+    "target_display_name": "Free",
+    "target_kind": "free",
+    "pauses_running": false,
+    "limits": {
+      "max_concurrent": 1,
+      "max_vcpu": 1,
+      "max_memory_mib": 1024,
+      "max_disk_mib": 4096,
+      "max_templates": 10
+    },
+    "blocked": "moves to Free are temporarily unavailable until pause support is deployed"
+  },
+  "blocked_request": {
+    "error": {
+      "code": "conflict",
+      "message": "moves to Free are temporarily unavailable until pause support is deployed"
+    }
+  },
+  "blocked_row_count": 0,
+  "change": {
+    "effective_at": "2026-11-01T00:00:00Z",
+    "id": "e45a0f71-93e8-4cec-95d0-269d0c27ccaa",
+    "limits": {
+      "max_concurrent": 1,
+      "max_vcpu": 1,
+      "max_memory_mib": 1024,
+      "max_disk_mib": 4096,
+      "max_templates": 10
+    },
+    "pauses_running": true,
+    "state": "scheduled",
+    "target_display_name": "Free",
+    "target_kind": "free",
+    "target_plan_key": "free",
+    "undoable": true
+  },
+  "immediate": {
+    "accepted_request": {
+      "confirm_pauses_running": true,
+      "idempotency_key": "console-immediate-intent",
+      "preview_token": "92565e20dc36be085e53ef6796619461b06b297b8f615df0eeaf77adaf01d786",
+      "target_plan": "free"
+    },
+    "change": {
+      "effective_at": "2026-10-23T23:25:18.529072Z",
+      "id": "86fb8859-a91c-4ba1-9745-119548ca57d3",
+      "limits": {
+        "max_concurrent": 1,
+        "max_vcpu": 1,
+        "max_memory_mib": 1024,
+        "max_disk_mib": 4096,
+        "max_templates": 10
+      },
+      "pauses_running": true,
+      "state": "scheduled",
+      "target_display_name": "Free",
+      "target_kind": "free",
+      "target_plan_key": "free",
+      "undoable": false
+    },
+    "preview": {
+      "target_plan_key": "free",
+      "target_display_name": "Free",
+      "target_kind": "free",
+      "timing": "immediate",
+      "effective_at": "2026-10-23T23:25:18.525196305Z",
+      "pauses_running": true,
+      "limits": {
+        "max_concurrent": 1,
+        "max_vcpu": 1,
+        "max_memory_mib": 1024,
+        "max_disk_mib": 4096,
+        "max_templates": 10
+      },
+      "preview_token": "92565e20dc36be085e53ef6796619461b06b297b8f615df0eeaf77adaf01d786"
+    },
+    "team_id": "4a2fcbc7-1917-4c5f-ba66-959cb504a0a3"
+  },
+  "pause_schema_sha": "5a8c592bb867ebc20cc5b2364dcd6cd7e95b3811",
+  "preview": {
+    "target_plan_key": "free",
+    "target_display_name": "Free",
+    "target_kind": "free",
+    "timing": "end_of_billing_period",
+    "effective_at": "2026-11-01T00:00:00Z",
+    "pauses_running": true,
+    "limits": {
+      "max_concurrent": 1,
+      "max_vcpu": 1,
+      "max_memory_mib": 1024,
+      "max_disk_mib": 4096,
+      "max_templates": 10
+    },
+    "preview_token": "279d27ac67a3d23088f8c03e1ce05aaac8eff79ab65fd47d9f3c98560ff0d542"
+  },
+  "team_id": "639bb183-874d-40c6-a184-1096555fcb07"
+}

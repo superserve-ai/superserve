@@ -1,15 +1,13 @@
 "use client"
 
-import { Button, cn, useToast } from "@superserve/ui"
-import { useQueryClient } from "@tanstack/react-query"
-import { usePathname } from "next/navigation"
-import { useCallback, useEffect, useSyncExternalStore } from "react"
+import { Button, cn } from "@superserve/ui"
+import { useCallback, useSyncExternalStore } from "react"
 
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { useBillingPayment } from "@/hooks/use-billing-payment"
+import { useBillingReturnNotice } from "@/hooks/use-billing-return-notice"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import type { BillingTrialBalance } from "@/lib/api/billing"
-import { billingKeys } from "@/lib/api/query-keys"
 
 // SS-484 billingTrialRunway accepts observations strictly newer than 15 minutes.
 // Expire cached observations too, including when background polling is suspended.
@@ -68,38 +66,10 @@ export function TrialBillingBanner() {
     summary,
     teamKey,
   )
-  const queryClient = useQueryClient()
-  const { addToast } = useToast()
-  const pathname = usePathname()
   const trial = summary?.trial
   const currentUrgentRunway = useCurrentUrgentRunway(trial)
 
-  useEffect(() => {
-    // Preserve the billing page's inline return notice and cleanup.
-    if (pathname === "/plan-usage" || pathname === "/plan-usage/") return
-    const url = new URL(window.location.href)
-    const billingState = url.searchParams.get("billing")
-    if (!url.searchParams.has("billing")) return
-    url.searchParams.delete("billing")
-    window.history.replaceState(window.history.state, "", url.toString())
-    void queryClient.invalidateQueries({ queryKey: billingKeys.all })
-    if (billingState === "success") {
-      addToast(
-        "Returned from Stripe. Billing status is refreshing against the latest server state.",
-        "info",
-      )
-    } else if (billingState === "cancel") {
-      addToast(
-        "Billing flow canceled. You can reopen billing setup any time.",
-        "warning",
-      )
-    } else if (billingState === "portal-return") {
-      addToast(
-        "Billing portal closed. Billing status is refreshing against the latest server state.",
-        "info",
-      )
-    }
-  }, [pathname, queryClient, addToast])
+  useBillingReturnNotice()
 
   if (
     !summary?.permissions?.can_view ||

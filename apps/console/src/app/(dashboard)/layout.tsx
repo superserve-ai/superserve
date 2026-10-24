@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation"
 
 import { ImpersonationBanner } from "@/components/admin/impersonation-banner"
+import { PlanBanner } from "@/components/billing/plan-banner"
 import { DashboardShell } from "@/components/layout/dashboard-shell"
 import { SessionExpiryRedirect } from "@/components/layout/session-expiry-redirect"
 import { PlanSelectionLoader } from "@/components/onboarding/plan-selection-loader"
 import { SignupPlanGate } from "@/components/onboarding/signup-plan-gate"
 import { QueryProvider } from "@/components/query-provider"
-import { TrialBillingBanner } from "@/components/trial-billing-banner"
 import {
   getImpersonationContext,
   hasImpersonationCookie,
@@ -45,7 +45,7 @@ export default async function DashboardLayout({
       <SessionExpiryRedirect />
       <SignupPlanGate>
         <DashboardShell
-          globalBanner={<TrialBillingBanner />}
+          globalBanner={<PlanBanner />}
           banner={<ImpersonationBanner context={impersonationContext} />}
         >
           {children}
