@@ -141,6 +141,15 @@ export function ProPaymentView({
           <span className="text-muted-foreground text-sm"> / month</span>
         </p>
         <ul className="text-muted-foreground mt-6 space-y-3 text-sm">
+          <li>
+            Pay once for the rest of your current billing period and receive the
+            same amount in non-expiring usage credit.
+          </li>
+          <li>Pro limits begin after payment is confirmed.</li>
+          <li>
+            Your regular {formatUsdCents(pro.monthly.price_cents)} monthly fee
+            and included credit begin on your next billing date.
+          </li>
           <li>{pro.credit_summary}</li>
           <li>Usage beyond that is billed monthly at normal rates</li>
           {pro.limits.max_concurrent ? (

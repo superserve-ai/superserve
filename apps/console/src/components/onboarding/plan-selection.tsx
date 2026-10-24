@@ -133,7 +133,11 @@ export function PlanSelection({
       run(async () => {
         const latest = await refresh()
         if (latest.state === "pending") {
-          await recoverProPayment(initial.teamKey, restart)
+          const outcome = await recoverProPayment(initial.teamKey, restart)
+          if (isStripeCheckoutUrl(outcome)) {
+            navigate(outcome)
+            return
+          }
           const recovered = await refresh()
           if (recovered.state === "committed") finish(recovered.offer)
           else if (recovered.state === "selecting") {
@@ -144,7 +148,7 @@ export function PlanSelection({
           if (latest.offer !== "free" || !freeBilling) finish(latest.offer)
         }
       }),
-    [run, refresh, initial.teamKey, finish, freeBilling, track],
+    [run, refresh, initial.teamKey, finish, freeBilling, track, navigate],
   )
 
   useEffect(() => {

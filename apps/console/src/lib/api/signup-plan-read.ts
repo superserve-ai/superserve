@@ -90,6 +90,28 @@ export async function readSignupPlan(
       choice.offer = null
     }
   }
+  if (choice.state === "selecting" || choice.state === "pending") {
+    const upgrade = await admin
+      .from("billing_pro_upgrade")
+      .select("state, offer_key")
+      .eq("team_id", team.teamId)
+      .not("state", "in", "(expired,ended)")
+      .maybeSingle()
+    if (
+      upgrade.error &&
+      upgrade.error.code !== "42P01" &&
+      upgrade.error.code !== "PGRST205"
+    )
+      throw new Error("Unable to check your payment. Please retry.")
+    if (upgrade.data) {
+      const paid = parseSignupChoice({
+        state: upgrade.data.state === "active" ? "committed" : "pending",
+        offer_key: upgrade.data.offer_key,
+      })
+      choice.state = paid.state
+      choice.offer = paid.offer
+    }
+  }
   const requestedOffer = readPlanOffer(
     (await cookies()).get(PLAN_OFFER_COOKIE)?.value,
     userId,

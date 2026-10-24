@@ -204,7 +204,12 @@ function validPaymentReturn(
   if (typeof value !== "string") return false
   try {
     const url = new URL(value)
-    return url.origin === origin && url.pathname.replace(/\/$/, "") === path
+    return (
+      url.origin === origin &&
+      !url.username &&
+      !url.password &&
+      url.pathname.replace(/\/$/, "") === path
+    )
   } catch {
     return false
   }
@@ -582,18 +587,22 @@ async function proxyRequest(
           },
           { status: 400 },
         )
-      if (
-        !validPaymentReturn(
-          input.success_url,
-          request.nextUrl.origin,
-          "/onboarding/plan",
-        ) ||
-        !validPaymentReturn(
-          input.cancel_url,
-          request.nextUrl.origin,
-          "/onboarding/plan",
-        )
-      )
+      const validReturn = (value: unknown) => {
+        try {
+          const url = new URL(value as string)
+          return (
+            url.origin === request.nextUrl.origin &&
+            !url.username &&
+            !url.password &&
+            (url.pathname.replace(/\/$/, "") === "/onboarding/plan" ||
+              (url.pathname.replace(/\/$/, "") === "/billing/pro" &&
+                url.searchParams.get("team") === input.expected_team))
+          )
+        } catch {
+          return false
+        }
+      }
+      if (!validReturn(input.success_url) || !validReturn(input.cancel_url))
         return NextResponse.json(
           {
             error: {
@@ -606,6 +615,7 @@ async function proxyRequest(
       upstreamUrl.pathname = "/stripe/checkout-session"
       body = JSON.stringify({
         offer: input.offer,
+        operation_id: input.operation_id,
         success_url: input.success_url,
         cancel_url: input.cancel_url,
       })

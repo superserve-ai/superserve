@@ -50,7 +50,11 @@ export function ProPayment({
   const summaryQuery = useBillingSummary(!!team)
   const plan = summaryQuery.data?.plan
   const paidPlan =
-    plan && plan.key !== "free" && plan.status === "active" ? plan.name : null
+    plan &&
+    !["free", "starter", "payg"].includes(plan.key) &&
+    plan.status === "active"
+      ? plan.name
+      : null
   const [confirming, setConfirming] = useState(billingReturn === "success")
   const [paymentTeam, setPaymentTeam] = useState(checkoutTeam)
   const [conflict, setConflict] = useState(false)
@@ -100,6 +104,10 @@ export function ProPayment({
           if (!target.active) return
           const outcome = await recoverProPayment(teamKey)
           if (!target.active) return
+          if (isStripeCheckoutUrl(outcome)) {
+            window.location.assign(outcome)
+            return
+          }
           if (outcome === "active") {
             router.replace(returnTo)
             return

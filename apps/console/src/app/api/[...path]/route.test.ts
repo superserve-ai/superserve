@@ -131,6 +131,7 @@ describe("api proxy /api/[...path]", () => {
         body: JSON.stringify({
           expected_team: "use:team-east",
           offer: "pro_annual",
+          operation_id: "11111111-1111-4111-8111-111111111111",
           price_id: "attacker-price",
           success_url: "https://console.test/onboarding/plan/?billing=success",
           cancel_url: "https://console.test/onboarding/plan/?billing=cancel",
@@ -144,6 +145,7 @@ describe("api proxy /api/[...path]", () => {
     expect(url).toBe("https://api.test.superserve.ai/stripe/checkout-session")
     expect(JSON.parse(init.body)).toEqual({
       offer: "pro_annual",
+      operation_id: "11111111-1111-4111-8111-111111111111",
       success_url: "https://console.test/onboarding/plan/?billing=success",
       cancel_url: "https://console.test/onboarding/plan/?billing=cancel",
     })
@@ -214,6 +216,32 @@ describe("api proxy /api/[...path]", () => {
       ).status,
     ).toBe(403)
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("accepts dashboard Pro returns only for the pinned checkout team", async () => {
+    const path = ["stripe", "pro-checkout"]
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify({ url: "https://checkout.stripe.com/session" }),
+        { status: 200 },
+      ),
+    )
+    for (const team of ["use:team-east", "use:other-team"]) {
+      const target = `https://console.test/billing/pro/?team=${encodeURIComponent(team)}`
+      const response = await POST(
+        req("POST", path, {
+          body: JSON.stringify({
+            expected_team: "use:team-east",
+            offer: "pro_monthly",
+            success_url: target,
+            cancel_url: target,
+          }),
+        }),
+        params(path),
+      )
+      expect(response.status).toBe(team === "use:team-east" ? 200 : 400)
+    }
+    expect(fetchSpy).toHaveBeenCalledOnce()
   })
 
   it("rejects arbitrary offers and cross-origin payment returns", async () => {
