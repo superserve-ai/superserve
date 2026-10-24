@@ -20,7 +20,10 @@ export function usePricingVersion(): PricingVersion | null | undefined {
         .pricing_version,
     enabled: ready,
     staleTime: 60_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   })
-  if (!data) return isError ? null : undefined
+  if (isError) return null
+  if (!data) return undefined
   return data
 }
