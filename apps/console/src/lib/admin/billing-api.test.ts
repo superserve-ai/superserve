@@ -461,3 +461,46 @@ describe("adminBillingRequest error detail", () => {
     expect((text as AdminBillingRequestError).detail).toBeUndefined()
   })
 })
+
+describe("admin billing request size", () => {
+  it("sends maximum Unicode assignment fields unchanged", async () => {
+    signIn(staff(["platform:billing:read", "platform:billing:write"]))
+    fetchMock.mockResolvedValue(Response.json({ ok: true }))
+    const body = {
+      idempotency_key: "🚀".repeat(200),
+      version_id: TEAM,
+      reason: "😀".repeat(2000),
+    }
+    await adminBillingRequest({
+      region: "use",
+      path: `/internal/teams/${TEAM}/billing/plan-assignments`,
+      schema,
+      method: "POST",
+      body,
+    })
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual(body)
+  })
+
+  it("caps the serialized UTF-8 request at 32 KiB before fetch", async () => {
+    signIn(staff(["platform:billing:read", "platform:billing:write"]))
+    fetchMock.mockResolvedValue(Response.json({ ok: true }))
+    const overhead = new TextEncoder().encode(
+      JSON.stringify({ reason: "" }),
+    ).byteLength
+    const reason = `${"😀".repeat(Math.floor((32768 - overhead) / 4))}${"a".repeat((32768 - overhead) % 4)}`
+    const send = (reason: string) =>
+      adminBillingRequest({
+        region: "use",
+        path: WRITE_PATH,
+        schema,
+        method: "POST",
+        body: { reason },
+      })
+    await expect(send(reason)).resolves.toEqual({ ok: true })
+    expect(
+      new TextEncoder().encode(fetchMock.mock.calls[0][1].body).byteLength,
+    ).toBe(32768)
+    expect(await kind(send(`${reason}a`))).toBe("invalid")
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
