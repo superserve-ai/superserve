@@ -184,3 +184,54 @@ it("explains when no custom plan can be assigned", () => {
   ).toBeTruthy()
   expect(screen.queryByRole("button", { name: "Assign plan" })).toBeNull()
 })
+
+it.each(["assignment", "downgrade", "undo"] as const)(
+  "accepts 2000 astral characters and rejects 2001 characters in the %s form",
+  async (operation) => {
+    if (operation === "assignment") {
+      vi.mocked(assignTeamPlanAction).mockResolvedValue({ kind: "saved" })
+      render(<AssignPlanForm region="use" teamId={team} plans={[enterprise]} />)
+      choose(/Plan/, enterprise.id)
+    } else if (operation === "downgrade") {
+      vi.mocked(requestPlanChangeAction).mockResolvedValue({ kind: "saved" })
+      renderChange()
+      choose(/Move to/, "starter")
+    } else {
+      vi.mocked(undoPlanChangeAction).mockResolvedValue({ kind: "saved" })
+      render(
+        <UndoPlanChangeForm
+          region="use"
+          teamId={team}
+          changeId={enterprise.id}
+        />,
+      )
+    }
+    const label = operation === "undo" ? /Undo reason/ : /Reason/
+    const button = screen.getByRole("button", {
+      name:
+        operation === "assignment"
+          ? "Assign plan"
+          : operation === "downgrade"
+            ? "Request change"
+            : "Undo change",
+    })
+    choose(label, `${"😀".repeat(1999)}aa`)
+    expect(screen.getByText("Use at most 2,000 characters.")).toBeTruthy()
+    expect(button).toBeDisabled()
+    const reason = "😀".repeat(2000)
+    choose(label, reason)
+    expect(screen.getByLabelText(label)).toHaveValue(reason)
+    expect(screen.queryByText("Use at most 2,000 characters.")).toBeNull()
+    expect(button).toBeEnabled()
+    fireEvent.click(button)
+    const action =
+      operation === "assignment"
+        ? assignTeamPlanAction
+        : operation === "downgrade"
+          ? requestPlanChangeAction
+          : undoPlanChangeAction
+    await waitFor(() =>
+      expect(action).toHaveBeenCalledWith(expect.objectContaining({ reason })),
+    )
+  },
+)

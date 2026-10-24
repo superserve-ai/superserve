@@ -48,6 +48,7 @@ beforeEach(() => {
   vi.mocked(requestPlanChange).mockReset()
   vi.mocked(undoPlanChange).mockReset()
   vi.mocked(assignTeamPlan).mockReset()
+  vi.mocked(grantStaffCredit).mockReset()
   vi.mocked(getPlanCatalog).mockResolvedValue({
     pricingV2: true,
     assignablePlans: [],
@@ -194,4 +195,67 @@ it("validates staff credit amounts before calling the backend", async () => {
     amountCents: 2500,
     reason: "goodwill",
   })
+})
+
+it.each(["assignment", "downgrade", "undo"] as const)(
+  "uses Unicode character boundaries for %s without changing the submitted text",
+  async (operation) => {
+    const versionId = "44444444-4444-4444-8444-444444444444"
+    const perform = (reason: string, idempotencyKey: string) =>
+      operation === "assignment"
+        ? assignTeamPlanAction({ ...valid, versionId, reason, idempotencyKey })
+        : operation === "downgrade"
+          ? requestPlanChangeAction({ ...valid, reason, idempotencyKey })
+          : undoPlanChangeAction({ ...valid, changeId: versionId, reason })
+    vi.mocked(assignTeamPlan).mockResolvedValue({} as never)
+    vi.mocked(requestPlanChange).mockResolvedValue({
+      effective_at: "2026-12-05T14:20:00Z",
+    } as never)
+    vi.mocked(undoPlanChange).mockResolvedValue({} as never)
+    const backend =
+      operation === "assignment"
+        ? assignTeamPlan
+        : operation === "downgrade"
+          ? requestPlanChange
+          : undoPlanChange
+    const reason = "😀".repeat(2000)
+    const key = "🚀".repeat(200)
+    expect(await perform(reason, key)).toMatchObject({ kind: "saved" })
+    if (operation === "undo") {
+      expect(backend).toHaveBeenLastCalledWith("use", team, versionId, reason)
+    } else {
+      expect(backend).toHaveBeenLastCalledWith(
+        "use",
+        team,
+        expect.objectContaining({ reason, idempotencyKey: key }),
+      )
+    }
+    for (const tooLong of ["😀".repeat(2001), "a".repeat(2001)]) {
+      expect(await perform(tooLong, key)).toEqual({ kind: "invalid" })
+    }
+    if (operation !== "undo") {
+      for (const invalidKey of ["🚀".repeat(201), "a".repeat(201), "   "]) {
+        expect(await perform(reason, invalidKey)).toEqual({ kind: "invalid" })
+      }
+    }
+    expect(backend).toHaveBeenCalledTimes(1)
+  },
+)
+
+it("preserves the staff credit backend's byte limits", async () => {
+  vi.mocked(grantStaffCredit).mockResolvedValue({} as never)
+  const input = {
+    ...valid,
+    amountCents: 2500,
+    reason: "😀".repeat(500),
+    idempotencyKey: "🚀".repeat(50),
+  }
+  expect(await grantStaffCreditAction(input)).toEqual({ kind: "saved" })
+  expect(
+    await grantStaffCreditAction({ ...input, reason: "😀".repeat(501) }),
+  ).toEqual({ kind: "invalid" })
+  expect(
+    await grantStaffCreditAction({ ...input, idempotencyKey: "🚀".repeat(51) }),
+  ).toEqual({ kind: "invalid" })
+  expect(grantStaffCredit).toHaveBeenCalledTimes(1)
 })

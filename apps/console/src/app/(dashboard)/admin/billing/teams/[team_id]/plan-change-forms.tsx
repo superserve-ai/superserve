@@ -3,6 +3,10 @@
 import { Alert, Button, Field, Textarea } from "@superserve/ui"
 import * as React from "react"
 
+import {
+  BILLING_REASON_LIMIT,
+  withinBillingTextLimit,
+} from "@/lib/admin/billing-text"
 import type {
   CatalogPlan,
   PlanChangeTarget,
@@ -45,6 +49,45 @@ function Outcome({
     <Alert variant="destructive">
       <FailureNotice message={FAILURES[result.kind]} detail={result.detail} />
     </Alert>
+  )
+}
+
+function PlanReasonField({
+  id,
+  label = "Reason",
+  value,
+  disabled,
+  onChange,
+  placeholder,
+}: {
+  id: string
+  label?: string
+  value: string
+  disabled: boolean
+  onChange: (value: string) => void
+  placeholder?: string
+}) {
+  const error = withinBillingTextLimit(value, BILLING_REASON_LIMIT)
+    ? undefined
+    : "Use at most 2,000 characters."
+  return (
+    <Field label={label} htmlFor={id} required>
+      <Textarea
+        id={id}
+        value={value}
+        maxLength={BILLING_REASON_LIMIT * 2}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        error={error}
+        aria-describedby={error ? `${id}-error` : undefined}
+      />
+      {error ? (
+        <p id={`${id}-error`} className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </Field>
   )
 }
 
@@ -185,19 +228,16 @@ export function PlanChangeForm({
           ))}
         </select>
       </Field>
-      <Field label="Reason" htmlFor="plan-change-reason" required>
-        <Textarea
-          id="plan-change-reason"
-          value={reason}
-          maxLength={2000}
-          disabled={write.locked}
-          onChange={(e) => {
-            setReason(e.target.value)
-            write.startOver()
-          }}
-          placeholder="Why this team is changing plans"
-        />
-      </Field>
+      <PlanReasonField
+        id="plan-change-reason"
+        value={reason}
+        disabled={write.locked}
+        onChange={(value) => {
+          setReason(value)
+          write.startOver()
+        }}
+        placeholder="Why this team is changing plans"
+      />
       {target === "free" ? (
         <Alert variant="warning">
           <span className="block font-medium">
@@ -217,7 +257,11 @@ export function PlanChangeForm({
       <SubmitRow
         write={write}
         label="Request change"
-        disabled={!target || !reason.trim()}
+        disabled={
+          !target ||
+          !reason.trim() ||
+          !withinBillingTextLimit(reason, BILLING_REASON_LIMIT)
+        }
       />
     </form>
   )
@@ -244,22 +288,23 @@ export function UndoPlanChangeForm({
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      <Field label="Undo reason" htmlFor="plan-change-undo" required>
-        <Textarea
-          id="plan-change-undo"
-          value={reason}
-          maxLength={2000}
-          disabled={write.locked || write.result?.kind === "saved"}
-          onChange={(e) => setReason(e.target.value)}
-        />
-      </Field>
+      <PlanReasonField
+        id="plan-change-undo"
+        label="Undo reason"
+        value={reason}
+        disabled={write.locked || write.result?.kind === "saved"}
+        onChange={setReason}
+      />
       <Outcome result={write.result} saved="Plan change undone." />
       <Button
         type="submit"
         size="sm"
         variant="outline"
         disabled={
-          write.pending || !reason.trim() || write.result?.kind === "saved"
+          write.pending ||
+          !reason.trim() ||
+          !withinBillingTextLimit(reason, BILLING_REASON_LIMIT) ||
+          write.result?.kind === "saved"
         }
       >
         {write.unknown ? "Retry undo" : "Undo change"}
@@ -329,19 +374,16 @@ export function AssignPlanForm({
           ))}
         </select>
       </Field>
-      <Field label="Reason" htmlFor="plan-assign-reason" required>
-        <Textarea
-          id="plan-assign-reason"
-          value={reason}
-          maxLength={2000}
-          disabled={write.locked}
-          onChange={(e) => {
-            setReason(e.target.value)
-            write.startOver()
-          }}
-          placeholder="For example, the signed Enterprise agreement"
-        />
-      </Field>
+      <PlanReasonField
+        id="plan-assign-reason"
+        value={reason}
+        disabled={write.locked}
+        onChange={(value) => {
+          setReason(value)
+          write.startOver()
+        }}
+        placeholder="For example, the signed Enterprise agreement"
+      />
       <p className="text-xs text-muted">
         Applies immediately and replaces the team's current plan and limits.
       </p>
@@ -349,7 +391,11 @@ export function AssignPlanForm({
       <SubmitRow
         write={write}
         label="Assign plan"
-        disabled={!versionId || !reason.trim()}
+        disabled={
+          !versionId ||
+          !reason.trim() ||
+          !withinBillingTextLimit(reason, BILLING_REASON_LIMIT)
+        }
       />
     </form>
   )

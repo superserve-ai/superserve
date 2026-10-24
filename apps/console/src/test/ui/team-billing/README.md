@@ -27,3 +27,12 @@ grant form. Each independent successful read keeps its own controls available.
 Use `?unavailable=catalog` for unknown pricing status with existing exits still
 available. Failed plan reads show unavailable history; a successfully loaded
 empty history keeps the empty-history message.
+
+For Unicode boundary QA, use `?state=starter`, choose Free or a custom plan,
+and paste 2,000 astral characters into Reason. The full value remains editable
+and submission is enabled. Replace it with 1,999 astral characters plus two
+ASCII characters: the field shows its 2,000-character error and submission is
+disabled. The same rule applies to the undo form in the default fixture. The
+fixture uses canned actions; actual code-point action validation and the
+32 KiB UTF-8 request bound are covered by focused regression tests. Staff
+credit retains its separate backend byte limits.

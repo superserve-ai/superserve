@@ -145,6 +145,12 @@ export async function adminBillingRequest<T>({
     throw new AdminBillingRequestError("unavailable")
   const url = new URL(path, cellFor(region).apiBaseUrl)
   if (query) url.search = query.toString()
+  const requestBody = body === undefined ? undefined : JSON.stringify(body)
+  if (
+    requestBody !== undefined &&
+    new TextEncoder().encode(requestBody).byteLength > 32 * 1024
+  )
+    throw new AdminBillingRequestError("invalid")
   let response: Response
   try {
     response = await fetch(url, {
@@ -157,7 +163,7 @@ export async function adminBillingRequest<T>({
         "X-Actor-User-Id": user.id,
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      ...(requestBody === undefined ? {} : { body: requestBody }),
     })
   } catch {
     throw new AdminBillingRequestError("unavailable")

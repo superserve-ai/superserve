@@ -7,6 +7,11 @@ import {
   type AdminBillingErrorKind,
 } from "@/lib/admin/billing-api"
 import {
+  BILLING_KEY_LIMIT,
+  BILLING_REASON_LIMIT,
+  withinBillingTextLimit,
+} from "@/lib/admin/billing-text"
+import {
   assignTeamPlan,
   grantStaffCredit,
   isUuid,
@@ -65,10 +70,10 @@ function validWrite(input: {
   const reason = input.reason.trim()
   if (
     !validTarget(input.region, input.teamId) ||
-    !input.idempotencyKey ||
-    input.idempotencyKey.length > 200 ||
+    !input.idempotencyKey.trim() ||
+    !withinBillingTextLimit(input.idempotencyKey, BILLING_KEY_LIMIT) ||
     !reason ||
-    reason.length > 2000
+    !withinBillingTextLimit(reason, BILLING_REASON_LIMIT)
   )
     return null
   return reason
@@ -109,7 +114,7 @@ export async function undoPlanChangeAction(input: {
     !validTarget(input.region, input.teamId) ||
     !isUuid(input.changeId) ||
     !reason ||
-    reason.length > 2000
+    !withinBillingTextLimit(reason, BILLING_REASON_LIMIT)
   )
     return { kind: "invalid" }
   return run(input.teamId, async () => {
@@ -150,6 +155,9 @@ export async function grantStaffCreditAction(input: {
   const reason = validWrite(input)
   if (
     reason === null ||
+    new TextEncoder().encode(input.idempotencyKey).byteLength >
+      BILLING_KEY_LIMIT ||
+    new TextEncoder().encode(reason).byteLength > BILLING_REASON_LIMIT ||
     typeof input.amountCents !== "number" ||
     !Number.isSafeInteger(input.amountCents) ||
     input.amountCents < 1 ||
