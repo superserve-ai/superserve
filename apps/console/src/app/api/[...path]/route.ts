@@ -359,7 +359,13 @@ async function proxyRequest(
           )
         }
       }
-      if (checkoutRequest || planRequest || prepaidWrite || isPlanChangeWritePath(joinedPath) || joinedPath === "billing/plan-change-preview")
+      if (
+        checkoutRequest ||
+        planRequest ||
+        prepaidWrite ||
+        isPlanChangeWritePath(joinedPath) ||
+        joinedPath === "billing/plan-change-preview"
+      )
         checkoutTeam = selfContext?.team ?? null
       apiKey = impersonationContext
         ? await getAuthApiKeyForUser(
@@ -905,7 +911,8 @@ async function forwardResponse(
   if (
     joinedPath === "billing/summary" ||
     isPlanBillingPath(joinedPath) ||
-    isPrepaidBillingPath(joinedPath) || isBillingV2ReadPath(joinedPath)
+    isPrepaidBillingPath(joinedPath) ||
+    isBillingV2ReadPath(joinedPath)
   ) {
     responseHeaders.set("cache-control", "private, no-store")
   }
