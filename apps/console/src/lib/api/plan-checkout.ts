@@ -10,6 +10,12 @@ export async function startProCheckout(
   success.searchParams.set("billing", "success")
   const cancel = new URL(returnUrl)
   cancel.searchParams.set("billing", "cancel")
+  const operationKey = `pro-checkout:${teamKey}:${offer}`
+  let operationId = sessionStorage.getItem(operationKey)
+  if (!operationId) {
+    operationId = crypto.randomUUID()
+    sessionStorage.setItem(operationKey, operationId)
+  }
   const response = await apiClient<{
     url?: string
     outcome?: string
@@ -19,11 +25,14 @@ export async function startProCheckout(
     cache: "no-store",
     body: JSON.stringify({
       expected_team: teamKey,
+      operation_id: operationId,
       offer,
       success_url: success.toString(),
       cancel_url: cancel.toString(),
     }),
   })
+  if (response.outcome === "active")
+    clearProOperations([[operationKey, operationId]])
   if (
     response.error?.code === "payment_confirmation_pending" ||
     response.outcome === "payment_confirmation_pending" ||
@@ -35,6 +44,24 @@ export async function startProCheckout(
       "Unable to open payment. Check your payment status before trying again.",
     )
   return response.url
+}
+
+function proOperations(teamKey: string): [string, string][] {
+  const prefix = `pro-checkout:${teamKey}:`
+  const operations: [string, string][] = []
+  for (let index = 0; index < sessionStorage.length; index++) {
+    const key = sessionStorage.key(index)
+    if (!key?.startsWith(prefix)) continue
+    const value = sessionStorage.getItem(key)
+    if (value) operations.push([key, value])
+  }
+  return operations
+}
+
+function clearProOperations(operations: [string, string][]) {
+  for (const [key, value] of operations) {
+    if (sessionStorage.getItem(key) === value) sessionStorage.removeItem(key)
+  }
 }
 
 export function isStripeCheckoutUrl(value: string) {
@@ -65,6 +92,7 @@ export async function commitFreePlan(teamKey: string) {
 }
 
 export async function recoverProPayment(teamKey: string, restart = false) {
+  const operations = proOperations(teamKey)
   const response = await apiClient<{ outcome: string; url?: string }>(
     "/stripe/pro-checkout/recover",
     {
@@ -88,5 +116,11 @@ export async function recoverProPayment(teamKey: string, restart = false) {
     ].includes(response.outcome)
   )
     throw new Error("Payment status is unavailable. Please check again.")
+  if (
+    ["active", "retryable", "no_pending_pro_purchase"].includes(
+      response.outcome,
+    )
+  )
+    clearProOperations(operations)
   return response.outcome
 }
