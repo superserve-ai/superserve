@@ -25,6 +25,7 @@ describe("getPricingVersionAction", () => {
       }),
     )
     await expect(getPricingVersionAction("use")).resolves.toBe("v2")
+    expect(fetchMock.mock.calls[0]![1]).toMatchObject({ cache: "no-store" })
     expect(String(fetchMock.mock.calls[0]![0])).toBe(
       "https://use.example.com/billing/plans/public",
     )
