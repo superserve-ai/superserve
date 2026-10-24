@@ -1,7 +1,11 @@
 import { render, screen } from "@testing-library/react"
 import { expect, it, vi } from "vitest"
 
-import type { StaffCredit, TeamPlanAssignments } from "@/lib/admin/team-billing"
+import type {
+  PlanCatalog,
+  StaffCredit,
+  TeamPlanAssignments,
+} from "@/lib/admin/team-billing"
 
 import { TeamBillingView } from "./team-billing-view"
 
@@ -52,18 +56,20 @@ const enterprise = {
 function renderView({
   plans = { current: pro, history: [pro], pending_change: null },
   pricingV2 = true,
+  catalog = { pricingV2, assignablePlans: [enterprise], freeLimits: null },
   canWrite = true,
   staffCredits = [],
 }: {
   plans?: TeamPlanAssignments | null
   staffCredits?: StaffCredit[] | null
   pricingV2?: boolean
+  catalog?: PlanCatalog | null
   canWrite?: boolean
 }) {
   render(
     <TeamBillingView
       plans={plans}
-      catalog={{ pricingV2, assignablePlans: [enterprise], freeLimits: null }}
+      catalog={catalog}
       staffCredits={staffCredits}
       region="use"
       teamId={team}
@@ -84,6 +90,8 @@ it("offers no plan writes while pricing v2 is off", () => {
     pricingV2: false,
   })
   expect(screen.getByText(/No plan assigned/)).toBeTruthy()
+  expect(screen.getByText("No plan history yet.")).toBeTruthy()
+  expect(screen.queryByText("Plan history is unavailable.")).toBeNull()
   expectNoPlanWrites()
   expect(screen.getByRole("button", { name: /Grant credit/ })).toBeTruthy()
 })
@@ -136,6 +144,8 @@ it("shows billing readers the plan without write forms", () => {
 it("hides plan assignment when the current plan read fails", () => {
   renderView({ plans: null })
   expect(screen.getByText(/The team's plan is unavailable/)).toBeTruthy()
+  expect(screen.getByText("Plan history is unavailable.")).toBeTruthy()
+  expect(screen.queryByText("No plan history yet.")).toBeNull()
   expectNoPlanWrites()
   expect(screen.getByRole("button", { name: /Grant credit/ })).toBeTruthy()
 })
@@ -146,4 +156,13 @@ it("hides new credit when its history read fails", () => {
   expect(screen.queryByLabelText(/Credit amount/)).toBeNull()
   expect(screen.queryByRole("button", { name: /Grant credit/ })).toBeNull()
   expect(screen.getByRole("button", { name: "Assign plan" })).toBeTruthy()
+})
+
+it("reports unknown pricing status after a catalog failure without blocking exits", () => {
+  renderView({ catalog: null })
+  expect(screen.getByText("Pricing status unavailable")).toBeTruthy()
+  expect(screen.queryByText(/New entry into pricing v2 is off/)).toBeNull()
+  expect(screen.queryByText("Legacy pricing")).toBeNull()
+  expect(screen.queryByRole("button", { name: "Assign plan" })).toBeNull()
+  expect(screen.getByLabelText(/Move to/)).toBeTruthy()
 })

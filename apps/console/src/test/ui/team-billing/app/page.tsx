@@ -147,9 +147,11 @@ export default async function Page({
       <TeamBillingView
         plans={unavailable === "plans" ? null : (states[state] ?? states.pro)}
         catalog={
-          state === "legacy"
-            ? { pricingV2: false, assignablePlans: [], freeLimits: null }
-            : { ...catalog, pricingV2: pricingSwitch !== "off" }
+          unavailable === "catalog"
+            ? null
+            : state === "legacy"
+              ? { pricingV2: false, assignablePlans: [], freeLimits: null }
+              : { ...catalog, pricingV2: pricingSwitch !== "off" }
         }
         staffCredits={
           unavailable === "credits"

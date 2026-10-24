@@ -23,3 +23,7 @@ Vitest.
 Append `?unavailable=plans` to show a failed assignment read with no assignment
 form, or `?unavailable=credits` to show a failed credit-history read with no new
 grant form. Each independent successful read keeps its own controls available.
+
+Use `?unavailable=catalog` for unknown pricing status with existing exits still
+available. Failed plan reads show unavailable history; a successfully loaded
+empty history keeps the empty-history message.

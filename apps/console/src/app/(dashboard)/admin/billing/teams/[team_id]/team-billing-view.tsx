@@ -110,7 +110,7 @@ export function TeamBillingView({
 }) {
   const current = plans?.current ?? null
   const pending = plans?.pending_change
-  const pricingV2 = catalog?.pricingV2 === true
+  const pricingV2 = catalog?.pricingV2
   const canAssign = canWrite && pricingV2 && plans !== null
   const changeOptions = current ? (DOWNGRADES[current.kind] ?? []) : []
 
@@ -126,11 +126,13 @@ export function TeamBillingView({
         <span className="text-muted">/</span>
         <span className="font-mono text-xs">{teamId}</span>
         <Badge variant="muted">{regionLabel(region)}</Badge>
-        {catalog ? (
+        {catalog === null ? (
+          <Badge variant="muted">Pricing status unavailable</Badge>
+        ) : (
           <Badge variant={catalog.pricingV2 ? "active" : "muted"}>
             {catalog.pricingV2 ? "Pricing v2" : "Legacy pricing"}
           </Badge>
-        ) : null}
+        )}
       </div>
 
       <Section title="Plan">
@@ -145,12 +147,12 @@ export function TeamBillingView({
           </p>
         ) : (
           <div className="space-y-3">
-            {pricingV2 ? null : (
+            {pricingV2 === false ? (
               <p className="text-sm text-muted">
                 New entry into pricing v2 is off in this region. Existing plans
                 remain in effect; downgrades and undo are still available.
               </p>
-            )}
+            ) : null}
             <Facts
               items={[
                 ["Plan", planName(current)],
@@ -289,7 +291,9 @@ export function TeamBillingView({
       </Section>
 
       <Section title="Plan history">
-        {!plans || plans.history.length === 0 ? (
+        {plans === null ? (
+          <p className="text-sm text-muted">Plan history is unavailable.</p>
+        ) : plans.history.length === 0 ? (
           <p className="text-sm text-muted">No plan history yet.</p>
         ) : (
           <Table>
