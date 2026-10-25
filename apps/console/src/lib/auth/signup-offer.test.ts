@@ -9,6 +9,7 @@ describe("parseSignupOffer", () => {
     ["free", "free"],
     ["starter", "starter"],
     ["starter_monthly", "starter"],
+    ["pro", "pro_monthly"],
     ["pro_monthly", "pro_monthly"],
     ["pro_annual", "pro_monthly"],
     ["yc_2026", "pro_monthly"],

@@ -11,7 +11,7 @@ import { Suspense, useEffect, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
-import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
+import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
@@ -30,7 +30,7 @@ function SignInContent() {
     searchParams.get(SIGNUP_OFFER_PARAM) ||
     searchParams.get("offer") ||
     undefined
-  const requestedOffer = normalizeRequestedOffer(rawOffer)
+  const requestedOffer = normalizeSignupRequestedOffer(rawOffer)
   const posthog = usePostHog()
 
   const rawNext = searchParams.get("next") || "/"

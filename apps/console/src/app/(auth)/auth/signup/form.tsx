@@ -12,7 +12,7 @@ import { useEffect, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
-import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
+import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
 import {
   clearFingerprintSignupCapture,
@@ -174,7 +174,7 @@ export default function SignUpContent() {
     searchParams.get(SIGNUP_OFFER_PARAM) ||
     searchParams.get("offer") ||
     undefined
-  const requestedOffer = normalizeRequestedOffer(rawOffer)
+  const requestedOffer = normalizeSignupRequestedOffer(rawOffer)
   const signInParams = new URLSearchParams()
   if (requestedOffer) signInParams.set("offer", requestedOffer)
   if (rawOffer && rawOffer !== requestedOffer)

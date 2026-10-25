@@ -11,7 +11,7 @@ import { createPromotionSignupAttempt } from "@/lib/api/promotion-device-evidenc
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
 import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
 import { issueGoogleSignupProof } from "@/lib/auth/google-signup-proof"
-import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
+import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import {
   beginSignupEvidenceAttempt,
   isSupersededSignupEvidenceAttempt,
@@ -317,7 +317,7 @@ export const signUpWithEmail = async (
   ycNext?: string,
   rawSignupOffer?: string,
 ) => {
-  const requestedOffer = normalizeRequestedOffer(offer)
+  const requestedOffer = normalizeSignupRequestedOffer(offer)
   const parsed = signUpSchema.safeParse({ email, password, fullName })
   if (!parsed.success)
     return { success: false, error: parsed.error.issues[0].message }

@@ -988,6 +988,7 @@ describe("auth callback", () => {
     it.each([
       ["free", "/sandboxes"],
       ["starter", "/plan-usage/buy-credit"],
+      ["pro", "/billing/pro/"],
       ["pro_monthly", "/billing/pro/"],
       ["pro_annual", "/billing/pro/"],
       ["retired_offer", "/billing/pro/"],
