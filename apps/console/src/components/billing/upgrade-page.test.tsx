@@ -216,6 +216,22 @@ describe("UpgradePage with pricing v2 on", () => {
     ).toHaveProperty("disabled", true)
     expect(mocks.schedule).not.toHaveBeenCalled()
   })
+  it("offers the included Starter route while Pro purchase is unavailable", () => {
+    mocks.plan.mockReturnValue({
+      data: { ...pro, key: "free", kind: "free", name: "Free" },
+      isError: false,
+    })
+    mount()
+    expect(screen.getByRole("link", { name: "Get Starter" })).toHaveAttribute(
+      "href",
+      "/plan-usage/buy-credit",
+    )
+    expect(screen.queryByRole("link", { name: "Get Pro" })).toBeNull()
+    expect(screen.getByTestId("plan-card-pro_monthly").textContent).toMatch(
+      /Not currently available/,
+    )
+  })
+
   it("shows every plan with the right action for a Pro team", () => {
     mount()
     expect(screen.getByTestId("plan-card-pro_monthly").textContent).toMatch(
