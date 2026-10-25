@@ -101,3 +101,21 @@ export function formatUsdCents(cents: number): string {
     maximumFractionDigits: 2,
   }).format(cents / 100)
 }
+
+export function planCard(
+  plans: PublicBillingPlans | null | undefined,
+  family: string,
+): PlanCard | undefined {
+  return plans?.cards.find((card) => card.family === family)
+}
+
+export function planSandboxSize(limits: PlanLimits): string | null {
+  const gib = (mib: number) =>
+    `${Number.isInteger(mib / 1024) ? mib / 1024 : (mib / 1024).toFixed(1)} GiB`
+  const parts = [
+    limits.max_vcpu ? `${limits.max_vcpu} vCPU` : null,
+    limits.max_memory_mib ? `${gib(limits.max_memory_mib)} memory` : null,
+    limits.max_disk_mib ? `${gib(limits.max_disk_mib)} disk` : null,
+  ].filter(Boolean)
+  return parts.length ? `Up to ${parts.join(", ")} per sandbox` : null
+}
