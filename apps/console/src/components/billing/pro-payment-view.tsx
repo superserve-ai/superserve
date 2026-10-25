@@ -107,24 +107,25 @@ export function ProPaymentView({
         ) : null}
       </div>
     )
-  if (step === "unavailable" || !pro?.monthly)
+  if (step === "unavailable" || !pro?.monthly || step === "conflict")
     return (
       <div className="space-y-3 p-6">
-        <p className="text-sm">Pro isn’t available to buy here right now.</p>
-        <Link href="/plan-usage" className="text-sm underline">
-          Back to billing
-        </Link>
-      </div>
-    )
-  if (step === "conflict")
-    return (
-      <div className="space-y-3 p-6">
-        <p className="text-sm" role="alert">
-          This team already has a paid plan or a payment in progress.
+        <p className="text-sm" role={step === "conflict" ? "alert" : undefined}>
+          {step === "conflict"
+            ? "This team already has a paid plan or a payment in progress."
+            : "Pro isn’t available to buy here right now."}
         </p>
-        <Link href="/plan-usage" className="text-sm underline">
+        <Button disabled={busy} onClick={onCheckPayment}>
+          Check payment status
+        </Button>
+        <Link href="/plan-usage/" className="text-sm underline">
           View your plan
         </Link>
+        {error ? (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
       </div>
     )
   const size = planSandboxSize(pro.limits)
