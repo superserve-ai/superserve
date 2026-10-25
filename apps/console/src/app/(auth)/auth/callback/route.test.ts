@@ -819,6 +819,24 @@ describe("auth callback", () => {
     )
   })
 
+  it("retains Pro recovery markers through OAuth without accepting a claimed paid state", async () => {
+    const next =
+      "/billing/pro/?billing=success&team=use%3Aoriginal&return=%2Fsandboxes"
+    const response = await GET(
+      new Request(
+        `https://console.superserve.ai/auth/callback?code=abc&next=${encodeURIComponent(next)}`,
+      ),
+    )
+    const destination = new URL(response.headers.get("location")!)
+    expect(destination.pathname + destination.search).toBe(next)
+    const forged = await GET(
+      new Request(
+        `https://console.superserve.ai/auth/callback?code=abc&next=${encodeURIComponent("/billing/pro/?approved=true")}`,
+      ),
+    )
+    expect(new URL(forged.headers.get("location")!).pathname).toBe("/sandboxes")
+  })
+
   it("preserves checkout account and team through OAuth reauthentication", async () => {
     const next =
       "/onboarding/plan/?team=use%3Aoriginal&account=u1&billing=success"

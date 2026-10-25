@@ -154,6 +154,19 @@ describe("middleware", () => {
     ).toBe(path)
   })
 
+  it("retains Pro payment recovery locators through anonymous sign-in", async () => {
+    const path =
+      "/billing/pro/?billing=success&team=use%3Aoriginal&return=%2Fsandboxes"
+    const response = await middleware(buildRequest(path))
+    expect(
+      new URL(response.headers.get("location")!).searchParams.get("next"),
+    ).toBe(path)
+    const forged = await middleware(buildRequest("/billing/pro/?approved=true"))
+    expect(
+      new URL(forged.headers.get("location")!).searchParams.get("next"),
+    ).toBe("/billing/pro/")
+  })
+
   it("preserves refreshed auth cookies from client.response on redirect", async () => {
     // Simulate Supabase writing refreshed auth cookies onto client.response
     // (which is what setAll does when getUser() refreshes the token).
