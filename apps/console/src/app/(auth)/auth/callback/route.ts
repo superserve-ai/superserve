@@ -49,6 +49,7 @@ import {
   updateSignupReviewMetadata,
 } from "@/lib/auth/signup-review-server"
 import { getPricingVersionAction } from "@/lib/billing/plans-actions"
+import { proAuthReturnPath } from "@/lib/billing/pro-auth-return"
 import { DEFAULT_REGION } from "@/lib/cells"
 import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import { fingerprintDiagnostics } from "@/lib/fingerprint/diagnostics-server"
@@ -550,6 +551,7 @@ export async function GET(request: Request) {
           },
         )
 
+        const proNext = proAuthReturnPath(next)
         const ycNext =
           ycReturnPath(next) ??
           (process.env.YC_STAFF_UI_ENABLED === "true"
@@ -559,11 +561,13 @@ export async function GET(request: Request) {
           !next.startsWith("/device") &&
           !next.startsWith("https://") &&
           !/^\/onboarding\/plan\/?(?:\?|$)/.test(next) &&
-          !ycNext
+          !ycNext &&
+          !proNext
         ) {
           next = "/sandboxes"
         }
         if (ycNext) next = ycNext
+        if (proNext) next = proNext
         if (
           next === "/sandboxes" &&
           (await cookies()).get("yc_claim_confirmation")
