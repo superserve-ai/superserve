@@ -24,6 +24,11 @@ import {
   retainOriginalGoogleSignup,
   revokeGoogleSignupAuthorization,
 } from "@/lib/auth/google-signup-proof"
+import {
+  createPendingMeetingContext,
+  PENDING_MEETING_COOKIE,
+  pendingMeetingCookieOptions,
+} from "@/lib/auth/pending-meeting-context"
 import { PLAN_OFFER_COOKIE } from "@/lib/auth/plan-preselection"
 import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
 import {
@@ -100,6 +105,11 @@ async function pendingSignupResponse(
     buildRedirectUrl(origin, "/auth/pending"),
   )
   response.cookies.delete(PLAN_OFFER_COOKIE)
+  const meetingContext = await createPendingMeetingContext(user.id)
+  response.cookies.set(PENDING_MEETING_COOKIE, meetingContext ?? "", {
+    ...pendingMeetingCookieOptions,
+    maxAge: meetingContext ? pendingMeetingCookieOptions.maxAge : 0,
+  })
   response.cookies.set(
     PENDING_PROFILE_COOKIE,
     encodePendingProfile({

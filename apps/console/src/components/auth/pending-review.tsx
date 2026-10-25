@@ -2,9 +2,11 @@
 
 import Image from "next/image"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import Script from "next/script"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
+import type { EnterpriseMeeting } from "@/lib/auth/enterprise-meeting"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 // superserve.ai/meet points here.
@@ -32,7 +34,13 @@ export function calendlyBookingUrl(name?: string, email?: string): string {
   return url.toString()
 }
 
-function CalendlyEmbed({ url }: { url: string }) {
+function CalendlyEmbed({
+  url,
+  onScheduled,
+}: {
+  url: string
+  onScheduled: () => void
+}) {
   const container = useRef<HTMLDivElement>(null)
   const [status, setStatus] = useState<"loading" | "ready" | "failed">(
     "loading",
@@ -46,6 +54,21 @@ function CalendlyEmbed({ url }: { url: string }) {
     )
     return () => window.clearTimeout(timer)
   }, [status])
+
+  useEffect(() => {
+    const receive = (event: MessageEvent) => {
+      const frame = container.current?.querySelector("iframe")
+      if (
+        event.origin === "https://calendly.com" &&
+        frame?.contentWindow &&
+        event.source === frame.contentWindow &&
+        event.data?.event === "calendly.event_scheduled"
+      )
+        onScheduled()
+    }
+    window.addEventListener("message", receive)
+    return () => window.removeEventListener("message", receive)
+  }, [onScheduled])
 
   const init = () => {
     const parentElement = container.current
@@ -96,10 +119,19 @@ function CalendlyEmbed({ url }: { url: string }) {
 export function PendingReview({
   name,
   email,
+  meeting,
 }: {
   name?: string
   email?: string
+  meeting: EnterpriseMeeting
 }) {
+  const router = useRouter()
+  const [checking, setChecking] = useState(false)
+  const scheduled = useCallback(() => {
+    setChecking(true)
+    router.refresh()
+  }, [router])
+
   // Clears any session left in the browser; setup gates every route anyway.
   useEffect(() => {
     void createBrowserClient()
@@ -124,8 +156,10 @@ export function PendingReview({
             Let&apos;s set up your Enterprise plan
           </h1>
           <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted">
-            Thanks for signing up. Book a time with our team below to set up
-            your plan. We&apos;ll email
+            {meeting.state === "booked"
+              ? "Your meeting with our team is scheduled. Your account stays on hold until our team approves it."
+              : "Thanks for signing up. Your account is being set up."}{" "}
+            We&apos;ll email
             {email ? (
               <>
                 {" "}
@@ -137,7 +171,66 @@ export function PendingReview({
             as soon as your account is ready.
           </p>
         </div>
-        <CalendlyEmbed url={calendlyBookingUrl(name, email)} />
+        {meeting.state === "booked" ? (
+          <section
+            className="mt-10 max-w-2xl border border-dashed border-border p-6"
+            aria-label="Your existing meeting"
+          >
+            <h2 className="text-xl font-medium">Your meeting is scheduled</h2>
+            <p className="mt-3 text-sm">
+              <time dateTime={meeting.startTime}>
+                {new Intl.DateTimeFormat("en-US", {
+                  dateStyle: "full",
+                  timeStyle: "short",
+                  timeZone: "UTC",
+                }).format(new Date(meeting.startTime))}{" "}
+                UTC
+              </time>
+            </p>
+            {meeting.rescheduleUrl ? (
+              <a
+                href={meeting.rescheduleUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-block underline underline-offset-2"
+              >
+                Change or reschedule meeting
+              </a>
+            ) : (
+              <p className="mt-4 text-sm text-muted">
+                To change this meeting, use your Calendly confirmation email.
+              </p>
+            )}
+          </section>
+        ) : meeting.state === "not_booked" && !checking ? (
+          <CalendlyEmbed
+            url={calendlyBookingUrl(name, email)}
+            onScheduled={scheduled}
+          />
+        ) : (
+          <section className="mt-10 max-w-2xl text-sm" aria-live="polite">
+            {meeting.state === "signin_required" ? (
+              <Link href="/auth/signin?next=%2F" className="underline">
+                Sign in to check your existing meeting
+              </Link>
+            ) : (
+              <p>
+                {checking
+                  ? "Checking your meeting. Use your Calendly confirmation email while we verify it."
+                  : "We couldn’t check your meeting. If you’ve already booked, use your Calendly confirmation email before booking again."}
+              </p>
+            )}
+          </section>
+        )}
+        {meeting.state !== "signin_required" && (
+          <button
+            type="button"
+            onClick={() => router.refresh()}
+            className="mt-6 text-sm underline underline-offset-2"
+          >
+            Refresh meeting
+          </button>
+        )}
       </div>
     </main>
   )

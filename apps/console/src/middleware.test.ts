@@ -1,3 +1,6 @@
+import { webcrypto } from "node:crypto"
+
+import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server"
 /**
  * Middleware tests — route protection, public bypass, cookie refresh
  * preservation on redirect.
@@ -13,10 +16,13 @@
  *   4. When the Supabase client is absent (missing env), the raw response
  *      is returned.
  */
-
-import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server"
 import { NextRequest, NextResponse } from "next/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+
+import {
+  PENDING_MEETING_COOKIE,
+  verifyPendingMeetingContext,
+} from "@/lib/auth/pending-meeting-context"
 
 // --- Mock createMiddlewareClient ---
 
@@ -196,6 +202,11 @@ describe("middleware", () => {
   })
 
   it("signs out an account awaiting Enterprise setup and sends it to the pending page", async () => {
+    vi.stubGlobal("crypto", webcrypto)
+    vi.stubEnv(
+      "GOOGLE_SIGNUP_PROOF_SECRET",
+      "example-meeting-signing-secret-at-least-thirty-two-bytes",
+    )
     const signOut = vi.fn().mockResolvedValue({ error: null })
     Object.assign(mockClient.supabase!.auth, { signOut })
     mockClient.supabase!.auth.getUser.mockResolvedValue({
@@ -211,10 +222,17 @@ describe("middleware", () => {
 
     const res = await middleware(buildRequest("/sandboxes"))
     expect(signOut).toHaveBeenCalled()
+    expect(
+      await verifyPendingMeetingContext(
+        res.cookies.get(PENDING_MEETING_COOKIE)?.value,
+      ),
+    ).toBe("user-123")
     expect(new URL(res.headers.get("location")!).pathname).toBe("/auth/pending")
     expect(await middleware(buildRequest("/auth/pending"))).toBe(
       mockClient.response,
     )
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
   })
 
   it.each([{}, { signup_review: "approved" }])(

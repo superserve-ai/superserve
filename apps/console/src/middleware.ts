@@ -1,5 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
 
+import {
+  createPendingMeetingContext,
+  PENDING_MEETING_COOKIE,
+  pendingMeetingCookieOptions,
+} from "@/lib/auth/pending-meeting-context"
 import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
 import { createMiddlewareClient, matchesRoute } from "@/lib/supabase/middleware"
 import { ycReturnPath } from "@/lib/yc/return-path"
@@ -63,6 +68,11 @@ export async function middleware(request: NextRequest) {
     for (const cookie of client.response.cookies.getAll()) {
       redirect.cookies.set(cookie)
     }
+    const meetingContext = await createPendingMeetingContext(user.id)
+    redirect.cookies.set(PENDING_MEETING_COOKIE, meetingContext ?? "", {
+      ...pendingMeetingCookieOptions,
+      maxAge: meetingContext ? pendingMeetingCookieOptions.maxAge : 0,
+    })
     return redirect
   }
 
