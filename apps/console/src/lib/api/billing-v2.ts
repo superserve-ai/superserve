@@ -107,7 +107,6 @@ export const UPGRADE_PATH = "/plan-usage/upgrade"
 
 export const PLAN_ACTION_LINKS = {
   starter: "/plan-usage/buy-credit",
-  pro: "/billing/pro",
   enterprise: "https://calendly.com/superserve-ai/25-min",
 } as const
 
@@ -249,7 +248,7 @@ export function planAction(current: TeamPlan, target: CatalogPlan): PlanAction {
       }
     return target.kind === "prepaid"
       ? { type: "link", href: PLAN_ACTION_LINKS.starter, label }
-      : { type: "link", href: PLAN_ACTION_LINKS.pro, label }
+      : { type: "unavailable" }
   }
   return { type: "downgrade", label: `Switch to ${target.name}` }
 }

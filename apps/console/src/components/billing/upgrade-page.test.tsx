@@ -216,7 +216,7 @@ describe("UpgradePage with pricing v2 on", () => {
     ).toHaveProperty("disabled", true)
     expect(mocks.schedule).not.toHaveBeenCalled()
   })
-  it("offers the included Starter and Pro purchase routes", () => {
+  it("offers Starter while keeping new Pro purchases unavailable", () => {
     mocks.plan.mockReturnValue({
       data: { ...pro, key: "free", kind: "free", name: "Free" },
       isError: false,
@@ -226,9 +226,9 @@ describe("UpgradePage with pricing v2 on", () => {
       "href",
       "/plan-usage/buy-credit",
     )
-    expect(screen.getByRole("link", { name: "Get Pro" })).toHaveAttribute(
-      "href",
-      "/billing/pro",
+    expect(screen.queryByRole("link", { name: "Get Pro" })).toBeNull()
+    expect(screen.getByTestId("plan-card-pro_monthly").textContent).toMatch(
+      /Not currently available/,
     )
   })
 
