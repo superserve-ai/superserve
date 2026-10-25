@@ -1,3 +1,4 @@
+import { AuthSessionMissingError } from "@supabase/supabase-js"
 import { beforeEach, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -68,3 +69,28 @@ it.each([
   expect((await readPendingMeeting()).state).toBe("signin_required")
   expect(mocks.lookup).not.toHaveBeenCalled()
 })
+
+it("allows the deliberate signed-out state reported by Supabase", async () => {
+  mocks.getUser.mockResolvedValueOnce({
+    data: { user: null },
+    error: new AuthSessionMissingError(),
+  })
+  expect(await readPendingMeeting()).toEqual({
+    state: "not_booked",
+    accountEmail: user.email,
+  })
+  expect(mocks.lookup).toHaveBeenCalledWith(user.email)
+})
+
+it.each([null, { id: "another-account" }])(
+  "refuses session validation failure before privileged lookup: %s",
+  async (current) => {
+    mocks.getUser.mockResolvedValueOnce({
+      data: { user: current },
+      error: new Error("Session validation unavailable"),
+    })
+    expect(await readPendingMeeting()).toEqual({ state: "unavailable" })
+    expect(mocks.getUserById).not.toHaveBeenCalled()
+    expect(mocks.lookup).not.toHaveBeenCalled()
+  },
+)

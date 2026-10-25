@@ -1,4 +1,5 @@
 import "server-only"
+import { isAuthSessionMissingError } from "@supabase/supabase-js"
 import { cookies } from "next/headers"
 
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -27,7 +28,8 @@ export async function readPendingMeeting(): Promise<
       data: { user: current },
       error: sessionError,
     } = await session.auth.getUser()
-    if (sessionError && current) return { state: "unavailable" }
+    if (sessionError && (current || !isAuthSessionMissingError(sessionError)))
+      return { state: "unavailable" }
     if (current && current.id !== userId) return { state: "signin_required" }
     const {
       data: { user },
