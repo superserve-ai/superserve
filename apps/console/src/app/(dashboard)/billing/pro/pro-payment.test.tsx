@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { ApiError } from "@/lib/api/client"
 import type { PublicBillingPlans } from "@/lib/billing/plans"
 
 import { ProPayment } from "./pro-payment"
@@ -11,6 +12,10 @@ const state = vi.hoisted(() => ({
   start: vi.fn(),
   plans: undefined as PublicBillingPlans | undefined,
   replace: vi.fn(),
+  summary: null as null | {
+    plan: { key: string; name: string; status: string }
+  },
+  summaryError: false,
 }))
 
 vi.mock("next/navigation", () => ({
@@ -24,7 +29,11 @@ vi.mock("@/components/page-header", () => ({
 }))
 vi.mock("@/hooks/use-teams", () => ({ useTeams: () => ({ data: null }) }))
 vi.mock("@/hooks/use-billing-summary", () => ({
-  useBillingSummary: () => ({ data: null, isPending: false }),
+  useBillingSummary: () => ({
+    data: state.summary,
+    isPending: false,
+    isError: state.summaryError,
+  }),
 }))
 vi.mock("@/hooks/use-public-billing-plans", () => ({
   usePublicBillingPlans: () => ({ data: state.plans, isPending: false }),
@@ -35,15 +44,80 @@ vi.mock("@/lib/api/plan-checkout", () => ({
   isStripeCheckoutUrl: vi.fn(),
 }))
 
+const availablePlans: PublicBillingPlans = {
+  pricing_version: "v2",
+  cards: [
+    {
+      family: "pro",
+      version: 1,
+      kind: "subscription",
+      name: "Pro",
+      price_label: "$250/month",
+      tagline: "",
+      features: [],
+      display_only: false,
+      monthly: {
+        offer_key: "pro_monthly",
+        price_cents: 25000,
+        monthly_equivalent_cents: 25000,
+        available: true,
+      },
+      annual: null,
+      credit_summary: "$250 every month",
+      monthly_credit_cents: 25000,
+      allowance: null,
+      matching: null,
+      limits: {
+        max_concurrent: 1000,
+        max_vcpu: 8,
+        max_memory_mib: 32768,
+        max_disk_mib: 102400,
+        max_templates: null,
+      },
+    },
+  ],
+}
+
 beforeEach(() => {
   state.team = { teamId: "team-a", region: "use" }
   state.recover.mockReset()
   state.start.mockReset()
   state.plans = undefined
   state.replace.mockReset()
+  state.summary = null
+  state.summaryError = false
 })
 
 describe("Pro payment return recovery", () => {
+  it.each(["legacy", "v2"] as const)(
+    "stops claiming an active subscription and closes new entry after a summary error with %s pricing",
+    (version) => {
+      state.summary = {
+        plan: { key: "pro_monthly", name: "Pro", status: "active" },
+      }
+      state.plans =
+        version === "v2"
+          ? availablePlans
+          : { pricing_version: "legacy", cards: [] }
+      const view = render(<ProPayment returnTo="/plan-usage/" />)
+      expect(screen.getByText(/Your team is on Pro/)).toBeTruthy()
+      state.summaryError = true
+      view.rerender(<ProPayment returnTo="/plan-usage/" />)
+      expect(screen.queryByText(/Your team is on Pro/)).toBeNull()
+      expect(
+        screen.getByText("Pro isn’t available to buy here right now."),
+      ).toBeTruthy()
+      expect(
+        screen.queryByRole("button", { name: "Continue to payment" }),
+      ).toBeNull()
+      expect(state.start).not.toHaveBeenCalled()
+      expect(state.recover).not.toHaveBeenCalled()
+      state.summaryError = false
+      view.rerender(<ProPayment returnTo="/plan-usage/" />)
+      expect(screen.getByText(/Your team is on Pro/)).toBeTruthy()
+    },
+  )
+
   it("requires the original checkout team before recovering", () => {
     render(
       <ProPayment
@@ -59,39 +133,7 @@ describe("Pro payment return recovery", () => {
   })
 
   it("pins in-page pending recovery to the team that started checkout", async () => {
-    state.plans = {
-      pricing_version: "v2",
-      cards: [
-        {
-          family: "pro",
-          version: 1,
-          kind: "subscription",
-          name: "Pro",
-          price_label: "$250/month",
-          tagline: "",
-          features: [],
-          display_only: false,
-          monthly: {
-            offer_key: "pro_monthly",
-            price_cents: 25000,
-            monthly_equivalent_cents: 25000,
-            available: true,
-          },
-          annual: null,
-          credit_summary: "$250 every month",
-          monthly_credit_cents: 25000,
-          allowance: null,
-          matching: null,
-          limits: {
-            max_concurrent: 1000,
-            max_vcpu: 8,
-            max_memory_mib: 32768,
-            max_disk_mib: 102400,
-            max_templates: null,
-          },
-        },
-      ],
-    }
+    state.plans = availablePlans
     state.start.mockResolvedValue(null)
     const view = render(<ProPayment returnTo="/plan-usage/" />)
     fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
@@ -141,5 +183,75 @@ describe("Pro payment return recovery", () => {
     expect(screen.getByRole("alert").textContent).toContain(
       "team you used for checkout",
     )
+  })
+  it("recovers an expired checkout conflict before offering a new payment", async () => {
+    state.plans = availablePlans
+    state.start.mockRejectedValue(
+      new ApiError(409, "plan_conflict", "Earlier checkout requires recovery"),
+    )
+    state.recover.mockResolvedValue("retryable")
+    render(<ProPayment returnTo="/plan-usage/" />)
+    fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
+    await screen.findByText(
+      "This team already has a paid plan or a payment in progress.",
+    )
+    fireEvent.click(
+      screen.getByRole("button", { name: "Check payment status" }),
+    )
+    await screen.findByRole("button", { name: "Continue to payment" })
+    expect(state.recover).toHaveBeenCalledWith("use:team-a")
+    expect(state.start).toHaveBeenCalledOnce()
+  })
+
+  it("keeps manual pending recovery bound to its original team", async () => {
+    state.plans = { ...availablePlans, pricing_version: "legacy" }
+    state.recover.mockResolvedValue("payment_confirmation_pending")
+    const view = render(<ProPayment returnTo="/plan-usage/" />)
+    fireEvent.click(
+      screen.getByRole("button", { name: "Check payment status" }),
+    )
+    await screen.findByRole("button", { name: "Check again" })
+    state.team = { teamId: "team-b", region: "use" }
+    view.rerender(<ProPayment returnTo="/plan-usage/" />)
+    expect(screen.getByRole("alert").textContent).toContain(
+      "team you used for checkout",
+    )
+    expect(screen.queryByRole("button", { name: "Check again" })).toBeNull()
+    expect(state.recover).toHaveBeenCalledExactlyOnceWith("use:team-a")
+    expect(state.replace).not.toHaveBeenCalled()
+  })
+
+  it.each(["retryable", "no_pending_pro_purchase"])(
+    "releases the team after a manual %s recovery",
+    async (outcome) => {
+      state.plans = { ...availablePlans, pricing_version: "legacy" }
+      state.recover.mockResolvedValue(outcome)
+      const view = render(<ProPayment returnTo="/plan-usage/" />)
+      fireEvent.click(
+        screen.getByRole("button", { name: "Check payment status" }),
+      )
+      await waitFor(() =>
+        expect(state.recover).toHaveBeenCalledExactlyOnceWith("use:team-a"),
+      )
+      state.team = { teamId: "team-b", region: "use" }
+      view.rerender(<ProPayment returnTo="/plan-usage/" />)
+      await screen.findByRole("button", { name: "Check payment status" })
+      expect(screen.queryByText(/team you used for checkout/)).toBeNull()
+    },
+  )
+
+  it("checks an accepted payment after entry closes without opening a new checkout", async () => {
+    state.plans = { ...availablePlans, pricing_version: "legacy" }
+    state.recover.mockResolvedValue("payment_confirmation_pending")
+    render(<ProPayment returnTo="/plan-usage/" />)
+    fireEvent.click(
+      screen.getByRole("button", { name: "Check payment status" }),
+    )
+    await screen.findByRole("button", { name: "Check again" })
+    expect(state.recover).toHaveBeenCalledWith("use:team-a")
+    expect(state.start).not.toHaveBeenCalled()
+    expect(
+      screen.queryByRole("button", { name: "Continue to payment" }),
+    ).toBeNull()
   })
 })

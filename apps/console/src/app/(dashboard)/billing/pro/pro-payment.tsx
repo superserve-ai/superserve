@@ -48,7 +48,7 @@ export function ProPayment({
   const plansQuery = usePublicBillingPlans(team?.region, !!team)
   const pro = planCard(plansQuery.data, "pro")
   const summaryQuery = useBillingSummary(!!team)
-  const plan = summaryQuery.data?.plan
+  const plan = summaryQuery.isError ? undefined : summaryQuery.data?.plan
   const paidPlan =
     plan &&
     !["free", "starter", "payg"].includes(plan.key) &&
@@ -99,6 +99,7 @@ export function ProPayment({
     (attempts = 1) =>
       run(async () => {
         if (!teamKey || teamMismatch) return
+        setPaymentTeam(teamKey)
         const target = operationTarget.current
         for (let attempt = 0; attempt < attempts; attempt++) {
           if (!target.active) return
@@ -114,13 +115,16 @@ export function ProPayment({
           }
           if (outcome !== "payment_confirmation_pending") {
             setConfirming(false)
+            setConflict(false)
+            if (!billingReturn) setPaymentTeam(undefined)
             return
           }
+          setConfirming(true)
           if (attempt + 1 < attempts)
             await new Promise((resolve) => setTimeout(resolve, 2000))
         }
       }),
-    [router, run, teamKey, returnTo, teamMismatch],
+    [router, run, teamKey, returnTo, teamMismatch, billingReturn],
   )
 
   useEffect(() => {
@@ -130,7 +134,7 @@ export function ProPayment({
 
   const onContinue = () =>
     void run(async () => {
-      if (!teamKey || teamMismatch) return
+      if (!teamKey || teamMismatch || summaryQuery.isError) return
       const target = operationTarget.current
       setPaymentTeam(teamKey)
       const back = new URL("/billing/pro/", window.location.origin)
@@ -150,7 +154,7 @@ export function ProPayment({
     loading:
       !team ||
       (!confirming && (plansQuery.isPending || summaryQuery.isPending)),
-    plans: plansQuery.data,
+    plans: summaryQuery.isError ? undefined : plansQuery.data,
     paidPlan,
     conflict,
     confirming,
