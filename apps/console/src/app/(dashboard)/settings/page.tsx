@@ -82,7 +82,7 @@ export default function SettingsPage() {
 
   const resourceStatus = (resource: BillingSummaryResource | undefined) => {
     if (!resource) return "Unavailable"
-    return resource.billable ? "Billed" : "Tracked only · Not billed"
+    return resource.billable ? "Billed" : "Usage recorded"
   }
 
   const handleSaveProfile = async () => {

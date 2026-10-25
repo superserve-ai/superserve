@@ -141,10 +141,9 @@ export function PlanChangeDialog({
                 ) : null}
                 {toFree ? (
                   <>
-                    <dt className="text-muted">Runtime</dt>
+                    <dt className="text-muted">Usage limits</dt>
                     <dd className="text-foreground">
-                      Allowance per 24-hour window; sandboxes pause when it runs
-                      out
+                      24-hour window; sandboxes pause at the limit
                     </dd>
                   </>
                 ) : null}

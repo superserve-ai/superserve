@@ -84,8 +84,7 @@ function PlanCard({
         {size ? <li>Up to {size} per sandbox</li> : null}
         {plan.kind === "free" ? (
           <li>
-            Runtime allowance per 24-hour window; sandboxes pause when it runs
-            out
+            Usage limits per 24-hour window; sandboxes pause when it runs out
           </li>
         ) : null}
       </ul>

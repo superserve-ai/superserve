@@ -248,7 +248,7 @@ describe("Settings billing", () => {
     renderPage()
 
     expect(screen.getByText("Billing")).toBeInTheDocument()
-    expect(screen.getByText("Tracked only · Not billed")).toBeInTheDocument()
+    expect(screen.getByText("Usage recorded")).toBeInTheDocument()
     expect(screen.getByText("$0.000108 / GiB-hour")).toBeInTheDocument()
   })
 
@@ -262,9 +262,7 @@ describe("Settings billing", () => {
     renderPage()
 
     expect(screen.getByText("Billed")).toBeInTheDocument()
-    expect(
-      screen.queryByText("Tracked only · Not billed"),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByText("Usage recorded")).not.toBeInTheDocument()
     expect(screen.getByText("$0.000108 / GiB-hour")).toBeInTheDocument()
   })
 
@@ -297,9 +295,7 @@ describe("Settings billing", () => {
     expect(screen.getByText("Unavailable")).toBeInTheDocument()
     expect(screen.getByText("$0.000108 / GiB-hour")).toBeInTheDocument()
     expect(screen.queryByText("Billed")).not.toBeInTheDocument()
-    expect(
-      screen.queryByText("Tracked only · Not billed"),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByText("Usage recorded")).not.toBeInTheDocument()
   })
 
   it("preserves billability when the storage rate is missing instead of showing a zero rate", () => {

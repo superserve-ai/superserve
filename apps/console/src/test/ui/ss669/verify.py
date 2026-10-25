@@ -130,7 +130,7 @@ def verify(browser, base, scenario, output):
         assert urlsplit(page.url).path == "/settings/", page.url
         storage_rate = page.locator("dl > div").filter(has=page.locator("dt", has_text="Storage"))
         expect(storage_rate).to_contain_text("$0.000108 / GiB-hour")
-        expect(storage_rate).to_contain_text("Billed" if billable else "Tracked only · Not billed")
+        expect(storage_rate).to_contain_text("Billed" if billable else "Usage recorded")
         if billable:
             expect(storage_rate).not_to_contain_text("Not billed")
         expect(page.get_by_text("$0.0720 / vCPU-hour", exact=True)).to_be_visible()
@@ -144,8 +144,11 @@ def verify(browser, base, scenario, output):
         card = page.locator("div.border-dashed.px-3.py-3").filter(has=page.get_by_text("Storage", exact=True))
         expect(card).to_have_count(1)
         charge = "$1.25" if scenario in ("paid", "credited") else "$0.00"
-        expect(card).to_contain_text(f"Charge: {charge}" if billable else "Tracked but not billed")
-        expect(card.get_by_text("Billed" if billable else "Tracked only", exact=True)).to_be_visible()
+        expect(card).to_contain_text(f"Charge: {charge}" if billable else "Usage recorded")
+        if billable:
+            expect(card.get_by_text("Billed", exact=True)).to_be_visible()
+        else:
+            expect(card.get_by_text("Tracked only", exact=True)).to_have_count(0)
         if scenario == "unavailable":
             expect(card.get_by_text("Usage unavailable", exact=True)).to_be_visible()
             expect(card).not_to_contain_text("GiB-hours")
@@ -157,17 +160,17 @@ def verify(browser, base, scenario, output):
         card.scroll_into_view_if_needed()
         page.screenshot(path=str(output / f"usage-resources-{scenario}.png"), full_page=True)
         legend = page.get_by_label("Chart legend", exact=True)
-        expect(legend).to_contain_text("Storage" if billable else "Storage equivalent (not billed)")
+        expect(legend).to_contain_text("Storage")
         if billable:
             expect(page.get_by_text("Tracked but not billed", exact=True)).to_have_count(0)
             expect(legend).not_to_contain_text("not billed")
         chart = page.get_by_label("Usage cost chart", exact=True)
         buckets = chart.locator("button[aria-label]")
         expect(buckets).to_have_count(2)
-        before = "Storage $0.63 (not billed)" if scenario == "tracked" else "Storage $0.00"
-        after = "Storage $0.63 (not billed)" if scenario == "tracked" else f"Storage {charge}"
+        before = "Storage $0.63" if scenario == "tracked" else "Storage $0.00"
+        after = "Storage $0.63" if scenario == "tracked" else f"Storage {charge}"
         if scenario == "unavailable":
-            before = after = "Storage $0.00 (not billed) · usage unavailable"
+            before = after = "Storage $0.00 · usage unavailable"
         expect(buckets.first).to_have_attribute("aria-label", re.compile(re.escape(before)))
         expect(buckets.last).to_have_attribute("aria-label", re.compile(re.escape(after)))
         expect(buckets.first).to_have_attribute("aria-label", re.compile(r"Billed total \$1\.80"))

@@ -104,16 +104,6 @@ export function formatUsageCost(value: number): string {
     : value.toFixed(2)
 }
 
-function storageLegend(buckets: BillingUsageSeriesBucket[]): string {
-  if (buckets.length === 0) return "Storage"
-  const billable = buckets.map((bucket) => bucket.storage.billable)
-  if (billable.every(Boolean)) return "Storage"
-  if (billable.every((value) => value === false)) {
-    return "Storage equivalent (not billed)"
-  }
-  return "Storage (mixed billing eligibility)"
-}
-
 function bucketTooltip(
   bucket: BillingUsageSeriesBucket,
   granularity: BillingUsageGranularity,
@@ -133,7 +123,7 @@ function bucketTooltip(
   })
   const start = tooltipDate.format(startDate)
   const end = tooltipDate.format(endDate)
-  const storage = `$${formatUsageCost(bucket.storage.cost_usd)}${bucket.storage.billable === false ? " (not billed)" : ""}`
+  const storage = `$${formatUsageCost(bucket.storage.cost_usd)}`
   return [
     `${bucketLabel(bucket.start, granularity, granularity === "monthly", timezone)} (${start} – ${end})`,
     `CPU $${formatUsageCost(bucket.cpu.cost_usd)}`,
@@ -448,7 +438,7 @@ export function PlanUsagePageClient() {
                     </span>
                     <span>
                       <i className="mr-1 inline-block size-2 rounded-sm bg-muted" />
-                      {storageLegend(buckets)}
+                      Storage
                     </span>
                   </div>
                   <div
@@ -519,7 +509,7 @@ export function PlanUsagePageClient() {
                                   style={{
                                     height: `${(storage / max) * 100}%`,
                                   }}
-                                  aria-label={`Storage equivalent $${formatUsageCost(storage)}${bucket.storage.billable === false ? " (not billed)" : ""}`}
+                                  aria-label={`Storage equivalent $${formatUsageCost(storage)}`}
                                 />
                               )}
                             </div>

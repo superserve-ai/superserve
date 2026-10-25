@@ -100,16 +100,18 @@ export function FreeAllowancePanel({
 }) {
   if (!allowance)
     return (
-      <Panel title="Runtime allowance">
-        <p className="text-sm text-muted">Allowance couldn&apos;t be loaded.</p>
+      <Panel title="Usage limits">
+        <p className="text-sm text-muted">
+          Usage limits couldn&apos;t be loaded.
+        </p>
       </Panel>
     )
   const total = allowance.allowance_cents
   if (!allowance.applies || total === null)
     return (
-      <Panel title="Runtime allowance">
+      <Panel title="Usage limits">
         <p className="text-sm text-muted">
-          No runtime allowance applies to your team right now.
+          No usage limit applies to your team right now.
         </p>
       </Panel>
     )
@@ -120,13 +122,30 @@ export function FreeAllowancePanel({
     : total
   const share = total > 0 ? remaining / total : 0
   const paused = open && allowance.paused === true
+  const resetMinutes =
+    open && allowance.resets_at && allowance.as_of
+      ? Math.max(
+          Math.ceil(
+            (Date.parse(allowance.resets_at) - Date.parse(allowance.as_of)) /
+              60_000,
+          ),
+          0,
+        )
+      : null
+  const resetDuration =
+    resetMinutes !== null && Number.isFinite(resetMinutes)
+      ? `${Math.floor(resetMinutes / 60)}h ${resetMinutes % 60}m`
+      : null
   return (
-    <Panel title="Runtime allowance">
+    <Panel title="Usage limits">
       <p className="text-3xl font-medium tracking-tight text-foreground">
-        {remaining > 0 ? Math.max(Math.ceil(share * 100), 1) : 0}%{" "}
-        <span className="text-sm font-normal text-muted">
-          of this window&apos;s allowance left
-        </span>
+        {resetDuration
+          ? `${resetDuration} until reset`
+          : "24-hour usage window"}
+      </p>
+      <p className="text-sm text-muted">
+        {remaining > 0 ? Math.max(Math.ceil(share * 100), 1) : 0}% of this
+        window&apos;s usage available
       </p>
       <Meter
         value={used}
@@ -138,11 +157,16 @@ export function FreeAllowancePanel({
       <p className="text-sm text-muted">
         {paused
           ? "Allowance used up. Running sandboxes are paused and can't start"
-          : "Compute and memory at usage rates. Disk isn't counted"}
+          : "Usage limits apply over a 24-hour window"}
         {open && allowance.resets_at
           ? `${paused ? " until" : "; resets"} ${dateTime(allowance.resets_at)}.`
           : ". The 24-hour window starts when you next start a sandbox."}
       </p>
+      {resetDuration && allowance.as_of ? (
+        <p className="text-xs text-muted">
+          Reset timing as of {dateTime(allowance.as_of)}.
+        </p>
+      ) : null}
     </Panel>
   )
 }
@@ -259,7 +283,9 @@ export function PlanOverview({
         <p className="text-3xl font-medium tracking-tight text-foreground">
           {plan.name}
         </p>
-        <p className="text-sm text-muted">{planPriceLabel(plan)}</p>
+        {plan.kind !== "free" ? (
+          <p className="text-sm text-muted">{planPriceLabel(plan)}</p>
+        ) : null}
         {pending ? (
           <p className="text-sm text-foreground">
             Changes to {pending.plan_name} on {date(pending.effective_at)}.
@@ -276,7 +302,7 @@ export function PlanOverview({
               <dd className="text-foreground">{size}</dd>
             </>
           ) : null}
-          {plan.limits.max_templates !== null ? (
+          {plan.kind !== "free" && plan.limits.max_templates !== null ? (
             <>
               <dt className="text-muted">Templates</dt>
               <dd className="text-foreground">

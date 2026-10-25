@@ -28,6 +28,16 @@ export function GET(request: NextRequest) {
   }
   const { summary, pricing } = billingFixture(scenario)
   const headers = { "Cache-Control": "no-store" }
+  if (path === "/api/billing/plan")
+    return NextResponse.json(
+      { plan: null, period: summary.billing_period, pending_change: null },
+      { headers },
+    )
+  if (path === "/api/billing/plans/public")
+    return NextResponse.json(
+      { pricing_version: "legacy", cards: [], plans: [] },
+      { headers },
+    )
   if (path === "/api/billing/summary")
     return NextResponse.json(summary, { headers })
   if (path === "/api/billing/pricing")

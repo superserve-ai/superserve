@@ -194,9 +194,7 @@ describe("CustomerBillingSection", () => {
       expect(within(card).getByText("Usage unavailable")).toBeInTheDocument()
       expect(within(card).queryByText(/0.*GiB-hours/)).not.toBeInTheDocument()
       expect(
-        within(card).getByText(
-          billable ? "Charge: $1.25" : "Tracked but not billed",
-        ),
+        within(card).getByText(billable ? "Charge: $1.25" : "Usage recorded"),
       ).toBeInTheDocument()
       expect(screen.getByText("0.03 vCPU-hours")).toBeInTheDocument()
       expect(screen.getByText("Open Customer Portal")).toBeEnabled()
@@ -213,7 +211,7 @@ describe("CustomerBillingSection", () => {
     expect(screen.getByText("CPU")).toBeInTheDocument()
     expect(screen.getByText("Memory")).toBeInTheDocument()
     expect(screen.getByText("Storage")).toBeInTheDocument()
-    expect(screen.getByText("Tracked only")).toBeInTheDocument()
+    expect(screen.getByText("Usage recorded")).toBeInTheDocument()
     expect(screen.getAllByText("Billed")).toHaveLength(2)
     expect(screen.getByText("0.03 vCPU-hours")).toBeInTheDocument()
     expect(screen.getByText("0.56 GiB-hours")).toBeInTheDocument()
@@ -362,7 +360,7 @@ describe("CustomerBillingSection", () => {
     expect(
       screen.getByRole("button", { name: /tracking only/i }),
     ).toBeDisabled()
-    expect(screen.getByText("Tracked only")).toBeInTheDocument()
+    expect(screen.getByText("Usage recorded")).toBeInTheDocument()
   })
 
   it("shows a refresh notice when returning from Stripe", () => {

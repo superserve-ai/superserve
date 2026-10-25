@@ -203,21 +203,34 @@ describe("PlanOverviewSection with pricing v2 on", () => {
 
   it("shows the Free allowance window and its reset time", () => {
     mocks.plan.mockReturnValue({
-      data: plan({ key: "free", kind: "free", name: "Free", fee_cents: 0 }),
+      data: plan({
+        key: "free",
+        kind: "free",
+        name: "Free",
+        fee_cents: 0,
+        limits: { ...plan({}).limits, max_templates: 10 },
+      }),
       isError: false,
     })
     mocks.allowance.mockReturnValue({
       data: allowance({
         window_started_at: "2026-10-23T08:00:00Z",
         resets_at: "2026-10-24T08:00:00Z",
+        as_of: "2026-10-23T18:30:00Z",
         used_cents: 4.87,
         remaining_cents: 8.45,
       }),
     })
     render(<PlanOverviewSection summary={summary} />)
     expect(mocks.allowance).toHaveBeenCalledWith(true)
-    expect(screen.getByText("64%")).toBeTruthy()
+    expect(
+      screen.getByText(/64% of this window.s usage available/),
+    ).toBeTruthy()
     expect(screen.getByText(/resets Oct 24, 8:00 AM UTC/)).toBeTruthy()
+    expect(screen.getByText("13h 30m until reset")).toBeTruthy()
+    expect(screen.getByText("Usage limits")).toBeTruthy()
+    expect(screen.queryByText("Templates")).toBeNull()
+    expect(screen.queryByText("$0, no card required")).toBeNull()
     expect(screen.getByRole("link", { name: "Upgrade" })).toBeTruthy()
   })
 
@@ -302,7 +315,7 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     })
     render(<PlanOverviewSection summary={summary} />)
     expect(
-      screen.getByText("No runtime allowance applies to your team right now."),
+      screen.getByText("No usage limit applies to your team right now."),
     ).toBeTruthy()
     expect(screen.queryByText(/couldn't be loaded/)).toBeNull()
   })
@@ -321,7 +334,7 @@ describe("PlanOverviewSection with pricing v2 on", () => {
       }),
     })
     render(<PlanOverviewSection summary={summary} />)
-    expect(screen.getByText("1%")).toBeTruthy()
+    expect(screen.getByText(/1% of this window.s usage available/)).toBeTruthy()
   })
 
   it("says when auto-recharge was turned off and when a top-up is in flight", () => {
