@@ -12,6 +12,10 @@ const state = vi.hoisted(() => ({
   start: vi.fn(),
   plans: undefined as PublicBillingPlans | undefined,
   replace: vi.fn(),
+  summary: null as null | {
+    plan: { key: string; name: string; status: string }
+  },
+  summaryError: false,
 }))
 
 vi.mock("next/navigation", () => ({
@@ -25,7 +29,11 @@ vi.mock("@/components/page-header", () => ({
 }))
 vi.mock("@/hooks/use-teams", () => ({ useTeams: () => ({ data: null }) }))
 vi.mock("@/hooks/use-billing-summary", () => ({
-  useBillingSummary: () => ({ data: null, isPending: false }),
+  useBillingSummary: () => ({
+    data: state.summary,
+    isPending: false,
+    isError: state.summaryError,
+  }),
 }))
 vi.mock("@/hooks/use-public-billing-plans", () => ({
   usePublicBillingPlans: () => ({ data: state.plans, isPending: false }),
@@ -76,9 +84,40 @@ beforeEach(() => {
   state.start.mockReset()
   state.plans = undefined
   state.replace.mockReset()
+  state.summary = null
+  state.summaryError = false
 })
 
 describe("Pro payment return recovery", () => {
+  it.each(["legacy", "v2"] as const)(
+    "stops claiming an active subscription and closes new entry after a summary error with %s pricing",
+    (version) => {
+      state.summary = {
+        plan: { key: "pro_monthly", name: "Pro", status: "active" },
+      }
+      state.plans =
+        version === "v2"
+          ? availablePlans
+          : { pricing_version: "legacy", cards: [] }
+      const view = render(<ProPayment returnTo="/plan-usage/" />)
+      expect(screen.getByText(/Your team is on Pro/)).toBeTruthy()
+      state.summaryError = true
+      view.rerender(<ProPayment returnTo="/plan-usage/" />)
+      expect(screen.queryByText(/Your team is on Pro/)).toBeNull()
+      expect(
+        screen.getByText("Pro isn’t available to buy here right now."),
+      ).toBeTruthy()
+      expect(
+        screen.queryByRole("button", { name: "Continue to payment" }),
+      ).toBeNull()
+      expect(state.start).not.toHaveBeenCalled()
+      expect(state.recover).not.toHaveBeenCalled()
+      state.summaryError = false
+      view.rerender(<ProPayment returnTo="/plan-usage/" />)
+      expect(screen.getByText(/Your team is on Pro/)).toBeTruthy()
+    },
+  )
+
   it("requires the original checkout team before recovering", () => {
     render(
       <ProPayment
