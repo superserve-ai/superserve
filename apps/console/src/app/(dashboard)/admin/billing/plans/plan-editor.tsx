@@ -85,7 +85,7 @@ const LIMITS = [
   ["max_vcpu", "vCPU per sandbox"],
   ["max_memory_mib", "Memory MiB"],
   ["max_disk_mib", "Disk MiB"],
-  ["max_templates", "Templates"],
+  ["max_templates", "Custom templates"],
 ] as const
 
 const NO_LIMITS: PlanDraft["limits"] = {

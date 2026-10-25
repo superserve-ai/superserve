@@ -5,6 +5,7 @@ import {
   mergeCatalogs,
   needsSync,
   planGroupSync,
+  planVersionSchema,
   type BillingCatalog,
   type PlanVersion,
   type RegionState,
@@ -49,6 +50,25 @@ function version(overrides: Partial<PlanVersion> = {}): PlanVersion {
 function catalog(plans: PlanVersion[]): BillingCatalog {
   return { plans, pricing_version: "legacy" }
 }
+
+it("accepts zero custom templates without relaxing resource minima", () => {
+  const free = version({
+    pricing_version: "v2",
+    family: "free",
+    kind: "free",
+    limits: { ...version().limits, max_templates: 0 },
+  })
+  expect(planVersionSchema.parse(free).limits.max_templates).toBe(0)
+  for (const limits of [
+    { ...free.limits, max_templates: -1 },
+    { ...free.limits, max_concurrent: 0 },
+    { ...free.limits, max_vcpu: 0 },
+    { ...free.limits, max_memory_mib: 0 },
+    { ...free.limits, max_disk_mib: 0 },
+  ]) {
+    expect(planVersionSchema.safeParse({ ...free, limits }).success).toBe(false)
+  }
+})
 
 describe("catalogDrift", () => {
   it("ignores version identity and timestamps when terms match", () => {

@@ -144,6 +144,26 @@ afterEach(() => {
 })
 
 describe("billing catalog fan-out", () => {
+  it("publishes Free with the confirmed zero custom-template limit", async () => {
+    signIn(["platform:billing:read", "platform:billing:write"])
+    const free = plan({
+      pricing_version: "v2",
+      family: "free",
+      kind: "free",
+      self_serve: false,
+      monthly_fee_cents: null,
+      limits: { ...plan().limits, max_templates: 0 },
+    })
+    serve({ "use.example.com": [free], "usw.example.com": [free] })
+    expect(
+      (await publishVersionAction(VERSION, "Free template policy")).errors,
+    ).toEqual({})
+    expect(writes()).toHaveLength(2)
+    expect(
+      writes().every((write) => write.body.expected.limits.max_templates === 0),
+    ).toBe(true)
+  })
+
   it("creates one version id and number in every region", async () => {
     signIn(["platform:billing:read", "platform:billing:write"])
     serve({
