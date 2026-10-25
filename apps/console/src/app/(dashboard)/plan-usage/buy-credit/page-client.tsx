@@ -148,7 +148,8 @@ function PurchaseCard({ canManage }: { canManage: boolean }) {
   const valid = amount !== null && validPrepaidCents(amount)
 
   const buy = async () => {
-    if (!teamKey || !valid || amount === null || submitting) return
+    if (!teamKey || !canManage || !valid || amount === null || submitting)
+      return
     setSubmitting(true)
     try {
       const url = await startPrepaidCheckout(
@@ -258,6 +259,10 @@ function AutoRechargeCard({
             ? { ...previous, auto_recharge: updated.auto_recharge }
             : updated,
       )
+      await queryClient.invalidateQueries({
+        queryKey: billingKeys.v2("prepaid", { cacheScope, teamKey }),
+        exact: true,
+      })
       addToast(
         enabled ? "Auto-recharge is on" : "Auto-recharge is off",
         "success",

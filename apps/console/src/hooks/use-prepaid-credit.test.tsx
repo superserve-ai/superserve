@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { act, renderHook } from "@testing-library/react"
+import { act, renderHook, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { afterEach, expect, it, vi } from "vitest"
 
@@ -76,6 +76,48 @@ it("polls paid purchases until their credit and balance are applied", async () =
     await vi.advanceTimersByTimeAsync(5_001)
   })
   expect(getPrepaidCredit).toHaveBeenCalledTimes(3)
+  unmount()
+  client.clear()
+})
+
+it("hides a retained prepaid balance after a failed refresh and recovers", async () => {
+  const data: PrepaidCreditSummary = {
+    balance_cents: 500,
+    low_balance: true,
+    has_saved_card: true,
+    purchases: [],
+    auto_recharge: {
+      enabled: false,
+      threshold_cents: null,
+      amount_cents: null,
+      disabled_reason: null,
+      disabled_at: null,
+      in_flight: false,
+    },
+  }
+  vi.mocked(getPrepaidCredit).mockReset().mockResolvedValue(data)
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  const key = ["billing", "prepaid", "self", "use:example-team"]
+  const { result, unmount } = renderHook(() => usePrepaidCredit(), {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  })
+  await waitFor(() => expect(result.current.data?.balance_cents).toBe(500))
+  vi.mocked(getPrepaidCredit).mockRejectedValue(new Error("Credit unavailable"))
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: key })
+  })
+  await waitFor(() => expect(result.current.isError).toBe(true))
+  expect(client.getQueryData(key)).toEqual(data)
+  expect(result.current.data).toBeUndefined()
+  vi.mocked(getPrepaidCredit).mockResolvedValue(data)
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: key })
+  })
+  await waitFor(() => expect(result.current.data?.balance_cents).toBe(500))
   unmount()
   client.clear()
 })

@@ -6,7 +6,6 @@ import {
   usePrepaidBalance,
   useTeamPlan,
 } from "@/hooks/use-billing-v2"
-import { usePricingVersion } from "@/hooks/use-pricing-version"
 import type { BillingSummaryResponse } from "@/lib/api/billing"
 
 import { PlanOverview } from "./plan-overview"
@@ -22,11 +21,8 @@ export function PlanOverviewSection({
 }: {
   summary: BillingSummaryResponse
 }) {
-  const version = usePricingVersion()
   const plan = useTeamPlan(true).data
-  const allowance = useFreeAllowance(
-    version === "v2" && plan?.kind === "free",
-  ).data
+  const allowance = useFreeAllowance(plan?.kind === "free").data
   const prepaid = usePrepaidBalance(plan?.kind === "prepaid").data
   if (!plan || plan.kind === "legacy_payg")
     return <CurrentPlan summary={summary} />

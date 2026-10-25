@@ -94,6 +94,25 @@ describe("PlanOverviewSection with pricing v2 off", () => {
     expect(screen.getByRole("link", { name: "Change plan" })).toBeTruthy()
   })
 
+  it("reads assigned Free usage limits after pricing rollback", () => {
+    mocks.version.mockReturnValue("legacy")
+    mocks.plan.mockReturnValue({
+      data: plan({ key: "free", kind: "free", name: "Free" }),
+      isError: false,
+    })
+    mocks.allowance.mockImplementation((enabled) => ({
+      data: enabled
+        ? allowance({ used_cents: 0, remaining_cents: 13.32 })
+        : undefined,
+    }))
+    render(<PlanOverviewSection summary={summary} />)
+    expect(mocks.allowance).toHaveBeenCalledWith(true)
+    expect(
+      screen.getByText(/100% of this window.s usage available/),
+    ).toBeTruthy()
+    expect(screen.queryByText("Usage limits couldn't be loaded.")).toBeNull()
+  })
+
   it("renders today's plan card when there is no assigned plan", () => {
     mocks.version.mockReturnValue("legacy")
     render(<PlanOverviewSection summary={summary} />)

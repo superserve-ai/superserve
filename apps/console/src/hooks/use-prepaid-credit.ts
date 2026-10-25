@@ -1,16 +1,14 @@
 "use client"
 
-import { type UseQueryResult, useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { getPrepaidCredit, type PrepaidCreditSummary } from "@/lib/api/prepaid"
 import { billingKeys } from "@/lib/api/query-keys"
 
-export function usePrepaidCredit(
-  enabled = true,
-): UseQueryResult<PrepaidCreditSummary, Error> {
+export function usePrepaidCredit(enabled = true) {
   const { cacheScope, teamKey, ready } = useBillingContext()
-  return useQuery<PrepaidCreditSummary, Error>({
+  const query = useQuery<PrepaidCreditSummary, Error>({
     queryKey: billingKeys.prepaid({
       cacheScope,
       teamKey: teamKey ?? "unresolved",
@@ -26,4 +24,5 @@ export function usePrepaidCredit(
         : 60_000,
     refetchIntervalInBackground: false,
   })
+  return { ...query, data: query.isError ? undefined : query.data }
 }

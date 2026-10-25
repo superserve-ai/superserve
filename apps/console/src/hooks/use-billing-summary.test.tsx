@@ -2,7 +2,13 @@ vi.mock("@/hooks/use-user", () => ({
   useUser: () => ({ user: { id: "u1" }, loading: false }),
 }))
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { act, render, screen, waitFor } from "@testing-library/react"
+import {
+  act,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { TrialBillingBanner } from "@/components/trial-billing-banner"
@@ -434,6 +440,45 @@ describe("useBillingSummary", () => {
     rerender(view())
     expect(await screen.findByText("$10.00")).toBeInTheDocument()
   })
+  it("drops retained billing authority after a failed refresh and recovers", async () => {
+    useBillingContext.mockReturnValue({
+      cacheScope: "self",
+      teamKey: "use:team-a",
+      ready: true,
+    })
+    getBillingSummary.mockResolvedValue(baseBillingSummary)
+    const { result } = renderHook(() => useBillingSummary(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      ),
+    })
+    await waitFor(() =>
+      expect(result.current.data?.permissions.can_manage).toBe(true),
+    )
+    getBillingSummary.mockRejectedValue(new Error("Billing access unavailable"))
+    await act(async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["billing", "summary", "self", "use:team-a"],
+      })
+    })
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(
+      queryClient.getQueryData(["billing", "summary", "self", "use:team-a"]),
+    ).toEqual(baseBillingSummary)
+    expect(result.current.data).toBeUndefined()
+    getBillingSummary.mockResolvedValue(baseBillingSummary)
+    await act(async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["billing", "summary", "self", "use:team-a"],
+      })
+    })
+    await waitFor(() =>
+      expect(result.current.data?.permissions.can_manage).toBe(true),
+    )
+  })
+
   it("refreshes the shared summary every 60 seconds in the foreground", async () => {
     vi.useFakeTimers()
     try {

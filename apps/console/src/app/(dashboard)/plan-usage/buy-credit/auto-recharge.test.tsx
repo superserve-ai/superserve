@@ -7,6 +7,7 @@ import type { PrepaidCreditSummary } from "@/lib/api/prepaid"
 const mocks = vi.hoisted(() => ({
   data: null as PrepaidCreditSummary | null,
   save: vi.fn(),
+  balanceFetch: vi.fn(),
 }))
 
 vi.mock("next/navigation", () => ({
@@ -26,6 +27,9 @@ vi.mock("@/hooks/use-billing-summary", () => ({
 vi.mock("@/hooks/use-prepaid-credit", () => ({
   usePrepaidCredit: () => ({ data: mocks.data, isLoading: false, error: null }),
 }))
+vi.mock("@/lib/api/client", () => ({
+  apiClient: (...args: unknown[]) => mocks.balanceFetch(...args),
+}))
 vi.mock("@/lib/api/prepaid", async (original) => ({
   ...(await original<typeof import("@/lib/api/prepaid")>()),
   setPrepaidAutoRecharge: mocks.save,
@@ -35,7 +39,36 @@ vi.mock("@superserve/ui", async (original) => ({
   useToast: () => ({ addToast: vi.fn() }),
 }))
 
+import { PlanAwareBanner } from "@/components/billing/plan-aware-banner"
+import { usePrepaidBalance } from "@/hooks/use-billing-v2"
+import type { TeamPlan } from "@/lib/api/billing-v2"
+import { billingKeys } from "@/lib/api/query-keys"
+
 import { BuyCreditPageClient } from "./page-client"
+
+function BalanceBanner() {
+  const prepaid = usePrepaidBalance(true)
+  const plan: TeamPlan = {
+    key: "starter",
+    kind: "prepaid",
+    name: "Starter",
+    limits: {
+      max_concurrent: 100,
+      max_vcpu: 2,
+      max_memory_mib: 4096,
+      max_disk_mib: 51200,
+      max_templates: null,
+    },
+    fee_cents: null,
+    included_cents: null,
+    period_start: null,
+    period_end: null,
+    pending_change: null,
+  }
+  return (
+    <PlanAwareBanner plan={plan} prepaid={prepaid.data ?? null} canManage />
+  )
+}
 
 const initial: PrepaidCreditSummary = {
   balance_cents: 2500,
@@ -53,6 +86,49 @@ const initial: PrepaidCreditSummary = {
 }
 
 describe("auto-recharge refresh", () => {
+  it("refreshes the low-balance banner after auto-recharge is enabled", async () => {
+    mocks.save.mockReset()
+    mocks.data = {
+      ...initial,
+      balance_cents: 100,
+      low_balance: true,
+      auto_recharge: { ...initial.auto_recharge, enabled: false },
+    }
+    const updated = {
+      ...mocks.data,
+      auto_recharge: { ...mocks.data.auto_recharge, enabled: true },
+    }
+    mocks.save.mockResolvedValue(updated)
+    mocks.balanceFetch.mockResolvedValue(updated)
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    client.setQueryData(
+      billingKeys.v2("prepaid", { cacheScope: "self", teamKey: "us:team" }),
+      mocks.data,
+    )
+    const view = render(
+      <QueryClientProvider client={client}>
+        <BuyCreditPageClient />
+        <BalanceBanner />
+      </QueryClientProvider>,
+    )
+    expect(
+      screen.getByRole("link", { name: "Set up auto-recharge" }),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole("switch"))
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+    await waitFor(() => expect(mocks.save).toHaveBeenCalled())
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("link", { name: "Set up auto-recharge" }),
+      ).toBeNull(),
+    )
+    expect(mocks.balanceFetch).toHaveBeenCalledWith("/billing/prepaid")
+    view.unmount()
+    client.clear()
+  })
+
   it("reflects a remote disable before saving again", async () => {
     mocks.data = initial
     const client = new QueryClient()
