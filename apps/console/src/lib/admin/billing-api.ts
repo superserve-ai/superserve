@@ -95,6 +95,12 @@ const WRITE_ROUTES: [WriteMethod, string][] = [
   ["POST", `${TEAM_BILLING}/matching`],
   ["POST", `${TEAM_BILLING}/matching/revoke`],
   ["POST", `${TEAM_BILLING}/matching/credits/${UUID}/acknowledge`],
+  ["POST", "/internal/billing/catalog/plans"],
+  ["PUT", `/internal/billing/catalog/plans/${UUID}`],
+  ["DELETE", `/internal/billing/catalog/plans/${UUID}`],
+  ["POST", `/internal/billing/catalog/plans/${UUID}/publish`],
+  ["POST", `/internal/billing/catalog/plans/${UUID}/retire`],
+  ["POST", "/internal/billing/pricing-version"],
 ]
 
 const WRITE_ROUTE_PATTERNS = WRITE_ROUTES.map(
