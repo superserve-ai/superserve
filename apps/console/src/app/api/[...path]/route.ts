@@ -182,12 +182,14 @@ function setImpersonationDebugHeaders(
 function validPaymentReturn(
   value: unknown,
   origin: string,
-  path: string,
+  paths: readonly string[],
 ): boolean {
   if (typeof value !== "string") return false
   try {
     const url = new URL(value)
-    return url.origin === origin && url.pathname.replace(/\/$/, "") === path
+    return (
+      url.origin === origin && paths.includes(url.pathname.replace(/\/$/, ""))
+    )
   } catch {
     return false
   }
@@ -402,16 +404,12 @@ async function proxyRequest(
     const purchase = input as Record<string, unknown>
     if (
       joinedPath === "billing/prepaid/checkout" &&
-      (!validPaymentReturn(
-        purchase.success_url,
-        request.nextUrl.origin,
+      (!validPaymentReturn(purchase.success_url, request.nextUrl.origin, [
         "/plan-usage/buy-credit",
-      ) ||
-        !validPaymentReturn(
-          purchase.cancel_url,
-          request.nextUrl.origin,
+      ]) ||
+        !validPaymentReturn(purchase.cancel_url, request.nextUrl.origin, [
           "/plan-usage/buy-credit",
-        ))
+        ]))
     ) {
       return NextResponse.json(
         {
@@ -540,16 +538,14 @@ async function proxyRequest(
           { status: 400 },
         )
       if (
-        !validPaymentReturn(
-          input.success_url,
-          request.nextUrl.origin,
+        !validPaymentReturn(input.success_url, request.nextUrl.origin, [
           "/onboarding/plan",
-        ) ||
-        !validPaymentReturn(
-          input.cancel_url,
-          request.nextUrl.origin,
+          "/billing/pro",
+        ]) ||
+        !validPaymentReturn(input.cancel_url, request.nextUrl.origin, [
           "/onboarding/plan",
-        )
+          "/billing/pro",
+        ])
       )
         return NextResponse.json(
           {

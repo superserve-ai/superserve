@@ -118,38 +118,48 @@ describe("api proxy /api/[...path]", () => {
     expect(res.status).toBe(404)
   })
 
-  it("forwards only the selected Pro offer and owned return URLs, never client price IDs", async () => {
-    fetchSpy.mockResolvedValue(
-      new Response(
-        JSON.stringify({ url: "https://checkout.stripe.com/session" }),
-        { status: 200 },
-      ),
-    )
-    const path = ["stripe", "pro-checkout"]
-    const res = await POST(
-      req("POST", path, {
-        body: JSON.stringify({
-          expected_team: "use:team-east",
-          offer: "pro_annual",
-          price_id: "attacker-price",
-          success_url: "https://console.test/onboarding/plan/?billing=success",
-          cancel_url: "https://console.test/onboarding/plan/?billing=cancel",
+  it.each([
+    "/onboarding/plan/",
+    "/billing/pro/?return=%2Fplan-usage&team=use%3Ateam-east",
+  ])(
+    "forwards the selected Pro offer and owned %s return URLs without client price IDs",
+    async (returnPath) => {
+      const successUrl = new URL(returnPath, "https://console.test")
+      successUrl.searchParams.set("billing", "success")
+      const cancelUrl = new URL(returnPath, "https://console.test")
+      cancelUrl.searchParams.set("billing", "cancel")
+      fetchSpy.mockResolvedValue(
+        new Response(
+          JSON.stringify({ url: "https://checkout.stripe.com/session" }),
+          { status: 200 },
+        ),
+      )
+      const path = ["stripe", "pro-checkout"]
+      const res = await POST(
+        req("POST", path, {
+          body: JSON.stringify({
+            expected_team: "use:team-east",
+            offer: "pro_annual",
+            price_id: "attacker-price",
+            success_url: successUrl.toString(),
+            cancel_url: cancelUrl.toString(),
+          }),
         }),
-      }),
-      params(path),
-    )
-    expect(res.status).toBe(200)
-    expect(fetchSpy).toHaveBeenCalledOnce()
-    const [url, init] = fetchSpy.mock.calls[0]
-    expect(url).toBe("https://api.test.superserve.ai/stripe/checkout-session")
-    expect(JSON.parse(init.body)).toEqual({
-      offer: "pro_annual",
-      success_url: "https://console.test/onboarding/plan/?billing=success",
-      cancel_url: "https://console.test/onboarding/plan/?billing=cancel",
-    })
-    expect(res.headers.get("cache-control")).toBe("private, no-store")
-    expect(publishPromotionIdentity).not.toHaveBeenCalled()
-  })
+        params(path),
+      )
+      expect(res.status).toBe(200)
+      expect(fetchSpy).toHaveBeenCalledOnce()
+      const [url, init] = fetchSpy.mock.calls[0]
+      expect(url).toBe("https://api.test.superserve.ai/stripe/checkout-session")
+      expect(JSON.parse(init.body)).toEqual({
+        offer: "pro_annual",
+        success_url: successUrl.toString(),
+        cancel_url: cancelUrl.toString(),
+      })
+      expect(res.headers.get("cache-control")).toBe("private, no-store")
+      expect(publishPromotionIdentity).not.toHaveBeenCalled()
+    },
+  )
 
   it.each(["plan-choice", "pro-checkout", "pro-checkout/recover"])(
     "rejects a stale team's %s request before dispatch",
@@ -228,6 +238,16 @@ describe("api proxy /api/[...path]", () => {
         offer: "pro_monthly",
         success_url: "https://other.test/onboarding/plan/",
         cancel_url: "https://console.test/onboarding/plan/",
+      },
+      {
+        offer: "pro_monthly",
+        success_url: "https://other.test/billing/pro/",
+        cancel_url: "https://console.test/billing/pro/",
+      },
+      {
+        offer: "pro_monthly",
+        success_url: "https://console.test/billing/pro/other",
+        cancel_url: "https://console.test/billing/pro/",
       },
     ])
       expect(
