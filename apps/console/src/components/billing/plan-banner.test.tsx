@@ -92,14 +92,15 @@ describe("PlanBanner with pricing v2 on", () => {
     expect(screen.queryByRole("link", { name: "Upgrade" })).toBeNull()
   })
 
-  it("pitches an upgrade on Free using the plan's own limits", () => {
+  it("shows the approved concise Free upgrade copy", () => {
     mocks.plan.mockReturnValue({ data: plan("free") })
     mount()
     expect(screen.queryByTestId("legacy-banner")).toBeNull()
     expect(
-      screen.getByRole("region", { name: "Free plan" }).textContent,
-    ).toMatch(
-      /1 sandbox running at a time, up to 1 vCPU, 1 GiB memory, 4 GiB disk each/,
+      screen.getByRole("region", { name: "Free plan" }).querySelector("p")
+        ?.textContent,
+    ).toBe(
+      "You're on Free: Upgrade to enjoy higher limits, and bigger sandboxes.",
     )
     expect(screen.getByRole("link", { name: "Upgrade" })).toBeTruthy()
     expect(mocks.returnNotice).toHaveBeenCalled()
