@@ -182,6 +182,25 @@ describe("Pro payment return recovery", () => {
     expect(state.replace).not.toHaveBeenCalled()
   })
 
+  it.each(["retryable", "no_pending_pro_purchase"])(
+    "releases the team after a manual %s recovery",
+    async (outcome) => {
+      state.plans = { ...availablePlans, pricing_version: "legacy" }
+      state.recover.mockResolvedValue(outcome)
+      const view = render(<ProPayment returnTo="/plan-usage/" />)
+      fireEvent.click(
+        screen.getByRole("button", { name: "Check payment status" }),
+      )
+      await waitFor(() =>
+        expect(state.recover).toHaveBeenCalledExactlyOnceWith("use:team-a"),
+      )
+      state.team = { teamId: "team-b", region: "use" }
+      view.rerender(<ProPayment returnTo="/plan-usage/" />)
+      await screen.findByRole("button", { name: "Check payment status" })
+      expect(screen.queryByText(/team you used for checkout/)).toBeNull()
+    },
+  )
+
   it("checks an accepted payment after entry closes without opening a new checkout", async () => {
     state.plans = { ...availablePlans, pricing_version: "legacy" }
     state.recover.mockResolvedValue("payment_confirmation_pending")

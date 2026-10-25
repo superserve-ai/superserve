@@ -116,6 +116,7 @@ export function ProPayment({
           if (outcome !== "payment_confirmation_pending") {
             setConfirming(false)
             setConflict(false)
+            if (!billingReturn) setPaymentTeam(undefined)
             return
           }
           setConfirming(true)
@@ -123,7 +124,7 @@ export function ProPayment({
             await new Promise((resolve) => setTimeout(resolve, 2000))
         }
       }),
-    [router, run, teamKey, returnTo, teamMismatch],
+    [router, run, teamKey, returnTo, teamMismatch, billingReturn],
   )
 
   useEffect(() => {
