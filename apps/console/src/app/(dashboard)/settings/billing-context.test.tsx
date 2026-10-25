@@ -18,6 +18,15 @@ const getBillingPricing = vi.fn()
 let directory: TeamDirectoryResponse | undefined
 let client: QueryClient
 
+vi.mock("@/lib/api/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/client")>()),
+  apiClient: vi.fn().mockResolvedValue({
+    plan: null,
+    period: { start: "2026-10-01T00:00:00Z", end: "2026-11-01T00:00:00Z" },
+    pending_change: null,
+  }),
+}))
+
 vi.mock("@/lib/api/billing", () => ({
   getBillingSummary: () => getBillingSummary(),
   getBillingPricing: () => getBillingPricing(),

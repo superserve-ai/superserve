@@ -11,6 +11,11 @@ import SettingsPage from "./page"
 const useUser = vi.fn()
 const useBillingSummary = vi.fn()
 const useBillingSettings = vi.fn()
+const useTeamPlan = vi.fn()
+
+vi.mock("@/hooks/use-billing-v2", () => ({
+  useTeamPlan: (...args: unknown[]) => useTeamPlan(...args),
+}))
 
 vi.mock("@/hooks/use-user", () => ({
   useUser: () => useUser(),
@@ -169,6 +174,11 @@ function renderPage() {
 
 describe("Settings billing", () => {
   beforeEach(() => {
+    useTeamPlan.mockReturnValue({
+      data: null,
+      isPending: false,
+      isError: false,
+    })
     useUser.mockReturnValue({
       user: {
         id: "user-1",
@@ -189,6 +199,50 @@ describe("Settings billing", () => {
       error: null,
     })
   })
+
+  it("hides the entire billing section for an assigned Free team", () => {
+    useTeamPlan.mockReturnValue({
+      data: { kind: "free" },
+      isPending: false,
+      isError: false,
+    })
+    renderPage()
+    expect(screen.queryByRole("heading", { name: "Billing" })).toBeNull()
+    expect(screen.queryByText("Usage-based billing")).toBeNull()
+    expect(screen.queryByText("$0.0720 / vCPU-hour")).toBeNull()
+    expect(screen.queryByRole("link", { name: "Billing & Usage" })).toBeNull()
+    expect(screen.getByRole("heading", { name: "Profile" })).toBeInTheDocument()
+    expect(useTeamPlan).toHaveBeenCalledWith(true)
+  })
+
+  it.each(["prepaid", "subscription", "custom", "legacy_payg"])(
+    "retains billing access for an assigned %s team",
+    (kind) => {
+      useTeamPlan.mockReturnValue({
+        data: { kind },
+        isPending: false,
+        isError: false,
+      })
+      renderPage()
+      expect(screen.getByText("Usage-based billing")).toBeInTheDocument()
+      expect(
+        screen.getByRole("link", { name: "Billing & Usage" }),
+      ).toHaveAttribute("href", "/plan-usage")
+    },
+  )
+
+  it.each([
+    { data: undefined, isPending: true, isError: false },
+    { data: { kind: "subscription" }, isPending: false, isError: true },
+  ])(
+    "makes no billing claim while assignment is unresolved or errored",
+    (state) => {
+      useTeamPlan.mockReturnValue(state)
+      renderPage()
+      expect(screen.queryByText("Usage-based billing")).toBeNull()
+      expect(screen.queryByRole("link", { name: "Billing & Usage" })).toBeNull()
+    },
+  )
 
   it("shows tracked-only storage even when a positive rate exists", () => {
     renderPage()
