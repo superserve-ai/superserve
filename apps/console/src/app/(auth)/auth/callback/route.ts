@@ -25,7 +25,7 @@ import {
   revokeGoogleSignupAuthorization,
 } from "@/lib/auth/google-signup-proof"
 import { PLAN_OFFER_COOKIE } from "@/lib/auth/plan-preselection"
-import { normalizeRequestedOffer } from "@/lib/auth/requested-offer"
+import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import {
   isActiveSignupEvidenceAttempt,
   readSignupEvidence,
@@ -113,7 +113,9 @@ async function pendingSignupResponse(
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
-  const requestedOffer = normalizeRequestedOffer(searchParams.get("offer"))
+  const requestedOffer = normalizeSignupRequestedOffer(
+    searchParams.get("offer"),
+  )
   const code = searchParams.get("code")
   const tokenHash = searchParams.get("token_hash")
   const type = searchParams.get("type") as

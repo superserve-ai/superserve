@@ -16,3 +16,9 @@ export function normalizeRequestedOffer(
     ? (value as RequestedOffer)
     : undefined
 }
+
+export function normalizeSignupRequestedOffer(
+  value: unknown,
+): RequestedOffer | undefined {
+  return normalizeRequestedOffer(value === "pro" ? "pro_monthly" : value)
+}

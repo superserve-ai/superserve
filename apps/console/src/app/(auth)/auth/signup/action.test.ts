@@ -450,7 +450,7 @@ describe("signUpWithEmail", () => {
     expect(mockGenerateLink).not.toHaveBeenCalled()
   })
 
-  it.each([undefined, "pro_monthly", "arbitrary_plan"])(
+  it.each([undefined, "pro", "pro_monthly", "arbitrary_plan"])(
     "sends confirmation and Slack with only a valid offer: %s",
     async (offer) => {
       mockGenerateLink.mockResolvedValue({
@@ -469,7 +469,8 @@ describe("signUpWithEmail", () => {
         offer,
       )
 
-      const expected = offer === "pro_monthly" ? offer : undefined
+      const expected =
+        offer === "pro" || offer === "pro_monthly" ? "pro_monthly" : undefined
       expect(
         new URL(
           mockGenerateLink.mock.lastCall![0].options.redirectTo,

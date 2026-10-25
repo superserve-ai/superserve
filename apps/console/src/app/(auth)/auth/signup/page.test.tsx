@@ -449,6 +449,7 @@ describe("SignUpPage", () => {
   })
 
   it.each([
+    ["pro", "pro_monthly"],
     ["pro_annual", "pro_annual"],
     ["arbitrary_plan", null],
   ])(
