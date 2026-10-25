@@ -99,6 +99,7 @@ export function ProPayment({
     (attempts = 1) =>
       run(async () => {
         if (!teamKey || teamMismatch) return
+        setPaymentTeam(teamKey)
         const target = operationTarget.current
         for (let attempt = 0; attempt < attempts; attempt++) {
           if (!target.active) return
@@ -114,8 +115,10 @@ export function ProPayment({
           }
           if (outcome !== "payment_confirmation_pending") {
             setConfirming(false)
+            setConflict(false)
             return
           }
+          setConfirming(true)
           if (attempt + 1 < attempts)
             await new Promise((resolve) => setTimeout(resolve, 2000))
         }
