@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   team: vi.fn(),
   impersonation: vi.fn(),
   single: vi.fn(),
+  upgrade: vi.fn(),
   intent: vi.fn(),
   billing: vi.fn(),
   assignment: vi.fn(),
@@ -52,6 +53,7 @@ beforeEach(() => {
     error: null,
   })
   mocks.intent.mockResolvedValue({ data: null, error: null })
+  mocks.upgrade.mockResolvedValue({ data: null, error: null })
   mocks.billing.mockResolvedValue({ data: null, error: null })
   mocks.assignment.mockResolvedValue({
     data: null,
@@ -70,6 +72,8 @@ beforeEach(() => {
           select: () => ({
             eq: (...args: unknown[]) => {
               mocks.eq(...args)
+              if (table === "billing_pro_upgrade")
+                return { not: () => ({ maybeSingle: mocks.upgrade }) }
               return {
                 maybeSingle:
                   table === "yc_claim_team_intent"
