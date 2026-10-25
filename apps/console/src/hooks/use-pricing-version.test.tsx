@@ -1,15 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { renderHook, waitFor } from "@testing-library/react"
+import { act, renderHook, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/lib/api/client"
 
 const mocks = vi.hoisted(() => ({ context: vi.fn(), api: vi.fn() }))
 vi.mock("./use-billing-context", () => ({ useBillingContext: mocks.context }))
-vi.mock("@/lib/api/client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/api/client")>()),
-  apiClient: mocks.api,
+vi.mock("@/lib/billing/plans-actions", () => ({
+  getPublicBillingPlansAction: (...args: unknown[]) => mocks.api(...args),
 }))
 
 import {
@@ -43,12 +42,11 @@ describe("usePricingVersion", () => {
   it("is legacy against today's backend, which has no pricing version", async () => {
     mocks.api.mockResolvedValue({ plans: [] })
     const { result } = renderHook(() => usePricingVersion(), { wrapper })
-    await waitFor(() => expect(mocks.api).toHaveBeenCalledTimes(1))
-    expect(mocks.api).toHaveBeenCalledWith("/billing/plans/public")
-    expect(result.current).toBe("legacy")
+    await waitFor(() => expect(result.current).toBe("legacy"))
+    expect(mocks.api).toHaveBeenCalledWith("use")
   })
 
-  it("caches today's missing endpoint as a definite legacy answer", async () => {
+  it("keeps legacy flows when the public endpoint is unavailable", async () => {
     mocks.api.mockRejectedValue(new ApiError(404, "not_found", "Not found"))
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -62,14 +60,13 @@ describe("usePricingVersion", () => {
     expect(
       client.getQueryState(["billing", "pricing-version", "self", "use:team-a"])
         ?.status,
-    ).toBe("success")
+    ).toBe("error")
   })
 
-  it("is legacy when the catalog request fails", async () => {
+  it("reports an unavailable catalog when its request fails", async () => {
     mocks.api.mockRejectedValue(new Error("Not found"))
     const { result } = renderHook(() => usePricingVersion(), { wrapper })
-    await waitFor(() => expect(mocks.api).toHaveBeenCalledTimes(1))
-    expect(result.current).toBe("legacy")
+    await waitFor(() => expect(result.current).toBeNull())
   })
 
   it("turns on once the region reports v2", async () => {
@@ -85,7 +82,7 @@ describe("usePricingVersion", () => {
       ready: true,
     })
     const { result } = renderHook(() => usePricingVersion(), { wrapper })
-    expect(result.current).toBe("legacy")
+    expect(result.current).toBeUndefined()
     expect(mocks.api).not.toHaveBeenCalled()
   })
 
@@ -104,7 +101,7 @@ describe("usePricingVersion", () => {
     expect(mocks.api).toHaveBeenCalledTimes(1)
   })
 
-  it("keeps v2 when a later refresh answers 404", async () => {
+  it("closes entry when a later refresh answers 404", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     })
@@ -116,11 +113,13 @@ describe("usePricingVersion", () => {
     })
     await waitFor(() => expect(result.current).toBe("v2"))
     mocks.api.mockRejectedValue(new ApiError(404, "not_found", "Not found"))
-    await client.refetchQueries()
-    expect(result.current).toBe("v2")
+    await act(async () => {
+      await client.refetchQueries()
+    })
+    await waitFor(() => expect(result.current).toBeNull())
   })
 
-  it("keeps v2 when a later refresh fails", async () => {
+  it("closes entry when a later refresh fails", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     })
@@ -132,8 +131,10 @@ describe("usePricingVersion", () => {
     })
     await waitFor(() => expect(result.current).toBe("v2"))
     mocks.api.mockRejectedValue(new Error("down"))
-    await client.refetchQueries()
-    expect(result.current).toBe("v2")
+    await act(async () => {
+      await client.refetchQueries()
+    })
+    await waitFor(() => expect(result.current).toBeNull())
   })
 
   it("shares one request with the plan catalog", async () => {
@@ -175,4 +176,43 @@ describe("usePricingVersion", () => {
     expect(result.current.version).toBe("v2")
     expect(mocks.api).toHaveBeenCalledTimes(1)
   })
+})
+
+afterEach(() => vi.useRealTimers())
+
+it("refreshes mounted entry state across rollback and fails closed on refresh errors", async () => {
+  vi.useFakeTimers()
+  mocks.api
+    .mockReset()
+    .mockResolvedValueOnce({ pricing_version: "v2", cards: [] })
+    .mockResolvedValueOnce({ pricing_version: "legacy", cards: [] })
+    .mockResolvedValueOnce({ pricing_version: "v2", cards: [] })
+    .mockRejectedValue(new Error("unavailable"))
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  )
+  const { result, unmount } = renderHook(() => usePricingVersion(), { wrapper })
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0)
+  })
+  expect(result.current).toBe("v2")
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(15_001)
+  })
+  expect(result.current).toBe("legacy")
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(15_001)
+  })
+  expect(result.current).toBe("v2")
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(15_001)
+  })
+  expect(result.current).toBeNull()
+  expect(mocks.api).toHaveBeenCalledTimes(4)
+  expect(mocks.api).toHaveBeenLastCalledWith("use")
+  unmount()
+  client.clear()
 })

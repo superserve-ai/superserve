@@ -250,12 +250,18 @@ function ResourceCard({ resource }: { resource: BillingSummaryResource }) {
           <p className="mt-1 text-xs text-muted">
             {resource.billable
               ? `Charge: ${formatCurrency(resource.charge_usd)}`
-              : "Tracked but not billed"}
+              : resource.resource === "storage"
+                ? "Usage recorded"
+                : "Tracked but not billed"}
           </p>
         </div>
-        <Badge variant={billingLabel === "Tracked only" ? "muted" : "default"}>
-          {billingLabel}
-        </Badge>
+        {resource.resource !== "storage" || resource.billable ? (
+          <Badge
+            variant={billingLabel === "Tracked only" ? "muted" : "default"}
+          >
+            {billingLabel}
+          </Badge>
+        ) : null}
       </div>
     </div>
   )

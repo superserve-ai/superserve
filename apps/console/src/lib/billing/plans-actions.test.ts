@@ -18,6 +18,39 @@ afterEach(() => {
 })
 
 describe("getPricingVersionAction", () => {
+  it("keeps a Free card with zero custom templates available", async () => {
+    const card = {
+      family: "free",
+      version: 2,
+      kind: "free",
+      name: "Free",
+      price_label: "$0",
+      tagline: "",
+      features: [],
+      display_only: false,
+      monthly: null,
+      annual: null,
+      credit_summary: "",
+      monthly_credit_cents: null,
+      allowance: null,
+      matching: null,
+      limits: {
+        max_concurrent: 1,
+        max_vcpu: 1,
+        max_memory_mib: 1024,
+        max_disk_mib: 4096,
+        max_templates: 0,
+      },
+    }
+    fetchMock.mockImplementation(async () =>
+      Response.json({ pricing_version: "v2", cards: [card] }),
+    )
+    await expect(getPricingVersionAction("use")).resolves.toBe("v2")
+    await expect(getPublicBillingPlansAction("use")).resolves.toMatchObject({
+      cards: [{ limits: { max_templates: 0 } }],
+    })
+  })
+
   it("reads the region's live pricing model", async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ pricing_version: "v2", cards: [] }), {
@@ -25,6 +58,7 @@ describe("getPricingVersionAction", () => {
       }),
     )
     await expect(getPricingVersionAction("use")).resolves.toBe("v2")
+    expect(fetchMock.mock.calls[0]![1]).toMatchObject({ cache: "no-store" })
     expect(String(fetchMock.mock.calls[0]![0])).toBe(
       "https://use.example.com/billing/plans/public",
     )

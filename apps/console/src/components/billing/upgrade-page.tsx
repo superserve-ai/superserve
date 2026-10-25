@@ -84,8 +84,7 @@ function PlanCard({
         {size ? <li>Up to {size} per sandbox</li> : null}
         {plan.kind === "free" ? (
           <li>
-            Runtime allowance per 24-hour window; sandboxes pause when it runs
-            out
+            Usage limits per 24-hour window; sandboxes pause when it runs out
           </li>
         ) : null}
       </ul>
@@ -157,7 +156,7 @@ export function UpgradePage() {
   const router = useRouter()
   const version = usePricingVersionState()
   const v2 = version === "v2"
-  const { teamKey, ready } = useBillingContext()
+  const { cacheScope, teamKey, ready } = useBillingContext()
   const planQuery = useTeamPlan(true)
   const catalogQuery = useCatalogPlans()
   const catalog = catalogQuery.isError ? [] : (catalogQuery.data ?? [])
@@ -184,7 +183,10 @@ export function UpgradePage() {
   const plan = planQuery.data
   const permissionsKnown = summary?.permissions !== undefined
   const canManage =
-    ready && teamKey !== null && (summary?.permissions?.can_manage ?? false)
+    ready &&
+    cacheScope === "self" &&
+    teamKey !== null &&
+    (summary?.permissions?.can_manage ?? false)
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: billingKeys.all })
 

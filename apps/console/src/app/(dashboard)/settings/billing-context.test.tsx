@@ -18,6 +18,15 @@ const getBillingPricing = vi.fn()
 let directory: TeamDirectoryResponse | undefined
 let client: QueryClient
 
+vi.mock("@/lib/api/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/client")>()),
+  apiClient: vi.fn().mockResolvedValue({
+    plan: null,
+    period: { start: "2026-10-01T00:00:00Z", end: "2026-11-01T00:00:00Z" },
+    pending_change: null,
+  }),
+}))
+
 vi.mock("@/lib/api/billing", () => ({
   getBillingSummary: () => getBillingSummary(),
   getBillingPricing: () => getBillingPricing(),
@@ -133,9 +142,7 @@ describe("Settings billing context isolation", () => {
         }
       })
       expect(getter).toHaveBeenCalledTimes(2)
-      expect(
-        screen.queryByText("Tracked only · Not billed"),
-      ).not.toBeInTheDocument()
+      expect(screen.queryByText("Usage recorded")).not.toBeInTheDocument()
 
       act(() => {
         void client.refetchQueries({ queryKey, exact: true })
@@ -151,9 +158,7 @@ describe("Settings billing context isolation", () => {
           error: null,
         })
         if (resource === "summary") {
-          expect(
-            screen.getByText("Tracked only · Not billed"),
-          ).toBeInTheDocument()
+          expect(screen.getByText("Usage recorded")).toBeInTheDocument()
           expect(screen.queryByText("Billed")).not.toBeInTheDocument()
           expect(screen.getByText("$0.000108 / GiB-hour")).toBeInTheDocument()
         } else {
@@ -252,16 +257,14 @@ describe("Settings billing context isolation", () => {
       await act(async () => {
         nextSummary.resolve(b.summary)
       })
-      expect(
-        await screen.findByText("Tracked only · Not billed"),
-      ).toBeInTheDocument()
+      expect(await screen.findByText("Usage recorded")).toBeInTheDocument()
       expect(
         await screen.findByText("$0.000216 / GiB-hour"),
       ).toBeInTheDocument()
       await act(async () => {
         latePricing.resolve(a.pricing)
       })
-      expect(screen.getByText("Tracked only · Not billed")).toBeInTheDocument()
+      expect(screen.getByText("Usage recorded")).toBeInTheDocument()
       expect(screen.getByText("$0.000216 / GiB-hour")).toBeInTheDocument()
       expect(screen.queryByText("Billed")).not.toBeInTheDocument()
       expect(screen.queryByText("$0.000108 / GiB-hour")).not.toBeInTheDocument()

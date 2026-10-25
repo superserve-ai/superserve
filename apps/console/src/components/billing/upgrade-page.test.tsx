@@ -6,6 +6,7 @@ import type { CatalogPlan, TeamPlan } from "@/lib/api/billing-v2"
 import consentWire from "@/test/fixtures/billing-plan-change-wire.json"
 
 const mocks = vi.hoisted(() => ({
+  scope: vi.fn(),
   version: vi.fn(),
   catalog: vi.fn(),
   plan: vi.fn(),
@@ -25,7 +26,7 @@ vi.mock("@superserve/ui", async () => ({
 }))
 vi.mock("@/hooks/use-billing-context", () => ({
   useBillingContext: () => ({
-    cacheScope: "self",
+    cacheScope: mocks.scope(),
     teamKey: "use:team-a",
     ready: true,
   }),
@@ -136,6 +137,7 @@ function mount() {
 
 beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset()
+  mocks.scope.mockReturnValue("self")
   mocks.version.mockReturnValue("v2")
   mocks.catalog.mockReturnValue({ data: catalog })
   mocks.plan.mockReturnValue({ data: pro, isError: false })
@@ -206,6 +208,19 @@ describe("UpgradePage with pricing v2 off", () => {
 })
 
 describe("UpgradePage with pricing v2 on", () => {
+  it("preserves plan details but hides all mutation actions during impersonation", () => {
+    mocks.scope.mockReturnValue("impersonated-team")
+    mount()
+    expect(screen.getByTestId("plan-card-pro_monthly")).toHaveTextContent(
+      "Current plan",
+    )
+    expect(screen.queryByRole("button", { name: /Switch to/ })).toBeNull()
+    expect(
+      screen.queryByRole("link", { name: /Get Starter|Get Pro/ }),
+    ).toBeNull()
+    expect(mocks.schedule).not.toHaveBeenCalled()
+  })
+
   it("doesn't offer a blocked preview for confirmation", async () => {
     mocks.preview.mockResolvedValue(consentWire.blocked_preview)
     mount()
@@ -216,6 +231,22 @@ describe("UpgradePage with pricing v2 on", () => {
     ).toHaveProperty("disabled", true)
     expect(mocks.schedule).not.toHaveBeenCalled()
   })
+  it("offers Starter while keeping new Pro purchases unavailable", () => {
+    mocks.plan.mockReturnValue({
+      data: { ...pro, key: "free", kind: "free", name: "Free" },
+      isError: false,
+    })
+    mount()
+    expect(screen.getByRole("link", { name: "Get Starter" })).toHaveAttribute(
+      "href",
+      "/plan-usage/buy-credit",
+    )
+    expect(screen.queryByRole("link", { name: "Get Pro" })).toBeNull()
+    expect(screen.getByTestId("plan-card-pro_monthly").textContent).toMatch(
+      /Not currently available/,
+    )
+  })
+
   it("shows every plan with the right action for a Pro team", () => {
     mount()
     expect(screen.getByTestId("plan-card-pro_monthly").textContent).toMatch(

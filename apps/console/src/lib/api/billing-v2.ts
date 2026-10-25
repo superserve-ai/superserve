@@ -106,8 +106,7 @@ export function isLowBalance(prepaid: PrepaidBalance): boolean {
 export const UPGRADE_PATH = "/plan-usage/upgrade"
 
 export const PLAN_ACTION_LINKS = {
-  starter: "/plan-usage/buy-credit",
-  pro: "/billing/pro",
+  starter: "/plan-usage/buy-credit/",
   enterprise: "https://calendly.com/superserve-ai/25-min",
 } as const
 
@@ -247,14 +246,9 @@ export function planAction(current: TeamPlan, target: CatalogPlan): PlanAction {
         undoable: current.pending_change.undoable,
         effectiveAt: current.pending_change.effective_at,
       }
-    return {
-      type: "link",
-      href:
-        target.kind === "prepaid"
-          ? PLAN_ACTION_LINKS.starter
-          : PLAN_ACTION_LINKS.pro,
-      label,
-    }
+    return target.kind === "prepaid"
+      ? { type: "link", href: PLAN_ACTION_LINKS.starter, label }
+      : { type: "unavailable" }
   }
   return { type: "downgrade", label: `Switch to ${target.name}` }
 }

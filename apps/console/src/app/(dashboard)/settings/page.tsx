@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/page-header"
 import { TeamsSection } from "@/components/settings/teams-section"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { useBillingSettings } from "@/hooks/use-billing-usage"
+import { useTeamPlan } from "@/hooks/use-billing-v2"
 import { useUser } from "@/hooks/use-user"
 import type {
   BillingPricingRate,
@@ -66,7 +67,13 @@ export default function SettingsPage() {
   const storageRate = billingSettings?.rates.find(
     (rate) => rate.resource_key === "storage_gib",
   )
-  const billingVisible = billingSummaryData?.permissions.can_view === true
+  const canViewBilling = billingSummaryData?.permissions.can_view === true
+  const assignedPlan = useTeamPlan(!loading && !!user && canViewBilling)
+  const billingVisible =
+    canViewBilling &&
+    !assignedPlan.isPending &&
+    !assignedPlan.isError &&
+    assignedPlan.data?.kind !== "free"
 
   const rateLabel = (rate: BillingPricingRate | undefined) =>
     rate
@@ -75,7 +82,7 @@ export default function SettingsPage() {
 
   const resourceStatus = (resource: BillingSummaryResource | undefined) => {
     if (!resource) return "Unavailable"
-    return resource.billable ? "Billed" : "Tracked only · Not billed"
+    return resource.billable ? "Billed" : "Usage recorded"
   }
 
   const handleSaveProfile = async () => {

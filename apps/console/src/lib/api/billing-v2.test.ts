@@ -58,32 +58,26 @@ function team(c: CatalogPlan, pending: string | null = null): TeamPlan {
 }
 
 describe("planAction", () => {
-  it("upgrades through the purchase pages", () => {
+  it("links only to purchase routes included in this build", () => {
     expect(planAction(team(FREE), STARTER)).toEqual({
       type: "link",
       href: PLAN_ACTION_LINKS.starter,
       label: "Get Starter",
     })
-    expect(planAction(team(FREE), PRO)).toMatchObject({
-      href: PLAN_ACTION_LINKS.pro,
-    })
-    expect(planAction(team(STARTER), PRO)).toMatchObject({
-      href: PLAN_ACTION_LINKS.pro,
-    })
+    expect(planAction(team(FREE), PRO)).toEqual({ type: "unavailable" })
+    expect(planAction(team(STARTER), PRO)).toEqual({ type: "unavailable" })
     expect(planAction(team(FREE), ENTERPRISE)).toMatchObject({
       href: PLAN_ACTION_LINKS.enterprise,
       label: "Book a meeting",
     })
   })
 
-  it("lets legacy pay-as-you-go teams buy Starter or Pro", () => {
+  it("lets legacy pay-as-you-go teams buy Starter while Pro is unavailable", () => {
     const legacy = team(card("legacy", "legacy_payg", "Pay as you go"))
     expect(planAction(legacy, STARTER)).toMatchObject({
       href: PLAN_ACTION_LINKS.starter,
     })
-    expect(planAction(legacy, PRO)).toMatchObject({
-      href: PLAN_ACTION_LINKS.pro,
-    })
+    expect(planAction(legacy, PRO)).toEqual({ type: "unavailable" })
     expect(planAction(legacy, FREE)).toEqual({
       type: "downgrade",
       label: "Switch to Free",

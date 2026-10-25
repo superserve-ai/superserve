@@ -45,6 +45,9 @@ vi.mock("@/hooks/use-customer-billing", () => ({
     useCustomerBillingExportPreview(...args),
 }))
 
+vi.mock("@/hooks/use-pricing-version", () => ({
+  usePricingVersion: () => "legacy",
+}))
 vi.mock("@/hooks/use-billing-summary", () => ({
   useBillingSummary: (...args: unknown[]) => useBillingSummary(...args),
 }))
@@ -626,7 +629,7 @@ describe("PlanUsagePage", () => {
       ).not.toBeInTheDocument()
       expect(
         screen.getByRole("button", {
-          name: /Storage \$0.00 \(not billed\) · usage unavailable/,
+          name: /Storage equivalent cost \$0.00 · usage unavailable/,
         }),
       ).toHaveAccessibleName(new RegExp(`CPU \\$${computeCost.toFixed(2)}`))
     },
@@ -747,18 +750,30 @@ describe("PlanUsagePage", () => {
     renderPage()
 
     expect(
-      screen.getByText("Storage (mixed billing eligibility)"),
+      within(screen.getByTestId("usage-cost-chart")).getByText("Storage"),
     ).toBeInTheDocument()
     expect(
-      screen.getByLabelText(/Storage \$17\.25 \(not billed\)/),
+      within(screen.getByTestId("usage-cost-chart")).getByText(
+        "Storage equivalent cost",
+      ),
     ).toBeInTheDocument()
+    expect(
+      screen.getByText("Cost and equivalent cost (USD)"),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("Billed cost (USD)")).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: /Storage equivalent cost \$17\.25/ }),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId("usage-cost-chart")).not.toHaveTextContent(
+      /not billed|unbilled|not counted|excluded/i,
+    )
     expect(
       screen.getByLabelText(/Storage \$23\.75(?! \(not billed\))/),
     ).toBeInTheDocument()
     expect(screen.getByLabelText(/Billed total \$32\.75/)).toBeInTheDocument()
   })
 
-  it("does not add not-billed copy when every storage bucket is billable", () => {
+  it("keeps storage labels neutral when every storage bucket is billable", () => {
     useBillingUsage.mockReturnValue({
       data: {
         start: "2026-06-01T00:00:00.000Z",
@@ -792,8 +807,9 @@ describe("PlanUsagePage", () => {
       within(screen.getByTestId("usage-cost-chart")).getByText("Storage"),
     ).toBeInTheDocument()
     expect(
-      screen.queryByText("Storage equivalent (not billed)"),
+      screen.queryByText("Storage equivalent cost"),
     ).not.toBeInTheDocument()
+    expect(screen.getByText("Billed cost (USD)")).toBeInTheDocument()
     expect(
       screen.getByLabelText(/Storage \$23\.75(?! \(not billed\))/),
     ).toBeInTheDocument()
