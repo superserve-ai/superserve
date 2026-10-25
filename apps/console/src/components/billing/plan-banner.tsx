@@ -1,5 +1,6 @@
 "use client"
 
+import { useQueryScope } from "@/components/query-provider"
 import { TrialBillingBanner } from "@/components/trial-billing-banner"
 import { useBillingReturnNotice } from "@/hooks/use-billing-return-notice"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
@@ -10,6 +11,7 @@ import type { TeamPlan } from "@/lib/api/billing-v2"
 import { PlanAwareBanner } from "./plan-aware-banner"
 
 function PricingV2Banner({ plan }: { plan: TeamPlan }) {
+  const scope = useQueryScope()
   useBillingReturnNotice()
   const summaryQuery = useBillingSummary()
   const summary = summaryQuery.isError ? undefined : summaryQuery.data
@@ -19,7 +21,7 @@ function PricingV2Banner({ plan }: { plan: TeamPlan }) {
     <PlanAwareBanner
       plan={plan}
       prepaid={prepaid ?? null}
-      canManage={summary.permissions.can_manage}
+      canManage={scope === "self" && summary.permissions.can_manage}
     />
   )
 }

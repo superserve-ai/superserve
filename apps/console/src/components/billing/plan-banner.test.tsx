@@ -5,12 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { TeamPlan } from "@/lib/api/billing-v2"
 
 const mocks = vi.hoisted(() => ({
+  scope: vi.fn(),
   version: vi.fn(),
   plan: vi.fn(),
   prepaid: vi.fn(),
   summary: vi.fn(),
   returnNotice: vi.fn(),
 }))
+vi.mock("@/components/query-provider", () => ({ useQueryScope: mocks.scope }))
 vi.mock("@/components/trial-billing-banner", () => ({
   TrialBillingBanner: () => <div data-testid="legacy-banner" />,
 }))
@@ -59,6 +61,7 @@ function mount() {
 }
 
 beforeEach(() => {
+  mocks.scope.mockReturnValue("self")
   mocks.plan.mockReturnValue({ data: undefined })
   mocks.prepaid.mockReturnValue({ data: undefined })
   mocks.summary.mockReturnValue({
@@ -80,6 +83,22 @@ describe("PlanBanner with pricing v2 off", () => {
 
 describe("PlanBanner with pricing v2 on", () => {
   beforeEach(() => mocks.version.mockReturnValue("v2"))
+
+  it.each(["free", "prepaid"] as const)(
+    "hides %s management links during impersonation",
+    (kind) => {
+      mocks.scope.mockReturnValue("impersonated-team")
+      mocks.plan.mockReturnValue({ data: plan(kind) })
+      mocks.prepaid.mockReturnValue({
+        data: { balance_cents: 0, auto_recharge: { enabled: false } },
+      })
+      mount()
+      expect(
+        screen.getByText("Contact your team's billing administrator."),
+      ).toBeTruthy()
+      expect(screen.queryByRole("link")).toBeNull()
+    },
+  )
 
   it("hides retained permissions when the billing summary refresh fails", () => {
     mocks.plan.mockReturnValue({ data: plan("free") })

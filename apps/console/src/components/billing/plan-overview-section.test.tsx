@@ -5,11 +5,13 @@ import type { BillingSummaryResponse } from "@/lib/api/billing"
 import type { FreeAllowance, TeamPlan } from "@/lib/api/billing-v2"
 
 const mocks = vi.hoisted(() => ({
+  scope: vi.fn(),
   version: vi.fn(),
   plan: vi.fn(),
   allowance: vi.fn(),
   prepaid: vi.fn(),
 }))
+vi.mock("@/components/query-provider", () => ({ useQueryScope: mocks.scope }))
 vi.mock("@/components/current-plan", () => ({
   CurrentPlan: () => <div data-testid="legacy-plan" />,
 }))
@@ -81,12 +83,26 @@ function plan(overrides: Partial<TeamPlan>): TeamPlan {
 }
 
 beforeEach(() => {
+  mocks.scope.mockReturnValue("self")
   mocks.plan.mockReturnValue({ data: undefined, isError: false })
   mocks.allowance.mockReturnValue({ data: undefined })
   mocks.prepaid.mockReturnValue({ data: undefined })
 })
 
 describe("PlanOverviewSection with pricing v2 off", () => {
+  it.each(["free", "prepaid", "subscription"] as const)(
+    "hides %s plan actions during impersonation while preserving the overview",
+    (kind) => {
+      mocks.scope.mockReturnValue("impersonated-team")
+      mocks.plan.mockReturnValue({ data: plan({ kind }), isError: false })
+      render(<PlanOverviewSection summary={summary} />)
+      expect(
+        screen.queryByRole("link", { name: /Upgrade|Change plan/ }),
+      ).toBeNull()
+      expect(screen.getByText("Running at once")).toBeTruthy()
+    },
+  )
+
   it("keeps an assigned team's change-plan link available after rollback", () => {
     mocks.version.mockReturnValue("legacy")
     mocks.plan.mockReturnValue({ data: plan({}), isError: false })

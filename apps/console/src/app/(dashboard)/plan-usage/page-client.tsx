@@ -128,7 +128,7 @@ function bucketTooltip(
     `${bucketLabel(bucket.start, granularity, granularity === "monthly", timezone)} (${start} – ${end})`,
     `CPU $${formatUsageCost(bucket.cpu.cost_usd)}`,
     `Memory $${formatUsageCost(bucket.memory.cost_usd)}`,
-    `Storage ${storage}${bucket.storage.usage === null ? " · usage unavailable" : ""}`,
+    `${bucket.storage.billable ? "Storage" : "Storage equivalent cost"} ${storage}${bucket.storage.usage === null ? " · usage unavailable" : ""}`,
     `Billed total $${formatUsageCost(bucket.billed_total_usd)}`,
   ]
 }
@@ -276,6 +276,10 @@ export function PlanUsagePageClient() {
       }
     | undefined
   const buckets: BillingUsageSeriesBucket[] = usageData?.buckets ?? []
+  const hasStorageCost = buckets.some((bucket) => bucket.storage.billable)
+  const hasStorageEquivalent = buckets.some(
+    (bucket) => !bucket.storage.billable,
+  )
   const legacyRows = usageData?.rows ?? []
   const renderGranularity: BillingUsageGranularity =
     usageData?.granularity === "week"
@@ -363,7 +367,7 @@ export function PlanUsagePageClient() {
                     Usage Details
                   </h2>
                   <p className="text-sm text-muted">
-                    Understand what is driving your current charges.
+                    Explore usage costs over time.
                   </p>
                 </div>
                 <DateRangeFilter
@@ -436,10 +440,18 @@ export function PlanUsagePageClient() {
                       <i className="mr-1 inline-block size-2 rounded-sm bg-primary/60" />
                       Memory
                     </span>
-                    <span>
-                      <i className="mr-1 inline-block size-2 rounded-sm bg-muted" />
-                      Storage
-                    </span>
+                    {hasStorageCost && (
+                      <span>
+                        <i className="mr-1 inline-block size-2 rounded-sm bg-muted/70" />
+                        Storage
+                      </span>
+                    )}
+                    {hasStorageEquivalent && (
+                      <span>
+                        <i className="mr-1 inline-block size-2 rounded-sm bg-muted" />
+                        Storage equivalent cost
+                      </span>
+                    )}
                   </div>
                   <div
                     className="flex h-64 items-end gap-1 overflow-x-auto"
@@ -447,7 +459,9 @@ export function PlanUsagePageClient() {
                     data-testid="usage-cost-chart-plot"
                   >
                     <div className="flex h-56 items-center pr-2 text-[10px] text-muted [writing-mode:vertical-rl]">
-                      Billed cost (USD)
+                      {hasStorageEquivalent
+                        ? "Cost and equivalent cost (USD)"
+                        : "Billed cost (USD)"}
                     </div>
                     {buckets.map((bucket) => {
                       const { cpu, memory, storage } = bucketCostTotals(bucket)
@@ -509,7 +523,7 @@ export function PlanUsagePageClient() {
                                   style={{
                                     height: `${(storage / max) * 100}%`,
                                   }}
-                                  aria-label={`Storage equivalent $${formatUsageCost(storage)}`}
+                                  aria-label={`Storage equivalent cost $${formatUsageCost(storage)}`}
                                 />
                               )}
                             </div>

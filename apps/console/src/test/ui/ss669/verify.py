@@ -167,10 +167,13 @@ def verify(browser, base, scenario, output):
         chart = page.get_by_label("Usage cost chart", exact=True)
         buckets = chart.locator("button[aria-label]")
         expect(buckets).to_have_count(2)
-        before = "Storage $0.63" if scenario == "tracked" else "Storage $0.00"
-        after = "Storage $0.63" if scenario == "tracked" else f"Storage {charge}"
+        storage_label = "Storage" if billable else "Storage equivalent cost"
+        expect(legend).to_contain_text(storage_label)
+        expect(page.get_by_text("Billed cost (USD)" if billable else "Cost and equivalent cost (USD)", exact=True)).to_be_visible()
+        before = f"{storage_label} $0.63" if scenario == "tracked" else f"{storage_label} $0.00"
+        after = f"{storage_label} $0.63" if scenario == "tracked" else f"{storage_label} {charge}"
         if scenario == "unavailable":
-            before = after = "Storage $0.00 · usage unavailable"
+            before = after = f"{storage_label} $0.00 · usage unavailable"
         expect(buckets.first).to_have_attribute("aria-label", re.compile(re.escape(before)))
         expect(buckets.last).to_have_attribute("aria-label", re.compile(re.escape(after)))
         expect(buckets.first).to_have_attribute("aria-label", re.compile(r"Billed total \$1\.80"))

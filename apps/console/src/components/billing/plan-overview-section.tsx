@@ -1,6 +1,7 @@
 "use client"
 
 import { CurrentPlan } from "@/components/current-plan"
+import { useQueryScope } from "@/components/query-provider"
 import {
   useFreeAllowance,
   usePrepaidBalance,
@@ -21,6 +22,7 @@ export function PlanOverviewSection({
 }: {
   summary: BillingSummaryResponse
 }) {
+  const scope = useQueryScope()
   const plan = useTeamPlan(true).data
   const allowance = useFreeAllowance(plan?.kind === "free").data
   const prepaid = usePrepaidBalance(plan?.kind === "prepaid").data
@@ -58,7 +60,7 @@ export function PlanOverviewSection({
       allowance={allowance ?? null}
       prepaid={prepaid ?? null}
       usageCents={matchingPeriod ? toCents(summary.current_charges_usd) : null}
-      canManage={summary.permissions?.can_manage ?? false}
+      canManage={scope === "self" && (summary.permissions?.can_manage ?? false)}
     />
   )
 }
