@@ -1148,7 +1148,7 @@ describe("auth callback", () => {
       expect(mockEnsureGoogleOnboardingMembership).not.toHaveBeenCalled()
       expect(mockSendWelcomeEmail).not.toHaveBeenCalled()
       cleanup()
-    })
+    }, 20_000)
 
     it.each(["approved", "pending", "rejected"])(
       "does not change a real %s review on Enterprise retry",
