@@ -87,10 +87,16 @@ function isStripeBillingPath(path: string): boolean {
 const PREPAID_BILLING_METHODS: Record<string, string> = {
   "billing/prepaid": "GET",
   "billing/prepaid/checkout": "POST",
+  "billing/prepaid/checkout/recover": "POST",
   "billing/prepaid/auto-recharge": "PUT",
 }
 
 const PREPAID_WRITE_FIELDS: Record<string, string[]> = {
+  "billing/prepaid/checkout/recover": [
+    "purchase_id",
+    "checkout_generation",
+    "cancel",
+  ],
   "billing/prepaid/checkout": [
     "operation_id",
     "amount_cents",

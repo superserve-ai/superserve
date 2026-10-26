@@ -482,7 +482,7 @@ describe("PlanUsagePage", () => {
   })
 
   it("shows a not-charged indicator for shadow usage", () => {
-    const summaryQuery = useBillingSummary.mock.results[0]?.value
+    const summaryQuery = useBillingSummary()
     useBillingSummary.mockReturnValue({
       ...summaryQuery,
       data: { ...summaryQuery.data, billing_mode: "shadow" },

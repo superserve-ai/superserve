@@ -17,9 +17,14 @@ const mocks = vi.hoisted(() => ({
     success: string
     cancel: string
   }[],
-  teamKey: "us:team",
+  teamKey: "use:11111111-1111-4111-8111-111111111111",
   ready: true,
   scope: "self",
+}))
+
+vi.mock("@/hooks/use-teams", () => ({
+  useTeams: () => ({ data: { teams: [] } }),
+  useSwitchTeam: () => ({ mutateAsync: vi.fn() }),
 }))
 
 vi.mock("next/navigation", () => ({
@@ -76,7 +81,7 @@ const initial: PrepaidCreditSummary = {
 
 beforeEach(() => {
   mocks.params = new URLSearchParams()
-  mocks.teamKey = "us:team"
+  mocks.teamKey = "use:11111111-1111-4111-8111-111111111111"
   mocks.scope = "self"
   mocks.ready = true
   mocks.checkout.mockReset()
@@ -102,16 +107,20 @@ it("blocks checkout before calling a backend without durable retry support", () 
   ).toBeTruthy()
 })
 it("keeps return URLs as navigation and never claims a verified payment", () => {
-  mocks.params = new URLSearchParams("purchase=success&team=us%3Ateam")
+  mocks.params = new URLSearchParams(
+    "purchase=success&team=use%3A11111111-1111-4111-8111-111111111111",
+  )
   render(page())
   expect(screen.getByText(/Checking payment status/)).toBeTruthy()
   expect(screen.queryByText(/Payment received/)).toBeNull()
 })
 it("doesn't show another team's credit or purchase controls after a payment return", () => {
-  mocks.params = new URLSearchParams("purchase=success&team=us%3Aother")
+  mocks.params = new URLSearchParams(
+    "purchase=success&team=use%3A22222222-2222-4222-8222-222222222222",
+  )
   render(page())
   expect(screen.getByRole("alert").textContent).toContain(
-    "belongs to another team",
+    "account and team that started checkout",
   )
   expect(screen.queryByRole("button", { name: /Buy.*credit/ })).toBeNull()
   expect(screen.queryByText("Credit balance")).toBeNull()
@@ -139,7 +148,7 @@ it("recovers the retained purchase after a lost response and entry closes", asyn
       id: "retained",
       amount: 2500,
       actor: "actor",
-      team: "us:team",
+      team: "use:11111111-1111-4111-8111-111111111111",
       success: "original-success",
       cancel: "original-cancel",
     },
@@ -155,7 +164,7 @@ it("recovers the retained purchase after a lost response and entry closes", asyn
   )
   await waitFor(() =>
     expect(mocks.checkout).toHaveBeenLastCalledWith(
-      "us:team",
+      "use:11111111-1111-4111-8111-111111111111",
       2500,
       expect.any(String),
       "actor",
@@ -185,7 +194,7 @@ it("serializes duplicate clicks and ignores checkout results after a team switch
   fireEvent.click(buy)
   expect(mocks.checkout).toHaveBeenCalledTimes(1)
   expect(mocks.checkout).toHaveBeenCalledWith(
-    "us:team",
+    "use:11111111-1111-4111-8111-111111111111",
     2500,
     expect.any(String),
     "actor",
@@ -234,11 +243,14 @@ describe("auto-recharge refresh", () => {
     )
     fireEvent.click(screen.getByRole("button", { name: "Save" }))
     await waitFor(() =>
-      expect(mocks.save).toHaveBeenCalledWith("us:team", {
-        enabled: false,
-        thresholdCents: 1000,
-        amountCents: 2500,
-      }),
+      expect(mocks.save).toHaveBeenCalledWith(
+        "use:11111111-1111-4111-8111-111111111111",
+        {
+          enabled: false,
+          thresholdCents: 1000,
+          amountCents: 2500,
+        },
+      ),
     )
   })
 })
@@ -276,11 +288,14 @@ describe("auto-recharge rollback", () => {
     )
     fireEvent.click(screen.getByRole("button", { name: "Save" }))
     await waitFor(() =>
-      expect(mocks.save).toHaveBeenCalledWith("us:team", {
-        enabled: false,
-        thresholdCents: 1000,
-        amountCents: 2500,
-      }),
+      expect(mocks.save).toHaveBeenCalledWith(
+        "use:11111111-1111-4111-8111-111111111111",
+        {
+          enabled: false,
+          thresholdCents: 1000,
+          amountCents: 2500,
+        },
+      ),
     )
   })
 })
