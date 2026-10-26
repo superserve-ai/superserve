@@ -61,9 +61,15 @@ export function DeviceApproval({
   // Signs out this browser only and comes back to the same code.
   const switchAccount = async () => {
     setBusy(true)
-    await createBrowserClient()
+    setError(null)
+    const { error: signOutError } = await createBrowserClient()
       .auth.signOut({ scope: "local" })
-      .catch(() => {})
+      .catch((cause: unknown) => ({ error: cause }))
+    if (signOutError) {
+      setError("Couldn't sign out. Please try again.")
+      setBusy(false)
+      return
+    }
     posthog?.reset()
     router.replace(
       `/auth/signin?next=${encodeURIComponent(`/device?code=${userCode}`)}`,
