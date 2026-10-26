@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from "@superserve/ui"
+import { useIsMutating, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useRef, useState } from "react"
 
 import { useSwitchTeam, useTeams } from "@/hooks/use-teams"
@@ -20,6 +21,8 @@ export function CheckoutContextRecovery({
   allowSwitch?: boolean
   contextPending?: boolean
 }) {
+  const queryClient = useQueryClient()
+  const switchingTeam = useIsMutating({ mutationKey: ["switch-team"] }) > 0
   const directory = useTeams()
   const switchTeam = useSwitchTeam()
   const actor = useUser().user?.id
@@ -48,7 +51,11 @@ export function CheckoutContextRecovery({
     )
   const recover = async (work: () => Promise<void>) => {
     const current = target.current
-    if (current.busy) return
+    if (
+      current.busy ||
+      queryClient.isMutating({ mutationKey: ["switch-team"] }) > 0
+    )
+      return
     current.busy = true
     setBusy(true)
     setError(null)
@@ -76,7 +83,7 @@ export function CheckoutContextRecovery({
         <>
           {allowSwitch && member && !contextPending && (
             <Button
-              disabled={busy}
+              disabled={busy || switchingTeam}
               onClick={() =>
                 void recover(async () => {
                   if (!team) return
@@ -89,7 +96,7 @@ export function CheckoutContextRecovery({
           )}
           <Button
             variant="outline"
-            disabled={busy}
+            disabled={busy || switchingTeam}
             onClick={() =>
               void recover(async () => {
                 const current = target.current
@@ -109,8 +116,14 @@ export function CheckoutContextRecovery({
           {(directory.isError || contextPending) && (
             <Button
               variant="outline"
-              disabled={busy}
-              onClick={() => void directory.refetch()}
+              disabled={busy || switchingTeam}
+              onClick={() => {
+                if (
+                  !busy &&
+                  queryClient.isMutating({ mutationKey: ["switch-team"] }) === 0
+                )
+                  void directory.refetch()
+              }}
             >
               Retry team lookup
             </Button>

@@ -33,6 +33,11 @@ const state = vi.hoisted(() => ({
   refetch: vi.fn(),
 }))
 
+vi.mock("@tanstack/react-query", async (original) => ({
+  ...(await original<typeof import("@tanstack/react-query")>()),
+  useIsMutating: () => 0,
+  useQueryClient: () => ({ isMutating: () => 0 }),
+}))
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: state.replace }),
   useSearchParams: () => new URLSearchParams(state.query),

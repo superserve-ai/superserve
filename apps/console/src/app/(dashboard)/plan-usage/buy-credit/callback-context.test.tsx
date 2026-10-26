@@ -69,7 +69,10 @@ vi.mock("@/hooks/use-teams", () => ({
   }),
   useSwitchTeam: () => ({ mutateAsync: state.switch }),
 }))
-vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }))
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ isMutating: () => 0 }),
+  useIsMutating: () => 0,
+}))
 beforeEach(() => {
   state.retained = []
   state.ready = true

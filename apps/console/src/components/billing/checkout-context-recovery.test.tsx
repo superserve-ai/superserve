@@ -1,9 +1,22 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import {
+  act,
+  fireEvent,
+  render as renderView,
+  screen,
+  waitFor,
+} from "@testing-library/react"
+import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+
+import { SessionExpiryRedirect } from "@/components/layout/session-expiry-redirect"
 
 import { CheckoutContextRecovery } from "./checkout-context-recovery"
 const state = vi.hoisted(() => ({
-  actor: "actor-a",
+  actor: "actor-a" as string | undefined,
+  refetch: vi.fn(),
+  directoryError: false,
+  authChange: undefined as undefined | ((event: string) => void),
   member: true,
   switch: vi.fn(),
   signOut: vi.fn(),
@@ -14,6 +27,8 @@ const callback = `/plan-usage/buy-credit/?purchase=success&team=use:${teamId}&pu
 vi.mock("@/hooks/use-teams", () => ({
   useTeams: () => ({
     data: { teams: state.member ? [{ id: teamId, region: "use" }] : [] },
+    refetch: state.refetch,
+    isError: state.directoryError,
   }),
   useSwitchTeam: () => ({ mutateAsync: state.switch }),
 }))
@@ -21,7 +36,15 @@ vi.mock("@/hooks/use-user", () => ({
   useUser: () => ({ user: { id: state.actor } }),
 }))
 vi.mock("@/lib/supabase/client", () => ({
-  createBrowserClient: () => ({ auth: { signOut: state.signOut } }),
+  createBrowserClient: () => ({
+    auth: {
+      signOut: state.signOut,
+      onAuthStateChange: (callback: (event: string) => void) => {
+        state.authChange = callback
+        return { data: { subscription: { unsubscribe: vi.fn() } } }
+      },
+    },
+  }),
 }))
 beforeEach(() => {
   state.actor = "actor-a"
@@ -29,8 +52,18 @@ beforeEach(() => {
   state.switch.mockReset().mockResolvedValue(undefined)
   state.signOut.mockReset().mockResolvedValue({ error: null })
   state.assign.mockReset()
+  state.refetch.mockReset()
+  state.directoryError = false
+  state.authChange = undefined
   vi.stubGlobal("location", { assign: state.assign })
 })
+function render(ui: ReactNode, client = new QueryClient()) {
+  return renderView(ui, {
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  })
+}
 describe("checkout context recovery", () => {
   it("returns to a member team only after an explicit click", async () => {
     render(<CheckoutContextRecovery callbackPath={callback} />)
@@ -100,4 +133,105 @@ describe("checkout context recovery", () => {
     expect(state.switch).not.toHaveBeenCalled()
     expect(state.signOut).not.toHaveBeenCalled()
   })
+  it.each(["switch", "create"])(
+    "blocks lookup retry during a real external team %s and enables it after completion",
+    async (operation) => {
+      const client = new QueryClient()
+      let complete!: () => void
+      const mutation = client.getMutationCache().build(client, {
+        mutationKey: ["switch-team", operation],
+        mutationFn: () =>
+          new Promise<void>((resolve) => {
+            complete = resolve
+          }),
+      })
+      const pending = mutation.execute(undefined)
+      render(
+        <CheckoutContextRecovery callbackPath={callback} contextPending />,
+        client,
+      )
+      const retry = screen.getByRole("button", { name: "Retry team lookup" })
+      await waitFor(() => expect(retry).toBeDisabled())
+      fireEvent.click(retry)
+      expect(state.refetch).not.toHaveBeenCalled()
+      expect(
+        screen.getByRole("button", {
+          name: "Sign out and use checkout account",
+        }),
+      ).toBeDisabled()
+      await act(async () => {
+        complete()
+        await pending
+      })
+      await waitFor(() => expect(retry).not.toBeDisabled())
+      fireEvent.click(retry)
+      expect(state.refetch).toHaveBeenCalledOnce()
+    },
+  )
+  it("keeps retry and account recovery enabled for unresolved directory without a mutation", () => {
+    render(<CheckoutContextRecovery callbackPath={callback} contextPending />)
+    expect(
+      screen.getByRole("button", { name: "Retry team lookup" }),
+    ).not.toBeDisabled()
+    expect(
+      screen.getByRole("button", { name: "Sign out and use checkout account" }),
+    ).not.toBeDisabled()
+  })
+  it("keeps directory-error retry enabled when no team mutation is active", () => {
+    state.directoryError = true
+    render(<CheckoutContextRecovery callbackPath={callback} />)
+    fireEvent.click(screen.getByRole("button", { name: "Retry team lookup" }))
+    expect(state.refetch).toHaveBeenCalledOnce()
+  })
+  it.each([
+    callback,
+    `/billing/pro/?billing=success&team=use:${teamId}&return=%2Fsandboxes%2F%3Fview%3Dall`,
+  ])(
+    "retains exact callback through SIGNED_OUT before signout completes: %s",
+    async (path) => {
+      const parsed = new URL(path, "https://console.test")
+      vi.stubGlobal("location", {
+        assign: state.assign,
+        pathname: parsed.pathname,
+        search: parsed.search,
+      })
+      let finish!: (value: { error: null }) => void
+      state.signOut.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve
+          }),
+      )
+      const view = render(
+        <>
+          <SessionExpiryRedirect />
+          <CheckoutContextRecovery callbackPath={path} />
+        </>,
+      )
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "Sign out and use checkout account",
+        }),
+      )
+      await act(async () => {
+        state.authChange?.("SIGNED_OUT")
+        state.actor = undefined
+      })
+      view.rerender(
+        <>
+          <SessionExpiryRedirect />
+          <CheckoutContextRecovery callbackPath={path} />
+        </>,
+      )
+      await act(async () => finish({ error: null }))
+      expect(state.assign).toHaveBeenCalledWith(
+        `/auth/signin?next=${encodeURIComponent(path)}`,
+      )
+      expect(
+        state.assign.mock.calls.every(
+          ([url]) => url === `/auth/signin?next=${encodeURIComponent(path)}`,
+        ),
+      ).toBe(true)
+    },
+  )
 })
