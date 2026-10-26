@@ -213,15 +213,16 @@ export async function provisionTeam(
  */
 export async function provisionHeldApplicantTeam(
   user: User,
+  region: string = DEFAULT_REGION,
 ): Promise<ProvisionedTeam> {
   if (signupReviewStatus(user) !== "pending")
     throw new Error("Only held applicants are provisioned by staff")
   return provisionTeamFor(
-    DEFAULT_REGION,
+    region,
     user,
     user.email ?? user.id,
     new Date().toISOString(),
-    undefined,
+    user.id,
     { googleProof: false },
   )
 }

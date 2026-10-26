@@ -14,8 +14,6 @@ import {
   type SignupReviewResult,
 } from "./signup-approval"
 
-class MissingEnterprisePlanError extends Error {}
-
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -44,21 +42,22 @@ export async function approveSignupAction(
     return { ok: false, error: "Choose the Enterprise plan to assign." }
   let result: SignupReviewResult
   try {
-    result = await approveSignup(userId, staff.id, async (team) => {
-      if (!planVersionId) throw new MissingEnterprisePlanError()
-      await assignEnterprisePlan(team, userId, planVersionId)
-    })
+    result = await approveSignup(
+      userId,
+      staff.id,
+      planVersionId,
+      async (team, frozenVersionId) => {
+        await assignEnterprisePlan(team, userId, frozenVersionId)
+      },
+    )
   } catch (error) {
     console.error("Enterprise access grant failed", error)
     result = {
       ok: false,
       error:
-        error instanceof MissingEnterprisePlanError
-          ? "Choose the Enterprise plan to assign. The applicant is still held."
-          : error instanceof AdminBillingRequestError &&
-              error.kind === "conflict"
-            ? "The plan can't be assigned: pricing v2 is off, the plan was retired, or this applicant was already given a different plan. The applicant is still held."
-            : "Access was not granted yet. The applicant is still held; try again.",
+        error instanceof AdminBillingRequestError && error.kind === "conflict"
+          ? "The plan can't be assigned: pricing v2 is off, the plan was retired, or this applicant was already given a different plan. The applicant is still held."
+          : "Access was not granted yet. The applicant is still held; try again.",
     }
   }
   revalidatePath("/admin/signups")

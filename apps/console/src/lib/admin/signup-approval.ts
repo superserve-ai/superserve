@@ -11,12 +11,15 @@ import {
   type SignupReviewStatus,
 } from "@/lib/auth/signup-review"
 import { updateSignupReviewMetadata } from "@/lib/auth/signup-review-server"
+import { DEFAULT_REGION } from "@/lib/cells"
 import { sendEmail } from "@/lib/email/send"
 import {
   SignupApprovedEmail,
   signupApprovedSubject,
 } from "@/lib/email/templates/signup-approved"
 import { createAdminClient } from "@/lib/supabase/admin"
+
+import { listEnterprisePlanVersions } from "./enterprise-plan"
 
 const LIST_PAGE_SIZE = 1000
 // Bounds an admin-only scan; review queues are far smaller than this.
@@ -107,7 +110,61 @@ async function reviewedUser(userId: string): Promise<User> {
   return data.user
 }
 
-export type AssignEnterprisePlan = (team: ProvisionedTeam) => Promise<void>
+export type AssignEnterprisePlan = (
+  team: ProvisionedTeam,
+  planVersionId: string,
+) => Promise<void>
+
+interface ReviewDecision {
+  user_id: string
+  decision: "approved" | "rejected"
+  staff_id: string
+  plan_version_id: string | null
+  region: string | null
+  created_at: string
+}
+
+async function readDecision(userId: string): Promise<ReviewDecision | null> {
+  const { data, error } = await createAdminClient()
+    .from("signup_review_decision")
+    .select("user_id,decision,staff_id,plan_version_id,region,created_at")
+    .eq("user_id", userId)
+    .maybeSingle()
+  if (error) throw new Error("Unable to read the signup review decision")
+  return data as ReviewDecision | null
+}
+
+async function claimDecision(
+  userId: string,
+  staffId: string,
+  decision: ReviewDecision["decision"],
+  planVersionId: string | null,
+): Promise<ReviewDecision> {
+  // The central Auth database serializes competing staff decisions. Neither
+  // Auth metadata nor a process-local lock can arbitrate across console hosts.
+  const { error } = await createAdminClient()
+    .from("signup_review_decision")
+    .upsert(
+      {
+        user_id: userId,
+        decision,
+        staff_id: staffId,
+        plan_version_id: planVersionId,
+        region: decision === "approved" ? DEFAULT_REGION : null,
+      },
+      { onConflict: "user_id", ignoreDuplicates: true },
+    )
+  if (error) throw new Error("Unable to save the signup review decision")
+  const winner = await readDecision(userId)
+  if (!winner) throw new Error("Signup review decision was not saved")
+  return winner
+}
+
+const decisionConflict: SignupReviewResult = {
+  ok: false,
+  error:
+    "This applicant already has a different review decision or plan. Refresh the review queue.",
+}
 
 /**
  * Gives a held Enterprise applicant access: provision their team, move it to
@@ -119,21 +176,57 @@ export type AssignEnterprisePlan = (team: ProvisionedTeam) => Promise<void>
 export async function approveSignup(
   userId: string,
   staffId: string,
+  planVersionId: string,
   assignEnterprisePlan: AssignEnterprisePlan,
 ): Promise<SignupReviewResult> {
   const user = await reviewedUser(userId)
   const status = signupReviewStatus(user)
   if (status === "pending") {
-    const team = await provisionHeldApplicantTeam(user)
-    await assignEnterprisePlan(team)
+    if (!planVersionId)
+      return {
+        ok: false,
+        error:
+          "Choose the Enterprise plan to assign. The applicant is still held.",
+      }
+    let winner = await readDecision(userId)
+    if (!winner) {
+      const plans = await listEnterprisePlanVersions(DEFAULT_REGION)
+      if (!plans.some((plan) => plan.id === planVersionId))
+        return {
+          ok: false,
+          error:
+            "Choose a published Enterprise plan. The applicant is still held.",
+        }
+      winner = await claimDecision(userId, staffId, "approved", planVersionId)
+    }
+    if (
+      winner.decision !== "approved" ||
+      winner.plan_version_id !== planVersionId
+    )
+      return decisionConflict
+    if (!winner.region || !winner.plan_version_id)
+      throw new Error("Incomplete signup review decision")
+    const team = await provisionHeldApplicantTeam(user, winner.region)
+    await assignEnterprisePlan(team, winner.plan_version_id)
     await updateSignupReviewMetadata(user.id, {
       signup_review: "approved",
-      approved_by: staffId,
-      approved_at: new Date().toISOString(),
+      approved_by: winner.staff_id,
+      approved_at: winner.created_at,
       approved_team_id: team.id,
     })
   } else if (status !== "approved" || user.app_metadata?.approval_email_sent_at)
     return { ok: false, error: "This account is not awaiting setup." }
+  // Legacy approved accounts have no decision row. Email-only recovery must
+  // never create a new decision, provision a team, or assign another plan.
+  if (status === "approved") {
+    const winner = await readDecision(userId)
+    if (
+      winner &&
+      (winner.decision !== "approved" ||
+        (planVersionId && winner.plan_version_id !== planVersionId))
+    )
+      return decisionConflict
+  }
   if (!user.email) return { ok: false, error: "This account has no email." }
   try {
     const result = await sendEmail({
@@ -167,10 +260,12 @@ export async function rejectSignup(
   const user = await reviewedUser(userId)
   if (signupReviewStatus(user) !== "pending")
     return { ok: false, error: "This account is not awaiting setup." }
+  const winner = await claimDecision(userId, staffId, "rejected", null)
+  if (winner.decision !== "rejected") return decisionConflict
   await updateSignupReviewMetadata(user.id, {
     signup_review: "rejected",
-    rejected_by: staffId,
-    rejected_at: new Date().toISOString(),
+    rejected_by: winner.staff_id,
+    rejected_at: winner.created_at,
   })
   return { ok: true, outcome: "rejected" }
 }

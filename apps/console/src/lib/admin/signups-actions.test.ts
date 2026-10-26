@@ -64,3 +64,18 @@ it("still allows an authorized non-impersonating staff action", async () => {
   })
   expect(mocks.reject).toHaveBeenCalledWith(user, "operator")
 })
+
+it("assigns the frozen winner plan passed by the durable approval coordinator", async () => {
+  await approveSignupAction(user, version)
+  expect(mocks.approve).toHaveBeenCalledWith(
+    user,
+    "operator",
+    version,
+    expect.any(Function),
+  )
+  const assignWinner = mocks.approve.mock.calls[0][3]
+  const frozenVersion = "9ab14bf2-0870-4578-aa01-24383ab97140"
+  const team = { id: "team", region: "usw", name: "Applicant" }
+  await assignWinner(team, frozenVersion)
+  expect(mocks.assign).toHaveBeenCalledWith(team, user, frozenVersion)
+})

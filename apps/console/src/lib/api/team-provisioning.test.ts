@@ -806,6 +806,18 @@ describe("provisionTeam", () => {
     expect(clients.use.writes).not.toEqual({})
   })
 
+  it("recovers held provisioning in its frozen region after the default changes", async () => {
+    const applicant = {
+      ...currentUser!,
+      app_metadata: { signup_review: "pending" },
+    }
+    await expect(
+      provisionHeldApplicantTeam(applicant as never, "usw"),
+    ).resolves.toMatchObject({ id: "team-new", region: "usw" })
+    expect(clients.usw.writes).not.toEqual({})
+    expect(clients.use.writes).toEqual({})
+  })
+
   it.each([undefined, "approved", "rejected"])(
     "refuses staff provisioning for an account that isn't held (%s)",
     async (review) => {

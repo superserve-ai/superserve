@@ -2,8 +2,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mockGetUserById = vi.fn()
 const mockGenerateLink = vi.fn()
+const mockCatalog = vi.fn()
+vi.mock("./enterprise-plan", () => ({
+  listEnterprisePlanVersions: (...args: unknown[]) => mockCatalog(...args),
+}))
+const mockClaim = vi.fn()
+const mockReadDecision = vi.fn()
+let decision: Record<string, unknown> | null = null
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
+    from: () => ({
+      upsert: (...args: unknown[]) => mockClaim(...args),
+      select: () => ({ eq: () => ({ maybeSingle: () => mockReadDecision() }) }),
+    }),
     auth: {
       admin: {
         getUserById: (...args: unknown[]) => mockGetUserById(...args),
@@ -29,6 +40,7 @@ vi.mock("@/lib/email/send", () => ({
 
 import { approveSignup, rejectSignup } from "./signup-approval"
 
+const PLAN = "22222222-2222-4222-8222-222222222222"
 const USER_ID = "11111111-1111-4111-8111-111111111111"
 
 function user(overrides: Record<string, unknown> = {}) {
@@ -45,6 +57,21 @@ function user(overrides: Record<string, unknown> = {}) {
 
 describe("signup approval", () => {
   beforeEach(() => {
+    decision = null
+    mockCatalog.mockReset().mockResolvedValue([
+      { id: PLAN, name: "Enterprise" },
+      {
+        id: "33333333-3333-4333-8333-333333333333",
+        name: "Another Enterprise",
+      },
+    ])
+    mockClaim.mockReset().mockImplementation(async (payload) => {
+      decision ??= { ...payload, created_at: "2026-10-26T00:00:00Z" }
+      return { error: null }
+    })
+    mockReadDecision
+      .mockReset()
+      .mockImplementation(async () => ({ data: decision, error: null }))
     mockGetUserById.mockReset()
     mockGenerateLink.mockReset()
     mockUpdate.mockReset().mockResolvedValue(undefined)
@@ -57,10 +84,10 @@ describe("signup approval", () => {
     mockGetUserById.mockResolvedValue({ data: { user: user() }, error: null })
 
     await expect(
-      approveSignup(USER_ID, "staff-1", mockAssign),
+      approveSignup(USER_ID, "staff-1", PLAN, mockAssign),
     ).resolves.toEqual({ ok: true, outcome: "approved" })
 
-    expect(mockAssign).toHaveBeenCalledWith(TEAM)
+    expect(mockAssign).toHaveBeenCalledWith(TEAM, PLAN)
     expect(mockUpdate).toHaveBeenNthCalledWith(
       1,
       USER_ID,
@@ -89,13 +116,13 @@ describe("signup approval", () => {
     mockAssign.mockRejectedValueOnce(new Error("unavailable"))
 
     await expect(
-      approveSignup(USER_ID, "staff-1", mockAssign),
+      approveSignup(USER_ID, "staff-1", PLAN, mockAssign),
     ).rejects.toThrow()
     expect(mockUpdate).not.toHaveBeenCalled()
     expect(mockSendEmail).not.toHaveBeenCalled()
 
     await expect(
-      approveSignup(USER_ID, "staff-1", mockAssign),
+      approveSignup(USER_ID, "staff-1", PLAN, mockAssign),
     ).resolves.toEqual({ ok: true, outcome: "approved" })
     expect(mockProvision).toHaveBeenCalledTimes(2)
     expect(mockAssign).toHaveBeenCalledTimes(2)
@@ -112,7 +139,7 @@ describe("signup approval", () => {
     })
 
     await expect(
-      approveSignup(USER_ID, "staff-1", mockAssign),
+      approveSignup(USER_ID, "staff-1", PLAN, mockAssign),
     ).resolves.toEqual({ ok: true, outcome: "approved" })
     expect(mockProvision).not.toHaveBeenCalled()
     expect(mockAssign).not.toHaveBeenCalled()
@@ -129,7 +156,7 @@ describe("signup approval", () => {
       error: null,
     })
 
-    await approveSignup(USER_ID, "staff-1", mockAssign)
+    await approveSignup(USER_ID, "staff-1", PLAN, mockAssign)
 
     expect(mockGenerateLink).toHaveBeenCalledWith(
       expect.objectContaining({ type: "magiclink" }),
@@ -151,7 +178,9 @@ describe("signup approval", () => {
       data: { user: user({ app_metadata }) },
       error: null,
     })
-    expect((await approveSignup(USER_ID, "staff-1", mockAssign)).ok).toBe(false)
+    expect((await approveSignup(USER_ID, "staff-1", PLAN, mockAssign)).ok).toBe(
+      false,
+    )
     expect((await rejectSignup(USER_ID, "staff-1")).ok).toBe(false)
     expect(mockUpdate).not.toHaveBeenCalled()
     expect(mockSendEmail).not.toHaveBeenCalled()
@@ -170,4 +199,130 @@ describe("signup approval", () => {
     )
     expect(mockSendEmail).not.toHaveBeenCalled()
   })
+  it.each(["approved", "rejected"])(
+    "serializes concurrent opposing decisions when %s wins",
+    async (first) => {
+      mockGetUserById.mockResolvedValue({ data: { user: user() }, error: null })
+      const approve = () => approveSignup(USER_ID, "approver", PLAN, mockAssign)
+      const reject = () => rejectSignup(USER_ID, "rejecter")
+      let claimed!: () => void
+      const firstClaimed = new Promise<void>((resolve) => {
+        claimed = resolve
+      })
+      mockClaim.mockImplementation(async (payload) => {
+        decision ??= { ...payload, created_at: "2026-10-26T00:00:00Z" }
+        claimed()
+        return { error: null }
+      })
+      const firstRequest = first === "approved" ? approve() : reject()
+      await firstClaimed
+      const results = await Promise.all([
+        firstRequest,
+        first === "approved" ? reject() : approve(),
+      ])
+      expect(results[0].ok).toBe(true)
+      expect(results[1].ok).toBe(false)
+      expect(decision?.decision).toBe(first)
+      expect(mockProvision).toHaveBeenCalledTimes(first === "approved" ? 1 : 0)
+      expect(mockAssign).toHaveBeenCalledTimes(first === "approved" ? 1 : 0)
+      expect(
+        mockUpdate.mock.calls
+          .filter(([, patch]) => patch.signup_review)
+          .map(([, patch]) => patch.signup_review),
+      ).toEqual([first])
+    },
+  )
+
+  it("rejects competing plan selections before the losing request provisions", async () => {
+    mockGetUserById.mockResolvedValue({ data: { user: user() }, error: null })
+    const results = await Promise.all([
+      approveSignup(USER_ID, "first-staff", PLAN, mockAssign),
+      approveSignup(
+        USER_ID,
+        "other-staff",
+        "33333333-3333-4333-8333-333333333333",
+        mockAssign,
+      ),
+    ])
+    expect(results.map((r) => r.ok)).toEqual([true, false])
+    expect(mockAssign).toHaveBeenCalledOnce()
+    expect(mockAssign).toHaveBeenCalledWith(TEAM, PLAN)
+  })
+
+  it("retries the winning frozen region, plan and staff after a partial failure", async () => {
+    mockGetUserById.mockResolvedValue({ data: { user: user() }, error: null })
+    decision = {
+      user_id: USER_ID,
+      decision: "approved",
+      staff_id: "original-staff",
+      plan_version_id: PLAN,
+      region: "usw",
+      created_at: "2026-10-25T00:00:00Z",
+    }
+    mockAssign.mockRejectedValueOnce(new Error("temporary failure"))
+    await expect(
+      approveSignup(USER_ID, "new-staff", PLAN, mockAssign),
+    ).rejects.toThrow("temporary failure")
+    await approveSignup(USER_ID, "new-staff", PLAN, mockAssign)
+    expect(mockCatalog).not.toHaveBeenCalled()
+    expect(mockProvision).toHaveBeenCalledWith(expect.anything(), "usw")
+    expect(mockAssign).toHaveBeenLastCalledWith(TEAM, PLAN)
+    expect(mockUpdate).toHaveBeenCalledWith(
+      USER_ID,
+      expect.objectContaining({
+        approved_by: "original-staff",
+        approved_at: "2026-10-25T00:00:00Z",
+      }),
+    )
+  })
+
+  it.each(["claim", "read"])(
+    "fails closed on decision %s storage errors",
+    async (stage) => {
+      mockGetUserById.mockResolvedValue({ data: { user: user() }, error: null })
+      if (stage === "claim")
+        mockClaim.mockResolvedValue({ error: { message: "missing schema" } })
+      else
+        mockReadDecision.mockResolvedValue({
+          data: null,
+          error: { message: "unavailable" },
+        })
+      await expect(
+        approveSignup(USER_ID, "staff-1", PLAN, mockAssign),
+      ).rejects.toThrow()
+      await expect(rejectSignup(USER_ID, "staff-1")).rejects.toThrow()
+      expect(mockProvision).not.toHaveBeenCalled()
+      expect(mockUpdate).not.toHaveBeenCalled()
+      expect(mockSendEmail).not.toHaveBeenCalled()
+    },
+  )
+
+  it("requires a plan before recording or provisioning a pending approval", async () => {
+    mockGetUserById.mockResolvedValue({ data: { user: user() }, error: null })
+    expect((await approveSignup(USER_ID, "staff-1", "", mockAssign)).ok).toBe(
+      false,
+    )
+    expect(mockClaim).not.toHaveBeenCalled()
+    expect(mockProvision).not.toHaveBeenCalled()
+  })
+  it.each(["unknown", "unavailable"])(
+    "refuses a first claim when the plan catalog is %s",
+    async (failure) => {
+      mockGetUserById.mockResolvedValue({ data: { user: user() }, error: null })
+      if (failure === "unknown") {
+        mockCatalog.mockResolvedValue([])
+        expect(
+          (await approveSignup(USER_ID, "staff-1", PLAN, mockAssign)).ok,
+        ).toBe(false)
+      } else {
+        mockCatalog.mockRejectedValue(new Error("unavailable"))
+        await expect(
+          approveSignup(USER_ID, "staff-1", PLAN, mockAssign),
+        ).rejects.toThrow()
+      }
+      expect(mockClaim).not.toHaveBeenCalled()
+      expect(mockProvision).not.toHaveBeenCalled()
+      expect(mockUpdate).not.toHaveBeenCalled()
+    },
+  )
 })
