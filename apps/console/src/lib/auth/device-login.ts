@@ -161,11 +161,17 @@ export async function approveDeviceCode(
 }
 
 export async function denyDeviceCode(userCode: string) {
-  const { error } = await deviceTable()
+  const { data, error } = await deviceTable()
     .update({ status: "denied" })
     .eq("user_code", userCode)
     .eq("status", "pending")
+    .select("id")
   if (error) throw new DeviceLoginError("unavailable", "Login is unavailable.")
+  if (!data?.length)
+    throw new DeviceLoginError(
+      "invalid_code",
+      "This code has expired or was already used.",
+    )
 }
 
 /**

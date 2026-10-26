@@ -178,6 +178,12 @@ describe("device login", () => {
       code: "access_denied",
     })
 
+    const approved = await start()
+    await approveDeviceCode(approved.userCode, user as never, team)
+    await expect(denyDeviceCode(approved.userCode)).rejects.toMatchObject({
+      code: "invalid_code",
+    })
+
     const expired = await start()
     state.rows.at(-1)!.expires_at = new Date(Date.now() - 1000).toISOString()
     await expect(pollDeviceCode(expired.deviceCode)).rejects.toMatchObject({
