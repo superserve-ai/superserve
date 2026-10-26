@@ -112,6 +112,6 @@ it("rejects conflicting checkout team locators before preparation", async () => 
     "next",
     "/billing/pro/?team=use%3Aoriginal&billing=success",
   )
-  await expect(GET(new Request(url))).rejects.toThrow("reason=account_setup")
+  await expect(GET(new Request(url))).rejects.toThrow("reason=team_changed")
   expect(m.prepare).not.toHaveBeenCalled()
 })

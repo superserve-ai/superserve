@@ -5,6 +5,7 @@ import {
   parseSignupChoice,
   type SignupPlanContext,
 } from "@/lib/api/signup-plan"
+import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
 import type { TeamMembership } from "@/lib/api/team-directory"
 import { PLAN_OFFER_COOKIE, readPlanOffer } from "@/lib/auth/plan-preselection"
 import { cellFor } from "@/lib/cells"
@@ -35,7 +36,7 @@ export async function readSignupPlan(
 ): Promise<SignupPlanContext> {
   const teamKey = `${team.region}:${team.teamId}`
   if (expectedTeam && expectedTeam !== teamKey)
-    throw new Error("Your active team changed. Reload to continue.")
+    throw new SignupSetupBlockedError("team_changed")
   const admin = cellFor(team.region).createAdminClient()
   const { data, error } = await admin
     .from("billing_signup_choice")

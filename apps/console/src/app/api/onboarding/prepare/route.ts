@@ -2,6 +2,7 @@ import { redirect, unstable_rethrow } from "next/navigation"
 
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { signupPlanPath } from "@/lib/api/signup-plan-page"
+import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
 import {
   proAuthReturnPath,
   starterAuthReturnPath,
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
         undefined)
       : undefined
     if (params.team && continuationTeam && params.team !== continuationTeam)
-      throw new Error("The checkout team changed")
+      throw new SignupSetupBlockedError("team_changed")
     await getSignupPlanAction(
       params.team ?? continuationTeam,
       params.account,
@@ -37,6 +38,11 @@ export async function GET(request: Request) {
     )
   } catch (error) {
     unstable_rethrow(error)
+    if (retry && error instanceof SignupSetupBlockedError) {
+      const terminal = new URL(retry, request.url)
+      terminal.searchParams.set("reason", error.reason)
+      redirect(terminal.pathname + terminal.search)
+    }
     redirect(retry ?? `${destination}&setup_error=1`)
   }
   if (continuation && params.account) redirect(continuation)

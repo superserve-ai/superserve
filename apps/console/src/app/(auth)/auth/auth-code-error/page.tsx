@@ -5,7 +5,7 @@ import { Button } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { Suspense } from "react"
+import { Suspense, useState } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
@@ -13,9 +13,13 @@ import { SIGNUP_RESTRICTED_MESSAGE } from "@/lib/auth/signup-restricted-message"
 import {
   proAuthReturnPath,
   starterAuthReturnPath,
+  signupPreparationReturnPath,
 } from "@/lib/billing/pro-auth-return"
+import { createBrowserClient } from "@/lib/supabase/client"
 
 function AuthCodeErrorContent() {
+  const [switching, setSwitching] = useState(false)
+  const [switchError, setSwitchError] = useState(false)
   const searchParams = useSearchParams()
   const isSignupContext = searchParams.get("reason") === "signup_blocked"
   const retryParams = new URLSearchParams()
@@ -26,10 +30,23 @@ function AuthCodeErrorContent() {
     proAuthReturnPath(searchParams.get("next")) ??
     starterAuthReturnPath(searchParams.get("next"))
   const account = searchParams.get("account")
+  const setupReason = searchParams.get("reason")
   const setupRetry =
-    searchParams.get("reason") === "account_setup" && continuation && account
-      ? `/api/onboarding/prepare/?${new URLSearchParams({ account, next: continuation })}`
+    [
+      "account_setup",
+      "account_changed",
+      "impersonation",
+      "team_changed",
+    ].includes(setupReason ?? "") &&
+    continuation &&
+    account
+      ? signupPreparationReturnPath(
+          `/api/onboarding/prepare/?${new URLSearchParams({ account, next: continuation })}`,
+        )
       : null
+  const wrongAccount = setupReason === "account_changed" && !!setupRetry
+  const impersonating = setupReason === "impersonation" && !!setupRetry
+  const wrongTeam = setupReason === "team_changed" && !!setupRetry
   const retryHref =
     setupRetry ??
     `${isSignupContext ? "/auth/signup" : "/auth/signin"}${retryParams.size ? `?${retryParams}` : ""}`
@@ -58,13 +75,70 @@ function AuthCodeErrorContent() {
             Authentication Error
           </h1>
           <p className="mt-2 text-center text-xs text-muted">
-            {isSignupContext
-              ? SIGNUP_RESTRICTED_MESSAGE
-              : "Something went wrong. Please try again."}
+            {wrongAccount
+              ? "Sign in to the account that started checkout to continue with your selected plan."
+              : impersonating
+                ? "End impersonation from the console before continuing with your selected plan."
+                : wrongTeam
+                  ? "Return to the team that started checkout before continuing with your selected plan."
+                  : isSignupContext
+                    ? SIGNUP_RESTRICTED_MESSAGE
+                    : "Something went wrong. Please try again."}
           </p>
-          <Button render={<Link href={retryHref} />} size="sm" className="mt-5">
-            Try Again
-          </Button>
+          {wrongAccount ? (
+            <Button
+              size="sm"
+              className="mt-5"
+              disabled={switching}
+              onClick={async () => {
+                setSwitching(true)
+                setSwitchError(false)
+                try {
+                  const { error } = await createBrowserClient().auth.signOut({
+                    scope: "local",
+                  })
+                  if (error) throw error
+                  window.location.assign(
+                    `/auth/signin?next=${encodeURIComponent(setupRetry!)}`,
+                  )
+                } catch {
+                  setSwitchError(true)
+                  setSwitching(false)
+                }
+              }}
+            >
+              {switching ? "Signing out…" : "Sign out and use another account"}
+            </Button>
+          ) : (
+            <>
+              {impersonating && (
+                <Link href="/sandboxes" className="mt-5 underline">
+                  Return to console to end impersonation
+                </Link>
+              )}
+              {wrongTeam && (
+                <Link href="/sandboxes" className="mt-5 underline">
+                  Return to console to select the original team
+                </Link>
+              )}
+              <Button
+                render={<Link href={retryHref} />}
+                size="sm"
+                className="mt-5"
+              >
+                {impersonating
+                  ? "Continue after ending impersonation"
+                  : wrongTeam
+                    ? "Continue after selecting the original team"
+                    : "Try Again"}
+              </Button>
+            </>
+          )}
+          {switchError && (
+            <p role="alert" className="mt-2 text-xs">
+              Unable to sign out. Please try again.
+            </p>
+          )}
         </div>
       </div>
     </div>

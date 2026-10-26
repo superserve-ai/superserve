@@ -6,6 +6,7 @@ import { getImpersonationContext } from "@/lib/admin/impersonation"
 import { getAuthApiKeyAndTeamForUser } from "@/lib/api/proxy-auth"
 import type { SignupPlanContext } from "@/lib/api/signup-plan"
 import { readSignupPlan } from "@/lib/api/signup-plan-read"
+import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
 import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
 import {
   proAuthReturnPath,
@@ -48,11 +49,9 @@ export async function getSignupPlanAction(
     )
   }
   if (expectedUser && expectedUser !== user.id)
-    throw new Error(
-      "Your account changed. Sign in to the account that started checkout.",
-    )
+    throw new SignupSetupBlockedError("account_changed")
   if (await getImpersonationContext(user))
-    throw new Error("Plan setup is unavailable during impersonation")
+    throw new SignupSetupBlockedError("impersonation")
   // Resolve/provision through the existing signup path, before reading billing state.
   const { team } = await getAuthApiKeyAndTeamForUser(
     user,

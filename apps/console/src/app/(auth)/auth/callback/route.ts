@@ -9,6 +9,7 @@ import {
 } from "@/app/(auth)/auth/signup/action"
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
+import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { completedMemberships } from "@/lib/api/team-provisioning"
 import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
@@ -745,9 +746,12 @@ export async function GET(request: Request) {
               undefined,
               next,
             )
-          } catch {
+          } catch (error) {
             const recovery = new URLSearchParams({
-              reason: "account_setup",
+              reason:
+                error instanceof SignupSetupBlockedError
+                  ? error.reason
+                  : "account_setup",
               account: user.id,
               next,
             })

@@ -17,7 +17,12 @@ const mocks = vi.hoisted(() => ({
     throw new Error(`redirect:${url}`)
   }),
 }))
-vi.mock("next/navigation", () => ({ redirect: mocks.redirect }))
+vi.mock("next/navigation", () => ({
+  redirect: mocks.redirect,
+  unstable_rethrow: (error: Error) => {
+    if (error.message.startsWith("redirect:")) throw error
+  },
+}))
 vi.mock("@/lib/auth/google-signup-proof", () => ({
   GoogleSignupRecoveryRequiredError: class extends Error {},
 }))
@@ -337,3 +342,61 @@ it.each([
     expect(mocks.team.mock.calls.length).toBe(before)
   },
 )
+
+describe("real paid preparation handler permanent recovery", () => {
+  const endpoint = (account = "user") =>
+    new Request(
+      `https://console.test/api/onboarding/prepare/?account=${account}&next=%2Fbilling%2Fpro%2F`,
+    )
+  async function failure(request: Request) {
+    const { GET } = await import("@/app/api/onboarding/prepare/route")
+    return GET(request).catch(
+      (error) => new URL(error.message.replace(/^redirect:/, ""), request.url),
+    )
+  }
+  it("surfaces account A's link while signed in as B without provisioning or retrying blindly", async () => {
+    const result = await failure(endpoint("account-A"))
+    if (!result) throw new Error("Expected blocked recovery")
+    expect(result.searchParams.get("reason")).toBe("account_changed")
+    expect(result.searchParams.get("account")).toBe("account-A")
+    expect(result.searchParams.get("next")).toBe("/billing/pro/")
+    expect(mocks.team).not.toHaveBeenCalled()
+    expect(mocks.from).not.toHaveBeenCalled()
+  })
+  it("surfaces impersonation before any team or billing action", async () => {
+    mocks.impersonation.mockResolvedValue({ teamId: "impersonated" })
+    const result = await failure(endpoint())
+    if (!result) throw new Error("Expected blocked recovery")
+    expect(result.searchParams.get("reason")).toBe("impersonation")
+    expect(result.searchParams.get("account")).toBe("user")
+    expect(mocks.team).not.toHaveBeenCalled()
+    expect(mocks.from).not.toHaveBeenCalled()
+  })
+  it("surfaces contradictory team locators before any setup action", async () => {
+    const url = new URL(endpoint().url)
+    url.searchParams.set("team", "use:original")
+    url.searchParams.set("next", "/billing/pro/?team=use%3Aother")
+    const result = await failure(new Request(url))
+    if (!result) throw new Error("Expected blocked recovery")
+    expect(result.searchParams.get("reason")).toBe("team_changed")
+    expect(mocks.user).not.toHaveBeenCalled()
+    expect(mocks.team).not.toHaveBeenCalled()
+  })
+  it("surfaces a changed active team from the actual signup plan reader", async () => {
+    const url = new URL(endpoint().url)
+    url.searchParams.set("next", "/billing/pro/?team=use%3Aoriginal")
+    const result = await failure(new Request(url))
+    if (!result) throw new Error("Expected blocked recovery")
+    expect(result.searchParams.get("reason")).toBe("team_changed")
+    expect(mocks.from).not.toHaveBeenCalled()
+  })
+  it("keeps unclassified/transient failures retryable without trusting their text", async () => {
+    mocks.team.mockRejectedValue(
+      new Error("Plan setup is unavailable during impersonation"),
+    )
+    const result = await failure(endpoint())
+    if (!result) throw new Error("Expected retry")
+    expect(result.searchParams.get("reason")).toBe("account_setup")
+    expect(result.searchParams.get("next")).toBe("/billing/pro/")
+  })
+})
