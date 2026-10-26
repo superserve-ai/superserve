@@ -21,34 +21,39 @@ export const proCheckoutSchema = z.object({
 })
 export type ProCheckout = z.infer<typeof proCheckoutSchema>
 
-export const teamPlanSchema = z
-  .object({
-    plan: z
-      .object({
-        plan_key: z.string(),
-        kind: planKindSchema,
-        display_name: z.string(),
-        limits: planLimitsSchema.extend({
-          max_concurrent: z.number().int().nonnegative().nullable(),
-          max_templates: z.number().int().nonnegative().nullable(),
-        }),
-        effective_from: z.string(),
-      })
-      .nullable(),
-    period: z.object({ start: z.string(), end: z.string() }),
-    pro_checkout: proCheckoutSchema.optional(),
-    pending_change: z
-      .object({
-        id: z.string().uuid(),
-        target_plan_key: z.string(),
-        target_display_name: z.string(),
-        effective_at: z.string(),
-        undoable: z.boolean(),
-        pauses_running: z.boolean(),
-      })
-      .nullable(),
-  })
-  .transform(({ plan, period, pending_change, pro_checkout }) =>
+const teamPlanResponseSchema = z.object({
+  plan: z
+    .object({
+      plan_key: z.string(),
+      kind: planKindSchema,
+      display_name: z.string(),
+      limits: planLimitsSchema.extend({
+        max_concurrent: z.number().int().nonnegative().nullable(),
+        max_templates: z.number().int().nonnegative().nullable(),
+      }),
+      effective_from: z.string(),
+    })
+    .nullable(),
+  period: z.object({ start: z.string(), end: z.string() }),
+  pro_checkout: proCheckoutSchema.optional(),
+  pending_change: z
+    .object({
+      id: z.string().uuid(),
+      target_plan_key: z.string(),
+      target_display_name: z.string(),
+      effective_at: z.string(),
+      undoable: z.boolean(),
+      pauses_running: z.boolean(),
+    })
+    .nullable(),
+})
+
+export const proCheckoutPlanSchema = teamPlanResponseSchema.transform(
+  ({ pro_checkout }) => pro_checkout ?? null,
+)
+
+export const teamPlanSchema = teamPlanResponseSchema.transform(
+  ({ plan, period, pending_change, pro_checkout }) =>
     plan === null
       ? null
       : {
@@ -72,7 +77,7 @@ export const teamPlanSchema = z
               }
             : null,
         },
-  )
+)
 
 const decimalCents = z.number().nonnegative()
 

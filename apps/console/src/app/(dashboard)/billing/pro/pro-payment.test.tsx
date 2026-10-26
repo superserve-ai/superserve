@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { proCheckoutPlanSchema } from "@/lib/api/billing-v2"
 import { ApiError } from "@/lib/api/client"
 import { signInOfferDestination } from "@/lib/auth/signup-offer"
 import type { PublicBillingPlans } from "@/lib/billing/plans"
@@ -79,10 +80,10 @@ vi.mock("@/hooks/use-teams", () => ({
   useSwitchTeam: () => ({ mutateAsync: state.switch }),
 }))
 vi.mock("@/hooks/use-billing-v2", () => ({
-  useTeamPlan: (enabled: boolean) => {
+  useProCheckoutTerms: (enabled: boolean) => {
     state.planQuery(enabled)
     return {
-      data: { pro_checkout: state.quote },
+      data: state.quote,
       isError: state.quoteError,
       isPending: state.quotePending,
       refetch: state.retryQuote,
@@ -861,4 +862,66 @@ it("shows only frozen first terms on an actual accepted cancel return with a cha
   expect(state.resume).toHaveBeenCalledWith(originalTeam, "actor")
   expect(state.start).not.toHaveBeenCalled()
   assign.mockRestore()
+})
+
+const noAssignmentPlan = {
+  plan: null,
+  period: { start: "2026-10-26T00:00:00Z", end: "2026-11-01T00:00:00Z" },
+  pending_change: null,
+}
+it("renders parsed server first-cycle terms when the current plan assignment is null", () => {
+  state.quote =
+    proCheckoutPlanSchema.parse({
+      ...noAssignmentPlan,
+      pro_checkout: { first_paid_pro_cycle: true, accepted: false },
+    }) ?? undefined
+  state.plans = availablePlans
+  render(<ActualProPayment returnTo="/plan-usage/" />)
+  expect(screen.getByText(/first full month of Pro costs \$250/)).toBeTruthy()
+  expect(
+    screen.getByText(/expires at the end of that billing month/),
+  ).toBeTruthy()
+  expect(screen.queryByText(/prorated non-expiring/)).toBeNull()
+  expect(state.start).not.toHaveBeenCalled()
+})
+it("renders only a parsed frozen quote on a no-assignment cancel return", () => {
+  const team = "use:11111111-1111-4111-8111-111111111111"
+  state.quote =
+    proCheckoutPlanSchema.parse({
+      ...noAssignmentPlan,
+      pro_checkout: {
+        first_paid_pro_cycle: true,
+        accepted: true,
+        first_payment_cents: 25000,
+        first_credit_cents: 40000,
+        period_start: "2026-10-26T12:00:00Z",
+        period_end: "2026-11-26T12:00:00Z",
+        credit_expires_at: "2026-11-26T12:00:00Z",
+      },
+    }) ?? undefined
+  state.plans = availablePlans
+  state.query = `billing=cancel&team=${team}`
+  render(
+    <ActualProPayment
+      billingReturn="cancel"
+      checkoutTeam={team}
+      returnTo="/plan-usage/"
+    />,
+  )
+  expect(screen.getByText(/First payment: \$250/)).toBeTruthy()
+  expect(screen.getByText(/Included usage credit: \$400/)).toBeTruthy()
+  expect(screen.queryByText(/prorated non-expiring/)).toBeNull()
+  expect(
+    screen.queryByRole("button", { name: "Continue to payment" }),
+  ).toBeNull()
+  expect(state.start).not.toHaveBeenCalled()
+})
+it("keeps successful legacy missing-quote behavior with no assignment", () => {
+  state.quote = proCheckoutPlanSchema.parse(noAssignmentPlan) ?? undefined
+  state.plans = availablePlans
+  render(<ActualProPayment returnTo="/plan-usage/" />)
+  expect(screen.getByText(/prorated non-expiring/)).toBeTruthy()
+  expect(
+    screen.getByRole("button", { name: "Continue to payment" }),
+  ).toBeTruthy()
 })

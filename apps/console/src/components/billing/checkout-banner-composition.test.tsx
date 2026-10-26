@@ -62,6 +62,7 @@ vi.mock("@/hooks/use-pricing-version", () => ({
 }))
 vi.mock("@/hooks/use-billing-v2", () => ({
   useTeamPlan: () => ({ data: { kind: "prepaid" } }),
+  useProCheckoutTerms: () => ({ data: undefined }),
   usePrepaidBalance: () => ({ data: null }),
 }))
 vi.mock("./plan-aware-banner", () => ({

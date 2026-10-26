@@ -94,7 +94,7 @@ vi.mock("@/lib/api/starter-checkout-recovery", () => ({
   }),
 }))
 vi.mock("@/hooks/use-billing-v2", () => ({
-  useTeamPlan: () => ({ data: undefined, refetch: state.refresh }),
+  useProCheckoutTerms: () => ({ data: undefined, refetch: state.refresh }),
 }))
 vi.mock("@/hooks/use-billing-summary", () => ({
   useBillingSummary: () => ({

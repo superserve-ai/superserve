@@ -17,7 +17,7 @@ import {
 } from "@/components/query-provider"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
-import { useTeamPlan } from "@/hooks/use-billing-v2"
+import { useProCheckoutTerms } from "@/hooks/use-billing-v2"
 import { usePublicBillingPlans } from "@/hooks/use-public-billing-plans"
 import { useTeams } from "@/hooks/use-teams"
 import { useUser } from "@/hooks/use-user"
@@ -136,7 +136,7 @@ function ProPaymentContext({
             checkoutEntryPath(callbackPath)
           ) ||
             params.get("team") !== checkoutTeam))))
-  const teamPlanQuery = useTeamPlan(
+  const teamPlanQuery = useProCheckoutTerms(
     !!team && ready && scope === "self" && !teamMismatch,
   )
   useEffect(() => {
@@ -382,7 +382,7 @@ function ProPaymentContext({
           <ProPaymentView
             step={step}
             pro={pro}
-            proCheckout={teamPlanQuery.data?.pro_checkout}
+            proCheckout={teamPlanQuery.data ?? undefined}
             quoteUnavailable={teamPlanQuery.isError}
             onRetryQuote={() => void teamPlanQuery.refetch()}
             paidPlan={paidPlan}
