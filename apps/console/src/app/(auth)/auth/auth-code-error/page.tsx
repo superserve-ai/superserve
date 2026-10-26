@@ -14,7 +14,11 @@ import { SIGNUP_RESTRICTED_MESSAGE } from "@/lib/auth/signup-restricted-message"
 function AuthCodeErrorContent() {
   const searchParams = useSearchParams()
   const isSignupContext = searchParams.get("reason") === "signup_blocked"
-  const retryHref = isSignupContext ? "/auth/signup" : "/auth/signin"
+  const retryParams = new URLSearchParams()
+  // Carry only the recognized retry preference; it cannot authorize admission.
+  if (searchParams.get("signup_offer") === "enterprise")
+    retryParams.set("signup_offer", "enterprise")
+  const retryHref = `${isSignupContext ? "/auth/signup" : "/auth/signin"}${retryParams.size ? `?${retryParams}` : ""}`
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">

@@ -208,43 +208,52 @@ describe("middleware", () => {
     expect(res).toBe(mockClient.response)
   })
 
-  it("signs out an account awaiting Enterprise setup and sends it to the pending page", async () => {
-    const signOut = vi.fn().mockResolvedValue({ error: null })
-    Object.assign(mockClient.supabase!.auth, { signOut })
-    mockClient.supabase!.auth.getUser.mockResolvedValue({
-      data: {
-        user: {
-          id: "user-123",
-          email: "u@e.com",
-          app_metadata: { signup_review: "pending" },
-        },
-      },
-      error: null,
-    })
-
-    const res = await middleware(buildRequest("/sandboxes"))
-    expect(signOut).toHaveBeenCalled()
-    expect(new URL(res.headers.get("location")!).pathname).toBe("/auth/pending")
-    expect(await middleware(buildRequest("/auth/pending"))).toBe(
-      mockClient.response,
-    )
-  })
-
-  it.each([{}, { signup_review: "approved" }])(
-    "lets an account without a hold through (%o)",
+  it.each([
+    { signup_review: "pending" },
+    { signup_enterprise_pricing_pending: true },
+  ])(
+    "blocks Enterprise setup or unresolved pricing even without URL intent (%o)",
     async (metadata) => {
-      const signOut = vi.fn()
+      const signOut = vi.fn().mockResolvedValue({ error: null })
       Object.assign(mockClient.supabase!.auth, { signOut })
       mockClient.supabase!.auth.getUser.mockResolvedValue({
-        data: { user: { id: "user-123", app_metadata: metadata } },
+        data: {
+          user: {
+            id: "user-123",
+            email: "u@e.com",
+            app_metadata: metadata,
+          },
+        },
         error: null,
       })
-      expect(await middleware(buildRequest("/sandboxes"))).toBe(
+
+      const res = await middleware(buildRequest("/sandboxes"))
+      expect(signOut).toHaveBeenCalled()
+      expect(new URL(res.headers.get("location")!).pathname).toBe(
+        "/auth/pending",
+      )
+      expect(await middleware(buildRequest("/auth/pending"))).toBe(
         mockClient.response,
       )
-      expect(signOut).not.toHaveBeenCalled()
     },
   )
+
+  it.each([
+    {},
+    { signup_review: "approved" },
+    { signup_review: "approved", signup_enterprise_pricing_pending: true },
+  ])("lets an account without a hold through (%o)", async (metadata) => {
+    const signOut = vi.fn()
+    Object.assign(mockClient.supabase!.auth, { signOut })
+    mockClient.supabase!.auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-123", app_metadata: metadata } },
+      error: null,
+    })
+    expect(await middleware(buildRequest("/sandboxes"))).toBe(
+      mockClient.response,
+    )
+    expect(signOut).not.toHaveBeenCalled()
+  })
 })
 
 describe("middleware matcher", () => {

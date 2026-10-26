@@ -26,6 +26,21 @@ describe("signup review", () => {
     )
   })
 
+  it("blocks service-owned unresolved Enterprise pricing independently of URL", () => {
+    const unresolved = {
+      app_metadata: { signup_enterprise_pricing_pending: true },
+    }
+    expect(isSignupReviewBlocked(unresolved)).toBe(true)
+    expect(() => assertSignupReviewCleared(unresolved)).toThrow(
+      SignupReviewPendingError,
+    )
+    expect(
+      isSignupReviewBlocked({
+        app_metadata: { signup_enterprise_pricing_pending: false },
+      }),
+    ).toBe(false)
+  })
+
   it("lets an approved account through", () => {
     expect(signupReviewStatus(account("approved"))).toBe("approved")
     expect(isSignupReviewBlocked(account("approved"))).toBe(false)

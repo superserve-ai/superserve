@@ -1,8 +1,8 @@
 import type { User } from "@supabase/supabase-js"
 
 // Review state lives in app_metadata, which only the service role can write.
-// Only pricing v2 Enterprise applicants are ever marked; unmarked accounts are
-// never gated.
+// Enterprise applicants awaiting a pricing decision are blocked until a strict
+// catalog read resolves legacy admission or pricing v2 staff approval.
 export type SignupReviewStatus = "pending" | "approved" | "rejected"
 
 export const SIGNUP_REVIEW_PENDING_MESSAGE =
@@ -19,10 +19,21 @@ export function signupReviewStatus(
     : undefined
 }
 
+export function hasPendingEnterprisePricing(user: MetadataUser): boolean {
+  return (
+    user?.app_metadata?.signup_enterprise_pricing_pending === true &&
+    signupReviewStatus(user) !== "approved"
+  )
+}
+
 /** Pending and rejected accounts get the same treatment, so neither is revealed. */
 export function isSignupReviewBlocked(user: MetadataUser): boolean {
   const status = signupReviewStatus(user)
-  return status === "pending" || status === "rejected"
+  return (
+    status === "pending" ||
+    status === "rejected" ||
+    hasPendingEnterprisePricing(user)
+  )
 }
 
 export class SignupReviewPendingError extends Error {

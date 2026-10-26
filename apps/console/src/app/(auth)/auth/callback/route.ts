@@ -42,7 +42,11 @@ import {
   evaluateSignupRestriction,
   SignupRestrictedError,
 } from "@/lib/auth/signup-restrictions"
-import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
+import {
+  hasPendingEnterprisePricing,
+  isSignupReviewBlocked,
+  signupReviewStatus,
+} from "@/lib/auth/signup-review"
 import {
   encodePendingProfile,
   PENDING_PROFILE_COOKIE,
@@ -212,23 +216,72 @@ export async function GET(request: Request) {
             return response
           }
         }
-        if (isSignupReviewBlocked(user))
+        const pendingEnterprisePricing = hasPendingEnterprisePricing(user)
+        if (
+          isSignupReviewBlocked(user) &&
+          (!pendingEnterprisePricing ||
+            signupReviewStatus(user) === "pending" ||
+            signupReviewStatus(user) === "rejected")
+        )
           return pendingSignupResponse(supabase, origin, user)
-        const offerIntent =
-          searchParams.get(SIGNUP_OFFER_PARAM) ?? searchParams.get("offer")
+        const offerIntent = pendingEnterprisePricing
+          ? "enterprise"
+          : (searchParams.get(SIGNUP_OFFER_PARAM) ?? searchParams.get("offer"))
         let enterprisePricing: "legacy" | "v2" | undefined
         if (offerIntent === "enterprise") {
           try {
             enterprisePricing = (await getPublicBillingPlansAction())
               .pricing_version
           } catch {
+            if (
+              code &&
+              isGoogleUser(user) &&
+              !pendingEnterprisePricing &&
+              !signupReviewStatus(user)
+            ) {
+              try {
+                const directory = await classifyGoogleMembershipState(
+                  user.id,
+                  await completedMemberships(
+                    user.id,
+                    await listTeamMembershipsForUserDetailed(user.id, {
+                      maxAgeMs: 0,
+                    }),
+                  ),
+                )
+                // A query cannot place an existing customer on hold. Persist only
+                // after a complete directory read proves this account is new.
+                if (directory.kind === "indeterminate")
+                  throw new Error("Enterprise membership unavailable")
+                if (directory.kind === "first_time") {
+                  await updateSignupReviewMetadata(user.id, {
+                    signup_enterprise_pricing_pending: true,
+                  })
+                }
+              } catch {
+                await revokeGoogleSignupAuthorization(
+                  user.id,
+                  searchParams.get("signup_attempt_id") || undefined,
+                ).catch(() => {})
+              }
+            }
             await supabase.auth.signOut().catch(() => {})
             return NextResponse.redirect(
               buildRedirectUrl(
                 origin,
-                "/auth/auth-code-error?reason=pricing_unavailable",
+                "/auth/auth-code-error?reason=pricing_unavailable&signup_offer=enterprise",
               ),
             )
+          }
+          if (pendingEnterprisePricing) {
+            await updateSignupReviewMetadata(user.id, {
+              signup_enterprise_pricing_pending: false,
+              ...(enterprisePricing === "v2"
+                ? { signup_review: "pending" }
+                : {}),
+            })
+            if (enterprisePricing === "v2")
+              return pendingSignupResponse(supabase, origin, user)
           }
         }
         const signupOffer =
@@ -316,7 +369,7 @@ export async function GET(request: Request) {
               recoveryUrl.searchParams.set("complete_google", "1")
               if (requestedOffer)
                 recoveryUrl.searchParams.set("offer", requestedOffer)
-              const signupOfferParam = searchParams.get(SIGNUP_OFFER_PARAM)
+              const signupOfferParam = offerIntent
               if (signupOfferParam)
                 recoveryUrl.searchParams.set(
                   SIGNUP_OFFER_PARAM,

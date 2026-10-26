@@ -1,4 +1,53 @@
+import { render, screen, cleanup, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import {
+  createElement,
+  cloneElement,
+  type ReactElement,
+  type ReactNode,
+} from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+
+let retrySearch = new URLSearchParams()
+const mockRetryOAuth = vi.fn()
+vi.mock("next/navigation", () => ({ useSearchParams: () => retrySearch }))
+vi.mock("next/image", () => ({ default: () => null }))
+vi.mock("next/link", () => ({
+  default: ({ href, children }: { href: string; children: ReactNode }) =>
+    createElement("a", { href }, children),
+}))
+vi.mock("@/components/corner-brackets", () => ({ CornerBrackets: () => null }))
+vi.mock("@/components/dither-background", () => ({
+  DitherBackground: () => null,
+}))
+vi.mock("@/lib/supabase/client", () => ({
+  createBrowserClient: () => ({
+    auth: {
+      getUser: async () => ({ data: { user: null }, error: null }),
+      signInWithOAuth: (...args: unknown[]) => mockRetryOAuth(...args),
+    },
+  }),
+}))
+vi.mock("@/app/(auth)/auth/signin/google-action", () => ({
+  beginGoogleSignIn: async () => "retry-origin",
+}))
+vi.mock("@superserve/ui", () => ({
+  Button: ({
+    render: element,
+    children,
+    ...props
+  }: {
+    render?: ReactElement
+    children?: ReactNode
+  }) =>
+    element
+      ? cloneElement(element, {}, children)
+      : createElement("button", props, children),
+  Input: () => null,
+}))
+vi.mock("posthog-js/react", () => ({
+  usePostHog: () => ({ capture: vi.fn() }),
+}))
 
 let currentUser: {
   id: string
@@ -8,6 +57,7 @@ let currentUser: {
     provider: string
     providers?: string[]
     signup_review?: string
+    signup_enterprise_pricing_pending?: boolean
   }
   user_metadata: { full_name?: string }
 } | null = null
@@ -1000,6 +1050,127 @@ describe("auth callback", () => {
         expect(mockSendWelcomeEmail).not.toHaveBeenCalled()
       },
     )
+
+    it("carries Enterprise through the rendered error retry, Google sign-in and callback recovery", async () => {
+      googleMembershipState = { kind: "first_time" }
+      mockStrictPlans.mockRejectedValue(new Error("catalog down"))
+      mockUpdateSignupReview.mockImplementation(async (_id, metadata) =>
+        Object.assign(currentUser!.app_metadata, metadata),
+      )
+      const failed = await firstTimeGoogle("enterprise")
+      retrySearch = new URL(failed.headers.get("location")!).searchParams
+      const ErrorPage = (await import("../auth-code-error/page")).default
+      render(createElement(ErrorPage))
+      const retry = new URL(
+        screen.getByRole("link", { name: "Try Again" }).getAttribute("href")!,
+        "https://console.superserve.ai",
+      )
+      expect(retry.pathname).toBe("/auth/signin")
+      cleanup()
+      retrySearch = retry.searchParams
+      mockRetryOAuth.mockResolvedValue({ error: null })
+      const SignInPage = (await import("../signin/page")).default
+      render(createElement(SignInPage))
+      await userEvent.click(
+        screen.getByRole("button", { name: "Continue with Google" }),
+      )
+      await waitFor(() => expect(mockRetryOAuth).toHaveBeenCalled())
+      const callback = new URL(
+        mockRetryOAuth.mock.lastCall![0].options.redirectTo,
+      )
+      expect(callback.searchParams.get("signup_offer")).toBe("enterprise")
+      callback.searchParams.set("code", "retry")
+      mockStrictPlans.mockResolvedValue({ pricing_version: "v2", cards: [] })
+      const recovered = await GET(new Request(callback))
+      expect(new URL(recovered.headers.get("location")!).pathname).toBe(
+        "/auth/pending",
+      )
+      expect(currentUser!.app_metadata.signup_review).toBe("pending")
+      expect(mockEnsureGoogleOnboardingMembership).not.toHaveBeenCalled()
+      expect(mockSendWelcomeEmail).not.toHaveBeenCalled()
+      cleanup()
+    })
+
+    it.each(["approved", "pending", "rejected"])(
+      "does not change a real %s review on Enterprise retry",
+      async (status) => {
+        googleMembershipState = { kind: "first_time" }
+        currentUser!.app_metadata.signup_review = status
+        mockStrictPlans.mockRejectedValue(new Error("catalog down"))
+        await GET(
+          new Request(
+            "https://console.superserve.ai/auth/callback?code=abc&signup_offer=enterprise",
+          ),
+        )
+        expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+        expect(currentUser!.app_metadata.signup_review).toBe(status)
+      },
+    )
+
+    it("revokes signup authorization and never provisions if saving unresolved classification fails", async () => {
+      googleMembershipState = { kind: "first_time" }
+      mockStrictPlans.mockRejectedValue(new Error("catalog down"))
+      mockUpdateSignupReview.mockRejectedValue(new Error("auth write down"))
+      await firstTimeGoogle("enterprise")
+      expect(mockRevokeGoogleSignupAuthorization).toHaveBeenCalledWith(
+        "u1",
+        "attempt-1",
+      )
+      expect(mockSignOut).toHaveBeenCalled()
+      expect(mockEnsureGoogleOnboardingMembership).not.toHaveBeenCalled()
+    })
+
+    it.each(["v2", "legacy"])(
+      "retains first-time Enterprise classification without a retry URL, resolving %s authoritatively",
+      async (pricing) => {
+        googleMembershipState = { kind: "first_time" }
+        mockStrictPlans.mockRejectedValue(new Error("catalog down"))
+        mockUpdateSignupReview.mockImplementation(async (_id, metadata) => {
+          Object.assign(currentUser!.app_metadata, metadata)
+        })
+        const failed = await firstTimeGoogle("enterprise")
+        const failure = new URL(failed.headers.get("location")!)
+        expect(failure.searchParams.get("signup_offer")).toBe("enterprise")
+        expect(
+          currentUser!.app_metadata.signup_enterprise_pricing_pending,
+        ).toBe(true)
+        expect(mockEnsureGoogleOnboardingMembership).not.toHaveBeenCalled()
+        mockStrictPlans.mockResolvedValue({
+          pricing_version: pricing,
+          cards: [],
+        })
+        const retry = await GET(
+          new Request(
+            "https://console.superserve.ai/auth/callback?code=retry&signup_attempt_id=attempt-1",
+          ),
+        )
+        expect(
+          currentUser!.app_metadata.signup_enterprise_pricing_pending,
+        ).toBe(false)
+        if (pricing === "v2") {
+          expect(currentUser!.app_metadata.signup_review).toBe("pending")
+          expect(new URL(retry.headers.get("location")!).pathname).toBe(
+            "/auth/pending",
+          )
+          expect(mockEnsureGoogleOnboardingMembership).not.toHaveBeenCalled()
+        } else {
+          expect(currentUser!.app_metadata.signup_review).toBeUndefined()
+          expect(new URL(retry.headers.get("location")!).pathname).toBe(
+            "/sandboxes",
+          )
+        }
+      },
+    )
+
+    it("cannot persist an Enterprise hold for an existing customer on catalog failure", async () => {
+      mockStrictPlans.mockRejectedValue(new Error("catalog down"))
+      await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&signup_offer=enterprise",
+        ),
+      )
+      expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+    })
 
     it("retains explicit legacy Enterprise email confirmation without inventing a hold", async () => {
       mockStrictPlans.mockResolvedValue({
