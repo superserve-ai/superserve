@@ -10,6 +10,13 @@ export async function POST(request: Request) {
       { error: "invalid_request", error_description: "Missing device_code." },
       { status: 400 },
     )
+  // Issued codes are 32 random bytes in base64url; anything else can't match,
+  // so it never reaches the database.
+  if (!/^[A-Za-z0-9_-]{43}$/.test(body.device_code))
+    return NextResponse.json(
+      { error: "invalid_grant", error_description: "Unknown device code." },
+      { status: 400 },
+    )
   try {
     const { apiKey, email, newAccount } = await pollDeviceCode(body.device_code)
     return NextResponse.json({
