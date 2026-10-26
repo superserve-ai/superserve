@@ -48,3 +48,64 @@ it("preserves authentication and Google proof recovery redirects", async () => {
     GET(new Request("https://console.test/api/onboarding/prepare/")),
   ).rejects.toThrow("/auth/signup?complete_google=1")
 })
+
+it.each([
+  "/plan-usage/buy-credit/",
+  "/billing/pro/?team=use%3Aoriginal&billing=success",
+])(
+  "retries preparation and preserves the authorized paid continuation %s",
+  async (next) => {
+    const url = new URL("https://console.test/api/onboarding/prepare/")
+    url.searchParams.set("next", next)
+    url.searchParams.set("account", "owner")
+    await expect(GET(new Request(url))).rejects.toThrow(next)
+    expect(m.prepare).toHaveBeenCalledWith(
+      new URL(next, url).searchParams.get("team") ?? undefined,
+      "owner",
+      undefined,
+    )
+    m.prepare.mockRejectedValueOnce(new Error("Response lost"))
+    const failure = await GET(new Request(url)).catch(
+      (error) => new URL(error.message, url),
+    )
+    if (!failure) throw new Error("Expected setup recovery redirect")
+    expect(failure.pathname).toBe("/auth/auth-code-error")
+    expect(failure.searchParams.get("next")).toBe(next)
+    expect(failure.searchParams.get("account")).toBe("owner")
+  },
+)
+it.each([
+  "https://evil.test",
+  "//evil.test",
+  "/billing/pro?approved=true",
+  "/sandboxes",
+  "/auth/pending",
+])("does not accept arbitrary preparation continuation %s", async (next) => {
+  const url = new URL("https://console.test/api/onboarding/prepare/")
+  url.searchParams.set("next", next)
+  url.searchParams.set("account", "owner")
+  await expect(GET(new Request(url))).rejects.toThrow(
+    "/onboarding/plan/?account=owner&setup_attempted=1",
+  )
+})
+it("requires the authenticated account binding for a paid continuation", async () => {
+  await expect(
+    GET(
+      new Request(
+        "https://console.test/api/onboarding/prepare/?next=%2Fbilling%2Fpro%2F",
+      ),
+    ),
+  ).rejects.toThrow("/onboarding/plan/?&setup_attempted=1")
+})
+
+it("rejects conflicting checkout team locators before preparation", async () => {
+  const url = new URL(
+    "https://console.test/api/onboarding/prepare/?account=owner&team=use%3Aother",
+  )
+  url.searchParams.set(
+    "next",
+    "/billing/pro/?team=use%3Aoriginal&billing=success",
+  )
+  await expect(GET(new Request(url))).rejects.toThrow("reason=account_setup")
+  expect(m.prepare).not.toHaveBeenCalled()
+})

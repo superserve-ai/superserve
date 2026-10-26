@@ -5,11 +5,15 @@ import { SIGNUP_RESTRICTED_MESSAGE } from "@/lib/auth/signup-restricted-message"
 
 let reason: string | null = null
 let intent: string | null = null
+let next: string | null = null
+let account: string | null = null
 vi.mock("next/navigation", () => ({
   useSearchParams: () =>
     new URLSearchParams({
       ...(reason ? { reason } : {}),
       ...(intent ? { signup_offer: intent } : {}),
+      ...(next ? { next } : {}),
+      ...(account ? { account } : {}),
     }),
 }))
 vi.mock("next/image", () => ({
@@ -45,6 +49,8 @@ describe("auth-code-error page", () => {
   beforeEach(() => {
     reason = null
     intent = null
+    next = null
+    account = null
   })
 
   it("displays the shared signup restriction message for callback denials", () => {
@@ -72,6 +78,39 @@ describe("auth-code-error page", () => {
       screen.getByRole("link", { name: "Try Again" }).getAttribute("href"),
     ).toBe("/auth/signin")
   })
+
+  it.each([
+    "/plan-usage/buy-credit/",
+    "/billing/pro/?team=use%3Aoriginal&billing=success",
+  ])(
+    "retries account setup with the bound paid destination %s",
+    (destination) => {
+      reason = "account_setup"
+      next = destination
+      account = "owner"
+      render(<AuthCodeErrorPage />)
+      const href = new URL(
+        screen.getByRole("link", { name: "Try Again" }).getAttribute("href")!,
+        "https://console.test",
+      )
+      expect(href.pathname).toBe("/api/onboarding/prepare/")
+      expect(href.searchParams.get("account")).toBe("owner")
+      expect(href.searchParams.get("next")).toBe(destination)
+    },
+  )
+
+  it.each(["https://evil.test", "//evil.test", "/billing/pro?approved=true"])(
+    "drops unsafe account setup continuation %s",
+    (destination) => {
+      reason = "account_setup"
+      next = destination
+      account = "owner"
+      render(<AuthCodeErrorPage />)
+      expect(
+        screen.getByRole("link", { name: "Try Again" }).getAttribute("href"),
+      ).toBe("/auth/signin")
+    },
+  )
 
   it("preserves the ordinary authentication error message", () => {
     render(<AuthCodeErrorPage />)

@@ -10,7 +10,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 let retrySearch = new URLSearchParams()
 const mockRetryOAuth = vi.fn()
-vi.mock("next/navigation", () => ({ useSearchParams: () => retrySearch }))
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => retrySearch,
+  redirect: (url: string) => {
+    throw Object.assign(new Error(url), { redirect: true })
+  },
+  unstable_rethrow: (error: { redirect?: boolean }) => {
+    if (error.redirect) throw error
+  },
+}))
 vi.mock("next/image", () => ({ default: () => null }))
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: ReactNode }) =>
@@ -76,6 +84,35 @@ let googleMembershipState:
 }
 let authExchangeError: { message: string } | null = null
 let authVerifyOtpError: { message: string } | null = null
+
+const mockGetSignupPlanAction = vi.fn()
+const mockPrepareTeam = vi.fn()
+const mockReadSignupPlan = vi.fn()
+vi.mock("@/lib/api/signup-plan-actions", () => ({
+  getSignupPlanAction: (...args: unknown[]) => mockGetSignupPlanAction(...args),
+}))
+vi.mock("@/lib/api/proxy-auth", () => ({
+  getAuthApiKeyAndTeamForUser: (...args: unknown[]) => mockPrepareTeam(...args),
+}))
+vi.mock("@/lib/api/signup-plan-read", () => ({
+  readSignupPlan: (...args: unknown[]) => mockReadSignupPlan(...args),
+}))
+vi.mock("@/lib/admin/impersonation", () => ({
+  getImpersonationContext: async () => null,
+}))
+vi.mock("@/lib/api/active-team", () => ({
+  readTeamSelection: async () => null,
+  pickActiveTeam: (teams: unknown[]) => teams[0],
+}))
+vi.mock("@/lib/api/teams-actions", () => ({
+  listTeamsAction: async () => ({
+    teams: directoryState.memberships.map((t) => ({
+      id: t.teamId,
+      region: t.region,
+      name: "Team",
+    })),
+  }),
+}))
 
 const mockCompleteStaffGoogle = vi.fn()
 vi.mock("@/lib/yc/staff-session", async (importOriginal) => ({
@@ -299,6 +336,22 @@ import { GET } from "./route"
 describe("auth callback", () => {
   beforeEach(() => {
     vi.stubEnv("YC_STAFF_UI_ENABLED", "false")
+    mockGetSignupPlanAction.mockReset().mockResolvedValue(undefined)
+    mockPrepareTeam.mockReset().mockImplementation(async () => {
+      const team = { teamId: "created-team", region: "use" }
+      directoryState.memberships = [team]
+      return { team, apiKey: "server-only" }
+    })
+    mockReadSignupPlan
+      .mockReset()
+      .mockImplementation(
+        async (userId: string, team: { region: string; teamId: string }) => ({
+          userId,
+          teamKey: `${team.region}:${team.teamId}`,
+          state: "legacy",
+          offer: null,
+        }),
+      )
     mockPricingVersion.mockReset().mockResolvedValue("legacy")
     mockStrictPlans.mockReset().mockImplementation(async () => ({
       pricing_version: await mockPricingVersion(),
@@ -1359,6 +1412,108 @@ describe("auth callback", () => {
         expect(mockPricingVersion).not.toHaveBeenCalled()
       },
     )
+
+    it.each([
+      ["starter", "/plan-usage/buy-credit/"],
+      ["pro_monthly", "/billing/pro/"],
+    ])(
+      "finishes first-team preparation before the fresh %s confirmation destination",
+      async (offer, next) => {
+        currentUser!.app_metadata = { provider: "email" }
+        const action = await vi.importActual<
+          typeof import("@/lib/api/signup-plan-actions")
+        >("@/lib/api/signup-plan-actions")
+        const { getSignupPlanPage } = await import("@/lib/api/signup-plan-page")
+        mockGetSignupPlanAction.mockImplementation(action.getSignupPlanAction)
+        const read = await vi.importActual<
+          typeof import("@/lib/api/signup-plan-read")
+        >("@/lib/api/signup-plan-read")
+        mockReadSignupPlan.mockImplementation(read.readSignupPlan)
+        const originalCell = mockCellFor.getMockImplementation()!
+        mockCellFor.mockImplementation((...args: unknown[]) => {
+          const original = originalCell(...args)
+          return {
+            ...original,
+            createAdminClient: () => {
+              const admin = original.createAdminClient()
+              return {
+                ...admin,
+                from: (table: string) => {
+                  if (table === "billing_signup_choice")
+                    return {
+                      select: () => ({
+                        eq: () => ({
+                          maybeSingle: async () => ({
+                            data: { state: "selecting", offer_key: null },
+                            error: null,
+                          }),
+                        }),
+                      }),
+                    }
+                  if (table === "team_plan_assignment")
+                    return {
+                      select: () => ({
+                        eq: () => ({
+                          lte: () => ({
+                            or: () => ({
+                              limit: async () => ({
+                                data: directoryState.memberships.length
+                                  ? [{ id: "initial-free-assignment" }]
+                                  : [],
+                                error: null,
+                              }),
+                            }),
+                          }),
+                        }),
+                      }),
+                    }
+                  return admin.from(table)
+                },
+              }
+            },
+          }
+        })
+        // This is the dashboard's real no-membership branch. Before the fix it
+        // replaced the selected payment page with generic plan setup/sandboxes.
+        await expect(getSignupPlanPage()).rejects.toThrow(
+          "/api/onboarding/prepare/",
+        )
+        const url = new URL(
+          "https://console.superserve.ai/auth/callback?token_hash=official&type=signup",
+        )
+        url.searchParams.set("offer", offer)
+        url.searchParams.set("signup_offer", offer)
+        url.searchParams.set("next", next)
+        const response = await GET(new Request(url))
+        expect(new URL(response.headers.get("location")!).pathname).toBe(next)
+        expect(mockPrepareTeam).toHaveBeenCalledWith(
+          currentUser,
+          expect.any(String),
+        )
+        expect(mockGetSignupPlanAction).toHaveBeenCalledWith(undefined, "u1")
+        // The real destination dashboard context now resolves the created Free
+        // team's legacy picker exemption; no preparation or plan-picker detour.
+        const page = await getSignupPlanPage()
+        expect(page?.context.teamKey).toBe("use:created-team")
+        expect(page?.context.state).toBe("legacy")
+        expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+      },
+    )
+
+    it("retains the paid continuation and actor when first-team preparation fails", async () => {
+      currentUser!.app_metadata = { provider: "email" }
+      mockGetSignupPlanAction.mockRejectedValueOnce(new Error("Response lost"))
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?token_hash=official&type=signup&signup_offer=starter&next=%2Fplan-usage%2Fbuy-credit%2F",
+        ),
+      )
+      const location = new URL(response.headers.get("location")!)
+      expect(location.pathname).toBe("/auth/auth-code-error")
+      expect(location.searchParams.get("reason")).toBe("account_setup")
+      expect(location.searchParams.get("next")).toBe("/plan-usage/buy-credit/")
+      expect(location.searchParams.get("account")).toBe("u1")
+    })
 
     it("routes by the legacy offer parameter when no v2 offer was sent", async () => {
       mockPricingVersion.mockResolvedValue("v2")

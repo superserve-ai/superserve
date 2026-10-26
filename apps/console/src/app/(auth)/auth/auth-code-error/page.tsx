@@ -10,6 +10,10 @@ import { Suspense } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { SIGNUP_RESTRICTED_MESSAGE } from "@/lib/auth/signup-restricted-message"
+import {
+  proAuthReturnPath,
+  starterAuthReturnPath,
+} from "@/lib/billing/pro-auth-return"
 
 function AuthCodeErrorContent() {
   const searchParams = useSearchParams()
@@ -18,7 +22,17 @@ function AuthCodeErrorContent() {
   // Carry only the recognized retry preference; it cannot authorize admission.
   if (searchParams.get("signup_offer") === "enterprise")
     retryParams.set("signup_offer", "enterprise")
-  const retryHref = `${isSignupContext ? "/auth/signup" : "/auth/signin"}${retryParams.size ? `?${retryParams}` : ""}`
+  const continuation =
+    proAuthReturnPath(searchParams.get("next")) ??
+    starterAuthReturnPath(searchParams.get("next"))
+  const account = searchParams.get("account")
+  const setupRetry =
+    searchParams.get("reason") === "account_setup" && continuation && account
+      ? `/api/onboarding/prepare/?${new URLSearchParams({ account, next: continuation })}`
+      : null
+  const retryHref =
+    setupRetry ??
+    `${isSignupContext ? "/auth/signup" : "/auth/signin"}${retryParams.size ? `?${retryParams}` : ""}`
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">

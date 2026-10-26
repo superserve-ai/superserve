@@ -8,6 +8,7 @@ import {
   sendWelcomeEmail,
 } from "@/app/(auth)/auth/signup/action"
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
+import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { completedMemberships } from "@/lib/api/team-provisioning"
 import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
@@ -669,6 +670,29 @@ export async function GET(request: Request) {
           (newSignup || signupOffer !== "enterprise")
         )
           next = SIGNUP_OFFER_DESTINATIONS[signupOffer]
+        if (
+          newSignup &&
+          (proAuthReturnPath(next) || starterAuthReturnPath(next))
+        ) {
+          // First-team setup must finish while this route can write cookies.
+          // Otherwise the dashboard's generic preparation redirect discards
+          // the selected payment page before assigning the initial Free plan.
+          try {
+            await getSignupPlanAction(
+              new URL(next, origin).searchParams.get("team") ?? undefined,
+              user.id,
+            )
+          } catch {
+            const recovery = new URLSearchParams({
+              reason: "account_setup",
+              account: user.id,
+              next,
+            })
+            return NextResponse.redirect(
+              buildRedirectUrl(origin, `/auth/auth-code-error?${recovery}`),
+            )
+          }
+        }
       }
 
       const response = NextResponse.redirect(
