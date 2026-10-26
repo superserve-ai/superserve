@@ -235,6 +235,12 @@ export function PrepaidPanel({ prepaid }: { prepaid: PrepaidBalance | null }) {
             : "Auto-recharge is off. Running sandboxes pause when the balance reaches $0."}{" "}
         Credit never expires.
       </p>
+      <Link
+        href="/plan-usage/buy-credit/#auto-recharge"
+        className="text-sm underline underline-offset-4"
+      >
+        Manage auto-recharge
+      </Link>
       {recharge.in_flight ? (
         <p className="text-sm text-muted">A top-up is being processed.</p>
       ) : null}

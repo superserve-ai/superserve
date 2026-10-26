@@ -265,6 +265,9 @@ describe("auto-recharge rollback", () => {
         <BuyCreditPageClient allowEntry={false} />
       </QueryClientProvider>,
     )
+    expect(
+      screen.getByRole("heading", { name: "Auto-recharge" }).closest("section"),
+    ).toHaveAttribute("id", "auto-recharge")
     expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
     expect(screen.getByText("$25")).toBeTruthy()
     expect(screen.queryByText(/never expires/)).toBeNull()

@@ -90,14 +90,6 @@ function billingModeCopy(
     }
   }
 
-  if (mode === "live") {
-    return {
-      title: "Billing is live",
-      message: "Usage is being exported to Stripe for invoicing.",
-      variant: "success" as const,
-    }
-  }
-
   return null
 }
 

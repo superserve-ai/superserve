@@ -402,7 +402,10 @@ function AutoRechargeCard({
 
   const canEnable = allowEntry && data.has_saved_card
   return (
-    <section className="flex flex-col gap-4 border border-dashed border-border p-4">
+    <section
+      id="auto-recharge"
+      className="scroll-mt-6 flex flex-col gap-4 border border-dashed border-border p-4"
+    >
       <h2 className="font-mono text-xs text-muted uppercase">Auto-recharge</h2>
       {current.disabled_reason && !current.enabled && (
         <p className="border border-dashed border-destructive p-3 text-sm text-foreground">

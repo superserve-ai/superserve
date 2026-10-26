@@ -325,6 +325,9 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     render(<PlanOverviewSection summary={summary} />)
     expect(screen.getByText("$42.50")).toBeTruthy()
     expect(
+      screen.getByRole("link", { name: "Manage auto-recharge" }),
+    ).toHaveAttribute("href", "/plan-usage/buy-credit#auto-recharge")
+    expect(
       screen.getByText(/adds \$20 when the balance drops below \$5/),
     ).toBeTruthy()
   })
@@ -482,4 +485,26 @@ describe("Pro bridge before the first monthly credit period", () => {
       expect(screen.getByText("Usage couldn't be loaded.")).toBeTruthy()
     },
   )
+})
+
+describe("first paid full-month included usage", () => {
+  it("shows issued credit immediately even with a future recurring contract start", () => {
+    mocks.plan.mockReturnValue({ data: plan({}), isError: false })
+    render(
+      <PlanOverviewSection
+        summary={
+          {
+            ...summary,
+            plan: {
+              ...summary.plan!,
+              status: "pending",
+              starts_at: "2026-11-01T00:00:00Z",
+            },
+          } as BillingSummaryResponse
+        }
+      />,
+    )
+    expect(screen.queryByText(/Monthly included usage starts/)).toBeNull()
+    expect(screen.getByText(/of \$250 used/)).toBeInTheDocument()
+  })
 })

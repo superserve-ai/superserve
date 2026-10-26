@@ -257,7 +257,7 @@ describe("CustomerBillingSection", () => {
 
     expect(screen.getByText("Open Customer Portal")).toBeInTheDocument()
     expect(screen.getAllByText("Jun 1, 2026 - Jul 1, 2026")).toHaveLength(2)
-    expect(screen.getByText("Billing is live")).toBeInTheDocument()
+    expect(screen.queryByText("Billing is live")).not.toBeInTheDocument()
     expect(screen.queryByText("Tracking only")).not.toBeInTheDocument()
     expect(screen.getByText("CPU")).toBeInTheDocument()
     expect(screen.getByText("Memory")).toBeInTheDocument()
