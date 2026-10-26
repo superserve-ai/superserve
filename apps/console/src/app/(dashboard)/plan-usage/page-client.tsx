@@ -24,6 +24,7 @@ import {
 import { TableSkeleton } from "@/components/table-skeleton"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { useBillingUsage } from "@/hooks/use-billing-usage"
+import { useTeamPlan } from "@/hooks/use-billing-v2"
 import { useTeams } from "@/hooks/use-teams"
 import { useUser } from "@/hooks/use-user"
 import type {
@@ -185,6 +186,8 @@ export function PlanUsagePageClient() {
   const { user, loading: userLoading } = useUser()
   const teamsQuery = useTeams()
   const dashboardTeam = useDashboardTeamContext()
+  const teamPlan = useTeamPlan(!userLoading && !!user).data
+  const showPayments = teamPlan !== undefined && teamPlan?.kind !== "free"
   const summaryQuery = useBillingSummary(!userLoading && !!user)
   // Do not render retained summary data after a failed refresh. The billing
   // query is team-scoped, but React Query can still expose the last successful
@@ -353,11 +356,11 @@ export function PlanUsagePageClient() {
             ) : summary ? (
               <>
                 <PlanOverviewSection summary={summary} />
-                <BillingSummary summary={summary} />
+                {showPayments ? <BillingSummary summary={summary} /> : null}
               </>
             ) : null}
 
-            {billingTeam && (
+            {billingTeam && showPayments && (
               <CustomerBillingSection
                 teamId={billingTeam.teamId}
                 teamRegion={billingTeam.region}

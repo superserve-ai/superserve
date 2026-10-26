@@ -1,24 +1,35 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { PrepaidCreditSummary } from "@/lib/api/prepaid"
 
 const mocks = vi.hoisted(() => ({
   data: null as PrepaidCreditSummary | null,
   save: vi.fn(),
+  params: new URLSearchParams(),
+  checkout: vi.fn(),
+  teamKey: "us:team",
+  ready: true,
+  scope: "self",
 }))
 
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => mocks.params,
+}))
+vi.mock("@/components/query-provider", () => ({
+  useQueryScope: () => mocks.scope,
 }))
 vi.mock("@/components/page-header", () => ({ PageHeader: () => null }))
 vi.mock("@/hooks/use-billing-context", () => ({
   useBillingContext: () => ({
-    teamKey: "us:team",
-    cacheScope: "self",
-    ready: true,
+    teamKey: mocks.teamKey,
+    cacheScope: mocks.scope,
+    ready: mocks.ready,
   }),
+}))
+vi.mock("@/hooks/use-user", () => ({
+  useUser: () => ({ user: { id: "actor" } }),
 }))
 vi.mock("@/hooks/use-billing-summary", () => ({
   useBillingSummary: () => ({ data: { permissions: { can_manage: true } } }),
@@ -29,6 +40,7 @@ vi.mock("@/hooks/use-prepaid-credit", () => ({
 vi.mock("@/lib/api/prepaid", async (original) => ({
   ...(await original<typeof import("@/lib/api/prepaid")>()),
   setPrepaidAutoRecharge: mocks.save,
+  startPrepaidCheckout: mocks.checkout,
 }))
 vi.mock("@superserve/ui", async (original) => ({
   ...(await original<typeof import("@superserve/ui")>()),
@@ -51,6 +63,84 @@ const initial: PrepaidCreditSummary = {
     in_flight: false,
   },
 }
+
+beforeEach(() => {
+  mocks.params = new URLSearchParams()
+  mocks.teamKey = "us:team"
+  mocks.scope = "self"
+  mocks.ready = true
+  mocks.checkout.mockReset()
+  mocks.data = initial
+})
+function page() {
+  return (
+    <QueryClientProvider client={new QueryClient()}>
+      <BuyCreditPageClient />
+    </QueryClientProvider>
+  )
+}
+it("keeps return URLs as navigation and never claims a verified payment", () => {
+  mocks.params = new URLSearchParams("purchase=success&team=us%3Ateam")
+  render(page())
+  expect(screen.getByText(/Checking payment status/)).toBeTruthy()
+  expect(screen.queryByText(/Payment received/)).toBeNull()
+})
+it("doesn't show another team's credit or purchase controls after a payment return", () => {
+  mocks.params = new URLSearchParams("purchase=success&team=us%3Aother")
+  render(page())
+  expect(screen.getByRole("alert").textContent).toContain(
+    "belongs to another team",
+  )
+  expect(screen.queryByRole("button", { name: /Buy.*credit/ })).toBeNull()
+  expect(screen.queryByText("Credit balance")).toBeNull()
+})
+it("keeps impersonation read only", () => {
+  mocks.scope = "team-other"
+  render(page())
+  expect(screen.getByRole("button", { name: "Buy $25 credit" })).toBeDisabled()
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled()
+})
+it("serializes duplicate clicks and ignores checkout results after a team switch", async () => {
+  let finish!: (value: {
+    purchase_id: string
+    state: string
+    url: string
+  }) => void
+  mocks.checkout.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+  )
+  const assign = vi
+    .spyOn(window.location, "assign")
+    .mockImplementation(() => {})
+  const { rerender } = render(page())
+  const buy = screen.getByRole("button", { name: "Buy $25 credit" })
+  fireEvent.click(buy)
+  fireEvent.click(buy)
+  expect(mocks.checkout).toHaveBeenCalledTimes(1)
+  expect(mocks.checkout).toHaveBeenCalledWith(
+    "us:team",
+    2500,
+    expect.any(String),
+    "actor",
+  )
+  mocks.teamKey = "us:other"
+  rerender(page())
+  finish({
+    purchase_id: "purchase",
+    state: "pending",
+    url: "https://checkout.stripe.com/original",
+  })
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Buy $25 credit" }),
+    ).toBeEnabled(),
+  )
+  expect(assign).not.toHaveBeenCalled()
+  assign.mockRestore()
+})
 
 describe("auto-recharge refresh", () => {
   it("reflects a remote disable before saving again", async () => {

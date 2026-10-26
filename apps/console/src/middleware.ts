@@ -1,7 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
-import { proAuthReturnPath } from "@/lib/billing/pro-auth-return"
+import {
+  proAuthReturnPath,
+  starterAuthReturnPath,
+} from "@/lib/billing/pro-auth-return"
 import { createMiddlewareClient, matchesRoute } from "@/lib/supabase/middleware"
 import { ycReturnPath } from "@/lib/yc/return-path"
 import { staffReturnPath } from "@/lib/yc/staff-return-path"
@@ -36,6 +39,7 @@ export async function middleware(request: NextRequest) {
     signinUrl.searchParams.set(
       "next",
       proAuthReturnPath(pathname + request.nextUrl.search) ??
+        starterAuthReturnPath(pathname + request.nextUrl.search) ??
         ycReturnPath(pathname + request.nextUrl.search) ??
         (process.env.YC_STAFF_UI_ENABLED === "true"
           ? staffReturnPath(pathname + request.nextUrl.search)

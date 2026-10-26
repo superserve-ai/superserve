@@ -1,6 +1,6 @@
 import { expect, it } from "vitest"
 
-import { proAuthReturnPath } from "./pro-auth-return"
+import { proAuthReturnPath, starterAuthReturnPath } from "./pro-auth-return"
 
 it.each([
   "/billing/pro",
@@ -26,4 +26,21 @@ it.each([
   "/billing/pro?return=%2Fsandboxes%0A",
 ])("rejects unrecognized or unsafe Pro returns: %s", (path) => {
   expect(proAuthReturnPath(path)).toBeNull()
+})
+
+it.each([
+  "/plan-usage/buy-credit",
+  "/plan-usage/buy-credit/?purchase=success&team=use%3Aoriginal",
+  "/plan-usage/buy-credit?purchase=cancel&team=use%3Aoriginal",
+])("retains the Starter team locator: %s", (path) => {
+  expect(starterAuthReturnPath(path)).toBe(path)
+})
+it.each([
+  "//external/plan-usage/buy-credit",
+  "/plan-usage/buy-credit#paid",
+  "/plan-usage/buy-credit?purchase=success&purchase=cancel",
+  "/plan-usage/buy-credit?team=a&team=b",
+  "/plan-usage/buy-credit?payment_authorized=true",
+])("rejects unsafe Starter returns: %s", (path) => {
+  expect(starterAuthReturnPath(path)).toBeNull()
 })

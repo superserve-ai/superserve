@@ -49,6 +49,8 @@ export interface ProPaymentViewProps {
   pro?: PlanCard
   paidPlan?: string | null
   busy: boolean
+  canContinue?: boolean
+  canRecover?: boolean
   canceled: boolean
   error?: string | null
   onContinue: () => void
@@ -60,6 +62,8 @@ export function ProPaymentView({
   pro,
   paidPlan,
   busy,
+  canContinue = true,
+  canRecover = true,
   canceled,
   error,
   onContinue,
@@ -97,7 +101,7 @@ export function ProPaymentView({
         <output className="block text-sm">
           We’re confirming your payment. This usually takes a few seconds.
         </output>
-        <Button disabled={busy} onClick={onCheckPayment}>
+        <Button disabled={busy || !canRecover} onClick={onCheckPayment}>
           Check again
         </Button>
         {error ? (
@@ -115,7 +119,7 @@ export function ProPaymentView({
             ? "This team already has a paid plan or a payment in progress."
             : "Pro isn’t available to buy here right now."}
         </p>
-        <Button disabled={busy} onClick={onCheckPayment}>
+        <Button disabled={busy || !canRecover} onClick={onCheckPayment}>
           Check payment status
         </Button>
         <Link href="/plan-usage/" className="text-sm underline">
@@ -171,7 +175,12 @@ export function ProPaymentView({
               Payment was canceled. You can try again whenever you’re ready.
             </p>
           ) : null}
-          <Button disabled={busy} onClick={onContinue}>
+          {!canContinue ? (
+            <p className="text-sm text-muted">
+              Only billing administrators can start payment.
+            </p>
+          ) : null}
+          <Button disabled={busy || !canContinue} onClick={onContinue}>
             Continue to payment
           </Button>
           <p className="text-muted-foreground text-xs">

@@ -1,12 +1,13 @@
 "use client"
 
 import { CurrentPlan } from "@/components/current-plan"
+import { useQueryScope } from "@/components/query-provider"
 import {
   useFreeAllowance,
+  useAllowancePricing,
   usePrepaidBalance,
   useTeamPlan,
 } from "@/hooks/use-billing-v2"
-import { usePricingVersion } from "@/hooks/use-pricing-version"
 import type { BillingSummaryResponse } from "@/lib/api/billing"
 
 import { PlanOverview } from "./plan-overview"
@@ -22,12 +23,20 @@ export function PlanOverviewSection({
 }: {
   summary: BillingSummaryResponse
 }) {
-  const version = usePricingVersion()
-  const plan = useTeamPlan(true).data
-  const allowance = useFreeAllowance(
-    version === "v2" && plan?.kind === "free",
-  ).data
+  const scope = useQueryScope()
+  const planQuery = useTeamPlan(true)
+  const plan = planQuery.data
+  const allowance = useFreeAllowance(plan?.kind === "free").data
+  const pricing = useAllowancePricing(plan?.kind === "free").data
   const prepaid = usePrepaidBalance(plan?.kind === "prepaid").data
+  if (plan === undefined)
+    return (
+      <p className="text-sm text-muted">
+        {planQuery.isError
+          ? "Your plan could not be loaded."
+          : "Loading your plan…"}
+      </p>
+    )
   if (!plan || plan.kind === "legacy_payg")
     return <CurrentPlan summary={summary} />
   const commercial = summary.plan?.key === plan.key ? summary.plan : null
@@ -58,11 +67,12 @@ export function PlanOverviewSection({
             : null,
         included_cents: includedCents,
       }}
+      allowancePricing={pricing ?? null}
       includedUsageStatus={matchingIncluded?.status}
       allowance={allowance ?? null}
       prepaid={prepaid ?? null}
       usageCents={matchingPeriod ? toCents(summary.current_charges_usd) : null}
-      canManage={summary.permissions?.can_manage ?? false}
+      canManage={scope === "self" && (summary.permissions?.can_manage ?? false)}
     />
   )
 }

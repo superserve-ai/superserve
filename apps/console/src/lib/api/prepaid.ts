@@ -46,31 +46,127 @@ export function getPrepaidCredit(): Promise<PrepaidCreditSummary> {
   })
 }
 
+interface PrepaidOperation {
+  id: string
+  team: string
+  actor: string
+  amount: number
+  success: string
+  cancel: string
+}
+
+function operationKey(actor: string, team: string, amount: number): string {
+  return `starter-checkout:${actor}:${team}:${amount}`
+}
+
+export function reconcilePrepaidOperations(
+  actor: string,
+  team: string,
+  purchases: PrepaidPurchase[],
+) {
+  const terminal = new Set(
+    purchases
+      .filter((p) => p.state === "credited" || p.state === "failed")
+      .map((p) => p.id),
+  )
+  const prefix = `starter-checkout:${actor}:${team}:`
+  for (let index = sessionStorage.length - 1; index >= 0; index--) {
+    const key = sessionStorage.key(index)
+    if (!key?.startsWith(prefix)) continue
+    const value = sessionStorage.getItem(key)
+    if (!value) continue
+    try {
+      const operation = JSON.parse(value) as PrepaidOperation
+      if (
+        operation.actor === actor &&
+        operation.team === team &&
+        terminal.has(operation.id) &&
+        sessionStorage.getItem(key) === value
+      )
+        sessionStorage.removeItem(key)
+    } catch {
+      /* Preserve unreadable recovery state for a deliberate retry. */
+    }
+  }
+}
+
+export interface PrepaidCheckoutResult {
+  purchase_id: string
+  state: "pending" | "paid" | "credited" | "failed"
+  url?: string
+}
+
 export async function startPrepaidCheckout(
   teamKey: string,
   amountCents: number,
   returnUrl: string,
-): Promise<string> {
-  const success = new URL(returnUrl)
-  success.searchParams.set("purchase", "success")
-  const cancel = new URL(returnUrl)
-  cancel.searchParams.set("purchase", "cancel")
-  const response = await apiClient<{ url?: string }>(
+  actor: string,
+): Promise<PrepaidCheckoutResult> {
+  if (!actor || !validPrepaidCents(amountCents))
+    throw new Error("Unable to start purchase")
+  const key = operationKey(actor, teamKey, amountCents)
+  const retained = sessionStorage.getItem(key)
+  let operation: PrepaidOperation
+  if (retained) {
+    operation = JSON.parse(retained) as PrepaidOperation
+    if (
+      operation.team !== teamKey ||
+      operation.actor !== actor ||
+      operation.amount !== amountCents ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+        operation.id,
+      )
+    )
+      throw new Error(
+        "Unable to recover this checkout. Check recent purchases before continuing.",
+      )
+  } else {
+    const id = crypto.randomUUID()
+    const success = new URL(returnUrl)
+    success.search = ""
+    success.searchParams.set("purchase", "success")
+    success.searchParams.set("team", teamKey)
+    success.searchParams.set("purchase_id", id)
+    const cancel = new URL(success)
+    cancel.searchParams.set("purchase", "cancel")
+    operation = {
+      id,
+      team: teamKey,
+      actor,
+      amount: amountCents,
+      success: success.toString(),
+      cancel: cancel.toString(),
+    }
+    sessionStorage.setItem(key, JSON.stringify(operation))
+  }
+  const response = await apiClient<PrepaidCheckoutResult>(
     "/billing/prepaid/checkout",
     {
       method: "POST",
       cache: "no-store",
       body: JSON.stringify({
         expected_team: teamKey,
+        operation_id: operation.id,
         amount_cents: amountCents,
-        success_url: success.toString(),
-        cancel_url: cancel.toString(),
+        success_url: operation.success,
+        cancel_url: operation.cancel,
       }),
     },
   )
-  if (!response.url || !isStripeCheckoutUrl(response.url))
-    throw new Error("Unable to open payment. Please try again.")
-  return response.url
+  if (
+    response.purchase_id !== operation.id ||
+    !["pending", "paid", "credited", "failed"].includes(response.state)
+  )
+    throw new Error(
+      "Payment status is uncertain. Retry to check the same purchase.",
+    )
+  if (response.url && !isStripeCheckoutUrl(response.url))
+    throw new Error("Unable to open payment. Retry to check the same purchase.")
+  if (response.state === "credited" || response.state === "failed") {
+    if (sessionStorage.getItem(key) === JSON.stringify(operation))
+      sessionStorage.removeItem(key)
+  }
+  return response
 }
 
 export function setPrepaidAutoRecharge(

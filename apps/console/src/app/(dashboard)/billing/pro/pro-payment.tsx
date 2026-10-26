@@ -8,7 +8,10 @@ import {
   proPaymentStep,
 } from "@/components/billing/pro-payment-view"
 import { PageHeader } from "@/components/page-header"
-import { useDashboardTeamContext } from "@/components/query-provider"
+import {
+  useDashboardTeamContext,
+  useQueryScope,
+} from "@/components/query-provider"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { usePublicBillingPlans } from "@/hooks/use-public-billing-plans"
 import { useTeams } from "@/hooks/use-teams"
@@ -32,6 +35,7 @@ export function ProPayment({
   checkoutTeam?: string
 }) {
   const router = useRouter()
+  const scope = useQueryScope()
   const dashboardTeam = useDashboardTeamContext()
   const teamsQuery = useTeams()
   const team = useMemo(() => {
@@ -48,6 +52,12 @@ export function ProPayment({
   const plansQuery = usePublicBillingPlans(team?.region, !!team)
   const pro = planCard(plansQuery.data, "pro")
   const summaryQuery = useBillingSummary(!!team)
+  const canContinue =
+    scope === "self" &&
+    !summaryQuery.isError &&
+    Boolean(summaryQuery.data?.permissions?.can_manage)
+  const canRecover =
+    scope === "self" && summaryQuery.data?.permissions?.can_manage !== false
   const plan = summaryQuery.isError ? undefined : summaryQuery.data?.plan
   const paidPlan =
     plan &&
@@ -71,7 +81,7 @@ export function ProPayment({
     return () => {
       target.active = false
     }
-  }, [teamKey])
+  }, [teamKey, scope])
 
   const run = useCallback(async (work: () => Promise<void>) => {
     if (inFlight.current) return
@@ -98,7 +108,7 @@ export function ProPayment({
   const checkPayment = useCallback(
     (attempts = 1) =>
       run(async () => {
-        if (!teamKey || teamMismatch) return
+        if (!canRecover || !teamKey || teamMismatch) return
         setPaymentTeam(teamKey)
         const target = operationTarget.current
         for (let attempt = 0; attempt < attempts; attempt++) {
@@ -124,7 +134,7 @@ export function ProPayment({
             await new Promise((resolve) => setTimeout(resolve, 2000))
         }
       }),
-    [router, run, teamKey, returnTo, teamMismatch, billingReturn],
+    [router, run, teamKey, returnTo, teamMismatch, billingReturn, canRecover],
   )
 
   useEffect(() => {
@@ -134,7 +144,8 @@ export function ProPayment({
 
   const onContinue = () =>
     void run(async () => {
-      if (!teamKey || teamMismatch || summaryQuery.isError) return
+      if (!canContinue || !teamKey || teamMismatch || summaryQuery.isError)
+        return
       const target = operationTarget.current
       setPaymentTeam(teamKey)
       const back = new URL("/billing/pro/", window.location.origin)
@@ -170,6 +181,8 @@ export function ProPayment({
           pro={pro}
           paidPlan={paidPlan}
           busy={busy}
+          canContinue={canContinue}
+          canRecover={canRecover}
           canceled={billingReturn === "cancel"}
           error={error}
           onContinue={onContinue}

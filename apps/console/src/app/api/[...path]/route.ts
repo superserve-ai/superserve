@@ -91,7 +91,12 @@ const PREPAID_BILLING_METHODS: Record<string, string> = {
 }
 
 const PREPAID_WRITE_FIELDS: Record<string, string[]> = {
-  "billing/prepaid/checkout": ["amount_cents", "success_url", "cancel_url"],
+  "billing/prepaid/checkout": [
+    "operation_id",
+    "amount_cents",
+    "success_url",
+    "cancel_url",
+  ],
   "billing/prepaid/auto-recharge": [
     "enabled",
     "threshold_cents",
@@ -473,6 +478,20 @@ async function proxyRequest(
         { status: 400 },
       )
     }
+    if (
+      joinedPath === "billing/prepaid/checkout" &&
+      purchase.operation_id !== undefined &&
+      !validOperationId(purchase.operation_id)
+    )
+      return NextResponse.json(
+        {
+          error: {
+            code: "invalid_request",
+            message: "Invalid purchase operation",
+          },
+        },
+        { status: 400 },
+      )
     const fields = PREPAID_WRITE_FIELDS[joinedPath] ?? []
     body = JSON.stringify(
       Object.fromEntries(

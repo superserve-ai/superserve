@@ -2,7 +2,6 @@ import { Button, cn } from "@superserve/ui"
 import Link from "next/link"
 
 import {
-  describeSandboxSize,
   formatCents,
   isLowBalance,
   PLAN_ACTION_LINKS,
@@ -66,7 +65,6 @@ export function PlanAwareBanner({
   canManage,
 }: PlanAwareBannerProps) {
   if (plan.kind === "free") {
-    const size = describeSandboxSize(plan.limits)
     const running = plan.limits.max_concurrent
     return (
       <BannerShell
@@ -80,13 +78,9 @@ export function PlanAwareBanner({
           </ManageAction>
         }
       >
-        You&apos;re on <strong>Free</strong>: {running ?? "Default number of"}{" "}
-        sandbox
-        {running === 1 ? "" : "es"} running at a time
-        {size ? `, up to ${size} each` : ""}, with a runtime allowance per
-        24-hour window. When it runs out, running sandboxes pause until the
-        window resets. Upgrade for higher limits, bigger sandboxes, more running
-        at once and no allowance pauses.
+        You can run {running ?? "the default number of"} sandbox
+        {running === 1 ? "" : "es"} at a time on Free. Upgrade for bigger
+        sandboxes and more usage.
       </BannerShell>
     )
   }

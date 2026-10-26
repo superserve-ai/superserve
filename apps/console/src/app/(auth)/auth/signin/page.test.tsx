@@ -130,6 +130,35 @@ describe("SignInPage", () => {
     })
   })
 
+  it.each([
+    ["starter", "/plan-usage/buy-credit"],
+    ["pro_monthly", "/billing/pro/"],
+    ["free", "/sandboxes"],
+  ])("keeps %s intent after password sign-in", async (offer, destination) => {
+    searchParamsMap = { offer }
+    mockSignInWithPassword.mockResolvedValue({ error: null })
+    render(<SignInPage />)
+    await user.type(
+      await screen.findByPlaceholderText("Email"),
+      "person@example.com",
+    )
+    await user.type(screen.getByPlaceholderText("Password"), "example-password")
+    await user.click(screen.getByRole("button", { name: "Sign In" }))
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith(destination))
+  })
+
+  it("keeps selected intent for an already signed-in customer", async () => {
+    searchParamsMap = { signup_offer: "starter" }
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: "user-1" } },
+      error: null,
+    })
+    render(<SignInPage />)
+    await waitFor(() =>
+      expect(mockReplace).toHaveBeenCalledWith("/plan-usage/buy-credit"),
+    )
+  })
+
   it("renders the signin form", async () => {
     render(<SignInPage />)
 

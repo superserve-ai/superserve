@@ -961,6 +961,19 @@ describe("auth callback", () => {
       }
     })
 
+    it("keeps selected Starter navigation when catalog entry is unavailable", async () => {
+      mockPricingVersion.mockResolvedValue("legacy")
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&signup_offer=starter",
+        ),
+      )
+      expect(new URL(response.headers.get("location")!).pathname).toBe(
+        "/plan-usage/buy-credit",
+      )
+      expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+    })
+
     it("does not ask for the switch without an offer", async () => {
       googleMembershipState = { kind: "first_time" }
       mockHasValidGoogleSignupProof.mockResolvedValue(true)
@@ -1034,7 +1047,7 @@ describe("auth callback", () => {
       )
     })
 
-    it("does not reroute an existing customer", async () => {
+    it("routes an existing customer to the selected Starter purchase", async () => {
       mockPricingVersion.mockResolvedValue("v2")
       const response = await GET(
         new Request(
@@ -1042,9 +1055,38 @@ describe("auth callback", () => {
         ),
       )
       expect(new URL(response.headers.get("location")!).pathname).toBe(
-        "/sandboxes",
+        "/plan-usage/buy-credit",
       )
     })
+
+    it.each([
+      ["offer=pro_monthly", "/billing/pro/"],
+      ["offer=free", "/sandboxes"],
+      ["signup_offer=enterprise", "/sandboxes"],
+      [
+        "signup_offer=starter&next=%2Fbilling%2Fpro%3Fbilling%3Dsuccess%26team%3Duse%253Aoriginal",
+        "/billing/pro",
+      ],
+      [
+        "signup_offer=pro_monthly&next=%2Fplan-usage%2Fbuy-credit%3Fpurchase%3Dsuccess%26team%3Duse%253Aoriginal",
+        "/plan-usage/buy-credit",
+      ],
+    ])(
+      "preserves existing account intent or explicit payment return: %s",
+      async (query, path) => {
+        mockPricingVersion.mockResolvedValue("v2")
+        const response = await GET(
+          new Request(
+            `https://console.superserve.ai/auth/callback?code=abc&${query}`,
+          ),
+        )
+        const location = new URL(response.headers.get("location")!)
+        expect(location.pathname).toBe(path)
+        if (query.includes("next="))
+          expect(location.searchParams.get("team")).toBe("use:original")
+        expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+      },
+    )
 
     it.each(["pending", "rejected"])(
       "signs a %s account out before any onboarding work",
@@ -1802,7 +1844,7 @@ describe("auth callback", () => {
       mockNotifySlackOfNewUser.mockClear()
       const response = await GET(new Request(confirmationUrl))
       expect(mockNotifySlackOfNewUser.mock.lastCall![4]).toBe("pro_monthly")
-      expect(response.headers.get("location")).toContain("/sandboxes")
+      expect(response.headers.get("location")).toContain("/billing/pro/")
       expect(mockEvaluateSignupRestriction).toHaveBeenCalledExactlyOnceWith(
         "use",
         "u1",

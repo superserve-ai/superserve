@@ -347,6 +347,16 @@ describe("signUpWithEmail", () => {
       expect(mockSlack.mock.lastCall).toHaveLength(5)
     })
 
+    it.each(["starter", "pro_monthly", "free"])(
+      "keeps %s routing intent when catalog entry is unavailable",
+      async (offer) => {
+        mockPricingVersion.mockResolvedValue("legacy")
+        await signUp(offer)
+        expect(callbackOffer()).toBe(offer)
+        expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+      },
+    )
+
     it("does not ask for the switch without an offer", async () => {
       await signUp(undefined)
       expect(mockPricingVersion).not.toHaveBeenCalled()

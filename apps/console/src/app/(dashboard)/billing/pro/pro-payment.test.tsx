@@ -16,6 +16,8 @@ const state = vi.hoisted(() => ({
     plan: { key: string; name: string; status: string }
   },
   summaryError: false,
+  scope: "self",
+  canManage: true,
 }))
 
 vi.mock("next/navigation", () => ({
@@ -23,6 +25,7 @@ vi.mock("next/navigation", () => ({
 }))
 vi.mock("@/components/query-provider", () => ({
   useDashboardTeamContext: () => state.team,
+  useQueryScope: () => state.scope,
 }))
 vi.mock("@/components/page-header", () => ({
   PageHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
@@ -30,7 +33,7 @@ vi.mock("@/components/page-header", () => ({
 vi.mock("@/hooks/use-teams", () => ({ useTeams: () => ({ data: null }) }))
 vi.mock("@/hooks/use-billing-summary", () => ({
   useBillingSummary: () => ({
-    data: state.summary,
+    data: { ...state.summary, permissions: { can_manage: state.canManage } },
     isPending: false,
     isError: state.summaryError,
   }),
@@ -86,9 +89,35 @@ beforeEach(() => {
   state.replace.mockReset()
   state.summary = null
   state.summaryError = false
+  state.scope = "self"
+  state.canManage = true
 })
 
 describe("Pro payment return recovery", () => {
+  it("keeps payment disabled for members without billing permission", () => {
+    state.canManage = false
+    state.plans = availablePlans
+    render(<ProPayment returnTo="/sandboxes" />)
+    expect(
+      screen.getByRole("button", { name: "Continue to payment" }),
+    ).toBeDisabled()
+    fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
+    expect(state.start).not.toHaveBeenCalled()
+  })
+  it("doesn't recover or start payments while impersonating", () => {
+    state.scope = "team-a"
+    state.plans = availablePlans
+    render(
+      <ProPayment
+        returnTo="/sandboxes"
+        billingReturn="success"
+        checkoutTeam="use:team-a"
+      />,
+    )
+    expect(state.recover).not.toHaveBeenCalled()
+    expect(state.start).not.toHaveBeenCalled()
+  })
+
   it.each(["legacy", "v2"] as const)(
     "stops claiming an active subscription and closes new entry after a summary error with %s pricing",
     (version) => {
@@ -113,6 +142,8 @@ describe("Pro payment return recovery", () => {
       expect(state.start).not.toHaveBeenCalled()
       expect(state.recover).not.toHaveBeenCalled()
       state.summaryError = false
+      state.scope = "self"
+      state.canManage = true
       view.rerender(<ProPayment returnTo="/plan-usage/" />)
       expect(screen.getByText(/Your team is on Pro/)).toBeTruthy()
     },

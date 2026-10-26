@@ -17,7 +17,11 @@ import {
   isSupersededSignupEvidenceAttempt,
   saveSignupEvidence,
 } from "@/lib/auth/signup-evidence"
-import { parseSignupOffer, SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
+import {
+  parseSignupOffer,
+  isSelfServeSignupOffer,
+  SIGNUP_OFFER_PARAM,
+} from "@/lib/auth/signup-offer"
 import {
   evaluateSignupRestriction,
   SignupRestrictedError,
@@ -457,8 +461,13 @@ export const signUpWithEmail = async (
       offerIntent && (await getPricingVersionAction()) === "v2"
         ? parseSignupOffer(offerIntent)
         : undefined
-    if (signupOffer)
-      callbackUrl.searchParams.set(SIGNUP_OFFER_PARAM, signupOffer)
+    const routingOffer =
+      signupOffer ??
+      (isSelfServeSignupOffer(offerIntent)
+        ? parseSignupOffer(offerIntent)
+        : undefined)
+    if (routingOffer)
+      callbackUrl.searchParams.set(SIGNUP_OFFER_PARAM, routingOffer)
     const redirectTo = callbackUrl.toString()
     const signupStartedAt = Date.now()
     const awaitingEnterpriseSetup = signupOffer === "enterprise"

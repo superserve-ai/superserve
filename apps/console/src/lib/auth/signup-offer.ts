@@ -21,3 +21,21 @@ export const SIGNUP_OFFER_DESTINATIONS: Record<SignupOffer, string> = {
   pro_monthly: "/billing/pro/",
   enterprise: "/auth/pending",
 }
+
+export function isSelfServeSignupOffer(
+  raw: unknown,
+): raw is "free" | "starter" | "pro" | "pro_monthly" {
+  return (
+    typeof raw === "string" &&
+    ["free", "starter", "pro", "pro_monthly"].includes(raw)
+  )
+}
+
+// Navigation intent never assigns a plan or grants payment authority. Existing
+// accounts must not enter the new-account Enterprise hold through a sign-in URL.
+export function signInOfferDestination(raw: unknown): string {
+  const offer = parseSignupOffer(raw)
+  return offer === "enterprise"
+    ? "/sandboxes"
+    : SIGNUP_OFFER_DESTINATIONS[offer]
+}

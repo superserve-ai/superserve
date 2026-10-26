@@ -12,7 +12,11 @@ import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
-import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
+import {
+  SIGNUP_OFFER_PARAM,
+  signInOfferDestination,
+  isSelfServeSignupOffer,
+} from "@/lib/auth/signup-offer"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
@@ -65,7 +69,11 @@ function SignInContent() {
         }
         if (user) {
           setIsEmailLoading(true)
-          window.location.replace(nextUrl)
+          window.location.replace(
+            nextUrl === "/" && isSelfServeSignupOffer(rawOffer)
+              ? signInOfferDestination(rawOffer)
+              : nextUrl,
+          )
         }
       } catch {
         setIsEmailLoading(false)
@@ -73,7 +81,7 @@ function SignInContent() {
       }
     }
     checkUser()
-  }, [nextUrl])
+  }, [nextUrl, rawOffer])
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -110,7 +118,11 @@ function SignInContent() {
       }
       posthog.capture(AUTH_EVENTS.SIGN_IN_COMPLETED, { method: "email" })
       // Discard routes prefetched before the session cookies were set.
-      window.location.replace(nextUrl)
+      window.location.replace(
+        nextUrl === "/" && isSelfServeSignupOffer(rawOffer)
+          ? signInOfferDestination(rawOffer)
+          : nextUrl,
+      )
       navigating = true
     } catch {
       setErrors({ form: "Error signing in. Please try again." })

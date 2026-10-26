@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query"
 import type { z } from "zod"
 
+import { getBillingPricing } from "@/lib/api/billing"
 import {
   BILLING_V2_PATHS,
   freeAllowanceSchema,
@@ -23,7 +24,11 @@ function useBillingV2Resource<T>(
   const query = useQuery({
     queryKey: billingKeys.v2(resource, { cacheScope, teamKey: teamKey ?? "" }),
     queryFn: async () =>
-      schema.parse(await apiClient<unknown>(BILLING_V2_PATHS[resource])),
+      schema.parse(
+        await apiClient<unknown>(BILLING_V2_PATHS[resource], {
+          cache: "no-store",
+        }),
+      ),
     enabled: enabled && ready && teamKey !== null,
     staleTime: 30_000,
     refetchInterval: 60_000,
@@ -41,4 +46,18 @@ export function useFreeAllowance(enabled: boolean) {
 
 export function usePrepaidBalance(enabled: boolean) {
   return useBillingV2Resource("prepaid", prepaidBalanceSchema, enabled)
+}
+
+export function useAllowancePricing(enabled: boolean) {
+  const { cacheScope, teamKey, ready } = useBillingContext()
+  const query = useQuery({
+    queryKey: billingKeys.settings({
+      cacheScope,
+      teamKey: teamKey ?? "unresolved",
+    }),
+    queryFn: getBillingPricing,
+    enabled: enabled && ready && teamKey !== null,
+    staleTime: 30_000,
+  })
+  return { ...query, data: query.isError ? undefined : query.data }
 }

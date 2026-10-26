@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   plan: vi.fn(),
   allowance: vi.fn(),
   prepaid: vi.fn(),
+  pricing: vi.fn(),
 }))
 vi.mock("@/components/current-plan", () => ({
   CurrentPlan: () => <div data-testid="legacy-plan" />,
@@ -19,6 +20,7 @@ vi.mock("@/hooks/use-pricing-version", () => ({
 vi.mock("@/hooks/use-billing-v2", () => ({
   useTeamPlan: mocks.plan,
   useFreeAllowance: mocks.allowance,
+  useAllowancePricing: mocks.pricing,
   usePrepaidBalance: mocks.prepaid,
 }))
 
@@ -81,9 +83,27 @@ function plan(overrides: Partial<TeamPlan>): TeamPlan {
 }
 
 beforeEach(() => {
-  mocks.plan.mockReturnValue({ data: undefined, isError: false })
+  mocks.plan.mockReturnValue({ data: null, isError: false })
   mocks.allowance.mockReturnValue({ data: undefined })
   mocks.prepaid.mockReturnValue({ data: undefined })
+  mocks.pricing.mockReturnValue({
+    data: {
+      plan_key: "free",
+      currency: "USD",
+      rates: [
+        {
+          resource_key: "vcpu",
+          display_unit: "vCPU-hour",
+          price_usd_hourly: 0.06,
+        },
+        {
+          resource_key: "memory_gib",
+          display_unit: "GiB-hour",
+          price_usd_hourly: 0.0066,
+        },
+      ],
+    },
+  })
 })
 
 describe("PlanOverviewSection with pricing v2 off", () => {
@@ -216,9 +236,36 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     })
     render(<PlanOverviewSection summary={summary} />)
     expect(mocks.allowance).toHaveBeenCalledWith(true)
-    expect(screen.getByText("64%")).toBeTruthy()
+    expect(screen.getByText(/1 hour 16 minutes/)).toBeTruthy()
     expect(screen.getByText(/resets Oct 24, 8:00 AM UTC/)).toBeTruthy()
     expect(screen.getByRole("link", { name: "Upgrade" })).toBeTruthy()
+  })
+
+  it("doesn't invent runtime or remaining credit when the backend reading is incomplete", () => {
+    mocks.plan.mockReturnValue({
+      data: plan({ key: "free", kind: "free", name: "Free" }),
+    })
+    mocks.allowance.mockReturnValue({
+      data: allowance({
+        window_started_at: "2026-10-23T08:00:00Z",
+        used_cents: null,
+        remaining_cents: null,
+      }),
+    })
+    render(<PlanOverviewSection summary={summary} />)
+    expect(screen.getByText("Remaining allowance is unavailable.")).toBeTruthy()
+    expect(screen.queryByText(/equivalent remaining/)).toBeNull()
+  })
+
+  it("keeps the monetary allowance visible if team pricing is unavailable", () => {
+    mocks.plan.mockReturnValue({
+      data: plan({ key: "free", kind: "free", name: "Free" }),
+    })
+    mocks.pricing.mockReturnValue({ data: undefined })
+    mocks.allowance.mockReturnValue({ data: allowance({}) })
+    render(<PlanOverviewSection summary={summary} />)
+    expect(screen.getByText(/allowance remaining/)).toBeTruthy()
+    expect(screen.queryByText(/equivalent remaining/)).toBeNull()
   })
 
   it("explains a paused Free allowance and a window that has not started", () => {
@@ -321,7 +368,7 @@ describe("PlanOverviewSection with pricing v2 on", () => {
       }),
     })
     render(<PlanOverviewSection summary={summary} />)
-    expect(screen.getByText("1%")).toBeTruthy()
+    expect(screen.getByText(/Less than 1 minute/)).toBeTruthy()
   })
 
   it("says when auto-recharge was turned off and when a top-up is in flight", () => {
@@ -372,7 +419,7 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     expect(screen.getByText("Changes to Free on Nov 1, 2026.")).toBeTruthy()
   })
 
-  it("falls back to today's plan card for legacy teams and when the plan can't load", () => {
+  it("keeps the legacy card for legacy teams and fails closed on unknown plans", () => {
     mocks.plan.mockReturnValue({
       data: plan({ key: "legacy", kind: "legacy_payg", name: "Pay as you go" }),
       isError: false,
@@ -382,7 +429,7 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     unmount()
     mocks.plan.mockReturnValue({ data: undefined, isError: true })
     render(<PlanOverviewSection summary={summary} />)
-    expect(screen.getByTestId("legacy-plan")).toBeTruthy()
+    expect(screen.getByText("Your plan could not be loaded.")).toBeTruthy()
   })
 
   it("hides plan changes from members who cannot manage billing", () => {

@@ -1240,6 +1240,7 @@ describe("api proxy prepaid credit", () => {
       req("POST", path, {
         body: JSON.stringify({
           expected_team: "use:team-east",
+          operation_id: "e2f2a080-167c-4cb0-8fb1-093be9e7720a",
           amount_cents: 2500,
           success_url: "https://console.test/plan-usage/buy-credit/",
           cancel_url: "https://console.test/plan-usage/buy-credit/",
@@ -1252,6 +1253,7 @@ describe("api proxy prepaid credit", () => {
     const [url, init] = fetchSpy.mock.calls[0]
     expect(url).toBe("https://api.test.superserve.ai/billing/prepaid/checkout")
     expect(JSON.parse(init.body)).toEqual({
+      operation_id: "e2f2a080-167c-4cb0-8fb1-093be9e7720a",
       amount_cents: 2500,
       success_url: "https://console.test/plan-usage/buy-credit/",
       cancel_url: "https://console.test/plan-usage/buy-credit/",

@@ -59,7 +59,7 @@ function mount() {
 }
 
 beforeEach(() => {
-  mocks.plan.mockReturnValue({ data: undefined })
+  mocks.plan.mockReturnValue({ data: null })
   mocks.prepaid.mockReturnValue({ data: undefined })
   mocks.summary.mockReturnValue({
     data: { permissions: { can_view: true, can_manage: true } },
@@ -67,12 +67,11 @@ beforeEach(() => {
 })
 
 describe("PlanBanner with pricing v2 off", () => {
-  it("renders only today's trial banner and never asks for v2 data", () => {
+  it("renders the legacy banner when there is no assigned plan", () => {
     mocks.version.mockReturnValue("legacy")
     mount()
     expect(screen.getByTestId("legacy-banner")).toBeTruthy()
-    expect(mocks.plan).toHaveBeenCalledWith(false)
-    expect(mocks.plan).not.toHaveBeenCalledWith(true)
+    expect(mocks.plan).toHaveBeenCalledWith(true)
     expect(mocks.prepaid).not.toHaveBeenCalled()
     expect(mocks.returnNotice).not.toHaveBeenCalled()
   })
@@ -92,23 +91,29 @@ describe("PlanBanner with pricing v2 on", () => {
     expect(screen.queryByRole("link", { name: "Upgrade" })).toBeNull()
   })
 
+  it("keeps assigned Free cardless after the public switch is rolled back", () => {
+    mocks.version.mockReturnValue("legacy")
+    mocks.plan.mockReturnValue({ data: plan("free") })
+    mount()
+    expect(screen.getByRole("link", { name: "Upgrade" })).toBeTruthy()
+    expect(screen.queryByTestId("legacy-banner")).toBeNull()
+  })
+
   it("pitches an upgrade on Free using the plan's own limits", () => {
     mocks.plan.mockReturnValue({ data: plan("free") })
     mount()
     expect(screen.queryByTestId("legacy-banner")).toBeNull()
     expect(
       screen.getByRole("region", { name: "Free plan" }).textContent,
-    ).toMatch(
-      /1 sandbox running at a time, up to 1 vCPU, 1 GiB memory, 4 GiB disk each/,
-    )
+    ).toMatch(/run 1 sandbox at a time on Free/)
     expect(screen.getByRole("link", { name: "Upgrade" })).toBeTruthy()
     expect(mocks.returnNotice).toHaveBeenCalled()
   })
 
-  it("keeps today's banner while the plan loads or if it fails", () => {
+  it("keeps payment prompts hidden while the plan loads or fails", () => {
     mocks.plan.mockReturnValue({ data: undefined, isError: true })
     mount()
-    expect(screen.getByTestId("legacy-banner")).toBeTruthy()
+    expect(screen.queryByTestId("legacy-banner")).toBeNull()
   })
 
   it("says compute is paused at a zero balance even without the low flag", () => {

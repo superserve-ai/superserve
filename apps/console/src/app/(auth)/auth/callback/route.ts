@@ -34,6 +34,7 @@ import {
 } from "@/lib/auth/signup-evidence"
 import {
   parseSignupOffer,
+  isSelfServeSignupOffer,
   SIGNUP_OFFER_DESTINATIONS,
   SIGNUP_OFFER_PARAM,
 } from "@/lib/auth/signup-offer"
@@ -49,7 +50,10 @@ import {
   updateSignupReviewMetadata,
 } from "@/lib/auth/signup-review-server"
 import { getPricingVersionAction } from "@/lib/billing/plans-actions"
-import { proAuthReturnPath } from "@/lib/billing/pro-auth-return"
+import {
+  proAuthReturnPath,
+  starterAuthReturnPath,
+} from "@/lib/billing/pro-auth-return"
 import { DEFAULT_REGION } from "@/lib/cells"
 import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import { fingerprintDiagnostics } from "@/lib/fingerprint/diagnostics-server"
@@ -210,7 +214,9 @@ export async function GET(request: Request) {
         const offerIntent =
           searchParams.get(SIGNUP_OFFER_PARAM) ?? searchParams.get("offer")
         const signupOffer =
-          offerIntent && (await getPricingVersionAction()) === "v2"
+          offerIntent &&
+          (isSelfServeSignupOffer(offerIntent) ||
+            (await getPricingVersionAction()) === "v2")
             ? parseSignupOffer(offerIntent)
             : undefined
         const signupAttemptId =
@@ -551,7 +557,7 @@ export async function GET(request: Request) {
           },
         )
 
-        const proNext = proAuthReturnPath(next)
+        const proNext = proAuthReturnPath(next) ?? starterAuthReturnPath(next)
         const ycNext =
           ycReturnPath(next) ??
           (process.env.YC_STAFF_UI_ENABLED === "true"
@@ -574,7 +580,12 @@ export async function GET(request: Request) {
         ) {
           next = "/yc/claim"
         }
-        if (newSignup && signupOffer && next === "/sandboxes")
+        if (
+          signupOffer &&
+          next === "/sandboxes" &&
+          (!searchParams.get("next") || searchParams.get("next") === "/") &&
+          (newSignup || signupOffer !== "enterprise")
+        )
           next = SIGNUP_OFFER_DESTINATIONS[signupOffer]
       }
 

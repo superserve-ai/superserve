@@ -3,16 +3,18 @@
 import { Button, Field, Input, Spinner, Switch, useToast } from "@superserve/ui"
 import { useQueryClient } from "@tanstack/react-query"
 import { useSearchParams } from "next/navigation"
-import { useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 
 import { PageHeader } from "@/components/page-header"
 import { useQueryScope } from "@/components/query-provider"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { usePrepaidCredit } from "@/hooks/use-prepaid-credit"
+import { useUser } from "@/hooks/use-user"
 import {
   type PrepaidCreditSummary,
   type PrepaidPurchase,
+  reconcilePrepaidOperations,
   setPrepaidAutoRecharge,
   startPrepaidCheckout,
   validPrepaidCents,
@@ -46,24 +48,45 @@ export function BuyCreditPageClient({
 }: { allowEntry?: boolean } = {}) {
   const params = useSearchParams()
   const purchase = params.get("purchase")
-  const { data, isLoading, error } = usePrepaidCredit()
-  const { data: summary } = useBillingSummary()
+  const { teamKey, ready } = useBillingContext()
+  const { user } = useUser()
+  const returnTeam = params.get("team")
+  const returnMismatch = Boolean(returnTeam && returnTeam !== teamKey)
+  const { data: credit, isLoading, error } = usePrepaidCredit()
+  const data = !returnMismatch && !error ? credit : undefined
+  const summaryQuery = useBillingSummary()
+  const summary = summaryQuery.isError ? undefined : summaryQuery.data
   const scope = useQueryScope()
   const canManage =
-    Boolean(summary?.permissions?.can_manage) && scope === "self"
+    ready && Boolean(summary?.permissions?.can_manage) && scope === "self"
+  useEffect(() => {
+    if (user && teamKey && data) {
+      try {
+        reconcilePrepaidOperations(user.id, teamKey, data.purchases)
+      } catch {
+        /* Keep payment status readable if browser storage is unavailable. */
+      }
+    }
+  }, [user, teamKey, data])
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader title={allowEntry ? "Buy credit" : "Credit balance"} />
       <div className="flex flex-col gap-6 overflow-y-auto p-4">
-        {purchase === "success" && (
+        {returnMismatch ? (
+          <p role="alert" className="text-sm text-muted">
+            This payment belongs to another team. Switch back to the team that
+            started it to check its status.
+          </p>
+        ) : null}
+        {!returnMismatch && purchase === "success" && (
           <p className="border border-dashed border-border p-3 text-sm text-foreground">
-            Payment received. Your credit appears here within a minute.
+            Checking payment status. Credit appears after payment is confirmed.
           </p>
         )}
-        {purchase === "cancel" && (
+        {!returnMismatch && purchase === "cancel" && (
           <p className="border border-dashed border-border p-3 text-sm text-muted">
-            Payment cancelled. No charge was made.
+            Checkout was cancelled. Check recent purchases before trying again.
           </p>
         )}
         {isLoading && <Spinner />}
@@ -76,7 +99,10 @@ export function BuyCreditPageClient({
           <>
             <BalanceCard data={data} showTerms={allowEntry} />
             {allowEntry ? (
-              <PurchaseCard canManage={canManage} />
+              <PurchaseCard
+                key={`${scope}:${teamKey}:${user?.id}`}
+                canManage={canManage}
+              />
             ) : (
               <p className="text-sm text-muted">
                 Credit purchases and auto-recharge changes are temporarily
@@ -137,7 +163,17 @@ export function requestedAmount(value: string | null): {
 }
 
 function PurchaseCard({ canManage }: { canManage: boolean }) {
-  const { teamKey } = useBillingContext()
+  const { teamKey, ready } = useBillingContext()
+  const { user } = useUser()
+  const target = useRef(teamKey)
+  useLayoutEffect(() => {
+    target.current = ready ? teamKey : null
+    return () => {
+      target.current = null
+    }
+  }, [teamKey, ready])
+  const inFlight = useRef(false)
+  const [status, setStatus] = useState<string | null>(null)
   const { addToast } = useToast()
   const initial = requestedAmount(useSearchParams().get("amount"))
   const [selected, setSelected] = useState(initial.preset)
@@ -148,27 +184,62 @@ function PurchaseCard({ canManage }: { canManage: boolean }) {
   const valid = amount !== null && validPrepaidCents(amount)
 
   const buy = async () => {
-    if (!teamKey || !valid || amount === null || submitting) return
+    if (
+      !user ||
+      !teamKey ||
+      !ready ||
+      !canManage ||
+      !valid ||
+      amount === null ||
+      inFlight.current
+    )
+      return
+    const originalTeam = teamKey
+    inFlight.current = true
     setSubmitting(true)
     try {
-      const url = await startPrepaidCheckout(
+      const result = await startPrepaidCheckout(
         teamKey,
         amount,
         window.location.href.split("?")[0],
+        user.id,
       )
-      window.location.assign(url)
+      if (target.current !== originalTeam) return
+      if (result.url && result.state === "pending")
+        window.location.assign(result.url)
+      else {
+        setStatus(
+          result.state === "credited"
+            ? "Credit confirmed. You can make another purchase."
+            : result.state === "failed"
+              ? "This purchase failed. You can start a new purchase."
+              : "Checking the existing purchase. Retry to check the same payment; credit appears after confirmation.",
+        )
+        setSubmitting(false)
+      }
     } catch (err) {
+      if (target.current !== originalTeam) return
+      setStatus(
+        "Payment status is uncertain. Retry to check the same purchase.",
+      )
       addToast(
         err instanceof Error ? err.message : "Unable to open payment",
         "error",
       )
       setSubmitting(false)
+    } finally {
+      inFlight.current = false
     }
   }
 
   return (
     <section className="flex flex-col gap-4 border border-dashed border-border p-4">
       <h2 className="font-mono text-xs text-muted uppercase">Add credit</h2>
+      {status ? (
+        <p role="alert" className="text-sm text-muted">
+          {status}
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {PRESET_CENTS.map((cents) => (
           <Button
@@ -201,7 +272,10 @@ function PurchaseCard({ canManage }: { canManage: boolean }) {
         />
       </Field>
       <div>
-        <Button disabled={!canManage || !valid || submitting} onClick={buy}>
+        <Button
+          disabled={!canManage || !user || !ready || !valid || submitting}
+          onClick={buy}
+        >
           {submitting
             ? "Opening payment…"
             : `Buy ${valid && amount !== null ? formatDollars(amount) : ""} credit`}

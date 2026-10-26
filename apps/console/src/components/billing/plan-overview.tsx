@@ -2,7 +2,10 @@ import { Badge, Button, cn } from "@superserve/ui"
 import Link from "next/link"
 
 import { CornerBrackets } from "@/components/corner-brackets"
-import type { BillingIncludedUsage } from "@/lib/api/billing"
+import type {
+  BillingIncludedUsage,
+  BillingPricingResponse,
+} from "@/lib/api/billing"
 import {
   describeSandboxSize,
   formatCents,
@@ -37,7 +40,7 @@ const date = (value: string) =>
 export function planPriceLabel(plan: TeamPlan): string {
   switch (plan.kind) {
     case "free":
-      return "$0, no card required"
+      return ""
     case "prepaid":
       return "Prepaid credit"
     case "subscription":
@@ -93,39 +96,92 @@ function Panel({
   )
 }
 
+// This is a monetary compute equivalent, never a countdown or start authority.
+export function allowanceEquivalentMinutes(
+  remainingCents: number,
+  pricing?: BillingPricingResponse | null,
+): string | null {
+  if (!pricing || pricing.currency !== "USD" || !Array.isArray(pricing.rates))
+    return null
+  const cpu = pricing.rates.filter(
+    (rate) => rate.resource_key === "vcpu" && rate.display_unit === "vCPU-hour",
+  )
+  const memory = pricing.rates.filter(
+    (rate) =>
+      rate.resource_key === "memory_gib" && rate.display_unit === "GiB-hour",
+  )
+  if (cpu.length !== 1 || memory.length !== 1) return null
+  const rates = [cpu[0]!.price_usd_hourly, memory[0]!.price_usd_hourly]
+  if (rates.some((rate) => !Number.isFinite(rate) || rate < 0)) return null
+  const hourly = rates[0]! + rates[1]!
+  if (
+    !Number.isFinite(hourly) ||
+    hourly <= 0 ||
+    !Number.isFinite(remainingCents)
+  )
+    return null
+  const minutes = Math.max(
+    0,
+    Math.floor((remainingCents / 100 / hourly) * 60 + 1e-8),
+  )
+  if (remainingCents > 0 && minutes === 0) return "Less than 1 minute"
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return [
+    hours ? `${hours} hour${hours === 1 ? "" : "s"}` : "",
+    rest || !hours ? `${rest} minute${rest === 1 ? "" : "s"}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ")
+}
+
 export function FreeAllowancePanel({
   allowance,
+  pricing,
 }: {
   allowance: FreeAllowance | null
+  pricing?: BillingPricingResponse | null
 }) {
   if (!allowance)
     return (
-      <Panel title="Runtime allowance">
+      <Panel title="Usage limits">
         <p className="text-sm text-muted">Allowance couldn&apos;t be loaded.</p>
       </Panel>
     )
   const total = allowance.allowance_cents
   if (!allowance.applies || total === null)
     return (
-      <Panel title="Runtime allowance">
+      <Panel title="Usage limits">
         <p className="text-sm text-muted">
           No runtime allowance applies to your team right now.
         </p>
       </Panel>
     )
   const open = allowance.window_started_at !== null
-  const used = open ? Math.min(allowance.used_cents ?? 0, total) : 0
-  const remaining = open
-    ? Math.max(allowance.remaining_cents ?? total - used, 0)
-    : total
+  const used = open ? allowance.used_cents : 0
+  const remaining = open ? allowance.remaining_cents : total
+  if (remaining === null || used === null)
+    return (
+      <Panel title="Usage limits">
+        <p className="text-sm text-muted">
+          Remaining allowance is unavailable.
+        </p>
+      </Panel>
+    )
+  const duration = allowanceEquivalentMinutes(remaining, pricing)
   const share = total > 0 ? remaining / total : 0
   const paused = open && allowance.paused === true
   return (
-    <Panel title="Runtime allowance">
+    <Panel title="Usage limits">
       <p className="text-3xl font-medium tracking-tight text-foreground">
-        {remaining > 0 ? Math.max(Math.ceil(share * 100), 1) : 0}%{" "}
+        {duration ??
+          new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: "USD",
+            maximumSignificantDigits: 3,
+          }).format(remaining / 100)}{" "}
         <span className="text-sm font-normal text-muted">
-          of this window&apos;s allowance left
+          {duration ? "equivalent remaining" : "allowance remaining"}
         </span>
       </p>
       <Meter
@@ -138,10 +194,14 @@ export function FreeAllowancePanel({
       <p className="text-sm text-muted">
         {paused
           ? "Allowance used up. Running sandboxes are paused and can't start"
-          : "Compute and memory at usage rates. Disk isn't counted"}
+          : "Daily compute allowance"}
         {open && allowance.resets_at
           ? `${paused ? " until" : "; resets"} ${dateTime(allowance.resets_at)}.`
           : ". The 24-hour window starts when you next start a sandbox."}
+        {duration
+          ? " Current-rate equivalent at 1 vCPU and 1 GiB memory; actual runtime depends on sandbox size."
+          : ""}
+        {" Unused allowance does not roll over."}
       </p>
     </Panel>
   )
@@ -232,6 +292,7 @@ export interface PlanOverviewProps {
   usageCents: number | null
   includedUsageStatus?: BillingIncludedUsage["status"]
   canManage: boolean
+  allowancePricing?: BillingPricingResponse | null
 }
 
 export function PlanOverview({
@@ -240,6 +301,7 @@ export function PlanOverview({
   prepaid,
   usageCents,
   includedUsageStatus,
+  allowancePricing,
   canManage,
 }: PlanOverviewProps) {
   const size = describeSandboxSize(plan.limits)
@@ -253,13 +315,15 @@ export function PlanOverview({
       <CornerBrackets size="sm" className="border-brand/70" />
       <div className="space-y-3 p-5 sm:p-6">
         <div className="flex items-center gap-2">
-          <p className={EYEBROW}>Plan</p>
+          <p className={EYEBROW}>Current plan</p>
           {pending ? <Badge variant="warning">Change scheduled</Badge> : null}
         </div>
         <p className="text-3xl font-medium tracking-tight text-foreground">
           {plan.name}
         </p>
-        <p className="text-sm text-muted">{planPriceLabel(plan)}</p>
+        {planPriceLabel(plan) ? (
+          <p className="text-sm text-muted">{planPriceLabel(plan)}</p>
+        ) : null}
         {pending ? (
           <p className="text-sm text-foreground">
             Changes to {pending.plan_name} on {date(pending.effective_at)}.
@@ -278,7 +342,7 @@ export function PlanOverview({
           ) : null}
           {plan.limits.max_templates !== null ? (
             <>
-              <dt className="text-muted">Templates</dt>
+              <dt className="text-muted">Custom templates</dt>
               <dd className="text-foreground">
                 {plan.limits.max_templates.toLocaleString("en-US")}
               </dd>
@@ -297,7 +361,10 @@ export function PlanOverview({
       </div>
       <div className="border-t border-dashed border-border sm:border-t-0 sm:border-l">
         {plan.kind === "free" ? (
-          <FreeAllowancePanel allowance={allowance} />
+          <FreeAllowancePanel
+            allowance={allowance}
+            pricing={allowancePricing}
+          />
         ) : plan.kind === "prepaid" ? (
           <PrepaidPanel prepaid={prepaid} />
         ) : plan.kind === "subscription" ? (
