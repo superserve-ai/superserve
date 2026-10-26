@@ -78,6 +78,8 @@ export function sanitizeClientName(input: unknown): string {
       ? input
           .replace(/[^\w.@ -]/g, "")
           .trim()
+          // macOS hostnames end in the mDNS suffix, which only adds noise.
+          .replace(/\.local$/i, "")
           .slice(0, MAX_CLIENT_NAME_LENGTH)
       : ""
   return name || "unknown device"

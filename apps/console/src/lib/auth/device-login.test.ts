@@ -102,6 +102,7 @@ import {
   denyDeviceCode,
   normalizeUserCode,
   pollDeviceCode as pollNow,
+  sanitizeClientName,
 } from "./device-login"
 
 // A client that waited the advertised interval since its last poll.
@@ -136,6 +137,15 @@ describe("device login", () => {
     await expect(pollNow("never-issued")).rejects.toMatchObject({
       code: "invalid_grant",
     })
+  })
+
+  it("drops the macOS .local suffix from device names", () => {
+    expect(sanitizeClientName("Example-MacBook-Pro.local")).toBe(
+      "Example-MacBook-Pro",
+    )
+    expect(sanitizeClientName("build-01.example.com")).toBe(
+      "build-01.example.com",
+    )
   })
 
   it("normalizes typed codes and rejects lookalikes", () => {
