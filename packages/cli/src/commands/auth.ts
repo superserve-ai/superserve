@@ -296,7 +296,6 @@ async function deviceLogin(opts: {
   wait: boolean
 }): Promise<DeviceLoginResult | null> {
   let pending = readPendingLogin()
-  const resumed = pending !== null
   if (pending) {
     // The server decides: approval keeps a code redeemable past our own clock,
     // so an agent re-running `login --no-wait` picks up its key here.
@@ -310,6 +309,8 @@ async function deviceLogin(opts: {
       pending = null
     }
   }
+  // Open the browser for a code created now, not for one an earlier run printed.
+  const fresh = pending === null
   pending ??= await startLogin()
   if (!opts.wait) {
     if (isJson()) {
@@ -335,7 +336,7 @@ async function deviceLogin(opts: {
     info(`Open ${color.cyan(pending.url)} to sign in.`)
     info(`Code: ${color.bold(pending.user_code)}`)
   }
-  if (opts.openBrowser && !resumed) openBrowser(pending.url)
+  if (opts.openBrowser && fresh) openBrowser(pending.url)
 
   let interval = pending.interval
   const waiting = spinner("Waiting for approval in the browser")
