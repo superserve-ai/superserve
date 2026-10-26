@@ -3,6 +3,13 @@ import { isStripeCheckoutUrl } from "./plan-checkout"
 
 export const PREPAID_STEP_CENTS = 500
 
+// Local navigation intent changed; subscribers still read only their actor/team.
+export const PREPAID_OPERATIONS_CHANGED =
+  "superserve:prepaid-operations-changed"
+function notifyPrepaidOperationsChanged() {
+  window.dispatchEvent(new Event(PREPAID_OPERATIONS_CHANGED))
+}
+
 export interface PrepaidAutoRecharge {
   enabled: boolean
   threshold_cents: number | null
@@ -71,6 +78,7 @@ export function reconcilePrepaidOperations(
       .map((p) => p.id),
   )
   const prefix = `starter-checkout:${actor}:${team}:`
+  let changed = false
   for (let index = sessionStorage.length - 1; index >= 0; index--) {
     const key = sessionStorage.key(index)
     if (!key?.startsWith(prefix)) continue
@@ -83,12 +91,15 @@ export function reconcilePrepaidOperations(
         operation.team === team &&
         terminal.has(operation.id) &&
         sessionStorage.getItem(key) === value
-      )
+      ) {
         sessionStorage.removeItem(key)
+        changed = true
+      }
     } catch {
       /* Preserve unreadable recovery state for a deliberate retry. */
     }
   }
+  if (changed) notifyPrepaidOperationsChanged()
 }
 
 export function retainedPrepaidOperations(
@@ -173,6 +184,7 @@ export async function startPrepaidCheckout(
       cancel: cancel.toString(),
     }
     sessionStorage.setItem(key, JSON.stringify(operation))
+    notifyPrepaidOperationsChanged()
   }
   const response = await apiClient<PrepaidCheckoutResult>(
     "/billing/prepaid/checkout",
@@ -198,8 +210,10 @@ export async function startPrepaidCheckout(
   if (response.url && !isStripeCheckoutUrl(response.url))
     throw new Error("Unable to open payment. Retry to check the same purchase.")
   if (response.state === "credited" || response.state === "failed") {
-    if (sessionStorage.getItem(key) === JSON.stringify(operation))
+    if (sessionStorage.getItem(key) === JSON.stringify(operation)) {
       sessionStorage.removeItem(key)
+      notifyPrepaidOperationsChanged()
+    }
   }
   return response
 }

@@ -11,6 +11,7 @@ import {
   type PrepaidOperation,
   reconcilePrepaidOperations,
   retainedPrepaidOperations,
+  PREPAID_OPERATIONS_CHANGED,
 } from "@/lib/api/prepaid"
 import { billingKeys } from "@/lib/api/query-keys"
 
@@ -47,18 +48,24 @@ export function useRetainedPrepaidOperations(purchases?: PrepaidPurchase[]) {
     operations: PrepaidOperation[]
   } | null>(null)
   useEffect(() => {
-    if (!actor || !teamKey) return
-    try {
-      if (purchases) reconcilePrepaidOperations(actor, teamKey, purchases)
-      setSaved({
-        actor,
-        team: teamKey,
-        operations: retainedPrepaidOperations(actor, teamKey),
-      })
-    } catch {
-      setSaved(null)
+    const refresh = () => {
+      if (!actor || !teamKey) return
+      try {
+        if (purchases) reconcilePrepaidOperations(actor, teamKey, purchases)
+        setSaved({
+          actor,
+          team: teamKey,
+          operations: retainedPrepaidOperations(actor, teamKey),
+        })
+      } catch {
+        setSaved(null)
+      }
     }
+    refresh()
+    window.addEventListener(PREPAID_OPERATIONS_CHANGED, refresh)
+    return () => window.removeEventListener(PREPAID_OPERATIONS_CHANGED, refresh)
   }, [actor, teamKey, purchases])
+
   return saved?.actor === actor && saved?.team === teamKey
     ? saved.operations
     : []
