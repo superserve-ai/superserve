@@ -4,6 +4,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs"
 import { homedir } from "node:os"
@@ -32,6 +33,11 @@ export interface StoredCredentials {
   api_key: string
   /** Control-plane override saved by `login --base-url`. */
   base_url?: string
+}
+
+/** When the saved key was written, or undefined when there is none. */
+export function credentialsSavedAt(): number | undefined {
+  return statSync(credentialsFile(), { throwIfNoEntry: false })?.mtimeMs
 }
 
 export function readCredentials(): StoredCredentials | null {

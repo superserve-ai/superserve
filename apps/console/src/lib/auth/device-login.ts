@@ -143,6 +143,10 @@ export async function approveDeviceCode(
       team_id: team.teamId,
       team_region: team.region,
       approved_at: new Date().toISOString(),
+      // A fresh window to redeem: --no-wait agents pick the key up on a later run.
+      expires_at: new Date(
+        Date.now() + DEVICE_CODE_TTL_SECONDS * 1000,
+      ).toISOString(),
     })
     .eq("user_code", userCode)
     .eq("status", "pending")
@@ -191,13 +195,17 @@ export async function pollDeviceCode(deviceCode: string) {
       "Waiting for approval in the browser.",
     )
   }
-  if (row.status !== "approved")
+  if (
+    row.status !== "approved" ||
+    new Date(row.expires_at as string).getTime() <= Date.now()
+  )
     throw new DeviceLoginError("expired_token", "The login code expired.")
 
   const { data: claimed, error: claimError } = await deviceTable()
     .update({ status: "consumed", consumed_at: new Date().toISOString() })
     .eq("id", row.id)
     .eq("status", "approved")
+    .gt("expires_at", new Date().toISOString())
     .select("id")
   if (claimError)
     throw new DeviceLoginError("unavailable", "Login is unavailable.")

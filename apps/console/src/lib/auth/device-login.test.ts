@@ -164,6 +164,20 @@ describe("device login", () => {
     ).rejects.toMatchObject({ code: "invalid_code" })
   })
 
+  it("won't redeem an approved code after its window closes", async () => {
+    const { deviceCode, userCode } = await start()
+    await approveDeviceCode(userCode, user as never, team)
+    // Approval restarts the window, so a --no-wait agent can come back later.
+    expect(
+      new Date(state.rows[0].expires_at as string).getTime(),
+    ).toBeGreaterThan(Date.now() + 590_000)
+    state.rows[0].expires_at = new Date(Date.now() - 1000).toISOString()
+    await expect(pollDeviceCode(deviceCode)).rejects.toMatchObject({
+      code: "expired_token",
+    })
+    expect(state.mint).not.toHaveBeenCalled()
+  })
+
   it("rate-limits a requester that keeps starting logins", async () => {
     for (let i = 0; i < 10; i++) await start()
     await expect(start()).rejects.toMatchObject({ code: "rate_limited" })

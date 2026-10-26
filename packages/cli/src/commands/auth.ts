@@ -6,7 +6,7 @@ import { Sandbox } from "@superserve/sdk"
 import type { Command } from "commander"
 
 import { apiFetch } from "../api"
-import { isInteractive, readSecret, readStdin } from "../args"
+import { isInteractive, readPipedInput, readSecret } from "../args"
 import {
   clearCredentials,
   configDir,
@@ -71,9 +71,7 @@ SUPERSERVE_API_KEY, when set, takes precedence over the saved key.`,
         baseUrl?: string
       }) => {
         const baseUrl = opts.baseUrl?.trim() || undefined
-        const piped = process.stdin.isTTY
-          ? ""
-          : (await readStdin()).toString("utf8").trim()
+        const piped = await readPipedInput()
         if (opts.withKey || piped) {
           const apiKey = piped || (await readSecret("API key: ")).trim()
           await saveKey(apiKey, baseUrl)

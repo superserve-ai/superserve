@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { existsSync, mkdtempSync, statSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { Readable } from "node:stream"
 
 import { retryAfterMs } from "../src/api"
 import { API, json, runCli, TEST_KEY } from "./harness"
@@ -243,5 +244,21 @@ describe("dev keys", () => {
       },
     )
     expect(local.exitCode).toBe(0)
+  })
+})
+
+describe("piped input", () => {
+  test("doesn't wait on a stdin that stays open (agent harnesses)", async () => {
+    const { readPipedInput } = await import("../src/args")
+    const saved = Object.getOwnPropertyDescriptor(process, "stdin")
+    const open = new Readable({ read() {} }) as Readable & { isTTY?: boolean }
+    Object.defineProperty(process, "stdin", { value: open, configurable: true })
+    try {
+      const started = Date.now()
+      expect(await readPipedInput(50)).toBe("")
+      expect(Date.now() - started).toBeLessThan(1_000)
+    } finally {
+      if (saved) Object.defineProperty(process, "stdin", saved)
+    }
   })
 })
