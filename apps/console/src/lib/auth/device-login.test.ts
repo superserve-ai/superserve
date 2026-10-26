@@ -110,6 +110,7 @@ describe("device login", () => {
     await expect(pollDeviceCode(deviceCode)).resolves.toEqual({
       apiKey: "ss_live_usw_secret",
       email: "dev@example.com",
+      newAccount: false,
     })
     expect(state.mint).toHaveBeenCalledWith(
       user,
@@ -176,6 +177,22 @@ describe("device login", () => {
       code: "expired_token",
     })
     expect(state.mint).not.toHaveBeenCalled()
+  })
+
+  it("flags a just-created team so the CLI can wait out its setup", async () => {
+    const { deviceCode, userCode } = await start()
+    await approveDeviceCode(userCode, user as never, team)
+    state.rows.push({ id: "team-1", created_at: new Date().toISOString() })
+    expect(await pollDeviceCode(deviceCode)).toMatchObject({ newAccount: true })
+
+    const second = await start()
+    await approveDeviceCode(second.userCode, user as never, team)
+    state.rows.find((r) => r.id === "team-1")!.created_at = new Date(
+      Date.now() - 86_400_000,
+    ).toISOString()
+    expect(await pollDeviceCode(second.deviceCode)).toMatchObject({
+      newAccount: false,
+    })
   })
 
   it("rate-limits a requester that keeps starting logins", async () => {

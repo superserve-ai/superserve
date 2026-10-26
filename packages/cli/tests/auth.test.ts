@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { existsSync, mkdtempSync, statSync } from "node:fs"
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Readable } from "node:stream"
@@ -135,6 +141,75 @@ describe("auth", () => {
     expect(finish.requests.map((q) => q.url.pathname)).not.toContain(
       "/api/cli/device",
     )
+  })
+
+  test("an agent re-running login --no-wait collects an approved key after the original expiry", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "superserve-login-"))
+    const env = { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir }
+    writeFileSync(
+      join(dir, "pending-login.json"),
+      JSON.stringify({
+        console_url: "https://console.superserve.ai",
+        device_code: "secret-device-code",
+        user_code: "BCDF-GHJK",
+        url: "https://console.superserve.ai/device?code=BCDF-GHJK",
+        // Past our own clock, but approval kept it redeemable on the server.
+        expires_at: Date.now() - 60_000,
+        interval: 0,
+      }),
+    )
+    const r = await runCli(["login", "--no-wait", "--json"], {
+      env,
+      fetch: (req) =>
+        req.url.pathname === "/api/cli/device/token"
+          ? json({ api_key: TEST_KEY, new_account: true })
+          : req.url.pathname === "/sandboxes"
+            ? json([])
+            : undefined,
+    })
+    expect(r.exitCode).toBe(0)
+    expect(JSON.parse(r.stdout).logged_in).toBe(true)
+    const saved = JSON.parse(
+      readFileSync(join(dir, "credentials.json"), "utf8"),
+    )
+    expect(saved.setup_until).toBeGreaterThan(Date.now())
+  })
+
+  test("a resumed code the server has expired starts a fresh login", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "superserve-login-"))
+    const env = { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir }
+    writeFileSync(
+      join(dir, "pending-login.json"),
+      JSON.stringify({
+        console_url: "https://console.superserve.ai",
+        device_code: "old-code",
+        user_code: "BCDF-GHJK",
+        url: "https://console.superserve.ai/device?code=BCDF-GHJK",
+        expires_at: Date.now() - 60_000,
+        interval: 0,
+      }),
+    )
+    const r = await runCli(["login", "--no-wait", "--json"], {
+      env,
+      fetch: (req) => {
+        if (req.url.pathname === "/api/cli/device/token")
+          return json({ error: "expired_token" }, 400)
+        if (req.url.pathname === "/api/cli/device")
+          return json({
+            device_code: "new-code",
+            user_code: "LMNP-QRST",
+            verification_uri_complete:
+              "https://console.superserve.ai/device?code=LMNP-QRST",
+            expires_in: 600,
+            interval: 0,
+          })
+      },
+    })
+    expect(r.exitCode).toBe(0)
+    expect(JSON.parse(r.stdout)).toMatchObject({
+      logged_in: false,
+      user_code: "LMNP-QRST",
+    })
   })
 
   test("a denied browser login fails with the auth code and saves nothing", async () => {

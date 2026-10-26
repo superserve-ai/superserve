@@ -21,7 +21,7 @@ import {
   parseInteger,
   parseKeyValues,
 } from "../args"
-import { connection, credentialsSavedAt, sdkOptions } from "../config"
+import { connection, readCredentials, sdkOptions } from "../config"
 import { CliError, EXIT, reportBatch, usageError } from "../errors"
 import {
   color,
@@ -242,16 +242,15 @@ function eventDetails(e: NetworkEvent): string {
 // A brand-new account's trial credit is recorded by a background worker a few
 // seconds after signup, so the first create right after `superserve login` can
 // briefly see 402. A 402 creates nothing, so retrying it is safe.
-const NEW_ACCOUNT_WINDOW_MS = 15 * 60_000
 const NEW_ACCOUNT_SETUP_MS = 90_000
 
 async function createWaitingForNewAccount<T>(
   create: () => Promise<T>,
 ): Promise<T> {
-  const savedAt =
-    connection().source === "credentials" ? credentialsSavedAt() : undefined
+  // Only a browser signup marks its account as still setting up.
   const fresh =
-    savedAt !== undefined && Date.now() - savedAt < NEW_ACCOUNT_WINDOW_MS
+    connection().source === "credentials" &&
+    (readCredentials()?.setup_until ?? 0) > Date.now()
   const deadline = Date.now() + NEW_ACCOUNT_SETUP_MS
   let told = false
   for (;;) {

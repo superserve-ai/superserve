@@ -20,6 +20,9 @@ export const DEVICE_CODE_TTL_SECONDS = 600
 export const DEVICE_POLL_INTERVAL_SECONDS = 5
 const MAX_CODES_PER_REQUESTER = 10
 const MAX_CLIENT_NAME_LENGTH = 64
+// A team this young is a fresh signup whose trial credit a background worker
+// may still be recording; the CLI waits out a brief 402 instead of failing.
+const NEW_ACCOUNT_WINDOW_MS = 15 * 60_000
 // No vowels, so a code never spells a word; no 0/O or 1/I lookalikes.
 const USER_CODE_ALPHABET = "BCDFGHJKLMNPQRSTVWXZ"
 
@@ -212,6 +215,11 @@ export async function pollDeviceCode(deviceCode: string) {
   if (!claimed?.length)
     throw new DeviceLoginError("invalid_grant", "This login was already used.")
 
+  const team = {
+    teamId: row.team_id as string,
+    region: row.team_region as string,
+  }
+  let minted: { apiKey: string; email: string | null }
   try {
     const {
       data: { user },
@@ -220,17 +228,13 @@ export async function pollDeviceCode(deviceCode: string) {
     if (userError || !user)
       throw new DeviceLoginError("access_denied", "The account is unavailable.")
     assertSignupReviewCleared(user)
-    const team = {
-      teamId: row.team_id as string,
-      region: row.team_region as string,
-    }
     const key = await mintTeamApiKey(
       user,
       team,
       `CLI · ${row.client_name ?? "unknown device"}`,
       new Date().toISOString(),
     )
-    return { apiKey: key.key, email: user.email ?? null }
+    minted = { apiKey: key.key, email: user.email ?? null }
   } catch (error) {
     if (
       !(error instanceof DeviceLoginError) &&
@@ -242,5 +246,24 @@ export async function pollDeviceCode(deviceCode: string) {
         .eq("status", "consumed")
     }
     throw error
+  }
+  return { ...minted, newAccount: await isNewTeam(team) }
+}
+
+/** Best effort: a failed lookup only means the CLI won't wait out a 402. */
+async function isNewTeam(team: { teamId: string; region: string }) {
+  try {
+    const { data } = await cellFor(team.region)
+      .createAdminClient()
+      .from("team")
+      .select("created_at")
+      .eq("id", team.teamId)
+      .maybeSingle()
+    const createdAt = data?.created_at
+      ? new Date(data.created_at as string).getTime()
+      : Number.NaN
+    return Date.now() - createdAt < NEW_ACCOUNT_WINDOW_MS
+  } catch {
+    return false
   }
 }

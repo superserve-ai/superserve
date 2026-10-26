@@ -406,7 +406,7 @@ describe("new account setup", () => {
     const dir = mkdtempSync(join(tmpdir(), "ss-fresh-"))
     writeFileSync(
       join(dir, "credentials.json"),
-      JSON.stringify({ api_key: TEST_KEY }),
+      JSON.stringify({ api_key: TEST_KEY, setup_until: Date.now() + 60_000 }),
     )
     let posts = 0
     const r = await runCli(["sandbox", "create", "--name", "first"], {
@@ -419,6 +419,23 @@ describe("new account setup", () => {
     expect(r.exitCode).toBe(0)
     expect(posts).toBe(2)
     expect(r.stderr).toContain("Finishing account setup")
+  })
+
+  test("a saved key without the signup marker (--with-key) fails right away", async () => {
+    const { mkdtempSync, writeFileSync } = await import("node:fs")
+    const { tmpdir } = await import("node:os")
+    const { join } = await import("node:path")
+    const dir = mkdtempSync(join(tmpdir(), "ss-withkey-"))
+    writeFileSync(
+      join(dir, "credentials.json"),
+      JSON.stringify({ api_key: TEST_KEY }),
+    )
+    const r = await runCli(["sandbox", "create", "--name", "x"], {
+      env: { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir },
+      fetch: () => ineligible(),
+    })
+    expect(r.exitCode).not.toBe(0)
+    expect(r.requests).toHaveLength(1)
   })
 
   test("without a fresh login, a 402 fails right away", async () => {

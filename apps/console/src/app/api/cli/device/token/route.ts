@@ -11,8 +11,12 @@ export async function POST(request: Request) {
       { status: 400 },
     )
   try {
-    const { apiKey, email } = await pollDeviceCode(body.device_code)
-    return NextResponse.json({ api_key: apiKey, email })
+    const { apiKey, email, newAccount } = await pollDeviceCode(body.device_code)
+    return NextResponse.json({
+      api_key: apiKey,
+      email,
+      new_account: newAccount,
+    })
   } catch (error) {
     if (error instanceof SignupReviewPendingError)
       return NextResponse.json(

@@ -4,7 +4,6 @@ import {
   readFileSync,
   renameSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from "node:fs"
 import { homedir } from "node:os"
@@ -33,11 +32,8 @@ export interface StoredCredentials {
   api_key: string
   /** Control-plane override saved by `login --base-url`. */
   base_url?: string
-}
-
-/** When the saved key was written, or undefined when there is none. */
-export function credentialsSavedAt(): number | undefined {
-  return statSync(credentialsFile(), { throwIfNoEntry: false })?.mtimeMs
+  /** Set by a browser signup: until then the new account may still be setting up billing. */
+  setup_until?: number
 }
 
 export function readCredentials(): StoredCredentials | null {

@@ -77,11 +77,16 @@ SUPERSERVE_API_KEY, when set, takes precedence over the saved key.`,
           await saveKey(apiKey, baseUrl)
           return
         }
-        const apiKey = await deviceLogin({
+        const login = await deviceLogin({
           openBrowser: opts.browser && isInteractive(),
           wait: opts.wait,
         })
-        if (apiKey) await saveKey(apiKey, baseUrl)
+        if (login)
+          await saveKey(
+            login.apiKey,
+            baseUrl,
+            login.newAccount ? Date.now() + ACCOUNT_SETUP_MS : undefined,
+          )
       },
     )
 
@@ -145,7 +150,11 @@ SUPERSERVE_API_KEY, when set, takes precedence over the saved key.`,
     })
 }
 
-async function saveKey(apiKey: string, baseUrl: string | undefined) {
+async function saveKey(
+  apiKey: string,
+  baseUrl: string | undefined,
+  setupUntil?: number,
+) {
   // Non-production endpoints (e.g. a local backend) issue ss_dev_ keys.
   const prefixes = baseUrl ? ["ss_live_", "ss_dev_"] : ["ss_live_"]
   if (!prefixes.some((p) => apiKey.startsWith(p))) {
@@ -158,7 +167,11 @@ async function saveKey(apiKey: string, baseUrl: string | undefined) {
   await withSpinner("Checking key", () =>
     Sandbox.list({ apiKey, baseUrl, limit: 1 }),
   )
-  const path = writeCredentials({ api_key: apiKey, base_url: baseUrl })
+  const path = writeCredentials({
+    api_key: apiKey,
+    base_url: baseUrl,
+    ...(setupUntil ? { setup_until: setupUntil } : {}),
+  })
   if (isJson()) {
     printJson({ logged_in: true, key: maskKey(apiKey), path })
     return
@@ -170,6 +183,12 @@ async function saveKey(apiKey: string, baseUrl: string | undefined) {
     warn("SUPERSERVE_API_KEY is set and overrides the saved key.")
   }
 }
+
+// Approving restarts a code's server-side window; keep a pending login this
+// much past its original expiry so a late `login` can still redeem it.
+const APPROVAL_WINDOW_MS = 10 * 60_000
+// How long a just-created account's first sandbox creates wait out a 402.
+const ACCOUNT_SETUP_MS = 15 * 60_000
 
 interface PendingLogin {
   console_url: string
@@ -187,7 +206,8 @@ function pendingFile(): string {
 function readPendingLogin(): PendingLogin | null {
   try {
     const data = JSON.parse(readFileSync(pendingFile(), "utf8"))
-    return data?.console_url === CONSOLE_URL && data.expires_at > Date.now()
+    return data?.console_url === CONSOLE_URL &&
+      data.expires_at + APPROVAL_WINDOW_MS > Date.now()
       ? (data as PendingLogin)
       : null
   } catch {
@@ -242,13 +262,55 @@ async function startLogin(): Promise<PendingLogin> {
   return pending
 }
 
-/** Device authorization (RFC 8628): returns the minted key, or null for --no-wait. */
+interface DeviceLoginResult {
+  apiKey: string
+  newAccount: boolean
+}
+
+/** One token poll: the key, "pending" or "slow_down"; throws once the login is over. */
+async function pollOnce(
+  pending: PendingLogin,
+): Promise<DeviceLoginResult | "pending" | "slow_down"> {
+  const { status, data } = await consoleRequest("/api/cli/device/token", {
+    device_code: pending.device_code,
+  })
+  if (status === 200 && typeof data.api_key === "string") {
+    rmSync(pendingFile(), { force: true })
+    return { apiKey: data.api_key, newAccount: data.new_account === true }
+  }
+  const code = String(data.error ?? "")
+  if (code === "slow_down") return "slow_down"
+  if (code === "authorization_pending" || status === 503) return "pending"
+  rmSync(pendingFile(), { force: true })
+  throw new CliError(
+    String(data.error_description ?? "Login failed."),
+    code === "access_denied" ? EXIT.AUTH : EXIT.ERROR,
+    "Run `superserve login` to try again.",
+    code || "login_failed",
+  )
+}
+
+/** Device authorization (RFC 8628): the minted key, or null for --no-wait. */
 async function deviceLogin(opts: {
   openBrowser: boolean
   wait: boolean
-}): Promise<string | null> {
-  const resumed = readPendingLogin()
-  const pending = resumed ?? (await startLogin())
+}): Promise<DeviceLoginResult | null> {
+  let pending = readPendingLogin()
+  const resumed = pending !== null
+  if (pending) {
+    // The server decides: approval keeps a code redeemable past our own clock,
+    // so an agent re-running `login --no-wait` picks up its key here.
+    try {
+      const first = await pollOnce(pending)
+      if (typeof first === "object") return first
+    } catch (err) {
+      const over = err instanceof CliError && err.code === "expired_token"
+      if (!over && !(err instanceof CliError && err.code === "invalid_grant"))
+        throw err
+      pending = null
+    }
+  }
+  pending ??= await startLogin()
   if (!opts.wait) {
     if (isJson()) {
       printJson({
@@ -278,25 +340,11 @@ async function deviceLogin(opts: {
   let interval = pending.interval
   const waiting = spinner("Waiting for approval in the browser")
   try {
-    while (Date.now() < pending.expires_at) {
-      const { status, data } = await consoleRequest("/api/cli/device/token", {
-        device_code: pending.device_code,
-      })
-      if (status === 200 && typeof data.api_key === "string") {
-        rmSync(pendingFile(), { force: true })
-        return data.api_key
-      }
-      const code = String(data.error ?? "")
-      if (code === "slow_down") interval += 5
-      else if (code !== "authorization_pending" && status !== 503) {
-        rmSync(pendingFile(), { force: true })
-        throw new CliError(
-          String(data.error_description ?? "Login failed."),
-          code === "access_denied" ? EXIT.AUTH : EXIT.ERROR,
-          "Run `superserve login` to try again.",
-          code || "login_failed",
-        )
-      }
+    // The server reports expiry; this bound only stops a server that never does.
+    while (Date.now() < pending.expires_at + APPROVAL_WINDOW_MS) {
+      const result = await pollOnce(pending)
+      if (typeof result === "object") return result
+      if (result === "slow_down") interval += 5
       await sleep(interval * 1000)
     }
   } finally {
