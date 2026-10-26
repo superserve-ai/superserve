@@ -13,8 +13,16 @@ export function useBillingReturnNotice() {
   const pathname = usePathname()
 
   useEffect(() => {
-    // Preserve the billing page's inline return notice and cleanup.
-    if (pathname === "/plan-usage" || pathname === "/plan-usage/") return
+    // These pages own their return markers, including strict checkout recovery.
+    if (
+      pathname === "/plan-usage" ||
+      pathname === "/plan-usage/" ||
+      pathname === "/billing/pro" ||
+      pathname === "/billing/pro/" ||
+      pathname === "/plan-usage/buy-credit" ||
+      pathname === "/plan-usage/buy-credit/"
+    )
+      return
     const url = new URL(window.location.href)
     const billingState = url.searchParams.get("billing")
     if (!url.searchParams.has("billing")) return
