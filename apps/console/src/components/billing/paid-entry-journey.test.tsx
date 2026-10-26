@@ -14,6 +14,7 @@ import { signupPreparationReturnPath } from "@/lib/billing/pro-auth-return"
 const id = "11111111-1111-4111-8111-111111111111"
 const teamKey = `use:${id}`
 const state = vi.hoisted(() => ({
+  refresh: vi.fn().mockResolvedValue({ isError: false }),
   teamKey: "use:11111111-1111-4111-8111-111111111111",
   query: "",
   member: true,
@@ -72,6 +73,7 @@ vi.mock("@/hooks/use-pricing-version", () => ({
 }))
 vi.mock("@/hooks/use-public-billing-plans", () => ({
   usePublicBillingPlans: () => ({
+    refetch: state.refresh,
     data: {
       pricing_version: state.pricing,
       cards: [
@@ -86,8 +88,19 @@ vi.mock("@/hooks/use-public-billing-plans", () => ({
     },
   }),
 }))
+vi.mock("@/lib/api/starter-checkout-recovery", () => ({
+  recoverStarterCheckout: async () => ({
+    outcome: "no_pending_starter_checkout",
+  }),
+}))
+vi.mock("@/hooks/use-billing-v2", () => ({
+  useTeamPlan: () => ({ data: undefined, refetch: state.refresh }),
+}))
 vi.mock("@/hooks/use-billing-summary", () => ({
-  useBillingSummary: () => ({ data: { permissions: { can_manage: true } } }),
+  useBillingSummary: () => ({
+    data: { permissions: { can_manage: true } },
+    refetch: state.refresh,
+  }),
 }))
 vi.mock("@/hooks/use-prepaid-credit", () => ({
   usePrepaidCredit: () => ({

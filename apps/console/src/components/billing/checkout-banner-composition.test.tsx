@@ -91,6 +91,11 @@ vi.mock("@/hooks/use-prepaid-credit", () => ({
   },
   useRetainedPrepaidOperations: () => [],
 }))
+vi.mock("@/lib/api/starter-checkout-recovery", () => ({
+  recoverStarterCheckout: async () => ({
+    outcome: "no_pending_starter_checkout",
+  }),
+}))
 vi.mock("@/lib/api/plan-checkout", () => ({
   recoverProPayment: (...args: unknown[]) => state.recover(...args),
   startProCheckout: (...args: unknown[]) => state.start(...args),

@@ -10,6 +10,17 @@ export { planKindSchema, planLimitsSchema } from "@/lib/billing/plans"
 
 const cents = z.number().int().nonnegative()
 
+export const proCheckoutSchema = z.object({
+  first_paid_pro_cycle: z.boolean(),
+  accepted: z.boolean(),
+  period_start: z.string().datetime({ offset: true }).optional(),
+  period_end: z.string().datetime({ offset: true }).optional(),
+  credit_expires_at: z.string().datetime({ offset: true }).optional(),
+  first_payment_cents: cents.optional(),
+  first_credit_cents: cents.optional(),
+})
+export type ProCheckout = z.infer<typeof proCheckoutSchema>
+
 export const teamPlanSchema = z
   .object({
     plan: z
@@ -25,6 +36,7 @@ export const teamPlanSchema = z
       })
       .nullable(),
     period: z.object({ start: z.string(), end: z.string() }),
+    pro_checkout: proCheckoutSchema.optional(),
     pending_change: z
       .object({
         id: z.string().uuid(),
@@ -36,10 +48,11 @@ export const teamPlanSchema = z
       })
       .nullable(),
   })
-  .transform(({ plan, period, pending_change }) =>
+  .transform(({ plan, period, pending_change, pro_checkout }) =>
     plan === null
       ? null
       : {
+          ...(pro_checkout ? { pro_checkout } : {}),
           key: plan.plan_key,
           kind: plan.kind,
           name: plan.display_name,
