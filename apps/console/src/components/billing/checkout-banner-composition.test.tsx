@@ -62,6 +62,7 @@ vi.mock("@/hooks/use-pricing-version", () => ({
 }))
 vi.mock("@/hooks/use-billing-v2", () => ({
   useTeamPlan: () => ({ data: { kind: "prepaid" } }),
+  useProCheckoutTerms: () => ({ data: undefined }),
   usePrepaidBalance: () => ({ data: null }),
 }))
 vi.mock("./plan-aware-banner", () => ({
@@ -90,6 +91,11 @@ vi.mock("@/hooks/use-prepaid-credit", () => ({
     }
   },
   useRetainedPrepaidOperations: () => [],
+}))
+vi.mock("@/lib/api/starter-checkout-recovery", () => ({
+  recoverStarterCheckout: async () => ({
+    outcome: "no_pending_starter_checkout",
+  }),
 }))
 vi.mock("@/lib/api/plan-checkout", () => ({
   recoverProPayment: (...args: unknown[]) => state.recover(...args),
