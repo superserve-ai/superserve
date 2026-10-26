@@ -1,8 +1,9 @@
 "use client"
 
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
+import { CheckoutContextRecovery } from "@/components/billing/checkout-context-recovery"
 import {
   ProPaymentView,
   proPaymentStep,
@@ -12,6 +13,7 @@ import {
   useDashboardTeamContext,
   useQueryScope,
 } from "@/components/query-provider"
+import { useBillingContext } from "@/hooks/use-billing-context"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { usePublicBillingPlans } from "@/hooks/use-public-billing-plans"
 import { useTeams } from "@/hooks/use-teams"
@@ -23,6 +25,7 @@ import {
   startProCheckout,
   resumeProCheckout,
 } from "@/lib/api/plan-checkout"
+import { checkoutRecoveryPath } from "@/lib/billing/checkout-return"
 import { planCard } from "@/lib/billing/plans"
 
 const CONFIRM_ATTEMPTS = 5
@@ -37,7 +40,10 @@ export function ProPayment({
   checkoutTeam?: string
 }) {
   const router = useRouter()
+  const params = useSearchParams()
+  const callbackPath = `/billing/pro/?${params.toString()}`
   const scope = useQueryScope()
+  const { ready } = useBillingContext()
   const actor = useUser().user?.id
   const dashboardTeam = useDashboardTeamContext()
   const teamsQuery = useTeams()
@@ -56,11 +62,14 @@ export function ProPayment({
   const pro = planCard(plansQuery.data, "pro")
   const summaryQuery = useBillingSummary(!!team)
   const canContinue =
+    ready &&
     scope === "self" &&
     !summaryQuery.isError &&
     Boolean(actor && summaryQuery.data?.permissions?.can_manage)
   const canRecover =
-    scope === "self" && summaryQuery.data?.permissions?.can_manage !== false
+    ready &&
+    scope === "self" &&
+    summaryQuery.data?.permissions?.can_manage !== false
   const plan = summaryQuery.isError ? undefined : summaryQuery.data?.plan
   const paidPlan =
     plan &&
@@ -77,14 +86,17 @@ export function ProPayment({
   const operationTarget = useRef({ active: false })
   const teamMismatch =
     (!!billingReturn || !!paymentTeam) &&
-    (!paymentTeam || paymentTeam !== teamKey)
+    (!paymentTeam ||
+      paymentTeam !== teamKey ||
+      ((params.has("billing") || params.has("team")) &&
+        !checkoutRecoveryPath(callbackPath)))
   useEffect(() => {
     const target = { active: true }
     operationTarget.current = target
     return () => {
       target.active = false
     }
-  }, [teamKey, scope, actor])
+  }, [teamKey, scope, actor, ready])
 
   const run = useCallback(async (work: () => Promise<void>) => {
     if (inFlight.current) return
@@ -190,6 +202,7 @@ export function ProPayment({
 
   const step = proPaymentStep({
     loading:
+      !ready ||
       !team ||
       (!confirming && (plansQuery.isPending || summaryQuery.isPending)),
     plans: summaryQuery.isError ? undefined : plansQuery.data,
@@ -203,18 +216,27 @@ export function ProPayment({
     <div className="flex h-full flex-col">
       <PageHeader title="Upgrade to Pro" />
       <div className="flex-1 overflow-y-auto">
-        <ProPaymentView
-          step={step}
-          pro={pro}
-          paidPlan={paidPlan}
-          busy={busy}
-          canContinue={canContinue}
-          canRecover={canRecover}
-          canceled={billingReturn === "cancel"}
-          error={error}
-          onContinue={onContinue}
-          onCheckPayment={() => void checkPayment()}
-        />
+        {step === "team_mismatch" ||
+        (!ready && (!!billingReturn || !!paymentTeam)) ? (
+          <CheckoutContextRecovery
+            callbackPath={callbackPath}
+            contextPending={!ready}
+            allowSwitch={scope === "self"}
+          />
+        ) : (
+          <ProPaymentView
+            step={step}
+            pro={pro}
+            paidPlan={paidPlan}
+            busy={busy}
+            canContinue={canContinue}
+            canRecover={canRecover}
+            canceled={billingReturn === "cancel"}
+            error={error}
+            onContinue={onContinue}
+            onCheckPayment={() => void checkPayment()}
+          />
+        )}
       </div>
     </div>
   )

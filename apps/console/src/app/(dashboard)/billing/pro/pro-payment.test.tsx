@@ -8,7 +8,7 @@ import type { PublicBillingPlans } from "@/lib/billing/plans"
 import { ProPayment } from "./pro-payment"
 
 const state = vi.hoisted(() => ({
-  team: { teamId: "team-a", region: "use" },
+  team: { teamId: "11111111-1111-4111-8111-111111111111", region: "use" },
   recover: vi.fn(),
   resume: vi.fn(),
   start: vi.fn(),
@@ -20,10 +20,19 @@ const state = vi.hoisted(() => ({
   summaryError: false,
   scope: "self",
   canManage: true,
+  ready: true,
+  switch: vi.fn(),
+  members: false,
+  directoryError: false,
+  refetch: vi.fn(),
 }))
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: state.replace }),
+  useSearchParams: () =>
+    new URLSearchParams(
+      "billing=success&team=use:11111111-1111-4111-8111-111111111111",
+    ),
 }))
 vi.mock("@/components/query-provider", () => ({
   useDashboardTeamContext: () => state.team,
@@ -32,10 +41,26 @@ vi.mock("@/components/query-provider", () => ({
 vi.mock("@/components/page-header", () => ({
   PageHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
 }))
+vi.mock("@/hooks/use-billing-context", () => ({
+  useBillingContext: () => ({ ready: state.ready }),
+}))
 vi.mock("@/hooks/use-user", () => ({
   useUser: () => ({ user: { id: "actor" } }),
 }))
-vi.mock("@/hooks/use-teams", () => ({ useTeams: () => ({ data: null }) }))
+vi.mock("@/hooks/use-teams", () => ({
+  useTeams: () => ({
+    data: state.members
+      ? {
+          teams: [
+            { id: "11111111-1111-4111-8111-111111111111", region: "use" },
+          ],
+        }
+      : null,
+    isError: state.directoryError,
+    refetch: state.refetch,
+  }),
+  useSwitchTeam: () => ({ mutateAsync: state.switch }),
+}))
 vi.mock("@/hooks/use-billing-summary", () => ({
   useBillingSummary: () => ({
     data: { ...state.summary, permissions: { can_manage: state.canManage } },
@@ -89,7 +114,7 @@ const availablePlans: PublicBillingPlans = {
 }
 
 beforeEach(() => {
-  state.team = { teamId: "team-a", region: "use" }
+  state.team = { teamId: "11111111-1111-4111-8111-111111111111", region: "use" }
   state.recover.mockReset()
   state.resume.mockReset().mockResolvedValue(null)
   state.start.mockReset()
@@ -99,6 +124,10 @@ beforeEach(() => {
   state.summaryError = false
   state.scope = "self"
   state.canManage = true
+  state.ready = true
+  state.members = false
+  state.directoryError = false
+  state.switch.mockReset()
 })
 
 describe("Pro payment return recovery", () => {
@@ -114,7 +143,7 @@ describe("Pro payment return recovery", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
     await waitFor(() =>
       expect(state.start).toHaveBeenCalledWith(
-        "use:team-a",
+        "use:11111111-1111-4111-8111-111111111111",
         "pro_monthly",
         expect.any(String),
         "actor",
@@ -139,7 +168,10 @@ describe("Pro payment return recovery", () => {
       screen.getByRole("button", { name: "Check payment status" }),
     )
     await waitFor(() =>
-      expect(state.resume).toHaveBeenCalledWith("use:team-a", "actor"),
+      expect(state.resume).toHaveBeenCalledWith(
+        "use:11111111-1111-4111-8111-111111111111",
+        "actor",
+      ),
     )
     await waitFor(() =>
       expect(assign).toHaveBeenCalledWith(
@@ -184,13 +216,13 @@ describe("Pro payment return recovery", () => {
     expect(state.start).not.toHaveBeenCalled()
   })
   it("doesn't recover or start payments while impersonating", () => {
-    state.scope = "team-a"
+    state.scope = "11111111-1111-4111-8111-111111111111"
     state.plans = availablePlans
     render(
       <ProPayment
         returnTo="/sandboxes"
         billingReturn="success"
-        checkoutTeam="use:team-a"
+        checkoutTeam="use:11111111-1111-4111-8111-111111111111"
       />,
     )
     expect(state.recover).not.toHaveBeenCalled()
@@ -223,6 +255,10 @@ describe("Pro payment return recovery", () => {
       state.summaryError = false
       state.scope = "self"
       state.canManage = true
+      state.ready = true
+      state.members = false
+      state.directoryError = false
+      state.switch.mockReset()
       view.rerender(<ProPayment returnTo="/plan-usage/" />)
       expect(screen.getByText(/Your team is on Pro/)).toBeTruthy()
     },
@@ -237,7 +273,7 @@ describe("Pro payment return recovery", () => {
       />,
     )
     expect(screen.getByRole("alert").textContent).toContain(
-      "team you used for checkout",
+      "account and team that started checkout",
     )
     expect(state.recover).not.toHaveBeenCalled()
   })
@@ -252,11 +288,11 @@ describe("Pro payment return recovery", () => {
     )
     expect(
       new URL(state.start.mock.calls[0]![2]).searchParams.get("team"),
-    ).toBe("use:team-a")
+    ).toBe("use:11111111-1111-4111-8111-111111111111")
     state.team = { teamId: "team-b", region: "use" }
     view.rerender(<ProPayment returnTo="/plan-usage/" />)
     expect(screen.getByRole("alert").textContent).toContain(
-      "team you used for checkout",
+      "account and team that started checkout",
     )
     expect(state.recover).not.toHaveBeenCalled()
   })
@@ -272,18 +308,20 @@ describe("Pro payment return recovery", () => {
       <ProPayment
         billingReturn="success"
         returnTo="/plan-usage/"
-        checkoutTeam="use:team-a"
+        checkoutTeam="use:11111111-1111-4111-8111-111111111111"
       />,
     )
     await waitFor(() =>
-      expect(state.recover).toHaveBeenCalledWith("use:team-a"),
+      expect(state.recover).toHaveBeenCalledWith(
+        "use:11111111-1111-4111-8111-111111111111",
+      ),
     )
     state.team = { teamId: "team-b", region: "use" }
     view.rerender(
       <ProPayment
         billingReturn="success"
         returnTo="/plan-usage/"
-        checkoutTeam="use:team-a"
+        checkoutTeam="use:11111111-1111-4111-8111-111111111111"
       />,
     )
     await act(async () => {
@@ -291,7 +329,7 @@ describe("Pro payment return recovery", () => {
     })
     expect(state.replace).not.toHaveBeenCalled()
     expect(screen.getByRole("alert").textContent).toContain(
-      "team you used for checkout",
+      "account and team that started checkout",
     )
   })
   it("recovers an expired checkout conflict before offering a new payment", async () => {
@@ -309,7 +347,9 @@ describe("Pro payment return recovery", () => {
       screen.getByRole("button", { name: "Check payment status" }),
     )
     await screen.findByRole("button", { name: "Continue to payment" })
-    expect(state.recover).toHaveBeenCalledWith("use:team-a")
+    expect(state.recover).toHaveBeenCalledWith(
+      "use:11111111-1111-4111-8111-111111111111",
+    )
     expect(state.start).toHaveBeenCalledOnce()
   })
 
@@ -324,10 +364,12 @@ describe("Pro payment return recovery", () => {
     state.team = { teamId: "team-b", region: "use" }
     view.rerender(<ProPayment returnTo="/plan-usage/" />)
     expect(screen.getByRole("alert").textContent).toContain(
-      "team you used for checkout",
+      "account and team that started checkout",
     )
     expect(screen.queryByRole("button", { name: "Check again" })).toBeNull()
-    expect(state.recover).toHaveBeenCalledExactlyOnceWith("use:team-a")
+    expect(state.recover).toHaveBeenCalledExactlyOnceWith(
+      "use:11111111-1111-4111-8111-111111111111",
+    )
     expect(state.replace).not.toHaveBeenCalled()
   })
 
@@ -341,12 +383,16 @@ describe("Pro payment return recovery", () => {
         screen.getByRole("button", { name: "Check payment status" }),
       )
       await waitFor(() =>
-        expect(state.recover).toHaveBeenCalledExactlyOnceWith("use:team-a"),
+        expect(state.recover).toHaveBeenCalledExactlyOnceWith(
+          "use:11111111-1111-4111-8111-111111111111",
+        ),
       )
       state.team = { teamId: "team-b", region: "use" }
       view.rerender(<ProPayment returnTo="/plan-usage/" />)
       await screen.findByRole("button", { name: "Check payment status" })
-      expect(screen.queryByText(/team you used for checkout/)).toBeNull()
+      expect(
+        screen.queryByText(/account and team that started checkout/),
+      ).toBeNull()
     },
   )
 
@@ -358,10 +404,70 @@ describe("Pro payment return recovery", () => {
       screen.getByRole("button", { name: "Check payment status" }),
     )
     await screen.findByRole("button", { name: "Check again" })
-    expect(state.recover).toHaveBeenCalledWith("use:team-a")
+    expect(state.recover).toHaveBeenCalledWith(
+      "use:11111111-1111-4111-8111-111111111111",
+    )
     expect(state.start).not.toHaveBeenCalled()
     expect(
       screen.queryByRole("button", { name: "Continue to payment" }),
     ).toBeNull()
   })
+  it("preserves a rejected team-switch error while context is pending and permits retry", async () => {
+    state.team = { teamId: "other-team", region: "use" }
+    state.members = true
+    let reject!: (error: Error) => void
+    state.switch.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, fail) => {
+          reject = fail
+        }),
+    )
+    const props = {
+      billingReturn: "success" as const,
+      returnTo: "/plan-usage/",
+      checkoutTeam: "use:11111111-1111-4111-8111-111111111111",
+    }
+    const view = render(<ProPayment {...props} />)
+    fireEvent.click(
+      screen.getByRole("button", { name: "Return to checkout team" }),
+    )
+    state.ready = false
+    view.rerender(<ProPayment {...props} />)
+    expect(state.recover).not.toHaveBeenCalled()
+    expect(state.start).not.toHaveBeenCalled()
+    state.ready = true
+    view.rerender(<ProPayment {...props} />)
+    await act(async () => reject(new Error("not a member")))
+    expect(
+      screen.getByText("Unable to restore checkout. Please try again."),
+    ).toBeTruthy()
+    fireEvent.click(
+      screen.getByRole("button", { name: "Return to checkout team" }),
+    )
+    expect(state.switch).toHaveBeenCalledTimes(2)
+  })
+  it.each([false, true])(
+    "offers sign-in recovery for unresolved directory, error=%s",
+    (error) => {
+      state.ready = false
+      state.directoryError = error
+      render(
+        <ProPayment
+          billingReturn="success"
+          returnTo="/plan-usage/"
+          checkoutTeam="use:11111111-1111-4111-8111-111111111111"
+        />,
+      )
+      expect(
+        screen.getByRole("button", {
+          name: "Sign out and use checkout account",
+        }),
+      ).toBeTruthy()
+      expect(
+        screen.getByRole("button", { name: "Retry team lookup" }),
+      ).toBeTruthy()
+      expect(state.recover).not.toHaveBeenCalled()
+      expect(state.start).not.toHaveBeenCalled()
+    },
+  )
 })
