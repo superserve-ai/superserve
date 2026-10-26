@@ -36,6 +36,12 @@ function query(op: "select" | "update", payload?: Row) {
       filters.push((row) => String(row[col]) > value)
       return builder
     },
+    // Only the `col.is.null,col.lte."iso"` shape the poll throttle uses.
+    or: (expr: string) => {
+      const [, col, bound] = /^(\w+)\.is\.null,\w+\.lte\."(.+)"$/.exec(expr)!
+      filters.push((row) => row[col] == null || String(row[col]) <= bound)
+      return builder
+    },
     maybeSingle: async () => ({ data: run()[0] ?? null, error: null }),
   })
   return builder
@@ -95,8 +101,14 @@ import {
   createDeviceCode,
   denyDeviceCode,
   normalizeUserCode,
-  pollDeviceCode,
+  pollDeviceCode as pollNow,
 } from "./device-login"
+
+// A client that waited the advertised interval since its last poll.
+async function pollDeviceCode(deviceCode: string) {
+  for (const row of state.rows) row.last_polled_at = null
+  return pollNow(deviceCode)
+}
 
 const user = { id: "user-1", email: "dev@example.com", app_metadata: {} }
 const team = { teamId: "team-1", region: "usw" }
@@ -111,6 +123,19 @@ describe("device login", () => {
     state.mint.mockReset().mockResolvedValue({ key: "ss_live_usw_secret" })
     state.getUser.mockReset().mockResolvedValue({ data: { user }, error: null })
     state.member.mockReset().mockResolvedValue(true)
+  })
+
+  it("answers slow_down to a client polling faster than the interval", async () => {
+    const { deviceCode } = await start()
+    await expect(pollNow(deviceCode)).rejects.toMatchObject({
+      code: "authorization_pending",
+    })
+    await expect(pollNow(deviceCode)).rejects.toMatchObject({
+      code: "slow_down",
+    })
+    await expect(pollNow("never-issued")).rejects.toMatchObject({
+      code: "invalid_grant",
+    })
   })
 
   it("normalizes typed codes and rejects lookalikes", () => {

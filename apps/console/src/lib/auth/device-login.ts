@@ -21,6 +21,8 @@ import { createAdminClient } from "@/lib/supabase/admin"
 
 export const DEVICE_CODE_TTL_SECONDS = 600
 export const DEVICE_POLL_INTERVAL_SECONDS = 5
+// A second under the advertised interval, so network jitter isn't slow_down.
+const MIN_POLL_GAP_MS = (DEVICE_POLL_INTERVAL_SECONDS - 1) * 1000
 const MAX_CODES_PER_REQUESTER = 10
 const MAX_CLIENT_NAME_LENGTH = 64
 // A team this young is a fresh signup whose trial credit a background worker
@@ -182,14 +184,30 @@ export async function denyDeviceCode(userCode: string) {
  */
 export async function pollDeviceCode(deviceCode: string) {
   const hash = sha256(deviceCode)
-  const { data: row, error } = await deviceTable()
+  const now = Date.now()
+  // Stamp and read in one write; a row polled too recently doesn't match.
+  const { data: rows, error } = await deviceTable()
+    .update({ last_polled_at: new Date(now).toISOString() })
+    .eq("device_code", hash)
+    .or(
+      `last_polled_at.is.null,last_polled_at.lte."${new Date(now - MIN_POLL_GAP_MS).toISOString()}"`,
+    )
     .select(
       "id, status, expires_at, user_id, team_id, team_region, client_name",
     )
-    .eq("device_code", hash)
-    .maybeSingle()
   if (error) throw new DeviceLoginError("unavailable", "Login is unavailable.")
-  if (!row) throw new DeviceLoginError("invalid_grant", "Unknown login code.")
+  const row = rows?.[0]
+  if (!row) {
+    const { data: known, error: knownError } = await deviceTable()
+      .select("id")
+      .eq("device_code", hash)
+      .maybeSingle()
+    if (knownError)
+      throw new DeviceLoginError("unavailable", "Login is unavailable.")
+    if (known)
+      throw new DeviceLoginError("slow_down", "Polling faster than allowed.")
+    throw new DeviceLoginError("invalid_grant", "Unknown login code.")
+  }
   if (row.status === "denied")
     throw new DeviceLoginError("access_denied", "The login was denied.")
   if (row.status === "consumed")
