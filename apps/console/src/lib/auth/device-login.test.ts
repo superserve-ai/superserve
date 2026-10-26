@@ -192,6 +192,9 @@ describe("device login", () => {
     await expect(
       approveDeviceCode(expired.userCode, user as never, team),
     ).rejects.toMatchObject({ code: "invalid_code" })
+    await expect(denyDeviceCode(expired.userCode)).rejects.toMatchObject({
+      code: "invalid_code",
+    })
   })
 
   it("won't redeem an approved code after its window closes", async () => {

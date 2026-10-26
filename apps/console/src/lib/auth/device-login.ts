@@ -165,6 +165,7 @@ export async function denyDeviceCode(userCode: string) {
     .update({ status: "denied" })
     .eq("user_code", userCode)
     .eq("status", "pending")
+    .gt("expires_at", new Date().toISOString())
     .select("id")
   if (error) throw new DeviceLoginError("unavailable", "Login is unavailable.")
   if (!data?.length)
