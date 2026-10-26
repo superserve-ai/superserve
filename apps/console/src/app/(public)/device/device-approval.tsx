@@ -17,10 +17,12 @@ export function DeviceApproval({
   userCode,
   clientName,
   email,
+  team,
 }: {
   userCode: string
   clientName: string
   email: string
+  team: { key: string; name: string | null } | null
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -32,10 +34,10 @@ export function DeviceApproval({
     setBusy(true)
     setError(null)
     try {
-      let result = await approveDeviceAction(userCode)
+      let result = await approveDeviceAction(userCode, team?.key ?? null)
       if (result.status === "commit_free_plan") {
         await commitFreePlan(result.teamKey)
-        result = await approveDeviceAction(userCode)
+        result = await approveDeviceAction(userCode, team?.key ?? null)
       }
       if (result.status === "redirect") {
         router.replace(result.to)
@@ -91,6 +93,13 @@ export function DeviceApproval({
       <p className="mb-6 text-sm text-muted">
         Signed in as{" "}
         <span className="font-medium text-foreground">{email}</span>
+        {team?.name ? (
+          <>
+            {" "}
+            for team{" "}
+            <span className="font-medium text-foreground">{team.name}</span>
+          </>
+        ) : null}
       </p>
       <p className="mb-2 text-xs text-muted">
         A CLI on{" "}

@@ -359,6 +359,7 @@ describe("dev keys", () => {
 describe("piped input", () => {
   test("login --with-key waits out a pause mid-key", async () => {
     const dir = mkdtempSync(join(tmpdir(), "superserve-login-"))
+    writeFileSync(join(dir, "pending-login.json"), "{}")
     const stdin = new Readable({ read() {} })
     stdin.push(TEST_KEY.slice(0, 3))
     setTimeout(() => {
@@ -376,6 +377,7 @@ describe("piped input", () => {
       readFileSync(join(dir, "credentials.json"), "utf8"),
     )
     expect(saved.api_key).toBe(TEST_KEY)
+    expect(existsSync(join(dir, "pending-login.json"))).toBe(false)
   })
 
   test("doesn't wait on a stdin that stays open (agent harnesses)", async () => {

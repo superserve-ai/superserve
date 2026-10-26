@@ -77,6 +77,8 @@ SUPERSERVE_API_KEY, when set, takes precedence over the saved key.`,
           : await readPipedInput()
         if (apiKey) {
           await saveKey(apiKey, baseUrl)
+          // An older browser login must not later replace the key just saved.
+          rmSync(pendingFile(), { force: true })
           return
         }
         const login = await deviceLogin({

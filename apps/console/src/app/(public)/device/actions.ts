@@ -1,5 +1,6 @@
 "use server"
 
+import { serializeTeamSelection as teamKey } from "@/lib/api/active-team"
 import { getOrCreateTeamForUser } from "@/lib/api/api-key-mint"
 import { readSignupPlan } from "@/lib/api/signup-plan-read"
 import {
@@ -32,6 +33,7 @@ export type DeviceApprovalResult =
  */
 export async function approveDeviceAction(
   code: string,
+  shownTeam: string | null,
 ): Promise<DeviceApprovalResult> {
   const userCode = normalizeUserCode(code)
   if (!userCode) return { status: "error", message: "Invalid code." }
@@ -45,6 +47,12 @@ export async function approveDeviceAction(
 
   try {
     const team = await getOrCreateTeamForUser(user, new Date().toISOString())
+    // The key must go to the team the page showed, not one selected since.
+    if (shownTeam && teamKey(team) !== shownTeam)
+      return {
+        status: "error",
+        message: "Your active team changed. Reload this page to continue.",
+      }
     const plan = await readSignupPlan(user.id, team)
     if (plan.state === "selecting")
       return { status: "commit_free_plan", teamKey: plan.teamKey }

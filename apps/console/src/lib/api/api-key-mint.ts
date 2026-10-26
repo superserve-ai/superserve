@@ -62,24 +62,28 @@ function hashKey(key: string): string {
  * auto-create one (named after their email) in the default cell and add
  * them as owner.
  */
+/** The team a key action would use right now, without creating one. */
+export async function findActiveTeamForUser(userId: string) {
+  const directory = await completedMemberships(
+    userId,
+    await listTeamMembershipsForUserDetailed(userId, { maxAgeMs: 0 }),
+  )
+  return {
+    active: pickActiveTeam(directory.memberships, await readTeamSelection()),
+    degraded: directory.degradedRegions.length > 0,
+  }
+}
+
 export async function getOrCreateTeamForUser(
   user: User,
   observedAt: string,
 ): Promise<TeamMembership> {
-  const directory = await completedMemberships(
-    user.id,
-    await listTeamMembershipsForUserDetailed(user.id, { maxAgeMs: 0 }),
-  )
-  const active = pickActiveTeam(
-    directory.memberships,
-    await readTeamSelection(),
-  )
+  const { active, degraded } = await findActiveTeamForUser(user.id)
   if (active) {
     return active
   }
 
-  if (directory.degradedRegions.length > 0)
-    throw new Error("Membership lookup degraded; please try again")
+  if (degraded) throw new Error("Membership lookup degraded; please try again")
 
   // No team yet — provision one through the full RBAC chain (same helper the
   // create-team and proxy-auth paths use), so a first API-key action can't

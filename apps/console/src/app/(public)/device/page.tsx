@@ -2,6 +2,9 @@ import Image from "next/image"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
+import { serializeTeamSelection } from "@/lib/api/active-team"
+import { findActiveTeamForUser } from "@/lib/api/api-key-mint"
+import { listTeamsForUser } from "@/lib/api/team-directory"
 import {
   findPendingDeviceCode,
   normalizeUserCode,
@@ -71,12 +74,25 @@ export default async function DevicePage({
   const pending = await findPendingDeviceCode(userCode)
   if (!pending) return <Unavailable title="Code expired or already used" />
 
+  // New accounts have no team yet; approving creates one.
+  const { active } = await findActiveTeamForUser(user.id)
+  const team = active
+    ? {
+        key: serializeTeamSelection(active),
+        name:
+          (await listTeamsForUser(user.id)).find(
+            (t) => t.id === active.teamId && t.region === active.region,
+          )?.name ?? null,
+      }
+    : null
+
   return (
     <DeviceCard>
       <DeviceApproval
         userCode={userCode}
         clientName={pending.clientName}
         email={user.email ?? ""}
+        team={team}
       />
     </DeviceCard>
   )
