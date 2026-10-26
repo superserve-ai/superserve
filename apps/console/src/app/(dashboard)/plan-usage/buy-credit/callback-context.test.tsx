@@ -2,15 +2,25 @@ import { act, fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { BuyCreditPageClient } from "./page-client"
+import { BuyCreditRoute } from "./route-client"
 const state = vi.hoisted(() => ({
   ready: true,
   team: "use:11111111-1111-4111-8111-111111111111",
   query: "",
   prepaid: vi.fn(),
+  retained: [] as { id: string; amount: number }[],
   summary: vi.fn(),
   switch: vi.fn(),
   directoryError: false,
+  pricing: "legacy" as "legacy" | undefined | null,
   refetch: vi.fn(),
+}))
+vi.mock("@/hooks/use-pricing-version", () => ({
+  usePricingVersion: () => state.pricing,
+}))
+vi.mock("@superserve/ui", async (original) => ({
+  ...(await original<typeof import("@superserve/ui")>()),
+  useToast: () => ({ addToast: vi.fn() }),
 }))
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(state.query),
@@ -28,7 +38,7 @@ vi.mock("@/components/page-header", () => ({
 vi.mock("@/hooks/use-billing-summary", () => ({
   useBillingSummary: (enabled: boolean) => {
     state.summary(enabled)
-    return {}
+    return { data: { permissions: { can_manage: true } } }
   },
 }))
 vi.mock("@/hooks/use-prepaid-credit", () => ({
@@ -36,13 +46,14 @@ vi.mock("@/hooks/use-prepaid-credit", () => ({
     state.prepaid(enabled)
     return {
       data: {
+        checkout_idempotency_supported: true,
         balance_cents: 12500,
         purchases: [],
         auto_recharge: { enabled: false },
       },
     }
   },
-  useRetainedPrepaidOperations: () => [],
+  useRetainedPrepaidOperations: () => state.retained,
 }))
 vi.mock("@/hooks/use-teams", () => ({
   useTeams: () => ({
@@ -60,6 +71,7 @@ vi.mock("@/hooks/use-teams", () => ({
 }))
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }))
 beforeEach(() => {
+  state.retained = []
   state.ready = true
   state.team = "use:11111111-1111-4111-8111-111111111111"
   state.prepaid.mockClear()
@@ -142,5 +154,36 @@ describe("Starter callback context isolation", () => {
       screen.getByRole("button", { name: "Sign out and use checkout account" }),
     ).toBeTruthy()
     expect(state.prepaid).toHaveBeenLastCalledWith(false)
+  })
+  it.each(["legacy", undefined, null] as const)(
+    "exposes callback recovery before current-team pricing gate %s",
+    (pricing) => {
+      state.pricing = pricing
+      state.query =
+        "purchase=success&team=usw:22222222-2222-4222-8222-222222222222"
+      state.ready = pricing === "legacy"
+      render(<BuyCreditRoute />)
+      expect(
+        screen.getByRole("button", {
+          name: "Sign out and use checkout account",
+        }),
+      ).toBeTruthy()
+      expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
+      expect(state.prepaid).toHaveBeenLastCalledWith(false)
+    },
+  )
+  it("restores only existing purchase recovery when the original team's entry is closed", () => {
+    state.pricing = "legacy"
+    state.query = `purchase=success&team=${state.team}&purchase_id=33333333-3333-4333-8333-333333333333`
+    state.retained = [
+      { id: "33333333-3333-4333-8333-333333333333", amount: 500 },
+    ]
+    render(<BuyCreditRoute />)
+    expect(screen.getByText("$125")).toBeTruthy()
+    expect(
+      screen.getByRole("button", { name: "Check previous purchase" }),
+    ).toBeTruthy()
+    expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
+    expect(screen.getByRole("switch")).toHaveAttribute("aria-disabled", "true")
   })
 })

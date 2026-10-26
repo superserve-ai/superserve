@@ -57,7 +57,8 @@ export function BuyCreditPageClient({
   const { user } = useUser()
   const returnTeam = params.get("team")
   const callbackPath = `/plan-usage/buy-credit/?${params.toString()}`
-  const returning = params.has("purchase") || params.has("team")
+  const returning =
+    params.has("purchase") || params.has("team") || params.has("purchase_id")
   const returnMismatch =
     ready &&
     returning &&

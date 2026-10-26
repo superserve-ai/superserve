@@ -42,6 +42,7 @@ export function ProPayment({
   const router = useRouter()
   const params = useSearchParams()
   const callbackPath = `/billing/pro/?${params.toString()}`
+  const returning = params.has("billing") || params.has("team")
   const scope = useQueryScope()
   const { ready } = useBillingContext()
   const actor = useUser().user?.id
@@ -85,7 +86,7 @@ export function ProPayment({
   const inFlight = useRef(false)
   const operationTarget = useRef({ active: false })
   const teamMismatch =
-    (!!billingReturn || !!paymentTeam) &&
+    (returning || !!billingReturn || !!paymentTeam) &&
     (!paymentTeam ||
       paymentTeam !== teamKey ||
       ((params.has("billing") || params.has("team")) &&
@@ -217,7 +218,7 @@ export function ProPayment({
       <PageHeader title="Upgrade to Pro" />
       <div className="flex-1 overflow-y-auto">
         {step === "team_mismatch" ||
-        (!ready && (!!billingReturn || !!paymentTeam)) ? (
+        (!ready && (returning || !!billingReturn || !!paymentTeam)) ? (
           <CheckoutContextRecovery
             callbackPath={callbackPath}
             contextPending={!ready}

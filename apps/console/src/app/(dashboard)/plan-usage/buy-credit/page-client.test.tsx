@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { dollarsToCents, formatDollars, requestedAmount } from "./page-client"
 
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+}))
+
 vi.mock("@/hooks/use-pricing-version", () => ({
   usePricingVersion: vi.fn(),
 }))

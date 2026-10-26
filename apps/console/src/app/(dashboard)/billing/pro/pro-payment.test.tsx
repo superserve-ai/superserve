@@ -5,7 +5,12 @@ import { ApiError } from "@/lib/api/client"
 import { signInOfferDestination } from "@/lib/auth/signup-offer"
 import type { PublicBillingPlans } from "@/lib/billing/plans"
 
-import { ProPayment } from "./pro-payment"
+import { ProPayment as ActualProPayment } from "./pro-payment"
+function ProPayment(props: React.ComponentProps<typeof ActualProPayment>) {
+  if (!state.query && props.billingReturn)
+    state.query = `billing=${props.billingReturn}&team=${props.checkoutTeam ?? ""}`
+  return <ActualProPayment {...props} />
+}
 
 const state = vi.hoisted(() => ({
   team: { teamId: "11111111-1111-4111-8111-111111111111", region: "use" },
@@ -21,6 +26,7 @@ const state = vi.hoisted(() => ({
   scope: "self",
   canManage: true,
   ready: true,
+  query: "billing=success&team=use:11111111-1111-4111-8111-111111111111",
   switch: vi.fn(),
   members: false,
   directoryError: false,
@@ -29,10 +35,7 @@ const state = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: state.replace }),
-  useSearchParams: () =>
-    new URLSearchParams(
-      "billing=success&team=use:11111111-1111-4111-8111-111111111111",
-    ),
+  useSearchParams: () => new URLSearchParams(state.query),
 }))
 vi.mock("@/components/query-provider", () => ({
   useDashboardTeamContext: () => state.team,
@@ -125,6 +128,7 @@ beforeEach(() => {
   state.scope = "self"
   state.canManage = true
   state.ready = true
+  state.query = ""
   state.members = false
   state.directoryError = false
   state.switch.mockReset()
@@ -272,9 +276,9 @@ describe("Pro payment return recovery", () => {
         checkoutTeam="use:team-b"
       />,
     )
-    expect(screen.getByRole("alert").textContent).toContain(
-      "account and team that started checkout",
-    )
+    expect(
+      screen.getByText(/Return to the account and team/).textContent,
+    ).toContain("account and team that started checkout")
     expect(state.recover).not.toHaveBeenCalled()
   })
 
@@ -291,9 +295,9 @@ describe("Pro payment return recovery", () => {
     ).toBe("use:11111111-1111-4111-8111-111111111111")
     state.team = { teamId: "team-b", region: "use" }
     view.rerender(<ProPayment returnTo="/plan-usage/" />)
-    expect(screen.getByRole("alert").textContent).toContain(
-      "account and team that started checkout",
-    )
+    expect(
+      screen.getByText(/Return to the account and team/).textContent,
+    ).toContain("account and team that started checkout")
     expect(state.recover).not.toHaveBeenCalled()
   })
 
@@ -328,9 +332,9 @@ describe("Pro payment return recovery", () => {
       resolve("active")
     })
     expect(state.replace).not.toHaveBeenCalled()
-    expect(screen.getByRole("alert").textContent).toContain(
-      "account and team that started checkout",
-    )
+    expect(
+      screen.getByText(/Return to the account and team/).textContent,
+    ).toContain("account and team that started checkout")
   })
   it("recovers an expired checkout conflict before offering a new payment", async () => {
     state.plans = availablePlans
@@ -363,9 +367,9 @@ describe("Pro payment return recovery", () => {
     await screen.findByRole("button", { name: "Check again" })
     state.team = { teamId: "team-b", region: "use" }
     view.rerender(<ProPayment returnTo="/plan-usage/" />)
-    expect(screen.getByRole("alert").textContent).toContain(
-      "account and team that started checkout",
-    )
+    expect(
+      screen.getByText(/Return to the account and team/).textContent,
+    ).toContain("account and team that started checkout")
     expect(screen.queryByRole("button", { name: "Check again" })).toBeNull()
     expect(state.recover).toHaveBeenCalledExactlyOnceWith(
       "use:11111111-1111-4111-8111-111111111111",
@@ -468,6 +472,24 @@ describe("Pro payment return recovery", () => {
       ).toBeTruthy()
       expect(state.recover).not.toHaveBeenCalled()
       expect(state.start).not.toHaveBeenCalled()
+    },
+  )
+  it.each([
+    "billing=invalid",
+    "billing=success&billing=cancel",
+    "team=invalid",
+  ])(
+    "blocks malformed raw callback %s before offering another payment",
+    (query) => {
+      state.query = query
+      state.plans = availablePlans
+      render(<ActualProPayment returnTo="/plan-usage/" />)
+      expect(screen.getByText(/incomplete or invalid/)).toBeTruthy()
+      expect(
+        screen.queryByRole("button", { name: "Continue to payment" }),
+      ).toBeNull()
+      expect(state.start).not.toHaveBeenCalled()
+      expect(state.recover).not.toHaveBeenCalled()
     },
   )
 })
