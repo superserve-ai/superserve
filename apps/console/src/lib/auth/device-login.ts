@@ -252,14 +252,24 @@ export async function pollDeviceCode(deviceCode: string) {
       !(error instanceof DeviceLoginError) &&
       !(error instanceof SignupReviewPendingError)
     ) {
-      await deviceTable()
-        .update({ status: "approved", consumed_at: null })
-        .eq("id", row.id)
-        .eq("status", "consumed")
+      await restoreClaim(row.id as string)
     }
     throw error
   }
   return { ...minted, newAccount: await isNewTeam(team) }
+}
+
+// Hands a claim back so the next poll can retry minting. If every attempt
+// fails the login is spent and the user has to run it again.
+async function restoreClaim(id: string) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { error } = await deviceTable()
+      .update({ status: "approved", consumed_at: null })
+      .eq("id", id)
+      .eq("status", "consumed")
+    if (!error) return
+    console.error("Device login claim restore failed", { error: error.message })
+  }
 }
 
 /** Best effort: a failed lookup only means the CLI won't wait out a 402. */

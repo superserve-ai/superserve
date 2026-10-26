@@ -101,7 +101,6 @@ export async function readStdin(): Promise<Buffer> {
   return Buffer.concat(chunks)
 }
 
-/** From stdin when piped, else a hidden prompt; never argv (shell history, `ps`). */
 /**
  * Text piped on stdin, or "" when nothing arrives within `waitMs`. Unlike
  * readStdin it never waits on a stdin that stays open without input, as many
@@ -134,6 +133,7 @@ export function readPipedInput(waitMs = 1000): Promise<string> {
   })
 }
 
+/** From stdin when piped, else a hidden prompt; never argv (shell history, `ps`). */
 export async function readSecret(prompt: string): Promise<string> {
   if (!process.stdin.isTTY) {
     const value = (await readStdin()).toString("utf8").replace(/\r?\n$/, "")

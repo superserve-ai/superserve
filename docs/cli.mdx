@@ -35,10 +35,10 @@ superserve whoami
 
 Without a browser on the same machine (SSH, containers, agents), use `--no-browser` to just print the URL, or `--no-wait` to print it and exit. Run `superserve login` again after approving to pick up the key.
 
-To save a key you already have, pipe it in or use `--with-key` for a hidden prompt:
+To save a key you already have, pipe it into `--with-key`, or run `--with-key` alone for a hidden prompt:
 
 ```bash
-echo "$SUPERSERVE_API_KEY" | superserve login
+echo "$SUPERSERVE_API_KEY" | superserve login --with-key
 superserve login --with-key
 ```
 

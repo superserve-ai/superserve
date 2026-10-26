@@ -57,8 +57,8 @@ up, starting on the Free plan) and approve this machine. The new key is saved
 locally. Agents without a browser can pass --no-wait, show the URL to a person,
 then run login again to pick up the key.
 
-To save an existing key instead, pipe it in or use --with-key:
-  echo "$SUPERSERVE_API_KEY" | superserve login
+To save an existing key instead, pipe it into --with-key or enter it at the prompt:
+  echo "$SUPERSERVE_API_KEY" | superserve login --with-key
   superserve login --with-key
 
 SUPERSERVE_API_KEY, when set, takes precedence over the saved key.`,

@@ -14,10 +14,8 @@ The install script puts the binary in `~/.superserve/bin` (override with `SUPERS
 
 ## Authenticate
 
-Create an API key in the [console](https://console.superserve.ai), then:
-
 ```bash
-superserve login          # prompts for the key and saves it to ~/.superserve/credentials.json
+superserve login          # signs in (or up) in the browser and saves a key to ~/.superserve/credentials.json
 superserve whoami         # shows the key in use and checks it
 ```
 
