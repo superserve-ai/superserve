@@ -3,18 +3,21 @@
 import { Button, Field, Input, Spinner, Switch, useToast } from "@superserve/ui"
 import { useQueryClient } from "@tanstack/react-query"
 import { useSearchParams } from "next/navigation"
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useLayoutEffect, useRef, useState } from "react"
 
 import { PageHeader } from "@/components/page-header"
 import { useQueryScope } from "@/components/query-provider"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
-import { usePrepaidCredit } from "@/hooks/use-prepaid-credit"
+import {
+  usePrepaidCredit,
+  useRetainedPrepaidOperations,
+} from "@/hooks/use-prepaid-credit"
 import { useUser } from "@/hooks/use-user"
 import {
   type PrepaidCreditSummary,
   type PrepaidPurchase,
-  reconcilePrepaidOperations,
+  type PrepaidOperation,
   setPrepaidAutoRecharge,
   startPrepaidCheckout,
   validPrepaidCents,
@@ -59,15 +62,7 @@ export function BuyCreditPageClient({
   const scope = useQueryScope()
   const canManage =
     ready && Boolean(summary?.permissions?.can_manage) && scope === "self"
-  useEffect(() => {
-    if (user && teamKey && data) {
-      try {
-        reconcilePrepaidOperations(user.id, teamKey, data.purchases)
-      } catch {
-        /* Keep payment status readable if browser storage is unavailable. */
-      }
-    }
-  }, [user, teamKey, data])
+  const retained = useRetainedPrepaidOperations(data?.purchases)
 
   return (
     <div className="flex h-full flex-col">
@@ -117,6 +112,22 @@ export function BuyCreditPageClient({
                 unavailable. You can still turn auto-recharge off.
               </p>
             )}
+            {!allowEntry && retained.length > 0 ? (
+              <div className="space-y-3">
+                <h2 className="text-sm font-medium">
+                  Resume a previous purchase
+                </h2>
+                {retained.map((operation) => (
+                  <PurchaseCard
+                    key={`${scope}:${teamKey}:${user?.id}:${operation.id}`}
+                    canManage={
+                      canManage && data.checkout_idempotency_supported === true
+                    }
+                    resume={operation}
+                  />
+                ))}
+              </div>
+            ) : null}
             <AutoRechargeCard
               key={[
                 allowEntry,
@@ -170,7 +181,13 @@ export function requestedAmount(value: string | null): {
   return { preset: 2500, custom: String(cents / 100) }
 }
 
-function PurchaseCard({ canManage }: { canManage: boolean }) {
+function PurchaseCard({
+  canManage,
+  resume,
+}: {
+  canManage: boolean
+  resume?: PrepaidOperation
+}) {
   const { teamKey, ready } = useBillingContext()
   const { user } = useUser()
   const target = useRef(teamKey)
@@ -183,12 +200,13 @@ function PurchaseCard({ canManage }: { canManage: boolean }) {
   const inFlight = useRef(false)
   const [status, setStatus] = useState<string | null>(null)
   const { addToast } = useToast()
+  const queryClient = useQueryClient()
   const initial = requestedAmount(useSearchParams().get("amount"))
   const [selected, setSelected] = useState(initial.preset)
   const [custom, setCustom] = useState(initial.custom)
   const [submitting, setSubmitting] = useState(false)
   const customCents = custom ? dollarsToCents(custom) : null
-  const amount = custom ? customCents : selected
+  const amount = resume?.amount ?? (custom ? customCents : selected)
   const valid = amount !== null && validPrepaidCents(amount)
 
   const buy = async () => {
@@ -211,11 +229,13 @@ function PurchaseCard({ canManage }: { canManage: boolean }) {
         amount,
         window.location.href.split("?")[0],
         user.id,
+        resume?.id,
       )
       if (target.current !== originalTeam) return
       if (result.url && result.state === "pending")
         window.location.assign(result.url)
       else {
+        void queryClient.invalidateQueries({ queryKey: billingKeys.all })
         setStatus(
           result.state === "credited"
             ? "Credit confirmed. You can make another purchase."
@@ -242,43 +262,53 @@ function PurchaseCard({ canManage }: { canManage: boolean }) {
 
   return (
     <section className="flex flex-col gap-4 border border-dashed border-border p-4">
-      <h2 className="font-mono text-xs text-muted uppercase">Add credit</h2>
+      <h2 className="font-mono text-xs text-muted uppercase">
+        {resume
+          ? `Previous ${formatDollars(resume.amount)} purchase`
+          : "Add credit"}
+      </h2>
       {status ? (
         <p role="alert" className="text-sm text-muted">
           {status}
         </p>
       ) : null}
-      <div className="flex flex-wrap gap-2">
-        {PRESET_CENTS.map((cents) => (
-          <Button
-            key={cents}
-            variant={!custom && selected === cents ? "default" : "outline"}
-            size="sm"
-            disabled={!canManage}
-            onClick={() => {
-              setCustom("")
-              setSelected(cents)
-            }}
+      {!resume ? (
+        <>
+          <div className="flex flex-wrap gap-2">
+            {PRESET_CENTS.map((cents) => (
+              <Button
+                key={cents}
+                variant={!custom && selected === cents ? "default" : "outline"}
+                size="sm"
+                disabled={!canManage}
+                onClick={() => {
+                  setCustom("")
+                  setSelected(cents)
+                }}
+              >
+                {formatDollars(cents)}
+              </Button>
+            ))}
+          </div>
+          <Field
+            label="Other amount (USD)"
+            description="Any amount in $5 steps, minimum $5."
+            error={
+              custom && !valid
+                ? "Enter a multiple of $5, at least $5."
+                : undefined
+            }
           >
-            {formatDollars(cents)}
-          </Button>
-        ))}
-      </div>
-      <Field
-        label="Other amount (USD)"
-        description="Any amount in $5 steps, minimum $5."
-        error={
-          custom && !valid ? "Enter a multiple of $5, at least $5." : undefined
-        }
-      >
-        <Input
-          inputMode="decimal"
-          placeholder="e.g. 75"
-          value={custom}
-          disabled={!canManage}
-          onChange={(e) => setCustom(e.target.value)}
-        />
-      </Field>
+            <Input
+              inputMode="decimal"
+              placeholder="e.g. 75"
+              value={custom}
+              disabled={!canManage}
+              onChange={(e) => setCustom(e.target.value)}
+            />
+          </Field>
+        </>
+      ) : null}
       <div>
         <Button
           disabled={!canManage || !user || !ready || !valid || submitting}
@@ -286,7 +316,9 @@ function PurchaseCard({ canManage }: { canManage: boolean }) {
         >
           {submitting
             ? "Opening payment…"
-            : `Buy ${valid && amount !== null ? formatDollars(amount) : ""} credit`}
+            : resume
+              ? "Check previous purchase"
+              : `Buy ${valid && amount !== null ? formatDollars(amount) : ""} credit`}
         </Button>
       </div>
     </section>

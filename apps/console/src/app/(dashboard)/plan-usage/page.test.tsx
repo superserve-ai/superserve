@@ -383,7 +383,7 @@ describe("PlanUsagePage", () => {
     expect(screen.getByText("Current Balance")).toBeInTheDocument()
   })
 
-  it("keeps Free cardless even when the summary advertises payment setup", () => {
+  it("retains paid history and credits after switching to Free without setup prompts", () => {
     useTeamPlan.mockReturnValue({
       data: {
         key: "free",
@@ -412,7 +412,12 @@ describe("PlanUsagePage", () => {
         /Set up billing|Payment setup required|Current Balance|Invoice history|no card required/,
       ),
     ).not.toBeInTheDocument()
-    expect(useCustomerBillingPeriods).not.toHaveBeenCalled()
+    expect(useCustomerBillingPeriods).toHaveBeenCalled()
+    expect(screen.getByText("Billing history")).toBeInTheDocument()
+    expect(screen.getByText("Credits remaining: $76.55")).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Open Customer Portal" }),
+    ).toBeInTheDocument()
   })
 
   it("shows the preview state when billing dashboard access is disabled", () => {

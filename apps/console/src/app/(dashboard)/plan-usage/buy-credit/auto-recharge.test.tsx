@@ -9,6 +9,14 @@ const mocks = vi.hoisted(() => ({
   save: vi.fn(),
   params: new URLSearchParams(),
   checkout: vi.fn(),
+  operations: [] as {
+    id: string
+    amount: number
+    team: string
+    actor: string
+    success: string
+    cancel: string
+  }[],
   teamKey: "us:team",
   ready: true,
   scope: "self",
@@ -36,6 +44,7 @@ vi.mock("@/hooks/use-billing-summary", () => ({
 }))
 vi.mock("@/hooks/use-prepaid-credit", () => ({
   usePrepaidCredit: () => ({ data: mocks.data, isLoading: false, error: null }),
+  useRetainedPrepaidOperations: () => mocks.operations,
 }))
 vi.mock("@/lib/api/prepaid", async (original) => ({
   ...(await original<typeof import("@/lib/api/prepaid")>()),
@@ -71,6 +80,7 @@ beforeEach(() => {
   mocks.scope = "self"
   mocks.ready = true
   mocks.checkout.mockReset()
+  mocks.operations = []
   mocks.data = initial
 })
 function page() {
@@ -112,6 +122,48 @@ it("keeps impersonation read only", () => {
   expect(screen.getByRole("button", { name: "Buy $25 credit" })).toBeDisabled()
   expect(screen.getByRole("button", { name: "Save" })).toBeDisabled()
 })
+it("recovers the retained purchase after a lost response and entry closes", async () => {
+  mocks.checkout.mockRejectedValueOnce(new Error("lost response"))
+  const view = (allowEntry: boolean) => (
+    <QueryClientProvider client={new QueryClient()}>
+      <BuyCreditPageClient allowEntry={allowEntry} />
+    </QueryClientProvider>
+  )
+  const { rerender } = render(view(true))
+  fireEvent.click(screen.getByRole("button", { name: "Buy $25 credit" }))
+  await waitFor(() =>
+    expect(screen.getByText(/Payment status is uncertain/)).toBeTruthy(),
+  )
+  mocks.operations = [
+    {
+      id: "retained",
+      amount: 2500,
+      actor: "actor",
+      team: "us:team",
+      success: "original-success",
+      cancel: "original-cancel",
+    },
+  ]
+  mocks.checkout.mockResolvedValue({
+    purchase_id: "retained",
+    state: "pending",
+  })
+  rerender(view(false))
+  expect(screen.queryByRole("button", { name: /Buy.*credit/ })).toBeNull()
+  fireEvent.click(
+    screen.getByRole("button", { name: "Check previous purchase" }),
+  )
+  await waitFor(() =>
+    expect(mocks.checkout).toHaveBeenLastCalledWith(
+      "us:team",
+      2500,
+      expect.any(String),
+      "actor",
+      "retained",
+    ),
+  )
+})
+
 it("serializes duplicate clicks and ignores checkout results after a team switch", async () => {
   let finish!: (value: {
     purchase_id: string
@@ -137,6 +189,7 @@ it("serializes duplicate clicks and ignores checkout results after a team switch
     2500,
     expect.any(String),
     "actor",
+    undefined,
   )
   mocks.teamKey = "us:other"
   rerender(page())

@@ -15,9 +15,11 @@ const prepaid = vi.hoisted(() => ({
   },
   isLoading: false,
   error: null as Error | null,
+  retained: [] as unknown[],
 }))
 vi.mock("@/hooks/use-prepaid-credit", () => ({
   usePrepaidCredit: () => prepaid,
+  useRetainedPrepaidOperations: () => prepaid.retained,
 }))
 vi.mock("../page-client", () => ({
   PlanUsagePageClient: () => <p>plan and usage</p>,
@@ -62,6 +64,7 @@ describe("buy credit route", () => {
     prepaid.data.auto_recharge.enabled = false
     prepaid.isLoading = false
     prepaid.error = null
+    prepaid.retained = []
   })
 
   it.each(["legacy", null] as const)(
@@ -86,6 +89,13 @@ describe("buy credit route", () => {
       expect(screen.queryByText("buy credit")).toBeNull()
     },
   )
+
+  it("keeps a lost-response operation reachable after entry closes even without backend history", () => {
+    vi.mocked(usePricingVersion).mockReturnValue("legacy")
+    prepaid.retained = [{ id: "retained" }]
+    render(<BuyCreditRoute />)
+    expect(screen.getByText("read and disable credit")).toBeTruthy()
+  })
 
   it("keeps purchased credit readable after pricing switches off", () => {
     vi.mocked(usePricingVersion).mockReturnValue("legacy")

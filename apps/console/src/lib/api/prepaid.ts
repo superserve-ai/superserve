@@ -47,7 +47,7 @@ export function getPrepaidCredit(): Promise<PrepaidCreditSummary> {
   })
 }
 
-interface PrepaidOperation {
+export interface PrepaidOperation {
   id: string
   team: string
   actor: string
@@ -91,6 +91,34 @@ export function reconcilePrepaidOperations(
   }
 }
 
+export function retainedPrepaidOperations(
+  actor: string,
+  team: string,
+): PrepaidOperation[] {
+  const prefix = `starter-checkout:${actor}:${team}:`
+  const operations: PrepaidOperation[] = []
+  for (let index = 0; index < sessionStorage.length; index++) {
+    const key = sessionStorage.key(index)
+    if (!key?.startsWith(prefix)) continue
+    try {
+      const operation = JSON.parse(
+        sessionStorage.getItem(key) ?? "null",
+      ) as PrepaidOperation | null
+      if (
+        operation &&
+        operation.actor === actor &&
+        operation.team === team &&
+        validPrepaidCents(operation.amount) &&
+        key === operationKey(actor, team, operation.amount)
+      )
+        operations.push(operation)
+    } catch {
+      /* Unreadable state cannot authorize a recovery request. */
+    }
+  }
+  return operations
+}
+
 export interface PrepaidCheckoutResult {
   purchase_id: string
   state: "pending" | "paid" | "credited" | "failed"
@@ -102,6 +130,7 @@ export async function startPrepaidCheckout(
   amountCents: number,
   returnUrl: string,
   actor: string,
+  resumeOperationId?: string,
 ): Promise<PrepaidCheckoutResult> {
   if (!actor || !validPrepaidCents(amountCents))
     throw new Error("Unable to start purchase")
@@ -111,6 +140,7 @@ export async function startPrepaidCheckout(
   if (retained) {
     operation = JSON.parse(retained) as PrepaidOperation
     if (
+      (resumeOperationId !== undefined && operation.id !== resumeOperationId) ||
       operation.team !== teamKey ||
       operation.actor !== actor ||
       operation.amount !== amountCents ||
@@ -122,6 +152,10 @@ export async function startPrepaidCheckout(
         "Unable to recover this checkout. Check recent purchases before continuing.",
       )
   } else {
+    if (resumeOperationId !== undefined)
+      throw new Error(
+        "This purchase has already finished or is no longer available for recovery.",
+      )
     const id = crypto.randomUUID()
     const success = new URL(returnUrl)
     success.search = ""

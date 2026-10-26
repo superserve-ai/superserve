@@ -115,7 +115,10 @@ vi.mock("@superserve/ui", async () => {
   }
 })
 
-function renderSection(summary: BillingSummaryResponse | null = baseSummary) {
+function renderSection(
+  summary: BillingSummaryResponse | null = baseSummary,
+  cardless = false,
+) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -129,6 +132,7 @@ function renderSection(summary: BillingSummaryResponse | null = baseSummary) {
         teamRegion="use"
         teamName="Pilot Team"
         summary={summary}
+        cardless={cardless}
       />
     </QueryClientProvider>,
   )
@@ -169,6 +173,46 @@ describe("CustomerBillingSection", () => {
       isFetching: false,
       error: null,
     })
+  })
+
+  it("preserves historical periods, credits and portal on Free without setup prompts", async () => {
+    renderSection({ ...baseSummary, payment_setup_required: true }, true)
+    expect(screen.getByText("Billing history")).toBeInTheDocument()
+    expect(screen.getByText("Credits remaining: $76.55")).toBeInTheDocument()
+    expect(screen.getByText("Outstanding balance: $100.00")).toBeInTheDocument()
+    expect(screen.getByText("May 1, 2026 - Jun 1, 2026")).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Open Customer Portal" }),
+    ).toBeEnabled()
+    expect(
+      screen.queryByText(
+        /Payment setup required|Set Up Billing|Billing setup pending/,
+      ),
+    ).not.toBeInTheDocument()
+  })
+  it("keeps a fresh Free account free of payment widgets", () => {
+    useCustomerBillingPeriods.mockReturnValue({
+      data: { periods: [] },
+      isPending: false,
+      error: null,
+    })
+    renderSection(
+      {
+        ...baseSummary,
+        portal_available: false,
+        checkout_available: true,
+        payment_setup_required: true,
+        credits_remaining_usd: 0,
+        expected_invoice_amount_usd: 0,
+      },
+      true,
+    )
+    expect(
+      screen.queryByTestId("customer-billing-section"),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /Set Up Billing|Portal/ }),
+    ).not.toBeInTheDocument()
   })
 
   it.each([false, true])(

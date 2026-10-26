@@ -36,6 +36,7 @@ interface CustomerBillingSectionProps {
   teamRegion: string
   teamName: string
   summary: BillingSummaryResponse | null | undefined
+  cardless?: boolean
 }
 
 function formatPeriodRange(start: string, end: string): string {
@@ -266,13 +267,16 @@ export function CustomerBillingSection({
   teamRegion,
   teamName,
   summary,
+  cardless = false,
 }: CustomerBillingSectionProps) {
   const queryClient = useQueryClient()
   const [notice, setNotice] = useState<ReturnType<typeof noticeFromQuery>>()
 
   const teamKey = `${teamRegion}:${teamId}`
   const { submitting, available, openSession } = useBillingPayment(
-    summary,
+    cardless && summary
+      ? { ...summary, checkout_available: false, payment_setup_required: false }
+      : summary,
     teamKey,
   )
   const periodsQuery = useCustomerBillingPeriods(teamId, teamKey)
@@ -338,6 +342,64 @@ export function CustomerBillingSection({
     !canManageBilling ||
     !billingActionAvailable ||
     !available
+
+  if (cardless) {
+    const periods = periodsQuery.isError
+      ? []
+      : (periodsQuery.data?.periods ?? [])
+    const credits = summary ? billingCredits(summary) : null
+    const hasAccount =
+      canOpenPortal ||
+      periods.length > 0 ||
+      (credits?.remaining != null && credits.remaining !== 0) ||
+      (credits?.payable != null && credits.payable !== 0)
+    if (!hasAccount && !periodsQuery.error) return null
+    return (
+      <section
+        className="space-y-3 border border-border/70 p-4"
+        data-testid="customer-billing-section"
+      >
+        <h3 className="text-base font-semibold">Billing history</h3>
+        {canOpenPortal && canManageBilling ? (
+          <Button
+            size="sm"
+            onClick={() => void openSession()}
+            disabled={isActionDisabled}
+          >
+            Open Customer Portal
+          </Button>
+        ) : null}
+        {credits?.remaining != null && credits.remaining !== 0 ? (
+          <p className="text-sm">
+            Credits remaining: {formatCurrency(credits.remaining)}
+          </p>
+        ) : null}
+        {credits?.payable != null && credits.payable !== 0 ? (
+          <p className="text-sm">
+            Outstanding balance: {formatCurrency(credits.payable)}
+          </p>
+        ) : null}
+        {periodsQuery.error ? (
+          <p role="alert" className="text-sm text-muted">
+            Billing history is unavailable. Please try again later.
+          </p>
+        ) : null}
+        {periods.map((period) => (
+          <div
+            key={period.period_id}
+            className="flex items-center justify-between gap-3 border border-dashed border-border/70 p-3 text-sm"
+          >
+            <span>
+              {formatPeriodRange(period.period_start, period.period_end)}
+            </span>
+            <Badge variant={statusTone(period.status)}>
+              {friendlyPeriodStatus(period.status)}
+            </Badge>
+          </div>
+        ))}
+      </section>
+    )
+  }
 
   return (
     <section

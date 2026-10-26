@@ -360,12 +360,13 @@ export function PlanUsagePageClient() {
               </>
             ) : null}
 
-            {billingTeam && showPayments && (
+            {billingTeam && teamPlan !== undefined && (
               <CustomerBillingSection
                 teamId={billingTeam.teamId}
                 teamRegion={billingTeam.region}
                 teamName={billingTeam.name}
                 summary={summary ?? null}
+                cardless={teamPlan?.kind === "free"}
               />
             )}
 

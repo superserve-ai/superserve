@@ -87,6 +87,34 @@ describe("Starter durable checkout", () => {
     ).rejects.toThrow("Unable to open payment")
     expect(body(1).operation_id).toBe(id)
   })
+  it("replays a closed-entry recovery with frozen URLs and never creates a replacement", async () => {
+    api.mockRejectedValueOnce(new Error("lost response"))
+    await expect(
+      startPrepaidCheckout("use:team", 500, route, "actor"),
+    ).rejects.toThrow()
+    const original = body(0)
+    respond("pending", "https://checkout.stripe.com/original")
+    await startPrepaidCheckout(
+      "use:team",
+      500,
+      route + "?changed=true",
+      "actor",
+      original.operation_id,
+    )
+    expect(body(1)).toEqual(original)
+    sessionStorage.clear()
+    await expect(
+      startPrepaidCheckout(
+        "use:team",
+        500,
+        route,
+        "actor",
+        original.operation_id,
+      ),
+    ).rejects.toThrow("already finished")
+    expect(api).toHaveBeenCalledTimes(2)
+    expect(sessionStorage.length).toBe(0)
+  })
   it("rotates identity only after a terminal backend result", async () => {
     respond("credited")
     await startPrepaidCheckout("use:team", 500, route, "actor")

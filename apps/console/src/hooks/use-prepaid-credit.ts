@@ -1,10 +1,20 @@
 "use client"
 
 import { type UseQueryResult, useQuery } from "@tanstack/react-query"
+import { useEffect, useState } from "react"
 
 import { useBillingContext } from "@/hooks/use-billing-context"
-import { getPrepaidCredit, type PrepaidCreditSummary } from "@/lib/api/prepaid"
+import {
+  getPrepaidCredit,
+  type PrepaidCreditSummary,
+  type PrepaidPurchase,
+  type PrepaidOperation,
+  reconcilePrepaidOperations,
+  retainedPrepaidOperations,
+} from "@/lib/api/prepaid"
 import { billingKeys } from "@/lib/api/query-keys"
+
+import { useUser } from "./use-user"
 
 export function usePrepaidCredit(
   enabled = true,
@@ -26,4 +36,30 @@ export function usePrepaidCredit(
         : 60_000,
     refetchIntervalInBackground: false,
   })
+}
+
+export function useRetainedPrepaidOperations(purchases?: PrepaidPurchase[]) {
+  const actor = useUser().user?.id
+  const { teamKey } = useBillingContext()
+  const [saved, setSaved] = useState<{
+    actor: string
+    team: string
+    operations: PrepaidOperation[]
+  } | null>(null)
+  useEffect(() => {
+    if (!actor || !teamKey) return
+    try {
+      if (purchases) reconcilePrepaidOperations(actor, teamKey, purchases)
+      setSaved({
+        actor,
+        team: teamKey,
+        operations: retainedPrepaidOperations(actor, teamKey),
+      })
+    } catch {
+      setSaved(null)
+    }
+  }, [actor, teamKey, purchases])
+  return saved?.actor === actor && saved?.team === teamKey
+    ? saved.operations
+    : []
 }
