@@ -59,6 +59,24 @@ vi.mock("@/lib/cells", () => ({
         },
         update: (values: Row) => query("update", values),
       }),
+      rpc: async (_fn: string, args: Record<string, unknown>) => {
+        const recent = state.rows.filter(
+          (row) => row.requester_hash === args.p_requester_hash,
+        )
+        if (recent.length >= (args.p_max_per_window as number))
+          return { data: false, error: null }
+        state.rows.push({
+          id: crypto.randomUUID(),
+          created_at: new Date().toISOString(),
+          device_code: args.p_device_code,
+          user_code: args.p_user_code,
+          client_name: args.p_client_name,
+          requester_hash: args.p_requester_hash,
+          status: "pending",
+          expires_at: args.p_expires_at,
+        })
+        return { data: true, error: null }
+      },
     }),
   }),
 }))
@@ -212,6 +230,22 @@ describe("device login", () => {
     // The code stays used up rather than becoming retryable.
     await expect(pollDeviceCode(deviceCode)).rejects.toMatchObject({
       code: "invalid_grant",
+    })
+  })
+
+  it("keeps an approved login retryable through a transient account lookup error", async () => {
+    const { deviceCode, userCode } = await start()
+    await approveDeviceCode(userCode, user as never, team)
+    state.getUser.mockResolvedValueOnce({
+      data: { user: null },
+      error: { message: "upstream timeout" },
+    })
+    await expect(pollDeviceCode(deviceCode)).rejects.not.toMatchObject({
+      code: "access_denied",
+    })
+    expect(state.rows[0].status).toBe("approved")
+    await expect(pollDeviceCode(deviceCode)).resolves.toMatchObject({
+      apiKey: "ss_live_usw_secret",
     })
   })
 

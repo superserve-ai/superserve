@@ -89,38 +89,32 @@ export async function createDeviceCode(input: {
   clientName: string
   requester: string
 }) {
-  const requesterHash = sha256(`device-login:${input.requester}`)
-  const windowStart = new Date(
-    Date.now() - DEVICE_CODE_TTL_SECONDS * 1000,
-  ).toISOString()
-  const { count, error: countError } = await deviceTable()
-    .select("id", { count: "exact", head: true })
-    .eq("requester_hash", requesterHash)
-    .gt("created_at", windowStart)
-  if (countError)
-    throw new DeviceLoginError("unavailable", "Login is unavailable.")
-  if ((count ?? 0) >= MAX_CODES_PER_REQUESTER)
-    throw new DeviceLoginError(
-      "rate_limited",
-      "Too many login attempts. Try again in a few minutes.",
-    )
-
   const deviceCode = crypto.randomBytes(32).toString("base64url")
-  const expiresAt = new Date(
-    Date.now() + DEVICE_CODE_TTL_SECONDS * 1000,
-  ).toISOString()
   for (let attempt = 0; attempt < 3; attempt++) {
     const userCode = generateUserCode()
-    const { error } = await deviceTable().insert({
-      device_code: sha256(deviceCode),
-      user_code: userCode,
-      client_name: input.clientName,
-      requester_hash: requesterHash,
-      status: "pending",
-      expires_at: expiresAt,
-    })
-    if (!error) return { deviceCode, userCode }
-    if (error.code !== "23505") break
+    // The count and insert share a per-requester lock, so a burst can't
+    // overshoot the limit.
+    const { data: started, error } = await cellFor(DEFAULT_REGION)
+      .createAdminClient()
+      .rpc("start_device_code", {
+        p_device_code: sha256(deviceCode),
+        p_user_code: userCode,
+        p_client_name: input.clientName,
+        p_requester_hash: sha256(`device-login:${input.requester}`),
+        p_expires_at: new Date(
+          Date.now() + DEVICE_CODE_TTL_SECONDS * 1000,
+        ).toISOString(),
+        p_max_per_window: MAX_CODES_PER_REQUESTER,
+        p_window: `${DEVICE_CODE_TTL_SECONDS} seconds`,
+      })
+    if (error?.code === "23505") continue
+    if (error) break
+    if (!started)
+      throw new DeviceLoginError(
+        "rate_limited",
+        "Too many login attempts. Try again in a few minutes.",
+      )
+    return { deviceCode, userCode }
   }
   throw new DeviceLoginError("unavailable", "Login is unavailable.")
 }
@@ -228,7 +222,10 @@ export async function pollDeviceCode(deviceCode: string) {
       data: { user },
       error: userError,
     } = await createAdminClient().auth.admin.getUserById(row.user_id as string)
-    if (userError || !user)
+    // A failed lookup is retryable (the claim is handed back below); only a
+    // lookup that finds no account ends the login.
+    if (userError) throw new Error(`user lookup failed: ${userError.message}`)
+    if (!user)
       throw new DeviceLoginError("access_denied", "The account is unavailable.")
     assertSignupReviewCleared(user)
     // Approval may predate a membership removal; check access as of now.

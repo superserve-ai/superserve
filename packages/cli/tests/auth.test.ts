@@ -175,6 +175,38 @@ describe("auth", () => {
     expect(saved.setup_until).toBeGreaterThan(Date.now())
   })
 
+  test("a resumed login saves the key for the --base-url it started with", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "superserve-login-"))
+    const env = { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir }
+    writeFileSync(
+      join(dir, "pending-login.json"),
+      JSON.stringify({
+        console_url: "https://console.superserve.ai",
+        base_url: "https://api.example.com",
+        device_code: "secret-device-code",
+        user_code: "BCDF-GHJK",
+        url: "https://console.superserve.ai/device?code=BCDF-GHJK",
+        expires_at: Date.now() + 60_000,
+        interval: 0,
+      }),
+    )
+    const r = await runCli(["login"], {
+      env,
+      fetch: (req) =>
+        req.url.pathname === "/api/cli/device/token"
+          ? json({ api_key: TEST_KEY })
+          : req.url.host === "api.example.com" &&
+              req.url.pathname === "/sandboxes"
+            ? json([])
+            : undefined,
+    })
+    expect(r.exitCode).toBe(0)
+    const saved = JSON.parse(
+      readFileSync(join(dir, "credentials.json"), "utf8"),
+    )
+    expect(saved.base_url).toBe("https://api.example.com")
+  })
+
   test("a resumed code the server has expired starts a fresh login", async () => {
     const dir = mkdtempSync(join(tmpdir(), "superserve-login-"))
     const env = { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir }

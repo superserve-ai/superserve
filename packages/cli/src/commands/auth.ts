@@ -80,11 +80,12 @@ SUPERSERVE_API_KEY, when set, takes precedence over the saved key.`,
         const login = await deviceLogin({
           openBrowser: opts.browser && isInteractive(),
           wait: opts.wait,
+          baseUrl,
         })
         if (login)
           await saveKey(
             login.apiKey,
-            baseUrl,
+            baseUrl ?? login.baseUrl,
             login.newAccount ? Date.now() + ACCOUNT_SETUP_MS : undefined,
           )
       },
@@ -191,6 +192,8 @@ const APPROVAL_WINDOW_MS = 10 * 60_000
 const ACCOUNT_SETUP_MS = 15 * 60_000
 
 interface PendingLogin {
+  /** `login --base-url`, kept so a resumed login saves the key for it too. */
+  base_url?: string
   console_url: string
   device_code: string
   user_code: string
@@ -235,7 +238,7 @@ async function consoleRequest(path: string, body: unknown) {
   return { status: res.status, data }
 }
 
-async function startLogin(): Promise<PendingLogin> {
+async function startLogin(baseUrl?: string): Promise<PendingLogin> {
   const { status, data } = await consoleRequest("/api/cli/device", {
     client_name: hostname(),
   })
@@ -249,6 +252,7 @@ async function startLogin(): Promise<PendingLogin> {
   }
   const pending: PendingLogin = {
     console_url: CONSOLE_URL,
+    ...(baseUrl ? { base_url: baseUrl } : {}),
     device_code: data.device_code,
     user_code: String(data.user_code),
     url: String(data.verification_uri_complete),
@@ -265,6 +269,8 @@ async function startLogin(): Promise<PendingLogin> {
 interface DeviceLoginResult {
   apiKey: string
   newAccount: boolean
+  /** The --base-url the login was started with. */
+  baseUrl?: string
 }
 
 /** One token poll: the key, "pending" or "slow_down"; throws once the login is over. */
@@ -276,7 +282,11 @@ async function pollOnce(
   })
   if (status === 200 && typeof data.api_key === "string") {
     rmSync(pendingFile(), { force: true })
-    return { apiKey: data.api_key, newAccount: data.new_account === true }
+    return {
+      apiKey: data.api_key,
+      newAccount: data.new_account === true,
+      baseUrl: pending.base_url,
+    }
   }
   const code = String(data.error ?? "")
   if (code === "slow_down") return "slow_down"
@@ -294,6 +304,7 @@ async function pollOnce(
 async function deviceLogin(opts: {
   openBrowser: boolean
   wait: boolean
+  baseUrl?: string
 }): Promise<DeviceLoginResult | null> {
   let pending = readPendingLogin()
   if (pending) {
@@ -311,7 +322,7 @@ async function deviceLogin(opts: {
   }
   // Open the browser for a code created now, not for one an earlier run printed.
   const fresh = pending === null
-  pending ??= await startLogin()
+  pending ??= await startLogin(opts.baseUrl)
   if (!opts.wait) {
     if (isJson()) {
       printJson({
