@@ -925,3 +925,71 @@ it("keeps successful legacy missing-quote behavior with no assignment", () => {
     screen.getByRole("button", { name: "Continue to payment" }),
   ).toBeTruthy()
 })
+
+describe("terminal Pro recovery to Starter fence transition", () => {
+  it("discovers a pending Starter purchase after a retryable Pro operation without offering a new checkout", async () => {
+    state.plans = availablePlans
+    state.recover.mockResolvedValue("retryable")
+    state.starterRecovery.mockResolvedValue({
+      ...pendingCredit,
+      outcome: "pending_starter_checkout",
+    })
+    render(<ActualProPayment returnTo="/plan-usage/" />)
+    fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
+    await screen.findByRole("button", { name: "Check again" })
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }))
+    await screen.findByRole("button", {
+      name: "Resume your $25 credit purchase",
+    })
+    expect(state.starterRecovery).toHaveBeenCalledExactlyOnceWith(
+      "use:11111111-1111-4111-8111-111111111111",
+    )
+    expect(
+      screen.queryByRole("button", { name: "Continue to payment" }),
+    ).toBeNull()
+    expect(state.start).toHaveBeenCalledTimes(1)
+    expect(state.refresh).not.toHaveBeenCalled()
+    expect(state.starterRecovery.mock.calls[0]).toHaveLength(1)
+  })
+  it.each(["retryable", "no_pending_pro_purchase"])(
+    "requires a successful Starter discovery and authoritative refresh after %s",
+    async (outcome) => {
+      state.recover.mockResolvedValue(outcome)
+      state.starterRecovery.mockResolvedValue({
+        outcome: "no_pending_starter_checkout",
+      })
+      render(<ActualProPayment returnTo="/plan-usage/" />)
+      fireEvent.click(
+        screen.getByRole("button", { name: "Check payment status" }),
+      )
+      await waitFor(() => expect(state.retryQuote).toHaveBeenCalledOnce())
+      expect(state.refresh).toHaveBeenCalledTimes(2)
+      expect(state.start).not.toHaveBeenCalled()
+    },
+  )
+  it.each(["active", "payment_confirmation_pending"])(
+    "does not discover or cancel Starter while Pro is %s",
+    async (outcome) => {
+      state.recover.mockResolvedValue(outcome)
+      render(<ActualProPayment returnTo="/plan-usage/" />)
+      fireEvent.click(
+        screen.getByRole("button", { name: "Check payment status" }),
+      )
+      if (outcome === "active")
+        await waitFor(() =>
+          expect(state.replace).toHaveBeenCalledWith("/plan-usage/"),
+        )
+      else await screen.findByRole("button", { name: "Check again" })
+      expect(state.starterRecovery).not.toHaveBeenCalled()
+      expect(
+        screen.queryByRole("button", {
+          name: "Cancel this purchase and choose Pro",
+        }),
+      ).toBeNull()
+      expect(
+        screen.queryByRole("button", { name: "Continue to payment" }),
+      ).toBeNull()
+      expect(state.start).not.toHaveBeenCalled()
+    },
+  )
+})

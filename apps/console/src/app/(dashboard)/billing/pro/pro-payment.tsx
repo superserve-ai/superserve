@@ -213,7 +213,10 @@ function ProPaymentContext({
             router.replace(returnTo)
             return
           }
-          if (outcome === "no_pending_pro_purchase") {
+          if (
+            outcome === "no_pending_pro_purchase" ||
+            outcome === "retryable"
+          ) {
             setStarterCheckRequired(true)
             const existing = await recoverStarterCheckout(teamKey)
             if (!target.active) return
