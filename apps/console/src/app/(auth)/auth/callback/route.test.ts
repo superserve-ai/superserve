@@ -1035,6 +1035,7 @@ describe("auth callback", () => {
     it.each(["code=abc", "token_hash=token&type=signup"])(
       "fails closed before Enterprise provisioning if current pricing cannot be read: %s",
       async (proof) => {
+        googleMembershipState = { kind: "first_time" }
         mockStrictPlans.mockRejectedValue(new Error("Pricing unavailable"))
         const response = await GET(
           new Request(
@@ -1046,7 +1047,11 @@ describe("auth callback", () => {
         ).toBe("pricing_unavailable")
         expect(mockSignOut).toHaveBeenCalled()
         expect(mockEnsureGoogleOnboardingMembership).not.toHaveBeenCalled()
-        expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+        if (proof.startsWith("code="))
+          expect(mockUpdateSignupReview).toHaveBeenCalledWith("u1", {
+            signup_enterprise_pricing_pending: true,
+          })
+        else expect(mockUpdateSignupReview).not.toHaveBeenCalled()
         expect(mockSendWelcomeEmail).not.toHaveBeenCalled()
       },
     )
@@ -1162,14 +1167,79 @@ describe("auth callback", () => {
       },
     )
 
-    it("cannot persist an Enterprise hold for an existing customer on catalog failure", async () => {
+    it.each([undefined, "approved"])(
+      "lets proven existing Google customers sign in during Enterprise catalog failure (%s)",
+      async (status) => {
+        currentUser!.app_metadata.signup_review = status
+        mockStrictPlans.mockRejectedValue(new Error("catalog down"))
+        const response = await GET(
+          new Request(
+            "https://console.superserve.ai/auth/callback?code=abc&signup_offer=enterprise",
+          ),
+        )
+        expect(new URL(response.headers.get("location")!).pathname).toBe(
+          "/sandboxes",
+        )
+        expect(mockSignOut).not.toHaveBeenCalled()
+        expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+        expect(mockEnsureGoogleOnboardingMembership).not.toHaveBeenCalled()
+        expect(mockPricingVersion).not.toHaveBeenCalled()
+        expect(currentUser!.app_metadata.signup_review).toBe(status)
+      },
+    )
+
+    it.each(["pending", "rejected"])(
+      "never bypasses an existing customer's real %s hold during catalog failure",
+      async (status) => {
+        currentUser!.app_metadata.signup_review = status
+        mockStrictPlans.mockRejectedValue(new Error("catalog down"))
+        const response = await GET(
+          new Request(
+            "https://console.superserve.ai/auth/callback?code=abc&signup_offer=enterprise",
+          ),
+        )
+        expect(new URL(response.headers.get("location")!).pathname).toBe(
+          "/auth/pending",
+        )
+        expect(mockSignOut).toHaveBeenCalled()
+        expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+        expect(mockEnsureGoogleOnboardingMembership).not.toHaveBeenCalled()
+      },
+    )
+
+    it("does not use a partially degraded existing directory to bypass Enterprise admission", async () => {
+      directoryState.degradedRegions = ["euw"]
       mockStrictPlans.mockRejectedValue(new Error("catalog down"))
-      await GET(
+      const response = await GET(
         new Request(
           "https://console.superserve.ai/auth/callback?code=abc&signup_offer=enterprise",
         ),
       )
+      expect(
+        new URL(response.headers.get("location")!).searchParams.get("reason"),
+      ).toBe("pricing_unavailable")
+      expect(mockSignOut).toHaveBeenCalled()
       expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+      expect(mockEnsureGoogleOnboardingMembership).not.toHaveBeenCalled()
+    })
+
+    it("does not admit degraded membership reads during Enterprise catalog failure", async () => {
+      googleMembershipState = {
+        kind: "indeterminate",
+        degradedRegions: ["use"],
+      }
+      mockStrictPlans.mockRejectedValue(new Error("catalog down"))
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&signup_offer=enterprise",
+        ),
+      )
+      expect(
+        new URL(response.headers.get("location")!).searchParams.get("reason"),
+      ).toBe("pricing_unavailable")
+      expect(mockSignOut).toHaveBeenCalled()
+      expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+      expect(mockEnsureGoogleOnboardingMembership).not.toHaveBeenCalled()
     })
 
     it("retains explicit legacy Enterprise email confirmation without inventing a hold", async () => {

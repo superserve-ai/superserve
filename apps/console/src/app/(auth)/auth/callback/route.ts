@@ -224,36 +224,43 @@ export async function GET(request: Request) {
             signupReviewStatus(user) === "rejected")
         )
           return pendingSignupResponse(supabase, origin, user)
-        const offerIntent = pendingEnterprisePricing
+        let offerIntent = pendingEnterprisePricing
           ? "enterprise"
           : (searchParams.get(SIGNUP_OFFER_PARAM) ?? searchParams.get("offer"))
         let enterprisePricing: "legacy" | "v2" | undefined
+        let provenExistingGoogle: GoogleMembershipState | undefined
         if (offerIntent === "enterprise") {
           try {
             enterprisePricing = (await getPublicBillingPlansAction())
               .pricing_version
           } catch {
-            if (
-              code &&
-              isGoogleUser(user) &&
-              !pendingEnterprisePricing &&
-              !signupReviewStatus(user)
-            ) {
+            if (code && isGoogleUser(user) && !pendingEnterprisePricing) {
               try {
+                const memberships = await completedMemberships(
+                  user.id,
+                  await listTeamMembershipsForUserDetailed(user.id, {
+                    maxAgeMs: 0,
+                  }),
+                )
+                if (memberships.degradedRegions.length)
+                  throw new Error("Enterprise membership unavailable")
                 const directory = await classifyGoogleMembershipState(
                   user.id,
-                  await completedMemberships(
-                    user.id,
-                    await listTeamMembershipsForUserDetailed(user.id, {
-                      maxAgeMs: 0,
-                    }),
-                  ),
+                  memberships,
                 )
                 // A query cannot place an existing customer on hold. Persist only
                 // after a complete directory read proves this account is new.
                 if (directory.kind === "indeterminate")
                   throw new Error("Enterprise membership unavailable")
-                if (directory.kind === "first_time") {
+                if (directory.kind === "existing") {
+                  provenExistingGoogle = directory
+                  // Existing membership already authorizes this account's
+                  // sign-in; a fresh signup preference cannot revoke it.
+                  offerIntent = null
+                } else if (
+                  directory.kind === "first_time" &&
+                  !signupReviewStatus(user)
+                ) {
                   await updateSignupReviewMetadata(user.id, {
                     signup_enterprise_pricing_pending: true,
                   })
@@ -265,13 +272,15 @@ export async function GET(request: Request) {
                 ).catch(() => {})
               }
             }
-            await supabase.auth.signOut().catch(() => {})
-            return NextResponse.redirect(
-              buildRedirectUrl(
-                origin,
-                "/auth/auth-code-error?reason=pricing_unavailable&signup_offer=enterprise",
-              ),
-            )
+            if (!provenExistingGoogle) {
+              await supabase.auth.signOut().catch(() => {})
+              return NextResponse.redirect(
+                buildRedirectUrl(
+                  origin,
+                  "/auth/auth-code-error?reason=pricing_unavailable&signup_offer=enterprise",
+                ),
+              )
+            }
           }
           if (pendingEnterprisePricing) {
             await updateSignupReviewMetadata(user.id, {
@@ -311,15 +320,17 @@ export async function GET(request: Request) {
           }
           let directory: GoogleMembershipState
           try {
-            directory = await classifyGoogleMembershipState(
-              user.id,
-              await completedMemberships(
+            directory =
+              provenExistingGoogle ??
+              (await classifyGoogleMembershipState(
                 user.id,
-                await listTeamMembershipsForUserDetailed(user.id, {
-                  maxAgeMs: 0,
-                }),
-              ),
-            )
+                await completedMemberships(
+                  user.id,
+                  await listTeamMembershipsForUserDetailed(user.id, {
+                    maxAgeMs: 0,
+                  }),
+                ),
+              ))
           } catch {
             // Return a response so retained origin cookies survive lookup failures.
             directory = { kind: "indeterminate", degradedRegions: [] }

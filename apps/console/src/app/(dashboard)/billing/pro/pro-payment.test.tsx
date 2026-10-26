@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/lib/api/client"
+import { signInOfferDestination } from "@/lib/auth/signup-offer"
 import type { PublicBillingPlans } from "@/lib/billing/plans"
 
 import { ProPayment } from "./pro-payment"
@@ -101,6 +102,26 @@ beforeEach(() => {
 })
 
 describe("Pro payment return recovery", () => {
+  it("normalizes the annual website alias to the visible monthly v2 offer and submits that quote", async () => {
+    expect(signInOfferDestination("pro_annual")).toBe("/billing/pro/")
+    state.plans = availablePlans
+    state.start.mockResolvedValue(undefined)
+    render(<ProPayment returnTo="/sandboxes" />)
+    expect(screen.getByText("$250")).toBeTruthy()
+    expect(screen.getByText("/ month")).toBeTruthy()
+    expect(screen.getByText(/Your regular \$250 monthly fee/)).toBeTruthy()
+    expect(screen.queryByText(/year|annual/i)).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
+    await waitFor(() =>
+      expect(state.start).toHaveBeenCalledWith(
+        "use:team-a",
+        "pro_monthly",
+        expect.any(String),
+        "actor",
+      ),
+    )
+  })
+
   it("reopens an accepted checkout after a lost first response even when entry closes", async () => {
     state.plans = availablePlans
     state.start.mockRejectedValueOnce(new Error("lost response"))

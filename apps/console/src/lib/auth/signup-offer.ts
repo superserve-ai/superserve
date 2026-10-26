@@ -8,7 +8,9 @@ export const SIGNUP_OFFER_PARAM = "signup_offer"
 export function parseSignupOffer(value: unknown): SignupOffer {
   if (typeof value !== "string" || value === "" || value === "free")
     return "free"
-  if (value === "pro") return "pro_monthly"
+  // Website aliases select the monthly-only v2 launch offer. Existing annual
+  // contracts and accepted checkouts retain their backend-authorized cadence.
+  if (value === "pro" || value === "pro_annual") return "pro_monthly"
   if (value === "enterprise" || value === "pro_monthly") return value
   if (value === "starter" || value.startsWith("starter_")) return "starter"
   return "pro_monthly"
