@@ -176,3 +176,90 @@ it("preserves accepted replay context after a provider transient and after no-UR
   for (const call of api.mock.calls)
     expect(JSON.parse(call[1].body)).toEqual(original)
 })
+
+it("isolates checkout after account switching and preserves each actor's frozen replay", async () => {
+  api.mockRejectedValueOnce(new Error("lost response"))
+  await expect(
+    startProCheckout(
+      "use:team",
+      "pro_monthly",
+      "https://console.test/actor-a",
+      "actor-a",
+    ),
+  ).rejects.toThrow("lost response")
+  const first = JSON.parse(api.mock.calls[0][1].body)
+  api.mockResolvedValue({ outcome: "payment_confirmation_pending" })
+  await startProCheckout(
+    "use:team",
+    "pro_monthly",
+    "https://console.test/actor-b",
+    "actor-b",
+  )
+  const second = JSON.parse(api.mock.calls[1][1].body)
+  expect(second.operation_id).not.toBe(first.operation_id)
+  expect(second.success_url).toContain("/actor-b")
+  await resumeProCheckout("use:team", "actor-a")
+  expect(JSON.parse(api.mock.calls[2][1].body)).toEqual(first)
+  await startProCheckout(
+    "use:team",
+    "pro_monthly",
+    "https://console.test/changed",
+    "actor-b",
+  )
+  expect(JSON.parse(api.mock.calls[3][1].body)).toEqual(second)
+})
+
+it("keeps a legacy accepted checkout exclusive to its original actor without rotating its identity", async () => {
+  const legacyKey = "pro-checkout:use:team:pro_monthly"
+  const context = {
+    id: "accepted-operation",
+    actor: "actor-a",
+    team: "use:team",
+    offer: "pro_monthly",
+    success: "https://console.test/original?billing=success",
+    cancel: "https://console.test/original?billing=cancel",
+  }
+  sessionStorage.setItem(legacyKey, context.id)
+  sessionStorage.setItem(`${legacyKey}:context`, JSON.stringify(context))
+  api.mockResolvedValue({ outcome: "payment_confirmation_pending" })
+  await expect(resumeProCheckout("use:team", "actor-b")).resolves.toBeNull()
+  expect(api).not.toHaveBeenCalled()
+  await startProCheckout(
+    "use:team",
+    "pro_monthly",
+    "https://console.test/actor-b",
+    "actor-b",
+  )
+  expect(JSON.parse(api.mock.calls[0][1].body).operation_id).not.toBe(
+    context.id,
+  )
+  await resumeProCheckout("use:team", "actor-a")
+  const replay = JSON.parse(api.mock.calls[1][1].body)
+  expect(replay.operation_id).toBe(context.id)
+  expect(replay.success_url).toBe(context.success)
+  await startProCheckout(
+    "use:team",
+    "pro_monthly",
+    "https://console.test/changed",
+    "actor-a",
+  )
+  expect(JSON.parse(api.mock.calls[2][1].body)).toEqual(replay)
+  expect(sessionStorage.getItem(legacyKey)).toBe(context.id)
+})
+
+it("does not mint an operation when a legacy checkout has ambiguous ownership", async () => {
+  sessionStorage.setItem(
+    "pro-checkout:use:team:pro_monthly",
+    "accepted-operation",
+  )
+  await expect(
+    startProCheckout(
+      "use:team",
+      "pro_monthly",
+      "https://console.test/billing",
+      "actor",
+    ),
+  ).rejects.toThrow("cannot be identified")
+  expect(api).not.toHaveBeenCalled()
+  expect(sessionStorage.length).toBe(1)
+})

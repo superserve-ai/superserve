@@ -11,7 +11,7 @@ export async function startProCheckout(
   success.searchParams.set("billing", "success")
   const cancel = new URL(returnUrl)
   cancel.searchParams.set("billing", "cancel")
-  const operationKey = `pro-checkout:${teamKey}:${offer}`
+  const operationKey = proOperationKey(teamKey, offer, actor)
   let operationId = sessionStorage.getItem(operationKey)
   if (!operationId) {
     operationId = crypto.randomUUID()
@@ -101,7 +101,7 @@ export async function resumeProCheckout(
 ): Promise<string | null> {
   const contexts: ProCheckoutContext[] = []
   for (const offer of ["pro_monthly", "pro_annual"] as const) {
-    const key = `pro-checkout:${team}:${offer}`
+    const key = proOperationKey(team, offer, actor)
     const raw = sessionStorage.getItem(`${key}:context`)
     if (!raw) continue
     const context = JSON.parse(raw) as ProCheckoutContext
@@ -118,6 +118,32 @@ export async function resumeProCheckout(
   const response = await dispatchProCheckout(context)
   // This operation is an existing replay only; never create or rotate an ID.
   return proCheckoutDestination(response)
+}
+
+function proOperationKey(team: string, offer: PurchaseOffer, actor?: string) {
+  const legacyKey = `pro-checkout:${team}:${offer}`
+  if (!actor) return legacyKey
+  const key = `${legacyKey}:actor:${encodeURIComponent(actor)}`
+  if (sessionStorage.getItem(key) || sessionStorage.getItem(`${key}:context`))
+    return key
+
+  // Keep accepted operations from before actor-scoped keys recoverable in place.
+  const legacyId = sessionStorage.getItem(legacyKey)
+  const raw = sessionStorage.getItem(`${legacyKey}:context`)
+  if (!legacyId && !raw) return key
+  const context = raw ? (JSON.parse(raw) as ProCheckoutContext) : null
+  if (context?.actor && context.actor !== actor) return key
+  if (
+    !context ||
+    context.actor !== actor ||
+    context.team !== team ||
+    context.offer !== offer ||
+    context.id !== legacyId
+  )
+    throw new Error(
+      "The saved checkout cannot be identified. Check payment status before trying again.",
+    )
+  return legacyKey
 }
 
 function proOperations(teamKey: string): [string, string][] {
