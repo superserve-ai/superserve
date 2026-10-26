@@ -367,6 +367,8 @@ async function deviceLogin(opts: {
   const waiting = spinner("Waiting for approval in the browser")
   try {
     // The server reports expiry; this bound only stops a server that never does.
+    // A resumed login just polled; polling again now would be slow_down.
+    if (!fresh) await sleep(interval * 1000)
     while (Date.now() < pending.expires_at + APPROVAL_WINDOW_MS) {
       const result = await pollOnce(pending)
       if (typeof result === "object") return result

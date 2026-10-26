@@ -246,6 +246,36 @@ describe("auth", () => {
     })
   })
 
+  test("a resumed login waits an interval before polling again", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "superserve-login-"))
+    const env = { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir }
+    writeFileSync(
+      join(dir, "pending-login.json"),
+      JSON.stringify({
+        console_url: "https://console.superserve.ai",
+        device_code: "secret-device-code",
+        user_code: "BCDF-GHJK",
+        url: "https://console.superserve.ai/device?code=BCDF-GHJK",
+        expires_at: Date.now() + 60_000,
+        interval: 1,
+      }),
+    )
+    const polledAt: number[] = []
+    const r = await runCli(["login", "--no-browser", "--json"], {
+      env,
+      fetch: (req) => {
+        if (req.url.pathname === "/api/cli/device/token") {
+          polledAt.push(Date.now())
+          return polledAt.length === 1
+            ? json({ error: "authorization_pending" }, 400)
+            : json({ api_key: TEST_KEY })
+        }
+      },
+    })
+    expect(r.exitCode).toBe(0)
+    expect(polledAt[1] - polledAt[0]).toBeGreaterThanOrEqual(900)
+  })
+
   test("a denied browser login fails with the auth code and saves nothing", async () => {
     const dir = mkdtempSync(join(tmpdir(), "superserve-login-"))
     const env = { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir }
