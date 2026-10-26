@@ -3,7 +3,7 @@
 import { Button, Field, Input, Spinner, Switch, useToast } from "@superserve/ui"
 import { useQueryClient } from "@tanstack/react-query"
 import { useSearchParams } from "next/navigation"
-import { useLayoutEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 
 import { CheckoutContextRecovery } from "@/components/billing/checkout-context-recovery"
 import { PageHeader } from "@/components/page-header"
@@ -76,6 +76,14 @@ export function BuyCreditPageClient({
   const canManage =
     ready && Boolean(summary?.permissions?.can_manage) && scope === "self"
   const retained = useRetainedPrepaidOperations(data?.purchases)
+  const rechargeReady = Boolean(data)
+  useEffect(() => {
+    if (rechargeReady && window.location.hash === "#auto-recharge") {
+      document
+        .getElementById("auto-recharge")
+        ?.scrollIntoView({ block: "start" })
+    }
+  }, [rechargeReady])
 
   return (
     <div className="flex h-full flex-col">
@@ -142,6 +150,10 @@ export function BuyCreditPageClient({
                 ))}
               </div>
             ) : null}
+          </>
+        )}
+        <div id="auto-recharge" className="scroll-mt-6">
+          {data ? (
             <AutoRechargeCard
               key={[
                 allowEntry,
@@ -154,9 +166,15 @@ export function BuyCreditPageClient({
               canManage={canManage}
               allowEntry={allowEntry}
             />
-            <PurchaseHistory purchases={data.purchases} />
-          </>
-        )}
+          ) : (
+            <p className="text-sm text-muted">
+              {contextMatched && error
+                ? "Auto-recharge settings are unavailable."
+                : "Loading auto-recharge settings…"}
+            </p>
+          )}
+        </div>
+        {data && <PurchaseHistory purchases={data.purchases} />}
       </div>
     </div>
   )
@@ -402,10 +420,7 @@ function AutoRechargeCard({
 
   const canEnable = allowEntry && data.has_saved_card
   return (
-    <section
-      id="auto-recharge"
-      className="scroll-mt-6 flex flex-col gap-4 border border-dashed border-border p-4"
-    >
+    <section className="flex flex-col gap-4 border border-dashed border-border p-4">
       <h2 className="font-mono text-xs text-muted uppercase">Auto-recharge</h2>
       {current.disabled_reason && !current.enabled && (
         <p className="border border-dashed border-destructive p-3 text-sm text-foreground">

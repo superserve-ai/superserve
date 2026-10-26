@@ -266,7 +266,9 @@ describe("auto-recharge rollback", () => {
       </QueryClientProvider>,
     )
     expect(
-      screen.getByRole("heading", { name: "Auto-recharge" }).closest("section"),
+      screen
+        .getByRole("heading", { name: "Auto-recharge" })
+        .closest("#auto-recharge"),
     ).toHaveAttribute("id", "auto-recharge")
     expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
     expect(screen.getByText("$25")).toBeTruthy()
@@ -301,4 +303,37 @@ describe("auto-recharge rollback", () => {
       ),
     )
   })
+})
+
+it("keeps the hash target mounted before a cold credit load and scrolls to settings when ready", () => {
+  const scroll = vi.fn()
+  const original = HTMLElement.prototype.scrollIntoView
+  HTMLElement.prototype.scrollIntoView = scroll
+  window.history.replaceState(null, "", "/plan-usage/buy-credit/#auto-recharge")
+  try {
+    mocks.data = null
+    const client = new QueryClient()
+    const view = () => (
+      <QueryClientProvider client={client}>
+        <BuyCreditPageClient />
+      </QueryClientProvider>
+    )
+    const { rerender } = render(view())
+    const target = document.getElementById("auto-recharge")
+    expect(target).toBeInTheDocument()
+    expect(
+      screen.getByText("Loading auto-recharge settings…"),
+    ).toBeInTheDocument()
+    expect(scroll).not.toHaveBeenCalled()
+    mocks.data = initial
+    rerender(view())
+    expect(document.getElementById("auto-recharge")).toBe(target)
+    expect(screen.getByRole("switch")).toBeInTheDocument()
+    expect(scroll).toHaveBeenCalledExactlyOnceWith({ block: "start" })
+    rerender(view())
+    expect(scroll).toHaveBeenCalledOnce()
+  } finally {
+    HTMLElement.prototype.scrollIntoView = original
+    window.history.replaceState(null, "", "/")
+  }
 })
