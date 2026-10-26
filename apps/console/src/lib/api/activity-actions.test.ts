@@ -94,4 +94,14 @@ describe("listActivityBySandboxAction", () => {
     expect(cellFor).toHaveBeenCalledWith("use")
     expect(query.eq).toHaveBeenCalledWith("team_id", "team-self")
   })
+
+  it("queries by the bare uuid when the page has a public sandbox id", async () => {
+    getImpersonationContext.mockResolvedValue(null)
+    resolveActiveTeam.mockResolvedValue({ teamId: "team-self", region: "usw" })
+    const uuid = "1b4e28ba-2fa1-11d2-883f-0016d3cca427"
+
+    await listActivityBySandboxAction(`sb-usw-${uuid}`)
+
+    expect(query.eq).toHaveBeenCalledWith("sandbox_id", uuid)
+  })
 })

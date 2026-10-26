@@ -60,6 +60,18 @@ export function regionFromSandboxId(sandboxId: string): string | undefined {
 }
 
 /**
+ * Database uuid behind a public sandbox id (`sb-<region>-<uuid>`); any other
+ * id is returned unchanged. Tables key sandboxes by the bare uuid.
+ */
+export function sandboxUuidFromId(sandboxId: string): string {
+  return (
+    /^sb-[a-z0-9]{1,17}-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(
+      sandboxId,
+    )?.[1] ?? sandboxId
+  )
+}
+
+/**
  * Origin of a sandbox's data-plane endpoint, `<label>-<id>.<host>`, e.g.
  * `sandboxUrl(id, "boxd", "ws")` for the terminal or
  * `sandboxUrl(id, "3000", "http")` for a preview. Callers append the path.

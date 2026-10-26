@@ -7,6 +7,7 @@ import { canReadPlatformActivity } from "@/lib/admin/permissions"
 import { resolveActiveTeam } from "@/lib/api/active-team"
 import type { TeamMembership } from "@/lib/api/team-directory"
 import { cellFor } from "@/lib/cells"
+import { sandboxUuidFromId } from "@/lib/sandbox-url"
 import { createServerClient } from "@/lib/supabase/server"
 
 async function getTeam(user: User): Promise<TeamMembership | null> {
@@ -42,7 +43,7 @@ export async function listActivityBySandboxAction(
     .select(
       "id, sandbox_id, template_id, category, action, status, sandbox_name, secret_id, secret_name, actor_id, duration_ms, error, metadata, created_at",
     )
-    .eq("sandbox_id", sandboxId)
+    .eq("sandbox_id", sandboxUuidFromId(sandboxId))
     .eq("team_id", team.teamId)
     .order("created_at", { ascending: false })
     .limit(limit)

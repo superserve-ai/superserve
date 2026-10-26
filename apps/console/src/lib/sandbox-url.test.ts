@@ -26,6 +26,20 @@ describe("regionFromSandboxId", () => {
   })
 })
 
+describe("sandboxUuidFromId", () => {
+  it("strips the region prefix from a public id", async () => {
+    const { sandboxUuidFromId } = await loadWithEnv({})
+    expect(sandboxUuidFromId(`sb-usw-${UUID}`)).toBe(UUID)
+    expect(sandboxUuidFromId(`sb-constructor-${UUID}`)).toBe(UUID)
+  })
+
+  it("returns bare and unrecognised ids unchanged", async () => {
+    const { sandboxUuidFromId } = await loadWithEnv({})
+    expect(sandboxUuidFromId(UUID)).toBe(UUID)
+    expect(sandboxUuidFromId("sb-usw-not-a-uuid")).toBe("sb-usw-not-a-uuid")
+  })
+})
+
 describe("sandboxUrl", () => {
   const unset = {
     NEXT_PUBLIC_SANDBOX_SCHEME: "",
