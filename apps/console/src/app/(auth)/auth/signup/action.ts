@@ -27,7 +27,10 @@ import {
   SignupRestrictedError,
   SIGNUP_RESTRICTED_MESSAGE,
 } from "@/lib/auth/signup-restrictions"
-import { getPricingVersionAction } from "@/lib/billing/plans-actions"
+import {
+  getPricingVersionAction,
+  getPublicBillingPlansAction,
+} from "@/lib/billing/plans-actions"
 import {
   proAuthReturnPath,
   starterAuthReturnPath,
@@ -464,12 +467,24 @@ export const signUpWithEmail = async (
     if (next) callbackUrl.searchParams.set("next", next)
     if (requestedOffer) callbackUrl.searchParams.set("offer", requestedOffer)
     const offerIntent = rawSignupOffer ?? offer
+    let pricingVersion: "legacy" | "v2" | undefined
+    if (offerIntent === "enterprise") {
+      try {
+        pricingVersion = (await getPublicBillingPlansAction()).pricing_version
+      } catch {
+        return {
+          success: false,
+          error: "Pricing is unavailable. Please try signing up again.",
+        }
+      }
+    } else if (offerIntent) pricingVersion = await getPricingVersionAction()
     const signupOffer =
-      offerIntent && (await getPricingVersionAction()) === "v2"
+      offerIntent && pricingVersion === "v2"
         ? parseSignupOffer(offerIntent)
         : undefined
     const routingOffer =
       signupOffer ??
+      (offerIntent === "enterprise" ? "enterprise" : undefined) ??
       (isSelfServeSignupOffer(offerIntent)
         ? parseSignupOffer(offerIntent)
         : undefined)

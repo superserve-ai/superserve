@@ -49,7 +49,10 @@ import {
   pendingProfileCookieOptions,
   updateSignupReviewMetadata,
 } from "@/lib/auth/signup-review-server"
-import { getPricingVersionAction } from "@/lib/billing/plans-actions"
+import {
+  getPricingVersionAction,
+  getPublicBillingPlansAction,
+} from "@/lib/billing/plans-actions"
 import {
   proAuthReturnPath,
   starterAuthReturnPath,
@@ -213,10 +216,25 @@ export async function GET(request: Request) {
           return pendingSignupResponse(supabase, origin, user)
         const offerIntent =
           searchParams.get(SIGNUP_OFFER_PARAM) ?? searchParams.get("offer")
+        let enterprisePricing: "legacy" | "v2" | undefined
+        if (offerIntent === "enterprise") {
+          try {
+            enterprisePricing = (await getPublicBillingPlansAction())
+              .pricing_version
+          } catch {
+            await supabase.auth.signOut().catch(() => {})
+            return NextResponse.redirect(
+              buildRedirectUrl(
+                origin,
+                "/auth/auth-code-error?reason=pricing_unavailable",
+              ),
+            )
+          }
+        }
         const signupOffer =
           offerIntent &&
           (isSelfServeSignupOffer(offerIntent) ||
-            (await getPricingVersionAction()) === "v2")
+            (enterprisePricing ?? (await getPricingVersionAction())) === "v2")
             ? parseSignupOffer(offerIntent)
             : undefined
         const signupAttemptId =

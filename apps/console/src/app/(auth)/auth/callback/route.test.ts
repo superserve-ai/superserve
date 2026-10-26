@@ -196,9 +196,11 @@ vi.mock("@/lib/auth/google-onboarding", () => ({
     mockEnsureGoogleOnboardingMembership(...args),
 }))
 
+const mockStrictPlans = vi.fn()
 const mockPricingVersion = vi.fn()
 vi.mock("@/lib/billing/plans-actions", () => ({
   getPricingVersionAction: (...args: unknown[]) => mockPricingVersion(...args),
+  getPublicBillingPlansAction: (...args: unknown[]) => mockStrictPlans(...args),
 }))
 const mockUpdateSignupReview = vi.fn()
 vi.mock("@/lib/auth/signup-review-server", async (importOriginal) => ({
@@ -248,6 +250,10 @@ describe("auth callback", () => {
   beforeEach(() => {
     vi.stubEnv("YC_STAFF_UI_ENABLED", "false")
     mockPricingVersion.mockReset().mockResolvedValue("legacy")
+    mockStrictPlans.mockReset().mockImplementation(async () => ({
+      pricing_version: await mockPricingVersion(),
+      cards: [],
+    }))
     mockSignOut.mockReset().mockResolvedValue({ error: null })
     mockUpdateSignupReview.mockReset().mockResolvedValue(undefined)
     evidenceJar.clear()
@@ -974,6 +980,43 @@ describe("auth callback", () => {
         "/plan-usage/buy-credit",
       )
       expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+    })
+
+    it.each(["code=abc", "token_hash=token&type=signup"])(
+      "fails closed before Enterprise provisioning if current pricing cannot be read: %s",
+      async (proof) => {
+        mockStrictPlans.mockRejectedValue(new Error("Pricing unavailable"))
+        const response = await GET(
+          new Request(
+            `https://console.superserve.ai/auth/callback?${proof}&signup_offer=enterprise`,
+          ),
+        )
+        expect(
+          new URL(response.headers.get("location")!).searchParams.get("reason"),
+        ).toBe("pricing_unavailable")
+        expect(mockSignOut).toHaveBeenCalled()
+        expect(mockEnsureGoogleOnboardingMembership).not.toHaveBeenCalled()
+        expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+        expect(mockSendWelcomeEmail).not.toHaveBeenCalled()
+      },
+    )
+
+    it("retains explicit legacy Enterprise email confirmation without inventing a hold", async () => {
+      mockStrictPlans.mockResolvedValue({
+        pricing_version: "legacy",
+        cards: [],
+      })
+      currentUser!.app_metadata = { provider: "email" }
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?token_hash=token&type=signup&signup_offer=enterprise",
+        ),
+      )
+      expect(new URL(response.headers.get("location")!).pathname).toBe(
+        "/sandboxes",
+      )
+      expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+      expect(mockSignOut).not.toHaveBeenCalled()
     })
 
     it("does not ask for the switch without an offer", async () => {
