@@ -1,0 +1,238 @@
+import "server-only"
+import crypto from "node:crypto"
+
+import type { User } from "@supabase/supabase-js"
+
+import { mintTeamApiKey } from "@/lib/api/api-key-mint"
+import type { TeamMembership } from "@/lib/api/team-directory"
+import {
+  assertSignupReviewCleared,
+  SignupReviewPendingError,
+} from "@/lib/auth/signup-review"
+import { cellFor, DEFAULT_REGION } from "@/lib/cells"
+import { createAdminClient } from "@/lib/supabase/admin"
+
+// Device authorization grant (RFC 8628) for `superserve login`. Rows live in
+// the default cell; the key is minted in the approving team's cell on the
+// CLI's first poll after approval, so the raw key is never stored anywhere.
+
+export const DEVICE_CODE_TTL_SECONDS = 600
+export const DEVICE_POLL_INTERVAL_SECONDS = 5
+const MAX_CODES_PER_REQUESTER = 10
+const MAX_CLIENT_NAME_LENGTH = 64
+// No vowels, so a code never spells a word; no 0/O or 1/I lookalikes.
+const USER_CODE_ALPHABET = "BCDFGHJKLMNPQRSTVWXZ"
+
+export type DevicePollError =
+  | "authorization_pending"
+  | "slow_down"
+  | "expired_token"
+  | "access_denied"
+  | "invalid_grant"
+
+export class DeviceLoginError extends Error {
+  constructor(
+    readonly code:
+      | "rate_limited"
+      | "invalid_code"
+      | "unavailable"
+      | DevicePollError,
+    message: string,
+  ) {
+    super(message)
+    this.name = "DeviceLoginError"
+  }
+}
+
+function sha256(value: string): string {
+  return crypto.createHash("sha256").update(value).digest("hex")
+}
+
+function generateUserCode(): string {
+  let code = ""
+  for (let i = 0; i < 8; i++) {
+    code += USER_CODE_ALPHABET[crypto.randomInt(USER_CODE_ALPHABET.length)]
+  }
+  return `${code.slice(0, 4)}-${code.slice(4)}`
+}
+
+/** Accepts what people type: any case, with or without the dash or spaces. */
+export function normalizeUserCode(input: string | null | undefined) {
+  const letters = (input ?? "").toUpperCase().replace(/[^A-Z]/g, "")
+  if (letters.length !== 8) return null
+  if ([...letters].some((ch) => !USER_CODE_ALPHABET.includes(ch))) return null
+  return `${letters.slice(0, 4)}-${letters.slice(4)}`
+}
+
+export function sanitizeClientName(input: unknown): string {
+  const name =
+    typeof input === "string"
+      ? input
+          .replace(/[^\w.@ -]/g, "")
+          .trim()
+          .slice(0, MAX_CLIENT_NAME_LENGTH)
+      : ""
+  return name || "unknown device"
+}
+
+function deviceTable() {
+  return cellFor(DEFAULT_REGION).createAdminClient().from("device_code")
+}
+
+export async function createDeviceCode(input: {
+  clientName: string
+  requester: string
+}) {
+  const requesterHash = sha256(`device-login:${input.requester}`)
+  const windowStart = new Date(
+    Date.now() - DEVICE_CODE_TTL_SECONDS * 1000,
+  ).toISOString()
+  const { count, error: countError } = await deviceTable()
+    .select("id", { count: "exact", head: true })
+    .eq("requester_hash", requesterHash)
+    .gt("created_at", windowStart)
+  if (countError)
+    throw new DeviceLoginError("unavailable", "Login is unavailable.")
+  if ((count ?? 0) >= MAX_CODES_PER_REQUESTER)
+    throw new DeviceLoginError(
+      "rate_limited",
+      "Too many login attempts. Try again in a few minutes.",
+    )
+
+  const deviceCode = crypto.randomBytes(32).toString("base64url")
+  const expiresAt = new Date(
+    Date.now() + DEVICE_CODE_TTL_SECONDS * 1000,
+  ).toISOString()
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const userCode = generateUserCode()
+    const { error } = await deviceTable().insert({
+      device_code: sha256(deviceCode),
+      user_code: userCode,
+      client_name: input.clientName,
+      requester_hash: requesterHash,
+      status: "pending",
+      expires_at: expiresAt,
+    })
+    if (!error) return { deviceCode, userCode }
+    if (error.code !== "23505") break
+  }
+  throw new DeviceLoginError("unavailable", "Login is unavailable.")
+}
+
+/** The pending request a user code points at, or null when it can't be approved. */
+export async function findPendingDeviceCode(userCode: string) {
+  const { data, error } = await deviceTable()
+    .select("client_name")
+    .eq("user_code", userCode)
+    .eq("status", "pending")
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle()
+  if (error) throw new DeviceLoginError("unavailable", "Login is unavailable.")
+  return data ? { clientName: (data.client_name as string) ?? "" } : null
+}
+
+export async function approveDeviceCode(
+  userCode: string,
+  user: User,
+  team: TeamMembership,
+) {
+  const { data, error } = await deviceTable()
+    .update({
+      status: "approved",
+      user_id: user.id,
+      team_id: team.teamId,
+      team_region: team.region,
+      approved_at: new Date().toISOString(),
+    })
+    .eq("user_code", userCode)
+    .eq("status", "pending")
+    .gt("expires_at", new Date().toISOString())
+    .select("id")
+  if (error) throw new DeviceLoginError("unavailable", "Login is unavailable.")
+  if (!data?.length)
+    throw new DeviceLoginError(
+      "invalid_code",
+      "This code has expired or was already used. Run superserve login again.",
+    )
+}
+
+export async function denyDeviceCode(userCode: string) {
+  const { error } = await deviceTable()
+    .update({ status: "denied" })
+    .eq("user_code", userCode)
+    .eq("status", "pending")
+  if (error) throw new DeviceLoginError("unavailable", "Login is unavailable.")
+}
+
+/**
+ * One poll from the CLI. Claims an approved row (so concurrent polls can't
+ * mint twice), mints the key, and hands the claim back if minting fails so
+ * the next poll can retry.
+ */
+export async function pollDeviceCode(deviceCode: string) {
+  const hash = sha256(deviceCode)
+  const { data: row, error } = await deviceTable()
+    .select(
+      "id, status, expires_at, user_id, team_id, team_region, client_name",
+    )
+    .eq("device_code", hash)
+    .maybeSingle()
+  if (error) throw new DeviceLoginError("unavailable", "Login is unavailable.")
+  if (!row) throw new DeviceLoginError("invalid_grant", "Unknown login code.")
+  if (row.status === "denied")
+    throw new DeviceLoginError("access_denied", "The login was denied.")
+  if (row.status === "consumed")
+    throw new DeviceLoginError("invalid_grant", "This login was already used.")
+  if (row.status === "pending") {
+    if (new Date(row.expires_at as string).getTime() <= Date.now())
+      throw new DeviceLoginError("expired_token", "The login code expired.")
+    throw new DeviceLoginError(
+      "authorization_pending",
+      "Waiting for approval in the browser.",
+    )
+  }
+  if (row.status !== "approved")
+    throw new DeviceLoginError("expired_token", "The login code expired.")
+
+  const { data: claimed, error: claimError } = await deviceTable()
+    .update({ status: "consumed", consumed_at: new Date().toISOString() })
+    .eq("id", row.id)
+    .eq("status", "approved")
+    .select("id")
+  if (claimError)
+    throw new DeviceLoginError("unavailable", "Login is unavailable.")
+  if (!claimed?.length)
+    throw new DeviceLoginError("invalid_grant", "This login was already used.")
+
+  try {
+    const {
+      data: { user },
+      error: userError,
+    } = await createAdminClient().auth.admin.getUserById(row.user_id as string)
+    if (userError || !user)
+      throw new DeviceLoginError("access_denied", "The account is unavailable.")
+    assertSignupReviewCleared(user)
+    const team = {
+      teamId: row.team_id as string,
+      region: row.team_region as string,
+    }
+    const key = await mintTeamApiKey(
+      user,
+      team,
+      `CLI · ${row.client_name ?? "unknown device"}`,
+      new Date().toISOString(),
+    )
+    return { apiKey: key.key, email: user.email ?? null }
+  } catch (error) {
+    if (
+      !(error instanceof DeviceLoginError) &&
+      !(error instanceof SignupReviewPendingError)
+    ) {
+      await deviceTable()
+        .update({ status: "approved", consumed_at: null })
+        .eq("id", row.id)
+        .eq("status", "consumed")
+    }
+    throw error
+  }
+}

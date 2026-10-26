@@ -1,5 +1,3 @@
-import { spawn } from "node:child_process"
-
 import {
   MAX_PREVIEW_PORT,
   MIN_PREVIEW_PORT,
@@ -17,6 +15,7 @@ import {
   formatDate,
   info,
   isJson,
+  openBrowser,
   printFields,
   printJson,
   printTable,
@@ -323,18 +322,4 @@ function printToken(t: PreviewToken): void {
         : "Valid until the port is rotated or unpublished.",
     ),
   )
-}
-
-function openBrowser(target: string): void {
-  if (!/^https?:\/\//.test(target)) return
-  // rundll32 avoids cmd.exe re-parsing & and ^ in the URL.
-  const [cmd, args] =
-    process.platform === "darwin"
-      ? ["open", [target]]
-      : process.platform === "win32"
-        ? ["rundll32", ["url.dll,FileProtocolHandler", target]]
-        : ["xdg-open", [target]]
-  const child = spawn(cmd, args, { stdio: "ignore", detached: true })
-  child.on("error", () => warn("Could not open a browser; open the URL above."))
-  child.unref()
 }

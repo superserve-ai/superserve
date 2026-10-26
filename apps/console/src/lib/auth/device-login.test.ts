@@ -1,0 +1,171 @@
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+type Row = Record<string, unknown>
+
+const state = vi.hoisted(() => ({
+  rows: [] as Record<string, unknown>[],
+  mint: vi.fn(),
+  getUser: vi.fn(),
+}))
+
+function query(op: "select" | "update", payload?: Row) {
+  const filters: ((row: Row) => boolean)[] = []
+  let count = false
+  const run = () => {
+    const matched = state.rows.filter((row) => filters.every((f) => f(row)))
+    if (op === "update") for (const row of matched) Object.assign(row, payload)
+    return matched
+  }
+  const result = Promise.resolve().then(() => {
+    const matched = run()
+    return count
+      ? { count: matched.length, error: null }
+      : { data: matched, error: null }
+  })
+  const builder = Object.assign(result, {
+    select: (_cols?: string, opts?: { count?: string }) => {
+      count = !!opts?.count
+      return builder
+    },
+    eq: (col: string, value: unknown) => {
+      filters.push((row) => row[col] === value)
+      return builder
+    },
+    gt: (col: string, value: string) => {
+      filters.push((row) => String(row[col]) > value)
+      return builder
+    },
+    maybeSingle: async () => ({ data: run()[0] ?? null, error: null }),
+  })
+  return builder
+}
+
+vi.mock("server-only", () => ({}))
+vi.mock("@/lib/cells", () => ({
+  DEFAULT_REGION: "use",
+  cellFor: () => ({
+    createAdminClient: () => ({
+      from: () => ({
+        select: (cols: string, opts?: { count?: string }) =>
+          query("select").select(cols, opts),
+        insert: async (row: Row) => {
+          state.rows.push({
+            id: crypto.randomUUID(),
+            created_at: new Date().toISOString(),
+            ...row,
+          })
+          return { error: null }
+        },
+        update: (values: Row) => query("update", values),
+      }),
+    }),
+  }),
+}))
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => ({
+    auth: { admin: { getUserById: state.getUser } },
+  }),
+}))
+vi.mock("@/lib/api/api-key-mint", () => ({ mintTeamApiKey: state.mint }))
+
+import {
+  approveDeviceCode,
+  createDeviceCode,
+  denyDeviceCode,
+  normalizeUserCode,
+  pollDeviceCode,
+} from "./device-login"
+
+const user = { id: "user-1", email: "dev@example.com", app_metadata: {} }
+const team = { teamId: "team-1", region: "usw" }
+
+async function start() {
+  return createDeviceCode({ clientName: "laptop", requester: "192.0.2.1" })
+}
+
+describe("device login", () => {
+  beforeEach(() => {
+    state.rows = []
+    state.mint.mockReset().mockResolvedValue({ key: "ss_live_usw_secret" })
+    state.getUser.mockReset().mockResolvedValue({ data: { user }, error: null })
+  })
+
+  it("normalizes typed codes and rejects lookalikes", () => {
+    expect(normalizeUserCode("bcdf ghjk")).toBe("BCDF-GHJK")
+    expect(normalizeUserCode("BCDF-GHJ0")).toBeNull()
+    expect(normalizeUserCode("ABCD-EFGH")).toBeNull()
+  })
+
+  it("never stores the polling secret", async () => {
+    const { deviceCode } = await start()
+    expect(JSON.stringify(state.rows)).not.toContain(deviceCode)
+  })
+
+  it("stays pending until approved, then mints exactly once in the team's cell", async () => {
+    const { deviceCode, userCode } = await start()
+    await expect(pollDeviceCode(deviceCode)).rejects.toMatchObject({
+      code: "authorization_pending",
+    })
+    await approveDeviceCode(userCode, user as never, team)
+    await expect(pollDeviceCode(deviceCode)).resolves.toEqual({
+      apiKey: "ss_live_usw_secret",
+      email: "dev@example.com",
+    })
+    expect(state.mint).toHaveBeenCalledWith(
+      user,
+      team,
+      "CLI · laptop",
+      expect.any(String),
+    )
+    await expect(pollDeviceCode(deviceCode)).rejects.toMatchObject({
+      code: "invalid_grant",
+    })
+    expect(state.mint).toHaveBeenCalledTimes(1)
+  })
+
+  it("lets the next poll retry when minting fails", async () => {
+    const { deviceCode, userCode } = await start()
+    await approveDeviceCode(userCode, user as never, team)
+    state.mint.mockRejectedValueOnce(new Error("cell down"))
+    await expect(pollDeviceCode(deviceCode)).rejects.toThrow("cell down")
+    await expect(pollDeviceCode(deviceCode)).resolves.toMatchObject({
+      apiKey: "ss_live_usw_secret",
+    })
+  })
+
+  it("does not mint for an account held for review", async () => {
+    const { deviceCode, userCode } = await start()
+    await approveDeviceCode(userCode, user as never, team)
+    state.getUser.mockResolvedValue({
+      data: { user: { ...user, app_metadata: { signup_review: "pending" } } },
+      error: null,
+    })
+    await expect(pollDeviceCode(deviceCode)).rejects.toThrow()
+    expect(state.mint).not.toHaveBeenCalled()
+    await expect(pollDeviceCode(deviceCode)).rejects.toMatchObject({
+      code: "invalid_grant",
+    })
+  })
+
+  it("reports denial and expiry, and refuses to approve either", async () => {
+    const denied = await start()
+    await denyDeviceCode(denied.userCode)
+    await expect(pollDeviceCode(denied.deviceCode)).rejects.toMatchObject({
+      code: "access_denied",
+    })
+
+    const expired = await start()
+    state.rows.at(-1)!.expires_at = new Date(Date.now() - 1000).toISOString()
+    await expect(pollDeviceCode(expired.deviceCode)).rejects.toMatchObject({
+      code: "expired_token",
+    })
+    await expect(
+      approveDeviceCode(expired.userCode, user as never, team),
+    ).rejects.toMatchObject({ code: "invalid_code" })
+  })
+
+  it("rate-limits a requester that keeps starting logins", async () => {
+    for (let i = 0; i < 10; i++) await start()
+    await expect(start()).rejects.toMatchObject({ code: "rate_limited" })
+  })
+})

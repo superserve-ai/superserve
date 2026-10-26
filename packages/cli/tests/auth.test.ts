@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtempSync, statSync } from "node:fs"
+import { existsSync, mkdtempSync, statSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -62,6 +62,99 @@ describe("auth", () => {
         req.headers.get("X-API-Key") === TEST_KEY ? json([]) : undefined,
     })
     expect(JSON.parse(who.stdout).source).toBe("credentials")
+  })
+
+  test("login with no key signs in from the browser and saves the minted key", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "superserve-login-"))
+    const env = { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir }
+    let polls = 0
+    const r = await runCli(["login", "--json"], {
+      env,
+      fetch: (req) => {
+        if (req.url.pathname === "/api/cli/device")
+          return json({
+            device_code: "secret-device-code",
+            user_code: "BCDF-GHJK",
+            verification_uri_complete:
+              "https://console.superserve.ai/device?code=BCDF-GHJK",
+            expires_in: 600,
+            interval: 0,
+          })
+        if (req.url.pathname === "/api/cli/device/token") {
+          expect(req.json()).toEqual({ device_code: "secret-device-code" })
+          return ++polls < 2
+            ? json({ error: "authorization_pending" }, 400)
+            : json({ api_key: TEST_KEY, email: "dev@example.com" })
+        }
+        return req.url.pathname === "/sandboxes" ? json([]) : undefined
+      },
+    })
+    expect(r.exitCode).toBe(0)
+    expect(r.stderr).toContain("BCDF-GHJK")
+    expect(JSON.parse(r.stdout).logged_in).toBe(true)
+    expect(polls).toBe(2)
+    expect(statSync(join(dir, "credentials.json")).mode & 0o777).toBe(0o600)
+    expect(existsSync(join(dir, "pending-login.json"))).toBe(false)
+  })
+
+  test("login --no-wait prints the URL, and the next login resumes the same code", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "superserve-login-"))
+    const env = { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir }
+    const start = await runCli(["login", "--no-wait", "--json"], {
+      env,
+      fetch: (req) =>
+        req.url.pathname === "/api/cli/device"
+          ? json({
+              device_code: "secret-device-code",
+              user_code: "BCDF-GHJK",
+              verification_uri_complete:
+                "https://console.superserve.ai/device?code=BCDF-GHJK",
+              expires_in: 600,
+              interval: 0,
+            })
+          : undefined,
+    })
+    expect(start.exitCode).toBe(0)
+    expect(JSON.parse(start.stdout)).toMatchObject({
+      logged_in: false,
+      user_code: "BCDF-GHJK",
+      url: "https://console.superserve.ai/device?code=BCDF-GHJK",
+    })
+
+    const finish = await runCli(["login"], {
+      env,
+      fetch: (req) =>
+        req.url.pathname === "/api/cli/device/token"
+          ? json({ api_key: TEST_KEY })
+          : req.url.pathname === "/sandboxes"
+            ? json([])
+            : undefined,
+    })
+    expect(finish.exitCode).toBe(0)
+    expect(finish.requests.map((q) => q.url.pathname)).not.toContain(
+      "/api/cli/device",
+    )
+  })
+
+  test("a denied browser login fails with the auth code and saves nothing", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "superserve-login-"))
+    const env = { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir }
+    const r = await runCli(["login"], {
+      env,
+      fetch: (req) =>
+        req.url.pathname === "/api/cli/device"
+          ? json({
+              device_code: "d",
+              user_code: "BCDF-GHJK",
+              verification_uri_complete: "https://console.superserve.ai/device",
+              expires_in: 600,
+              interval: 0,
+            })
+          : json({ error: "access_denied", error_description: "Denied." }, 400),
+    })
+    expect(r.exitCode).toBe(3)
+    expect(existsSync(join(dir, "credentials.json"))).toBe(false)
+    expect(existsSync(join(dir, "pending-login.json"))).toBe(false)
   })
 
   test("no key anywhere exits with the auth code", async () => {
