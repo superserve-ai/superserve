@@ -383,6 +383,40 @@ describe("PlanUsagePage", () => {
     expect(screen.getByText("Current Balance")).toBeInTheDocument()
   })
 
+  it.each([
+    [
+      "failed",
+      {
+        data: undefined,
+        error: new ApiError(503, "unavailable", "Plan unavailable"),
+        isError: true,
+        isPending: false,
+      },
+    ],
+    [
+      "loading",
+      { data: undefined, error: null, isError: false, isPending: true },
+    ],
+  ])(
+    "preserves authorized billing controls when the plan query is %s",
+    (_, planQuery) => {
+      // useTeamPlan deliberately removes retained data on query errors. The
+      // independent summary still authorizes this existing customer's portal.
+      useTeamPlan.mockReturnValue(planQuery)
+      renderPage()
+      expect(screen.getByTestId("billing-statement")).toBeInTheDocument()
+      expect(screen.getByTestId("customer-billing-section")).toBeInTheDocument()
+      expect(
+        screen.getByRole("button", { name: "Open Customer Portal" }),
+      ).toBeInTheDocument()
+      expect(useCustomerBillingPeriods).toHaveBeenCalledWith(
+        "team-1",
+        "use:team-1",
+      )
+      expect(screen.getByText("Current Balance")).toBeInTheDocument()
+    },
+  )
+
   it("retains paid history and credits after switching to Free without setup prompts", () => {
     useTeamPlan.mockReturnValue({
       data: {

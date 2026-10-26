@@ -163,7 +163,7 @@ async function claimDecision(
 const decisionConflict: SignupReviewResult = {
   ok: false,
   error:
-    "This applicant already has a different review decision or plan. Refresh the review queue.",
+    "This applicant already has a saved review decision or plan. Retry the original approved plan. If it is unavailable or cannot finish, an operator must reconcile the saved decision; choosing another plan or rejecting cannot replace it.",
 }
 
 /**

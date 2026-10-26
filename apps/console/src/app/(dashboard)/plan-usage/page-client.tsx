@@ -187,7 +187,9 @@ export function PlanUsagePageClient() {
   const teamsQuery = useTeams()
   const dashboardTeam = useDashboardTeamContext()
   const teamPlan = useTeamPlan(!userLoading && !!user).data
-  const showPayments = teamPlan !== undefined && teamPlan?.kind !== "free"
+  // A failed plan lookup must not hide independently authorized billing data.
+  // Only a confirmed Free assignment suppresses payment setup.
+  const showPayments = teamPlan?.kind !== "free"
   const summaryQuery = useBillingSummary(!userLoading && !!user)
   // Do not render retained summary data after a failed refresh. The billing
   // query is team-scoped, but React Query can still expose the last successful
@@ -360,7 +362,7 @@ export function PlanUsagePageClient() {
               </>
             ) : null}
 
-            {billingTeam && teamPlan !== undefined && (
+            {billingTeam && (
               <CustomerBillingSection
                 teamId={billingTeam.teamId}
                 teamRegion={billingTeam.region}
