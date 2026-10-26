@@ -147,6 +147,25 @@ describe("Pro payment step", () => {
 })
 
 describe("Pro payment view", () => {
+  it("describes prorated credit without promising that it equals the cash fee", () => {
+    render(
+      <ProPaymentView
+        step="offer"
+        pro={planCard(v2, "pro")}
+        busy={false}
+        canceled={false}
+        onContinue={vi.fn()}
+        onCheckPayment={vi.fn()}
+      />,
+    )
+    expect(
+      screen.getByText(
+        /prorated non-expiring usage credit based on your selected plan/,
+      ),
+    ).toBeTruthy()
+    expect(screen.queryByText(/same amount in non-expiring/)).toBeNull()
+  })
+
   it("shows the catalog price and starts checkout", () => {
     const onContinue = vi.fn()
     const pro = planCard(v2, "pro")!

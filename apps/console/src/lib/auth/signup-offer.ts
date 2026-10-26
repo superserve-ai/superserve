@@ -22,12 +22,11 @@ export const SIGNUP_OFFER_DESTINATIONS: Record<SignupOffer, string> = {
   enterprise: "/auth/pending",
 }
 
-export function isSelfServeSignupOffer(
-  raw: unknown,
-): raw is "free" | "starter" | "pro" | "pro_monthly" {
+export function isSelfServeSignupOffer(raw: unknown): raw is string {
   return (
     typeof raw === "string" &&
-    ["free", "starter", "pro", "pro_monthly"].includes(raw)
+    (["free", "starter", "pro", "pro_monthly", "pro_annual"].includes(raw) ||
+      raw.startsWith("starter_"))
   )
 }
 

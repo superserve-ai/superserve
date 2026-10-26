@@ -148,7 +148,7 @@ export function ProPaymentView({
         <ul className="text-muted-foreground mt-6 space-y-3 text-sm">
           <li>
             Pay once for the rest of your current billing period and receive the
-            same amount in non-expiring usage credit.
+            prorated non-expiring usage credit based on your selected plan.
           </li>
           <li>Pro limits begin after payment is confirmed.</li>
           <li>

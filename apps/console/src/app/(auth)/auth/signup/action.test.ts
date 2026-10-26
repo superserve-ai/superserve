@@ -357,6 +357,21 @@ describe("signUpWithEmail", () => {
       },
     )
 
+    it.each(["v2", "legacy"])(
+      "preserves alias navigation without changing accepted terms under %s entry",
+      async (version) => {
+        mockPricingVersion.mockResolvedValue(version)
+        for (const [raw, destination] of [
+          ["starter_monthly", "starter"],
+          ["pro_annual", "pro_monthly"],
+        ]) {
+          await signUp(raw)
+          expect(callbackOffer()).toBe(destination)
+        }
+        expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+      },
+    )
+
     it("does not ask for the switch without an offer", async () => {
       await signUp(undefined)
       expect(mockPricingVersion).not.toHaveBeenCalled()

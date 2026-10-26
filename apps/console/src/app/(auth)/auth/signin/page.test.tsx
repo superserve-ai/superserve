@@ -132,6 +132,8 @@ describe("SignInPage", () => {
 
   it.each([
     ["starter", "/plan-usage/buy-credit"],
+    ["starter_monthly", "/plan-usage/buy-credit"],
+    ["pro_annual", "/billing/pro/"],
     ["pro_monthly", "/billing/pro/"],
     ["free", "/sandboxes"],
   ])("keeps %s intent after password sign-in", async (offer, destination) => {
@@ -158,6 +160,35 @@ describe("SignInPage", () => {
       expect(mockReplace).toHaveBeenCalledWith("/plan-usage/buy-credit"),
     )
   })
+
+  it.each([
+    ["starter_monthly", "/plan-usage/buy-credit"],
+    ["pro_annual", "/billing/pro/"],
+  ])(
+    "restores %s navigation for an existing session",
+    async (offer, destination) => {
+      searchParamsMap = { signup_offer: offer }
+      mockGetUser.mockResolvedValue({
+        data: { user: { id: "existing-user" } },
+        error: null,
+      })
+      render(<SignInPage />)
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith(destination))
+    },
+  )
+
+  it.each(["unknown_offer", "enterprise", "yc_2026"])(
+    "does not promote %s fallback into password sign-in routing",
+    async (offer) => {
+      searchParamsMap = { offer }
+      mockGetUser.mockResolvedValue({
+        data: { user: { id: "existing-user" } },
+        error: null,
+      })
+      render(<SignInPage />)
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"))
+    },
+  )
 
   it("renders the signin form", async () => {
     render(<SignInPage />)

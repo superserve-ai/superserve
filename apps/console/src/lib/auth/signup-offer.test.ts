@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { parseSignupOffer } from "./signup-offer"
+import { isSelfServeSignupOffer, parseSignupOffer } from "./signup-offer"
 
 describe("parseSignupOffer", () => {
   it.each([
@@ -19,3 +19,21 @@ describe("parseSignupOffer", () => {
     expect(parseSignupOffer(raw)).toBe(offer)
   })
 })
+
+it.each([
+  "free",
+  "starter",
+  "starter_monthly",
+  "starter_legacy",
+  "pro",
+  "pro_monthly",
+  "pro_annual",
+])("recognizes explicit routing alias %s", (raw) => {
+  expect(isSelfServeSignupOffer(raw)).toBe(true)
+})
+it.each([undefined, "", "unknown_offer", "enterprise", "yc_2026"])(
+  "does not elevate parser fallback %s to self-serve routing",
+  (raw) => {
+    expect(isSelfServeSignupOffer(raw)).toBe(false)
+  },
+)

@@ -94,6 +94,28 @@ beforeEach(() => {
 })
 
 describe("Pro payment return recovery", () => {
+  it.each(["v2", "legacy"] as const)(
+    "preserves a legacy annual contract's name and closes new checkout under %s entry",
+    (version) => {
+      state.summary = {
+        plan: {
+          key: "pro_annual",
+          name: "Legacy Annual Agreement",
+          status: "active",
+        },
+      }
+      state.plans = { ...availablePlans, pricing_version: version }
+      render(<ProPayment returnTo="/sandboxes" />)
+      expect(
+        screen.getByText(/Your team is on Legacy Annual Agreement/),
+      ).toBeTruthy()
+      expect(
+        screen.queryByRole("button", { name: "Continue to payment" }),
+      ).toBeNull()
+      expect(state.start).not.toHaveBeenCalled()
+    },
+  )
+
   it("keeps payment disabled for members without billing permission", () => {
     state.canManage = false
     state.plans = availablePlans

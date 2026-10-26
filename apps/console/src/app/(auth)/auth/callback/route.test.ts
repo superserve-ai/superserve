@@ -706,7 +706,9 @@ describe("auth callback", () => {
           `https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1&offer=${offer}`,
         ),
       )
-      expect(response.headers.get("location")).toContain("/sandboxes")
+      expect(response.headers.get("location")).toContain(
+        offer === "pro_annual" ? "/billing/pro/" : "/sandboxes",
+      )
       const offerCookie = response.cookies.get("ss-plan-offer")
       if (expected)
         expect(JSON.parse(offerCookie!.value)).toEqual({
@@ -1033,6 +1035,29 @@ describe("auth callback", () => {
         destination,
       )
     })
+
+    it.each(["v2", "legacy"])(
+      "keeps recognized aliases through OAuth and email confirmation under %s entry",
+      async (version) => {
+        mockPricingVersion.mockResolvedValue(version)
+        for (const [offer, destination] of [
+          ["starter_monthly", "/plan-usage/buy-credit"],
+          ["pro_annual", "/billing/pro/"],
+        ]) {
+          for (const proof of ["code=abc", "token_hash=token&type=signup"]) {
+            const response = await GET(
+              new Request(
+                `https://console.superserve.ai/auth/callback?${proof}&signup_offer=${offer}`,
+              ),
+            )
+            expect(new URL(response.headers.get("location")!).pathname).toBe(
+              destination,
+            )
+          }
+        }
+        expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+      },
+    )
 
     it("routes by the legacy offer parameter when no v2 offer was sent", async () => {
       mockPricingVersion.mockResolvedValue("v2")
