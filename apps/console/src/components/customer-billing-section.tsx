@@ -376,7 +376,7 @@ export function CustomerBillingSection({
         ) : null}
         {credits?.payable != null && credits.payable !== 0 ? (
           <p className="text-sm">
-            Outstanding balance: {formatCurrency(credits.payable)}
+            Current billing period estimate: {formatCurrency(credits.payable)}
           </p>
         ) : null}
         {periodsQuery.error ? (

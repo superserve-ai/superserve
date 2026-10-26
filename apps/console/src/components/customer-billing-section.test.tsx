@@ -179,7 +179,12 @@ describe("CustomerBillingSection", () => {
     renderSection({ ...baseSummary, payment_setup_required: true }, true)
     expect(screen.getByText("Billing history")).toBeInTheDocument()
     expect(screen.getByText("Credits remaining: $76.55")).toBeInTheDocument()
-    expect(screen.getByText("Outstanding balance: $100.00")).toBeInTheDocument()
+    expect(
+      screen.getByText("Current billing period estimate: $100.00"),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(/Outstanding balance|Overdue balance/),
+    ).not.toBeInTheDocument()
     expect(screen.getByText("May 1, 2026 - Jun 1, 2026")).toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: "Open Customer Portal" }),
