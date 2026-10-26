@@ -218,14 +218,19 @@ function readPendingLogin(): PendingLogin | null {
   }
 }
 
+const CONSOLE_TIMEOUT_MS = 30_000
+
 async function consoleRequest(path: string, body: unknown) {
   let res: Response
+  let text: string
   try {
     res = await fetch(`${CONSOLE_URL}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "User-Agent": USER_AGENT },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(CONSOLE_TIMEOUT_MS),
     })
+    text = await res.text()
   } catch {
     throw new CliError(
       `Could not reach ${CONSOLE_URL}.`,
@@ -234,7 +239,10 @@ async function consoleRequest(path: string, body: unknown) {
       "network",
     )
   }
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+  let data: Record<string, unknown> = {}
+  try {
+    data = JSON.parse(text)
+  } catch {}
   return { status: res.status, data }
 }
 
