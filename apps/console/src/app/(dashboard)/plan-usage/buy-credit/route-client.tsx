@@ -1,6 +1,7 @@
 "use client"
 
 import { Spinner } from "@superserve/ui"
+import { useSearchParams } from "next/navigation"
 
 import {
   usePrepaidCredit,
@@ -12,9 +13,15 @@ import { PlanUsagePageClient } from "../page-client"
 import { BuyCreditPageClient } from "./page-client"
 
 export function BuyCreditRoute() {
+  const params = useSearchParams()
+  const returning =
+    params.has("purchase") || params.has("team") || params.has("purchase_id")
   const version = usePricingVersion()
-  const existing = usePrepaidCredit(version !== undefined && version !== "v2")
+  const existing = usePrepaidCredit(
+    !returning && version !== undefined && version !== "v2",
+  )
   const retained = useRetainedPrepaidOperations(existing.data?.purchases)
+  if (returning) return <BuyCreditPageClient allowEntry={version === "v2"} />
   if (version === "v2") return <BuyCreditPageClient />
   if (
     retained.length > 0 ||

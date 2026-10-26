@@ -1,8 +1,9 @@
 "use client"
 
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
+import { CheckoutContextRecovery } from "@/components/billing/checkout-context-recovery"
 import {
   ProPaymentView,
   proPaymentStep,
@@ -12,6 +13,7 @@ import {
   useDashboardTeamContext,
   useQueryScope,
 } from "@/components/query-provider"
+import { useBillingContext } from "@/hooks/use-billing-context"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { usePublicBillingPlans } from "@/hooks/use-public-billing-plans"
 import { useTeams } from "@/hooks/use-teams"
@@ -23,21 +25,36 @@ import {
   startProCheckout,
   resumeProCheckout,
 } from "@/lib/api/plan-checkout"
+import {
+  checkoutEntryPath,
+  checkoutRecoveryPath,
+} from "@/lib/billing/checkout-return"
 import { planCard } from "@/lib/billing/plans"
 
 const CONFIRM_ATTEMPTS = 5
 
-export function ProPayment({
-  billingReturn,
-  returnTo,
-  checkoutTeam,
-}: {
+interface ProPaymentProps {
   billingReturn?: "success" | "cancel"
   returnTo: string
   checkoutTeam?: string
-}) {
+}
+
+export function ProPayment(props: ProPaymentProps) {
+  const params = useSearchParams()
+  return <ProPaymentContext key={params.toString()} {...props} />
+}
+
+function ProPaymentContext({
+  billingReturn,
+  returnTo,
+  checkoutTeam,
+}: ProPaymentProps) {
   const router = useRouter()
+  const params = useSearchParams()
+  const callbackPath = `/billing/pro/?${params.toString()}`
+  const returning = params.has("billing") || params.has("team")
   const scope = useQueryScope()
+  const { ready } = useBillingContext()
   const actor = useUser().user?.id
   const dashboardTeam = useDashboardTeamContext()
   const teamsQuery = useTeams()
@@ -56,11 +73,14 @@ export function ProPayment({
   const pro = planCard(plansQuery.data, "pro")
   const summaryQuery = useBillingSummary(!!team)
   const canContinue =
+    ready &&
     scope === "self" &&
     !summaryQuery.isError &&
     Boolean(actor && summaryQuery.data?.permissions?.can_manage)
   const canRecover =
-    scope === "self" && summaryQuery.data?.permissions?.can_manage !== false
+    ready &&
+    scope === "self" &&
+    summaryQuery.data?.permissions?.can_manage !== false
   const plan = summaryQuery.isError ? undefined : summaryQuery.data?.plan
   const paidPlan =
     plan &&
@@ -69,22 +89,41 @@ export function ProPayment({
       ? plan.name
       : null
   const [confirming, setConfirming] = useState(billingReturn === "success")
-  const [paymentTeam, setPaymentTeam] = useState(checkoutTeam)
+  const [paymentTeam, setPaymentTeam] = useState<string | undefined>()
+  const expectedTeam = checkoutTeam ?? paymentTeam
+  const recoveryPath = useMemo(() => {
+    if (!paymentTeam || checkoutRecoveryPath(callbackPath)) return callbackPath
+    if (returning && !checkoutEntryPath(callbackPath)) return callbackPath
+    if (checkoutTeam && checkoutTeam !== paymentTeam) return callbackPath
+    // A pending in-page operation has not navigated to its result URL yet.
+    // Retain its original target for status recovery, never for a new purchase.
+    const status = new URL("/billing/pro/", "https://console.invalid")
+    status.searchParams.set("team", paymentTeam)
+    status.searchParams.set("return", returnTo)
+    status.searchParams.set("billing", "success")
+    return checkoutRecoveryPath(status.pathname + status.search) ?? callbackPath
+  }, [returning, paymentTeam, returnTo, callbackPath, checkoutTeam])
   const [conflict, setConflict] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inFlight = useRef(false)
   const operationTarget = useRef({ active: false })
   const teamMismatch =
-    (!!billingReturn || !!paymentTeam) &&
-    (!paymentTeam || paymentTeam !== teamKey)
+    (returning || !!billingReturn || !!expectedTeam) &&
+    (!expectedTeam ||
+      expectedTeam !== teamKey ||
+      ((params.has("billing") || params.has("team")) &&
+        (!(
+          checkoutRecoveryPath(callbackPath) ?? checkoutEntryPath(callbackPath)
+        ) ||
+          params.get("team") !== checkoutTeam)))
   useEffect(() => {
     const target = { active: true }
     operationTarget.current = target
     return () => {
       target.active = false
     }
-  }, [teamKey, scope, actor])
+  }, [teamKey, scope, actor, ready])
 
   const run = useCallback(async (work: () => Promise<void>) => {
     if (inFlight.current) return
@@ -190,6 +229,7 @@ export function ProPayment({
 
   const step = proPaymentStep({
     loading:
+      !ready ||
       !team ||
       (!confirming && (plansQuery.isPending || summaryQuery.isPending)),
     plans: summaryQuery.isError ? undefined : plansQuery.data,
@@ -203,18 +243,27 @@ export function ProPayment({
     <div className="flex h-full flex-col">
       <PageHeader title="Upgrade to Pro" />
       <div className="flex-1 overflow-y-auto">
-        <ProPaymentView
-          step={step}
-          pro={pro}
-          paidPlan={paidPlan}
-          busy={busy}
-          canContinue={canContinue}
-          canRecover={canRecover}
-          canceled={billingReturn === "cancel"}
-          error={error}
-          onContinue={onContinue}
-          onCheckPayment={() => void checkPayment()}
-        />
+        {step === "team_mismatch" ||
+        (!ready && (returning || !!billingReturn || !!paymentTeam)) ? (
+          <CheckoutContextRecovery
+            callbackPath={recoveryPath}
+            contextPending={!ready}
+            allowSwitch={scope === "self"}
+          />
+        ) : (
+          <ProPaymentView
+            step={step}
+            pro={pro}
+            paidPlan={paidPlan}
+            busy={busy}
+            canContinue={canContinue}
+            canRecover={canRecover}
+            canceled={billingReturn === "cancel"}
+            error={error}
+            onContinue={onContinue}
+            onCheckPayment={() => void checkPayment()}
+          />
+        )}
       </div>
     </div>
   )

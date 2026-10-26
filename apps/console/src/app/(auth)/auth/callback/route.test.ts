@@ -8,6 +8,11 @@ import {
 } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import {
+  checkoutEntryPath,
+  checkoutRecoveryPath,
+} from "@/lib/billing/checkout-return"
+
 let retrySearch = new URLSearchParams()
 const mockRetryOAuth = vi.fn()
 vi.mock("next/navigation", () => ({
@@ -1629,7 +1634,7 @@ describe("auth callback", () => {
         degradedRegions: ["use"],
       }
       const preparation =
-        "/api/onboarding/prepare/?account=original&team=use%3Aoriginal-team&next=%2Fbilling%2Fpro%2F"
+        "/api/onboarding/prepare/?account=original&team=use%3A11111111-1111-4111-8111-111111111111&next=%2Fbilling%2Fpro%2F"
       const url = new URL(
         "https://console.superserve.ai/auth/callback?code=abc",
       )
@@ -1643,9 +1648,15 @@ describe("auth callback", () => {
       expect(savedPreparation.searchParams.get("account")).toBe("original")
       const paid = new URL(savedPreparation.searchParams.get("next")!, url)
       expect(paid.pathname).toBe("/billing/pro/")
-      expect(paid.searchParams.get("team")).toBe("use:original-team")
+      expect(paid.searchParams.get("team")).toBe(
+        "use:11111111-1111-4111-8111-111111111111",
+      )
       expect(mockGetSignupPlanAction).not.toHaveBeenCalled()
       expect(mockMarkGoogleSignupAttempt).not.toHaveBeenCalled()
+      expect(checkoutEntryPath(paid.pathname + paid.search)).toBe(
+        paid.pathname + paid.search,
+      )
+      expect(checkoutRecoveryPath(paid.pathname + paid.search)).toBeNull()
     })
 
     it("sends a real unbound Google proof through completion rather than looping first-team preparation", async () => {
