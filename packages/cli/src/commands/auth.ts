@@ -71,9 +71,11 @@ SUPERSERVE_API_KEY, when set, takes precedence over the saved key.`,
         baseUrl?: string
       }) => {
         const baseUrl = opts.baseUrl?.trim() || undefined
-        const piped = await readPipedInput()
-        if (opts.withKey || piped) {
-          const apiKey = piped || (await readSecret("API key: ")).trim()
+        // --with-key reads to EOF; only the unflagged sniff is bounded.
+        const apiKey = opts.withKey
+          ? (await readSecret("API key: ")).trim()
+          : await readPipedInput()
+        if (apiKey) {
           await saveKey(apiKey, baseUrl)
           return
         }

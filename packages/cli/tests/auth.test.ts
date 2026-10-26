@@ -357,6 +357,27 @@ describe("dev keys", () => {
 })
 
 describe("piped input", () => {
+  test("login --with-key waits out a pause mid-key", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "superserve-login-"))
+    const stdin = new Readable({ read() {} })
+    stdin.push(TEST_KEY.slice(0, 3))
+    setTimeout(() => {
+      stdin.push(TEST_KEY.slice(3))
+      stdin.push(null)
+    }, 1_200)
+    const r = await runCli(["login", "--with-key", "--json"], {
+      env: { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir },
+      stdin,
+      fetch: (req) =>
+        req.url.pathname === "/sandboxes" ? json([]) : undefined,
+    })
+    expect(r.exitCode).toBe(0)
+    const saved = JSON.parse(
+      readFileSync(join(dir, "credentials.json"), "utf8"),
+    )
+    expect(saved.api_key).toBe(TEST_KEY)
+  })
+
   test("doesn't wait on a stdin that stays open (agent harnesses)", async () => {
     const { readPipedInput } = await import("../src/args")
     const saved = Object.getOwnPropertyDescriptor(process, "stdin")
