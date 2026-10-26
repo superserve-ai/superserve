@@ -83,11 +83,11 @@ SUPERSERVE_API_KEY, when set, takes precedence over the saved key.`,
           baseUrl,
         })
         if (login)
-          await saveKey(
-            login.apiKey,
-            baseUrl ?? login.baseUrl,
-            login.newAccount ? Date.now() + ACCOUNT_SETUP_MS : undefined,
-          )
+          await saveKey(login.apiKey, baseUrl ?? login.baseUrl, {
+            setupUntil: login.newAccount
+              ? Date.now() + ACCOUNT_SETUP_MS
+              : undefined,
+          })
       },
     )
 
@@ -154,7 +154,7 @@ SUPERSERVE_API_KEY, when set, takes precedence over the saved key.`,
 async function saveKey(
   apiKey: string,
   baseUrl: string | undefined,
-  setupUntil?: number,
+  minted?: { setupUntil?: number },
 ) {
   // Non-production endpoints (e.g. a local backend) issue ss_dev_ keys.
   const prefixes = baseUrl ? ["ss_live_", "ss_dev_"] : ["ss_live_"]
@@ -164,14 +164,16 @@ async function saveKey(
       EXIT.USAGE,
     )
   }
-  // Validate before saving so a typo never replaces a working key.
-  await withSpinner("Checking key", () =>
-    Sandbox.list({ apiKey, baseUrl, limit: 1 }),
-  )
+  // Validate typed keys so a typo never replaces a working one. A minted key
+  // is saved as is: its grant is already spent, so a failed check would lose it.
+  if (!minted)
+    await withSpinner("Checking key", () =>
+      Sandbox.list({ apiKey, baseUrl, limit: 1 }),
+    )
   const path = writeCredentials({
     api_key: apiKey,
     base_url: baseUrl,
-    ...(setupUntil ? { setup_until: setupUntil } : {}),
+    ...(minted?.setupUntil ? { setup_until: minted.setupUntil } : {}),
   })
   if (isJson()) {
     printJson({ logged_in: true, key: maskKey(apiKey), path })

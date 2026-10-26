@@ -163,8 +163,9 @@ describe("auth", () => {
       fetch: (req) =>
         req.url.pathname === "/api/cli/device/token"
           ? json({ api_key: TEST_KEY, new_account: true })
-          : req.url.pathname === "/sandboxes"
-            ? json([])
+          : // The grant is spent, so an API outage must not lose the key.
+            req.url.pathname === "/sandboxes"
+            ? json({ error: "unavailable" }, 503)
             : undefined,
     })
     expect(r.exitCode).toBe(0)
@@ -172,6 +173,7 @@ describe("auth", () => {
     const saved = JSON.parse(
       readFileSync(join(dir, "credentials.json"), "utf8"),
     )
+    expect(saved.api_key).toBe(TEST_KEY)
     expect(saved.setup_until).toBeGreaterThan(Date.now())
   })
 
