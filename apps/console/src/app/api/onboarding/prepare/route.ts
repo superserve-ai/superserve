@@ -33,6 +33,7 @@ export async function GET(request: Request) {
       params.team ?? continuationTeam,
       params.account,
       params.billing,
+      continuation ?? undefined,
     )
   } catch (error) {
     unstable_rethrow(error)

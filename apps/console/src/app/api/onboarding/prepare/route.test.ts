@@ -26,7 +26,12 @@ it("provisions before redirecting with the original checkout identity", async ()
   ).rejects.toThrow(
     "/onboarding/plan/?team=use%3Ateam&account=owner&billing=cancel&setup_attempted=1",
   )
-  expect(m.prepare).toHaveBeenCalledWith("use:team", "owner", "cancel")
+  expect(m.prepare).toHaveBeenCalledWith(
+    "use:team",
+    "owner",
+    "cancel",
+    undefined,
+  )
 })
 it("returns to recovery after an error without accepting a redirect destination", async () => {
   m.prepare.mockRejectedValue(new Error("Unavailable"))
@@ -63,6 +68,7 @@ it.each([
       new URL(next, url).searchParams.get("team") ?? undefined,
       "owner",
       undefined,
+      next,
     )
     m.prepare.mockRejectedValueOnce(new Error("Response lost"))
     const failure = await GET(new Request(url)).catch(

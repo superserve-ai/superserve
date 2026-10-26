@@ -61,6 +61,7 @@ import {
 import {
   proAuthReturnPath,
   starterAuthReturnPath,
+  signupPreparationReturnPath,
 } from "@/lib/billing/pro-auth-return"
 import { DEFAULT_REGION } from "@/lib/cells"
 import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
@@ -641,6 +642,7 @@ export async function GET(request: Request) {
         )
 
         const proNext = proAuthReturnPath(next) ?? starterAuthReturnPath(next)
+        const preparationNext = signupPreparationReturnPath(next)
         const ycNext =
           ycReturnPath(next) ??
           (process.env.YC_STAFF_UI_ENABLED === "true"
@@ -651,12 +653,14 @@ export async function GET(request: Request) {
           !next.startsWith("https://") &&
           !/^\/onboarding\/plan\/?(?:\?|$)/.test(next) &&
           !ycNext &&
-          !proNext
+          !proNext &&
+          !preparationNext
         ) {
           next = "/sandboxes"
         }
         if (ycNext) next = ycNext
         if (proNext) next = proNext
+        if (preparationNext) next = preparationNext
         if (
           next === "/sandboxes" &&
           (await cookies()).get("yc_claim_confirmation")
@@ -681,6 +685,8 @@ export async function GET(request: Request) {
             await getSignupPlanAction(
               new URL(next, origin).searchParams.get("team") ?? undefined,
               user.id,
+              undefined,
+              next,
             )
           } catch {
             const recovery = new URLSearchParams({

@@ -295,3 +295,45 @@ describe("authoritative signup plan read", () => {
     expect((await getSignupPlanAction()).state).toBe("legacy")
   })
 })
+
+it.each([
+  "/billing/pro/?team=usw%3Awest-team&billing=success",
+  "/plan-usage/buy-credit/",
+])(
+  "retains account-bound paid setup after session expiration and Google proof recovery: %s",
+  async (next) => {
+    mocks.user.mockResolvedValueOnce({ data: { user: null } })
+    const expired = await getSignupPlanAction(
+      "usw:west-team",
+      "user",
+      undefined,
+      next,
+    ).catch((error) => error.message.replace(/^redirect:/, ""))
+    const signin = new URL(expired, "https://console.test")
+    expect(signin.pathname).toBe("/auth/signin")
+    const retry = new URL(signin.searchParams.get("next")!, signin)
+    expect(retry.pathname).toBe("/api/onboarding/prepare/")
+    expect(retry.searchParams.get("next")).toBe(next)
+    expect(retry.searchParams.get("account")).toBe("user")
+    expect(retry.searchParams.get("team")).toBe("usw:west-team")
+    mocks.team.mockRejectedValueOnce(new GoogleSignupRecoveryRequiredError())
+    const proof = await getSignupPlanAction(
+      "usw:west-team",
+      "user",
+      undefined,
+      next,
+    ).catch((error) => error.message.replace(/^redirect:/, ""))
+    const signup = new URL(proof, signin)
+    expect(signup.pathname).toBe("/auth/signup")
+    expect(signup.searchParams.get("complete_google")).toBe("1")
+    expect(signup.searchParams.get("next")).toBe(retry.pathname + retry.search)
+    mocks.user.mockResolvedValueOnce({
+      data: { user: { id: "other-account" } },
+    })
+    const before = mocks.team.mock.calls.length
+    await expect(
+      getSignupPlanAction("usw:west-team", "user", undefined, next),
+    ).rejects.toThrow("Your account changed")
+    expect(mocks.team.mock.calls.length).toBe(before)
+  },
+)

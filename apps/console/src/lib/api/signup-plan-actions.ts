@@ -7,13 +7,33 @@ import { getAuthApiKeyAndTeamForUser } from "@/lib/api/proxy-auth"
 import type { SignupPlanContext } from "@/lib/api/signup-plan"
 import { readSignupPlan } from "@/lib/api/signup-plan-read"
 import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
+import {
+  proAuthReturnPath,
+  starterAuthReturnPath,
+  signupPreparationReturnPath,
+} from "@/lib/billing/pro-auth-return"
 import { createServerClient } from "@/lib/supabase/server"
 
 export async function getSignupPlanAction(
   expectedTeam?: string,
   expectedUser?: string,
   billingReturn?: string,
+  paidContinuation?: string,
 ): Promise<SignupPlanContext> {
+  const paidNext =
+    proAuthReturnPath(paidContinuation ?? null) ??
+    starterAuthReturnPath(paidContinuation ?? null)
+  const preparation = new URL(
+    "/api/onboarding/prepare/",
+    "https://console.superserve.ai",
+  )
+  if (expectedUser) preparation.searchParams.set("account", expectedUser)
+  if (expectedTeam) preparation.searchParams.set("team", expectedTeam)
+  if (billingReturn) preparation.searchParams.set("billing", billingReturn)
+  if (paidNext) preparation.searchParams.set("next", paidNext)
+  const paidRecovery = signupPreparationReturnPath(
+    preparation.pathname + preparation.search,
+  )
   const supabase = await createServerClient()
   const {
     data: { user },
@@ -24,7 +44,7 @@ export async function getSignupPlanAction(
     if (expectedUser) next.searchParams.set("account", expectedUser)
     if (billingReturn) next.searchParams.set("billing", billingReturn)
     redirect(
-      `/auth/signin?next=${encodeURIComponent(next.pathname + next.search)}`,
+      `/auth/signin?next=${encodeURIComponent(paidRecovery ?? next.pathname + next.search)}`,
     )
   }
   if (expectedUser && expectedUser !== user.id)
@@ -39,7 +59,9 @@ export async function getSignupPlanAction(
     new Date().toISOString(),
   ).catch((error: unknown) => {
     if (error instanceof GoogleSignupRecoveryRequiredError)
-      redirect("/auth/signup?complete_google=1")
+      redirect(
+        `/auth/signup?complete_google=1${paidRecovery ? `&next=${encodeURIComponent(paidRecovery)}` : ""}`,
+      )
     throw error
   })
   return readSignupPlan(user.id, team, expectedTeam)

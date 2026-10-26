@@ -1,6 +1,10 @@
 import { expect, it } from "vitest"
 
-import { proAuthReturnPath, starterAuthReturnPath } from "./pro-auth-return"
+import {
+  proAuthReturnPath,
+  starterAuthReturnPath,
+  signupPreparationReturnPath,
+} from "./pro-auth-return"
 
 it.each([
   "/billing/pro",
@@ -43,4 +47,26 @@ it.each([
   "/plan-usage/buy-credit?payment_authorized=true",
 ])("rejects unsafe Starter returns: %s", (path) => {
   expect(starterAuthReturnPath(path)).toBeNull()
+})
+
+it.each([
+  "/api/onboarding/prepare/?account=owner&next=%2Fbilling%2Fpro%2F",
+  "/api/onboarding/prepare/?account=owner&team=use%3Aoriginal&billing=success&next=%2Fplan-usage%2Fbuy-credit%2F%3Fteam%3Duse%253Aoriginal%26purchase%3Dsuccess",
+])("retains only a bound paid preparation return: %s", (path) => {
+  expect(signupPreparationReturnPath(path)).toBe(path)
+})
+it.each([
+  null,
+  "//evil.test/api/onboarding/prepare/?account=owner&next=%2Fbilling%2Fpro%2F",
+  "/api/onboarding/prepare/?next=%2Fbilling%2Fpro%2F",
+  "/api/onboarding/prepare/?account=owner&next=https%3A%2F%2Fevil.test",
+  "/api/onboarding/prepare/?account=owner&next=%2Fsandboxes",
+  "/api/onboarding/prepare/?account=owner&next=%2Fapi%2Fonboarding%2Fprepare%2F",
+  "/api/onboarding/prepare/?account=owner&account=other&next=%2Fbilling%2Fpro%2F",
+  "/api/onboarding/prepare/?account=owner&approved=true&next=%2Fbilling%2Fpro%2F",
+  "/api/onboarding/prepare/?account=owner&team=use%3Aother&next=%2Fbilling%2Fpro%2F%3Fteam%3Duse%253Aoriginal",
+  "/api/onboarding/prepare/?account=owner&billing=paid&next=%2Fbilling%2Fpro%2F",
+  "/api/onboarding/prepare/?account=owner&next=%2Fbilling%2Fpro%2F#fragment",
+])("rejects unsafe or unbound preparation returns: %s", (path) => {
+  expect(signupPreparationReturnPath(path)).toBeNull()
 })

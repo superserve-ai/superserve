@@ -241,6 +241,7 @@ vi.mock("@/lib/api/team-directory", () => ({
   ) => mockListTeamMembershipsForUserDetailed(...args),
 }))
 vi.mock("@/lib/auth/google-signup-proof", () => ({
+  GoogleSignupRecoveryRequiredError: class extends Error {},
   hasValidGoogleSignupProof: (...args: unknown[]) =>
     mockHasValidGoogleSignupProof(...args),
   hasValidLegacyGoogleSignupProof: (...args: unknown[]) =>
@@ -1490,7 +1491,12 @@ describe("auth callback", () => {
           currentUser,
           expect.any(String),
         )
-        expect(mockGetSignupPlanAction).toHaveBeenCalledWith(undefined, "u1")
+        expect(mockGetSignupPlanAction).toHaveBeenCalledWith(
+          undefined,
+          "u1",
+          undefined,
+          next,
+        )
         // The real destination dashboard context now resolves the created Free
         // team's legacy picker exemption; no preparation or plan-picker detour.
         const page = await getSignupPlanPage()
@@ -1513,6 +1519,68 @@ describe("auth callback", () => {
       expect(location.searchParams.get("reason")).toBe("account_setup")
       expect(location.searchParams.get("next")).toBe("/plan-usage/buy-credit/")
       expect(location.searchParams.get("account")).toBe("u1")
+    })
+
+    it("retries a failed first-team confirmation through expired-session reauthentication without losing Starter", async () => {
+      currentUser!.app_metadata = { provider: "email" }
+      const owner = currentUser!
+      const action = await vi.importActual<
+        typeof import("@/lib/api/signup-plan-actions")
+      >("@/lib/api/signup-plan-actions")
+      const { GET: prepare } =
+        await import("@/app/api/onboarding/prepare/route")
+      mockGetSignupPlanAction.mockImplementation(action.getSignupPlanAction)
+      mockPrepareTeam.mockRejectedValueOnce(
+        new Error("Provision response lost"),
+      )
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?token_hash=official&type=signup&signup_offer=starter&next=%2Fplan-usage%2Fbuy-credit%2F",
+        ),
+      )
+      const recovery = new URL(response.headers.get("location")!)
+      expect(recovery.searchParams.get("reason")).toBe("account_setup")
+      const retry = new URL("/api/onboarding/prepare/", recovery)
+      retry.searchParams.set("account", recovery.searchParams.get("account")!)
+      retry.searchParams.set("next", recovery.searchParams.get("next")!)
+      currentUser = null
+      const signin = await prepare(new Request(retry)).catch(
+        (error) => new URL(error.message, retry),
+      )
+      if (!signin) throw new Error("Expected reauthentication")
+      expect(signin.pathname).toBe("/auth/signin")
+      const authenticatedNext = signin.searchParams.get("next")!
+      expect(new URL(authenticatedNext, signin).searchParams.get("next")).toBe(
+        "/plan-usage/buy-credit/",
+      )
+      currentUser = owner
+      const callback = new URL(
+        "https://console.superserve.ai/auth/callback?token_hash=renewed&type=magiclink",
+      )
+      callback.searchParams.set("next", authenticatedNext)
+      const authenticated = await GET(new Request(callback))
+      const prepared = await prepare(
+        new Request(authenticated.headers.get("location")!),
+      ).catch((error) => new URL(error.message, retry))
+      if (!prepared) throw new Error("Expected paid destination")
+      expect(prepared.pathname).toBe("/plan-usage/buy-credit/")
+      expect(directoryState.memberships).toEqual([
+        { teamId: "created-team", region: "use" },
+      ])
+    })
+
+    it("keeps an account-bound paid preparation return through reauthentication", async () => {
+      currentUser!.app_metadata = { provider: "email" }
+      const next =
+        "/api/onboarding/prepare/?account=u1&next=%2Fbilling%2Fpro%2F"
+      const url = new URL(
+        "https://console.superserve.ai/auth/callback?token_hash=official&type=magiclink",
+      )
+      url.searchParams.set("next", next)
+      const response = await GET(new Request(url))
+      const destination = new URL(response.headers.get("location")!)
+      expect(destination.pathname + destination.search).toBe(next)
+      expect(mockGetSignupPlanAction).not.toHaveBeenCalled()
     })
 
     it("routes by the legacy offer parameter when no v2 offer was sent", async () => {
