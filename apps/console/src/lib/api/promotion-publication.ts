@@ -1,6 +1,10 @@
 import "server-only"
 import type { User } from "@supabase/supabase-js"
 
+import {
+  enterpriseProvisioningContext,
+  type EnterpriseProvisioningAuthority,
+} from "@/lib/admin/enterprise-provisioning-authority"
 import { DEFAULT_REGION } from "@/lib/cells"
 import type { DiagnosticStage } from "@/lib/fingerprint/diagnostics"
 import {
@@ -12,10 +16,12 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import {
   bindPromotionSignupAccount,
   getPromotionSignupAccountEvidence,
+  getPromotionSignupAccountEvidenceForEnterprise,
   getPromotionSignupEligibilityForTrustedSignup,
   PromotionEvidenceError,
   registerPromotionSignupAccount,
   registerPromotionSignupDevice,
+  registerPromotionSignupDeviceForEnterprise,
 } from "./promotion-device-evidence"
 import type { PromotionSignupEligibility } from "./promotion-device-evidence"
 import { publishPromotionIdentity } from "./promotion-identity"
@@ -107,6 +113,25 @@ export async function publishAccountPromotion(
   user: User,
   observedAt: string,
 ): Promise<{ authorityUnavailable: boolean }> {
+  return publishAccountPromotionFor(region, user, observedAt)
+}
+
+export async function publishEnterpriseAccountPromotion(
+  region: string,
+  user: User,
+  observedAt: string,
+  authority: EnterpriseProvisioningAuthority,
+): Promise<{ authorityUnavailable: boolean }> {
+  enterpriseProvisioningContext(authority, user.id, region)
+  return publishAccountPromotionFor(region, user, observedAt, authority)
+}
+
+async function publishAccountPromotionFor(
+  region: string,
+  user: User,
+  observedAt: string,
+  authority?: EnterpriseProvisioningAuthority,
+): Promise<{ authorityUnavailable: boolean }> {
   let authorityUnavailable = false
   try {
     await publishPromotionIdentity(region, user.id, user, observedAt)
@@ -114,8 +139,17 @@ export async function publishAccountPromotion(
     authorityUnavailable = true
   }
   try {
-    await getPromotionSignupAccountEvidence(user.id)
-    await registerPromotionSignupDevice(region, user.id)
+    if (authority) {
+      await getPromotionSignupAccountEvidenceForEnterprise(user.id, authority)
+      await registerPromotionSignupDeviceForEnterprise(
+        region,
+        user.id,
+        authority,
+      )
+    } else {
+      await getPromotionSignupAccountEvidence(user.id)
+      await registerPromotionSignupDevice(region, user.id)
+    }
   } catch (error) {
     if (
       !(

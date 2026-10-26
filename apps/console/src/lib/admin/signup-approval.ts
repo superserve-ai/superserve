@@ -206,7 +206,11 @@ export async function approveSignup(
       return decisionConflict
     if (!winner.region || !winner.plan_version_id)
       throw new Error("Incomplete signup review decision")
-    const team = await provisionHeldApplicantTeam(user, winner.region)
+    const team = await provisionHeldApplicantTeam(
+      user,
+      winner.region,
+      winner.plan_version_id,
+    )
     await assignEnterprisePlan(team, winner.plan_version_id)
     await updateSignupReviewMetadata(user.id, {
       signup_review: "approved",

@@ -799,7 +799,11 @@ describe("provisionTeam", () => {
     }
 
     await expect(
-      provisionHeldApplicantTeam(applicant as never),
+      provisionHeldApplicantTeam(
+        applicant as never,
+        "use",
+        "enterprise-version",
+      ),
     ).resolves.toMatchObject({ id: "team-new", region: "use" })
 
     expect(mockRequireGoogleSignupProof).not.toHaveBeenCalled()
@@ -812,7 +816,11 @@ describe("provisionTeam", () => {
       app_metadata: { signup_review: "pending" },
     }
     await expect(
-      provisionHeldApplicantTeam(applicant as never, "usw"),
+      provisionHeldApplicantTeam(
+        applicant as never,
+        "usw",
+        "enterprise-version",
+      ),
     ).resolves.toMatchObject({ id: "team-new", region: "usw" })
     expect(clients.usw.writes).not.toEqual({})
     expect(clients.use.writes).toEqual({})
@@ -826,7 +834,11 @@ describe("provisionTeam", () => {
         app_metadata: review ? { signup_review: review } : {},
       }
       await expect(
-        provisionHeldApplicantTeam(account as never),
+        provisionHeldApplicantTeam(
+          account as never,
+          "use",
+          "enterprise-version",
+        ),
       ).rejects.toThrow("Only held applicants")
       expect(clients.use.writes).toEqual({})
     },
@@ -1401,7 +1413,20 @@ describe("provisionTeam", () => {
   })
 })
 
+vi.mock("@/lib/admin/enterprise-provisioning-authority", () => ({
+  authorizeEnterpriseProvisioning: async (userId: string, region: string) => ({
+    userId,
+    region,
+  }),
+  enterpriseProvisioningContext: (authority: { region: string }) => ({
+    user: currentUser,
+    region: authority.region,
+  }),
+}))
 vi.mock("@/lib/api/promotion-publication", () => ({
+  publishEnterpriseAccountPromotion: async () => ({
+    authorityUnavailable: false,
+  }),
   publishAccountPromotion: async (
     region: string,
     user: { id: string },
@@ -1417,6 +1442,17 @@ vi.mock("@/lib/api/promotion-publication", () => ({
 }))
 vi.mock("@/lib/api/promotion-device-evidence", () => ({
   PromotionEvidenceError: class extends Error {},
+  recoverPromotionTeamForEnterprise: async () => null,
+  preparePromotionTeamForEnterprise: async (input: object) => ({
+    ...input,
+    teamId: "team-new",
+    attemptId: "backend-attempt",
+    state: "prepared",
+  }),
+  completePromotionTeamForEnterprise: async (input: object) => ({
+    ...input,
+    state: "completed",
+  }),
   recoverPromotionTeam: async () => null,
   preparePromotionTeam: async (input: object) => ({
     ...input,

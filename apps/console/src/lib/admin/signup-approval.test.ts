@@ -265,7 +265,7 @@ describe("signup approval", () => {
     ).rejects.toThrow("temporary failure")
     await approveSignup(USER_ID, "new-staff", PLAN, mockAssign)
     expect(mockCatalog).not.toHaveBeenCalled()
-    expect(mockProvision).toHaveBeenCalledWith(expect.anything(), "usw")
+    expect(mockProvision).toHaveBeenCalledWith(expect.anything(), "usw", PLAN)
     expect(mockAssign).toHaveBeenLastCalledWith(TEAM, PLAN)
     expect(mockUpdate).toHaveBeenCalledWith(
       USER_ID,

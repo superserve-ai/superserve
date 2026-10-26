@@ -1,6 +1,10 @@
 import "server-only"
 import crypto from "node:crypto"
 
+import {
+  enterpriseProvisioningContext,
+  type EnterpriseProvisioningAuthority,
+} from "@/lib/admin/enterprise-provisioning-authority"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -361,6 +365,20 @@ export async function getPromotionSignupAccountEvidence(
   expectedUserId?: string,
 ): Promise<OriginalPromotionSignupEvidence> {
   const userId = await verifiedAccountId(expectedUserId)
+  return getPromotionSignupAccountEvidenceForAccount(userId)
+}
+
+export async function getPromotionSignupAccountEvidenceForEnterprise(
+  userId: string,
+  authority: EnterpriseProvisioningAuthority,
+): Promise<OriginalPromotionSignupEvidence> {
+  enterpriseProvisioningContext(authority, userId)
+  return getPromotionSignupAccountEvidenceForAccount(userId)
+}
+
+async function getPromotionSignupAccountEvidenceForAccount(
+  userId: string,
+): Promise<OriginalPromotionSignupEvidence> {
   const result = await post(
     DEFAULT_REGION,
     "/internal/promotion/account/evidence",
@@ -383,6 +401,22 @@ export async function registerPromotionSignupDevice(
   expectedUserId?: string,
 ): Promise<"owner" | "owner_conflict"> {
   const userId = await verifiedAccountId(expectedUserId)
+  return registerPromotionSignupDeviceForAccount(region, userId)
+}
+
+export async function registerPromotionSignupDeviceForEnterprise(
+  region: string,
+  userId: string,
+  authority: EnterpriseProvisioningAuthority,
+): Promise<"owner" | "owner_conflict"> {
+  enterpriseProvisioningContext(authority, userId, region)
+  return registerPromotionSignupDeviceForAccount(region, userId)
+}
+
+async function registerPromotionSignupDeviceForAccount(
+  region: string,
+  userId: string,
+): Promise<"owner" | "owner_conflict"> {
   const result = await post(
     region,
     "/internal/promotion/account/register",
@@ -572,6 +606,28 @@ export async function preparePromotionTeam(
   const binding = { ...input }
   validatePreparation(binding)
   const userId = await verifiedAccountId(binding.userId)
+  return preparePromotionTeamForAccount(binding, userId)
+}
+
+export async function preparePromotionTeamForEnterprise(
+  input: PromotionTeamPreparation,
+  authority: EnterpriseProvisioningAuthority,
+): Promise<PreparedPromotionTeam> {
+  const binding = { ...input }
+  validatePreparation(binding)
+  enterpriseProvisioningContext(
+    authority,
+    binding.userId,
+    binding.region,
+    binding.operationId,
+  )
+  return preparePromotionTeamForAccount(binding, binding.userId)
+}
+
+async function preparePromotionTeamForAccount(
+  binding: PromotionTeamPreparation,
+  userId: string,
+): Promise<PreparedPromotionTeam> {
   const fields = {
     operation_id: binding.operationId,
     name: binding.name,
@@ -595,6 +651,28 @@ export async function recoverPromotionTeam(
   const binding = { ...input }
   validateCreationLocator(binding)
   const userId = await verifiedAccountId(binding.userId)
+  return recoverPromotionTeamForAccount(binding, userId)
+}
+
+export async function recoverPromotionTeamForEnterprise(
+  input: CreationLocator,
+  authority: EnterpriseProvisioningAuthority,
+): Promise<PreparedPromotionTeam | null> {
+  const binding = { ...input }
+  validateCreationLocator(binding)
+  enterpriseProvisioningContext(
+    authority,
+    binding.userId,
+    binding.region,
+    binding.operationId,
+  )
+  return recoverPromotionTeamForAccount(binding, binding.userId)
+}
+
+async function recoverPromotionTeamForAccount(
+  binding: CreationLocator,
+  userId: string,
+): Promise<PreparedPromotionTeam | null> {
   const fields = {
     operation_id: binding.operationId,
     home_region: binding.region,
@@ -630,6 +708,30 @@ export async function completePromotionTeam(
   if (!validCreationId(binding.attemptId) || !validCreationId(binding.teamId))
     throw new PromotionEvidenceError("invalid_evidence")
   const userId = await verifiedAccountId(binding.userId)
+  return completePromotionTeamForAccount(binding, userId)
+}
+
+export async function completePromotionTeamForEnterprise(
+  input: PreparedPromotionTeam,
+  authority: EnterpriseProvisioningAuthority,
+): Promise<PreparedPromotionTeam> {
+  const binding = { ...input }
+  validatePreparation(binding)
+  if (!validCreationId(binding.attemptId) || !validCreationId(binding.teamId))
+    throw new PromotionEvidenceError("invalid_evidence")
+  enterpriseProvisioningContext(
+    authority,
+    binding.userId,
+    binding.region,
+    binding.operationId,
+  )
+  return completePromotionTeamForAccount(binding, binding.userId)
+}
+
+async function completePromotionTeamForAccount(
+  binding: PreparedPromotionTeam,
+  userId: string,
+): Promise<PreparedPromotionTeam> {
   const fields = {
     operation_id: binding.operationId,
     attempt_id: binding.attemptId,
