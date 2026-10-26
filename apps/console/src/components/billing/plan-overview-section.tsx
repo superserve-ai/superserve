@@ -53,6 +53,15 @@ export function PlanOverviewSection({
     Date.parse(included.period_end) === Date.parse(plan.period_end ?? "")
       ? included
       : null
+  const bridgeMonthlyStartsAt =
+    plan.kind === "subscription" &&
+    commercial?.status === "pending" &&
+    matchingPeriod &&
+    !matchingIncluded &&
+    commercial.starts_at &&
+    Date.parse(commercial.starts_at) === Date.parse(plan.period_end ?? "")
+      ? commercial.starts_at
+      : undefined
   const includedCents =
     matchingIncluded?.status === "issued"
       ? toCents(matchingIncluded.amount_usd)
@@ -69,6 +78,7 @@ export function PlanOverviewSection({
       }}
       allowancePricing={pricing ?? null}
       includedUsageStatus={matchingIncluded?.status}
+      bridgeMonthlyStartsAt={bridgeMonthlyStartsAt}
       allowance={allowance ?? null}
       prepaid={prepaid ?? null}
       usageCents={matchingPeriod ? toCents(summary.current_charges_usd) : null}

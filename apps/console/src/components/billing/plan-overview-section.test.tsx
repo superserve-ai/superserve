@@ -447,3 +447,39 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     expect(screen.queryByRole("link", { name: "Change plan" })).toBeNull()
   })
 })
+
+describe("Pro bridge before the first monthly credit period", () => {
+  const bridgeSummary = {
+    ...summary,
+    plan: {
+      ...summary.plan!,
+      status: "pending",
+      starts_at: "2026-11-01T00:00:00Z",
+      included_usage: null,
+    },
+  } as BillingSummaryResponse
+  it("shows the authoritative next monthly start without fabricating issued credit or current usage", () => {
+    mocks.plan.mockReturnValue({ data: plan({}), isError: false })
+    render(<PlanOverviewSection summary={bridgeSummary} />)
+    expect(
+      screen.getByText("Monthly included usage starts on Nov 1, 2026."),
+    ).toBeTruthy()
+    expect(screen.queryByText(/couldn't be loaded|of \$250 used/)).toBeNull()
+  })
+  it.each(["active", "different plan", "different start", "different period"])(
+    "retains missing-usage error for %s rather than inferring a bridge",
+    (mismatch) => {
+      mocks.plan.mockReturnValue({ data: plan({}), isError: false })
+      const changed = structuredClone(bridgeSummary)
+      if (mismatch === "active") changed.plan!.status = "active"
+      if (mismatch === "different plan") changed.plan!.key = "different-plan"
+      if (mismatch === "different start")
+        changed.plan!.starts_at = "2026-11-02T00:00:00Z"
+      if (mismatch === "different period")
+        changed.billing_period.end = "2026-11-02T00:00:00Z"
+      render(<PlanOverviewSection summary={changed} />)
+      expect(screen.queryByText(/Monthly included usage starts/)).toBeNull()
+      expect(screen.getByText("Usage couldn't be loaded.")).toBeTruthy()
+    },
+  )
+})
