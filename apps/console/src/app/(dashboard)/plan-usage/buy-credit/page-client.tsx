@@ -24,7 +24,10 @@ import {
   validPrepaidCents,
 } from "@/lib/api/prepaid"
 import { billingKeys } from "@/lib/api/query-keys"
-import { checkoutRecoveryPath } from "@/lib/billing/checkout-return"
+import {
+  checkoutEntryPath,
+  checkoutRecoveryPath,
+} from "@/lib/billing/checkout-return"
 
 const PRESET_CENTS = [500, 2500, 5000, 10000]
 
@@ -62,7 +65,8 @@ export function BuyCreditPageClient({
   const returnMismatch =
     ready &&
     returning &&
-    (!checkoutRecoveryPath(callbackPath) || returnTeam !== teamKey)
+    (!(checkoutRecoveryPath(callbackPath) ?? checkoutEntryPath(callbackPath)) ||
+      returnTeam !== teamKey)
   const contextMatched = ready && !returnMismatch
   const { data: credit, isLoading, error } = usePrepaidCredit(contextMatched)
   const data = contextMatched && !error ? credit : undefined

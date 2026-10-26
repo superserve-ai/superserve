@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react"
 import { useSwitchTeam, useTeams } from "@/hooks/use-teams"
 import { useUser } from "@/hooks/use-user"
 import {
+  checkoutEntryPath,
   checkoutRecoveryPath,
   checkoutTeamReference,
 } from "@/lib/billing/checkout-return"
@@ -38,7 +39,8 @@ export function CheckoutContextRecovery({
       current.active = false
     }
   }, [actor, callbackPath])
-  const safePath = checkoutRecoveryPath(callbackPath)
+  const entryPath = checkoutEntryPath(callbackPath)
+  const safePath = checkoutRecoveryPath(callbackPath) ?? entryPath
   const team = safePath
     ? checkoutTeamReference(
         new URL(safePath, "https://console.invalid").searchParams.get("team"),
@@ -75,8 +77,9 @@ export function CheckoutContextRecovery({
         <p className="text-sm text-muted">Loading checkout account…</p>
       ) : (
         <p role="alert" className="text-sm text-muted">
-          Return to the account and team that started checkout to check its
-          payment status. This will not start another purchase.
+          {entryPath
+            ? "Return to the account and team that started signup to continue choosing your plan. No purchase will be started automatically."
+            : "Return to the account and team that started checkout to check its payment status. This will not start another purchase."}
         </p>
       )}
       {safePath ? (
@@ -91,7 +94,7 @@ export function CheckoutContextRecovery({
                 })
               }
             >
-              Return to checkout team
+              {entryPath ? "Return to signup team" : "Return to checkout team"}
             </Button>
           )}
           <Button
@@ -111,7 +114,9 @@ export function CheckoutContextRecovery({
               })
             }
           >
-            Sign out and use checkout account
+            {entryPath
+              ? "Sign out and use signup account"
+              : "Sign out and use checkout account"}
           </Button>
           {(directory.isError || contextPending) && (
             <Button

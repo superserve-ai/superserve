@@ -1,3 +1,4 @@
+import { proAuthReturnPath, starterAuthReturnPath } from "./pro-auth-return"
 import { safeReturnPath } from "./return-path"
 
 export function checkoutTeamReference(value: string | null | undefined) {
@@ -35,4 +36,20 @@ export function checkoutRecoveryPath(path: string): string | null {
   if (purchaseId !== null && !checkoutTeamReference(`use:${purchaseId}`))
     return null
   return `${url.pathname}${url.search}`
+}
+
+// Setup can pin a fresh paid-plan destination before checkout has started.
+// A result marker or purchase identity must never fall back to fresh entry.
+export function checkoutEntryPath(path: string): string | null {
+  const safe = proAuthReturnPath(path) ?? starterAuthReturnPath(path)
+  if (!safe) return null
+  const url = new URL(safe, "https://console.invalid")
+  if (
+    url.searchParams.has("billing") ||
+    url.searchParams.has("purchase") ||
+    url.searchParams.has("purchase_id")
+  )
+    return null
+  if (!checkoutTeamReference(url.searchParams.get("team"))) return null
+  return safe
 }

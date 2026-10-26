@@ -25,20 +25,30 @@ import {
   startProCheckout,
   resumeProCheckout,
 } from "@/lib/api/plan-checkout"
-import { checkoutRecoveryPath } from "@/lib/billing/checkout-return"
+import {
+  checkoutEntryPath,
+  checkoutRecoveryPath,
+} from "@/lib/billing/checkout-return"
 import { planCard } from "@/lib/billing/plans"
 
 const CONFIRM_ATTEMPTS = 5
 
-export function ProPayment({
-  billingReturn,
-  returnTo,
-  checkoutTeam,
-}: {
+interface ProPaymentProps {
   billingReturn?: "success" | "cancel"
   returnTo: string
   checkoutTeam?: string
-}) {
+}
+
+export function ProPayment(props: ProPaymentProps) {
+  const params = useSearchParams()
+  return <ProPaymentContext key={params.toString()} {...props} />
+}
+
+function ProPaymentContext({
+  billingReturn,
+  returnTo,
+  checkoutTeam,
+}: ProPaymentProps) {
   const router = useRouter()
   const params = useSearchParams()
   const callbackPath = `/billing/pro/?${params.toString()}`
@@ -79,18 +89,22 @@ export function ProPayment({
       ? plan.name
       : null
   const [confirming, setConfirming] = useState(billingReturn === "success")
-  const [paymentTeam, setPaymentTeam] = useState(checkoutTeam)
+  const [paymentTeam, setPaymentTeam] = useState<string | undefined>()
+  const expectedTeam = checkoutTeam ?? paymentTeam
   const [conflict, setConflict] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inFlight = useRef(false)
   const operationTarget = useRef({ active: false })
   const teamMismatch =
-    (returning || !!billingReturn || !!paymentTeam) &&
-    (!paymentTeam ||
-      paymentTeam !== teamKey ||
+    (returning || !!billingReturn || !!expectedTeam) &&
+    (!expectedTeam ||
+      expectedTeam !== teamKey ||
       ((params.has("billing") || params.has("team")) &&
-        !checkoutRecoveryPath(callbackPath)))
+        (!(
+          checkoutRecoveryPath(callbackPath) ?? checkoutEntryPath(callbackPath)
+        ) ||
+          params.get("team") !== checkoutTeam)))
   useEffect(() => {
     const target = { active: true }
     operationTarget.current = target

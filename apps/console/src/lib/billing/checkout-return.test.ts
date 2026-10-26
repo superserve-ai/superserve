@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { checkoutRecoveryPath } from "./checkout-return"
+import { checkoutEntryPath, checkoutRecoveryPath } from "./checkout-return"
 const team = "use:11111111-1111-4111-8111-111111111111"
 describe("retained direct checkout callbacks", () => {
   it.each(["success", "cancel"])(
@@ -24,5 +24,30 @@ describe("retained direct checkout callbacks", () => {
     `/billing/pro/?billing=success&team=${team}#other`,
   ])("rejects unsafe, ambiguous or incomplete callback %s", (path) => {
     expect(checkoutRecoveryPath(path)).toBeNull()
+  })
+})
+
+describe("fresh team-pinned entry remains separate from payment results", () => {
+  it.each([
+    `/billing/pro/?team=${team}&return=%2Fsandboxes%2F%3Fview%3Dall`,
+    `/plan-usage/buy-credit/?team=${team}&amount=500`,
+  ])(
+    "retains validated fresh entry %s without treating it as a callback",
+    (path) => {
+      expect(checkoutEntryPath(path)).toBe(path)
+      expect(checkoutRecoveryPath(path)).toBeNull()
+    },
+  )
+  it.each([
+    `/billing/pro/?team=${team}&billing=`,
+    `/billing/pro/?team=${team}&billing=invalid`,
+    `/billing/pro/?team=${team}&team=${team}`,
+    `/billing/pro/?team=${team}&return=%2F%2Fevil.test`,
+    `/billing/pro/?team=${team}&approved=true`,
+    `/plan-usage/buy-credit/?team=${team}&purchase_id=22222222-2222-4222-8222-222222222222`,
+    `/plan-usage/buy-credit/?team=${team}&purchase=`,
+    `/plan-usage/buy-credit/?team=${team}&amount=500&amount=1000`,
+  ])("does not reclassify malformed result or conflicting entry %s", (path) => {
+    expect(checkoutEntryPath(path)).toBeNull()
   })
 })
