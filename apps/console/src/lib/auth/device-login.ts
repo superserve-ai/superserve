@@ -4,7 +4,10 @@ import crypto from "node:crypto"
 import type { User } from "@supabase/supabase-js"
 
 import { mintTeamApiKey } from "@/lib/api/api-key-mint"
-import type { TeamMembership } from "@/lib/api/team-directory"
+import {
+  membershipExistsInCell,
+  type TeamMembership,
+} from "@/lib/api/team-directory"
 import {
   assertSignupReviewCleared,
   SignupReviewPendingError,
@@ -228,6 +231,12 @@ export async function pollDeviceCode(deviceCode: string) {
     if (userError || !user)
       throw new DeviceLoginError("access_denied", "The account is unavailable.")
     assertSignupReviewCleared(user)
+    // Approval may predate a membership removal; check access as of now.
+    if (!(await membershipExistsInCell(team.region, user.id, team.teamId)))
+      throw new DeviceLoginError(
+        "access_denied",
+        "You no longer have access to that team.",
+      )
     const key = await mintTeamApiKey(
       user,
       team,

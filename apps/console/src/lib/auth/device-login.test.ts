@@ -6,6 +6,7 @@ const state = vi.hoisted(() => ({
   rows: [] as Record<string, unknown>[],
   mint: vi.fn(),
   getUser: vi.fn(),
+  member: vi.fn(),
 }))
 
 function query(op: "select" | "update", payload?: Row) {
@@ -67,6 +68,9 @@ vi.mock("@/lib/supabase/admin", () => ({
   }),
 }))
 vi.mock("@/lib/api/api-key-mint", () => ({ mintTeamApiKey: state.mint }))
+vi.mock("@/lib/api/team-directory", () => ({
+  membershipExistsInCell: state.member,
+}))
 
 import {
   approveDeviceCode,
@@ -88,6 +92,7 @@ describe("device login", () => {
     state.rows = []
     state.mint.mockReset().mockResolvedValue({ key: "ss_live_usw_secret" })
     state.getUser.mockReset().mockResolvedValue({ data: { user }, error: null })
+    state.member.mockReset().mockResolvedValue(true)
   })
 
   it("normalizes typed codes and rejects lookalikes", () => {
@@ -192,6 +197,21 @@ describe("device login", () => {
     ).toISOString()
     expect(await pollDeviceCode(second.deviceCode)).toMatchObject({
       newAccount: false,
+    })
+  })
+
+  it("won't mint for someone removed from the team after approving", async () => {
+    const { deviceCode, userCode } = await start()
+    await approveDeviceCode(userCode, user as never, team)
+    state.member.mockResolvedValue(false)
+    await expect(pollDeviceCode(deviceCode)).rejects.toMatchObject({
+      code: "access_denied",
+    })
+    expect(state.member).toHaveBeenCalledWith("usw", "user-1", "team-1")
+    expect(state.mint).not.toHaveBeenCalled()
+    // The code stays used up rather than becoming retryable.
+    await expect(pollDeviceCode(deviceCode)).rejects.toMatchObject({
+      code: "invalid_grant",
     })
   })
 
