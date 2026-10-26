@@ -363,6 +363,17 @@ describe("real paid preparation handler permanent recovery", () => {
     expect(mocks.team).not.toHaveBeenCalled()
     expect(mocks.from).not.toHaveBeenCalled()
   })
+  it("retains an outer-only team pin in a wrong-account recovery destination", async () => {
+    const url = new URL(endpoint("account-A").url)
+    url.searchParams.set("team", "use:original")
+    const result = await failure(new Request(url))
+    if (!result) throw new Error("Expected blocked recovery")
+    expect(result.searchParams.get("reason")).toBe("account_changed")
+    expect(
+      new URL(result.searchParams.get("next")!, url).searchParams.get("team"),
+    ).toBe("use:original")
+    expect(mocks.team).not.toHaveBeenCalled()
+  })
   it("surfaces impersonation before any team or billing action", async () => {
     mocks.impersonation.mockResolvedValue({ teamId: "impersonated" })
     const result = await failure(endpoint())
@@ -378,7 +389,7 @@ describe("real paid preparation handler permanent recovery", () => {
     url.searchParams.set("next", "/billing/pro/?team=use%3Aother")
     const result = await failure(new Request(url))
     if (!result) throw new Error("Expected blocked recovery")
-    expect(result.searchParams.get("reason")).toBe("team_changed")
+    expect(result.searchParams.get("reason")).toBe("team_conflict")
     expect(mocks.user).not.toHaveBeenCalled()
     expect(mocks.team).not.toHaveBeenCalled()
   })

@@ -37,6 +37,7 @@ function AuthCodeErrorContent() {
       "account_changed",
       "impersonation",
       "team_changed",
+      "team_conflict",
     ].includes(setupReason ?? "") &&
     continuation &&
     account
@@ -47,6 +48,7 @@ function AuthCodeErrorContent() {
   const wrongAccount = setupReason === "account_changed" && !!setupRetry
   const impersonating = setupReason === "impersonation" && !!setupRetry
   const wrongTeam = setupReason === "team_changed" && !!setupRetry
+  const conflictingTeams = setupReason === "team_conflict" && !!setupRetry
   const retryHref =
     setupRetry ??
     `${isSignupContext ? "/auth/signup" : "/auth/signin"}${retryParams.size ? `?${retryParams}` : ""}`
@@ -81,9 +83,11 @@ function AuthCodeErrorContent() {
                 ? "End impersonation from the console before continuing with your selected plan."
                 : wrongTeam
                   ? "Return to the team that started checkout before continuing with your selected plan."
-                  : isSignupContext
-                    ? SIGNUP_RESTRICTED_MESSAGE
-                    : "Something went wrong. Please try again."}
+                  : conflictingTeams
+                    ? "Saved checkout team details conflict. Return to the original checkout link, or contact support if it is unavailable."
+                    : isSignupContext
+                      ? SIGNUP_RESTRICTED_MESSAGE
+                      : "Something went wrong. Please try again."}
           </p>
           {wrongAccount ? (
             <Button
@@ -121,17 +125,24 @@ function AuthCodeErrorContent() {
                   Return to console to select the original team
                 </Link>
               )}
-              <Button
-                render={<Link href={retryHref} />}
-                size="sm"
-                className="mt-5"
-              >
-                {impersonating
-                  ? "Continue after ending impersonation"
-                  : wrongTeam
-                    ? "Continue after selecting the original team"
-                    : "Try Again"}
-              </Button>
+              {conflictingTeams && (
+                <Link href="/sandboxes" className="mt-5 underline">
+                  Return to console
+                </Link>
+              )}
+              {!conflictingTeams && (
+                <Button
+                  render={<Link href={retryHref} />}
+                  size="sm"
+                  className="mt-5"
+                >
+                  {impersonating
+                    ? "Continue after ending impersonation"
+                    : wrongTeam
+                      ? "Continue after selecting the original team"
+                      : "Try Again"}
+                </Button>
+              )}
             </>
           )}
           {switchError && (

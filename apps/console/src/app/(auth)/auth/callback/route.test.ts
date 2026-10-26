@@ -1728,6 +1728,54 @@ describe("auth callback", () => {
       expect(mockUpdateSignupReview).not.toHaveBeenCalled()
     })
 
+    it("keeps an outer-only team pin through the real handler, rendered recovery, and retry", async () => {
+      const action = await vi.importActual<
+        typeof import("@/lib/api/signup-plan-actions")
+      >("@/lib/api/signup-plan-actions")
+      const read = await vi.importActual<
+        typeof import("@/lib/api/signup-plan-read")
+      >("@/lib/api/signup-plan-read")
+      const { GET: prepare } =
+        await import("@/app/api/onboarding/prepare/route")
+      mockGetSignupPlanAction.mockImplementation(action.getSignupPlanAction)
+      mockReadSignupPlan.mockImplementation(read.readSignupPlan)
+      const request = new Request(
+        "https://console.superserve.ai/api/onboarding/prepare/?account=u1&team=use%3Aoriginal-team&next=%2Fbilling%2Fpro%2F",
+      )
+      const failure = await prepare(request).catch(
+        (error) => new URL(error.message, request.url),
+      )
+      if (!failure) throw new Error("Expected team recovery")
+      expect(failure.searchParams.get("reason")).toBe("team_changed")
+      retrySearch = failure.searchParams
+      const ErrorPage = (await import("../auth-code-error/page")).default
+      render(createElement(ErrorPage))
+      const retry = new URL(
+        screen
+          .getByRole("link", {
+            name: "Continue after selecting the original team",
+          })
+          .getAttribute("href")!,
+        request.url,
+      )
+      cleanup()
+      const paid = new URL(retry.searchParams.get("next")!, retry)
+      expect(paid.searchParams.get("team")).toBe("use:original-team")
+      // The currently selected created-team must still be rejected; recovery
+      // cannot silently retarget the original checkout to that different team.
+      const again = await prepare(new Request(retry)).catch(
+        (error) => new URL(error.message, retry),
+      )
+      if (!again) throw new Error("Expected binding to remain blocked")
+      expect(again.searchParams.get("reason")).toBe("team_changed")
+      expect(mockGetSignupPlanAction).toHaveBeenLastCalledWith(
+        "use:original-team",
+        "u1",
+        undefined,
+        "/billing/pro/?team=use%3Aoriginal-team",
+      )
+    })
+
     it("keeps an account-bound paid preparation return through reauthentication", async () => {
       currentUser!.app_metadata = { provider: "email" }
       const next =

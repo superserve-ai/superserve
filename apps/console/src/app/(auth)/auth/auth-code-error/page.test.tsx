@@ -198,6 +198,25 @@ describe("auth-code-error page", () => {
     },
   )
 
+  it("does not choose a team or offer retry when saved checkout locators contradict", () => {
+    reason = "team_conflict"
+    account = "original-owner"
+    next = "/billing/pro/?team=use%3Aoriginal"
+    render(<AuthCodeErrorPage />)
+    expect(
+      screen.getByText(/Saved checkout team details conflict/),
+    ).toBeTruthy()
+    expect(
+      screen
+        .getByRole("link", { name: "Return to console" })
+        .getAttribute("href"),
+    ).toBe("/sandboxes")
+    expect(
+      screen.queryByRole("link", { name: /Continue|Try Again/ }),
+    ).toBeNull()
+    expect(signOut).not.toHaveBeenCalled()
+  })
+
   it("does not offer account switching for an unsafe or unbound recovery URL", () => {
     reason = "account_changed"
     account = "original-owner"

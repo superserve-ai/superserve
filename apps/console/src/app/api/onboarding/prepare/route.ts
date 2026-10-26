@@ -15,9 +15,24 @@ export async function GET(request: Request) {
     account: query.get("account") ?? undefined,
     billing: query.get("billing") ?? undefined,
   }
-  const continuation =
+  let continuation =
     proAuthReturnPath(query.get("next")) ??
     starterAuthReturnPath(query.get("next"))
+  const nestedTeam = continuation
+    ? (new URL(continuation, request.url).searchParams.get("team") ?? undefined)
+    : undefined
+  const conflictingTeams = !!(
+    params.team &&
+    nestedTeam &&
+    params.team !== nestedTeam
+  )
+  if (continuation && params.team && !nestedTeam) {
+    // The outer preparation locator is just as binding as a paid-page locator.
+    // Normalize it before building any error/sign-in recovery destination.
+    const pinned = new URL(continuation, request.url)
+    pinned.searchParams.set("team", params.team)
+    continuation = pinned.pathname + pinned.search
+  }
   const destination = signupPlanPath(params)
   const retry =
     continuation && params.account
@@ -28,8 +43,7 @@ export async function GET(request: Request) {
       ? (new URL(continuation, request.url).searchParams.get("team") ??
         undefined)
       : undefined
-    if (params.team && continuationTeam && params.team !== continuationTeam)
-      throw new SignupSetupBlockedError("team_changed")
+    if (conflictingTeams) throw new SignupSetupBlockedError("team_conflict")
     await getSignupPlanAction(
       params.team ?? continuationTeam,
       params.account,
