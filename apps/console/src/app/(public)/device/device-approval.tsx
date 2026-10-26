@@ -8,6 +8,7 @@ import { useState } from "react"
 import { Spinner } from "@/components/icons"
 import { commitFreePlan } from "@/lib/api/plan-checkout"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
+import { createBrowserClient } from "@/lib/supabase/client"
 
 import { approveDeviceAction, denyDeviceAction } from "./actions"
 
@@ -17,12 +18,13 @@ export function DeviceApproval({
   userCode,
   clientName,
   email,
-  team,
+  teamKey,
 }: {
   userCode: string
   clientName: string
   email: string
-  team: { key: string; name: string | null } | null
+  /** The team the key will go to; approval fails if it changes meanwhile. */
+  teamKey: string | null
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -34,10 +36,10 @@ export function DeviceApproval({
     setBusy(true)
     setError(null)
     try {
-      let result = await approveDeviceAction(userCode, team?.key ?? null)
+      let result = await approveDeviceAction(userCode, teamKey)
       if (result.status === "commit_free_plan") {
         await commitFreePlan(result.teamKey)
-        result = await approveDeviceAction(userCode, team?.key ?? null)
+        result = await approveDeviceAction(userCode, teamKey)
       }
       if (result.status === "redirect") {
         router.replace(result.to)
@@ -54,6 +56,18 @@ export function DeviceApproval({
     } finally {
       setBusy(false)
     }
+  }
+
+  // Signs out this browser only and comes back to the same code.
+  const switchAccount = async () => {
+    setBusy(true)
+    await createBrowserClient()
+      .auth.signOut({ scope: "local" })
+      .catch(() => {})
+    posthog?.reset()
+    router.replace(
+      `/auth/signin?next=${encodeURIComponent(`/device?code=${userCode}`)}`,
+    )
   }
 
   const deny = async () => {
@@ -92,14 +106,15 @@ export function DeviceApproval({
       </h1>
       <p className="mb-6 text-sm text-muted">
         Signed in as{" "}
-        <span className="font-medium text-foreground">{email}</span>
-        {team?.name ? (
-          <>
-            {" "}
-            for team{" "}
-            <span className="font-medium text-foreground">{team.name}</span>
-          </>
-        ) : null}
+        <span className="font-medium text-foreground">{email}</span>.{" "}
+        <button
+          type="button"
+          onClick={switchAccount}
+          disabled={busy}
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          Use a different account
+        </button>
       </p>
       <p className="mb-2 text-xs text-muted">
         A CLI on{" "}
