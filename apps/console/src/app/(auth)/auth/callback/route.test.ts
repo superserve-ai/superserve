@@ -1059,6 +1059,23 @@ describe("auth callback", () => {
       },
     )
 
+    it.each([
+      "/billing/pro/?team=use%3Ateam&return=%2Fsandboxes",
+      "/plan-usage/buy-credit?amount=500",
+    ])(
+      "keeps direct no-offer email confirmation destination %s",
+      async (next) => {
+        const url = new URL(
+          "https://console.superserve.ai/auth/callback?token_hash=abc123&type=signup",
+        )
+        url.searchParams.set("next", next)
+        const response = await GET(new Request(url))
+        const location = new URL(response.headers.get("location")!)
+        expect(location.pathname + location.search).toBe(next)
+        expect(mockPricingVersion).not.toHaveBeenCalled()
+      },
+    )
+
     it("routes by the legacy offer parameter when no v2 offer was sent", async () => {
       mockPricingVersion.mockResolvedValue("v2")
       currentUser!.app_metadata = { provider: "email" }

@@ -95,6 +95,7 @@ describe("onboarding plan flow", () => {
         expect.stringContaining(
           "/onboarding/plan/?team=use%3Ateam&account=user",
         ),
+        "user",
       ),
     )
     expect(assign).toHaveBeenCalledWith(

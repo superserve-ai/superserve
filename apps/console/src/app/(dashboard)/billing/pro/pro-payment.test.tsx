@@ -9,6 +9,7 @@ import { ProPayment } from "./pro-payment"
 const state = vi.hoisted(() => ({
   team: { teamId: "team-a", region: "use" },
   recover: vi.fn(),
+  resume: vi.fn(),
   start: vi.fn(),
   plans: undefined as PublicBillingPlans | undefined,
   replace: vi.fn(),
@@ -30,6 +31,9 @@ vi.mock("@/components/query-provider", () => ({
 vi.mock("@/components/page-header", () => ({
   PageHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
 }))
+vi.mock("@/hooks/use-user", () => ({
+  useUser: () => ({ user: { id: "actor" } }),
+}))
 vi.mock("@/hooks/use-teams", () => ({ useTeams: () => ({ data: null }) }))
 vi.mock("@/hooks/use-billing-summary", () => ({
   useBillingSummary: () => ({
@@ -43,8 +47,10 @@ vi.mock("@/hooks/use-public-billing-plans", () => ({
 }))
 vi.mock("@/lib/api/plan-checkout", () => ({
   recoverProPayment: (...args: unknown[]) => state.recover(...args),
+  resumeProCheckout: (...args: unknown[]) => state.resume(...args),
   startProCheckout: (...args: unknown[]) => state.start(...args),
-  isStripeCheckoutUrl: vi.fn(),
+  isStripeCheckoutUrl: (value: string) =>
+    value.startsWith("https://checkout.stripe.com/"),
 }))
 
 const availablePlans: PublicBillingPlans = {
@@ -84,6 +90,7 @@ const availablePlans: PublicBillingPlans = {
 beforeEach(() => {
   state.team = { teamId: "team-a", region: "use" }
   state.recover.mockReset()
+  state.resume.mockReset().mockResolvedValue(null)
   state.start.mockReset()
   state.plans = undefined
   state.replace.mockReset()
@@ -94,6 +101,35 @@ beforeEach(() => {
 })
 
 describe("Pro payment return recovery", () => {
+  it("reopens an accepted checkout after a lost first response even when entry closes", async () => {
+    state.plans = availablePlans
+    state.start.mockRejectedValueOnce(new Error("lost response"))
+    state.recover.mockResolvedValue("payment_confirmation_pending")
+    state.resume.mockResolvedValue("https://checkout.stripe.com/original")
+    const assign = vi
+      .spyOn(window.location, "assign")
+      .mockImplementation(() => {})
+    const { rerender } = render(<ProPayment returnTo="/original" />)
+    fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
+    await screen.findByText("lost response")
+    state.plans = { ...availablePlans, pricing_version: "legacy" }
+    rerender(<ProPayment returnTo="/different-return" />)
+    fireEvent.click(
+      screen.getByRole("button", { name: "Check payment status" }),
+    )
+    await waitFor(() =>
+      expect(state.resume).toHaveBeenCalledWith("use:team-a", "actor"),
+    )
+    await waitFor(() =>
+      expect(assign).toHaveBeenCalledWith(
+        "https://checkout.stripe.com/original",
+      ),
+    )
+    // URL validation is separate from payment state; navigation grants no plan.
+    expect(state.start).toHaveBeenCalledTimes(1)
+    assign.mockRestore()
+  })
+
   it.each(["v2", "legacy"] as const)(
     "preserves a legacy annual contract's name and closes new checkout under %s entry",
     (version) => {

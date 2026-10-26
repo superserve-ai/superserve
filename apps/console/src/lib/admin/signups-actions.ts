@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { getImpersonationTeamId } from "@/lib/admin/impersonation"
 import { createServerClient } from "@/lib/supabase/server"
 
 import { AdminBillingRequestError } from "./billing-api"
@@ -26,6 +27,8 @@ async function requireSignupApprover() {
   if (!user || !canApprovePlatformSignups(user)) {
     throw new Error("Forbidden: signup approval access required")
   }
+  if (await getImpersonationTeamId(user))
+    throw new AdminBillingRequestError("read_only_impersonation")
   return user
 }
 

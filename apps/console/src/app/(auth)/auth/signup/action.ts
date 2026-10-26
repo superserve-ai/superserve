@@ -28,6 +28,10 @@ import {
   SIGNUP_RESTRICTED_MESSAGE,
 } from "@/lib/auth/signup-restrictions"
 import { getPricingVersionAction } from "@/lib/billing/plans-actions"
+import {
+  proAuthReturnPath,
+  starterAuthReturnPath,
+} from "@/lib/billing/pro-auth-return"
 import { DEFAULT_REGION } from "@/lib/cells"
 import {
   isCloudflareSignupObservationEnabled as readCloudflareObservationFlag,
@@ -453,7 +457,10 @@ export const signUpWithEmail = async (
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai"
     const callbackUrl = new URL("/auth/callback", appUrl)
-    const next = ycReturnPath(ycNext)
+    const next =
+      proAuthReturnPath(ycNext ?? null) ??
+      starterAuthReturnPath(ycNext ?? null) ??
+      ycReturnPath(ycNext)
     if (next) callbackUrl.searchParams.set("next", next)
     if (requestedOffer) callbackUrl.searchParams.set("offer", requestedOffer)
     const offerIntent = rawSignupOffer ?? offer

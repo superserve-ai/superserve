@@ -307,7 +307,7 @@ describe("signUpWithEmail", () => {
   })
 
   describe("pricing v2 offers", () => {
-    const signUp = (rawOffer: string | undefined) => {
+    const signUp = (rawOffer: string | undefined, next?: string) => {
       mockGenerateLink.mockResolvedValue({
         data: {
           user: { id: "user-1", created_at: new Date().toISOString() },
@@ -328,7 +328,7 @@ describe("signUpWithEmail", () => {
         undefined,
         undefined,
         undefined,
-        undefined,
+        next,
         rawOffer,
       )
     }
@@ -371,6 +371,43 @@ describe("signUpWithEmail", () => {
         expect(mockUpdateSignupReview).not.toHaveBeenCalled()
       },
     )
+
+    it.each([
+      "/billing/pro/?billing=cancel&team=use%3Ateam&return=%2Fsandboxes",
+      "/plan-usage/buy-credit?amount=500",
+      "/plan-usage/buy-credit?purchase=success&team=use%3Ateam&purchase_id=payment",
+    ])(
+      "keeps direct purchase entry through the emailed confirmation: %s",
+      async (next) => {
+        await signUp(undefined, next)
+        const redirect = new URL(
+          mockGenerateLink.mock.lastCall![0].options.redirectTo,
+        )
+        expect(redirect.searchParams.get("next")).toBe(next)
+        const confirmation = new URL(
+          mockSendEmail.mock.lastCall![0].react.replace(
+            "ConfirmationEmail:",
+            "",
+          ),
+        )
+        expect(confirmation.searchParams.get("next")).toBe(next)
+        expect(confirmation.searchParams.get("token_hash")).toBe("abc123")
+        expect(confirmation.searchParams.get("type")).toBe("signup")
+        expect(confirmation.searchParams.get("signup_offer")).toBeNull()
+      },
+    )
+    it.each([
+      "https://outside.test/billing/pro",
+      "//outside.test/billing/pro",
+      "/billing/pro?return=https%3A%2F%2Foutside.test",
+    ])("rejects unsafe emailed purchase returns: %s", async (next) => {
+      await signUp(undefined, next)
+      expect(
+        new URL(
+          mockGenerateLink.mock.lastCall![0].options.redirectTo,
+        ).searchParams.get("next"),
+      ).toBeNull()
+    })
 
     it("does not ask for the switch without an offer", async () => {
       await signUp(undefined)

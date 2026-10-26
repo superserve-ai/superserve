@@ -99,7 +99,8 @@ export function ProPaymentView({
     return (
       <div className="space-y-3 p-6">
         <output className="block text-sm">
-          We’re confirming your payment. This usually takes a few seconds.
+          Payment status is pending. Check again to continue the saved checkout
+          or confirm its payment.
         </output>
         <Button disabled={busy || !canRecover} onClick={onCheckPayment}>
           Check again

@@ -277,6 +277,7 @@ export function PlanSelection({
             initial.teamKey,
             offer,
             checkoutReturnUrl().toString(),
+            initial.userId,
           )
           if (url) navigate(url)
           else await refresh()

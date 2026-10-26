@@ -5,6 +5,7 @@ export async function startProCheckout(
   teamKey: string,
   offer: PurchaseOffer,
   returnUrl: string,
+  actor?: string,
 ): Promise<string | null> {
   const success = new URL(returnUrl)
   success.searchParams.set("billing", "success")
@@ -16,23 +17,71 @@ export async function startProCheckout(
     operationId = crypto.randomUUID()
     sessionStorage.setItem(operationKey, operationId)
   }
-  const response = await apiClient<{
-    url?: string
-    outcome?: string
-    error?: { code?: string }
-  }>("/stripe/pro-checkout", {
+  const contextKey = `${operationKey}:context`
+  const retained = sessionStorage.getItem(contextKey)
+  let context: ProCheckoutContext
+  if (retained) {
+    context = JSON.parse(retained) as ProCheckoutContext
+    if (
+      context.id !== operationId ||
+      context.team !== teamKey ||
+      context.offer !== offer ||
+      context.actor !== actor
+    )
+      throw new Error(
+        "The saved checkout belongs to another account or operation. Check payment status for the original team.",
+      )
+  } else {
+    context = {
+      id: operationId,
+      team: teamKey,
+      offer,
+      actor,
+      success: success.toString(),
+      cancel: cancel.toString(),
+    }
+    sessionStorage.setItem(contextKey, JSON.stringify(context))
+  }
+  const response = await dispatchProCheckout(context)
+  if (response.outcome === "active")
+    clearProOperations([
+      [operationKey, operationId],
+      [contextKey, JSON.stringify(context)],
+    ])
+  return proCheckoutDestination(response)
+}
+
+interface ProCheckoutContext {
+  id: string
+  actor?: string
+  team: string
+  offer: PurchaseOffer
+  success: string
+  cancel: string
+}
+interface ProCheckoutResponse {
+  url?: string
+  outcome?: string
+  error?: { code?: string }
+}
+
+async function dispatchProCheckout(
+  context: ProCheckoutContext,
+): Promise<ProCheckoutResponse> {
+  return apiClient<ProCheckoutResponse>("/stripe/pro-checkout", {
     method: "POST",
     cache: "no-store",
     body: JSON.stringify({
-      expected_team: teamKey,
-      operation_id: operationId,
-      offer,
-      success_url: success.toString(),
-      cancel_url: cancel.toString(),
+      expected_team: context.team,
+      operation_id: context.id,
+      offer: context.offer,
+      success_url: context.success,
+      cancel_url: context.cancel,
     }),
   })
-  if (response.outcome === "active")
-    clearProOperations([[operationKey, operationId]])
+}
+
+function proCheckoutDestination(response: ProCheckoutResponse): string | null {
   if (
     response.error?.code === "payment_confirmation_pending" ||
     response.outcome === "payment_confirmation_pending" ||
@@ -44,6 +93,31 @@ export async function startProCheckout(
       "Unable to open payment. Check your payment status before trying again.",
     )
   return response.url
+}
+
+export async function resumeProCheckout(
+  team: string,
+  actor: string,
+): Promise<string | null> {
+  const contexts: ProCheckoutContext[] = []
+  for (const offer of ["pro_monthly", "pro_annual"] as const) {
+    const key = `pro-checkout:${team}:${offer}`
+    const raw = sessionStorage.getItem(`${key}:context`)
+    if (!raw) continue
+    const context = JSON.parse(raw) as ProCheckoutContext
+    if (
+      context.actor === actor &&
+      context.team === team &&
+      context.offer === offer &&
+      context.id === sessionStorage.getItem(key)
+    )
+      contexts.push(context)
+  }
+  if (contexts.length !== 1) return null
+  const context = contexts[0]!
+  const response = await dispatchProCheckout(context)
+  // This operation is an existing replay only; never create or rotate an ID.
+  return proCheckoutDestination(response)
 }
 
 function proOperations(teamKey: string): [string, string][] {

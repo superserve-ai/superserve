@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { recoverProPayment, startProCheckout } from "./plan-checkout"
+import {
+  recoverProPayment,
+  startProCheckout,
+  resumeProCheckout,
+} from "./plan-checkout"
 
 const api = vi.hoisted(() => vi.fn())
 vi.mock("./client", () => ({ apiClient: (...args: unknown[]) => api(...args) }))
@@ -109,4 +113,66 @@ it("clears only the completed offer identity", async () => {
     "other-operation",
   )
   expect(sessionStorage.getItem("pro-checkout:use:team:pro_monthly")).toBeNull()
+})
+
+it("replays an accepted checkout after lost response with frozen team, actor, offer and URLs", async () => {
+  api.mockRejectedValueOnce(new Error("lost response"))
+  await expect(
+    startProCheckout(
+      "use:team",
+      "pro_monthly",
+      "https://console.test/billing/pro?team=use%3Ateam&return=%2Foriginal",
+      "actor",
+    ),
+  ).rejects.toThrow("lost response")
+  const original = JSON.parse(api.mock.calls[0][1].body)
+  api.mockResolvedValue({ url: "https://checkout.stripe.com/original" })
+  await expect(resumeProCheckout("use:team", "actor")).resolves.toBe(
+    "https://checkout.stripe.com/original",
+  )
+  expect(JSON.parse(api.mock.calls[1][1].body)).toEqual(original)
+  await startProCheckout(
+    "use:team",
+    "pro_monthly",
+    "https://console.test/billing/pro?team=use%3Ateam&return=%2Fchanged",
+    "actor",
+  )
+  expect(JSON.parse(api.mock.calls[2][1].body)).toEqual(original)
+})
+it("does not create a fresh operation while checking a closed-entry or different-account recovery", async () => {
+  await expect(resumeProCheckout("use:team", "actor")).resolves.toBeNull()
+  expect(api).not.toHaveBeenCalled()
+  api.mockResolvedValue({ outcome: "payment_confirmation_pending" })
+  await startProCheckout(
+    "use:team",
+    "pro_monthly",
+    "https://console.test/billing/pro?team=use%3Ateam",
+    "actor",
+  )
+  await expect(resumeProCheckout("use:team", "other-actor")).resolves.toBeNull()
+  await expect(resumeProCheckout("use:other", "actor")).resolves.toBeNull()
+  expect(api).toHaveBeenCalledTimes(1)
+})
+
+it("preserves accepted replay context after a provider transient and after no-URL pending responses", async () => {
+  api.mockResolvedValueOnce({ outcome: "payment_confirmation_pending" })
+  await startProCheckout(
+    "use:team",
+    "pro_monthly",
+    "https://console.test/billing/pro?team=use%3Ateam",
+    "actor",
+  )
+  const original = JSON.parse(api.mock.calls[0][1].body)
+  api.mockRejectedValueOnce(new Error("provider unavailable"))
+  await expect(resumeProCheckout("use:team", "actor")).rejects.toThrow(
+    "provider unavailable",
+  )
+  api.mockResolvedValueOnce({ outcome: "payment_confirmation_pending" })
+  await expect(resumeProCheckout("use:team", "actor")).resolves.toBeNull()
+  api.mockResolvedValueOnce({ url: "https://checkout.stripe.com/original" })
+  await expect(resumeProCheckout("use:team", "actor")).resolves.toBe(
+    "https://checkout.stripe.com/original",
+  )
+  for (const call of api.mock.calls)
+    expect(JSON.parse(call[1].body)).toEqual(original)
 })
