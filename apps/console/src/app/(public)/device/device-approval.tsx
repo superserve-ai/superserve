@@ -123,9 +123,9 @@ export function DeviceApproval({
         </button>
       </p>
       <p className="mb-2 text-xs text-muted">
-        A CLI on{" "}
-        <span className="font-medium text-foreground">{clientName}</span> is
-        asking for an API key. Only continue if this code matches your terminal:
+        <span className="font-medium text-foreground">{clientName}</span> wants
+        an API key. Only authorize if you started this login and the code
+        matches your terminal:
       </p>
       <code className="mb-6 flex justify-center bg-background px-3 py-2 font-mono text-2xl font-medium tracking-wide text-primary">
         {userCode}
