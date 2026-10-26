@@ -336,14 +336,33 @@ export async function GET(request: Request) {
                 next: retryPaidNext,
               })}`
             : null
-        const membershipFailureResponse = () =>
-          NextResponse.redirect(
+        const membershipFailureResponse = (googleProofRecovery = false) => {
+          if (googleProofRecovery && paidSetupRecovery) {
+            // The directory has not established a new Google account yet, so
+            // its pre-auth proof must remain unbound. Resume through signup's
+            // proof gate rather than repeatedly attempting first-team setup.
+            const saved = new URL(paidSetupRecovery, origin).searchParams
+            const preparation = `/api/onboarding/prepare/?${new URLSearchParams(
+              {
+                account: saved.get("account")!,
+                next: saved.get("next")!,
+              },
+            )}`
+            return NextResponse.redirect(
+              buildRedirectUrl(
+                origin,
+                `/auth/signup?${new URLSearchParams({ complete_google: "1", next: preparation })}`,
+              ),
+            )
+          }
+          return NextResponse.redirect(
             buildRedirectUrl(
               origin,
               paidSetupRecovery ??
                 "/auth/auth-code-error?reason=membership_lookup_degraded",
             ),
           )
+        }
         const signupAttemptId =
           searchParams.get("signup_attempt_id") || undefined
         const provider = code
@@ -392,7 +411,7 @@ export async function GET(request: Request) {
               stage: "callback",
               degradedRegions: directory.degradedRegions,
             })
-            return membershipFailureResponse()
+            return membershipFailureResponse(true)
           }
 
           isNewUser = directory.kind === "first_time"

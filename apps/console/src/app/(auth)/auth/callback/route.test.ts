@@ -1636,12 +1636,57 @@ describe("auth callback", () => {
       url.searchParams.set("next", preparation)
       const response = await GET(new Request(url))
       const failure = new URL(response.headers.get("location")!)
-      expect(failure.searchParams.get("account")).toBe("original")
-      const paid = new URL(failure.searchParams.get("next")!, url)
+      expect(failure.pathname).toBe("/auth/signup")
+      expect(failure.searchParams.get("complete_google")).toBe("1")
+      const savedPreparation = new URL(failure.searchParams.get("next")!, url)
+      expect(savedPreparation.pathname).toBe("/api/onboarding/prepare/")
+      expect(savedPreparation.searchParams.get("account")).toBe("original")
+      const paid = new URL(savedPreparation.searchParams.get("next")!, url)
       expect(paid.pathname).toBe("/billing/pro/")
       expect(paid.searchParams.get("team")).toBe("use:original-team")
       expect(mockGetSignupPlanAction).not.toHaveBeenCalled()
       expect(mockMarkGoogleSignupAttempt).not.toHaveBeenCalled()
+    })
+
+    it("sends a real unbound Google proof through completion rather than looping first-team preparation", async () => {
+      vi.stubEnv(
+        "GOOGLE_SIGNUP_PROOF_SECRET",
+        "test-google-proof-secret-at-least-32-characters",
+      )
+      const proof = await vi.importActual<
+        typeof import("@/lib/auth/google-signup-proof")
+      >("@/lib/auth/google-signup-proof")
+      await proof.issueGoogleSignupProof("early-unbound-attempt")
+      const before = [...evidenceJar]
+      googleMembershipState = {
+        kind: "indeterminate",
+        degradedRegions: ["use"],
+      }
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=early-unbound-attempt&signup_offer=starter&next=%2Fplan-usage%2Fbuy-credit%2F",
+        ),
+      )
+      const recovery = new URL(response.headers.get("location")!)
+      expect(recovery.pathname).toBe("/auth/signup")
+      expect(recovery.searchParams.get("complete_google")).toBe("1")
+      const preparation = new URL(recovery.searchParams.get("next")!, recovery)
+      expect(preparation.searchParams.get("account")).toBe("u1")
+      expect(preparation.searchParams.get("next")).toBe(
+        "/plan-usage/buy-credit/",
+      )
+      expect([...evidenceJar]).toEqual(before)
+      expect(mockMarkGoogleSignupAttempt).not.toHaveBeenCalled()
+      expect(mockGetSignupPlanAction).not.toHaveBeenCalled()
+      // This real guard cannot use an unbound scoped proof without completion.
+      // After that gate binds the proof, the same actor's guard succeeds.
+      await expect(proof.requireGoogleSignupProof("u1")).rejects.toThrow(
+        "Google signup verification required",
+      )
+      await proof.markGoogleSignupAttempt("early-unbound-attempt", "u1")
+      await expect(proof.requireGoogleSignupProof("u1")).resolves.toBe(
+        "early-unbound-attempt",
+      )
     })
 
     it.each(["https://evil.test", "//evil.test", "/billing/pro?approved=true"])(
