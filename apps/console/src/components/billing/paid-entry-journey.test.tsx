@@ -6,6 +6,7 @@ import ProPage from "@/app/(dashboard)/billing/pro/page"
 import { ProPayment } from "@/app/(dashboard)/billing/pro/pro-payment"
 import { BuyCreditRoute } from "@/app/(dashboard)/plan-usage/buy-credit/route-client"
 import { GET as prepare } from "@/app/api/onboarding/prepare/route"
+import { SessionExpiryRedirect } from "@/components/layout/session-expiry-redirect"
 import { ApiError } from "@/lib/api/client"
 import { SIGNUP_OFFER_DESTINATIONS } from "@/lib/auth/signup-offer"
 import { signupPreparationReturnPath } from "@/lib/billing/pro-auth-return"
@@ -23,6 +24,7 @@ const state = vi.hoisted(() => ({
   switch: vi.fn(),
   signout: vi.fn(),
   assign: vi.fn(),
+  authChange: undefined as undefined | ((event: string) => void),
 }))
 vi.mock("next/navigation", () => ({
   redirect: (path: string) => {
@@ -107,7 +109,15 @@ vi.mock("@/lib/api/plan-checkout", () => ({
     value.startsWith("https://checkout.stripe.com/"),
 }))
 vi.mock("@/lib/supabase/client", () => ({
-  createBrowserClient: () => ({ auth: { signOut: state.signout } }),
+  createBrowserClient: () => ({
+    auth: {
+      signOut: state.signout,
+      onAuthStateChange: (callback: (event: string) => void) => {
+        state.authChange = callback
+        return { data: { subscription: { unsubscribe: vi.fn() } } }
+      },
+    },
+  }),
 }))
 vi.mock("@superserve/ui", async (original) => ({
   ...(await original<typeof import("@superserve/ui")>()),
@@ -116,8 +126,17 @@ vi.mock("@superserve/ui", async (original) => ({
 function show(ui: React.ReactNode) {
   return render(
     <QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>,
+    {
+      wrapper: ({ children }) => (
+        <>
+          <SessionExpiryRedirect />
+          {children}
+        </>
+      ),
+    },
   )
 }
+
 async function preparedDestination(next: string, team?: string) {
   const url = new URL("https://console.test/api/onboarding/prepare/")
   url.searchParams.set("account", "actor")
@@ -430,6 +449,146 @@ describe("actual signup preparation to paid page journey", () => {
       screen.getByRole("button", { name: "Continue to payment" }),
     ).not.toBeDisabled()
   })
+
+  it.each([
+    ["start-null", false],
+    ["manual-pending", false],
+    ["start-null", true],
+    ["manual-pending", true],
+  ] as const)(
+    "restores the original in-page %s payment team, URL pin=%s, without starting another purchase",
+    async (producer, pinned) => {
+      const target = await preparedDestination(
+        "/billing/pro/?return=%2Fsandboxes%2F%3Fview%3Doriginal",
+        pinned ? teamKey : undefined,
+      )
+      if (producer === "manual-pending") state.pricing = "legacy"
+      const props = {
+        searchParams: Promise.resolve(Object.fromEntries(target.searchParams)),
+      }
+      const view = show(await ProPage(props))
+      fireEvent.click(
+        screen.getByRole("button", {
+          name:
+            producer === "start-null"
+              ? "Continue to payment"
+              : "Check payment status",
+        }),
+      )
+      await screen.findByText(/Payment status is pending/)
+      const started = producer === "start-null" ? 1 : 0
+      expect(state.start).toHaveBeenCalledTimes(started)
+      state.teamKey = "use:22222222-2222-4222-8222-222222222222"
+      view.rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          {await ProPage(props)}
+        </QueryClientProvider>,
+      )
+      expect(screen.queryByText(/incomplete or invalid/)).toBeNull()
+      fireEvent.click(
+        screen.getByRole("button", { name: "Return to checkout team" }),
+      )
+      await waitFor(() =>
+        expect(state.switch).toHaveBeenCalledWith({
+          teamId: id,
+          region: "use",
+        }),
+      )
+      state.teamKey = teamKey
+      view.rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          {await ProPage(props)}
+        </QueryClientProvider>,
+      )
+      fireEvent.click(screen.getByRole("button", { name: "Check again" }))
+      await waitFor(() => expect(state.recover).toHaveBeenCalledWith(teamKey))
+      expect(state.start).toHaveBeenCalledTimes(started)
+    },
+  )
+  it.each([
+    ["start-null", false],
+    ["manual-pending", false],
+    ["start-null", true],
+    ["manual-pending", true],
+  ] as const)(
+    "retains the original %s operation, URL pin=%s, through sign-in and checks its status without a new purchase",
+    async (producer, pinned) => {
+      const target = await preparedDestination(
+        "/billing/pro/?return=%2Fsandboxes%2F%3Fview%3Doriginal",
+        pinned ? teamKey : undefined,
+      )
+      if (producer === "manual-pending") state.pricing = "legacy"
+      const props = {
+        searchParams: Promise.resolve(Object.fromEntries(target.searchParams)),
+      }
+      const view = show(await ProPage(props))
+      fireEvent.click(
+        screen.getByRole("button", {
+          name:
+            producer === "start-null"
+              ? "Continue to payment"
+              : "Check payment status",
+        }),
+      )
+      await screen.findByText(/Payment status is pending/)
+      const started = producer === "start-null" ? 1 : 0
+      state.teamKey = "use:22222222-2222-4222-8222-222222222222"
+      state.member = false
+      view.rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          {await ProPage(props)}
+        </QueryClientProvider>,
+      )
+      vi.stubGlobal("location", {
+        origin: "https://console.test",
+        assign: state.assign,
+        pathname: target.pathname,
+        search: target.search,
+      })
+      state.signout.mockImplementation(async () => {
+        state.authChange?.("SIGNED_OUT")
+        return { error: null }
+      })
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "Sign out and use checkout account",
+        }),
+      )
+      await waitFor(() => expect(state.assign).toHaveBeenCalled())
+      const signIn = new URL(
+        state.assign.mock.calls[0]![0],
+        "https://console.test",
+      )
+      const retained = new URL(signIn.searchParams.get("next")!, signIn)
+      expect(retained.searchParams.get("team")).toBe(teamKey)
+      expect(retained.searchParams.get("return")).toBe(
+        "/sandboxes/?view=original",
+      )
+      expect(retained.searchParams.get("billing")).toBe("success")
+      expect(
+        state.assign.mock.calls.every(
+          ([url]) =>
+            url ===
+            `/auth/signin?next=${encodeURIComponent(retained.pathname + retained.search)}`,
+        ),
+      ).toBe(true)
+      state.teamKey = teamKey
+      state.member = true
+      state.query = retained.searchParams.toString()
+      state.recover.mockClear().mockResolvedValue("active")
+      view.rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          {await ProPage({
+            searchParams: Promise.resolve(
+              Object.fromEntries(retained.searchParams),
+            ),
+          })}
+        </QueryClientProvider>,
+      )
+      await waitFor(() => expect(state.recover).toHaveBeenCalledWith(teamKey))
+      expect(state.start).toHaveBeenCalledTimes(started)
+    },
+  )
   it.each([
     "billing=",
     "billing=invalid",

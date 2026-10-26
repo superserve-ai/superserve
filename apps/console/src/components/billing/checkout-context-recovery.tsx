@@ -4,6 +4,7 @@ import { Button } from "@superserve/ui"
 import { useIsMutating, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useRef, useState } from "react"
 
+import { retainSignOutReturnPath } from "@/components/layout/session-expiry-redirect"
 import { useSwitchTeam, useTeams } from "@/hooks/use-teams"
 import { useUser } from "@/hooks/use-user"
 import {
@@ -28,8 +29,35 @@ export function CheckoutContextRecovery({
   const switchTeam = useSwitchTeam()
   const actor = useUser().user?.id
   const [busy, setBusy] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const target = useRef({ active: true, busy: false })
+  const signOutIntent = useRef<{
+    actor: string | undefined
+    active: boolean
+    release: () => void
+  } | null>(null)
+  useEffect(() => {
+    setSigningOut(false)
+    return () => {
+      if (signOutIntent.current) {
+        signOutIntent.current.active = false
+        signOutIntent.current.release()
+        signOutIntent.current = null
+      }
+    }
+  }, [callbackPath])
+  useEffect(() => {
+    const intent = signOutIntent.current
+    if (!intent || !actor) return
+    if (!intent.actor) intent.actor = actor
+    else if (actor !== intent.actor) {
+      intent.active = false
+      intent.release()
+      signOutIntent.current = null
+      setSigningOut(false)
+    }
+  }, [actor])
   useEffect(() => {
     const current = { active: true, busy: false }
     target.current = current
@@ -55,6 +83,7 @@ export function CheckoutContextRecovery({
     const current = target.current
     if (
       current.busy ||
+      signOutIntent.current?.active ||
       queryClient.isMutating({ mutationKey: ["switch-team"] }) > 0
     )
       return
@@ -86,7 +115,7 @@ export function CheckoutContextRecovery({
         <>
           {allowSwitch && member && !contextPending && (
             <Button
-              disabled={busy || switchingTeam}
+              disabled={busy || signingOut || switchingTeam}
               onClick={() =>
                 void recover(async () => {
                   if (!team) return
@@ -99,18 +128,33 @@ export function CheckoutContextRecovery({
           )}
           <Button
             variant="outline"
-            disabled={busy || switchingTeam}
+            disabled={busy || signingOut || switchingTeam}
             onClick={() =>
               void recover(async () => {
-                const current = target.current
-                const { error } = await createBrowserClient().auth.signOut({
-                  scope: "local",
-                })
-                if (error) throw error
-                if (current.active)
-                  window.location.assign(
-                    `/auth/signin?next=${encodeURIComponent(safePath)}`,
-                  )
+                const intent = {
+                  actor,
+                  active: true,
+                  release: retainSignOutReturnPath(safePath),
+                }
+                signOutIntent.current = intent
+                setSigningOut(true)
+                try {
+                  const { error } = await createBrowserClient().auth.signOut({
+                    scope: "local",
+                  })
+                  if (error) throw error
+                  if (intent.active)
+                    window.location.assign(
+                      `/auth/signin?next=${encodeURIComponent(safePath)}`,
+                    )
+                } catch (cause) {
+                  intent.active = false
+                  intent.release()
+                  setSigningOut(false)
+                  if (signOutIntent.current === intent)
+                    signOutIntent.current = null
+                  throw cause
+                }
               })
             }
           >
@@ -121,7 +165,7 @@ export function CheckoutContextRecovery({
           {(directory.isError || contextPending) && (
             <Button
               variant="outline"
-              disabled={busy || switchingTeam}
+              disabled={busy || signingOut || switchingTeam}
               onClick={() => {
                 if (
                   !busy &&

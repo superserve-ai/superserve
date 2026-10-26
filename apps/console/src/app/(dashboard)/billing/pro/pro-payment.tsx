@@ -91,6 +91,18 @@ function ProPaymentContext({
   const [confirming, setConfirming] = useState(billingReturn === "success")
   const [paymentTeam, setPaymentTeam] = useState<string | undefined>()
   const expectedTeam = checkoutTeam ?? paymentTeam
+  const recoveryPath = useMemo(() => {
+    if (!paymentTeam || checkoutRecoveryPath(callbackPath)) return callbackPath
+    if (returning && !checkoutEntryPath(callbackPath)) return callbackPath
+    if (checkoutTeam && checkoutTeam !== paymentTeam) return callbackPath
+    // A pending in-page operation has not navigated to its result URL yet.
+    // Retain its original target for status recovery, never for a new purchase.
+    const status = new URL("/billing/pro/", "https://console.invalid")
+    status.searchParams.set("team", paymentTeam)
+    status.searchParams.set("return", returnTo)
+    status.searchParams.set("billing", "success")
+    return checkoutRecoveryPath(status.pathname + status.search) ?? callbackPath
+  }, [returning, paymentTeam, returnTo, callbackPath, checkoutTeam])
   const [conflict, setConflict] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -234,7 +246,7 @@ function ProPaymentContext({
         {step === "team_mismatch" ||
         (!ready && (returning || !!billingReturn || !!paymentTeam)) ? (
           <CheckoutContextRecovery
-            callbackPath={callbackPath}
+            callbackPath={recoveryPath}
             contextPending={!ready}
             allowSwitch={scope === "self"}
           />

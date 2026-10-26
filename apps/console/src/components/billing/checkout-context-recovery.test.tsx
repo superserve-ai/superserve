@@ -189,11 +189,10 @@ describe("checkout context recovery", () => {
   ])(
     "retains exact callback through SIGNED_OUT before signout completes: %s",
     async (path) => {
-      const parsed = new URL(path, "https://console.test")
       vi.stubGlobal("location", {
         assign: state.assign,
-        pathname: parsed.pathname,
-        search: parsed.search,
+        pathname: "/billing/pro/",
+        search: "?return=%2Fsandboxes%2F",
       })
       let finish!: (value: { error: null }) => void
       state.signOut.mockImplementation(
@@ -234,4 +233,114 @@ describe("checkout context recovery", () => {
       ).toBe(true)
     },
   )
+  it("clears the deliberate destination on signout failure so later session expiry uses current navigation", async () => {
+    vi.stubGlobal("location", {
+      assign: state.assign,
+      pathname: "/billing/pro/",
+      search: "?return=%2Fsandboxes%2F",
+    })
+    state.signOut.mockResolvedValueOnce({ error: new Error("unavailable") })
+    render(
+      <>
+        <SessionExpiryRedirect />
+        <CheckoutContextRecovery callbackPath={callback} />
+      </>,
+    )
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sign out and use checkout account" }),
+    )
+    await screen.findByText("Unable to restore checkout. Please try again.")
+    await act(async () => state.authChange?.("SIGNED_OUT"))
+    expect(state.assign).toHaveBeenCalledWith(
+      `/auth/signin?next=${encodeURIComponent("/billing/pro/?return=%2Fsandboxes%2F")}`,
+    )
+  })
+  it("retains the pending destination when actor hydration completes before SIGNED_OUT", async () => {
+    state.actor = undefined
+    vi.stubGlobal("location", {
+      assign: state.assign,
+      pathname: "/billing/pro/",
+      search: "",
+    })
+    let finish!: (value: { error: null }) => void
+    state.signOut.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    const view = render(
+      <>
+        <SessionExpiryRedirect />
+        <CheckoutContextRecovery callbackPath={callback} />
+      </>,
+    )
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sign out and use checkout account" }),
+    )
+    state.actor = "actor-a"
+    view.rerender(
+      <>
+        <SessionExpiryRedirect />
+        <CheckoutContextRecovery callbackPath={callback} />
+      </>,
+    )
+    const signOut = screen.getByRole("button", {
+      name: "Sign out and use checkout account",
+    })
+    expect(signOut).toBeDisabled()
+    fireEvent.click(signOut)
+    expect(state.signOut).toHaveBeenCalledOnce()
+    await act(async () => state.authChange?.("SIGNED_OUT"))
+    expect(state.assign).toHaveBeenCalledWith(
+      `/auth/signin?next=${encodeURIComponent(callback)}`,
+    )
+    await act(async () => finish({ error: null }))
+    expect(
+      state.assign.mock.calls.every(
+        ([url]) => url === `/auth/signin?next=${encodeURIComponent(callback)}`,
+      ),
+    ).toBe(true)
+  })
+  it("clears an obsolete return override when the recovery path changes during signout", async () => {
+    let finish!: (value: { error: null }) => void
+    state.signOut.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    const view = render(
+      <>
+        <SessionExpiryRedirect />
+        <CheckoutContextRecovery callbackPath={callback} />
+      </>,
+    )
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sign out and use checkout account" }),
+    )
+    const next = `/billing/pro/?team=use:${teamId}&billing=cancel`
+    const url = new URL(next, "https://console.test")
+    vi.stubGlobal("location", {
+      assign: state.assign,
+      pathname: url.pathname,
+      search: url.search,
+    })
+    view.rerender(
+      <>
+        <SessionExpiryRedirect />
+        <CheckoutContextRecovery callbackPath={next} />
+      </>,
+    )
+    await act(async () => state.authChange?.("SIGNED_OUT"))
+    expect(state.assign).toHaveBeenCalledWith(
+      `/auth/signin?next=${encodeURIComponent(next)}`,
+    )
+    await act(async () => finish({ error: null }))
+    expect(
+      state.assign.mock.calls.every(
+        ([value]) => value === `/auth/signin?next=${encodeURIComponent(next)}`,
+      ),
+    ).toBe(true)
+  })
 })
