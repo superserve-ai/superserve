@@ -64,13 +64,22 @@ export async function approveDeviceAction(
   }
 }
 
-export async function denyDeviceAction(code: string): Promise<void> {
+export async function denyDeviceAction(
+  code: string,
+): Promise<{ status: "denied" } | { status: "error"; message: string }> {
   const userCode = normalizeUserCode(code)
-  if (!userCode) return
+  if (!userCode) return { status: "error", message: "Invalid code." }
   const supabase = await createServerClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return
-  await denyDeviceCode(userCode)
+  if (!user) return { status: "error", message: "Sign in to continue." }
+  try {
+    await denyDeviceCode(userCode)
+    return { status: "denied" }
+  } catch (error) {
+    if (error instanceof DeviceLoginError)
+      return { status: "error", message: error.message }
+    throw error
+  }
 }

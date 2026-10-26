@@ -56,9 +56,16 @@ export function DeviceApproval({
 
   const deny = async () => {
     setBusy(true)
-    await denyDeviceAction(userCode).catch(() => {})
-    setOutcome("denied")
-    setBusy(false)
+    setError(null)
+    try {
+      const result = await denyDeviceAction(userCode)
+      if (result.status === "denied") setOutcome("denied")
+      else setError(result.message)
+    } catch {
+      setError("Couldn't deny the login. Please try again.")
+    } finally {
+      setBusy(false)
+    }
   }
 
   if (outcome) {
