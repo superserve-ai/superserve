@@ -50,6 +50,7 @@ vi.mock("@superserve/ui", async (original) => ({
 import { BuyCreditPageClient } from "./page-client"
 
 const initial: PrepaidCreditSummary = {
+  checkout_idempotency_supported: true,
   balance_cents: 2500,
   low_balance: false,
   has_saved_card: true,
@@ -79,6 +80,17 @@ function page() {
     </QueryClientProvider>
   )
 }
+it("blocks checkout before calling a backend without durable retry support", () => {
+  mocks.data = { ...initial, checkout_idempotency_supported: undefined }
+  render(page())
+  const buy = screen.getByRole("button", { name: "Buy $25 credit" })
+  expect(buy).toBeDisabled()
+  fireEvent.click(buy)
+  expect(mocks.checkout).not.toHaveBeenCalled()
+  expect(
+    screen.getByText(/Credit purchases are temporarily unavailable/),
+  ).toBeTruthy()
+})
 it("keeps return URLs as navigation and never claims a verified payment", () => {
   mocks.params = new URLSearchParams("purchase=success&team=us%3Ateam")
   render(page())

@@ -24,6 +24,7 @@ export interface PrepaidPurchase {
 }
 
 export interface PrepaidCreditSummary {
+  checkout_idempotency_supported?: boolean
   balance_cents: number
   low_balance: boolean
   auto_recharge: PrepaidAutoRecharge

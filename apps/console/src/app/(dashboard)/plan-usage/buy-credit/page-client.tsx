@@ -98,10 +98,18 @@ export function BuyCreditPageClient({
         {data && (
           <>
             <BalanceCard data={data} showTerms={allowEntry} />
+            {allowEntry && data.checkout_idempotency_supported !== true ? (
+              <p className="text-sm text-muted">
+                Credit purchases are temporarily unavailable. Please try again
+                later.
+              </p>
+            ) : null}
             {allowEntry ? (
               <PurchaseCard
                 key={`${scope}:${teamKey}:${user?.id}`}
-                canManage={canManage}
+                canManage={
+                  canManage && data.checkout_idempotency_supported === true
+                }
               />
             ) : (
               <p className="text-sm text-muted">
