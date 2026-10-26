@@ -25,6 +25,15 @@ const HTTP_METHODS = [
 // state; none are part of the developer sandbox API reference.
 const EXEMPT_PATHS = new Set([
   "/health",
+  "/billing/free-allowance",
+  "/billing/plan",
+  "/billing/plan-change-preview",
+  "/billing/plan-changes",
+  "/billing/plan-changes/{change_id}/undo",
+  "/billing/plans/public",
+  "/billing/prepaid",
+  "/billing/prepaid/auto-recharge",
+  "/billing/prepaid/checkout",
   "/billing/pricing",
   "/billing/pricing/public",
   "/billing/summary",
