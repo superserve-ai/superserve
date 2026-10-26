@@ -1569,6 +1569,120 @@ describe("auth callback", () => {
       ])
     })
 
+    it.each(["starter", "pro_monthly"])(
+      "renders an account-bound %s retry after the earlier email directory read degrades",
+      async (offer) => {
+        currentUser!.app_metadata = { provider: "email" }
+        directoryState = { memberships: [], degradedRegions: ["use"] }
+        const next =
+          offer === "starter" ? "/plan-usage/buy-credit/" : "/billing/pro/"
+        const url = new URL(
+          "https://console.superserve.ai/auth/callback?token_hash=official&type=signup",
+        )
+        url.searchParams.set("signup_offer", offer)
+        url.searchParams.set("next", next)
+        const response = await GET(new Request(url))
+        const failure = new URL(response.headers.get("location")!)
+        expect(mockGetSignupPlanAction).not.toHaveBeenCalled()
+        retrySearch = failure.searchParams
+        const ErrorPage = (await import("../auth-code-error/page")).default
+        render(createElement(ErrorPage))
+        const retry = new URL(
+          screen.getByRole("link", { name: "Try Again" }).getAttribute("href")!,
+          url,
+        )
+        cleanup()
+        expect(retry.pathname).toBe("/api/onboarding/prepare/")
+        expect(retry.searchParams.get("next")).toBe(next)
+        expect(retry.searchParams.get("account")).toBe("u1")
+        expect(mockEvaluateSignupRestriction).not.toHaveBeenCalled()
+        // A fresh retry still uses the existing verified-account setup action;
+        // this redirect is navigation, not membership or payment authorization.
+      },
+    )
+
+    it.each(["starter", "pro_monthly"])(
+      "preserves default %s offer intent when the email directory read throws",
+      async (offer) => {
+        currentUser!.app_metadata = { provider: "email" }
+        mockListTeamMembershipsForUserDetailed.mockRejectedValueOnce(
+          new Error("Directory unavailable"),
+        )
+        const response = await GET(
+          new Request(
+            `https://console.superserve.ai/auth/callback?token_hash=official&type=signup&signup_offer=${offer}`,
+          ),
+        )
+        const failure = new URL(response.headers.get("location")!)
+        expect(failure.searchParams.get("reason")).toBe("account_setup")
+        expect(failure.searchParams.get("account")).toBe("u1")
+        expect(failure.searchParams.get("next")).toBe(
+          offer === "starter" ? "/plan-usage/buy-credit" : "/billing/pro/",
+        )
+        expect(mockGetSignupPlanAction).not.toHaveBeenCalled()
+      },
+    )
+
+    it("retains the existing preparation account and pinned team on a degraded Google lookup", async () => {
+      googleMembershipState = {
+        kind: "indeterminate",
+        degradedRegions: ["use"],
+      }
+      const preparation =
+        "/api/onboarding/prepare/?account=original&team=use%3Aoriginal-team&next=%2Fbilling%2Fpro%2F"
+      const url = new URL(
+        "https://console.superserve.ai/auth/callback?code=abc",
+      )
+      url.searchParams.set("next", preparation)
+      const response = await GET(new Request(url))
+      const failure = new URL(response.headers.get("location")!)
+      expect(failure.searchParams.get("account")).toBe("original")
+      const paid = new URL(failure.searchParams.get("next")!, url)
+      expect(paid.pathname).toBe("/billing/pro/")
+      expect(paid.searchParams.get("team")).toBe("use:original-team")
+      expect(mockGetSignupPlanAction).not.toHaveBeenCalled()
+      expect(mockMarkGoogleSignupAttempt).not.toHaveBeenCalled()
+    })
+
+    it.each(["https://evil.test", "//evil.test", "/billing/pro?approved=true"])(
+      "does not turn unsafe next into a paid retry on degraded lookup: %s",
+      async (next) => {
+        currentUser!.app_metadata = { provider: "email" }
+        directoryState = { memberships: [], degradedRegions: ["use"] }
+        const url = new URL(
+          "https://console.superserve.ai/auth/callback?token_hash=official&type=signup&signup_offer=starter",
+        )
+        url.searchParams.set("next", next)
+        const response = await GET(new Request(url))
+        const failure = new URL(response.headers.get("location")!)
+        expect(failure.searchParams.get("reason")).toBe(
+          "membership_lookup_degraded",
+        )
+        expect(failure.searchParams.get("account")).toBeNull()
+        expect(failure.searchParams.get("next")).toBeNull()
+      },
+    )
+
+    it("keeps Enterprise directory degradation out of self-serve preparation", async () => {
+      mockStrictPlans.mockResolvedValue({ pricing_version: "v2", cards: [] })
+      googleMembershipState = {
+        kind: "indeterminate",
+        degradedRegions: ["use"],
+      }
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&signup_offer=enterprise&next=%2Fbilling%2Fpro%2F",
+        ),
+      )
+      const failure = new URL(response.headers.get("location")!)
+      expect(failure.searchParams.get("reason")).toBe(
+        "membership_lookup_degraded",
+      )
+      expect(failure.searchParams.get("next")).toBeNull()
+      expect(mockGetSignupPlanAction).not.toHaveBeenCalled()
+      expect(mockUpdateSignupReview).not.toHaveBeenCalled()
+    })
+
     it("keeps an account-bound paid preparation return through reauthentication", async () => {
       currentUser!.app_metadata = { provider: "email" }
       const next =

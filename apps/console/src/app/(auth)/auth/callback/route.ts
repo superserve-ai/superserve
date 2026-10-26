@@ -301,6 +301,49 @@ export async function GET(request: Request) {
             (enterprisePricing ?? (await getPricingVersionAction())) === "v2")
             ? parseSignupOffer(offerIntent)
             : undefined
+        // Authentication has consumed the code/token before directory reads.
+        // Keep only bounded navigation intent so a transient read can resume
+        // through fresh actor/team/policy checks without replaying that token.
+        const preparationReturn = signupPreparationReturnPath(next)
+        const preparationIntent = preparationReturn
+          ? new URL(preparationReturn, origin).searchParams
+          : null
+        const directPaidNext =
+          proAuthReturnPath(next) ?? starterAuthReturnPath(next)
+        const defaultPaidNext =
+          (!searchParams.get("next") || searchParams.get("next") === "/") &&
+          !(await cookies()).get("yc_claim_confirmation") &&
+          (signupOffer === "starter" || signupOffer === "pro_monthly")
+            ? SIGNUP_OFFER_DESTINATIONS[signupOffer]
+            : null
+        let retryPaidNext =
+          preparationIntent?.get("next") ?? directPaidNext ?? defaultPaidNext
+        // A preparation return can pin its team outside the nested paid URL.
+        // Carry that locator into the retry rather than falling back to the
+        // browser's newly selected team after the directory recovers.
+        if (retryPaidNext && preparationIntent?.get("team")) {
+          const paid = new URL(retryPaidNext, origin)
+          paid.searchParams.set("team", preparationIntent.get("team")!)
+          retryPaidNext = paid.pathname + paid.search
+        }
+        const paidSetupRecovery =
+          signupOffer !== "enterprise" &&
+          !pendingEnterprisePricing &&
+          retryPaidNext
+            ? `/auth/auth-code-error?${new URLSearchParams({
+                reason: "account_setup",
+                account: preparationIntent?.get("account") ?? user.id,
+                next: retryPaidNext,
+              })}`
+            : null
+        const membershipFailureResponse = () =>
+          NextResponse.redirect(
+            buildRedirectUrl(
+              origin,
+              paidSetupRecovery ??
+                "/auth/auth-code-error?reason=membership_lookup_degraded",
+            ),
+          )
         const signupAttemptId =
           searchParams.get("signup_attempt_id") || undefined
         const provider = code
@@ -349,12 +392,7 @@ export async function GET(request: Request) {
               stage: "callback",
               degradedRegions: directory.degradedRegions,
             })
-            return NextResponse.redirect(
-              buildRedirectUrl(
-                origin,
-                "/auth/auth-code-error?reason=membership_lookup_degraded",
-              ),
-            )
+            return membershipFailureResponse()
           }
 
           isNewUser = directory.kind === "first_time"
@@ -543,22 +581,22 @@ export async function GET(request: Request) {
 
         newSignup = type !== "invite" && (type === "signup" || isNewUser)
         if (type !== "invite" && (type === "signup" || (code && isNewUser))) {
-          const directory = await completedMemberships(
-            user.id,
-            await listTeamMembershipsForUserDetailed(user.id, {
-              maxAgeMs: 0,
-            }),
-          )
+          let directory: Awaited<ReturnType<typeof completedMemberships>>
+          try {
+            directory = await completedMemberships(
+              user.id,
+              await listTeamMembershipsForUserDetailed(user.id, {
+                maxAgeMs: 0,
+              }),
+            )
+          } catch {
+            return membershipFailureResponse()
+          }
           if (
             directory.memberships.length === 0 &&
             directory.degradedRegions.length > 0
           )
-            return NextResponse.redirect(
-              buildRedirectUrl(
-                origin,
-                "/auth/auth-code-error?reason=membership_lookup_degraded",
-              ),
-            )
+            return membershipFailureResponse()
           if (
             directory.memberships.length === 0 &&
             directory.degradedRegions.length === 0
