@@ -451,7 +451,7 @@ describe("PlanOverviewSection with pricing v2 on", () => {
   })
 })
 
-describe("Pro bridge before the first monthly credit period", () => {
+describe("Pro next monthly billing period", () => {
   const bridgeSummary = {
     ...summary,
     plan: {
@@ -465,11 +465,43 @@ describe("Pro bridge before the first monthly credit period", () => {
     mocks.plan.mockReturnValue({ data: plan({}), isError: false })
     render(<PlanOverviewSection summary={bridgeSummary} />)
     expect(
-      screen.getByText("Monthly included usage starts on Nov 1, 2026."),
+      screen.getByText("Next monthly billing period starts on Nov 1, 2026."),
     ).toBeTruthy()
     expect(screen.queryByText(/couldn't be loaded|of \$250 used/)).toBeNull()
   })
-  it.each(["active", "different plan", "different start", "different period"])(
+  it("does not label the next period as the start of included usage for a first paid month", () => {
+    const start = "2026-10-27T05:14:51Z"
+    const end = "2026-11-27T05:14:51Z"
+    mocks.plan.mockReturnValue({
+      data: plan({ period_start: start, period_end: end }),
+      isError: false,
+    })
+    render(
+      <PlanOverviewSection
+        summary={{
+          ...bridgeSummary,
+          billing_period: { start, end },
+          plan: { ...bridgeSummary.plan!, starts_at: end },
+        }}
+      />,
+    )
+    expect(
+      screen.getByText("Next monthly billing period starts on Nov 27, 2026."),
+    ).toBeTruthy()
+    expect(
+      screen.queryByText(
+        /Monthly included usage starts|credit issued|of \$250 used/,
+      ),
+    ).toBeNull()
+  })
+  it.each([
+    "active",
+    "different plan",
+    "different start",
+    "different period",
+    "different period start",
+    "prepaid plan",
+  ])(
     "retains missing-usage error for %s rather than inferring a bridge",
     (mismatch) => {
       mocks.plan.mockReturnValue({ data: plan({}), isError: false })
@@ -480,9 +512,19 @@ describe("Pro bridge before the first monthly credit period", () => {
         changed.plan!.starts_at = "2026-11-02T00:00:00Z"
       if (mismatch === "different period")
         changed.billing_period.end = "2026-11-02T00:00:00Z"
+      if (mismatch === "different period start")
+        changed.billing_period.start = "2026-10-02T00:00:00Z"
+      if (mismatch === "prepaid plan")
+        mocks.plan.mockReturnValue({
+          data: plan({ kind: "prepaid" }),
+          isError: false,
+        })
       render(<PlanOverviewSection summary={changed} />)
-      expect(screen.queryByText(/Monthly included usage starts/)).toBeNull()
-      expect(screen.getByText("Usage couldn't be loaded.")).toBeTruthy()
+      expect(
+        screen.queryByText(/Next monthly billing period starts/),
+      ).toBeNull()
+      if (mismatch !== "prepaid plan")
+        expect(screen.getByText("Usage couldn't be loaded.")).toBeTruthy()
     },
   )
 })

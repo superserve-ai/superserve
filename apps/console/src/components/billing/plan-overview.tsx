@@ -258,7 +258,7 @@ export function IncludedUsagePanel({
     <Panel title="Included usage this period">
       {bridgeMonthlyStartsAt ? (
         <p className="text-sm text-muted">
-          Monthly included usage starts on {date(bridgeMonthlyStartsAt)}.
+          Next monthly billing period starts on {date(bridgeMonthlyStartsAt)}.
         </p>
       ) : status === "pending" || status === "not_issued" ? (
         <p className="text-sm text-muted">
