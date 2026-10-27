@@ -13,14 +13,14 @@ Curated by Superserve and available to every team. Identified by the `superserve
 
 | Name | Base image | Shape (vCPU · mem · disk) | Adds on top of the base toolkit |
 |---|---|---|---|
-| `superserve/base` | `ubuntu:24.04` | 1 · 1024 MiB · 8192 MiB | `build-essential`, `pkg-config`, `python3` (3.12), `python3-dev`, `python3-pip`, `python3-venv` (apt); Node.js 22 with `npm`. Default when `fromTemplate` is omitted. |
-| `superserve/python-3.11` | `python:3.11-slim` | 1 · 1024 MiB · 4096 MiB | `requests` (pip). |
-| `superserve/node-22` | `node:22-slim` | 1 · 1024 MiB · 4096 MiB | `pnpm`, `typescript` (npm global). |
-| `superserve/python-ml` | `python:3.11` | 2 · 2048 MiB · 4096 MiB | `build-essential` (apt); numpy, pandas, scikit-learn, matplotlib, jupyter, ipython, requests (pip). |
-| `superserve/code-interpreter` | `python:3.11` | 2 · 2048 MiB · 8192 MiB | `build-essential`, `libfreetype6-dev`, `libpng-dev` (apt); numpy, pandas, scikit-learn, matplotlib, jupyter, ipython, requests, pillow, seaborn, plotly, openpyxl (pip). |
-| `superserve/claude-code` | `ubuntu:24.04` | 2 · 2048 MiB · 8192 MiB | `build-essential`, `ripgrep`, `vim`, `python3`, `python3-pip` (apt); Claude Code CLI (`claude`). |
-| `superserve/openclaw` | `ubuntu:24.04` | 2 · 2048 MiB · 8192 MiB | `tmux` (apt); OpenClaw CLI. |
-| `superserve/hermes` | `ubuntu:24.04` | 2 · 2048 MiB · 8192 MiB | `tmux`, `xz-utils` (apt); Hermes agent. |
+| `superserve/base` | `ubuntu:24.04` | 2 · 4096 MiB · 8192 MiB | `build-essential`, `pkg-config`, `python3` (3.12), `python3-dev`, `python3-pip`, `python3-venv` (apt); Node.js 22 with `npm`. Default when `fromTemplate` is omitted. |
+| `superserve/python-3.11` | `python:3.11-slim` | 2 · 4096 MiB · 8192 MiB | `requests` (pip). |
+| `superserve/node-22` | `node:22-slim` | 2 · 4096 MiB · 8192 MiB | `pnpm`, `typescript` (npm global). |
+| `superserve/python-ml` | `python:3.11` | 2 · 4096 MiB · 8192 MiB | `build-essential` (apt); numpy, pandas, scikit-learn, matplotlib, jupyter, ipython, requests (pip). |
+| `superserve/code-interpreter` | `python:3.11` | 2 · 4096 MiB · 8192 MiB | `build-essential`, `libfreetype6-dev`, `libpng-dev` (apt); numpy, pandas, scikit-learn, matplotlib, jupyter, ipython, requests, pillow, seaborn, plotly, openpyxl (pip). |
+| `superserve/claude-code` | `ubuntu:24.04` | 2 · 4096 MiB · 8192 MiB | `build-essential`, `ripgrep`, `vim`, `python3`, `python3-pip` (apt); Claude Code CLI (`claude`). |
+| `superserve/openclaw` | `ubuntu:24.04` | 2 · 4096 MiB · 8192 MiB | `tmux` (apt); OpenClaw CLI. |
+| `superserve/hermes` | `ubuntu:24.04` | 2 · 4096 MiB · 8192 MiB | `tmux`, `xz-utils` (apt); Hermes agent. |
 | `superserve/omnara` | `ubuntu:24.04` | 2 · 4096 MiB · 8192 MiB | Omnara's [default machine environment](https://docs.omnara.com/machines/pools#default-machine-environment): `build-essential`, `cmake`, `ninja-build`, `gh`, `jq`, `ripgrep`, `sqlite3`, `postgresql-16`, `redis-server`, `poppler-utils`, `qpdf` (apt); Python 3.12 with uv, numpy, pandas, matplotlib, openpyxl, python-docx, python-pptx, pypdf, Playwright + Chromium headless shell (pip); Node.js 24 with `pnpm`, `yarn`; Go 1.27; `yq`. Runs as root in `/workspace` with bash as `/bin/sh`. Default template for [Omnara](https://docs.omnara.com/machines/providers/superserve) pools. |
 | `superserve/desktop` | `ubuntu:24.04` | 2 · 4096 MiB · 8192 MiB | `xfce4`, `xfce4-terminal`, `tigervnc-standalone-server`, `novnc`, `google-chrome-stable`, `xdotool`, `imagemagick` (apt); desktop session runs as the `desktop` user. For [computer use](/sandbox/desktop). |
 
