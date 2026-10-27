@@ -10,7 +10,7 @@ import {
 } from "@/hooks/use-billing-v2"
 import type { BillingSummaryResponse } from "@/lib/api/billing"
 
-import { PlanOverview } from "./plan-overview"
+import { PlanDetails, PlanOverview } from "./plan-overview"
 
 function toCents(usd: number | null | undefined): number | null {
   return typeof usd === "number" && Number.isFinite(usd)
@@ -20,15 +20,17 @@ function toCents(usd: number | null | undefined): number | null {
 
 export function PlanOverviewSection({
   summary,
+  details = false,
 }: {
   summary: BillingSummaryResponse
+  details?: boolean
 }) {
   const scope = useQueryScope()
   const planQuery = useTeamPlan(true)
   const plan = planQuery.data
-  const allowance = useFreeAllowance(plan?.kind === "free").data
-  const pricing = useAllowancePricing(plan?.kind === "free").data
-  const prepaid = usePrepaidBalance(plan?.kind === "prepaid").data
+  const allowance = useFreeAllowance(!details && plan?.kind === "free").data
+  const pricing = useAllowancePricing(!details && plan?.kind === "free").data
+  const prepaid = usePrepaidBalance(!details && plan?.kind === "prepaid").data
   if (plan === undefined)
     return (
       <p className="text-sm text-muted">
@@ -66,6 +68,21 @@ export function PlanOverviewSection({
     matchingIncluded?.status === "issued"
       ? toCents(matchingIncluded.amount_usd)
       : null
+  const canManage =
+    scope === "self" && (summary.permissions?.can_manage ?? false)
+  if (details)
+    return (
+      <PlanDetails
+        plan={{
+          ...plan,
+          fee_cents:
+            commercial?.billing_interval_months === 1
+              ? toCents(commercial.price_usd)
+              : null,
+        }}
+        canManage={canManage}
+      />
+    )
   return (
     <PlanOverview
       plan={{
@@ -82,7 +99,7 @@ export function PlanOverviewSection({
       allowance={allowance ?? null}
       prepaid={prepaid ?? null}
       usageCents={matchingPeriod ? toCents(summary.current_charges_usd) : null}
-      canManage={scope === "self" && (summary.permissions?.can_manage ?? false)}
+      canManage={canManage}
     />
   )
 }

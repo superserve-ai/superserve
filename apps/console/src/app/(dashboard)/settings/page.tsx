@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePostHog } from "posthog-js/react"
 import { useEffect, useState } from "react"
 
+import { PlanOverviewSection } from "@/components/billing/plan-overview-section"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { PageHeader } from "@/components/page-header"
 import { TeamsSection } from "@/components/settings/teams-section"
@@ -264,15 +265,20 @@ export default function SettingsPage() {
                   Billing
                 </h2>
                 <p className="mt-1 text-xs text-muted">
-                  Plan, pricing, and usage estimates.
+                  Plan, limits, and billing configuration.
                 </p>
               </div>
               <div className="max-w-xl space-y-5">
+                {billingSummaryData ? (
+                  <div className="border border-border">
+                    <PlanOverviewSection summary={billingSummaryData} details />
+                  </div>
+                ) : null}
                 <div className="border border-border px-4 py-4">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-sm font-medium text-foreground">
-                        Usage-based billing
+                        Resource rates
                       </p>
                       <p className="mt-1 text-xs leading-relaxed text-muted">
                         Usage is metered from active vCPU seconds, active GiB
@@ -322,7 +328,7 @@ export default function SettingsPage() {
                   variant="outline"
                   render={<Link href="/plan-usage" />}
                 >
-                  Billing & Usage
+                  Plan & Usage
                 </Button>
               </div>
             </div>
