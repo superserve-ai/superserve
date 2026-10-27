@@ -104,7 +104,10 @@ describe("install.sh PATH setup", () => {
     "zsh follows a ZDOTDIR that only .zshenv sets",
     () => {
       const home = newHome()
-      writeFileSync(join(home, ".zshenv"), `ZDOTDIR="$HOME/zdot"\n`)
+      writeFileSync(
+        join(home, ".zshenv"),
+        `echo "hello from zshenv"\nZDOTDIR="$HOME/zdot"\n`,
+      )
       install({ HOME: home, SHELL: "/bin/zsh" })
       expect(readFileSync(join(home, "zdot", ".zshrc"), "utf8")).toContain(
         ".superserve/bin",

@@ -105,7 +105,8 @@ if [ -z "$ON_PATH" ] && [ -z "${SUPERSERVE_NO_MODIFY_PATH:-}" ]; then
   case "$(basename "${SHELL:-/bin/sh}")" in
     zsh)
       # .zshenv may set ZDOTDIR without exporting it, so ask zsh where it reads.
-      ZDIR="$(zsh -c 'printf %s "${ZDOTDIR:-$HOME}"' 2>/dev/null || true)"
+      # The answer comes back on fd 3 so anything .zshenv prints is dropped.
+      ZDIR="$(zsh -c 'printf %s "${ZDOTDIR:-$HOME}" >&3' 3>&1 >/dev/null 2>&1 || true)"
       add_to_profile "${ZDIR:-${ZDOTDIR:-$HOME}}/.zshrc"
       ;;
     bash)
