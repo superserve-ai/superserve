@@ -175,8 +175,7 @@ export function BuyCreditPageClient({
               />
             ) : (
               <p className="text-sm text-muted">
-                Credit purchases and auto-recharge changes are temporarily
-                unavailable. You can still turn auto-recharge off.
+                Credit purchases are temporarily unavailable.
               </p>
             )}
             {!existingStarter.blocksEntry && retained.length > 0 ? (
@@ -197,6 +196,11 @@ export function BuyCreditPageClient({
                   />
                 ))}
               </div>
+            ) : null}
+            {!allowRecharge ? (
+              <p className="text-sm text-muted">
+                Auto-recharge changes are temporarily unavailable. You can still turn auto-recharge off.
+              </p>
             ) : null}
             <AutoRechargeCard
               key={[

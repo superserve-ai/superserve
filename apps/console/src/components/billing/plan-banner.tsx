@@ -21,14 +21,10 @@ function PricingV2Banner({ plan }: { plan: TeamPlan }) {
     <PlanAwareBanner
       plan={plan}
       prepaid={prepaid ?? null}
-      canManage={
-        scope === "self" &&
-        summary.permissions.can_manage &&
-        (plan.kind === "free"
-          ? capabilities.data?.fresh_entry.pro === true ||
-            capabilities.data?.fresh_entry.starter === true
-          : capabilities.data?.fresh_entry.starter === true)
-      }
+      canManage={scope === "self" && summary.permissions.can_manage}
+      canUpgrade={capabilities.data?.fresh_entry.pro === true || capabilities.data?.fresh_entry.starter === true}
+      canBuyCredit={capabilities.data?.fresh_entry.starter === true}
+      canConfigureRecharge={capabilities.data?.fresh_entry.auto_recharge === true}
     />
   )
 }

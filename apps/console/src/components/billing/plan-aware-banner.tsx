@@ -14,6 +14,9 @@ export interface PlanAwareBannerProps {
   plan: TeamPlan
   prepaid: PrepaidBalance | null
   canManage: boolean
+  canUpgrade?: boolean
+  canBuyCredit?: boolean
+  canConfigureRecharge?: boolean
 }
 
 function BannerShell({
@@ -63,6 +66,9 @@ export function PlanAwareBanner({
   plan,
   prepaid,
   canManage,
+  canUpgrade = true,
+  canBuyCredit = true,
+  canConfigureRecharge = true,
 }: PlanAwareBannerProps) {
   if (plan.kind === "free") {
     const running = plan.limits.max_concurrent
@@ -72,9 +78,11 @@ export function PlanAwareBanner({
         label="Free plan"
         action={
           <ManageAction canManage={canManage}>
-            <Button size="sm" render={<Link href={UPGRADE_PATH} />}>
-              Upgrade
-            </Button>
+            {canUpgrade ? (
+              <Button size="sm" render={<Link href={UPGRADE_PATH} />}>
+                Upgrade
+              </Button>
+            ) : null}
           </ManageAction>
         }
       >
@@ -93,13 +101,15 @@ export function PlanAwareBanner({
         label="Starter balance"
         action={
           <ManageAction canManage={canManage}>
-            <Button
-              size="sm"
-              render={<Link href={PLAN_ACTION_LINKS.starter} />}
-            >
-              Buy credit
-            </Button>
-            {!prepaid.auto_recharge.enabled && (
+            {canBuyCredit ? (
+              <Button
+                size="sm"
+                render={<Link href={PLAN_ACTION_LINKS.starter} />}
+              >
+                Buy credit
+              </Button>
+            ) : null}
+            {canConfigureRecharge && !prepaid.auto_recharge.enabled && (
               <Link
                 href={PLAN_ACTION_LINKS.starter}
                 className="self-center underline underline-offset-4"

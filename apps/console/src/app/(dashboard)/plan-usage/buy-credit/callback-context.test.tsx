@@ -200,3 +200,13 @@ describe("Starter callback context isolation", () => {
     expect(screen.getByRole("switch")).toHaveAttribute("aria-disabled", "true")
   })
 })
+
+it.each([[false, true], [true, false], [false, false], [true, true]])(
+  "describes credit entry=%s and recharge entry=%s independently",
+  (allowEntry, allowRecharge) => {
+    state.query = ""
+    render(<BuyCreditPageClient allowEntry={allowEntry} allowRecharge={allowRecharge} />)
+    expect(Boolean(screen.queryByText("Credit purchases are temporarily unavailable."))).toBe(!allowEntry)
+    expect(Boolean(screen.queryByText(/Auto-recharge changes are temporarily unavailable/))).toBe(!allowRecharge)
+  },
+)
