@@ -133,6 +133,14 @@ if [ -z "$ON_PATH" ] && [ -z "$UPDATED" ]; then
   echo "  $LINE"
 fi
 
+# An older install earlier on PATH (e.g. the 1.x npm package) would keep
+# answering to plain `superserve`.
+OTHER="$(command -v superserve 2>/dev/null || true)"
+if [ -n "$OTHER" ] && [ "$OTHER" != "${INSTALL_DIR}/superserve" ]; then
+  echo ""
+  info "Note: another superserve at ${OTHER} comes first on your PATH. Remove it (for example 'npm uninstall -g @superserve/cli') so 'superserve' runs this one."
+fi
+
 # --- Sign in ---
 # A person at a terminal goes straight to the browser login, which also signs
 # new users up. Under `curl | sh` stdin is this script, so login reads the tty.

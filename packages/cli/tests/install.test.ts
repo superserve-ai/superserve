@@ -149,6 +149,16 @@ describe("install.sh PATH setup", () => {
     expect(out).not.toContain("Open a new terminal")
   })
 
+  test("warns when an older superserve comes first on PATH", () => {
+    const home = newHome()
+    const old = join(home, "old-bin")
+    mkdirSync(old)
+    writeFileSync(join(old, "superserve"), "#!/bin/sh\n")
+    chmodSync(join(old, "superserve"), 0o755)
+    const out = install({ HOME: home, SHELL: "/bin/zsh", PATH_PREFIX: old })
+    expect(out).toContain(`another superserve at ${old}/superserve`)
+  })
+
   test("Fish gets fish syntax in the manual PATH hint", () => {
     const home = newHome()
     const out = install({
