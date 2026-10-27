@@ -139,7 +139,7 @@ fi
 # whoami is a network call, so it only runs when login would.
 SUPERSERVE="${INSTALL_DIR}/superserve"
 if [ -n "${SUPERSERVE_NO_LOGIN:-}" ] || [ ! -t 1 ] || ! (: </dev/tty) 2>/dev/null; then
-  info "Done! Run 'superserve login' to sign in."
+  info "Done! Run 'superserve login' to sign in (agents and scripts: 'superserve login --no-wait')."
 elif "$SUPERSERVE" whoami >/dev/null 2>&1; then
   info "Done! You're already signed in."
 else
