@@ -10,7 +10,7 @@ curl -fsSL https://superserve.ai/install | sh     # standalone binary, macOS and
 brew install superserve-ai/tap/superserve         # Homebrew
 ```
 
-The install script puts the binary in `~/.superserve/bin` (override with `SUPERSERVE_INSTALL_DIR`) and installs the latest release unless `SUPERSERVE_VERSION` is set.
+The install script puts the binary in `~/.superserve/bin` (override with `SUPERSERVE_INSTALL_DIR`) and installs the latest release unless `SUPERSERVE_VERSION` is set. In a terminal it then runs `superserve login`; set `SUPERSERVE_NO_LOGIN=1` to skip it.
 
 ## Authenticate
 

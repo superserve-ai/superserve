@@ -1,6 +1,7 @@
 #!/bin/sh
 # Superserve CLI installer
 # Usage: curl -fsSL https://superserve.ai/install | sh
+# Set SUPERSERVE_NO_LOGIN=1 to skip the browser sign-in at the end.
 set -eu
 
 REPO="superserve-ai/superserve"
@@ -97,4 +98,15 @@ case ":${PATH}:" in
     ;;
 esac
 
-info "Done! Run 'superserve --help' to get started."
+# --- Sign in ---
+# A person at a terminal goes straight to the browser login, which also signs
+# new users up. Under `curl | sh` stdin is this script, so login reads the tty.
+SUPERSERVE="${INSTALL_DIR}/superserve"
+if [ -z "${SUPERSERVE_NO_LOGIN:-}" ] && [ -t 1 ] && (: </dev/tty) 2>/dev/null \
+  && ! "$SUPERSERVE" whoami >/dev/null 2>&1; then
+  echo ""
+  "$SUPERSERVE" login </dev/tty || info "Run 'superserve login' to sign in."
+  exit 0
+fi
+
+info "Done! Run 'superserve login' to sign in, or 'superserve --help'."
