@@ -132,6 +132,17 @@ describe("install.sh PATH setup", () => {
     expect(found.stdout.trim()).toBe(join(dir, "superserve"))
   })
 
+  test("Fish gets fish syntax in the manual PATH hint", () => {
+    const home = newHome()
+    const out = install({
+      HOME: home,
+      SHELL: "/usr/bin/fish",
+      SUPERSERVE_NO_MODIFY_PATH: "1",
+    })
+    expect(out).toContain(`fish_add_path '${home}/.superserve/bin'`)
+    expect(out).not.toContain("export PATH=")
+  })
+
   test("Fish writes to the config under XDG_CONFIG_HOME", () => {
     const home = newHome()
     const xdg = join(home, "xdg")

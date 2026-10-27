@@ -101,8 +101,12 @@ bash_login_file() {
 # Single-quote the directory so a profile never re-parses it as shell code.
 SQ_DIR="'$(printf '%s' "$INSTALL_DIR" | sed "s/'/'\\\\''/g")'"
 LINE="export PATH=${SQ_DIR}:\"\$PATH\""
+SHELL_NAME="$(basename "${SHELL:-/bin/sh}")"
+if [ "$SHELL_NAME" = "fish" ]; then
+  LINE="fish_add_path '$(printf '%s' "$INSTALL_DIR" | sed -e 's/\\/\\\\/g' -e "s/'/\\\\'/g")'"
+fi
 if [ -z "$ON_PATH" ] && [ -z "${SUPERSERVE_NO_MODIFY_PATH:-}" ]; then
-  case "$(basename "${SHELL:-/bin/sh}")" in
+  case "$SHELL_NAME" in
     zsh)
       # .zshenv may set ZDOTDIR without exporting it, so ask zsh where it reads.
       # The answer comes back on fd 3 so anything .zshenv prints is dropped.
@@ -119,7 +123,6 @@ if [ -z "$ON_PATH" ] && [ -z "${SUPERSERVE_NO_MODIFY_PATH:-}" ]; then
       add_to_profile "${LOGIN_FILE:-$DEFAULT_LOGIN}"
       ;;
     fish)
-      LINE="fish_add_path '$(printf '%s' "$INSTALL_DIR" | sed -e 's/\\/\\\\/g' -e "s/'/\\\\'/g")'"
       add_to_profile "${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
       ;;
   esac
