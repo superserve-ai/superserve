@@ -12,6 +12,7 @@ import { PlanBanner } from "./plan-banner"
 const team = "use:11111111-1111-4111-8111-111111111111"
 const otherTeam = "use:22222222-2222-4222-8222-222222222222"
 const state = vi.hoisted(() => ({
+  starterRecover: vi.fn(),
   recover: vi.fn(),
   start: vi.fn(),
   resume: vi.fn(),
@@ -137,9 +138,7 @@ vi.mock("@/hooks/use-prepaid-credit", () => ({
   useRetainedPrepaidOperations: () => [],
 }))
 vi.mock("@/lib/api/starter-checkout-recovery", () => ({
-  recoverStarterCheckout: async () => ({
-    outcome: "no_pending_starter_checkout",
-  }),
+  recoverStarterCheckout: (...args: unknown[]) => state.starterRecover(...args),
 }))
 vi.mock("@/lib/api/plan-checkout", () => ({
   recoverProPayment: (...args: unknown[]) => state.recover(...args),
@@ -149,14 +148,17 @@ vi.mock("@/lib/api/plan-checkout", () => ({
 }))
 beforeEach(() => {
   vi.clearAllMocks()
+  state.starterRecover.mockResolvedValue({
+    outcome: "no_pending_starter_checkout",
+  })
   state.recover.mockResolvedValue("none")
   state.planReady = true
   state.legacyPlan = false
   state.originalTeamMember = true
   window.history.replaceState({}, "", "/")
 })
-async function renderPro(query: string) {
-  window.history.replaceState({}, "", `/billing/pro/?${query}`)
+async function renderPro(query: string, pathname = "/billing/pro/") {
+  window.history.replaceState({}, "", `${pathname}?${query}`)
   const params: Record<string, string | string[]> = {}
   const search = new URLSearchParams(query)
   search.forEach((_, key) => {
@@ -673,3 +675,149 @@ it.each([
     new URLSearchParams(query).getAll("billing"),
   )
 })
+
+vi.mock("@/lib/api/prepaid", async (original) => ({
+  ...(await original<typeof import("@/lib/api/prepaid")>()),
+  startPrepaidCheckout: (...args: unknown[]) => state.start(...args),
+}))
+
+const invalidReturnMatrix = ["/billing/pro", "/plan-usage/buy-credit"].flatMap(
+  (route) =>
+    ["", "/"].flatMap((slash) =>
+      ["", `team=${team}&`].flatMap((identity) =>
+        [
+          "purchase=unknown",
+          "purchase=",
+          "purchase=success&purchase=success",
+          "purchase=success&purchase=cancel",
+          "purchase_id=33333333-3333-4333-8333-333333333333&purchase_id=33333333-3333-4333-8333-333333333333",
+          "purchase_id=not-an-id&unsupported=1",
+          "billing=unknown",
+          "billing=",
+          "billing=success&billing=success",
+          "billing=success&billing=cancel",
+          "billing_flow=unknown",
+          "billing_flow=",
+          "billing_flow=success&billing_flow=success",
+          "billing_flow=success&billing_flow=cancel",
+          "billing=unknown&billing_flow=success",
+          "billing=success&billing_flow=unknown",
+        ].map((marker) => `${route}${slash}?${identity}${marker}`),
+      ),
+    ),
+)
+
+it.each(invalidReturnMatrix)(
+  "rejects invalid return across middleware and sign-in: %s",
+  async (path) => {
+    const response = await middleware(
+      new NextRequest(new URL(path, "https://console.test")),
+    )
+    const signin = new URL(response.headers.get("location")!)
+    expect(signin.pathname.replace(/\/$/, "")).toBe("/auth/signin")
+    expect(signin.searchParams.get("next")).toBe("/auth/auth-code-error/")
+    window.history.replaceState({}, "", signin.pathname + signin.search)
+    const replace = vi
+      .spyOn(window.location, "replace")
+      .mockImplementation(() => {})
+    const auth = render(<SignInPage />)
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith("/auth/auth-code-error/"),
+    )
+    auth.unmount()
+    replace.mockRestore()
+    const errorResponse = await middleware(
+      new NextRequest("https://console.test/auth/auth-code-error/"),
+    )
+    expect(errorResponse.headers.get("location")).toBeNull()
+    window.history.replaceState({}, "", "/auth/auth-code-error/")
+    render(<AuthCodeErrorPage />)
+    expect(screen.getByText("Authentication Error")).toBeTruthy()
+    expect(state.start).not.toHaveBeenCalled()
+    expect(state.resume).not.toHaveBeenCalled()
+    expect(state.recover).not.toHaveBeenCalled()
+    expect(state.starterRecover).not.toHaveBeenCalled()
+  },
+)
+
+it.each(invalidReturnMatrix)(
+  "keeps signed-in invalid return fenced after banner/query synchronization: %s",
+  async (path) => {
+    const url = new URL(path, "https://console.test")
+    const mount = async () => {
+      if (url.pathname.startsWith("/billing/pro"))
+        return renderPro(window.location.search.slice(1), url.pathname)
+      return render(
+        <>
+          <PlanBanner />
+          <BuyCreditRoute />
+        </>,
+      )
+    }
+    window.history.replaceState({}, "", path)
+    const first = await mount()
+    first.unmount()
+    await mount()
+    expect(screen.getByText(/incomplete or invalid/)).toBeTruthy()
+    expect(
+      screen.queryByRole("button", {
+        name: /Buy .* credit|Continue to payment/,
+      }),
+    ).toBeNull()
+    expect(state.start).not.toHaveBeenCalled()
+    expect(state.resume).not.toHaveBeenCalled()
+    expect(state.recover).not.toHaveBeenCalled()
+    expect(state.starterRecover).not.toHaveBeenCalled()
+    if (url.pathname.startsWith("/plan-usage"))
+      expect(state.prepaid).toHaveBeenLastCalledWith(false)
+  },
+)
+
+it.each([
+  "/billing/pro",
+  "/billing/pro/",
+  "/plan-usage/buy-credit",
+  "/plan-usage/buy-credit/",
+])("preserves deliberate bare entry through sign-in: %s", async (path) => {
+  const response = await middleware(
+    new NextRequest(new URL(path, "https://console.test")),
+  )
+  const signin = new URL(response.headers.get("location")!)
+  expect(signin.searchParams.get("next")).toBe(path)
+  window.history.replaceState({}, "", signin.pathname + signin.search)
+  const replace = vi
+    .spyOn(window.location, "replace")
+    .mockImplementation(() => {})
+  render(<SignInPage />)
+  await waitFor(() => expect(replace).toHaveBeenCalledWith(path))
+  replace.mockRestore()
+  expect(state.start).not.toHaveBeenCalled()
+  expect(state.resume).not.toHaveBeenCalled()
+  expect(state.recover).not.toHaveBeenCalled()
+  expect(state.starterRecover).not.toHaveBeenCalled()
+})
+
+it.each(["/plan-usage/buy-credit", "/plan-usage/buy-credit/"])(
+  "retains accepted malformed operation evidence for downstream rejection: %s",
+  async (route) => {
+    const path = `${route}?team=${team}&purchase_id=not-an-id`
+    const response = await middleware(
+      new NextRequest(new URL(path, "https://console.test")),
+    )
+    const signin = new URL(response.headers.get("location")!)
+    expect(signin.searchParams.get("next")).toBe(path)
+    window.history.replaceState({}, "", path)
+    render(
+      <>
+        <PlanBanner />
+        <BuyCreditRoute />
+      </>,
+    )
+    expect(screen.getByText(/incomplete or invalid/)).toBeTruthy()
+    expect(new URLSearchParams(window.location.search).get("purchase_id")).toBe(
+      "not-an-id",
+    )
+    expect(state.start).not.toHaveBeenCalled()
+    expect(state.starterRecover).not.toHaveBeenCalled()
+  },
+)

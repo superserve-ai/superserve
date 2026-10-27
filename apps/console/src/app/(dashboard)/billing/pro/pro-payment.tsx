@@ -73,6 +73,8 @@ function ProPaymentContext({
       "billing",
     ) !== null
   const returning =
+    params.has("purchase") ||
+    params.has("purchase_id") ||
     params.has("team") ||
     (params.has("billing_flow") && !genericFlowPending) ||
     (params.has("billing") && !legacyGenericReturn)

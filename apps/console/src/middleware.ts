@@ -39,13 +39,16 @@ export async function middleware(request: NextRequest) {
     const billingPath = pathname + request.nextUrl.search
     const retainedBilling =
       proAuthReturnPath(billingPath) ?? starterAuthReturnPath(billingPath)
-    const invalidGenericReturn =
+    const invalidBillingReturn =
       /^\/(?:billing\/pro|plan-usage\/buy-credit)\/?$/.test(pathname) &&
-      request.nextUrl.searchParams.has("billing_flow") &&
+      (request.nextUrl.searchParams.has("billing_flow") ||
+        request.nextUrl.searchParams.has("billing") ||
+        request.nextUrl.searchParams.has("purchase") ||
+        request.nextUrl.searchParams.has("purchase_id")) &&
       !retainedBilling
     signinUrl.searchParams.set(
       "next",
-      invalidGenericReturn
+      invalidBillingReturn
         ? "/auth/auth-code-error/"
         : (retainedBilling ??
             ycReturnPath(pathname + request.nextUrl.search) ??
