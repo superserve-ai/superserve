@@ -257,7 +257,7 @@ describe("CustomerBillingSection", () => {
 
     expect(screen.getByText("Open Customer Portal")).toBeInTheDocument()
     expect(screen.getAllByText("Jun 1, 2026 - Jul 1, 2026")).toHaveLength(2)
-    expect(screen.getByText("Billing is live")).toBeInTheDocument()
+    expect(screen.queryByText("Billing is live")).not.toBeInTheDocument()
     expect(screen.queryByText("Tracking only")).not.toBeInTheDocument()
     expect(screen.getByText("CPU")).toBeInTheDocument()
     expect(screen.getByText("Memory")).toBeInTheDocument()
@@ -425,5 +425,94 @@ describe("CustomerBillingSection", () => {
         "Billing status is refreshing against the latest server state.",
       ),
     ).toBeInTheDocument()
+  })
+
+  it.each(["paid", "open", "uncollectible", "void"])(
+    "retains invoice history and actionable %s state",
+    (status) => {
+      useCustomerBillingPeriods.mockReturnValue({
+        data: {
+          periods: [
+            {
+              period_id: "test",
+              period_start: "2026-06-01T00:00:00Z",
+              period_end: "2026-07-01T00:00:00Z",
+              status: "active",
+              stripe_subscription_status: "active",
+              stripe_invoice_status: status,
+            },
+          ],
+        },
+        isPending: false,
+        isFetching: false,
+        error: null,
+      })
+      renderSection()
+      expect(screen.queryByText("Billing is live")).not.toBeInTheDocument()
+      expect(screen.getByText("Billing Periods")).toBeInTheDocument()
+      expect(
+        screen.getByRole("button", { name: "Open Customer Portal" }),
+      ).toBeEnabled()
+      if (status === "paid") {
+        expect(screen.queryByText("Payment Status")).not.toBeInTheDocument()
+        expect(screen.queryByText("Connected")).not.toBeInTheDocument()
+      } else {
+        expect(screen.getByText("Payment Status")).toBeInTheDocument()
+      }
+    },
+  )
+  it.each([
+    { label: "pending period", status: "pending" },
+    { label: "failed period", status: "failed" },
+    {
+      label: "blocked period",
+      status: "active",
+      blocked_reason: "Payment reconciliation pending",
+    },
+    {
+      label: "pending subscription",
+      status: "active",
+      stripe_subscription_status: "incomplete",
+    },
+    {
+      label: "failed subscription",
+      status: "active",
+      stripe_subscription_status: "past_due",
+    },
+    {
+      label: "scheduled cancellation",
+      status: "active",
+      cancel_at_period_end: true,
+    },
+  ])("keeps payment status for $label", ({ label: _label, ...period }) => {
+    useCustomerBillingPeriods.mockReturnValue({
+      data: {
+        periods: [
+          {
+            period_id: "test",
+            period_start: "2026-06-01T00:00:00Z",
+            period_end: "2026-07-01T00:00:00Z",
+            stripe_subscription_status: "active",
+            stripe_invoice_status: "paid",
+            ...period,
+          },
+        ],
+      },
+      isPending: false,
+      isFetching: false,
+      error: null,
+    })
+    renderSection()
+    expect(screen.getByText("Payment Status")).toBeInTheDocument()
+  })
+
+  it("keeps disconnected payment and setup recovery visible", () => {
+    renderSection({
+      ...baseSummary,
+      portal_available: false,
+      payment_setup_required: true,
+    })
+    expect(screen.getByText("Payment setup required")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Set Up Billing" })).toBeEnabled()
   })
 })

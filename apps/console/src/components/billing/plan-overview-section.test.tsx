@@ -107,10 +107,10 @@ beforeEach(() => {
 })
 
 describe("PlanOverviewSection with pricing v2 off", () => {
-  it("keeps an assigned team's change-plan link available after rollback", () => {
+  it("keeps an assigned team's settings change-plan link available after rollback", () => {
     mocks.version.mockReturnValue("legacy")
     mocks.plan.mockReturnValue({ data: plan({}), isError: false })
-    render(<PlanOverviewSection summary={summary} />)
+    render(<PlanOverviewSection summary={summary} details />)
     expect(screen.getByRole("link", { name: "Change plan" })).toBeTruthy()
   })
 
@@ -134,6 +134,7 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     })
     render(
       <PlanOverviewSection
+        details
         summary={{
           ...summary,
           plan: {
@@ -177,11 +178,10 @@ describe("PlanOverviewSection with pricing v2 on", () => {
   it("shows Pro usage against the included amount", () => {
     mocks.plan.mockReturnValue({ data: plan({}), isError: false })
     render(<PlanOverviewSection summary={summary} />)
-    expect(screen.getByText("$250 / month")).toBeTruthy()
     expect(screen.getByText(/of \$250 used/)).toBeTruthy()
     expect(screen.getByText(/\$62\.50 beyond the included usage/)).toBeTruthy()
-    expect(screen.getByText("8 vCPU, 32 GiB memory, 100 GiB disk")).toBeTruthy()
-    expect(screen.getByRole("link", { name: "Change plan" })).toBeTruthy()
+    expect(screen.queryByText("Current plan")).toBeNull()
+    expect(screen.queryByRole("link", { name: "Change plan" })).toBeNull()
   })
 
   it("doesn't report usage from a different billing period", () => {
@@ -199,7 +199,6 @@ describe("PlanOverviewSection with pricing v2 on", () => {
       isError: false,
     })
     render(<PlanOverviewSection summary={summary} />)
-    expect(screen.getByText("Subscription")).toBeTruthy()
     expect(screen.getByText("Usage couldn't be loaded.")).toBeTruthy()
     expect(screen.queryByText(/of \$250 used/)).toBeNull()
   })
@@ -218,7 +217,7 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     expect(
       screen.getByRole("link", { name: "Contact us" }).getAttribute("href"),
     ).toBe("https://calendly.com/superserve-ai/25-min")
-    expect(screen.getByRole("link", { name: "Change plan" })).toBeTruthy()
+    expect(screen.queryByRole("link", { name: "Change plan" })).toBeNull()
   })
 
   it("shows the Free allowance window and its reset time", () => {
@@ -325,6 +324,10 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     render(<PlanOverviewSection summary={summary} />)
     expect(screen.getByText("$42.50")).toBeTruthy()
     expect(
+      screen.getByRole("link", { name: "Add more" }).getAttribute("href"),
+    ).toBe("/plan-usage/buy-credit")
+    expect(screen.queryByText("Current plan")).toBeNull()
+    expect(
       screen.getByText(/adds \$20 when the balance drops below \$5/),
     ).toBeTruthy()
   })
@@ -414,7 +417,7 @@ describe("PlanOverviewSection with pricing v2 on", () => {
       }),
       isError: false,
     })
-    render(<PlanOverviewSection summary={summary} />)
+    render(<PlanOverviewSection summary={summary} details />)
     expect(screen.getByText("Change scheduled")).toBeTruthy()
     expect(screen.getByText("Changes to Free on Nov 1, 2026.")).toBeTruthy()
   })
@@ -482,4 +485,66 @@ describe("Pro bridge before the first monthly credit period", () => {
       expect(screen.getByText("Usage couldn't be loaded.")).toBeTruthy()
     },
   )
+})
+
+describe("Settings plan details", () => {
+  it.each([0, 3])(
+    "shows the authoritative Free template cap %s without usage or guessing",
+    (max_templates) => {
+      mocks.plan.mockReturnValue({
+        data: plan({
+          key: "free",
+          kind: "free",
+          name: "Free",
+          limits: { ...plan({}).limits, max_templates },
+        }),
+      })
+      render(<PlanOverviewSection summary={summary} details />)
+      expect(screen.getByText("Free")).toBeTruthy()
+      expect(
+        screen.getByText("Custom templates").nextElementSibling?.textContent,
+      ).toBe(String(max_templates))
+      expect(
+        screen.getByRole("link", { name: "Change plan" }).getAttribute("href"),
+      ).toBe("/plan-usage/upgrade")
+      expect(screen.queryByText("Usage limits")).toBeNull()
+      expect(mocks.allowance).toHaveBeenCalledWith(false)
+      expect(mocks.pricing).toHaveBeenCalledWith(false)
+    },
+  )
+  it("retains an unknown plan loading failure without a family guess", () => {
+    mocks.plan.mockReturnValue({ data: undefined, isError: true })
+    render(<PlanOverviewSection summary={summary} details />)
+    expect(screen.getByText("Your plan could not be loaded.")).toBeTruthy()
+    expect(screen.queryByText("Free")).toBeNull()
+    expect(screen.queryByText("Usage-based billing")).toBeNull()
+  })
+  it("puts Starter configuration in Settings and hides management from viewers", () => {
+    mocks.plan.mockReturnValue({
+      data: plan({ key: "starter", kind: "prepaid", name: "Starter" }),
+    })
+    const { unmount } = render(
+      <PlanOverviewSection summary={summary} details />,
+    )
+    expect(
+      screen
+        .getByRole("link", { name: "Manage auto-recharge" })
+        .getAttribute("href"),
+    ).toBe("/plan-usage/buy-credit")
+    expect(screen.queryByRole("link", { name: "Add more" })).toBeNull()
+    unmount()
+    render(
+      <PlanOverviewSection
+        summary={{
+          ...summary,
+          permissions: { can_view: true, can_manage: false },
+        }}
+        details
+      />,
+    )
+    expect(
+      screen.queryByRole("link", { name: "Manage auto-recharge" }),
+    ).toBeNull()
+    expect(screen.queryByRole("link", { name: "Change plan" })).toBeNull()
+  })
 })

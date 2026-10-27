@@ -302,6 +302,76 @@ export interface PlanOverviewProps {
   allowancePricing?: BillingPricingResponse | null
 }
 
+export function PlanDetails({
+  plan,
+  canManage,
+}: {
+  plan: TeamPlan
+  canManage: boolean
+}) {
+  const size = describeSandboxSize(plan.limits)
+  const pending = plan.pending_change
+  return (
+    <div className="space-y-3 p-5 sm:p-6">
+      <div className="flex items-center gap-2">
+        <p className={EYEBROW}>Current plan</p>
+        {pending ? <Badge variant="warning">Change scheduled</Badge> : null}
+      </div>
+      <p className="text-3xl font-medium tracking-tight text-foreground">
+        {plan.name}
+      </p>
+      {planPriceLabel(plan) ? (
+        <p className="text-sm text-muted">{planPriceLabel(plan)}</p>
+      ) : null}
+      {pending ? (
+        <p className="text-sm text-foreground">
+          Changes to {pending.plan_name} on {date(pending.effective_at)}.
+        </p>
+      ) : null}
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 pt-2 text-sm">
+        <dt className="text-muted">Running at once</dt>
+        <dd className="text-foreground">
+          {plan.limits.max_concurrent?.toLocaleString("en-US") ?? "Default"}
+        </dd>
+        {size ? (
+          <>
+            <dt className="text-muted">Per sandbox</dt>
+            <dd className="text-foreground">{size}</dd>
+          </>
+        ) : null}
+        {plan.limits.max_templates !== null ? (
+          <>
+            <dt className="text-muted">Custom templates</dt>
+            <dd className="text-foreground">
+              {plan.limits.max_templates.toLocaleString("en-US")}
+            </dd>
+          </>
+        ) : null}
+      </dl>
+      {canManage ? (
+        <div className="flex flex-wrap gap-3">
+          <Button
+            size="sm"
+            variant="outline"
+            render={<Link href={UPGRADE_PATH} />}
+          >
+            Change plan
+          </Button>
+          {plan.kind === "prepaid" ? (
+            <Button
+              size="sm"
+              variant="outline"
+              render={<Link href={PLAN_ACTION_LINKS.starter} />}
+            >
+              Manage auto-recharge
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export function PlanOverview({
   plan,
   allowance,
@@ -312,62 +382,14 @@ export function PlanOverview({
   allowancePricing,
   canManage,
 }: PlanOverviewProps) {
-  const size = describeSandboxSize(plan.limits)
-  const pending = plan.pending_change
   return (
     <section
-      aria-label="Plan and limits"
-      className="relative mx-auto grid w-full max-w-4xl border border-dashed border-border bg-surface/40 sm:grid-cols-2"
+      aria-label="Usage and balance"
+      className="relative mx-auto w-full max-w-4xl border border-dashed border-border bg-surface/40"
       data-testid="plan-overview"
     >
       <CornerBrackets size="sm" className="border-brand/70" />
-      <div className="space-y-3 p-5 sm:p-6">
-        <div className="flex items-center gap-2">
-          <p className={EYEBROW}>Current plan</p>
-          {pending ? <Badge variant="warning">Change scheduled</Badge> : null}
-        </div>
-        <p className="text-3xl font-medium tracking-tight text-foreground">
-          {plan.name}
-        </p>
-        {planPriceLabel(plan) ? (
-          <p className="text-sm text-muted">{planPriceLabel(plan)}</p>
-        ) : null}
-        {pending ? (
-          <p className="text-sm text-foreground">
-            Changes to {pending.plan_name} on {date(pending.effective_at)}.
-          </p>
-        ) : null}
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 pt-2 text-sm">
-          <dt className="text-muted">Running at once</dt>
-          <dd className="text-foreground">
-            {plan.limits.max_concurrent?.toLocaleString("en-US") ?? "Default"}
-          </dd>
-          {size ? (
-            <>
-              <dt className="text-muted">Per sandbox</dt>
-              <dd className="text-foreground">{size}</dd>
-            </>
-          ) : null}
-          {plan.limits.max_templates !== null ? (
-            <>
-              <dt className="text-muted">Custom templates</dt>
-              <dd className="text-foreground">
-                {plan.limits.max_templates.toLocaleString("en-US")}
-              </dd>
-            </>
-          ) : null}
-        </dl>
-        {canManage ? (
-          <Button
-            size="sm"
-            variant={plan.kind === "free" ? "default" : "outline"}
-            render={<Link href={UPGRADE_PATH} />}
-          >
-            {plan.kind === "free" ? "Upgrade" : "Change plan"}
-          </Button>
-        ) : null}
-      </div>
-      <div className="border-t border-dashed border-border sm:border-t-0 sm:border-l">
+      <div>
         {plan.kind === "free" ? (
           <FreeAllowancePanel
             allowance={allowance}
@@ -402,6 +424,24 @@ export function PlanOverview({
             </p>
           </Panel>
         )}
+        {canManage && (plan.kind === "free" || plan.kind === "prepaid") ? (
+          <div className="px-5 pb-5 sm:px-6 sm:pb-6">
+            <Button
+              size="sm"
+              render={
+                <Link
+                  href={
+                    plan.kind === "free"
+                      ? UPGRADE_PATH
+                      : PLAN_ACTION_LINKS.starter
+                  }
+                />
+              }
+            >
+              {plan.kind === "free" ? "Upgrade" : "Add more"}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </section>
   )
