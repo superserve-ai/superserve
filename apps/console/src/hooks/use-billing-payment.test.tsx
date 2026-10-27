@@ -73,8 +73,12 @@ it("keeps checkout return conventions and blocks duplicate submission", async ()
   expect(result.current.submitting).toBe("checkout")
   expect(mocks.checkout).toHaveBeenCalledTimes(1)
   const params = mocks.checkout.mock.calls[0][0]
-  expect(new URL(params.successUrl).searchParams.get("billing")).toBe("success")
-  expect(new URL(params.cancelUrl).searchParams.get("billing")).toBe("cancel")
+  expect(new URL(params.successUrl).searchParams.get("billing_flow")).toBe(
+    "success",
+  )
+  expect(new URL(params.cancelUrl).searchParams.get("billing_flow")).toBe(
+    "cancel",
+  )
   expect(new URL(params.successUrl).searchParams.get("tab")).toBe("one")
   await act(async () => {
     reject(new Error("Unavailable"))
@@ -91,7 +95,7 @@ it("prefers the existing portal flow", async () => {
   expect(mocks.checkout).not.toHaveBeenCalled()
   expect(
     new URL(mocks.portal.mock.calls[0][0].returnUrl).searchParams.get(
-      "billing",
+      "billing_flow",
     ),
   ).toBe("portal-return")
 })
@@ -217,3 +221,31 @@ it("ignores a late payment response after team selection changes", async () => {
   expect(window.location.href).toBe(originalUrl)
   expect(mocks.toast).not.toHaveBeenCalled()
 })
+
+it.each([false, true])(
+  "keeps existing purchase and Pro callback identity separate from generic setup (portal: %s)",
+  async (portal) => {
+    window.history.replaceState(
+      {},
+      "",
+      "/billing/pro/?billing=success&team=use%3A11111111-1111-4111-8111-111111111111&purchase_id=22222222-2222-4222-8222-222222222222",
+    )
+    const request = portal ? mocks.portal : mocks.checkout
+    request.mockRejectedValue(new Error("not navigating"))
+    const { result } = setup({ ...summary, portal_available: portal })
+    await act(() => result.current.openSession())
+    const raw = request.mock.calls[0][0]
+    const urls = portal ? [raw.returnUrl] : [raw.successUrl, raw.cancelUrl]
+    for (const value of urls) {
+      const url = new URL(value)
+      expect(url.searchParams.get("billing")).toBe("success")
+      expect(url.searchParams.get("team")).toBe(
+        "use:11111111-1111-4111-8111-111111111111",
+      )
+      expect(url.searchParams.get("purchase_id")).toBe(
+        "22222222-2222-4222-8222-222222222222",
+      )
+      expect(url.searchParams.has("billing_flow")).toBe(true)
+    }
+  },
+)

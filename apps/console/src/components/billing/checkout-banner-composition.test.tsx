@@ -15,6 +15,8 @@ const state = vi.hoisted(() => ({
   toast: vi.fn(),
   replace: vi.fn(),
   prepaid: vi.fn(),
+  planReady: true,
+  legacyPlan: false,
 }))
 vi.mock("next/navigation", () => ({
   usePathname: () => window.location.pathname,
@@ -61,7 +63,13 @@ vi.mock("@/hooks/use-pricing-version", () => ({
   usePricingVersion: () => "v2",
 }))
 vi.mock("@/hooks/use-billing-v2", () => ({
-  useTeamPlan: () => ({ data: { kind: "prepaid" } }),
+  useTeamPlan: () => ({
+    data: state.planReady
+      ? state.legacyPlan
+        ? null
+        : { kind: "prepaid" }
+      : undefined,
+  }),
   usePrepaidBalance: () => ({ data: null }),
 }))
 vi.mock("./plan-aware-banner", () => ({
@@ -105,6 +113,8 @@ vi.mock("@/lib/api/plan-checkout", () => ({
 beforeEach(() => {
   vi.clearAllMocks()
   state.recover.mockResolvedValue("none")
+  state.planReady = true
+  state.legacyPlan = false
   window.history.replaceState({}, "", "/")
 })
 async function renderPro(query: string) {
@@ -181,7 +191,7 @@ describe("global billing banner composed with checkout routes", () => {
       expect(state.prepaid).toHaveBeenLastCalledWith(false)
     },
   )
-  it("does not erase unexpected billing from invalid Starter callback", () => {
+  it("consumes generic billing on buy-credit without erasing its purchase callback", () => {
     const query = `purchase=success&team=${team}&billing=success`
     window.history.replaceState({}, "", `/plan-usage/buy-credit/?${query}`)
     render(
@@ -191,9 +201,43 @@ describe("global billing banner composed with checkout routes", () => {
       </>,
     )
     expect(screen.getByText(/incomplete or invalid/)).toBeTruthy()
-    expect(window.location.search).toBe(`?${query}`)
+    expect(new URLSearchParams(window.location.search).toString()).toBe(
+      new URLSearchParams(`purchase=success&team=${team}`).toString(),
+    )
+    expect(state.invalidate).toHaveBeenCalledOnce()
+    expect(state.toast).toHaveBeenCalledOnce()
     expect(state.prepaid).toHaveBeenLastCalledWith(false)
   })
+  it.each(["success", "cancel", "portal-return"])(
+    "consumes generic %s billing on Pro without treating it as a Pro payment",
+    async (result) => {
+      await renderPro(`billing=${result}`)
+      expect(window.location.search).toBe("")
+      expect(screen.queryByText(/incomplete or invalid/)).toBeNull()
+      expect(state.invalidate).toHaveBeenCalledOnce()
+      expect(state.toast).toHaveBeenCalledOnce()
+      expect(state.recover).not.toHaveBeenCalled()
+      expect(state.start).not.toHaveBeenCalled()
+    },
+  )
+  it.each(["success", "cancel", "portal-return"])(
+    "consumes generic %s billing on buy-credit once and preserves unrelated parameters",
+    (result) => {
+      window.history.replaceState(
+        {},
+        "",
+        `/plan-usage/buy-credit/?billing=${result}&amount=500&keep=1`,
+      )
+      const { rerender } = render(<PlanBanner />)
+      expect(window.location.search).toBe("?amount=500&keep=1")
+      expect(state.invalidate).toHaveBeenCalledOnce()
+      expect(state.toast).toHaveBeenCalledOnce()
+      rerender(<PlanBanner />)
+      expect(state.invalidate).toHaveBeenCalledOnce()
+      expect(state.toast).toHaveBeenCalledOnce()
+      expect(state.start).not.toHaveBeenCalled()
+    },
+  )
   it.each(["/plan-usage", "/plan-usage/"])(
     "leaves %s consumption to inline notice",
     (path) => {
@@ -215,3 +259,193 @@ describe("global billing banner composed with checkout routes", () => {
     expect(state.invalidate).toHaveBeenCalled()
   })
 })
+
+describe("generic setup marker and strict checkout callback matrix", () => {
+  it.each(["success", "cancel", "portal-return"])(
+    "consumes generic %s from a team-pinned Pro entry without initiating payment recovery",
+    async (flow) => {
+      const view = await renderPro(`team=${team}&billing_flow=${flow}`)
+      expect(new URLSearchParams(window.location.search).toString()).toBe(
+        new URLSearchParams(`team=${team}`).toString(),
+      )
+      expect(screen.queryByText(/incomplete or invalid/)).toBeNull()
+      view.rerender(<PlanBanner />)
+      expect(state.toast).toHaveBeenCalledOnce()
+      expect(state.invalidate).toHaveBeenCalledOnce()
+      expect(state.recover).not.toHaveBeenCalled()
+      expect(state.start).not.toHaveBeenCalled()
+    },
+  )
+  it("removes a stale generic marker without consuming a true Pro result or recovering the wrong team", async () => {
+    const remaining = `billing=success&team=${otherTeam}`
+    const view = await renderPro(`${remaining}&billing_flow=portal-return`)
+    expect(new URLSearchParams(window.location.search).toString()).toBe(
+      new URLSearchParams(remaining).toString(),
+    )
+    view.rerender(
+      <>
+        <PlanBanner />
+        {await ProPaymentPage({
+          searchParams: Promise.resolve({
+            billing: "success",
+            team: otherTeam,
+          }),
+        })}
+      </>,
+    )
+    expect(
+      screen.getByRole("button", { name: "Return to checkout team" }),
+    ).toBeTruthy()
+    expect(new URLSearchParams(window.location.search).toString()).toBe(
+      new URLSearchParams(remaining).toString(),
+    )
+    expect(state.recover).not.toHaveBeenCalled()
+    expect(state.start).not.toHaveBeenCalled()
+    expect(state.invalidate).toHaveBeenCalledOnce()
+  })
+  it("recovers a matching true Pro result only after its independent generic marker is consumed", async () => {
+    const remaining = `billing=success&team=${team}`
+    const view = await renderPro(`${remaining}&billing_flow=cancel`)
+    expect(state.recover).not.toHaveBeenCalled()
+    view.rerender(
+      <>
+        <PlanBanner />
+        {await ProPaymentPage({
+          searchParams: Promise.resolve({ billing: "success", team }),
+        })}
+      </>,
+    )
+    expect(new URLSearchParams(window.location.search).toString()).toBe(
+      new URLSearchParams(remaining).toString(),
+    )
+    expect(state.recover).toHaveBeenCalledExactlyOnceWith(team)
+    expect(state.start).not.toHaveBeenCalled()
+    expect(state.toast).toHaveBeenCalledOnce()
+  })
+  it.each(["unknown", "success&billing_flow=cancel"])(
+    "retains invalid or duplicate generic marker %s without downgrading strict recovery",
+    async (flow) => {
+      const query = `billing=success&team=${team}&billing_flow=${flow}`
+      await renderPro(query)
+      expect(window.location.search).toBe(`?${query}`)
+      expect(screen.getByText(/incomplete or invalid/)).toBeTruthy()
+      expect(state.recover).not.toHaveBeenCalled()
+      expect(state.start).not.toHaveBeenCalled()
+      expect(state.invalidate).not.toHaveBeenCalled()
+    },
+  )
+  it("preserves malformed team context after consuming a generic setup marker", async () => {
+    const view = await renderPro("team=malformed&billing_flow=success")
+    expect(window.location.search).toBe("?team=malformed")
+    view.rerender(
+      <>
+        <PlanBanner />
+        {await ProPaymentPage({
+          searchParams: Promise.resolve({ team: "malformed" }),
+        })}
+      </>,
+    )
+    expect(screen.getByText(/incomplete or invalid/)).toBeTruthy()
+    expect(state.recover).not.toHaveBeenCalled()
+    expect(state.start).not.toHaveBeenCalled()
+  })
+  it.each(["33333333-3333-4333-8333-333333333333", "malformed"])(
+    "preserves purchase identity %s when consuming an independent generic marker",
+    (purchaseId) => {
+      const remaining = `purchase=cancel&team=${otherTeam}&purchase_id=${purchaseId}`
+      window.history.replaceState(
+        {},
+        "",
+        `/plan-usage/buy-credit/?${remaining}&billing_flow=success`,
+      )
+      const view = render(
+        <>
+          <PlanBanner />
+          <BuyCreditRoute />
+        </>,
+      )
+      expect(new URLSearchParams(window.location.search).toString()).toBe(
+        new URLSearchParams(remaining).toString(),
+      )
+      view.rerender(
+        <>
+          <PlanBanner />
+          <BuyCreditRoute />
+        </>,
+      )
+      expect(new URLSearchParams(window.location.search).toString()).toBe(
+        new URLSearchParams(remaining).toString(),
+      )
+      expect(state.prepaid).toHaveBeenLastCalledWith(false)
+      expect(state.start).not.toHaveBeenCalled()
+      if (purchaseId === "malformed")
+        expect(screen.getByText(/incomplete or invalid/)).toBeTruthy()
+      else
+        expect(
+          screen.getByRole("button", { name: "Return to checkout team" }),
+        ).toBeTruthy()
+      expect(state.invalidate).toHaveBeenCalledOnce()
+    },
+  )
+})
+
+it("consumes overlapping generic markers on buy-credit without stealing its purchase callback", () => {
+  const purchaseId = "33333333-3333-4333-8333-333333333333"
+  const remaining = `purchase=cancel&team=${otherTeam}&purchase_id=${purchaseId}`
+  window.history.replaceState(
+    {},
+    "",
+    `/plan-usage/buy-credit/?${remaining}&billing=success&billing_flow=portal-return`,
+  )
+  const view = render(
+    <>
+      <PlanBanner />
+      <BuyCreditRoute />
+    </>,
+  )
+  expect(new URLSearchParams(window.location.search).toString()).toBe(
+    new URLSearchParams(remaining).toString(),
+  )
+  view.rerender(
+    <>
+      <PlanBanner />
+      <BuyCreditRoute />
+    </>,
+  )
+  expect(
+    screen.getByRole("button", { name: "Return to checkout team" }),
+  ).toBeTruthy()
+  expect(state.invalidate).toHaveBeenCalledOnce()
+  expect(state.toast).toHaveBeenCalledOnce()
+  expect(state.start).not.toHaveBeenCalled()
+})
+
+it("consumes generic returns even while the current plan lookup is unavailable", async () => {
+  state.planReady = false
+  const view = await renderPro(`team=${team}&billing_flow=success`)
+  expect(
+    new URLSearchParams(window.location.search).get("billing_flow"),
+  ).toBeNull()
+  expect(new URLSearchParams(window.location.search).get("team")).toBe(team)
+  expect(state.invalidate).toHaveBeenCalledOnce()
+  view.rerender(<PlanBanner />)
+  expect(state.invalidate).toHaveBeenCalledOnce()
+  expect(state.recover).not.toHaveBeenCalled()
+  expect(state.start).not.toHaveBeenCalled()
+})
+
+it.each(["billing=success", "billing_flow=portal-return"])(
+  "consumes %s exactly once across the global and legacy banner consumers",
+  async (query) => {
+    state.legacyPlan = true
+    const view = await renderPro(query)
+    expect(window.location.search).toBe("")
+    expect(state.invalidate).toHaveBeenCalledOnce()
+    expect(state.toast).toHaveBeenCalledOnce()
+    view.rerender(<PlanBanner />)
+    expect(state.invalidate).toHaveBeenCalledOnce()
+    expect(state.toast).toHaveBeenCalledOnce()
+    expect(state.recover).not.toHaveBeenCalled()
+    expect(state.start).not.toHaveBeenCalled()
+  },
+)

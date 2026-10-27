@@ -34,6 +34,7 @@ import {
 import {
   checkoutEntryPath,
   checkoutRecoveryPath,
+  genericBillingReturnState,
 } from "@/lib/billing/checkout-return"
 import { planCard } from "@/lib/billing/plans"
 
@@ -51,14 +52,24 @@ export function ProPayment(props: ProPaymentProps) {
 }
 
 function ProPaymentContext({
-  billingReturn,
+  billingReturn: suppliedBillingReturn,
   returnTo,
   checkoutTeam,
 }: ProPaymentProps) {
   const router = useRouter()
   const params = useSearchParams()
+  const genericFlowPending =
+    genericBillingReturnState(new URLSearchParams(params.toString())) !== null
+  const billingReturn = params.has("team") ? suppliedBillingReturn : undefined
   const callbackPath = `/billing/pro/?${params.toString()}`
-  const returning = params.has("billing") || params.has("team")
+  const legacyGenericReturn =
+    !params.has("team") &&
+    genericBillingReturnState(
+      new URLSearchParams(params.toString()),
+      "billing",
+    ) !== null
+  const returning =
+    params.has("team") || (params.has("billing") && !legacyGenericReturn)
   const queryClient = useQueryClient()
   const queryClientRef = useRef(queryClient)
   queryClientRef.current = queryClient
@@ -129,7 +140,7 @@ function ProPaymentContext({
     ((returning || !!billingReturn || !!expectedTeam) &&
       (!expectedTeam ||
         expectedTeam !== teamKey ||
-        ((params.has("billing") || params.has("team")) &&
+        (params.has("team") &&
           (!(
             checkoutRecoveryPath(callbackPath) ??
             checkoutEntryPath(callbackPath)
@@ -356,6 +367,7 @@ function ProPaymentContext({
 
   const step = proPaymentStep({
     loading:
+      genericFlowPending ||
       !ready ||
       !team ||
       (!confirming && (plansQuery.isPending || summaryQuery.isPending)),
@@ -374,7 +386,7 @@ function ProPaymentContext({
         (!ready && (returning || !!billingReturn || !!paymentTeam)) ? (
           <CheckoutContextRecovery
             callbackPath={recoveryPath}
-            contextPending={!ready}
+            contextPending={!ready || genericFlowPending}
             allowSwitch={scope === "self"}
           />
         ) : starter && starter.actor === actor && starter.team === teamKey ? (

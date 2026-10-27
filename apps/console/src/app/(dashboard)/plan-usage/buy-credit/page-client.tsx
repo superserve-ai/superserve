@@ -27,6 +27,7 @@ import { billingKeys } from "@/lib/api/query-keys"
 import {
   checkoutEntryPath,
   checkoutRecoveryPath,
+  genericBillingReturnState,
 } from "@/lib/billing/checkout-return"
 
 const PRESET_CENTS = [500, 2500, 5000, 10000]
@@ -55,6 +56,8 @@ export function BuyCreditPageClient({
   allowEntry = true,
 }: { allowEntry?: boolean } = {}) {
   const params = useSearchParams()
+  const genericFlowPending =
+    genericBillingReturnState(new URLSearchParams(params.toString())) !== null
   const purchase = params.get("purchase")
   const { teamKey, ready } = useBillingContext()
   const { user } = useUser()
@@ -67,7 +70,7 @@ export function BuyCreditPageClient({
     returning &&
     (!(checkoutRecoveryPath(callbackPath) ?? checkoutEntryPath(callbackPath)) ||
       returnTeam !== teamKey)
-  const contextMatched = ready && !returnMismatch
+  const contextMatched = ready && !returnMismatch && !genericFlowPending
   const { data: credit, isLoading, error } = usePrepaidCredit(contextMatched)
   const data = contextMatched && !error ? credit : undefined
   const summaryQuery = useBillingSummary(contextMatched)
@@ -84,7 +87,7 @@ export function BuyCreditPageClient({
         {returning && !contextMatched ? (
           <CheckoutContextRecovery
             callbackPath={callbackPath}
-            contextPending={!ready}
+            contextPending={!ready || genericFlowPending}
             allowSwitch={scope === "self"}
           />
         ) : null}
@@ -99,7 +102,7 @@ export function BuyCreditPageClient({
             purchase or check its status before starting another.
           </p>
         )}
-        {(!ready || isLoading) && <Spinner />}
+        {(!ready || isLoading || genericFlowPending) && <Spinner />}
         {contextMatched && error && (
           <p className="text-sm text-destructive">
             Credit balance is unavailable. Please reload.

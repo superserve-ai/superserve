@@ -318,15 +318,15 @@ describe("CustomerBillingSection", () => {
       expect(request).toHaveBeenCalledTimes(1)
       const returnUrl = new URL(window.location.href)
       if (portalAvailable) {
-        returnUrl.searchParams.set("billing", "portal-return")
+        returnUrl.searchParams.set("billing_flow", "portal-return")
         expect(request).toHaveBeenCalledWith({
           returnUrl: returnUrl.toString(),
         })
         expect(createStripeCheckoutSession).not.toHaveBeenCalled()
       } else {
         const cancelUrl = new URL(returnUrl)
-        returnUrl.searchParams.set("billing", "success")
-        cancelUrl.searchParams.set("billing", "cancel")
+        returnUrl.searchParams.set("billing_flow", "success")
+        cancelUrl.searchParams.set("billing_flow", "cancel")
         expect(request).toHaveBeenCalledWith({
           intentScope: expect.any(String),
           successUrl: returnUrl.toString(),
