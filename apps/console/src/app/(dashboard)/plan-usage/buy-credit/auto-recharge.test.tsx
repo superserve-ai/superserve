@@ -371,3 +371,70 @@ it("does not start a different purchase while server discovery is unresolved or 
   ).not.toBeDisabled()
   expect(mocks.checkout).not.toHaveBeenCalled()
 })
+
+it("honors an explicit recharge-disable denial including a mid-edit change", () => {
+  mocks.save.mockReset()
+  const client = new QueryClient()
+  const view = (allowDisableRecharge: boolean) => (
+    <QueryClientProvider client={client}>
+      <BuyCreditPageClient
+        allowEntry={false}
+        allowDisableRecharge={allowDisableRecharge}
+      />
+    </QueryClientProvider>
+  )
+  const mounted = render(view(false))
+  expect(screen.getByRole("switch")).toHaveAttribute("aria-disabled", "true")
+  fireEvent.click(screen.getByRole("switch"))
+  expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "true")
+  mounted.rerender(view(true))
+  fireEvent.click(screen.getByRole("switch"))
+  expect(screen.getByRole("button", { name: "Save" })).not.toBeDisabled()
+  mounted.rerender(view(false))
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled()
+  fireEvent.click(screen.getByRole("button", { name: "Save" }))
+  expect(mocks.save).not.toHaveBeenCalled()
+})
+
+it("denies Starter discovery and retained purchase writes on explicit recovery denial", () => {
+  mocks.recover.mockClear()
+  mocks.checkout.mockClear()
+  mocks.operations = [
+    {
+      id: "saved",
+      amount: 2500,
+      team: mocks.teamKey,
+      actor: "actor",
+      success: "/saved",
+      cancel: "/saved",
+    },
+  ]
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <BuyCreditPageClient allowEntry={false} allowRecovery={false} />
+    </QueryClientProvider>,
+  )
+  const retained = screen.getByRole("button", {
+    name: "Check previous purchase",
+  })
+  expect(retained).toBeDisabled()
+  fireEvent.click(retained)
+  expect(mocks.recover).not.toHaveBeenCalled()
+  expect(mocks.checkout).not.toHaveBeenCalled()
+  expect(screen.getByText("$25")).toBeTruthy()
+})
+
+it("keeps fresh Starter entry fenced when recovery discovery is explicitly denied", () => {
+  mocks.checkout.mockClear()
+  mocks.recover.mockClear()
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <BuyCreditPageClient allowEntry allowRecovery={false} />
+    </QueryClientProvider>,
+  )
+  const buy = screen.getByRole("button", { name: "Buy $25 credit" })
+  expect(buy).toBeDisabled()
+  fireEvent.click(buy)
+  expect(mocks.checkout).not.toHaveBeenCalled()
+  expect(mocks.recover).not.toHaveBeenCalled()
+})

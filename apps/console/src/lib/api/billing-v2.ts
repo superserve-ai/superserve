@@ -20,6 +20,10 @@ export const proCheckoutTermsSchema = z.object({
   first_credit_cents: cents.safe().optional(),
 })
 
+export const proCheckoutResponseSchema = z.object({
+  pro_checkout: proCheckoutTermsSchema.optional(),
+})
+
 export type ProCheckoutTerms = z.infer<typeof proCheckoutTermsSchema>
 
 export const teamPlanSchema = z

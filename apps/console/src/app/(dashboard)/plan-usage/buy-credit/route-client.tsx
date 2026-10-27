@@ -23,22 +23,45 @@ export function BuyCreditRoute() {
   const capabilities = useBillingCapabilities()
   const version = usePricingVersion()
   const entry = capabilities.data?.fresh_entry.starter === true
+  const recovery = capabilities.data?.actions?.recover_payment !== false
+  const disableRecharge =
+    capabilities.data?.actions?.disable_auto_recharge !== false
   const recharge = capabilities.data?.fresh_entry.auto_recharge === true
   const existing = usePrepaidCredit(
     !returning && version !== undefined && version !== "v2",
   )
   const retained = useRetainedPrepaidOperations(existing.data?.purchases)
   if (returning)
-    return <BuyCreditPageClient allowEntry={entry} allowRecharge={recharge} />
+    return (
+      <BuyCreditPageClient
+        allowEntry={entry}
+        allowRecharge={recharge}
+        allowDisableRecharge={disableRecharge}
+        allowRecovery={recovery}
+      />
+    )
   if (version === "v2")
-    return <BuyCreditPageClient allowEntry={entry} allowRecharge={recharge} />
+    return (
+      <BuyCreditPageClient
+        allowEntry={entry}
+        allowRecharge={recharge}
+        allowDisableRecharge={disableRecharge}
+        allowRecovery={recovery}
+      />
+    )
   if (
     retained.length > 0 ||
     (existing.data?.balance_cents ?? 0) !== 0 ||
     existing.data?.auto_recharge.enabled ||
     existing.data?.purchases.length
   )
-    return <BuyCreditPageClient allowEntry={false} />
+    return (
+      <BuyCreditPageClient
+        allowEntry={false}
+        allowDisableRecharge={disableRecharge}
+        allowRecovery={recovery}
+      />
+    )
   if (version === undefined || existing.isLoading) return <Spinner />
   if (version === null)
     return (

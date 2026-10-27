@@ -19,6 +19,7 @@ function ProPayment(props: React.ComponentProps<typeof ActualProPayment>) {
 }
 
 const state = vi.hoisted(() => ({
+  recoveryAllowed: true,
   entryOpen: true,
   terms: undefined as unknown,
   termsError: false,
@@ -128,6 +129,7 @@ vi.mock("@/hooks/use-billing-capabilities", () => ({
   useBillingCapabilities: () => ({
     data: state.plans
       ? {
+          actions: { recover_payment: state.recoveryAllowed },
           catalog: state.plans,
           pricing_version: state.plans.pricing_version,
           entry_open: state.entryOpen && state.plans.pricing_version === "v2",
@@ -191,6 +193,7 @@ async function readyContinue() {
   return button
 }
 beforeEach(() => {
+  state.recoveryAllowed = true
   state.entryOpen = true
   state.liveTermsQuery = false
   state.liveQueryClient = false
@@ -1146,3 +1149,60 @@ it.each([
     assign.mockRestore()
   },
 )
+
+it.each([false, true])(
+  "blocks explicit recovery denial on manual and success callback paths, callback=%s",
+  async (callback) => {
+    state.plans = availablePlans
+    state.recoveryAllowed = false
+    state.entryOpen = false
+    if (callback)
+      state.query =
+        "billing=success&team=use:11111111-1111-4111-8111-111111111111"
+    render(
+      <ProPayment
+        billingReturn={callback ? "success" : undefined}
+        checkoutTeam={
+          callback ? "use:11111111-1111-4111-8111-111111111111" : undefined
+        }
+        returnTo="/plan-usage/"
+      />,
+    )
+    const button = await screen.findByRole("button", {
+      name: callback ? "Check again" : "Check payment status",
+    })
+    expect(button).toBeDisabled()
+    fireEvent.click(button)
+    expect(state.recover).not.toHaveBeenCalled()
+    expect(state.resume).not.toHaveBeenCalled()
+  },
+)
+
+it("loads accepted terms independently of a null current plan", async () => {
+  state.plans = availablePlans
+  const terms = {
+    first_paid_pro_cycle: true,
+    accepted: true,
+    first_payment_cents: 0,
+    first_credit_cents: 25000,
+    period_start: "2026-10-27T00:00:00Z",
+    period_end: "2026-11-27T00:00:00Z",
+  }
+  state.readTerms.mockResolvedValue({ plan: null, pro_checkout: terms })
+  render(<ProPayment returnTo="/plan-usage/" />)
+  const options = state.termsQuery.mock.lastCall?.[0]
+  expect(await options.queryFn()).toEqual({ pro_checkout: terms })
+})
+
+it("keeps fresh Pro entry fenced when recovery discovery is explicitly denied", async () => {
+  state.plans = availablePlans
+  state.recoveryAllowed = false
+  render(<ProPayment returnTo="/plan-usage/" />)
+  const button = await screen.findByRole("button", {
+    name: "Continue to payment",
+  })
+  expect(button).toBeDisabled()
+  fireEvent.click(button)
+  expect(state.start).not.toHaveBeenCalled()
+  expect(state.starterRecover).not.toHaveBeenCalled()
+})

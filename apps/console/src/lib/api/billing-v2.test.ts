@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   proCheckoutTermsSchema,
   teamPlanSchema,
+  proCheckoutResponseSchema,
   type CatalogPlan,
   catalogPlansOf,
   PLAN_ACTION_LINKS,
@@ -250,4 +251,27 @@ describe("authoritative Pro checkout terms", () => {
   ])("rejects malformed authoritative fields (%j)", (terms) => {
     expect(proCheckoutTermsSchema.safeParse(terms).success).toBe(false)
   })
+})
+
+it("preserves frozen checkout terms without a current plan", () => {
+  const terms = {
+    first_paid_pro_cycle: true,
+    accepted: true,
+    first_payment_cents: 0,
+    first_credit_cents: 25000,
+    period_start: "2026-10-27T00:00:00Z",
+    period_end: "2026-11-27T00:00:00Z",
+  }
+  expect(
+    proCheckoutResponseSchema.parse({ plan: null, pro_checkout: terms })
+      .pro_checkout,
+  ).toEqual(terms)
+  expect(
+    teamPlanSchema.parse({
+      plan: null,
+      period: { start: "2026-10-27T00:00:00Z", end: "2026-11-27T00:00:00Z" },
+      pending_change: null,
+      pro_checkout: terms,
+    }),
+  ).toBeNull()
 })

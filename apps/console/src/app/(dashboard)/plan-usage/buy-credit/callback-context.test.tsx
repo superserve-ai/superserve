@@ -1,6 +1,14 @@
 vi.mock("@/hooks/use-billing-capabilities", () => ({
   useBillingCapabilities: () => ({
-    data: { fresh_entry: { starter: false, auto_recharge: false } },
+    data: state.capabilitiesMissing
+      ? undefined
+      : {
+          fresh_entry: { starter: false, auto_recharge: false },
+          actions: {
+            disable_auto_recharge: state.disableRecharge,
+            recover_payment: state.allowRecovery,
+          },
+        },
   }),
 }))
 import { act, fireEvent, render, screen } from "@testing-library/react"
@@ -9,6 +17,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { BuyCreditPageClient } from "./page-client"
 import { BuyCreditRoute } from "./route-client"
 const state = vi.hoisted(() => ({
+  recover: vi.fn(),
+  allowRecovery: true,
+  disableRecharge: true,
+  capabilitiesMissing: false,
+  rechargeEnabled: false,
   ready: true,
   team: "use:11111111-1111-4111-8111-111111111111",
   query: "",
@@ -17,13 +30,11 @@ const state = vi.hoisted(() => ({
   summary: vi.fn(),
   switch: vi.fn(),
   directoryError: false,
-  pricing: "legacy" as "legacy" | undefined | null,
+  pricing: "legacy" as "legacy" | "v2" | undefined | null,
   refetch: vi.fn(),
 }))
 vi.mock("@/lib/api/starter-checkout-recovery", () => ({
-  recoverStarterCheckout: async () => ({
-    outcome: "no_pending_starter_checkout",
-  }),
+  recoverStarterCheckout: (...args: unknown[]) => state.recover(...args),
 }))
 vi.mock("@/hooks/use-pricing-version", () => ({
   usePricingVersion: () => state.pricing,
@@ -59,7 +70,7 @@ vi.mock("@/hooks/use-prepaid-credit", () => ({
         checkout_idempotency_supported: true,
         balance_cents: 12500,
         purchases: [],
-        auto_recharge: { enabled: false },
+        auto_recharge: { enabled: state.rechargeEnabled },
       },
     }
   },
@@ -84,6 +95,14 @@ vi.mock("@tanstack/react-query", () => ({
   useIsMutating: () => 0,
 }))
 beforeEach(() => {
+  state.recover
+    .mockReset()
+    .mockResolvedValue({ outcome: "no_pending_starter_checkout" })
+  state.allowRecovery = true
+  state.disableRecharge = true
+  state.capabilitiesMissing = false
+  state.rechargeEnabled = false
+  state.pricing = "legacy"
   state.retained = []
   state.ready = true
   state.team = "use:11111111-1111-4111-8111-111111111111"
@@ -226,5 +245,34 @@ it.each([
         screen.queryByText(/Auto-recharge changes are temporarily unavailable/),
       ),
     ).toBe(!allowRecharge)
+  },
+)
+
+it.each([false, true, undefined])(
+  "routes recharge disable admission independently: %s",
+  (allowed) => {
+    state.query = ""
+    state.pricing = "v2"
+    state.rechargeEnabled = true
+    state.capabilitiesMissing = allowed === undefined
+    state.disableRecharge = allowed ?? true
+    render(<BuyCreditRoute />)
+    const toggle = screen.getByRole("switch")
+    expect(toggle.getAttribute("aria-disabled") === "true").toBe(
+      allowed === false,
+    )
+  },
+)
+
+it.each([false, true, undefined])(
+  "routes Starter recovery admission independently: %s",
+  async (allowed) => {
+    state.query = ""
+    state.pricing = "v2"
+    state.allowRecovery = allowed ?? true
+    state.capabilitiesMissing = allowed === undefined
+    render(<BuyCreditRoute />)
+    await act(async () => {})
+    expect(state.recover.mock.calls.length > 0).toBe(allowed !== false)
   },
 )

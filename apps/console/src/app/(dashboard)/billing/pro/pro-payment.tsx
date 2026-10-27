@@ -22,7 +22,7 @@ import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { usePendingStarterCheckout } from "@/hooks/use-pending-starter-checkout"
 import { useTeams } from "@/hooks/use-teams"
 import { useUser } from "@/hooks/use-user"
-import { teamPlanSchema } from "@/lib/api/billing-v2"
+import { proCheckoutResponseSchema } from "@/lib/api/billing-v2"
 import { ApiError, apiClient } from "@/lib/api/client"
 import {
   isStripeCheckoutUrl,
@@ -110,7 +110,7 @@ function ProPaymentContext({
       checkoutTermsRevision,
     ],
     queryFn: async () =>
-      teamPlanSchema.parse(
+      proCheckoutResponseSchema.parse(
         await apiClient<unknown>("/billing/plan", { cache: "no-store" }),
       ),
     enabled:
@@ -126,17 +126,17 @@ function ProPaymentContext({
   const plansQuery = { ...capabilities, data: capabilities.data?.catalog }
   const pro = planCard(plansQuery.data, "pro")
   const summaryQuery = useBillingSummary(!!team)
-  const canContinue =
-    ready &&
-    scope === "self" &&
-    capabilities.data?.fresh_entry.pro === true &&
-    !summaryQuery.isError &&
-    Boolean(actor && summaryQuery.data?.permissions?.can_manage)
   const canRecover =
     ready &&
     !!actor &&
     scope === "self" &&
-    summaryQuery.data?.permissions?.can_manage !== false
+    summaryQuery.data?.permissions?.can_manage !== false &&
+    capabilities.data?.actions?.recover_payment !== false
+  const canContinue =
+    canRecover &&
+    capabilities.data?.fresh_entry.pro === true &&
+    !summaryQuery.isError &&
+    Boolean(actor && summaryQuery.data?.permissions?.can_manage)
   const plan = summaryQuery.isError ? undefined : summaryQuery.data?.plan
   const paidPlan =
     plan &&

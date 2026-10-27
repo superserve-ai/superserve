@@ -58,7 +58,14 @@ const STATE_LABELS: Record<PrepaidPurchase["state"], string> = {
 export function BuyCreditPageClient({
   allowEntry = true,
   allowRecharge = allowEntry,
-}: { allowEntry?: boolean; allowRecharge?: boolean } = {}) {
+  allowDisableRecharge = true,
+  allowRecovery = true,
+}: {
+  allowEntry?: boolean
+  allowRecharge?: boolean
+  allowDisableRecharge?: boolean
+  allowRecovery?: boolean
+} = {}) {
   const params = useSearchParams()
   const genericFlowPending =
     genericBillingReturnState(new URLSearchParams(params.toString())) !== null
@@ -94,12 +101,13 @@ export function BuyCreditPageClient({
   const scope = useQueryScope()
   const canManage =
     ready && Boolean(summary?.permissions?.can_manage) && scope === "self"
+  const canRecover = canManage && allowRecovery
   const retained = useRetainedPrepaidOperations(data?.purchases)
   const queryClient = useQueryClient()
   const existingStarter = usePendingStarterCheckout({
     team: teamKey,
     actor,
-    enabled: contextMatched && canManage,
+    enabled: contextMatched && canRecover,
     refresh: async () => {
       await queryClient.invalidateQueries(
         { queryKey: billingKeys.all },
@@ -160,7 +168,7 @@ export function BuyCreditPageClient({
             ) : null}
             <ServerStarterRecovery
               recovery={existingStarter}
-              canManage={canManage}
+              canManage={canRecover}
             />
             {allowEntry ? (
               <PurchaseCard
@@ -168,7 +176,7 @@ export function BuyCreditPageClient({
                 actor={actor}
                 checkCanStart={existingStarter.canStart}
                 canManage={
-                  canManage &&
+                  canRecover &&
                   !existingStarter.blocksEntry &&
                   data.checkout_idempotency_supported === true
                 }
@@ -187,7 +195,7 @@ export function BuyCreditPageClient({
                   <PurchaseCard
                     key={`${scope}:${teamKey}:${user?.id}:${operation.id}`}
                     canManage={
-                      canManage &&
+                      canRecover &&
                       !existingStarter.blocksEntry &&
                       data.checkout_idempotency_supported === true
                     }
@@ -199,8 +207,9 @@ export function BuyCreditPageClient({
             ) : null}
             {!allowRecharge ? (
               <p className="text-sm text-muted">
-                Auto-recharge changes are temporarily unavailable. You can still
-                turn auto-recharge off.
+                Auto-recharge changes are temporarily unavailable.
+                {allowDisableRecharge &&
+                  " You can still turn auto-recharge off."}
               </p>
             ) : null}
             <AutoRechargeCard
@@ -214,6 +223,7 @@ export function BuyCreditPageClient({
               data={data}
               canManage={canManage}
               allowEntry={allowRecharge}
+              allowDisable={allowDisableRecharge}
             />
             <PurchaseHistory purchases={data.purchases} />
           </>
@@ -410,10 +420,12 @@ function AutoRechargeCard({
   data,
   canManage,
   allowEntry,
+  allowDisable,
 }: {
   data: PrepaidCreditSummary
   canManage: boolean
   allowEntry: boolean
+  allowDisable: boolean
 }) {
   const { teamKey, cacheScope } = useBillingContext()
   const queryClient = useQueryClient()
@@ -436,9 +448,9 @@ function AutoRechargeCard({
       validNewPrepaidCents(thresholdCents) &&
       validNewPrepaidCents(amountCents))
 
+  const actionAllowed = enabled ? allowEntry : allowDisable
   const save = async () => {
-    if (!teamKey || !canManage || !valid || saving || (!allowEntry && enabled))
-      return
+    if (!teamKey || !canManage || !valid || saving || !actionAllowed) return
     setSaving(true)
     try {
       const updated = await setPrepaidAutoRecharge(teamKey, {
@@ -480,7 +492,7 @@ function AutoRechargeCard({
       <Switch
         label="Charge my saved card automatically when credit runs low"
         checked={enabled}
-        disabled={!canManage || (!enabled && !canEnable)}
+        disabled={!canManage || (enabled ? !allowDisable : !canEnable)}
         onCheckedChange={setEnabled}
       />
       {allowEntry && !canEnable && (
@@ -529,7 +541,7 @@ function AutoRechargeCard({
       <div>
         <Button
           variant="outline"
-          disabled={!canManage || !valid || saving || (!allowEntry && enabled)}
+          disabled={!canManage || !valid || saving || !actionAllowed}
           onClick={save}
         >
           {saving ? "Saving…" : "Save"}
