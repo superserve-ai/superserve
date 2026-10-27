@@ -190,7 +190,7 @@ export function CreateTemplateDialog({
           <Field
             label="Base image"
             required
-            description="Linux/amd64 image with a shell at /bin/sh."
+            description="Linux/amd64 image with /bin/sh, mkdir, mount, chmod, and sync."
           >
             <div className="grid grid-cols-2 gap-2">
               {CURATED_IMAGES.map((img) => {
