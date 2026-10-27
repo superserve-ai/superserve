@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@superserve/ui"
+import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Suspense, useEffect } from "react"
 
@@ -24,6 +25,7 @@ import { CreateTemplateDialog } from "@/components/templates/create-template-dia
 import { TemplateTableRow } from "@/components/templates/template-table-row"
 import { useCreateParam } from "@/hooks/use-create-param"
 import { useListParams } from "@/hooks/use-list-params"
+import { useTemplateEntitlement } from "@/hooks/use-template-entitlement"
 import { useTemplatesPage } from "@/hooks/use-templates"
 import {
   TEMPLATE_SORT_COLUMNS,
@@ -48,6 +50,12 @@ export default function TemplatesPageClient() {
 function TemplatesPageContent() {
   const searchParams = useSearchParams()
   const [createOpen, setCreateOpen] = useCreateParam()
+  const entitlement = useTemplateEntitlement()
+  const templatesUnavailable = entitlement.status === "unavailable"
+  const canCreate = entitlement.status === "allowed"
+  const openCreate = () => {
+    if (canCreate) setCreateOpen(true)
+  }
 
   const {
     page,
@@ -93,8 +101,20 @@ function TemplatesPageContent() {
   const isEmpty =
     !isPending && !error && !isPlaceholderData && total === 0 && !hasFilters
 
-  const newButton = (
-    <Button size="sm" onClick={() => setCreateOpen(true)}>
+  const newButton = templatesUnavailable ? (
+    <Button size="sm" render={<Link href="/plan-usage/upgrade" />}>
+      Upgrade to create templates
+    </Button>
+  ) : entitlement.status === "error" ? (
+    <Button size="sm" onClick={() => entitlement.retry()}>
+      Retry template limits
+    </Button>
+  ) : !canCreate ? (
+    <Button size="sm" disabled>
+      Loading template limits…
+    </Button>
+  ) : (
+    <Button size="sm" onClick={openCreate}>
       <PlusIcon className="size-3.5" weight="light" />
       Create template
     </Button>
@@ -126,9 +146,13 @@ function TemplatesPageContent() {
         <EmptyState
           icon={StackIcon}
           title="No templates yet"
-          description="Templates are pre-baked VM images your sandboxes boot from. Create one to reuse the same environment across sandboxes."
-          actionLabel="Create template"
-          onAction={() => setCreateOpen(true)}
+          description={
+            templatesUnavailable
+              ? "Upgrade your plan to create reusable sandbox templates."
+              : "Templates are pre-baked VM images your sandboxes boot from. Create one to reuse the same environment across sandboxes."
+          }
+          actionLabel={canCreate ? "Create template" : undefined}
+          onAction={canCreate ? openCreate : undefined}
         />
       ) : (
         <>
@@ -162,14 +186,18 @@ function TemplatesPageContent() {
                   q
                     ? "Try a different name."
                     : owner === "team"
-                      ? "Create one to get started."
+                      ? templatesUnavailable
+                        ? "Upgrade your plan to create team templates."
+                        : "Create one to get started."
                       : "System templates are curated by Superserve."
                 }
                 actionLabel={
-                  !q && owner === "team" ? "Create template" : undefined
+                  canCreate && !q && owner === "team"
+                    ? "Create template"
+                    : undefined
                 }
                 onAction={
-                  !q && owner === "team" ? () => setCreateOpen(true) : undefined
+                  canCreate && !q && owner === "team" ? openCreate : undefined
                 }
               />
             ) : (

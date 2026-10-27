@@ -12,9 +12,11 @@ import {
   Field,
   Input,
 } from "@superserve/ui"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useMemo, useState } from "react"
 
+import { useTemplateEntitlement } from "@/hooks/use-template-entitlement"
 import { useCreateTemplate } from "@/hooks/use-templates"
 import { ApiError } from "@/lib/api/client"
 
@@ -65,6 +67,8 @@ export function CreateTemplateDialog({
 }: CreateTemplateDialogProps = {}) {
   const router = useRouter()
   const create = useCreateTemplate()
+  const entitlement = useTemplateEntitlement()
+  const templatesUnavailable = entitlement.status === "unavailable"
 
   const [internalOpen, setInternalOpen] = useState(false)
   const open = controlledOpen ?? internalOpen
@@ -108,6 +112,7 @@ export function CreateTemplateDialog({
   const isValid = !liveNameError && !liveImageError && trimmedImage.length > 0
 
   const handleCreate = async () => {
+    if (entitlement.status !== "allowed") return
     const image = trimmedImage
     const nameError = validateName(name.trim())
     const imageError = validateImage(image)
@@ -149,6 +154,36 @@ export function CreateTemplateDialog({
       }
       setErrors({ form: "Something went wrong. Try again." })
     }
+  }
+
+  if (entitlement.status !== "allowed") {
+    if (hideTrigger && !open) return null
+    if (!templatesUnavailable) {
+      return (
+        <div className="space-y-3 p-4">
+          <p className="text-sm text-muted">
+            {entitlement.status === "error"
+              ? "Template limits could not be loaded."
+              : "Loading template limits…"}
+          </p>
+          {entitlement.status === "error" && (
+            <Button onClick={() => entitlement.retry()}>
+              Retry template limits
+            </Button>
+          )}
+        </div>
+      )
+    }
+    return (
+      <div className="space-y-3 p-4">
+        <p className="text-sm text-muted">
+          Your plan does not include template creation.
+        </p>
+        <Button render={<Link href="/plan-usage/upgrade" />}>
+          Upgrade to create templates
+        </Button>
+      </div>
+    )
   }
 
   return (
