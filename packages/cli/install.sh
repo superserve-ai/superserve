@@ -109,15 +109,13 @@ if [ -z "$ON_PATH" ] && [ -z "${SUPERSERVE_NO_MODIFY_PATH:-}" ]; then
       add_to_profile "${ZDIR:-${ZDOTDIR:-$HOME}}/.zshrc"
       ;;
     bash)
+      # Interactive shells read .bashrc; login shells (macOS terminals, SSH)
+      # read only the first login file that exists, so never shadow one.
+      DEFAULT_LOGIN="$HOME/.profile"
+      [ "$OS" = "darwin" ] && DEFAULT_LOGIN="$HOME/.bash_profile"
       LOGIN_FILE="$(bash_login_file)"
-      if [ "$OS" = "darwin" ]; then
-        # macOS terminals start login shells; never shadow an existing .profile.
-        add_to_profile "${LOGIN_FILE:-$HOME/.bash_profile}"
-      else
-        # Linux terminals read .bashrc; login shells (SSH) read the login file.
-        add_to_profile "$HOME/.bashrc"
-        add_to_profile "${LOGIN_FILE:-$HOME/.profile}"
-      fi
+      add_to_profile "$HOME/.bashrc"
+      add_to_profile "${LOGIN_FILE:-$DEFAULT_LOGIN}"
       ;;
     fish)
       LINE="fish_add_path '$(printf '%s' "$INSTALL_DIR" | sed -e 's/\\/\\\\/g' -e "s/'/\\\\'/g")'"

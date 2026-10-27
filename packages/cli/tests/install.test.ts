@@ -68,6 +68,10 @@ describe("install.sh PATH setup", () => {
       const profile = readFileSync(join(home, file), "utf8")
       expect(profile).toContain("export KEEP=1")
       expect(profile).toContain(".superserve/bin")
+      // Non-login terminals read .bashrc instead.
+      expect(readFileSync(join(home, ".bashrc"), "utf8")).toContain(
+        ".superserve/bin",
+      )
     },
   )
 
