@@ -198,7 +198,7 @@ to rediscover boxes you created earlier.
 
 A sandbox **inherits its VM shape from its template** — there is **no `vcpu`, `memory`,
 or `disk` argument on `create()`**. To change the shape, boot from (or build) a different
-template. The default template `superserve/base` (`ubuntu:24.04`) is **1 vCPU · 1024 MiB
+template. The default template `superserve/base` (`ubuntu:24.04`) is **2 vCPU · 4096 MiB
 memory · 8192 MiB disk**.
 
 | Shape field | Min  | Max (platform ceiling) | Default |
@@ -208,10 +208,9 @@ memory · 8192 MiB disk**.
 | `diskMib`   | 1024 | 8192                   | 4096    |
 
 - **New teams are capped at 2 vCPU / 2048 MiB** — email support@superserve.ai to raise it.
-- Heavier system templates (`superserve/python-ml`, `code-interpreter`, `claude-code`,
-  `openclaw`, `hermes`) ship at 2 vCPU / 2048 MiB; `superserve/omnara` (Omnara's
-  coding-agent toolchain) and `superserve/desktop` at 2 vCPU / 4096 MiB. See the full
-  catalog in the docs.
+- Every `superserve/*` system template ships at 2 vCPU / 4096 MiB / 8192 MiB disk,
+  including the heavier ones (`python-ml`, `code-interpreter`, `claude-code`, `openclaw`,
+  `hermes`, `omnara`, `desktop`). See the full catalog in the docs.
 - Live shape and timestamps (`vcpuCount`, `memoryMib`, `createdAt`, `network`) live on
   **`SandboxInfo`** (from `getInfo()` / `list()`), not on the sandbox instance.
 
