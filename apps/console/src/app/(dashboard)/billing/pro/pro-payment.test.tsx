@@ -131,6 +131,13 @@ const availablePlans: PublicBillingPlans = {
   ],
 }
 
+async function readyContinue() {
+  const button = await screen.findByRole("button", {
+    name: "Continue to payment",
+  })
+  await waitFor(() => expect(button).not.toBeDisabled())
+  return button
+}
 beforeEach(() => {
   state.starterRecover
     .mockReset()
@@ -162,7 +169,7 @@ describe("Pro payment return recovery", () => {
     expect(screen.getByText("/ month")).toBeTruthy()
     expect(screen.getByText(/Your regular \$250 monthly fee/)).toBeTruthy()
     expect(screen.queryByText(/year|annual/i)).toBeNull()
-    fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
+    fireEvent.click(await readyContinue())
     await waitFor(() =>
       expect(state.start).toHaveBeenCalledWith(
         "use:11111111-1111-4111-8111-111111111111",
@@ -182,7 +189,7 @@ describe("Pro payment return recovery", () => {
       .spyOn(window.location, "assign")
       .mockImplementation(() => {})
     const { rerender } = render(<ProPayment returnTo="/original" />)
-    fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
+    fireEvent.click(await readyContinue())
     await screen.findByText("lost response")
     state.plans = { ...availablePlans, pricing_version: "legacy" }
     rerender(<ProPayment returnTo="/different-return" />)
@@ -304,7 +311,7 @@ describe("Pro payment return recovery", () => {
     state.plans = availablePlans
     state.start.mockResolvedValue(null)
     const view = render(<ProPayment returnTo="/plan-usage/" />)
-    fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
+    fireEvent.click(await readyContinue())
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Check again" })).toBeTruthy(),
     )
@@ -361,7 +368,7 @@ describe("Pro payment return recovery", () => {
     )
     state.recover.mockResolvedValue("retryable")
     render(<ProPayment returnTo="/plan-usage/" />)
-    fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
+    fireEvent.click(await readyContinue())
     await screen.findByText(
       "This team already has a paid plan or a payment in progress.",
     )
@@ -523,12 +530,17 @@ async function showPendingStarter() {
     new ApiError(409, "plan_conflict", "Earlier checkout"),
   )
   state.recover.mockResolvedValue("no_pending_pro_purchase")
-  state.starterRecover.mockResolvedValue({
-    ...pendingStarter,
-    outcome: "pending_starter_checkout",
-  })
+  state.starterRecover
+    .mockResolvedValueOnce({ outcome: "no_pending_starter_checkout" })
+    .mockResolvedValue({
+      ...pendingStarter,
+      outcome: "pending_starter_checkout",
+    })
   render(<ProPayment returnTo="/plan-usage/" />)
-  fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
+  fireEvent.click(await readyContinue())
+  await screen.findByText(
+    "This team already has a paid plan or a payment in progress.",
+  )
   fireEvent.click(
     await screen.findByRole("button", { name: "Check payment status" }),
   )
@@ -574,7 +586,7 @@ describe("original Starter checkout recovery", () => {
       }),
     )
     await screen.findByRole("button", { name: "Continue to payment" })
-    expect(state.starterRecover).toHaveBeenLastCalledWith(
+    expect(state.starterRecover).toHaveBeenCalledWith(
       "use:11111111-1111-4111-8111-111111111111",
       expect.objectContaining(pendingStarter),
       true,
@@ -604,4 +616,83 @@ describe("original Starter checkout recovery", () => {
     )
     expect(state.start).toHaveBeenCalledTimes(1)
   })
+})
+
+it("discovers a server-side $5 purchase on ordinary Pro entry without attempting a Pro payment", async () => {
+  sessionStorage.clear()
+  state.query = ""
+  state.plans = availablePlans
+  state.starterRecover.mockResolvedValue({
+    ...pendingStarter,
+    amount_cents: 500,
+    outcome: "pending_starter_checkout",
+  })
+  render(<ProPayment returnTo="/plan-usage/" />)
+  await screen.findByRole("button", { name: "Resume your $5 credit purchase" })
+  expect(
+    screen.getByRole("button", { name: "Cancel this purchase and choose Pro" }),
+  ).not.toBeDisabled()
+  expect(state.start).not.toHaveBeenCalled()
+  expect(state.recover).not.toHaveBeenCalled()
+  expect(state.resume).not.toHaveBeenCalled()
+  expect(state.starterRecover).toHaveBeenCalledExactlyOnceWith(
+    "use:11111111-1111-4111-8111-111111111111",
+  )
+  expect(sessionStorage.length).toBe(0)
+})
+
+it.each(["unavailable", "available"])(
+  "keeps original Pro status/replay reachable when Starter discovery fails and offer is %s",
+  async (offer) => {
+    sessionStorage.clear()
+    state.plans = offer === "available" ? availablePlans : undefined
+    state.starterRecover.mockRejectedValue(
+      new Error("HTTP 500: not a Starter checkout"),
+    )
+    state.recover.mockResolvedValue("payment_confirmation_pending")
+    state.resume.mockResolvedValue(
+      "https://checkout.stripe.com/original-legacy-pro",
+    )
+    const assign = vi
+      .spyOn(window.location, "assign")
+      .mockImplementation(() => {})
+    render(<ProPayment returnTo="/plan-usage/" />)
+    await screen.findByText(/Unable to check your existing purchase/)
+    expect(state.recover).not.toHaveBeenCalled()
+    expect(state.start).not.toHaveBeenCalled()
+    fireEvent.click(
+      screen.getByRole("button", { name: "Check Pro payment status" }),
+    )
+    await waitFor(() =>
+      expect(assign).toHaveBeenCalledWith(
+        "https://checkout.stripe.com/original-legacy-pro",
+      ),
+    )
+    expect(state.recover).toHaveBeenCalledExactlyOnceWith(
+      "use:11111111-1111-4111-8111-111111111111",
+    )
+    expect(state.start).not.toHaveBeenCalled()
+    expect(
+      state.starterRecover.mock.calls.every((args) => args.length === 1),
+    ).toBe(true)
+    assign.mockRestore()
+  },
+)
+
+it("keeps a known non-Starter Pro checkout's ordinary status control without starting another checkout", async () => {
+  state.plans = undefined
+  state.starterRecover.mockResolvedValue({
+    outcome: "no_pending_starter_checkout",
+  })
+  state.recover.mockResolvedValue("payment_confirmation_pending")
+  render(<ProPayment returnTo="/plan-usage/" />)
+  await waitFor(() =>
+    expect(
+      screen.queryByText(/Checking for an unfinished credit purchase/),
+    ).toBeNull(),
+  )
+  fireEvent.click(screen.getByRole("button", { name: "Check payment status" }))
+  await screen.findByText(/Payment status is pending/)
+  expect(state.start).not.toHaveBeenCalled()
+  expect(screen.getByRole("button", { name: "Check again" })).not.toBeDisabled()
 })

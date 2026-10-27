@@ -184,6 +184,13 @@ export function ProPaymentView({
           <Button disabled={busy || !canContinue} onClick={onContinue}>
             Continue to payment
           </Button>
+          <Button
+            disabled={busy || !canRecover}
+            onClick={onCheckPayment}
+            variant="outline"
+          >
+            Check payment status
+          </Button>
           <p className="text-muted-foreground text-xs">
             Have a promotion code? Enter it on the payment page. It applies to
             your first invoice.

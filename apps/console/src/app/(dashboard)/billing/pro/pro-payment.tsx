@@ -10,6 +10,7 @@ import {
   ProPaymentView,
   proPaymentStep,
 } from "@/components/billing/pro-payment-view"
+import { ServerStarterRecovery } from "@/components/billing/server-starter-recovery"
 import { PageHeader } from "@/components/page-header"
 import {
   useDashboardTeamContext,
@@ -17,6 +18,7 @@ import {
 } from "@/components/query-provider"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
+import { usePendingStarterCheckout } from "@/hooks/use-pending-starter-checkout"
 import { usePublicBillingPlans } from "@/hooks/use-public-billing-plans"
 import { useTeams } from "@/hooks/use-teams"
 import { useUser } from "@/hooks/use-user"
@@ -102,6 +104,7 @@ function ProPaymentContext({
     Boolean(actor && summaryQuery.data?.permissions?.can_manage)
   const canRecover =
     ready &&
+    !!actor &&
     scope === "self" &&
     summaryQuery.data?.permissions?.can_manage !== false
   const plan = summaryQuery.isError ? undefined : summaryQuery.data?.plan
@@ -191,6 +194,21 @@ function ProPaymentContext({
     },
     [refetchSummary, refetchPlans],
   )
+
+  const existingStarter = usePendingStarterCheckout({
+    team: teamKey,
+    actor,
+    enabled:
+      canRecover &&
+      !teamMismatch &&
+      !genericFlowPending &&
+      !billingReturn &&
+      !paidPlan &&
+      !starter,
+    refresh: async () => {
+      await refreshEntry(operationTarget.current)
+    },
+  })
 
   const checkPayment = useCallback(
     (attempts = 1) =>
@@ -347,6 +365,7 @@ function ProPaymentContext({
       if (
         !actor ||
         !canContinue ||
+        !existingStarter.canStart() ||
         !teamKey ||
         teamMismatch ||
         summaryQuery.isError ||
@@ -389,12 +408,31 @@ function ProPaymentContext({
     <div className="flex h-full flex-col">
       <PageHeader title="Upgrade to Pro" />
       <div className="flex-1 overflow-y-auto">
+        {existingStarter.visible &&
+        existingStarter.busy &&
+        !existingStarter.purchase ? (
+          <ServerStarterRecovery
+            recovery={existingStarter}
+            canManage={canRecover}
+            onCheckProStatus={() => void checkPayment()}
+            choosingPro
+          />
+        ) : null}
         {step === "team_mismatch" ||
         (!ready && (returning || !!billingReturn || !!paymentTeam)) ? (
           <CheckoutContextRecovery
             callbackPath={recoveryPath}
             contextPending={!ready || genericFlowPending}
             allowSwitch={scope === "self"}
+          />
+        ) : existingStarter.visible &&
+          !confirming &&
+          (!existingStarter.busy || !!existingStarter.purchase) ? (
+          <ServerStarterRecovery
+            recovery={existingStarter}
+            canManage={canRecover}
+            onCheckProStatus={() => void checkPayment()}
+            choosingPro
           />
         ) : starter && starter.actor === actor && starter.team === teamKey ? (
           <PendingStarterPayment
@@ -412,7 +450,7 @@ function ProPaymentContext({
             pro={pro}
             paidPlan={paidPlan}
             busy={busy}
-            canContinue={canContinue}
+            canContinue={canContinue && !existingStarter.blocksEntry}
             canRecover={canRecover}
             canceled={billingReturn === "cancel"}
             error={error}
