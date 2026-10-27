@@ -603,16 +603,12 @@ async function proxyRequest(
       )
     }
     if (joinedPath === "stripe/pro-checkout") {
-      if (
-        !["developer_monthly", "pro_monthly", "pro_annual"].includes(
-          input.offer as string,
-        )
-      )
+      if (!["pro_monthly", "pro_annual"].includes(input.offer as string))
         return NextResponse.json(
           {
             error: {
               code: "invalid_offer",
-              message: "Select a plan and billing frequency",
+              message: "Select a Pro billing frequency",
             },
           },
           { status: 400 },

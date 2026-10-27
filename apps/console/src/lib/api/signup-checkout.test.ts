@@ -56,7 +56,7 @@ describe("startSignupCheckout", () => {
       success_url:
         "https://console.example.test/billing/pro/?team=use%3Ateam-1&billing=success",
       cancel_url:
-        "https://console.example.test/billing/pro/?team=use%3Ateam-1&billing=cancel",
+        "https://console.example.test/auth/auth-code-error/?reason=checkout_canceled&offer=developer",
     })
   })
 

@@ -291,8 +291,7 @@ vi.mock("@/lib/billing/plans-actions", () => ({
   getPublicBillingPlansAction: (...args: unknown[]) => mockStrictPlans(...args),
 }))
 const mockStartSignupCheckout = vi.fn()
-vi.mock("@/lib/api/signup-checkout", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/api/signup-checkout")>()),
+vi.mock("@/lib/api/signup-checkout", () => ({
   startSignupCheckout: (...args: unknown[]) => mockStartSignupCheckout(...args),
 }))
 const mockUpdateSignupReview = vi.fn()
@@ -1008,7 +1007,7 @@ describe("auth callback", () => {
 
       it.each([
         ["&signup_offer=developer", "developer"],
-        ["&signup_offer=starter", "developer"],
+        ["&signup_offer=starter", "starter"],
         ["&offer=pro_monthly", "pro_monthly"],
       ])(
         "sends a pending team from %s straight to Stripe Checkout",
@@ -1031,13 +1030,12 @@ describe("auth callback", () => {
 
       it("asks a pending team without a plan to choose one", async () => {
         mockPricingVersion.mockResolvedValue("v2")
-        mockStartSignupCheckout.mockImplementation(
-          async (_user: unknown, offer: unknown) =>
-            offer ? null : "/auth/auth-code-error/?reason=plan_required",
+        mockStartSignupCheckout.mockResolvedValue(
+          "/auth/auth-code-error/?reason=plan_required",
         )
-        const response = await emailSignup("")
-        const location = new URL(response.headers.get("location")!)
-        expect(location.pathname).toBe("/auth/auth-code-error/")
+        const location = new URL(
+          (await emailSignup("")).headers.get("location")!,
+        )
         expect(location.searchParams.get("reason")).toBe("plan_required")
         expect(mockStartSignupCheckout).toHaveBeenCalledWith(
           expect.anything(),
@@ -1046,7 +1044,7 @@ describe("auth callback", () => {
         )
       })
 
-      it("keeps the in-app paid page as recovery when checkout cannot start", async () => {
+      it("offers to resume the selected plan when checkout cannot start", async () => {
         mockPricingVersion.mockResolvedValue("v2")
         mockStartSignupCheckout.mockRejectedValue(new Error("cell down"))
         const location = new URL(
@@ -1054,24 +1052,53 @@ describe("auth callback", () => {
             "location",
           )!,
         )
-        expect(location.pathname).toBe("/auth/auth-code-error")
-        expect(location.searchParams.get("reason")).toBe("account_setup")
-        expect(location.searchParams.get("next")).toBe("/billing/pro/")
+        expect(location.searchParams.get("reason")).toBe("checkout_unavailable")
+        expect(location.searchParams.get("offer")).toBe("developer")
+      })
+
+      it("keeps a Free signup's landing when the payment check fails", async () => {
+        mockPricingVersion.mockResolvedValue("v2")
+        mockStartSignupCheckout.mockRejectedValue(new Error("cell down"))
+        const response = await emailSignup("&signup_offer=free")
+        expect(new URL(response.headers.get("location")!).pathname).toBe(
+          "/sandboxes",
+        )
       })
 
       it("keeps the existing destination for a team that already has a plan", async () => {
         mockPricingVersion.mockResolvedValue("v2")
-        const response = await emailSignup("&signup_offer=pro")
+        const response = await emailSignup("&signup_offer=starter")
         expect(new URL(response.headers.get("location")!).pathname).toBe(
-          "/billing/pro/",
+          "/plan-usage/buy-credit",
         )
       })
 
-      it("never starts checkout under legacy pricing", async () => {
-        const response = await emailSignup("&signup_offer=developer")
+      it.each(["&signup_offer=starter", "&signup_offer=pro", ""])(
+        "never starts checkout under legacy pricing for %s",
+        async (query) => {
+          await emailSignup(query)
+          expect(mockStartSignupCheckout).not.toHaveBeenCalled()
+        },
+      )
+
+      it("never starts checkout for an existing customer", async () => {
+        mockPricingVersion.mockResolvedValue("v2")
+        await GET(
+          new Request(
+            "https://console.superserve.ai/auth/callback?code=abc&signup_offer=developer",
+          ),
+        )
         expect(mockStartSignupCheckout).not.toHaveBeenCalled()
-        expect(new URL(response.headers.get("location")!).pathname).toBe(
-          "/billing/pro/",
+      })
+
+      it("keeps the checkout resume route through sign-in", async () => {
+        const response = await GET(
+          new Request(
+            "https://console.superserve.ai/auth/callback?code=abc&next=%2Fapi%2Fonboarding%2Fcheckout%2F%3Foffer%3Ddeveloper",
+          ),
+        )
+        expect(response.headers.get("location")).toBe(
+          "https://console.superserve.ai/api/onboarding/checkout/?offer=developer",
         )
       })
     })
@@ -1157,17 +1184,15 @@ describe("auth callback", () => {
       }
     })
 
-    it("keeps selected Developer navigation when catalog entry is unavailable", async () => {
+    it("keeps selected Starter navigation when catalog entry is unavailable", async () => {
       mockPricingVersion.mockResolvedValue("legacy")
-      googleMembershipState = { kind: "first_time" }
-      mockHasValidGoogleSignupProof.mockResolvedValue(true)
       const response = await GET(
         new Request(
-          "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1&signup_offer=starter",
+          "https://console.superserve.ai/auth/callback?code=abc&signup_offer=starter",
         ),
       )
       expect(new URL(response.headers.get("location")!).pathname).toBe(
-        "/billing/pro/",
+        "/plan-usage/buy-credit",
       )
       expect(mockUpdateSignupReview).not.toHaveBeenCalled()
     })
@@ -1400,7 +1425,7 @@ describe("auth callback", () => {
       expect(mockSignOut).not.toHaveBeenCalled()
     })
 
-    it("keeps a no-offer signup on today's landing under legacy pricing", async () => {
+    it("reads pricing once for a no-offer signup and keeps today's landing", async () => {
       googleMembershipState = { kind: "first_time" }
       mockHasValidGoogleSignupProof.mockResolvedValue(true)
       const response = await GET(
@@ -1408,10 +1433,11 @@ describe("auth callback", () => {
           "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
         ),
       )
+      expect(mockPricingVersion).toHaveBeenCalledTimes(1)
+      expect(mockStartSignupCheckout).not.toHaveBeenCalled()
       expect(new URL(response.headers.get("location")!).pathname).toBe(
         "/sandboxes",
       )
-      expect(mockStartSignupCheckout).not.toHaveBeenCalled()
     })
 
     it("holds a new Enterprise account without access", async () => {
@@ -1447,8 +1473,7 @@ describe("auth callback", () => {
 
     it.each([
       ["free", "/sandboxes"],
-      ["starter", "/billing/pro/"],
-      ["developer", "/billing/pro/"],
+      ["starter", "/plan-usage/buy-credit"],
       ["pro", "/billing/pro/"],
       ["pro_monthly", "/billing/pro/"],
       ["pro_annual", "/billing/pro/"],
@@ -1468,8 +1493,8 @@ describe("auth callback", () => {
       "keeps recognized aliases through OAuth and email confirmation under %s entry",
       async (version) => {
         mockPricingVersion.mockResolvedValue(version)
-        for (const [offer, existing] of [
-          ["starter_monthly", "/sandboxes"],
+        for (const [offer, destination] of [
+          ["starter_monthly", "/plan-usage/buy-credit"],
           ["pro_annual", "/billing/pro/"],
         ]) {
           for (const proof of ["code=abc", "token_hash=token&type=signup"]) {
@@ -1479,7 +1504,7 @@ describe("auth callback", () => {
               ),
             )
             expect(new URL(response.headers.get("location")!).pathname).toBe(
-              proof === "code=abc" ? existing : "/billing/pro/",
+              destination,
             )
           }
         }
@@ -1706,7 +1731,9 @@ describe("auth callback", () => {
         const failure = new URL(response.headers.get("location")!)
         expect(failure.searchParams.get("reason")).toBe("account_setup")
         expect(failure.searchParams.get("account")).toBe("u1")
-        expect(failure.searchParams.get("next")).toBe("/billing/pro/")
+        expect(failure.searchParams.get("next")).toBe(
+          offer === "starter" ? "/plan-usage/buy-credit" : "/billing/pro/",
+        )
         expect(mockGetSignupPlanAction).not.toHaveBeenCalled()
       },
     )
@@ -1891,7 +1918,7 @@ describe("auth callback", () => {
       )
     })
 
-    it("keeps an existing customer off the new-team Developer offer", async () => {
+    it("routes an existing customer to the selected Starter purchase", async () => {
       mockPricingVersion.mockResolvedValue("v2")
       const response = await GET(
         new Request(
@@ -1899,9 +1926,8 @@ describe("auth callback", () => {
         ),
       )
       expect(new URL(response.headers.get("location")!).pathname).toBe(
-        "/sandboxes",
+        "/plan-usage/buy-credit",
       )
-      expect(mockStartSignupCheckout).not.toHaveBeenCalled()
     })
 
     it.each([

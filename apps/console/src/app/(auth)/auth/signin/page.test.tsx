@@ -131,8 +131,8 @@ describe("SignInPage", () => {
   })
 
   it.each([
-    ["starter", "/sandboxes"],
-    ["starter_monthly", "/sandboxes"],
+    ["starter", "/plan-usage/buy-credit"],
+    ["starter_monthly", "/plan-usage/buy-credit"],
     ["pro_annual", "/billing/pro/"],
     ["pro_monthly", "/billing/pro/"],
     ["free", "/sandboxes"],
@@ -150,19 +150,19 @@ describe("SignInPage", () => {
   })
 
   it("keeps selected intent for an already signed-in customer", async () => {
-    searchParamsMap = { signup_offer: "pro" }
+    searchParamsMap = { signup_offer: "starter" }
     mockGetUser.mockResolvedValue({
       data: { user: { id: "user-1" } },
       error: null,
     })
     render(<SignInPage />)
     await waitFor(() =>
-      expect(mockReplace).toHaveBeenCalledWith("/billing/pro/"),
+      expect(mockReplace).toHaveBeenCalledWith("/plan-usage/buy-credit"),
     )
   })
 
   it.each([
-    ["starter_monthly", "/sandboxes"],
+    ["starter_monthly", "/plan-usage/buy-credit"],
     ["pro_annual", "/billing/pro/"],
   ])(
     "restores %s navigation for an existing session",

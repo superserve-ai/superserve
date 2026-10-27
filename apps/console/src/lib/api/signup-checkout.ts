@@ -1,33 +1,21 @@
 import type { User } from "@supabase/supabase-js"
 
+import {
+  SIGNUP_CHECKOUT_OFFERS,
+  type SignupCheckoutOffer,
+  signupCheckoutRetryPath,
+} from "@/lib/billing/signup-checkout-paths"
 import { cellFor } from "@/lib/cells"
 
 import { getAuthApiKeyAndTeamForUser } from "./proxy-auth"
 
-// Catalog offer keys a new team may buy at signup, keyed by signup intent.
-const SIGNUP_CHECKOUT_OFFERS = {
-  developer: "developer_monthly",
-  pro_monthly: "pro_monthly",
-} as const
+const BACKEND_TIMEOUT_MS = 10_000
 
-export type SignupCheckoutOffer = keyof typeof SIGNUP_CHECKOUT_OFFERS
-
-export function isSignupCheckoutOffer(
-  offer: unknown,
-): offer is SignupCheckoutOffer {
-  return (
-    typeof offer === "string" && Object.hasOwn(SIGNUP_CHECKOUT_OFFERS, offer)
-  )
+function successPath(team: string) {
+  return `/billing/pro/?${new URLSearchParams({ team, billing: "success" })}`
 }
 
-export function signupCheckoutReturnPath(
-  team: string,
-  outcome: "success" | "cancel",
-) {
-  return `/billing/pro/?${new URLSearchParams({ team, billing: outcome })}`
-}
-
-// A new team waiting for payment goes straight to its plan's Stripe Checkout.
+// A team waiting for payment goes straight to its plan's Stripe Checkout.
 // Returns null when the team already has a plan, so the caller keeps its
 // existing destination; the backend resumes an open checkout on every call.
 export async function startSignupCheckout(
@@ -41,6 +29,7 @@ export async function startSignupCheckout(
   const plan = await fetch(`${base}/billing/plan`, {
     headers,
     cache: "no-store",
+    signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
   })
   if (!plan.ok) throw new Error(`billing plan read failed: ${plan.status}`)
   const { entry_state: entry } = (await plan.json()) as {
@@ -49,17 +38,17 @@ export async function startSignupCheckout(
   if (entry !== "pending_payment" && entry !== "payment_failed") return null
   if (!offer) return "/auth/auth-code-error/?reason=plan_required"
 
-  const teamKey = `${team.region}:${team.teamId}`
-  const success = signupCheckoutReturnPath(teamKey, "success")
+  const success = successPath(`${team.region}:${team.teamId}`)
   const response = await fetch(`${base}/stripe/checkout-session`, {
     method: "POST",
     headers,
     cache: "no-store",
+    signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
     body: JSON.stringify({
       offer: SIGNUP_CHECKOUT_OFFERS[offer],
       success_url: new URL(success, origin).toString(),
       cancel_url: new URL(
-        signupCheckoutReturnPath(teamKey, "cancel"),
+        signupCheckoutRetryPath(offer, "checkout_canceled"),
         origin,
       ).toString(),
     }),
