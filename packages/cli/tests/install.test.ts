@@ -82,6 +82,14 @@ describe("install.sh PATH setup", () => {
     expect(existsSync(join(home, ".bash_profile"))).toBe(false)
   })
 
+  test("Linux Bash with no login file creates .profile", () => {
+    const home = newHome()
+    install({ HOME: home, SHELL: "/bin/bash" }, "Linux")
+    expect(readFileSync(join(home, ".profile"), "utf8")).toContain(
+      ".superserve/bin",
+    )
+  })
+
   test("doesn't call the API when it won't sign in", () => {
     const home = newHome()
     install({ HOME: home, SHELL: "/bin/zsh" })

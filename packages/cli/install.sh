@@ -112,7 +112,7 @@ if [ -z "$ON_PATH" ] && [ -z "${SUPERSERVE_NO_MODIFY_PATH:-}" ]; then
       else
         # Linux terminals read .bashrc; login shells (SSH) read the login file.
         add_to_profile "$HOME/.bashrc"
-        if [ -n "$LOGIN_FILE" ]; then add_to_profile "$LOGIN_FILE"; fi
+        add_to_profile "${LOGIN_FILE:-$HOME/.profile}"
       fi
       ;;
     fish)
@@ -144,5 +144,5 @@ fi
 # This shell's PATH can't change from here; a new one reads the profile.
 if [ -n "$UPDATED" ]; then
   echo ""
-  info "Open a new terminal, or run 'exec \$SHELL', to start using superserve."
+  info "Open a new terminal, or run 'exec \$SHELL -l', to start using superserve."
 fi
