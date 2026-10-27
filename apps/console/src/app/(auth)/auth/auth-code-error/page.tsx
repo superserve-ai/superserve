@@ -157,18 +157,22 @@ function AuthCodeErrorContent() {
               {choosePlan && (
                 <>
                   <div className="mt-5 flex gap-2">
-                    <Button
-                      render={<Link href={signupCheckoutPath("developer")} />}
-                      size="sm"
-                    >
-                      Developer
-                    </Button>
-                    <Button
-                      render={<Link href={signupCheckoutPath("pro_monthly")} />}
-                      size="sm"
-                    >
-                      Pro
-                    </Button>
+                    {(
+                      [
+                        ["developer", "Developer"],
+                        ["pro_monthly", "Pro"],
+                      ] as const
+                    ).map(([plan, label]) => (
+                      <form
+                        key={plan}
+                        method="post"
+                        action={signupCheckoutPath(plan)}
+                      >
+                        <Button type="submit" size="sm">
+                          {label}
+                        </Button>
+                      </form>
+                    ))}
                   </div>
                   <Link
                     href="https://superserve.ai/pricing"

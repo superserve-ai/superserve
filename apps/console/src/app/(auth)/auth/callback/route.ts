@@ -67,7 +67,7 @@ import {
 } from "@/lib/billing/pro-auth-return"
 import {
   isSignupCheckoutOffer,
-  SIGNUP_CHECKOUT_ROUTE,
+  isSignupCheckoutPath,
   signupCheckoutRetryPath,
 } from "@/lib/billing/signup-checkout-paths"
 import { DEFAULT_REGION } from "@/lib/cells"
@@ -716,7 +716,7 @@ export async function GET(request: Request) {
           !next.startsWith("/device") &&
           !next.startsWith("https://") &&
           !/^\/onboarding\/plan\/?(?:\?|$)/.test(next) &&
-          !next.startsWith(SIGNUP_CHECKOUT_ROUTE) &&
+          !isSignupCheckoutPath(next) &&
           !ycNext &&
           !proNext &&
           !preparationNext

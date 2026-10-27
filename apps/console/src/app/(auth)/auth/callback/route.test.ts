@@ -1091,6 +1091,17 @@ describe("auth callback", () => {
         expect(mockStartSignupCheckout).not.toHaveBeenCalled()
       })
 
+      it("drops a checkout path that escapes the resume route", async () => {
+        const response = await GET(
+          new Request(
+            "https://console.superserve.ai/auth/callback?code=abc&next=%2Fapi%2Fonboarding%2Fcheckout%2F..%2F..%2Fadmin",
+          ),
+        )
+        expect(new URL(response.headers.get("location")!).pathname).toBe(
+          "/sandboxes",
+        )
+      })
+
       it("keeps the checkout resume route through sign-in", async () => {
         const response = await GET(
           new Request(

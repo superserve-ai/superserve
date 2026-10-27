@@ -87,12 +87,16 @@ describe("auth-code-error page", () => {
     (r) => {
       reason = r
       render(<AuthCodeErrorPage />)
-      expect(
-        screen.getByRole("link", { name: "Developer" }).getAttribute("href"),
-      ).toBe("/api/onboarding/checkout/?offer=developer")
-      expect(
-        screen.getByRole("link", { name: "Pro" }).getAttribute("href"),
-      ).toBe("/api/onboarding/checkout/?offer=pro_monthly")
+      for (const [name, offer] of [
+        ["Developer", "developer"],
+        ["Pro", "pro_monthly"],
+      ]) {
+        const form = screen.getByRole("button", { name }).closest("form")!
+        expect(form.getAttribute("method")).toBe("post")
+        expect(form.getAttribute("action")).toBe(
+          `/api/onboarding/checkout/?offer=${offer}`,
+        )
+      }
       expect(screen.queryByRole("link", { name: "Try Again" })).toBeNull()
     },
   )

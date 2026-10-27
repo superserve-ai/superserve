@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 let user: { id: string } | null
@@ -12,7 +14,7 @@ vi.mock("@/lib/api/signup-checkout", async (importOriginal) => ({
   startSignupCheckout: (...args: unknown[]) => start(...args),
 }))
 
-import { GET } from "./route"
+import { GET, POST } from "./route"
 
 const visit = async (query: string) =>
   new URL(
@@ -40,6 +42,7 @@ describe("signup checkout resume", () => {
       user,
       "developer",
       "https://console.example.test",
+      false,
     )
   })
 
@@ -69,6 +72,34 @@ describe("signup checkout resume", () => {
     expect((await visit("offer=enterprise")).searchParams.get("reason")).toBe(
       "plan_required",
     )
+    expect(start).not.toHaveBeenCalled()
+  })
+
+  it("lets a same-origin plan choice replace an open checkout", async () => {
+    start.mockResolvedValue("https://checkout.stripe.com/c/pay/cs_test_2")
+    const response = await POST(
+      new Request(
+        "https://console.example.test/api/onboarding/checkout/?offer=pro_monthly",
+        { method: "POST", headers: { origin: "https://console.example.test" } },
+      ),
+    )
+    expect(response.status).toBe(303)
+    expect(start).toHaveBeenCalledWith(
+      user,
+      "pro_monthly",
+      "https://console.example.test",
+      true,
+    )
+  })
+
+  it("refuses a cross-site plan choice", async () => {
+    const response = await POST(
+      new Request(
+        "https://console.example.test/api/onboarding/checkout/?offer=pro_monthly",
+        { method: "POST", headers: { origin: "https://other.example" } },
+      ),
+    )
+    expect(response.status).toBe(403)
     expect(start).not.toHaveBeenCalled()
   })
 })

@@ -29,3 +29,8 @@ export function signupCheckoutRetryPath(
 ) {
   return `/auth/auth-code-error/?${new URLSearchParams({ reason, offer })}`
 }
+
+export function isSignupCheckoutPath(path: string) {
+  const match = /^\/api\/onboarding\/checkout\/\?offer=([a-z_]+)$/.exec(path)
+  return !!match && isSignupCheckoutOffer(match[1])
+}

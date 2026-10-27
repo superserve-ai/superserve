@@ -18,10 +18,14 @@ const user = { id: "u1" } as User
 const origin = "https://console.example.test"
 let entryState: string
 let checkout: { status: number; body: unknown }
+let checkouts: { status: number; body: unknown }[] = []
 const fetchMock = vi.fn(async (url: string) => {
   if (url.endsWith("/billing/plan"))
     return Response.json({ entry_state: entryState })
-  return Response.json(checkout.body, { status: checkout.status })
+  if (url.endsWith("/stripe/pro-checkout/recover"))
+    return Response.json({ outcome: "retryable" })
+  const next = checkouts.shift() ?? checkout
+  return Response.json(next.body, { status: next.status })
 })
 
 describe("startSignupCheckout", () => {
@@ -31,6 +35,7 @@ describe("startSignupCheckout", () => {
       status: 200,
       body: { url: "https://checkout.stripe.com/c/pay/cs_test_1" },
     }
+    checkouts = []
     fetchMock.mockClear()
     vi.stubGlobal("fetch", fetchMock)
   })
@@ -89,5 +94,25 @@ describe("startSignupCheckout", () => {
     await expect(
       startSignupCheckout(user, "pro_monthly", origin),
     ).rejects.toThrow()
+  })
+
+  it("replaces an open checkout for another plan only on an explicit choice", async () => {
+    const conflict = { status: 409, body: { error: { code: "plan_conflict" } } }
+    checkouts = [conflict]
+    await expect(
+      startSignupCheckout(user, "pro_monthly", origin),
+    ).rejects.toThrow()
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).endsWith("/recover")),
+    ).toBe(false)
+
+    checkouts = [conflict]
+    expect(await startSignupCheckout(user, "pro_monthly", origin, true)).toBe(
+      "https://checkout.stripe.com/c/pay/cs_test_1",
+    )
+    const restart = fetchMock.mock.calls.find(([url]) =>
+      String(url).endsWith("/stripe/pro-checkout/recover"),
+    ) as unknown as [string, RequestInit]
+    expect(JSON.parse(restart[1].body as string)).toEqual({ restart: true })
   })
 })
