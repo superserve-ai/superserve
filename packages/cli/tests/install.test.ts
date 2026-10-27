@@ -13,13 +13,16 @@ import { join } from "node:path"
 
 const INSTALL_SH = join(import.meta.dir, "..", "install.sh")
 
-// Runs the real install.sh offline: fake curl serves a stub binary (whose
-// `whoami` succeeds, so no login starts) and fake uname picks the OS.
+// Runs the real install.sh offline: fake curl serves a stub binary that logs
+// its calls, and fake uname picks the OS. Without a terminal, no login starts.
 function install(env: Record<string, string>, os = "Darwin") {
   const home = env.HOME
   const fakes = join(home, ".fakes")
   mkdirSync(fakes, { recursive: true })
-  writeFileSync(join(fakes, "stub"), "#!/bin/sh\nexit 0\n")
+  writeFileSync(
+    join(fakes, "stub"),
+    `#!/bin/sh\necho "$*" >> "${fakes}/calls"\nexit 0\n`,
+  )
   writeFileSync(
     join(fakes, "uname"),
     `#!/bin/sh\n[ "$1" = "-m" ] && echo arm64 || echo ${os}\n`,
@@ -67,6 +70,23 @@ describe("install.sh PATH setup", () => {
       expect(profile).toContain(".superserve/bin")
     },
   )
+
+  test("Linux Bash also updates an existing login file, for SSH sessions", () => {
+    const home = newHome()
+    writeFileSync(join(home, ".profile"), "export KEEP=1\n")
+    install({ HOME: home, SHELL: "/bin/bash" }, "Linux")
+    for (const file of [".bashrc", ".profile"])
+      expect(readFileSync(join(home, file), "utf8")).toContain(
+        ".superserve/bin",
+      )
+    expect(existsSync(join(home, ".bash_profile"))).toBe(false)
+  })
+
+  test("doesn't call the API when it won't sign in", () => {
+    const home = newHome()
+    install({ HOME: home, SHELL: "/bin/zsh" })
+    expect(existsSync(join(home, ".fakes", "calls"))).toBe(false)
+  })
 
   test("Fish writes to the config under XDG_CONFIG_HOME", () => {
     const home = newHome()

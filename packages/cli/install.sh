@@ -83,36 +83,45 @@ info "Installed to ${INSTALL_DIR}/superserve"
 # `superserve`. SUPERSERVE_NO_MODIFY_PATH=1 leaves dotfiles alone.
 ON_PATH=""
 case ":${PATH}:" in *":${INSTALL_DIR}:"*) ON_PATH=1 ;; esac
-PROFILE=""
+UPDATED=""
+add_to_profile() {
+  if ! grep -qsxF "$LINE" "$1"; then
+    mkdir -p "$(dirname "$1")"
+    printf '\n# superserve\n%s\n' "$LINE" >> "$1"
+    info "Added ${INSTALL_DIR} to your PATH in $1"
+  fi
+  UPDATED=1
+}
+# The first login startup file that exists, which is the only one Bash reads.
+bash_login_file() {
+  for f in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+    if [ -f "$f" ]; then echo "$f"; return; fi
+  done
+}
 if [ -z "$ON_PATH" ] && [ -z "${SUPERSERVE_NO_MODIFY_PATH:-}" ]; then
   # Single-quote the directory so a profile never re-parses it as shell code.
   SQ_DIR="'$(printf '%s' "$INSTALL_DIR" | sed "s/'/'\\\\''/g")'"
   LINE="export PATH=${SQ_DIR}:\"\$PATH\""
   case "$(basename "${SHELL:-/bin/sh}")" in
-    zsh) PROFILE="${ZDOTDIR:-$HOME}/.zshrc" ;;
+    zsh) add_to_profile "${ZDOTDIR:-$HOME}/.zshrc" ;;
     bash)
-      PROFILE="$HOME/.bashrc"
-      # macOS opens login shells, which read only the first of these that
-      # exists; creating .bash_profile would hide an existing .profile.
+      LOGIN_FILE="$(bash_login_file)"
       if [ "$OS" = "darwin" ]; then
-        PROFILE="$HOME/.bash_profile"
-        for f in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
-          if [ -f "$f" ]; then PROFILE="$f"; break; fi
-        done
+        # macOS terminals start login shells; never shadow an existing .profile.
+        add_to_profile "${LOGIN_FILE:-$HOME/.bash_profile}"
+      else
+        # Linux terminals read .bashrc; login shells (SSH) read the login file.
+        add_to_profile "$HOME/.bashrc"
+        if [ -n "$LOGIN_FILE" ]; then add_to_profile "$LOGIN_FILE"; fi
       fi
       ;;
     fish)
-      PROFILE="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
       LINE="fish_add_path '$(printf '%s' "$INSTALL_DIR" | sed -e 's/\\/\\\\/g' -e "s/'/\\\\'/g")'"
+      add_to_profile "${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
       ;;
   esac
-  if [ -n "$PROFILE" ] && ! grep -qsxF "$LINE" "$PROFILE"; then
-    mkdir -p "$(dirname "$PROFILE")"
-    printf '\n# superserve\n%s\n' "$LINE" >> "$PROFILE"
-    info "Added ${INSTALL_DIR} to your PATH in ${PROFILE}"
-  fi
 fi
-if [ -z "$ON_PATH" ] && [ -z "$PROFILE" ]; then
+if [ -z "$ON_PATH" ] && [ -z "$UPDATED" ]; then
   echo ""
   info "Add superserve to your PATH in your shell profile:"
   echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
@@ -121,18 +130,19 @@ fi
 # --- Sign in ---
 # A person at a terminal goes straight to the browser login, which also signs
 # new users up. Under `curl | sh` stdin is this script, so login reads the tty.
+# whoami is a network call, so it only runs when login would.
 SUPERSERVE="${INSTALL_DIR}/superserve"
-if "$SUPERSERVE" whoami >/dev/null 2>&1; then
+if [ -n "${SUPERSERVE_NO_LOGIN:-}" ] || [ ! -t 1 ] || ! (: </dev/tty) 2>/dev/null; then
+  info "Done! Run 'superserve login' to sign in."
+elif "$SUPERSERVE" whoami >/dev/null 2>&1; then
   info "Done! You're already signed in."
-elif [ -z "${SUPERSERVE_NO_LOGIN:-}" ] && [ -t 1 ] && (: </dev/tty) 2>/dev/null; then
+else
   echo ""
   "$SUPERSERVE" login </dev/tty || info "Run 'superserve login' to sign in."
-else
-  info "Done! Run 'superserve login' to sign in."
 fi
 
 # This shell's PATH can't change from here; a new one reads the profile.
-if [ -n "$PROFILE" ]; then
+if [ -n "$UPDATED" ]; then
   echo ""
   info "Open a new terminal, or run 'exec \$SHELL', to start using superserve."
 fi
