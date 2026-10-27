@@ -39,6 +39,12 @@ export interface PrepaidCreditSummary {
   purchases: PrepaidPurchase[]
 }
 
+export const PREPAID_MAX_CENTS = 1_000_000
+
+export function validNewPrepaidCents(cents: number): boolean {
+  return validPrepaidCents(cents) && cents <= PREPAID_MAX_CENTS
+}
+
 export function validPrepaidCents(cents: number): boolean {
   return (
     Number.isInteger(cents) &&
@@ -163,6 +169,8 @@ export async function startPrepaidCheckout(
         "Unable to recover this checkout. Check recent purchases before continuing.",
       )
   } else {
+    if (!validNewPrepaidCents(amountCents))
+      throw new Error("Enter a multiple of $5 between $5 and $10,000.")
     if (resumeOperationId !== undefined)
       throw new Error(
         "This purchase has already finished or is no longer available for recovery.",
@@ -222,6 +230,12 @@ export function setPrepaidAutoRecharge(
   teamKey: string,
   settings: { enabled: boolean; thresholdCents?: number; amountCents?: number },
 ): Promise<PrepaidCreditSummary> {
+  if (
+    settings.enabled &&
+    (!validNewPrepaidCents(settings.thresholdCents ?? NaN) ||
+      !validNewPrepaidCents(settings.amountCents ?? NaN))
+  )
+    throw new Error("Enter a multiple of $5 between $5 and $10,000.")
   return apiClient<PrepaidCreditSummary>("/billing/prepaid/auto-recharge", {
     method: "PUT",
     cache: "no-store",
