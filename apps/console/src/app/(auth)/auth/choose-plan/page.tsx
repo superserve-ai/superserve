@@ -11,6 +11,7 @@ import { DitherBackground } from "@/components/dither-background"
 import {
   isSignupCheckoutOffer,
   type PlanPickerReason,
+  SIGNUP_CHECKOUT_RETURN_ROUTE,
   signupCheckoutPath,
 } from "@/lib/billing/signup-checkout-paths"
 
@@ -21,8 +22,10 @@ const PLANS = [
 
 const MESSAGES: Record<PlanPickerReason, string> = {
   upgrade: "Choose a plan to keep your sandboxes running.",
+  payment_confirming:
+    "We're still confirming your payment. This usually takes a few seconds.",
   trial_ended:
-    "Your free trial is used up. Your sandboxes are paused and nothing is deleted. Choose a plan to resume.",
+    "Your free trial is used up or isn't available for this account. Your sandboxes are paused and nothing is deleted. Choose a plan to continue.",
   payment_failed:
     "We couldn't confirm a card for your plan. Choose a plan to try again.",
   plan_unavailable: "That plan is no longer available. Choose another plan.",
@@ -66,27 +69,37 @@ function ChoosePlanContent() {
           <p className="mt-2 text-center text-xs text-muted">
             {MESSAGES[reason]}
           </p>
-          <div className="mt-5 flex gap-2">
-            {PLANS.map(({ offer, label }) => (
-              <form
-                key={offer}
-                method="post"
-                action={signupCheckoutPath(offer)}
-              >
-                <Button
-                  type="submit"
-                  size="sm"
-                  variant={
-                    !preselected || preselected === offer
-                      ? "default"
-                      : "outline"
-                  }
+          {reason === "payment_confirming" ? (
+            <Button
+              render={<Link href={SIGNUP_CHECKOUT_RETURN_ROUTE} />}
+              size="sm"
+              className="mt-5"
+            >
+              Check again
+            </Button>
+          ) : (
+            <div className="mt-5 flex gap-2">
+              {PLANS.map(({ offer, label }) => (
+                <form
+                  key={offer}
+                  method="post"
+                  action={signupCheckoutPath(offer)}
                 >
-                  {label}
-                </Button>
-              </form>
-            ))}
-          </div>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    variant={
+                      !preselected || preselected === offer
+                        ? "default"
+                        : "outline"
+                    }
+                  >
+                    {label}
+                  </Button>
+                </form>
+              ))}
+            </div>
+          )}
           <Link
             href="https://superserve.ai/pricing"
             className="mt-3 text-xs underline"

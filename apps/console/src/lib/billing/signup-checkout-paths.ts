@@ -35,6 +35,10 @@ export function isAwaitingPlanState(
 // Starts or resumes the team's checkout for offer from inside the console.
 export const SIGNUP_CHECKOUT_ROUTE = "/api/onboarding/checkout/"
 
+// Where Stripe returns after payment: it confirms the payment before the
+// dashboard, which sends unpaid teams to the picker, is reached.
+export const SIGNUP_CHECKOUT_RETURN_ROUTE = "/api/onboarding/checkout/return/"
+
 export function signupCheckoutPath(offer: SignupCheckoutOffer) {
   return `${SIGNUP_CHECKOUT_ROUTE}?${new URLSearchParams({ offer })}`
 }
@@ -46,6 +50,7 @@ export function isSignupCheckoutPath(path: string) {
 
 export type PlanPickerReason =
   | "upgrade"
+  | "payment_confirming"
   | "trial_ended"
   | "payment_failed"
   | "plan_unavailable"

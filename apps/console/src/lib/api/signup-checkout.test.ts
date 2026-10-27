@@ -12,18 +12,26 @@ vi.mock("@/lib/cells", () => ({
 
 import type { User } from "@supabase/supabase-js"
 
-import { signupEntryDestination, startSignupCheckout } from "./signup-checkout"
+import {
+  confirmSignupCheckout,
+  signupEntryDestination,
+  startSignupCheckout,
+} from "./signup-checkout"
 
 const user = { id: "u1" } as User
 const origin = "https://console.example.test"
 let entryState: string
 let checkout: { status: number; body: unknown }
 let checkouts: { status: number; body: unknown }[] = []
+let recovered: { status: number; body: unknown } = {
+  status: 200,
+  body: { outcome: "retryable" },
+}
 const fetchMock = vi.fn(async (url: string) => {
   if (url.endsWith("/billing/plan"))
     return Response.json({ entry_state: entryState })
   if (url.endsWith("/stripe/pro-checkout/recover"))
-    return Response.json({ outcome: "retryable" })
+    return Response.json(recovered.body, { status: recovered.status })
   const next = checkouts.shift() ?? checkout
   return Response.json(next.body, { status: next.status })
 })
@@ -36,6 +44,7 @@ describe("startSignupCheckout", () => {
       body: { url: "https://checkout.stripe.com/c/pay/cs_test_1" },
     }
     checkouts = []
+    recovered = { status: 200, body: { outcome: "retryable" } }
     fetchMock.mockClear()
     vi.stubGlobal("fetch", fetchMock)
   })
@@ -53,7 +62,7 @@ describe("startSignupCheckout", () => {
     expect(JSON.parse(init.body as string)).toEqual({
       offer: "developer_monthly",
       success_url:
-        "https://console.example.test/billing/pro/?team=use%3Ateam-1&billing=success",
+        "https://console.example.test/api/onboarding/checkout/return/",
       cancel_url:
         "https://console.example.test/auth/choose-plan/?reason=checkout_canceled&offer=developer",
     })
@@ -99,7 +108,7 @@ describe("startSignupCheckout", () => {
       body: { outcome: "payment_confirmation_pending" },
     }
     expect(await startSignupCheckout(user, "pro_monthly", origin)).toBe(
-      "/billing/pro/?team=use%3Ateam-1&billing=success",
+      "/api/onboarding/checkout/return/",
     )
   })
 
@@ -129,4 +138,33 @@ describe("startSignupCheckout", () => {
     ) as unknown as [string, RequestInit]
     expect(JSON.parse(restart[1].body as string)).toEqual({ restart: true })
   })
+
+  it.each([
+    [200, { outcome: "active" }, "/sandboxes"],
+    [
+      200,
+      {
+        outcome: "payment_method_required",
+        url: "https://checkout.stripe.com/c/pay/cs_setup",
+      },
+      "https://checkout.stripe.com/c/pay/cs_setup",
+    ],
+    [
+      202,
+      { outcome: "payment_confirmation_pending" },
+      "/auth/choose-plan/?reason=payment_confirming",
+    ],
+    [200, { outcome: "active", url: "https://other.example/x" }, "/sandboxes"],
+    [
+      200,
+      { outcome: "payment_method_required", url: "https://other.example/x" },
+      "/auth/choose-plan/?reason=payment_confirming",
+    ],
+  ])(
+    "settles a paid checkout before the dashboard (%s %j)",
+    async (status, body, destination) => {
+      recovered = { status, body }
+      expect(await confirmSignupCheckout(user)).toBe(destination)
+    },
+  )
 })

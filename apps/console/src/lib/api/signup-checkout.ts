@@ -5,6 +5,7 @@ import {
   isAwaitingPlanState,
   planPickerPath,
   SIGNUP_CHECKOUT_OFFERS,
+  SIGNUP_CHECKOUT_RETURN_ROUTE,
   type SignupCheckoutOffer,
 } from "@/lib/billing/signup-checkout-paths"
 import { cellFor } from "@/lib/cells"
@@ -61,8 +62,8 @@ export async function startSignupCheckout(
 ): Promise<string | null> {
   const backend = await teamBackend(user)
   if (!(await readEntryState(backend))) return null
-  const { base, headers, team } = backend
-  const success = `/billing/pro/?${new URLSearchParams({ team: `${team.region}:${team.teamId}`, billing: "success" })}`
+  const { base, headers } = backend
+  const success = SIGNUP_CHECKOUT_RETURN_ROUTE
   const create = async () => {
     const response = await fetch(`${base}/stripe/checkout-session`, {
       method: "POST",
@@ -107,4 +108,25 @@ export async function startSignupCheckout(
   if (result.url?.startsWith("https://checkout.stripe.com/")) return result.url
   if (result.outcome === "active") return "/sandboxes"
   return success
+}
+
+// Settles a checkout the customer just paid, so a team leaving Stripe lands
+// in the console with its plan rather than back on the picker.
+export async function confirmSignupCheckout(user: User): Promise<string> {
+  const { base, headers } = await teamBackend(user)
+  const response = await fetch(`${base}/stripe/pro-checkout/recover`, {
+    method: "POST",
+    headers,
+    cache: "no-store",
+    signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
+    body: JSON.stringify({ restart: false }),
+  })
+  const result = (await response.json().catch(() => ({}))) as {
+    outcome?: string
+    url?: string
+  }
+  if (response.ok && result.outcome === "active") return "/sandboxes"
+  if (response.ok && result.url?.startsWith("https://checkout.stripe.com/"))
+    return result.url
+  return planPickerPath("payment_confirming")
 }
