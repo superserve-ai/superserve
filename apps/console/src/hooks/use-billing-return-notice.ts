@@ -29,10 +29,15 @@ export function useBillingReturnNotice() {
     const billingState = genericState ?? url.searchParams.get("billing")
     if (genericState !== null) {
       url.searchParams.delete("billing_flow")
-      if (!inlineOwnsBilling && !proOwnsBilling)
+      if (
+        !inlineOwnsBilling &&
+        !proOwnsBilling &&
+        genericBillingReturnState(url.searchParams, "billing") !== null
+      )
         url.searchParams.delete("billing")
     } else {
-      if (!url.searchParams.has("billing")) return
+      if (genericBillingReturnState(url.searchParams, "billing") === null)
+        return
       url.searchParams.delete("billing")
     }
     window.history.replaceState(window.history.state, "", url.toString())

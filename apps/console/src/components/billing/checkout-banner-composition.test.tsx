@@ -601,3 +601,52 @@ it("renders bounded invalid-return error without propagating a raw malicious con
   expect(state.start).not.toHaveBeenCalled()
   expect(state.recover).not.toHaveBeenCalled()
 })
+
+it.each(["billing=unknown", "billing=success&billing=cancel"])(
+  "preserves invalid Starter legacy markers through query synchronization: %s",
+  (marker) => {
+    const query = `team=${team}&${marker}`
+    window.history.replaceState({}, "", `/plan-usage/buy-credit/?${query}`)
+    const view = () => (
+      <>
+        <PlanBanner />
+        <BuyCreditRoute />
+      </>
+    )
+    const mounted = render(view())
+    expect(window.location.search).toBe(`?${query}`)
+    mounted.rerender(view())
+    expect(screen.getByText(/incomplete or invalid/)).toBeTruthy()
+    expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
+    expect(state.toast).not.toHaveBeenCalled()
+    expect(state.invalidate).not.toHaveBeenCalled()
+    expect(state.prepaid).toHaveBeenLastCalledWith(false)
+  },
+)
+
+it.each(["billing=unknown", "billing=success&billing=cancel"])(
+  "generic setup does not erase another invalid Starter marker: %s",
+  (marker) => {
+    window.history.replaceState(
+      {},
+      "",
+      `/plan-usage/buy-credit/?team=${team}&${marker}&billing_flow=success`,
+    )
+    const view = () => (
+      <>
+        <PlanBanner />
+        <BuyCreditRoute />
+      </>
+    )
+    const mounted = render(view())
+    expect(
+      new URLSearchParams(window.location.search).getAll("billing"),
+    ).toEqual(new URLSearchParams(marker).getAll("billing"))
+    expect(
+      new URLSearchParams(window.location.search).has("billing_flow"),
+    ).toBe(false)
+    mounted.rerender(view())
+    expect(screen.getByText(/incomplete or invalid/)).toBeTruthy()
+    expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
+  },
+)
