@@ -1,6 +1,6 @@
 "use client"
 
-import { useIsMutating, useQueryClient } from "@tanstack/react-query"
+import { useIsMutating, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
@@ -22,7 +22,8 @@ import { usePendingStarterCheckout } from "@/hooks/use-pending-starter-checkout"
 import { usePublicBillingPlans } from "@/hooks/use-public-billing-plans"
 import { useTeams } from "@/hooks/use-teams"
 import { useUser } from "@/hooks/use-user"
-import { ApiError } from "@/lib/api/client"
+import { teamPlanSchema } from "@/lib/api/billing-v2"
+import { ApiError, apiClient } from "@/lib/api/client"
 import {
   isStripeCheckoutUrl,
   recoverProPayment,
@@ -94,6 +95,15 @@ function ProPaymentContext({
     return match ? { id: match.id, region: match.region } : null
   }, [dashboardTeam, teamsQuery.data])
   const teamKey = team ? `${team.region}:${team.id}` : null
+  const checkoutTermsQuery = useQuery({
+    queryKey: ["pro-checkout-terms", scope, actor, teamKey],
+    queryFn: async () =>
+      teamPlanSchema.parse(
+        await apiClient<unknown>("/billing/plan", { cache: "no-store" }),
+      ),
+    enabled: ready && !!actor && !!teamKey && scope === "self" && !teamMutating,
+    staleTime: 0,
+  })
   const plansQuery = usePublicBillingPlans(team?.region, !!team)
   const pro = planCard(plansQuery.data, "pro")
   const summaryQuery = useBillingSummary(!!team)
@@ -449,6 +459,17 @@ function ProPaymentContext({
             step={step}
             pro={pro}
             paidPlan={paidPlan}
+            checkoutTerms={
+              ready &&
+              actor &&
+              scope === "self" &&
+              !teamMutating &&
+              !teamMismatch &&
+              !checkoutTermsQuery.isError &&
+              !checkoutTermsQuery.isFetching
+                ? checkoutTermsQuery.data?.pro_checkout
+                : undefined
+            }
             busy={busy}
             canContinue={canContinue && !existingStarter.blocksEntry}
             canRecover={canRecover}

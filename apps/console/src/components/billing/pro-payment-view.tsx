@@ -4,6 +4,7 @@ import { Button } from "@superserve/ui"
 import Link from "next/link"
 
 import { CornerBrackets } from "@/components/corner-brackets"
+import type { ProCheckoutTerms } from "@/lib/api/billing-v2"
 import {
   formatUsdCents,
   planCard,
@@ -48,6 +49,7 @@ export interface ProPaymentViewProps {
   step: ProPaymentStep
   pro?: PlanCard
   paidPlan?: string | null
+  checkoutTerms?: ProCheckoutTerms
   busy: boolean
   canContinue?: boolean
   canRecover?: boolean
@@ -61,6 +63,7 @@ export function ProPaymentView({
   step,
   pro,
   paidPlan,
+  checkoutTerms,
   busy,
   canContinue = true,
   canRecover = true,
@@ -142,21 +145,17 @@ export function ProPaymentView({
       >
         <CornerBrackets size="sm" />
         <h2 className="text-2xl font-medium tracking-tight">{pro.name}</h2>
-        <p className="mt-2 text-3xl">
-          {formatUsdCents(pro.monthly.price_cents)}
-          <span className="text-muted-foreground text-sm"> / month</span>
-        </p>
+        {checkoutTerms?.accepted ? (
+          <p className="mt-2 text-sm">Saved checkout terms</p>
+        ) : (
+          <p className="mt-2 text-3xl">
+            {formatUsdCents(pro.monthly.price_cents)}
+            <span className="text-muted-foreground text-sm"> / month</span>
+          </p>
+        )}
         <ul className="text-muted-foreground mt-6 space-y-3 text-sm">
-          <li>
-            Pay once for the rest of your current billing period and receive the
-            prorated non-expiring usage credit based on your selected plan.
-          </li>
+          <ProCheckoutCopy terms={checkoutTerms} pro={pro} />
           <li>Pro limits begin after payment is confirmed.</li>
-          <li>
-            Your regular {formatUsdCents(pro.monthly.price_cents)} monthly fee
-            and included credit begin on your next billing date.
-          </li>
-          <li>{pro.credit_summary}</li>
           <li>Usage beyond that is billed monthly at normal rates</li>
           {pro.limits.max_concurrent ? (
             <li>
@@ -203,5 +202,92 @@ export function ProPaymentView({
         ) : null}
       </section>
     </div>
+  )
+}
+
+function checkoutDate(value: string): string {
+  return (
+    new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "UTC",
+    }).format(new Date(value)) + " UTC"
+  )
+}
+
+function ProCheckoutCopy({
+  terms,
+  pro,
+}: {
+  terms?: ProCheckoutTerms
+  pro: PlanCard
+}) {
+  if (terms?.accepted) {
+    const {
+      period_start: start,
+      period_end: end,
+      first_payment_cents: payment,
+      first_credit_cents: credit,
+      credit_expires_at: expiry,
+    } = terms
+    // Incomplete or contradictory accepted terms must never fall back to a live catalog quote.
+    if (
+      start &&
+      end &&
+      payment !== undefined &&
+      credit !== undefined &&
+      Date.parse(start) < Date.parse(end) &&
+      (terms.first_paid_pro_cycle ? expiry === end : expiry === undefined)
+    ) {
+      return (
+        <>
+          <li>
+            Your saved initial payment before discounts is{" "}
+            {formatUsdCents(payment)} for {checkoutDate(start)} through{" "}
+            {checkoutDate(end)}.
+          </li>
+          <li>
+            {formatUsdCents(credit)} in included usage credit{" "}
+            {expiry
+              ? `expires on ${checkoutDate(expiry)}.`
+              : "is prorated for this billing period and never expires."}
+          </li>
+          <li>
+            {terms.first_paid_pro_cycle
+              ? "Your first paid billing month is shown above. "
+              : "Your existing billing date is preserved. "}
+            Your next billing date is {checkoutDate(end)}. Confirm discounts and
+            the amount due on the secure payment page.
+          </li>
+        </>
+      )
+    }
+  } else if (terms?.first_paid_pro_cycle && pro.monthly) {
+    return (
+      <>
+        <li>
+          Your first payment covers a full billing month. The monthly plan fee
+          is {formatUsdCents(pro.monthly.price_cents)} before discounts.
+        </li>
+        {pro.monthly_credit_cents !== null ? (
+          <li>
+            Your plan includes {formatUsdCents(pro.monthly_credit_cents)} in
+            usage credit each billing month. Unused monthly credit expires at
+            the end of that billing month.
+          </li>
+        ) : null}
+        <li>
+          Your monthly renewal date is set when you start Pro. Confirm your
+          initial amount, included credit and renewal date on the secure payment
+          page.
+        </li>
+      </>
+    )
+  }
+  return (
+    <li>
+      The secure payment page confirms your initial payment amount, included
+      usage credit and renewal date before you pay.
+    </li>
   )
 }

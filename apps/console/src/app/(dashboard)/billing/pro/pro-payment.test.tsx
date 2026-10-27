@@ -13,6 +13,11 @@ function ProPayment(props: React.ComponentProps<typeof ActualProPayment>) {
 }
 
 const state = vi.hoisted(() => ({
+  terms: undefined as unknown,
+  termsError: false,
+  termsFetching: false,
+  actor: "actor",
+  termsQuery: vi.fn(),
   team: { teamId: "11111111-1111-4111-8111-111111111111", region: "use" },
   recover: vi.fn(),
   resume: vi.fn(),
@@ -37,6 +42,14 @@ const state = vi.hoisted(() => ({
 vi.mock("@tanstack/react-query", async (original) => ({
   ...(await original<typeof import("@tanstack/react-query")>()),
   useIsMutating: () => 0,
+  useQuery: (options: unknown) => {
+    state.termsQuery(options)
+    return {
+      data: state.terms,
+      isError: state.termsError,
+      isFetching: state.termsFetching,
+    }
+  },
   useQueryClient: () => ({ isMutating: () => 0 }),
 }))
 vi.mock("next/navigation", () => ({
@@ -58,7 +71,7 @@ vi.mock("@/hooks/use-billing-context", () => ({
   useBillingContext: () => ({ ready: state.ready }),
 }))
 vi.mock("@/hooks/use-user", () => ({
-  useUser: () => ({ user: { id: "actor" } }),
+  useUser: () => ({ user: { id: state.actor } }),
 }))
 vi.mock("@/hooks/use-teams", () => ({
   useTeams: () => ({
@@ -139,6 +152,11 @@ async function readyContinue() {
   return button
 }
 beforeEach(() => {
+  state.terms = undefined
+  state.termsError = false
+  state.termsFetching = false
+  state.actor = "actor"
+  state.termsQuery.mockClear()
   state.starterRecover
     .mockReset()
     .mockResolvedValue({ outcome: "no_pending_starter_checkout" })
@@ -167,7 +185,11 @@ describe("Pro payment return recovery", () => {
     render(<ProPayment returnTo="/sandboxes" />)
     expect(screen.getByText("$250")).toBeTruthy()
     expect(screen.getByText("/ month")).toBeTruthy()
-    expect(screen.getByText(/Your regular \$250 monthly fee/)).toBeTruthy()
+    expect(
+      screen.getByText(
+        /secure payment page confirms your initial payment amount/,
+      ),
+    ).toBeTruthy()
     expect(screen.queryByText(/year|annual/i)).toBeNull()
     fireEvent.click(await readyContinue())
     await waitFor(() =>
@@ -695,4 +717,62 @@ it("keeps a known non-Starter Pro checkout's ordinary status control without sta
   await screen.findByText(/Payment status is pending/)
   expect(state.start).not.toHaveBeenCalled()
   expect(screen.getByRole("button", { name: "Check again" })).not.toBeDisabled()
+})
+
+describe("authoritative Pro offer terms context", () => {
+  it("keys read-only terms by actor and active team without creating checkout", async () => {
+    state.query = ""
+    state.plans = availablePlans
+    state.terms = {
+      pro_checkout: { first_paid_pro_cycle: true, accepted: false },
+    }
+    const view = render(<ProPayment returnTo="/plan-usage/" />)
+    await screen.findByText(/full billing month/)
+    expect(state.termsQuery.mock.lastCall?.[0]).toMatchObject({
+      queryKey: [
+        "pro-checkout-terms",
+        "self",
+        "actor",
+        "use:11111111-1111-4111-8111-111111111111",
+      ],
+      enabled: true,
+    })
+    expect(state.start).not.toHaveBeenCalled()
+    state.actor = "another-actor"
+    state.team = {
+      teamId: "22222222-2222-4222-8222-222222222222",
+      region: "usw",
+    }
+    state.terms = undefined
+    view.rerender(<ProPayment returnTo="/plan-usage/" />)
+    expect(screen.queryByText(/full billing month/)).toBeNull()
+    expect(state.termsQuery.mock.lastCall?.[0]).toMatchObject({
+      queryKey: [
+        "pro-checkout-terms",
+        "self",
+        "another-actor",
+        "usw:22222222-2222-4222-8222-222222222222",
+      ],
+    })
+    expect(state.start).not.toHaveBeenCalled()
+  })
+  it.each(["error", "fetching", "not-ready", "impersonated"])(
+    "does not display cached authoritative terms while %s",
+    async (mode) => {
+      state.query = ""
+      state.plans = availablePlans
+      state.terms = {
+        pro_checkout: { first_paid_pro_cycle: true, accepted: false },
+      }
+      state.termsError = mode === "error"
+      state.termsFetching = mode === "fetching"
+      state.ready = mode !== "not-ready"
+      state.scope = mode === "impersonated" ? "impersonated" : "self"
+      render(<ProPayment returnTo="/plan-usage/" />)
+      await waitFor(() =>
+        expect(screen.queryByText(/full billing month/)).toBeNull(),
+      )
+      expect(state.start).not.toHaveBeenCalled()
+    },
+  )
 })
