@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  proCheckoutTermsSchema,
+  teamPlanSchema,
   type CatalogPlan,
   catalogPlansOf,
   PLAN_ACTION_LINKS,
@@ -198,5 +200,54 @@ describe("catalogPlansOf", () => {
   it("surfaces malformed catalogs as failures instead of empty successful data", () => {
     expect(() => catalogPlansOf({ plans: [] })).toThrow()
     expect(() => catalogPlansOf({ cards: [{ family: "broken" }] })).toThrow()
+  })
+})
+
+describe("authoritative Pro checkout terms", () => {
+  const response = {
+    plan: {
+      plan_key: "free",
+      kind: "free",
+      display_name: "Free",
+      limits,
+      effective_from: "2026-10-27T00:00:00Z",
+    },
+    period: { start: "2026-10-01T00:00:00Z", end: "2026-11-01T00:00:00Z" },
+    pending_change: null,
+  }
+  it("retains optional preview and frozen terms without inventing a quote", () => {
+    expect(teamPlanSchema.parse(response)?.pro_checkout).toBeUndefined()
+    const preview = { first_paid_pro_cycle: true, accepted: false }
+    expect(
+      teamPlanSchema.parse({ ...response, pro_checkout: preview })
+        ?.pro_checkout,
+    ).toEqual(preview)
+    const accepted = {
+      ...preview,
+      accepted: true,
+      period_start: "2026-10-27T00:00:00Z",
+      period_end: "2026-11-27T00:00:00Z",
+      first_payment_cents: 0,
+      first_credit_cents: 35789,
+      credit_expires_at: "2026-11-27T00:00:00Z",
+    }
+    expect(
+      teamPlanSchema.parse({ ...response, pro_checkout: accepted })
+        ?.pro_checkout,
+    ).toEqual(accepted)
+  })
+  it.each([
+    { first_paid_pro_cycle: "true", accepted: false },
+    { first_paid_pro_cycle: true },
+    { first_paid_pro_cycle: true, accepted: true, first_payment_cents: -1 },
+    { first_paid_pro_cycle: true, accepted: true, first_credit_cents: 1.5 },
+    {
+      first_paid_pro_cycle: true,
+      accepted: true,
+      first_payment_cents: Number.MAX_SAFE_INTEGER + 1,
+    },
+    { first_paid_pro_cycle: true, accepted: true, period_end: "not a date" },
+  ])("rejects malformed authoritative fields (%j)", (terms) => {
+    expect(proCheckoutTermsSchema.safeParse(terms).success).toBe(false)
   })
 })

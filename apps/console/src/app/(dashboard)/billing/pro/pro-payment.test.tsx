@@ -1,7 +1,13 @@
+import {
+  QueryClient,
+  QueryClientProvider,
+  QueryObserver,
+} from "@tanstack/react-query"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/lib/api/client"
+import { billingKeys } from "@/lib/api/query-keys"
 import { signInOfferDestination } from "@/lib/auth/signup-offer"
 import type { PublicBillingPlans } from "@/lib/billing/plans"
 
@@ -13,6 +19,14 @@ function ProPayment(props: React.ComponentProps<typeof ActualProPayment>) {
 }
 
 const state = vi.hoisted(() => ({
+  terms: undefined as unknown,
+  termsError: false,
+  termsFetching: false,
+  actor: "actor",
+  termsQuery: vi.fn(),
+  liveTermsQuery: false,
+  liveQueryClient: false,
+  readTerms: vi.fn(),
   team: { teamId: "11111111-1111-4111-8111-111111111111", region: "use" },
   recover: vi.fn(),
   resume: vi.fn(),
@@ -34,10 +48,37 @@ const state = vi.hoisted(() => ({
   refetch: vi.fn(),
 }))
 
-vi.mock("@tanstack/react-query", async (original) => ({
-  ...(await original<typeof import("@tanstack/react-query")>()),
-  useIsMutating: () => 0,
-  useQueryClient: () => ({ isMutating: () => 0 }),
+vi.mock("@tanstack/react-query", async (original) => {
+  const actual = await original<typeof import("@tanstack/react-query")>()
+  const awaitOriginalQuery = actual.useQuery
+  return {
+    ...actual,
+    useIsMutating: () => 0,
+    useQuery: (options: unknown) => {
+      state.termsQuery(options)
+      if (state.liveTermsQuery)
+        return awaitOriginalQuery(
+          options as Parameters<typeof awaitOriginalQuery>[0],
+        )
+      return {
+        data: state.terms,
+        isError: state.termsError,
+        isFetching: state.termsFetching,
+      }
+    },
+    useQueryClient: () =>
+      state.liveQueryClient
+        ? actual.useQueryClient()
+        : {
+            isMutating: () => 0,
+            cancelQueries: async () => {},
+            invalidateQueries: async () => {},
+          },
+  }
+})
+vi.mock("@/lib/api/client", async (original) => ({
+  ...(await original<typeof import("@/lib/api/client")>()),
+  apiClient: (...args: unknown[]) => state.readTerms(...args),
 }))
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: state.replace }),
@@ -58,7 +99,7 @@ vi.mock("@/hooks/use-billing-context", () => ({
   useBillingContext: () => ({ ready: state.ready }),
 }))
 vi.mock("@/hooks/use-user", () => ({
-  useUser: () => ({ user: { id: "actor" } }),
+  useUser: () => ({ user: { id: state.actor } }),
 }))
 vi.mock("@/hooks/use-teams", () => ({
   useTeams: () => ({
@@ -139,6 +180,14 @@ async function readyContinue() {
   return button
 }
 beforeEach(() => {
+  state.liveTermsQuery = false
+  state.liveQueryClient = false
+  state.readTerms.mockReset()
+  state.terms = undefined
+  state.termsError = false
+  state.termsFetching = false
+  state.actor = "actor"
+  state.termsQuery.mockClear()
   state.starterRecover
     .mockReset()
     .mockResolvedValue({ outcome: "no_pending_starter_checkout" })
@@ -167,7 +216,11 @@ describe("Pro payment return recovery", () => {
     render(<ProPayment returnTo="/sandboxes" />)
     expect(screen.getByText("$250")).toBeTruthy()
     expect(screen.getByText("/ month")).toBeTruthy()
-    expect(screen.getByText(/Your regular \$250 monthly fee/)).toBeTruthy()
+    expect(
+      screen.getByText(
+        /secure payment page confirms your initial payment amount/,
+      ),
+    ).toBeTruthy()
     expect(screen.queryByText(/year|annual/i)).toBeNull()
     fireEvent.click(await readyContinue())
     await waitFor(() =>
@@ -695,4 +748,329 @@ it("keeps a known non-Starter Pro checkout's ordinary status control without sta
   await screen.findByText(/Payment status is pending/)
   expect(state.start).not.toHaveBeenCalled()
   expect(screen.getByRole("button", { name: "Check again" })).not.toBeDisabled()
+})
+
+describe("authoritative Pro offer terms context", () => {
+  it("keys read-only terms by actor and active team without creating checkout", async () => {
+    state.query = ""
+    state.plans = availablePlans
+    state.terms = {
+      pro_checkout: { first_paid_pro_cycle: true, accepted: false },
+    }
+    const view = render(<ProPayment returnTo="/plan-usage/" />)
+    await screen.findByText(/full billing month/)
+    expect(state.termsQuery.mock.lastCall?.[0]).toMatchObject({
+      queryKey: [
+        "pro-checkout-terms",
+        "self",
+        "actor",
+        "use:11111111-1111-4111-8111-111111111111",
+        0,
+      ],
+      enabled: true,
+    })
+    expect(state.start).not.toHaveBeenCalled()
+    state.actor = "another-actor"
+    state.team = {
+      teamId: "22222222-2222-4222-8222-222222222222",
+      region: "usw",
+    }
+    state.terms = undefined
+    view.rerender(<ProPayment returnTo="/plan-usage/" />)
+    expect(screen.queryByText(/full billing month/)).toBeNull()
+    expect(state.termsQuery.mock.lastCall?.[0]).toMatchObject({
+      queryKey: [
+        "pro-checkout-terms",
+        "self",
+        "another-actor",
+        "usw:22222222-2222-4222-8222-222222222222",
+        0,
+      ],
+    })
+    expect(state.start).not.toHaveBeenCalled()
+  })
+  it.each(["error", "fetching", "not-ready", "impersonated"])(
+    "does not display cached authoritative terms while %s",
+    async (mode) => {
+      state.query = ""
+      state.plans = availablePlans
+      state.terms = {
+        pro_checkout: { first_paid_pro_cycle: true, accepted: false },
+      }
+      state.termsError = mode === "error"
+      state.termsFetching = mode === "fetching"
+      state.ready = mode !== "not-ready"
+      state.scope = mode === "impersonated" ? "impersonated" : "self"
+      render(<ProPayment returnTo="/plan-usage/" />)
+      await waitFor(() =>
+        expect(screen.queryByText(/full billing month/)).toBeNull(),
+      )
+      expect(state.start).not.toHaveBeenCalled()
+    },
+  )
+})
+
+describe("Pro offer authority after recovery", () => {
+  it.each(["preview", "failed-read"])(
+    "discards an expired quote and independently reads replacement authority (%s)",
+    async (result) => {
+      state.liveTermsQuery = true
+      state.plans = availablePlans
+      const accepted = {
+        first_paid_pro_cycle: true,
+        accepted: true,
+        period_start: "2026-10-27T04:00:00Z",
+        period_end: "2026-11-27T04:00:00Z",
+        credit_expires_at: "2026-11-27T04:00:00Z",
+        first_payment_cents: 12345,
+        first_credit_cents: 34567,
+      }
+      const planResponse = (pro_checkout: unknown) => ({
+        plan: {
+          plan_key: "free",
+          kind: "free",
+          display_name: "Free",
+          effective_from: "2026-10-27T00:00:00Z",
+          limits: {
+            max_concurrent: 1,
+            max_vcpu: 1,
+            max_memory_mib: 1024,
+            max_disk_mib: 4096,
+            max_templates: 0,
+          },
+        },
+        period: { start: "2026-10-01T00:00:00Z", end: "2026-11-01T00:00:00Z" },
+        pending_change: null,
+        pro_checkout,
+      })
+      let expired = false
+      let finishRead!: (value: unknown) => void
+      let failRead!: (error: Error) => void
+      const newRead = new Promise((resolve, reject) => {
+        finishRead = resolve
+        failRead = reject
+      })
+      state.readTerms.mockImplementation(() =>
+        expired ? newRead : Promise.resolve(planResponse(accepted)),
+      )
+      state.start.mockRejectedValueOnce(
+        new ApiError(
+          409,
+          "plan_conflict",
+          "Earlier checkout requires recovery",
+        ),
+      )
+      state.recover.mockImplementation(async () => {
+        expired = true
+        return "retryable"
+      })
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      })
+      const view = render(
+        <QueryClientProvider client={queryClient}>
+          <ProPayment returnTo="/plan-usage/" />
+        </QueryClientProvider>,
+      )
+      await screen.findByText(
+        /saved initial payment before discounts is \$123.45/,
+      )
+      fireEvent.click(await readyContinue())
+      await screen.findByText(
+        "This team already has a paid plan or a payment in progress.",
+      )
+      fireEvent.click(
+        screen.getByRole("button", { name: "Check payment status" }),
+      )
+      await screen.findByRole("button", { name: "Continue to payment" })
+      await waitFor(() => expect(state.readTerms).toHaveBeenCalledTimes(3))
+      expect(screen.queryByText(/\$123.45|\$345.67|Nov 27/)).toBeNull()
+      expect(
+        screen.getByText(
+          /secure payment page confirms your initial payment amount/,
+        ),
+      ).toBeTruthy()
+      await act(async () => {
+        if (result === "preview")
+          finishRead(
+            planResponse({ first_paid_pro_cycle: true, accepted: false }),
+          )
+        else failRead(new Error("Authority unavailable"))
+      })
+      if (result === "preview") await screen.findByText(/full billing month/)
+      else
+        await screen.findByText(
+          /secure payment page confirms your initial payment amount/,
+        )
+      expect(screen.queryByText(/\$123.45|\$345.67|Nov 27/)).toBeNull()
+      expect(state.start).toHaveBeenCalledOnce()
+      view.unmount()
+      queryClient.clear()
+    },
+  )
+})
+
+describe("completed Pro callback refreshes authoritative plan cache", () => {
+  const key = billingKeys.v2("plan", {
+    cacheScope: "self",
+    teamKey: "use:11111111-1111-4111-8111-111111111111",
+  })
+  const deferred = <T,>() => {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((done) => {
+      resolve = done
+    })
+    return { promise, resolve }
+  }
+  function observePlan(
+    client: QueryClient,
+    read: () => Promise<string>,
+    initial = "Free",
+  ) {
+    client.setQueryData(key, initial)
+    const observer = new QueryObserver(client, {
+      queryKey: key,
+      queryFn: read,
+      staleTime: Infinity,
+      retry: false,
+    })
+    const unsubscribe = observer.subscribe(() => {})
+    return { observer, unsubscribe }
+  }
+  it.each(["paid", "zero-total-plus-setup"])(
+    "refreshes %s success and rejects a late pre-active snapshot before navigation",
+    async (flow) => {
+      state.liveQueryClient = true
+      state.plans = availablePlans
+      state.recover.mockResolvedValue("active")
+      const oldRead = deferred<string>()
+      const freshRead = deferred<string>()
+      const read = vi
+        .fn()
+        .mockImplementationOnce(() => oldRead.promise)
+        .mockImplementation(() => freshRead.promise)
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      })
+      const initial = flow === "paid" ? "Starter" : "Free"
+      const { observer, unsubscribe } = observePlan(client, read, initial)
+      const inactive = billingKeys.v2("prepaid", {
+        cacheScope: "self",
+        teamKey: "use:11111111-1111-4111-8111-111111111111",
+      })
+      client.setQueryData(inactive, "old balance")
+      void observer.refetch()
+      render(
+        <QueryClientProvider client={client}>
+          <ProPayment
+            billingReturn="success"
+            checkoutTeam="use:11111111-1111-4111-8111-111111111111"
+            returnTo="/plan-usage/"
+          />
+        </QueryClientProvider>,
+      )
+      await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
+      expect(state.replace).not.toHaveBeenCalled()
+      await act(async () => {
+        freshRead.resolve("Pro")
+      })
+      await waitFor(() =>
+        expect(state.replace).toHaveBeenCalledWith("/plan-usage/"),
+      )
+      await act(async () => {
+        oldRead.resolve(initial)
+      })
+      expect(client.getQueryData(key)).toBe("Pro")
+      expect(client.getQueryState(inactive)?.isInvalidated).toBe(true)
+      expect(state.start).not.toHaveBeenCalled()
+      unsubscribe()
+      client.clear()
+    },
+  )
+  it.each(["team-switch", "unmount"])(
+    "does not navigate after %s during post-payment read",
+    async (mode) => {
+      state.liveQueryClient = true
+      state.plans = availablePlans
+      state.recover.mockResolvedValue("active")
+      const freshRead = deferred<string>()
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      })
+      const read = vi.fn(() => freshRead.promise)
+      const { unsubscribe } = observePlan(client, read)
+      const view = render(
+        <QueryClientProvider client={client}>
+          <ProPayment
+            billingReturn="success"
+            checkoutTeam="use:11111111-1111-4111-8111-111111111111"
+            returnTo="/plan-usage/"
+          />
+        </QueryClientProvider>,
+      )
+      await waitFor(() => expect(read).toHaveBeenCalledOnce())
+      if (mode === "unmount") view.unmount()
+      else {
+        state.team = {
+          teamId: "22222222-2222-4222-8222-222222222222",
+          region: "usw",
+        }
+        view.rerender(
+          <QueryClientProvider client={client}>
+            <ProPayment
+              billingReturn="success"
+              checkoutTeam="use:11111111-1111-4111-8111-111111111111"
+              returnTo="/plan-usage/"
+            />
+          </QueryClientProvider>,
+        )
+      }
+      await act(async () => {
+        freshRead.resolve("Pro")
+      })
+      expect(state.replace).not.toHaveBeenCalled()
+      expect(state.start).not.toHaveBeenCalled()
+      unsubscribe()
+      client.clear()
+    },
+  )
+  it("retains completed-payment state on read failure and retries only the read", async () => {
+    state.liveQueryClient = true
+    state.plans = availablePlans
+    state.recover.mockResolvedValue("active")
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const read = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Read unavailable"))
+      .mockResolvedValue("Pro")
+    const { unsubscribe } = observePlan(client, read)
+    render(
+      <QueryClientProvider client={client}>
+        <ProPayment
+          billingReturn="success"
+          checkoutTeam="use:11111111-1111-4111-8111-111111111111"
+          returnTo="/plan-usage/"
+        />
+      </QueryClientProvider>,
+    )
+    await screen.findByText(
+      /Payment is confirmed, but your plan could not be refreshed/,
+    )
+    expect(
+      screen.queryByRole("button", { name: "Continue to payment" }),
+    ).toBeNull()
+    expect(state.replace).not.toHaveBeenCalled()
+    expect(state.recover).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }))
+    await waitFor(() =>
+      expect(state.replace).toHaveBeenCalledWith("/plan-usage/"),
+    )
+    expect(client.getQueryData(key)).toBe("Pro")
+    expect(state.recover).toHaveBeenCalledOnce()
+    expect(state.start).not.toHaveBeenCalled()
+    unsubscribe()
+    client.clear()
+  })
 })
