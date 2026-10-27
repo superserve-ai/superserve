@@ -11,7 +11,6 @@ import { PlanAwareBanner } from "./plan-aware-banner"
 
 function PricingV2Banner({ plan }: { plan: TeamPlan }) {
   const scope = useQueryScope()
-  useBillingReturnNotice()
   const summaryQuery = useBillingSummary()
   const summary = summaryQuery.isError ? undefined : summaryQuery.data
   const prepaid = usePrepaidBalance(plan.kind === "prepaid").data
@@ -26,6 +25,7 @@ function PricingV2Banner({ plan }: { plan: TeamPlan }) {
 }
 
 export function PlanBanner() {
+  useBillingReturnNotice()
   const plan = useTeamPlan(true).data
   if (plan === undefined) return null
   if (!plan || plan.kind === "legacy_payg") return <TrialBillingBanner />

@@ -73,7 +73,7 @@ describe("PlanBanner with pricing v2 off", () => {
     expect(screen.getByTestId("legacy-banner")).toBeTruthy()
     expect(mocks.plan).toHaveBeenCalledWith(true)
     expect(mocks.prepaid).not.toHaveBeenCalled()
-    expect(mocks.returnNotice).not.toHaveBeenCalled()
+    expect(mocks.returnNotice).toHaveBeenCalled()
   })
 })
 

@@ -15,7 +15,10 @@ import { BuyCreditPageClient } from "./page-client"
 export function BuyCreditRoute() {
   const params = useSearchParams()
   const returning =
-    params.has("purchase") || params.has("team") || params.has("purchase_id")
+    params.has("purchase") ||
+    params.has("team") ||
+    params.has("purchase_id") ||
+    params.has("billing_flow")
   const version = usePricingVersion()
   const existing = usePrepaidCredit(
     !returning && version !== undefined && version !== "v2",

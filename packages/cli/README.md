@@ -10,14 +10,12 @@ curl -fsSL https://superserve.ai/install | sh     # standalone binary, macOS and
 brew install superserve-ai/tap/superserve         # Homebrew
 ```
 
-The install script puts the binary in `~/.superserve/bin` (override with `SUPERSERVE_INSTALL_DIR`) and installs the latest release unless `SUPERSERVE_VERSION` is set.
+The install script puts the binary in `~/.superserve/bin` (override with `SUPERSERVE_INSTALL_DIR`) and installs the latest release unless `SUPERSERVE_VERSION` is set. It adds that directory to your PATH in your shell profile (`SUPERSERVE_NO_MODIFY_PATH=1` skips this) and, in a terminal, runs `superserve login` (`SUPERSERVE_NO_LOGIN=1` skips this).
 
 ## Authenticate
 
-Create an API key in the [console](https://console.superserve.ai), then:
-
 ```bash
-superserve login          # prompts for the key and saves it to ~/.superserve/credentials.json
+superserve login          # signs in (or up) in the browser and saves a key to ~/.superserve/credentials.json
 superserve whoami         # shows the key in use and checks it
 ```
 

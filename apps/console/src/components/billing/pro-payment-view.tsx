@@ -4,7 +4,7 @@ import { Button } from "@superserve/ui"
 import Link from "next/link"
 
 import { CornerBrackets } from "@/components/corner-brackets"
-import type { ProCheckout } from "@/lib/api/billing-v2"
+import type { ProCheckoutTerms } from "@/lib/api/billing-v2"
 import {
   formatUsdCents,
   planCard,
@@ -18,6 +18,7 @@ export type ProPaymentStep =
   | "unavailable"
   | "offer"
   | "confirming"
+  | "completed"
   | "conflict"
   | "subscribed"
   | "team_mismatch"
@@ -47,11 +48,9 @@ export function proPaymentStep(state: {
 
 export interface ProPaymentViewProps {
   step: ProPaymentStep
-  quoteUnavailable?: boolean
-  onRetryQuote?: () => void
-  proCheckout?: ProCheckout
   pro?: PlanCard
   paidPlan?: string | null
+  checkoutTerms?: ProCheckoutTerms
   busy: boolean
   canContinue?: boolean
   canRecover?: boolean
@@ -64,10 +63,8 @@ export interface ProPaymentViewProps {
 export function ProPaymentView({
   step,
   pro,
-  proCheckout,
-  quoteUnavailable = false,
-  onRetryQuote,
   paidPlan,
+  checkoutTerms,
   busy,
   canContinue = true,
   canRecover = true,
@@ -102,18 +99,13 @@ export function ProPaymentView({
         </Link>
       </div>
     )
-  if (step === "confirming")
+  if (step === "completed")
     return (
       <div className="space-y-3 p-6">
         <output className="block text-sm">
-          Payment status is pending. Check again to continue the saved checkout
-          or confirm its payment.
+          Payment is confirmed.{" "}
+          {busy ? "Refreshing your plan…" : "Check again to refresh your plan."}
         </output>
-        <ProCheckoutTerms
-          pro={pro}
-          checkout={proCheckout}
-          unavailable={quoteUnavailable}
-        />
         <Button disabled={busy || !canRecover} onClick={onCheckPayment}>
           Check again
         </Button>
@@ -124,32 +116,22 @@ export function ProPaymentView({
         ) : null}
       </div>
     )
-  if (proCheckout?.accepted)
+  if (step === "confirming")
     return (
-      <section aria-label="Saved Pro checkout" className="space-y-3 p-6">
-        <h2 className="text-lg font-medium">Your saved Pro checkout</h2>
-        <ProCheckoutTerms
-          checkout={proCheckout}
-          unavailable={quoteUnavailable}
-        />
-        {canceled ? (
-          <p className="text-sm">
-            You left the payment page. Check the saved checkout to continue or
-            confirm its status.
-          </p>
-        ) : null}
+      <div className="space-y-3 p-6">
+        <output className="block text-sm">
+          Payment status is pending. Check again to continue the saved checkout
+          or confirm its payment.
+        </output>
         <Button disabled={busy || !canRecover} onClick={onCheckPayment}>
-          Continue saved checkout
+          Check again
         </Button>
-        <Link href="/plan-usage/" className="text-sm underline">
-          View your plan
-        </Link>
         {error ? (
           <p className="text-sm text-destructive" role="alert">
             {error}
           </p>
         ) : null}
-      </section>
+      </div>
     )
   if (step === "unavailable" || !pro?.monthly || step === "conflict")
     return (
@@ -181,26 +163,17 @@ export function ProPaymentView({
       >
         <CornerBrackets size="sm" />
         <h2 className="text-2xl font-medium tracking-tight">{pro.name}</h2>
-        <p className="mt-2 text-3xl">
-          {formatUsdCents(pro.monthly.price_cents)}
-          <span className="text-muted-foreground text-sm"> / month</span>
-        </p>
+        {checkoutTerms?.accepted ? (
+          <p className="mt-2 text-sm">Saved checkout terms</p>
+        ) : (
+          <p className="mt-2 text-3xl">
+            {formatUsdCents(pro.monthly.price_cents)}
+            <span className="text-muted-foreground text-sm"> / month</span>
+          </p>
+        )}
         <ul className="text-muted-foreground mt-6 space-y-3 text-sm">
-          <ProCheckoutTerms
-            pro={pro}
-            checkout={proCheckout}
-            unavailable={quoteUnavailable}
-            asList
-          />
+          <ProCheckoutCopy terms={checkoutTerms} pro={pro} />
           <li>Pro limits begin after payment is confirmed.</li>
-          <li>
-            Your regular {formatUsdCents(pro.monthly.price_cents)} monthly fee
-            and included credit{" "}
-            {proCheckout?.first_paid_pro_cycle
-              ? "renew at the end of each billing month."
-              : "begin on your next billing date."}
-          </li>
-          <li>{pro.credit_summary}</li>
           <li>Usage beyond that is billed monthly at normal rates</li>
           {pro.limits.max_concurrent ? (
             <li>
@@ -225,16 +198,15 @@ export function ProPaymentView({
               Only billing administrators can start payment.
             </p>
           ) : null}
-          {quoteUnavailable ? (
-            <Button disabled={busy} onClick={onRetryQuote}>
-              Retry payment terms
-            </Button>
-          ) : null}
-          <Button
-            disabled={busy || !canContinue || quoteUnavailable}
-            onClick={onContinue}
-          >
+          <Button disabled={busy || !canContinue} onClick={onContinue}>
             Continue to payment
+          </Button>
+          <Button
+            disabled={busy || !canRecover}
+            onClick={onCheckPayment}
+            variant="outline"
+          >
+            Check payment status
           </Button>
           <p className="text-muted-foreground text-xs">
             Have a promotion code? Enter it on the payment page. It applies to
@@ -251,92 +223,89 @@ export function ProPaymentView({
   )
 }
 
-function quoteDate(value: string) {
-  return new Date(value).toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "UTC",
-    timeZoneName: "short",
-  })
+function checkoutDate(value: string): string {
+  return (
+    new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "UTC",
+    }).format(new Date(value)) + " UTC"
+  )
 }
 
-function ProCheckoutTerms({
+function ProCheckoutCopy({
+  terms,
   pro,
-  checkout,
-  asList = false,
-  unavailable = false,
 }: {
-  pro?: PlanCard
-  checkout?: ProCheckout
-  asList?: boolean
-  unavailable?: boolean
+  terms?: ProCheckoutTerms
+  pro: PlanCard
 }) {
-  let terms: React.ReactNode
-  if (unavailable) {
-    terms = (
-      <>We couldn’t load your first-payment terms. Retry before continuing.</>
-    )
-  } else if (checkout?.accepted) {
-    terms = (
+  if (terms?.accepted) {
+    const {
+      period_start: start,
+      period_end: end,
+      first_payment_cents: payment,
+      first_credit_cents: credit,
+      credit_expires_at: expiry,
+    } = terms
+    // Incomplete or contradictory accepted terms must never fall back to a live catalog quote.
+    if (
+      start &&
+      end &&
+      payment !== undefined &&
+      credit !== undefined &&
+      Date.parse(start) < Date.parse(end) &&
+      (terms.first_paid_pro_cycle ? expiry === end : expiry === undefined)
+    ) {
+      return (
+        <>
+          <li>
+            Your saved initial payment before discounts is{" "}
+            {formatUsdCents(payment)} for {checkoutDate(start)} through{" "}
+            {checkoutDate(end)}.
+          </li>
+          <li>
+            {formatUsdCents(credit)} in included usage credit{" "}
+            {expiry
+              ? `expires on ${checkoutDate(expiry)}.`
+              : "is prorated for this billing period and never expires."}
+          </li>
+          <li>
+            {terms.first_paid_pro_cycle
+              ? "Your first paid billing month is shown above. "
+              : "Your existing billing date is preserved. "}
+            Your next billing date is {checkoutDate(end)}. Confirm discounts and
+            the amount due on the secure payment page.
+          </li>
+        </>
+      )
+    }
+  } else if (terms?.first_paid_pro_cycle && pro.monthly) {
+    return (
       <>
-        {checkout.first_payment_cents !== undefined ? (
-          <>
-            First payment: {formatUsdCents(checkout.first_payment_cents)} before
-            any promotion discount.{" "}
-          </>
-        ) : null}
-        {checkout.first_credit_cents !== undefined ? (
-          <>
-            Included usage credit: {formatUsdCents(checkout.first_credit_cents)}
-            .{" "}
-          </>
-        ) : null}
-        {checkout.period_start && checkout.period_end ? (
-          <>
-            This payment covers {quoteDate(checkout.period_start)} to{" "}
-            {quoteDate(checkout.period_end)}.{" "}
-          </>
-        ) : null}
-        {checkout.credit_expires_at ? (
-          <>
-            This credit expires {quoteDate(checkout.credit_expires_at)} and does
-            not roll over.
-          </>
-        ) : !checkout.first_paid_pro_cycle ? (
-          <>This first payment’s usage credit does not expire.</>
-        ) : null}
-      </>
-    )
-  } else if (checkout?.first_paid_pro_cycle && pro?.monthly) {
-    terms = (
-      <>
-        Your first full month of Pro costs{" "}
-        {formatUsdCents(pro.monthly.price_cents)} before any promotion discount.
-        Your monthly billing cycle starts when you upgrade.{" "}
+        <li>
+          Your first payment covers a full billing month. The monthly plan fee
+          is {formatUsdCents(pro.monthly.price_cents)} before discounts.
+        </li>
         {pro.monthly_credit_cents !== null ? (
-          <>
-            You receive {formatUsdCents(pro.monthly_credit_cents)} in usage
-            credit for that month.{" "}
-          </>
+          <li>
+            Your plan includes {formatUsdCents(pro.monthly_credit_cents)} in
+            usage credit each billing month. Unused monthly credit expires at
+            the end of that billing month.
+          </li>
         ) : null}
-        This credit expires at the end of that billing month and does not roll
-        over.
+        <li>
+          Your monthly renewal date is set when you start Pro. Confirm your
+          initial amount, included credit and renewal date on the secure payment
+          page.
+        </li>
       </>
     )
-  } else if (asList) {
-    terms = (
-      <>
-        Pay once for the rest of your current billing period and receive the
-        prorated non-expiring usage credit based on your selected plan.
-      </>
-    )
-  } else return null
-  return asList ? (
-    <li>{terms}</li>
-  ) : (
-    <p className="text-muted-foreground text-sm">{terms}</p>
+  }
+  return (
+    <li>
+      The secure payment page confirms your initial payment amount, included
+      usage credit and renewal date before you pay.
+    </li>
   )
 }

@@ -1,3 +1,4 @@
+import { genericBillingReturnState } from "./generic-return"
 import { proAuthReturnPath, starterAuthReturnPath } from "./pro-auth-return"
 import { safeReturnPath } from "./return-path"
 
@@ -18,11 +19,13 @@ export function checkoutRecoveryPath(path: string): string | null {
   if (url.hash) return null
   const params = url.searchParams
   const allowed = starter
-    ? ["purchase", "team", "purchase_id", "amount"]
-    : ["billing", "team", "return"]
+    ? ["purchase", "team", "purchase_id", "amount", "billing_flow"]
+    : ["billing", "team", "return", "billing_flow"]
   for (const key of params.keys()) {
     if (!allowed.includes(key) || params.getAll(key).length !== 1) return null
   }
+  if (params.has("billing_flow") && !genericBillingReturnState(params))
+    return null
   if (!checkoutTeamReference(params.get("team"))) return null
   if (
     !["success", "cancel"].includes(
@@ -53,3 +56,5 @@ export function checkoutEntryPath(path: string): string | null {
   if (!checkoutTeamReference(url.searchParams.get("team"))) return null
   return safe
 }
+
+export { genericBillingReturnState } from "./generic-return"

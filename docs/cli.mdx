@@ -22,18 +22,27 @@ brew install superserve-ai/tap/superserve
 ```
 </CodeGroup>
 
-The npm package needs Node.js 22.4 or later. The install script downloads a standalone binary for macOS or Linux into `~/.superserve/bin`.
+The npm package needs Node.js 22.4 or later. The install script downloads a standalone binary for macOS or Linux into `~/.superserve/bin`, adds that to your PATH in your shell profile, then, when run in a terminal, starts `superserve login` so you can sign in or sign up straight away. Set `SUPERSERVE_NO_MODIFY_PATH=1` to leave your profile alone, or `SUPERSERVE_NO_LOGIN=1` to skip the sign-in.
 
 ## Authenticate
-
-Create an API key in the [Superserve Console](https://console.superserve.ai?utm_source=docs&utm_medium=link) (see [Get an API key](/api-key)), then save it:
 
 ```bash
 superserve login
 superserve whoami
 ```
 
-`login` reads the key from a hidden prompt, or from stdin when piped, and saves it to `~/.superserve/credentials.json`. In CI, set `SUPERSERVE_API_KEY` instead; it takes precedence over the saved key.
+`login` opens the Superserve Console in your browser. Sign in or sign up (new accounts start on the Free plan), check that the code on the page matches your terminal, and approve. The CLI saves a new API key to `~/.superserve/credentials.json`; it shows up as `CLI · <hostname>` on the API keys page, where you can revoke it.
+
+Without a browser on the same machine (SSH, containers, agents), use `--no-browser` to just print the URL, or `--no-wait` to print it and exit. Run `superserve login` again after approving to pick up the key.
+
+To save a key you already have, pipe it into `--with-key`, or run `--with-key` alone for a hidden prompt:
+
+```bash
+echo "$SUPERSERVE_API_KEY" | superserve login --with-key
+superserve login --with-key
+```
+
+In CI, set `SUPERSERVE_API_KEY` instead; it takes precedence over the saved key.
 
 ## Quickstart
 

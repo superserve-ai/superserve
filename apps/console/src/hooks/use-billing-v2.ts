@@ -8,7 +8,6 @@ import {
   BILLING_V2_PATHS,
   freeAllowanceSchema,
   prepaidBalanceSchema,
-  proCheckoutPlanSchema,
   teamPlanSchema,
 } from "@/lib/api/billing-v2"
 import { apiClient } from "@/lib/api/client"
@@ -20,14 +19,10 @@ function useBillingV2Resource<T>(
   resource: keyof typeof BILLING_V2_PATHS,
   schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   enabled: boolean,
-  variant?: "pro-checkout",
 ) {
   const { cacheScope, teamKey, ready } = useBillingContext()
   const query = useQuery({
-    queryKey: [
-      ...billingKeys.v2(resource, { cacheScope, teamKey: teamKey ?? "" }),
-      ...(variant ? [variant] : []),
-    ],
+    queryKey: billingKeys.v2(resource, { cacheScope, teamKey: teamKey ?? "" }),
     queryFn: async () =>
       schema.parse(
         await apiClient<unknown>(BILLING_V2_PATHS[resource], {
@@ -39,15 +34,6 @@ function useBillingV2Resource<T>(
     refetchInterval: 60_000,
   })
   return { ...query, data: query.isError ? undefined : query.data }
-}
-
-export function useProCheckoutTerms(enabled: boolean) {
-  return useBillingV2Resource(
-    "plan",
-    proCheckoutPlanSchema,
-    enabled,
-    "pro-checkout",
-  )
 }
 
 export function useTeamPlan(enabled: boolean) {

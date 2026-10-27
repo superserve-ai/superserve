@@ -3,13 +3,15 @@
 import { Button, Field, Input, Spinner, Switch, useToast } from "@superserve/ui"
 import { useQueryClient } from "@tanstack/react-query"
 import { useSearchParams } from "next/navigation"
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useLayoutEffect, useRef, useState } from "react"
 
 import { CheckoutContextRecovery } from "@/components/billing/checkout-context-recovery"
+import { ServerStarterRecovery } from "@/components/billing/server-starter-recovery"
 import { PageHeader } from "@/components/page-header"
 import { useQueryScope } from "@/components/query-provider"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
+import { usePendingStarterCheckout } from "@/hooks/use-pending-starter-checkout"
 import {
   usePrepaidCredit,
   useRetainedPrepaidOperations,
@@ -27,6 +29,7 @@ import { billingKeys } from "@/lib/api/query-keys"
 import {
   checkoutEntryPath,
   checkoutRecoveryPath,
+  genericBillingReturnState,
 } from "@/lib/billing/checkout-return"
 
 const PRESET_CENTS = [500, 2500, 5000, 10000]
@@ -45,7 +48,7 @@ export function dollarsToCents(value: string): number | null {
 }
 
 const STATE_LABELS: Record<PrepaidPurchase["state"], string> = {
-  pending: "Processing",
+  pending: "Payment not confirmed",
   paid: "Paid, adding credit",
   credited: "Credited",
   failed: "Failed",
@@ -55,19 +58,25 @@ export function BuyCreditPageClient({
   allowEntry = true,
 }: { allowEntry?: boolean } = {}) {
   const params = useSearchParams()
+  const genericFlowPending =
+    genericBillingReturnState(new URLSearchParams(params.toString())) !== null
   const purchase = params.get("purchase")
   const { teamKey, ready } = useBillingContext()
-  const { user } = useUser()
+  const { user, loading: actorLoading, error: actorError } = useUser()
+  const actor = !actorLoading && !actorError ? user?.id : undefined
   const returnTeam = params.get("team")
   const callbackPath = `/plan-usage/buy-credit/?${params.toString()}`
   const returning =
-    params.has("purchase") || params.has("team") || params.has("purchase_id")
+    params.has("purchase") ||
+    params.has("team") ||
+    params.has("purchase_id") ||
+    (params.has("billing_flow") && !genericFlowPending)
   const returnMismatch =
     ready &&
     returning &&
     (!(checkoutRecoveryPath(callbackPath) ?? checkoutEntryPath(callbackPath)) ||
       returnTeam !== teamKey)
-  const contextMatched = ready && !returnMismatch
+  const contextMatched = ready && !returnMismatch && !genericFlowPending
   const { data: credit, isLoading, error } = usePrepaidCredit(contextMatched)
   const data = contextMatched && !error ? credit : undefined
   const summaryQuery = useBillingSummary(contextMatched)
@@ -76,14 +85,18 @@ export function BuyCreditPageClient({
   const canManage =
     ready && Boolean(summary?.permissions?.can_manage) && scope === "self"
   const retained = useRetainedPrepaidOperations(data?.purchases)
-  const rechargeReady = Boolean(data)
-  useEffect(() => {
-    if (rechargeReady && window.location.hash === "#auto-recharge") {
-      document
-        .getElementById("auto-recharge")
-        ?.scrollIntoView({ block: "start" })
-    }
-  }, [rechargeReady])
+  const queryClient = useQueryClient()
+  const existingStarter = usePendingStarterCheckout({
+    team: teamKey,
+    actor,
+    enabled: contextMatched && canManage,
+    refresh: async () => {
+      await queryClient.invalidateQueries(
+        { queryKey: billingKeys.all },
+        { throwOnError: true },
+      )
+    },
+  })
 
   return (
     <div className="flex h-full flex-col">
@@ -92,7 +105,7 @@ export function BuyCreditPageClient({
         {returning && !contextMatched ? (
           <CheckoutContextRecovery
             callbackPath={callbackPath}
-            contextPending={!ready}
+            contextPending={!ready || genericFlowPending}
             allowSwitch={scope === "self"}
           />
         ) : null}
@@ -103,10 +116,17 @@ export function BuyCreditPageClient({
         )}
         {contextMatched && purchase === "cancel" && (
           <p className="border border-dashed border-border p-3 text-sm text-muted">
-            Checkout was cancelled. Check recent purchases before trying again.
+            You left checkout. Payment is not confirmed; resume the original
+            purchase or check its status before starting another.
           </p>
         )}
-        {(!ready || isLoading) && <Spinner />}
+        {(!ready || isLoading || genericFlowPending) && <Spinner />}
+        {actorError ? (
+          <p role="alert" className="text-sm text-destructive">
+            Unable to verify your account. Sign in again before starting a
+            payment.
+          </p>
+        ) : null}
         {contextMatched && error && (
           <p className="text-sm text-destructive">
             Credit balance is unavailable. Please reload.
@@ -121,11 +141,19 @@ export function BuyCreditPageClient({
                 later.
               </p>
             ) : null}
+            <ServerStarterRecovery
+              recovery={existingStarter}
+              canManage={canManage}
+            />
             {allowEntry ? (
               <PurchaseCard
                 key={`${scope}:${teamKey}:${user?.id}`}
+                actor={actor}
+                checkCanStart={existingStarter.canStart}
                 canManage={
-                  canManage && data.checkout_idempotency_supported === true
+                  canManage &&
+                  !existingStarter.blocksEntry &&
+                  data.checkout_idempotency_supported === true
                 }
               />
             ) : (
@@ -134,7 +162,7 @@ export function BuyCreditPageClient({
                 unavailable. You can still turn auto-recharge off.
               </p>
             )}
-            {!allowEntry && retained.length > 0 ? (
+            {!existingStarter.blocksEntry && retained.length > 0 ? (
               <div className="space-y-3">
                 <h2 className="text-sm font-medium">
                   Resume a previous purchase
@@ -143,17 +171,16 @@ export function BuyCreditPageClient({
                   <PurchaseCard
                     key={`${scope}:${teamKey}:${user?.id}:${operation.id}`}
                     canManage={
-                      canManage && data.checkout_idempotency_supported === true
+                      canManage &&
+                      !existingStarter.blocksEntry &&
+                      data.checkout_idempotency_supported === true
                     }
+                    actor={actor}
                     resume={operation}
                   />
                 ))}
               </div>
             ) : null}
-          </>
-        )}
-        <div id="auto-recharge" className="scroll-mt-6">
-          {data ? (
             <AutoRechargeCard
               key={[
                 allowEntry,
@@ -166,15 +193,9 @@ export function BuyCreditPageClient({
               canManage={canManage}
               allowEntry={allowEntry}
             />
-          ) : (
-            <p className="text-sm text-muted">
-              {contextMatched && error
-                ? "Auto-recharge settings are unavailable."
-                : "Loading auto-recharge settings…"}
-            </p>
-          )}
-        </div>
-        {data && <PurchaseHistory purchases={data.purchases} />}
+            <PurchaseHistory purchases={data.purchases} />
+          </>
+        )}
       </div>
     </div>
   )
@@ -216,12 +237,15 @@ export function requestedAmount(value: string | null): {
 function PurchaseCard({
   canManage,
   resume,
+  checkCanStart,
+  actor,
 }: {
+  actor: string | undefined
+  checkCanStart?: () => boolean
   canManage: boolean
   resume?: PrepaidOperation
 }) {
   const { teamKey, ready } = useBillingContext()
-  const { user } = useUser()
   const target = useRef(teamKey)
   useLayoutEffect(() => {
     target.current = ready ? teamKey : null
@@ -243,10 +267,11 @@ function PurchaseCard({
 
   const buy = async () => {
     if (
-      !user ||
+      !actor ||
       !teamKey ||
       !ready ||
       !canManage ||
+      (checkCanStart && !checkCanStart()) ||
       !valid ||
       amount === null ||
       inFlight.current
@@ -260,7 +285,7 @@ function PurchaseCard({
         teamKey,
         amount,
         window.location.href.split("?")[0],
-        user.id,
+        actor,
         resume?.id,
       )
       if (target.current !== originalTeam) return
@@ -343,7 +368,7 @@ function PurchaseCard({
       ) : null}
       <div>
         <Button
-          disabled={!canManage || !user || !ready || !valid || submitting}
+          disabled={!canManage || !actor || !ready || !valid || submitting}
           onClick={buy}
         >
           {submitting

@@ -13,6 +13,7 @@ export function PendingStarterPayment({
   onResume,
   onCancel,
   onCheckPayment,
+  choosingPro = true,
 }: {
   purchase: PendingStarterCheckout
   busy: boolean
@@ -21,6 +22,7 @@ export function PendingStarterPayment({
   onResume: () => void
   onCheckPayment: () => void
   onCancel: () => void
+  choosingPro?: boolean
 }) {
   return (
     <div className="space-y-3 p-6">
@@ -28,19 +30,30 @@ export function PendingStarterPayment({
         Finish or cancel your credit purchase
       </h2>
       <p className="text-sm">
-        A Starter checkout is in progress. You can resume it or request
-        cancellation before choosing Pro. If payment is already processing,
-        we’ll wait for confirmation.
+        You have an unfinished Starter credit purchase. Resume it, or cancel the
+        unpaid checkout{" "}
+        {choosingPro
+          ? "before choosing Pro"
+          : "before starting another payment"}
+        . If payment was completed, we’ll confirm the original purchase first.
       </p>
-      <Button disabled={busy || !canManage} onClick={onResume}>
-        Resume your {formatUsdCents(purchase.amount_cents)} credit purchase
-      </Button>
-      <Button disabled={busy || !canManage} onClick={onCancel}>
-        Cancel this purchase and choose Pro
-      </Button>
-      <Button disabled={busy || !canManage} onClick={onCheckPayment}>
-        Check purchase status
-      </Button>
+      <div className="flex flex-col items-start gap-3">
+        <Button disabled={busy || !canManage} onClick={onResume}>
+          Resume your {formatUsdCents(purchase.amount_cents)} credit purchase
+        </Button>
+        <Button
+          variant="outline"
+          disabled={busy || !canManage}
+          onClick={onCancel}
+        >
+          {choosingPro
+            ? "Cancel this purchase and choose Pro"
+            : "Cancel this unpaid purchase"}
+        </Button>
+        <Button disabled={busy || !canManage} onClick={onCheckPayment}>
+          Check purchase status
+        </Button>
+      </div>
       {error ? (
         <p className="text-sm text-destructive" role="alert">
           {error}

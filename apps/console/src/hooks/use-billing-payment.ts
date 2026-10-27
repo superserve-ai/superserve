@@ -85,15 +85,15 @@ export function useBillingPayment(
       let session
       if (summary?.portal_available) {
         const returnUrl = new URL(currentUrl)
-        returnUrl.searchParams.set("billing", "portal-return")
+        returnUrl.searchParams.set("billing_flow", "portal-return")
         session = await createStripeCustomerPortalSession({
           returnUrl: returnUrl.toString(),
         })
       } else {
         const successUrl = new URL(currentUrl)
-        successUrl.searchParams.set("billing", "success")
+        successUrl.searchParams.set("billing_flow", "success")
         const cancelUrl = new URL(currentUrl)
-        cancelUrl.searchParams.set("billing", "cancel")
+        cancelUrl.searchParams.set("billing_flow", "cancel")
         session = await createStripeCheckoutSession({
           intentScope: `${user?.id}:${teamKey}`,
           successUrl: successUrl.toString(),

@@ -147,23 +147,97 @@ describe("Pro payment step", () => {
 })
 
 describe("Pro payment view", () => {
-  it("describes prorated credit without promising that it equals the cash fee", () => {
-    render(
+  function offer(
+    terms?: React.ComponentProps<typeof ProPaymentView>["checkoutTerms"],
+    pro = planCard(v2, "pro")!,
+  ) {
+    return render(
       <ProPaymentView
         step="offer"
-        pro={planCard(v2, "pro")}
+        pro={pro}
+        checkoutTerms={terms}
         busy={false}
         canceled={false}
         onContinue={vi.fn()}
         onCheckPayment={vi.fn()}
       />,
     )
+  }
+
+  it.each([undefined, { first_paid_pro_cycle: false, accepted: false }])(
+    "uses neutral copy without authoritative eligibility (%j)",
+    (terms) => {
+      offer(terms)
+      expect(
+        screen.getByText(
+          /secure payment page confirms your initial payment amount/,
+        ),
+      ).toBeTruthy()
+      expect(
+        screen.queryByText(/prorated|never expires|rest of your current/),
+      ).toBeNull()
+    },
+  )
+
+  it("previews the full first month with independent configured fee and credit", () => {
+    offer(
+      { first_paid_pro_cycle: true, accepted: false },
+      {
+        ...planCard(v2, "pro")!,
+        monthly: { ...planCard(v2, "pro")!.monthly!, price_cents: 35789 },
+        monthly_credit_cents: 42000,
+      },
+    )
+    expect(screen.getByText(/full billing month.*\$357.89/)).toBeTruthy()
+    expect(screen.getByText(/\$420.*expires at the end/)).toBeTruthy()
+    expect(
+      screen.queryByText(/prorated|non-expiring|next billing date/),
+    ).toBeNull()
+  })
+
+  const saved = {
+    first_paid_pro_cycle: true,
+    accepted: true,
+    period_start: "2026-10-27T04:00:00Z",
+    period_end: "2026-11-27T04:00:00Z",
+    credit_expires_at: "2026-11-27T04:00:00Z",
+    first_payment_cents: 12345,
+    first_credit_cents: 34567,
+  }
+  it("shows frozen accepted amounts and logical expiry instead of live catalog amounts", () => {
+    offer(saved)
     expect(
       screen.getByText(
-        /prorated non-expiring usage credit based on your selected plan/,
+        /saved initial payment before discounts is \$123.45.*Oct 27.*Nov 27/,
       ),
     ).toBeTruthy()
-    expect(screen.queryByText(/same amount in non-expiring/)).toBeNull()
+    expect(screen.getByText(/\$345.67.*expires on Nov 27.*UTC/)).toBeTruthy()
+    expect(screen.queryByText(/\$250/)).toBeNull()
+  })
+  it("only describes a historical prorated non-expiring bridge with complete accepted proof", () => {
+    offer({
+      ...saved,
+      first_paid_pro_cycle: false,
+      credit_expires_at: undefined,
+    })
+    expect(screen.getByText(/\$345.67.*prorated.*never expires/)).toBeTruthy()
+    expect(screen.getByText(/existing billing date is preserved/)).toBeTruthy()
+  })
+  it.each([
+    { ...saved, first_payment_cents: undefined },
+    { ...saved, credit_expires_at: undefined },
+    { ...saved, period_end: saved.period_start },
+    { ...saved, first_paid_pro_cycle: false },
+  ])("keeps incomplete or conflicting frozen terms neutral (%j)", (terms) => {
+    offer(terms)
+    expect(
+      screen.getByText(
+        /secure payment page confirms your initial payment amount/,
+      ),
+    ).toBeTruthy()
+    expect(
+      screen.queryByText(/\$250|full billing month|never expires/),
+    ).toBeNull()
   })
 
   it("shows the catalog price and starts checkout", () => {
@@ -179,7 +253,7 @@ describe("Pro payment view", () => {
         onCheckPayment={vi.fn()}
       />,
     )
-    expect(screen.getByText(pro.credit_summary)).toBeTruthy()
+    expect(screen.getByText(/secure payment page confirms/)).toBeTruthy()
     expect(screen.getByText(/promotion code.*first invoice/i)).toBeTruthy()
     fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
     expect(onContinue).toHaveBeenCalledOnce()
@@ -204,105 +278,4 @@ describe("Pro payment return path", () => {
     ])
       expect(safeReturnPath(unsafe)).toBe("/plan-usage/")
   })
-})
-
-describe("verified first Pro cycle terms", () => {
-  const terms = (
-    checkout?: import("@/lib/api/billing-v2").ProCheckout,
-    step: "offer" | "confirming" = "offer",
-  ) =>
-    render(
-      <ProPaymentView
-        step={step}
-        pro={{
-          ...v2.cards[0]!,
-          monthly: { ...v2.cards[0]!.monthly!, price_cents: 17500 },
-          monthly_credit_cents: 32000,
-        }}
-        proCheckout={checkout}
-        busy={false}
-        canceled={false}
-        onContinue={vi.fn()}
-        onCheckPayment={vi.fn()}
-      />,
-    )
-  it("uses independent configured fee and credit without inventing dates", () => {
-    terms({ first_paid_pro_cycle: true, accepted: false })
-    expect(screen.getByText(/first full month of Pro costs \$175/)).toBeTruthy()
-    expect(screen.getByText(/receive \$320 in usage credit/)).toBeTruthy()
-    expect(
-      screen.getByText(/expires at the end of that billing month/),
-    ).toBeTruthy()
-    expect(screen.queryByText(/prorated non-expiring/)).toBeNull()
-    expect(screen.queryByText(/This payment covers/)).toBeNull()
-    expect(screen.getByText(/applies to your first invoice/)).toBeTruthy()
-  })
-  it("uses frozen accepted amounts and expiry despite changed catalog", () => {
-    terms(
-      {
-        first_paid_pro_cycle: true,
-        accepted: true,
-        first_payment_cents: 25000,
-        first_credit_cents: 40000,
-        period_start: "2026-10-26T12:00:00Z",
-        period_end: "2026-11-26T12:00:00Z",
-        credit_expires_at: "2026-11-26T12:00:00Z",
-      },
-      "confirming",
-    )
-    expect(
-      screen.getByText(/First payment: \$250 before any promotion discount/),
-    ).toBeTruthy()
-    expect(screen.getByText(/Included usage credit: \$400/)).toBeTruthy()
-    expect(screen.getByText(/credit expires Nov 26, 2026/)).toBeTruthy()
-    expect(screen.getByText(/This payment covers Oct 26, 2026/)).toBeTruthy()
-    expect(screen.queryByText(/does not expire/)).toBeNull()
-  })
-  it("keeps accepted bridge credit non-expiring", () => {
-    terms({
-      first_paid_pro_cycle: false,
-      accepted: true,
-      first_payment_cents: 4200,
-      first_credit_cents: 7500,
-    })
-    expect(screen.getByText(/First payment: \$42/)).toBeTruthy()
-    expect(screen.getByText(/Included usage credit: \$75/)).toBeTruthy()
-    expect(screen.getByText(/usage credit does not expire/)).toBeTruthy()
-  })
-  it("preserves absent-object old-backend display", () => {
-    terms()
-    expect(screen.getByText(/prorated non-expiring/)).toBeTruthy()
-    expect(screen.queryByText(/first full month/)).toBeNull()
-  })
-})
-
-it("does not infer a recurring price or current benefits from an accepted prorated bridge", () => {
-  render(
-    <ProPaymentView
-      step="offer"
-      pro={v2.cards[0]}
-      proCheckout={{
-        first_paid_pro_cycle: false,
-        accepted: true,
-        first_payment_cents: 4200,
-        first_credit_cents: 7500,
-      }}
-      busy={false}
-      canceled={true}
-      onContinue={vi.fn()}
-      onCheckPayment={vi.fn()}
-    />,
-  )
-  expect(screen.getByText(/First payment: \$42/)).toBeTruthy()
-  expect(screen.getByText(/Included usage credit: \$75/)).toBeTruthy()
-  expect(screen.getByText(/does not expire/)).toBeTruthy()
-  expect(
-    screen.queryByText(/250|monthly fee|sandboxes running|every month/),
-  ).toBeNull()
-  expect(
-    screen.queryByRole("button", { name: "Continue to payment" }),
-  ).toBeNull()
-  expect(
-    screen.getByRole("button", { name: "Continue saved checkout" }),
-  ).toBeTruthy()
 })

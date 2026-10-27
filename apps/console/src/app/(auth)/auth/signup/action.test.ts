@@ -420,6 +420,7 @@ describe("signUpWithEmail", () => {
       "/billing/pro/?billing=cancel&team=use%3Ateam&return=%2Fsandboxes",
       "/plan-usage/buy-credit?amount=500",
       "/plan-usage/buy-credit?purchase=success&team=use%3Ateam&purchase_id=payment",
+      "/device?code=BCDF-GHJK",
     ])(
       "keeps direct purchase entry through the emailed confirmation: %s",
       async (next) => {
@@ -444,6 +445,7 @@ describe("signUpWithEmail", () => {
       "https://outside.test/billing/pro",
       "//outside.test/billing/pro",
       "/billing/pro?return=https%3A%2F%2Foutside.test",
+      "/device?code=BCDF-GHJK&next=https%3A%2F%2Foutside.test",
     ])("rejects unsafe emailed purchase returns: %s", async (next) => {
       await signUp(undefined, next)
       expect(

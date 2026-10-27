@@ -10,50 +10,46 @@ export { planKindSchema, planLimitsSchema } from "@/lib/billing/plans"
 
 const cents = z.number().int().nonnegative()
 
-export const proCheckoutSchema = z.object({
+export const proCheckoutTermsSchema = z.object({
   first_paid_pro_cycle: z.boolean(),
   accepted: z.boolean(),
   period_start: z.string().datetime({ offset: true }).optional(),
   period_end: z.string().datetime({ offset: true }).optional(),
   credit_expires_at: z.string().datetime({ offset: true }).optional(),
-  first_payment_cents: cents.optional(),
-  first_credit_cents: cents.optional(),
-})
-export type ProCheckout = z.infer<typeof proCheckoutSchema>
-
-const teamPlanResponseSchema = z.object({
-  plan: z
-    .object({
-      plan_key: z.string(),
-      kind: planKindSchema,
-      display_name: z.string(),
-      limits: planLimitsSchema.extend({
-        max_concurrent: z.number().int().nonnegative().nullable(),
-        max_templates: z.number().int().nonnegative().nullable(),
-      }),
-      effective_from: z.string(),
-    })
-    .nullable(),
-  period: z.object({ start: z.string(), end: z.string() }),
-  pro_checkout: proCheckoutSchema.optional(),
-  pending_change: z
-    .object({
-      id: z.string().uuid(),
-      target_plan_key: z.string(),
-      target_display_name: z.string(),
-      effective_at: z.string(),
-      undoable: z.boolean(),
-      pauses_running: z.boolean(),
-    })
-    .nullable(),
+  first_payment_cents: cents.safe().optional(),
+  first_credit_cents: cents.safe().optional(),
 })
 
-export const proCheckoutPlanSchema = teamPlanResponseSchema.transform(
-  ({ pro_checkout }) => pro_checkout ?? null,
-)
+export type ProCheckoutTerms = z.infer<typeof proCheckoutTermsSchema>
 
-export const teamPlanSchema = teamPlanResponseSchema.transform(
-  ({ plan, period, pending_change, pro_checkout }) =>
+export const teamPlanSchema = z
+  .object({
+    plan: z
+      .object({
+        plan_key: z.string(),
+        kind: planKindSchema,
+        display_name: z.string(),
+        limits: planLimitsSchema.extend({
+          max_concurrent: z.number().int().nonnegative().nullable(),
+          max_templates: z.number().int().nonnegative().nullable(),
+        }),
+        effective_from: z.string(),
+      })
+      .nullable(),
+    period: z.object({ start: z.string(), end: z.string() }),
+    pro_checkout: proCheckoutTermsSchema.optional(),
+    pending_change: z
+      .object({
+        id: z.string().uuid(),
+        target_plan_key: z.string(),
+        target_display_name: z.string(),
+        effective_at: z.string(),
+        undoable: z.boolean(),
+        pauses_running: z.boolean(),
+      })
+      .nullable(),
+  })
+  .transform(({ plan, period, pending_change, pro_checkout }) =>
     plan === null
       ? null
       : {
@@ -77,7 +73,7 @@ export const teamPlanSchema = teamPlanResponseSchema.transform(
               }
             : null,
         },
-)
+  )
 
 const decimalCents = z.number().nonnegative()
 

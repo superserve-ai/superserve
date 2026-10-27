@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -146,4 +146,32 @@ describe("unknown template entitlement", () => {
     rerender(<CreateTemplateDialog />)
     expect(screen.queryByRole("button", { name: "New template" })).toBeNull()
   })
+})
+
+describe("current image validation with authoritative entitlement", () => {
+  it.each(["alpine:latest", "gcr.io/distroless/base:latest"])(
+    "preserves submission of configured image %s when templates are allowed",
+    async (image) => {
+      mocks.cap = 10
+      mocks.create.mockResolvedValue({ id: "created-template" })
+      render(<CreateTemplateDialog open hideTrigger />)
+      fireEvent.change(screen.getByPlaceholderText("e.g. python-ml"), {
+        target: { value: "allowed-template" },
+      })
+      fireEvent.click(screen.getByRole("button", { name: "Custom image…" }))
+      fireEvent.change(screen.getByPlaceholderText("ghcr.io/myorg/base:v1"), {
+        target: { value: image },
+      })
+      fireEvent.keyDown(screen.getByPlaceholderText("e.g. python-ml"), {
+        key: "Enter",
+      })
+      await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce())
+      expect(mocks.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "allowed-template",
+          build_spec: { from: image },
+        }),
+      )
+    },
+  )
 })

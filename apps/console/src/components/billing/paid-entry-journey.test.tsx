@@ -22,6 +22,7 @@ const state = vi.hoisted(() => ({
   prepare: vi.fn(),
   start: vi.fn(),
   recover: vi.fn(),
+  starterRecover: vi.fn(),
   switch: vi.fn(),
   signout: vi.fn(),
   assign: vi.fn(),
@@ -88,14 +89,6 @@ vi.mock("@/hooks/use-public-billing-plans", () => ({
     },
   }),
 }))
-vi.mock("@/lib/api/starter-checkout-recovery", () => ({
-  recoverStarterCheckout: async () => ({
-    outcome: "no_pending_starter_checkout",
-  }),
-}))
-vi.mock("@/hooks/use-billing-v2", () => ({
-  useProCheckoutTerms: () => ({ data: undefined, refetch: state.refresh }),
-}))
 vi.mock("@/hooks/use-billing-summary", () => ({
   useBillingSummary: () => ({
     data: { permissions: { can_manage: true } },
@@ -113,6 +106,9 @@ vi.mock("@/hooks/use-prepaid-credit", () => ({
     },
   }),
   useRetainedPrepaidOperations: () => [],
+}))
+vi.mock("@/lib/api/starter-checkout-recovery", () => ({
+  recoverStarterCheckout: (...args: unknown[]) => state.starterRecover(...args),
 }))
 vi.mock("@/lib/api/plan-checkout", () => ({
   startProCheckout: (...args: unknown[]) => state.start(...args),
@@ -173,12 +169,23 @@ async function preparedDestination(next: string, team?: string) {
   state.query = target.searchParams.toString()
   return target
 }
+
+async function readyContinue() {
+  const button = await screen.findByRole("button", {
+    name: "Continue to payment",
+  })
+  await waitFor(() => expect(button).not.toBeDisabled())
+  return button
+}
 beforeEach(() => {
   state.teamKey = teamKey
   state.query = ""
   state.member = true
   state.pricing = "v2"
   state.prepare.mockReset().mockResolvedValue(undefined)
+  state.starterRecover
+    .mockReset()
+    .mockResolvedValue({ outcome: "no_pending_starter_checkout" })
   state.start.mockReset().mockResolvedValue(null)
   state.recover.mockReset().mockResolvedValue("payment_confirmation_pending")
   state.switch.mockReset().mockResolvedValue(undefined)
@@ -198,7 +205,7 @@ describe("actual signup preparation to paid page journey", () => {
       searchParams: Promise.resolve(Object.fromEntries(target.searchParams)),
     })
     show(page)
-    fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
+    fireEvent.click(await readyContinue())
     await waitFor(() =>
       expect(state.start).toHaveBeenCalledWith(
         teamKey,
@@ -218,7 +225,7 @@ describe("actual signup preparation to paid page journey", () => {
     })
     show(page)
     expect(state.start).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
+    fireEvent.click(await readyContinue())
     await waitFor(() => expect(state.start).toHaveBeenCalledOnce())
     const checkoutReturn = new URL(state.start.mock.calls[0]![2])
     expect(checkoutReturn.searchParams.get("team")).toBe(teamKey)
@@ -282,9 +289,11 @@ describe("actual signup preparation to paid page journey", () => {
           screen.queryByRole("button", { name: /Buy .* credit/ }),
         ).toBeNull()
       else
-        expect(
-          screen.getByRole("button", { name: /Buy .* credit/ }),
-        ).not.toBeDisabled()
+        await waitFor(() =>
+          expect(
+            screen.getByRole("button", { name: /Buy .* credit/ }),
+          ).not.toBeDisabled(),
+        )
       expect(screen.queryByText(/incomplete or invalid/)).toBeNull()
     },
   )
@@ -364,9 +373,7 @@ describe("actual signup preparation to paid page journey", () => {
         searchParams: Promise.resolve(Object.fromEntries(target.searchParams)),
       })
       show(page)
-      fireEvent.click(
-        screen.getByRole("button", { name: "Continue to payment" }),
-      )
+      fireEvent.click(await readyContinue())
       await screen.findByText(
         "This team already has a paid plan or a payment in progress.",
       )
@@ -416,7 +423,7 @@ describe("actual signup preparation to paid page journey", () => {
         })}
       </QueryClientProvider>,
     )
-    fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
+    fireEvent.click(await readyContinue())
     await waitFor(() =>
       expect(state.start).toHaveBeenCalledWith(
         other,
@@ -441,7 +448,7 @@ describe("actual signup preparation to paid page journey", () => {
         searchParams: Promise.resolve(Object.fromEntries(first.searchParams)),
       }),
     )
-    fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
+    fireEvent.click(await readyContinue())
     await waitFor(() => expect(state.start).toHaveBeenCalledOnce())
     const second = await preparedDestination(
       "/billing/pro/?return=%2Fsandboxes%2F%3Fview%3Dupdated",
@@ -480,6 +487,7 @@ describe("actual signup preparation to paid page journey", () => {
         searchParams: Promise.resolve(Object.fromEntries(target.searchParams)),
       }
       const view = show(await ProPage(props))
+      if (producer === "start-null") await readyContinue()
       fireEvent.click(
         screen.getByRole("button", {
           name:
@@ -535,6 +543,7 @@ describe("actual signup preparation to paid page journey", () => {
         searchParams: Promise.resolve(Object.fromEntries(target.searchParams)),
       }
       const view = show(await ProPage(props))
+      if (producer === "start-null") await readyContinue()
       fireEvent.click(
         screen.getByRole("button", {
           name:
@@ -617,4 +626,28 @@ describe("actual signup preparation to paid page journey", () => {
     expect(state.start).not.toHaveBeenCalled()
     expect(state.recover).not.toHaveBeenCalled()
   })
+})
+
+it("finds the original server purchase from normal team-pinned Pro entry without a result marker", async () => {
+  sessionStorage.clear()
+  state.starterRecover.mockResolvedValue({
+    outcome: "pending_starter_checkout",
+    purchase_id: "33333333-3333-4333-8333-333333333333",
+    checkout_generation: "2026-10-27T00:00:00Z",
+    amount_cents: 500,
+  })
+  const target = await preparedDestination("/billing/pro/", teamKey)
+  expect(target.searchParams.has("billing")).toBe(false)
+  show(
+    await ProPage({
+      searchParams: Promise.resolve(Object.fromEntries(target.searchParams)),
+    }),
+  )
+  await screen.findByRole("button", { name: "Resume your $5 credit purchase" })
+  expect(
+    screen.getByRole("button", { name: "Cancel this purchase and choose Pro" }),
+  ).not.toBeDisabled()
+  expect(state.start).not.toHaveBeenCalled()
+  expect(state.recover).not.toHaveBeenCalled()
+  expect(state.starterRecover).toHaveBeenCalledExactlyOnceWith(teamKey)
 })

@@ -1,3 +1,4 @@
+import { genericBillingReturnState } from "./generic-return"
 import { safeReturnPath } from "./return-path"
 
 export function proAuthReturnPath(raw: string | null): string | null {
@@ -12,11 +13,16 @@ export function proAuthReturnPath(raw: string | null): string | null {
   if (!/^\/billing\/pro\/?$/.test(url.pathname) || url.hash) return null
   for (const key of url.searchParams.keys()) {
     if (
-      !["billing", "team", "return"].includes(key) ||
+      !["billing", "team", "return", "billing_flow"].includes(key) ||
       url.searchParams.getAll(key).length !== 1
     )
       return null
   }
+  if (
+    url.searchParams.has("billing_flow") &&
+    !genericBillingReturnState(url.searchParams)
+  )
+    return null
   const billing = url.searchParams.get("billing")
   if (billing !== null && billing !== "success" && billing !== "cancel")
     return null
@@ -38,11 +44,28 @@ export function starterAuthReturnPath(raw: string | null): string | null {
     return null
   for (const key of url.searchParams.keys()) {
     if (
-      !["purchase", "team", "amount", "purchase_id"].includes(key) ||
+      ![
+        "purchase",
+        "team",
+        "amount",
+        "purchase_id",
+        "billing",
+        "billing_flow",
+      ].includes(key) ||
       url.searchParams.getAll(key).length !== 1
     )
       return null
   }
+  if (
+    url.searchParams.has("billing_flow") &&
+    !genericBillingReturnState(url.searchParams)
+  )
+    return null
+  if (
+    url.searchParams.has("billing") &&
+    !genericBillingReturnState(url.searchParams, "billing")
+  )
+    return null
   const purchase = url.searchParams.get("purchase")
   if (purchase !== null && purchase !== "success" && purchase !== "cancel")
     return null

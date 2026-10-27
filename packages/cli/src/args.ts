@@ -101,6 +101,38 @@ export async function readStdin(): Promise<Buffer> {
   return Buffer.concat(chunks)
 }
 
+/**
+ * Text piped on stdin, or "" when nothing arrives within `waitMs`. Unlike
+ * readStdin it never waits on a stdin that stays open without input, as many
+ * agent harnesses leave it.
+ */
+export function readPipedInput(waitMs = 1000): Promise<string> {
+  const stdin = process.stdin
+  if (stdin.isTTY) return Promise.resolve("")
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = []
+    const done = () => {
+      clearTimeout(timer)
+      stdin.off("data", onData)
+      stdin.off("end", done)
+      stdin.off("error", done)
+      stdin.pause()
+      resolve(Buffer.concat(chunks).toString("utf8").trim())
+    }
+    // Keep reading while data flows; stop at EOF or once the pipe goes quiet.
+    const onData = (chunk: Buffer) => {
+      chunks.push(chunk)
+      clearTimeout(timer)
+      timer = setTimeout(done, waitMs)
+    }
+    let timer = setTimeout(done, waitMs)
+    stdin.on("data", onData)
+    stdin.once("end", done)
+    stdin.once("error", done)
+    stdin.resume()
+  })
+}
+
 /** From stdin when piped, else a hidden prompt; never argv (shell history, `ps`). */
 export async function readSecret(prompt: string): Promise<string> {
   if (!process.stdin.isTTY) {

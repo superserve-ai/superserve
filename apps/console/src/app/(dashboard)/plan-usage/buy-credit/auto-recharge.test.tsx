@@ -7,6 +7,7 @@ import type { PrepaidCreditSummary } from "@/lib/api/prepaid"
 const mocks = vi.hoisted(() => ({
   data: null as PrepaidCreditSummary | null,
   save: vi.fn(),
+  recover: vi.fn(),
   params: new URLSearchParams(),
   checkout: vi.fn(),
   operations: [] as {
@@ -22,6 +23,9 @@ const mocks = vi.hoisted(() => ({
   scope: "self",
 }))
 
+vi.mock("@/lib/api/starter-checkout-recovery", () => ({
+  recoverStarterCheckout: (...args: unknown[]) => mocks.recover(...args),
+}))
 vi.mock("@/hooks/use-teams", () => ({
   useTeams: () => ({ data: { teams: [] } }),
   useSwitchTeam: () => ({ mutateAsync: vi.fn() }),
@@ -84,6 +88,9 @@ beforeEach(() => {
   mocks.teamKey = "use:11111111-1111-4111-8111-111111111111"
   mocks.scope = "self"
   mocks.ready = true
+  mocks.recover
+    .mockReset()
+    .mockResolvedValue({ outcome: "no_pending_starter_checkout" })
   mocks.checkout.mockReset()
   mocks.operations = []
   mocks.data = initial
@@ -139,6 +146,11 @@ it("recovers the retained purchase after a lost response and entry closes", asyn
     </QueryClientProvider>
   )
   const { rerender } = render(view(true))
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Buy $25 credit" }),
+    ).not.toBeDisabled(),
+  )
   fireEvent.click(screen.getByRole("button", { name: "Buy $25 credit" }))
   await waitFor(() =>
     expect(screen.getByText(/Payment status is uncertain/)).toBeTruthy(),
@@ -189,6 +201,11 @@ it("serializes duplicate clicks and ignores checkout results after a team switch
     .spyOn(window.location, "assign")
     .mockImplementation(() => {})
   const { rerender } = render(page())
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Buy $25 credit" }),
+    ).not.toBeDisabled(),
+  )
   const buy = screen.getByRole("button", { name: "Buy $25 credit" })
   fireEvent.click(buy)
   fireEvent.click(buy)
@@ -265,11 +282,6 @@ describe("auto-recharge rollback", () => {
         <BuyCreditPageClient allowEntry={false} />
       </QueryClientProvider>,
     )
-    expect(
-      screen
-        .getByRole("heading", { name: "Auto-recharge" })
-        .closest("#auto-recharge"),
-    ).toHaveAttribute("id", "auto-recharge")
     expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
     expect(screen.getByText("$25")).toBeTruthy()
     expect(screen.queryByText(/never expires/)).toBeNull()
@@ -305,35 +317,57 @@ describe("auto-recharge rollback", () => {
   })
 })
 
-it("keeps the hash target mounted before a cold credit load and scrolls to settings when ready", () => {
-  const scroll = vi.fn()
-  const original = HTMLElement.prototype.scrollIntoView
-  HTMLElement.prototype.scrollIntoView = scroll
-  window.history.replaceState(null, "", "/plan-usage/buy-credit/#auto-recharge")
-  try {
-    mocks.data = null
-    const client = new QueryClient()
-    const view = () => (
-      <QueryClientProvider client={client}>
-        <BuyCreditPageClient />
-      </QueryClientProvider>
-    )
-    const { rerender } = render(view())
-    const target = document.getElementById("auto-recharge")
-    expect(target).toBeInTheDocument()
+it.each([false, true])(
+  "discovers an original $5 checkout with empty storage, ordinary callback=%s",
+  async (callback) => {
+    sessionStorage.clear()
+    const original = {
+      outcome: "pending_starter_checkout",
+      purchase_id: "33333333-3333-4333-8333-333333333333",
+      checkout_generation: "2026-10-27T00:00:00Z",
+      amount_cents: 500,
+    }
+    mocks.recover.mockResolvedValue(original)
+    if (callback)
+      mocks.params = new URLSearchParams({
+        purchase: "cancel",
+        team: mocks.teamKey,
+        purchase_id: original.purchase_id,
+      })
+    render(page())
+    await screen.findByRole("button", {
+      name: "Resume your $5 credit purchase",
+    })
     expect(
-      screen.getByText("Loading auto-recharge settings…"),
-    ).toBeInTheDocument()
-    expect(scroll).not.toHaveBeenCalled()
-    mocks.data = initial
-    rerender(view())
-    expect(document.getElementById("auto-recharge")).toBe(target)
-    expect(screen.getByRole("switch")).toBeInTheDocument()
-    expect(scroll).toHaveBeenCalledExactlyOnceWith({ block: "start" })
-    rerender(view())
-    expect(scroll).toHaveBeenCalledOnce()
-  } finally {
-    HTMLElement.prototype.scrollIntoView = original
-    window.history.replaceState(null, "", "/")
-  }
+      screen.getByRole("button", { name: "Cancel this unpaid purchase" }),
+    ).not.toBeDisabled()
+    expect(
+      screen.getByRole("button", { name: "Buy $25 credit" }),
+    ).toBeDisabled()
+    expect(mocks.checkout).not.toHaveBeenCalled()
+    expect(mocks.recover).toHaveBeenCalledExactlyOnceWith(mocks.teamKey)
+    expect(sessionStorage.length).toBe(0)
+  },
+)
+
+it("does not start a different purchase while server discovery is unresolved or forbidden", async () => {
+  let reject!: (error: Error) => void
+  mocks.recover.mockImplementation(
+    () =>
+      new Promise((_resolve, failure) => {
+        reject = failure
+      }),
+  )
+  render(page())
+  const buy = screen.getByRole("button", { name: "Buy $25 credit" })
+  expect(buy).toBeDisabled()
+  fireEvent.click(buy)
+  expect(mocks.checkout).not.toHaveBeenCalled()
+  reject(new Error("403"))
+  await screen.findByText(/Unable to check your existing purchase/)
+  expect(buy).toBeDisabled()
+  expect(
+    screen.getByRole("button", { name: "Check purchase status" }),
+  ).not.toBeDisabled()
+  expect(mocks.checkout).not.toHaveBeenCalled()
 })

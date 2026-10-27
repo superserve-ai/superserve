@@ -17,12 +17,9 @@ import {
   useFreeAllowance,
   usePrepaidBalance,
   useTeamPlan,
-  useProCheckoutTerms,
 } from "./use-billing-v2"
 
-beforeEach(() => {
-  mocks.api.mockReset()
-})
+beforeEach(() => mocks.api.mockReset())
 
 describe("billing data after a failed refresh", () => {
   it.each([
@@ -139,38 +136,4 @@ describe("billing data after a failed refresh", () => {
       client.clear()
     },
   )
-})
-
-it("keeps assignment-null plan and verified checkout terms in distinct team-scoped caches", async () => {
-  const quote = { first_paid_pro_cycle: true, accepted: false }
-  const response = {
-    plan: null,
-    period: { start: "2026-10-26T00:00:00Z", end: "2026-11-01T00:00:00Z" },
-    pending_change: null,
-    pro_checkout: quote,
-  }
-  mocks.api.mockResolvedValue(response)
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  })
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
-  )
-  const { result } = renderHook(
-    () => ({ plan: useTeamPlan(true), terms: useProCheckoutTerms(true) }),
-    { wrapper },
-  )
-  await waitFor(() => expect(result.current.terms.isSuccess).toBe(true))
-  await waitFor(() => expect(result.current.plan.isSuccess).toBe(true))
-  expect(result.current.plan.data).toBeNull()
-  expect(result.current.terms.data).toEqual(quote)
-  expect(client.getQueryCache().getAll()).toHaveLength(2)
-  mocks.api.mockRejectedValue(new Error("unavailable"))
-  await act(async () => {
-    await result.current.terms.refetch()
-  })
-  await waitFor(() => expect(result.current.terms.isError).toBe(true))
-  expect(result.current.terms.data).toBeUndefined()
-  expect(result.current.plan.data).toBeNull()
-  client.clear()
 })

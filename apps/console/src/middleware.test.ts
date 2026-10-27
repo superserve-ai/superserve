@@ -274,3 +274,36 @@ describe("middleware matcher", () => {
     },
   )
 })
+
+it.each(["/billing/pro/", "/plan-usage/buy-credit/"])(
+  "fails closed for invalid generic return at %s",
+  async (path) => {
+    for (const marker of [
+      "unknown",
+      "success&billing_flow=cancel",
+      "success&approved=true",
+    ]) {
+      mockClient = {
+        supabase: {
+          auth: {
+            getUser: vi.fn().mockResolvedValue({ data: { user: null } }),
+          },
+        },
+        response: buildResponse(),
+      }
+      const response = await middleware(
+        buildRequest(`${path}?team=original&billing_flow=${marker}`),
+      )
+      expect(
+        new URL(response.headers.get("location")!).searchParams.get("next"),
+      ).toBe("/auth/auth-code-error/")
+      const errorPage = await middleware(buildRequest("/auth/auth-code-error/"))
+      expect(errorPage).toBe(mockClient.response)
+      expect(errorPage.headers.get("location")).toBeNull()
+      const signin = await middleware(
+        buildRequest("/auth/signin/?next=%2Fauth%2Fauth-code-error%2F"),
+      )
+      expect(signin).toBe(mockClient.response)
+    }
+  },
+)

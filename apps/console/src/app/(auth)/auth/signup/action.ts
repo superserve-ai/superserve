@@ -9,6 +9,7 @@ import * as z from "zod"
 
 import { createPromotionSignupAttempt } from "@/lib/api/promotion-device-evidence"
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
+import { deviceReturnPath } from "@/lib/auth/device-return-path"
 import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
 import { issueGoogleSignupProof } from "@/lib/auth/google-signup-proof"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
@@ -463,7 +464,8 @@ export const signUpWithEmail = async (
     const next =
       proAuthReturnPath(ycNext ?? null) ??
       starterAuthReturnPath(ycNext ?? null) ??
-      ycReturnPath(ycNext)
+      ycReturnPath(ycNext) ??
+      deviceReturnPath(ycNext)
     if (next) callbackUrl.searchParams.set("next", next)
     if (requestedOffer) callbackUrl.searchParams.set("offer", requestedOffer)
     const offerIntent = rawSignupOffer ?? offer

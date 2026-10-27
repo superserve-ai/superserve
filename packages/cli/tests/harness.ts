@@ -37,7 +37,7 @@ export interface RunOptions {
   /** Overrides on top of the test defaults; `undefined` unsets a variable. */
   env?: Record<string, string | undefined>
   /** Piped stdin contents. Omitted: an empty, non-TTY stdin. */
-  stdin?: string | Uint8Array
+  stdin?: string | Uint8Array | Readable
 }
 
 export interface RunResult {
@@ -129,8 +129,10 @@ export async function runCli(
   }) as typeof process.stderr.write
 
   const savedStdin = Object.getOwnPropertyDescriptor(process, "stdin")
-  const stdin = Readable.from(
-    opts.stdin === undefined ? [] : [Buffer.from(opts.stdin)],
+  const stdin = (
+    opts.stdin instanceof Readable
+      ? opts.stdin
+      : Readable.from(opts.stdin === undefined ? [] : [Buffer.from(opts.stdin)])
   ) as Readable & { isTTY?: boolean }
   stdin.isTTY = false
   Object.defineProperty(process, "stdin", { value: stdin, configurable: true })
