@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 import { useEffect } from "react"
 
 import { billingKeys } from "@/lib/api/query-keys"
+import { genericBillingReturnState } from "@/lib/billing/checkout-return"
 
 export function useBillingReturnNotice() {
   const queryClient = useQueryClient()
@@ -13,12 +14,27 @@ export function useBillingReturnNotice() {
   const pathname = usePathname()
 
   useEffect(() => {
-    // Preserve the billing page's inline return notice and cleanup.
-    if (pathname === "/plan-usage" || pathname === "/plan-usage/") return
     const url = new URL(window.location.href)
-    const billingState = url.searchParams.get("billing")
-    if (!url.searchParams.has("billing")) return
-    url.searchParams.delete("billing")
+    const genericState = genericBillingReturnState(url.searchParams)
+    if (url.searchParams.has("billing_flow") && genericState === null) return
+    const inlineOwnsBilling =
+      pathname === "/plan-usage" || pathname === "/plan-usage/"
+    const proOwnsBilling =
+      (pathname === "/billing/pro" || pathname === "/billing/pro/") &&
+      (url.searchParams.has("team") ||
+        (url.searchParams.has("billing") &&
+          genericBillingReturnState(url.searchParams, "billing") === null))
+    // A generic setup return must not consume another checkout's result.
+    if (genericState === null && (inlineOwnsBilling || proOwnsBilling)) return
+    const billingState = genericState ?? url.searchParams.get("billing")
+    if (genericState !== null) {
+      url.searchParams.delete("billing_flow")
+      if (!inlineOwnsBilling && !proOwnsBilling)
+        url.searchParams.delete("billing")
+    } else {
+      if (!url.searchParams.has("billing")) return
+      url.searchParams.delete("billing")
+    }
     window.history.replaceState(window.history.state, "", url.toString())
     void queryClient.invalidateQueries({ queryKey: billingKeys.all })
     if (billingState === "success") {

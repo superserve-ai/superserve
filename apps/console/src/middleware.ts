@@ -36,18 +36,26 @@ export async function middleware(request: NextRequest) {
     const signinUrl = request.nextUrl.clone()
     signinUrl.pathname = "/auth/signin"
     signinUrl.search = ""
+    const billingPath = pathname + request.nextUrl.search
+    const retainedBilling =
+      proAuthReturnPath(billingPath) ?? starterAuthReturnPath(billingPath)
+    const invalidGenericReturn =
+      /^\/(?:billing\/pro|plan-usage\/buy-credit)\/?$/.test(pathname) &&
+      request.nextUrl.searchParams.has("billing_flow") &&
+      !retainedBilling
     signinUrl.searchParams.set(
       "next",
-      proAuthReturnPath(pathname + request.nextUrl.search) ??
-        starterAuthReturnPath(pathname + request.nextUrl.search) ??
-        ycReturnPath(pathname + request.nextUrl.search) ??
-        (process.env.YC_STAFF_UI_ENABLED === "true"
-          ? staffReturnPath(pathname + request.nextUrl.search)
-          : null) ??
-        pathname +
-          (pathname.replace(/\/$/, "") === "/onboarding/plan"
-            ? request.nextUrl.search
-            : ""),
+      invalidGenericReturn
+        ? "/auth/auth-code-error/"
+        : (retainedBilling ??
+            ycReturnPath(pathname + request.nextUrl.search) ??
+            (process.env.YC_STAFF_UI_ENABLED === "true"
+              ? staffReturnPath(pathname + request.nextUrl.search)
+              : null) ??
+            pathname +
+              (pathname.replace(/\/$/, "") === "/onboarding/plan"
+                ? request.nextUrl.search
+                : "")),
     )
     // Build the redirect on top of client.response so any refreshed Supabase
     // auth cookies (written by getUser() via setAll) survive the redirect.
