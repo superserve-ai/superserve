@@ -1,6 +1,7 @@
 // User-declared routing intent only; never billing or signup eligibility authority.
 export const REQUESTED_OFFER_LABELS = {
   free: "Free",
+  developer: "Developer",
   pro_monthly: "Pro Monthly",
   pro_annual: "Pro Annual",
   yc_2026: "YC",
@@ -20,5 +21,7 @@ export function normalizeRequestedOffer(
 export function normalizeSignupRequestedOffer(
   value: unknown,
 ): RequestedOffer | undefined {
-  return normalizeRequestedOffer(value === "pro" ? "pro_monthly" : value)
+  if (value === "pro") return "pro_monthly"
+  if (value === "starter") return "developer"
+  return normalizeRequestedOffer(value)
 }

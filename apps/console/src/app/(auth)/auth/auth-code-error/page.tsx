@@ -49,6 +49,8 @@ function AuthCodeErrorContent() {
   const impersonating = setupReason === "impersonation" && !!setupRetry
   const wrongTeam = setupReason === "team_changed" && !!setupRetry
   const conflictingTeams = setupReason === "team_conflict" && !!setupRetry
+  const choosePlan =
+    setupReason === "plan_required" || setupReason === "plan_unavailable"
   const retryHref =
     setupRetry ??
     `${isSignupContext ? "/auth/signup" : "/auth/signin"}${retryParams.size ? `?${retryParams}` : ""}`
@@ -85,9 +87,13 @@ function AuthCodeErrorContent() {
                   ? "Return to the team that started checkout before continuing with your selected plan."
                   : conflictingTeams
                     ? "Saved checkout team details conflict. Return to the original checkout link, or contact support if it is unavailable."
-                    : isSignupContext
-                      ? SIGNUP_RESTRICTED_MESSAGE
-                      : "Something went wrong. Please try again."}
+                    : choosePlan
+                      ? setupReason === "plan_unavailable"
+                        ? "That plan is no longer available. Choose a plan to finish setting up your account."
+                        : "Choose a plan to finish setting up your account."
+                      : isSignupContext
+                        ? SIGNUP_RESTRICTED_MESSAGE
+                        : "Something went wrong. Please try again."}
           </p>
           {wrongAccount ? (
             <Button
@@ -130,7 +136,16 @@ function AuthCodeErrorContent() {
                   Return to console
                 </Link>
               )}
-              {!conflictingTeams && (
+              {choosePlan && (
+                <Button
+                  render={<Link href="https://superserve.ai/pricing" />}
+                  size="sm"
+                  className="mt-5"
+                >
+                  Choose a plan
+                </Button>
+              )}
+              {!conflictingTeams && !choosePlan && (
                 <Button
                   render={<Link href={retryHref} />}
                   size="sm"

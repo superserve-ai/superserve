@@ -79,6 +79,27 @@ describe("auth-code-error page", () => {
     ).toBe("/auth/signin?signup_offer=enterprise")
   })
 
+  it.each([
+    ["plan_required", "Choose a plan to finish setting up your account."],
+    [
+      "plan_unavailable",
+      "That plan is no longer available. Choose a plan to finish setting up your account.",
+    ],
+  ])(
+    "sends a signup without a sellable plan back to plans for %s",
+    (r, text) => {
+      reason = r
+      render(<AuthCodeErrorPage />)
+      expect(screen.getByText(text)).toBeTruthy()
+      expect(
+        screen
+          .getByRole("link", { name: "Choose a plan" })
+          .getAttribute("href"),
+      ).toBe("https://superserve.ai/pricing")
+      expect(screen.queryByRole("link", { name: "Try Again" })).toBeNull()
+    },
+  )
+
   it("drops unrecognized retry intent", () => {
     intent = "https://evil.example"
     render(<AuthCodeErrorPage />)

@@ -8,6 +8,10 @@ import {
   sendWelcomeEmail,
 } from "@/app/(auth)/auth/signup/action"
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
+import {
+  isSignupCheckoutOffer,
+  startSignupCheckout,
+} from "@/lib/api/signup-checkout"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
@@ -314,7 +318,7 @@ export async function GET(request: Request) {
         const defaultPaidNext =
           (!searchParams.get("next") || searchParams.get("next") === "/") &&
           !(await cookies()).get("yc_claim_confirmation") &&
-          (signupOffer === "starter" || signupOffer === "pro_monthly")
+          (signupOffer === "developer" || signupOffer === "pro_monthly")
             ? SIGNUP_OFFER_DESTINATIONS[signupOffer]
             : null
         let retryPaidNext =
@@ -729,7 +733,8 @@ export async function GET(request: Request) {
           signupOffer &&
           next === "/sandboxes" &&
           (!searchParams.get("next") || searchParams.get("next") === "/") &&
-          (newSignup || signupOffer !== "enterprise")
+          (newSignup ||
+            (signupOffer !== "enterprise" && signupOffer !== "developer"))
         )
           next = SIGNUP_OFFER_DESTINATIONS[signupOffer]
         if (
@@ -758,6 +763,28 @@ export async function GET(request: Request) {
             return NextResponse.redirect(
               buildRedirectUrl(origin, `/auth/auth-code-error?${recovery}`),
             )
+          }
+        }
+        if (
+          newSignup &&
+          signupOffer !== "enterprise" &&
+          (next === "/sandboxes" ||
+            (signupOffer && next === SIGNUP_OFFER_DESTINATIONS[signupOffer])) &&
+          (await getPricingVersionAction()) === "v2"
+        ) {
+          try {
+            next =
+              (await startSignupCheckout(
+                user,
+                isSignupCheckoutOffer(signupOffer) ? signupOffer : undefined,
+                origin,
+              )) ?? next
+          } catch {
+            next = `/auth/auth-code-error?${new URLSearchParams({
+              reason: "account_setup",
+              account: user.id,
+              next: SIGNUP_OFFER_DESTINATIONS.pro_monthly,
+            })}`
           }
         }
       }
