@@ -1,3 +1,4 @@
+import { genericBillingReturnState } from "./generic-return"
 import { proAuthReturnPath, starterAuthReturnPath } from "./pro-auth-return"
 import { safeReturnPath } from "./return-path"
 
@@ -18,11 +19,13 @@ export function checkoutRecoveryPath(path: string): string | null {
   if (url.hash) return null
   const params = url.searchParams
   const allowed = starter
-    ? ["purchase", "team", "purchase_id", "amount"]
-    : ["billing", "team", "return"]
+    ? ["purchase", "team", "purchase_id", "amount", "billing_flow"]
+    : ["billing", "team", "return", "billing_flow"]
   for (const key of params.keys()) {
     if (!allowed.includes(key) || params.getAll(key).length !== 1) return null
   }
+  if (params.has("billing_flow") && !genericBillingReturnState(params))
+    return null
   if (!checkoutTeamReference(params.get("team"))) return null
   if (
     !["success", "cancel"].includes(
@@ -54,14 +57,4 @@ export function checkoutEntryPath(path: string): string | null {
   return safe
 }
 
-// Generic card setup never owns an existing Pro or credit-purchase callback.
-export function genericBillingReturnState(
-  params: URLSearchParams,
-  marker: "billing_flow" | "billing" = "billing_flow",
-) {
-  const values = params.getAll(marker)
-  return values.length === 1 &&
-    ["success", "cancel", "portal-return"].includes(values[0]!)
-    ? values[0]!
-    : null
-}
+export { genericBillingReturnState } from "./generic-return"

@@ -64,7 +64,10 @@ export function BuyCreditPageClient({
   const returnTeam = params.get("team")
   const callbackPath = `/plan-usage/buy-credit/?${params.toString()}`
   const returning =
-    params.has("purchase") || params.has("team") || params.has("purchase_id")
+    params.has("purchase") ||
+    params.has("team") ||
+    params.has("purchase_id") ||
+    (params.has("billing_flow") && !genericFlowPending)
   const returnMismatch =
     ready &&
     returning &&

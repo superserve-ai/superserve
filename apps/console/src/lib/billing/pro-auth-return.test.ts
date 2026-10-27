@@ -70,3 +70,28 @@ it.each([
 ])("rejects unsafe or unbound preparation returns: %s", (path) => {
   expect(signupPreparationReturnPath(path)).toBeNull()
 })
+
+it.each(["success", "cancel", "portal-return"])(
+  "retains bounded generic %s on both routes",
+  (flow) => {
+    const pro = `/billing/pro/?team=use%3Aoriginal&return=%2Fsandboxes&billing_flow=${flow}`
+    const starter = `/plan-usage/buy-credit/?purchase=cancel&team=use%3Aoriginal&purchase_id=original&billing_flow=${flow}`
+    expect(proAuthReturnPath(pro)).toBe(pro)
+    expect(starterAuthReturnPath(starter)).toBe(starter)
+  },
+)
+it.each([
+  "unknown",
+  "success&billing_flow=cancel",
+  "",
+  "success&approved=true",
+])("rejects invalid generic marker %s on both routes", (flow) => {
+  expect(
+    proAuthReturnPath(`/billing/pro/?team=original&billing_flow=${flow}`),
+  ).toBeNull()
+  expect(
+    starterAuthReturnPath(
+      `/plan-usage/buy-credit/?team=original&billing_flow=${flow}`,
+    ),
+  ).toBeNull()
+})

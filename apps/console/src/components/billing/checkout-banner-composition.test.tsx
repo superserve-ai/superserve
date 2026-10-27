@@ -1,8 +1,12 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
+import { NextRequest, NextResponse } from "next/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import AuthCodeErrorPage from "@/app/(auth)/auth/auth-code-error/page"
+import SignInPage from "@/app/(auth)/auth/signin/page"
 import ProPaymentPage from "@/app/(dashboard)/billing/pro/page"
 import { BuyCreditRoute } from "@/app/(dashboard)/plan-usage/buy-credit/route-client"
+import { middleware } from "@/middleware"
 
 import { PlanBanner } from "./plan-banner"
 const team = "use:11111111-1111-4111-8111-111111111111"
@@ -17,7 +21,36 @@ const state = vi.hoisted(() => ({
   prepaid: vi.fn(),
   planReady: true,
   legacyPlan: false,
+  originalTeamMember: true,
 }))
+vi.mock("@/lib/supabase/middleware", () => ({
+  createMiddlewareClient: () => ({
+    supabase: { auth: { getUser: async () => ({ data: { user: null } }) } },
+    response: NextResponse.next(),
+  }),
+  matchesRoute: (path: string, routes: string[]) =>
+    routes.some((route) => path === route || path.startsWith(`${route}/`)),
+}))
+vi.mock("@/lib/supabase/client", () => ({
+  createBrowserClient: () => ({
+    auth: {
+      getUser: async () => ({
+        data: { user: { id: "different-signin-actor" } },
+        error: null,
+      }),
+    },
+  }),
+}))
+vi.mock("@/app/(auth)/auth/signin/google-action", () => ({
+  beginGoogleSignIn: vi.fn(),
+}))
+vi.mock("posthog-js/react", () => ({
+  usePostHog: () => ({ capture: vi.fn() }),
+}))
+vi.mock("@/components/dither-background", () => ({
+  DitherBackground: () => null,
+}))
+vi.mock("@/components/corner-brackets", () => ({ CornerBrackets: () => null }))
 vi.mock("next/navigation", () => ({
   usePathname: () => window.location.pathname,
   useSearchParams: () => new URLSearchParams(window.location.search),
@@ -81,7 +114,9 @@ vi.mock("@/hooks/use-public-billing-plans", () => ({
 vi.mock("@/hooks/use-teams", () => ({
   useTeams: () => ({
     data: {
-      teams: [{ id: "22222222-2222-4222-8222-222222222222", region: "use" }],
+      teams: state.originalTeamMember
+        ? [{ id: "22222222-2222-4222-8222-222222222222", region: "use" }]
+        : [],
     },
   }),
   useSwitchTeam: () => ({ mutateAsync: vi.fn() }),
@@ -115,6 +150,7 @@ beforeEach(() => {
   state.recover.mockResolvedValue("none")
   state.planReady = true
   state.legacyPlan = false
+  state.originalTeamMember = true
   window.history.replaceState({}, "", "/")
 })
 async function renderPro(query: string) {
@@ -449,3 +485,117 @@ it.each(["billing=success", "billing_flow=portal-return"])(
     expect(state.start).not.toHaveBeenCalled()
   },
 )
+
+describe("expired generic checkout returns through middleware and sign-in", () => {
+  it.each(["success", "cancel", "portal-return"])(
+    "retains original team and purchase after %s with another account active",
+    async (flow) => {
+      const paths = [
+        `/billing/pro/?team=${otherTeam}&return=%2Fsandboxes&billing_flow=${flow}`,
+        `/billing/pro/?billing=success&team=${otherTeam}&billing_flow=${flow}`,
+        `/plan-usage/buy-credit/?team=${otherTeam}&amount=500&billing_flow=${flow}`,
+        `/plan-usage/buy-credit/?purchase=cancel&team=${otherTeam}&purchase_id=33333333-3333-4333-8333-333333333333&billing_flow=${flow}`,
+      ]
+      for (const path of paths.flatMap((path) => [path, path])) {
+        state.originalTeamMember = !state.originalTeamMember
+        const response = await middleware(
+          new NextRequest(new URL(path, "https://console.test")),
+        )
+        const signin = new URL(response.headers.get("location")!)
+        expect(signin.pathname.replace(/\/$/, "")).toBe("/auth/signin")
+        expect(signin.searchParams.get("next")).toBe(path)
+        window.history.replaceState({}, "", signin.pathname + signin.search)
+        const replace = vi
+          .spyOn(window.location, "replace")
+          .mockImplementation(() => {})
+        const signInView = render(<SignInPage />)
+        await waitFor(() => expect(replace).toHaveBeenCalledWith(path))
+        signInView.unmount()
+        replace.mockRestore()
+        let view
+        if (path.startsWith("/billing/pro"))
+          view = await renderPro(path.split("?")[1]!)
+        else {
+          window.history.replaceState({}, "", path)
+          view = render(
+            <>
+              <PlanBanner />
+              <BuyCreditRoute />
+            </>,
+          )
+        }
+        // Next navigation re-renders after the global consumer removes only
+        // its generic marker. The retained team/purchase must still fence it.
+        view.unmount()
+        if (path.startsWith("/billing/pro"))
+          view = await renderPro(window.location.search.slice(1))
+        else
+          view = render(
+            <>
+              <PlanBanner />
+              <BuyCreditRoute />
+            </>,
+          )
+        expect(new URLSearchParams(window.location.search).get("team")).toBe(
+          otherTeam,
+        )
+        expect(state.start).not.toHaveBeenCalled()
+        expect(state.resume).not.toHaveBeenCalled()
+        expect(state.recover).not.toHaveBeenCalled()
+        expect(screen.queryByText("$125")).toBeNull()
+        if (state.originalTeamMember)
+          expect(
+            screen.getByRole("button", {
+              name: /Return to (signup|checkout) team/,
+            }),
+          ).toBeTruthy()
+        else
+          expect(
+            screen.queryByRole("button", {
+              name: /Return to (signup|checkout) team/,
+            }),
+          ).toBeNull()
+        expect(
+          screen.getByRole("button", {
+            name: /Sign out and use (signup|checkout) account/,
+          }),
+        ).toBeTruthy()
+        view.unmount()
+      }
+    },
+  )
+})
+
+it.each(["unknown", "success&billing_flow=cancel"])(
+  "never opens an unpinned paid entry for invalid generic marker %s",
+  async (flow) => {
+    const pro = await renderPro(`billing_flow=${flow}`)
+    expect(screen.getByText(/incomplete or invalid/)).toBeTruthy()
+    expect(state.start).not.toHaveBeenCalled()
+    pro.unmount()
+    window.history.replaceState(
+      {},
+      "",
+      `/plan-usage/buy-credit/?billing_flow=${flow}`,
+    )
+    render(
+      <>
+        <PlanBanner />
+        <BuyCreditRoute />
+      </>,
+    )
+    expect(screen.getByText(/incomplete or invalid/)).toBeTruthy()
+    expect(state.prepaid).toHaveBeenLastCalledWith(false)
+  },
+)
+
+it("renders bounded invalid-return error without propagating a raw malicious continuation", () => {
+  window.history.replaceState({}, "", "/auth/auth-code-error/")
+  render(<AuthCodeErrorPage />)
+  expect(screen.getByText("Authentication Error")).toBeTruthy()
+  expect(
+    screen.getByRole("link", { name: "Try Again" }).getAttribute("href"),
+  ).toBe("/auth/signin")
+  expect(state.start).not.toHaveBeenCalled()
+  expect(state.recover).not.toHaveBeenCalled()
+})

@@ -69,7 +69,9 @@ function ProPaymentContext({
       "billing",
     ) !== null
   const returning =
-    params.has("team") || (params.has("billing") && !legacyGenericReturn)
+    params.has("team") ||
+    (params.has("billing_flow") && !genericFlowPending) ||
+    (params.has("billing") && !legacyGenericReturn)
   const queryClient = useQueryClient()
   const queryClientRef = useRef(queryClient)
   queryClientRef.current = queryClient
@@ -331,9 +333,14 @@ function ProPaymentContext({
     })
 
   useEffect(() => {
-    if (billingReturn === "success" && teamKey && !teamMismatch)
+    if (
+      billingReturn === "success" &&
+      teamKey &&
+      !teamMismatch &&
+      !genericFlowPending
+    )
       void checkPayment(CONFIRM_ATTEMPTS)
-  }, [billingReturn, teamKey, teamMismatch, checkPayment])
+  }, [billingReturn, teamKey, teamMismatch, genericFlowPending, checkPayment])
 
   const onContinue = () =>
     void run(async () => {
