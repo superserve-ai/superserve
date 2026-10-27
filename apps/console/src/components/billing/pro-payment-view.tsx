@@ -18,6 +18,7 @@ export type ProPaymentStep =
   | "unavailable"
   | "offer"
   | "confirming"
+  | "completed"
   | "conflict"
   | "subscribed"
   | "team_mismatch"
@@ -96,6 +97,23 @@ export function ProPaymentView({
         <Link href="/plan-usage/" className="text-sm underline">
           Go to Billing
         </Link>
+      </div>
+    )
+  if (step === "completed")
+    return (
+      <div className="space-y-3 p-6">
+        <output className="block text-sm">
+          Payment is confirmed.{" "}
+          {busy ? "Refreshing your plan…" : "Check again to refresh your plan."}
+        </output>
+        <Button disabled={busy || !canRecover} onClick={onCheckPayment}>
+          Check again
+        </Button>
+        {error ? (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
       </div>
     )
   if (step === "confirming")

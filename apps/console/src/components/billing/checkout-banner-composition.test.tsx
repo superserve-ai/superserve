@@ -59,6 +59,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({ data: undefined, isError: false, isFetching: false }),
   useQueryClient: () => ({
+    cancelQueries: async () => {},
     invalidateQueries: state.invalidate,
     isMutating: () => 0,
   }),

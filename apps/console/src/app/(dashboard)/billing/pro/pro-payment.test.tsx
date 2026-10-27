@@ -1,8 +1,13 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import {
+  QueryClient,
+  QueryClientProvider,
+  QueryObserver,
+} from "@tanstack/react-query"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/lib/api/client"
+import { billingKeys } from "@/lib/api/query-keys"
 import { signInOfferDestination } from "@/lib/auth/signup-offer"
 import type { PublicBillingPlans } from "@/lib/billing/plans"
 
@@ -20,6 +25,7 @@ const state = vi.hoisted(() => ({
   actor: "actor",
   termsQuery: vi.fn(),
   liveTermsQuery: false,
+  liveQueryClient: false,
   readTerms: vi.fn(),
   team: { teamId: "11111111-1111-4111-8111-111111111111", region: "use" },
   recover: vi.fn(),
@@ -60,7 +66,14 @@ vi.mock("@tanstack/react-query", async (original) => {
         isFetching: state.termsFetching,
       }
     },
-    useQueryClient: () => ({ isMutating: () => 0 }),
+    useQueryClient: () =>
+      state.liveQueryClient
+        ? actual.useQueryClient()
+        : {
+            isMutating: () => 0,
+            cancelQueries: async () => {},
+            invalidateQueries: async () => {},
+          },
   }
 })
 vi.mock("@/lib/api/client", async (original) => ({
@@ -168,6 +181,7 @@ async function readyContinue() {
 }
 beforeEach(() => {
   state.liveTermsQuery = false
+  state.liveQueryClient = false
   state.readTerms.mockReset()
   state.terms = undefined
   state.termsError = false
@@ -894,4 +908,169 @@ describe("Pro offer authority after recovery", () => {
       queryClient.clear()
     },
   )
+})
+
+describe("completed Pro callback refreshes authoritative plan cache", () => {
+  const key = billingKeys.v2("plan", {
+    cacheScope: "self",
+    teamKey: "use:11111111-1111-4111-8111-111111111111",
+  })
+  const deferred = <T,>() => {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((done) => {
+      resolve = done
+    })
+    return { promise, resolve }
+  }
+  function observePlan(
+    client: QueryClient,
+    read: () => Promise<string>,
+    initial = "Free",
+  ) {
+    client.setQueryData(key, initial)
+    const observer = new QueryObserver(client, {
+      queryKey: key,
+      queryFn: read,
+      staleTime: Infinity,
+      retry: false,
+    })
+    const unsubscribe = observer.subscribe(() => {})
+    return { observer, unsubscribe }
+  }
+  it.each(["paid", "zero-total-plus-setup"])(
+    "refreshes %s success and rejects a late pre-active snapshot before navigation",
+    async (flow) => {
+      state.liveQueryClient = true
+      state.plans = availablePlans
+      state.recover.mockResolvedValue("active")
+      const oldRead = deferred<string>()
+      const freshRead = deferred<string>()
+      const read = vi
+        .fn()
+        .mockImplementationOnce(() => oldRead.promise)
+        .mockImplementation(() => freshRead.promise)
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      })
+      const initial = flow === "paid" ? "Starter" : "Free"
+      const { observer, unsubscribe } = observePlan(client, read, initial)
+      const inactive = billingKeys.v2("prepaid", {
+        cacheScope: "self",
+        teamKey: "use:11111111-1111-4111-8111-111111111111",
+      })
+      client.setQueryData(inactive, "old balance")
+      void observer.refetch()
+      render(
+        <QueryClientProvider client={client}>
+          <ProPayment
+            billingReturn="success"
+            checkoutTeam="use:11111111-1111-4111-8111-111111111111"
+            returnTo="/plan-usage/"
+          />
+        </QueryClientProvider>,
+      )
+      await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
+      expect(state.replace).not.toHaveBeenCalled()
+      await act(async () => {
+        freshRead.resolve("Pro")
+      })
+      await waitFor(() =>
+        expect(state.replace).toHaveBeenCalledWith("/plan-usage/"),
+      )
+      await act(async () => {
+        oldRead.resolve(initial)
+      })
+      expect(client.getQueryData(key)).toBe("Pro")
+      expect(client.getQueryState(inactive)?.isInvalidated).toBe(true)
+      expect(state.start).not.toHaveBeenCalled()
+      unsubscribe()
+      client.clear()
+    },
+  )
+  it.each(["team-switch", "unmount"])(
+    "does not navigate after %s during post-payment read",
+    async (mode) => {
+      state.liveQueryClient = true
+      state.plans = availablePlans
+      state.recover.mockResolvedValue("active")
+      const freshRead = deferred<string>()
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      })
+      const read = vi.fn(() => freshRead.promise)
+      const { unsubscribe } = observePlan(client, read)
+      const view = render(
+        <QueryClientProvider client={client}>
+          <ProPayment
+            billingReturn="success"
+            checkoutTeam="use:11111111-1111-4111-8111-111111111111"
+            returnTo="/plan-usage/"
+          />
+        </QueryClientProvider>,
+      )
+      await waitFor(() => expect(read).toHaveBeenCalledOnce())
+      if (mode === "unmount") view.unmount()
+      else {
+        state.team = {
+          teamId: "22222222-2222-4222-8222-222222222222",
+          region: "usw",
+        }
+        view.rerender(
+          <QueryClientProvider client={client}>
+            <ProPayment
+              billingReturn="success"
+              checkoutTeam="use:11111111-1111-4111-8111-111111111111"
+              returnTo="/plan-usage/"
+            />
+          </QueryClientProvider>,
+        )
+      }
+      await act(async () => {
+        freshRead.resolve("Pro")
+      })
+      expect(state.replace).not.toHaveBeenCalled()
+      expect(state.start).not.toHaveBeenCalled()
+      unsubscribe()
+      client.clear()
+    },
+  )
+  it("retains completed-payment state on read failure and retries only the read", async () => {
+    state.liveQueryClient = true
+    state.plans = availablePlans
+    state.recover.mockResolvedValue("active")
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const read = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Read unavailable"))
+      .mockResolvedValue("Pro")
+    const { unsubscribe } = observePlan(client, read)
+    render(
+      <QueryClientProvider client={client}>
+        <ProPayment
+          billingReturn="success"
+          checkoutTeam="use:11111111-1111-4111-8111-111111111111"
+          returnTo="/plan-usage/"
+        />
+      </QueryClientProvider>,
+    )
+    await screen.findByText(
+      /Payment is confirmed, but your plan could not be refreshed/,
+    )
+    expect(
+      screen.queryByRole("button", { name: "Continue to payment" }),
+    ).toBeNull()
+    expect(state.replace).not.toHaveBeenCalled()
+    expect(state.recover).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }))
+    await waitFor(() =>
+      expect(state.replace).toHaveBeenCalledWith("/plan-usage/"),
+    )
+    expect(client.getQueryData(key)).toBe("Pro")
+    expect(state.recover).toHaveBeenCalledOnce()
+    expect(state.start).not.toHaveBeenCalled()
+    unsubscribe()
+    client.clear()
+  })
 })
