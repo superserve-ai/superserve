@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -18,6 +19,8 @@ const state = vi.hoisted(() => ({
   termsFetching: false,
   actor: "actor",
   termsQuery: vi.fn(),
+  liveTermsQuery: false,
+  readTerms: vi.fn(),
   team: { teamId: "11111111-1111-4111-8111-111111111111", region: "use" },
   recover: vi.fn(),
   resume: vi.fn(),
@@ -39,18 +42,30 @@ const state = vi.hoisted(() => ({
   refetch: vi.fn(),
 }))
 
-vi.mock("@tanstack/react-query", async (original) => ({
-  ...(await original<typeof import("@tanstack/react-query")>()),
-  useIsMutating: () => 0,
-  useQuery: (options: unknown) => {
-    state.termsQuery(options)
-    return {
-      data: state.terms,
-      isError: state.termsError,
-      isFetching: state.termsFetching,
-    }
-  },
-  useQueryClient: () => ({ isMutating: () => 0 }),
+vi.mock("@tanstack/react-query", async (original) => {
+  const actual = await original<typeof import("@tanstack/react-query")>()
+  const awaitOriginalQuery = actual.useQuery
+  return {
+    ...actual,
+    useIsMutating: () => 0,
+    useQuery: (options: unknown) => {
+      state.termsQuery(options)
+      if (state.liveTermsQuery)
+        return awaitOriginalQuery(
+          options as Parameters<typeof awaitOriginalQuery>[0],
+        )
+      return {
+        data: state.terms,
+        isError: state.termsError,
+        isFetching: state.termsFetching,
+      }
+    },
+    useQueryClient: () => ({ isMutating: () => 0 }),
+  }
+})
+vi.mock("@/lib/api/client", async (original) => ({
+  ...(await original<typeof import("@/lib/api/client")>()),
+  apiClient: (...args: unknown[]) => state.readTerms(...args),
 }))
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: state.replace }),
@@ -152,6 +167,8 @@ async function readyContinue() {
   return button
 }
 beforeEach(() => {
+  state.liveTermsQuery = false
+  state.readTerms.mockReset()
   state.terms = undefined
   state.termsError = false
   state.termsFetching = false
@@ -734,6 +751,7 @@ describe("authoritative Pro offer terms context", () => {
         "self",
         "actor",
         "use:11111111-1111-4111-8111-111111111111",
+        0,
       ],
       enabled: true,
     })
@@ -752,6 +770,7 @@ describe("authoritative Pro offer terms context", () => {
         "self",
         "another-actor",
         "usw:22222222-2222-4222-8222-222222222222",
+        0,
       ],
     })
     expect(state.start).not.toHaveBeenCalled()
@@ -773,6 +792,106 @@ describe("authoritative Pro offer terms context", () => {
         expect(screen.queryByText(/full billing month/)).toBeNull(),
       )
       expect(state.start).not.toHaveBeenCalled()
+    },
+  )
+})
+
+describe("Pro offer authority after recovery", () => {
+  it.each(["preview", "failed-read"])(
+    "discards an expired quote and independently reads replacement authority (%s)",
+    async (result) => {
+      state.liveTermsQuery = true
+      state.plans = availablePlans
+      const accepted = {
+        first_paid_pro_cycle: true,
+        accepted: true,
+        period_start: "2026-10-27T04:00:00Z",
+        period_end: "2026-11-27T04:00:00Z",
+        credit_expires_at: "2026-11-27T04:00:00Z",
+        first_payment_cents: 12345,
+        first_credit_cents: 34567,
+      }
+      const planResponse = (pro_checkout: unknown) => ({
+        plan: {
+          plan_key: "free",
+          kind: "free",
+          display_name: "Free",
+          effective_from: "2026-10-27T00:00:00Z",
+          limits: {
+            max_concurrent: 1,
+            max_vcpu: 1,
+            max_memory_mib: 1024,
+            max_disk_mib: 4096,
+            max_templates: 0,
+          },
+        },
+        period: { start: "2026-10-01T00:00:00Z", end: "2026-11-01T00:00:00Z" },
+        pending_change: null,
+        pro_checkout,
+      })
+      let expired = false
+      let finishRead!: (value: unknown) => void
+      let failRead!: (error: Error) => void
+      const newRead = new Promise((resolve, reject) => {
+        finishRead = resolve
+        failRead = reject
+      })
+      state.readTerms.mockImplementation(() =>
+        expired ? newRead : Promise.resolve(planResponse(accepted)),
+      )
+      state.start.mockRejectedValueOnce(
+        new ApiError(
+          409,
+          "plan_conflict",
+          "Earlier checkout requires recovery",
+        ),
+      )
+      state.recover.mockImplementation(async () => {
+        expired = true
+        return "retryable"
+      })
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      })
+      const view = render(
+        <QueryClientProvider client={queryClient}>
+          <ProPayment returnTo="/plan-usage/" />
+        </QueryClientProvider>,
+      )
+      await screen.findByText(
+        /saved initial payment before discounts is \$123.45/,
+      )
+      fireEvent.click(await readyContinue())
+      await screen.findByText(
+        "This team already has a paid plan or a payment in progress.",
+      )
+      fireEvent.click(
+        screen.getByRole("button", { name: "Check payment status" }),
+      )
+      await screen.findByRole("button", { name: "Continue to payment" })
+      await waitFor(() => expect(state.readTerms).toHaveBeenCalledTimes(3))
+      expect(screen.queryByText(/\$123.45|\$345.67|Nov 27/)).toBeNull()
+      expect(
+        screen.getByText(
+          /secure payment page confirms your initial payment amount/,
+        ),
+      ).toBeTruthy()
+      await act(async () => {
+        if (result === "preview")
+          finishRead(
+            planResponse({ first_paid_pro_cycle: true, accepted: false }),
+          )
+        else failRead(new Error("Authority unavailable"))
+      })
+      if (result === "preview") await screen.findByText(/full billing month/)
+      else
+        await screen.findByText(
+          /secure payment page confirms your initial payment amount/,
+        )
+      expect(screen.queryByText(/\$123.45|\$345.67|Nov 27/)).toBeNull()
+      expect(state.start).toHaveBeenCalledOnce()
+      view.unmount()
+      queryClient.clear()
     },
   )
 })
