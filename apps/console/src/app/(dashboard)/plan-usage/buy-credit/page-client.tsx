@@ -24,6 +24,7 @@ import {
   setPrepaidAutoRecharge,
   startPrepaidCheckout,
   validPrepaidCents,
+  validNewPrepaidCents,
 } from "@/lib/api/prepaid"
 import { billingKeys } from "@/lib/api/query-keys"
 import {
@@ -244,7 +245,7 @@ export function requestedAmount(value: string | null): {
   custom: string
 } {
   const cents = value === null ? NaN : Number(value)
-  if (!validPrepaidCents(cents)) return { preset: 2500, custom: "" }
+  if (!validNewPrepaidCents(cents)) return { preset: 2500, custom: "" }
   if (PRESET_CENTS.includes(cents)) return { preset: cents, custom: "" }
   return { preset: 2500, custom: String(cents / 100) }
 }
@@ -278,7 +279,9 @@ function PurchaseCard({
   const [submitting, setSubmitting] = useState(false)
   const customCents = custom ? dollarsToCents(custom) : null
   const amount = resume?.amount ?? (custom ? customCents : selected)
-  const valid = amount !== null && validPrepaidCents(amount)
+  const valid =
+    amount !== null &&
+    (resume ? validPrepaidCents(amount) : validNewPrepaidCents(amount))
 
   const buy = async () => {
     if (
@@ -364,10 +367,10 @@ function PurchaseCard({
           </div>
           <Field
             label="Other amount (USD)"
-            description="Any amount in $5 steps, minimum $5."
+            description="Any amount in $5 steps, from $5 to $10,000."
             error={
               custom && !valid
-                ? "Enter a multiple of $5, at least $5."
+                ? "Enter a multiple of $5 between $5 and $10,000."
                 : undefined
             }
           >
@@ -424,8 +427,8 @@ function AutoRechargeCard({
     !enabled ||
     (thresholdCents !== null &&
       amountCents !== null &&
-      validPrepaidCents(thresholdCents) &&
-      validPrepaidCents(amountCents))
+      validNewPrepaidCents(thresholdCents) &&
+      validNewPrepaidCents(amountCents))
 
   const save = async () => {
     if (!teamKey || !canManage || !valid || saving || (!allowEntry && enabled))
@@ -484,8 +487,8 @@ function AutoRechargeCard({
           <Field
             label="When credit falls below (USD)"
             error={
-              thresholdCents === null || !validPrepaidCents(thresholdCents)
-                ? "Enter a multiple of $5."
+              thresholdCents === null || !validNewPrepaidCents(thresholdCents)
+                ? "Enter a multiple of $5 between $5 and $10,000."
                 : undefined
             }
           >
@@ -499,8 +502,8 @@ function AutoRechargeCard({
           <Field
             label="Add this much credit (USD)"
             error={
-              amountCents === null || !validPrepaidCents(amountCents)
-                ? "Enter a multiple of $5."
+              amountCents === null || !validNewPrepaidCents(amountCents)
+                ? "Enter a multiple of $5 between $5 and $10,000."
                 : undefined
             }
           >

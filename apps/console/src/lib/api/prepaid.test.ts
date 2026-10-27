@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   startPrepaidCheckout,
+  retainedPrepaidOperations,
+  validNewPrepaidCents,
+  setPrepaidAutoRecharge,
   reconcilePrepaidOperations,
   type PrepaidPurchase,
 } from "./prepaid"
@@ -20,6 +23,42 @@ const respond = (state = "pending", url?: string) =>
     ...(url ? { url } : {}),
   }))
 describe("Starter durable checkout", () => {
+  it("caps new purchases at $10,000 and preserves retained larger operations", async () => {
+    respond()
+    expect(validNewPrepaidCents(1_000_000)).toBe(true)
+    expect(validNewPrepaidCents(1_000_500)).toBe(false)
+    await startPrepaidCheckout("use:team", 1_000_000, route, "actor")
+    expect(body(0).amount_cents).toBe(1_000_000)
+    await expect(
+      startPrepaidCheckout("use:team", 1_000_500, route, "actor"),
+    ).rejects.toThrow("$10,000")
+    expect(api).toHaveBeenCalledTimes(1)
+    const operation = {
+      id: crypto.randomUUID(),
+      team: "use:team",
+      actor: "actor",
+      amount: 1_000_500,
+      success: route + "?purchase=success",
+      cancel: route + "?purchase=cancel",
+    }
+    sessionStorage.setItem(
+      "starter-checkout:actor:use:team:1000500",
+      JSON.stringify(operation),
+    )
+    expect(retainedPrepaidOperations("actor", "use:team")).toContainEqual(
+      operation,
+    )
+    await startPrepaidCheckout(
+      "use:team",
+      operation.amount,
+      route,
+      "actor",
+      operation.id,
+    )
+    expect(body(1).operation_id).toBe(operation.id)
+    expect(body(1).amount_cents).toBe(operation.amount)
+  })
+
   it("replays original identity, amount and frozen redirect URLs after response loss", async () => {
     api.mockRejectedValueOnce(new Error("lost response"))
     await expect(
@@ -121,4 +160,28 @@ describe("Starter durable checkout", () => {
     await startPrepaidCheckout("use:team", 500, route, "actor")
     expect(body(1).operation_id).not.toBe(body(0).operation_id)
   })
+})
+
+it("caps auto-recharge settings and still permits disabling oversized settings", async () => {
+  api.mockResolvedValue({})
+  expect(() =>
+    setPrepaidAutoRecharge("use:team", {
+      enabled: true,
+      thresholdCents: 500,
+      amountCents: 1_000_500,
+    }),
+  ).toThrow("$10,000")
+  expect(api).not.toHaveBeenCalled()
+  await setPrepaidAutoRecharge("use:team", {
+    enabled: true,
+    thresholdCents: 500,
+    amountCents: 1_000_000,
+  })
+  expect(body(0).amount_cents).toBe(1_000_000)
+  await setPrepaidAutoRecharge("use:team", {
+    enabled: false,
+    thresholdCents: 500,
+    amountCents: 1_000_500,
+  })
+  expect(body(1)).toEqual({ expected_team: "use:team", enabled: false })
 })
