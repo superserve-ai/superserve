@@ -98,12 +98,16 @@ bash_login_file() {
     if [ -f "$f" ]; then echo "$f"; return; fi
   done
 }
+# Single-quote the directory so a profile never re-parses it as shell code.
+SQ_DIR="'$(printf '%s' "$INSTALL_DIR" | sed "s/'/'\\\\''/g")'"
+LINE="export PATH=${SQ_DIR}:\"\$PATH\""
 if [ -z "$ON_PATH" ] && [ -z "${SUPERSERVE_NO_MODIFY_PATH:-}" ]; then
-  # Single-quote the directory so a profile never re-parses it as shell code.
-  SQ_DIR="'$(printf '%s' "$INSTALL_DIR" | sed "s/'/'\\\\''/g")'"
-  LINE="export PATH=${SQ_DIR}:\"\$PATH\""
   case "$(basename "${SHELL:-/bin/sh}")" in
-    zsh) add_to_profile "${ZDOTDIR:-$HOME}/.zshrc" ;;
+    zsh)
+      # .zshenv may set ZDOTDIR without exporting it, so ask zsh where it reads.
+      ZDIR="$(zsh -c 'printf %s "${ZDOTDIR:-$HOME}"' 2>/dev/null || true)"
+      add_to_profile "${ZDIR:-${ZDOTDIR:-$HOME}}/.zshrc"
+      ;;
     bash)
       LOGIN_FILE="$(bash_login_file)"
       if [ "$OS" = "darwin" ]; then
@@ -124,7 +128,7 @@ fi
 if [ -z "$ON_PATH" ] && [ -z "$UPDATED" ]; then
   echo ""
   info "Add superserve to your PATH in your shell profile:"
-  echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
+  echo "  $LINE"
 fi
 
 # --- Sign in ---

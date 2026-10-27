@@ -96,6 +96,35 @@ describe("install.sh PATH setup", () => {
     expect(existsSync(join(home, ".fakes", "calls"))).toBe(false)
   })
 
+  test.skipIf(!Bun.which("zsh"))(
+    "zsh follows a ZDOTDIR that only .zshenv sets",
+    () => {
+      const home = newHome()
+      writeFileSync(join(home, ".zshenv"), `ZDOTDIR="$HOME/zdot"\n`)
+      install({ HOME: home, SHELL: "/bin/zsh" })
+      expect(readFileSync(join(home, "zdot", ".zshrc"), "utf8")).toContain(
+        ".superserve/bin",
+      )
+    },
+  )
+
+  test("the manual PATH hint survives copying for an awkward dir", () => {
+    const home = newHome()
+    const dir = join(home, "it's a $dir")
+    const out = install({
+      HOME: home,
+      SHELL: "/bin/zsh",
+      SUPERSERVE_INSTALL_DIR: dir,
+      SUPERSERVE_NO_MODIFY_PATH: "1",
+    })
+    const hint = out.split("\n").find((l) => l.includes("export PATH="))
+    const found = spawnSync("sh", ["-c", `${hint}; command -v superserve`], {
+      env: { PATH: "/usr/bin:/bin" },
+      encoding: "utf8",
+    })
+    expect(found.stdout.trim()).toBe(join(dir, "superserve"))
+  })
+
   test("Fish writes to the config under XDG_CONFIG_HOME", () => {
     const home = newHome()
     const xdg = join(home, "xdg")
