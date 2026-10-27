@@ -1,9 +1,11 @@
 import type { User } from "@supabase/supabase-js"
 
 import {
+  type AwaitingPlanState,
+  isAwaitingPlanState,
+  planPickerPath,
   SIGNUP_CHECKOUT_OFFERS,
   type SignupCheckoutOffer,
-  signupCheckoutRetryPath,
 } from "@/lib/billing/signup-checkout-paths"
 import { cellFor } from "@/lib/cells"
 
@@ -11,36 +13,56 @@ import { getAuthApiKeyAndTeamForUser } from "./proxy-auth"
 
 const BACKEND_TIMEOUT_MS = 10_000
 
-function successPath(team: string) {
-  return `/billing/pro/?${new URLSearchParams({ team, billing: "success" })}`
+async function teamBackend(user: User) {
+  const { apiKey, team } = await getAuthApiKeyAndTeamForUser(user)
+  return {
+    team,
+    base: cellFor(team.region).apiBaseUrl,
+    headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
+  }
 }
 
-// A team waiting for payment goes straight to its plan's Stripe Checkout.
-// Returns null when the team already has a plan, so the caller keeps its
-// existing destination; the backend resumes an open checkout on every call.
-// switchPlan replaces an open checkout for another plan; resuming never does.
-export async function startSignupCheckout(
-  user: User,
-  offer: SignupCheckoutOffer | undefined,
-  origin: string,
-  switchPlan = false,
-): Promise<string | null> {
-  const { apiKey, team } = await getAuthApiKeyAndTeamForUser(user)
-  const base = cellFor(team.region).apiBaseUrl
-  const headers = { "X-API-Key": apiKey, "Content-Type": "application/json" }
-  const plan = await fetch(`${base}/billing/plan`, {
-    headers,
+async function readEntryState(
+  backend: Awaited<ReturnType<typeof teamBackend>>,
+): Promise<AwaitingPlanState | null> {
+  const plan = await fetch(`${backend.base}/billing/plan`, {
+    headers: backend.headers,
     cache: "no-store",
     signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
   })
   if (!plan.ok) throw new Error(`billing plan read failed: ${plan.status}`)
   const { entry_state: entry } = (await plan.json()) as {
-    entry_state?: string
+    entry_state?: unknown
   }
-  if (entry !== "pending_payment" && entry !== "payment_failed") return null
-  if (!offer) return "/auth/auth-code-error/?reason=plan_required"
+  return isAwaitingPlanState(entry) ? entry : null
+}
 
-  const success = successPath(`${team.region}:${team.teamId}`)
+// Where a new signup lands: the console while its trial lasts, the plan picker
+// once it is used up. Null keeps the caller's destination, so a team that has
+// a plan, or a backend without trials, follows today's flow.
+export async function signupEntryDestination(
+  user: User,
+  offer: SignupCheckoutOffer | undefined,
+): Promise<string | null> {
+  const entry = await readEntryState(await teamBackend(user))
+  if (!entry) return null
+  if (entry === "trial") return "/sandboxes"
+  return planPickerPath(entry, offer)
+}
+
+// Starts or resumes the selected plan's Stripe Checkout for a team that has
+// not paid yet. Returns null when the team already has a plan. switchPlan
+// replaces an open checkout for another plan; resuming never does.
+export async function startSignupCheckout(
+  user: User,
+  offer: SignupCheckoutOffer,
+  origin: string,
+  switchPlan = false,
+): Promise<string | null> {
+  const backend = await teamBackend(user)
+  if (!(await readEntryState(backend))) return null
+  const { base, headers, team } = backend
+  const success = `/billing/pro/?${new URLSearchParams({ team: `${team.region}:${team.teamId}`, billing: "success" })}`
   const create = async () => {
     const response = await fetch(`${base}/stripe/checkout-session`, {
       method: "POST",
@@ -51,7 +73,7 @@ export async function startSignupCheckout(
         offer: SIGNUP_CHECKOUT_OFFERS[offer],
         success_url: new URL(success, origin).toString(),
         cancel_url: new URL(
-          signupCheckoutRetryPath(offer, "checkout_canceled"),
+          planPickerPath("checkout_canceled", offer),
           origin,
         ).toString(),
       }),
@@ -79,7 +101,7 @@ export async function startSignupCheckout(
     if (restart.ok) ({ response, result } = await create())
   }
   if (response.status === 400 && result.error?.code === "invalid_offer")
-    return "/auth/auth-code-error/?reason=plan_unavailable"
+    return planPickerPath("plan_unavailable")
   if (!response.ok)
     throw new Error(`signup checkout failed: ${response.status}`)
   if (result.url?.startsWith("https://checkout.stripe.com/")) return result.url

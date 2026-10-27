@@ -11,7 +11,6 @@ let reason: string | null = null
 let intent: string | null = null
 let next: string | null = null
 let account: string | null = null
-let offer: string | null = null
 vi.mock("next/navigation", () => ({
   useSearchParams: () =>
     new URLSearchParams({
@@ -19,7 +18,6 @@ vi.mock("next/navigation", () => ({
       ...(intent ? { signup_offer: intent } : {}),
       ...(next ? { next } : {}),
       ...(account ? { account } : {}),
-      ...(offer ? { offer } : {}),
     }),
 }))
 vi.mock("next/image", () => ({
@@ -61,7 +59,6 @@ describe("auth-code-error page", () => {
     intent = null
     next = null
     account = null
-    offer = null
   })
 
   it("displays the shared signup restriction message for callback denials", () => {
@@ -80,49 +77,6 @@ describe("auth-code-error page", () => {
     expect(
       screen.getByRole("link", { name: "Try Again" }).getAttribute("href"),
     ).toBe("/auth/signin?signup_offer=enterprise")
-  })
-
-  it.each(["plan_required", "plan_unavailable"])(
-    "lets a team waiting for payment pick a plan in the console for %s",
-    (r) => {
-      reason = r
-      render(<AuthCodeErrorPage />)
-      for (const [name, offer] of [
-        ["Developer", "developer"],
-        ["Pro", "pro_monthly"],
-      ]) {
-        const form = screen.getByRole("button", { name }).closest("form")!
-        expect(form.getAttribute("method")).toBe("post")
-        expect(form.getAttribute("action")).toBe(
-          `/api/onboarding/checkout/?offer=${offer}`,
-        )
-      }
-      expect(screen.queryByRole("link", { name: "Try Again" })).toBeNull()
-    },
-  )
-
-  it.each(["checkout_canceled", "checkout_unavailable"])(
-    "resumes the selected plan's checkout after %s",
-    (r) => {
-      reason = r
-      offer = "starter"
-      render(<AuthCodeErrorPage />)
-      expect(
-        screen
-          .getByRole("link", { name: "Continue to checkout" })
-          .getAttribute("href"),
-      ).toBe("/api/onboarding/checkout/?offer=starter")
-    },
-  )
-
-  it("falls back to sign-in when a checkout retry names no sellable plan", () => {
-    reason = "checkout_canceled"
-    offer = "enterprise"
-    render(<AuthCodeErrorPage />)
-    expect(
-      screen.queryByRole("link", { name: "Continue to checkout" }),
-    ).toBeNull()
-    expect(screen.getByRole("link", { name: "Try Again" })).toBeTruthy()
   })
 
   it("drops unrecognized retry intent", () => {

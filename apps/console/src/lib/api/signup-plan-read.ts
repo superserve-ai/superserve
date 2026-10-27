@@ -8,6 +8,10 @@ import {
 import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
 import type { TeamMembership } from "@/lib/api/team-directory"
 import { PLAN_OFFER_COOKIE, readPlanOffer } from "@/lib/auth/plan-preselection"
+import {
+  type AwaitingPlanState,
+  isAwaitingPlanState,
+} from "@/lib/billing/signup-checkout-paths"
 import { cellFor } from "@/lib/cells"
 
 async function hasPlanAssignment(
@@ -55,6 +59,25 @@ export async function readSignupPlan(
     // Pricing v2 assigns every plan directly; the signup picker doesn't apply.
     choice.state = "legacy"
     choice.offer = null
+  }
+  let entryState: AwaitingPlanState | undefined
+  if (choice.state === "selecting" || choice.state === "pending") {
+    const entry = await admin.rpc("billing_team_entry_state", {
+      p_team: team.teamId,
+    })
+    // A cell without trials has no such function and keeps today's flow.
+    if (
+      entry.error &&
+      entry.error.code !== "PGRST202" &&
+      entry.error.code !== "42883"
+    )
+      throw new Error("Unable to check your plan. Please retry.")
+    if (!entry.error && isAwaitingPlanState(entry.data)) {
+      // A team on its trial buys its plan through checkout, not the picker.
+      entryState = entry.data
+      choice.state = "legacy"
+      choice.offer = null
+    }
   }
   if (choice.state === "selecting" || choice.state === "pending") {
     const [intent, billing] = await Promise.all([
@@ -122,5 +145,6 @@ export async function readSignupPlan(
     teamKey,
     ...choice,
     requestedOffer,
+    ...(entryState ? { entryState } : {}),
   }
 }

@@ -8,7 +8,7 @@ import {
   sendWelcomeEmail,
 } from "@/app/(auth)/auth/signup/action"
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
-import { startSignupCheckout } from "@/lib/api/signup-checkout"
+import { signupEntryDestination } from "@/lib/api/signup-checkout"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
@@ -68,7 +68,7 @@ import {
 import {
   isSignupCheckoutOffer,
   isSignupCheckoutPath,
-  signupCheckoutRetryPath,
+  PLAN_PICKER_ROUTE,
 } from "@/lib/billing/signup-checkout-paths"
 import { DEFAULT_REGION } from "@/lib/cells"
 import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
@@ -717,6 +717,7 @@ export async function GET(request: Request) {
           !next.startsWith("https://") &&
           !/^\/onboarding\/plan\/?(?:\?|$)/.test(next) &&
           !isSignupCheckoutPath(next) &&
+          !next.startsWith(PLAN_PICKER_ROUTE) &&
           !ycNext &&
           !proNext &&
           !preparationNext
@@ -777,12 +778,10 @@ export async function GET(request: Request) {
             (signupOffer && next === SIGNUP_OFFER_DESTINATIONS[signupOffer])) &&
           (await getPricingVersionAction()) === "v2"
         ) {
-          try {
-            next =
-              (await startSignupCheckout(user, checkoutOffer, origin)) ?? next
-          } catch {
-            if (checkoutOffer) next = signupCheckoutRetryPath(checkoutOffer)
-          }
+          next =
+            (await signupEntryDestination(user, checkoutOffer).catch(
+              () => null,
+            )) ?? next
         }
       }
 

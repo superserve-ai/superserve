@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   billing: vi.fn(),
   assignment: vi.fn(),
   from: vi.fn(),
+  rpc: vi.fn(),
   eq: vi.fn(),
   cookie: vi.fn(),
   cell: vi.fn(),
@@ -91,8 +92,9 @@ beforeEach(() => {
           }),
         },
   )
+  mocks.rpc.mockResolvedValue({ data: null, error: { code: "PGRST202" } })
   mocks.cell.mockReturnValue({
-    createAdminClient: () => ({ from: mocks.from }),
+    createAdminClient: () => ({ from: mocks.from, rpc: mocks.rpc }),
   })
 })
 
@@ -410,4 +412,27 @@ describe("real paid preparation handler permanent recovery", () => {
     expect(result.searchParams.get("reason")).toBe("account_setup")
     expect(result.searchParams.get("next")).toBe("/billing/pro/")
   })
+
+  it.each(["trial", "trial_ended", "payment_failed"])(
+    "skips the signup picker for a team in %s and reports its entry state",
+    async (state) => {
+      mocks.rpc.mockResolvedValue({ data: state, error: null })
+      const context = await getSignupPlanAction("usw:west-team")
+      expect(context.state).toBe("legacy")
+      expect(context.entryState).toBe(state)
+      expect(mocks.rpc).toHaveBeenCalledWith("billing_team_entry_state", {
+        p_team: "west-team",
+      })
+    },
+  )
+
+  it.each(["active", null])(
+    "keeps today's plan selection when the backend reports %s",
+    async (state) => {
+      mocks.rpc.mockResolvedValue({ data: state, error: null })
+      const context = await getSignupPlanAction("usw:west-team")
+      expect(context.state).toBe("selecting")
+      expect(context.entryState).toBeUndefined()
+    },
+  )
 })

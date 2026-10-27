@@ -15,10 +15,6 @@ import {
   starterAuthReturnPath,
   signupPreparationReturnPath,
 } from "@/lib/billing/pro-auth-return"
-import {
-  isSignupCheckoutOffer,
-  signupCheckoutPath,
-} from "@/lib/billing/signup-checkout-paths"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 function AuthCodeErrorContent() {
@@ -53,16 +49,6 @@ function AuthCodeErrorContent() {
   const impersonating = setupReason === "impersonation" && !!setupRetry
   const wrongTeam = setupReason === "team_changed" && !!setupRetry
   const conflictingTeams = setupReason === "team_conflict" && !!setupRetry
-  const choosePlan =
-    setupReason === "plan_required" || setupReason === "plan_unavailable"
-  const checkoutOffer = searchParams.get("offer")
-  const resumeCheckout =
-    (setupReason === "checkout_canceled" ||
-      setupReason === "checkout_unavailable") &&
-    isSignupCheckoutOffer(checkoutOffer)
-      ? signupCheckoutPath(checkoutOffer)
-      : null
-  const paymentSetup = choosePlan || !!resumeCheckout
   const retryHref =
     setupRetry ??
     `${isSignupContext ? "/auth/signup" : "/auth/signin"}${retryParams.size ? `?${retryParams}` : ""}`
@@ -88,9 +74,7 @@ function AuthCodeErrorContent() {
         <div className="flex flex-col items-center">
           <WarningIcon className="mb-3 size-8 text-muted" weight="light" />
           <h1 className="text-center text-sm font-medium text-foreground">
-            {paymentSetup
-              ? "Finish setting up your account"
-              : "Authentication Error"}
+            Authentication Error
           </h1>
           <p className="mt-2 text-center text-xs text-muted">
             {wrongAccount
@@ -101,17 +85,9 @@ function AuthCodeErrorContent() {
                   ? "Return to the team that started checkout before continuing with your selected plan."
                   : conflictingTeams
                     ? "Saved checkout team details conflict. Return to the original checkout link, or contact support if it is unavailable."
-                    : choosePlan
-                      ? setupReason === "plan_unavailable"
-                        ? "That plan is no longer available. Choose a plan to finish setting up your account."
-                        : "Choose a plan to finish setting up your account."
-                      : resumeCheckout
-                        ? setupReason === "checkout_canceled"
-                          ? "Checkout was cancelled. Your account is ready once your plan is paid."
-                          : "We couldn't open checkout. Please try again."
-                        : isSignupContext
-                          ? SIGNUP_RESTRICTED_MESSAGE
-                          : "Something went wrong. Please try again."}
+                    : isSignupContext
+                      ? SIGNUP_RESTRICTED_MESSAGE
+                      : "Something went wrong. Please try again."}
           </p>
           {wrongAccount ? (
             <Button
@@ -154,44 +130,7 @@ function AuthCodeErrorContent() {
                   Return to console
                 </Link>
               )}
-              {choosePlan && (
-                <>
-                  <div className="mt-5 flex gap-2">
-                    {(
-                      [
-                        ["developer", "Developer"],
-                        ["pro_monthly", "Pro"],
-                      ] as const
-                    ).map(([plan, label]) => (
-                      <form
-                        key={plan}
-                        method="post"
-                        action={signupCheckoutPath(plan)}
-                      >
-                        <Button type="submit" size="sm">
-                          {label}
-                        </Button>
-                      </form>
-                    ))}
-                  </div>
-                  <Link
-                    href="https://superserve.ai/pricing"
-                    className="mt-3 text-xs underline"
-                  >
-                    Compare plans
-                  </Link>
-                </>
-              )}
-              {resumeCheckout && (
-                <Button
-                  render={<Link href={resumeCheckout} />}
-                  size="sm"
-                  className="mt-5"
-                >
-                  Continue to checkout
-                </Button>
-              )}
-              {!conflictingTeams && !paymentSetup && (
+              {!conflictingTeams && (
                 <Button
                   render={<Link href={retryHref} />}
                   size="sm"

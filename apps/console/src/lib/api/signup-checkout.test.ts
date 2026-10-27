@@ -12,7 +12,7 @@ vi.mock("@/lib/cells", () => ({
 
 import type { User } from "@supabase/supabase-js"
 
-import { startSignupCheckout } from "./signup-checkout"
+import { signupEntryDestination, startSignupCheckout } from "./signup-checkout"
 
 const user = { id: "u1" } as User
 const origin = "https://console.example.test"
@@ -30,7 +30,7 @@ const fetchMock = vi.fn(async (url: string) => {
 
 describe("startSignupCheckout", () => {
   beforeEach(() => {
-    entryState = "pending_payment"
+    entryState = "trial"
     checkout = {
       status: 200,
       body: { url: "https://checkout.stripe.com/c/pay/cs_test_1" },
@@ -38,12 +38,6 @@ describe("startSignupCheckout", () => {
     checkouts = []
     fetchMock.mockClear()
     vi.stubGlobal("fetch", fetchMock)
-  })
-
-  it("leaves a team that already has a plan on its existing destination", async () => {
-    entryState = "active"
-    expect(await startSignupCheckout(user, "developer", origin)).toBeNull()
-    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it("creates or resumes the selected plan's checkout for the team", async () => {
@@ -61,21 +55,41 @@ describe("startSignupCheckout", () => {
       success_url:
         "https://console.example.test/billing/pro/?team=use%3Ateam-1&billing=success",
       cancel_url:
-        "https://console.example.test/auth/auth-code-error/?reason=checkout_canceled&offer=developer",
+        "https://console.example.test/auth/choose-plan/?reason=checkout_canceled&offer=developer",
     })
   })
 
-  it("asks for a plan before any checkout when none was selected", async () => {
-    expect(await startSignupCheckout(user, undefined, origin)).toBe(
-      "/auth/auth-code-error/?reason=plan_required",
-    )
+  it.each([
+    ["trial", "/sandboxes"],
+    ["trial_ended", "/auth/choose-plan/?reason=trial_ended&offer=developer"],
+    [
+      "payment_failed",
+      "/auth/choose-plan/?reason=payment_failed&offer=developer",
+    ],
+  ])("lands a new %s signup in the console", async (state, destination) => {
+    entryState = state
+    expect(await signupEntryDestination(user, "developer")).toBe(destination)
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+
+  it.each(["active", "pending_payment", undefined])(
+    "keeps today's flow when the backend reports %s",
+    async (state) => {
+      entryState = state as string
+      expect(await signupEntryDestination(user, "developer")).toBeNull()
+      expect(await startSignupCheckout(user, "developer", origin)).toBeNull()
+      expect(
+        fetchMock.mock.calls.some(([url]) =>
+          String(url).endsWith("/checkout-session"),
+        ),
+      ).toBe(false)
+    },
+  )
 
   it("reports a plan that is no longer sold as recoverable", async () => {
     checkout = { status: 400, body: { error: { code: "invalid_offer" } } }
     expect(await startSignupCheckout(user, "pro_monthly", origin)).toBe(
-      "/auth/auth-code-error/?reason=plan_unavailable",
+      "/auth/choose-plan/?reason=plan_unavailable",
     )
   })
 

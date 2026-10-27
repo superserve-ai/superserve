@@ -2,6 +2,7 @@ import {
   normalizeRequestedOffer,
   type RequestedOffer,
 } from "@/lib/auth/requested-offer"
+import type { AwaitingPlanState } from "@/lib/billing/signup-checkout-paths"
 
 export type SignupPlanState =
   | "legacy"
@@ -17,6 +18,7 @@ export interface SignupPlanContext {
   state: SignupPlanState
   offer: "free" | PurchaseOffer | null
   requestedOffer?: RequestedOffer
+  entryState?: AwaitingPlanState
 }
 
 export function parseSignupChoice(

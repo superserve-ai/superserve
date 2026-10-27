@@ -4,11 +4,11 @@ import { startSignupCheckout } from "@/lib/api/signup-checkout"
 import {
   isSignupCheckoutOffer,
   signupCheckoutPath,
-  signupCheckoutRetryPath,
+  planPickerPath,
 } from "@/lib/billing/signup-checkout-paths"
 import { createServerClient } from "@/lib/supabase/server"
 
-// GET resumes the plan checkout of a team still waiting for payment. A
+// GET resumes the plan checkout of a team that has not paid yet. A
 // same-origin POST is an explicit plan choice and may replace an open
 // checkout for another plan.
 export async function GET(request: Request) {
@@ -26,9 +26,7 @@ async function checkout(request: Request, switchPlan: boolean) {
   const { origin, searchParams } = new URL(request.url)
   const offer = searchParams.get("offer")
   if (!isSignupCheckoutOffer(offer))
-    return NextResponse.redirect(
-      new URL("/auth/auth-code-error/?reason=plan_required", origin),
-    )
+    return NextResponse.redirect(new URL(planPickerPath("upgrade"), origin))
   const {
     data: { user },
   } = await (await createServerClient()).auth.getUser()
@@ -45,7 +43,7 @@ async function checkout(request: Request, switchPlan: boolean) {
       (await startSignupCheckout(user, offer, origin, switchPlan)) ??
       "/sandboxes"
   } catch {
-    target = signupCheckoutRetryPath(offer)
+    target = planPickerPath("checkout_unavailable", offer)
   }
   return NextResponse.redirect(new URL(target, origin), 303)
 }

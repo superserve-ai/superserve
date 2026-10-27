@@ -70,7 +70,7 @@ describe("signup checkout resume", () => {
 
   it("rejects an unknown offer without starting checkout", async () => {
     expect((await visit("offer=enterprise")).searchParams.get("reason")).toBe(
-      "plan_required",
+      "upgrade",
     )
     expect(start).not.toHaveBeenCalled()
   })
