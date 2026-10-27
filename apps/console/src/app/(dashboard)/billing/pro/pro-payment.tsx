@@ -130,6 +130,8 @@ function ProPaymentContext({
     ready &&
     !!actor &&
     scope === "self" &&
+    !summaryQuery.isPending &&
+    !capabilities.isPending &&
     summaryQuery.data?.permissions?.can_manage !== false &&
     capabilities.data?.actions?.recover_payment !== false
   const canContinue =
@@ -426,6 +428,7 @@ function ProPaymentContext({
   useEffect(() => {
     if (
       billingReturn === "success" &&
+      canRecover &&
       !paymentCompleted &&
       teamKey &&
       !teamMismatch &&
@@ -434,6 +437,7 @@ function ProPaymentContext({
       void checkPayment(CONFIRM_ATTEMPTS)
   }, [
     billingReturn,
+    canRecover,
     paymentCompleted,
     teamKey,
     teamMismatch,

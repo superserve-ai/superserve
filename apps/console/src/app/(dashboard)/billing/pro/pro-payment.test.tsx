@@ -19,6 +19,8 @@ function ProPayment(props: React.ComponentProps<typeof ActualProPayment>) {
 }
 
 const state = vi.hoisted(() => ({
+  capabilitiesPending: false,
+  summaryPending: false,
   recoveryAllowed: true,
   entryOpen: true,
   terms: undefined as unknown,
@@ -120,7 +122,7 @@ vi.mock("@/hooks/use-teams", () => ({
 vi.mock("@/hooks/use-billing-summary", () => ({
   useBillingSummary: () => ({
     data: { ...state.summary, permissions: { can_manage: state.canManage } },
-    isPending: false,
+    isPending: state.summaryPending,
     refetch: async () => ({ isError: state.summaryError }),
     isError: state.summaryError,
   }),
@@ -138,8 +140,8 @@ vi.mock("@/hooks/use-billing-capabilities", () => ({
           },
         }
       : undefined,
-    isPending: false,
-    isError: false,
+    isPending: state.capabilitiesPending,
+    isError: !state.plans && !state.capabilitiesPending,
     refetch: async () => ({ isError: false }),
   }),
 }))
@@ -193,6 +195,8 @@ async function readyContinue() {
   return button
 }
 beforeEach(() => {
+  state.capabilitiesPending = false
+  state.summaryPending = false
   state.recoveryAllowed = true
   state.entryOpen = true
   state.liveTermsQuery = false
@@ -1206,3 +1210,37 @@ it("keeps fresh Pro entry fenced when recovery discovery is explicitly denied", 
   expect(state.start).not.toHaveBeenCalled()
   expect(state.starterRecover).not.toHaveBeenCalled()
 })
+
+it.each([false, true])(
+  "waits for initial authority before callback recovery, settled denial=%s",
+  async (denied) => {
+    state.capabilitiesPending = true
+    state.summaryPending = true
+    state.query =
+      "billing=success&team=use:11111111-1111-4111-8111-111111111111"
+    state.recover.mockResolvedValue("active")
+    const view = () => (
+      <ProPayment
+        billingReturn="success"
+        checkoutTeam="use:11111111-1111-4111-8111-111111111111"
+        returnTo="/plan-usage/"
+      />
+    )
+    const mounted = render(view())
+    await act(async () => {})
+    expect(state.recover).not.toHaveBeenCalled()
+    state.summaryPending = false
+    mounted.rerender(view())
+    await act(async () => {})
+    expect(state.recover).not.toHaveBeenCalled()
+    state.capabilitiesPending = false
+    if (denied) {
+      state.plans = availablePlans
+      state.recoveryAllowed = false
+    }
+    mounted.rerender(view())
+    await act(async () => {})
+    if (denied) expect(state.recover).not.toHaveBeenCalled()
+    else await waitFor(() => expect(state.recover).toHaveBeenCalled())
+  },
+)

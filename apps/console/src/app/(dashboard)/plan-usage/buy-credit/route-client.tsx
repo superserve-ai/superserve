@@ -23,8 +23,11 @@ export function BuyCreditRoute() {
   const capabilities = useBillingCapabilities()
   const version = usePricingVersion()
   const entry = capabilities.data?.fresh_entry.starter === true
-  const recovery = capabilities.data?.actions?.recover_payment !== false
+  const recovery =
+    !capabilities.isPending &&
+    capabilities.data?.actions?.recover_payment !== false
   const disableRecharge =
+    !capabilities.isPending &&
     capabilities.data?.actions?.disable_auto_recharge !== false
   const recharge = capabilities.data?.fresh_entry.auto_recharge === true
   const existing = usePrepaidCredit(

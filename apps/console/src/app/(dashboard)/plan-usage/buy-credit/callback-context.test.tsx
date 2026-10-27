@@ -1,5 +1,6 @@
 vi.mock("@/hooks/use-billing-capabilities", () => ({
   useBillingCapabilities: () => ({
+    isPending: state.capabilitiesPending,
     data: state.capabilitiesMissing
       ? undefined
       : {
@@ -20,6 +21,7 @@ const state = vi.hoisted(() => ({
   recover: vi.fn(),
   allowRecovery: true,
   disableRecharge: true,
+  capabilitiesPending: false,
   capabilitiesMissing: false,
   rechargeEnabled: false,
   ready: true,
@@ -100,6 +102,7 @@ beforeEach(() => {
     .mockResolvedValue({ outcome: "no_pending_starter_checkout" })
   state.allowRecovery = true
   state.disableRecharge = true
+  state.capabilitiesPending = false
   state.capabilitiesMissing = false
   state.rechargeEnabled = false
   state.pricing = "legacy"
@@ -276,3 +279,23 @@ it.each([false, true, undefined])(
     expect(state.recover.mock.calls.length > 0).toBe(allowed !== false)
   },
 )
+
+it("waits for initial capabilities before retained Starter recovery or recharge disable", async () => {
+  state.query = ""
+  state.pricing = "v2"
+  state.rechargeEnabled = true
+  state.capabilitiesPending = true
+  state.capabilitiesMissing = true
+  const mounted = render(<BuyCreditRoute />)
+  await act(async () => {})
+  expect(state.recover).not.toHaveBeenCalled()
+  expect(screen.getByRole("switch")).toHaveAttribute("aria-disabled", "true")
+  state.capabilitiesPending = false
+  mounted.rerender(<BuyCreditRoute />)
+  await act(async () => {})
+  expect(state.recover).toHaveBeenCalled()
+  expect(screen.getByRole("switch")).not.toHaveAttribute(
+    "aria-disabled",
+    "true",
+  )
+})
