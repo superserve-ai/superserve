@@ -15,6 +15,11 @@ const state = vi.hoisted(() => ({
   pricing: "legacy" as "legacy" | undefined | null,
   refetch: vi.fn(),
 }))
+vi.mock("@/lib/api/starter-checkout-recovery", () => ({
+  recoverStarterCheckout: async () => ({
+    outcome: "no_pending_starter_checkout",
+  }),
+}))
 vi.mock("@/hooks/use-pricing-version", () => ({
   usePricingVersion: () => state.pricing,
 }))
@@ -175,7 +180,7 @@ describe("Starter callback context isolation", () => {
       expect(state.prepaid).toHaveBeenLastCalledWith(false)
     },
   )
-  it("restores only existing purchase recovery when the original team's entry is closed", () => {
+  it("restores only existing purchase recovery when the original team's entry is closed", async () => {
     state.pricing = "legacy"
     state.query = `purchase=success&team=${state.team}&purchase_id=33333333-3333-4333-8333-333333333333`
     state.retained = [
@@ -184,7 +189,7 @@ describe("Starter callback context isolation", () => {
     render(<BuyCreditRoute />)
     expect(screen.getByText("$125")).toBeTruthy()
     expect(
-      screen.getByRole("button", { name: "Check previous purchase" }),
+      await screen.findByRole("button", { name: "Check previous purchase" }),
     ).toBeTruthy()
     expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
     expect(screen.getByRole("switch")).toHaveAttribute("aria-disabled", "true")

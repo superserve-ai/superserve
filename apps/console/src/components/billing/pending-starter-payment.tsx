@@ -13,6 +13,7 @@ export function PendingStarterPayment({
   onResume,
   onCancel,
   onCheckPayment,
+  choosingPro = true,
 }: {
   purchase: PendingStarterCheckout
   busy: boolean
@@ -21,6 +22,7 @@ export function PendingStarterPayment({
   onResume: () => void
   onCheckPayment: () => void
   onCancel: () => void
+  choosingPro?: boolean
 }) {
   return (
     <div className="space-y-3 p-6">
@@ -29,8 +31,11 @@ export function PendingStarterPayment({
       </h2>
       <p className="text-sm">
         You have an unfinished Starter credit purchase. Resume it, or cancel the
-        unpaid checkout before choosing Pro. If payment was completed, we’ll
-        confirm the original purchase first.
+        unpaid checkout{" "}
+        {choosingPro
+          ? "before choosing Pro"
+          : "before starting another payment"}
+        . If payment was completed, we’ll confirm the original purchase first.
       </p>
       <div className="flex flex-col items-start gap-3">
         <Button disabled={busy || !canManage} onClick={onResume}>
@@ -41,7 +46,9 @@ export function PendingStarterPayment({
           disabled={busy || !canManage}
           onClick={onCancel}
         >
-          Cancel this purchase and choose Pro
+          {choosingPro
+            ? "Cancel this purchase and choose Pro"
+            : "Cancel this unpaid purchase"}
         </Button>
         <Button disabled={busy || !canManage} onClick={onCheckPayment}>
           Check purchase status
