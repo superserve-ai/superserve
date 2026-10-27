@@ -45,7 +45,7 @@ export const planLimitsSchema = z.object({
   max_vcpu: z.number().int().positive().nullable(),
   max_memory_mib: z.number().int().positive().nullable(),
   max_disk_mib: z.number().int().positive().nullable(),
-  max_templates: z.number().int().positive().nullable(),
+  max_templates: z.number().int().nonnegative().nullable(),
 })
 
 export const pricingVersionSchema = z.enum(["legacy", "v2"])
