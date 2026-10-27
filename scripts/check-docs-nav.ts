@@ -34,6 +34,7 @@ const EXEMPT_PATHS = new Set([
   "/billing/prepaid",
   "/billing/prepaid/auto-recharge",
   "/billing/prepaid/checkout",
+  "/billing/prepaid/checkout/recover",
   "/billing/pricing",
   "/billing/pricing/public",
   "/billing/summary",

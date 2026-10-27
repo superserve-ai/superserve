@@ -1,6 +1,6 @@
 "use client"
 
-import { useIsMutating, useQueryClient } from "@tanstack/react-query"
+import { useIsMutating, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
@@ -22,13 +22,15 @@ import { usePendingStarterCheckout } from "@/hooks/use-pending-starter-checkout"
 import { usePublicBillingPlans } from "@/hooks/use-public-billing-plans"
 import { useTeams } from "@/hooks/use-teams"
 import { useUser } from "@/hooks/use-user"
-import { ApiError } from "@/lib/api/client"
+import { teamPlanSchema } from "@/lib/api/billing-v2"
+import { ApiError, apiClient } from "@/lib/api/client"
 import {
   isStripeCheckoutUrl,
   recoverProPayment,
   startProCheckout,
   resumeProCheckout,
 } from "@/lib/api/plan-checkout"
+import { billingKeys } from "@/lib/api/query-keys"
 import {
   recoverStarterCheckout,
   type PendingStarterCheckout,
@@ -94,6 +96,32 @@ function ProPaymentContext({
     return match ? { id: match.id, region: match.region } : null
   }, [dashboardTeam, teamsQuery.data])
   const teamKey = team ? `${team.region}:${team.id}` : null
+  const [busy, setBusy] = useState(false)
+  const [checkoutTermsRevision, setCheckoutTermsRevision] = useState(0)
+  const discardCheckoutTerms = useCallback(() => {
+    setCheckoutTermsRevision((revision) => revision + 1)
+  }, [])
+  const checkoutTermsQuery = useQuery({
+    queryKey: [
+      "pro-checkout-terms",
+      scope,
+      actor,
+      teamKey,
+      checkoutTermsRevision,
+    ],
+    queryFn: async () =>
+      teamPlanSchema.parse(
+        await apiClient<unknown>("/billing/plan", { cache: "no-store" }),
+      ),
+    enabled:
+      ready &&
+      !!actor &&
+      !!teamKey &&
+      scope === "self" &&
+      !teamMutating &&
+      !busy,
+    staleTime: 0,
+  })
   const plansQuery = usePublicBillingPlans(team?.region, !!team)
   const pro = planCard(plansQuery.data, "pro")
   const summaryQuery = useBillingSummary(!!team)
@@ -114,6 +142,12 @@ function ProPaymentContext({
     plan.status === "active"
       ? plan.name
       : null
+  const [confirmedPayment, setConfirmedPayment] = useState<{
+    team: string
+    actor: string
+  } | null>(null)
+  const paymentCompleted =
+    confirmedPayment?.team === teamKey && confirmedPayment?.actor === actor
   const [confirming, setConfirming] = useState(billingReturn === "success")
   const [paymentTeam, setPaymentTeam] = useState<string | undefined>()
   const [starter, setStarter] = useState<{
@@ -136,7 +170,6 @@ function ProPaymentContext({
     return checkoutRecoveryPath(status.pathname + status.search) ?? callbackPath
   }, [returning, paymentTeam, returnTo, callbackPath, checkoutTeam])
   const [conflict, setConflict] = useState(false)
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inFlight = useRef(false)
   const operationTarget = useRef({ active: false })
@@ -185,6 +218,9 @@ function ProPaymentContext({
   const { refetch: refetchPlans } = plansQuery
   const refreshEntry = useCallback(
     async (target: { active: boolean }) => {
+      // Recovery can expire the accepted operation. Read a new authority snapshot;
+      // a failed read must not resurrect its previous frozen quote.
+      discardCheckoutTerms()
       const results = await Promise.all([refetchSummary(), refetchPlans()])
       if (!target.active) return
       if (results.some((result) => result.isError))
@@ -192,7 +228,33 @@ function ProPaymentContext({
           "Unable to refresh your plan. Check payment status again before continuing.",
         )
     },
-    [refetchSummary, refetchPlans],
+    [refetchSummary, refetchPlans, discardCheckoutTerms],
+  )
+
+  const refreshCompletedPayment = useCallback(
+    async (target: { active: boolean }) => {
+      const client = queryClientRef.current
+      // A request begun before reconciliation can legitimately contain the old plan.
+      await client.cancelQueries({ queryKey: billingKeys.all })
+      if (!target.active || client.isMutating({ mutationKey: ["switch-team"] }))
+        return
+      try {
+        await client.invalidateQueries(
+          { queryKey: billingKeys.all, refetchType: "active" },
+          { cancelRefetch: true, throwOnError: true },
+        )
+      } catch {
+        if (target.active)
+          throw new Error(
+            "Payment is confirmed, but your plan could not be refreshed. Check again to refresh your plan.",
+          )
+        return
+      }
+      if (!target.active || client.isMutating({ mutationKey: ["switch-team"] }))
+        return
+      router.replace(returnTo)
+    },
+    [router, returnTo],
   )
 
   const existingStarter = usePendingStarterCheckout({
@@ -221,8 +283,13 @@ function ProPaymentContext({
           queryClientRef.current.isMutating({ mutationKey: ["switch-team"] })
         )
           return
+        discardCheckoutTerms()
         setPaymentTeam(teamKey)
         const target = operationTarget.current
+        if (paymentCompleted) {
+          await refreshCompletedPayment(target)
+          return
+        }
         for (let attempt = 0; attempt < attempts; attempt++) {
           if (!target.active) return
           const outcome = await recoverProPayment(teamKey)
@@ -232,7 +299,9 @@ function ProPaymentContext({
             return
           }
           if (outcome === "active") {
-            router.replace(returnTo)
+            if (actor) setConfirmedPayment({ team: teamKey, actor })
+            setConfirming(false)
+            await refreshCompletedPayment(target)
             return
           }
           if (
@@ -280,16 +349,17 @@ function ProPaymentContext({
         }
       }),
     [
-      router,
       run,
       teamKey,
-      returnTo,
       teamMismatch,
       billingReturn,
       canRecover,
       actor,
       teamMutating,
       refreshEntry,
+      discardCheckoutTerms,
+      paymentCompleted,
+      refreshCompletedPayment,
     ],
   )
 
@@ -306,6 +376,7 @@ function ProPaymentContext({
       )
         return
       const target = operationTarget.current
+      discardCheckoutTerms()
       const result = await recoverStarterCheckout(
         starter.team,
         starter.purchase,
@@ -353,17 +424,26 @@ function ProPaymentContext({
   useEffect(() => {
     if (
       billingReturn === "success" &&
+      !paymentCompleted &&
       teamKey &&
       !teamMismatch &&
       !genericFlowPending
     )
       void checkPayment(CONFIRM_ATTEMPTS)
-  }, [billingReturn, teamKey, teamMismatch, genericFlowPending, checkPayment])
+  }, [
+    billingReturn,
+    paymentCompleted,
+    teamKey,
+    teamMismatch,
+    genericFlowPending,
+    checkPayment,
+  ])
 
   const onContinue = () =>
     void run(async () => {
       if (
         !actor ||
+        paymentCompleted ||
         !canContinue ||
         !existingStarter.canStart() ||
         !teamKey ||
@@ -376,6 +456,7 @@ function ProPaymentContext({
       )
         return
       const target = operationTarget.current
+      discardCheckoutTerms()
       setPaymentTeam(teamKey)
       const back = new URL("/billing/pro/", window.location.origin)
       back.searchParams.set("return", returnTo)
@@ -391,18 +472,21 @@ function ProPaymentContext({
       else setConfirming(true)
     })
 
-  const step = proPaymentStep({
-    loading:
-      genericFlowPending ||
-      !ready ||
-      !team ||
-      (!confirming && (plansQuery.isPending || summaryQuery.isPending)),
-    plans: summaryQuery.isError ? undefined : plansQuery.data,
-    paidPlan,
-    conflict: conflict || starterCheckRequired,
-    confirming,
-    teamMismatch,
-  })
+  const step =
+    ready && !teamMismatch && paymentCompleted
+      ? "completed"
+      : proPaymentStep({
+          loading:
+            genericFlowPending ||
+            !ready ||
+            !team ||
+            (!confirming && (plansQuery.isPending || summaryQuery.isPending)),
+          plans: summaryQuery.isError ? undefined : plansQuery.data,
+          paidPlan,
+          conflict: conflict || starterCheckRequired,
+          confirming,
+          teamMismatch,
+        })
 
   return (
     <div className="flex h-full flex-col">
@@ -449,6 +533,18 @@ function ProPaymentContext({
             step={step}
             pro={pro}
             paidPlan={paidPlan}
+            checkoutTerms={
+              ready &&
+              actor &&
+              scope === "self" &&
+              !teamMutating &&
+              !teamMismatch &&
+              !busy &&
+              !checkoutTermsQuery.isError &&
+              !checkoutTermsQuery.isFetching
+                ? checkoutTermsQuery.data?.pro_checkout
+                : undefined
+            }
             busy={busy}
             canContinue={canContinue && !existingStarter.blocksEntry}
             canRecover={canRecover}

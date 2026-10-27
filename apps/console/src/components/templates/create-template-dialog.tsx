@@ -45,11 +45,6 @@ function validateName(name: string): string | null {
 
 function validateImage(image: string): string | null {
   if (!image) return "Base image is required"
-  const lower = image.toLowerCase()
-  if (lower.includes("alpine"))
-    return "Alpine images are not supported. Pick a glibc-based image."
-  if (lower.includes("distroless"))
-    return "Distroless images are not supported."
   return null
 }
 
@@ -195,7 +190,7 @@ export function CreateTemplateDialog({
           <Field
             label="Base image"
             required
-            description="Linux/amd64 image with glibc. Alpine and distroless are not supported."
+            description="Linux/amd64 image with /bin/sh, mkdir, mount, chmod, and sync."
           >
             <div className="grid grid-cols-2 gap-2">
               {CURATED_IMAGES.map((img) => {

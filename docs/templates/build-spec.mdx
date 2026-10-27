@@ -17,8 +17,7 @@ from: "ghcr.io/myorg/foo:v1" // any OCI registry
 **Constraints:**
 
 - Must be a **linux/amd64** image
-- **Alpine bases are rejected**
-- **Distroless bases are rejected** — they ship no shell, so `run` steps can't execute
+- Must include a shell at `/bin/sh` and the `mkdir`, `mount`, `chmod`, and `sync` commands, which every template boots and builds with. Debian, Ubuntu, Alpine, and BusyBox images all qualify; distroless and `scratch`-based images don't.
 
 ## `steps`: ordered build steps
 
@@ -96,6 +95,7 @@ When a build lands on `failed`, `BuildError.code` carries one of these stable id
 | ---------------------- | -------------------------------------------------------------------------------------------- |
 | `bad_reference`        | The `from` image reference is malformed (expected `python:3.11` or `ghcr.io/org/image:tag`). |
 | `unsupported_platform` | The base image isn't `linux/amd64`.                                                          |
+| `unsupported_base`     | Base image has no `/bin/sh`, `mkdir`, `mount`, `chmod`, or `sync`; the message says which.   |
 | `image_pull_failed`    | Base image couldn't be pulled or resolved — bad reference, or the registry was unreachable.  |
 | `image_unsafe`         | Image rejected for unsafe paths (tar / symlink / hardlink entries escaping the root).        |
 | `image_too_large`      | Flattened image exceeds the requested `diskMib`; raise `diskMib`.                            |

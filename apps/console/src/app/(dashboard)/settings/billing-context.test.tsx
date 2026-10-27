@@ -15,6 +15,7 @@ import SettingsPage from "./page"
 
 const getBillingSummary = vi.fn()
 const getBillingPricing = vi.fn()
+const getTeamPlan = vi.fn()
 let directory: TeamDirectoryResponse | undefined
 let client: QueryClient
 
@@ -22,6 +23,12 @@ vi.mock("@/lib/api/billing", () => ({
   getBillingSummary: () => getBillingSummary(),
   getBillingPricing: () => getBillingPricing(),
   getBillingUsageSeries: vi.fn(),
+}))
+vi.mock("@/hooks/use-billing-v2", () => ({
+  useTeamPlan: () => getTeamPlan(),
+  useFreeAllowance: () => ({ data: undefined }),
+  useAllowancePricing: () => ({ data: undefined }),
+  usePrepaidBalance: () => ({ data: undefined }),
 }))
 vi.mock("@/hooks/use-teams", () => ({ useTeams: () => ({ data: directory }) }))
 vi.mock("@/hooks/use-user", () => ({
@@ -70,6 +77,7 @@ describe("Settings billing context isolation", () => {
   beforeEach(() => {
     getBillingSummary.mockReset()
     getBillingPricing.mockReset()
+    getTeamPlan.mockReset().mockReturnValue({ data: undefined, isError: false })
     selectTeam("team-a", "use")
   })
   afterEach(() => client?.clear())
@@ -267,4 +275,64 @@ describe("Settings billing context isolation", () => {
       expect(screen.queryByText("$0.000108 / GiB-hour")).not.toBeInTheDocument()
     },
   )
+  it("shows the authoritative Free plan and actual limits in Settings", async () => {
+    const fixture = billingFixture("paid")
+    fixture.summary.permissions.can_manage = true
+    getBillingSummary.mockResolvedValue(fixture.summary)
+    getBillingPricing.mockResolvedValue(fixture.pricing)
+    getTeamPlan.mockReturnValue({
+      data: {
+        key: "free-configured",
+        name: "Free",
+        kind: "free",
+        fee_cents: null,
+        included_cents: null,
+        period_start: null,
+        period_end: null,
+        pending_change: null,
+        limits: {
+          max_concurrent: 1,
+          max_vcpu: 1,
+          max_memory_mib: 1024,
+          max_disk_mib: 10240,
+          max_templates: 2,
+        },
+      },
+    })
+    render(
+      <QueryProvider>
+        <Page />
+      </QueryProvider>,
+    )
+    expect(await screen.findByText("Free")).toBeInTheDocument()
+    expect(
+      screen.getByText("Custom templates").nextElementSibling,
+    ).toHaveTextContent("2")
+    expect(screen.getByRole("link", { name: "Change plan" })).toHaveAttribute(
+      "href",
+      "/plan-usage/upgrade",
+    )
+    expect(screen.queryByText("Usage-based billing")).not.toBeInTheDocument()
+    expect(screen.queryByText("Usage limits")).not.toBeInTheDocument()
+  })
+
+  it("does not guess a plan family when the plan request fails", async () => {
+    const fixture = billingFixture("paid")
+    getBillingSummary.mockResolvedValue(fixture.summary)
+    getBillingPricing.mockResolvedValue(fixture.pricing)
+    getTeamPlan.mockReturnValue({ data: undefined, isError: true })
+    render(
+      <QueryProvider>
+        <Page />
+      </QueryProvider>,
+    )
+    expect(
+      await screen.findByText("Your plan could not be loaded."),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("Free")).not.toBeInTheDocument()
+    expect(screen.queryByText("Usage-based billing")).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("link", { name: "Change plan" }),
+    ).not.toBeInTheDocument()
+  })
 })
