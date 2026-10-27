@@ -77,8 +77,16 @@ export function BuyCreditPageClient({
     (!(checkoutRecoveryPath(callbackPath) ?? checkoutEntryPath(callbackPath)) ||
       returnTeam !== teamKey)
   const contextMatched = ready && !returnMismatch && !genericFlowPending
-  const { data: credit, isLoading, error } = usePrepaidCredit(contextMatched)
+  const {
+    data: credit,
+    isLoading,
+    error,
+    refetch,
+  } = usePrepaidCredit(contextMatched)
   const data = contextMatched && !error ? credit : undefined
+  const returnedPurchase = data?.purchases.find(
+    (item) => item.id === params.get("purchase_id"),
+  )
   const summaryQuery = useBillingSummary(contextMatched)
   const summary = summaryQuery.isError ? undefined : summaryQuery.data
   const scope = useQueryScope()
@@ -109,9 +117,15 @@ export function BuyCreditPageClient({
             allowSwitch={scope === "self"}
           />
         ) : null}
-        {contextMatched && purchase === "success" && (
+        {contextMatched && purchase === "success" && !error && (
           <p className="border border-dashed border-border p-3 text-sm text-foreground">
-            Checking payment status. Credit appears after payment is confirmed.
+            {returnedPurchase?.state === "credited"
+              ? "Payment confirmed. Credit has been added."
+              : returnedPurchase?.state === "paid"
+                ? "Payment confirmed. Credit is being added."
+                : returnedPurchase?.state === "failed"
+                  ? "This payment failed. Check recent purchases for details."
+                  : "Checking payment status. Credit appears after payment is confirmed."}
           </p>
         )}
         {contextMatched && purchase === "cancel" && (
@@ -128,9 +142,10 @@ export function BuyCreditPageClient({
           </p>
         ) : null}
         {contextMatched && error && (
-          <p className="text-sm text-destructive">
-            Credit balance is unavailable. Please reload.
-          </p>
+          <div role="alert" className="space-y-2 text-sm text-destructive">
+            <p>Credit balance and payment status are unavailable.</p>
+            <Button onClick={() => void refetch()}>Check status</Button>
+          </div>
         )}
         {data && (
           <>
