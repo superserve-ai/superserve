@@ -650,3 +650,26 @@ it.each(["billing=unknown", "billing=success&billing=cancel"])(
     expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
   },
 )
+
+it.each([
+  "billing=unknown",
+  "billing=success&billing=cancel",
+  "billing=unknown&billing_flow=success",
+  "billing=success&billing=cancel&billing_flow=success",
+])("fences teamless invalid Starter legacy returns: %s", (query) => {
+  window.history.replaceState({}, "", `/plan-usage/buy-credit/?${query}`)
+  const view = () => (
+    <>
+      <PlanBanner />
+      <BuyCreditRoute />
+    </>
+  )
+  const mounted = render(view())
+  mounted.rerender(view())
+  expect(screen.getByText(/incomplete or invalid/)).toBeTruthy()
+  expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
+  expect(state.prepaid).toHaveBeenLastCalledWith(false)
+  expect(new URLSearchParams(window.location.search).getAll("billing")).toEqual(
+    new URLSearchParams(query).getAll("billing"),
+  )
+})

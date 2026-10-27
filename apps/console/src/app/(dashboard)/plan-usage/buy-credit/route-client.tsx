@@ -16,6 +16,7 @@ import { BuyCreditPageClient } from "./page-client"
 export function BuyCreditRoute() {
   const params = useSearchParams()
   const returning =
+    params.has("billing") ||
     params.has("purchase") ||
     params.has("team") ||
     params.has("purchase_id") ||

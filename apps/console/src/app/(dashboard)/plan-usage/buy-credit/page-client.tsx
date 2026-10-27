@@ -76,6 +76,7 @@ export function BuyCreditPageClient({
   const returnTeam = params.get("team")
   const callbackPath = `/plan-usage/buy-credit/?${params.toString()}`
   const returning =
+    params.has("billing") ||
     params.has("purchase") ||
     params.has("team") ||
     params.has("purchase_id") ||
