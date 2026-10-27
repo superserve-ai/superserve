@@ -438,8 +438,12 @@ describe("PlanUsagePage", () => {
       },
     })
     renderPage()
-    expect(screen.getByText("Current plan")).toBeInTheDocument()
-    expect(screen.getByText("Free")).toBeInTheDocument()
+    expect(
+      screen.getByRole("region", { name: "Usage and balance" }),
+    ).toBeInTheDocument()
+    expect(screen.getByText("Usage limits")).toBeInTheDocument()
+    expect(screen.queryByText("Current plan")).not.toBeInTheDocument()
+    expect(screen.queryByText("Free")).not.toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Upgrade" })).toBeInTheDocument()
     expect(
       screen.queryByText(
@@ -482,7 +486,7 @@ describe("PlanUsagePage", () => {
   })
 
   it("shows a not-charged indicator for shadow usage", () => {
-    const summaryQuery = useBillingSummary.mock.results[0]?.value
+    const summaryQuery = useBillingSummary()
     useBillingSummary.mockReturnValue({
       ...summaryQuery,
       data: { ...summaryQuery.data, billing_mode: "shadow" },

@@ -11,7 +11,11 @@ export const metadata: Metadata = {
 export default async function ProPaymentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ billing?: string; return?: string; team?: string }>
+  searchParams: Promise<{
+    billing?: string | string[]
+    return?: string | string[]
+    team?: string | string[]
+  }>
 }) {
   const { billing, return: returnTo, team: checkoutTeam } = await searchParams
   return (
@@ -19,8 +23,10 @@ export default async function ProPaymentPage({
       billingReturn={
         billing === "success" || billing === "cancel" ? billing : undefined
       }
-      returnTo={safeReturnPath(returnTo)}
-      checkoutTeam={checkoutTeam}
+      returnTo={safeReturnPath(
+        typeof returnTo === "string" ? returnTo : undefined,
+      )}
+      checkoutTeam={typeof checkoutTeam === "string" ? checkoutTeam : undefined}
     />
   )
 }

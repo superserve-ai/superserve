@@ -90,14 +90,6 @@ function billingModeCopy(
     }
   }
 
-  if (mode === "live") {
-    return {
-      title: "Billing is live",
-      message: "Usage is being exported to Stripe for invoicing.",
-      variant: "success" as const,
-    }
-  }
-
   return null
 }
 
@@ -322,6 +314,17 @@ export function CustomerBillingSection({
     }
   }, [queryClient])
 
+  const payment = paymentSummary(summary, latestPeriod)
+  const successfulPayment =
+    payment.headline === "Connected" &&
+    !periodsQuery.error &&
+    latestPeriod !== null &&
+    ["active", "exported", "approved"].includes(latestPeriod.status) &&
+    !latestPeriod.blocked_reason &&
+    !latestPeriod.cancel_at_period_end &&
+    (!latestPeriod?.stripe_invoice_status ||
+      latestPeriod.stripe_invoice_status === "paid") &&
+    latestPeriod.stripe_subscription_status === "active"
   const modeCopy = billingModeCopy(summary?.billing_mode)
   const canManageBilling = Boolean(summary?.permissions?.can_manage)
   const canOpenPortal = Boolean(summary?.portal_available)
@@ -474,7 +477,12 @@ export function CustomerBillingSection({
         </Alert>
       )}
 
-      <div className="grid gap-3 lg:grid-cols-3">
+      <div
+        className={cn(
+          "grid gap-3",
+          successfulPayment ? "lg:grid-cols-2" : "lg:grid-cols-3",
+        )}
+      >
         <Card className="border-border/70 bg-background/60">
           <CardContent className="space-y-2 p-4">
             <p className="font-mono text-[10px] font-semibold tracking-wide text-muted uppercase">
@@ -493,22 +501,22 @@ export function CustomerBillingSection({
           </CardContent>
         </Card>
 
-        <Card className="border-border/70 bg-background/60">
-          <CardContent className="space-y-2 p-4">
-            <p className="font-mono text-[10px] font-semibold tracking-wide text-muted uppercase">
-              Payment Status
-            </p>
-            <p className="text-sm font-medium text-foreground">
-              {paymentSummary(summary, latestPeriod).headline}
-            </p>
-            <p className="text-xs text-muted">
-              {paymentSummary(summary, latestPeriod).detail}
-            </p>
-            {latestPeriod?.cancel_at_period_end && (
-              <p className="text-xs text-muted">Cancel at period end: yes</p>
-            )}
-          </CardContent>
-        </Card>
+        {!successfulPayment ? (
+          <Card className="border-border/70 bg-background/60">
+            <CardContent className="space-y-2 p-4">
+              <p className="font-mono text-[10px] font-semibold tracking-wide text-muted uppercase">
+                Payment Status
+              </p>
+              <p className="text-sm font-medium text-foreground">
+                {payment.headline}
+              </p>
+              <p className="text-xs text-muted">{payment.detail}</p>
+              {latestPeriod?.cancel_at_period_end && (
+                <p className="text-xs text-muted">Cancel at period end: yes</p>
+              )}
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Card className="border-border/70 bg-background/60">
           <CardContent className="space-y-2 p-4">
