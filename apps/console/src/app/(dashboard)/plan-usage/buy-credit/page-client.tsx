@@ -199,7 +199,8 @@ export function BuyCreditPageClient({
             ) : null}
             {!allowRecharge ? (
               <p className="text-sm text-muted">
-                Auto-recharge changes are temporarily unavailable. You can still turn auto-recharge off.
+                Auto-recharge changes are temporarily unavailable. You can still
+                turn auto-recharge off.
               </p>
             ) : null}
             <AutoRechargeCard
