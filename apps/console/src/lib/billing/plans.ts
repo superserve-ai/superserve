@@ -82,6 +82,15 @@ export const planCardSchema = z.object({
 export const publicBillingPlansSchema = z.object({
   pricing_version: pricingVersionSchema,
   cards: z.array(planCardSchema),
+  signup_admission: z
+    .object({
+      schema_version: z.literal(1),
+      pricing_version: pricingVersionSchema,
+      source: z.enum(["legacy", "all_teams", "new_team"]),
+      entry_open: z.boolean(),
+      epoch: z.string().uuid().nullable(),
+    })
+    .optional(),
 })
 
 export type PlanGrant = z.infer<typeof planGrantSchema>

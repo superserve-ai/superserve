@@ -1,3 +1,17 @@
+vi.mock("@/hooks/use-billing-capabilities", () => ({
+  useBillingCapabilities: () => ({
+    data: {
+      pricing_version: useTeamPlan().data ? "v2" : "legacy",
+      entry_open: !!useTeamPlan().data,
+      fresh_entry: {
+        starter: !!useTeamPlan().data,
+        pro: !!useTeamPlan().data,
+        auto_recharge: false,
+        choose_free: false,
+      },
+    },
+  }),
+}))
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { fireEvent, render, screen, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"

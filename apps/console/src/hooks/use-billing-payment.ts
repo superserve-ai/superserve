@@ -5,6 +5,7 @@ import { type QueryClient, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 
 import { useQueryScope } from "@/components/query-provider"
+import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
 import { useUser } from "@/hooks/use-user"
 import type { BillingSummaryResponse } from "@/lib/api/billing"
 import {
@@ -21,6 +22,8 @@ export function useBillingPayment(
   summary: BillingSummaryResponse | null | undefined,
   teamKey: string | null,
 ) {
+  const capabilities = useBillingCapabilities()
+  const legacyCheckout = capabilities.data?.pricing_version === "legacy"
   const { addToast } = useToast()
   const { user } = useUser()
   const queryClient = useQueryClient()
@@ -45,7 +48,8 @@ export function useBillingPayment(
   const available = Boolean(
     user &&
     summary?.permissions?.can_manage &&
-    (summary.portal_available || summary.checkout_available) &&
+    (summary.portal_available ||
+      (summary.checkout_available && legacyCheckout)) &&
     cacheScope === "self",
   )
 

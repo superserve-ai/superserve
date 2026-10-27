@@ -19,6 +19,7 @@ function ProPayment(props: React.ComponentProps<typeof ActualProPayment>) {
 }
 
 const state = vi.hoisted(() => ({
+  entryOpen: true,
   terms: undefined as unknown,
   termsError: false,
   termsFetching: false,
@@ -123,10 +124,20 @@ vi.mock("@/hooks/use-billing-summary", () => ({
     isError: state.summaryError,
   }),
 }))
-vi.mock("@/hooks/use-public-billing-plans", () => ({
-  usePublicBillingPlans: () => ({
-    data: state.plans,
+vi.mock("@/hooks/use-billing-capabilities", () => ({
+  useBillingCapabilities: () => ({
+    data: state.plans
+      ? {
+          catalog: state.plans,
+          pricing_version: state.plans.pricing_version,
+          entry_open: state.entryOpen && state.plans.pricing_version === "v2",
+          fresh_entry: {
+            pro: state.entryOpen && state.plans.pricing_version === "v2",
+          },
+        }
+      : undefined,
     isPending: false,
+    isError: false,
     refetch: async () => ({ isError: false }),
   }),
 }))
@@ -180,6 +191,7 @@ async function readyContinue() {
   return button
 }
 beforeEach(() => {
+  state.entryOpen = true
   state.liveTermsQuery = false
   state.liveQueryClient = false
   state.readTerms.mockReset()
@@ -589,7 +601,7 @@ async function showPendingStarter() {
       ...pendingStarter,
       outcome: "pending_starter_checkout",
     })
-  render(<ProPayment returnTo="/plan-usage/" />)
+  const mounted = render(<ProPayment returnTo="/plan-usage/" />)
   fireEvent.click(await readyContinue())
   await screen.findByText(
     "This team already has a paid plan or a payment in progress.",
@@ -598,6 +610,7 @@ async function showPendingStarter() {
     await screen.findByRole("button", { name: "Check payment status" }),
   )
   await screen.findByRole("button", { name: "Resume your $25 credit purchase" })
+  return mounted
 }
 
 describe("original Starter checkout recovery", () => {
@@ -1074,3 +1087,62 @@ describe("completed Pro callback refreshes authoritative plan cache", () => {
     client.clear()
   })
 })
+
+it("retains enrolled v2 display but denies a new Pro purchase when the cohort gate closes", async () => {
+  state.plans = availablePlans
+  state.entryOpen = false
+  render(<ProPayment returnTo="/plan-usage/" />)
+  expect(await screen.findByText(/Pro isn’t available/)).toBeTruthy()
+  expect(
+    screen.queryByRole("button", { name: "Continue to payment" }),
+  ).toBeNull()
+  expect(state.start).not.toHaveBeenCalled()
+  expect(
+    screen.getByRole("button", { name: "Check payment status" }),
+  ).not.toBeDisabled()
+})
+
+it.each([
+  [false, false],
+  [false, true],
+  [true, false],
+  [true, true],
+])(
+  "recovers the original local Starter operation after capability outage=%s, cancel=%s",
+  async (outage, cancel) => {
+    const mounted = await showPendingStarter()
+    state.entryOpen = false
+    if (outage) state.plans = undefined
+    mounted.rerender(<ProPayment returnTo="/plan-usage/" />)
+    state.starterRecover.mockResolvedValue(
+      cancel
+        ? { outcome: "retryable" }
+        : { outcome: "recovered", url: "https://checkout.stripe.com/saved" },
+    )
+    const assign = vi
+      .spyOn(window.location, "assign")
+      .mockImplementation(() => {})
+    const button = await screen.findByRole("button", {
+      name: cancel
+        ? "Cancel this purchase and choose Pro"
+        : "Resume your $25 credit purchase",
+    })
+    await waitFor(() => expect(button).not.toBeDisabled())
+    fireEvent.click(button)
+    await waitFor(() =>
+      expect(state.starterRecover).toHaveBeenCalledWith(
+        "use:11111111-1111-4111-8111-111111111111",
+        expect.objectContaining(pendingStarter),
+        cancel,
+      ),
+    )
+    expect(state.start).toHaveBeenCalledTimes(1)
+    if (!cancel)
+      await waitFor(() =>
+        expect(assign).toHaveBeenCalledWith(
+          "https://checkout.stripe.com/saved",
+        ),
+      )
+    assign.mockRestore()
+  },
+)

@@ -2,6 +2,7 @@
 
 import { CurrentPlan } from "@/components/current-plan"
 import { useQueryScope } from "@/components/query-provider"
+import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
 import {
   useFreeAllowance,
   useAllowancePricing,
@@ -26,6 +27,7 @@ export function PlanOverviewSection({
   details?: boolean
 }) {
   const scope = useQueryScope()
+  const capabilities = useBillingCapabilities()
   const planQuery = useTeamPlan(true)
   const plan = planQuery.data
   const allowance = useFreeAllowance(!details && plan?.kind === "free").data
@@ -100,6 +102,12 @@ export function PlanOverviewSection({
       prepaid={prepaid ?? null}
       usageCents={matchingPeriod ? toCents(summary.current_charges_usd) : null}
       canManage={canManage}
+      canPurchase={
+        plan.kind === "free"
+          ? capabilities.data?.fresh_entry.pro === true ||
+            capabilities.data?.fresh_entry.starter === true
+          : capabilities.data?.fresh_entry.starter === true
+      }
     />
   )
 }

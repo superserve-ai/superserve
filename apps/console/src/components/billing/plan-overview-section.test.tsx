@@ -1,3 +1,19 @@
+vi.mock("@/hooks/use-billing-capabilities", () => ({
+  useBillingCapabilities: () => ({
+    data: mocks.capabilitiesUnavailable
+      ? undefined
+      : {
+          pricing_version: "v2",
+          entry_open: true,
+          fresh_entry: {
+            starter: true,
+            pro: true,
+            auto_recharge: true,
+            choose_free: true,
+          },
+        },
+  }),
+}))
 import { render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -5,6 +21,7 @@ import type { BillingSummaryResponse } from "@/lib/api/billing"
 import type { FreeAllowance, TeamPlan } from "@/lib/api/billing-v2"
 
 const mocks = vi.hoisted(() => ({
+  capabilitiesUnavailable: false,
   version: vi.fn(),
   plan: vi.fn(),
   allowance: vi.fn(),
@@ -83,6 +100,7 @@ function plan(overrides: Partial<TeamPlan>): TeamPlan {
 }
 
 beforeEach(() => {
+  mocks.capabilitiesUnavailable = false
   mocks.plan.mockReturnValue({ data: null, isError: false })
   mocks.allowance.mockReturnValue({ data: undefined })
   mocks.prepaid.mockReturnValue({ data: undefined })
@@ -589,4 +607,20 @@ describe("Settings plan details", () => {
     ).toBeNull()
     expect(screen.queryByRole("link", { name: "Change plan" })).toBeNull()
   })
+})
+
+it("keeps Settings recovery and recharge-disable navigation when capabilities are unavailable", () => {
+  mocks.capabilitiesUnavailable = true
+  mocks.plan.mockReturnValue({
+    data: plan({ key: "starter", name: "Starter", kind: "prepaid" }),
+    isError: false,
+  })
+  render(<PlanOverviewSection summary={summary} details />)
+  expect(screen.getByRole("link", { name: "Change plan" })).toHaveAttribute(
+    "href",
+    "/plan-usage/upgrade",
+  )
+  expect(
+    screen.getByRole("link", { name: "Manage auto-recharge" }),
+  ).toHaveAttribute("href", "/plan-usage/buy-credit")
 })

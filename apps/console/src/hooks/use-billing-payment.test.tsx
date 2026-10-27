@@ -1,3 +1,10 @@
+vi.mock("@/hooks/use-billing-capabilities", () => ({
+  useBillingCapabilities: () => ({
+    data: mocks.capabilityModel
+      ? { pricing_version: mocks.capabilityModel }
+      : undefined,
+  }),
+}))
 vi.mock("@/hooks/use-user", () => ({
   useUser: () => ({ user: { id: "u1" }, loading: false }),
 }))
@@ -11,6 +18,7 @@ import { teamKeys } from "@/lib/api/query-keys"
 import { useBillingPayment } from "./use-billing-payment"
 
 const mocks = vi.hoisted(() => ({
+  capabilityModel: "legacy" as "legacy" | "v2" | undefined,
   checkout: vi.fn(),
   portal: vi.fn(),
   publishEvidence: vi.fn(),
@@ -49,6 +57,7 @@ function setup(value = summary) {
   return { ...hook, client }
 }
 beforeEach(() => {
+  mocks.capabilityModel = "legacy"
   sessionStorage.clear()
   vi.clearAllMocks()
   mocks.scope.mockReturnValue("self")
@@ -249,3 +258,25 @@ it.each([false, true])(
     }
   },
 )
+
+it("never falls back to legacy card checkout after enrolled capabilities become unavailable", async () => {
+  mocks.capabilityModel = "v2"
+  const { result, rerender } = setup()
+  expect(result.current.available).toBe(false)
+  mocks.capabilityModel = undefined
+  rerender({ teamKey: "use:a" })
+  await act(() => result.current.openSession())
+  expect(result.current.available).toBe(false)
+  expect(mocks.checkout).not.toHaveBeenCalled()
+  rerender({ teamKey: "use:other" })
+  await act(() => result.current.openSession())
+  expect(mocks.checkout).not.toHaveBeenCalled()
+})
+it("preserves the existing customer portal when capabilities are unavailable", async () => {
+  mocks.capabilityModel = undefined
+  mocks.portal.mockRejectedValue(new Error("Portal unavailable"))
+  const { result } = setup({ ...summary, portal_available: true })
+  await act(() => result.current.openSession())
+  expect(mocks.portal).toHaveBeenCalledTimes(1)
+  expect(mocks.checkout).not.toHaveBeenCalled()
+})

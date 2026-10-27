@@ -113,6 +113,23 @@ describe("api proxy /api/[...path]", () => {
     vi.mocked(getImpersonationContext).mockResolvedValue(null)
   })
 
+  it("forwards team capabilities only through authenticated billing reads", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ schema_version: 1 }), { status: 200 }),
+    )
+    const path = ["billing", "capabilities"]
+    const response = await GET(req("GET", path), params(path))
+    expect(response.status).toBe(200)
+    expect(String(fetchSpy.mock.calls[0][0])).toContain("/billing/capabilities")
+    vi.mocked(createServerClient).mockResolvedValue({
+      auth: { getUser: async () => ({ data: { user: null } }) },
+    } as never)
+    fetchSpy.mockClear()
+    const denied = await GET(req("GET", path), params(path))
+    expect(denied.status).toBe(401)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
   it("returns 404 for a path outside the allowed prefixes", async () => {
     const res = await GET(req("GET", ["unknown"]), params(["unknown"]))
     expect(res.status).toBe(404)

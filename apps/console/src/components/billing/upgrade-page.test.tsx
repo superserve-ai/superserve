@@ -1,3 +1,16 @@
+vi.mock("@/hooks/use-billing-capabilities", () => ({
+  useBillingCapabilities: () => ({
+    data: {
+      pricing_version: mocks.version(),
+      entry_open: mocks.version() === "v2",
+      fresh_entry: {
+        starter: mocks.version() === "v2",
+        pro: mocks.version() === "v2",
+        choose_free: mocks.version() === "v2",
+      },
+    },
+  }),
+}))
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -146,14 +159,14 @@ beforeEach(() => {
 
 describe("UpgradePage with pricing v2 off", () => {
   it.each(["subscription", "prepaid", "custom"] as const)(
-    "keeps %s exits available while hiding purchases",
+    "keeps %s visible without starting a new transition while admission is closed",
     async (kind) => {
       mocks.version.mockReturnValue("legacy")
       mocks.plan.mockReturnValue({ data: { ...pro, kind }, isError: false })
       mount()
       expect(
-        screen.getByRole("button", { name: "Switch to Free" }),
-      ).toBeTruthy()
+        screen.queryByRole("button", { name: "Switch to Free" }),
+      ).toBeNull()
       expect(screen.queryByRole("link", { name: /Get |Book/ })).toBeNull()
       expect(screen.queryByTestId("plan-card-pro_monthly")).toBeNull()
       expect(mocks.replace).not.toHaveBeenCalled()
@@ -190,7 +203,8 @@ describe("UpgradePage with pricing v2 off", () => {
   it("waits without redirecting while the switch hasn't answered", () => {
     mocks.version.mockReturnValue("unknown")
     const { container } = mount()
-    expect(container.textContent).toBe("")
+    expect(container.textContent).toContain("New purchases are unavailable")
+    expect(screen.queryByRole("button", { name: "Switch to Free" })).toBeNull()
     expect(mocks.replace).not.toHaveBeenCalled()
     expect(mocks.plan).toHaveBeenCalledWith(true)
   })

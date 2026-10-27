@@ -1,3 +1,17 @@
+vi.mock("@/hooks/use-billing-capabilities", () => ({
+  useBillingCapabilities: () => ({
+    data: {
+      pricing_version: "v2",
+      entry_open: true,
+      fresh_entry: {
+        starter: true,
+        pro: true,
+        auto_recharge: true,
+        choose_free: true,
+      },
+    },
+  }),
+}))
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"

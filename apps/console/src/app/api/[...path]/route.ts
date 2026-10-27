@@ -47,6 +47,7 @@ const ALLOWED_PREFIXES = [
 ]
 
 const BILLING_V2_READ_PATHS = new Set([
+  "billing/capabilities",
   "billing/plans/public",
   "billing/plan",
   "billing/free-allowance",

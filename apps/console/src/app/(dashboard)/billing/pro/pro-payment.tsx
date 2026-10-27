@@ -16,10 +16,10 @@ import {
   useDashboardTeamContext,
   useQueryScope,
 } from "@/components/query-provider"
+import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { usePendingStarterCheckout } from "@/hooks/use-pending-starter-checkout"
-import { usePublicBillingPlans } from "@/hooks/use-public-billing-plans"
 import { useTeams } from "@/hooks/use-teams"
 import { useUser } from "@/hooks/use-user"
 import { teamPlanSchema } from "@/lib/api/billing-v2"
@@ -122,12 +122,14 @@ function ProPaymentContext({
       !busy,
     staleTime: 0,
   })
-  const plansQuery = usePublicBillingPlans(team?.region, !!team)
+  const capabilities = useBillingCapabilities()
+  const plansQuery = { ...capabilities, data: capabilities.data?.catalog }
   const pro = planCard(plansQuery.data, "pro")
   const summaryQuery = useBillingSummary(!!team)
   const canContinue =
     ready &&
     scope === "self" &&
+    capabilities.data?.fresh_entry.pro === true &&
     !summaryQuery.isError &&
     Boolean(actor && summaryQuery.data?.permissions?.can_manage)
   const canRecover =
@@ -369,7 +371,7 @@ function ProPaymentContext({
         !starter ||
         starter.actor !== actor ||
         starter.team !== teamKey ||
-        !canContinue ||
+        !canRecover ||
         teamMismatch ||
         teamMutating ||
         queryClientRef.current.isMutating({ mutationKey: ["switch-team"] })
@@ -482,6 +484,7 @@ function ProPaymentContext({
             !team ||
             (!confirming && (plansQuery.isPending || summaryQuery.isPending)),
           plans: summaryQuery.isError ? undefined : plansQuery.data,
+          entryOpen: capabilities.data?.fresh_entry.pro === true,
           paidPlan,
           conflict: conflict || starterCheckRequired,
           confirming,
@@ -522,7 +525,7 @@ function ProPaymentContext({
           <PendingStarterPayment
             purchase={starter.purchase}
             busy={busy || teamMutating}
-            canManage={canContinue}
+            canManage={canRecover}
             error={error}
             onResume={() => actOnStarter(false)}
             onCancel={() => actOnStarter(true)}

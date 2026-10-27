@@ -57,7 +57,8 @@ const STATE_LABELS: Record<PrepaidPurchase["state"], string> = {
 
 export function BuyCreditPageClient({
   allowEntry = true,
-}: { allowEntry?: boolean } = {}) {
+  allowRecharge = allowEntry,
+}: { allowEntry?: boolean; allowRecharge?: boolean } = {}) {
   const params = useSearchParams()
   const genericFlowPending =
     genericBillingReturnState(new URLSearchParams(params.toString())) !== null
@@ -199,7 +200,7 @@ export function BuyCreditPageClient({
             ) : null}
             <AutoRechargeCard
               key={[
-                allowEntry,
+                allowRecharge,
                 data.auto_recharge.enabled,
                 data.auto_recharge.threshold_cents,
                 data.auto_recharge.amount_cents,
@@ -207,7 +208,7 @@ export function BuyCreditPageClient({
               ].join(":")}
               data={data}
               canManage={canManage}
-              allowEntry={allowEntry}
+              allowEntry={allowRecharge}
             />
             <PurchaseHistory purchases={data.purchases} />
           </>

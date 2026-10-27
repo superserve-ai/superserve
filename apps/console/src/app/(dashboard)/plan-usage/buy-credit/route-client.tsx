@@ -3,6 +3,7 @@
 import { Spinner } from "@superserve/ui"
 import { useSearchParams } from "next/navigation"
 
+import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
 import {
   usePrepaidCredit,
   useRetainedPrepaidOperations,
@@ -19,13 +20,18 @@ export function BuyCreditRoute() {
     params.has("team") ||
     params.has("purchase_id") ||
     params.has("billing_flow")
+  const capabilities = useBillingCapabilities()
   const version = usePricingVersion()
+  const entry = capabilities.data?.fresh_entry.starter === true
+  const recharge = capabilities.data?.fresh_entry.auto_recharge === true
   const existing = usePrepaidCredit(
     !returning && version !== undefined && version !== "v2",
   )
   const retained = useRetainedPrepaidOperations(existing.data?.purchases)
-  if (returning) return <BuyCreditPageClient allowEntry={version === "v2"} />
-  if (version === "v2") return <BuyCreditPageClient />
+  if (returning)
+    return <BuyCreditPageClient allowEntry={entry} allowRecharge={recharge} />
+  if (version === "v2")
+    return <BuyCreditPageClient allowEntry={entry} allowRecharge={recharge} />
   if (
     retained.length > 0 ||
     (existing.data?.balance_cents ?? 0) !== 0 ||

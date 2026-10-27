@@ -299,6 +299,7 @@ export interface PlanOverviewProps {
   includedUsageStatus?: BillingIncludedUsage["status"]
   bridgeMonthlyStartsAt?: string
   canManage: boolean
+  canPurchase?: boolean
   allowancePricing?: BillingPricingResponse | null
 }
 
@@ -381,6 +382,7 @@ export function PlanOverview({
   bridgeMonthlyStartsAt,
   allowancePricing,
   canManage,
+  canPurchase = true,
 }: PlanOverviewProps) {
   return (
     <section
@@ -424,7 +426,9 @@ export function PlanOverview({
             </p>
           </Panel>
         )}
-        {canManage && (plan.kind === "free" || plan.kind === "prepaid") ? (
+        {canManage &&
+        canPurchase &&
+        (plan.kind === "free" || plan.kind === "prepaid") ? (
           <div className="px-5 pb-5 sm:px-6 sm:pb-6">
             <Button
               size="sm"

@@ -27,6 +27,7 @@ export type ProPaymentStep =
 // on sale, so turning pricing v2 off never hides a paying customer's plan.
 export function proPaymentStep(state: {
   loading: boolean
+  entryOpen?: boolean
   plans?: PublicBillingPlans
   paidPlan?: string | null
   conflict: boolean
@@ -38,6 +39,7 @@ export function proPaymentStep(state: {
   if (state.confirming) return "confirming"
   if (state.paidPlan) return "subscribed"
   if (
+    state.entryOpen === false ||
     state.plans?.pricing_version !== "v2" ||
     !planCard(state.plans, "pro")?.monthly?.available
   )

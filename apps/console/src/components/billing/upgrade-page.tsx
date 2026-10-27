@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 
 import { PageHeader } from "@/components/page-header"
+import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { useTeamPlan } from "@/hooks/use-billing-v2"
@@ -155,8 +156,9 @@ function PendingChange({
 
 export function UpgradePage() {
   const router = useRouter()
+  const capabilities = useBillingCapabilities()
   const version = usePricingVersionState()
-  const v2 = version === "v2"
+  const v2 = version === "v2" && capabilities.data?.entry_open === true
   const { teamKey, ready, cacheScope } = useBillingContext()
   const planQuery = useTeamPlan(true)
   const catalogQuery = useCatalogPlans()
@@ -177,7 +179,7 @@ export function UpgradePage() {
   }, [version, planQuery.data, router])
 
   if (
-    version === "unknown" ||
+    (version === "unknown" && !planQuery.data) ||
     (version === "legacy" && planQuery.data === null)
   )
     return null
@@ -236,10 +238,12 @@ export function UpgradePage() {
             {!v2 ? (
               <div className="space-y-3">
                 <p className="text-sm text-muted">
-                  New purchases are unavailable. You can still leave your
-                  current plan or undo a scheduled change.
+                  New purchases are unavailable. You can still view your current
+                  plan and undo a scheduled change.
                 </p>
-                {canManage && !plan.pending_change ? (
+                {canManage &&
+                capabilities.data?.fresh_entry.choose_free &&
+                !plan.pending_change ? (
                   <div className="flex flex-wrap gap-3">
                     {plan.kind === "subscription" ? (
                       <Button
@@ -287,7 +291,16 @@ export function UpgradePage() {
                   key={entry.key}
                   plan={entry}
                   current={plan}
-                  canManage={canManage}
+                  canManage={
+                    canManage &&
+                    (entry.kind === "free"
+                      ? capabilities.data?.fresh_entry.choose_free === true
+                      : entry.kind === "prepaid"
+                        ? capabilities.data?.fresh_entry.starter === true
+                        : entry.kind === "subscription"
+                          ? capabilities.data?.fresh_entry.pro === true
+                          : true)
+                  }
                   onDowngrade={(entry) =>
                     teamKey && setTarget({ plan: entry, teamKey })
                   }
@@ -297,7 +310,13 @@ export function UpgradePage() {
           </>
         )}
       </div>
-      {target && target.teamKey === teamKey && ready && canManage ? (
+      {target &&
+      target.teamKey === teamKey &&
+      ready &&
+      canManage &&
+      (target.plan.kind === "free"
+        ? capabilities.data?.fresh_entry.choose_free
+        : capabilities.data?.fresh_entry.starter) ? (
         <PlanChangeDialog
           key={`${target.teamKey}:${target.plan.key}`}
           target={target.plan}

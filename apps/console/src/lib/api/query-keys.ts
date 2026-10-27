@@ -79,6 +79,18 @@ export const networkKeys = {
 
 export const billingKeys = {
   all: ["billing"] as const,
+  capabilities: (context: {
+    cacheScope: string
+    teamKey: string
+    actor: string
+  }) =>
+    [
+      "billing",
+      "capabilities",
+      context.cacheScope,
+      context.actor,
+      context.teamKey,
+    ] as const,
   publicPlans: (region: string) => ["billing", "public-plans", region] as const,
   customer: {
     all: ["billing", "customer"] as const,

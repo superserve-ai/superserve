@@ -1,3 +1,17 @@
+vi.mock("@/hooks/use-billing-capabilities", () => ({
+  useBillingCapabilities: () => ({
+    data: {
+      pricing_version: "legacy",
+      entry_open: false,
+      fresh_entry: {
+        starter: false,
+        pro: false,
+        auto_recharge: false,
+        choose_free: false,
+      },
+    },
+  }),
+}))
 import { render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 

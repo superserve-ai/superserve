@@ -72,20 +72,29 @@ vi.mock("@/hooks/use-user", () => ({
 vi.mock("@/hooks/use-pricing-version", () => ({
   usePricingVersion: () => state.pricing,
 }))
-vi.mock("@/hooks/use-public-billing-plans", () => ({
-  usePublicBillingPlans: () => ({
+vi.mock("@/hooks/use-billing-capabilities", () => ({
+  useBillingCapabilities: () => ({
     refetch: state.refresh,
     data: {
       pricing_version: state.pricing,
-      cards: [
-        {
-          family: "pro",
-          name: "Pro",
-          features: [],
-          monthly: { available: true, price_cents: 25000 },
-          limits: {},
-        },
-      ],
+      entry_open: state.pricing === "v2",
+      fresh_entry: {
+        starter: state.pricing === "v2",
+        pro: state.pricing === "v2",
+        auto_recharge: state.pricing === "v2",
+      },
+      catalog: {
+        pricing_version: state.pricing,
+        cards: [
+          {
+            family: "pro",
+            name: "Pro",
+            features: [],
+            monthly: { available: true, price_cents: 25000 },
+            limits: {},
+          },
+        ],
+      },
     },
   }),
 }))
