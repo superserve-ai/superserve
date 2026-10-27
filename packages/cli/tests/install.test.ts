@@ -45,8 +45,12 @@ esac
 `,
   )
   for (const f of ["uname", "curl"]) chmodSync(join(fakes, f), 0o755)
+  const { PATH_PREFIX, ...rest } = env
   const r = spawnSync("sh", [INSTALL_SH], {
-    env: { PATH: `${fakes}:/usr/bin:/bin`, ...env },
+    env: {
+      PATH: [PATH_PREFIX, fakes, "/usr/bin", "/bin"].filter(Boolean).join(":"),
+      ...rest,
+    },
     encoding: "utf8",
   })
   expect(r.status).toBe(0)
@@ -130,6 +134,19 @@ describe("install.sh PATH setup", () => {
       encoding: "utf8",
     })
     expect(found.stdout.trim()).toBe(join(dir, "superserve"))
+  })
+
+  test("persists PATH even when the installer's PATH already has the dir", () => {
+    const home = newHome()
+    const out = install({
+      HOME: home,
+      SHELL: "/bin/zsh",
+      PATH_PREFIX: `${home}/.superserve/bin`,
+    })
+    expect(readFileSync(join(home, ".zshrc"), "utf8")).toContain(
+      ".superserve/bin",
+    )
+    expect(out).not.toContain("Open a new terminal")
   })
 
   test("Fish gets fish syntax in the manual PATH hint", () => {

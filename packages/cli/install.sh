@@ -105,7 +105,7 @@ SHELL_NAME="$(basename "${SHELL:-/bin/sh}")"
 if [ "$SHELL_NAME" = "fish" ]; then
   LINE="fish_add_path '$(printf '%s' "$INSTALL_DIR" | sed -e 's/\\/\\\\/g' -e "s/'/\\\\'/g")'"
 fi
-if [ -z "$ON_PATH" ] && [ -z "${SUPERSERVE_NO_MODIFY_PATH:-}" ]; then
+if [ -z "${SUPERSERVE_NO_MODIFY_PATH:-}" ]; then
   case "$SHELL_NAME" in
     zsh)
       # .zshenv may set ZDOTDIR without exporting it, so ask zsh where it reads.
@@ -148,7 +148,7 @@ else
 fi
 
 # This shell's PATH can't change from here; a new one reads the profile.
-if [ -n "$UPDATED" ]; then
+if [ -n "$UPDATED" ] && [ -z "$ON_PATH" ]; then
   echo ""
   info "Open a new terminal, or run 'exec \$SHELL -l', to start using superserve."
 fi
