@@ -1,7 +1,8 @@
 #!/bin/sh
 # Superserve CLI installer
 # Usage: curl -fsSL https://superserve.ai/install | sh
-# Set SUPERSERVE_NO_LOGIN=1 to skip the browser sign-in at the end.
+# Set SUPERSERVE_NO_LOGIN=1 to skip the browser sign-in at the end, and
+# SUPERSERVE_NO_MODIFY_PATH=1 to leave your shell profile untouched.
 set -eu
 
 REPO="superserve-ai/superserve"
@@ -77,36 +78,47 @@ mv "${TMPDIR}/${BINARY}" "${INSTALL_DIR}/superserve"
 chmod +x "${INSTALL_DIR}/superserve"
 info "Installed to ${INSTALL_DIR}/superserve"
 
-# --- PATH instructions ---
-case ":${PATH}:" in
-  *":${INSTALL_DIR}:"*) ;;
-  *)
-    echo ""
-    info "Add superserve to your PATH by adding this to your shell profile:"
-    echo ""
-    echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
-    echo ""
-    # Detect shell and suggest the right file
-    SHELL_NAME="$(basename "${SHELL:-/bin/sh}")"
-    case "$SHELL_NAME" in
-      zsh)  echo "  echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ~/.zshrc" ;;
-      bash) echo "  echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ~/.bashrc" ;;
-      fish) echo "  fish_add_path ${INSTALL_DIR}" ;;
-      *)    echo "  # Add the export line to your shell's config file" ;;
-    esac
-    echo ""
-    ;;
-esac
+# --- PATH ---
+# Add the install dir to the shell profile once so new terminals find
+# `superserve`. SUPERSERVE_NO_MODIFY_PATH=1 leaves dotfiles alone.
+ON_PATH=""
+case ":${PATH}:" in *":${INSTALL_DIR}:"*) ON_PATH=1 ;; esac
+PROFILE=""
+if [ -z "$ON_PATH" ] && [ -z "${SUPERSERVE_NO_MODIFY_PATH:-}" ]; then
+  LINE="export PATH=\"${INSTALL_DIR}:\$PATH\""
+  case "$(basename "${SHELL:-/bin/sh}")" in
+    zsh)  PROFILE="${ZDOTDIR:-$HOME}/.zshrc" ;;
+    # macOS opens login shells, which read .bash_profile rather than .bashrc.
+    bash) PROFILE="$HOME/.bashrc"; [ "$OS" = "darwin" ] && PROFILE="$HOME/.bash_profile" ;;
+    fish) PROFILE="$HOME/.config/fish/config.fish"; LINE="fish_add_path ${INSTALL_DIR}" ;;
+  esac
+  if [ -n "$PROFILE" ] && ! grep -qsF "$LINE" "$PROFILE"; then
+    mkdir -p "$(dirname "$PROFILE")"
+    printf '\n# superserve\n%s\n' "$LINE" >> "$PROFILE"
+    info "Added ${INSTALL_DIR} to your PATH in ${PROFILE}"
+  fi
+fi
+if [ -z "$ON_PATH" ] && [ -z "$PROFILE" ]; then
+  echo ""
+  info "Add superserve to your PATH in your shell profile:"
+  echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
+fi
 
 # --- Sign in ---
 # A person at a terminal goes straight to the browser login, which also signs
 # new users up. Under `curl | sh` stdin is this script, so login reads the tty.
 SUPERSERVE="${INSTALL_DIR}/superserve"
-if [ -z "${SUPERSERVE_NO_LOGIN:-}" ] && [ -t 1 ] && (: </dev/tty) 2>/dev/null \
-  && ! "$SUPERSERVE" whoami >/dev/null 2>&1; then
+if "$SUPERSERVE" whoami >/dev/null 2>&1; then
+  info "Done! You're already signed in."
+elif [ -z "${SUPERSERVE_NO_LOGIN:-}" ] && [ -t 1 ] && (: </dev/tty) 2>/dev/null; then
   echo ""
   "$SUPERSERVE" login </dev/tty || info "Run 'superserve login' to sign in."
-  exit 0
+else
+  info "Done! Run 'superserve login' to sign in."
 fi
 
-info "Done! Run 'superserve login' to sign in, or 'superserve --help'."
+# This shell's PATH can't change from here; a new one reads the profile.
+if [ -n "$PROFILE" ]; then
+  echo ""
+  info "Open a new terminal, or run 'exec \$SHELL', to start using superserve."
+fi
