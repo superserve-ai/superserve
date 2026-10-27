@@ -308,7 +308,7 @@ import { Template, Sandbox } from "@superserve/sdk"
 
 const template = await Template.create({
   name: "my-python-env",
-  from: "python:3.11", // linux/amd64 OCI image; Alpine & distroless are rejected
+  from: "python:3.11", // linux/amd64 OCI image with /bin/sh, mkdir, mount, chmod, and sync
   vcpu: 2,
   memoryMib: 2048,
   steps: [{ run: "pip install numpy pandas" }, { workdir: "/app" }],
