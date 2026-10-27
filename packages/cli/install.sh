@@ -85,14 +85,28 @@ ON_PATH=""
 case ":${PATH}:" in *":${INSTALL_DIR}:"*) ON_PATH=1 ;; esac
 PROFILE=""
 if [ -z "$ON_PATH" ] && [ -z "${SUPERSERVE_NO_MODIFY_PATH:-}" ]; then
-  LINE="export PATH=\"${INSTALL_DIR}:\$PATH\""
+  # Single-quote the directory so a profile never re-parses it as shell code.
+  SQ_DIR="'$(printf '%s' "$INSTALL_DIR" | sed "s/'/'\\\\''/g")'"
+  LINE="export PATH=${SQ_DIR}:\"\$PATH\""
   case "$(basename "${SHELL:-/bin/sh}")" in
-    zsh)  PROFILE="${ZDOTDIR:-$HOME}/.zshrc" ;;
-    # macOS opens login shells, which read .bash_profile rather than .bashrc.
-    bash) PROFILE="$HOME/.bashrc"; [ "$OS" = "darwin" ] && PROFILE="$HOME/.bash_profile" ;;
-    fish) PROFILE="$HOME/.config/fish/config.fish"; LINE="fish_add_path ${INSTALL_DIR}" ;;
+    zsh) PROFILE="${ZDOTDIR:-$HOME}/.zshrc" ;;
+    bash)
+      PROFILE="$HOME/.bashrc"
+      # macOS opens login shells, which read only the first of these that
+      # exists; creating .bash_profile would hide an existing .profile.
+      if [ "$OS" = "darwin" ]; then
+        PROFILE="$HOME/.bash_profile"
+        for f in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+          if [ -f "$f" ]; then PROFILE="$f"; break; fi
+        done
+      fi
+      ;;
+    fish)
+      PROFILE="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
+      LINE="fish_add_path '$(printf '%s' "$INSTALL_DIR" | sed -e 's/\\/\\\\/g' -e "s/'/\\\\'/g")'"
+      ;;
   esac
-  if [ -n "$PROFILE" ] && ! grep -qsF "$LINE" "$PROFILE"; then
+  if [ -n "$PROFILE" ] && ! grep -qsxF "$LINE" "$PROFILE"; then
     mkdir -p "$(dirname "$PROFILE")"
     printf '\n# superserve\n%s\n' "$LINE" >> "$PROFILE"
     info "Added ${INSTALL_DIR} to your PATH in ${PROFILE}"
