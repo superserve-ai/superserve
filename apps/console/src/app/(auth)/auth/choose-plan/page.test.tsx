@@ -40,9 +40,21 @@ describe("plan picker", () => {
   })
 
   it("offers both plans when the trial has ended", () => {
-    params = new URLSearchParams({ reason: "trial_ended", offer: "developer" })
+    params = new URLSearchParams({
+      reason: "trial_ended",
+      offer: "developer",
+      account: "u1",
+      team: "use:team-1",
+    })
     render(<ChoosePlanPage />)
-    expect(screen.getByRole("button", { name: "Developer" })).toBeTruthy()
+    expect(
+      screen
+        .getByRole("button", { name: "Developer" })
+        .closest("form")!
+        .getAttribute("action"),
+    ).toBe(
+      "/api/onboarding/checkout/?offer=developer&account=u1&team=use%3Ateam-1",
+    )
     expect(screen.getByRole("button", { name: "Pro" })).toBeTruthy()
   })
 
@@ -62,6 +74,13 @@ describe("plan picker", () => {
       ).toBe("/api/onboarding/checkout/return/?account=u1&team=use%3Ateam-1")
     },
   )
+
+  it("offers no purchase without the account and team it was shown for", () => {
+    params = new URLSearchParams({ reason: "trial_ended", offer: "developer" })
+    render(<ChoosePlanPage />)
+    expect(screen.queryByRole("button", { name: "Developer" })).toBeNull()
+    expect(screen.getByRole("link", { name: "Back to console" })).toBeTruthy()
+  })
 
   it("offers no purchase when a checkout return names no checkout", () => {
     params = new URLSearchParams({ reason: "checkout_elsewhere" })

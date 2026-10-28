@@ -9,6 +9,7 @@ import { Suspense } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import {
+  checkoutLocator,
   isSignupCheckoutOffer,
   type PlanPickerReason,
   signupCheckoutReturnPath,
@@ -25,7 +26,7 @@ const MESSAGES: Record<PlanPickerReason, string> = {
   payment_confirming:
     "We're still confirming your payment. This usually takes a few seconds.",
   checkout_elsewhere:
-    "This payment was started from a different account or team. Switch back to it, then return to finish setting up.",
+    "This checkout belongs to a different account or team than the one you're signed in to now. Switch back to it, then try again.",
   trial_ended:
     "Your free trial is used up or isn't available for this account. Your sandboxes are paused and nothing is deleted. Choose a plan to continue.",
   payment_failed:
@@ -40,8 +41,7 @@ function ChoosePlanContent() {
   const raw = searchParams.get("reason")
   const reason: PlanPickerReason =
     raw && Object.hasOwn(MESSAGES, raw) ? (raw as PlanPickerReason) : "upgrade"
-  const checkoutAccount = searchParams.get("account")
-  const checkoutTeam = searchParams.get("team")
+  const locator = checkoutLocator(searchParams)
   const selected = searchParams.get("offer")
   const preselected =
     selected === "starter"
@@ -75,13 +75,13 @@ function ChoosePlanContent() {
           </p>
           {reason === "payment_confirming" ||
           reason === "checkout_elsewhere" ? (
-            checkoutAccount && checkoutTeam ? (
+            locator ? (
               <Button
                 render={
                   <Link
                     href={signupCheckoutReturnPath(
-                      checkoutAccount,
-                      checkoutTeam,
+                      locator.account,
+                      locator.team,
                     )}
                   />
                 }
@@ -99,13 +99,21 @@ function ChoosePlanContent() {
                 Back to console
               </Button>
             )
+          ) : !locator ? (
+            <Button
+              render={<Link href="/sandboxes" />}
+              size="sm"
+              className="mt-5"
+            >
+              Back to console
+            </Button>
           ) : (
             <div className="mt-5 flex gap-2">
               {PLANS.map(({ offer, label }) => (
                 <form
                   key={offer}
                   method="post"
-                  action={signupCheckoutPath(offer)}
+                  action={signupCheckoutPath(offer, locator)}
                 >
                   <Button
                     type="submit"

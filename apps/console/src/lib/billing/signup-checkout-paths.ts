@@ -45,13 +45,39 @@ export function signupCheckoutReturnPath(account: string, team: string) {
   return `${SIGNUP_CHECKOUT_RETURN_ROUTE}?${new URLSearchParams({ account, team })}`
 }
 
-export function signupCheckoutPath(offer: SignupCheckoutOffer) {
-  return `${SIGNUP_CHECKOUT_ROUTE}?${new URLSearchParams({ offer })}`
+// The account and team a picker or checkout request was made for. Requests
+// carry it so a session or active team that changed in another tab can never
+// start, replace or confirm another team's checkout.
+export interface CheckoutLocator {
+  account: string
+  team: string
+}
+
+export function checkoutLocator(
+  params: URLSearchParams,
+): CheckoutLocator | null {
+  const account = params.get("account")
+  const team = params.get("team")
+  return account && team ? { account, team } : null
+}
+
+export function signupCheckoutPath(
+  offer: SignupCheckoutOffer,
+  locator: CheckoutLocator,
+) {
+  return `${SIGNUP_CHECKOUT_ROUTE}?${new URLSearchParams({ offer, ...locator })}`
 }
 
 export function isSignupCheckoutPath(path: string) {
-  const match = /^\/api\/onboarding\/checkout\/\?offer=([a-z_]+)$/.exec(path)
-  return !!match && isSignupCheckoutOffer(match[1])
+  if (!path.startsWith(SIGNUP_CHECKOUT_ROUTE)) return false
+  const url = new URL(path, "https://console.invalid")
+  return (
+    url.pathname === SIGNUP_CHECKOUT_ROUTE &&
+    [...url.searchParams.keys()].every((key) =>
+      ["offer", "account", "team"].includes(key),
+    ) &&
+    isSignupCheckoutOffer(url.searchParams.get("offer"))
+  )
 }
 
 export type PlanPickerReason =
@@ -66,12 +92,18 @@ export type PlanPickerReason =
 
 export const PLAN_PICKER_ROUTE = "/auth/choose-plan/"
 
+// A picker without a locator offers no purchase, only a way back.
 export function planPickerPath(
   reason: PlanPickerReason,
   offer?: SignupCheckoutOffer,
+  locator?: CheckoutLocator | null,
 ) {
   const query = new URLSearchParams({ reason })
   if (offer) query.set("offer", offer)
+  if (locator) {
+    query.set("account", locator.account)
+    query.set("team", locator.team)
+  }
   return `${PLAN_PICKER_ROUTE}?${query}`
 }
 
@@ -83,14 +115,4 @@ export function trialPlanOffer(
   if (requested === "pro_monthly" || requested === "pro_annual")
     return "pro_monthly"
   return undefined
-}
-
-// Picker states about one checkout keep its account and team, so the page can
-// only re-check that checkout and never start a purchase for another team.
-export function checkoutStatusPath(
-  reason: "payment_confirming" | "checkout_elsewhere",
-  account: string,
-  team: string,
-) {
-  return `${PLAN_PICKER_ROUTE}?${new URLSearchParams({ reason, account, team })}`
 }

@@ -19,6 +19,8 @@ import {
 } from "./signup-checkout"
 
 const user = { id: "u1" } as User
+const mine = { account: "u1", team: "use:team-1" }
+const pinned = "account=u1&team=use%3Ateam-1"
 const origin = "https://console.example.test"
 let entryState: string
 let checkout: { status: number; body: unknown }
@@ -51,7 +53,7 @@ describe("startSignupCheckout", () => {
 
   it("creates or resumes the selected plan's checkout for the team", async () => {
     entryState = "payment_failed"
-    expect(await startSignupCheckout(user, "developer", origin)).toBe(
+    expect(await startSignupCheckout(user, "developer", origin, mine)).toBe(
       "https://checkout.stripe.com/c/pay/cs_test_1",
     )
     const [url, init] = fetchMock.mock.lastCall as unknown as [
@@ -64,16 +66,19 @@ describe("startSignupCheckout", () => {
       success_url:
         "https://console.example.test/api/onboarding/checkout/return/?account=u1&team=use%3Ateam-1",
       cancel_url:
-        "https://console.example.test/auth/choose-plan/?reason=checkout_canceled&offer=developer",
+        "https://console.example.test/auth/choose-plan/?reason=checkout_canceled&offer=developer&account=u1&team=use%3Ateam-1",
     })
   })
 
   it.each([
     ["trial", "/sandboxes"],
-    ["trial_ended", "/auth/choose-plan/?reason=trial_ended&offer=developer"],
+    [
+      "trial_ended",
+      `/auth/choose-plan/?reason=trial_ended&offer=developer&${pinned}`,
+    ],
     [
       "payment_failed",
-      "/auth/choose-plan/?reason=payment_failed&offer=developer",
+      `/auth/choose-plan/?reason=payment_failed&offer=developer&${pinned}`,
     ],
   ])("lands a new %s signup in the console", async (state, destination) => {
     entryState = state
@@ -86,7 +91,9 @@ describe("startSignupCheckout", () => {
     async (state) => {
       entryState = state as string
       expect(await signupEntryDestination(user, "developer")).toBeNull()
-      expect(await startSignupCheckout(user, "developer", origin)).toBeNull()
+      expect(
+        await startSignupCheckout(user, "developer", origin, mine),
+      ).toBeNull()
       expect(
         fetchMock.mock.calls.some(([url]) =>
           String(url).endsWith("/checkout-session"),
@@ -97,8 +104,8 @@ describe("startSignupCheckout", () => {
 
   it("reports a plan that is no longer sold as recoverable", async () => {
     checkout = { status: 400, body: { error: { code: "invalid_offer" } } }
-    expect(await startSignupCheckout(user, "pro_monthly", origin)).toBe(
-      "/auth/choose-plan/?reason=plan_unavailable",
+    expect(await startSignupCheckout(user, "pro_monthly", origin, mine)).toBe(
+      `/auth/choose-plan/?reason=plan_unavailable&${pinned}`,
     )
   })
 
@@ -107,15 +114,31 @@ describe("startSignupCheckout", () => {
       status: 202,
       body: { outcome: "payment_confirmation_pending" },
     }
-    expect(await startSignupCheckout(user, "pro_monthly", origin)).toBe(
+    expect(await startSignupCheckout(user, "pro_monthly", origin, mine)).toBe(
       "/api/onboarding/checkout/return/?account=u1&team=use%3Ateam-1",
     )
   })
 
+  it.each([
+    { account: "other-user", team: "use:team-1" },
+    { account: "u1", team: "use:other-team" },
+  ])(
+    "never touches checkout when the session no longer matches %j",
+    async (expected) => {
+      expect(
+        await startSignupCheckout(user, "developer", origin, expected, true),
+      ).toBe("/auth/choose-plan/?reason=checkout_elsewhere")
+      expect(fetchMock).not.toHaveBeenCalledWith(
+        expect.stringMatching(/checkout-session|recover/),
+        expect.anything(),
+      )
+    },
+  )
+
   it("throws when checkout cannot start", async () => {
     checkout = { status: 409, body: { error: { code: "plan_conflict" } } }
     await expect(
-      startSignupCheckout(user, "pro_monthly", origin),
+      startSignupCheckout(user, "pro_monthly", origin, mine),
     ).rejects.toThrow()
   })
 
@@ -123,16 +146,16 @@ describe("startSignupCheckout", () => {
     const conflict = { status: 409, body: { error: { code: "plan_conflict" } } }
     checkouts = [conflict]
     await expect(
-      startSignupCheckout(user, "pro_monthly", origin),
+      startSignupCheckout(user, "pro_monthly", origin, mine),
     ).rejects.toThrow()
     expect(
       fetchMock.mock.calls.some(([url]) => String(url).endsWith("/recover")),
     ).toBe(false)
 
     checkouts = [conflict]
-    expect(await startSignupCheckout(user, "pro_monthly", origin, true)).toBe(
-      "https://checkout.stripe.com/c/pay/cs_test_1",
-    )
+    expect(
+      await startSignupCheckout(user, "pro_monthly", origin, mine, true),
+    ).toBe("https://checkout.stripe.com/c/pay/cs_test_1")
     const restart = fetchMock.mock.calls.find(([url]) =>
       String(url).endsWith("/stripe/pro-checkout/recover"),
     ) as unknown as [string, RequestInit]

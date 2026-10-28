@@ -33,7 +33,10 @@ export default async function DashboardLayout({
   const entry = signup?.context.entryState
   if (entry === "trial_ended" || entry === "payment_failed")
     redirect(
-      planPickerPath(entry, trialPlanOffer(signup?.context.requestedOffer)),
+      planPickerPath(entry, trialPlanOffer(signup?.context.requestedOffer), {
+        account: signup!.context.userId,
+        team: signup!.context.teamKey,
+      }),
     )
   const queryScope = impersonationContext?.teamId ?? "self"
 

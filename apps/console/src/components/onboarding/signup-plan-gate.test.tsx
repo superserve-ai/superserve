@@ -81,7 +81,7 @@ describe("signup plan gate", () => {
       renderGate()
       await waitFor(() =>
         expect(mocks.replace).toHaveBeenCalledWith(
-          `/auth/choose-plan/?reason=${entryState}&offer=developer`,
+          `/auth/choose-plan/?reason=${entryState}&offer=developer&account=owner&team=use%3Ateam`,
         ),
       )
     },

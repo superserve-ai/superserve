@@ -2,7 +2,6 @@ import { NextResponse } from "next/server"
 
 import { confirmSignupCheckout } from "@/lib/api/signup-checkout"
 import {
-  checkoutStatusPath,
   planPickerPath,
   signupCheckoutReturnPath,
 } from "@/lib/billing/signup-checkout-paths"
@@ -28,7 +27,7 @@ export async function GET(request: Request) {
   } catch {
     target =
       account && team
-        ? checkoutStatusPath("payment_confirming", account, team)
+        ? planPickerPath("payment_confirming", undefined, { account, team })
         : planPickerPath("checkout_elsewhere")
   }
   return NextResponse.redirect(new URL(target, origin))

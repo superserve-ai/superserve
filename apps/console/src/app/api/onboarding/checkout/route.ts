@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { startSignupCheckout } from "@/lib/api/signup-checkout"
 import {
+  checkoutLocator,
   isSignupCheckoutOffer,
   signupCheckoutPath,
   planPickerPath,
@@ -25,9 +26,15 @@ export async function POST(request: Request) {
 async function checkout(request: Request, switchPlan: boolean) {
   const { origin, searchParams } = new URL(request.url)
   const offer = searchParams.get("offer")
+  const locator = checkoutLocator(searchParams)
+  if (!locator)
+    return NextResponse.redirect(
+      new URL(planPickerPath("checkout_elsewhere"), origin),
+      303,
+    )
   if (!isSignupCheckoutOffer(offer))
     return NextResponse.redirect(
-      new URL(planPickerPath("upgrade"), origin),
+      new URL(planPickerPath("upgrade", undefined, locator), origin),
       303,
     )
   const {
@@ -36,7 +43,7 @@ async function checkout(request: Request, switchPlan: boolean) {
   if (!user)
     return NextResponse.redirect(
       new URL(
-        `/auth/signin?${new URLSearchParams({ next: signupCheckoutPath(offer) })}`,
+        `/auth/signin?${new URLSearchParams({ next: signupCheckoutPath(offer, locator) })}`,
         origin,
       ),
       303,
@@ -44,10 +51,10 @@ async function checkout(request: Request, switchPlan: boolean) {
   let target: string
   try {
     target =
-      (await startSignupCheckout(user, offer, origin, switchPlan)) ??
+      (await startSignupCheckout(user, offer, origin, locator, switchPlan)) ??
       "/sandboxes"
   } catch {
-    target = planPickerPath("checkout_unavailable", offer)
+    target = planPickerPath("checkout_unavailable", offer, locator)
   }
   return NextResponse.redirect(new URL(target, origin), 303)
 }

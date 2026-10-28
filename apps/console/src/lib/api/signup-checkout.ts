@@ -3,10 +3,10 @@ import type { User } from "@supabase/supabase-js"
 import {
   type AwaitingPlanState,
   isAwaitingPlanState,
-  checkoutStatusPath,
+  type CheckoutLocator,
+  signupCheckoutReturnPath,
   planPickerPath,
   SIGNUP_CHECKOUT_OFFERS,
-  signupCheckoutReturnPath,
   type SignupCheckoutOffer,
 } from "@/lib/billing/signup-checkout-paths"
 import { cellFor } from "@/lib/cells"
@@ -19,6 +19,7 @@ async function teamBackend(user: User) {
   const { apiKey, team } = await getAuthApiKeyAndTeamForUser(user)
   return {
     team,
+    locator: { account: user.id, team: `${team.region}:${team.teamId}` },
     base: cellFor(team.region).apiBaseUrl,
     headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
   }
@@ -46,10 +47,11 @@ export async function signupEntryDestination(
   user: User,
   offer: SignupCheckoutOffer | undefined,
 ): Promise<string | null> {
-  const entry = await readEntryState(await teamBackend(user))
+  const backend = await teamBackend(user)
+  const entry = await readEntryState(backend)
   if (!entry) return null
   if (entry === "trial") return "/sandboxes"
-  return planPickerPath(entry, offer)
+  return planPickerPath(entry, offer, backend.locator)
 }
 
 // Starts or resumes the selected plan's Stripe Checkout for a team that has
@@ -59,15 +61,15 @@ export async function startSignupCheckout(
   user: User,
   offer: SignupCheckoutOffer,
   origin: string,
+  expected: CheckoutLocator,
   switchPlan = false,
 ): Promise<string | null> {
   const backend = await teamBackend(user)
+  const { base, headers, locator } = backend
+  if (expected.account !== locator.account || expected.team !== locator.team)
+    return planPickerPath("checkout_elsewhere")
   if (!(await readEntryState(backend))) return null
-  const { base, headers, team } = backend
-  const success = signupCheckoutReturnPath(
-    user.id,
-    `${team.region}:${team.teamId}`,
-  )
+  const success = signupCheckoutReturnPath(locator.account, locator.team)
   const create = async () => {
     const response = await fetch(`${base}/stripe/checkout-session`, {
       method: "POST",
@@ -78,7 +80,7 @@ export async function startSignupCheckout(
         offer: SIGNUP_CHECKOUT_OFFERS[offer],
         success_url: new URL(success, origin).toString(),
         cancel_url: new URL(
-          planPickerPath("checkout_canceled", offer),
+          planPickerPath("checkout_canceled", offer, locator),
           origin,
         ).toString(),
       }),
@@ -106,7 +108,7 @@ export async function startSignupCheckout(
     if (restart.ok) ({ response, result } = await create())
   }
   if (response.status === 400 && result.error?.code === "invalid_offer")
-    return planPickerPath("plan_unavailable")
+    return planPickerPath("plan_unavailable", undefined, locator)
   if (!response.ok)
     throw new Error(`signup checkout failed: ${response.status}`)
   if (result.url?.startsWith("https://checkout.stripe.com/")) return result.url
@@ -121,10 +123,11 @@ export async function confirmSignupCheckout(
   account: string | null,
   teamKey: string | null,
 ): Promise<string> {
-  const { base, headers, team } = await teamBackend(user)
+  const { base, headers, locator } = await teamBackend(user)
   if (!account || !teamKey) return planPickerPath("checkout_elsewhere")
-  if (account !== user.id || teamKey !== `${team.region}:${team.teamId}`)
-    return checkoutStatusPath("checkout_elsewhere", account, teamKey)
+  const original = { account, team: teamKey }
+  if (account !== locator.account || teamKey !== locator.team)
+    return planPickerPath("checkout_elsewhere", undefined, original)
   const response = await fetch(`${base}/stripe/pro-checkout/recover`, {
     method: "POST",
     headers,
@@ -139,5 +142,5 @@ export async function confirmSignupCheckout(
   if (response.ok && result.outcome === "active") return "/sandboxes"
   if (response.ok && result.url?.startsWith("https://checkout.stripe.com/"))
     return result.url
-  return checkoutStatusPath("payment_confirming", account, teamKey)
+  return planPickerPath("payment_confirming", undefined, original)
 }

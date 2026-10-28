@@ -35,43 +35,50 @@ describe("signup checkout resume", () => {
 
   it("resumes the selected plan's checkout for a team waiting for payment", async () => {
     start.mockResolvedValue("https://checkout.stripe.com/c/pay/cs_test_1")
-    expect((await visit("offer=developer")).href).toBe(
-      "https://checkout.stripe.com/c/pay/cs_test_1",
-    )
+    expect(
+      (await visit("offer=developer&account=u1&team=use%3Ateam-1")).href,
+    ).toBe("https://checkout.stripe.com/c/pay/cs_test_1")
     expect(start).toHaveBeenCalledWith(
       user,
       "developer",
       "https://console.example.test",
+      { account: "u1", team: "use:team-1" },
       false,
     )
   })
 
   it("sends a team that already has a plan to the console", async () => {
     start.mockResolvedValue(null)
-    expect((await visit("offer=pro_monthly")).pathname).toBe("/sandboxes")
+    expect(
+      (await visit("offer=pro_monthly&account=u1&team=use%3Ateam-1")).pathname,
+    ).toBe("/sandboxes")
   })
 
   it("keeps the offer on a retry page when checkout cannot start", async () => {
     start.mockRejectedValue(new Error("cell down"))
-    const location = await visit("offer=developer")
+    const location = await visit("offer=developer&account=u1&team=use%3Ateam-1")
     expect(location.searchParams.get("reason")).toBe("checkout_unavailable")
     expect(location.searchParams.get("offer")).toBe("developer")
   })
 
   it("asks for sign-in and returns to the same checkout", async () => {
     user = null
-    const location = await visit("offer=pro_monthly")
+    const location = await visit(
+      "offer=pro_monthly&account=u1&team=use%3Ateam-1",
+    )
     expect(location.pathname).toBe("/auth/signin")
     expect(location.searchParams.get("next")).toBe(
-      "/api/onboarding/checkout/?offer=pro_monthly",
+      "/api/onboarding/checkout/?offer=pro_monthly&account=u1&team=use%3Ateam-1",
     )
     expect(start).not.toHaveBeenCalled()
   })
 
   it("rejects an unknown offer without starting checkout", async () => {
-    expect((await visit("offer=enterprise")).searchParams.get("reason")).toBe(
-      "upgrade",
-    )
+    expect(
+      (
+        await visit("offer=enterprise&account=u1&team=use%3Ateam-1")
+      ).searchParams.get("reason"),
+    ).toBe("upgrade")
     expect(start).not.toHaveBeenCalled()
   })
 
@@ -79,7 +86,7 @@ describe("signup checkout resume", () => {
     start.mockResolvedValue("https://checkout.stripe.com/c/pay/cs_test_2")
     const response = await POST(
       new Request(
-        "https://console.example.test/api/onboarding/checkout/?offer=pro_monthly",
+        "https://console.example.test/api/onboarding/checkout/?offer=pro_monthly&account=u1&team=use%3Ateam-1",
         { method: "POST", headers: { origin: "https://console.example.test" } },
       ),
     )
@@ -88,6 +95,7 @@ describe("signup checkout resume", () => {
       user,
       "pro_monthly",
       "https://console.example.test",
+      { account: "u1", team: "use:team-1" },
       true,
     )
   })
@@ -95,7 +103,7 @@ describe("signup checkout resume", () => {
   it("refuses a cross-site plan choice", async () => {
     const response = await POST(
       new Request(
-        "https://console.example.test/api/onboarding/checkout/?offer=pro_monthly",
+        "https://console.example.test/api/onboarding/checkout/?offer=pro_monthly&account=u1&team=use%3Ateam-1",
         { method: "POST", headers: { origin: "https://other.example" } },
       ),
     )
@@ -104,8 +112,9 @@ describe("signup checkout resume", () => {
   })
 
   it.each([
-    ["offer=pro_monthly", null],
-    ["offer=enterprise", { id: "u1" }],
+    ["offer=pro_monthly&account=u1&team=use%3Ateam-1", null],
+    ["offer=enterprise&account=u1&team=use%3Ateam-1", { id: "u1" }],
+    ["offer=pro_monthly", { id: "u1" }],
   ])(
     "turns a plan choice into a page load on every redirect (%s)",
     async (query, signedIn) => {

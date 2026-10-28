@@ -38,7 +38,10 @@ function SelfSignupPlanGate({ children }: { children: ReactNode }) {
   const entry = query.data?.entryState
   const picker =
     entry === "trial_ended" || entry === "payment_failed"
-      ? planPickerPath(entry, trialPlanOffer(query.data?.requestedOffer))
+      ? planPickerPath(entry, trialPlanOffer(query.data?.requestedOffer), {
+          account: query.data!.userId,
+          team: query.data!.teamKey,
+        })
       : null
   useEffect(() => {
     if (required) router.replace("/onboarding/plan")
