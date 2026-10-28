@@ -169,6 +169,8 @@ describe("startSignupCheckout", () => {
 
   it.each([
     [200, { outcome: "active" }, "/sandboxes"],
+    [200, { outcome: "retryable" }, "/sandboxes"],
+    [200, { outcome: "no_pending_pro_purchase" }, "/sandboxes"],
     [
       200,
       {

@@ -143,8 +143,15 @@ export async function confirmSignupCheckout(
     outcome?: string
     url?: string
   }
-  if (response.ok && result.outcome === "active") return "/sandboxes"
   if (response.ok && result.url?.startsWith("https://checkout.stripe.com/"))
     return result.url
+  // Nothing left to settle: the console sends a used-up trial to the picker.
+  if (
+    response.ok &&
+    ["active", "retryable", "no_pending_pro_purchase"].includes(
+      result.outcome ?? "",
+    )
+  )
+    return "/sandboxes"
   return planPickerPath("payment_confirming", undefined, original)
 }
