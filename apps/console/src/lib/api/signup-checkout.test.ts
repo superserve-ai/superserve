@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const provision = vi.hoisted(() => vi.fn())
 vi.mock("./proxy-auth", () => ({
-  getAuthApiKeyAndTeamForUser: async () => ({
-    apiKey: "server-only",
-    team: { teamId: "team-1", region: "use" },
-  }),
+  getAuthApiKeyAndTeamForUser: async () => (
+    provision(),
+    {
+      apiKey: "server-only",
+      team: { teamId: "team-1", region: "use" },
+    }
+  ),
 }))
 vi.mock("@/lib/cells", () => ({
   cellFor: () => ({ apiBaseUrl: "https://api.example.test" }),
@@ -48,6 +52,7 @@ describe("startSignupCheckout", () => {
     checkouts = []
     recovered = { status: 200, body: { outcome: "retryable" } }
     fetchMock.mockClear()
+    provision.mockClear()
     vi.stubGlobal("fetch", fetchMock)
   })
 
@@ -215,4 +220,19 @@ describe("startSignupCheckout", () => {
       ).toBe(false)
     },
   )
+
+  it("refuses another account before resolving or provisioning a team", async () => {
+    const other = { account: "other-user", team: "use:team-1" }
+    expect(
+      await startSignupCheckout(user, "developer", origin, other, true),
+    ).toBe("/auth/choose-plan/?reason=checkout_elsewhere")
+    expect(await confirmSignupCheckout(user, "other-user", "use:team-1")).toBe(
+      "/auth/choose-plan/?reason=checkout_elsewhere&account=other-user&team=use%3Ateam-1",
+    )
+    expect(await confirmSignupCheckout(user, null, null)).toBe(
+      "/auth/choose-plan/?reason=checkout_elsewhere",
+    )
+    expect(provision).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
 })

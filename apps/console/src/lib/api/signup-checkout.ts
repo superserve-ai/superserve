@@ -55,7 +55,8 @@ export async function signupEntryDestination(
 }
 
 // Starts or resumes the selected plan's Stripe Checkout for a team that has
-// not paid yet. Returns null when the team already has a plan. switchPlan
+// not paid yet. Another account's request is refused before the team lookup,
+// which can provision a first team. Returns null when the team already has a plan. switchPlan
 // replaces an open checkout for another plan; resuming never does.
 export async function startSignupCheckout(
   user: User,
@@ -64,9 +65,10 @@ export async function startSignupCheckout(
   expected: CheckoutLocator,
   switchPlan = false,
 ): Promise<string | null> {
+  if (expected.account !== user.id) return planPickerPath("checkout_elsewhere")
   const backend = await teamBackend(user)
   const { base, headers, locator } = backend
-  if (expected.account !== locator.account || expected.team !== locator.team)
+  if (expected.team !== locator.team)
     return planPickerPath("checkout_elsewhere")
   if (!(await readEntryState(backend))) return null
   const success = signupCheckoutReturnPath(locator.account, locator.team)
@@ -123,10 +125,12 @@ export async function confirmSignupCheckout(
   account: string | null,
   teamKey: string | null,
 ): Promise<string> {
-  const { base, headers, locator } = await teamBackend(user)
   if (!account || !teamKey) return planPickerPath("checkout_elsewhere")
   const original = { account, team: teamKey }
-  if (account !== locator.account || teamKey !== locator.team)
+  if (account !== user.id)
+    return planPickerPath("checkout_elsewhere", undefined, original)
+  const { base, headers, locator } = await teamBackend(user)
+  if (teamKey !== locator.team)
     return planPickerPath("checkout_elsewhere", undefined, original)
   const response = await fetch(`${base}/stripe/pro-checkout/recover`, {
     method: "POST",
