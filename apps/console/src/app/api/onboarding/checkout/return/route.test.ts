@@ -19,7 +19,7 @@ const visit = async () =>
     (
       await GET(
         new Request(
-          "https://console.example.test/api/onboarding/checkout/return/",
+          "https://console.example.test/api/onboarding/checkout/return/?account=u1&team=use%3At1",
         ),
       )
     ).headers.get("location")!,
@@ -34,6 +34,7 @@ describe("checkout return", () => {
   it("sends a settled payment to the console", async () => {
     confirm.mockResolvedValue("/sandboxes")
     expect((await visit()).pathname).toBe("/sandboxes")
+    expect(confirm).toHaveBeenCalledWith(user, "u1", "use:t1")
   })
 
   it("waits on the picker when confirmation fails", async () => {
@@ -48,7 +49,7 @@ describe("checkout return", () => {
     const location = await visit()
     expect(location.pathname).toBe("/auth/signin")
     expect(location.searchParams.get("next")).toBe(
-      "/api/onboarding/checkout/return/",
+      "/api/onboarding/checkout/return/?account=u1&team=use%3At1",
     )
     expect(confirm).not.toHaveBeenCalled()
   })

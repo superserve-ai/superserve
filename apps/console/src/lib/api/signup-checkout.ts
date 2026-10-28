@@ -3,9 +3,10 @@ import type { User } from "@supabase/supabase-js"
 import {
   type AwaitingPlanState,
   isAwaitingPlanState,
+  paymentConfirmingPath,
   planPickerPath,
   SIGNUP_CHECKOUT_OFFERS,
-  SIGNUP_CHECKOUT_RETURN_ROUTE,
+  signupCheckoutReturnPath,
   type SignupCheckoutOffer,
 } from "@/lib/billing/signup-checkout-paths"
 import { cellFor } from "@/lib/cells"
@@ -62,8 +63,11 @@ export async function startSignupCheckout(
 ): Promise<string | null> {
   const backend = await teamBackend(user)
   if (!(await readEntryState(backend))) return null
-  const { base, headers } = backend
-  const success = SIGNUP_CHECKOUT_RETURN_ROUTE
+  const { base, headers, team } = backend
+  const success = signupCheckoutReturnPath(
+    user.id,
+    `${team.region}:${team.teamId}`,
+  )
   const create = async () => {
     const response = await fetch(`${base}/stripe/checkout-session`, {
       method: "POST",
@@ -112,8 +116,14 @@ export async function startSignupCheckout(
 
 // Settles a checkout the customer just paid, so a team leaving Stripe lands
 // in the console with its plan rather than back on the picker.
-export async function confirmSignupCheckout(user: User): Promise<string> {
-  const { base, headers } = await teamBackend(user)
+export async function confirmSignupCheckout(
+  user: User,
+  account: string | null,
+  teamKey: string | null,
+): Promise<string> {
+  const { base, headers, team } = await teamBackend(user)
+  if (account !== user.id || teamKey !== `${team.region}:${team.teamId}`)
+    return planPickerPath("checkout_elsewhere")
   const response = await fetch(`${base}/stripe/pro-checkout/recover`, {
     method: "POST",
     headers,
@@ -128,5 +138,5 @@ export async function confirmSignupCheckout(user: User): Promise<string> {
   if (response.ok && result.outcome === "active") return "/sandboxes"
   if (response.ok && result.url?.startsWith("https://checkout.stripe.com/"))
     return result.url
-  return planPickerPath("payment_confirming")
+  return paymentConfirmingPath(account, teamKey)
 }

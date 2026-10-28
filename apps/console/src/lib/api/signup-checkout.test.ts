@@ -62,7 +62,7 @@ describe("startSignupCheckout", () => {
     expect(JSON.parse(init.body as string)).toEqual({
       offer: "developer_monthly",
       success_url:
-        "https://console.example.test/api/onboarding/checkout/return/",
+        "https://console.example.test/api/onboarding/checkout/return/?account=u1&team=use%3Ateam-1",
       cancel_url:
         "https://console.example.test/auth/choose-plan/?reason=checkout_canceled&offer=developer",
     })
@@ -108,7 +108,7 @@ describe("startSignupCheckout", () => {
       body: { outcome: "payment_confirmation_pending" },
     }
     expect(await startSignupCheckout(user, "pro_monthly", origin)).toBe(
-      "/api/onboarding/checkout/return/",
+      "/api/onboarding/checkout/return/?account=u1&team=use%3Ateam-1",
     )
   })
 
@@ -152,19 +152,38 @@ describe("startSignupCheckout", () => {
     [
       202,
       { outcome: "payment_confirmation_pending" },
-      "/auth/choose-plan/?reason=payment_confirming",
+      "/auth/choose-plan/?reason=payment_confirming&account=u1&team=use%3Ateam-1",
     ],
     [200, { outcome: "active", url: "https://other.example/x" }, "/sandboxes"],
     [
       200,
       { outcome: "payment_method_required", url: "https://other.example/x" },
-      "/auth/choose-plan/?reason=payment_confirming",
+      "/auth/choose-plan/?reason=payment_confirming&account=u1&team=use%3Ateam-1",
     ],
   ])(
     "settles a paid checkout before the dashboard (%s %j)",
     async (status, body, destination) => {
       recovered = { status, body }
-      expect(await confirmSignupCheckout(user)).toBe(destination)
+      expect(await confirmSignupCheckout(user, "u1", "use:team-1")).toBe(
+        destination,
+      )
+    },
+  )
+
+  it.each([
+    ["other-user", "use:team-1"],
+    ["u1", "use:other-team"],
+    [null, null],
+  ])(
+    "never confirms a checkout started by account %s on team %s",
+    async (account, team) => {
+      recovered = { status: 200, body: { outcome: "active" } }
+      expect(await confirmSignupCheckout(user, account, team)).toBe(
+        "/auth/choose-plan/?reason=checkout_elsewhere",
+      )
+      expect(
+        fetchMock.mock.calls.some(([url]) => String(url).endsWith("/recover")),
+      ).toBe(false)
     },
   )
 })

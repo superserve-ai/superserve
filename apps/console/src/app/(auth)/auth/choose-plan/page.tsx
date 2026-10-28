@@ -11,7 +11,7 @@ import { DitherBackground } from "@/components/dither-background"
 import {
   isSignupCheckoutOffer,
   type PlanPickerReason,
-  SIGNUP_CHECKOUT_RETURN_ROUTE,
+  signupCheckoutReturnPath,
   signupCheckoutPath,
 } from "@/lib/billing/signup-checkout-paths"
 
@@ -24,6 +24,8 @@ const MESSAGES: Record<PlanPickerReason, string> = {
   upgrade: "Choose a plan to keep your sandboxes running.",
   payment_confirming:
     "We're still confirming your payment. This usually takes a few seconds.",
+  checkout_elsewhere:
+    "This payment was started from a different account or team. Switch back to it, then return to finish setting up.",
   trial_ended:
     "Your free trial is used up or isn't available for this account. Your sandboxes are paused and nothing is deleted. Choose a plan to continue.",
   payment_failed:
@@ -71,7 +73,14 @@ function ChoosePlanContent() {
           </p>
           {reason === "payment_confirming" ? (
             <Button
-              render={<Link href={SIGNUP_CHECKOUT_RETURN_ROUTE} />}
+              render={
+                <Link
+                  href={signupCheckoutReturnPath(
+                    searchParams.get("account") ?? "",
+                    searchParams.get("team") ?? "",
+                  )}
+                />
+              }
               size="sm"
               className="mt-5"
             >

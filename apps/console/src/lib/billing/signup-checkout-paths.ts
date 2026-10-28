@@ -39,6 +39,12 @@ export const SIGNUP_CHECKOUT_ROUTE = "/api/onboarding/checkout/"
 // dashboard, which sends unpaid teams to the picker, is reached.
 export const SIGNUP_CHECKOUT_RETURN_ROUTE = "/api/onboarding/checkout/return/"
 
+// The return names the account and team that started checkout, so a session
+// that changed in the meantime cannot confirm another team's payment.
+export function signupCheckoutReturnPath(account: string, team: string) {
+  return `${SIGNUP_CHECKOUT_RETURN_ROUTE}?${new URLSearchParams({ account, team })}`
+}
+
 export function signupCheckoutPath(offer: SignupCheckoutOffer) {
   return `${SIGNUP_CHECKOUT_ROUTE}?${new URLSearchParams({ offer })}`
 }
@@ -51,6 +57,7 @@ export function isSignupCheckoutPath(path: string) {
 export type PlanPickerReason =
   | "upgrade"
   | "payment_confirming"
+  | "checkout_elsewhere"
   | "trial_ended"
   | "payment_failed"
   | "plan_unavailable"
@@ -76,4 +83,8 @@ export function trialPlanOffer(
   if (requested === "pro_monthly" || requested === "pro_annual")
     return "pro_monthly"
   return undefined
+}
+
+export function paymentConfirmingPath(account: string, team: string) {
+  return `${PLAN_PICKER_ROUTE}?${new URLSearchParams({ reason: "payment_confirming", account, team })}`
 }

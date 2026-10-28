@@ -56,7 +56,9 @@ export async function middleware(request: NextRequest) {
               ? staffReturnPath(pathname + request.nextUrl.search)
               : null) ??
             pathname +
-              (pathname.replace(/\/$/, "") === "/onboarding/plan"
+              (["/onboarding/plan", "/auth/choose-plan"].includes(
+                pathname.replace(/\/$/, ""),
+              )
                 ? request.nextUrl.search
                 : "")),
     )
