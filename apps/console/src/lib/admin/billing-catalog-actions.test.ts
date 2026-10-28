@@ -71,6 +71,8 @@ function plan(overrides: Partial<PlanVersion> = {}): PlanVersion {
       max_disk_mib: null,
       max_templates: null,
     },
+    funding_policy: "postpaid",
+    topoff: null,
     created_at: "2026-10-01T00:00:00Z",
     published_at: null,
     retired_at: null,
@@ -110,7 +112,11 @@ function draftOf(p: ReturnType<typeof plan>) {
     preview: _preview,
     ...draft
   } = p
-  return draft
+  return {
+    ...draft,
+    funding_policy: draft.funding_policy ?? "postpaid",
+    topoff: draft.topoff ?? null,
+  }
 }
 
 function writes() {
@@ -164,6 +170,55 @@ describe("billing catalog fan-out", () => {
     expect(creates.every((w) => w.body.id === result.id)).toBe(true)
     expect(creates.every((w) => w.body.version === 5)).toBe(true)
     expect(creates[0]!.body.reason).toBe("Raise the Pro fee")
+  })
+
+  it("sends funding and Auto Topoff terms on create and in the publish check", async () => {
+    signIn(["platform:billing:read", "platform:billing:write"])
+    const funded = plan({
+      pricing_version: "v2",
+      family: "funded",
+      funding_policy: "prepaid",
+      topoff: {
+        amount_cents: 1500,
+        threshold_cents: 1000,
+        default_enabled: false,
+      },
+    })
+    serve({ "use.example.com": [], "usw.example.com": [] })
+    await createDraftAction(draftOf(funded), "Add a funded plan")
+    for (const write of writes()) {
+      expect(write.body.funding_policy).toBe("prepaid")
+      expect(write.body.topoff).toEqual(funded.topoff)
+    }
+    fetchMock.mockReset()
+    serve({ "use.example.com": [funded], "usw.example.com": [funded] })
+    await publishVersionAction(VERSION, "Launch")
+    for (const write of writes())
+      expect(write.body.expected).toMatchObject({
+        funding_policy: "prepaid",
+        topoff: funded.topoff,
+      })
+  })
+
+  it("refuses Auto Topoff the catalog would reject without writing", async () => {
+    signIn(["platform:billing:read", "platform:billing:write"])
+    serve({ "use.example.com": [], "usw.example.com": [] })
+    const result = await createDraftAction(
+      draftOf(
+        plan({
+          pricing_version: "v2",
+          funding_policy: "prepaid",
+          topoff: {
+            amount_cents: 1250,
+            threshold_cents: 1000,
+            default_enabled: true,
+          },
+        }),
+      ),
+      "Bad step",
+    )
+    expect(result.errors.all).toMatch(/multiples of \$5/)
+    expect(writes()).toEqual([])
   })
 
   it("reports the regions that failed so the change can be retried", async () => {

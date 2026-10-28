@@ -16,6 +16,7 @@ import { configuredRegions } from "@/lib/cells"
 import {
   billingCatalogSchema,
   catalogDrift,
+  fundingIssue,
   mergeCatalogs,
   nextVersionNumber,
   schedulePreviewSchema,
@@ -121,6 +122,8 @@ function draftBody(version: PlanVersion | PlanDraft) {
     matching: version.matching,
     allowance: version.allowance,
     limits: version.limits,
+    funding_policy: version.funding_policy ?? "postpaid",
+    topoff: version.topoff ?? null,
   }
 }
 
@@ -196,6 +199,8 @@ export async function createDraftAction(
   draft: PlanDraft,
   reason: string,
 ): Promise<FanOutResult> {
+  const issue = fundingIssue(draft)
+  if (issue) return failure(new Error(issue))
   try {
     const catalogs = await loadCatalogs()
     const id = randomUUID()
@@ -232,6 +237,8 @@ export async function updateDraftAction(
   draft: PlanDraft,
   reason: string,
 ): Promise<FanOutResult> {
+  const issue = fundingIssue(draft)
+  if (issue) return failure(new Error(issue))
   try {
     const catalogs = await loadCatalogs()
     const merged = mergeCatalogs(catalogs).find((v) => v.version.id === id)
