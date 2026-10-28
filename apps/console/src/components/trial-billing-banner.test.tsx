@@ -385,11 +385,15 @@ describe("TrialBillingBanner for a new team's trial", () => {
     expect(container.textContent).not.toMatch(/Add Payment|\$95/)
   })
 
-  it("warns once the balance reaches the almost-used-up setting", () => {
+  it("warns once the balance drops below the almost-used-up setting", () => {
     entry("trial")
     mocks.summary.mockReturnValue({ data: trial(0.11, 0.11) })
+    const { unmount } = mount("pro_monthly")
+    expect(banner()).not.toHaveTextContent(/almost used up/)
+    unmount()
+    mocks.summary.mockReturnValue({ data: trial(0.1, 0.11) })
     mount("pro_monthly")
-    expect(banner()).toHaveTextContent(/almost used up: \$0\.11 left/)
+    expect(banner()).toHaveTextContent(/almost used up: \$0\.10 left/)
     expect(banner()).toHaveClass("bg-yellow-100")
   })
 

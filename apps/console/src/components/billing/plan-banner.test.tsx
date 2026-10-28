@@ -432,8 +432,25 @@ describe("PlanBanner for a credit-funded subscription", () => {
     mocks.offers = [offer]
     mocks.plan.mockReturnValue({ data: funded })
     mocks.prepaid.mockReturnValue({
-      data: { ...balance(0, false).data, balance_fresh: false },
+      data: { ...balance(0, false).data, balance_observed: false },
     })
+    expect(mount().container.textContent).toBe("")
+  })
+
+  it("prefers the backend's low-credit threshold over the top-off terms", () => {
+    mocks.offers = [offer]
+    mocks.plan.mockReturnValue({ data: funded })
+    mocks.summary.mockReturnValue({
+      data: {
+        permissions: { can_view: true, can_manage: true },
+        trial: { state: "none", low_credit_threshold_usd: 4 },
+      },
+    })
+    mocks.prepaid.mockReturnValue(balance(350, false))
+    const { unmount } = mount()
+    expect(screen.getByRole("region", { name: "Funded credit" })).toBeTruthy()
+    unmount()
+    mocks.prepaid.mockReturnValue(balance(400, false))
     expect(mount().container.textContent).toBe("")
   })
 

@@ -124,7 +124,7 @@ export const freeAllowanceSchema = z.object({
 export const prepaidBalanceSchema = z.object({
   balance_cents: z.number().int(),
   low_balance: z.boolean().optional(),
-  balance_fresh: z.boolean().optional().catch(undefined),
+  balance_observed: z.boolean().optional().catch(undefined),
   auto_recharge: z.object({
     enabled: z.boolean(),
     threshold_cents: cents.nullable(),
@@ -157,7 +157,7 @@ export function isLowBalance(
 // A balance the backend has not observed recently reads as $0, so it can't
 // say the credit ran out.
 export function balanceKnown(prepaid: PrepaidBalance): boolean {
-  return prepaid.balance_fresh !== false
+  return prepaid.balance_observed !== false
 }
 
 type PlanTerms = {

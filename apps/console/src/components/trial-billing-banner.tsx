@@ -108,7 +108,7 @@ export function trialStage(
   return known &&
     typeof threshold === "number" &&
     Number.isFinite(threshold) &&
-    remaining <= threshold
+    remaining < threshold
     ? "almost_used_up"
     : "trial"
 }

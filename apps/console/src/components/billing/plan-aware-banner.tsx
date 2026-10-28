@@ -18,6 +18,7 @@ import type { BillingOffer, PlanTopoff } from "@/lib/billing/plans"
 export interface PlanAwareBannerProps {
   plan: TeamPlan
   offers?: readonly BillingOffer[]
+  lowCreditThresholdCents?: number | null
   prepaid: PrepaidBalance | null
   canManage: boolean
   canUpgrade?: boolean
@@ -122,6 +123,7 @@ function LowCreditBanner({
 export function PlanAwareBanner({
   plan,
   offers,
+  lowCreditThresholdCents,
   prepaid,
   canManage,
   canUpgrade = true,
@@ -157,7 +159,10 @@ export function PlanAwareBanner({
     const topoff = planTopoff(plan, offers)
     return prepaid &&
       !prepaid.auto_recharge.enabled &&
-      isLowBalance(prepaid, topoff?.threshold_cents) ? (
+      isLowBalance(
+        prepaid,
+        lowCreditThresholdCents ?? topoff?.threshold_cents,
+      ) ? (
       <LowCreditBanner
         plan={plan}
         topoff={topoff}
