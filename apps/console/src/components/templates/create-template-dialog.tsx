@@ -14,7 +14,7 @@ import {
 } from "@superserve/ui"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { useTemplateEntitlement } from "@/hooks/use-template-entitlement"
 import { useCreateTemplate } from "@/hooks/use-templates"
@@ -37,10 +37,10 @@ const VCPU_OPTIONS = [1, 2] as const
 
 const NAME_RE = /^[a-z0-9][a-z0-9-]*$/
 
-function withinCap<T extends number>(
-  options: readonly T[],
+function withinCap(
+  options: readonly number[],
   cap: number | null | undefined,
-): readonly T[] {
+): readonly number[] {
   return cap == null ? options : options.filter((option) => option <= cap)
 }
 
@@ -99,6 +99,16 @@ export function CreateTemplateDialog({
     image?: string
     form?: string
   }>({})
+  // A cap can shrink after a selection (plan refresh, team switch); keep the
+  // selection on an offered shape so the submit matches what is shown.
+  useEffect(() => {
+    if (!memoryOptions.includes(memory))
+      setMemory(memoryOptions[memoryOptions.length - 1] ?? MEMORY_OPTIONS[0])
+    if (!vcpuOptions.includes(vcpu))
+      setVcpu(vcpuOptions[vcpuOptions.length - 1] ?? VCPU_OPTIONS[0])
+    if (!diskOptions.includes(disk))
+      setDisk(diskOptions[diskOptions.length - 1] ?? DISK_OPTIONS[0])
+  }, [memoryOptions, vcpuOptions, diskOptions, memory, vcpu, disk])
 
   const reset = () => {
     setName("")

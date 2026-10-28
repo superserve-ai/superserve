@@ -199,4 +199,23 @@ describe("shape options follow the team's plan caps", () => {
     expect(screen.getAllByRole("button", { name: "2 GB" })).toHaveLength(2)
     expect(screen.getAllByRole("button", { name: "4 GB" })).toHaveLength(1)
   })
+
+  it("clamps a selection the shrinking cap no longer offers", async () => {
+    mocks.cap = 10
+    mocks.create.mockResolvedValue({ id: "created-template" })
+    const view = render(<CreateTemplateDialog open hideTrigger />)
+    fireEvent.click(screen.getAllByRole("button", { name: "4 GB" })[0])
+    mocks.memoryCap = 2048
+    view.rerender(<CreateTemplateDialog open hideTrigger />)
+    fireEvent.change(screen.getByPlaceholderText("e.g. python-ml"), {
+      target: { value: "clamped-template" },
+    })
+    fireEvent.keyDown(screen.getByPlaceholderText("e.g. python-ml"), {
+      key: "Enter",
+    })
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce())
+    expect(mocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({ memory_mib: 2048 }),
+    )
+  })
 })
