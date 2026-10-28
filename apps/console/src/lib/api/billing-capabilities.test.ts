@@ -1,6 +1,10 @@
 import { expect, it } from "vitest"
 
-import { parseBillingCapabilities } from "./billing-capabilities"
+import {
+  canStartAnyPlan,
+  canStartPlan,
+  parseBillingCapabilities,
+} from "./billing-capabilities"
 
 const team = "11111111-1111-4111-8111-111111111111"
 function wire(model: "legacy" | "v2", open: boolean) {
@@ -54,3 +58,59 @@ it.each([
     ).toThrow()
   },
 )
+
+const offer = (offer_key: string, sellable: boolean) => ({
+  offer_key,
+  family: offer_key.split("_")[0],
+  display_name: offer_key,
+  price_cents: 900,
+  interval_months: 1,
+  included_credit_cents: 900,
+  funding_policy: "postpaid",
+  topoff: null,
+  sellable,
+})
+
+it("keeps readable offers when one entry is malformed, and none when absent", () => {
+  const parsed = parseBillingCapabilities(
+    {
+      ...wire("v2", true),
+      offers: [
+        offer("alpha_monthly", true),
+        { offer_key: "broken" },
+        offer("beta_monthly", false),
+      ],
+    },
+    `use:${team}`,
+  )
+  expect(parsed.offers.map((o) => o.offer_key)).toEqual([
+    "alpha_monthly",
+    "beta_monthly",
+  ])
+  expect(
+    parseBillingCapabilities(wire("v2", true), `use:${team}`).offers,
+  ).toEqual([])
+})
+
+it("needs both the entry gate and a sellable offer to start a plan", () => {
+  const open = parseBillingCapabilities(
+    {
+      ...wire("v2", true),
+      offers: [offer("alpha_monthly", true), offer("beta_monthly", false)],
+    },
+    `use:${team}`,
+  )
+  const plan = (key: string) => ({ key, kind: "subscription" as const })
+  expect(canStartPlan(open, plan("alpha_monthly"))).toBe(true)
+  expect(canStartPlan(open, plan("beta_monthly"))).toBe(false)
+  expect(canStartPlan(open, plan("unlisted_monthly"))).toBe(true)
+  expect(canStartPlan(open, { key: "free", kind: "free" })).toBe(false)
+  expect(canStartAnyPlan(open)).toBe(true)
+
+  const closed = {
+    ...open,
+    fresh_entry: { ...open.fresh_entry, pro: false, starter: false },
+  }
+  expect(canStartPlan(closed, plan("alpha_monthly"))).toBe(false)
+  expect(canStartAnyPlan(closed)).toBe(false)
+})

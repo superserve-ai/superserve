@@ -80,9 +80,17 @@ export const billingOfferSchema = z.object({
   sellable: z.boolean(),
 })
 
-// Offers are optional catalog detail: a backend without them, or with an
-// entry this console cannot read, falls back to the plan cards.
-export const billingOffersSchema = z.array(billingOfferSchema).catch([])
+// Offers are optional catalog detail: a backend without them keeps today's
+// behaviour, and an entry this console cannot read is left out on its own.
+export const billingOffersSchema = z
+  .array(z.unknown())
+  .catch([])
+  .transform((entries) =>
+    entries.flatMap((entry) => {
+      const offer = billingOfferSchema.safeParse(entry)
+      return offer.success ? [offer.data] : []
+    }),
+  )
 
 export const planCardSchema = z.object({
   family: z.string(),
@@ -103,8 +111,8 @@ export const planCardSchema = z.object({
     .nullable(),
   matching: planMatchingSchema,
   limits: planLimitsSchema,
-  funding_policy: fundingPolicySchema.optional(),
-  topoff: planTopoffSchema.optional(),
+  funding_policy: fundingPolicySchema.optional().catch(undefined),
+  topoff: planTopoffSchema.optional().catch(undefined),
 })
 
 export const publicBillingPlansSchema = z.object({

@@ -45,7 +45,7 @@ export interface BillingTrialBalance {
   runway_state?: "over_24h" | "under_24h" | "unknown" | null
   runway_observed_at?: string | null
   // Optional until the backend publishes the trial's "almost used up" setting.
-  almost_used_up_usd?: number | null
+  low_credit_threshold_usd?: number | null
 }
 
 export interface BillingIncludedUsage {

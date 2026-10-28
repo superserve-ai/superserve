@@ -362,9 +362,9 @@ describe("TrialBillingBanner", () => {
 })
 
 describe("TrialBillingBanner for a new team's trial", () => {
-  const trial = (remaining_usd: number, almost_used_up_usd?: number) =>
+  const trial = (remaining_usd: number, low_credit_threshold_usd?: number) =>
     summary({
-      trial: { state: "active", remaining_usd, almost_used_up_usd },
+      trial: { state: "active", remaining_usd, low_credit_threshold_usd },
     })
   const entry = (data: string) =>
     mocks.entry.mockReturnValue({ data, isPending: false, isError: false })

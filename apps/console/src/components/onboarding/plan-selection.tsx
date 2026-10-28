@@ -4,7 +4,9 @@ import { Button } from "@superserve/ui"
 import posthog from "posthog-js"
 import { useCallback, useEffect, useRef, useState } from "react"
 
+import { createStripeCheckoutSession } from "@/lib/api/billing-stripe"
 import {
+  commitFreePlan,
   isStripeCheckoutUrl,
   recoverProPayment,
   startProCheckout,
@@ -12,6 +14,8 @@ import {
 import type { SignupPlanContext } from "@/lib/api/signup-plan"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { initialPlanSelection } from "@/lib/auth/plan-preselection"
+import { getTeamOffersAction } from "@/lib/billing/plan-offers-actions"
+import type { BillingOffer } from "@/lib/billing/plans"
 
 import { PlanSelectionView, type PlanCadence } from "./plan-selection-view"
 
@@ -24,7 +28,12 @@ export function PlanSelection({
 }) {
   const defaults = initialPlanSelection(initial.requestedOffer)
   const [context, setContext] = useState(initial)
+  const [selection, setSelection] = useState(defaults.selection)
   const [cadence, setCadence] = useState<PlanCadence>(defaults.cadence)
+  const [freeBilling, setFreeBilling] = useState(
+    initial.offer === "free" && Boolean(billingReturn),
+  )
+  const [offers, setOffers] = useState<BillingOffer[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [uncertain, setUncertain] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -32,7 +41,12 @@ export function PlanSelection({
   const mounted = useRef(true)
   const completionSent = useRef(false)
   const navigating = useRef(false)
-  const step = context.state === "pending" ? "payment-pending" : "plans"
+  const step =
+    context.state === "pending"
+      ? "payment-pending"
+      : freeBilling
+        ? "free-billing"
+        : "plans"
 
   const track = useCallback(
     (action: string, selected?: string) => {
@@ -60,12 +74,12 @@ export function PlanSelection({
   }, [])
 
   const finish = useCallback(
-    (offer: string | null) => {
+    (offer: string | null, salesFallback = false) => {
       if (!completionSent.current) {
-        track("completed", offer ?? undefined)
+        track("completed", offer ?? "free")
         completionSent.current = true
       }
-      navigate("/sandboxes")
+      navigate(salesFallback ? "/sandboxes?contact_sales=1" : "/sandboxes")
     },
     [track, navigate],
   )
@@ -129,13 +143,27 @@ export function PlanSelection({
           }
           const recovered = await refresh()
           if (recovered.state === "committed") finish(recovered.offer)
-          else if (recovered.state === "selecting") track("payment_retryable")
+          else if (recovered.state === "selecting") {
+            setFreeBilling(false)
+            track("payment_retryable")
+          }
         } else if (latest.state === "committed" || latest.state === "legacy") {
-          finish(latest.offer)
+          if (latest.offer !== "free" || !freeBilling) finish(latest.offer)
         }
       }),
-    [run, refresh, initial.teamKey, finish, track, navigate],
+    [run, refresh, initial.teamKey, finish, freeBilling, track, navigate],
   )
+
+  useEffect(() => {
+    let live = true
+    getTeamOffersAction().then(
+      (loaded) => live && setOffers(loaded),
+      () => {},
+    )
+    return () => {
+      live = false
+    }
+  }, [])
 
   useEffect(() => {
     mounted.current = true
@@ -178,9 +206,22 @@ export function PlanSelection({
       navigate("/yc/claim/")
       return
     }
-    if (context.state === "legacy" || context.state === "committed")
+    if (
+      context.state === "legacy" ||
+      (context.state === "committed" &&
+        (context.offer !== "free" ||
+          !freeBilling ||
+          billingReturn === "success"))
+    )
       finish(context.offer)
-  }, [context.state, context.offer, finish, navigate])
+  }, [
+    context.state,
+    context.offer,
+    freeBilling,
+    billingReturn,
+    finish,
+    navigate,
+  ])
 
   const checkoutReturnUrl = () => {
     const url = new URL("/onboarding/plan/", window.location.origin)
@@ -222,17 +263,30 @@ export function PlanSelection({
   return (
     <PlanSelectionView
       step={step}
+      offers={offers}
+      selection={selection}
       cadence={cadence}
       busy={busy}
       error={error}
       onCadence={(value) => {
         setCadence(value)
+        setSelection("pro")
         track("cadence_changed", `pro_${value}`)
       }}
+      onFree={() =>
+        void run(async () => {
+          if (await confirmSelecting()) {
+            setSelection("free")
+            setFreeBilling(true)
+            track("free_selected", "free")
+          }
+        })
+      }
       onPro={() =>
         void run(async () => {
           if (!(await confirmSelecting())) return
           const offer = `pro_${cadence}` as const
+          setSelection("pro")
           track("continue_to_payment", offer)
           const url = await startProCheckout(
             initial.teamKey,
@@ -245,13 +299,71 @@ export function PlanSelection({
         })
       }
       onEnterprise={() => {
-        window.open(
-          "https://www.superserve.ai/meet/",
-          "_blank",
-          "noopener,noreferrer",
-        )
-        track("contact_sales", "enterprise")
+        if (inFlight.current) return
+        // Reserve the tab during the user gesture; navigate only after Free is committed.
+        const tab = window.open("about:blank", "_blank")
+        if (tab) tab.opener = null
+        void run(async () => {
+          try {
+            if (!(await confirmSelecting())) {
+              tab?.close()
+              return
+            }
+            await commitFreePlan(initial.teamKey)
+            if (tab) tab.location.href = "https://www.superserve.ai/meet/"
+            track("contact_sales", "enterprise")
+            finish("free", !tab)
+          } catch (cause) {
+            tab?.close()
+            throw cause
+          }
+        })
       }}
+      onAddCard={() =>
+        void run(async () => {
+          const latest = await refresh()
+          if (
+            latest.state === "pending" ||
+            (latest.offer && latest.offer !== "free") ||
+            latest.state === "legacy"
+          )
+            return
+          await commitFreePlan(initial.teamKey)
+          track("add_payment_method", "free")
+          const url = checkoutReturnUrl()
+          const success = new URL(url)
+          success.searchParams.set("billing", "success")
+          const cancel = new URL(url)
+          cancel.searchParams.set("billing", "cancel")
+          const session = await createStripeCheckoutSession({
+            intentScope: `${initial.userId}:${initial.teamKey}`,
+            expectedTeam: initial.teamKey,
+            successUrl: success.toString(),
+            cancelUrl: cancel.toString(),
+          })
+          if (!isStripeCheckoutUrl(session.url))
+            throw new Error(
+              "Unable to open billing. Please try again or skip for now.",
+            )
+          navigate(session.url)
+        })
+      }
+      onSkip={() =>
+        void run(async () => {
+          await commitFreePlan(initial.teamKey)
+          track("skip_billing", "free")
+          finish("free")
+        })
+      }
+      onBack={() =>
+        void run(async () => {
+          if (await confirmSelecting()) setFreeBilling(false)
+          else
+            setError(
+              "Your Free plan is already selected. You can add billing or skip for now.",
+            )
+        })
+      }
       onCheckPayment={() => void checkPayment()}
       onCancelPayment={() => void checkPayment(true)}
     />

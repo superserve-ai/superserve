@@ -2,7 +2,6 @@
 
 import { serializeTeamSelection as teamKey } from "@/lib/api/active-team"
 import { getOrCreateTeamForUser } from "@/lib/api/api-key-mint"
-import { signupPlanPath } from "@/lib/api/signup-plan-page"
 import { readSignupPlan } from "@/lib/api/signup-plan-read"
 import {
   approveDeviceCode,
@@ -23,12 +22,14 @@ import { createServerClient } from "@/lib/supabase/server"
 
 export type DeviceApprovalResult =
   | { status: "approved" }
+  | { status: "commit_free_plan"; teamKey: string }
   | { status: "redirect"; to: string }
   | { status: "error"; message: string }
 
 /**
- * Approves a CLI login for the user's active team. A team still choosing a
- * plan is sent to choose one first.
+ * Approves a CLI login for the user's active team. A brand-new team is still
+ * choosing a plan, so the first call hands back its team key for the page to
+ * commit Free through the normal proxy path; the page then calls again.
  */
 export async function approveDeviceAction(
   code: string,
@@ -54,10 +55,7 @@ export async function approveDeviceAction(
       }
     const plan = await readSignupPlan(user.id, team)
     if (plan.state === "selecting")
-      return {
-        status: "redirect",
-        to: signupPlanPath({ team: plan.teamKey }),
-      }
+      return { status: "commit_free_plan", teamKey: plan.teamKey }
     await approveDeviceCode(userCode, user, team)
     return { status: "approved" }
   } catch (error) {

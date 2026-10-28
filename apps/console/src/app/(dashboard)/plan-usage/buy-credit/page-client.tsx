@@ -19,6 +19,7 @@ import {
   useRetainedPrepaidOperations,
 } from "@/hooks/use-prepaid-credit"
 import { useUser } from "@/hooks/use-user"
+import { fundedByCredit, planTopoff } from "@/lib/api/billing-v2"
 import {
   type PrepaidCreditSummary,
   type PrepaidPurchase,
@@ -33,7 +34,7 @@ import {
   checkoutRecoveryPath,
   genericBillingReturnState,
 } from "@/lib/billing/checkout-return"
-import { findOffer, type PlanTopoff } from "@/lib/billing/plans"
+import type { PlanTopoff } from "@/lib/billing/plans"
 
 const AMOUNT_ERROR = "Enter a dollar amount above $0, like 25."
 
@@ -108,7 +109,11 @@ export function BuyCreditPageClient({
   const scope = useQueryScope()
   const plan = useTeamPlan(contextMatched).data
   const offers = useBillingCapabilities().data?.offers
-  const topoff = findOffer(offers, plan?.key)?.topoff ?? null
+  const topoff = plan ? planTopoff(plan, offers) : null
+  // A subscription funded by credit only manages Auto Topoff here; one-off
+  // credit purchases are a prepaid plan's.
+  const topoffOnly =
+    !!plan && plan.kind === "subscription" && fundedByCredit(plan, offers)
   const canManage =
     ready && Boolean(summary?.permissions?.can_manage) && scope === "self"
   const canRecover = canManage && allowRecovery
@@ -128,7 +133,15 @@ export function BuyCreditPageClient({
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title={allowEntry ? "Buy credit" : "Credit balance"} />
+      <PageHeader
+        title={
+          topoffOnly
+            ? "Auto Topoff"
+            : allowEntry
+              ? "Buy credit"
+              : "Credit balance"
+        }
+      />
       <div className="flex flex-col gap-6 overflow-y-auto p-4">
         {returning && !contextMatched ? (
           <CheckoutContextRecovery
@@ -169,7 +182,7 @@ export function BuyCreditPageClient({
         )}
         {data && (
           <>
-            <BalanceCard data={data} showTerms={allowEntry} />
+            <BalanceCard data={data} showTerms={allowEntry && !topoffOnly} />
             {allowEntry && data.checkout_idempotency_supported !== true ? (
               <p className="text-sm text-muted">
                 Credit purchases are temporarily unavailable. Please try again
@@ -180,7 +193,7 @@ export function BuyCreditPageClient({
               recovery={existingStarter}
               canManage={canRecover}
             />
-            {allowEntry ? (
+            {topoffOnly ? null : allowEntry ? (
               <PurchaseCard
                 key={`${scope}:${teamKey}:${user?.id}:${topoff?.amount_cents}`}
                 actor={actor}

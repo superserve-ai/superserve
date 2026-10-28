@@ -104,7 +104,7 @@ export function trialStage(
     (known && remaining <= 0)
   )
     return "ended"
-  const threshold = trial?.almost_used_up_usd
+  const threshold = trial?.low_credit_threshold_usd
   return known &&
     typeof threshold === "number" &&
     Number.isFinite(threshold) &&

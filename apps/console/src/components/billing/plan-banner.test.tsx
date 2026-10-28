@@ -401,6 +401,42 @@ describe("PlanBanner for a credit-funded subscription", () => {
     ).toBeTruthy()
   })
 
+  it("reads funding and top-off from the team's frozen terms first", () => {
+    mocks.offers = [offer]
+    mocks.plan.mockReturnValue({
+      data: {
+        ...funded,
+        funding_policy: "prepaid",
+        topoff: {
+          amount_cents: 400,
+          threshold_cents: 300,
+          default_enabled: false,
+        },
+      },
+    })
+    mocks.prepaid.mockReturnValue(balance(250, false))
+    const { unmount } = mount()
+    expect(
+      screen.getByRole("region", { name: "Funded credit" }).textContent,
+    ).toMatch(/Auto Topoff adds \$4 whenever/)
+    unmount()
+
+    mocks.plan.mockReturnValue({
+      data: { ...funded, funding_policy: "postpaid" },
+    })
+    mocks.prepaid.mockReturnValue(balance(0, false))
+    expect(mount().container.textContent).toBe("")
+  })
+
+  it("says nothing about running out while the balance isn't current", () => {
+    mocks.offers = [offer]
+    mocks.plan.mockReturnValue({ data: funded })
+    mocks.prepaid.mockReturnValue({
+      data: { ...balance(0, false).data, balance_fresh: false },
+    })
+    expect(mount().container.textContent).toBe("")
+  })
+
   it("treats a subscription missing from the offers as postpaid", () => {
     mocks.offers = []
     mocks.plan.mockReturnValue({ data: funded })

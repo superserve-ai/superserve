@@ -3,9 +3,13 @@ import { z } from "zod"
 import {
   type BillingOffer,
   findOffer,
+  type FundingPolicy,
+  fundingPolicySchema,
   planCardSchema,
   planKindSchema,
   planLimitsSchema,
+  type PlanTopoff,
+  planTopoffSchema,
 } from "@/lib/billing/plans"
 import {
   isAwaitingPlanState,
@@ -48,6 +52,8 @@ export const teamPlanSchema = z
           max_templates: z.number().int().nonnegative().nullable(),
         }),
         effective_from: z.string(),
+        funding_policy: fundingPolicySchema.optional().catch(undefined),
+        topoff: planTopoffSchema.optional().catch(undefined),
       })
       .nullable(),
     period: z.object({ start: z.string(), end: z.string() }),
@@ -72,6 +78,10 @@ export const teamPlanSchema = z
           kind: plan.kind,
           name: plan.display_name,
           limits: plan.limits,
+          ...(plan.funding_policy
+            ? { funding_policy: plan.funding_policy }
+            : {}),
+          ...(plan.topoff !== undefined ? { topoff: plan.topoff } : {}),
           fee_cents: null as number | null,
           included_cents: null as number | null,
           period_start: period.start as string | null,
@@ -114,6 +124,7 @@ export const freeAllowanceSchema = z.object({
 export const prepaidBalanceSchema = z.object({
   balance_cents: z.number().int(),
   low_balance: z.boolean().optional(),
+  balance_fresh: z.boolean().optional().catch(undefined),
   auto_recharge: z.object({
     enabled: z.boolean(),
     threshold_cents: cents.nullable(),
@@ -143,16 +154,51 @@ export function isLowBalance(
     : prepaid.low_balance === true
 }
 
-// Plans that run on funded credit: prepaid credit, or a subscription whose
-// catalog offer spends included and topped-up credit before pausing.
+// A balance the backend has not observed recently reads as $0, so it can't
+// say the credit ran out.
+export function balanceKnown(prepaid: PrepaidBalance): boolean {
+  return prepaid.balance_fresh !== false
+}
+
+type PlanTerms = {
+  key: string
+  kind: PlanKind
+  funding_policy?: FundingPolicy
+  topoff?: PlanTopoff
+}
+
+// The team's frozen terms decide; a backend that doesn't report them falls
+// back to the current catalog offer for the same plan.
+export function planFundingPolicy(
+  plan: PlanTerms,
+  offers: readonly BillingOffer[] | undefined,
+): FundingPolicy {
+  if (plan.kind === "prepaid") return "prepaid"
+  return (
+    plan.funding_policy ??
+    findOffer(offers, plan.key)?.funding_policy ??
+    "postpaid"
+  )
+}
+
+export function planTopoff(
+  plan: PlanTerms,
+  offers: readonly BillingOffer[] | undefined,
+): PlanTopoff {
+  return plan.topoff !== undefined
+    ? plan.topoff
+    : (findOffer(offers, plan.key)?.topoff ?? null)
+}
+
+// Plans that run on funded credit: prepaid credit, or a subscription that
+// spends included and topped-up credit before pausing.
 export function fundedByCredit(
-  plan: { key: string; kind: PlanKind },
+  plan: PlanTerms,
   offers: readonly BillingOffer[] | undefined,
 ): boolean {
   return (
-    plan.kind === "prepaid" ||
-    (plan.kind === "subscription" &&
-      findOffer(offers, plan.key)?.funding_policy === "prepaid")
+    (plan.kind === "prepaid" || plan.kind === "subscription") &&
+    planFundingPolicy(plan, offers) === "prepaid"
   )
 }
 
@@ -176,7 +222,6 @@ export const BILLING_V2_PATHS = {
   plan: "/billing/plan",
   "free-allowance": "/billing/free-allowance",
   prepaid: "/billing/prepaid",
-  entry: "/billing/plan",
 } as const
 
 export const catalogPlanSchema = planCardSchema.transform((card) => ({

@@ -6,6 +6,7 @@ import { usePostHog } from "posthog-js/react"
 import { useState } from "react"
 
 import { Spinner } from "@/components/icons"
+import { commitFreePlan } from "@/lib/api/plan-checkout"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
@@ -35,7 +36,11 @@ export function DeviceApproval({
     setBusy(true)
     setError(null)
     try {
-      const result = await approveDeviceAction(userCode, teamKey)
+      let result = await approveDeviceAction(userCode, teamKey)
+      if (result.status === "commit_free_plan") {
+        await commitFreePlan(result.teamKey)
+        result = await approveDeviceAction(userCode, teamKey)
+      }
       if (result.status === "redirect") {
         router.replace(result.to)
         return

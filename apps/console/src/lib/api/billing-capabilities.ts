@@ -49,16 +49,11 @@ export const billingCapabilitiesSchema = z
 
 export type BillingCapabilities = z.infer<typeof billingCapabilitiesSchema>
 
-// Whether this team can buy plan now. The catalog offer decides; a backend
-// that does not list the plan among its offers keeps the per-kind gates.
-export function canStartPlan(
-  capabilities: BillingCapabilities | undefined,
-  plan: { key: string; kind: PlanKind },
+function freshEntryFor(
+  capabilities: BillingCapabilities,
+  kind: PlanKind,
 ): boolean {
-  if (!capabilities) return false
-  const offer = findOffer(capabilities.offers, plan.key)
-  if (offer) return offer.sellable
-  switch (plan.kind) {
+  switch (kind) {
     case "prepaid":
       return capabilities.fresh_entry.starter
     case "subscription":
@@ -68,14 +63,25 @@ export function canStartPlan(
   }
 }
 
+// Whether this team can buy plan now: the entry gate for its kind must be
+// open, and a catalog offer for it, where listed, must be sellable.
+export function canStartPlan(
+  capabilities: BillingCapabilities | undefined,
+  plan: { key: string; kind: PlanKind },
+): boolean {
+  if (!capabilities || !freshEntryFor(capabilities, plan.kind)) return false
+  return findOffer(capabilities.offers, plan.key)?.sellable ?? true
+}
+
 export function canStartAnyPlan(
   capabilities: BillingCapabilities | undefined,
 ): boolean {
   if (!capabilities) return false
   const offers = capabilities.offers ?? []
-  return offers.length > 0
-    ? offers.some((offer) => offer.sellable)
-    : capabilities.fresh_entry.pro || capabilities.fresh_entry.starter
+  return (
+    (capabilities.fresh_entry.pro || capabilities.fresh_entry.starter) &&
+    (offers.length === 0 || offers.some((offer) => offer.sellable))
+  )
 }
 
 export function parseBillingCapabilities(body: unknown, teamKey: string) {

@@ -108,7 +108,7 @@ describe("billing data after a failed refresh", () => {
         await result.current.refetch()
       })
       await waitFor(() => expect(result.current.isError).toBe(true))
-      expect(client.getQueryCache().getAll()[0].state.data).toEqual(data)
+      expect(client.getQueryCache().getAll()[0].state.data).toBeDefined()
       expect(result.current.data).toBeUndefined()
       mocks.api.mockResolvedValue(
         hook === useTeamPlan

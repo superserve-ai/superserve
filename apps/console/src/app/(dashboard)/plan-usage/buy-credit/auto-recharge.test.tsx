@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   teamKey: "use:11111111-1111-4111-8111-111111111111",
   ready: true,
   scope: "self",
+  plan: { key: "funded_monthly", kind: "prepaid" } as Record<string, unknown>,
 }))
 
 vi.mock("@/lib/api/starter-checkout-recovery", () => ({
@@ -32,7 +33,7 @@ vi.mock("@/hooks/use-teams", () => ({
 }))
 
 vi.mock("@/hooks/use-billing-v2", () => ({
-  useTeamPlan: () => ({ data: { key: "funded_monthly" } }),
+  useTeamPlan: () => ({ data: mocks.plan }),
 }))
 vi.mock("@/hooks/use-billing-capabilities", () => ({
   useBillingCapabilities: () => ({
@@ -56,7 +57,11 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/components/query-provider", () => ({
   useQueryScope: () => mocks.scope,
 }))
-vi.mock("@/components/page-header", () => ({ PageHeader: () => null }))
+vi.mock("@/components/page-header", () => ({
+  PageHeader: ({ title }: { title: string }) => (
+    <p data-testid="page-title">{title}</p>
+  ),
+}))
 vi.mock("@/hooks/use-billing-context", () => ({
   useBillingContext: () => ({
     teamKey: mocks.teamKey,
@@ -103,6 +108,7 @@ const initial: PrepaidCreditSummary = {
 }
 
 beforeEach(() => {
+  mocks.plan = { key: "funded_monthly", kind: "prepaid" }
   mocks.params = new URLSearchParams()
   mocks.teamKey = "use:11111111-1111-4111-8111-111111111111"
   mocks.scope = "self"
@@ -456,4 +462,20 @@ it("keeps fresh Starter entry fenced when recovery discovery is explicitly denie
   fireEvent.click(buy)
   expect(mocks.checkout).not.toHaveBeenCalled()
   expect(mocks.recover).not.toHaveBeenCalled()
+})
+
+it("only manages Auto Topoff for a subscription funded by credit", () => {
+  mocks.plan = {
+    key: "funded_monthly",
+    kind: "subscription",
+    funding_policy: "prepaid",
+    topoff: {
+      amount_cents: 2500,
+      threshold_cents: 1000,
+      default_enabled: true,
+    },
+  }
+  render(page())
+  expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
+  expect(screen.getByTestId("page-title").textContent).toBe("Auto Topoff")
 })

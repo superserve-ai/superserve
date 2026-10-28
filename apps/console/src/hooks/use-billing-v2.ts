@@ -1,6 +1,7 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
+import { useCallback } from "react"
 import type { z } from "zod"
 
 import { getBillingPricing } from "@/lib/api/billing"
@@ -16,20 +17,20 @@ import { billingKeys } from "@/lib/api/query-keys"
 
 import { useBillingContext } from "./use-billing-context"
 
+// Caches the response as read, so readers of the same resource share one
+// request and each parses the part it needs.
 function useBillingV2Resource<T>(
   resource: keyof typeof BILLING_V2_PATHS,
   schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   enabled: boolean,
 ) {
   const { cacheScope, teamKey, ready } = useBillingContext()
+  const select = useCallback((raw: unknown) => schema.parse(raw), [schema])
   const query = useQuery({
     queryKey: billingKeys.v2(resource, { cacheScope, teamKey: teamKey ?? "" }),
-    queryFn: async () =>
-      schema.parse(
-        await apiClient<unknown>(BILLING_V2_PATHS[resource], {
-          cache: "no-store",
-        }),
-      ),
+    queryFn: () =>
+      apiClient<unknown>(BILLING_V2_PATHS[resource], { cache: "no-store" }),
+    select,
     enabled: enabled && ready && teamKey !== null,
     staleTime: 30_000,
     refetchInterval: 60_000,
@@ -42,7 +43,7 @@ export function useTeamPlan(enabled: boolean) {
 }
 
 export function useTeamEntry(enabled: boolean) {
-  return useBillingV2Resource("entry", teamEntrySchema, enabled)
+  return useBillingV2Resource("plan", teamEntrySchema, enabled)
 }
 
 export function useFreeAllowance(enabled: boolean) {

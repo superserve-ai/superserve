@@ -4,20 +4,31 @@ import { Button, cn } from "@superserve/ui"
 import type { ReactNode } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
+import {
+  type BillingOffer,
+  findOffer,
+  formatUsdCents,
+} from "@/lib/billing/plans"
 
 export type PlanCadence = "monthly" | "annual"
-export type PlanStep = "plans" | "payment-pending"
+export type PlanStep = "plans" | "free-billing" | "payment-pending"
 
 export interface PlanSelectionViewProps {
   step: PlanStep
+  selection: "free" | "pro"
   cadence: PlanCadence
   busy: boolean
   error?: string | null
   onCadence: (cadence: PlanCadence) => void
+  onFree: () => void
   onPro: () => void
   onEnterprise: () => void
+  onAddCard: () => void
+  onSkip: () => void
+  onBack: () => void
   onCheckPayment: () => void
   onCancelPayment: () => void
+  offers?: readonly BillingOffer[] | null
 }
 
 function Benefits({ children }: { children: ReactNode }) {
@@ -53,8 +64,11 @@ function Card({
 }
 
 export function PlanSelectionView(props: PlanSelectionViewProps) {
-  const { step, cadence, busy, error } = props
+  const { step, selection, cadence, busy, error } = props
+  const proOffer = findOffer(props.offers ?? undefined, `pro_${cadence}`)
+  const proIncluded = proOffer?.included_credit_cents
   const choosing = step === "plans"
+  const pending = step === "payment-pending"
   return (
     <main className="min-h-dvh bg-background px-5 py-10 text-foreground sm:px-10 sm:py-14">
       <div className="mx-auto max-w-6xl">
@@ -87,7 +101,14 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
                     >
                       {complete ? "✓" : index + 1}
                     </span>
-                    <span>{label}</span>
+                    <span>
+                      {label}
+                      {index === 2 && !pending ? (
+                        <span className="text-muted-foreground ml-1 text-xs">
+                          (optional for Free)
+                        </span>
+                      ) : null}
+                    </span>
                   </li>
                 )
               },
@@ -96,12 +117,18 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
         </nav>
 
         <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
-          {choosing ? "Choose your plan." : "We’re checking your payment"}
+          {choosing
+            ? "Choose your plan."
+            : pending
+              ? "We’re checking your payment"
+              : "You’re almost ready."}
         </h1>
         <p className="text-muted-foreground mt-4 max-w-2xl">
           {choosing
-            ? "Choose the plan that fits your team."
-            : "Your account is ready. We’re confirming your Pro payment before finishing setup."}
+            ? "Start small or build at scale. Choose the plan that fits your team."
+            : pending
+              ? "Your account is ready. We’re confirming your Pro payment before finishing setup."
+              : "Add a payment method for pay-as-you-go usage, or start with your trial credit. No subscription fee."}
         </p>
 
         {error ? (
@@ -114,8 +141,38 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
         ) : null}
 
         {choosing ? (
-          <div className="mt-10 grid gap-5 lg:grid-cols-2">
-            <Card title="Pro" selected>
+          <div className="mt-10 grid gap-5 lg:grid-cols-3">
+            <Card title="Free" selected={selection === "free"}>
+              <div className="mt-6 min-h-24">
+                <p className="text-4xl font-medium">$0</p>
+                <p className="text-muted-foreground mt-2 font-mono text-xs uppercase">
+                  Pay as you go after credit
+                </p>
+              </div>
+              <p className="text-muted-foreground min-h-16 text-sm leading-relaxed">
+                Everything you need to build and ship your first agents.
+              </p>
+              <Button
+                className="mt-6 w-full"
+                variant="outline"
+                disabled={busy}
+                onClick={props.onFree}
+              >
+                Continue with Free
+              </Button>
+              <div className="mt-8 border-t border-dashed border-border pt-6">
+                <Benefits>
+                  <li>
+                    Trial credit to start, plus more when you add billing, if
+                    eligible
+                  </li>
+                  <li>No time limit on sandboxes</li>
+                  <li>Standard usage rates after credit</li>
+                </Benefits>
+              </div>
+            </Card>
+
+            <Card title="Pro" selected={selection === "pro"}>
               <fieldset
                 className="mt-4 flex gap-4 font-mono text-xs uppercase"
                 disabled={busy}
@@ -139,18 +196,26 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
                 ))}
               </fieldset>
               <div className="mt-4 min-h-16">
-                <p>
-                  <span className="text-4xl font-medium">
-                    {cadence === "annual" ? "$1,000" : "$1,200"}
-                  </span>
-                  <span className="text-muted-foreground ml-2 font-mono text-xs">
-                    / MONTH
-                  </span>
-                </p>
+                {proOffer ? (
+                  <p>
+                    <span className="text-4xl font-medium">
+                      {formatUsdCents(
+                        Math.round(
+                          proOffer.price_cents / proOffer.interval_months,
+                        ),
+                      )}
+                    </span>
+                    <span className="text-muted-foreground ml-2 font-mono text-xs">
+                      / MONTH
+                    </span>
+                  </p>
+                ) : null}
                 <p className="text-muted-foreground mt-2 font-mono text-xs uppercase">
-                  {cadence === "annual"
-                    ? "$12,000 billed annually · Save 17%"
-                    : "$1,200 billed monthly"}
+                  {proOffer && cadence === "annual"
+                    ? `${formatUsdCents(proOffer.price_cents)} billed annually`
+                    : cadence === "annual"
+                      ? "Billed annually"
+                      : "Billed monthly"}
                 </p>
               </div>
               <p className="text-muted-foreground mt-2 min-h-16 text-sm leading-relaxed">
@@ -164,14 +229,22 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
                 Continue to payment
               </Button>
               <div className="mt-8 border-t border-dashed border-border pt-6">
+                <p className="mb-4 text-sm font-medium">
+                  Everything in Free, plus:
+                </p>
                 <Benefits>
-                  <li>$1,000 in metered usage included each month</li>
+                  {proIncluded ? (
+                    <li>
+                      {formatUsdCents(proIncluded)} in metered usage included
+                      each month
+                    </li>
+                  ) : null}
                   <li>Priority support</li>
-                  <li>Up to 1,000 concurrent sandboxes</li>
-                  <li>Up to 16 vCPU, 64 GiB memory, 64 GiB disk per sandbox</li>
+                  <li>Higher concurrency and bigger sandboxes</li>
                 </Benefits>
                 <p className="text-muted-foreground mt-6 text-xs leading-relaxed">
-                  Usage beyond the included amount is billed at standard rates.
+                  Free signup credits do not stack with Pro. Usage beyond the
+                  included amount is billed at standard rates.
                 </p>
               </div>
             </Card>
@@ -204,10 +277,13 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
                   <li>Custom concurrency and sandbox sizes</li>
                   <li>Dedicated support</li>
                 </Benefits>
+                <p className="text-muted-foreground mt-6 text-xs leading-relaxed">
+                  Continue on Free while you talk with our team.
+                </p>
               </div>
             </Card>
           </div>
-        ) : (
+        ) : pending ? (
           <section
             aria-label="Payment confirmation"
             className="bg-card mt-10 max-w-2xl border border-dashed border-border p-6 sm:p-8"
@@ -246,6 +322,34 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
               </a>
               . You can return to this page to check again.
             </p>
+          </section>
+        ) : (
+          <section
+            aria-label="Free billing setup"
+            className="bg-card mt-10 max-w-2xl border border-dashed border-border p-6 sm:p-8"
+          >
+            <h2 className="text-xl font-medium">Free · Pay as you go</h2>
+            <p className="text-muted-foreground mt-4 text-sm leading-relaxed">
+              Adding a payment method activates pay-as-you-go billing and
+              replaces your trial credit with promotional credit, if eligible.
+              You can also skip and add billing later.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button disabled={busy} onClick={props.onAddCard}>
+                Add payment method
+              </Button>
+              <Button variant="outline" disabled={busy} onClick={props.onSkip}>
+                Skip for now
+              </Button>
+            </div>
+            <button
+              type="button"
+              className="text-muted-foreground mt-6 text-sm underline underline-offset-4 disabled:opacity-50"
+              disabled={busy}
+              onClick={props.onBack}
+            >
+              Back to plans
+            </button>
           </section>
         )}
       </div>

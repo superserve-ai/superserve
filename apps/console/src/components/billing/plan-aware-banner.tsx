@@ -2,16 +2,18 @@ import { Button, cn } from "@superserve/ui"
 import Link from "next/link"
 
 import {
+  balanceKnown,
   BUY_CREDIT_PATH,
   formatCents,
   fundedByCredit,
   isLowBalance,
+  planTopoff,
   type PrepaidBalance,
   type TeamPlan,
   TOPOFF_SETTINGS_PATH,
   UPGRADE_PATH,
 } from "@/lib/api/billing-v2"
-import { type BillingOffer, findOffer } from "@/lib/billing/plans"
+import type { BillingOffer, PlanTopoff } from "@/lib/billing/plans"
 
 export interface PlanAwareBannerProps {
   plan: TeamPlan
@@ -68,17 +70,16 @@ export function ManageAction({
 
 function LowCreditBanner({
   plan,
-  offer,
+  topoff,
   prepaid,
   canManage,
 }: {
   plan: TeamPlan
-  offer: BillingOffer | undefined
+  topoff: PlanTopoff
   prepaid: PrepaidBalance
   canManage: boolean
 }) {
   const empty = prepaid.balance_cents <= 0
-  const topoff = offer?.topoff
   return (
     <BannerShell
       tone={empty ? "danger" : "warning"}
@@ -150,14 +151,16 @@ export function PlanAwareBanner({
     )
   }
 
+  if (prepaid && !balanceKnown(prepaid)) return null
+
   if (plan.kind === "subscription" && fundedByCredit(plan, offers)) {
-    const offer = findOffer(offers, plan.key)
+    const topoff = planTopoff(plan, offers)
     return prepaid &&
       !prepaid.auto_recharge.enabled &&
-      isLowBalance(prepaid, offer?.topoff?.threshold_cents) ? (
+      isLowBalance(prepaid, topoff?.threshold_cents) ? (
       <LowCreditBanner
         plan={plan}
-        offer={offer}
+        topoff={topoff}
         prepaid={prepaid}
         canManage={canManage}
       />
