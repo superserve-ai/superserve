@@ -247,28 +247,21 @@ export function UpgradePage() {
               </p>
             ) : null}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {(v2 ? catalog : [])
-                .filter(
-                  (entry) =>
-                    entry.kind !== "free" ||
-                    plan.kind === "free" ||
-                    plan.pending_change?.plan_key === entry.key,
-                )
-                .map((entry) => (
-                  <PlanCard
-                    key={entry.key}
-                    plan={entry}
-                    current={plan}
-                    canManage={
-                      canManage &&
-                      (entry.kind === "custom" ||
-                        canStartPlan(capabilities.data, entry))
-                    }
-                    onDowngrade={(entry) =>
-                      teamKey && setTarget({ plan: entry, teamKey })
-                    }
-                  />
-                ))}
+              {(v2 ? catalog : []).map((entry) => (
+                <PlanCard
+                  key={entry.key}
+                  plan={entry}
+                  current={plan}
+                  canManage={
+                    canManage &&
+                    (entry.kind === "custom" ||
+                      canStartPlan(capabilities.data, entry))
+                  }
+                  onDowngrade={(entry) =>
+                    teamKey && setTarget({ plan: entry, teamKey })
+                  }
+                />
+              ))}
             </div>
           </>
         )}

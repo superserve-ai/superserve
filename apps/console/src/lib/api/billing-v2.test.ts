@@ -92,7 +92,7 @@ describe("planAction", () => {
     expect(planAction(team(FREE), FUNDED)).toEqual({ type: "unavailable" })
   })
 
-  it("lets legacy pay-as-you-go teams buy Starter or Pro but not Free", () => {
+  it("lets legacy pay-as-you-go teams buy Starter or Pro or move to Free", () => {
     const legacy = team(card("legacy", "legacy_payg", "Pay as you go"))
     expect(planAction(legacy, STARTER)).toMatchObject({
       href: BUY_CREDIT_PATH,
@@ -100,16 +100,22 @@ describe("planAction", () => {
     expect(planAction(legacy, PRO)).toMatchObject({
       href: PRO_UPGRADE_PATH,
     })
-    expect(planAction(legacy, FREE)).toEqual({ type: "unavailable" })
+    expect(planAction(legacy, FREE)).toEqual({
+      type: "downgrade",
+      label: "Switch to Free",
+    })
   })
 
-  it("downgrades through a scheduled change but never offers Free", () => {
+  it("lets teams on a plan downgrade through a scheduled change", () => {
     expect(planAction(team(PRO), STARTER)).toEqual({
       type: "downgrade",
       label: "Switch to Starter",
     })
     for (const current of [PRO, STARTER, ENTERPRISE])
-      expect(planAction(team(current), FREE)).toEqual({ type: "unavailable" })
+      expect(planAction(team(current), FREE)).toEqual({
+        type: "downgrade",
+        label: "Switch to Free",
+      })
   })
 
   it("marks the current and scheduled plans and sends Enterprise teams to us", () => {

@@ -104,13 +104,19 @@ it("needs both the entry gate and a sellable offer to start a plan", () => {
   expect(canStartPlan(open, plan("alpha_monthly"))).toBe(true)
   expect(canStartPlan(open, plan("beta_monthly"))).toBe(false)
   expect(canStartPlan(open, plan("unlisted_monthly"))).toBe(true)
-  expect(canStartPlan(open, { key: "free", kind: "free" })).toBe(false)
+  expect(canStartPlan(open, { key: "free", kind: "free" })).toBe(true)
   expect(canStartAnyPlan(open)).toBe(true)
 
   const closed = {
     ...open,
-    fresh_entry: { ...open.fresh_entry, pro: false, starter: false },
+    fresh_entry: {
+      ...open.fresh_entry,
+      pro: false,
+      starter: false,
+      choose_free: false,
+    },
   }
   expect(canStartPlan(closed, plan("alpha_monthly"))).toBe(false)
+  expect(canStartPlan(closed, { key: "free", kind: "free" })).toBe(false)
   expect(canStartAnyPlan(closed)).toBe(false)
 })

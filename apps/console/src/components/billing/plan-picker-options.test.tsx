@@ -57,6 +57,18 @@ describe("PlanPickerOptions", () => {
     )
   })
 
+  it("highlights a plan still on sale when the preselected one isn't", async () => {
+    mocks.offers = [
+      offer("developer_monthly", "Builder", { sellable: false }),
+      offer("pro_monthly", "Team"),
+    ]
+    render(<PlanPickerOptions preselected="developer" />)
+    expect(await screen.findByRole("form", { name: "Team plan" })).toHaveClass(
+      "border-brand/70",
+    )
+    expect(screen.queryByRole("form", { name: "Builder plan" })).toBeNull()
+  })
+
   it("falls back to today's plan buttons when offers can't be read", async () => {
     mocks.offers = null
     render(<PlanPickerOptions preselected={null} />)

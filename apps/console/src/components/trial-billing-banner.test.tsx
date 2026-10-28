@@ -385,6 +385,24 @@ describe("TrialBillingBanner for a new team's trial", () => {
     expect(container.textContent).not.toMatch(/Add Payment|\$95/)
   })
 
+  it("sends Upgrade to the picker when the chosen plan isn't sold any more", () => {
+    entry("trial")
+    mocks.offers = [
+      {
+        offer_key: "developer_monthly",
+        display_name: "Builder",
+        sellable: false,
+      },
+    ]
+    mocks.summary.mockReturnValue({ data: trial(0.37) })
+    mount("developer")
+    expect(screen.queryByRole("button", { name: /Upgrade to/ })).toBeNull()
+    expect(screen.getByRole("link", { name: "Upgrade" })).toHaveAttribute(
+      "href",
+      expect.stringMatching(/choose-plan\/?\?reason=upgrade$/),
+    )
+  })
+
   it("warns once the balance drops below the almost-used-up setting", () => {
     entry("trial")
     mocks.summary.mockReturnValue({ data: trial(0.11, 0.11) })

@@ -58,13 +58,15 @@ function freshEntryFor(
       return capabilities.fresh_entry.starter
     case "subscription":
       return capabilities.fresh_entry.pro
+    case "free":
+      return capabilities.fresh_entry.choose_free
     default:
       return false
   }
 }
 
-// Whether this team can buy plan now: the entry gate for its kind must be
-// open, and a catalog offer for it, where listed, must be sellable.
+// Whether this team can move to plan now: the entry gate for its kind must
+// be open, and a catalog offer for it, where listed, must be sellable.
 export function canStartPlan(
   capabilities: BillingCapabilities | undefined,
   plan: { key: string; kind: PlanKind },

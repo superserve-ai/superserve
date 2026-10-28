@@ -312,7 +312,8 @@ export function planAction(current: TeamPlan, target: CatalogPlan): PlanAction {
     return { type: "scheduled" }
   if (target.kind === current.kind)
     return target.kind === "free" ? { type: "current" } : { type: "contact" }
-  if (target.kind === "free") return { type: "unavailable" }
+  if (target.kind === "free")
+    return { type: "downgrade", label: "Switch to Free" }
   if (current.kind === "custom") return { type: "contact" }
   if (target.kind === "custom")
     return {

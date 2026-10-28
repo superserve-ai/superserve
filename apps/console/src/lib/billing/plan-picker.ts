@@ -70,3 +70,13 @@ export function offerTerms(offer: BillingOffer): string[] {
     )
   return terms
 }
+
+// Whether the picker still sells offer. Offers that don't list it leave
+// today's behaviour, which offers it.
+export function pickerOfferSellable(
+  offers: readonly BillingOffer[] | null | undefined,
+  offer: SignupCheckoutOffer,
+): boolean {
+  const key = SIGNUP_CHECKOUT_OFFERS[offer]
+  return offers?.find((catalog) => catalog.offer_key === key)?.sellable ?? true
+}

@@ -244,8 +244,7 @@ describe("UpgradePage with pricing v2 on", () => {
     expect(screen.getByTestId("plan-card-pro_monthly").textContent).toMatch(
       /Current plan/,
     )
-    expect(screen.queryByRole("button", { name: "Switch to Free" })).toBeNull()
-    expect(screen.queryByTestId("plan-card-free")).toBeNull()
+    expect(screen.getByRole("button", { name: "Switch to Free" })).toBeTruthy()
     expect(
       screen.getByRole("button", { name: "Switch to Starter" }),
     ).toBeTruthy()

@@ -77,7 +77,11 @@ export function PlanPickerOptions({
       <div className="mt-5 h-5 w-5 animate-spin border-2 border-primary border-t-transparent" />
     )
   const plans = pickerPlans(offers)
-  const chosen = preselected === "starter" ? "developer" : preselected
+  const asked = preselected === "starter" ? "developer" : preselected
+  const chosen =
+    asked && !plans.some((plan) => plan.offer === asked)
+      ? (plans[0]?.offer ?? null)
+      : asked
   const highlighted = (offer: SignupCheckoutOffer) =>
     !chosen || chosen === offer
   if (plans.length === 0)

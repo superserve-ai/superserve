@@ -21,7 +21,9 @@ const mocks = vi.hoisted(() => ({
   teamKey: "use:11111111-1111-4111-8111-111111111111",
   ready: true,
   scope: "self",
-  plan: { key: "funded_monthly", kind: "prepaid" } as Record<string, unknown>,
+  plan: { key: "funded_monthly", kind: "prepaid" } as
+    | Record<string, unknown>
+    | undefined,
 }))
 
 vi.mock("@/lib/api/starter-checkout-recovery", () => ({
@@ -478,4 +480,11 @@ it("only manages Auto Topoff for a subscription funded by credit", () => {
   render(page())
   expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
   expect(screen.getByTestId("page-title").textContent).toBe("Auto Topoff")
+})
+
+it("waits for the plan before offering a credit purchase", () => {
+  mocks.plan = undefined
+  render(page())
+  expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
+  expect(screen.getByText("Checking your plan…")).toBeTruthy()
 })

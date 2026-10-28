@@ -21,7 +21,7 @@ import type {
   BillingTrialBalance,
 } from "@/lib/api/billing"
 import type { SignupPlanContext } from "@/lib/api/signup-plan"
-import { pickerPlanLabel } from "@/lib/billing/plan-picker"
+import { pickerOfferSellable, pickerPlanLabel } from "@/lib/billing/plan-picker"
 import {
   type AwaitingPlanState,
   planPickerPath,
@@ -127,7 +127,9 @@ function TrialEntryBanner({
     "signup-plan",
     teamKey,
   ])
-  const selected = trialPlanOffer(signup?.requestedOffer)
+  const requested = trialPlanOffer(signup?.requestedOffer)
+  const selected =
+    requested && pickerOfferSellable(offers, requested) ? requested : undefined
   const stage = trialStage(entry, summary.trial)
   const remaining = formatUsd(summary.trial?.remaining_usd)
   const plan = selected ? pickerPlanLabel(offers, selected) : null

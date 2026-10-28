@@ -193,7 +193,9 @@ export function BuyCreditPageClient({
               recovery={existingStarter}
               canManage={canRecover}
             />
-            {topoffOnly ? null : allowEntry ? (
+            {topoffOnly ? null : allowEntry && plan === undefined ? (
+              <p className="text-sm text-muted">Checking your plan…</p>
+            ) : allowEntry ? (
               <PurchaseCard
                 key={`${scope}:${teamKey}:${user?.id}:${topoff?.amount_cents}`}
                 actor={actor}
@@ -231,9 +233,8 @@ export function BuyCreditPageClient({
             ) : null}
             {!allowRecharge ? (
               <p className="text-sm text-muted">
-                Auto-recharge changes are temporarily unavailable.
-                {allowDisableRecharge &&
-                  " You can still turn auto-recharge off."}
+                Auto Topoff changes are temporarily unavailable.
+                {allowDisableRecharge && " You can still turn Auto Topoff off."}
               </p>
             ) : null}
             <AutoRechargeCard
@@ -468,13 +469,10 @@ function AutoRechargeCard({
             ? { ...previous, auto_recharge: updated.auto_recharge }
             : updated,
       )
-      addToast(
-        enabled ? "Auto-recharge is on" : "Auto-recharge is off",
-        "success",
-      )
+      addToast(enabled ? "Auto Topoff is on" : "Auto Topoff is off", "success")
     } catch (err) {
       addToast(
-        err instanceof Error ? err.message : "Unable to save auto-recharge",
+        err instanceof Error ? err.message : "Unable to save Auto Topoff",
         "error",
       )
     } finally {
@@ -491,7 +489,7 @@ function AutoRechargeCard({
       <h2 className="font-mono text-xs text-muted uppercase">Auto Topoff</h2>
       {current.disabled_reason && !current.enabled && (
         <p className="border border-dashed border-destructive p-3 text-sm text-foreground">
-          Auto-recharge was turned off: {current.disabled_reason}.
+          Auto Topoff was turned off: {current.disabled_reason}.
           {allowEntry && " Check your card, then turn it back on."}
         </p>
       )}
@@ -503,7 +501,7 @@ function AutoRechargeCard({
       />
       {allowEntry && !canEnable && (
         <p className="text-sm text-muted">
-          Buy credit once to save a card, then you can turn on auto-recharge.
+          Buy credit once to save a card, then you can turn on Auto Topoff.
         </p>
       )}
       {enabled && (
@@ -542,7 +540,7 @@ function AutoRechargeCard({
       )}
       <p className="text-sm text-muted">
         At most one charge runs at a time and at most 10 a day. A declined card
-        turns auto-recharge off and we email your billing contacts.
+        turns Auto Topoff off and we email your billing contacts.
       </p>
       <div>
         <Button
@@ -569,7 +567,7 @@ function PurchaseHistory({ purchases }: { purchases: PrepaidPurchase[] }) {
           <li key={p.id} className="flex items-center justify-between py-2">
             <span className="text-foreground">
               {new Date(p.created_at).toLocaleDateString()} ·{" "}
-              {p.source === "auto_recharge" ? "Auto-recharge" : "Purchase"}
+              {p.source === "auto_recharge" ? "Auto Topoff" : "Purchase"}
             </span>
             <span className="text-muted">
               {formatDollars(p.amount_cents)} · {STATE_LABELS[p.state]}

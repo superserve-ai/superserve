@@ -69,6 +69,10 @@ vi.mock("@/hooks/use-teams", () => ({
 vi.mock("@/hooks/use-user", () => ({
   useUser: () => ({ user: { id: "actor" } }),
 }))
+vi.mock("@/hooks/use-billing-v2", async (original) => ({
+  ...(await original<typeof import("@/hooks/use-billing-v2")>()),
+  useTeamPlan: () => ({ data: null }),
+}))
 vi.mock("@/hooks/use-pricing-version", () => ({
   usePricingVersion: () => state.pricing,
 }))

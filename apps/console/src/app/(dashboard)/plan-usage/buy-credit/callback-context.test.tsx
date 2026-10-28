@@ -248,7 +248,7 @@ it.each([
     ).toBe(!allowEntry)
     expect(
       Boolean(
-        screen.queryByText(/Auto-recharge changes are temporarily unavailable/),
+        screen.queryByText(/Auto Topoff changes are temporarily unavailable/),
       ),
     ).toBe(!allowRecharge)
   },
