@@ -111,16 +111,18 @@ export function draftFromVersion(version: PlanVersion): PlanDraft {
 }
 
 // Mirrors the catalog API: only v2 subscriptions run on funded credit, and
-// Auto Topoff needs funded credit and amounts in $5 steps from $5 to $10,000.
-const TOPOFF_STEP_CENTS = 500
+// Auto Topoff needs funded credit, an amount in $5 steps and a threshold in
+// whole dollars, both up to $10,000.
+const TOPOFF_AMOUNT_STEP_CENTS = 500
+const TOPOFF_THRESHOLD_STEP_CENTS = 100
 const TOPOFF_MAX_CENTS = 1_000_000
 
-function validTopoffCents(cents: number) {
+function validTopoffCents(cents: number, step: number) {
   return (
     Number.isInteger(cents) &&
-    cents >= TOPOFF_STEP_CENTS &&
+    cents >= step &&
     cents <= TOPOFF_MAX_CENTS &&
-    cents % TOPOFF_STEP_CENTS === 0
+    cents % step === 0
   )
 }
 
@@ -139,10 +141,13 @@ export function fundingIssue(
     return "Auto Topoff needs a plan that runs on funded credit."
   if (
     draft.topoff &&
-    (!validTopoffCents(draft.topoff.amount_cents) ||
-      !validTopoffCents(draft.topoff.threshold_cents))
+    (!validTopoffCents(draft.topoff.amount_cents, TOPOFF_AMOUNT_STEP_CENTS) ||
+      !validTopoffCents(
+        draft.topoff.threshold_cents,
+        TOPOFF_THRESHOLD_STEP_CENTS,
+      ))
   )
-    return "Auto Topoff amount and threshold must be multiples of $5 from $5 to $10,000."
+    return "Auto Topoff needs an amount in $5 steps from $5 and a threshold in whole dollars from $1, both up to $10,000."
   return null
 }
 

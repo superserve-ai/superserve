@@ -65,18 +65,25 @@ export function PlanPickerOptions({
   preselected: SignupCheckoutOffer | null
   locator: CheckoutLocator
 }) {
-  const [offers, setOffers] = useState<BillingOffer[] | null>()
   const { account, team } = locator
+  const key = `${account}:${team}`
+  // Offers are kept with the team they were read for, so a picker that moves
+  // to another team never shows the previous team's prices on its forms.
+  const [loaded, setLoaded] = useState<{
+    key: string
+    offers: BillingOffer[] | null
+  }>()
   useEffect(() => {
     let live = true
     getTeamOffersAction({ account, team }).then(
-      (loaded) => live && setOffers(loaded),
-      () => live && setOffers(null),
+      (offers) => live && setLoaded({ key, offers }),
+      () => live && setLoaded({ key, offers: null }),
     )
     return () => {
       live = false
     }
-  }, [account, team])
+  }, [account, team, key])
+  const offers = loaded?.key === key ? loaded.offers : undefined
 
   if (offers === undefined)
     return (

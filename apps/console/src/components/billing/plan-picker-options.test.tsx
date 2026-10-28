@@ -1,16 +1,19 @@
-import { cleanup, render, screen } from "@testing-library/react"
+import { act, cleanup, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { BillingOffer } from "@/lib/billing/plans"
 
 const mocks = vi.hoisted(() => ({
   offers: null as BillingOffer[] | null,
+  next: null as Promise<BillingOffer[]> | null,
   load: vi.fn(),
 }))
 vi.mock("@/lib/billing/plan-offers-actions", () => ({
   getTeamOffersAction: async (locator: unknown) => {
     mocks.load(locator)
-    return mocks.offers
+    const next = mocks.next
+    mocks.next = null
+    return next ?? mocks.offers
   },
 }))
 
@@ -94,4 +97,28 @@ describe("PlanPickerOptions", () => {
     render(<PlanPickerOptions preselected={null} locator={locator} />)
     expect(await screen.findByText(/No plans are available/)).toBeTruthy()
   })
+})
+
+it("never shows the previous team's offers on forms for a new team", async () => {
+  mocks.offers = [offer("developer_monthly", "Team A price")]
+  const { rerender } = render(
+    <PlanPickerOptions preselected="developer" locator={locator} />,
+  )
+  await screen.findByRole("form", { name: "Team A price plan" })
+  let resolve!: (offers: BillingOffer[]) => void
+  const pending = new Promise<BillingOffer[]>((r) => {
+    resolve = r
+  })
+  mocks.next = pending
+  const other = { account: locator.account, team: "use:team-2" }
+  rerender(<PlanPickerOptions preselected="developer" locator={other} />)
+  expect(screen.queryByRole("form", { name: "Team A price plan" })).toBeNull()
+  expect(screen.queryByRole("button")).toBeNull()
+  await act(async () =>
+    resolve([
+      offer("developer_monthly", "Team B price", { price_cents: 2500 }),
+    ]),
+  )
+  const form = await screen.findByRole("form", { name: "Team B price plan" })
+  expect(form.getAttribute("action")).toContain("team=use%3Ateam-2")
 })

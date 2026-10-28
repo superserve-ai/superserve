@@ -670,3 +670,31 @@ it("keeps Settings recovery and recharge-disable navigation when capabilities ar
     screen.getByRole("link", { name: "Manage auto-recharge" }),
   ).toHaveAttribute("href", "/plan-usage/buy-credit")
 })
+
+it("doesn't promise postpaid overages for a credit-funded plan", () => {
+  mocks.plan.mockReturnValue({
+    data: plan({
+      key: "developer_monthly",
+      name: "Developer",
+      funding_policy: "prepaid",
+      topoff: {
+        amount_cents: 2500,
+        threshold_cents: 1000,
+        default_enabled: false,
+      },
+    }),
+    isError: false,
+  })
+  render(
+    <PlanOverviewSection
+      summary={{
+        ...summary,
+        plan: { ...summary.plan!, key: "developer_monthly" },
+      }}
+    />,
+  )
+  expect(
+    screen.queryByText(/beyond the included usage, billed at usage rates/),
+  ).toBeNull()
+  expect(screen.queryByText(/at the end of the period/)).toBeNull()
+})

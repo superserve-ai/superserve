@@ -217,7 +217,7 @@ describe("billing catalog fan-out", () => {
       ),
       "Bad step",
     )
-    expect(result.errors.all).toMatch(/multiples of \$5/)
+    expect(result.errors.all).toMatch(/amount in \$5 steps/)
     expect(writes()).toEqual([])
   })
 

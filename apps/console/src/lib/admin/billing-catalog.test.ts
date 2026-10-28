@@ -222,6 +222,18 @@ describe("fundingIssue", () => {
 
   it("accepts a funded v2 subscription with a valid Auto Topoff", () => {
     expect(fundingIssue(terms())).toBeNull()
+    for (const threshold_cents of [100, 700, 1_000_000])
+      expect(
+        fundingIssue(
+          terms({
+            topoff: {
+              amount_cents: 1500,
+              threshold_cents,
+              default_enabled: true,
+            },
+          }),
+        ),
+      ).toBeNull()
     expect(fundingIssue(terms({ topoff: null }))).toBeNull()
     expect(
       fundingIssue(terms({ funding_policy: "postpaid", topoff: null })),
@@ -248,6 +260,26 @@ describe("fundingIssue", () => {
         topoff: {
           amount_cents: 1500,
           threshold_cents: 0,
+          default_enabled: true,
+        },
+      }),
+    ],
+    [
+      "a threshold in cents",
+      terms({
+        topoff: {
+          amount_cents: 1500,
+          threshold_cents: 150,
+          default_enabled: true,
+        },
+      }),
+    ],
+    [
+      "a too-large threshold",
+      terms({
+        topoff: {
+          amount_cents: 1500,
+          threshold_cents: 1_000_100,
           default_enabled: true,
         },
       }),

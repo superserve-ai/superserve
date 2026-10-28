@@ -503,3 +503,88 @@ describe("PlanBanner for a credit-funded subscription", () => {
     expect(mount().container.textContent).toBe("")
   })
 })
+
+it("stays quiet on an empty balance the backend doesn't call low while the summary still reads active", () => {
+  mocks.plan.mockReturnValue({
+    data: {
+      ...plan("subscription"),
+      key: "developer_monthly",
+      name: "Developer",
+      funding_policy: "prepaid",
+      topoff: {
+        amount_cents: 2500,
+        threshold_cents: 1000,
+        default_enabled: false,
+      },
+    },
+  })
+  mocks.summary.mockReturnValue({
+    data: {
+      permissions: { can_view: true, can_manage: true },
+      trial: {
+        state: "active",
+        remaining_usd: 1,
+        low_credit_threshold_usd: 10,
+      },
+    },
+  })
+  mocks.prepaid.mockReturnValue({
+    data: {
+      balance_cents: 0,
+      balance_observed: true,
+      low_balance: false,
+      auto_recharge: {
+        enabled: false,
+        threshold_cents: 1000,
+        amount_cents: 2500,
+        disabled_reason: null,
+        disabled_at: null,
+        in_flight: false,
+      },
+    },
+  })
+  expect(mount().container.textContent).toBe("")
+})
+
+it("stays quiet while the funded credit state is unknown", () => {
+  mocks.plan.mockReturnValue({
+    data: {
+      ...plan("subscription"),
+      key: "developer_monthly",
+      name: "Developer",
+      funding_policy: "prepaid",
+      topoff: {
+        amount_cents: 2500,
+        threshold_cents: 1000,
+        default_enabled: false,
+      },
+    },
+  })
+  mocks.summary.mockReturnValue({
+    data: {
+      permissions: { can_view: true, can_manage: true },
+      trial: {
+        state: "unknown",
+        remaining_usd: 0,
+        eligible: false,
+        low_credit_threshold_usd: 10,
+      },
+    },
+  })
+  mocks.prepaid.mockReturnValue({
+    data: {
+      balance_cents: 0,
+      balance_observed: true,
+      low_balance: false,
+      auto_recharge: {
+        enabled: false,
+        threshold_cents: 1000,
+        amount_cents: 2500,
+        disabled_reason: null,
+        disabled_at: null,
+        in_flight: false,
+      },
+    },
+  })
+  expect(mount().container.textContent).toBe("")
+})
