@@ -1,0 +1,207 @@
+"use client"
+
+import { Button, Field, Input, Switch, useToast } from "@superserve/ui"
+import { useQueryClient } from "@tanstack/react-query"
+import { useState } from "react"
+
+import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
+import { useBillingContext } from "@/hooks/use-billing-context"
+import { usePrepaidCredit } from "@/hooks/use-prepaid-credit"
+import {
+  type PrepaidCreditSummary,
+  setPrepaidAutoRecharge,
+  validPrepaidCents,
+} from "@/lib/api/prepaid"
+import { billingKeys } from "@/lib/api/query-keys"
+import type { PlanTopoff } from "@/lib/billing/plans"
+
+export const AMOUNT_ERROR = "Enter a dollar amount above $0, like 25."
+
+export function centsToDollars(cents: number | null | undefined): string {
+  return typeof cents === "number" ? String(cents / 100) : ""
+}
+
+export function dollarsToCents(value: string): number | null {
+  if (!/^\d+(\.\d{1,2})?$/.test(value.trim())) return null
+  return Math.round(Number(value.trim()) * 100)
+}
+
+export function AutoTopoffCard({
+  data,
+  topoff,
+  canManage,
+  allowEntry,
+  allowDisable,
+}: {
+  data: PrepaidCreditSummary
+  topoff: PlanTopoff
+  canManage: boolean
+  allowEntry: boolean
+  allowDisable: boolean
+}) {
+  const { teamKey, cacheScope } = useBillingContext()
+  const queryClient = useQueryClient()
+  const { addToast } = useToast()
+  const current = data.auto_recharge
+  const [enabled, setEnabled] = useState(current.enabled)
+  const [threshold, setThreshold] = useState(
+    centsToDollars(current.threshold_cents ?? topoff?.threshold_cents),
+  )
+  const [amount, setAmount] = useState(
+    centsToDollars(current.amount_cents ?? topoff?.amount_cents),
+  )
+  const [saving, setSaving] = useState(false)
+  const thresholdCents = dollarsToCents(threshold)
+  const amountCents = dollarsToCents(amount)
+  const valid =
+    !enabled ||
+    (thresholdCents !== null &&
+      amountCents !== null &&
+      validPrepaidCents(thresholdCents) &&
+      validPrepaidCents(amountCents))
+
+  const actionAllowed = enabled ? allowEntry : allowDisable
+  const save = async () => {
+    if (!teamKey || !canManage || !valid || saving || !actionAllowed) return
+    setSaving(true)
+    try {
+      const updated = await setPrepaidAutoRecharge(teamKey, {
+        enabled,
+        thresholdCents: thresholdCents ?? undefined,
+        amountCents: amountCents ?? undefined,
+      })
+      queryClient.setQueryData(
+        billingKeys.prepaid({ cacheScope, teamKey }),
+        (previous: PrepaidCreditSummary | undefined) =>
+          previous
+            ? { ...previous, auto_recharge: updated.auto_recharge }
+            : updated,
+      )
+      addToast(enabled ? "Auto Topoff is on" : "Auto Topoff is off", "success")
+    } catch (err) {
+      addToast(
+        err instanceof Error ? err.message : "Unable to save Auto Topoff",
+        "error",
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const canEnable = allowEntry && data.has_saved_card
+  return (
+    <section
+      id="auto-topoff"
+      className="flex flex-col gap-4 border border-dashed border-border p-4"
+    >
+      <h2 className="font-mono text-xs text-muted uppercase">Auto Topoff</h2>
+      {current.disabled_reason && !current.enabled && (
+        <p className="border border-dashed border-destructive p-3 text-sm text-foreground">
+          Auto Topoff was turned off: {current.disabled_reason}.
+          {allowEntry && " Check your card, then turn it back on."}
+        </p>
+      )}
+      <Switch
+        label="Charge my saved card automatically when credit runs low"
+        checked={enabled}
+        disabled={!canManage || (enabled ? !allowDisable : !canEnable)}
+        onCheckedChange={setEnabled}
+      />
+      {allowEntry && !canEnable && (
+        <p className="text-sm text-muted">
+          Buy credit once to save a card, then you can turn on Auto Topoff.
+        </p>
+      )}
+      {enabled && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label="When credit falls below (USD)"
+            error={
+              thresholdCents === null || !validPrepaidCents(thresholdCents)
+                ? AMOUNT_ERROR
+                : undefined
+            }
+          >
+            <Input
+              inputMode="decimal"
+              value={threshold}
+              disabled={!canManage || !allowEntry}
+              onChange={(e) => setThreshold(e.target.value)}
+            />
+          </Field>
+          <Field
+            label="Add this much credit (USD)"
+            error={
+              amountCents === null || !validPrepaidCents(amountCents)
+                ? AMOUNT_ERROR
+                : undefined
+            }
+          >
+            <Input
+              inputMode="decimal"
+              value={amount}
+              disabled={!canManage || !allowEntry}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+          </Field>
+        </div>
+      )}
+      <p className="text-sm text-muted">
+        At most one charge runs at a time and at most 10 a day. A declined card
+        turns Auto Topoff off and we email your billing contacts.
+      </p>
+      <div>
+        <Button
+          variant="outline"
+          disabled={!canManage || !valid || saving || !actionAllowed}
+          onClick={save}
+        >
+          {saving ? "Saving…" : "Save"}
+        </Button>
+      </div>
+    </section>
+  )
+}
+
+// Auto Topoff for a plan funded by credit, managed from Settings.
+export function AutoTopoffSettings({
+  topoff,
+  canManage,
+}: {
+  topoff: PlanTopoff
+  canManage: boolean
+}) {
+  const capabilities = useBillingCapabilities()
+  const credit = usePrepaidCredit()
+  const data = credit.isError ? undefined : credit.data
+  if (!data)
+    return (
+      <p id="auto-topoff" className="px-5 pb-5 text-sm text-muted sm:px-6">
+        {credit.isError
+          ? "Auto Topoff settings couldn't be loaded."
+          : "Loading Auto Topoff…"}
+      </p>
+    )
+  const allowEntry = capabilities.data?.fresh_entry.auto_recharge === true
+  const allowDisable =
+    !capabilities.isPending &&
+    capabilities.data?.actions?.disable_auto_recharge !== false
+  return (
+    <div className="px-5 pb-5 sm:px-6">
+      <AutoTopoffCard
+        key={[
+          allowEntry,
+          data.auto_recharge.enabled,
+          data.auto_recharge.threshold_cents,
+          data.auto_recharge.amount_cents,
+          data.auto_recharge.disabled_at,
+        ].join(":")}
+        data={data}
+        topoff={topoff}
+        canManage={canManage}
+        allowEntry={allowEntry}
+        allowDisable={allowDisable}
+      />
+    </div>
+  )
+}

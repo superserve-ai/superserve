@@ -14,6 +14,7 @@ vi.mock("@/hooks/use-billing-capabilities", () => ({
         },
   }),
 }))
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -27,6 +28,35 @@ const mocks = vi.hoisted(() => ({
   allowance: vi.fn(),
   prepaid: vi.fn(),
   pricing: vi.fn(),
+}))
+vi.mock("@/hooks/use-prepaid-credit", () => ({
+  usePrepaidCredit: () => ({
+    data: {
+      checkout_idempotency_supported: true,
+      balance_cents: 900,
+      has_saved_card: true,
+      purchases: [],
+      auto_recharge: {
+        enabled: false,
+        threshold_cents: null,
+        amount_cents: null,
+        disabled_reason: null,
+        disabled_at: null,
+        in_flight: false,
+      },
+    },
+  }),
+}))
+vi.mock("@/hooks/use-billing-context", () => ({
+  useBillingContext: () => ({
+    teamKey: "use:t",
+    cacheScope: "self",
+    ready: true,
+  }),
+}))
+vi.mock("@superserve/ui", async (original) => ({
+  ...(await original<typeof import("@superserve/ui")>()),
+  useToast: () => ({ addToast: vi.fn() }),
 }))
 vi.mock("@/components/current-plan", () => ({
   CurrentPlan: () => <div data-testid="legacy-plan" />,
@@ -264,7 +294,7 @@ describe("PlanOverviewSection with pricing v2 on", () => {
       isError: false,
     })
     render(<PlanOverviewSection summary={summary} />)
-    expect(screen.getByText("Usage couldn't be loaded.")).toBeTruthy()
+    expect(screen.getByText("Loading your plan…")).toBeTruthy()
     expect(screen.queryByText(/of \$250 used/)).toBeNull()
   })
 
@@ -516,8 +546,8 @@ describe("PlanOverviewSection with pricing v2 on", () => {
   })
 })
 
-describe("Pro next monthly billing period", () => {
-  const bridgeSummary = {
+describe("a summary that disagrees with the plan", () => {
+  const pending = {
     ...summary,
     plan: {
       ...summary.plan!,
@@ -526,75 +556,70 @@ describe("Pro next monthly billing period", () => {
       included_usage: null,
     },
   } as BillingSummaryResponse
-  it("shows the authoritative next monthly start without fabricating issued credit or current usage", () => {
+
+  it.each([
+    ["is still pending", pending],
+    [
+      "names another plan",
+      { ...summary, plan: { ...summary.plan!, key: "other_monthly" } },
+    ],
+  ])("shows loading while the summary %s", (_, changed) => {
     mocks.plan.mockReturnValue({ data: plan({}), isError: false })
-    render(<PlanOverviewSection summary={bridgeSummary} />)
+    render(<PlanOverviewSection summary={changed as BillingSummaryResponse} />)
+    expect(screen.getByText("Loading your plan…")).toBeTruthy()
     expect(
-      screen.getByText("Next monthly billing period starts on Nov 1, 2026."),
-    ).toBeTruthy()
-    expect(screen.queryByText(/couldn't be loaded|of \$250 used/)).toBeNull()
-  })
-  it("does not label the next period as the start of included usage for a first paid month", () => {
-    const start = "2026-10-27T05:14:51Z"
-    const end = "2026-11-27T05:14:51Z"
-    mocks.plan.mockReturnValue({
-      data: plan({ period_start: start, period_end: end }),
-      isError: false,
-    })
-    render(
-      <PlanOverviewSection
-        summary={{
-          ...bridgeSummary,
-          billing_period: { start, end },
-          plan: { ...bridgeSummary.plan!, starts_at: end },
-        }}
-      />,
-    )
-    expect(
-      screen.getByText("Next monthly billing period starts on Nov 27, 2026."),
-    ).toBeTruthy()
-    expect(
-      screen.queryByText(
-        /Monthly included usage starts|credit issued|of \$250 used/,
-      ),
+      screen.queryByText(/Next monthly|of \$250 used|couldn't be loaded/),
     ).toBeNull()
   })
-  it.each([
-    "active",
-    "different plan",
-    "different start",
-    "different period",
-    "different period start",
-    "prepaid plan",
-  ])(
-    "retains missing-usage error for %s rather than inferring a bridge",
-    (mismatch) => {
-      mocks.plan.mockReturnValue({ data: plan({}), isError: false })
-      const changed = structuredClone(bridgeSummary)
-      if (mismatch === "active") changed.plan!.status = "active"
-      if (mismatch === "different plan") changed.plan!.key = "different-plan"
-      if (mismatch === "different start")
-        changed.plan!.starts_at = "2026-11-02T00:00:00Z"
-      if (mismatch === "different period")
-        changed.billing_period.end = "2026-11-02T00:00:00Z"
-      if (mismatch === "different period start")
-        changed.billing_period.start = "2026-10-02T00:00:00Z"
-      if (mismatch === "prepaid plan")
-        mocks.plan.mockReturnValue({
-          data: plan({ kind: "prepaid" }),
-          isError: false,
-        })
-      render(<PlanOverviewSection summary={changed} />)
-      expect(
-        screen.queryByText(/Next monthly billing period starts/),
-      ).toBeNull()
-      if (mismatch !== "prepaid plan")
-        expect(screen.getByText("Usage couldn't be loaded.")).toBeTruthy()
-    },
-  )
+
+  it("leaves credit plans alone, which have no contract to compare", () => {
+    mocks.plan.mockReturnValue({
+      data: plan({ kind: "prepaid" }),
+      isError: false,
+    })
+    render(<PlanOverviewSection summary={pending} />)
+    expect(screen.queryByText("Loading your plan…")).toBeNull()
+  })
 })
 
 describe("Settings plan details", () => {
+  it("manages Auto Topoff here and says how to cancel a credit-funded plan", () => {
+    mocks.plan.mockReturnValue({
+      data: plan({
+        funding_policy: "prepaid",
+        topoff: {
+          amount_cents: 300,
+          threshold_cents: 200,
+          default_enabled: true,
+        },
+      }),
+      isError: false,
+    })
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PlanOverviewSection summary={summary} details />
+      </QueryClientProvider>,
+    )
+    expect(document.getElementById("auto-topoff")).toBeTruthy()
+    expect(screen.getByRole("switch")).toBeTruthy()
+    expect(screen.getByText(/To cancel, contact support/).textContent).toBe(
+      "To cancel, contact support at support@superserve.ai.",
+    )
+  })
+
+  it("points Pro teams to priority Slack or email to cancel", () => {
+    mocks.plan.mockReturnValue({ data: plan({}), isError: false })
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PlanOverviewSection summary={summary} details />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByText(/To cancel/).textContent).toBe(
+      "To cancel, contact support in your priority Slack channel or at support@superserve.ai.",
+    )
+    expect(document.getElementById("auto-topoff")).toBeNull()
+  })
+
   it.each([0, 3])(
     "never shows the internal template cap %s, usage or guesses",
     (max_templates) => {

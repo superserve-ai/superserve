@@ -277,23 +277,17 @@ export function IncludedUsagePanel({
   plan,
   usageCents,
   status,
-  bridgeMonthlyStartsAt,
   funded = false,
 }: {
   plan: TeamPlan
   usageCents: number | null
   status?: BillingIncludedUsage["status"]
-  bridgeMonthlyStartsAt?: string
   funded?: boolean
 }) {
   const included = plan.included_cents
   return (
     <Panel title="Included usage this period">
-      {bridgeMonthlyStartsAt ? (
-        <p className="text-sm text-muted">
-          Next monthly billing period starts on {date(bridgeMonthlyStartsAt)}.
-        </p>
-      ) : status === "pending" || status === "not_issued" ? (
+      {status === "pending" || status === "not_issued" ? (
         <p className="text-sm text-muted">
           {status === "pending"
             ? "Included usage is being added."
@@ -337,21 +331,46 @@ export interface PlanOverviewProps {
   prepaid: PrepaidBalance | null
   usageCents: number | null
   includedUsageStatus?: BillingIncludedUsage["status"]
-  bridgeMonthlyStartsAt?: string
   canManage: boolean
   canPurchase?: boolean
   allowancePricing?: BillingPricingResponse | null
   funded?: boolean
 }
 
+const SUPPORT_EMAIL = "support@superserve.ai"
+
+// How a team on a self-serve subscription reaches support to cancel: a plan
+// funded by credit by email, other subscriptions by priority Slack or email.
+function CancelSupport({ funded }: { funded: boolean }) {
+  const email = (
+    <a
+      href={`mailto:${SUPPORT_EMAIL}`}
+      className="underline underline-offset-4"
+    >
+      {SUPPORT_EMAIL}
+    </a>
+  )
+  return (
+    <p className="text-sm text-muted">
+      To cancel, contact support{" "}
+      {funded ? (
+        <>at {email}</>
+      ) : (
+        <>in your priority Slack channel or at {email}</>
+      )}
+      .
+    </p>
+  )
+}
+
 export function PlanDetails({
   plan,
   canManage,
-  topoff = false,
+  funded = false,
 }: {
   plan: TeamPlan
   canManage: boolean
-  topoff?: boolean
+  funded?: boolean
 }) {
   const size = describeSandboxSize(plan.limits)
   const pending = plan.pending_change
@@ -401,17 +420,10 @@ export function PlanDetails({
             >
               Manage auto-recharge
             </Button>
-          ) : topoff ? (
-            <Button
-              size="sm"
-              variant="outline"
-              render={<Link href={TOPOFF_SETTINGS_PATH} />}
-            >
-              Manage Auto Topoff
-            </Button>
           ) : null}
         </div>
       ) : null}
+      {plan.kind === "subscription" ? <CancelSupport funded={funded} /> : null}
     </div>
   )
 }
@@ -422,7 +434,6 @@ export function PlanOverview({
   prepaid,
   usageCents,
   includedUsageStatus,
-  bridgeMonthlyStartsAt,
   allowancePricing,
   canManage,
   canPurchase = true,
@@ -449,7 +460,6 @@ export function PlanOverview({
               plan={plan}
               usageCents={usageCents}
               status={includedUsageStatus}
-              bridgeMonthlyStartsAt={bridgeMonthlyStartsAt}
               funded={funded}
             />
             {funded ? <PrepaidPanel prepaid={prepaid} funded /> : null}

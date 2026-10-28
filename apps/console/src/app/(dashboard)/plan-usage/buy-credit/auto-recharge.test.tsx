@@ -466,7 +466,7 @@ it("keeps fresh Starter entry fenced when recovery discovery is explicitly denie
   expect(mocks.recover).not.toHaveBeenCalled()
 })
 
-it("only manages Auto Topoff for a subscription funded by credit", () => {
+it("sends a subscription funded by credit to Settings for Auto Topoff", () => {
   mocks.plan = {
     key: "funded_monthly",
     kind: "subscription",
@@ -479,7 +479,12 @@ it("only manages Auto Topoff for a subscription funded by credit", () => {
   }
   render(page())
   expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
-  expect(screen.getByTestId("page-title").textContent).toBe("Auto Topoff")
+  expect(screen.getByTestId("page-title").textContent).toBe("Credit balance")
+  expect(screen.queryByRole("switch")).toBeNull()
+  expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute(
+    "href",
+    expect.stringMatching(/^\/settings\/?#auto-topoff$/),
+  )
 })
 
 it("waits for the plan before offering a credit purchase", () => {

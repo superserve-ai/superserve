@@ -11,8 +11,9 @@ import {
 } from "@/hooks/use-billing-v2"
 import type { BillingSummaryResponse } from "@/lib/api/billing"
 import { canStartAnyPlan, canStartPlan } from "@/lib/api/billing-capabilities"
-import { fundedByCredit } from "@/lib/api/billing-v2"
+import { fundedByCredit, planTopoff } from "@/lib/api/billing-v2"
 
+import { AutoTopoffSettings } from "./auto-topoff-card"
 import { PlanDetails, PlanOverview } from "./plan-overview"
 
 function toCents(usd: number | null | undefined): number | null {
@@ -51,6 +52,14 @@ export function PlanOverviewSection({
     )
   if (!plan || plan.kind === "legacy_payg")
     return <CurrentPlan summary={summary} />
+  // The summary's contract and the plan assignment can briefly disagree
+  // while a purchase or renewal settles; show neither until they agree.
+  if (
+    plan.kind === "subscription" &&
+    summary.plan &&
+    (summary.plan.key !== plan.key || summary.plan.status === "pending")
+  )
+    return <p className="text-sm text-muted">Loading your plan…</p>
   const commercial = summary.plan?.key === plan.key ? summary.plan : null
   const matchingPeriod =
     Date.parse(plan.period_start ?? "") ===
@@ -65,15 +74,6 @@ export function PlanOverviewSection({
     Date.parse(included.period_end) === Date.parse(plan.period_end ?? "")
       ? included
       : null
-  const bridgeMonthlyStartsAt =
-    plan.kind === "subscription" &&
-    commercial?.status === "pending" &&
-    matchingPeriod &&
-    !matchingIncluded &&
-    commercial.starts_at &&
-    Date.parse(commercial.starts_at) === Date.parse(plan.period_end ?? "")
-      ? commercial.starts_at
-      : undefined
   const includedCents =
     matchingIncluded?.status === "issued"
       ? toCents(matchingIncluded.amount_usd)
@@ -82,17 +82,25 @@ export function PlanOverviewSection({
     scope === "self" && (summary.permissions?.can_manage ?? false)
   if (details)
     return (
-      <PlanDetails
-        plan={{
-          ...plan,
-          fee_cents:
-            commercial?.billing_interval_months === 1
-              ? toCents(commercial.price_usd)
-              : null,
-        }}
-        canManage={canManage}
-        topoff={funded}
-      />
+      <>
+        <PlanDetails
+          plan={{
+            ...plan,
+            fee_cents:
+              commercial?.billing_interval_months === 1
+                ? toCents(commercial.price_usd)
+                : null,
+          }}
+          canManage={canManage}
+          funded={funded}
+        />
+        {funded ? (
+          <AutoTopoffSettings
+            topoff={planTopoff(plan, capabilities.data?.offers)}
+            canManage={canManage}
+          />
+        ) : null}
+      </>
     )
   return (
     <PlanOverview
@@ -106,7 +114,6 @@ export function PlanOverviewSection({
       }}
       allowancePricing={pricing ?? null}
       includedUsageStatus={matchingIncluded?.status}
-      bridgeMonthlyStartsAt={bridgeMonthlyStartsAt}
       allowance={allowance ?? null}
       prepaid={prepaid ?? null}
       usageCents={matchingPeriod ? toCents(summary.current_charges_usd) : null}

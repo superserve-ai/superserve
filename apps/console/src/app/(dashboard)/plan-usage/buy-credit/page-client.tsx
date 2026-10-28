@@ -1,10 +1,17 @@
 "use client"
 
-import { Button, Field, Input, Spinner, Switch, useToast } from "@superserve/ui"
+import { Button, Field, Input, Spinner, useToast } from "@superserve/ui"
 import { useQueryClient } from "@tanstack/react-query"
+import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { useLayoutEffect, useRef, useState } from "react"
 
+import {
+  AMOUNT_ERROR,
+  AutoTopoffCard,
+  centsToDollars,
+  dollarsToCents,
+} from "@/components/billing/auto-topoff-card"
 import { CheckoutContextRecovery } from "@/components/billing/checkout-context-recovery"
 import { ServerStarterRecovery } from "@/components/billing/server-starter-recovery"
 import { PageHeader } from "@/components/page-header"
@@ -19,12 +26,15 @@ import {
   useRetainedPrepaidOperations,
 } from "@/hooks/use-prepaid-credit"
 import { useUser } from "@/hooks/use-user"
-import { fundedByCredit, planTopoff } from "@/lib/api/billing-v2"
+import {
+  fundedByCredit,
+  planTopoff,
+  TOPOFF_SETTINGS_PATH,
+} from "@/lib/api/billing-v2"
 import {
   type PrepaidCreditSummary,
   type PrepaidPurchase,
   type PrepaidOperation,
-  setPrepaidAutoRecharge,
   startPrepaidCheckout,
   validPrepaidCents,
 } from "@/lib/api/prepaid"
@@ -34,9 +44,6 @@ import {
   checkoutRecoveryPath,
   genericBillingReturnState,
 } from "@/lib/billing/checkout-return"
-import type { PlanTopoff } from "@/lib/billing/plans"
-
-const AMOUNT_ERROR = "Enter a dollar amount above $0, like 25."
 
 export function formatDollars(cents: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -46,14 +53,7 @@ export function formatDollars(cents: number): string {
   }).format(cents / 100)
 }
 
-function centsToDollars(cents: number | null | undefined): string {
-  return typeof cents === "number" ? String(cents / 100) : ""
-}
-
-export function dollarsToCents(value: string): number | null {
-  if (!/^\d+(\.\d{1,2})?$/.test(value.trim())) return null
-  return Math.round(Number(value.trim()) * 100)
-}
+export { dollarsToCents } from "@/components/billing/auto-topoff-card"
 
 const STATE_LABELS: Record<PrepaidPurchase["state"], string> = {
   pending: "Payment not confirmed",
@@ -136,7 +136,7 @@ export function BuyCreditPageClient({
       <PageHeader
         title={
           topoffOnly
-            ? "Auto Topoff"
+            ? "Credit balance"
             : allowEntry
               ? "Buy credit"
               : "Credit balance"
@@ -231,28 +231,44 @@ export function BuyCreditPageClient({
                 ))}
               </div>
             ) : null}
-            {!allowRecharge ? (
+            {topoffOnly ? (
               <p className="text-sm text-muted">
-                Auto Topoff changes are temporarily unavailable.
-                {allowDisableRecharge && " You can still turn Auto Topoff off."}
+                Manage Auto Topoff in{" "}
+                <Link
+                  href={TOPOFF_SETTINGS_PATH}
+                  className="underline underline-offset-4"
+                >
+                  Settings
+                </Link>
+                .
               </p>
-            ) : null}
-            <AutoRechargeCard
-              key={[
-                allowRecharge,
-                data.auto_recharge.enabled,
-                data.auto_recharge.threshold_cents,
-                data.auto_recharge.amount_cents,
-                data.auto_recharge.disabled_at,
-                topoff?.amount_cents,
-                topoff?.threshold_cents,
-              ].join(":")}
-              data={data}
-              topoff={topoff}
-              canManage={canManage}
-              allowEntry={allowRecharge}
-              allowDisable={allowDisableRecharge}
-            />
+            ) : (
+              <>
+                {!allowRecharge ? (
+                  <p className="text-sm text-muted">
+                    Auto Topoff changes are temporarily unavailable.
+                    {allowDisableRecharge &&
+                      " You can still turn Auto Topoff off."}
+                  </p>
+                ) : null}
+                <AutoTopoffCard
+                  key={[
+                    allowRecharge,
+                    data.auto_recharge.enabled,
+                    data.auto_recharge.threshold_cents,
+                    data.auto_recharge.amount_cents,
+                    data.auto_recharge.disabled_at,
+                    topoff?.amount_cents,
+                    topoff?.threshold_cents,
+                  ].join(":")}
+                  data={data}
+                  topoff={topoff}
+                  canManage={canManage}
+                  allowEntry={allowRecharge}
+                  allowDisable={allowDisableRecharge}
+                />
+              </>
+            )}
             <PurchaseHistory purchases={data.purchases} />
           </>
         )}
@@ -412,143 +428,6 @@ function PurchaseCard({
             : resume
               ? "Check previous purchase"
               : `Buy ${valid && amount !== null ? formatDollars(amount) : ""} credit`}
-        </Button>
-      </div>
-    </section>
-  )
-}
-
-function AutoRechargeCard({
-  data,
-  topoff,
-  canManage,
-  allowEntry,
-  allowDisable,
-}: {
-  data: PrepaidCreditSummary
-  topoff: PlanTopoff
-  canManage: boolean
-  allowEntry: boolean
-  allowDisable: boolean
-}) {
-  const { teamKey, cacheScope } = useBillingContext()
-  const queryClient = useQueryClient()
-  const { addToast } = useToast()
-  const current = data.auto_recharge
-  const [enabled, setEnabled] = useState(current.enabled)
-  const [threshold, setThreshold] = useState(
-    centsToDollars(current.threshold_cents ?? topoff?.threshold_cents),
-  )
-  const [amount, setAmount] = useState(
-    centsToDollars(current.amount_cents ?? topoff?.amount_cents),
-  )
-  const [saving, setSaving] = useState(false)
-  const thresholdCents = dollarsToCents(threshold)
-  const amountCents = dollarsToCents(amount)
-  const valid =
-    !enabled ||
-    (thresholdCents !== null &&
-      amountCents !== null &&
-      validPrepaidCents(thresholdCents) &&
-      validPrepaidCents(amountCents))
-
-  const actionAllowed = enabled ? allowEntry : allowDisable
-  const save = async () => {
-    if (!teamKey || !canManage || !valid || saving || !actionAllowed) return
-    setSaving(true)
-    try {
-      const updated = await setPrepaidAutoRecharge(teamKey, {
-        enabled,
-        thresholdCents: thresholdCents ?? undefined,
-        amountCents: amountCents ?? undefined,
-      })
-      queryClient.setQueryData(
-        billingKeys.prepaid({ cacheScope, teamKey }),
-        (previous: PrepaidCreditSummary | undefined) =>
-          previous
-            ? { ...previous, auto_recharge: updated.auto_recharge }
-            : updated,
-      )
-      addToast(enabled ? "Auto Topoff is on" : "Auto Topoff is off", "success")
-    } catch (err) {
-      addToast(
-        err instanceof Error ? err.message : "Unable to save Auto Topoff",
-        "error",
-      )
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const canEnable = allowEntry && data.has_saved_card
-  return (
-    <section
-      id="auto-topoff"
-      className="flex flex-col gap-4 border border-dashed border-border p-4"
-    >
-      <h2 className="font-mono text-xs text-muted uppercase">Auto Topoff</h2>
-      {current.disabled_reason && !current.enabled && (
-        <p className="border border-dashed border-destructive p-3 text-sm text-foreground">
-          Auto Topoff was turned off: {current.disabled_reason}.
-          {allowEntry && " Check your card, then turn it back on."}
-        </p>
-      )}
-      <Switch
-        label="Charge my saved card automatically when credit runs low"
-        checked={enabled}
-        disabled={!canManage || (enabled ? !allowDisable : !canEnable)}
-        onCheckedChange={setEnabled}
-      />
-      {allowEntry && !canEnable && (
-        <p className="text-sm text-muted">
-          Buy credit once to save a card, then you can turn on Auto Topoff.
-        </p>
-      )}
-      {enabled && (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label="When credit falls below (USD)"
-            error={
-              thresholdCents === null || !validPrepaidCents(thresholdCents)
-                ? AMOUNT_ERROR
-                : undefined
-            }
-          >
-            <Input
-              inputMode="decimal"
-              value={threshold}
-              disabled={!canManage || !allowEntry}
-              onChange={(e) => setThreshold(e.target.value)}
-            />
-          </Field>
-          <Field
-            label="Add this much credit (USD)"
-            error={
-              amountCents === null || !validPrepaidCents(amountCents)
-                ? AMOUNT_ERROR
-                : undefined
-            }
-          >
-            <Input
-              inputMode="decimal"
-              value={amount}
-              disabled={!canManage || !allowEntry}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-          </Field>
-        </div>
-      )}
-      <p className="text-sm text-muted">
-        At most one charge runs at a time and at most 10 a day. A declined card
-        turns Auto Topoff off and we email your billing contacts.
-      </p>
-      <div>
-        <Button
-          variant="outline"
-          disabled={!canManage || !valid || saving || !actionAllowed}
-          onClick={save}
-        >
-          {saving ? "Saving…" : "Save"}
         </Button>
       </div>
     </section>

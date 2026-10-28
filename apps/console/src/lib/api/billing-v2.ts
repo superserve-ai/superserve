@@ -211,7 +211,7 @@ export function fundedByCredit(
 
 export const UPGRADE_PATH = "/plan-usage/upgrade"
 export const BUY_CREDIT_PATH = "/plan-usage/buy-credit"
-export const TOPOFF_SETTINGS_PATH = "/plan-usage/buy-credit/#auto-topoff"
+export const TOPOFF_SETTINGS_PATH = "/settings#auto-topoff"
 export const PRO_UPGRADE_PATH = "/billing/pro"
 
 // Plan families a team on a plan can buy from the in-app upgrade page.
@@ -335,8 +335,7 @@ export function planAction(current: TeamPlan, target: CatalogPlan): PlanAction {
     return { type: "scheduled" }
   if (target.kind === current.kind)
     return target.kind === "free" ? { type: "current" } : { type: "contact" }
-  if (target.kind === "free")
-    return { type: "downgrade", label: "Switch to Free" }
+  if (target.kind === "free") return { type: "unavailable" }
   if (current.kind === "custom") return { type: "contact" }
   if (target.kind === "custom")
     return {
@@ -360,5 +359,8 @@ export function planAction(current: TeamPlan, target: CatalogPlan): PlanAction {
       }
     return { type: "link", href, label }
   }
-  return { type: "downgrade", label: `Switch to ${target.name}` }
+  // Moving down to credit or Free isn't offered under pricing v2.
+  return target.kind === "prepaid"
+    ? { type: "unavailable" }
+    : { type: "downgrade", label: `Switch to ${target.name}` }
 }
