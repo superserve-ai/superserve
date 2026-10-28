@@ -3,7 +3,7 @@ import type { User } from "@supabase/supabase-js"
 import {
   type AwaitingPlanState,
   isAwaitingPlanState,
-  paymentConfirmingPath,
+  checkoutStatusPath,
   planPickerPath,
   SIGNUP_CHECKOUT_OFFERS,
   signupCheckoutReturnPath,
@@ -122,8 +122,9 @@ export async function confirmSignupCheckout(
   teamKey: string | null,
 ): Promise<string> {
   const { base, headers, team } = await teamBackend(user)
+  if (!account || !teamKey) return planPickerPath("checkout_elsewhere")
   if (account !== user.id || teamKey !== `${team.region}:${team.teamId}`)
-    return planPickerPath("checkout_elsewhere")
+    return checkoutStatusPath("checkout_elsewhere", account, teamKey)
   const response = await fetch(`${base}/stripe/pro-checkout/recover`, {
     method: "POST",
     headers,
@@ -138,5 +139,5 @@ export async function confirmSignupCheckout(
   if (response.ok && result.outcome === "active") return "/sandboxes"
   if (response.ok && result.url?.startsWith("https://checkout.stripe.com/"))
     return result.url
-  return paymentConfirmingPath(account, teamKey)
+  return checkoutStatusPath("payment_confirming", account, teamKey)
 }

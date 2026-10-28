@@ -171,16 +171,22 @@ describe("startSignupCheckout", () => {
   )
 
   it.each([
-    ["other-user", "use:team-1"],
-    ["u1", "use:other-team"],
-    [null, null],
+    [
+      "other-user",
+      "use:team-1",
+      "/auth/choose-plan/?reason=checkout_elsewhere&account=other-user&team=use%3Ateam-1",
+    ],
+    [
+      "u1",
+      "use:other-team",
+      "/auth/choose-plan/?reason=checkout_elsewhere&account=u1&team=use%3Aother-team",
+    ],
+    [null, null, "/auth/choose-plan/?reason=checkout_elsewhere"],
   ])(
     "never confirms a checkout started by account %s on team %s",
-    async (account, team) => {
+    async (account, team, destination) => {
       recovered = { status: 200, body: { outcome: "active" } }
-      expect(await confirmSignupCheckout(user, account, team)).toBe(
-        "/auth/choose-plan/?reason=checkout_elsewhere",
-      )
+      expect(await confirmSignupCheckout(user, account, team)).toBe(destination)
       expect(
         fetchMock.mock.calls.some(([url]) => String(url).endsWith("/recover")),
       ).toBe(false)

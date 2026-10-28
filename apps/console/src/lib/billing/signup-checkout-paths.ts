@@ -85,6 +85,12 @@ export function trialPlanOffer(
   return undefined
 }
 
-export function paymentConfirmingPath(account: string, team: string) {
-  return `${PLAN_PICKER_ROUTE}?${new URLSearchParams({ reason: "payment_confirming", account, team })}`
+// Picker states about one checkout keep its account and team, so the page can
+// only re-check that checkout and never start a purchase for another team.
+export function checkoutStatusPath(
+  reason: "payment_confirming" | "checkout_elsewhere",
+  account: string,
+  team: string,
+) {
+  return `${PLAN_PICKER_ROUTE}?${new URLSearchParams({ reason, account, team })}`
 }

@@ -40,6 +40,8 @@ function ChoosePlanContent() {
   const raw = searchParams.get("reason")
   const reason: PlanPickerReason =
     raw && Object.hasOwn(MESSAGES, raw) ? (raw as PlanPickerReason) : "upgrade"
+  const checkoutAccount = searchParams.get("account")
+  const checkoutTeam = searchParams.get("team")
   const selected = searchParams.get("offer")
   const preselected =
     selected === "starter"
@@ -71,21 +73,32 @@ function ChoosePlanContent() {
           <p className="mt-2 text-center text-xs text-muted">
             {MESSAGES[reason]}
           </p>
-          {reason === "payment_confirming" ? (
-            <Button
-              render={
-                <Link
-                  href={signupCheckoutReturnPath(
-                    searchParams.get("account") ?? "",
-                    searchParams.get("team") ?? "",
-                  )}
-                />
-              }
-              size="sm"
-              className="mt-5"
-            >
-              Check again
-            </Button>
+          {reason === "payment_confirming" ||
+          reason === "checkout_elsewhere" ? (
+            checkoutAccount && checkoutTeam ? (
+              <Button
+                render={
+                  <Link
+                    href={signupCheckoutReturnPath(
+                      checkoutAccount,
+                      checkoutTeam,
+                    )}
+                  />
+                }
+                size="sm"
+                className="mt-5"
+              >
+                Check again
+              </Button>
+            ) : (
+              <Button
+                render={<Link href="/sandboxes" />}
+                size="sm"
+                className="mt-5"
+              >
+                Back to console
+              </Button>
+            )
           ) : (
             <div className="mt-5 flex gap-2">
               {PLANS.map(({ offer, label }) => (
