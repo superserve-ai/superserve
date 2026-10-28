@@ -290,6 +290,11 @@ vi.mock("@/lib/billing/plans-actions", () => ({
   getPricingVersionAction: (...args: unknown[]) => mockPricingVersion(...args),
   getPublicBillingPlansAction: (...args: unknown[]) => mockStrictPlans(...args),
 }))
+const mockSignupEntryDestination = vi.fn()
+vi.mock("@/lib/api/signup-checkout", () => ({
+  signupEntryDestination: (...args: unknown[]) =>
+    mockSignupEntryDestination(...args),
+}))
 const mockUpdateSignupReview = vi.fn()
 vi.mock("@/lib/auth/signup-review-server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/signup-review-server")>()),
@@ -354,6 +359,7 @@ describe("auth callback", () => {
         }),
       )
     mockPricingVersion.mockReset().mockResolvedValue("legacy")
+    mockSignupEntryDestination.mockReset().mockResolvedValue(null)
     mockStrictPlans.mockReset().mockImplementation(async () => ({
       pricing_version: await mockPricingVersion(),
       cards: [],
@@ -992,6 +998,119 @@ describe("auth callback", () => {
       )
     }
 
+    describe("trial signup", () => {
+      const emailSignup = (query: string) =>
+        GET(
+          new Request(
+            `https://console.superserve.ai/auth/callback?token_hash=official&type=signup${query}`,
+          ),
+        )
+
+      it.each([
+        ["&signup_offer=developer", "developer"],
+        ["&signup_offer=starter", "starter"],
+        ["&offer=pro_monthly", "pro_monthly"],
+        ["", undefined],
+      ])(
+        "opens the console for a new trial team from %s",
+        async (query, offer) => {
+          mockPricingVersion.mockResolvedValue("v2")
+          mockSignupEntryDestination.mockResolvedValue("/sandboxes")
+          const response = await emailSignup(query)
+          expect(new URL(response.headers.get("location")!).pathname).toBe(
+            "/sandboxes",
+          )
+          expect(mockSignupEntryDestination).toHaveBeenCalledWith(
+            expect.objectContaining({ id: "u1" }),
+            offer,
+          )
+        },
+      )
+
+      it("sends a signup without trial compute to the plan picker", async () => {
+        mockPricingVersion.mockResolvedValue("v2")
+        mockSignupEntryDestination.mockResolvedValue(
+          "/auth/choose-plan/?reason=trial_ended&offer=developer",
+        )
+        const location = new URL(
+          (await emailSignup("&signup_offer=developer")).headers.get(
+            "location",
+          )!,
+        )
+        expect(location.pathname).toBe("/auth/choose-plan/")
+        expect(location.searchParams.get("reason")).toBe("trial_ended")
+      })
+
+      it.each([
+        ["&signup_offer=starter", "/plan-usage/buy-credit"],
+        ["&signup_offer=free", "/sandboxes"],
+      ])(
+        "keeps today's destination for %s when the entry check fails or has no trial",
+        async (query, destination) => {
+          mockPricingVersion.mockResolvedValue("v2")
+          for (const outcome of [null, new Error("cell down")]) {
+            mockSignupEntryDestination.mockReset()
+            if (outcome instanceof Error)
+              mockSignupEntryDestination.mockRejectedValue(outcome)
+            else mockSignupEntryDestination.mockResolvedValue(outcome)
+            const response = await emailSignup(query)
+            expect(new URL(response.headers.get("location")!).pathname).toBe(
+              destination,
+            )
+          }
+        },
+      )
+
+      it.each(["&signup_offer=starter", "&signup_offer=pro", ""])(
+        "never reads the entry state under legacy pricing for %s",
+        async (query) => {
+          await emailSignup(query)
+          expect(mockSignupEntryDestination).not.toHaveBeenCalled()
+        },
+      )
+
+      it("never reads the entry state for an existing customer", async () => {
+        mockPricingVersion.mockResolvedValue("v2")
+        await GET(
+          new Request(
+            "https://console.superserve.ai/auth/callback?code=abc&signup_offer=developer",
+          ),
+        )
+        expect(mockSignupEntryDestination).not.toHaveBeenCalled()
+      })
+
+      it.each([
+        "/api/onboarding/checkout/../../admin",
+        "/api/onboarding/checkout/return/../../../admin",
+        "/auth/choose-plan/../../admin",
+        "/auth/choose-plan/?reason=upgrade&next=/admin",
+      ])("drops %s, which escapes its route", async (next) => {
+        const response = await GET(
+          new Request(
+            `https://console.superserve.ai/auth/callback?code=abc&next=${encodeURIComponent(next)}`,
+          ),
+        )
+        expect(new URL(response.headers.get("location")!).pathname).toBe(
+          "/sandboxes",
+        )
+      })
+
+      it.each([
+        "/api/onboarding/checkout/?offer=developer&account=u1&team=use%3At1",
+        "/api/onboarding/checkout/return/?account=u1&team=use%3At1",
+        "/auth/choose-plan/?reason=upgrade&account=u1&team=use%3At1",
+      ])("keeps %s through sign-in", async (next) => {
+        const response = await GET(
+          new Request(
+            `https://console.superserve.ai/auth/callback?code=abc&next=${encodeURIComponent(next)}`,
+          ),
+        )
+        expect(response.headers.get("location")).toBe(
+          `https://console.superserve.ai${next}`,
+        )
+      })
+    })
+
     it("keeps today's signup when the switch is off, whatever the offer", async () => {
       const response = await firstTimeGoogle("enterprise")
 
@@ -1314,15 +1433,19 @@ describe("auth callback", () => {
       expect(mockSignOut).not.toHaveBeenCalled()
     })
 
-    it("does not ask for the switch without an offer", async () => {
+    it("reads pricing once for a no-offer signup and keeps today's landing", async () => {
       googleMembershipState = { kind: "first_time" }
       mockHasValidGoogleSignupProof.mockResolvedValue(true)
-      await GET(
+      const response = await GET(
         new Request(
           "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
         ),
       )
-      expect(mockPricingVersion).not.toHaveBeenCalled()
+      expect(mockPricingVersion).toHaveBeenCalledTimes(1)
+      expect(mockSignupEntryDestination).not.toHaveBeenCalled()
+      expect(new URL(response.headers.get("location")!).pathname).toBe(
+        "/sandboxes",
+      )
     })
 
     it("holds a new Enterprise account without access", async () => {

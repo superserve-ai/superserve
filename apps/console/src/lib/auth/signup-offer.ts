@@ -1,6 +1,11 @@
 // Pricing v2 signup intent from the website's ?offer=. Routing only; the
 // billing backend decides what a team may buy.
-export type SignupOffer = "free" | "starter" | "pro_monthly" | "enterprise"
+export type SignupOffer =
+  | "free"
+  | "starter"
+  | "developer"
+  | "pro_monthly"
+  | "enterprise"
 
 export const SIGNUP_OFFER_PARAM = "signup_offer"
 
@@ -12,14 +17,18 @@ export function parseSignupOffer(value: unknown): SignupOffer {
   // contracts and accepted checkouts retain their backend-authorized cadence.
   if (value === "pro" || value === "pro_annual") return "pro_monthly"
   if (value === "enterprise" || value === "pro_monthly") return value
+  if (value === "developer") return "developer"
   if (value === "starter" || value.startsWith("starter_")) return "starter"
   return "pro_monthly"
 }
 
-// Where a new account lands after signup under pricing v2.
+// Where a new account lands after signup under pricing v2. A new team waiting
+// for payment goes to its plan's Stripe Checkout instead; Developer is sold
+// only that way.
 export const SIGNUP_OFFER_DESTINATIONS: Record<SignupOffer, string> = {
   free: "/sandboxes",
   starter: "/plan-usage/buy-credit",
+  developer: "/sandboxes",
   pro_monthly: "/billing/pro/",
   enterprise: "/auth/pending",
 }
@@ -27,7 +36,14 @@ export const SIGNUP_OFFER_DESTINATIONS: Record<SignupOffer, string> = {
 export function isSelfServeSignupOffer(raw: unknown): raw is string {
   return (
     typeof raw === "string" &&
-    (["free", "starter", "pro", "pro_monthly", "pro_annual"].includes(raw) ||
+    ([
+      "free",
+      "developer",
+      "starter",
+      "pro",
+      "pro_monthly",
+      "pro_annual",
+    ].includes(raw) ||
       raw.startsWith("starter_"))
   )
 }

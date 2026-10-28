@@ -8,6 +8,7 @@ import {
   sendWelcomeEmail,
 } from "@/app/(auth)/auth/signup/action"
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
+import { signupEntryDestination } from "@/lib/api/signup-checkout"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
@@ -64,6 +65,12 @@ import {
   starterAuthReturnPath,
   signupPreparationReturnPath,
 } from "@/lib/billing/pro-auth-return"
+import {
+  isSignupCheckoutOffer,
+  isPlanPickerPath,
+  isSignupCheckoutPath,
+  isSignupCheckoutReturnPath,
+} from "@/lib/billing/signup-checkout-paths"
 import { DEFAULT_REGION } from "@/lib/cells"
 import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import { fingerprintDiagnostics } from "@/lib/fingerprint/diagnostics-server"
@@ -710,6 +717,9 @@ export async function GET(request: Request) {
           !next.startsWith("/device") &&
           !next.startsWith("https://") &&
           !/^\/onboarding\/plan\/?(?:\?|$)/.test(next) &&
+          !isSignupCheckoutPath(next) &&
+          !isSignupCheckoutReturnPath(next) &&
+          !isPlanPickerPath(next) &&
           !ycNext &&
           !proNext &&
           !preparationNext
@@ -759,6 +769,21 @@ export async function GET(request: Request) {
               buildRedirectUrl(origin, `/auth/auth-code-error?${recovery}`),
             )
           }
+        }
+        const checkoutOffer = isSignupCheckoutOffer(signupOffer)
+          ? signupOffer
+          : undefined
+        if (
+          newSignup &&
+          (checkoutOffer || !signupOffer || signupOffer === "free") &&
+          (next === "/sandboxes" ||
+            (signupOffer && next === SIGNUP_OFFER_DESTINATIONS[signupOffer])) &&
+          (await getPricingVersionAction()) === "v2"
+        ) {
+          next =
+            (await signupEntryDestination(user, checkoutOffer).catch(
+              () => null,
+            )) ?? next
         }
       }
 

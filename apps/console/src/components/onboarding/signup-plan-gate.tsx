@@ -8,6 +8,7 @@ import { useQueryScope } from "@/components/query-provider"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { needsPlanSelection } from "@/lib/api/signup-plan"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
+import { awaitingPlanRedirect } from "@/lib/billing/signup-checkout-paths"
 
 export function SignupPlanGate({ children }: { children: ReactNode }) {
   const scope = useQueryScope()
@@ -16,7 +17,7 @@ export function SignupPlanGate({ children }: { children: ReactNode }) {
 }
 
 // The dashboard layout checks the team it renders with on the server and seeds
-// that answer. This only re-checks after a team switch or a new team, in the
+// that answer, sending a team whose trial ended to the plan picker. This only re-checks after a team switch or a new team, in the
 // background: a failed read leaves the console usable and the next full load
 // checks again on the server.
 function SelfSignupPlanGate({ children }: { children: ReactNode }) {
@@ -31,9 +32,11 @@ function SelfSignupPlanGate({ children }: { children: ReactNode }) {
     retry: 2,
   })
   const required = query.data && needsPlanSelection(query.data)
+  const picker = query.data ? awaitingPlanRedirect(query.data) : null
   useEffect(() => {
     if (required) router.replace("/onboarding/plan")
-  }, [required, router])
+    else if (picker) router.replace(picker)
+  }, [required, picker, router])
   return (
     <>
       {searchParams.get("contact_sales") === "1" && (

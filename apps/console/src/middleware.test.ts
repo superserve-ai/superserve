@@ -154,6 +154,15 @@ describe("middleware", () => {
     ).toBe(path)
   })
 
+  it("keeps the plan picker state through sign-in", async () => {
+    const path =
+      "/auth/choose-plan/?reason=payment_confirming&account=user&team=use%3Aoriginal"
+    const response = await middleware(buildRequest(path))
+    expect(
+      new URL(response.headers.get("location")!).searchParams.get("next"),
+    ).toBe(path)
+  })
+
   it("retains Pro payment recovery locators through anonymous sign-in", async () => {
     const path =
       "/billing/pro/?billing=success&team=use%3Aoriginal&return=%2Fsandboxes"

@@ -13,6 +13,7 @@ import {
 } from "@/lib/admin/impersonation"
 import { needsPlanSelection } from "@/lib/api/signup-plan"
 import { getSignupPlanPage } from "@/lib/api/signup-plan-page"
+import { awaitingPlanRedirect } from "@/lib/billing/signup-checkout-paths"
 
 export default async function DashboardLayout({
   children,
@@ -26,6 +27,8 @@ export default async function DashboardLayout({
   if (!impersonationContext && !signup)
     return <PlanSelectionLoader initialContext={null} />
   if (signup && needsPlanSelection(signup.context)) redirect("/onboarding/plan")
+  const picker = signup ? awaitingPlanRedirect(signup.context) : null
+  if (picker) redirect(picker)
   const queryScope = impersonationContext?.teamId ?? "self"
 
   return (

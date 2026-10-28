@@ -7,6 +7,7 @@ describe("parseSignupOffer", () => {
     [undefined, "free"],
     ["", "free"],
     ["free", "free"],
+    ["developer", "developer"],
     ["starter", "starter"],
     ["starter_monthly", "starter"],
     ["pro", "pro_monthly"],
@@ -22,6 +23,7 @@ describe("parseSignupOffer", () => {
 
 it.each([
   "free",
+  "developer",
   "starter",
   "starter_monthly",
   "starter_legacy",
