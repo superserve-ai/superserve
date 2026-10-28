@@ -29,9 +29,9 @@ const CURATED_IMAGES = [
   "debian:12-slim",
 ] as const
 
-// Trimmed to the default per-team caps from the backend (vcpu=2, memory_mib=2048,
+// Trimmed to the default per-team caps from the backend (vcpu=2, memory_mib=4096,
 // disk_mib=8192). Teams with raised caps drop to the SDK/API for higher values.
-const MEMORY_OPTIONS = [256, 512, 1024, 2048] as const
+const MEMORY_OPTIONS = [256, 512, 1024, 2048, 4096] as const
 const DISK_OPTIONS = [1024, 2048, 4096, 8192] as const
 const VCPU_OPTIONS = [1, 2] as const
 
