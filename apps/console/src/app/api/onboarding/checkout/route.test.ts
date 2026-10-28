@@ -102,4 +102,25 @@ describe("signup checkout resume", () => {
     expect(response.status).toBe(403)
     expect(start).not.toHaveBeenCalled()
   })
+
+  it.each([
+    ["offer=pro_monthly", null],
+    ["offer=enterprise", { id: "u1" }],
+  ])(
+    "turns a plan choice into a page load on every redirect (%s)",
+    async (query, signedIn) => {
+      user = signedIn
+      const response = await POST(
+        new Request(
+          `https://console.example.test/api/onboarding/checkout/?${query}`,
+          {
+            method: "POST",
+            headers: { origin: "https://console.example.test" },
+          },
+        ),
+      )
+      expect(response.status).toBe(303)
+      expect(start).not.toHaveBeenCalled()
+    },
+  )
 })

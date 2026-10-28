@@ -26,7 +26,10 @@ async function checkout(request: Request, switchPlan: boolean) {
   const { origin, searchParams } = new URL(request.url)
   const offer = searchParams.get("offer")
   if (!isSignupCheckoutOffer(offer))
-    return NextResponse.redirect(new URL(planPickerPath("upgrade"), origin))
+    return NextResponse.redirect(
+      new URL(planPickerPath("upgrade"), origin),
+      303,
+    )
   const {
     data: { user },
   } = await (await createServerClient()).auth.getUser()
@@ -36,6 +39,7 @@ async function checkout(request: Request, switchPlan: boolean) {
         `/auth/signin?${new URLSearchParams({ next: signupCheckoutPath(offer) })}`,
         origin,
       ),
+      303,
     )
   let target: string
   try {
