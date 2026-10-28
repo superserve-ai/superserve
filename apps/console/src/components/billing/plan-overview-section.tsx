@@ -11,29 +11,15 @@ import {
 } from "@/hooks/use-billing-v2"
 import type { BillingSummaryResponse } from "@/lib/api/billing"
 import { canStartAnyPlan, canStartPlan } from "@/lib/api/billing-capabilities"
-import { fundedByCredit, planTopoff, type TeamPlan } from "@/lib/api/billing-v2"
-import { type BillingOffer, findOffer } from "@/lib/billing/plans"
+import { fundedByCredit, planTopoff } from "@/lib/api/billing-v2"
 
 import { AutoTopoffSettings } from "./auto-topoff-card"
-import { type CancelChannel, PlanDetails, PlanOverview } from "./plan-overview"
+import { PlanDetails, PlanOverview, supportChannel } from "./plan-overview"
 
 function toCents(usd: number | null | undefined): number | null {
   return typeof usd === "number" && Number.isFinite(usd)
     ? Math.round(usd * 100)
     : null
-}
-
-// Developer is supported by email and Pro by priority Slack or email; a plan
-// the catalog doesn't name follows its funding.
-function cancelChannel(
-  plan: TeamPlan,
-  funded: boolean,
-  offers: readonly BillingOffer[] | undefined,
-): CancelChannel {
-  const family = findOffer(offers, plan.key)?.family
-  if (family === "developer") return "email"
-  if (family === "pro") return "priority"
-  return funded ? "email" : "priority"
 }
 
 const SETTLING_MS = 10 * 60_000
@@ -116,7 +102,7 @@ export function PlanOverviewSection({
                 : null,
           }}
           canManage={canManage}
-          cancelChannel={cancelChannel(plan, funded, capabilities.data?.offers)}
+          cancelChannel={supportChannel(plan, capabilities.data?.offers)}
         />
         {funded ? (
           <AutoTopoffSettings

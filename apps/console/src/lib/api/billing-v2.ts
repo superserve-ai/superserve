@@ -334,7 +334,11 @@ export function planAction(current: TeamPlan, target: CatalogPlan): PlanAction {
   if (current.pending_change?.plan_key === target.key)
     return { type: "scheduled" }
   if (target.kind === current.kind)
-    return target.kind === "free" ? { type: "current" } : { type: "contact" }
+    return target.kind === "free"
+      ? { type: "current" }
+      : target.kind === "subscription"
+        ? { type: "unavailable" }
+        : { type: "contact" }
   if (target.kind === "free") return { type: "unavailable" }
   if (current.kind === "custom") return { type: "contact" }
   if (target.kind === "custom")

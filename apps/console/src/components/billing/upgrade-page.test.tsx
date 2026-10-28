@@ -348,6 +348,45 @@ describe("UpgradePage with pricing v2 on", () => {
     expect(screen.getByRole("link", { name: "Get Pro" })).toBeTruthy()
   })
 
+  it("tells a team on a subscription to contact support to change plans", () => {
+    const pro = catalog.find((entry) => entry.key === "pro_monthly")!
+    mocks.catalog.mockReturnValue({
+      data: [
+        ...catalog,
+        {
+          ...pro,
+          key: "developer_monthly",
+          family: "developer",
+          name: "Builder",
+          funding_policy: "prepaid",
+        },
+      ],
+    })
+    const { unmount } = mount()
+    expect(screen.queryByTestId("plan-card-developer_monthly")).toBeNull()
+    expect(
+      screen.getByText(/To change your plan, contact support/).textContent,
+    ).toBe(
+      "To change your plan, contact support in your priority Slack channel or at support@superserve.ai.",
+    )
+    unmount()
+
+    mocks.plan.mockReturnValue({
+      data: {
+        ...pro,
+        key: "developer_monthly",
+        name: "Builder",
+        funding_policy: "prepaid",
+      },
+      isError: false,
+    })
+    mount()
+    expect(screen.queryByTestId("plan-card-pro_monthly")).toBeNull()
+    expect(
+      screen.getByText(/To change your plan, contact support/).textContent,
+    ).toBe("To change your plan, contact support at support@superserve.ai.")
+  })
+
   it("explains an empty plan catalog", () => {
     mocks.catalog.mockReturnValue({ data: [] })
     mount()

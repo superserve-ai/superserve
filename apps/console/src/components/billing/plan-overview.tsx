@@ -7,6 +7,7 @@ import type {
   BillingPricingResponse,
 } from "@/lib/api/billing"
 import {
+  fundedByCredit,
   balanceKnown,
   BUY_CREDIT_PATH,
   describeSandboxSize,
@@ -18,6 +19,7 @@ import {
   TOPOFF_SETTINGS_PATH,
   UPGRADE_PATH,
 } from "@/lib/api/billing-v2"
+import { type BillingOffer, findOffer } from "@/lib/billing/plans"
 
 const EYEBROW =
   "font-mono text-[10px] font-semibold tracking-[0.18em] text-muted uppercase"
@@ -339,10 +341,29 @@ export interface PlanOverviewProps {
 
 const SUPPORT_EMAIL = "support@superserve.ai"
 
-export type CancelChannel = "email" | "priority"
+export type SupportChannel = "email" | "priority"
 
-// How a team on a self-serve subscription reaches support to cancel.
-function CancelSupport({ channel }: { channel: CancelChannel }) {
+// Developer is supported by email and Pro by priority Slack or email; a plan
+// the catalog doesn't name follows its funding.
+export function supportChannel(
+  plan: TeamPlan,
+  offers: readonly BillingOffer[] | undefined,
+): SupportChannel {
+  const family = findOffer(offers, plan.key)?.family
+  if (family === "developer") return "email"
+  if (family === "pro") return "priority"
+  return fundedByCredit(plan, offers) ? "email" : "priority"
+}
+
+// How a team on a self-serve subscription reaches support to change or
+// cancel its plan.
+export function SupportContact({
+  channel,
+  action,
+}: {
+  channel: SupportChannel
+  action: string
+}) {
   const email = (
     <a
       href={`mailto:${SUPPORT_EMAIL}`}
@@ -353,7 +374,7 @@ function CancelSupport({ channel }: { channel: CancelChannel }) {
   )
   return (
     <p className="text-sm text-muted">
-      To cancel, contact support{" "}
+      To {action}, contact support{" "}
       {channel === "email" ? (
         <>at {email}</>
       ) : (
@@ -371,7 +392,7 @@ export function PlanDetails({
 }: {
   plan: TeamPlan
   canManage: boolean
-  cancelChannel?: CancelChannel
+  cancelChannel?: SupportChannel
 }) {
   const size = describeSandboxSize(plan.limits)
   const pending = plan.pending_change
@@ -425,7 +446,7 @@ export function PlanDetails({
         </div>
       ) : null}
       {plan.kind === "subscription" ? (
-        <CancelSupport channel={cancelChannel} />
+        <SupportContact channel={cancelChannel} action="cancel" />
       ) : null}
     </div>
   )

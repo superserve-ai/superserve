@@ -132,9 +132,11 @@ describe("planAction", () => {
 })
 
 describe("planAction edge cases", () => {
-  it("treats the same kind under a different key as current or contact", () => {
+  it("offers no move between subscriptions, and treats another Free key as current", () => {
     const legacyPro = { ...team(PRO), key: "pro_annual" }
-    expect(planAction(legacyPro, PRO)).toEqual({ type: "contact" })
+    expect(planAction(legacyPro, PRO)).toEqual({ type: "unavailable" })
+    expect(planAction(team(DEVELOPER), PRO)).toEqual({ type: "unavailable" })
+    expect(planAction(team(PRO), DEVELOPER)).toEqual({ type: "unavailable" })
     expect(planAction({ ...team(FREE), key: "free_legacy" }, FREE)).toEqual({
       type: "current",
     })

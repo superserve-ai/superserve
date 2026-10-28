@@ -29,6 +29,7 @@ export function proPaymentStep(state: {
   loading: boolean
   entryOpen?: boolean
   family?: string
+  sellable?: boolean
   plans?: PublicBillingPlans
   paidPlan?: string | null
   conflict: boolean
@@ -41,6 +42,7 @@ export function proPaymentStep(state: {
   if (state.paidPlan) return "subscribed"
   if (
     state.entryOpen === false ||
+    state.sellable === false ||
     state.plans?.pricing_version !== "v2" ||
     !planCard(state.plans, state.family ?? "pro")?.monthly?.available
   )

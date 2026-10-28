@@ -45,7 +45,7 @@ import {
   checkoutRecoveryPath,
   genericBillingReturnState,
 } from "@/lib/billing/checkout-return"
-import { planCard } from "@/lib/billing/plans"
+import { findOffer, planCard } from "@/lib/billing/plans"
 
 const CONFIRM_ATTEMPTS = 5
 
@@ -504,6 +504,8 @@ function ProPaymentContext({
           plans: summaryQuery.isError ? undefined : plansQuery.data,
           entryOpen: capabilities.data?.fresh_entry.pro === true,
           family,
+          sellable: findOffer(capabilities.data?.offers, `${family}_monthly`)
+            ?.sellable,
           paidPlan,
           conflict: conflict || starterCheckRequired,
           confirming,

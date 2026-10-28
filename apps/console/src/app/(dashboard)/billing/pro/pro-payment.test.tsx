@@ -20,6 +20,7 @@ function ProPayment(props: React.ComponentProps<typeof ActualProPayment>) {
 
 const state = vi.hoisted(() => ({
   capabilitiesPending: false,
+  offers: undefined as unknown[] | undefined,
   summaryPending: false,
   recoveryAllowed: true,
   entryOpen: true,
@@ -138,6 +139,7 @@ vi.mock("@/hooks/use-billing-capabilities", () => ({
           fresh_entry: {
             pro: state.entryOpen && state.plans.pricing_version === "v2",
           },
+          offers: state.offers,
         }
       : undefined,
     isPending: state.capabilitiesPending,
@@ -215,6 +217,7 @@ beforeEach(() => {
   state.resume.mockReset().mockResolvedValue(null)
   state.start.mockReset()
   state.plans = undefined
+  state.offers = undefined
   state.replace.mockReset()
   state.summary = null
   state.summaryError = false
@@ -251,6 +254,52 @@ describe("Pro payment return recovery", () => {
       ),
     )
   })
+
+  it.each([
+    ["", "pro_monthly", "Pro"],
+    ["plan=developer", "developer_monthly", "Builder"],
+  ])(
+    "says a plan that isn't on sale can't be bought (%s)",
+    async (query, offerKey, name) => {
+      const pro = availablePlans.cards[0]!
+      state.plans = {
+        ...availablePlans,
+        cards: [
+          pro,
+          {
+            ...pro,
+            family: "developer",
+            name: "Builder",
+            monthly: { ...pro.monthly!, offer_key: "developer_monthly" },
+          },
+        ],
+      }
+      state.offers = [
+        {
+          offer_key: offerKey,
+          family: offerKey.split("_")[0],
+          display_name: name,
+          price_cents: 900,
+          interval_months: 1,
+          included_credit_cents: 900,
+          funding_policy: "postpaid",
+          topoff: null,
+          sellable: false,
+        },
+      ]
+      state.query = query
+      render(<ProPayment returnTo="/sandboxes" />)
+      expect(
+        await screen.findByText(
+          `${name} isn’t available to buy here right now.`,
+        ),
+      ).toBeTruthy()
+      expect(screen.queryByText(/Only billing administrators/)).toBeNull()
+      expect(
+        screen.queryByRole("button", { name: "Continue to payment" }),
+      ).toBeNull()
+    },
+  )
 
   it("reopens an accepted Developer checkout after a lost first response", async () => {
     const pro = availablePlans.cards[0]!

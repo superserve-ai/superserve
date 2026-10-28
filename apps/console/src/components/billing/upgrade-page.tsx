@@ -27,6 +27,8 @@ import {
 import { undoPlanChange } from "@/lib/api/plan-changes"
 import { billingKeys } from "@/lib/api/query-keys"
 
+import { SupportContact, supportChannel } from "./plan-overview"
+
 const date = (value: string) =>
   new Date(value).toLocaleDateString("en-US", {
     month: "short",
@@ -198,6 +200,12 @@ export function UpgradePage() {
           </p>
         ) : (
           <>
+            {plan.kind === "subscription" ? (
+              <SupportContact
+                channel={supportChannel(plan, capabilities.data?.offers)}
+                action="change your plan"
+              />
+            ) : null}
             <PendingChange
               plan={plan}
               canManage={canManage}
