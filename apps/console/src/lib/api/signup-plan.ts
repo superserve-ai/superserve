@@ -19,6 +19,7 @@ export interface SignupPlanContext {
   offer: "free" | PurchaseOffer | null
   requestedOffer?: RequestedOffer
   entryState?: AwaitingPlanState
+  paymentSettling?: boolean
 }
 
 export function parseSignupChoice(

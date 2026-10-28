@@ -60,25 +60,6 @@ export async function readSignupPlan(
     choice.state = "legacy"
     choice.offer = null
   }
-  let entryState: AwaitingPlanState | undefined
-  if (choice.state === "selecting" || choice.state === "pending") {
-    const entry = await admin.rpc("billing_team_entry_state", {
-      p_team: team.teamId,
-    })
-    // A cell without trials has no such function and keeps today's flow.
-    if (
-      entry.error &&
-      entry.error.code !== "PGRST202" &&
-      entry.error.code !== "42883"
-    )
-      throw new Error("Unable to check your plan. Please retry.")
-    if (!entry.error && isAwaitingPlanState(entry.data)) {
-      // A team on its trial buys its plan through checkout, not the picker.
-      entryState = entry.data
-      choice.state = "legacy"
-      choice.offer = null
-    }
-  }
   if (choice.state === "selecting" || choice.state === "pending") {
     const [intent, billing] = await Promise.all([
       admin
@@ -114,6 +95,40 @@ export async function readSignupPlan(
       choice.offer = null
     }
   }
+  let entryState: AwaitingPlanState | undefined
+  let paymentSettling = false
+  if (choice.state === "selecting" || choice.state === "pending") {
+    const entry = await admin.rpc("billing_team_entry_state", {
+      p_team: team.teamId,
+    })
+    // A cell without trials has no such function and keeps today's flow.
+    if (
+      entry.error &&
+      entry.error.code !== "PGRST202" &&
+      entry.error.code !== "42883"
+    )
+      throw new Error("Unable to check your plan. Please retry.")
+    if (!entry.error && isAwaitingPlanState(entry.data)) {
+      // A team on its trial buys its plan through checkout, not the picker;
+      // a checkout it already paid for settles before it may buy again.
+      entryState = entry.data
+      choice.state = "legacy"
+      choice.offer = null
+      const upgrade = await admin
+        .from("billing_pro_upgrade")
+        .select("state")
+        .eq("team_id", team.teamId)
+        .in("state", ["paid", "credited", "active"])
+        .maybeSingle()
+      if (
+        upgrade.error &&
+        upgrade.error.code !== "42P01" &&
+        upgrade.error.code !== "PGRST205"
+      )
+        throw new Error("Unable to check your payment. Please retry.")
+      paymentSettling = !upgrade.error && !!upgrade.data
+    }
+  }
   if (choice.state === "selecting" || choice.state === "pending") {
     const upgrade = await admin
       .from("billing_pro_upgrade")
@@ -146,5 +161,6 @@ export async function readSignupPlan(
     ...choice,
     requestedOffer,
     ...(entryState ? { entryState } : {}),
+    ...(paymentSettling ? { paymentSettling } : {}),
   }
 }

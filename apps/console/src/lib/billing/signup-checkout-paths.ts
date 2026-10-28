@@ -116,3 +116,20 @@ export function trialPlanOffer(
     return "pro_monthly"
   return undefined
 }
+
+// Where a team that has not paid must go before using the console: the picker
+// once its trial is used up, or the payment check while a paid checkout settles.
+export function awaitingPlanRedirect(context: {
+  userId: string
+  teamKey: string
+  entryState?: AwaitingPlanState
+  paymentSettling?: boolean
+  requestedOffer?: string
+}): string | null {
+  const entry = context.entryState
+  if (entry !== "trial_ended" && entry !== "payment_failed") return null
+  const locator = { account: context.userId, team: context.teamKey }
+  return context.paymentSettling
+    ? planPickerPath("payment_confirming", undefined, locator)
+    : planPickerPath(entry, trialPlanOffer(context.requestedOffer), locator)
+}

@@ -8,10 +8,7 @@ import { useQueryScope } from "@/components/query-provider"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { needsPlanSelection } from "@/lib/api/signup-plan"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
-import {
-  planPickerPath,
-  trialPlanOffer,
-} from "@/lib/billing/signup-checkout-paths"
+import { awaitingPlanRedirect } from "@/lib/billing/signup-checkout-paths"
 
 export function SignupPlanGate({ children }: { children: ReactNode }) {
   const scope = useQueryScope()
@@ -35,14 +32,7 @@ function SelfSignupPlanGate({ children }: { children: ReactNode }) {
     retry: 2,
   })
   const required = query.data && needsPlanSelection(query.data)
-  const entry = query.data?.entryState
-  const picker =
-    entry === "trial_ended" || entry === "payment_failed"
-      ? planPickerPath(entry, trialPlanOffer(query.data?.requestedOffer), {
-          account: query.data!.userId,
-          team: query.data!.teamKey,
-        })
-      : null
+  const picker = query.data ? awaitingPlanRedirect(query.data) : null
   useEffect(() => {
     if (required) router.replace("/onboarding/plan")
     else if (picker) router.replace(picker)

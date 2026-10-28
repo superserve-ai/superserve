@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   assignment: vi.fn(),
   from: vi.fn(),
   rpc: vi.fn(),
+  settling: vi.fn(),
   eq: vi.fn(),
   cookie: vi.fn(),
   cell: vi.fn(),
@@ -79,7 +80,10 @@ beforeEach(() => {
             eq: (...args: unknown[]) => {
               mocks.eq(...args)
               if (table === "billing_pro_upgrade")
-                return { not: () => ({ maybeSingle: mocks.upgrade }) }
+                return {
+                  not: () => ({ maybeSingle: mocks.upgrade }),
+                  in: () => ({ maybeSingle: mocks.settling }),
+                }
               return {
                 maybeSingle:
                   table === "yc_claim_team_intent"
@@ -93,6 +97,7 @@ beforeEach(() => {
         },
   )
   mocks.rpc.mockResolvedValue({ data: null, error: { code: "PGRST202" } })
+  mocks.settling.mockResolvedValue({ data: null, error: null })
   mocks.cell.mockReturnValue({
     createAdminClient: () => ({ from: mocks.from, rpc: mocks.rpc }),
   })
@@ -425,6 +430,36 @@ describe("real paid preparation handler permanent recovery", () => {
       })
     },
   )
+
+  it.each([
+    [
+      { claim_id: "claim", released_at: null },
+      { data: null, error: null },
+    ],
+    [{ data: null, error: null }, { id: "operation" }],
+  ])("keeps a YC claim ahead of the trial state", async (intent, billing) => {
+    mocks.rpc.mockResolvedValue({ data: "trial_ended", error: null })
+    mocks.intent.mockResolvedValue(
+      "claim_id" in intent ? { data: intent, error: null } : intent,
+    )
+    mocks.billing.mockResolvedValue(
+      "id" in billing ? { data: billing, error: null } : billing,
+    )
+    const context = await getSignupPlanAction("usw:west-team")
+    expect(context.state).toBe("yc_claim")
+    expect(context.entryState).toBeUndefined()
+  })
+
+  it("marks a paid checkout that is still settling for a trial team", async () => {
+    mocks.rpc.mockResolvedValue({ data: "trial_ended", error: null })
+    mocks.settling.mockResolvedValue({ data: { state: "paid" }, error: null })
+    const context = await getSignupPlanAction("usw:west-team")
+    expect(context).toMatchObject({
+      state: "legacy",
+      entryState: "trial_ended",
+      paymentSettling: true,
+    })
+  })
 
   it.each(["active", null])(
     "keeps today's plan selection when the backend reports %s",
