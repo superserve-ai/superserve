@@ -4,7 +4,6 @@ import { startSignupCheckout } from "@/lib/api/signup-checkout"
 import {
   checkoutLocator,
   isSignupCheckoutOffer,
-  signupCheckoutPath,
   planPickerPath,
 } from "@/lib/billing/signup-checkout-paths"
 import { createServerClient } from "@/lib/supabase/server"
@@ -43,7 +42,7 @@ async function checkout(request: Request, switchPlan: boolean) {
   if (!user)
     return NextResponse.redirect(
       new URL(
-        `/auth/signin?${new URLSearchParams({ next: signupCheckoutPath(offer, locator) })}`,
+        `/auth/signin?${new URLSearchParams({ next: planPickerPath("upgrade", offer, locator) })}`,
         origin,
       ),
       303,

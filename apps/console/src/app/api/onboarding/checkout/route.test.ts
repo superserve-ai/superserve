@@ -61,14 +61,14 @@ describe("signup checkout resume", () => {
     expect(location.searchParams.get("offer")).toBe("developer")
   })
 
-  it("asks for sign-in and returns to the same checkout", async () => {
+  it("asks for sign-in and returns to the plan picker so the choice is made again", async () => {
     user = null
     const location = await visit(
       "offer=pro_monthly&account=u1&team=use%3Ateam-1",
     )
     expect(location.pathname).toBe("/auth/signin")
     expect(location.searchParams.get("next")).toBe(
-      "/api/onboarding/checkout/?offer=pro_monthly&account=u1&team=use%3Ateam-1",
+      "/auth/choose-plan/?reason=upgrade&offer=pro_monthly&account=u1&team=use%3Ateam-1",
     )
     expect(start).not.toHaveBeenCalled()
   })
