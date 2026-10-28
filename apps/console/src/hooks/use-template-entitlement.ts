@@ -16,5 +16,9 @@ export function useTemplateEntitlement() {
           : query.data?.limits.max_templates === 0
             ? "unavailable"
             : "allowed"
-  return { status, retry: query.refetch }
+  // The plan's per-sandbox caps, so the create dialog only offers shapes the
+  // backend would accept for this team. Absent while loading or for teams
+  // whose plan reports no cap.
+  const limits = query.isSuccess ? (query.data?.limits ?? null) : null
+  return { status, retry: query.refetch, limits }
 }

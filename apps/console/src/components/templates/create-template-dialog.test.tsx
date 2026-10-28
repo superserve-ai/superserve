@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   cap: 0 as number | null,
+  memoryCap: null as number | null,
   ready: true,
   teamKey: "use:team-a" as string | null,
   querySuccess: true,
@@ -19,7 +20,12 @@ vi.mock("@/hooks/use-billing-v2", () => ({
         ? null
         : mocks.planState === "missing"
           ? undefined
-          : { limits: { max_templates: mocks.cap } },
+          : {
+              limits: {
+                max_templates: mocks.cap,
+                max_memory_mib: mocks.memoryCap,
+              },
+            },
     isSuccess: mocks.querySuccess,
     isError: mocks.queryError,
     refetch: mocks.refetch,
@@ -40,6 +46,7 @@ import { CreateTemplateDialog } from "./create-template-dialog"
 
 beforeEach(() => {
   mocks.cap = 0
+  mocks.memoryCap = null
   mocks.ready = true
   mocks.teamKey = "use:team-a"
   mocks.querySuccess = true
@@ -174,4 +181,22 @@ describe("current image validation with authoritative entitlement", () => {
       )
     },
   )
+})
+
+describe("shape options follow the team's plan caps", () => {
+  it("offers 4 GB when the plan reports no memory cap", () => {
+    mocks.cap = 10
+    render(<CreateTemplateDialog open hideTrigger />)
+    // Memory and disk both offer 4 GB.
+    expect(screen.getAllByRole("button", { name: "4 GB" })).toHaveLength(2)
+  })
+
+  it("hides shapes above a team's memory cap", () => {
+    mocks.cap = 10
+    mocks.memoryCap = 2048
+    render(<CreateTemplateDialog open hideTrigger />)
+    // Only the disk row still offers 4 GB; memory stops at the 2 GB cap.
+    expect(screen.getAllByRole("button", { name: "2 GB" })).toHaveLength(2)
+    expect(screen.getAllByRole("button", { name: "4 GB" })).toHaveLength(1)
+  })
 })

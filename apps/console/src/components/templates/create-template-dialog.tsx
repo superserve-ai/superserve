@@ -37,6 +37,13 @@ const VCPU_OPTIONS = [1, 2] as const
 
 const NAME_RE = /^[a-z0-9][a-z0-9-]*$/
 
+function withinCap<T extends number>(
+  options: readonly T[],
+  cap: number | null | undefined,
+): readonly T[] {
+  return cap == null ? options : options.filter((option) => option <= cap)
+}
+
 function validateName(name: string): string | null {
   if (!name) return "Name is required"
   if (name.length > 128) return "Name must be 128 characters or fewer"
@@ -69,6 +76,12 @@ export function CreateTemplateDialog({
   const create = useCreateTemplate()
   const entitlement = useTemplateEntitlement()
   const templatesUnavailable = entitlement.status === "unavailable"
+  // Offer only shapes within the team's plan caps; a missing cap keeps the
+  // full list. Teams with raised caps use the SDK/API for higher values.
+  const caps = entitlement.limits
+  const memoryOptions = withinCap(MEMORY_OPTIONS, caps?.max_memory_mib)
+  const vcpuOptions = withinCap(VCPU_OPTIONS, caps?.max_vcpu)
+  const diskOptions = withinCap(DISK_OPTIONS, caps?.max_disk_mib)
 
   const [internalOpen, setInternalOpen] = useState(false)
   const open = controlledOpen ?? internalOpen
@@ -276,7 +289,7 @@ export function CreateTemplateDialog({
 
           <Field label="Memory">
             <div className="flex border border-dashed border-border">
-              {MEMORY_OPTIONS.map((m) => (
+              {memoryOptions.map((m) => (
                 <button
                   key={m}
                   type="button"
@@ -299,7 +312,7 @@ export function CreateTemplateDialog({
             <div className="grid grid-cols-2 gap-3">
               <Field label="vCPU">
                 <div className="flex border border-dashed border-border">
-                  {VCPU_OPTIONS.map((n) => (
+                  {vcpuOptions.map((n) => (
                     <button
                       key={n}
                       type="button"
@@ -319,7 +332,7 @@ export function CreateTemplateDialog({
 
               <Field label="Disk">
                 <div className="flex border border-dashed border-border">
-                  {DISK_OPTIONS.map((d) => (
+                  {diskOptions.map((d) => (
                     <button
                       key={d}
                       type="button"
