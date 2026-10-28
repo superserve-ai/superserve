@@ -51,3 +51,16 @@ describe("fresh team-pinned entry remains separate from payment results", () => 
     expect(checkoutEntryPath(path)).toBeNull()
   })
 })
+
+it("keeps the chosen upgrade plan through a checkout return, and nothing else", () => {
+  const developer = `/billing/pro/?billing=success&team=${team}&plan=developer`
+  expect(checkoutRecoveryPath(developer)).toBe(developer)
+  expect(
+    checkoutRecoveryPath(`/billing/pro/?billing=success&team=${team}&plan=pro`),
+  ).toBeNull()
+  expect(
+    checkoutRecoveryPath(
+      `/billing/pro/?billing=success&team=${team}&plan=enterprise`,
+    ),
+  ).toBeNull()
+})

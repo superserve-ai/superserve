@@ -1,9 +1,12 @@
 import { apiClient } from "./client"
 import type { PurchaseOffer } from "./signup-plan"
 
+// Offers a team can start from the in-app upgrade page.
+export type CheckoutOffer = PurchaseOffer | "developer_monthly"
+
 export async function startProCheckout(
   teamKey: string,
-  offer: PurchaseOffer,
+  offer: CheckoutOffer,
   returnUrl: string,
   actor?: string,
 ): Promise<string | null> {
@@ -55,7 +58,7 @@ interface ProCheckoutContext {
   id: string
   actor?: string
   team: string
-  offer: PurchaseOffer
+  offer: CheckoutOffer
   success: string
   cancel: string
 }
@@ -120,7 +123,7 @@ export async function resumeProCheckout(
   return proCheckoutDestination(response)
 }
 
-function proOperationKey(team: string, offer: PurchaseOffer, actor?: string) {
+function proOperationKey(team: string, offer: CheckoutOffer, actor?: string) {
   const legacyKey = `pro-checkout:${team}:${offer}`
   if (!actor) return legacyKey
   const key = `${legacyKey}:actor:${encodeURIComponent(actor)}`

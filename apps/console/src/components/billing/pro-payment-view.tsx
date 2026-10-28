@@ -23,11 +23,12 @@ export type ProPaymentStep =
   | "subscribed"
   | "team_mismatch"
 
-// A team already on a paid plan is sent to manage it, whether or not Pro is
-// on sale, so turning pricing v2 off never hides a paying customer's plan.
+// A team already on a paid plan is sent to manage it, whether or not the plan
+// is on sale, so turning pricing v2 off never hides a paying customer's plan.
 export function proPaymentStep(state: {
   loading: boolean
   entryOpen?: boolean
+  family?: string
   plans?: PublicBillingPlans
   paidPlan?: string | null
   conflict: boolean
@@ -41,7 +42,7 @@ export function proPaymentStep(state: {
   if (
     state.entryOpen === false ||
     state.plans?.pricing_version !== "v2" ||
-    !planCard(state.plans, "pro")?.monthly?.available
+    !planCard(state.plans, state.family ?? "pro")?.monthly?.available
   )
     return "unavailable"
   if (state.conflict) return "conflict"
@@ -51,6 +52,7 @@ export function proPaymentStep(state: {
 export interface ProPaymentViewProps {
   step: ProPaymentStep
   pro?: PlanCard
+  planName?: string
   paidPlan?: string | null
   checkoutTerms?: ProCheckoutTerms
   busy: boolean
@@ -65,6 +67,7 @@ export interface ProPaymentViewProps {
 export function ProPaymentView({
   step,
   pro,
+  planName = pro?.name ?? "Pro",
   paidPlan,
   checkoutTerms,
   busy,
@@ -76,7 +79,7 @@ export function ProPaymentView({
   onCheckPayment,
 }: ProPaymentViewProps) {
   if (step === "loading")
-    return <p className="text-muted-foreground p-6 text-sm">Loading Pro…</p>
+    return <p className="text-muted-foreground p-6 text-sm">Loading plan…</p>
   if (step === "team_mismatch")
     return (
       <div className="space-y-3 p-6">
@@ -141,7 +144,7 @@ export function ProPaymentView({
         <p className="text-sm" role={step === "conflict" ? "alert" : undefined}>
           {step === "conflict"
             ? "This team already has a paid plan or a payment in progress."
-            : "Pro isn’t available to buy here right now."}
+            : `${planName} isn’t available to buy here right now.`}
         </p>
         <Button disabled={busy || !canRecover} onClick={onCheckPayment}>
           Check payment status
@@ -160,7 +163,7 @@ export function ProPaymentView({
   return (
     <div className="mx-auto max-w-2xl p-4 sm:p-6">
       <section
-        aria-label="Pro plan"
+        aria-label={`${pro.name} plan`}
         className="bg-card relative border border-dashed border-brand p-6 sm:p-8"
       >
         <CornerBrackets size="sm" />
@@ -175,8 +178,25 @@ export function ProPaymentView({
         )}
         <ul className="text-muted-foreground mt-6 space-y-3 text-sm">
           <ProCheckoutCopy terms={checkoutTerms} pro={pro} />
-          <li>Pro limits begin after payment is confirmed.</li>
-          <li>Usage beyond that is billed monthly at normal rates</li>
+          <li>{pro.name} limits begin after payment is confirmed.</li>
+          {pro.funding_policy === "prepaid" ? (
+            <>
+              <li>
+                Usage beyond the included credit is paid from Auto Topoff
+                credit. Running sandboxes pause when credit runs out.
+              </li>
+              {pro.topoff ? (
+                <li>
+                  Auto Topoff adds {formatUsdCents(pro.topoff.amount_cents)}{" "}
+                  when credit drops below{" "}
+                  {formatUsdCents(pro.topoff.threshold_cents)}. Choose it at
+                  checkout.
+                </li>
+              ) : null}
+            </>
+          ) : (
+            <li>Usage beyond that is billed monthly at normal rates</li>
+          )}
           {pro.limits.max_concurrent ? (
             <li>
               {pro.limits.max_concurrent.toLocaleString("en-US")} sandboxes
@@ -297,9 +317,9 @@ function ProCheckoutCopy({
           </li>
         ) : null}
         <li>
-          Your monthly renewal date is set when you start Pro. Confirm your
-          initial amount, included credit and renewal date on the secure payment
-          page.
+          Your monthly renewal date is set when you start {pro.name}. Confirm
+          your initial amount, included credit and renewal date on the secure
+          payment page.
         </li>
       </>
     )

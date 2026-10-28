@@ -20,7 +20,7 @@ export function checkoutRecoveryPath(path: string): string | null {
   const params = url.searchParams
   const allowed = starter
     ? ["purchase", "team", "purchase_id", "amount", "billing_flow"]
-    : ["billing", "team", "return", "billing_flow"]
+    : ["billing", "team", "return", "billing_flow", "plan"]
   for (const key of params.keys()) {
     if (!allowed.includes(key) || params.getAll(key).length !== 1) return null
   }
@@ -35,6 +35,7 @@ export function checkoutRecoveryPath(path: string): string | null {
     return null
   const returnTo = params.get("return")
   if (returnTo !== null && safeReturnPath(returnTo) !== returnTo) return null
+  if (params.has("plan") && params.get("plan") !== "developer") return null
   const purchaseId = params.get("purchase_id")
   if (purchaseId !== null && !checkoutTeamReference(`use:${purchaseId}`))
     return null

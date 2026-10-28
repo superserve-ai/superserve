@@ -252,6 +252,48 @@ describe("Pro payment return recovery", () => {
     )
   })
 
+  it("sells a credit-funded plan from the same page when asked for it", async () => {
+    const pro = availablePlans.cards[0]!
+    state.plans = {
+      ...availablePlans,
+      cards: [
+        pro,
+        {
+          ...pro,
+          family: "developer",
+          name: "Builder",
+          monthly: { ...pro.monthly!, offer_key: "developer_monthly" },
+          funding_policy: "prepaid",
+          topoff: {
+            amount_cents: 300,
+            threshold_cents: 200,
+            default_enabled: true,
+          },
+        },
+      ],
+    }
+    state.query = "plan=developer"
+    state.start.mockResolvedValue(undefined)
+    render(<ProPayment returnTo="/sandboxes" />)
+    expect(
+      await screen.findByRole("region", { name: "Builder plan" }),
+    ).toBeTruthy()
+    expect(screen.getByText(/paid from Auto Topoff credit/)).toBeTruthy()
+    expect(screen.queryByText(/billed monthly at normal rates/)).toBeNull()
+    fireEvent.click(await readyContinue())
+    await waitFor(() =>
+      expect(state.start).toHaveBeenCalledWith(
+        "use:11111111-1111-4111-8111-111111111111",
+        "developer_monthly",
+        expect.any(String),
+        "actor",
+      ),
+    )
+    expect(
+      new URL(state.start.mock.calls[0]![2]).searchParams.get("plan"),
+    ).toBe("developer")
+  })
+
   it("reopens an accepted checkout after a lost first response even when entry closes", async () => {
     state.plans = availablePlans
     state.start.mockRejectedValueOnce(new Error("lost response"))

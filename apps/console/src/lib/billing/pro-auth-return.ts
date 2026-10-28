@@ -13,7 +13,7 @@ export function proAuthReturnPath(raw: string | null): string | null {
   if (!/^\/billing\/pro\/?$/.test(url.pathname) || url.hash) return null
   for (const key of url.searchParams.keys()) {
     if (
-      !["billing", "team", "return", "billing_flow"].includes(key) ||
+      !["billing", "team", "return", "billing_flow", "plan"].includes(key) ||
       url.searchParams.getAll(key).length !== 1
     )
       return null
@@ -28,6 +28,8 @@ export function proAuthReturnPath(raw: string | null): string | null {
     return null
   const returnTo = url.searchParams.get("return")
   if (returnTo !== null && safeReturnPath(returnTo) !== returnTo) return null
+  const plan = url.searchParams.get("plan")
+  if (plan !== null && plan !== "developer") return null
   return url.pathname + url.search
 }
 

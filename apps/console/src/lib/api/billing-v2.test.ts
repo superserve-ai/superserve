@@ -31,6 +31,7 @@ const card = (
     : "postpaid",
 ): CatalogPlan => ({
   key,
+  family: key.split("_")[0]!,
   kind,
   name,
   price_label: name,
@@ -43,7 +44,13 @@ const card = (
 const FREE = card("free", "free", "Free")
 const STARTER = card("starter", "prepaid", "Starter")
 const PRO = card("pro_monthly", "subscription", "Pro")
-const FUNDED = card("funded_monthly", "subscription", "Funded", "prepaid")
+const DEVELOPER = card(
+  "developer_monthly",
+  "subscription",
+  "Developer",
+  "prepaid",
+)
+const OTHER = card("other_monthly", "subscription", "Other")
 const ENTERPRISE = card("enterprise", "custom", "Enterprise")
 
 function team(c: CatalogPlan, pending: string | null = null): TeamPlan {
@@ -88,8 +95,13 @@ describe("planAction", () => {
     })
   })
 
-  it("has no in-app path to a credit-funded subscription for a team on a plan", () => {
-    expect(planAction(team(FREE), FUNDED)).toEqual({ type: "unavailable" })
+  it("sells Developer to a team on a plan through the upgrade page", () => {
+    expect(planAction(team(FREE), DEVELOPER)).toEqual({
+      type: "link",
+      href: "/billing/pro/?plan=developer",
+      label: "Get Developer",
+    })
+    expect(planAction(team(FREE), OTHER)).toEqual({ type: "unavailable" })
   })
 
   it("lets legacy pay-as-you-go teams buy Starter or Pro or move to Free", () => {

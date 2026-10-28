@@ -7,13 +7,13 @@ import {
   formatCents,
   fundedByCredit,
   isLowBalance,
-  planTopoff,
   type PrepaidBalance,
   type TeamPlan,
   TOPOFF_SETTINGS_PATH,
   UPGRADE_PATH,
+  upgradePath,
 } from "@/lib/api/billing-v2"
-import type { BillingOffer, PlanTopoff } from "@/lib/billing/plans"
+import type { BillingOffer } from "@/lib/billing/plans"
 
 export interface PlanAwareBannerProps {
   plan: TeamPlan
@@ -70,54 +70,38 @@ export function ManageAction({
 }
 
 function LowCreditBanner({
-  plan,
-  topoff,
   prepaid,
   canManage,
 }: {
-  plan: TeamPlan
-  topoff: PlanTopoff
   prepaid: PrepaidBalance
   canManage: boolean
 }) {
-  const empty = prepaid.balance_cents <= 0
   return (
     <BannerShell
-      tone={empty ? "danger" : "warning"}
-      label={`${plan.name} credit`}
+      tone={prepaid.balance_cents <= 0 ? "danger" : "warning"}
+      label="Credit balance"
       action={
         <ManageAction canManage={canManage}>
           <Button size="sm" render={<Link href={TOPOFF_SETTINGS_PATH} />}>
-            {prepaid.auto_recharge.disabled_reason
-              ? "Turn Auto Topoff back on"
-              : "Turn on Auto Topoff"}
+            Buy usage
           </Button>
         </ManageAction>
       }
     >
-      {empty ? (
-        <>
-          Your {plan.name} credit has run out. Running sandboxes are paused and
-          nothing is deleted.
-        </>
-      ) : (
-        <>
-          Your {plan.name} credit is{" "}
-          <strong>{formatCents(prepaid.balance_cents)}</strong>. Running
-          sandboxes pause when it runs out.
-        </>
-      )}{" "}
-      {topoff ? (
-        <>
-          Auto Topoff adds <strong>{formatCents(topoff.amount_cents)}</strong>{" "}
-          whenever your credit drops below {formatCents(topoff.threshold_cents)}
-          .
-        </>
-      ) : (
-        "Turn on Auto Topoff to add credit automatically."
-      )}
+      Your credit balance is too low. Buy usage to continue running sandboxes.
     </BannerShell>
   )
+}
+
+// The monthly plans a team on a plan can buy in the console right now.
+function upgradeChoices(offers: readonly BillingOffer[] | undefined) {
+  return (offers ?? []).flatMap((offer) => {
+    const href =
+      offer.sellable && offer.interval_months === 1
+        ? upgradePath(offer.family)
+        : null
+    return href ? [{ name: offer.display_name, href }] : []
+  })
 }
 
 export function PlanAwareBanner({
@@ -132,23 +116,37 @@ export function PlanAwareBanner({
 }: PlanAwareBannerProps) {
   if (plan.kind === "free") {
     const running = plan.limits.max_concurrent
+    const choices = upgradeChoices(offers)
     return (
       <BannerShell
         tone="info"
         label="Free plan"
         action={
           <ManageAction canManage={canManage}>
-            {canUpgrade ? (
+            {!canUpgrade ? null : choices.length ? (
+              choices.map((choice, index) => (
+                <Button
+                  key={choice.href}
+                  size="sm"
+                  variant={index === 0 ? "default" : "outline"}
+                  render={<Link href={choice.href} />}
+                >
+                  Get {choice.name}
+                </Button>
+              ))
+            ) : (
               <Button size="sm" render={<Link href={UPGRADE_PATH} />}>
                 Upgrade
               </Button>
-            ) : null}
+            )}
           </ManageAction>
         }
       >
         You can run {running ?? "the default number of"} sandbox
-        {running === 1 ? "" : "es"} at a time on Free. Upgrade for bigger
-        sandboxes and more usage.
+        {running === 1 ? "" : "es"} at a time on Free.{" "}
+        {choices.length
+          ? `Upgrade to ${choices.map((choice) => choice.name).join(" or ")} for bigger sandboxes and more usage.`
+          : "Upgrade for bigger sandboxes and more usage."}
       </BannerShell>
     )
   }
@@ -160,13 +158,8 @@ export function PlanAwareBanner({
     return prepaid &&
       settled &&
       !prepaid.auto_recharge.enabled &&
-      (prepaid.low_balance === true || prepaid.balance_cents <= 0) ? (
-      <LowCreditBanner
-        plan={plan}
-        topoff={planTopoff(plan, offers)}
-        prepaid={prepaid}
-        canManage={canManage}
-      />
+      prepaid.low_balance === true ? (
+      <LowCreditBanner prepaid={prepaid} canManage={canManage} />
     ) : null
   }
 

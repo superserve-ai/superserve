@@ -78,6 +78,7 @@ const proLimits = {
 const catalog: CatalogPlan[] = [
   {
     key: "free",
+    family: "free",
     kind: "free",
     name: "Free",
     price_label: "$0",
@@ -89,6 +90,7 @@ const catalog: CatalogPlan[] = [
   },
   {
     key: "starter",
+    family: "starter",
     kind: "prepaid",
     name: "Starter",
     price_label: "Prepaid credit from $5",
@@ -100,6 +102,7 @@ const catalog: CatalogPlan[] = [
   },
   {
     key: "pro_monthly",
+    family: "pro",
     kind: "subscription",
     name: "Pro",
     price_label: "$250/month",
@@ -111,6 +114,7 @@ const catalog: CatalogPlan[] = [
   },
   {
     key: "enterprise",
+    family: "enterprise",
     kind: "custom",
     name: "Enterprise",
     price_label: "Book a meeting",
@@ -546,6 +550,33 @@ describe("UpgradePage with pricing v2 on", () => {
       ),
     )
     expect(mocks.schedule.mock.calls[0][5]).toBeUndefined()
+  })
+
+  it("offers Developer to a Free team instead of calling it unavailable", () => {
+    const pro = catalog.find((entry) => entry.key === "pro_monthly")!
+    mocks.catalog.mockReturnValue({
+      data: [
+        ...catalog,
+        {
+          ...pro,
+          key: "developer_monthly",
+          family: "developer",
+          name: "Builder",
+          funding_policy: "prepaid",
+        },
+      ],
+    })
+    mocks.plan.mockReturnValue({
+      data: { ...pro, key: "free", kind: "free", name: "Free" },
+      isError: false,
+    })
+    mount()
+    const card = screen.getByTestId("plan-card-developer_monthly")
+    expect(card.textContent).not.toMatch(/Not currently available/)
+    expect(
+      screen.getByRole("link", { name: "Get Builder" }).getAttribute("href"),
+    ).toMatch(/\/billing\/pro\/?\?plan=developer$/)
+    expect(screen.getByRole("link", { name: "Get Pro" })).toBeTruthy()
   })
 
   it("explains an empty plan catalog", () => {

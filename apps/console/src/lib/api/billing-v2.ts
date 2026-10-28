@@ -198,6 +198,21 @@ export const UPGRADE_PATH = "/plan-usage/upgrade"
 export const BUY_CREDIT_PATH = "/plan-usage/buy-credit"
 export const TOPOFF_SETTINGS_PATH = "/plan-usage/buy-credit/#auto-topoff"
 export const PRO_UPGRADE_PATH = "/billing/pro"
+
+// Plan families a team on a plan can buy from the in-app upgrade page.
+export const UPGRADE_FAMILIES = ["pro", "developer"] as const
+export type UpgradeFamily = (typeof UPGRADE_FAMILIES)[number]
+
+export function upgradeFamily(value: string | null | undefined): UpgradeFamily {
+  return value === "developer" ? "developer" : "pro"
+}
+
+export function upgradePath(family: string): string | null {
+  if (family === "pro") return PRO_UPGRADE_PATH
+  return (UPGRADE_FAMILIES as readonly string[]).includes(family)
+    ? `${PRO_UPGRADE_PATH}/?plan=${family}`
+    : null
+}
 export const ENTERPRISE_MEETING_URL =
   "https://calendly.com/superserve-ai/25-min"
 
@@ -218,6 +233,7 @@ export const BILLING_V2_PATHS = {
 
 export const catalogPlanSchema = planCardSchema.transform((card) => ({
   key: card.monthly?.offer_key ?? card.family,
+  family: card.family,
   kind: card.kind,
   name: card.name,
   price_label: card.price_label,
@@ -318,11 +334,7 @@ export function planAction(current: TeamPlan, target: CatalogPlan): PlanAction {
     current.kind === "legacy_payg"
   ) {
     const href =
-      target.kind === "prepaid"
-        ? BUY_CREDIT_PATH
-        : target.funding_policy === "postpaid"
-          ? PRO_UPGRADE_PATH
-          : null
+      target.kind === "prepaid" ? BUY_CREDIT_PATH : upgradePath(target.family)
     if (!target.available || !href) return { type: "unavailable" }
     const label = `Get ${target.name}`
     if (current.pending_change)

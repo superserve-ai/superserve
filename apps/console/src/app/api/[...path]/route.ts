@@ -603,7 +603,11 @@ async function proxyRequest(
       )
     }
     if (joinedPath === "stripe/pro-checkout") {
-      if (!["pro_monthly", "pro_annual"].includes(input.offer as string))
+      if (
+        !["pro_monthly", "pro_annual", "developer_monthly"].includes(
+          input.offer as string,
+        )
+      )
         return NextResponse.json(
           {
             error: {

@@ -44,8 +44,6 @@ export interface BillingTrialBalance {
   // Optional during the SS-484 rollout; the server downgrades stale runway to unknown.
   runway_state?: "over_24h" | "under_24h" | "unknown" | null
   runway_observed_at?: string | null
-  // Optional until the backend publishes the trial's "almost used up" setting.
-  low_credit_threshold_usd?: number | null
 }
 
 export interface BillingIncludedUsage {
@@ -58,7 +56,8 @@ export interface BillingIncludedUsage {
 export interface BillingPlan {
   key: string
   name: string
-  status: "active" | "pending"
+  // A team on its trial reports the "trial" plan with its entry state.
+  status: "active" | "pending" | "trial" | "trial_ended" | "payment_failed"
   price_usd: number | null
   billing_interval_months: number | null
   starts_at: string | null

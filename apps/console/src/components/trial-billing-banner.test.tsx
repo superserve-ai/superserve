@@ -365,9 +365,9 @@ describe("TrialBillingBanner", () => {
 })
 
 describe("TrialBillingBanner for a new team's trial", () => {
-  const trial = (remaining_usd: number, low_credit_threshold_usd?: number) =>
+  const trial = (remaining_usd: number) =>
     summary({
-      trial: { state: "active", remaining_usd, low_credit_threshold_usd },
+      trial: { state: "active", remaining_usd },
     })
   const entry = (data: string) =>
     mocks.entry.mockReturnValue({ data, isPending: false, isError: false })
@@ -376,7 +376,7 @@ describe("TrialBillingBanner for a new team's trial", () => {
   it("shows the trial with an Upgrade to the selected plan's checkout", () => {
     entry("trial")
     mocks.offers = [{ offer_key: "developer_monthly", display_name: "Builder" }]
-    mocks.summary.mockReturnValue({ data: trial(0.37, 0.11) })
+    mocks.summary.mockReturnValue({ data: trial(0.37) })
     const { container } = mount("developer")
     expect(banner()).toHaveTextContent("You're on a free trial with $0.37 left")
     const upgrade = screen.getByRole("button", { name: "Upgrade to Builder" })
@@ -412,23 +412,13 @@ describe("TrialBillingBanner for a new team's trial", () => {
     )
   })
 
-  it("warns once the balance drops below the almost-used-up setting", () => {
-    entry("trial")
-    mocks.summary.mockReturnValue({ data: trial(0.11, 0.11) })
-    const { unmount } = mount("pro_monthly")
-    expect(banner()).not.toHaveTextContent(/almost used up/)
-    unmount()
-    mocks.summary.mockReturnValue({ data: trial(0.1, 0.11) })
-    mount("pro_monthly")
-    expect(banner()).toHaveTextContent(/almost used up: \$0\.10 left/)
-    expect(banner()).toHaveClass("bg-yellow-100")
-  })
-
-  it("has no almost-used-up stage without the setting", () => {
+  it("keeps the upgrade banner for the whole trial, however little is left", () => {
     entry("trial")
     mocks.summary.mockReturnValue({ data: trial(0.01) })
     mount("pro_monthly")
+    expect(banner()).toHaveTextContent("You're on a free trial with $0.01 left")
     expect(banner()).not.toHaveTextContent(/almost used up/)
+    expect(screen.getByRole("button", { name: /Upgrade/ })).toBeTruthy()
   })
 
   it("says sandboxes are paused and nothing is deleted once the trial ends", () => {

@@ -95,3 +95,10 @@ it.each([
     ),
   ).toBeNull()
 })
+
+it("keeps a Developer upgrade through sign-in but no other plan value", () => {
+  expect(proAuthReturnPath("/billing/pro/?plan=developer")).toBe(
+    "/billing/pro/?plan=developer",
+  )
+  expect(proAuthReturnPath("/billing/pro/?plan=custom")).toBeNull()
+})

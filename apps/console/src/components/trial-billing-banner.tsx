@@ -88,30 +88,24 @@ function formatUsd(amount: number | null | undefined): string | null {
     : null
 }
 
-export type TrialStage = "trial" | "almost_used_up" | "ended" | "payment_failed"
+export type TrialStage = "trial" | "ended" | "payment_failed"
 
-// The trial's stage from its entry state and balance. The "almost used up"
-// threshold is a backend setting; without it the trial has no such stage.
+// The trial's stage from its entry state and balance.
 export function trialStage(
   entry: AwaitingPlanState,
   trial: BillingTrialBalance | null | undefined,
 ): TrialStage {
   if (entry === "payment_failed") return "payment_failed"
   const remaining = trial?.remaining_usd
-  const known = typeof remaining === "number" && Number.isFinite(remaining)
   if (
     entry === "trial_ended" ||
     trial?.state === "exhausted" ||
-    (known && remaining <= 0)
+    (typeof remaining === "number" &&
+      Number.isFinite(remaining) &&
+      remaining <= 0)
   )
     return "ended"
-  const threshold = trial?.low_credit_threshold_usd
-  return known &&
-    typeof threshold === "number" &&
-    Number.isFinite(threshold) &&
-    remaining < threshold
-    ? "almost_used_up"
-    : "trial"
+  return "trial"
 }
 
 function TrialEntryBanner({
@@ -141,13 +135,7 @@ function TrialEntryBanner({
   const canManage = scope === "self" && summary.permissions.can_manage
   return (
     <BannerShell
-      tone={
-        stage === "trial"
-          ? "info"
-          : stage === "almost_used_up"
-            ? "warning"
-            : "danger"
-      }
+      tone={stage === "trial" ? "info" : "danger"}
       label="Free trial"
       action={
         <ManageAction canManage={canManage}>
@@ -187,17 +175,6 @@ function TrialEntryBanner({
         <>
           Your free trial has ended. Your sandboxes are paused and nothing is
           deleted. Upgrade to resume.
-        </>
-      ) : stage === "almost_used_up" ? (
-        <>
-          Your free trial is almost used up
-          {remaining ? (
-            <>
-              : <strong>{remaining} left</strong>
-            </>
-          ) : null}
-          . When it runs out, sandboxes pause and nothing is deleted. Upgrade to
-          keep them running.
         </>
       ) : (
         <>
