@@ -24,7 +24,9 @@ function priceLabel(plan: BillingPlan, currency: string): string {
   if (plan.key === "trial")
     return plan.status === "trial"
       ? "Trial credit · no card needed"
-      : "Trial ended · choose a plan to continue"
+      : plan.status === "payment_failed"
+        ? "Payment didn’t go through · choose a plan to try again"
+        : "Trial ended · choose a plan to continue"
   if (plan.price_usd == null || plan.billing_interval_months == null) {
     return "Pay as you go"
   }

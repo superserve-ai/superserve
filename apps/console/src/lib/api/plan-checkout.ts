@@ -4,6 +4,12 @@ import type { PurchaseOffer } from "./signup-plan"
 // Offers a team can start from the in-app upgrade page.
 export type CheckoutOffer = PurchaseOffer | "developer_monthly"
 
+const CHECKOUT_OFFERS: readonly CheckoutOffer[] = [
+  "pro_monthly",
+  "pro_annual",
+  "developer_monthly",
+]
+
 export async function startProCheckout(
   teamKey: string,
   offer: CheckoutOffer,
@@ -103,7 +109,7 @@ export async function resumeProCheckout(
   actor: string,
 ): Promise<string | null> {
   const contexts: ProCheckoutContext[] = []
-  for (const offer of ["pro_monthly", "pro_annual"] as const) {
+  for (const offer of CHECKOUT_OFFERS) {
     const key = proOperationKey(team, offer, actor)
     const raw = sessionStorage.getItem(`${key}:context`)
     if (!raw) continue

@@ -612,7 +612,7 @@ async function proxyRequest(
           {
             error: {
               code: "invalid_offer",
-              message: "Select a Pro billing frequency",
+              message: "Select a plan and billing frequency",
             },
           },
           { status: 400 },

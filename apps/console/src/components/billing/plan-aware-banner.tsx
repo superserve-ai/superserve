@@ -11,12 +11,17 @@ import {
   type TeamPlan,
   TOPOFF_SETTINGS_PATH,
   UPGRADE_PATH,
-  upgradePath,
 } from "@/lib/api/billing-v2"
 import type { BillingOffer } from "@/lib/billing/plans"
 
+export interface UpgradeChoice {
+  name: string
+  href: string
+}
+
 export interface PlanAwareBannerProps {
   plan: TeamPlan
+  upgradeChoices?: readonly UpgradeChoice[]
   offers?: readonly BillingOffer[]
   fundingState?: string | null
   prepaid: PrepaidBalance | null
@@ -83,7 +88,9 @@ function LowCreditBanner({
       action={
         <ManageAction canManage={canManage}>
           <Button size="sm" render={<Link href={TOPOFF_SETTINGS_PATH} />}>
-            Buy usage
+            {prepaid.auto_recharge.disabled_reason
+              ? "Turn Auto Topoff back on"
+              : "Turn on Auto Topoff"}
           </Button>
         </ManageAction>
       }
@@ -93,19 +100,9 @@ function LowCreditBanner({
   )
 }
 
-// The monthly plans a team on a plan can buy in the console right now.
-function upgradeChoices(offers: readonly BillingOffer[] | undefined) {
-  return (offers ?? []).flatMap((offer) => {
-    const href =
-      offer.sellable && offer.interval_months === 1
-        ? upgradePath(offer.family)
-        : null
-    return href ? [{ name: offer.display_name, href }] : []
-  })
-}
-
 export function PlanAwareBanner({
   plan,
+  upgradeChoices = [],
   offers,
   fundingState,
   prepaid,
@@ -116,7 +113,7 @@ export function PlanAwareBanner({
 }: PlanAwareBannerProps) {
   if (plan.kind === "free") {
     const running = plan.limits.max_concurrent
-    const choices = upgradeChoices(offers)
+    const choices = canUpgrade ? upgradeChoices : []
     return (
       <BannerShell
         tone="info"

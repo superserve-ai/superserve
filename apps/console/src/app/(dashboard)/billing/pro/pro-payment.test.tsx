@@ -252,6 +252,43 @@ describe("Pro payment return recovery", () => {
     )
   })
 
+  it("reopens an accepted Developer checkout after a lost first response", async () => {
+    const pro = availablePlans.cards[0]!
+    state.plans = {
+      ...availablePlans,
+      cards: [
+        {
+          ...pro,
+          family: "developer",
+          name: "Builder",
+          monthly: { ...pro.monthly!, offer_key: "developer_monthly" },
+          funding_policy: "prepaid",
+        },
+      ],
+    }
+    state.query = "plan=developer"
+    state.start.mockRejectedValueOnce(new Error("lost response"))
+    state.recover.mockResolvedValue("payment_confirmation_pending")
+    state.resume.mockResolvedValue("https://checkout.stripe.com/original")
+    const assign = vi
+      .spyOn(window.location, "assign")
+      .mockImplementation(() => {})
+    render(<ProPayment returnTo="/original" />)
+    fireEvent.click(await readyContinue())
+    await screen.findByText("lost response")
+    expect(state.start.mock.calls[0]![1]).toBe("developer_monthly")
+    fireEvent.click(
+      screen.getByRole("button", { name: "Check payment status" }),
+    )
+    await waitFor(() =>
+      expect(assign).toHaveBeenCalledWith(
+        "https://checkout.stripe.com/original",
+      ),
+    )
+    expect(state.start).toHaveBeenCalledTimes(1)
+    assign.mockRestore()
+  })
+
   it("sells a credit-funded plan from the same page when asked for it", async () => {
     const pro = availablePlans.cards[0]!
     state.plans = {

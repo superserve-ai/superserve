@@ -25,6 +25,7 @@ export {
 const cents = z.number().int().nonnegative()
 
 export const proCheckoutTermsSchema = z.object({
+  offer_key: z.string().optional().catch(undefined),
   first_paid_pro_cycle: z.boolean(),
   accepted: z.boolean(),
   period_start: z.string().datetime({ offset: true }).optional(),
@@ -39,6 +40,20 @@ export const proCheckoutResponseSchema = z.object({
 })
 
 export type ProCheckoutTerms = z.infer<typeof proCheckoutTermsSchema>
+
+// Saved checkout terms describe the team's open checkout, which may be for
+// another plan. A backend that doesn't name the offer predates any plan but
+// Pro being sold here.
+export function checkoutTermsFor(
+  terms: ProCheckoutTerms | undefined,
+  offerKey: string,
+): ProCheckoutTerms | undefined {
+  if (!terms?.accepted) return terms
+  const matches = terms.offer_key
+    ? terms.offer_key === offerKey
+    : offerKey.startsWith("pro_")
+  return matches ? terms : undefined
+}
 
 export const teamPlanSchema = z
   .object({

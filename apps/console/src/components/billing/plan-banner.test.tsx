@@ -12,6 +12,7 @@ vi.mock("@/hooks/use-billing-capabilities", () => ({
             choose_free: true,
           },
           offers: mocks.offers,
+          catalog: { pricing_version: "v2", cards: mocks.cards },
         },
   }),
 }))
@@ -24,6 +25,7 @@ import type { TeamPlan } from "@/lib/api/billing-v2"
 const mocks = vi.hoisted(() => ({
   capabilityUnavailable: false,
   offers: undefined as unknown[] | undefined,
+  cards: [] as unknown[],
   buyCredit: true,
   recharge: true,
   version: vi.fn(),
@@ -82,6 +84,7 @@ function mount() {
 beforeEach(() => {
   mocks.capabilityUnavailable = false
   mocks.offers = undefined
+  mocks.cards = []
   mocks.buyCredit = true
   mocks.recharge = true
   mocks.plan.mockReturnValue({ data: null })
@@ -281,31 +284,15 @@ describe("PlanBanner with pricing v2 on", () => {
     expect(container.textContent).toBe("")
   })
 
-  it("lets a Free team choose between the plans on sale", () => {
-    mocks.offers = [
-      {
-        offer_key: "developer_monthly",
-        family: "developer",
-        display_name: "Builder",
-        price_cents: 900,
-        interval_months: 1,
-        included_credit_cents: 900,
-        funding_policy: "prepaid",
-        topoff: null,
-        sellable: true,
-      },
-      {
-        offer_key: "pro_monthly",
-        family: "pro",
-        display_name: "Team",
-        price_cents: 9900,
-        interval_months: 1,
-        included_credit_cents: 9900,
-        funding_policy: "postpaid",
-        topoff: null,
-        sellable: true,
-      },
-    ]
+  const card = (family: string, name: string, available = true) => ({
+    family,
+    kind: "subscription",
+    name,
+    monthly: { offer_key: `${family}_monthly`, available },
+  })
+
+  it("lets a Free team choose between the plans it can buy", () => {
+    mocks.cards = [card("developer", "Builder"), card("pro", "Team")]
     mocks.plan.mockReturnValue({ data: plan("free") })
     mount()
     expect(
@@ -317,6 +304,25 @@ describe("PlanBanner with pricing v2 on", () => {
     expect(
       screen.getByRole("link", { name: "Get Team" }).getAttribute("href"),
     ).toMatch(/\/billing\/pro\/?$/)
+  })
+
+  it("falls back to the upgrade page when no plan passes the purchase check", () => {
+    mocks.cards = [card("developer", "Builder", false)]
+    mocks.plan.mockReturnValue({ data: plan("free") })
+    mount()
+    expect(screen.queryByRole("link", { name: /^Get / })).toBeNull()
+    expect(screen.getByRole("link", { name: "Upgrade" })).toBeTruthy()
+  })
+
+  it("names no plans when the team can't upgrade now", () => {
+    mocks.buyCredit = false
+    mocks.cards = [card("developer", "Builder"), card("pro", "Team")]
+    mocks.plan.mockReturnValue({ data: plan("free") })
+    mount()
+    expect(
+      screen.getByRole("region", { name: "Free plan" }).textContent,
+    ).not.toMatch(/Upgrade to Builder/)
+    expect(screen.queryByRole("link")).toBeNull()
   })
 
   it("hides actions from members who cannot manage billing", () => {
@@ -430,10 +436,9 @@ describe("PlanBanner for a credit-funded subscription", () => {
       /^Your credit balance is too low\. Buy usage to continue running sandboxes\./,
     )
     expect(banner.textContent).not.toMatch(/\$/)
-    expect(screen.getByRole("link", { name: "Buy usage" })).toHaveAttribute(
-      "href",
-      expect.stringMatching(/#auto-topoff$/),
-    )
+    expect(
+      screen.getByRole("link", { name: "Turn on Auto Topoff" }),
+    ).toHaveAttribute("href", expect.stringMatching(/#auto-topoff$/))
   })
 
   it("follows the backend's flag rather than its own threshold", () => {
@@ -453,6 +458,9 @@ describe("PlanBanner for a credit-funded subscription", () => {
     )
     mount()
     expect(screen.getByText(/credit balance is too low/)).toBeTruthy()
+    expect(
+      screen.getByRole("link", { name: "Turn Auto Topoff back on" }),
+    ).toBeTruthy()
   })
 
   it("says nothing on an empty balance the backend doesn't call low", () => {

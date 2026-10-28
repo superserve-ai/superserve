@@ -7,6 +7,7 @@ import {
   type CatalogPlan,
   catalogPlansOf,
   BUY_CREDIT_PATH,
+  checkoutTermsFor,
   ENTERPRISE_MEETING_URL,
   isLowBalance,
   planAction,
@@ -317,4 +318,23 @@ it("preserves frozen checkout terms without a current plan", () => {
       pro_checkout: terms,
     }),
   ).toBeNull()
+})
+
+describe("checkoutTermsFor", () => {
+  const terms = (offer_key?: string) => ({
+    offer_key,
+    first_paid_pro_cycle: true,
+    accepted: true,
+  })
+
+  it("shows saved terms only for the plan they were saved for", () => {
+    expect(
+      checkoutTermsFor(terms("developer_monthly"), "developer_monthly"),
+    ).toBeDefined()
+    expect(
+      checkoutTermsFor(terms("developer_monthly"), "pro_monthly"),
+    ).toBeUndefined()
+    expect(checkoutTermsFor(terms(), "pro_monthly")).toBeDefined()
+    expect(checkoutTermsFor(terms(), "developer_monthly")).toBeUndefined()
+  })
 })

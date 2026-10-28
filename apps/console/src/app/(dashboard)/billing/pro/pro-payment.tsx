@@ -23,7 +23,11 @@ import { usePendingStarterCheckout } from "@/hooks/use-pending-starter-checkout"
 import { useTeams } from "@/hooks/use-teams"
 import { useUser } from "@/hooks/use-user"
 import { canStartPlan } from "@/lib/api/billing-capabilities"
-import { proCheckoutResponseSchema, upgradeFamily } from "@/lib/api/billing-v2"
+import {
+  checkoutTermsFor,
+  proCheckoutResponseSchema,
+  upgradeFamily,
+} from "@/lib/api/billing-v2"
 import { ApiError, apiClient } from "@/lib/api/client"
 import {
   isStripeCheckoutUrl,
@@ -508,7 +512,7 @@ function ProPaymentContext({
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title={`Upgrade to ${planName}`} />
+      <PageHeader title="Upgrade your plan" />
       <div className="flex-1 overflow-y-auto">
         {existingStarter.visible &&
         existingStarter.busy &&
@@ -561,7 +565,10 @@ function ProPaymentContext({
               !busy &&
               !checkoutTermsQuery.isError &&
               !checkoutTermsQuery.isFetching
-                ? checkoutTermsQuery.data?.pro_checkout
+                ? checkoutTermsFor(
+                    checkoutTermsQuery.data?.pro_checkout,
+                    `${family}_monthly`,
+                  )
                 : undefined
             }
             busy={busy}

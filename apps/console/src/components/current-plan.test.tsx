@@ -29,6 +29,7 @@ const summary = (status: string) =>
 it.each([
   ["trial", "Trial credit · no card needed"],
   ["trial_ended", "Trial ended · choose a plan to continue"],
+  ["payment_failed", "Payment didn’t go through · choose a plan to try again"],
 ])("never calls a %s team pay as you go", (status, label) => {
   render(<CurrentPlan summary={summary(status)} />)
   expect(screen.getByText("Free trial")).toBeTruthy()
