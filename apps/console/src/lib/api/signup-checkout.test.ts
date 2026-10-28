@@ -187,6 +187,14 @@ describe("startSignupCheckout", () => {
     [200, { outcome: "active", url: "https://other.example/x" }, "/sandboxes"],
     [
       200,
+      {
+        outcome: "payment_method_required",
+        url: "https://checkout.stripe.com.evil.example/c/pay/cs_x",
+      },
+      "/auth/choose-plan/?reason=payment_confirming&account=u1&team=use%3Ateam-1",
+    ],
+    [
+      200,
       { outcome: "payment_method_required", url: "https://other.example/x" },
       "/auth/choose-plan/?reason=payment_confirming&account=u1&team=use%3Ateam-1",
     ],

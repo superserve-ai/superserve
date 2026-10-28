@@ -11,6 +11,7 @@ import {
 } from "@/lib/billing/signup-checkout-paths"
 import { cellFor } from "@/lib/cells"
 
+import { isStripeCheckoutUrl } from "./plan-checkout"
 import { getAuthApiKeyAndTeamForUser } from "./proxy-auth"
 
 const BACKEND_TIMEOUT_MS = 10_000
@@ -113,7 +114,7 @@ export async function startSignupCheckout(
     return planPickerPath("plan_unavailable", undefined, locator)
   if (!response.ok)
     throw new Error(`signup checkout failed: ${response.status}`)
-  if (result.url?.startsWith("https://checkout.stripe.com/")) return result.url
+  if (result.url && isStripeCheckoutUrl(result.url)) return result.url
   if (result.outcome === "active") return "/sandboxes"
   return success
 }
@@ -143,7 +144,7 @@ export async function confirmSignupCheckout(
     outcome?: string
     url?: string
   }
-  if (response.ok && result.url?.startsWith("https://checkout.stripe.com/"))
+  if (response.ok && result.url && isStripeCheckoutUrl(result.url))
     return result.url
   // Nothing left to settle: the console sends a used-up trial to the picker.
   if (
