@@ -29,6 +29,7 @@ describe("billing data after a failed refresh", () => {
       data: {
         key: "free",
         kind: "free",
+        effective_from: "2026-10-23T00:00:00Z",
         name: "Free",
         limits: {
           max_concurrent: 1,

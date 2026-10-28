@@ -63,6 +63,7 @@ function team(c: CatalogPlan, pending: string | null = null): TeamPlan {
     fee_cents: null,
     included_cents: null,
     period_start: null,
+    effective_from: "2026-10-01T00:00:00Z",
     period_end: null,
     pending_change: pending
       ? {

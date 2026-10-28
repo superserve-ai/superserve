@@ -2,7 +2,7 @@
 
 import { Button, Field, Input, Switch, useToast } from "@superserve/ui"
 import { useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
 import { useBillingContext } from "@/hooks/use-billing-context"
@@ -14,6 +14,8 @@ import {
 } from "@/lib/api/prepaid"
 import { billingKeys } from "@/lib/api/query-keys"
 import type { PlanTopoff } from "@/lib/billing/plans"
+
+const AUTO_TOPOFF_ANCHOR = "auto-topoff"
 
 export const AMOUNT_ERROR = "Enter a dollar amount above $0, like 25."
 
@@ -90,10 +92,7 @@ export function AutoTopoffCard({
 
   const canEnable = allowEntry && data.has_saved_card
   return (
-    <section
-      id="auto-topoff"
-      className="flex flex-col gap-4 border border-dashed border-border p-4"
-    >
+    <section className="flex flex-col gap-4 border border-dashed border-border p-4">
       <h2 className="font-mono text-xs text-muted uppercase">Auto Topoff</h2>
       {current.disabled_reason && !current.enabled && (
         <p className="border border-dashed border-destructive p-3 text-sm text-foreground">
@@ -172,11 +171,18 @@ export function AutoTopoffSettings({
   canManage: boolean
 }) {
   const capabilities = useBillingCapabilities()
+  const { teamKey } = useBillingContext()
   const credit = usePrepaidCredit()
   const data = credit.isError ? undefined : credit.data
+  const loaded = !!data
+  // Links land here before the settings have loaded, so scroll once they do.
+  useEffect(() => {
+    if (loaded && window.location.hash === `#${AUTO_TOPOFF_ANCHOR}`)
+      document.getElementById(AUTO_TOPOFF_ANCHOR)?.scrollIntoView()
+  }, [loaded])
   if (!data)
     return (
-      <p id="auto-topoff" className="px-5 pb-5 text-sm text-muted sm:px-6">
+      <p className="px-5 pb-5 text-sm text-muted sm:px-6">
         {credit.isError
           ? "Auto Topoff settings couldn't be loaded."
           : "Loading Auto Topoff…"}
@@ -187,9 +193,10 @@ export function AutoTopoffSettings({
     !capabilities.isPending &&
     capabilities.data?.actions?.disable_auto_recharge !== false
   return (
-    <div className="px-5 pb-5 sm:px-6">
+    <div id={AUTO_TOPOFF_ANCHOR} className="px-5 pb-5 sm:px-6">
       <AutoTopoffCard
         key={[
+          teamKey,
           allowEntry,
           data.auto_recharge.enabled,
           data.auto_recharge.threshold_cents,

@@ -70,6 +70,7 @@ function plan(kind: TeamPlan["kind"]): TeamPlan {
     included_cents: null,
     period_start: null,
     period_end: null,
+    effective_from: "2026-10-01T00:00:00Z",
     pending_change: null,
   }
 }

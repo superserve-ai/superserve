@@ -91,6 +91,7 @@ export const teamPlanSchema = z
           ...(pro_checkout ? { pro_checkout } : {}),
           key: plan.plan_key,
           kind: plan.kind,
+          effective_from: plan.effective_from,
           name: plan.display_name,
           limits: plan.limits,
           ...(plan.funding_policy
@@ -211,7 +212,7 @@ export function fundedByCredit(
 
 export const UPGRADE_PATH = "/plan-usage/upgrade"
 export const BUY_CREDIT_PATH = "/plan-usage/buy-credit"
-export const TOPOFF_SETTINGS_PATH = "/settings#auto-topoff"
+export const TOPOFF_SETTINGS_PATH = "/settings/#auto-topoff"
 export const PRO_UPGRADE_PATH = "/billing/pro"
 
 // Plan families a team on a plan can buy from the in-app upgrade page.
@@ -324,7 +325,6 @@ export type PlanAction =
   | { type: "current" }
   | { type: "scheduled" }
   | { type: "link"; href: string; label: string }
-  | { type: "downgrade"; label: string }
   | { type: "blocked"; undoable: boolean; effectiveAt: string }
   | { type: "contact" }
   | { type: "unavailable" }
@@ -359,8 +359,6 @@ export function planAction(current: TeamPlan, target: CatalogPlan): PlanAction {
       }
     return { type: "link", href, label }
   }
-  // Moving down to credit or Free isn't offered under pricing v2.
-  return target.kind === "prepaid"
-    ? { type: "unavailable" }
-    : { type: "downgrade", label: `Switch to ${target.name}` }
+  // Moving down to a smaller plan isn't offered here under pricing v2.
+  return { type: "unavailable" }
 }

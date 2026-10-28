@@ -24,10 +24,8 @@ import {
   planAction,
   type TeamPlan,
 } from "@/lib/api/billing-v2"
-import { schedulePlanChange, undoPlanChange } from "@/lib/api/plan-changes"
+import { undoPlanChange } from "@/lib/api/plan-changes"
 import { billingKeys } from "@/lib/api/query-keys"
-
-import { PlanChangeDialog } from "./plan-change-dialog"
 
 const date = (value: string) =>
   new Date(value).toLocaleDateString("en-US", {
@@ -41,12 +39,10 @@ function PlanCard({
   plan,
   current,
   canManage,
-  onDowngrade,
 }: {
   plan: CatalogPlan
   current: TeamPlan
   canManage: boolean
-  onDowngrade: (plan: CatalogPlan) => void
 }) {
   const action = planAction(current, plan)
   const size = plan.limits ? describeSandboxSize(plan.limits) : null
@@ -95,10 +91,6 @@ function PlanCard({
       action.type === "current" ||
       action.type === "scheduled" ? null : action.type === "link" ? (
         <Button size="sm" render={<Link href={action.href} />}>
-          {action.label}
-        </Button>
-      ) : action.type === "downgrade" ? (
-        <Button size="sm" variant="outline" onClick={() => onDowngrade(plan)}>
           {action.label}
         </Button>
       ) : action.type === "blocked" ? (
@@ -168,10 +160,6 @@ export function UpgradePage() {
   const summary = summaryQuery.isError ? undefined : summaryQuery.data
   const queryClient = useQueryClient()
   const { addToast } = useToast()
-  const [target, setTarget] = useState<{
-    plan: Pick<CatalogPlan, "key" | "kind" | "name">
-    teamKey: string
-  } | null>(null)
   const [undoing, setUndoing] = useState(false)
 
   useEffect(() => {
@@ -249,10 +237,7 @@ export function UpgradePage() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               {(v2 ? catalog : [])
                 .filter(
-                  (entry) =>
-                    (entry.kind !== "free" && entry.kind !== "prepaid") ||
-                    entry.key === plan.key ||
-                    plan.pending_change?.plan_key === entry.key,
+                  (entry) => planAction(plan, entry).type !== "unavailable",
                 )
                 .map((entry) => (
                   <PlanCard
@@ -264,52 +249,12 @@ export function UpgradePage() {
                       (entry.kind === "custom" ||
                         canStartPlan(capabilities.data, entry))
                     }
-                    onDowngrade={(entry) =>
-                      teamKey && setTarget({ plan: entry, teamKey })
-                    }
                   />
                 ))}
             </div>
           </>
         )}
       </div>
-      {target &&
-      target.teamKey === teamKey &&
-      ready &&
-      canManage &&
-      canStartPlan(capabilities.data, target.plan) ? (
-        <PlanChangeDialog
-          key={`${target.teamKey}:${target.plan.key}`}
-          target={target.plan}
-          onClose={() => setTarget(null)}
-          onConfirm={async (
-            expectedTeam,
-            idempotencyKey,
-            previewToken,
-            confirmPausesRunning,
-            expectedEffectiveAt,
-          ) => {
-            const change = await schedulePlanChange(
-              target.plan.key,
-              expectedTeam,
-              idempotencyKey,
-              previewToken,
-              confirmPausesRunning,
-              expectedEffectiveAt,
-            )
-            setTarget(null)
-            addToast(
-              change.state === "scheduled"
-                ? `Switch to ${change.target_display_name} scheduled for ${date(change.effective_at)}.`
-                : change.state === "undone"
-                  ? "The plan change has been undone."
-                  : `Plan change to ${change.target_display_name} applied.`,
-              "success",
-            )
-            await refresh()
-          }}
-        />
-      ) : null}
     </div>
   )
 }

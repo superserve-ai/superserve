@@ -136,6 +136,7 @@ const pro: TeamPlan = {
   fee_cents: 25000,
   included_cents: 25000,
   period_start: "2026-10-01T00:00:00Z",
+  effective_from: "2026-10-01T00:00:00Z",
   period_end: "2026-11-01T00:00:00Z",
   pending_change: null,
 }

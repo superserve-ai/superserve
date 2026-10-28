@@ -11,6 +11,7 @@ vi.mock("@/hooks/use-billing-capabilities", () => ({
             auto_recharge: true,
             choose_free: true,
           },
+          offers: mocks.offers,
         },
   }),
 }))
@@ -23,6 +24,7 @@ import type { FreeAllowance, TeamPlan } from "@/lib/api/billing-v2"
 
 const mocks = vi.hoisted(() => ({
   capabilitiesUnavailable: false,
+  offers: undefined as unknown[] | undefined,
   version: vi.fn(),
   plan: vi.fn(),
   allowance: vi.fn(),
@@ -124,6 +126,7 @@ function plan(overrides: Partial<TeamPlan>): TeamPlan {
     included_cents: 25000,
     period_start: "2026-10-01T00:00:00Z",
     period_end: "2026-11-01T00:00:00Z",
+    effective_from: "2026-10-01T00:00:00Z",
     pending_change: null,
     ...overrides,
   }
@@ -131,6 +134,7 @@ function plan(overrides: Partial<TeamPlan>): TeamPlan {
 
 beforeEach(() => {
   mocks.capabilitiesUnavailable = false
+  mocks.offers = undefined
   mocks.plan.mockReturnValue({ data: null, isError: false })
   mocks.allowance.mockReturnValue({ data: undefined })
   mocks.prepaid.mockReturnValue({ data: undefined })
@@ -294,7 +298,7 @@ describe("PlanOverviewSection with pricing v2 on", () => {
       isError: false,
     })
     render(<PlanOverviewSection summary={summary} />)
-    expect(screen.getByText("Loading your plan…")).toBeTruthy()
+    expect(screen.getByText("Usage couldn't be loaded.")).toBeTruthy()
     expect(screen.queryByText(/of \$250 used/)).toBeNull()
   })
 
@@ -557,19 +561,46 @@ describe("a summary that disagrees with the plan", () => {
     },
   } as BillingSummaryResponse
 
+  const recent = () => new Date(Date.now() - 60_000).toISOString()
+
   it.each([
-    ["is still pending", pending],
+    ["is still pending", pending, "2026-10-01T00:00:00Z"],
     [
-      "names another plan",
+      "names another plan just after the plan changed",
       { ...summary, plan: { ...summary.plan!, key: "other_monthly" } },
+      recent(),
     ],
-  ])("shows loading while the summary %s", (_, changed) => {
-    mocks.plan.mockReturnValue({ data: plan({}), isError: false })
+  ])("shows loading while the summary %s", (_, changed, effective_from) => {
+    mocks.plan.mockReturnValue({
+      data: plan({ effective_from }),
+      isError: false,
+    })
     render(<PlanOverviewSection summary={changed as BillingSummaryResponse} />)
     expect(screen.getByText("Loading your plan…")).toBeTruthy()
-    expect(
-      screen.queryByText(/Next monthly|of \$250 used|couldn't be loaded/),
-    ).toBeNull()
+    expect(screen.queryByText(/of \$250 used|couldn't be loaded/)).toBeNull()
+  })
+
+  it.each([
+    ["a renewal under another key", "pro_annual", "active"],
+    ["a lapsed contract falling back to Free", "free", "active"],
+    ["a trial fallback", "trial", "trial"],
+  ])("renders %s normally once the plan has settled", (_, key, status) => {
+    mocks.plan.mockReturnValue({
+      data: plan({ key: "yc_2026" }),
+      isError: false,
+    })
+    render(
+      <PlanOverviewSection
+        summary={
+          {
+            ...summary,
+            plan: { ...summary.plan!, key, status },
+          } as BillingSummaryResponse
+        }
+      />,
+    )
+    expect(screen.queryByText("Loading your plan…")).toBeNull()
+    expect(screen.getByText("Usage couldn't be loaded.")).toBeTruthy()
   })
 
   it("leaves credit plans alone, which have no contract to compare", () => {
@@ -603,6 +634,52 @@ describe("Settings plan details", () => {
     expect(document.getElementById("auto-topoff")).toBeTruthy()
     expect(screen.getByRole("switch")).toBeTruthy()
     expect(screen.getByText(/To cancel, contact support/).textContent).toBe(
+      "To cancel, contact support at support@superserve.ai.",
+    )
+  })
+
+  it("scrolls to Auto Topoff once it loads when a link asked for it", () => {
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    window.history.replaceState({}, "", "/settings/#auto-topoff")
+    mocks.plan.mockReturnValue({
+      data: plan({ funding_policy: "prepaid", topoff: null }),
+      isError: false,
+    })
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PlanOverviewSection summary={summary} details />
+      </QueryClientProvider>,
+    )
+    expect(scroll).toHaveBeenCalledOnce()
+    expect(scroll.mock.contexts[0]).toBe(document.getElementById("auto-topoff"))
+    window.history.replaceState({}, "", "/")
+  })
+
+  it("follows the catalog family over funding for how to cancel", () => {
+    mocks.offers = [
+      {
+        offer_key: "developer_monthly",
+        family: "developer",
+        display_name: "Builder",
+        price_cents: 900,
+        interval_months: 1,
+        included_credit_cents: 900,
+        funding_policy: "postpaid",
+        topoff: null,
+        sellable: true,
+      },
+    ]
+    mocks.plan.mockReturnValue({
+      data: plan({ key: "developer_monthly" }),
+      isError: false,
+    })
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PlanOverviewSection summary={summary} details />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByText(/To cancel/).textContent).toBe(
       "To cancel, contact support at support@superserve.ai.",
     )
   })

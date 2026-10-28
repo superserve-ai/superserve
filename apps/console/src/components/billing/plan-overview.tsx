@@ -232,7 +232,7 @@ export function PrepaidPanel({
             ? formatCents(Math.max(prepaid.balance_cents, 0))
             : "Updating…"}
         </p>
-        <p className="text-sm text-muted" id="auto-topoff">
+        <p className="text-sm text-muted">
           {recharge.enabled &&
           recharge.amount_cents !== null &&
           recharge.threshold_cents !== null
@@ -339,9 +339,10 @@ export interface PlanOverviewProps {
 
 const SUPPORT_EMAIL = "support@superserve.ai"
 
-// How a team on a self-serve subscription reaches support to cancel: a plan
-// funded by credit by email, other subscriptions by priority Slack or email.
-function CancelSupport({ funded }: { funded: boolean }) {
+export type CancelChannel = "email" | "priority"
+
+// How a team on a self-serve subscription reaches support to cancel.
+function CancelSupport({ channel }: { channel: CancelChannel }) {
   const email = (
     <a
       href={`mailto:${SUPPORT_EMAIL}`}
@@ -353,7 +354,7 @@ function CancelSupport({ funded }: { funded: boolean }) {
   return (
     <p className="text-sm text-muted">
       To cancel, contact support{" "}
-      {funded ? (
+      {channel === "email" ? (
         <>at {email}</>
       ) : (
         <>in your priority Slack channel or at {email}</>
@@ -366,11 +367,11 @@ function CancelSupport({ funded }: { funded: boolean }) {
 export function PlanDetails({
   plan,
   canManage,
-  funded = false,
+  cancelChannel = "priority",
 }: {
   plan: TeamPlan
   canManage: boolean
-  funded?: boolean
+  cancelChannel?: CancelChannel
 }) {
   const size = describeSandboxSize(plan.limits)
   const pending = plan.pending_change
@@ -423,7 +424,9 @@ export function PlanDetails({
           ) : null}
         </div>
       ) : null}
-      {plan.kind === "subscription" ? <CancelSupport funded={funded} /> : null}
+      {plan.kind === "subscription" ? (
+        <CancelSupport channel={cancelChannel} />
+      ) : null}
     </div>
   )
 }
