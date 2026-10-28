@@ -43,7 +43,7 @@ vi.mock("next/headers", () => ({
   cookies: async () => ({ get: mocks.cookie }),
 }))
 
-import { needsPlanSelection } from "./signup-plan"
+import { needsPlanSelection, parseSignupChoice } from "./signup-plan"
 import { getSignupPlanAction } from "./signup-plan-actions"
 
 beforeEach(() => {
@@ -468,6 +468,28 @@ describe("real paid preparation handler permanent recovery", () => {
       const context = await getSignupPlanAction("usw:west-team")
       expect(context.state).toBe("selecting")
       expect(context.entryState).toBeUndefined()
+    },
+  )
+
+  it.each(["developer_monthly", "pro_monthly", "team_scale_annual"])(
+    "lets a team that bought %s into the dashboard",
+    async (offer) => {
+      mocks.single.mockResolvedValue({
+        data: { state: "committed", offer_key: offer },
+        error: null,
+      })
+      const context = await getSignupPlanAction("usw:west-team")
+      expect(context).toMatchObject({ state: "committed", offer })
+      expect(needsPlanSelection(context)).toBe(false)
+    },
+  )
+
+  it.each(["pro", "developer", "Developer_monthly", "starter_weekly", 7])(
+    "still rejects %s as a stored plan",
+    (offer) => {
+      expect(() =>
+        parseSignupChoice({ state: "committed", offer_key: offer }),
+      ).toThrow()
     },
   )
 })
