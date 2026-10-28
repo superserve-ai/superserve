@@ -58,6 +58,32 @@ export const planKindSchema = z.enum([
   "custom",
 ])
 
+export const fundingPolicySchema = z.enum(["prepaid", "postpaid"])
+
+export const planTopoffSchema = z
+  .object({
+    amount_cents: z.number().int().positive(),
+    threshold_cents: z.number().int().positive(),
+    default_enabled: z.boolean(),
+  })
+  .nullable()
+
+export const billingOfferSchema = z.object({
+  offer_key: z.string(),
+  family: z.string(),
+  display_name: z.string(),
+  price_cents: z.number().int().nonnegative(),
+  interval_months: z.number().int().positive(),
+  included_credit_cents: z.number().int().nonnegative().nullable(),
+  funding_policy: fundingPolicySchema,
+  topoff: planTopoffSchema,
+  sellable: z.boolean(),
+})
+
+// Offers are optional catalog detail: a backend without them, or with an
+// entry this console cannot read, falls back to the plan cards.
+export const billingOffersSchema = z.array(billingOfferSchema).catch([])
+
 export const planCardSchema = z.object({
   family: z.string(),
   version: z.number().int(),
@@ -77,6 +103,8 @@ export const planCardSchema = z.object({
     .nullable(),
   matching: planMatchingSchema,
   limits: planLimitsSchema,
+  funding_policy: fundingPolicySchema.optional(),
+  topoff: planTopoffSchema.optional(),
 })
 
 export const publicBillingPlansSchema = z.object({
@@ -101,6 +129,9 @@ export type PlanKind = z.infer<typeof planKindSchema>
 export type PricingVersion = z.infer<typeof pricingVersionSchema>
 export type PlanCard = z.infer<typeof planCardSchema>
 export type PublicBillingPlans = z.infer<typeof publicBillingPlansSchema>
+export type FundingPolicy = z.infer<typeof fundingPolicySchema>
+export type PlanTopoff = z.infer<typeof planTopoffSchema>
+export type BillingOffer = z.infer<typeof billingOfferSchema>
 
 export function formatUsdCents(cents: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -118,13 +149,31 @@ export function planCard(
   return plans?.cards.find((card) => card.family === family)
 }
 
-export function planSandboxSize(limits: PlanLimits): string | null {
-  const gib = (mib: number) =>
-    `${Number.isInteger(mib / 1024) ? mib / 1024 : (mib / 1024).toFixed(1)} GiB`
+function formatMiB(mib: number): string {
+  return mib % 1024 === 0 ? `${mib / 1024} GiB` : `${mib} MiB`
+}
+
+// Disk is an internal cap and is never shown.
+export function describeSandboxSize(
+  limits: Pick<PlanLimits, "max_vcpu" | "max_memory_mib">,
+): string | null {
   const parts = [
     limits.max_vcpu ? `${limits.max_vcpu} vCPU` : null,
-    limits.max_memory_mib ? `${gib(limits.max_memory_mib)} memory` : null,
-    limits.max_disk_mib ? `${gib(limits.max_disk_mib)} disk` : null,
+    limits.max_memory_mib ? `${formatMiB(limits.max_memory_mib)} memory` : null,
   ].filter(Boolean)
-  return parts.length ? `Up to ${parts.join(", ")} per sandbox` : null
+  return parts.length ? parts.join(", ") : null
+}
+
+export function planSandboxSize(limits: PlanLimits): string | null {
+  const size = describeSandboxSize(limits)
+  return size ? `Up to ${size} per sandbox` : null
+}
+
+export function findOffer(
+  offers: readonly BillingOffer[] | undefined,
+  offerKey: string | null | undefined,
+): BillingOffer | undefined {
+  return offerKey
+    ? offers?.find((offer) => offer.offer_key === offerKey)
+    : undefined
 }

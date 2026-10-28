@@ -44,6 +44,8 @@ export interface BillingTrialBalance {
   // Optional during the SS-484 rollout; the server downgrades stale runway to unknown.
   runway_state?: "over_24h" | "under_24h" | "unknown" | null
   runway_observed_at?: string | null
+  // Optional until the backend publishes the trial's "almost used up" setting.
+  almost_used_up_usd?: number | null
 }
 
 export interface BillingIncludedUsage {

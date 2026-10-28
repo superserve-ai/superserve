@@ -10,6 +10,8 @@ import {
   useTeamPlan,
 } from "@/hooks/use-billing-v2"
 import type { BillingSummaryResponse } from "@/lib/api/billing"
+import { canStartAnyPlan, canStartPlan } from "@/lib/api/billing-capabilities"
+import { fundedByCredit } from "@/lib/api/billing-v2"
 
 import { PlanDetails, PlanOverview } from "./plan-overview"
 
@@ -83,6 +85,10 @@ export function PlanOverviewSection({
               : null,
         }}
         canManage={canManage}
+        topoff={
+          plan.kind === "subscription" &&
+          fundedByCredit(plan, capabilities.data?.offers)
+        }
       />
     )
   return (
@@ -104,9 +110,8 @@ export function PlanOverviewSection({
       canManage={canManage}
       canPurchase={
         plan.kind === "free"
-          ? capabilities.data?.fresh_entry.pro === true ||
-            capabilities.data?.fresh_entry.starter === true
-          : capabilities.data?.fresh_entry.starter === true
+          ? canStartAnyPlan(capabilities.data)
+          : canStartPlan(capabilities.data, plan)
       }
     />
   )

@@ -1,6 +1,11 @@
 import { z } from "zod"
 
-import { publicBillingPlansSchema } from "@/lib/billing/plans"
+import {
+  billingOffersSchema,
+  findOffer,
+  type PlanKind,
+  publicBillingPlansSchema,
+} from "@/lib/billing/plans"
 
 import { apiClient } from "./client"
 
@@ -24,6 +29,7 @@ export const billingCapabilitiesSchema = z
       disable_auto_recharge: z.boolean(),
     }),
     catalog: publicBillingPlansSchema,
+    offers: billingOffersSchema,
   })
   .superRefine((value, ctx) => {
     if (value.catalog.pricing_version !== value.pricing_version)
@@ -42,6 +48,35 @@ export const billingCapabilitiesSchema = z
   })
 
 export type BillingCapabilities = z.infer<typeof billingCapabilitiesSchema>
+
+// Whether this team can buy plan now. The catalog offer decides; a backend
+// that does not list the plan among its offers keeps the per-kind gates.
+export function canStartPlan(
+  capabilities: BillingCapabilities | undefined,
+  plan: { key: string; kind: PlanKind },
+): boolean {
+  if (!capabilities) return false
+  const offer = findOffer(capabilities.offers, plan.key)
+  if (offer) return offer.sellable
+  switch (plan.kind) {
+    case "prepaid":
+      return capabilities.fresh_entry.starter
+    case "subscription":
+      return capabilities.fresh_entry.pro
+    default:
+      return false
+  }
+}
+
+export function canStartAnyPlan(
+  capabilities: BillingCapabilities | undefined,
+): boolean {
+  if (!capabilities) return false
+  const offers = capabilities.offers ?? []
+  return offers.length > 0
+    ? offers.some((offer) => offer.sellable)
+    : capabilities.fresh_entry.pro || capabilities.fresh_entry.starter
+}
 
 export function parseBillingCapabilities(body: unknown, teamKey: string) {
   const parsed = billingCapabilitiesSchema.parse(body)

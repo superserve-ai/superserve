@@ -4,13 +4,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { BillingSummaryResponse } from "@/lib/api/billing"
 
-import { TrialBillingBanner } from "./trial-billing-banner"
+import { TrialBillingBanner, trialStage } from "./trial-billing-banner"
 
 const mocks = vi.hoisted(() => ({
   summary: vi.fn(),
   payment: vi.fn(),
   context: vi.fn(),
   toast: vi.fn(),
+  entry: vi.fn(),
+  offers: undefined as unknown[] | undefined,
+}))
+vi.mock("@/hooks/use-billing-v2", () => ({ useTeamEntry: mocks.entry }))
+vi.mock("@/hooks/use-billing-capabilities", () => ({
+  useBillingCapabilities: () => ({ data: { offers: mocks.offers } }),
 }))
 vi.mock("@superserve/ui", async () => ({
   ...(await vi.importActual<typeof import("@superserve/ui")>("@superserve/ui")),
@@ -36,10 +42,12 @@ function summary(overrides: Partial<BillingSummaryResponse> = {}) {
     ...overrides,
   }
 }
-function mount() {
+function mount(requestedOffer?: string) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
+  if (requestedOffer)
+    client.setQueryData(["signup-plan", "use:a"], { requestedOffer })
   const invalidate = vi.spyOn(client, "invalidateQueries")
   const result = render(
     <QueryClientProvider client={client}>
@@ -51,6 +59,8 @@ function mount() {
 
 beforeEach(() => {
   mocks.toast.mockClear()
+  mocks.offers = undefined
+  mocks.entry.mockReturnValue({ data: null, isPending: false, isError: false })
   mocks.summary.mockReturnValue({ data: summary(), isError: false })
   mocks.context.mockReturnValue({ teamKey: "use:a", ready: true })
   mocks.payment.mockReturnValue({
@@ -70,7 +80,7 @@ describe("TrialBillingBanner", () => {
     mount()
     expect(screen.getByRole("status")).toHaveClass("bg-yellow-100")
     expect(screen.getByText("$3.25 remaining")).toBeInTheDocument()
-    expect(screen.getByText("$95 in additional credits")).toBeInTheDocument()
+    expect(screen.getByRole("status")).not.toHaveTextContent("$95")
     expect(screen.getAllByRole("button")).toHaveLength(1)
   })
 
@@ -125,7 +135,7 @@ describe("TrialBillingBanner", () => {
     mount()
     expect(screen.getByRole("status")).toHaveClass("bg-red-100")
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Your free trial credit has run out. Add a payment method to unlock $95 in credits and continue running sandboxes.",
+      "Your free trial credit has run out. Add a payment method to continue running sandboxes.",
     )
     expect(screen.getByRole("status")).not.toHaveTextContent(
       /paused|delet|7.day/i,
@@ -193,7 +203,7 @@ describe("TrialBillingBanner", () => {
     const { client, rerender } = mount()
     expect(screen.getByRole("status")).toHaveClass("bg-red-100")
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Based on your recent usage, your trial credit may run out within the next 24 hours, and any running sandboxes will automatically be stopped. Add a payment method to unlock $95 in credits and continue running sandboxes.",
+      "Based on your recent usage, your trial credit may run out within the next 24 hours, and any running sandboxes will automatically be stopped. Add a payment method to continue running sandboxes.",
     )
 
     mocks.summary.mockReturnValue({
@@ -207,7 +217,7 @@ describe("TrialBillingBanner", () => {
     expect(screen.getByRole("status")).toHaveClass("bg-yellow-100")
     expect(screen.getByRole("status")).not.toHaveClass("bg-red-100")
     expect(screen.getByRole("status")).toHaveTextContent(
-      "You're on a free trial with $3.25 remaining. Add a payment method to unlock $95 in additional credits.",
+      "You're on a free trial with $3.25 remaining. Add a payment method to keep running sandboxes once it's used up.",
     )
     expect(screen.getByRole("status")).not.toHaveTextContent("recent usage")
   })
@@ -344,8 +354,98 @@ describe("TrialBillingBanner", () => {
 
   it("hides cached data while the team switch is pending", () => {
     mocks.context.mockReturnValue({ teamKey: "use:b", ready: false })
+    mocks.payment.mockClear()
     mount()
     expect(screen.queryByRole("status")).not.toBeInTheDocument()
-    expect(mocks.payment).toHaveBeenCalledWith(undefined, "use:b")
+    expect(mocks.payment).not.toHaveBeenCalled()
+  })
+})
+
+describe("TrialBillingBanner for a new team's trial", () => {
+  const trial = (remaining_usd: number, almost_used_up_usd?: number) =>
+    summary({
+      trial: { state: "active", remaining_usd, almost_used_up_usd },
+    })
+  const entry = (data: string) =>
+    mocks.entry.mockReturnValue({ data, isPending: false, isError: false })
+  const banner = () => screen.getByRole("region", { name: "Free trial" })
+
+  it("shows the trial with an Upgrade to the selected plan's checkout", () => {
+    entry("trial")
+    mocks.offers = [{ offer_key: "developer_monthly", display_name: "Builder" }]
+    mocks.summary.mockReturnValue({ data: trial(0.37, 0.11) })
+    const { container } = mount("developer")
+    expect(banner()).toHaveTextContent("You're on a free trial with $0.37 left")
+    const upgrade = screen.getByRole("button", { name: "Upgrade to Builder" })
+    const form = upgrade.closest("form")!
+    expect(form.getAttribute("method")).toBe("post")
+    expect(form.getAttribute("action")).toMatch(
+      /^\/api\/onboarding\/checkout\/\?offer=developer$/,
+    )
+    expect(container.textContent).not.toMatch(/Add Payment|\$95/)
+  })
+
+  it("warns once the balance reaches the almost-used-up setting", () => {
+    entry("trial")
+    mocks.summary.mockReturnValue({ data: trial(0.11, 0.11) })
+    mount("pro_monthly")
+    expect(banner()).toHaveTextContent(/almost used up: \$0\.11 left/)
+    expect(banner()).toHaveClass("bg-yellow-100")
+  })
+
+  it("has no almost-used-up stage without the setting", () => {
+    entry("trial")
+    mocks.summary.mockReturnValue({ data: trial(0.01) })
+    mount("pro_monthly")
+    expect(banner()).not.toHaveTextContent(/almost used up/)
+  })
+
+  it("says sandboxes are paused and nothing is deleted once the trial ends", () => {
+    entry("trial_ended")
+    mocks.summary.mockReturnValue({ data: trial(0) })
+    mount()
+    expect(banner()).toHaveTextContent(
+      "Your free trial has ended. Your sandboxes are paused and nothing is deleted. Upgrade to resume.",
+    )
+    expect(banner()).toHaveClass("bg-red-100")
+    expect(screen.getByRole("link", { name: "Upgrade" })).toHaveAttribute(
+      "href",
+      expect.stringMatching(/\/auth\/choose-plan\/?\?reason=upgrade$/),
+    )
+  })
+
+  it("waits for the entry state instead of flashing the legacy banner", () => {
+    mocks.entry.mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+    })
+    const { container } = mount()
+    expect(container.textContent).toBe("")
+  })
+
+  it("leaves Upgrade to billing administrators", () => {
+    entry("trial")
+    mocks.summary.mockReturnValue({
+      data: summary({ permissions: { can_view: true, can_manage: false } }),
+    })
+    mount("developer")
+    expect(screen.queryByRole("button")).not.toBeInTheDocument()
+    expect(
+      screen.getByText("Contact your team's billing administrator."),
+    ).toBeInTheDocument()
+  })
+})
+
+describe("trialStage", () => {
+  it.each([
+    ["trial", { state: "active", remaining_usd: 0.5 }, "trial"],
+    ["trial", { state: "exhausted", remaining_usd: 0.5 }, "ended"],
+    ["trial", { state: "active", remaining_usd: 0 }, "ended"],
+    ["trial_ended", { state: "active", remaining_usd: 0.5 }, "ended"],
+    ["payment_failed", undefined, "payment_failed"],
+    ["trial", undefined, "trial"],
+  ] as const)("%s with %o is %s", (entry, trial, stage) => {
+    expect(trialStage(entry, trial)).toBe(stage)
   })
 })

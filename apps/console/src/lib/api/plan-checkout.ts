@@ -178,19 +178,6 @@ export function isStripeCheckoutUrl(value: string) {
   }
 }
 
-export async function commitFreePlan(teamKey: string) {
-  const response = await apiClient<{ state: string; offer: string }>(
-    "/stripe/plan-choice",
-    {
-      method: "POST",
-      cache: "no-store",
-      body: JSON.stringify({ expected_team: teamKey, offer: "free" }),
-    },
-  )
-  if (response.state !== "committed" || response.offer !== "free")
-    throw new Error("Unable to confirm your plan. Please retry.")
-}
-
 export async function recoverProPayment(teamKey: string, restart = false) {
   const operations = proOperations(teamKey)
   const response = await apiClient<{ outcome: string; url?: string }>(

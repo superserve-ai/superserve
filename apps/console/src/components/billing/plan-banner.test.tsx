@@ -11,6 +11,7 @@ vi.mock("@/hooks/use-billing-capabilities", () => ({
             auto_recharge: mocks.recharge,
             choose_free: true,
           },
+          offers: mocks.offers,
         },
   }),
 }))
@@ -22,6 +23,7 @@ import type { TeamPlan } from "@/lib/api/billing-v2"
 
 const mocks = vi.hoisted(() => ({
   capabilityUnavailable: false,
+  offers: undefined as unknown[] | undefined,
   buyCredit: true,
   recharge: true,
   version: vi.fn(),
@@ -60,7 +62,7 @@ function plan(kind: TeamPlan["kind"]): TeamPlan {
   return {
     key: kind,
     kind,
-    name: kind,
+    name: kind === "prepaid" ? "Starter" : kind,
     limits,
     fee_cents: null,
     included_cents: null,
@@ -79,6 +81,7 @@ function mount() {
 
 beforeEach(() => {
   mocks.capabilityUnavailable = false
+  mocks.offers = undefined
   mocks.buyCredit = true
   mocks.recharge = true
   mocks.plan.mockReturnValue({ data: null })
@@ -168,6 +171,7 @@ describe("PlanBanner with pricing v2 on", () => {
     mocks.prepaid.mockReturnValue({
       data: {
         balance_cents: 250,
+        low_balance: true,
         auto_recharge: {
           enabled: false,
           threshold_cents: null,
@@ -307,7 +311,11 @@ it.each([
     mocks.recharge = recharge
     mocks.plan.mockReturnValue({ data: plan("prepaid") })
     mocks.prepaid.mockReturnValue({
-      data: { balance_cents: 250, auto_recharge: { enabled: false } },
+      data: {
+        balance_cents: 250,
+        low_balance: true,
+        auto_recharge: { enabled: false },
+      },
     })
     mount()
     expect(Boolean(screen.queryByRole("link", { name: "Buy credit" }))).toBe(
@@ -321,3 +329,82 @@ it.each([
     ).toBeNull()
   },
 )
+
+describe("PlanBanner for a credit-funded subscription", () => {
+  const funded = {
+    ...plan("subscription"),
+    key: "funded_monthly",
+    name: "Funded",
+  }
+  const offer = {
+    offer_key: "funded_monthly",
+    family: "funded",
+    display_name: "Funded",
+    price_cents: 700,
+    interval_months: 1,
+    included_credit_cents: 700,
+    funding_policy: "prepaid",
+    topoff: { amount_cents: 300, threshold_cents: 200, default_enabled: true },
+    sellable: true,
+  }
+  const balance = (
+    cents: number,
+    enabled: boolean,
+    disabled_reason = null,
+  ) => ({
+    data: {
+      balance_cents: cents,
+      low_balance: false,
+      auto_recharge: {
+        enabled,
+        threshold_cents: enabled ? 200 : null,
+        amount_cents: enabled ? 300 : null,
+        disabled_reason,
+        disabled_at: null,
+        in_flight: false,
+      },
+    },
+  })
+
+  it("warns below the catalog threshold only while Auto Topoff is off", () => {
+    mocks.offers = [offer]
+    mocks.plan.mockReturnValue({ data: funded })
+    mocks.prepaid.mockReturnValue(balance(150, false))
+    const { unmount } = mount()
+    const banner = screen.getByRole("region", { name: "Funded credit" })
+    expect(banner.textContent).toMatch(/Your Funded credit is \$1\.50/)
+    expect(banner.textContent).toMatch(/Auto Topoff adds \$3 whenever/)
+    expect(
+      screen.getByRole("link", { name: "Turn on Auto Topoff" }),
+    ).toHaveAttribute("href", expect.stringMatching(/#auto-topoff$/))
+    unmount()
+
+    mocks.prepaid.mockReturnValue(balance(150, true))
+    expect(mount().container.textContent).toBe("")
+  })
+
+  it("stays quiet above the catalog threshold", () => {
+    mocks.offers = [offer]
+    mocks.plan.mockReturnValue({ data: funded })
+    mocks.prepaid.mockReturnValue(balance(250, false))
+    expect(mount().container.textContent).toBe("")
+  })
+
+  it("warns after a failed charge turned Auto Topoff off", () => {
+    mocks.offers = [offer]
+    mocks.plan.mockReturnValue({ data: funded })
+    mocks.prepaid.mockReturnValue(balance(0, false, "card_declined" as never))
+    mount()
+    expect(screen.getByText(/credit has run out/)).toBeTruthy()
+    expect(
+      screen.getByRole("link", { name: "Turn Auto Topoff back on" }),
+    ).toBeTruthy()
+  })
+
+  it("treats a subscription missing from the offers as postpaid", () => {
+    mocks.offers = []
+    mocks.plan.mockReturnValue({ data: funded })
+    mocks.prepaid.mockReturnValue(balance(0, false))
+    expect(mount().container.textContent).toBe("")
+  })
+})

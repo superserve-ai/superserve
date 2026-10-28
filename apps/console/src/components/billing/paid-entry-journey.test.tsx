@@ -297,12 +297,17 @@ describe("actual signup preparation to paid page journey", () => {
         expect(
           screen.queryByRole("button", { name: /Buy .* credit/ }),
         ).toBeNull()
-      else
+      else {
+        fireEvent.change(
+          await screen.findByRole("textbox", { name: "Amount (USD)" }),
+          { target: { value: "7" } },
+        )
         await waitFor(() =>
           expect(
             screen.getByRole("button", { name: /Buy .* credit/ }),
           ).not.toBeDisabled(),
         )
+      }
       expect(screen.queryByText(/incomplete or invalid/)).toBeNull()
     },
   )

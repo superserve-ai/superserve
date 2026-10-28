@@ -3,13 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   startPrepaidCheckout,
   retainedPrepaidOperations,
-  validNewPrepaidCents,
   setPrepaidAutoRecharge,
   reconcilePrepaidOperations,
   type PrepaidPurchase,
 } from "./prepaid"
 const api = vi.hoisted(() => vi.fn())
-vi.mock("./client", () => ({ apiClient: (...args: unknown[]) => api(...args) }))
+vi.mock("./client", async (original) => ({
+  ...(await original<typeof import("./client")>()),
+  apiClient: (...args: unknown[]) => api(...args),
+}))
 const route = "https://console.test/plan-usage/buy-credit/"
 const body = (index: number) => JSON.parse(api.mock.calls[index]![1].body)
 beforeEach(() => {
@@ -23,40 +25,23 @@ const respond = (state = "pending", url?: string) =>
     ...(url ? { url } : {}),
   }))
 describe("Starter durable checkout", () => {
-  it("caps new purchases at $10,000 and preserves retained larger operations", async () => {
-    respond()
-    expect(validNewPrepaidCents(1_000_000)).toBe(true)
-    expect(validNewPrepaidCents(1_000_500)).toBe(false)
-    await startPrepaidCheckout("use:team", 1_000_000, route, "actor")
-    expect(body(0).amount_cents).toBe(1_000_000)
+  it("leaves the accepted range to the backend and forgets a rejected purchase", async () => {
+    const { ApiError } = await import("./client")
+    api.mockRejectedValueOnce(
+      new ApiError(400, "bad_request", "amount rejected"),
+    )
     await expect(
-      startPrepaidCheckout("use:team", 1_000_500, route, "actor"),
-    ).rejects.toThrow("$10,000")
-    expect(api).toHaveBeenCalledTimes(1)
-    const operation = {
-      id: crypto.randomUUID(),
-      team: "use:team",
-      actor: "actor",
-      amount: 1_000_500,
-      success: route + "?purchase=success",
-      cancel: route + "?purchase=cancel",
-    }
-    sessionStorage.setItem(
-      "starter-checkout:actor:use:team:1000500",
-      JSON.stringify(operation),
-    )
-    expect(retainedPrepaidOperations("actor", "use:team")).toContainEqual(
-      operation,
-    )
-    await startPrepaidCheckout(
-      "use:team",
-      operation.amount,
-      route,
-      "actor",
-      operation.id,
-    )
-    expect(body(1).operation_id).toBe(operation.id)
-    expect(body(1).amount_cents).toBe(operation.amount)
+      startPrepaidCheckout("use:team", 1_234_567, route, "actor"),
+    ).rejects.toThrow("amount rejected")
+    expect(body(0).amount_cents).toBe(1_234_567)
+    expect(retainedPrepaidOperations("actor", "use:team")).toEqual([])
+    respond()
+    await startPrepaidCheckout("use:team", 1_234_567, route, "actor")
+    expect(body(1).operation_id).not.toBe(body(0).operation_id)
+    await expect(
+      startPrepaidCheckout("use:team", 0, route, "actor"),
+    ).rejects.toThrow()
+    expect(api).toHaveBeenCalledTimes(2)
   })
 
   it("replays original identity, amount and frozen redirect URLs after response loss", async () => {
@@ -162,26 +147,22 @@ describe("Starter durable checkout", () => {
   })
 })
 
-it("caps auto-recharge settings and still permits disabling oversized settings", async () => {
+it("rejects empty auto-recharge settings and still permits disabling", async () => {
   api.mockResolvedValue({})
   expect(() =>
     setPrepaidAutoRecharge("use:team", {
       enabled: true,
-      thresholdCents: 500,
-      amountCents: 1_000_500,
+      thresholdCents: 0,
+      amountCents: 700,
     }),
-  ).toThrow("$10,000")
+  ).toThrow()
   expect(api).not.toHaveBeenCalled()
   await setPrepaidAutoRecharge("use:team", {
     enabled: true,
-    thresholdCents: 500,
-    amountCents: 1_000_000,
+    thresholdCents: 300,
+    amountCents: 700,
   })
-  expect(body(0).amount_cents).toBe(1_000_000)
-  await setPrepaidAutoRecharge("use:team", {
-    enabled: false,
-    thresholdCents: 500,
-    amountCents: 1_000_500,
-  })
+  expect(body(0).amount_cents).toBe(700)
+  await setPrepaidAutoRecharge("use:team", { enabled: false })
   expect(body(1)).toEqual({ expected_team: "use:team", enabled: false })
 })

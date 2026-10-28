@@ -15,11 +15,12 @@ import {
   useCatalogPlans,
   usePricingVersionState,
 } from "@/hooks/use-pricing-version"
+import { canStartPlan } from "@/lib/api/billing-capabilities"
 import {
   type CatalogPlan,
   describeSandboxSize,
+  ENTERPRISE_MEETING_URL,
   formatCents,
-  PLAN_ACTION_LINKS,
   planAction,
   type TeamPlan,
 } from "@/lib/api/billing-v2"
@@ -111,7 +112,7 @@ function PlanCard({
       ) : (
         <p className="text-sm text-muted">
           <Link
-            href={PLAN_ACTION_LINKS.enterprise}
+            href={ENTERPRISE_MEETING_URL}
             className="underline underline-offset-4"
           >
             Contact us
@@ -236,76 +237,38 @@ export function UpgradePage() {
               </p>
             ) : null}
             {!v2 ? (
-              <div className="space-y-3">
-                <p className="text-sm text-muted">
-                  New purchases are unavailable. You can still view your current
-                  plan and undo a scheduled change.
-                </p>
-                {canManage &&
-                capabilities.data?.fresh_entry.choose_free &&
-                !plan.pending_change ? (
-                  <div className="flex flex-wrap gap-3">
-                    {plan.kind === "subscription" ? (
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          teamKey &&
-                          setTarget({
-                            teamKey,
-                            plan: {
-                              key: "starter",
-                              kind: "prepaid",
-                              name: "Starter",
-                            },
-                          })
-                        }
-                      >
-                        Switch to Starter
-                      </Button>
-                    ) : null}
-                    {plan.kind !== "free" ? (
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          teamKey &&
-                          setTarget({
-                            teamKey,
-                            plan: { key: "free", kind: "free", name: "Free" },
-                          })
-                        }
-                      >
-                        Switch to Free
-                      </Button>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
+              <p className="text-sm text-muted">
+                New purchases are unavailable. You can still view your current
+                plan and undo a scheduled change.
+              </p>
             ) : catalog.length === 0 ? (
               <p className="text-sm text-muted">
                 Plans couldn&apos;t be loaded. Try again shortly.
               </p>
             ) : null}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {(v2 ? catalog : []).map((entry) => (
-                <PlanCard
-                  key={entry.key}
-                  plan={entry}
-                  current={plan}
-                  canManage={
-                    canManage &&
-                    (entry.kind === "free"
-                      ? capabilities.data?.fresh_entry.choose_free === true
-                      : entry.kind === "prepaid"
-                        ? capabilities.data?.fresh_entry.starter === true
-                        : entry.kind === "subscription"
-                          ? capabilities.data?.fresh_entry.pro === true
-                          : true)
-                  }
-                  onDowngrade={(entry) =>
-                    teamKey && setTarget({ plan: entry, teamKey })
-                  }
-                />
-              ))}
+              {(v2 ? catalog : [])
+                .filter(
+                  (entry) =>
+                    entry.kind !== "free" ||
+                    plan.kind === "free" ||
+                    plan.pending_change?.plan_key === entry.key,
+                )
+                .map((entry) => (
+                  <PlanCard
+                    key={entry.key}
+                    plan={entry}
+                    current={plan}
+                    canManage={
+                      canManage &&
+                      (entry.kind === "custom" ||
+                        canStartPlan(capabilities.data, entry))
+                    }
+                    onDowngrade={(entry) =>
+                      teamKey && setTarget({ plan: entry, teamKey })
+                    }
+                  />
+                ))}
             </div>
           </>
         )}
@@ -314,9 +277,7 @@ export function UpgradePage() {
       target.teamKey === teamKey &&
       ready &&
       canManage &&
-      (target.plan.kind === "free"
-        ? capabilities.data?.fresh_entry.choose_free
-        : capabilities.data?.fresh_entry.starter) ? (
+      canStartPlan(capabilities.data, target.plan) ? (
         <PlanChangeDialog
           key={`${target.teamKey}:${target.plan.key}`}
           target={target.plan}

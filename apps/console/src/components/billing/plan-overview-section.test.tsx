@@ -549,7 +549,7 @@ describe("Pro next monthly billing period", () => {
 
 describe("Settings plan details", () => {
   it.each([0, 3])(
-    "shows the authoritative Free template cap %s without usage or guessing",
+    "never shows the internal template cap %s, usage or guesses",
     (max_templates) => {
       mocks.plan.mockReturnValue({
         data: plan({
@@ -561,9 +561,8 @@ describe("Settings plan details", () => {
       })
       render(<PlanOverviewSection summary={summary} details />)
       expect(screen.getByText("Free")).toBeTruthy()
-      expect(
-        screen.getByText("Custom templates").nextElementSibling?.textContent,
-      ).toBe(String(max_templates))
+      expect(screen.queryByText("Custom templates")).toBeNull()
+      expect(screen.queryByText(/disk/)).toBeNull()
       expect(
         screen.getByRole("link", { name: "Change plan" }).getAttribute("href"),
       ).toBe("/plan-usage/upgrade")

@@ -2,16 +2,20 @@ import { Button, cn } from "@superserve/ui"
 import Link from "next/link"
 
 import {
+  BUY_CREDIT_PATH,
   formatCents,
+  fundedByCredit,
   isLowBalance,
-  PLAN_ACTION_LINKS,
   type PrepaidBalance,
   type TeamPlan,
+  TOPOFF_SETTINGS_PATH,
   UPGRADE_PATH,
 } from "@/lib/api/billing-v2"
+import { type BillingOffer, findOffer } from "@/lib/billing/plans"
 
 export interface PlanAwareBannerProps {
   plan: TeamPlan
+  offers?: readonly BillingOffer[]
   prepaid: PrepaidBalance | null
   canManage: boolean
   canUpgrade?: boolean
@@ -19,7 +23,7 @@ export interface PlanAwareBannerProps {
   canConfigureRecharge?: boolean
 }
 
-function BannerShell({
+export function BannerShell({
   tone,
   label,
   children,
@@ -48,7 +52,7 @@ function BannerShell({
   )
 }
 
-function ManageAction({
+export function ManageAction({
   canManage,
   children,
 }: {
@@ -62,8 +66,61 @@ function ManageAction({
   )
 }
 
+function LowCreditBanner({
+  plan,
+  offer,
+  prepaid,
+  canManage,
+}: {
+  plan: TeamPlan
+  offer: BillingOffer | undefined
+  prepaid: PrepaidBalance
+  canManage: boolean
+}) {
+  const empty = prepaid.balance_cents <= 0
+  const topoff = offer?.topoff
+  return (
+    <BannerShell
+      tone={empty ? "danger" : "warning"}
+      label={`${plan.name} credit`}
+      action={
+        <ManageAction canManage={canManage}>
+          <Button size="sm" render={<Link href={TOPOFF_SETTINGS_PATH} />}>
+            {prepaid.auto_recharge.disabled_reason
+              ? "Turn Auto Topoff back on"
+              : "Turn on Auto Topoff"}
+          </Button>
+        </ManageAction>
+      }
+    >
+      {empty ? (
+        <>
+          Your {plan.name} credit has run out. Running sandboxes are paused and
+          nothing is deleted.
+        </>
+      ) : (
+        <>
+          Your {plan.name} credit is{" "}
+          <strong>{formatCents(prepaid.balance_cents)}</strong>. Running
+          sandboxes pause when it runs out.
+        </>
+      )}{" "}
+      {topoff ? (
+        <>
+          Auto Topoff adds <strong>{formatCents(topoff.amount_cents)}</strong>{" "}
+          whenever your credit drops below {formatCents(topoff.threshold_cents)}
+          .
+        </>
+      ) : (
+        "Turn on Auto Topoff to add credit automatically."
+      )}
+    </BannerShell>
+  )
+}
+
 export function PlanAwareBanner({
   plan,
+  offers,
   prepaid,
   canManage,
   canUpgrade = true,
@@ -93,25 +150,36 @@ export function PlanAwareBanner({
     )
   }
 
+  if (plan.kind === "subscription" && fundedByCredit(plan, offers)) {
+    const offer = findOffer(offers, plan.key)
+    return prepaid &&
+      !prepaid.auto_recharge.enabled &&
+      isLowBalance(prepaid, offer?.topoff?.threshold_cents) ? (
+      <LowCreditBanner
+        plan={plan}
+        offer={offer}
+        prepaid={prepaid}
+        canManage={canManage}
+      />
+    ) : null
+  }
+
   if (plan.kind === "prepaid" && prepaid && isLowBalance(prepaid)) {
     const empty = prepaid.balance_cents <= 0
     return (
       <BannerShell
         tone={empty ? "danger" : "warning"}
-        label="Starter balance"
+        label={`${plan.name} balance`}
         action={
           <ManageAction canManage={canManage}>
             {canBuyCredit ? (
-              <Button
-                size="sm"
-                render={<Link href={PLAN_ACTION_LINKS.starter} />}
-              >
+              <Button size="sm" render={<Link href={BUY_CREDIT_PATH} />}>
                 Buy credit
               </Button>
             ) : null}
             {canConfigureRecharge && !prepaid.auto_recharge.enabled && (
               <Link
-                href={PLAN_ACTION_LINKS.starter}
+                href={BUY_CREDIT_PATH}
                 className="self-center underline underline-offset-4"
               >
                 {prepaid.auto_recharge.disabled_reason
@@ -124,14 +192,14 @@ export function PlanAwareBanner({
       >
         {empty ? (
           <>
-            Your Starter balance has run out. Running sandboxes are paused
+            Your {plan.name} balance has run out. Running sandboxes are paused
             {prepaid.auto_recharge.in_flight
               ? " while a top-up is being processed."
               : " until you add credit."}
           </>
         ) : (
           <>
-            Your Starter balance is{" "}
+            Your {plan.name} balance is{" "}
             <strong>{formatCents(prepaid.balance_cents)}</strong>. Running
             sandboxes pause when it reaches $0.
           </>

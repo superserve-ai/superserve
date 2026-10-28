@@ -6,8 +6,12 @@ import {
   proCheckoutResponseSchema,
   type CatalogPlan,
   catalogPlansOf,
-  PLAN_ACTION_LINKS,
+  BUY_CREDIT_PATH,
+  ENTERPRISE_MEETING_URL,
+  isLowBalance,
   planAction,
+  type PrepaidBalance,
+  PRO_UPGRADE_PATH,
   type TeamPlan,
 } from "./billing-v2"
 
@@ -22,6 +26,9 @@ const card = (
   key: string,
   kind: CatalogPlan["kind"],
   name: string,
+  funding_policy: CatalogPlan["funding_policy"] = kind === "prepaid"
+    ? "prepaid"
+    : "postpaid",
 ): CatalogPlan => ({
   key,
   kind,
@@ -31,10 +38,12 @@ const card = (
   fee_cents: null,
   included_cents: null,
   limits,
+  funding_policy,
 })
 const FREE = card("free", "free", "Free")
 const STARTER = card("starter", "prepaid", "Starter")
 const PRO = card("pro_monthly", "subscription", "Pro")
+const FUNDED = card("funded_monthly", "subscription", "Funded", "prepaid")
 const ENTERPRISE = card("enterprise", "custom", "Enterprise")
 
 function team(c: CatalogPlan, pending: string | null = null): TeamPlan {
@@ -64,52 +73,43 @@ describe("planAction", () => {
   it("upgrades through the purchase pages", () => {
     expect(planAction(team(FREE), STARTER)).toEqual({
       type: "link",
-      href: PLAN_ACTION_LINKS.starter,
+      href: BUY_CREDIT_PATH,
       label: "Get Starter",
     })
     expect(planAction(team(FREE), PRO)).toMatchObject({
-      href: PLAN_ACTION_LINKS.pro,
+      href: PRO_UPGRADE_PATH,
     })
     expect(planAction(team(STARTER), PRO)).toMatchObject({
-      href: PLAN_ACTION_LINKS.pro,
+      href: PRO_UPGRADE_PATH,
     })
     expect(planAction(team(FREE), ENTERPRISE)).toMatchObject({
-      href: PLAN_ACTION_LINKS.enterprise,
+      href: ENTERPRISE_MEETING_URL,
       label: "Book a meeting",
     })
   })
 
-  it("lets legacy pay-as-you-go teams buy Starter or Pro", () => {
-    const legacy = team(card("legacy", "legacy_payg", "Pay as you go"))
-    expect(planAction(legacy, STARTER)).toMatchObject({
-      href: PLAN_ACTION_LINKS.starter,
-    })
-    expect(planAction(legacy, PRO)).toMatchObject({
-      href: PLAN_ACTION_LINKS.pro,
-    })
-    expect(planAction(legacy, FREE)).toEqual({
-      type: "downgrade",
-      label: "Switch to Free",
-    })
+  it("has no in-app path to a credit-funded subscription for a team on a plan", () => {
+    expect(planAction(team(FREE), FUNDED)).toEqual({ type: "unavailable" })
   })
 
-  it("downgrades through a scheduled change", () => {
+  it("lets legacy pay-as-you-go teams buy Starter or Pro but not Free", () => {
+    const legacy = team(card("legacy", "legacy_payg", "Pay as you go"))
+    expect(planAction(legacy, STARTER)).toMatchObject({
+      href: BUY_CREDIT_PATH,
+    })
+    expect(planAction(legacy, PRO)).toMatchObject({
+      href: PRO_UPGRADE_PATH,
+    })
+    expect(planAction(legacy, FREE)).toEqual({ type: "unavailable" })
+  })
+
+  it("downgrades through a scheduled change but never offers Free", () => {
     expect(planAction(team(PRO), STARTER)).toEqual({
       type: "downgrade",
       label: "Switch to Starter",
     })
-    expect(planAction(team(PRO), FREE)).toEqual({
-      type: "downgrade",
-      label: "Switch to Free",
-    })
-    expect(planAction(team(STARTER), FREE)).toEqual({
-      type: "downgrade",
-      label: "Switch to Free",
-    })
-    expect(planAction(team(ENTERPRISE), FREE)).toEqual({
-      type: "downgrade",
-      label: "Switch to Free",
-    })
+    for (const current of [PRO, STARTER, ENTERPRISE])
+      expect(planAction(team(current), FREE)).toEqual({ type: "unavailable" })
   })
 
   it("marks the current and scheduled plans and sends Enterprise teams to us", () => {
@@ -135,6 +135,37 @@ describe("planAction edge cases", () => {
       undoable: true,
       effectiveAt: "2026-11-01T00:00:00Z",
     })
+  })
+})
+
+describe("isLowBalance", () => {
+  const balance = (
+    balance_cents: number,
+    enabled: boolean,
+    low_balance?: boolean,
+  ): PrepaidBalance => ({
+    balance_cents,
+    low_balance,
+    auto_recharge: {
+      enabled,
+      threshold_cents: null,
+      amount_cents: null,
+      disabled_reason: null,
+      disabled_at: null,
+      in_flight: false,
+    },
+  })
+
+  it("uses the catalog threshold when there is one", () => {
+    expect(isLowBalance(balance(299, false), 300)).toBe(true)
+    expect(isLowBalance(balance(300, false), 300)).toBe(false)
+    expect(isLowBalance(balance(299, true), 300)).toBe(false)
+  })
+
+  it("falls back to the backend's low-balance flag", () => {
+    expect(isLowBalance(balance(700, false, true))).toBe(true)
+    expect(isLowBalance(balance(1, false, false))).toBe(false)
+    expect(isLowBalance(balance(0, true, false))).toBe(true)
   })
 })
 

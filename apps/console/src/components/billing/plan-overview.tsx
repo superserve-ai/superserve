@@ -7,12 +7,14 @@ import type {
   BillingPricingResponse,
 } from "@/lib/api/billing"
 import {
+  BUY_CREDIT_PATH,
   describeSandboxSize,
+  ENTERPRISE_MEETING_URL,
   formatCents,
   type FreeAllowance,
-  PLAN_ACTION_LINKS,
   type PrepaidBalance,
   type TeamPlan,
+  TOPOFF_SETTINGS_PATH,
   UPGRADE_PATH,
 } from "@/lib/api/billing-v2"
 
@@ -306,9 +308,11 @@ export interface PlanOverviewProps {
 export function PlanDetails({
   plan,
   canManage,
+  topoff = false,
 }: {
   plan: TeamPlan
   canManage: boolean
+  topoff?: boolean
 }) {
   const size = describeSandboxSize(plan.limits)
   const pending = plan.pending_change
@@ -340,14 +344,6 @@ export function PlanDetails({
             <dd className="text-foreground">{size}</dd>
           </>
         ) : null}
-        {plan.limits.max_templates !== null ? (
-          <>
-            <dt className="text-muted">Custom templates</dt>
-            <dd className="text-foreground">
-              {plan.limits.max_templates.toLocaleString("en-US")}
-            </dd>
-          </>
-        ) : null}
       </dl>
       {canManage ? (
         <div className="flex flex-wrap gap-3">
@@ -362,9 +358,17 @@ export function PlanDetails({
             <Button
               size="sm"
               variant="outline"
-              render={<Link href={PLAN_ACTION_LINKS.starter} />}
+              render={<Link href={BUY_CREDIT_PATH} />}
             >
               Manage auto-recharge
+            </Button>
+          ) : topoff ? (
+            <Button
+              size="sm"
+              variant="outline"
+              render={<Link href={TOPOFF_SETTINGS_PATH} />}
+            >
+              Manage Auto Topoff
             </Button>
           ) : null}
         </div>
@@ -413,7 +417,7 @@ export function PlanOverview({
                 <>
                   Billed under your agreement.{" "}
                   <Link
-                    href={PLAN_ACTION_LINKS.enterprise}
+                    href={ENTERPRISE_MEETING_URL}
                     className="underline underline-offset-4"
                   >
                     Contact us
@@ -434,11 +438,7 @@ export function PlanOverview({
               size="sm"
               render={
                 <Link
-                  href={
-                    plan.kind === "free"
-                      ? UPGRADE_PATH
-                      : PLAN_ACTION_LINKS.starter
-                  }
+                  href={plan.kind === "free" ? UPGRADE_PATH : BUY_CREDIT_PATH}
                 />
               }
             >

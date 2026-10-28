@@ -58,16 +58,12 @@ describe("buy credit amounts", () => {
     expect(dollarsToCents("1e3")).toBeNull()
   })
 
-  it("preselects a requested amount only when it is a valid purchase", () => {
-    expect(requestedAmount("5000")).toEqual({ preset: 5000, custom: "" })
-    expect(requestedAmount("7500")).toEqual({ preset: 2500, custom: "75" })
-    expect(requestedAmount("750")).toEqual({ preset: 2500, custom: "" })
-    expect(requestedAmount("1000000")).toEqual({
-      preset: 2500,
-      custom: "10000",
-    })
-    expect(requestedAmount("1000500")).toEqual({ preset: 2500, custom: "" })
-    expect(requestedAmount(null)).toEqual({ preset: 2500, custom: "" })
+  it("prefills a requested amount, else the plan's top-off amount", () => {
+    expect(requestedAmount("7300", 1100)).toBe("73")
+    expect(requestedAmount("12.5", 1100)).toBe("11")
+    expect(requestedAmount("-100", 1100)).toBe("11")
+    expect(requestedAmount(null, 1100)).toBe("11")
+    expect(requestedAmount(null)).toBe("")
   })
 
   it("formats whole and fractional dollars", () => {

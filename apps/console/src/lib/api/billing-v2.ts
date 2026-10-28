@@ -1,12 +1,22 @@
 import { z } from "zod"
 
 import {
+  type BillingOffer,
+  findOffer,
   planCardSchema,
   planKindSchema,
   planLimitsSchema,
 } from "@/lib/billing/plans"
+import {
+  isAwaitingPlanState,
+  type AwaitingPlanState,
+} from "@/lib/billing/signup-checkout-paths"
 
-export { planKindSchema, planLimitsSchema } from "@/lib/billing/plans"
+export {
+  describeSandboxSize,
+  planKindSchema,
+  planLimitsSchema,
+} from "@/lib/billing/plans"
 
 const cents = z.number().int().nonnegative()
 
@@ -79,6 +89,14 @@ export const teamPlanSchema = z
         },
   )
 
+// The new-team entry state from the plan read. Anything but a team that has
+// not paid for a plan yet, including a backend without trials, is null.
+export const teamEntrySchema = z
+  .object({ entry_state: z.unknown().optional() })
+  .transform(({ entry_state }): AwaitingPlanState | null =>
+    isAwaitingPlanState(entry_state) ? entry_state : null,
+  )
+
 const decimalCents = z.number().nonnegative()
 
 export const freeAllowanceSchema = z.object({
@@ -95,6 +113,7 @@ export const freeAllowanceSchema = z.object({
 
 export const prepaidBalanceSchema = z.object({
   balance_cents: z.number().int(),
+  low_balance: z.boolean().optional(),
   auto_recharge: z.object({
     enabled: z.boolean(),
     threshold_cents: cents.nullable(),
@@ -111,23 +130,38 @@ export type TeamPlan = NonNullable<z.infer<typeof teamPlanSchema>>
 export type FreeAllowance = z.infer<typeof freeAllowanceSchema>
 export type PrepaidBalance = z.infer<typeof prepaidBalanceSchema>
 
-export const LOW_BALANCE_CENTS = 500
+// thresholdCents is the plan's low-credit threshold from the catalog; without
+// one the backend's low-balance flag decides.
+export function isLowBalance(
+  prepaid: PrepaidBalance,
+  thresholdCents?: number | null,
+): boolean {
+  if (prepaid.balance_cents <= 0) return true
+  if (prepaid.auto_recharge.enabled) return false
+  return typeof thresholdCents === "number"
+    ? prepaid.balance_cents < thresholdCents
+    : prepaid.low_balance === true
+}
 
-export function isLowBalance(prepaid: PrepaidBalance): boolean {
+// Plans that run on funded credit: prepaid credit, or a subscription whose
+// catalog offer spends included and topped-up credit before pausing.
+export function fundedByCredit(
+  plan: { key: string; kind: PlanKind },
+  offers: readonly BillingOffer[] | undefined,
+): boolean {
   return (
-    prepaid.balance_cents <= 0 ||
-    (prepaid.balance_cents <= LOW_BALANCE_CENTS &&
-      !prepaid.auto_recharge.enabled)
+    plan.kind === "prepaid" ||
+    (plan.kind === "subscription" &&
+      findOffer(offers, plan.key)?.funding_policy === "prepaid")
   )
 }
 
 export const UPGRADE_PATH = "/plan-usage/upgrade"
-
-export const PLAN_ACTION_LINKS = {
-  starter: "/plan-usage/buy-credit",
-  pro: "/billing/pro",
-  enterprise: "https://calendly.com/superserve-ai/25-min",
-} as const
+export const BUY_CREDIT_PATH = "/plan-usage/buy-credit"
+export const TOPOFF_SETTINGS_PATH = "/plan-usage/buy-credit/#auto-topoff"
+export const PRO_UPGRADE_PATH = "/billing/pro"
+export const ENTERPRISE_MEETING_URL =
+  "https://calendly.com/superserve-ai/25-min"
 
 export function formatCents(amount: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -138,24 +172,11 @@ export function formatCents(amount: number): string {
   }).format(amount / 100)
 }
 
-export function describeSandboxSize(limits: PlanLimits): string | null {
-  const parts = [
-    limits.max_vcpu !== null && `${limits.max_vcpu} vCPU`,
-    limits.max_memory_mib !== null &&
-      `${formatMiB(limits.max_memory_mib)} memory`,
-    limits.max_disk_mib !== null && `${formatMiB(limits.max_disk_mib)} disk`,
-  ].filter((part): part is string => typeof part === "string")
-  return parts.length ? parts.join(", ") : null
-}
-
-function formatMiB(mib: number): string {
-  return mib % 1024 === 0 ? `${mib / 1024} GiB` : `${mib} MiB`
-}
-
 export const BILLING_V2_PATHS = {
   plan: "/billing/plan",
   "free-allowance": "/billing/free-allowance",
   prepaid: "/billing/prepaid",
+  entry: "/billing/plan",
 } as const
 
 export const catalogPlanSchema = planCardSchema.transform((card) => ({
@@ -169,6 +190,8 @@ export const catalogPlanSchema = planCardSchema.transform((card) => ({
       ? card.allowance.amount_cents
       : card.monthly_credit_cents,
   limits: card.limits,
+  funding_policy:
+    card.funding_policy ?? (card.kind === "prepaid" ? "prepaid" : "postpaid"),
   available:
     card.kind === "prepaid" ||
     card.kind === "free" ||
@@ -244,20 +267,25 @@ export function planAction(current: TeamPlan, target: CatalogPlan): PlanAction {
     return { type: "scheduled" }
   if (target.kind === current.kind)
     return target.kind === "free" ? { type: "current" } : { type: "contact" }
-  if (target.kind === "free")
-    return { type: "downgrade", label: "Switch to Free" }
+  if (target.kind === "free") return { type: "unavailable" }
   if (current.kind === "custom") return { type: "contact" }
   if (target.kind === "custom")
     return {
       type: "link",
-      href: PLAN_ACTION_LINKS.enterprise,
+      href: ENTERPRISE_MEETING_URL,
       label: "Book a meeting",
     }
   if (
     PLAN_RANK[target.kind] > PLAN_RANK[current.kind] ||
     current.kind === "legacy_payg"
   ) {
-    if (!target.available) return { type: "unavailable" }
+    const href =
+      target.kind === "prepaid"
+        ? BUY_CREDIT_PATH
+        : target.funding_policy === "postpaid"
+          ? PRO_UPGRADE_PATH
+          : null
+    if (!target.available || !href) return { type: "unavailable" }
     const label = `Get ${target.name}`
     if (current.pending_change)
       return {
@@ -265,14 +293,7 @@ export function planAction(current: TeamPlan, target: CatalogPlan): PlanAction {
         undoable: current.pending_change.undoable,
         effectiveAt: current.pending_change.effective_at,
       }
-    return {
-      type: "link",
-      href:
-        target.kind === "prepaid"
-          ? PLAN_ACTION_LINKS.starter
-          : PLAN_ACTION_LINKS.pro,
-      label,
-    }
+    return { type: "link", href, label }
   }
   return { type: "downgrade", label: `Switch to ${target.name}` }
 }

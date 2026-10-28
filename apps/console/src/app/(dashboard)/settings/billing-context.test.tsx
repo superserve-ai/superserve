@@ -319,9 +319,7 @@ describe("Settings billing context isolation", () => {
       </QueryProvider>,
     )
     expect(await screen.findByText("Free")).toBeInTheDocument()
-    expect(
-      screen.getByText("Custom templates").nextElementSibling,
-    ).toHaveTextContent("2")
+    expect(screen.queryByText("Custom templates")).not.toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Change plan" })).toHaveAttribute(
       "href",
       "/plan-usage/upgrade",

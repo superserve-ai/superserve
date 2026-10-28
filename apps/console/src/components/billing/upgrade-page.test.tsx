@@ -85,6 +85,7 @@ const catalog: CatalogPlan[] = [
     fee_cents: 0,
     included_cents: null,
     limits: freeLimits,
+    funding_policy: "postpaid",
   },
   {
     key: "starter",
@@ -95,6 +96,7 @@ const catalog: CatalogPlan[] = [
     fee_cents: null,
     included_cents: null,
     limits: freeLimits,
+    funding_policy: "prepaid",
   },
   {
     key: "pro_monthly",
@@ -105,6 +107,7 @@ const catalog: CatalogPlan[] = [
     fee_cents: 25000,
     included_cents: 25000,
     limits: proLimits,
+    funding_policy: "postpaid",
   },
   {
     key: "enterprise",
@@ -121,6 +124,7 @@ const catalog: CatalogPlan[] = [
       max_disk_mib: null,
       max_templates: null,
     },
+    funding_policy: "postpaid",
   },
 ]
 const pro: TeamPlan = {
@@ -221,12 +225,17 @@ describe("UpgradePage with pricing v2 off", () => {
 
 describe("UpgradePage with pricing v2 on", () => {
   it("doesn't offer a blocked preview for confirmation", async () => {
-    mocks.preview.mockResolvedValue(consentWire.blocked_preview)
+    mocks.preview.mockResolvedValue({
+      ...consentWire.blocked_preview,
+      target_plan_key: "starter",
+      target_kind: "prepaid",
+      target_display_name: "Starter",
+    })
     mount()
-    fireEvent.click(screen.getByRole("button", { name: "Switch to Free" }))
+    fireEvent.click(screen.getByRole("button", { name: "Switch to Starter" }))
     await screen.findByText(consentWire.blocked_preview.blocked)
     expect(
-      screen.getAllByRole("button", { name: "Switch to Free" }).at(-1),
+      screen.getAllByRole("button", { name: "Switch to Starter" }).at(-1),
     ).toHaveProperty("disabled", true)
     expect(mocks.schedule).not.toHaveBeenCalled()
   })
@@ -235,29 +244,30 @@ describe("UpgradePage with pricing v2 on", () => {
     expect(screen.getByTestId("plan-card-pro_monthly").textContent).toMatch(
       /Current plan/,
     )
-    expect(screen.getByRole("button", { name: "Switch to Free" })).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "Switch to Free" })).toBeNull()
+    expect(screen.queryByTestId("plan-card-free")).toBeNull()
     expect(
       screen.getByRole("button", { name: "Switch to Starter" }),
     ).toBeTruthy()
     expect(screen.getByRole("link", { name: "Book a meeting" })).toBeTruthy()
   })
 
-  it("confirms bound Free terms and reports the authoritative schedule date", async () => {
+  it("confirms bound terms and reports the authoritative schedule date", async () => {
     mocks.preview.mockResolvedValue({
-      target_plan_key: "free",
-      target_kind: "free",
-      target_display_name: "Free",
+      target_plan_key: "starter",
+      target_kind: "prepaid",
+      target_display_name: "Starter",
       limits: freeLimits,
       preview_token: previewToken,
       effective_at: "2026-11-01T00:00:00.123456789Z",
       timing: "end_of_billing_period",
-      pauses_running: true,
+      pauses_running: false,
     })
     mocks.schedule.mockResolvedValue({
       id: "34971786-dd50-492b-b934-306b63764c4b",
-      target_plan_key: "free",
-      target_display_name: "Free",
-      target_kind: "free",
+      target_plan_key: "starter",
+      target_display_name: "Starter",
+      target_kind: "prepaid",
       effective_at: "2026-11-02T00:00:00Z",
       pauses_running: true,
       state: "scheduled",
@@ -265,31 +275,29 @@ describe("UpgradePage with pricing v2 on", () => {
       limits: freeLimits,
     })
     mount()
-    fireEvent.click(screen.getByRole("button", { name: "Switch to Free" }))
-    await screen.findByText(FREE_SWITCH_WARNING)
-    expect(mocks.preview).toHaveBeenCalledWith("free", "use:team-a")
+    fireEvent.click(screen.getByRole("button", { name: "Switch to Starter" }))
+    await screen.findByText(/Your plan changes to Starter on Nov 1, 2026/)
+    expect(mocks.preview).toHaveBeenCalledWith("starter", "use:team-a")
     expect(screen.getByRole("dialog").textContent).toMatch(
-      /starting on Nov 1, 2026/,
+      /1 vCPU, 1 GiB memory/,
     )
-    expect(screen.getByRole("dialog").textContent).toMatch(
-      /1 vCPU, 1 GiB memory, 4 GiB disk/,
-    )
+    expect(screen.getByRole("dialog").textContent).not.toMatch(/disk/)
     fireEvent.click(
-      screen.getAllByRole("button", { name: "Switch to Free" }).at(-1)!,
+      screen.getAllByRole("button", { name: "Switch to Starter" }).at(-1)!,
     )
     await waitFor(() =>
       expect(mocks.schedule).toHaveBeenCalledWith(
-        "free",
+        "starter",
         "use:team-a",
         expect.any(String),
         previewToken,
-        true,
+        false,
         "2026-11-01T00:00:00.123456789Z",
       ),
     )
     await waitFor(() =>
       expect(mocks.toast).toHaveBeenCalledWith(
-        "Switch to Free scheduled for Nov 2, 2026.",
+        "Switch to Starter scheduled for Nov 2, 2026.",
         "success",
       ),
     )
@@ -369,38 +377,35 @@ describe("UpgradePage with pricing v2 on", () => {
     ])
   })
 
-  it.each(["missing-token", "missing-pause-warning"])(
-    "fails closed for %s",
-    async (failure) => {
-      mocks.preview.mockResolvedValue({
-        target_plan_key: "free",
-        target_kind: "free",
-        target_display_name: "Free",
-        limits: freeLimits,
-        effective_at: "2026-11-01T00:00:00Z",
-        timing: "end_of_billing_period",
-        pauses_running: failure !== "missing-pause-warning",
-        preview_token: failure === "missing-token" ? undefined : previewToken,
-      })
-      mount()
-      fireEvent.click(screen.getByRole("button", { name: "Switch to Free" }))
-      await screen.findByText(/couldn't check this change/)
-      const confirm = screen
-        .getAllByRole("button", { name: "Switch to Free" })
-        .at(-1)!
-      expect(confirm).toHaveProperty("disabled", true)
-      fireEvent.click(confirm)
-      expect(mocks.schedule).not.toHaveBeenCalled()
-    },
-  )
+  it.each(["missing-token"])("fails closed for %s", async (failure) => {
+    mocks.preview.mockResolvedValue({
+      target_plan_key: "starter",
+      target_kind: "prepaid",
+      target_display_name: "Starter",
+      limits: freeLimits,
+      effective_at: "2026-11-01T00:00:00Z",
+      timing: "end_of_billing_period",
+      pauses_running: failure !== "missing-pause-warning",
+      preview_token: failure === "missing-token" ? undefined : previewToken,
+    })
+    mount()
+    fireEvent.click(screen.getByRole("button", { name: "Switch to Starter" }))
+    await screen.findByText(/couldn't check this change/)
+    const confirm = screen
+      .getAllByRole("button", { name: "Switch to Starter" })
+      .at(-1)!
+    expect(confirm).toHaveProperty("disabled", true)
+    fireEvent.click(confirm)
+    expect(mocks.schedule).not.toHaveBeenCalled()
+  })
 
   it("never schedules without a preview", async () => {
     mocks.preview.mockRejectedValue(new Error("down"))
     mount()
-    fireEvent.click(screen.getByRole("button", { name: "Switch to Free" }))
+    fireEvent.click(screen.getByRole("button", { name: "Switch to Starter" }))
     await screen.findByText(/couldn't check this change/)
     expect(
-      screen.getAllByRole("button", { name: "Switch to Free" }).at(-1),
+      screen.getAllByRole("button", { name: "Switch to Starter" }).at(-1),
     ).toHaveProperty("disabled", true)
   })
 

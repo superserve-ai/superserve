@@ -9,8 +9,10 @@ import { CheckoutContextRecovery } from "@/components/billing/checkout-context-r
 import { ServerStarterRecovery } from "@/components/billing/server-starter-recovery"
 import { PageHeader } from "@/components/page-header"
 import { useQueryScope } from "@/components/query-provider"
+import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
+import { useTeamPlan } from "@/hooks/use-billing-v2"
 import { usePendingStarterCheckout } from "@/hooks/use-pending-starter-checkout"
 import {
   usePrepaidCredit,
@@ -24,7 +26,6 @@ import {
   setPrepaidAutoRecharge,
   startPrepaidCheckout,
   validPrepaidCents,
-  validNewPrepaidCents,
 } from "@/lib/api/prepaid"
 import { billingKeys } from "@/lib/api/query-keys"
 import {
@@ -32,8 +33,9 @@ import {
   checkoutRecoveryPath,
   genericBillingReturnState,
 } from "@/lib/billing/checkout-return"
+import { findOffer, type PlanTopoff } from "@/lib/billing/plans"
 
-const PRESET_CENTS = [500, 2500, 5000, 10000]
+const AMOUNT_ERROR = "Enter a dollar amount above $0, like 25."
 
 export function formatDollars(cents: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -41,6 +43,10 @@ export function formatDollars(cents: number): string {
     currency: "USD",
     minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
   }).format(cents / 100)
+}
+
+function centsToDollars(cents: number | null | undefined): string {
+  return typeof cents === "number" ? String(cents / 100) : ""
 }
 
 export function dollarsToCents(value: string): number | null {
@@ -100,6 +106,9 @@ export function BuyCreditPageClient({
   const summaryQuery = useBillingSummary(contextMatched)
   const summary = summaryQuery.isError ? undefined : summaryQuery.data
   const scope = useQueryScope()
+  const plan = useTeamPlan(contextMatched).data
+  const offers = useBillingCapabilities().data?.offers
+  const topoff = findOffer(offers, plan?.key)?.topoff ?? null
   const canManage =
     ready && Boolean(summary?.permissions?.can_manage) && scope === "self"
   const canRecover = canManage && allowRecovery
@@ -173,8 +182,9 @@ export function BuyCreditPageClient({
             />
             {allowEntry ? (
               <PurchaseCard
-                key={`${scope}:${teamKey}:${user?.id}`}
+                key={`${scope}:${teamKey}:${user?.id}:${topoff?.amount_cents}`}
                 actor={actor}
+                defaultCents={topoff?.amount_cents}
                 checkCanStart={existingStarter.canStart}
                 canManage={
                   canRecover &&
@@ -220,8 +230,11 @@ export function BuyCreditPageClient({
                 data.auto_recharge.threshold_cents,
                 data.auto_recharge.amount_cents,
                 data.auto_recharge.disabled_at,
+                topoff?.amount_cents,
+                topoff?.threshold_cents,
               ].join(":")}
               data={data}
+              topoff={topoff}
               canManage={canManage}
               allowEntry={allowRecharge}
               allowDisable={allowDisableRecharge}
@@ -257,14 +270,13 @@ function BalanceCard({
   )
 }
 
-export function requestedAmount(value: string | null): {
-  preset: number
-  custom: string
-} {
+// The amount a link asked for, in cents, else the plan's own top-off amount.
+export function requestedAmount(
+  value: string | null,
+  defaultCents?: number,
+): string {
   const cents = value === null ? NaN : Number(value)
-  if (!validNewPrepaidCents(cents)) return { preset: 2500, custom: "" }
-  if (PRESET_CENTS.includes(cents)) return { preset: cents, custom: "" }
-  return { preset: 2500, custom: String(cents / 100) }
+  return centsToDollars(validPrepaidCents(cents) ? cents : defaultCents)
 }
 
 function PurchaseCard({
@@ -272,11 +284,13 @@ function PurchaseCard({
   resume,
   checkCanStart,
   actor,
+  defaultCents,
 }: {
   actor: string | undefined
   checkCanStart?: () => boolean
   canManage: boolean
   resume?: PrepaidOperation
+  defaultCents?: number
 }) {
   const { teamKey, ready } = useBillingContext()
   const target = useRef(teamKey)
@@ -290,15 +304,12 @@ function PurchaseCard({
   const [status, setStatus] = useState<string | null>(null)
   const { addToast } = useToast()
   const queryClient = useQueryClient()
-  const initial = requestedAmount(useSearchParams().get("amount"))
-  const [selected, setSelected] = useState(initial.preset)
-  const [custom, setCustom] = useState(initial.custom)
+  const [custom, setCustom] = useState(
+    requestedAmount(useSearchParams().get("amount"), defaultCents),
+  )
   const [submitting, setSubmitting] = useState(false)
-  const customCents = custom ? dollarsToCents(custom) : null
-  const amount = resume?.amount ?? (custom ? customCents : selected)
-  const valid =
-    amount !== null &&
-    (resume ? validPrepaidCents(amount) : validNewPrepaidCents(amount))
+  const amount = resume?.amount ?? (custom ? dollarsToCents(custom) : null)
+  const valid = amount !== null && validPrepaidCents(amount)
 
   const buy = async () => {
     if (
@@ -365,41 +376,17 @@ function PurchaseCard({
         </p>
       ) : null}
       {!resume ? (
-        <>
-          <div className="flex flex-wrap gap-2">
-            {PRESET_CENTS.map((cents) => (
-              <Button
-                key={cents}
-                variant={!custom && selected === cents ? "default" : "outline"}
-                size="sm"
-                disabled={!canManage}
-                onClick={() => {
-                  setCustom("")
-                  setSelected(cents)
-                }}
-              >
-                {formatDollars(cents)}
-              </Button>
-            ))}
-          </div>
-          <Field
-            label="Other amount (USD)"
-            description="Any amount in $5 steps, from $5 to $10,000."
-            error={
-              custom && !valid
-                ? "Enter a multiple of $5 between $5 and $10,000."
-                : undefined
-            }
-          >
-            <Input
-              inputMode="decimal"
-              placeholder="e.g. 75"
-              value={custom}
-              disabled={!canManage}
-              onChange={(e) => setCustom(e.target.value)}
-            />
-          </Field>
-        </>
+        <Field
+          label="Amount (USD)"
+          error={custom && !valid ? AMOUNT_ERROR : undefined}
+        >
+          <Input
+            inputMode="decimal"
+            value={custom}
+            disabled={!canManage}
+            onChange={(e) => setCustom(e.target.value)}
+          />
+        </Field>
       ) : null}
       <div>
         <Button
@@ -419,11 +406,13 @@ function PurchaseCard({
 
 function AutoRechargeCard({
   data,
+  topoff,
   canManage,
   allowEntry,
   allowDisable,
 }: {
   data: PrepaidCreditSummary
+  topoff: PlanTopoff
   canManage: boolean
   allowEntry: boolean
   allowDisable: boolean
@@ -434,10 +423,10 @@ function AutoRechargeCard({
   const current = data.auto_recharge
   const [enabled, setEnabled] = useState(current.enabled)
   const [threshold, setThreshold] = useState(
-    String((current.threshold_cents ?? 1000) / 100),
+    centsToDollars(current.threshold_cents ?? topoff?.threshold_cents),
   )
   const [amount, setAmount] = useState(
-    String((current.amount_cents ?? 2500) / 100),
+    centsToDollars(current.amount_cents ?? topoff?.amount_cents),
   )
   const [saving, setSaving] = useState(false)
   const thresholdCents = dollarsToCents(threshold)
@@ -446,8 +435,8 @@ function AutoRechargeCard({
     !enabled ||
     (thresholdCents !== null &&
       amountCents !== null &&
-      validNewPrepaidCents(thresholdCents) &&
-      validNewPrepaidCents(amountCents))
+      validPrepaidCents(thresholdCents) &&
+      validPrepaidCents(amountCents))
 
   const actionAllowed = enabled ? allowEntry : allowDisable
   const save = async () => {
@@ -482,8 +471,11 @@ function AutoRechargeCard({
 
   const canEnable = allowEntry && data.has_saved_card
   return (
-    <section className="flex flex-col gap-4 border border-dashed border-border p-4">
-      <h2 className="font-mono text-xs text-muted uppercase">Auto-recharge</h2>
+    <section
+      id="auto-topoff"
+      className="flex flex-col gap-4 border border-dashed border-border p-4"
+    >
+      <h2 className="font-mono text-xs text-muted uppercase">Auto Topoff</h2>
       {current.disabled_reason && !current.enabled && (
         <p className="border border-dashed border-destructive p-3 text-sm text-foreground">
           Auto-recharge was turned off: {current.disabled_reason}.
@@ -506,8 +498,8 @@ function AutoRechargeCard({
           <Field
             label="When credit falls below (USD)"
             error={
-              thresholdCents === null || !validNewPrepaidCents(thresholdCents)
-                ? "Enter a multiple of $5 between $5 and $10,000."
+              thresholdCents === null || !validPrepaidCents(thresholdCents)
+                ? AMOUNT_ERROR
                 : undefined
             }
           >
@@ -521,8 +513,8 @@ function AutoRechargeCard({
           <Field
             label="Add this much credit (USD)"
             error={
-              amountCents === null || !validNewPrepaidCents(amountCents)
-                ? "Enter a multiple of $5 between $5 and $10,000."
+              amountCents === null || !validPrepaidCents(amountCents)
+                ? AMOUNT_ERROR
                 : undefined
             }
           >

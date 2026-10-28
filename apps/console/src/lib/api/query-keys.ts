@@ -147,7 +147,7 @@ export const billingKeys = {
       context.target,
     ] as const,
   v2: (
-    resource: "plan" | "free-allowance" | "prepaid",
+    resource: "plan" | "free-allowance" | "prepaid" | "entry",
     context: { cacheScope: string; teamKey: string },
   ) =>
     [

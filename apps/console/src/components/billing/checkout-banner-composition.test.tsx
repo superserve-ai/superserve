@@ -107,6 +107,7 @@ vi.mock("@/hooks/use-billing-v2", () => ({
       : undefined,
   }),
   usePrepaidBalance: () => ({ data: null }),
+  useTeamEntry: () => ({ data: null, isPending: false, isError: false }),
 }))
 vi.mock("./plan-aware-banner", () => ({
   PlanAwareBanner: () => <aside>Current plan banner</aside>,
