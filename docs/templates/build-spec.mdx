@@ -19,6 +19,8 @@ from: "ghcr.io/myorg/foo:v1" // any OCI registry
 - Must be a **linux/amd64** image
 - Must include a shell at `/bin/sh` and the `mkdir`, `mount`, `chmod`, and `sync` commands, which every template boots and builds with. Debian, Ubuntu, Alpine, and BusyBox images all qualify; distroless and `scratch`-based images don't.
 
+**Image settings:** the image's own `ENV`, `WORKDIR`, and `USER` carry over, as they do with `docker run`. Build steps see the image's env vars and start in its working directory, but run as root. Sandbox commands, `startCmd`, and `readyCmd` also run as the image's user. `env`, `workdir`, and `user` steps override the image.
+
 ## `steps`: ordered build steps
 
 A list of tagged objects executed in order inside the build VM. Exactly one of `run` / `env` / `workdir` / `user` must be set per step.
@@ -57,7 +59,7 @@ Working directory for subsequent build steps and the runtime default cwd. Auto-c
 { user: { name: "appuser", sudo: true } }
 ```
 
-Switches the user for subsequent build steps and sets the runtime default exec user. User is created if not present. `sudo: true` grants passwordless sudo.
+Switches the user for subsequent build steps and sets the runtime default exec user, in place of the image's own `USER`. User is created if not present. `sudo: true` grants passwordless sudo.
 
 ## `startCmd`: process to start after build
 
@@ -91,21 +93,24 @@ Your team's maximum depends on its plan. For larger sandboxes, email [support@su
 
 When a build lands on `failed`, `BuildError.code` carries one of these stable identifiers (the SDK parses it from the `"<code>: <detail>"` prefix on `errorMessage`):
 
-| Code                   | Meaning                                                                                      |
-| ---------------------- | -------------------------------------------------------------------------------------------- |
-| `bad_reference`        | The `from` image reference is malformed (expected `python:3.11` or `ghcr.io/org/image:tag`). |
-| `unsupported_platform` | The base image isn't `linux/amd64`.                                                          |
-| `unsupported_base`     | Base image has no `/bin/sh`, `mkdir`, `mount`, `chmod`, or `sync`; the message says which.   |
-| `image_pull_failed`    | Base image couldn't be pulled or resolved — bad reference, or the registry was unreachable.  |
-| `image_unsafe`         | Image rejected for unsafe paths (tar / symlink / hardlink entries escaping the root).        |
-| `image_too_large`      | Flattened image exceeds the requested `diskMib`; raise `diskMib`.                            |
-| `step_failed`          | A build step exited non-zero. The message includes the failing step and its exit code.       |
-| `boot_failed`          | Build VM failed to boot.                                                                     |
-| `snapshot_failed`      | Snapshot couldn't be captured.                                                               |
-| `start_cmd_failed`     | `startCmd` didn't launch successfully.                                                       |
-| `ready_cmd_failed`     | `readyCmd` didn't exit `0` within 10 minutes.                                                |
-| `dispatch_failed`      | The build host was unreachable when the build was dispatched.                                |
-| `build_failed`         | Catch-all when no specific code applies.                                                     |
+| Code                    | Meaning                                                                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `bad_reference`         | The `from` image reference is malformed (expected `python:3.11` or `ghcr.io/org/image:tag`).                 |
+| `unsupported_platform`  | The base image isn't `linux/amd64`.                                                                          |
+| `unsupported_base`      | Base image lacks `/bin/sh` or a required command (the message says which), or its `USER` can't run commands. |
+| `image_pull_failed`     | Base image couldn't be pulled or resolved — bad reference, or the registry was unreachable.                  |
+| `image_unsafe`          | Image rejected for unsafe paths (tar / symlink / hardlink entries escaping the root).                        |
+| `image_too_large`       | Flattened image exceeds the requested `diskMib`; raise `diskMib`.                                            |
+| `step_failed`           | A build step exited non-zero. The message includes the failing step and its exit code.                       |
+| `boot_failed`           | Build VM failed to boot.                                                                                     |
+| `snapshot_failed`       | Snapshot couldn't be captured.                                                                               |
+| `start_cmd_failed`      | `startCmd` didn't launch successfully.                                                                       |
+| `ready_cmd_failed`      | `readyCmd` didn't exit `0` within 10 minutes.                                                                |
+| `dispatch_failed`       | The build host was unreachable when the build was dispatched.                                                |
+| `capacity_unavailable`  | No build capacity was free in time. Retry the build.                                                         |
+| `build_timed_out`       | The build didn't finish within its time budget. Retry the build.                                             |
+| `infrastructure_failed` | The build failed on the platform's side repeatedly. Retry the build.                                         |
+| `build_failed`          | Catch-all when no specific code applies.                                                                     |
 
 `Template.create` / `rebuild` can also be rejected **before a build starts** with a `RateLimitError` — `too_many_builds` (team's concurrent-build limit) or `too_many_templates` (team's template-count limit). These are not `BuildError` codes; see [Errors](/errors#ratelimiterror).
 
