@@ -207,7 +207,7 @@ memory · 8192 MiB disk**.
 | `memoryMib` | 256  | 4096                   | 1024    |
 | `diskMib`   | 1024 | 8192                   | 4096    |
 
-- **New teams are capped at 2 vCPU / 2048 MiB** — email support@superserve.ai to raise it.
+- **New teams are capped at 2 vCPU / 4096 MiB / 8192 MiB disk** — email support@superserve.ai to raise it.
 - Every `superserve/*` system template ships at 2 vCPU / 4096 MiB / 8192 MiB disk,
   including the heavier ones (`python-ml`, `code-interpreter`, `claude-code`, `openclaw`,
   `hermes`, `omnara`, `desktop`). See the full catalog in the docs.
