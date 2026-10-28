@@ -349,12 +349,17 @@ describe("PlanBanner for a credit-funded subscription", () => {
   }
   const balance = (
     cents: number,
-    enabled: boolean,
-    disabled_reason = null,
+    {
+      low = false,
+      enabled = false,
+      observed = true,
+      disabled_reason = null as string | null,
+    } = {},
   ) => ({
     data: {
       balance_cents: cents,
-      low_balance: false,
+      balance_observed: observed,
+      low_balance: low,
       auto_recharge: {
         enabled,
         threshold_cents: enabled ? 200 : null,
@@ -365,35 +370,46 @@ describe("PlanBanner for a credit-funded subscription", () => {
       },
     },
   })
+  const fundingState = (state: string) =>
+    mocks.summary.mockReturnValue({
+      data: {
+        permissions: { can_view: true, can_manage: true },
+        trial: { state, low_credit_threshold_usd: 2 },
+      },
+    })
 
-  it("warns below the catalog threshold only while Auto Topoff is off", () => {
+  beforeEach(() => {
     mocks.offers = [offer]
     mocks.plan.mockReturnValue({ data: funded })
-    mocks.prepaid.mockReturnValue(balance(150, false))
-    const { unmount } = mount()
+    fundingState("active")
+  })
+
+  it("warns when the backend reports low credit with Auto Topoff off", () => {
+    mocks.prepaid.mockReturnValue(balance(150, { low: true }))
+    mount()
     const banner = screen.getByRole("region", { name: "Funded credit" })
     expect(banner.textContent).toMatch(/Your Funded credit is \$1\.50/)
     expect(banner.textContent).toMatch(/Auto Topoff adds \$3 whenever/)
     expect(
       screen.getByRole("link", { name: "Turn on Auto Topoff" }),
     ).toHaveAttribute("href", expect.stringMatching(/#auto-topoff$/))
-    unmount()
+  })
 
-    mocks.prepaid.mockReturnValue(balance(150, true))
+  it("follows the backend's flag rather than its own threshold", () => {
+    mocks.prepaid.mockReturnValue(balance(150, { low: false }))
     expect(mount().container.textContent).toBe("")
   })
 
-  it("stays quiet above the catalog threshold", () => {
-    mocks.offers = [offer]
-    mocks.plan.mockReturnValue({ data: funded })
-    mocks.prepaid.mockReturnValue(balance(250, false))
+  it("stays quiet while Auto Topoff is on", () => {
+    fundingState("auto_topoff")
+    mocks.prepaid.mockReturnValue(balance(0, { low: true, enabled: true }))
     expect(mount().container.textContent).toBe("")
   })
 
   it("warns after a failed charge turned Auto Topoff off", () => {
-    mocks.offers = [offer]
-    mocks.plan.mockReturnValue({ data: funded })
-    mocks.prepaid.mockReturnValue(balance(0, false, "card_declined" as never))
+    mocks.prepaid.mockReturnValue(
+      balance(0, { disabled_reason: "card_declined" }),
+    )
     mount()
     expect(screen.getByText(/credit has run out/)).toBeTruthy()
     expect(
@@ -401,8 +417,19 @@ describe("PlanBanner for a credit-funded subscription", () => {
     ).toBeTruthy()
   })
 
+  it("says nothing while a just-settled checkout's credit isn't observed", () => {
+    fundingState("unknown")
+    mocks.prepaid.mockReturnValue(balance(0, { observed: false }))
+    expect(mount().container.textContent).toBe("")
+  })
+
+  it("says nothing during renewal grace before the new grant is observed", () => {
+    fundingState("unknown")
+    mocks.prepaid.mockReturnValue(balance(0))
+    expect(mount().container.textContent).toBe("")
+  })
+
   it("reads funding and top-off from the team's frozen terms first", () => {
-    mocks.offers = [offer]
     mocks.plan.mockReturnValue({
       data: {
         ...funded,
@@ -414,7 +441,7 @@ describe("PlanBanner for a credit-funded subscription", () => {
         },
       },
     })
-    mocks.prepaid.mockReturnValue(balance(250, false))
+    mocks.prepaid.mockReturnValue(balance(250, { low: true }))
     const { unmount } = mount()
     expect(
       screen.getByRole("region", { name: "Funded credit" }).textContent,
@@ -424,40 +451,13 @@ describe("PlanBanner for a credit-funded subscription", () => {
     mocks.plan.mockReturnValue({
       data: { ...funded, funding_policy: "postpaid" },
     })
-    mocks.prepaid.mockReturnValue(balance(0, false))
-    expect(mount().container.textContent).toBe("")
-  })
-
-  it("says nothing about running out while the balance isn't current", () => {
-    mocks.offers = [offer]
-    mocks.plan.mockReturnValue({ data: funded })
-    mocks.prepaid.mockReturnValue({
-      data: { ...balance(0, false).data, balance_observed: false },
-    })
-    expect(mount().container.textContent).toBe("")
-  })
-
-  it("prefers the backend's low-credit threshold over the top-off terms", () => {
-    mocks.offers = [offer]
-    mocks.plan.mockReturnValue({ data: funded })
-    mocks.summary.mockReturnValue({
-      data: {
-        permissions: { can_view: true, can_manage: true },
-        trial: { state: "none", low_credit_threshold_usd: 4 },
-      },
-    })
-    mocks.prepaid.mockReturnValue(balance(350, false))
-    const { unmount } = mount()
-    expect(screen.getByRole("region", { name: "Funded credit" })).toBeTruthy()
-    unmount()
-    mocks.prepaid.mockReturnValue(balance(400, false))
+    mocks.prepaid.mockReturnValue(balance(0, { low: true }))
     expect(mount().container.textContent).toBe("")
   })
 
   it("treats a subscription missing from the offers as postpaid", () => {
     mocks.offers = []
-    mocks.plan.mockReturnValue({ data: funded })
-    mocks.prepaid.mockReturnValue(balance(0, false))
+    mocks.prepaid.mockReturnValue(balance(0, { low: true }))
     expect(mount().container.textContent).toBe("")
   })
 })

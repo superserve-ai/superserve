@@ -34,7 +34,13 @@ export function PlanOverviewSection({
   const plan = planQuery.data
   const allowance = useFreeAllowance(!details && plan?.kind === "free").data
   const pricing = useAllowancePricing(!details && plan?.kind === "free").data
-  const prepaid = usePrepaidBalance(!details && plan?.kind === "prepaid").data
+  const funded =
+    !!plan &&
+    plan.kind === "subscription" &&
+    fundedByCredit(plan, capabilities.data?.offers)
+  const prepaid = usePrepaidBalance(
+    !details && (plan?.kind === "prepaid" || funded),
+  ).data
   if (plan === undefined)
     return (
       <p className="text-sm text-muted">
@@ -85,10 +91,7 @@ export function PlanOverviewSection({
               : null,
         }}
         canManage={canManage}
-        topoff={
-          plan.kind === "subscription" &&
-          fundedByCredit(plan, capabilities.data?.offers)
-        }
+        topoff={funded}
       />
     )
   return (
@@ -107,6 +110,7 @@ export function PlanOverviewSection({
       allowance={allowance ?? null}
       prepaid={prepaid ?? null}
       usageCents={matchingPeriod ? toCents(summary.current_charges_usd) : null}
+      funded={funded}
       canManage={canManage}
       canPurchase={
         plan.kind === "free"

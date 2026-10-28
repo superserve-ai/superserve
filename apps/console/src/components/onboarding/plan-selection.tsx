@@ -156,14 +156,17 @@ export function PlanSelection({
 
   useEffect(() => {
     let live = true
-    getTeamOffersAction().then(
+    getTeamOffersAction({
+      account: initial.userId,
+      team: initial.teamKey,
+    }).then(
       (loaded) => live && setOffers(loaded),
       () => {},
     )
     return () => {
       live = false
     }
-  }, [])
+  }, [initial.userId, initial.teamKey])
 
   useEffect(() => {
     mounted.current = true

@@ -19,16 +19,11 @@ function PricingV2Banner({ plan }: { plan: TeamPlan }) {
   const summary = summaryQuery.isError ? undefined : summaryQuery.data
   const prepaid = usePrepaidBalance(fundedByCredit(plan, offers)).data
   if (!summary?.permissions?.can_view) return null
-  const threshold = summary.trial?.low_credit_threshold_usd
   return (
     <PlanAwareBanner
       plan={plan}
       offers={offers}
-      lowCreditThresholdCents={
-        typeof threshold === "number" && Number.isFinite(threshold)
-          ? Math.round(threshold * 100)
-          : null
-      }
+      fundingState={summary.trial?.state}
       prepaid={prepaid ?? null}
       canManage={scope === "self" && summary.permissions.can_manage}
       canUpgrade={canStartAnyPlan(capabilities)}

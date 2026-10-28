@@ -16,6 +16,7 @@ import { useBillingPayment } from "@/hooks/use-billing-payment"
 import { useBillingReturnNotice } from "@/hooks/use-billing-return-notice"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { useTeamEntry } from "@/hooks/use-billing-v2"
+import { useUser } from "@/hooks/use-user"
 import type {
   BillingSummaryResponse,
   BillingTrialBalance,
@@ -127,6 +128,9 @@ function TrialEntryBanner({
     "signup-plan",
     teamKey,
   ])
+  const user = useUser().user
+  const account = signup?.userId ?? user?.id
+  const locator = account && teamKey ? { account, team: teamKey } : null
   const requested = trialPlanOffer(signup?.requestedOffer)
   const selected =
     requested && pickerOfferSellable(offers, requested) ? requested : undefined
@@ -147,8 +151,8 @@ function TrialEntryBanner({
       label="Free trial"
       action={
         <ManageAction canManage={canManage}>
-          {selected ? (
-            <form method="post" action={signupCheckoutPath(selected)}>
+          {selected && locator ? (
+            <form method="post" action={signupCheckoutPath(selected, locator)}>
               <Button type="submit" size="sm">
                 {upgrade}
               </Button>
@@ -156,14 +160,16 @@ function TrialEntryBanner({
           ) : (
             <Button
               size="sm"
-              render={<Link href={planPickerPath("upgrade")} />}
+              render={
+                <Link href={planPickerPath("upgrade", undefined, locator)} />
+              }
             >
               {upgrade}
             </Button>
           )}
-          {selected ? (
+          {selected && locator ? (
             <Link
-              href={planPickerPath("upgrade", selected)}
+              href={planPickerPath("upgrade", selected, locator)}
               className="self-center underline underline-offset-4"
             >
               Other plans

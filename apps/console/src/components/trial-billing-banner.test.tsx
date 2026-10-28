@@ -47,7 +47,10 @@ function mount(requestedOffer?: string) {
     defaultOptions: { queries: { retry: false } },
   })
   if (requestedOffer)
-    client.setQueryData(["signup-plan", "use:a"], { requestedOffer })
+    client.setQueryData(["signup-plan", "use:a"], {
+      requestedOffer,
+      userId: "account-1",
+    })
   const invalidate = vi.spyOn(client, "invalidateQueries")
   const result = render(
     <QueryClientProvider client={client}>
@@ -379,9 +382,13 @@ describe("TrialBillingBanner for a new team's trial", () => {
     const upgrade = screen.getByRole("button", { name: "Upgrade to Builder" })
     const form = upgrade.closest("form")!
     expect(form.getAttribute("method")).toBe("post")
-    expect(form.getAttribute("action")).toMatch(
-      /^\/api\/onboarding\/checkout\/\?offer=developer$/,
-    )
+    const action = new URL(form.getAttribute("action")!, "https://x.test")
+    expect(action.pathname).toBe("/api/onboarding/checkout/")
+    expect(Object.fromEntries(action.searchParams)).toEqual({
+      offer: "developer",
+      account: "account-1",
+      team: "use:a",
+    })
     expect(container.textContent).not.toMatch(/Add Payment|\$95/)
   })
 
@@ -399,7 +406,9 @@ describe("TrialBillingBanner for a new team's trial", () => {
     expect(screen.queryByRole("button", { name: /Upgrade to/ })).toBeNull()
     expect(screen.getByRole("link", { name: "Upgrade" })).toHaveAttribute(
       "href",
-      expect.stringMatching(/choose-plan\/?\?reason=upgrade$/),
+      expect.stringMatching(
+        /choose-plan\/?\?reason=upgrade&account=account-1&team=use%3Aa$/,
+      ),
     )
   })
 

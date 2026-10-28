@@ -141,17 +141,9 @@ export type TeamPlan = NonNullable<z.infer<typeof teamPlanSchema>>
 export type FreeAllowance = z.infer<typeof freeAllowanceSchema>
 export type PrepaidBalance = z.infer<typeof prepaidBalanceSchema>
 
-// thresholdCents is the plan's low-credit threshold from the catalog; without
-// one the backend's low-balance flag decides.
-export function isLowBalance(
-  prepaid: PrepaidBalance,
-  thresholdCents?: number | null,
-): boolean {
+export function isLowBalance(prepaid: PrepaidBalance): boolean {
   if (prepaid.balance_cents <= 0) return true
-  if (prepaid.auto_recharge.enabled) return false
-  return typeof thresholdCents === "number"
-    ? prepaid.balance_cents < thresholdCents
-    : prepaid.low_balance === true
+  return !prepaid.auto_recharge.enabled && prepaid.low_balance === true
 }
 
 // A balance the backend has not observed recently reads as $0, so it can't

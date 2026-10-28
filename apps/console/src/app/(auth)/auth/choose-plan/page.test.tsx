@@ -28,6 +28,9 @@ vi.mock("@superserve/ui", () => ({
     ),
 }))
 vi.mock("@/components/corner-brackets", () => ({ CornerBrackets: () => null }))
+vi.mock("@/lib/billing/plan-offers-actions", () => ({
+  getTeamOffersAction: async () => null,
+}))
 vi.mock("@/components/dither-background", () => ({
   DitherBackground: () => null,
 }))
@@ -39,7 +42,7 @@ describe("plan picker", () => {
     params = new URLSearchParams()
   })
 
-  it("offers both plans when the trial has ended", () => {
+  it("offers both plans when the trial has ended", async () => {
     params = new URLSearchParams({
       reason: "trial_ended",
       offer: "developer",
@@ -48,8 +51,7 @@ describe("plan picker", () => {
     })
     render(<ChoosePlanPage />)
     expect(
-      screen
-        .getByRole("button", { name: "Developer" })
+      (await screen.findByRole("button", { name: "Developer" }))
         .closest("form")!
         .getAttribute("action"),
     ).toBe(

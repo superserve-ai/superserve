@@ -162,13 +162,7 @@ describe("isLowBalance", () => {
     },
   })
 
-  it("uses the catalog threshold when there is one", () => {
-    expect(isLowBalance(balance(299, false), 300)).toBe(true)
-    expect(isLowBalance(balance(300, false), 300)).toBe(false)
-    expect(isLowBalance(balance(299, true), 300)).toBe(false)
-  })
-
-  it("falls back to the backend's low-balance flag", () => {
+  it("follows the backend's low-balance flag", () => {
     expect(isLowBalance(balance(700, false, true))).toBe(true)
     expect(isLowBalance(balance(1, false, false))).toBe(false)
     expect(isLowBalance(balance(0, true, false))).toBe(true)

@@ -12,21 +12,24 @@ import {
 } from "@/lib/billing/plan-picker"
 import type { BillingOffer } from "@/lib/billing/plans"
 import {
+  type CheckoutLocator,
   type SignupCheckoutOffer,
   signupCheckoutPath,
 } from "@/lib/billing/signup-checkout-paths"
 
 function PlanOption({
   plan,
+  locator,
   highlighted,
 }: {
   plan: PickerPlan & { catalog: BillingOffer }
+  locator: CheckoutLocator
   highlighted: boolean
 }) {
   return (
     <form
       method="post"
-      action={signupCheckoutPath(plan.offer)}
+      action={signupCheckoutPath(plan.offer, locator)}
       aria-label={`${plan.label} plan`}
       className={cn(
         "flex flex-col gap-3 border border-dashed p-4 text-left",
@@ -57,20 +60,23 @@ function PlanOption({
 
 export function PlanPickerOptions({
   preselected,
+  locator,
 }: {
   preselected: SignupCheckoutOffer | null
+  locator: CheckoutLocator
 }) {
   const [offers, setOffers] = useState<BillingOffer[] | null>()
+  const { account, team } = locator
   useEffect(() => {
     let live = true
-    getTeamOffersAction().then(
+    getTeamOffersAction({ account, team }).then(
       (loaded) => live && setOffers(loaded),
       () => live && setOffers(null),
     )
     return () => {
       live = false
     }
-  }, [])
+  }, [account, team])
 
   if (offers === undefined)
     return (
@@ -98,7 +104,11 @@ export function PlanPickerOptions({
     return (
       <div className="mt-5 flex gap-2">
         {plans.map(({ offer, label }) => (
-          <form key={offer} method="post" action={signupCheckoutPath(offer)}>
+          <form
+            key={offer}
+            method="post"
+            action={signupCheckoutPath(offer, locator)}
+          >
             <Button
               type="submit"
               size="sm"
@@ -116,6 +126,7 @@ export function PlanPickerOptions({
         <PlanOption
           key={plan.offer}
           plan={plan}
+          locator={locator}
           highlighted={highlighted(plan.offer)}
         />
       ))}

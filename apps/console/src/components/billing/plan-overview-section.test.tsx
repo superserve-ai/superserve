@@ -202,6 +202,53 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     expect(screen.queryByRole("link", { name: "Change plan" })).toBeNull()
   })
 
+  it("describes a credit-funded subscription as paused when out, not billed later", () => {
+    mocks.plan.mockReturnValue({
+      data: plan({
+        funding_policy: "prepaid",
+        topoff: {
+          amount_cents: 300,
+          threshold_cents: 200,
+          default_enabled: true,
+        },
+      }),
+      isError: false,
+    })
+    mocks.prepaid.mockReturnValue({
+      data: {
+        balance_cents: 900,
+        balance_observed: true,
+        low_balance: false,
+        auto_recharge: {
+          enabled: true,
+          threshold_cents: 200,
+          amount_cents: 300,
+          disabled_reason: null,
+          disabled_at: null,
+          in_flight: false,
+        },
+      },
+    })
+    render(<PlanOverviewSection summary={summary} />)
+    expect(mocks.prepaid).toHaveBeenCalledWith(true)
+    expect(screen.getByText(/of \$250 used/)).toBeTruthy()
+    expect(screen.queryByText(/billed at usage rates/)).toBeNull()
+    expect(screen.queryByText(/end of the period/)).toBeNull()
+    expect(
+      screen.getByText(
+        /paid from Auto Topoff credit\. Running sandboxes pause/,
+      ),
+    ).toBeTruthy()
+    expect(
+      screen.getByText(
+        /Auto Topoff is on: adds \$3 when credit drops below \$2/,
+      ),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("link", { name: "Manage Auto Topoff" }),
+    ).toBeTruthy()
+  })
+
   it("doesn't report usage from a different billing period", () => {
     mocks.plan.mockReturnValue({
       data: plan({ period_start: "2026-10-15T00:00:00Z" }),

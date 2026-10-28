@@ -7,6 +7,7 @@ import type {
   BillingPricingResponse,
 } from "@/lib/api/billing"
 import {
+  balanceKnown,
   BUY_CREDIT_PATH,
   describeSandboxSize,
   ENTERPRISE_MEETING_URL,
@@ -209,7 +210,13 @@ export function FreeAllowancePanel({
   )
 }
 
-export function PrepaidPanel({ prepaid }: { prepaid: PrepaidBalance | null }) {
+export function PrepaidPanel({
+  prepaid,
+  funded = false,
+}: {
+  prepaid: PrepaidBalance | null
+  funded?: boolean
+}) {
   if (!prepaid)
     return (
       <Panel title="Credit balance" id="credit">
@@ -217,6 +224,28 @@ export function PrepaidPanel({ prepaid }: { prepaid: PrepaidBalance | null }) {
       </Panel>
     )
   const recharge = prepaid.auto_recharge
+  if (funded)
+    return (
+      <Panel title="Credit balance" id="credit">
+        <p className="text-3xl font-medium tracking-tight text-foreground">
+          {balanceKnown(prepaid)
+            ? formatCents(Math.max(prepaid.balance_cents, 0))
+            : "Updating…"}
+        </p>
+        <p className="text-sm text-muted" id="auto-topoff">
+          {recharge.enabled &&
+          recharge.amount_cents !== null &&
+          recharge.threshold_cents !== null
+            ? `Auto Topoff is on: adds ${formatCents(recharge.amount_cents)} when credit drops below ${formatCents(recharge.threshold_cents)}.`
+            : recharge.disabled_reason
+              ? "Auto Topoff was turned off. Running sandboxes pause when credit runs out."
+              : "Auto Topoff is off. Running sandboxes pause when credit runs out."}
+        </p>
+        {recharge.in_flight ? (
+          <p className="text-sm text-muted">A top-up is being processed.</p>
+        ) : null}
+      </Panel>
+    )
   return (
     <Panel title="Credit balance" id="credit">
       <p
@@ -249,11 +278,13 @@ export function IncludedUsagePanel({
   usageCents,
   status,
   bridgeMonthlyStartsAt,
+  funded = false,
 }: {
   plan: TeamPlan
   usageCents: number | null
   status?: BillingIncludedUsage["status"]
   bridgeMonthlyStartsAt?: string
+  funded?: boolean
 }) {
   const included = plan.included_cents
   return (
@@ -279,14 +310,21 @@ export function IncludedUsagePanel({
             </span>
           </p>
           <Meter value={usageCents} max={included} tone="normal" />
-          <p className="text-sm text-muted">
-            {usageCents > included
-              ? `${formatCents(usageCents - included)} beyond the included usage, billed at usage rates`
-              : "Usage beyond this is billed at usage rates"}
-            {plan.period_end
-              ? ` at the end of the period on ${date(plan.period_end)}.`
-              : "."}
-          </p>
+          {funded ? (
+            <p className="text-sm text-muted">
+              Usage beyond this is paid from Auto Topoff credit. Running
+              sandboxes pause when credit runs out.
+            </p>
+          ) : (
+            <p className="text-sm text-muted">
+              {usageCents > included
+                ? `${formatCents(usageCents - included)} beyond the included usage, billed at usage rates`
+                : "Usage beyond this is billed at usage rates"}
+              {plan.period_end
+                ? ` at the end of the period on ${date(plan.period_end)}.`
+                : "."}
+            </p>
+          )}
         </>
       )}
     </Panel>
@@ -303,6 +341,7 @@ export interface PlanOverviewProps {
   canManage: boolean
   canPurchase?: boolean
   allowancePricing?: BillingPricingResponse | null
+  funded?: boolean
 }
 
 export function PlanDetails({
@@ -387,6 +426,7 @@ export function PlanOverview({
   allowancePricing,
   canManage,
   canPurchase = true,
+  funded = false,
 }: PlanOverviewProps) {
   return (
     <section
@@ -404,12 +444,27 @@ export function PlanOverview({
         ) : plan.kind === "prepaid" ? (
           <PrepaidPanel prepaid={prepaid} />
         ) : plan.kind === "subscription" ? (
-          <IncludedUsagePanel
-            plan={plan}
-            usageCents={usageCents}
-            status={includedUsageStatus}
-            bridgeMonthlyStartsAt={bridgeMonthlyStartsAt}
-          />
+          <>
+            <IncludedUsagePanel
+              plan={plan}
+              usageCents={usageCents}
+              status={includedUsageStatus}
+              bridgeMonthlyStartsAt={bridgeMonthlyStartsAt}
+              funded={funded}
+            />
+            {funded ? <PrepaidPanel prepaid={prepaid} funded /> : null}
+            {funded && canManage ? (
+              <div className="px-5 pb-5 sm:px-6 sm:pb-6">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  render={<Link href={TOPOFF_SETTINGS_PATH} />}
+                >
+                  Manage Auto Topoff
+                </Button>
+              </div>
+            ) : null}
+          </>
         ) : (
           <Panel title="Billing">
             <p className="text-sm text-muted">
