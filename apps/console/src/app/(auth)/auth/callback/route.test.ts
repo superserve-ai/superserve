@@ -1079,10 +1079,15 @@ describe("auth callback", () => {
         expect(mockSignupEntryDestination).not.toHaveBeenCalled()
       })
 
-      it("drops a checkout path that escapes the resume route", async () => {
+      it.each([
+        "/api/onboarding/checkout/../../admin",
+        "/api/onboarding/checkout/return/../../../admin",
+        "/auth/choose-plan/../../admin",
+        "/auth/choose-plan/?reason=upgrade&next=/admin",
+      ])("drops %s, which escapes its route", async (next) => {
         const response = await GET(
           new Request(
-            "https://console.superserve.ai/auth/callback?code=abc&next=%2Fapi%2Fonboarding%2Fcheckout%2F..%2F..%2Fadmin",
+            `https://console.superserve.ai/auth/callback?code=abc&next=${encodeURIComponent(next)}`,
           ),
         )
         expect(new URL(response.headers.get("location")!).pathname).toBe(
@@ -1091,8 +1096,9 @@ describe("auth callback", () => {
       })
 
       it.each([
-        "/api/onboarding/checkout/?offer=developer",
-        "/auth/choose-plan/?reason=upgrade",
+        "/api/onboarding/checkout/?offer=developer&account=u1&team=use%3At1",
+        "/api/onboarding/checkout/return/?account=u1&team=use%3At1",
+        "/auth/choose-plan/?reason=upgrade&account=u1&team=use%3At1",
       ])("keeps %s through sign-in", async (next) => {
         const response = await GET(
           new Request(

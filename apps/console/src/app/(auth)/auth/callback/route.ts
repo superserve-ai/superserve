@@ -67,9 +67,9 @@ import {
 } from "@/lib/billing/pro-auth-return"
 import {
   isSignupCheckoutOffer,
+  isPlanPickerPath,
   isSignupCheckoutPath,
-  PLAN_PICKER_ROUTE,
-  SIGNUP_CHECKOUT_RETURN_ROUTE,
+  isSignupCheckoutReturnPath,
 } from "@/lib/billing/signup-checkout-paths"
 import { DEFAULT_REGION } from "@/lib/cells"
 import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
@@ -718,8 +718,8 @@ export async function GET(request: Request) {
           !next.startsWith("https://") &&
           !/^\/onboarding\/plan\/?(?:\?|$)/.test(next) &&
           !isSignupCheckoutPath(next) &&
-          !next.startsWith(SIGNUP_CHECKOUT_RETURN_ROUTE) &&
-          !next.startsWith(PLAN_PICKER_ROUTE) &&
+          !isSignupCheckoutReturnPath(next) &&
+          !isPlanPickerPath(next) &&
           !ycNext &&
           !proNext &&
           !preparationNext

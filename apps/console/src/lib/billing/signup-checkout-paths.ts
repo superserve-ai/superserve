@@ -68,16 +68,28 @@ export function signupCheckoutPath(
   return `${SIGNUP_CHECKOUT_ROUTE}?${new URLSearchParams({ offer, ...locator })}`
 }
 
-export function isSignupCheckoutPath(path: string) {
-  if (!path.startsWith(SIGNUP_CHECKOUT_ROUTE)) return false
+// Parses a relative path and accepts it only when it resolves to exactly
+// route with no query keys beyond keys, so ".." segments cannot escape it.
+function exactRoute(path: string, route: string, keys: readonly string[]) {
+  if (!path.startsWith(route)) return null
   const url = new URL(path, "https://console.invalid")
-  return (
-    url.pathname === SIGNUP_CHECKOUT_ROUTE &&
-    [...url.searchParams.keys()].every((key) =>
-      ["offer", "account", "team"].includes(key),
-    ) &&
-    isSignupCheckoutOffer(url.searchParams.get("offer"))
-  )
+  return url.pathname === route &&
+    [...url.searchParams.keys()].every((key) => keys.includes(key))
+    ? url
+    : null
+}
+
+export function isSignupCheckoutPath(path: string) {
+  const url = exactRoute(path, SIGNUP_CHECKOUT_ROUTE, [
+    "offer",
+    "account",
+    "team",
+  ])
+  return !!url && isSignupCheckoutOffer(url.searchParams.get("offer"))
+}
+
+export function isSignupCheckoutReturnPath(path: string) {
+  return !!exactRoute(path, SIGNUP_CHECKOUT_RETURN_ROUTE, ["account", "team"])
 }
 
 export type PlanPickerReason =
@@ -132,4 +144,13 @@ export function awaitingPlanRedirect(context: {
   return context.paymentSettling
     ? planPickerPath("payment_confirming", undefined, locator)
     : planPickerPath(entry, trialPlanOffer(context.requestedOffer), locator)
+}
+
+export function isPlanPickerPath(path: string) {
+  return !!exactRoute(path, PLAN_PICKER_ROUTE, [
+    "reason",
+    "offer",
+    "account",
+    "team",
+  ])
 }
