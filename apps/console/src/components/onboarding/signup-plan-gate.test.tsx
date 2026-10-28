@@ -67,6 +67,37 @@ describe("signup plan gate", () => {
     )
     expect(mocks.getPlan).toHaveBeenCalledWith("use:team")
   })
+  it.each(["trial_ended", "payment_failed"])(
+    "sends a team switched to %s to the plan picker",
+    async (entryState) => {
+      mocks.getPlan.mockResolvedValue({
+        userId: "owner",
+        teamKey: "use:team",
+        state: "legacy",
+        offer: null,
+        requestedOffer: "developer",
+        entryState,
+      })
+      renderGate()
+      await waitFor(() =>
+        expect(mocks.replace).toHaveBeenCalledWith(
+          `/auth/choose-plan/?reason=${entryState}&offer=developer`,
+        ),
+      )
+    },
+  )
+  it("keeps a team on its trial in the console", async () => {
+    mocks.getPlan.mockResolvedValue({
+      userId: "owner",
+      teamKey: "use:team",
+      state: "legacy",
+      offer: null,
+      entryState: "trial",
+    })
+    renderGate()
+    await waitFor(() => expect(mocks.getPlan).toHaveBeenCalled())
+    expect(mocks.replace).not.toHaveBeenCalled()
+  })
   it("keeps the console usable when the read fails", async () => {
     mocks.getPlan.mockRejectedValue(new Error("Unavailable"))
     renderGate()
