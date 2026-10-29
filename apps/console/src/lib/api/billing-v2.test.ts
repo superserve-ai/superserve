@@ -134,7 +134,9 @@ describe("planAction", () => {
     expect(planAction(team(PRO), PRO)).toEqual({ type: "current" })
     expect(planAction(team(PRO, "free"), FREE)).toEqual({ type: "scheduled" })
     expect(planAction(team(ENTERPRISE), PRO)).toEqual({ type: "contact" })
-    expect(planAction(team(ENTERPRISE), STARTER)).toEqual({ type: "contact" })
+    expect(planAction(team(ENTERPRISE), STARTER)).toEqual({
+      type: "unavailable",
+    })
   })
 })
 

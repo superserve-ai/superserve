@@ -339,7 +339,8 @@ export function planAction(current: TeamPlan, target: CatalogPlan): PlanAction {
       : target.kind === "subscription" || target.kind === "prepaid"
         ? { type: "unavailable" }
         : { type: "contact" }
-  if (target.kind === "free") return { type: "unavailable" }
+  if (target.kind === "free" || target.kind === "prepaid")
+    return { type: "unavailable" }
   if (current.kind === "custom") return { type: "contact" }
   if (target.kind === "custom")
     return {
@@ -351,8 +352,7 @@ export function planAction(current: TeamPlan, target: CatalogPlan): PlanAction {
     PLAN_RANK[target.kind] > PLAN_RANK[current.kind] ||
     current.kind === "legacy_payg"
   ) {
-    // Starter credit isn't sold to teams that aren't already on it.
-    const href = target.kind === "prepaid" ? null : upgradePath(target.family)
+    const href = upgradePath(target.family)
     if (!target.available || !href) return { type: "unavailable" }
     const label = `Get ${target.name}`
     if (current.pending_change)

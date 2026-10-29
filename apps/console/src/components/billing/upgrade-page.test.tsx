@@ -405,6 +405,22 @@ describe("UpgradePage with pricing v2 on", () => {
     expect(screen.getByRole("link", { name: "Get Pro" })).toBeTruthy()
   })
 
+  it("shows an Enterprise team no Starter card", () => {
+    const pro = catalog.find((entry) => entry.key === "pro_monthly")!
+    mocks.plan.mockReturnValue({
+      data: {
+        ...pro,
+        key: "enterprise",
+        kind: "custom",
+        name: "Enterprise",
+        pending_change: null,
+      },
+      isError: false,
+    })
+    mount()
+    expect(screen.queryByTestId("plan-card-starter")).toBeNull()
+  })
+
   it("still shows a Starter team its own plan", () => {
     const pro = catalog.find((entry) => entry.key === "pro_monthly")!
     mocks.plan.mockReturnValue({
