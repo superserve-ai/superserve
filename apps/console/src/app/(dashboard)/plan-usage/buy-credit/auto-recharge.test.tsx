@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   teamKey: "use:11111111-1111-4111-8111-111111111111",
   ready: true,
   scope: "self",
+  planError: false,
+  refetchPlan: vi.fn(),
   plan: { key: "funded_monthly", kind: "prepaid" } as
     | Record<string, unknown>
     | undefined,
@@ -35,7 +37,11 @@ vi.mock("@/hooks/use-teams", () => ({
 }))
 
 vi.mock("@/hooks/use-billing-v2", () => ({
-  useTeamPlan: () => ({ data: mocks.plan }),
+  useTeamPlan: () => ({
+    data: mocks.plan,
+    isError: mocks.planError,
+    refetch: mocks.refetchPlan,
+  }),
 }))
 vi.mock("@/hooks/use-billing-capabilities", () => ({
   useBillingCapabilities: () => ({
@@ -111,6 +117,8 @@ const initial: PrepaidCreditSummary = {
 
 beforeEach(() => {
   mocks.plan = { key: "funded_monthly", kind: "prepaid" }
+  mocks.planError = false
+  mocks.refetchPlan.mockReset()
   mocks.params = new URLSearchParams()
   mocks.teamKey = "use:11111111-1111-4111-8111-111111111111"
   mocks.scope = "self"
@@ -492,4 +500,68 @@ it("waits for the plan before offering a credit purchase", () => {
   render(page())
   expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
   expect(screen.getByText("Checking your plan…")).toBeTruthy()
+})
+
+it.each([
+  ["Free", { key: "free", kind: "free" }],
+  ["legacy pay-as-you-go", null],
+  ["Pro", { key: "pro_monthly", kind: "subscription" }],
+])("offers a %s team no Starter credit purchase", (_, plan) => {
+  mocks.plan = plan as never
+  mocks.data = {
+    ...initial,
+    auto_recharge: { ...initial.auto_recharge, enabled: false },
+  }
+  render(page())
+  expect(screen.queryByRole("button", { name: /^Buy .*credit$/ })).toBeNull()
+  expect(screen.queryByRole("textbox", { name: "Amount (USD)" })).toBeNull()
+  expect(screen.queryByRole("switch")).toBeNull()
+  expect(screen.getByTestId("page-title").textContent).toBe("Credit balance")
+})
+
+it("still lets a team that returns from an earlier purchase recover it", async () => {
+  mocks.plan = { key: "free", kind: "free" }
+  mocks.operations = [
+    {
+      id: "11111111-1111-4111-8111-111111111111",
+      amount: 1500,
+      team: mocks.teamKey,
+      actor: "actor",
+      success: "https://console.test/s",
+      cancel: "https://console.test/c",
+    },
+  ]
+  render(page())
+  expect(await screen.findByText("Resume a previous purchase")).toBeTruthy()
+})
+
+it("keeps a Starter team's own purchases and auto-recharge", async () => {
+  mocks.plan = { key: "starter", kind: "prepaid" }
+  render(page())
+  expect(
+    await screen.findByRole("button", { name: /^Buy .*credit$/ }),
+  ).toBeTruthy()
+  expect(screen.getByRole("switch")).toBeTruthy()
+  expect(screen.getByTestId("page-title").textContent).toBe("Buy credit")
+})
+
+it("keeps the toggle for a team that isn't on Starter but has auto-recharge on", async () => {
+  mocks.plan = { key: "free", kind: "free" }
+  render(page())
+  const toggle = screen.getByRole("switch")
+  expect(toggle).toBeTruthy()
+  expect(toggle.getAttribute("aria-disabled")).not.toBe("true")
+  expect(screen.queryByRole("button", { name: /^Buy .*credit$/ })).toBeNull()
+})
+
+it("keeps the toggle and offers a retry while the plan can't be read", async () => {
+  mocks.plan = undefined
+  mocks.planError = true
+  render(page())
+  expect(screen.getByRole("switch")).toBeTruthy()
+  expect(screen.getByRole("alert").textContent).toMatch(
+    /Your plan couldn.t be loaded/,
+  )
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+  expect(mocks.refetchPlan).toHaveBeenCalled()
 })

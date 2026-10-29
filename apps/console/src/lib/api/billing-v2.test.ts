@@ -6,7 +6,6 @@ import {
   proCheckoutResponseSchema,
   type CatalogPlan,
   catalogPlansOf,
-  BUY_CREDIT_PATH,
   checkoutTermsFor,
   ENTERPRISE_MEETING_URL,
   isLowBalance,
@@ -80,11 +79,6 @@ function team(c: CatalogPlan, pending: string | null = null): TeamPlan {
 
 describe("planAction", () => {
   it("upgrades through the purchase pages", () => {
-    expect(planAction(team(FREE), STARTER)).toEqual({
-      type: "link",
-      href: BUY_CREDIT_PATH,
-      label: "Get Starter",
-    })
     expect(planAction(team(FREE), PRO)).toMatchObject({
       href: PRO_UPGRADE_PATH,
     })
@@ -106,11 +100,24 @@ describe("planAction", () => {
     expect(planAction(team(FREE), OTHER)).toEqual({ type: "unavailable" })
   })
 
-  it("lets legacy pay-as-you-go teams buy Starter or Pro but not move to Free", () => {
+  it("never sells Starter to a team that isn't on it", () => {
     const legacy = team(card("legacy", "legacy_payg", "Pay as you go"))
-    expect(planAction(legacy, STARTER)).toMatchObject({
-      href: BUY_CREDIT_PATH,
+    const trial = team(card("trial", "free", "Free trial"))
+    for (const current of [FREE, PRO, ENTERPRISE].map((c) => team(c)))
+      expect(planAction(current, STARTER)).not.toMatchObject({ type: "link" })
+    expect(planAction(legacy, STARTER)).toEqual({ type: "unavailable" })
+    expect(planAction(trial, STARTER)).toEqual({ type: "unavailable" })
+    expect(planAction(team(STARTER), STARTER)).toEqual({ type: "current" })
+    expect(
+      planAction(team(STARTER), { ...STARTER, key: "starter_v2" }),
+    ).toEqual({ type: "unavailable" })
+    expect(planAction(team(PRO, "starter"), STARTER)).toEqual({
+      type: "scheduled",
     })
+  })
+
+  it("lets legacy pay-as-you-go teams buy Pro but not move to Free", () => {
+    const legacy = team(card("legacy", "legacy_payg", "Pay as you go"))
     expect(planAction(legacy, PRO)).toMatchObject({
       href: PRO_UPGRADE_PATH,
     })
@@ -127,7 +134,9 @@ describe("planAction", () => {
     expect(planAction(team(PRO), PRO)).toEqual({ type: "current" })
     expect(planAction(team(PRO, "free"), FREE)).toEqual({ type: "scheduled" })
     expect(planAction(team(ENTERPRISE), PRO)).toEqual({ type: "contact" })
-    expect(planAction(team(ENTERPRISE), STARTER)).toEqual({ type: "contact" })
+    expect(planAction(team(ENTERPRISE), STARTER)).toEqual({
+      type: "unavailable",
+    })
   })
 })
 

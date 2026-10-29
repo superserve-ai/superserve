@@ -321,7 +321,7 @@ export async function GET(request: Request) {
         const defaultPaidNext =
           (!searchParams.get("next") || searchParams.get("next") === "/") &&
           !(await cookies()).get("yc_claim_confirmation") &&
-          (signupOffer === "starter" || signupOffer === "pro_monthly")
+          signupOffer === "pro_monthly"
             ? SIGNUP_OFFER_DESTINATIONS[signupOffer]
             : null
         let retryPaidNext =

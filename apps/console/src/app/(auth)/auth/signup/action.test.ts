@@ -391,12 +391,16 @@ describe("signUpWithEmail", () => {
       },
     )
 
-    it.each(["starter", "pro_monthly", "free"])(
+    it.each([
+      ["starter", "developer"],
+      ["pro_monthly", "pro_monthly"],
+      ["free", "free"],
+    ])(
       "keeps %s routing intent when catalog entry is unavailable",
-      async (offer) => {
+      async (offer, routed) => {
         mockPricingVersion.mockResolvedValue("legacy")
         await signUp(offer)
-        expect(callbackOffer()).toBe(offer)
+        expect(callbackOffer()).toBe(routed)
         expect(mockUpdateSignupReview).not.toHaveBeenCalled()
       },
     )
@@ -406,7 +410,7 @@ describe("signUpWithEmail", () => {
       async (version) => {
         mockPricingVersion.mockResolvedValue(version)
         for (const [raw, destination] of [
-          ["starter_monthly", "starter"],
+          ["starter_monthly", "developer"],
           ["pro_annual", "pro_monthly"],
         ]) {
           await signUp(raw)
@@ -521,7 +525,7 @@ describe("signUpWithEmail", () => {
 
       await signUp("starter")
 
-      expect(callbackOffer()).toBe("starter")
+      expect(callbackOffer()).toBe("developer")
       expect(mockUpdateSignupReview).not.toHaveBeenCalled()
       expect(mockSlack.mock.lastCall).toHaveLength(5)
     })

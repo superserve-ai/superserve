@@ -11,14 +11,14 @@ vi.mock("@/lib/supabase/client", () => ({
   createBrowserClient: () => ({ auth: { getUser: mocks.getUser } }),
 }))
 vi.mock("@/hooks/use-billing-v2", () => ({
-  useTeamPlan: () => ({ data: { key: "funded_monthly" } }),
+  useTeamPlan: () => ({ data: { key: "starter", kind: "prepaid" } }),
 }))
 vi.mock("@/hooks/use-billing-capabilities", () => ({
   useBillingCapabilities: () => ({
     data: {
       offers: [
         {
-          offer_key: "funded_monthly",
+          offer_key: "starter",
           topoff: {
             amount_cents: 2500,
             threshold_cents: 1000,

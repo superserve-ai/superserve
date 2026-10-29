@@ -387,6 +387,52 @@ describe("UpgradePage with pricing v2 on", () => {
     ).toBe("To change your plan, contact support at support@superserve.ai.")
   })
 
+  it.each([
+    ["Free", { key: "free", kind: "free" as const, name: "Free" }],
+    [
+      "legacy pay-as-you-go",
+      { key: "payg", kind: "legacy_payg" as const, name: "Pay as you go" },
+    ],
+  ])("shows a %s team no Starter card", (_, current) => {
+    const pro = catalog.find((entry) => entry.key === "pro_monthly")!
+    mocks.plan.mockReturnValue({
+      data: { ...pro, ...current },
+      isError: false,
+    })
+    mount()
+    expect(screen.queryByTestId("plan-card-starter")).toBeNull()
+    expect(screen.queryByRole("link", { name: "Get Starter" })).toBeNull()
+    expect(screen.getByRole("link", { name: "Get Pro" })).toBeTruthy()
+  })
+
+  it("shows an Enterprise team no Starter card", () => {
+    const pro = catalog.find((entry) => entry.key === "pro_monthly")!
+    mocks.plan.mockReturnValue({
+      data: {
+        ...pro,
+        key: "enterprise",
+        kind: "custom",
+        name: "Enterprise",
+        pending_change: null,
+      },
+      isError: false,
+    })
+    mount()
+    expect(screen.queryByTestId("plan-card-starter")).toBeNull()
+  })
+
+  it("still shows a Starter team its own plan", () => {
+    const pro = catalog.find((entry) => entry.key === "pro_monthly")!
+    mocks.plan.mockReturnValue({
+      data: { ...pro, key: "starter", kind: "prepaid", name: "Starter" },
+      isError: false,
+    })
+    mount()
+    expect(screen.getByTestId("plan-card-starter").textContent).toMatch(
+      /Current plan/,
+    )
+  })
+
   it("explains an empty plan catalog", () => {
     mocks.catalog.mockReturnValue({ data: [] })
     mount()

@@ -7,7 +7,7 @@ vi.mock("@/hooks/use-billing-capabilities", () => ({
           entry_open: true,
           fresh_entry: {
             starter: mocks.buyCredit,
-            pro: mocks.buyCredit,
+            pro: mocks.pro ?? mocks.buyCredit,
             auto_recharge: mocks.recharge,
             choose_free: true,
           },
@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   offers: undefined as unknown[] | undefined,
   cards: [] as unknown[],
   buyCredit: true,
+  pro: undefined as boolean | undefined,
   recharge: true,
   version: vi.fn(),
   plan: vi.fn(),
@@ -87,6 +88,7 @@ beforeEach(() => {
   mocks.offers = undefined
   mocks.cards = []
   mocks.buyCredit = true
+  mocks.pro = undefined
   mocks.recharge = true
   mocks.plan.mockReturnValue({ data: null })
   mocks.prepaid.mockReturnValue({ data: undefined })
@@ -324,6 +326,14 @@ describe("PlanBanner with pricing v2 on", () => {
       screen.getByRole("region", { name: "Free plan" }).textContent,
     ).not.toMatch(/Upgrade to Builder/)
     expect(screen.queryByRole("link")).toBeNull()
+  })
+
+  it("doesn't let Starter entry alone put an upgrade on a Free team's banner", () => {
+    mocks.pro = false
+    mocks.plan.mockReturnValue({ data: plan("free") })
+    mount()
+    expect(screen.queryByRole("link")).toBeNull()
+    expect(screen.queryByText(/Buy credit|Add more|Starter/)).toBeNull()
   })
 
   it("hides actions from members who cannot manage billing", () => {
