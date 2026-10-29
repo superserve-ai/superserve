@@ -46,6 +46,9 @@ vi.mock("@/lib/supabase/server", () => ({
     },
   })),
 }))
+vi.mock("@/lib/admin/google-session", () => ({
+  hasPrivilegedGoogleSession: vi.fn(async () => true),
+}))
 
 const teamLookup = vi.hoisted(() => ({
   team: {
@@ -76,6 +79,8 @@ vi.mock("@/lib/cells", () => ({
     }),
   }),
 }))
+
+import { hasPrivilegedGoogleSession } from "@/lib/admin/google-session"
 
 import {
   clearImpersonationCookie,
@@ -111,6 +116,7 @@ afterEach(() => {
   teamLookup.result = { data: { name: "Acme Corp" }, error: null }
   mockHeaders.host = "console.superserve.ai"
   delete process.env.NEXT_PUBLIC_COOKIE_DOMAIN
+  vi.mocked(hasPrivilegedGoogleSession).mockResolvedValue(true)
 })
 
 describe("impersonation token", () => {
@@ -146,6 +152,12 @@ describe("getImpersonationTeamId", () => {
   it("returns null for a user without platform access even with a valid cookie", async () => {
     cookieStore.value = signImpersonationToken(TEAM, Date.now() + 60_000)
     expect(await getImpersonationTeamId(unauthorizedUser)).toBeNull()
+  })
+
+  it("returns null when a staff user has no current Google proof", async () => {
+    vi.mocked(hasPrivilegedGoogleSession).mockResolvedValue(false)
+    cookieStore.value = signImpersonationToken(TEAM, Date.now() + 60_000)
+    expect(await getImpersonationTeamId(platformUser)).toBeNull()
   })
 
   it("returns null when no cookie is present", async () => {

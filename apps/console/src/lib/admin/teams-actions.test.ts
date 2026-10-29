@@ -22,6 +22,9 @@ vi.mock("@/lib/admin/permissions", () => ({
   canReadPlatformTeams: vi.fn(),
   canStartPlatformImpersonation: vi.fn(),
 }))
+vi.mock("@/lib/admin/staff", () => ({
+  requireStaff: vi.fn(),
+}))
 vi.mock("@/lib/admin/impersonation", () => ({
   clearImpersonationCookie: vi.fn(),
   readImpersonationContext: vi.fn(),
@@ -45,6 +48,7 @@ import {
   canReadPlatformTeams,
   canStartPlatformImpersonation,
 } from "@/lib/admin/permissions"
+import { requireStaff } from "@/lib/admin/staff"
 import { findTeamById, listAllTeams } from "@/lib/api/team-directory"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -57,6 +61,11 @@ import {
 
 describe("teams actions", () => {
   beforeEach(() => {
+    vi.mocked(requireStaff).mockResolvedValue({
+      id: "admin-1",
+      email: "admin@superserve.ai",
+      app_metadata: { provider: "google", providers: ["google"] },
+    } as never)
     vi.mocked(createServerClient).mockResolvedValue({
       auth: { getUser: async () => ({ data: { user: { id: "admin-1" } } }) },
     } as never)
@@ -82,6 +91,18 @@ describe("teams actions", () => {
     const rows = await listAllTeamsAction()
     expect(rows).toEqual(teamRows)
     expect(canReadPlatformTeams).toHaveBeenCalled()
+  })
+
+  it("rejects direct team reads when current Google proof is unavailable", async () => {
+    vi.mocked(listAllTeams).mockClear()
+    vi.mocked(requireStaff).mockRejectedValueOnce(
+      new Error("Forbidden: staff access required"),
+    )
+
+    await expect(listAllTeamsAction()).rejects.toThrow(
+      "Forbidden: staff access required",
+    )
+    expect(listAllTeams).not.toHaveBeenCalled()
   })
 
   it("rejects start impersonation when the user lacks supported read scopes", async () => {

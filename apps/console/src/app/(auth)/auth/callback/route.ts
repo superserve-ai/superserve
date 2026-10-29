@@ -7,6 +7,7 @@ import {
   readFingerprintSignupEventId,
   sendWelcomeEmail,
 } from "@/app/(auth)/auth/signup/action"
+import { isStaff } from "@/lib/admin/staff"
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
 import { signupEntryDestination } from "@/lib/api/signup-checkout"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
@@ -84,6 +85,7 @@ import { ycReturnPath } from "@/lib/yc/return-path"
 import { staffReturnPath } from "@/lib/yc/staff-return-path"
 import {
   completeStaffGoogle,
+  issuePrivilegedGoogleProof,
   STAFF_SESSION_COOKIE,
   STAFF_PROOF_SECONDS,
   staffCookieOptions,
@@ -207,6 +209,7 @@ export async function GET(request: Request) {
       } = await supabase.auth.getUser()
 
       let newSignup = false
+      let privilegedGoogleProof: string | null = null
       if (user) {
         if (code && searchParams.has("staff_google_nonce")) {
           const staffProof = await completeStaffGoogle(
@@ -225,6 +228,15 @@ export async function GET(request: Request) {
             response.cookies.delete(PLAN_OFFER_COOKIE)
             return response
           }
+        }
+        // Staff-domain sessions receive a proof only after this callback's
+        // server-side code exchange and Google userinfo verification. This
+        // keeps ordinary customer OAuth/password flows unchanged.
+        if (code && exchangedSession && isStaff(user)) {
+          privilegedGoogleProof = await issuePrivilegedGoogleProof(
+            exchangedSession,
+            user,
+          )
         }
         const pendingEnterprisePricing = hasPendingEnterprisePricing(user)
         if (
@@ -802,6 +814,12 @@ export async function GET(request: Request) {
             maxAge: 7 * 24 * 60 * 60,
           },
         )
+      }
+      if (privilegedGoogleProof) {
+        response.cookies.set(STAFF_SESSION_COOKIE, privilegedGoogleProof, {
+          ...staffCookieOptions,
+          maxAge: STAFF_PROOF_SECONDS,
+        })
       }
       if (!newSignup || !requestedOffer)
         response.cookies.delete(PLAN_OFFER_COOKIE)

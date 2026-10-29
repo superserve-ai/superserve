@@ -1,5 +1,6 @@
 import type { User } from "@supabase/supabase-js"
 
+import { hasPrivilegedGoogleSession } from "@/lib/admin/google-session"
 import { createServerClient } from "@/lib/supabase/server"
 
 const DEFAULT_STAFF_DOMAIN = "superserve.ai"
@@ -9,9 +10,8 @@ function staffDomain(): string {
 }
 
 /**
- * True only for a Google-verified identity on the staff domain. We require the
- * google provider so a spoofed email/password signup on @superserve.ai can't
- * gain admin access (the console supports email/password too).
+ * True only for a staff-domain account linked to Google. Current-session
+ * provenance is a separate authority checked by requireStaff.
  */
 export function isStaff(user: User | null | undefined): boolean {
   if (!user?.email) return false
@@ -29,7 +29,9 @@ export async function requireStaff(): Promise<User> {
   const supabase = await createServerClient()
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser()
-  if (!isStaff(user)) throw new Error("Forbidden: staff access required")
+  if (userError || !isStaff(user) || !(await hasPrivilegedGoogleSession(user)))
+    throw new Error("Forbidden: staff access required")
   return user as User
 }

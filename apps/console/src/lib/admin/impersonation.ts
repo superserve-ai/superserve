@@ -3,7 +3,9 @@ import crypto from "node:crypto"
 import type { User } from "@supabase/supabase-js"
 import { cookies, headers } from "next/headers"
 
+import { hasPrivilegedGoogleSession } from "@/lib/admin/google-session"
 import { canStartPlatformImpersonation } from "@/lib/admin/permissions"
+import { isStaff } from "@/lib/admin/staff"
 import { getProxySecret } from "@/lib/api/proxy-secret"
 import { findTeamById } from "@/lib/api/team-directory"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
@@ -140,7 +142,11 @@ export async function readImpersonationContext(): Promise<ImpersonationContext |
 export async function getImpersonationTeamId(
   user: User | null | undefined,
 ): Promise<string | null> {
-  if (!canStartPlatformImpersonation(user)) return null
+  if (
+    !canStartPlatformImpersonation(user) ||
+    (isStaff(user) && !(await hasPrivilegedGoogleSession(user)))
+  )
+    return null
   return readImpersonationTeamId()
 }
 

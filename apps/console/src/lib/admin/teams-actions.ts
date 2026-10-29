@@ -9,12 +9,12 @@ import {
 } from "@/lib/admin/impersonation"
 import { revokeImpersonationKeyRow } from "@/lib/admin/impersonation-key"
 import { findTeamById, listAllTeams } from "@/lib/api/team-directory"
-import { createServerClient } from "@/lib/supabase/server"
 
 import {
   canReadPlatformTeams,
   canStartPlatformImpersonation,
 } from "./permissions"
+import { requireStaff } from "./staff"
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -28,22 +28,16 @@ export interface AdminTeamRow {
 }
 
 async function requirePlatformTeamRead() {
-  const supabase = await createServerClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user || !canReadPlatformTeams(user)) {
+  const user = await requireStaff()
+  if (!canReadPlatformTeams(user)) {
     throw new Error("Forbidden: platform team read access required")
   }
   return user
 }
 
 async function requirePlatformImpersonationAccess() {
-  const supabase = await createServerClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user || !canStartPlatformImpersonation(user)) {
+  const user = await requireStaff()
+  if (!canStartPlatformImpersonation(user)) {
     throw new Error("Forbidden: platform impersonation access required")
   }
   return user
@@ -80,15 +74,16 @@ export async function startImpersonationAction(teamId: string) {
 }
 
 export async function stopImpersonationAction() {
-  const impersonation = await readImpersonationContext()
-  await clearImpersonationCookie()
-
   let user
   try {
     user = await requirePlatformImpersonationAccess()
   } catch {
+    await clearImpersonationCookie()
     redirect("/admin")
   }
+
+  const impersonation = await readImpersonationContext()
+  await clearImpersonationCookie()
 
   if (user && impersonation) {
     try {
