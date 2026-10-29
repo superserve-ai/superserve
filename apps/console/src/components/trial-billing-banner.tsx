@@ -80,14 +80,6 @@ export function TrialBillingBanner() {
 
   const exhausted = trial.state === "exhausted"
   const urgent = exhausted || currentUrgentRunway
-  const remaining =
-    typeof trial.remaining_usd === "number" &&
-    Number.isFinite(trial.remaining_usd)
-      ? new Intl.NumberFormat("en-US", {
-          style: "currency",
-          currency: "USD",
-        }).format(trial.remaining_usd)
-      : null
 
   return (
     <div
@@ -115,15 +107,8 @@ export function TrialBillingBanner() {
           </>
         ) : (
           <>
-            You&apos;re on a free trial
-            {remaining ? (
-              <>
-                {" "}
-                with <strong>{remaining} remaining</strong>
-              </>
-            ) : null}
-            . Add a payment method to unlock{" "}
-            <strong>$95 in additional credits</strong>.
+            You&apos;re on a free trial with limited usage. To use the full
+            platform, subscribe.
           </>
         )}
       </p>
@@ -133,7 +118,7 @@ export function TrialBillingBanner() {
           disabled={!available || submitting !== null}
           onClick={() => void openSession()}
         >
-          {submitting ? "Loading..." : "Add Payment"}
+          {submitting ? "Loading..." : urgent ? "Add Payment" : "Subscribe"}
         </Button>
       ) : (
         <p>Contact your team&apos;s billing administrator.</p>

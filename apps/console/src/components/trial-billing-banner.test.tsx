@@ -66,28 +66,19 @@ afterEach(() => {
 })
 
 describe("TrialBillingBanner", () => {
-  it("shows full trial balance and incentive without a dismiss action", () => {
+  it("shows a subtle trial notice without the balance or a dismiss action", () => {
     mount()
     expect(screen.getByRole("status")).toHaveClass("bg-yellow-100")
-    expect(screen.getByText("$3.25 remaining")).toBeInTheDocument()
-    expect(screen.getByText("$95 in additional credits")).toBeInTheDocument()
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "You're on a free trial with limited usage. To use the full platform, subscribe.",
+    )
+    expect(screen.getByRole("status")).not.toHaveTextContent("$")
     expect(screen.getAllByRole("button")).toHaveLength(1)
+    expect(screen.getByRole("button", { name: "Subscribe" })).toBeEnabled()
   })
 
-  it.each([null, undefined, Number.NaN])(
-    "omits unavailable balance %s",
-    (remaining_usd) => {
-      mocks.summary.mockReturnValue({
-        data: summary({ trial: { state: "active", remaining_usd } }),
-      })
-      mount()
-      expect(screen.getByRole("status")).toHaveClass("bg-yellow-100")
-      expect(screen.getByRole("status")).not.toHaveTextContent("$0.00")
-    },
-  )
-
   it.each([0, 0.001])(
-    "does not infer exhaustion from formatted balance %s",
+    "does not infer exhaustion from balance %s",
     (remaining_usd) => {
       mocks.summary.mockReturnValue({
         data: summary({ trial: { state: "active", remaining_usd } }),
@@ -146,7 +137,7 @@ describe("TrialBillingBanner", () => {
   it("disables unavailable payment setup", () => {
     mocks.payment.mockReturnValue({ available: false })
     mount()
-    expect(screen.getByRole("button", { name: "Add Payment" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Subscribe" })).toBeDisabled()
   })
 
   it.each(["unknown", undefined, "over_24h"] as const)(
@@ -207,7 +198,7 @@ describe("TrialBillingBanner", () => {
     expect(screen.getByRole("status")).toHaveClass("bg-yellow-100")
     expect(screen.getByRole("status")).not.toHaveClass("bg-red-100")
     expect(screen.getByRole("status")).toHaveTextContent(
-      "You're on a free trial with $3.25 remaining. Add a payment method to unlock $95 in additional credits.",
+      "You're on a free trial with limited usage. To use the full platform, subscribe.",
     )
     expect(screen.getByRole("status")).not.toHaveTextContent("recent usage")
   })

@@ -195,8 +195,10 @@ describe("useBillingSummary", () => {
         </QueryClientProvider>
       )
       const { rerender } = render(view())
-      expect(await screen.findByText("$3.25 remaining")).toBeInTheDocument()
-      expect(screen.getByRole("button", { name: "Add Payment" })).toBeEnabled()
+      expect(
+        await screen.findByText(/free trial with limited usage/),
+      ).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Subscribe" })).toBeEnabled()
 
       // Leave a refresh in flight after Team A has already displayed its banner.
       act(() => {
@@ -215,7 +217,9 @@ describe("useBillingSummary", () => {
       // Assert synchronously: waiting for disappearance could miss a stale flash.
       expect(screen.queryByRole("status")).not.toBeInTheDocument()
       expect(screen.queryByRole("button")).not.toBeInTheDocument()
-      expect(screen.queryByText("$3.25 remaining")).not.toBeInTheDocument()
+      expect(
+        screen.queryByText(/free trial with limited usage/),
+      ).not.toBeInTheDocument()
       await waitFor(() => expect(getBillingSummary).toHaveBeenCalledTimes(3))
 
       await act(async () => pendingTeamB.resolve(teamB))
@@ -232,7 +236,9 @@ describe("useBillingSummary", () => {
           expect(screen.queryByRole("status")).not.toBeInTheDocument()
         }
         expect(screen.queryByRole("button")).not.toBeInTheDocument()
-        expect(screen.queryByText("$3.25 remaining")).not.toBeInTheDocument()
+        expect(
+          screen.queryByText(/free trial with limited usage/),
+        ).not.toBeInTheDocument()
       }
       await waitFor(() => {
         expect(
@@ -266,7 +272,9 @@ describe("useBillingSummary", () => {
         ).toEqual(lateSummary),
       )
       expectTeamB()
-      expect(screen.queryByText("$1.75 remaining")).not.toBeInTheDocument()
+      expect(
+        screen.queryByText(/free trial with limited usage/),
+      ).not.toBeInTheDocument()
     },
   )
 
