@@ -279,17 +279,23 @@ export function IncludedUsagePanel({
   plan,
   usageCents,
   status,
+  bridgeMonthlyStartsAt,
   funded = false,
 }: {
   plan: TeamPlan
   usageCents: number | null
   status?: BillingIncludedUsage["status"]
+  bridgeMonthlyStartsAt?: string
   funded?: boolean
 }) {
   const included = plan.included_cents
   return (
     <Panel title="Included usage this period">
-      {status === "pending" || status === "not_issued" ? (
+      {bridgeMonthlyStartsAt ? (
+        <p className="text-sm text-muted">
+          Next monthly billing period starts on {date(bridgeMonthlyStartsAt)}.
+        </p>
+      ) : status === "pending" || status === "not_issued" ? (
         <p className="text-sm text-muted">
           {status === "pending"
             ? "Included usage is being added."
@@ -336,6 +342,7 @@ export interface PlanOverviewProps {
   canManage: boolean
   canPurchase?: boolean
   allowancePricing?: BillingPricingResponse | null
+  bridgeMonthlyStartsAt?: string
   funded?: boolean
 }
 
@@ -461,6 +468,7 @@ export function PlanOverview({
   allowancePricing,
   canManage,
   canPurchase = true,
+  bridgeMonthlyStartsAt,
   funded = false,
 }: PlanOverviewProps) {
   return (
@@ -484,6 +492,7 @@ export function PlanOverview({
               plan={plan}
               usageCents={usageCents}
               status={includedUsageStatus}
+              bridgeMonthlyStartsAt={bridgeMonthlyStartsAt}
               funded={funded}
             />
             {funded ? <PrepaidPanel prepaid={prepaid} funded /> : null}

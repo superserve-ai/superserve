@@ -59,17 +59,6 @@ export function PlanOverviewSection({
     )
   if (!plan || plan.kind === "legacy_payg")
     return <CurrentPlan summary={summary} />
-  // The summary's contract and the plan assignment briefly disagree while a
-  // purchase or renewal settles; wait only while that is plausibly the case,
-  // so a lasting difference never leaves the plan loading.
-  if (
-    plan.kind === "subscription" &&
-    summary.plan &&
-    (summary.plan.key !== plan.key || summary.plan.status === "pending") &&
-    (summary.plan.status === "pending" ||
-      recentlyEffective(plan.effective_from))
-  )
-    return <p className="text-sm text-muted">Loading your plan…</p>
   const commercial = summary.plan?.key === plan.key ? summary.plan : null
   const matchingPeriod =
     Date.parse(plan.period_start ?? "") ===
@@ -84,6 +73,29 @@ export function PlanOverviewSection({
     Date.parse(included.period_end) === Date.parse(plan.period_end ?? "")
       ? included
       : null
+  // Between a first paid month and the first monthly period the contract is
+  // pending, has no included usage yet and starts when this period ends.
+  const bridgeMonthlyStartsAt =
+    plan.kind === "subscription" &&
+    commercial?.status === "pending" &&
+    matchingPeriod &&
+    !matchingIncluded &&
+    commercial.starts_at &&
+    Date.parse(commercial.starts_at) === Date.parse(plan.period_end ?? "") &&
+    Date.parse(commercial.starts_at) > Date.now()
+      ? commercial.starts_at
+      : undefined
+  // Otherwise the summary's contract and the plan assignment disagree only
+  // briefly while a purchase or renewal settles; wait just for that window,
+  // so a lasting difference never leaves the plan loading.
+  if (
+    !bridgeMonthlyStartsAt &&
+    plan.kind === "subscription" &&
+    summary.plan &&
+    (summary.plan.key !== plan.key || summary.plan.status === "pending") &&
+    recentlyEffective(plan.effective_from)
+  )
+    return <p className="text-sm text-muted">Loading your plan…</p>
   const includedCents =
     matchingIncluded?.status === "issued"
       ? toCents(matchingIncluded.amount_usd)
@@ -126,6 +138,7 @@ export function PlanOverviewSection({
       includedUsageStatus={matchingIncluded?.status}
       allowance={allowance ?? null}
       prepaid={prepaid ?? null}
+      bridgeMonthlyStartsAt={bridgeMonthlyStartsAt}
       usageCents={matchingPeriod ? toCents(summary.current_charges_usd) : null}
       funded={funded}
       canManage={canManage}
