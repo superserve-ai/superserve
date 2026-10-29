@@ -18,3 +18,10 @@ describe("signup Pro alias", () => {
     ).toThrow()
   })
 })
+
+it.each(["starter", "starter_monthly", "starter_legacy"])(
+  "treats the %s link as asking for Developer",
+  (raw) => {
+    expect(normalizeSignupRequestedOffer(raw)).toBe("developer")
+  },
+)

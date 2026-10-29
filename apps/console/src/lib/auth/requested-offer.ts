@@ -22,6 +22,10 @@ export function normalizeSignupRequestedOffer(
   value: unknown,
 ): RequestedOffer | undefined {
   if (value === "pro") return "pro_monthly"
-  if (value === "starter") return "developer"
+  if (
+    value === "starter" ||
+    (typeof value === "string" && value.startsWith("starter_"))
+  )
+    return "developer"
   return normalizeRequestedOffer(value)
 }

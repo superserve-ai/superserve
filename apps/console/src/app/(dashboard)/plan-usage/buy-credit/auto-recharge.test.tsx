@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   teamKey: "use:11111111-1111-4111-8111-111111111111",
   ready: true,
   scope: "self",
+  planError: false,
+  refetchPlan: vi.fn(),
   plan: { key: "funded_monthly", kind: "prepaid" } as
     | Record<string, unknown>
     | undefined,
@@ -35,7 +37,11 @@ vi.mock("@/hooks/use-teams", () => ({
 }))
 
 vi.mock("@/hooks/use-billing-v2", () => ({
-  useTeamPlan: () => ({ data: mocks.plan }),
+  useTeamPlan: () => ({
+    data: mocks.plan,
+    isError: mocks.planError,
+    refetch: mocks.refetchPlan,
+  }),
 }))
 vi.mock("@/hooks/use-billing-capabilities", () => ({
   useBillingCapabilities: () => ({
@@ -111,6 +117,8 @@ const initial: PrepaidCreditSummary = {
 
 beforeEach(() => {
   mocks.plan = { key: "funded_monthly", kind: "prepaid" }
+  mocks.planError = false
+  mocks.refetchPlan.mockReset()
   mocks.params = new URLSearchParams()
   mocks.teamKey = "use:11111111-1111-4111-8111-111111111111"
   mocks.scope = "self"
@@ -535,4 +543,25 @@ it("keeps a Starter team's own purchases and auto-recharge", async () => {
   ).toBeTruthy()
   expect(screen.getByRole("switch")).toBeTruthy()
   expect(screen.getByTestId("page-title").textContent).toBe("Buy credit")
+})
+
+it("keeps the toggle for a team that isn't on Starter but has auto-recharge on", async () => {
+  mocks.plan = { key: "free", kind: "free" }
+  render(page())
+  const toggle = screen.getByRole("switch")
+  expect(toggle).toBeTruthy()
+  expect(toggle.getAttribute("aria-disabled")).not.toBe("true")
+  expect(screen.queryByRole("button", { name: /^Buy .*credit$/ })).toBeNull()
+})
+
+it("keeps the toggle and offers a retry while the plan can't be read", async () => {
+  mocks.plan = undefined
+  mocks.planError = true
+  render(page())
+  expect(screen.getByRole("switch")).toBeTruthy()
+  expect(screen.getByRole("alert").textContent).toMatch(
+    /Your plan couldn.t be loaded/,
+  )
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+  expect(mocks.refetchPlan).toHaveBeenCalled()
 })

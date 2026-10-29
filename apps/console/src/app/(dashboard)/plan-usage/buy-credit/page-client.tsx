@@ -108,7 +108,8 @@ export function BuyCreditPageClient({
   const summaryQuery = useBillingSummary(contextMatched)
   const summary = summaryQuery.isError ? undefined : summaryQuery.data
   const scope = useQueryScope()
-  const plan = useTeamPlan(contextMatched).data
+  const planQuery = useTeamPlan(contextMatched)
+  const plan = planQuery.data
   const offers = useBillingCapabilities().data?.offers
   const topoff = plan ? planTopoff(plan, offers) : null
   // A subscription funded by credit only manages Auto Topoff here; one-off
@@ -192,7 +193,19 @@ export function BuyCreditPageClient({
               canManage={canRecover}
             />
             {topoffOnly ? null : allowEntry && plan === undefined ? (
-              <p className="text-sm text-muted">Checking your plan…</p>
+              planQuery.isError ? (
+                <div
+                  role="alert"
+                  className="space-y-2 text-sm text-destructive"
+                >
+                  <p>Your plan couldn&apos;t be loaded.</p>
+                  <Button onClick={() => void planQuery.refetch()}>
+                    Try again
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-muted">Checking your plan…</p>
+              )
             ) : purchasable ? (
               <PurchaseCard
                 key={`${scope}:${teamKey}:${user?.id}:${topoff?.amount_cents}`}
@@ -251,7 +264,9 @@ export function BuyCreditPageClient({
                 </Link>
                 .
               </p>
-            ) : starterTeam || data.auto_recharge.enabled ? (
+            ) : plan === undefined ||
+              starterTeam ||
+              data.auto_recharge.enabled ? (
               <>
                 {!allowRecharge ? (
                   <p className="text-sm text-muted">

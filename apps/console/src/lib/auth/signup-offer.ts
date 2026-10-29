@@ -1,11 +1,6 @@
 // Pricing v2 signup intent from the website's ?offer=. Routing only; the
 // billing backend decides what a team may buy.
-export type SignupOffer =
-  | "free"
-  | "starter"
-  | "developer"
-  | "pro_monthly"
-  | "enterprise"
+export type SignupOffer = "free" | "developer" | "pro_monthly" | "enterprise"
 
 export const SIGNUP_OFFER_PARAM = "signup_offer"
 
@@ -32,7 +27,6 @@ export function parseSignupOffer(value: unknown): SignupOffer {
 // only that way.
 export const SIGNUP_OFFER_DESTINATIONS: Record<SignupOffer, string> = {
   free: "/sandboxes",
-  starter: "/plan-usage/buy-credit",
   developer: "/sandboxes",
   pro_monthly: "/billing/pro/",
   enterprise: "/auth/pending",
