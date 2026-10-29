@@ -131,8 +131,8 @@ describe("SignInPage", () => {
   })
 
   it.each([
-    ["starter", "/plan-usage/buy-credit"],
-    ["starter_monthly", "/plan-usage/buy-credit"],
+    ["starter", "/sandboxes"],
+    ["starter_monthly", "/sandboxes"],
     ["pro_annual", "/billing/pro/"],
     ["pro_monthly", "/billing/pro/"],
     ["free", "/sandboxes"],
@@ -156,13 +156,11 @@ describe("SignInPage", () => {
       error: null,
     })
     render(<SignInPage />)
-    await waitFor(() =>
-      expect(mockReplace).toHaveBeenCalledWith("/plan-usage/buy-credit"),
-    )
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/sandboxes"))
   })
 
   it.each([
-    ["starter_monthly", "/plan-usage/buy-credit"],
+    ["starter_monthly", "/sandboxes"],
     ["pro_annual", "/billing/pro/"],
   ])(
     "restores %s navigation for an existing session",

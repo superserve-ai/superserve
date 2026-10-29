@@ -30,6 +30,7 @@ import {
   fundedByCredit,
   planTopoff,
   TOPOFF_SETTINGS_PATH,
+  UPGRADE_PATH,
 } from "@/lib/api/billing-v2"
 import {
   type PrepaidCreditSummary,
@@ -114,6 +115,9 @@ export function BuyCreditPageClient({
   // credit purchases are a prepaid plan's.
   const topoffOnly =
     !!plan && plan.kind === "subscription" && fundedByCredit(plan, offers)
+  // Starter credit is sold only to teams already on Starter.
+  const starterTeam = plan?.kind === "prepaid"
+  const purchasable = allowEntry && starterTeam
   const canManage =
     ready && Boolean(summary?.permissions?.can_manage) && scope === "self"
   const canRecover = canManage && allowRecovery
@@ -134,13 +138,7 @@ export function BuyCreditPageClient({
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title={
-          topoffOnly
-            ? "Credit balance"
-            : allowEntry
-              ? "Buy credit"
-              : "Credit balance"
-        }
+        title={purchasable && !topoffOnly ? "Buy credit" : "Credit balance"}
       />
       <div className="flex flex-col gap-6 overflow-y-auto p-4">
         {returning && !contextMatched ? (
@@ -182,8 +180,8 @@ export function BuyCreditPageClient({
         )}
         {data && (
           <>
-            <BalanceCard data={data} showTerms={allowEntry && !topoffOnly} />
-            {allowEntry && data.checkout_idempotency_supported !== true ? (
+            <BalanceCard data={data} showTerms={purchasable && !topoffOnly} />
+            {purchasable && data.checkout_idempotency_supported !== true ? (
               <p className="text-sm text-muted">
                 Credit purchases are temporarily unavailable. Please try again
                 later.
@@ -195,7 +193,7 @@ export function BuyCreditPageClient({
             />
             {topoffOnly ? null : allowEntry && plan === undefined ? (
               <p className="text-sm text-muted">Checking your plan…</p>
-            ) : allowEntry ? (
+            ) : purchasable ? (
               <PurchaseCard
                 key={`${scope}:${teamKey}:${user?.id}:${topoff?.amount_cents}`}
                 actor={actor}
@@ -207,6 +205,17 @@ export function BuyCreditPageClient({
                   data.checkout_idempotency_supported === true
                 }
               />
+            ) : allowEntry ? (
+              <p className="text-sm text-muted">
+                Your plan doesn&apos;t include credit purchases.{" "}
+                <Link
+                  href={UPGRADE_PATH}
+                  className="underline underline-offset-4"
+                >
+                  See plans
+                </Link>
+                .
+              </p>
             ) : (
               <p className="text-sm text-muted">
                 Credit purchases are temporarily unavailable.
@@ -242,7 +251,7 @@ export function BuyCreditPageClient({
                 </Link>
                 .
               </p>
-            ) : (
+            ) : starterTeam || data.auto_recharge.enabled ? (
               <>
                 {!allowRecharge ? (
                   <p className="text-sm text-muted">
@@ -268,7 +277,7 @@ export function BuyCreditPageClient({
                   allowDisable={allowDisableRecharge}
                 />
               </>
-            )}
+            ) : null}
             <PurchaseHistory purchases={data.purchases} />
           </>
         )}

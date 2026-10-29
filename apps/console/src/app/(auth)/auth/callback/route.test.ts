@@ -1008,7 +1008,7 @@ describe("auth callback", () => {
 
       it.each([
         ["&signup_offer=developer", "developer"],
-        ["&signup_offer=starter", "starter"],
+        ["&signup_offer=starter", "developer"],
         ["&offer=pro_monthly", "pro_monthly"],
         ["", undefined],
       ])(
@@ -1042,7 +1042,7 @@ describe("auth callback", () => {
       })
 
       it.each([
-        ["&signup_offer=starter", "/plan-usage/buy-credit"],
+        ["&signup_offer=starter", "/sandboxes"],
         ["&signup_offer=free", "/sandboxes"],
       ])(
         "keeps today's destination for %s when the entry check fails or has no trial",
@@ -1192,7 +1192,7 @@ describe("auth callback", () => {
       }
     })
 
-    it("keeps selected Starter navigation when catalog entry is unavailable", async () => {
+    it("sends a Starter link to the Developer path when catalog entry is unavailable", async () => {
       mockPricingVersion.mockResolvedValue("legacy")
       const response = await GET(
         new Request(
@@ -1200,7 +1200,7 @@ describe("auth callback", () => {
         ),
       )
       expect(new URL(response.headers.get("location")!).pathname).toBe(
-        "/plan-usage/buy-credit",
+        "/sandboxes",
       )
       expect(mockUpdateSignupReview).not.toHaveBeenCalled()
     })
@@ -1481,7 +1481,7 @@ describe("auth callback", () => {
 
     it.each([
       ["free", "/sandboxes"],
-      ["starter", "/plan-usage/buy-credit"],
+      ["starter", "/sandboxes"],
       ["pro", "/billing/pro/"],
       ["pro_monthly", "/billing/pro/"],
       ["pro_annual", "/billing/pro/"],
@@ -1502,7 +1502,7 @@ describe("auth callback", () => {
       async (version) => {
         mockPricingVersion.mockResolvedValue(version)
         for (const [offer, destination] of [
-          ["starter_monthly", "/plan-usage/buy-credit"],
+          ["starter_monthly", "/sandboxes"],
           ["pro_annual", "/billing/pro/"],
         ]) {
           for (const proof of ["code=abc", "token_hash=token&type=signup"]) {
@@ -1724,7 +1724,7 @@ describe("auth callback", () => {
       },
     )
 
-    it.each(["starter", "pro_monthly"])(
+    it.each(["pro_monthly"])(
       "preserves default %s offer intent when the email directory read throws",
       async (offer) => {
         currentUser!.app_metadata = { provider: "email" }
@@ -1739,9 +1739,7 @@ describe("auth callback", () => {
         const failure = new URL(response.headers.get("location")!)
         expect(failure.searchParams.get("reason")).toBe("account_setup")
         expect(failure.searchParams.get("account")).toBe("u1")
-        expect(failure.searchParams.get("next")).toBe(
-          offer === "starter" ? "/plan-usage/buy-credit" : "/billing/pro/",
-        )
+        expect(failure.searchParams.get("next")).toBe("/billing/pro/")
         expect(mockGetSignupPlanAction).not.toHaveBeenCalled()
       },
     )
@@ -1926,7 +1924,7 @@ describe("auth callback", () => {
       )
     })
 
-    it("routes an existing customer to the selected Starter purchase", async () => {
+    it("routes an existing customer's Starter link like Developer", async () => {
       mockPricingVersion.mockResolvedValue("v2")
       const response = await GET(
         new Request(
@@ -1934,7 +1932,7 @@ describe("auth callback", () => {
         ),
       )
       expect(new URL(response.headers.get("location")!).pathname).toBe(
-        "/plan-usage/buy-credit",
+        "/sandboxes",
       )
     })
 

@@ -17,8 +17,13 @@ export function parseSignupOffer(value: unknown): SignupOffer {
   // contracts and accepted checkouts retain their backend-authorized cadence.
   if (value === "pro" || value === "pro_annual") return "pro_monthly"
   if (value === "enterprise" || value === "pro_monthly") return value
-  if (value === "developer") return "developer"
-  if (value === "starter" || value.startsWith("starter_")) return "starter"
+  // Starter links land on Developer, which replaced it for new signups.
+  if (
+    value === "developer" ||
+    value === "starter" ||
+    value.startsWith("starter_")
+  )
+    return "developer"
   return "pro_monthly"
 }
 

@@ -93,7 +93,7 @@ vi.mock("@/hooks/use-teams", () => ({
   useSwitchTeam: () => ({ mutateAsync: state.switch }),
 }))
 vi.mock("@/hooks/use-billing-v2", () => ({
-  useTeamPlan: () => ({ data: undefined }),
+  useTeamPlan: () => ({ data: { key: "starter", kind: "prepaid" } }),
 }))
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ isMutating: () => 0 }),

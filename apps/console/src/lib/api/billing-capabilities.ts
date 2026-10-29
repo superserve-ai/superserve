@@ -81,7 +81,7 @@ export function canStartAnyPlan(
 ): boolean {
   if (!capabilities) return false
   return (
-    (capabilities.fresh_entry.pro || capabilities.fresh_entry.starter) &&
+    capabilities.fresh_entry.pro &&
     pickerPlans(capabilities.offers).length > 0
   )
 }

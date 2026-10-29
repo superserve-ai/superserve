@@ -493,3 +493,46 @@ it("waits for the plan before offering a credit purchase", () => {
   expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
   expect(screen.getByText("Checking your plan…")).toBeTruthy()
 })
+
+it.each([
+  ["Free", { key: "free", kind: "free" }],
+  ["legacy pay-as-you-go", null],
+  ["Pro", { key: "pro_monthly", kind: "subscription" }],
+])("offers a %s team no Starter credit purchase", (_, plan) => {
+  mocks.plan = plan as never
+  mocks.data = {
+    ...initial,
+    auto_recharge: { ...initial.auto_recharge, enabled: false },
+  }
+  render(page())
+  expect(screen.queryByRole("button", { name: /^Buy .*credit$/ })).toBeNull()
+  expect(screen.queryByRole("textbox", { name: "Amount (USD)" })).toBeNull()
+  expect(screen.queryByRole("switch")).toBeNull()
+  expect(screen.getByTestId("page-title").textContent).toBe("Credit balance")
+})
+
+it("still lets a team that returns from an earlier purchase recover it", async () => {
+  mocks.plan = { key: "free", kind: "free" }
+  mocks.operations = [
+    {
+      id: "11111111-1111-4111-8111-111111111111",
+      amount: 1500,
+      team: mocks.teamKey,
+      actor: "actor",
+      success: "https://console.test/s",
+      cancel: "https://console.test/c",
+    },
+  ]
+  render(page())
+  expect(await screen.findByText("Resume a previous purchase")).toBeTruthy()
+})
+
+it("keeps a Starter team's own purchases and auto-recharge", async () => {
+  mocks.plan = { key: "starter", kind: "prepaid" }
+  render(page())
+  expect(
+    await screen.findByRole("button", { name: /^Buy .*credit$/ }),
+  ).toBeTruthy()
+  expect(screen.getByRole("switch")).toBeTruthy()
+  expect(screen.getByTestId("page-title").textContent).toBe("Buy credit")
+})
