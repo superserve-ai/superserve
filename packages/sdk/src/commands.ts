@@ -82,11 +82,12 @@ export class Commands {
     command: string,
     options: CommandOptions = {},
   ): Promise<CommandResult> {
-    const { cwd, env, timeoutMs, onStdout, onStderr } = options
+    const { cwd, user, env, timeoutMs, onStdout, onStderr } = options
     const isStreaming = onStdout !== undefined || onStderr !== undefined
 
     const body: Record<string, unknown> = { command }
     if (cwd !== undefined) body.working_dir = cwd
+    if (user !== undefined) body.user = user
     if (env !== undefined) body.env = env
     // API expects seconds; convert from ms
     if (timeoutMs !== undefined) body.timeout_s = Math.ceil(timeoutMs / 1000)

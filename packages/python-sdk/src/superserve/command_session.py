@@ -58,6 +58,7 @@ async def spawn_command(
     command: str,
     *,
     cwd: str | None = None,
+    user: str | None = None,
     env: dict[str, str] | None = None,
     timeout_seconds: int | None = None,
     on_stdout: Callable[[str], None] | None = None,
@@ -79,6 +80,8 @@ async def spawn_command(
     start: dict[str, Any] = {"command": command}
     if cwd is not None:
         start["working_dir"] = cwd
+    if user is not None:
+        start["user"] = user
     if env is not None:
         start["env"] = env
     if timeout_seconds is not None:

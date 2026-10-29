@@ -262,6 +262,11 @@ export interface CommandResult {
 
 export interface CommandOptions {
   cwd?: string
+  /**
+   * User to run as: a name or uid, optionally `:group` (e.g. `"root"`,
+   * `"1000"`, `"app:app"`). Defaults to the template's user.
+   */
+  user?: string
   env?: Record<string, string>
   timeoutMs?: number
   onStdout?: (data: string) => void
@@ -278,6 +283,11 @@ export interface CommandOptions {
 
 export interface SpawnOptions {
   cwd?: string
+  /**
+   * User to run as: a name or uid, optionally `:group` (e.g. `"root"`,
+   * `"1000"`, `"app:app"`). Defaults to the template's user.
+   */
+  user?: string
   env?: Record<string, string>
   /** Per-command timeout. Omit for no timeout — interactive processes are long-lived. */
   timeoutMs?: number

@@ -88,6 +88,7 @@ export async function spawnCommand(
 function buildStart(command: string, o: SpawnOptions): Record<string, unknown> {
   const start: Record<string, unknown> = { command }
   if (o.cwd !== undefined) start.working_dir = o.cwd
+  if (o.user !== undefined) start.user = o.user
   if (o.env !== undefined) start.env = o.env
   if (o.timeoutMs !== undefined) start.timeout_s = Math.ceil(o.timeoutMs / 1000)
   return start

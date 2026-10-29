@@ -20,6 +20,7 @@ const TERMINAL_MAX_MS = 4 * 3600_000
 
 interface ExecOptions {
   cwd?: string
+  user?: string
   env?: string[]
   timeout?: string
   interactive?: boolean
@@ -32,6 +33,10 @@ export function register(program: Command): void {
     .argument("<sandbox>", "Sandbox ID or name")
     .argument("<command...>", "Command to run (put it after --)")
     .option("-w, --cwd <dir>", "Working directory in the sandbox")
+    .option(
+      "-u, --user <user[:group]>",
+      "User to run as (name or uid); defaults to the template's user",
+    )
     .option("-e, --env <KEY=VAL>", "Environment variable (repeatable)", collect)
     .option(
       "--timeout <duration>",
@@ -67,6 +72,7 @@ UTF-8 text; leave it off for binary output.`,
     .action(async (sandbox: string, argv: string[], opts: ExecOptions) => {
       const start: Record<string, unknown> = { command: commandString(argv) }
       if (opts.cwd) start.working_dir = opts.cwd
+      if (opts.user) start.user = opts.user
       const env = parseKeyValues(opts.env, "--env")
       if (env) start.env = env
       if (opts.timeout !== undefined) {

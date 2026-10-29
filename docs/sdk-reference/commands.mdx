@@ -82,7 +82,7 @@ result = await session.wait()
 </CodeGroup>
 
 <Note>
-In Python, `spawn()` is on `AsyncSandbox` only; the synchronous version raises. It takes the same `cwd`, `env`, `timeoutMs` / `timeout_seconds`, `onStdout`, and `onStderr` options as `run`. Leave the timeout off for a long-lived process.
+In Python, `spawn()` is on `AsyncSandbox` only; the synchronous version raises. It takes the same `cwd`, `user`, `env`, `timeoutMs` / `timeout_seconds`, `onStdout`, and `onStderr` options as `run`. Leave the timeout off for a long-lived process.
 </Note>
 
 ## `CommandSession`
@@ -102,6 +102,7 @@ In Python the methods are awaitable (`await session.stdin.write(...)`, `await se
 | Option | Type | Description |
 |---|---|---|
 | `cwd` | `string` | Working directory. Server-side default when unset. |
+| `user` | `string` | User to run as: a name or uid, optionally `:group` (`"root"`, `"1000"`, `"app:app"`). Defaults to the template's user (the image's `USER`, or the template's `user` step). |
 | `env` | `Record<string, string>` | Env vars for this command only (merged with sandbox-wide env vars). |
 | `timeoutMs` / `timeout_seconds` | `number` | Command timeout. Only sent when specified. |
 | `onStdout` / `on_stdout` | `(data: string) => void` | Stream stdout chunks. |

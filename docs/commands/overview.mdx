@@ -83,6 +83,8 @@ result = sandbox.commands.run(
 Watch the units: TypeScript takes `timeoutMs` (milliseconds), Python takes `timeout_seconds` (seconds).
 </Note>
 
+Commands run as the template's user (the image's `USER`, or the template's `user` step). Pass `user` to run as someone else, like `docker exec -u`: a name or uid, optionally `:group`, e.g. `user: "root"` to install a package.
+
 ## Timeouts
 
 Pass a timeout to kill a command that runs longer than you expect.

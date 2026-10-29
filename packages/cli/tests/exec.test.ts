@@ -45,6 +45,8 @@ describe("exec", () => {
         SANDBOX_ID,
         "-w",
         "/app",
+        "-u",
+        "root",
         "-e",
         "A=1",
         "--timeout",
@@ -76,6 +78,7 @@ describe("exec", () => {
       {
         command: `grep 'a b' 'it'\\''s'`,
         working_dir: "/app",
+        user: "root",
         env: { A: "1" },
         timeout_s: 120,
       },

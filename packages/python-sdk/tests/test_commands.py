@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 import respx
@@ -69,6 +71,19 @@ class TestCommandsRun:
             request_body = route.calls.last.request.content
             assert b"/tmp" in request_body
             assert b"FOO" in request_body
+
+    def test_sends_user_only_when_set(self) -> None:
+        with respx.mock() as router:
+            route = router.post(f"{DATA_PLANE}/exec").mock(
+                return_value=httpx.Response(
+                    200, json={"stdout": "", "stderr": "", "exit_code": 0}
+                )
+            )
+            commands = _make_commands()
+            commands.run("apt-get update", user="root")
+            assert json.loads(route.calls.last.request.content)["user"] == "root"
+            commands.run("id")
+            assert "user" not in json.loads(route.calls.last.request.content)
 
     def test_surfaces_truncated_flag(self) -> None:
         with respx.mock() as router:
