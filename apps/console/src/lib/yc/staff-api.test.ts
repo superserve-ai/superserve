@@ -82,7 +82,12 @@ beforeEach(() => {
   f.cookie.mockReturnValue({
     value: signProof(
       "yc-staff-google-session",
-      { actor, session: "original-session", google: "google-sub" },
+      {
+        actor,
+        session: "original-session",
+        google: "google-sub",
+        email: "staff@superserve.ai",
+      },
       900,
     ),
   })

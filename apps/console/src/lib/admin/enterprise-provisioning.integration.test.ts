@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const io = vi.hoisted(() => ({
   getUser: vi.fn(),
+  getClaims: vi.fn(),
   getApplicant: vi.fn(),
   updateApplicant: vi.fn(),
   from: vi.fn(),
@@ -13,7 +14,9 @@ const io = vi.hoisted(() => ({
   cookie: vi.fn(),
 }))
 vi.mock("@/lib/supabase/server", () => ({
-  createServerClient: async () => ({ auth: { getUser: io.getUser } }),
+  createServerClient: async () => ({
+    auth: { getUser: io.getUser, getClaims: io.getClaims },
+  }),
 }))
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
@@ -43,6 +46,7 @@ import {
   recoverPromotionTeamForEnterprise,
 } from "@/lib/api/promotion-device-evidence"
 import { provisionHeldApplicantTeam } from "@/lib/api/team-provisioning"
+import { signProof } from "@/lib/yc/signed-proof"
 
 import { assignEnterprisePlan } from "./enterprise-plan"
 import {
@@ -50,7 +54,12 @@ import {
   enterpriseProvisioningContext,
   type EnterpriseProvisioningAuthority,
 } from "./enterprise-provisioning-authority"
-import { signImpersonationToken } from "./impersonation"
+import {
+  PRIVILEGED_GOOGLE_SESSION_COOKIE,
+  PRIVILEGED_GOOGLE_SESSION_PURPOSE,
+  PRIVILEGED_GOOGLE_SESSION_SECONDS,
+} from "./google-session"
+import { IMPERSONATION_COOKIE, signImpersonationToken } from "./impersonation"
 import { approveSignup } from "./signup-approval"
 
 const applicantId = "11111111-1111-4111-8111-111111111111"
@@ -148,6 +157,19 @@ beforeEach(() => {
     created_at: "2026-10-01T00:00:00Z",
     user_metadata: {},
     email: "operator@superserve.ai",
+    identities: [
+      {
+        id: "staff-google-subject",
+        user_id: staffId,
+        identity_id: "staff-google-identity",
+        provider: "google",
+        identity_data: {
+          sub: "staff-google-subject",
+          email: "operator@superserve.ai",
+          email_verified: true,
+        },
+      },
+    ],
     app_metadata: {
       provider: "google",
       permissions: [
@@ -168,6 +190,10 @@ beforeEach(() => {
     data: { user: structuredClone(staff) },
     error: null,
   }))
+  io.getClaims.mockReset().mockResolvedValue({
+    data: { claims: { sub: staffId, session_id: "staff-session" } },
+    error: null,
+  })
   io.getApplicant.mockReset().mockImplementation(async (id) => ({
     data: { user: id === applicantId ? structuredClone(applicant) : null },
     error: null,
@@ -396,8 +422,25 @@ describe("real staff-to-applicant Enterprise fulfillment callgraph", () => {
       plan_version_id: version,
       region: "use",
     }
-    io.cookie.mockReturnValue({
-      value: signImpersonationToken(teamId, Date.now() + 60_000),
+    const googleProof = signProof(
+      PRIVILEGED_GOOGLE_SESSION_PURPOSE,
+      {
+        actor: staffId,
+        session: "staff-session",
+        google: "staff-google-subject",
+        email: staff.email,
+      },
+      PRIVILEGED_GOOGLE_SESSION_SECONDS,
+    )
+    const impersonationToken = signImpersonationToken(
+      teamId,
+      Date.now() + 60_000,
+    )
+    io.cookie.mockImplementation((name) => {
+      if (name === PRIVILEGED_GOOGLE_SESSION_COOKIE)
+        return { value: googleProof }
+      if (name === IMPERSONATION_COOKIE) return { value: impersonationToken }
+      return undefined
     })
     await expect(
       provisionHeldApplicantTeam(applicant, "use", version),
