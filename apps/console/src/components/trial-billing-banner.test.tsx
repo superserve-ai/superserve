@@ -445,6 +445,20 @@ describe("TrialBillingBanner for a new team's trial", () => {
     expect(container.textContent).toBe("")
   })
 
+  it("shows nothing rather than the legacy banner when the entry state fails to load", () => {
+    mocks.entry.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+    })
+    mocks.summary.mockReturnValue({
+      data: summary({ trial: { state: "active", remaining_usd: 0.03 } }),
+    })
+    const { container } = mount()
+    expect(container.textContent).toBe("")
+    expect(mocks.payment).not.toHaveBeenCalled()
+  })
+
   it("leaves Upgrade to billing administrators", () => {
     entry("trial")
     mocks.summary.mockReturnValue({

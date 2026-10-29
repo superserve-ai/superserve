@@ -198,7 +198,7 @@ export function TrialBillingBanner() {
   const summary = ready && !summaryQuery.isError ? summaryQuery.data : undefined
   const entryQuery = useTeamEntry(true)
   useBillingReturnNotice()
-  if (entryQuery.isPending && !entryQuery.isError) return null
+  if (entryQuery.isPending || entryQuery.isError) return null
   const entry = entryQuery.data
   if (!summary?.permissions?.can_view) return null
   if (entry) return <TrialEntryBanner entry={entry} summary={summary} />
