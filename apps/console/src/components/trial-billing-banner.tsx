@@ -80,14 +80,6 @@ export function TrialBillingBanner() {
 
   const exhausted = trial.state === "exhausted"
   const urgent = exhausted || currentUrgentRunway
-  const remaining =
-    typeof trial.remaining_usd === "number" &&
-    Number.isFinite(trial.remaining_usd)
-      ? new Intl.NumberFormat("en-US", {
-          style: "currency",
-          currency: "USD",
-        }).format(trial.remaining_usd)
-      : null
 
   return (
     <div
@@ -97,7 +89,7 @@ export function TrialBillingBanner() {
         "flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b px-4 py-3 text-sm",
         urgent
           ? "border-red-500/40 bg-red-100 text-red-950 dark:bg-red-950 dark:text-red-100"
-          : "border-yellow-500/40 bg-yellow-100 text-yellow-950 dark:bg-yellow-950 dark:text-yellow-100",
+          : "border-dashed border-border bg-surface text-foreground",
       )}
     >
       <p className="min-w-0 flex-1 basis-72">
@@ -115,15 +107,8 @@ export function TrialBillingBanner() {
           </>
         ) : (
           <>
-            You&apos;re on a free trial
-            {remaining ? (
-              <>
-                {" "}
-                with <strong>{remaining} remaining</strong>
-              </>
-            ) : null}
-            . Add a payment method to unlock{" "}
-            <strong>$95 in additional credits</strong>.
+            You&apos;re on a free trial with limited usage. To use the full
+            platform, subscribe.
           </>
         )}
       </p>
@@ -133,7 +118,7 @@ export function TrialBillingBanner() {
           disabled={!available || submitting !== null}
           onClick={() => void openSession()}
         >
-          {submitting ? "Loading..." : "Add Payment"}
+          {submitting ? "Loading..." : urgent ? "Add Payment" : "Subscribe"}
         </Button>
       ) : (
         <p>Contact your team&apos;s billing administrator.</p>
