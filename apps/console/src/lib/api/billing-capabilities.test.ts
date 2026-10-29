@@ -120,3 +120,23 @@ it("needs both the entry gate and a sellable offer to start a plan", () => {
   expect(canStartPlan(closed, { key: "free", kind: "free" })).toBe(false)
   expect(canStartAnyPlan(closed)).toBe(false)
 })
+
+it("offers an upgrade from the default plans when only unrelated offers are listed", () => {
+  const unrelated = parseBillingCapabilities(
+    { ...wire("v2", true), offers: [offer("alpha_monthly", false)] },
+    `use:${team}`,
+  )
+  expect(canStartAnyPlan(unrelated)).toBe(true)
+  const upgradesOffSale = parseBillingCapabilities(
+    {
+      ...wire("v2", true),
+      offers: [
+        offer("developer_monthly", false),
+        offer("pro_monthly", false),
+        offer("alpha_monthly", true),
+      ],
+    },
+    `use:${team}`,
+  )
+  expect(canStartAnyPlan(upgradesOffSale)).toBe(false)
+})

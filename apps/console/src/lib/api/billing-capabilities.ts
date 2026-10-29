@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+import { pickerPlans } from "@/lib/billing/plan-picker"
 import {
   billingOffersSchema,
   findOffer,
@@ -79,10 +80,9 @@ export function canStartAnyPlan(
   capabilities: BillingCapabilities | undefined,
 ): boolean {
   if (!capabilities) return false
-  const offers = capabilities.offers ?? []
   return (
     (capabilities.fresh_entry.pro || capabilities.fresh_entry.starter) &&
-    (offers.length === 0 || offers.some((offer) => offer.sellable))
+    pickerPlans(capabilities.offers).length > 0
   )
 }
 
