@@ -89,7 +89,7 @@ export function TrialBillingBanner() {
         "flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b px-4 py-3 text-sm",
         urgent
           ? "border-red-500/40 bg-red-100 text-red-950 dark:bg-red-950 dark:text-red-100"
-          : "border-yellow-500/40 bg-yellow-100 text-yellow-950 dark:bg-yellow-950 dark:text-yellow-100",
+          : "border-dashed border-border bg-surface text-foreground",
       )}
     >
       <p className="min-w-0 flex-1 basis-72">

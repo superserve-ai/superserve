@@ -68,7 +68,7 @@ afterEach(() => {
 describe("TrialBillingBanner", () => {
   it("shows a subtle trial notice without the balance or a dismiss action", () => {
     mount()
-    expect(screen.getByRole("status")).toHaveClass("bg-yellow-100")
+    expect(screen.getByRole("status")).toHaveClass("bg-surface")
     expect(screen.getByRole("status")).toHaveTextContent(
       "You're on a free trial with limited usage. To use the full platform, subscribe.",
     )
@@ -84,7 +84,7 @@ describe("TrialBillingBanner", () => {
         data: summary({ trial: { state: "active", remaining_usd } }),
       })
       mount()
-      expect(screen.getByRole("status")).toHaveClass("bg-yellow-100")
+      expect(screen.getByRole("status")).toHaveClass("bg-surface")
       expect(screen.getByRole("status")).not.toHaveTextContent("has run out")
     },
   )
@@ -141,7 +141,7 @@ describe("TrialBillingBanner", () => {
   })
 
   it.each(["unknown", undefined, "over_24h"] as const)(
-    "uses yellow for runway %s",
+    "uses the neutral style for runway %s",
     (runway_state) => {
       mocks.summary.mockReturnValue({
         data: summary({
@@ -149,7 +149,7 @@ describe("TrialBillingBanner", () => {
         }),
       })
       mount()
-      expect(screen.getByRole("status")).toHaveClass("bg-yellow-100")
+      expect(screen.getByRole("status")).toHaveClass("bg-surface")
     },
   )
 
@@ -166,7 +166,7 @@ describe("TrialBillingBanner", () => {
         }),
       })
       mount()
-      expect(screen.getByRole("status")).toHaveClass("bg-yellow-100")
+      expect(screen.getByRole("status")).toHaveClass("bg-surface")
     },
   )
 
@@ -195,7 +195,7 @@ describe("TrialBillingBanner", () => {
         <TrialBillingBanner />
       </QueryClientProvider>,
     )
-    expect(screen.getByRole("status")).toHaveClass("bg-yellow-100")
+    expect(screen.getByRole("status")).toHaveClass("bg-surface")
     expect(screen.getByRole("status")).not.toHaveClass("bg-red-100")
     expect(screen.getByRole("status")).toHaveTextContent(
       "You're on a free trial with limited usage. To use the full platform, subscribe.",
@@ -223,7 +223,7 @@ describe("TrialBillingBanner", () => {
       act(() => vi.advanceTimersByTime(15 * 60_000 + skew - 1))
       expect(screen.getByRole("status")).toHaveClass("bg-red-100")
       act(() => vi.advanceTimersByTime(1))
-      expect(screen.getByRole("status")).toHaveClass("bg-yellow-100")
+      expect(screen.getByRole("status")).toHaveClass("bg-surface")
     },
   )
 
@@ -240,7 +240,7 @@ describe("TrialBillingBanner", () => {
       }),
     })
     mount()
-    expect(screen.getByRole("status")).toHaveClass("bg-yellow-100")
+    expect(screen.getByRole("status")).toHaveClass("bg-surface")
   })
 
   it("expires cached urgency at the backend freshness boundary", () => {
@@ -258,7 +258,7 @@ describe("TrialBillingBanner", () => {
     mount()
     expect(screen.getByRole("status")).toHaveClass("bg-red-100")
     act(() => vi.advanceTimersByTime(1000))
-    expect(screen.getByRole("status")).toHaveClass("bg-yellow-100")
+    expect(screen.getByRole("status")).toHaveClass("bg-surface")
   })
 
   it("refreshes on payment return without treating success as activation", () => {
