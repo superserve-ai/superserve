@@ -65,6 +65,7 @@ class Commands:
         command: str,
         *,
         cwd: str | None = None,
+        user: str | None = None,
         env: dict[str, str] | None = None,
         timeout_seconds: int | None = None,
         on_stdout: Callable[[str], None] | None = None,
@@ -77,6 +78,8 @@ class Commands:
         body: dict[str, Any] = {"command": command}
         if cwd is not None:
             body["working_dir"] = cwd
+        if user is not None:
+            body["user"] = user
         if env is not None:
             body["env"] = env
         if timeout_seconds is not None:
@@ -238,6 +241,7 @@ class AsyncCommands:
         command: str,
         *,
         cwd: str | None = None,
+        user: str | None = None,
         env: dict[str, str] | None = None,
         timeout_seconds: int | None = None,
         on_stdout: Callable[[str], None] | None = None,
@@ -247,6 +251,8 @@ class AsyncCommands:
         body: dict[str, Any] = {"command": command}
         if cwd is not None:
             body["working_dir"] = cwd
+        if user is not None:
+            body["user"] = user
         if env is not None:
             body["env"] = env
         if timeout_seconds is not None:
@@ -265,6 +271,7 @@ class AsyncCommands:
         command: str,
         *,
         cwd: str | None = None,
+        user: str | None = None,
         env: dict[str, str] | None = None,
         timeout_seconds: int | None = None,
         on_stdout: Callable[[str], None] | None = None,
@@ -300,6 +307,7 @@ class AsyncCommands:
             ),
             command,
             cwd=cwd,
+            user=user,
             env=env,
             timeout_seconds=timeout_seconds,
             on_stdout=on_stdout,

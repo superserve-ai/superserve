@@ -185,6 +185,23 @@ describe("Commands.run (sync)", () => {
     expect(body.timeout_s).toBe(3)
   })
 
+  it("sends user only when set", async () => {
+    const mock = vi.fn(async () =>
+      jsonResponse({ stdout: "", stderr: "", exit_code: 0 }),
+    )
+    vi.stubGlobal("fetch", mock)
+
+    const commands = new Commands(makeDeps())
+    await commands.run("apt-get update", { user: "root" })
+    await commands.run("id")
+
+    const bodies = mock.mock.calls.map((c) =>
+      JSON.parse((c[1] as RequestInit).body as string),
+    )
+    expect(bodies[0].user).toBe("root")
+    expect(bodies[1]).not.toHaveProperty("user")
+  })
+
   it("refreshes token + retries on AuthenticationError, then succeeds", async () => {
     let refreshCalled = 0
     const deps = makeDeps({
