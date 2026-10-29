@@ -1,11 +1,15 @@
 import { z } from "zod"
 
 import {
+  type FundingPolicy,
+  fundingPolicySchema,
   planAllowanceSchema,
   planGrantSchema,
   planKindSchema,
   planLimitsSchema,
   planMatchingSchema,
+  type PlanTopoff,
+  planTopoffSchema,
   pricingVersionSchema,
 } from "@/lib/billing/plans"
 
@@ -42,6 +46,8 @@ export const planVersionSchema = z.object({
   matching: planMatchingSchema,
   allowance: planAllowanceSchema,
   limits: planLimitsSchema,
+  funding_policy: fundingPolicySchema.optional(),
+  topoff: planTopoffSchema.optional(),
   created_at: z.string(),
   published_at: z.string().nullable(),
   retired_at: z.string().nullable(),
@@ -76,6 +82,8 @@ export interface PlanDraft {
   matching: PlanVersion["matching"]
   allowance: PlanVersion["allowance"]
   limits: PlanVersion["limits"]
+  funding_policy: FundingPolicy
+  topoff: PlanTopoff
 }
 
 export function draftFromVersion(version: PlanVersion): PlanDraft {
@@ -97,7 +105,50 @@ export function draftFromVersion(version: PlanVersion): PlanDraft {
     matching: version.matching,
     allowance: version.allowance,
     limits: version.limits,
+    funding_policy: version.funding_policy ?? "postpaid",
+    topoff: version.topoff ?? null,
   }
+}
+
+// Mirrors the catalog API: only v2 subscriptions run on funded credit, and
+// Auto Topoff needs funded credit, an amount in $5 steps and a threshold in
+// whole dollars, both up to $10,000.
+const TOPOFF_AMOUNT_STEP_CENTS = 500
+const TOPOFF_THRESHOLD_STEP_CENTS = 100
+const TOPOFF_MAX_CENTS = 1_000_000
+
+function validTopoffCents(cents: number, step: number) {
+  return (
+    Number.isInteger(cents) &&
+    cents >= step &&
+    cents <= TOPOFF_MAX_CENTS &&
+    cents % step === 0
+  )
+}
+
+export function fundingIssue(
+  draft: Pick<
+    PlanDraft,
+    "pricing_version" | "kind" | "funding_policy" | "topoff"
+  >,
+): string | null {
+  if (
+    draft.funding_policy === "prepaid" &&
+    (draft.kind !== "subscription" || draft.pricing_version !== "v2")
+  )
+    return "Only v2 subscription plans can run on funded credit."
+  if (draft.topoff && draft.funding_policy !== "prepaid")
+    return "Auto Topoff needs a plan that runs on funded credit."
+  if (
+    draft.topoff &&
+    (!validTopoffCents(draft.topoff.amount_cents, TOPOFF_AMOUNT_STEP_CENTS) ||
+      !validTopoffCents(
+        draft.topoff.threshold_cents,
+        TOPOFF_THRESHOLD_STEP_CENTS,
+      ))
+  )
+    return "Auto Topoff needs an amount in $5 steps from $5 and a threshold in whole dollars from $1, both up to $10,000."
+  return null
 }
 
 export type RegionState = "draft" | "published" | "retired" | "missing"

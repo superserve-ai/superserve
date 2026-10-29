@@ -1,13 +1,34 @@
 "use client"
 
 import { Button, cn } from "@superserve/ui"
+import { useQueryClient } from "@tanstack/react-query"
+import Link from "next/link"
 import { useCallback, useSyncExternalStore } from "react"
 
+import {
+  BannerShell,
+  ManageAction,
+} from "@/components/billing/plan-aware-banner"
+import { useQueryScope } from "@/components/query-provider"
+import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { useBillingPayment } from "@/hooks/use-billing-payment"
 import { useBillingReturnNotice } from "@/hooks/use-billing-return-notice"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
-import type { BillingTrialBalance } from "@/lib/api/billing"
+import { useTeamEntry } from "@/hooks/use-billing-v2"
+import { useUser } from "@/hooks/use-user"
+import type {
+  BillingSummaryResponse,
+  BillingTrialBalance,
+} from "@/lib/api/billing"
+import type { SignupPlanContext } from "@/lib/api/signup-plan"
+import { pickerOfferSellable, pickerPlanLabel } from "@/lib/billing/plan-picker"
+import {
+  type AwaitingPlanState,
+  planPickerPath,
+  signupCheckoutPath,
+  trialPlanOffer,
+} from "@/lib/billing/signup-checkout-paths"
 
 // SS-484 billingTrialRunway accepts observations strictly newer than 15 minutes.
 // Expire cached observations too, including when background polling is suspended.
@@ -58,36 +79,147 @@ function useCurrentUrgentRunway(trial: BillingTrialBalance | null | undefined) {
   return useSyncExternalStore(subscribe, getSnapshot, getServerUrgency)
 }
 
+function formatUsd(amount: number | null | undefined): string | null {
+  return typeof amount === "number" && Number.isFinite(amount)
+    ? new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+      }).format(amount)
+    : null
+}
+
+export type TrialStage = "trial" | "ended" | "payment_failed"
+
+// The trial's stage from its entry state and balance.
+export function trialStage(
+  entry: AwaitingPlanState,
+  trial: BillingTrialBalance | null | undefined,
+): TrialStage {
+  if (entry === "payment_failed") return "payment_failed"
+  const remaining = trial?.remaining_usd
+  if (
+    entry === "trial_ended" ||
+    trial?.state === "exhausted" ||
+    (typeof remaining === "number" &&
+      Number.isFinite(remaining) &&
+      remaining <= 0)
+  )
+    return "ended"
+  return "trial"
+}
+
+function TrialEntryBanner({
+  entry,
+  summary,
+}: {
+  entry: AwaitingPlanState
+  summary: BillingSummaryResponse
+}) {
+  const { teamKey } = useBillingContext()
+  const scope = useQueryScope()
+  const offers = useBillingCapabilities().data?.offers
+  const signup = useQueryClient().getQueryData<SignupPlanContext>([
+    "signup-plan",
+    teamKey,
+  ])
+  const user = useUser().user
+  const account = signup?.userId ?? user?.id
+  const locator = account && teamKey ? { account, team: teamKey } : null
+  const requested = trialPlanOffer(signup?.requestedOffer)
+  const selected =
+    requested && pickerOfferSellable(offers, requested) ? requested : undefined
+  const stage = trialStage(entry, summary.trial)
+  const remaining = formatUsd(summary.trial?.remaining_usd)
+  const plan = selected ? pickerPlanLabel(offers, selected) : null
+  const upgrade = plan ? `Upgrade to ${plan}` : "Upgrade"
+  const canManage = scope === "self" && summary.permissions.can_manage
+  return (
+    <BannerShell
+      tone={stage === "trial" ? "info" : "danger"}
+      label="Free trial"
+      action={
+        <ManageAction canManage={canManage}>
+          {selected && locator ? (
+            <form method="post" action={signupCheckoutPath(selected, locator)}>
+              <Button type="submit" size="sm">
+                {upgrade}
+              </Button>
+            </form>
+          ) : (
+            <Button
+              size="sm"
+              render={
+                <Link href={planPickerPath("upgrade", undefined, locator)} />
+              }
+            >
+              {upgrade}
+            </Button>
+          )}
+          {selected && locator ? (
+            <Link
+              href={planPickerPath("upgrade", selected, locator)}
+              className="self-center underline underline-offset-4"
+            >
+              Other plans
+            </Link>
+          ) : null}
+        </ManageAction>
+      }
+    >
+      {stage === "payment_failed" ? (
+        <>
+          We couldn&apos;t confirm a card for your plan. Your sandboxes are
+          paused and nothing is deleted. Upgrade to resume.
+        </>
+      ) : stage === "ended" ? (
+        <>
+          Your free trial has ended. Your sandboxes are paused and nothing is
+          deleted. Upgrade to resume.
+        </>
+      ) : (
+        <>
+          You&apos;re on a free trial
+          {remaining ? (
+            <>
+              {" "}
+              with <strong>{remaining} left</strong>
+            </>
+          ) : null}
+          . Upgrade to keep your sandboxes running once it&apos;s used up.
+        </>
+      )}
+    </BannerShell>
+  )
+}
+
 export function TrialBillingBanner() {
-  const { teamKey, ready } = useBillingContext()
+  const { ready } = useBillingContext()
   const summaryQuery = useBillingSummary()
   const summary = ready && !summaryQuery.isError ? summaryQuery.data : undefined
+  const entryQuery = useTeamEntry(true)
+  useBillingReturnNotice()
+  if (entryQuery.isPending || entryQuery.isError) return null
+  const entry = entryQuery.data
+  if (!summary?.permissions?.can_view) return null
+  if (entry) return <TrialEntryBanner entry={entry} summary={summary} />
+  return <LegacyTrialBanner summary={summary} />
+}
+
+function LegacyTrialBanner({ summary }: { summary: BillingSummaryResponse }) {
+  const { teamKey } = useBillingContext()
   const { submitting, available, openSession } = useBillingPayment(
     summary,
     teamKey,
   )
-  const trial = summary?.trial
+  const trial = summary.trial
   const currentUrgentRunway = useCurrentUrgentRunway(trial)
 
-  useBillingReturnNotice()
-
-  if (
-    !summary?.permissions?.can_view ||
-    !trial ||
-    (trial.state !== "active" && trial.state !== "exhausted")
-  )
+  if (!trial || (trial.state !== "active" && trial.state !== "exhausted"))
     return null
 
   const exhausted = trial.state === "exhausted"
   const urgent = exhausted || currentUrgentRunway
-  const remaining =
-    typeof trial.remaining_usd === "number" &&
-    Number.isFinite(trial.remaining_usd)
-      ? new Intl.NumberFormat("en-US", {
-          style: "currency",
-          currency: "USD",
-        }).format(trial.remaining_usd)
-      : null
+  const remaining = formatUsd(trial.remaining_usd)
 
   return (
     <div
@@ -103,15 +235,14 @@ export function TrialBillingBanner() {
       <p className="min-w-0 flex-1 basis-72">
         {exhausted ? (
           <>
-            Your free trial credit has run out. Add a payment method to unlock{" "}
-            <strong>$95 in credits</strong> and continue running sandboxes.
+            Your free trial credit has run out. Add a payment method to continue
+            running sandboxes.
           </>
         ) : urgent ? (
           <>
             Based on your recent usage, your trial credit may run out within the
             next 24 hours, and any running sandboxes will automatically be
-            stopped. Add a payment method to unlock{" "}
-            <strong>$95 in credits</strong> and continue running sandboxes.
+            stopped. Add a payment method to continue running sandboxes.
           </>
         ) : (
           <>
@@ -122,8 +253,8 @@ export function TrialBillingBanner() {
                 with <strong>{remaining} remaining</strong>
               </>
             ) : null}
-            . Add a payment method to unlock{" "}
-            <strong>$95 in additional credits</strong>.
+            . Add a payment method to keep running sandboxes once it&apos;s used
+            up.
           </>
         )}
       </p>

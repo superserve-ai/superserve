@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   catalogDrift,
+  fundingIssue,
   mergeCatalogs,
   needsSync,
   planGroupSync,
@@ -205,5 +206,95 @@ describe("mergeCatalogs", () => {
       ["v1", { use: [], usw: [] }],
       ["v2", { use: [], usw: ["create", "publish"] }],
     ])
+  })
+})
+
+describe("fundingIssue", () => {
+  const terms = (
+    overrides: Partial<Parameters<typeof fundingIssue>[0]> = {},
+  ) => ({
+    pricing_version: "v2" as const,
+    kind: "subscription" as const,
+    funding_policy: "prepaid" as const,
+    topoff: { amount_cents: 1500, threshold_cents: 500, default_enabled: true },
+    ...overrides,
+  })
+
+  it("accepts a funded v2 subscription with a valid Auto Topoff", () => {
+    expect(fundingIssue(terms())).toBeNull()
+    for (const threshold_cents of [100, 700, 1_000_000])
+      expect(
+        fundingIssue(
+          terms({
+            topoff: {
+              amount_cents: 1500,
+              threshold_cents,
+              default_enabled: true,
+            },
+          }),
+        ),
+      ).toBeNull()
+    expect(fundingIssue(terms({ topoff: null }))).toBeNull()
+    expect(
+      fundingIssue(terms({ funding_policy: "postpaid", topoff: null })),
+    ).toBeNull()
+  })
+
+  it.each([
+    ["prepaid credit", terms({ kind: "prepaid", topoff: null })],
+    ["legacy pricing", terms({ pricing_version: "legacy", topoff: null })],
+    ["a postpaid top-off", terms({ funding_policy: "postpaid" })],
+    [
+      "an off-step amount",
+      terms({
+        topoff: {
+          amount_cents: 1250,
+          threshold_cents: 500,
+          default_enabled: true,
+        },
+      }),
+    ],
+    [
+      "a too-small threshold",
+      terms({
+        topoff: {
+          amount_cents: 1500,
+          threshold_cents: 0,
+          default_enabled: true,
+        },
+      }),
+    ],
+    [
+      "a threshold in cents",
+      terms({
+        topoff: {
+          amount_cents: 1500,
+          threshold_cents: 150,
+          default_enabled: true,
+        },
+      }),
+    ],
+    [
+      "a too-large threshold",
+      terms({
+        topoff: {
+          amount_cents: 1500,
+          threshold_cents: 1_000_100,
+          default_enabled: true,
+        },
+      }),
+    ],
+    [
+      "a too-large amount",
+      terms({
+        topoff: {
+          amount_cents: 1_000_500,
+          threshold_cents: 500,
+          default_enabled: true,
+        },
+      }),
+    ],
+  ])("rejects %s", (_, draft) => {
+    expect(fundingIssue(draft)).not.toBeNull()
   })
 })

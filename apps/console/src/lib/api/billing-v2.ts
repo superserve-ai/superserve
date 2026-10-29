@@ -1,16 +1,31 @@
 import { z } from "zod"
 
 import {
+  type BillingOffer,
+  findOffer,
+  type FundingPolicy,
+  fundingPolicySchema,
   planCardSchema,
+  planKindSchema,
+  planLimitsSchema,
+  type PlanTopoff,
+  planTopoffSchema,
+} from "@/lib/billing/plans"
+import {
+  isAwaitingPlanState,
+  type AwaitingPlanState,
+} from "@/lib/billing/signup-checkout-paths"
+
+export {
+  describeSandboxSize,
   planKindSchema,
   planLimitsSchema,
 } from "@/lib/billing/plans"
 
-export { planKindSchema, planLimitsSchema } from "@/lib/billing/plans"
-
 const cents = z.number().int().nonnegative()
 
 export const proCheckoutTermsSchema = z.object({
+  offer_key: z.string().optional().catch(undefined),
   first_paid_pro_cycle: z.boolean(),
   accepted: z.boolean(),
   period_start: z.string().datetime({ offset: true }).optional(),
@@ -26,6 +41,20 @@ export const proCheckoutResponseSchema = z.object({
 
 export type ProCheckoutTerms = z.infer<typeof proCheckoutTermsSchema>
 
+// Saved checkout terms describe the team's open checkout, which may be for
+// another plan. A backend that doesn't name the offer predates any plan but
+// Pro being sold here.
+export function checkoutTermsFor(
+  terms: ProCheckoutTerms | undefined,
+  offerKey: string,
+): ProCheckoutTerms | undefined {
+  if (!terms?.accepted) return terms
+  const matches = terms.offer_key
+    ? terms.offer_key === offerKey
+    : offerKey.startsWith("pro_")
+  return matches ? terms : undefined
+}
+
 export const teamPlanSchema = z
   .object({
     plan: z
@@ -38,6 +67,8 @@ export const teamPlanSchema = z
           max_templates: z.number().int().nonnegative().nullable(),
         }),
         effective_from: z.string(),
+        funding_policy: fundingPolicySchema.optional().catch(undefined),
+        topoff: planTopoffSchema.optional().catch(undefined),
       })
       .nullable(),
     period: z.object({ start: z.string(), end: z.string() }),
@@ -60,8 +91,13 @@ export const teamPlanSchema = z
           ...(pro_checkout ? { pro_checkout } : {}),
           key: plan.plan_key,
           kind: plan.kind,
+          effective_from: plan.effective_from,
           name: plan.display_name,
           limits: plan.limits,
+          ...(plan.funding_policy
+            ? { funding_policy: plan.funding_policy }
+            : {}),
+          ...(plan.topoff !== undefined ? { topoff: plan.topoff } : {}),
           fee_cents: null as number | null,
           included_cents: null as number | null,
           period_start: period.start as string | null,
@@ -77,6 +113,14 @@ export const teamPlanSchema = z
               }
             : null,
         },
+  )
+
+// The new-team entry state from the plan read. Anything but a team that has
+// not paid for a plan yet, including a backend without trials, is null.
+export const teamEntrySchema = z
+  .object({ entry_state: z.unknown().optional() })
+  .transform(({ entry_state }): AwaitingPlanState | null =>
+    isAwaitingPlanState(entry_state) ? entry_state : null,
   )
 
 const decimalCents = z.number().nonnegative()
@@ -95,6 +139,8 @@ export const freeAllowanceSchema = z.object({
 
 export const prepaidBalanceSchema = z.object({
   balance_cents: z.number().int(),
+  low_balance: z.boolean().optional(),
+  balance_observed: z.boolean().optional().catch(undefined),
   auto_recharge: z.object({
     enabled: z.boolean(),
     threshold_cents: cents.nullable(),
@@ -111,23 +157,80 @@ export type TeamPlan = NonNullable<z.infer<typeof teamPlanSchema>>
 export type FreeAllowance = z.infer<typeof freeAllowanceSchema>
 export type PrepaidBalance = z.infer<typeof prepaidBalanceSchema>
 
-export const LOW_BALANCE_CENTS = 500
-
 export function isLowBalance(prepaid: PrepaidBalance): boolean {
+  if (prepaid.balance_cents <= 0) return true
+  return !prepaid.auto_recharge.enabled && prepaid.low_balance === true
+}
+
+// A balance the backend has not observed recently reads as $0, so it can't
+// say the credit ran out.
+export function balanceKnown(prepaid: PrepaidBalance): boolean {
+  return prepaid.balance_observed !== false
+}
+
+type PlanTerms = {
+  key: string
+  kind: PlanKind
+  funding_policy?: FundingPolicy
+  topoff?: PlanTopoff
+}
+
+// The team's frozen terms decide; a backend that doesn't report them falls
+// back to the current catalog offer for the same plan.
+export function planFundingPolicy(
+  plan: PlanTerms,
+  offers: readonly BillingOffer[] | undefined,
+): FundingPolicy {
+  if (plan.kind === "prepaid") return "prepaid"
   return (
-    prepaid.balance_cents <= 0 ||
-    (prepaid.balance_cents <= LOW_BALANCE_CENTS &&
-      !prepaid.auto_recharge.enabled)
+    plan.funding_policy ??
+    findOffer(offers, plan.key)?.funding_policy ??
+    "postpaid"
+  )
+}
+
+export function planTopoff(
+  plan: PlanTerms,
+  offers: readonly BillingOffer[] | undefined,
+): PlanTopoff {
+  return plan.topoff !== undefined
+    ? plan.topoff
+    : (findOffer(offers, plan.key)?.topoff ?? null)
+}
+
+// Plans that run on funded credit: prepaid credit, or a subscription that
+// spends included and topped-up credit before pausing.
+export function fundedByCredit(
+  plan: PlanTerms,
+  offers: readonly BillingOffer[] | undefined,
+): boolean {
+  return (
+    (plan.kind === "prepaid" || plan.kind === "subscription") &&
+    planFundingPolicy(plan, offers) === "prepaid"
   )
 }
 
 export const UPGRADE_PATH = "/plan-usage/upgrade"
+export const BUY_CREDIT_PATH = "/plan-usage/buy-credit"
+export const TOPOFF_SETTINGS_PATH = "/settings/#auto-topoff"
+export const PRO_UPGRADE_PATH = "/billing/pro"
 
-export const PLAN_ACTION_LINKS = {
-  starter: "/plan-usage/buy-credit",
-  pro: "/billing/pro",
-  enterprise: "https://calendly.com/superserve-ai/25-min",
-} as const
+// Plan families a team on a plan can buy from the in-app upgrade page.
+export const UPGRADE_FAMILIES = ["pro", "developer"] as const
+export type UpgradeFamily = (typeof UPGRADE_FAMILIES)[number]
+
+export function upgradeFamily(value: string | null | undefined): UpgradeFamily {
+  return value === "developer" ? "developer" : "pro"
+}
+
+export function upgradePath(family: string): string | null {
+  if (family === "pro") return PRO_UPGRADE_PATH
+  return (UPGRADE_FAMILIES as readonly string[]).includes(family)
+    ? `${PRO_UPGRADE_PATH}/?plan=${family}`
+    : null
+}
+export const ENTERPRISE_MEETING_URL =
+  "https://calendly.com/superserve-ai/25-min"
 
 export function formatCents(amount: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -138,20 +241,6 @@ export function formatCents(amount: number): string {
   }).format(amount / 100)
 }
 
-export function describeSandboxSize(limits: PlanLimits): string | null {
-  const parts = [
-    limits.max_vcpu !== null && `${limits.max_vcpu} vCPU`,
-    limits.max_memory_mib !== null &&
-      `${formatMiB(limits.max_memory_mib)} memory`,
-    limits.max_disk_mib !== null && `${formatMiB(limits.max_disk_mib)} disk`,
-  ].filter((part): part is string => typeof part === "string")
-  return parts.length ? parts.join(", ") : null
-}
-
-function formatMiB(mib: number): string {
-  return mib % 1024 === 0 ? `${mib / 1024} GiB` : `${mib} MiB`
-}
-
 export const BILLING_V2_PATHS = {
   plan: "/billing/plan",
   "free-allowance": "/billing/free-allowance",
@@ -160,6 +249,7 @@ export const BILLING_V2_PATHS = {
 
 export const catalogPlanSchema = planCardSchema.transform((card) => ({
   key: card.monthly?.offer_key ?? card.family,
+  family: card.family,
   kind: card.kind,
   name: card.name,
   price_label: card.price_label,
@@ -169,6 +259,8 @@ export const catalogPlanSchema = planCardSchema.transform((card) => ({
       ? card.allowance.amount_cents
       : card.monthly_credit_cents,
   limits: card.limits,
+  funding_policy:
+    card.funding_policy ?? (card.kind === "prepaid" ? "prepaid" : "postpaid"),
   available:
     card.kind === "prepaid" ||
     card.kind === "free" ||
@@ -233,7 +325,6 @@ export type PlanAction =
   | { type: "current" }
   | { type: "scheduled" }
   | { type: "link"; href: string; label: string }
-  | { type: "downgrade"; label: string }
   | { type: "blocked"; undoable: boolean; effectiveAt: string }
   | { type: "contact" }
   | { type: "unavailable" }
@@ -243,21 +334,26 @@ export function planAction(current: TeamPlan, target: CatalogPlan): PlanAction {
   if (current.pending_change?.plan_key === target.key)
     return { type: "scheduled" }
   if (target.kind === current.kind)
-    return target.kind === "free" ? { type: "current" } : { type: "contact" }
-  if (target.kind === "free")
-    return { type: "downgrade", label: "Switch to Free" }
+    return target.kind === "free"
+      ? { type: "current" }
+      : target.kind === "subscription"
+        ? { type: "unavailable" }
+        : { type: "contact" }
+  if (target.kind === "free") return { type: "unavailable" }
   if (current.kind === "custom") return { type: "contact" }
   if (target.kind === "custom")
     return {
       type: "link",
-      href: PLAN_ACTION_LINKS.enterprise,
+      href: ENTERPRISE_MEETING_URL,
       label: "Book a meeting",
     }
   if (
     PLAN_RANK[target.kind] > PLAN_RANK[current.kind] ||
     current.kind === "legacy_payg"
   ) {
-    if (!target.available) return { type: "unavailable" }
+    const href =
+      target.kind === "prepaid" ? BUY_CREDIT_PATH : upgradePath(target.family)
+    if (!target.available || !href) return { type: "unavailable" }
     const label = `Get ${target.name}`
     if (current.pending_change)
       return {
@@ -265,14 +361,8 @@ export function planAction(current: TeamPlan, target: CatalogPlan): PlanAction {
         undoable: current.pending_change.undoable,
         effectiveAt: current.pending_change.effective_at,
       }
-    return {
-      type: "link",
-      href:
-        target.kind === "prepaid"
-          ? PLAN_ACTION_LINKS.starter
-          : PLAN_ACTION_LINKS.pro,
-      label,
-    }
+    return { type: "link", href, label }
   }
-  return { type: "downgrade", label: `Switch to ${target.name}` }
+  // Moving down to a smaller plan isn't offered here under pricing v2.
+  return { type: "unavailable" }
 }

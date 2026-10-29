@@ -14,6 +14,8 @@ import {
 import type { SignupPlanContext } from "@/lib/api/signup-plan"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { initialPlanSelection } from "@/lib/auth/plan-preselection"
+import { getTeamOffersAction } from "@/lib/billing/plan-offers-actions"
+import type { BillingOffer } from "@/lib/billing/plans"
 
 import { PlanSelectionView, type PlanCadence } from "./plan-selection-view"
 
@@ -31,6 +33,7 @@ export function PlanSelection({
   const [freeBilling, setFreeBilling] = useState(
     initial.offer === "free" && Boolean(billingReturn),
   )
+  const [offers, setOffers] = useState<BillingOffer[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [uncertain, setUncertain] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -152,6 +155,20 @@ export function PlanSelection({
   )
 
   useEffect(() => {
+    let live = true
+    getTeamOffersAction({
+      account: initial.userId,
+      team: initial.teamKey,
+    }).then(
+      (loaded) => live && setOffers(loaded),
+      () => {},
+    )
+    return () => {
+      live = false
+    }
+  }, [initial.userId, initial.teamKey])
+
+  useEffect(() => {
     mounted.current = true
     track("viewed")
     if (billingReturn) track("checkout_returned")
@@ -249,6 +266,7 @@ export function PlanSelection({
   return (
     <PlanSelectionView
       step={step}
+      offers={offers}
       selection={selection}
       cadence={cadence}
       busy={busy}

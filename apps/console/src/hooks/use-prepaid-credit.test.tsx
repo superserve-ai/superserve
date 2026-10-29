@@ -6,7 +6,8 @@ import { startPrepaidCheckout, type PrepaidPurchase } from "@/lib/api/prepaid"
 import { useRetainedPrepaidOperations } from "./use-prepaid-credit"
 
 const api = vi.hoisted(() => vi.fn())
-vi.mock("@/lib/api/client", () => ({
+vi.mock("@/lib/api/client", async (original) => ({
+  ...(await original<typeof import("@/lib/api/client")>()),
   apiClient: (...args: unknown[]) => api(...args),
 }))
 const state = vi.hoisted(() => ({ actor: "actor", team: "use:team" }))

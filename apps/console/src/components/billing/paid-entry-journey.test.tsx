@@ -69,6 +69,10 @@ vi.mock("@/hooks/use-teams", () => ({
 vi.mock("@/hooks/use-user", () => ({
   useUser: () => ({ user: { id: "actor" } }),
 }))
+vi.mock("@/hooks/use-billing-v2", async (original) => ({
+  ...(await original<typeof import("@/hooks/use-billing-v2")>()),
+  useTeamPlan: () => ({ data: null }),
+}))
 vi.mock("@/hooks/use-pricing-version", () => ({
   usePricingVersion: () => state.pricing,
 }))
@@ -297,12 +301,17 @@ describe("actual signup preparation to paid page journey", () => {
         expect(
           screen.queryByRole("button", { name: /Buy .* credit/ }),
         ).toBeNull()
-      else
+      else {
+        fireEvent.change(
+          await screen.findByRole("textbox", { name: "Amount (USD)" }),
+          { target: { value: "7" } },
+        )
         await waitFor(() =>
           expect(
             screen.getByRole("button", { name: /Buy .* credit/ }),
           ).not.toBeDisabled(),
         )
+      }
       expect(screen.queryByText(/incomplete or invalid/)).toBeNull()
     },
   )

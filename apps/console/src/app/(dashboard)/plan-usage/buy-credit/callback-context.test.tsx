@@ -92,6 +92,9 @@ vi.mock("@/hooks/use-teams", () => ({
   }),
   useSwitchTeam: () => ({ mutateAsync: state.switch }),
 }))
+vi.mock("@/hooks/use-billing-v2", () => ({
+  useTeamPlan: () => ({ data: undefined }),
+}))
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ isMutating: () => 0 }),
   useIsMutating: () => 0,
@@ -245,7 +248,7 @@ it.each([
     ).toBe(!allowEntry)
     expect(
       Boolean(
-        screen.queryByText(/Auto-recharge changes are temporarily unavailable/),
+        screen.queryByText(/Auto Topoff changes are temporarily unavailable/),
       ),
     ).toBe(!allowRecharge)
   },

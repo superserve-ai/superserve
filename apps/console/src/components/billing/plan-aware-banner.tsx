@@ -2,16 +2,28 @@ import { Button, cn } from "@superserve/ui"
 import Link from "next/link"
 
 import {
+  balanceKnown,
+  BUY_CREDIT_PATH,
   formatCents,
+  fundedByCredit,
   isLowBalance,
-  PLAN_ACTION_LINKS,
   type PrepaidBalance,
   type TeamPlan,
+  TOPOFF_SETTINGS_PATH,
   UPGRADE_PATH,
 } from "@/lib/api/billing-v2"
+import type { BillingOffer } from "@/lib/billing/plans"
+
+export interface UpgradeChoice {
+  name: string
+  href: string
+}
 
 export interface PlanAwareBannerProps {
   plan: TeamPlan
+  upgradeChoices?: readonly UpgradeChoice[]
+  offers?: readonly BillingOffer[]
+  fundingState?: string | null
   prepaid: PrepaidBalance | null
   canManage: boolean
   canUpgrade?: boolean
@@ -19,7 +31,7 @@ export interface PlanAwareBannerProps {
   canConfigureRecharge?: boolean
 }
 
-function BannerShell({
+export function BannerShell({
   tone,
   label,
   children,
@@ -48,7 +60,7 @@ function BannerShell({
   )
 }
 
-function ManageAction({
+export function ManageAction({
   canManage,
   children,
 }: {
@@ -62,8 +74,41 @@ function ManageAction({
   )
 }
 
+function LowCreditBanner({
+  prepaid,
+  canManage,
+  canConfigureRecharge,
+}: {
+  prepaid: PrepaidBalance
+  canManage: boolean
+  canConfigureRecharge: boolean
+}) {
+  return (
+    <BannerShell
+      tone={prepaid.balance_cents <= 0 ? "danger" : "warning"}
+      label="Credit balance"
+      action={
+        canConfigureRecharge && (
+          <ManageAction canManage={canManage}>
+            <Button size="sm" render={<Link href={TOPOFF_SETTINGS_PATH} />}>
+              {prepaid.auto_recharge.disabled_reason
+                ? "Turn Auto Topoff back on"
+                : "Turn on Auto Topoff"}
+            </Button>
+          </ManageAction>
+        )
+      }
+    >
+      Your credit balance is too low. Buy usage to continue running sandboxes.
+    </BannerShell>
+  )
+}
+
 export function PlanAwareBanner({
   plan,
+  upgradeChoices = [],
+  offers,
+  fundingState,
   prepaid,
   canManage,
   canUpgrade = true,
@@ -72,25 +117,55 @@ export function PlanAwareBanner({
 }: PlanAwareBannerProps) {
   if (plan.kind === "free") {
     const running = plan.limits.max_concurrent
+    const choices = canUpgrade ? upgradeChoices : []
     return (
       <BannerShell
         tone="info"
         label="Free plan"
         action={
           <ManageAction canManage={canManage}>
-            {canUpgrade ? (
+            {!canUpgrade ? null : choices.length ? (
+              choices.map((choice, index) => (
+                <Button
+                  key={choice.href}
+                  size="sm"
+                  variant={index === 0 ? "default" : "outline"}
+                  render={<Link href={choice.href} />}
+                >
+                  Get {choice.name}
+                </Button>
+              ))
+            ) : (
               <Button size="sm" render={<Link href={UPGRADE_PATH} />}>
                 Upgrade
               </Button>
-            ) : null}
+            )}
           </ManageAction>
         }
       >
         You can run {running ?? "the default number of"} sandbox
-        {running === 1 ? "" : "es"} at a time on Free. Upgrade for bigger
-        sandboxes and more usage.
+        {running === 1 ? "" : "es"} at a time on Free.{" "}
+        {choices.length
+          ? `Upgrade to ${choices.map((choice) => choice.name).join(" or ")} for bigger sandboxes and more usage.`
+          : "Upgrade for bigger sandboxes and more usage."}
       </BannerShell>
     )
+  }
+
+  if (prepaid && !balanceKnown(prepaid)) return null
+
+  if (plan.kind === "subscription" && fundedByCredit(plan, offers)) {
+    const settled = fundingState !== "unknown" && fundingState !== "auto_topoff"
+    return prepaid &&
+      settled &&
+      !prepaid.auto_recharge.enabled &&
+      prepaid.low_balance === true ? (
+      <LowCreditBanner
+        prepaid={prepaid}
+        canManage={canManage}
+        canConfigureRecharge={canConfigureRecharge}
+      />
+    ) : null
   }
 
   if (plan.kind === "prepaid" && prepaid && isLowBalance(prepaid)) {
@@ -98,20 +173,17 @@ export function PlanAwareBanner({
     return (
       <BannerShell
         tone={empty ? "danger" : "warning"}
-        label="Starter balance"
+        label={`${plan.name} balance`}
         action={
           <ManageAction canManage={canManage}>
             {canBuyCredit ? (
-              <Button
-                size="sm"
-                render={<Link href={PLAN_ACTION_LINKS.starter} />}
-              >
+              <Button size="sm" render={<Link href={BUY_CREDIT_PATH} />}>
                 Buy credit
               </Button>
             ) : null}
             {canConfigureRecharge && !prepaid.auto_recharge.enabled && (
               <Link
-                href={PLAN_ACTION_LINKS.starter}
+                href={BUY_CREDIT_PATH}
                 className="self-center underline underline-offset-4"
               >
                 {prepaid.auto_recharge.disabled_reason
@@ -124,14 +196,14 @@ export function PlanAwareBanner({
       >
         {empty ? (
           <>
-            Your Starter balance has run out. Running sandboxes are paused
+            Your {plan.name} balance has run out. Running sandboxes are paused
             {prepaid.auto_recharge.in_flight
               ? " while a top-up is being processed."
               : " until you add credit."}
           </>
         ) : (
           <>
-            Your Starter balance is{" "}
+            Your {plan.name} balance is{" "}
             <strong>{formatCents(prepaid.balance_cents)}</strong>. Running
             sandboxes pause when it reaches $0.
           </>

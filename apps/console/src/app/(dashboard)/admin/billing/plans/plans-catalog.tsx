@@ -72,6 +72,8 @@ export const EMPTY_DRAFT: PlanDraft = {
     max_disk_mib: null,
     max_templates: null,
   },
+  funding_policy: "postpaid",
+  topoff: null,
 }
 
 export type Confirmation = {

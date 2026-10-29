@@ -21,6 +21,10 @@ vi.mock("@/lib/api/billing", () => ({
   getBillingSummary: (...args: unknown[]) => getBillingSummary(...args),
 }))
 
+vi.mock("@/hooks/use-billing-v2", () => ({
+  useTeamEntry: () => ({ data: null, isPending: false, isError: false }),
+}))
+
 vi.mock("next/navigation", () => ({ usePathname: () => "/sandboxes/" }))
 vi.mock("@superserve/ui", async () => ({
   ...(await vi.importActual<typeof import("@superserve/ui")>("@superserve/ui")),

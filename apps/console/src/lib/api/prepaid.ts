@@ -1,7 +1,5 @@
-import { apiClient } from "./client"
+import { ApiError, apiClient } from "./client"
 import { isStripeCheckoutUrl } from "./plan-checkout"
-
-export const PREPAID_STEP_CENTS = 500
 
 // Local navigation intent changed; subscribers still read only their actor/team.
 export const PREPAID_OPERATIONS_CHANGED =
@@ -39,19 +37,9 @@ export interface PrepaidCreditSummary {
   purchases: PrepaidPurchase[]
 }
 
-export const PREPAID_MAX_CENTS = 1_000_000
-
-export function validNewPrepaidCents(cents: number): boolean {
-  return validPrepaidCents(cents) && cents <= PREPAID_MAX_CENTS
-}
-
+// The backend owns the accepted amounts and explains a rejected one.
 export function validPrepaidCents(cents: number): boolean {
-  return (
-    Number.isInteger(cents) &&
-    cents >= PREPAID_STEP_CENTS &&
-    cents % PREPAID_STEP_CENTS === 0 &&
-    cents <= 100_000_000
-  )
+  return Number.isSafeInteger(cents) && cents > 0
 }
 
 export function getPrepaidCredit(): Promise<PrepaidCreditSummary> {
@@ -169,8 +157,6 @@ export async function startPrepaidCheckout(
         "Unable to recover this checkout. Check recent purchases before continuing.",
       )
   } else {
-    if (!validNewPrepaidCents(amountCents))
-      throw new Error("Enter a multiple of $5 between $5 and $10,000.")
     if (resumeOperationId !== undefined)
       throw new Error(
         "This purchase has already finished or is no longer available for recovery.",
@@ -194,20 +180,35 @@ export async function startPrepaidCheckout(
     sessionStorage.setItem(key, JSON.stringify(operation))
     notifyPrepaidOperationsChanged()
   }
-  const response = await apiClient<PrepaidCheckoutResult>(
-    "/billing/prepaid/checkout",
-    {
-      method: "POST",
-      cache: "no-store",
-      body: JSON.stringify({
-        expected_team: teamKey,
-        operation_id: operation.id,
-        amount_cents: amountCents,
-        success_url: operation.success,
-        cancel_url: operation.cancel,
-      }),
-    },
-  )
+  let response: PrepaidCheckoutResult
+  try {
+    response = await apiClient<PrepaidCheckoutResult>(
+      "/billing/prepaid/checkout",
+      {
+        method: "POST",
+        cache: "no-store",
+        body: JSON.stringify({
+          expected_team: teamKey,
+          operation_id: operation.id,
+          amount_cents: amountCents,
+          success_url: operation.success,
+          cancel_url: operation.cancel,
+        }),
+      },
+    )
+  } catch (error) {
+    // A rejected amount started no purchase, so there is nothing to resume.
+    if (
+      !retained &&
+      error instanceof ApiError &&
+      error.status === 400 &&
+      sessionStorage.getItem(key) === JSON.stringify(operation)
+    ) {
+      sessionStorage.removeItem(key)
+      notifyPrepaidOperationsChanged()
+    }
+    throw error
+  }
   if (
     response.purchase_id !== operation.id ||
     !["pending", "paid", "credited", "failed"].includes(response.state)
@@ -232,10 +233,10 @@ export function setPrepaidAutoRecharge(
 ): Promise<PrepaidCreditSummary> {
   if (
     settings.enabled &&
-    (!validNewPrepaidCents(settings.thresholdCents ?? NaN) ||
-      !validNewPrepaidCents(settings.amountCents ?? NaN))
+    (!validPrepaidCents(settings.thresholdCents ?? NaN) ||
+      !validPrepaidCents(settings.amountCents ?? NaN))
   )
-    throw new Error("Enter a multiple of $5 between $5 and $10,000.")
+    throw new Error("Enter dollar amounts above $0.")
   return apiClient<PrepaidCreditSummary>("/billing/prepaid/auto-recharge", {
     method: "PUT",
     cache: "no-store",

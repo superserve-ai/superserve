@@ -11,22 +11,54 @@ vi.mock("@/hooks/use-billing-capabilities", () => ({
             auto_recharge: true,
             choose_free: true,
           },
+          offers: mocks.offers,
         },
   }),
 }))
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { BillingSummaryResponse } from "@/lib/api/billing"
 import type { FreeAllowance, TeamPlan } from "@/lib/api/billing-v2"
 
 const mocks = vi.hoisted(() => ({
   capabilitiesUnavailable: false,
+  offers: undefined as unknown[] | undefined,
   version: vi.fn(),
   plan: vi.fn(),
   allowance: vi.fn(),
   prepaid: vi.fn(),
   pricing: vi.fn(),
+}))
+vi.mock("@/hooks/use-prepaid-credit", () => ({
+  usePrepaidCredit: () => ({
+    data: {
+      checkout_idempotency_supported: true,
+      balance_cents: 900,
+      has_saved_card: true,
+      purchases: [],
+      auto_recharge: {
+        enabled: false,
+        threshold_cents: null,
+        amount_cents: null,
+        disabled_reason: null,
+        disabled_at: null,
+        in_flight: false,
+      },
+    },
+  }),
+}))
+vi.mock("@/hooks/use-billing-context", () => ({
+  useBillingContext: () => ({
+    teamKey: "use:t",
+    cacheScope: "self",
+    ready: true,
+  }),
+}))
+vi.mock("@superserve/ui", async (original) => ({
+  ...(await original<typeof import("@superserve/ui")>()),
+  useToast: () => ({ addToast: vi.fn() }),
 }))
 vi.mock("@/components/current-plan", () => ({
   CurrentPlan: () => <div data-testid="legacy-plan" />,
@@ -94,6 +126,7 @@ function plan(overrides: Partial<TeamPlan>): TeamPlan {
     included_cents: 25000,
     period_start: "2026-10-01T00:00:00Z",
     period_end: "2026-11-01T00:00:00Z",
+    effective_from: "2026-10-01T00:00:00Z",
     pending_change: null,
     ...overrides,
   }
@@ -101,6 +134,7 @@ function plan(overrides: Partial<TeamPlan>): TeamPlan {
 
 beforeEach(() => {
   mocks.capabilitiesUnavailable = false
+  mocks.offers = undefined
   mocks.plan.mockReturnValue({ data: null, isError: false })
   mocks.allowance.mockReturnValue({ data: undefined })
   mocks.prepaid.mockReturnValue({ data: undefined })
@@ -200,6 +234,53 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     expect(screen.getByText(/\$62\.50 beyond the included usage/)).toBeTruthy()
     expect(screen.queryByText("Current plan")).toBeNull()
     expect(screen.queryByRole("link", { name: "Change plan" })).toBeNull()
+  })
+
+  it("describes a credit-funded subscription as paused when out, not billed later", () => {
+    mocks.plan.mockReturnValue({
+      data: plan({
+        funding_policy: "prepaid",
+        topoff: {
+          amount_cents: 300,
+          threshold_cents: 200,
+          default_enabled: true,
+        },
+      }),
+      isError: false,
+    })
+    mocks.prepaid.mockReturnValue({
+      data: {
+        balance_cents: 900,
+        balance_observed: true,
+        low_balance: false,
+        auto_recharge: {
+          enabled: true,
+          threshold_cents: 200,
+          amount_cents: 300,
+          disabled_reason: null,
+          disabled_at: null,
+          in_flight: false,
+        },
+      },
+    })
+    render(<PlanOverviewSection summary={summary} />)
+    expect(mocks.prepaid).toHaveBeenCalledWith(true)
+    expect(screen.getByText(/of \$250 used/)).toBeTruthy()
+    expect(screen.queryByText(/billed at usage rates/)).toBeNull()
+    expect(screen.queryByText(/end of the period/)).toBeNull()
+    expect(
+      screen.getByText(
+        /paid from Auto Topoff credit\. Running sandboxes pause/,
+      ),
+    ).toBeTruthy()
+    expect(
+      screen.getByText(
+        /Auto Topoff is on: adds \$3 when credit drops below \$2/,
+      ),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("link", { name: "Manage Auto Topoff" }),
+    ).toBeTruthy()
   })
 
   it("doesn't report usage from a different billing period", () => {
@@ -470,6 +551,13 @@ describe("PlanOverviewSection with pricing v2 on", () => {
 })
 
 describe("Pro next monthly billing period", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2026-10-20T00:00:00Z"))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
   const bridgeSummary = {
     ...summary,
     plan: {
@@ -487,6 +575,14 @@ describe("Pro next monthly billing period", () => {
     ).toBeTruthy()
     expect(screen.queryByText(/couldn't be loaded|of \$250 used/)).toBeNull()
   })
+  it("doesn't call a start that has already passed the next period", () => {
+    vi.setSystemTime(new Date("2026-11-02T00:00:00Z"))
+    mocks.plan.mockReturnValue({ data: plan({}), isError: false })
+    render(<PlanOverviewSection summary={bridgeSummary} />)
+    expect(screen.queryByText(/Next monthly billing period starts/)).toBeNull()
+    expect(screen.queryByText("Loading your plan…")).toBeNull()
+  })
+
   it("does not label the next period as the start of included usage for a first paid month", () => {
     const start = "2026-10-27T05:14:51Z"
     const end = "2026-11-27T05:14:51Z"
@@ -547,9 +643,177 @@ describe("Pro next monthly billing period", () => {
   )
 })
 
+describe("a summary that disagrees with the plan", () => {
+  const pending = {
+    ...summary,
+    plan: {
+      ...summary.plan!,
+      status: "pending",
+      starts_at: "2026-11-01T00:00:00Z",
+      included_usage: null,
+    },
+  } as BillingSummaryResponse
+
+  const recent = () => new Date(Date.now() - 60_000).toISOString()
+
+  it.each([
+    [
+      "is pending just after the plan changed",
+      {
+        ...pending,
+        plan: { ...pending.plan!, starts_at: "2026-10-01T00:00:00Z" },
+      },
+      recent(),
+    ],
+    [
+      "names another plan just after the plan changed",
+      { ...summary, plan: { ...summary.plan!, key: "other_monthly" } },
+      recent(),
+    ],
+  ])("shows loading while the summary %s", (_, changed, effective_from) => {
+    mocks.plan.mockReturnValue({
+      data: plan({ effective_from }),
+      isError: false,
+    })
+    render(<PlanOverviewSection summary={changed as BillingSummaryResponse} />)
+    expect(screen.getByText("Loading your plan…")).toBeTruthy()
+    expect(screen.queryByText(/of \$250 used|couldn't be loaded/)).toBeNull()
+  })
+
+  it("stops waiting on a pending contract once the plan has settled", () => {
+    mocks.plan.mockReturnValue({ data: plan({}), isError: false })
+    render(
+      <PlanOverviewSection
+        summary={
+          {
+            ...pending,
+            plan: { ...pending.plan!, starts_at: "2026-10-01T00:00:00Z" },
+          } as BillingSummaryResponse
+        }
+      />,
+    )
+    expect(screen.queryByText("Loading your plan…")).toBeNull()
+  })
+
+  it.each([
+    ["a renewal under another key", "pro_annual", "active"],
+    ["a lapsed contract falling back to Free", "free", "active"],
+    ["a trial fallback", "trial", "trial"],
+  ])("renders %s normally once the plan has settled", (_, key, status) => {
+    mocks.plan.mockReturnValue({
+      data: plan({ key: "yc_2026" }),
+      isError: false,
+    })
+    render(
+      <PlanOverviewSection
+        summary={
+          {
+            ...summary,
+            plan: { ...summary.plan!, key, status },
+          } as BillingSummaryResponse
+        }
+      />,
+    )
+    expect(screen.queryByText("Loading your plan…")).toBeNull()
+    expect(screen.getByText("Usage couldn't be loaded.")).toBeTruthy()
+  })
+
+  it("leaves credit plans alone, which have no contract to compare", () => {
+    mocks.plan.mockReturnValue({
+      data: plan({ kind: "prepaid" }),
+      isError: false,
+    })
+    render(<PlanOverviewSection summary={pending} />)
+    expect(screen.queryByText("Loading your plan…")).toBeNull()
+  })
+})
+
 describe("Settings plan details", () => {
+  it("manages Auto Topoff here and says how to cancel a credit-funded plan", () => {
+    mocks.plan.mockReturnValue({
+      data: plan({
+        funding_policy: "prepaid",
+        topoff: {
+          amount_cents: 300,
+          threshold_cents: 200,
+          default_enabled: true,
+        },
+      }),
+      isError: false,
+    })
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PlanOverviewSection summary={summary} details />
+      </QueryClientProvider>,
+    )
+    expect(document.getElementById("auto-topoff")).toBeTruthy()
+    expect(screen.getByRole("switch")).toBeTruthy()
+    expect(screen.getByText(/To cancel, contact support/).textContent).toBe(
+      "To cancel, contact support at support@superserve.ai.",
+    )
+  })
+
+  it("scrolls to Auto Topoff once it loads when a link asked for it", () => {
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    window.history.replaceState({}, "", "/settings/#auto-topoff")
+    mocks.plan.mockReturnValue({
+      data: plan({ funding_policy: "prepaid", topoff: null }),
+      isError: false,
+    })
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PlanOverviewSection summary={summary} details />
+      </QueryClientProvider>,
+    )
+    expect(scroll).toHaveBeenCalledOnce()
+    expect(scroll.mock.contexts[0]).toBe(document.getElementById("auto-topoff"))
+    window.history.replaceState({}, "", "/")
+  })
+
+  it("follows the catalog family over funding for how to cancel", () => {
+    mocks.offers = [
+      {
+        offer_key: "developer_monthly",
+        family: "developer",
+        display_name: "Builder",
+        price_cents: 900,
+        interval_months: 1,
+        included_credit_cents: 900,
+        funding_policy: "postpaid",
+        topoff: null,
+        sellable: true,
+      },
+    ]
+    mocks.plan.mockReturnValue({
+      data: plan({ key: "developer_monthly" }),
+      isError: false,
+    })
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PlanOverviewSection summary={summary} details />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByText(/To cancel/).textContent).toBe(
+      "To cancel, contact support at support@superserve.ai.",
+    )
+  })
+
+  it("points Pro teams to priority Slack or email to cancel", () => {
+    mocks.plan.mockReturnValue({ data: plan({}), isError: false })
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PlanOverviewSection summary={summary} details />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByText(/To cancel/).textContent).toBe(
+      "To cancel, contact support in your priority Slack channel or at support@superserve.ai.",
+    )
+    expect(document.getElementById("auto-topoff")).toBeNull()
+  })
+
   it.each([0, 3])(
-    "shows the authoritative Free template cap %s without usage or guessing",
+    "never shows the internal template cap %s, usage or guesses",
     (max_templates) => {
       mocks.plan.mockReturnValue({
         data: plan({
@@ -561,9 +825,8 @@ describe("Settings plan details", () => {
       })
       render(<PlanOverviewSection summary={summary} details />)
       expect(screen.getByText("Free")).toBeTruthy()
-      expect(
-        screen.getByText("Custom templates").nextElementSibling?.textContent,
-      ).toBe(String(max_templates))
+      expect(screen.queryByText("Custom templates")).toBeNull()
+      expect(screen.queryByText(/disk/)).toBeNull()
       expect(
         screen.getByRole("link", { name: "Change plan" }).getAttribute("href"),
       ).toBe("/plan-usage/upgrade")
@@ -623,4 +886,32 @@ it("keeps Settings recovery and recharge-disable navigation when capabilities ar
   expect(
     screen.getByRole("link", { name: "Manage auto-recharge" }),
   ).toHaveAttribute("href", "/plan-usage/buy-credit")
+})
+
+it("doesn't promise postpaid overages for a credit-funded plan", () => {
+  mocks.plan.mockReturnValue({
+    data: plan({
+      key: "developer_monthly",
+      name: "Developer",
+      funding_policy: "prepaid",
+      topoff: {
+        amount_cents: 2500,
+        threshold_cents: 1000,
+        default_enabled: false,
+      },
+    }),
+    isError: false,
+  })
+  render(
+    <PlanOverviewSection
+      summary={{
+        ...summary,
+        plan: { ...summary.plan!, key: "developer_monthly" },
+      }}
+    />,
+  )
+  expect(
+    screen.queryByText(/beyond the included usage, billed at usage rates/),
+  ).toBeNull()
+  expect(screen.queryByText(/at the end of the period/)).toBeNull()
 })

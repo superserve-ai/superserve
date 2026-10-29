@@ -30,8 +30,8 @@ export function PendingStarterPayment({
         Finish or cancel your credit purchase
       </h2>
       <p className="text-sm">
-        You have an unfinished Starter credit purchase. Resume it, or cancel the
-        unpaid checkout{" "}
+        You have an unfinished credit purchase. Resume it, or cancel the unpaid
+        checkout{" "}
         {choosingPro
           ? "before choosing Pro"
           : "before starting another payment"}

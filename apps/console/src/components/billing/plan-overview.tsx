@@ -7,14 +7,19 @@ import type {
   BillingPricingResponse,
 } from "@/lib/api/billing"
 import {
+  fundedByCredit,
+  balanceKnown,
+  BUY_CREDIT_PATH,
   describeSandboxSize,
+  ENTERPRISE_MEETING_URL,
   formatCents,
   type FreeAllowance,
-  PLAN_ACTION_LINKS,
   type PrepaidBalance,
   type TeamPlan,
+  TOPOFF_SETTINGS_PATH,
   UPGRADE_PATH,
 } from "@/lib/api/billing-v2"
+import { type BillingOffer, findOffer } from "@/lib/billing/plans"
 
 const EYEBROW =
   "font-mono text-[10px] font-semibold tracking-[0.18em] text-muted uppercase"
@@ -207,7 +212,13 @@ export function FreeAllowancePanel({
   )
 }
 
-export function PrepaidPanel({ prepaid }: { prepaid: PrepaidBalance | null }) {
+export function PrepaidPanel({
+  prepaid,
+  funded = false,
+}: {
+  prepaid: PrepaidBalance | null
+  funded?: boolean
+}) {
   if (!prepaid)
     return (
       <Panel title="Credit balance" id="credit">
@@ -215,6 +226,28 @@ export function PrepaidPanel({ prepaid }: { prepaid: PrepaidBalance | null }) {
       </Panel>
     )
   const recharge = prepaid.auto_recharge
+  if (funded)
+    return (
+      <Panel title="Credit balance" id="credit">
+        <p className="text-3xl font-medium tracking-tight text-foreground">
+          {balanceKnown(prepaid)
+            ? formatCents(Math.max(prepaid.balance_cents, 0))
+            : "Updating…"}
+        </p>
+        <p className="text-sm text-muted">
+          {recharge.enabled &&
+          recharge.amount_cents !== null &&
+          recharge.threshold_cents !== null
+            ? `Auto Topoff is on: adds ${formatCents(recharge.amount_cents)} when credit drops below ${formatCents(recharge.threshold_cents)}.`
+            : recharge.disabled_reason
+              ? "Auto Topoff was turned off. Running sandboxes pause when credit runs out."
+              : "Auto Topoff is off. Running sandboxes pause when credit runs out."}
+        </p>
+        {recharge.in_flight ? (
+          <p className="text-sm text-muted">A top-up is being processed.</p>
+        ) : null}
+      </Panel>
+    )
   return (
     <Panel title="Credit balance" id="credit">
       <p
@@ -247,11 +280,13 @@ export function IncludedUsagePanel({
   usageCents,
   status,
   bridgeMonthlyStartsAt,
+  funded = false,
 }: {
   plan: TeamPlan
   usageCents: number | null
   status?: BillingIncludedUsage["status"]
   bridgeMonthlyStartsAt?: string
+  funded?: boolean
 }) {
   const included = plan.included_cents
   return (
@@ -277,14 +312,21 @@ export function IncludedUsagePanel({
             </span>
           </p>
           <Meter value={usageCents} max={included} tone="normal" />
-          <p className="text-sm text-muted">
-            {usageCents > included
-              ? `${formatCents(usageCents - included)} beyond the included usage, billed at usage rates`
-              : "Usage beyond this is billed at usage rates"}
-            {plan.period_end
-              ? ` at the end of the period on ${date(plan.period_end)}.`
-              : "."}
-          </p>
+          {funded ? (
+            <p className="text-sm text-muted">
+              Usage beyond this is paid from Auto Topoff credit. Running
+              sandboxes pause when credit runs out.
+            </p>
+          ) : (
+            <p className="text-sm text-muted">
+              {usageCents > included
+                ? `${formatCents(usageCents - included)} beyond the included usage, billed at usage rates`
+                : "Usage beyond this is billed at usage rates"}
+              {plan.period_end
+                ? ` at the end of the period on ${date(plan.period_end)}.`
+                : "."}
+            </p>
+          )}
         </>
       )}
     </Panel>
@@ -297,18 +339,67 @@ export interface PlanOverviewProps {
   prepaid: PrepaidBalance | null
   usageCents: number | null
   includedUsageStatus?: BillingIncludedUsage["status"]
-  bridgeMonthlyStartsAt?: string
   canManage: boolean
   canPurchase?: boolean
   allowancePricing?: BillingPricingResponse | null
+  bridgeMonthlyStartsAt?: string
+  funded?: boolean
+}
+
+const SUPPORT_EMAIL = "support@superserve.ai"
+
+export type SupportChannel = "email" | "priority"
+
+// Developer is supported by email and Pro by priority Slack or email; a plan
+// the catalog doesn't name follows its funding.
+export function supportChannel(
+  plan: TeamPlan,
+  offers: readonly BillingOffer[] | undefined,
+): SupportChannel {
+  const family = findOffer(offers, plan.key)?.family
+  if (family === "developer") return "email"
+  if (family === "pro") return "priority"
+  return fundedByCredit(plan, offers) ? "email" : "priority"
+}
+
+// How a team on a self-serve subscription reaches support to change or
+// cancel its plan.
+export function SupportContact({
+  channel,
+  action,
+}: {
+  channel: SupportChannel
+  action: string
+}) {
+  const email = (
+    <a
+      href={`mailto:${SUPPORT_EMAIL}`}
+      className="underline underline-offset-4"
+    >
+      {SUPPORT_EMAIL}
+    </a>
+  )
+  return (
+    <p className="text-sm text-muted">
+      To {action}, contact support{" "}
+      {channel === "email" ? (
+        <>at {email}</>
+      ) : (
+        <>in your priority Slack channel or at {email}</>
+      )}
+      .
+    </p>
+  )
 }
 
 export function PlanDetails({
   plan,
   canManage,
+  cancelChannel = "priority",
 }: {
   plan: TeamPlan
   canManage: boolean
+  cancelChannel?: SupportChannel
 }) {
   const size = describeSandboxSize(plan.limits)
   const pending = plan.pending_change
@@ -340,14 +431,6 @@ export function PlanDetails({
             <dd className="text-foreground">{size}</dd>
           </>
         ) : null}
-        {plan.limits.max_templates !== null ? (
-          <>
-            <dt className="text-muted">Custom templates</dt>
-            <dd className="text-foreground">
-              {plan.limits.max_templates.toLocaleString("en-US")}
-            </dd>
-          </>
-        ) : null}
       </dl>
       {canManage ? (
         <div className="flex flex-wrap gap-3">
@@ -362,12 +445,15 @@ export function PlanDetails({
             <Button
               size="sm"
               variant="outline"
-              render={<Link href={PLAN_ACTION_LINKS.starter} />}
+              render={<Link href={BUY_CREDIT_PATH} />}
             >
               Manage auto-recharge
             </Button>
           ) : null}
         </div>
+      ) : null}
+      {plan.kind === "subscription" ? (
+        <SupportContact channel={cancelChannel} action="cancel" />
       ) : null}
     </div>
   )
@@ -379,10 +465,11 @@ export function PlanOverview({
   prepaid,
   usageCents,
   includedUsageStatus,
-  bridgeMonthlyStartsAt,
   allowancePricing,
   canManage,
   canPurchase = true,
+  bridgeMonthlyStartsAt,
+  funded = false,
 }: PlanOverviewProps) {
   return (
     <section
@@ -400,12 +487,27 @@ export function PlanOverview({
         ) : plan.kind === "prepaid" ? (
           <PrepaidPanel prepaid={prepaid} />
         ) : plan.kind === "subscription" ? (
-          <IncludedUsagePanel
-            plan={plan}
-            usageCents={usageCents}
-            status={includedUsageStatus}
-            bridgeMonthlyStartsAt={bridgeMonthlyStartsAt}
-          />
+          <>
+            <IncludedUsagePanel
+              plan={plan}
+              usageCents={usageCents}
+              status={includedUsageStatus}
+              bridgeMonthlyStartsAt={bridgeMonthlyStartsAt}
+              funded={funded}
+            />
+            {funded ? <PrepaidPanel prepaid={prepaid} funded /> : null}
+            {funded && canManage ? (
+              <div className="px-5 pb-5 sm:px-6 sm:pb-6">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  render={<Link href={TOPOFF_SETTINGS_PATH} />}
+                >
+                  Manage Auto Topoff
+                </Button>
+              </div>
+            ) : null}
+          </>
         ) : (
           <Panel title="Billing">
             <p className="text-sm text-muted">
@@ -413,7 +515,7 @@ export function PlanOverview({
                 <>
                   Billed under your agreement.{" "}
                   <Link
-                    href={PLAN_ACTION_LINKS.enterprise}
+                    href={ENTERPRISE_MEETING_URL}
                     className="underline underline-offset-4"
                   >
                     Contact us
@@ -434,11 +536,7 @@ export function PlanOverview({
               size="sm"
               render={
                 <Link
-                  href={
-                    plan.kind === "free"
-                      ? UPGRADE_PATH
-                      : PLAN_ACTION_LINKS.starter
-                  }
+                  href={plan.kind === "free" ? UPGRADE_PATH : BUY_CREDIT_PATH}
                 />
               }
             >

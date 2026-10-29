@@ -139,6 +139,25 @@ it("replays an accepted checkout after lost response with frozen team, actor, of
   )
   expect(JSON.parse(api.mock.calls[2][1].body)).toEqual(original)
 })
+it("replays an accepted Developer checkout after a lost response", async () => {
+  api.mockRejectedValueOnce(new Error("lost response"))
+  await expect(
+    startProCheckout(
+      "use:team",
+      "developer_monthly",
+      "https://console.test/billing/pro?team=use%3Ateam&plan=developer",
+      "actor",
+    ),
+  ).rejects.toThrow("lost response")
+  const original = JSON.parse(api.mock.calls[0][1].body)
+  expect(original.offer).toBe("developer_monthly")
+  api.mockResolvedValue({ url: "https://checkout.stripe.com/original" })
+  await expect(resumeProCheckout("use:team", "actor")).resolves.toBe(
+    "https://checkout.stripe.com/original",
+  )
+  expect(JSON.parse(api.mock.calls[1][1].body)).toEqual(original)
+})
+
 it("does not create a fresh operation while checking a closed-entry or different-account recovery", async () => {
   await expect(resumeProCheckout("use:team", "actor")).resolves.toBeNull()
   expect(api).not.toHaveBeenCalled()

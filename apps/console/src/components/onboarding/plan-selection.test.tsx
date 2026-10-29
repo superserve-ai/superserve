@@ -25,6 +25,9 @@ vi.mock("@/lib/api/billing-stripe", () => ({
   createStripeCheckoutSession: vi.fn(),
 }))
 vi.mock("posthog-js", () => ({ default: { capture: vi.fn() } }))
+vi.mock("@/lib/billing/plan-offers-actions", () => ({
+  getTeamOffersAction: async () => null,
+}))
 
 const selecting: SignupPlanContext = {
   userId: "user",

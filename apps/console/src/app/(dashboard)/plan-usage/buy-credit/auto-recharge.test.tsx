@@ -21,6 +21,9 @@ const mocks = vi.hoisted(() => ({
   teamKey: "use:11111111-1111-4111-8111-111111111111",
   ready: true,
   scope: "self",
+  plan: { key: "funded_monthly", kind: "prepaid" } as
+    | Record<string, unknown>
+    | undefined,
 }))
 
 vi.mock("@/lib/api/starter-checkout-recovery", () => ({
@@ -31,13 +34,36 @@ vi.mock("@/hooks/use-teams", () => ({
   useSwitchTeam: () => ({ mutateAsync: vi.fn() }),
 }))
 
+vi.mock("@/hooks/use-billing-v2", () => ({
+  useTeamPlan: () => ({ data: mocks.plan }),
+}))
+vi.mock("@/hooks/use-billing-capabilities", () => ({
+  useBillingCapabilities: () => ({
+    data: {
+      offers: [
+        {
+          offer_key: "funded_monthly",
+          topoff: {
+            amount_cents: 2500,
+            threshold_cents: 1000,
+            default_enabled: true,
+          },
+        },
+      ],
+    },
+  }),
+}))
 vi.mock("next/navigation", () => ({
   useSearchParams: () => mocks.params,
 }))
 vi.mock("@/components/query-provider", () => ({
   useQueryScope: () => mocks.scope,
 }))
-vi.mock("@/components/page-header", () => ({ PageHeader: () => null }))
+vi.mock("@/components/page-header", () => ({
+  PageHeader: ({ title }: { title: string }) => (
+    <p data-testid="page-title">{title}</p>
+  ),
+}))
 vi.mock("@/hooks/use-billing-context", () => ({
   useBillingContext: () => ({
     teamKey: mocks.teamKey,
@@ -84,6 +110,7 @@ const initial: PrepaidCreditSummary = {
 }
 
 beforeEach(() => {
+  mocks.plan = { key: "funded_monthly", kind: "prepaid" }
   mocks.params = new URLSearchParams()
   mocks.teamKey = "use:11111111-1111-4111-8111-111111111111"
   mocks.scope = "self"
@@ -437,4 +464,32 @@ it("keeps fresh Starter entry fenced when recovery discovery is explicitly denie
   fireEvent.click(buy)
   expect(mocks.checkout).not.toHaveBeenCalled()
   expect(mocks.recover).not.toHaveBeenCalled()
+})
+
+it("sends a subscription funded by credit to Settings for Auto Topoff", () => {
+  mocks.plan = {
+    key: "funded_monthly",
+    kind: "subscription",
+    funding_policy: "prepaid",
+    topoff: {
+      amount_cents: 2500,
+      threshold_cents: 1000,
+      default_enabled: true,
+    },
+  }
+  render(page())
+  expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
+  expect(screen.getByTestId("page-title").textContent).toBe("Credit balance")
+  expect(screen.queryByRole("switch")).toBeNull()
+  expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute(
+    "href",
+    expect.stringMatching(/^\/settings\/?#auto-topoff$/),
+  )
+})
+
+it("waits for the plan before offering a credit purchase", () => {
+  mocks.plan = undefined
+  render(page())
+  expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
+  expect(screen.getByText("Checking your plan…")).toBeTruthy()
 })

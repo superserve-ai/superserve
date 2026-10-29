@@ -5,7 +5,7 @@ import { safeReturnPath } from "@/lib/billing/return-path"
 import { ProPayment } from "./pro-payment"
 
 export const metadata: Metadata = {
-  title: "Upgrade to Pro",
+  title: "Upgrade your plan",
 }
 
 export default async function ProPaymentPage({

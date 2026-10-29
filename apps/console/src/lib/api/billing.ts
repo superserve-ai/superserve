@@ -56,7 +56,8 @@ export interface BillingIncludedUsage {
 export interface BillingPlan {
   key: string
   name: string
-  status: "active" | "pending"
+  // A team on its trial reports the "trial" plan with its entry state.
+  status: "active" | "pending" | "trial" | "trial_ended" | "payment_failed"
   price_usd: number | null
   billing_interval_months: number | null
   starts_at: string | null

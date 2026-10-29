@@ -4,6 +4,11 @@ import { Button, cn } from "@superserve/ui"
 import type { ReactNode } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
+import {
+  type BillingOffer,
+  findOffer,
+  formatUsdCents,
+} from "@/lib/billing/plans"
 
 export type PlanCadence = "monthly" | "annual"
 export type PlanStep = "plans" | "free-billing" | "payment-pending"
@@ -23,6 +28,7 @@ export interface PlanSelectionViewProps {
   onBack: () => void
   onCheckPayment: () => void
   onCancelPayment: () => void
+  offers?: readonly BillingOffer[] | null
 }
 
 function Benefits({ children }: { children: ReactNode }) {
@@ -59,6 +65,8 @@ function Card({
 
 export function PlanSelectionView(props: PlanSelectionViewProps) {
   const { step, selection, cadence, busy, error } = props
+  const proOffer = findOffer(props.offers ?? undefined, `pro_${cadence}`)
+  const proIncluded = proOffer?.included_credit_cents
   const choosing = step === "plans"
   const pending = step === "payment-pending"
   return (
@@ -120,7 +128,7 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
             ? "Start small or build at scale. Choose the plan that fits your team."
             : pending
               ? "Your account is ready. We’re confirming your Pro payment before finishing setup."
-              : "Add a payment method for pay-as-you-go usage, or start with your $5 trial credit. No subscription fee."}
+              : "Add a payment method for pay-as-you-go usage, or start with your trial credit. No subscription fee."}
         </p>
 
         {error ? (
@@ -155,12 +163,11 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
               <div className="mt-8 border-t border-dashed border-border pt-6">
                 <Benefits>
                   <li>
-                    $5 to start, plus $95 when you add billing, if eligible
+                    Trial credit to start, plus more when you add billing, if
+                    eligible
                   </li>
-                  <li>Up to 20 concurrent sandboxes</li>
                   <li>No time limit on sandboxes</li>
                   <li>Standard usage rates after credit</li>
-                  <li>Up to 2 vCPU, 2 GiB memory, 8 GiB disk per sandbox</li>
                 </Benefits>
               </div>
             </Card>
@@ -189,18 +196,26 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
                 ))}
               </fieldset>
               <div className="mt-4 min-h-16">
-                <p>
-                  <span className="text-4xl font-medium">
-                    {cadence === "annual" ? "$1,000" : "$1,200"}
-                  </span>
-                  <span className="text-muted-foreground ml-2 font-mono text-xs">
-                    / MONTH
-                  </span>
-                </p>
+                {proOffer ? (
+                  <p>
+                    <span className="text-4xl font-medium">
+                      {formatUsdCents(
+                        Math.round(
+                          proOffer.price_cents / proOffer.interval_months,
+                        ),
+                      )}
+                    </span>
+                    <span className="text-muted-foreground ml-2 font-mono text-xs">
+                      / MONTH
+                    </span>
+                  </p>
+                ) : null}
                 <p className="text-muted-foreground mt-2 font-mono text-xs uppercase">
-                  {cadence === "annual"
-                    ? "$12,000 billed annually · Save 17%"
-                    : "$1,200 billed monthly"}
+                  {proOffer && cadence === "annual"
+                    ? `${formatUsdCents(proOffer.price_cents)} billed annually`
+                    : cadence === "annual"
+                      ? "Billed annually"
+                      : "Billed monthly"}
                 </p>
               </div>
               <p className="text-muted-foreground mt-2 min-h-16 text-sm leading-relaxed">
@@ -218,10 +233,14 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
                   Everything in Free, plus:
                 </p>
                 <Benefits>
-                  <li>$1,000 in metered usage included each month</li>
+                  {proIncluded ? (
+                    <li>
+                      {formatUsdCents(proIncluded)} in metered usage included
+                      each month
+                    </li>
+                  ) : null}
                   <li>Priority support</li>
-                  <li>Up to 1,000 concurrent sandboxes</li>
-                  <li>Up to 16 vCPU, 64 GiB memory, 64 GiB disk per sandbox</li>
+                  <li>Higher concurrency and bigger sandboxes</li>
                 </Benefits>
                 <p className="text-muted-foreground mt-6 text-xs leading-relaxed">
                   Free signup credits do not stack with Pro. Usage beyond the
@@ -312,8 +331,8 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
             <h2 className="text-xl font-medium">Free · Pay as you go</h2>
             <p className="text-muted-foreground mt-4 text-sm leading-relaxed">
               Adding a payment method activates pay-as-you-go billing and
-              replaces your $5 trial with $95 in promotional credit, if
-              eligible. You can also skip and add billing later.
+              replaces your trial credit with promotional credit, if eligible.
+              You can also skip and add billing later.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Button disabled={busy} onClick={props.onAddCard}>

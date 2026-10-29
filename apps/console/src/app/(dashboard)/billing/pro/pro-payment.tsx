@@ -22,7 +22,12 @@ import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { usePendingStarterCheckout } from "@/hooks/use-pending-starter-checkout"
 import { useTeams } from "@/hooks/use-teams"
 import { useUser } from "@/hooks/use-user"
-import { proCheckoutResponseSchema } from "@/lib/api/billing-v2"
+import { canStartPlan } from "@/lib/api/billing-capabilities"
+import {
+  checkoutTermsFor,
+  proCheckoutResponseSchema,
+  upgradeFamily,
+} from "@/lib/api/billing-v2"
 import { ApiError, apiClient } from "@/lib/api/client"
 import {
   isStripeCheckoutUrl,
@@ -40,7 +45,7 @@ import {
   checkoutRecoveryPath,
   genericBillingReturnState,
 } from "@/lib/billing/checkout-return"
-import { planCard } from "@/lib/billing/plans"
+import { findOffer, planCard } from "@/lib/billing/plans"
 
 const CONFIRM_ATTEMPTS = 5
 
@@ -66,6 +71,7 @@ function ProPaymentContext({
     genericBillingReturnState(new URLSearchParams(params.toString())) !== null
   const billingReturn = params.has("team") ? suppliedBillingReturn : undefined
   const callbackPath = `/billing/pro/?${params.toString()}`
+  const family = upgradeFamily(params.get("plan"))
   const legacyGenericReturn =
     !params.has("team") &&
     genericBillingReturnState(
@@ -126,7 +132,8 @@ function ProPaymentContext({
   })
   const capabilities = useBillingCapabilities()
   const plansQuery = { ...capabilities, data: capabilities.data?.catalog }
-  const pro = planCard(plansQuery.data, "pro")
+  const pro = planCard(plansQuery.data, family)
+  const planName = pro?.name ?? (family === "developer" ? "Developer" : "Pro")
   const summaryQuery = useBillingSummary(!!team)
   const canRecover =
     ready &&
@@ -138,7 +145,10 @@ function ProPaymentContext({
     capabilities.data?.actions?.recover_payment !== false
   const canContinue =
     canRecover &&
-    capabilities.data?.fresh_entry.pro === true &&
+    canStartPlan(capabilities.data, {
+      key: `${family}_monthly`,
+      kind: "subscription",
+    }) &&
     !summaryQuery.isError &&
     Boolean(actor && summaryQuery.data?.permissions?.can_manage)
   const plan = summaryQuery.isError ? undefined : summaryQuery.data?.plan
@@ -173,8 +183,9 @@ function ProPaymentContext({
     status.searchParams.set("team", paymentTeam)
     status.searchParams.set("return", returnTo)
     status.searchParams.set("billing", "success")
+    if (family !== "pro") status.searchParams.set("plan", family)
     return checkoutRecoveryPath(status.pathname + status.search) ?? callbackPath
-  }, [returning, paymentTeam, returnTo, callbackPath, checkoutTeam])
+  }, [returning, paymentTeam, returnTo, callbackPath, checkoutTeam, family])
   const [conflict, setConflict] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inFlight = useRef(false)
@@ -469,9 +480,10 @@ function ProPaymentContext({
       const back = new URL("/billing/pro/", window.location.origin)
       back.searchParams.set("return", returnTo)
       back.searchParams.set("team", teamKey)
+      if (family !== "pro") back.searchParams.set("plan", family)
       const url = await startProCheckout(
         teamKey,
-        "pro_monthly",
+        `${family}_monthly`,
         back.toString(),
         actor,
       )
@@ -491,6 +503,9 @@ function ProPaymentContext({
             (!confirming && (plansQuery.isPending || summaryQuery.isPending)),
           plans: summaryQuery.isError ? undefined : plansQuery.data,
           entryOpen: capabilities.data?.fresh_entry.pro === true,
+          family,
+          sellable: findOffer(capabilities.data?.offers, `${family}_monthly`)
+            ?.sellable,
           paidPlan,
           conflict: conflict || starterCheckRequired,
           confirming,
@@ -499,7 +514,7 @@ function ProPaymentContext({
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Upgrade to Pro" />
+      <PageHeader title="Upgrade your plan" />
       <div className="flex-1 overflow-y-auto">
         {existingStarter.visible &&
         existingStarter.busy &&
@@ -541,6 +556,7 @@ function ProPaymentContext({
           <ProPaymentView
             step={step}
             pro={pro}
+            planName={planName}
             paidPlan={paidPlan}
             checkoutTerms={
               ready &&
@@ -551,7 +567,10 @@ function ProPaymentContext({
               !busy &&
               !checkoutTermsQuery.isError &&
               !checkoutTermsQuery.isFetching
-                ? checkoutTermsQuery.data?.pro_checkout
+                ? checkoutTermsFor(
+                    checkoutTermsQuery.data?.pro_checkout,
+                    `${family}_monthly`,
+                  )
                 : undefined
             }
             busy={busy}

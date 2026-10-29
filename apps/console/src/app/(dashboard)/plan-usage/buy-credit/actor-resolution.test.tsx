@@ -10,6 +10,25 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/supabase/client", () => ({
   createBrowserClient: () => ({ auth: { getUser: mocks.getUser } }),
 }))
+vi.mock("@/hooks/use-billing-v2", () => ({
+  useTeamPlan: () => ({ data: { key: "funded_monthly" } }),
+}))
+vi.mock("@/hooks/use-billing-capabilities", () => ({
+  useBillingCapabilities: () => ({
+    data: {
+      offers: [
+        {
+          offer_key: "funded_monthly",
+          topoff: {
+            amount_cents: 2500,
+            threshold_cents: 1000,
+            default_enabled: true,
+          },
+        },
+      ],
+    },
+  }),
+}))
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }))

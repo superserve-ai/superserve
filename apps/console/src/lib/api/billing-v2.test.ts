@@ -6,8 +6,13 @@ import {
   proCheckoutResponseSchema,
   type CatalogPlan,
   catalogPlansOf,
-  PLAN_ACTION_LINKS,
+  BUY_CREDIT_PATH,
+  checkoutTermsFor,
+  ENTERPRISE_MEETING_URL,
+  isLowBalance,
   planAction,
+  type PrepaidBalance,
+  PRO_UPGRADE_PATH,
   type TeamPlan,
 } from "./billing-v2"
 
@@ -22,8 +27,12 @@ const card = (
   key: string,
   kind: CatalogPlan["kind"],
   name: string,
+  funding_policy: CatalogPlan["funding_policy"] = kind === "prepaid"
+    ? "prepaid"
+    : "postpaid",
 ): CatalogPlan => ({
   key,
+  family: key.split("_")[0]!,
   kind,
   name,
   price_label: name,
@@ -31,10 +40,18 @@ const card = (
   fee_cents: null,
   included_cents: null,
   limits,
+  funding_policy,
 })
 const FREE = card("free", "free", "Free")
 const STARTER = card("starter", "prepaid", "Starter")
 const PRO = card("pro_monthly", "subscription", "Pro")
+const DEVELOPER = card(
+  "developer_monthly",
+  "subscription",
+  "Developer",
+  "prepaid",
+)
+const OTHER = card("other_monthly", "subscription", "Other")
 const ENTERPRISE = card("enterprise", "custom", "Enterprise")
 
 function team(c: CatalogPlan, pending: string | null = null): TeamPlan {
@@ -46,6 +63,7 @@ function team(c: CatalogPlan, pending: string | null = null): TeamPlan {
     fee_cents: null,
     included_cents: null,
     period_start: null,
+    effective_from: "2026-10-01T00:00:00Z",
     period_end: null,
     pending_change: pending
       ? {
@@ -64,52 +82,45 @@ describe("planAction", () => {
   it("upgrades through the purchase pages", () => {
     expect(planAction(team(FREE), STARTER)).toEqual({
       type: "link",
-      href: PLAN_ACTION_LINKS.starter,
+      href: BUY_CREDIT_PATH,
       label: "Get Starter",
     })
     expect(planAction(team(FREE), PRO)).toMatchObject({
-      href: PLAN_ACTION_LINKS.pro,
+      href: PRO_UPGRADE_PATH,
     })
     expect(planAction(team(STARTER), PRO)).toMatchObject({
-      href: PLAN_ACTION_LINKS.pro,
+      href: PRO_UPGRADE_PATH,
     })
     expect(planAction(team(FREE), ENTERPRISE)).toMatchObject({
-      href: PLAN_ACTION_LINKS.enterprise,
+      href: ENTERPRISE_MEETING_URL,
       label: "Book a meeting",
     })
   })
 
-  it("lets legacy pay-as-you-go teams buy Starter or Pro", () => {
-    const legacy = team(card("legacy", "legacy_payg", "Pay as you go"))
-    expect(planAction(legacy, STARTER)).toMatchObject({
-      href: PLAN_ACTION_LINKS.starter,
+  it("sells Developer to a team on a plan through the upgrade page", () => {
+    expect(planAction(team(FREE), DEVELOPER)).toEqual({
+      type: "link",
+      href: "/billing/pro/?plan=developer",
+      label: "Get Developer",
     })
-    expect(planAction(legacy, PRO)).toMatchObject({
-      href: PLAN_ACTION_LINKS.pro,
-    })
-    expect(planAction(legacy, FREE)).toEqual({
-      type: "downgrade",
-      label: "Switch to Free",
-    })
+    expect(planAction(team(FREE), OTHER)).toEqual({ type: "unavailable" })
   })
 
-  it("downgrades through a scheduled change", () => {
-    expect(planAction(team(PRO), STARTER)).toEqual({
-      type: "downgrade",
-      label: "Switch to Starter",
+  it("lets legacy pay-as-you-go teams buy Starter or Pro but not move to Free", () => {
+    const legacy = team(card("legacy", "legacy_payg", "Pay as you go"))
+    expect(planAction(legacy, STARTER)).toMatchObject({
+      href: BUY_CREDIT_PATH,
     })
-    expect(planAction(team(PRO), FREE)).toEqual({
-      type: "downgrade",
-      label: "Switch to Free",
+    expect(planAction(legacy, PRO)).toMatchObject({
+      href: PRO_UPGRADE_PATH,
     })
-    expect(planAction(team(STARTER), FREE)).toEqual({
-      type: "downgrade",
-      label: "Switch to Free",
-    })
-    expect(planAction(team(ENTERPRISE), FREE)).toEqual({
-      type: "downgrade",
-      label: "Switch to Free",
-    })
+    expect(planAction(legacy, FREE)).toEqual({ type: "unavailable" })
+  })
+
+  it("offers no move down to credit or Free under pricing v2", () => {
+    expect(planAction(team(PRO), STARTER)).toEqual({ type: "unavailable" })
+    for (const current of [PRO, STARTER, ENTERPRISE])
+      expect(planAction(team(current), FREE)).toEqual({ type: "unavailable" })
   })
 
   it("marks the current and scheduled plans and sends Enterprise teams to us", () => {
@@ -121,9 +132,11 @@ describe("planAction", () => {
 })
 
 describe("planAction edge cases", () => {
-  it("treats the same kind under a different key as current or contact", () => {
+  it("offers no move between subscriptions, and treats another Free key as current", () => {
     const legacyPro = { ...team(PRO), key: "pro_annual" }
-    expect(planAction(legacyPro, PRO)).toEqual({ type: "contact" })
+    expect(planAction(legacyPro, PRO)).toEqual({ type: "unavailable" })
+    expect(planAction(team(DEVELOPER), PRO)).toEqual({ type: "unavailable" })
+    expect(planAction(team(PRO), DEVELOPER)).toEqual({ type: "unavailable" })
     expect(planAction({ ...team(FREE), key: "free_legacy" }, FREE)).toEqual({
       type: "current",
     })
@@ -135,6 +148,31 @@ describe("planAction edge cases", () => {
       undoable: true,
       effectiveAt: "2026-11-01T00:00:00Z",
     })
+  })
+})
+
+describe("isLowBalance", () => {
+  const balance = (
+    balance_cents: number,
+    enabled: boolean,
+    low_balance?: boolean,
+  ): PrepaidBalance => ({
+    balance_cents,
+    low_balance,
+    auto_recharge: {
+      enabled,
+      threshold_cents: null,
+      amount_cents: null,
+      disabled_reason: null,
+      disabled_at: null,
+      in_flight: false,
+    },
+  })
+
+  it("follows the backend's low-balance flag", () => {
+    expect(isLowBalance(balance(700, false, true))).toBe(true)
+    expect(isLowBalance(balance(1, false, false))).toBe(false)
+    expect(isLowBalance(balance(0, true, false))).toBe(true)
   })
 })
 
@@ -274,4 +312,23 @@ it("preserves frozen checkout terms without a current plan", () => {
       pro_checkout: terms,
     }),
   ).toBeNull()
+})
+
+describe("checkoutTermsFor", () => {
+  const terms = (offer_key?: string) => ({
+    offer_key,
+    first_paid_pro_cycle: true,
+    accepted: true,
+  })
+
+  it("shows saved terms only for the plan they were saved for", () => {
+    expect(
+      checkoutTermsFor(terms("developer_monthly"), "developer_monthly"),
+    ).toBeDefined()
+    expect(
+      checkoutTermsFor(terms("developer_monthly"), "pro_monthly"),
+    ).toBeUndefined()
+    expect(checkoutTermsFor(terms(), "pro_monthly")).toBeDefined()
+    expect(checkoutTermsFor(terms(), "developer_monthly")).toBeUndefined()
+  })
 })

@@ -3,7 +3,11 @@
 import { Button, Field, Input, Textarea } from "@superserve/ui"
 import { useEffect, useState, useTransition } from "react"
 
-import type { PlanDraft, SchedulePreview } from "@/lib/admin/billing-catalog"
+import {
+  fundingIssue,
+  type PlanDraft,
+  type SchedulePreview,
+} from "@/lib/admin/billing-catalog"
 import {
   createDraftAction,
   previewScheduleAction,
@@ -70,6 +74,8 @@ interface DraftForm {
   matching: { percent: string; cap: string } | null
   allowance: AllowanceForm | null
   limits: Record<keyof PlanDraft["limits"], string>
+  funded: boolean
+  topoff: { amount: string; threshold: string; default_enabled: boolean } | null
 }
 
 const KINDS: [PlanKind, string][] = [
@@ -158,6 +164,14 @@ function formFrom(draft: PlanDraft): DraftForm {
       max_disk_mib: text(draft.limits.max_disk_mib),
       max_templates: text(draft.limits.max_templates),
     },
+    funded: draft.funding_policy === "prepaid",
+    topoff: draft.topoff
+      ? {
+          amount: dollars(draft.topoff.amount_cents),
+          threshold: dollars(draft.topoff.threshold_cents),
+          default_enabled: draft.topoff.default_enabled,
+        }
+      : null,
   }
 }
 
@@ -240,13 +254,26 @@ function draftFrom(form: DraftForm): PlanDraft | string {
         return "Matching needs a percent between 0.01 and 100 and a dollar cap."
       matching = { matching_bps: bps, cap_cents: cap }
     }
+    const funded = form.funded && !form.display_only
+    let topoff: PlanDraft["topoff"] = null
+    if (funded && form.topoff) {
+      const amount = centsFromDollars(form.topoff.amount)
+      const threshold = centsFromDollars(form.topoff.threshold)
+      if (amount === null || threshold === null)
+        return "Auto Topoff needs a dollar amount and threshold."
+      topoff = {
+        amount_cents: amount,
+        threshold_cents: threshold,
+        default_enabled: form.topoff.default_enabled,
+      }
+    }
     let allowance: PlanDraft["allowance"] = null
     if (form.allowance && !form.display_only) {
       const parsed = allowanceFrom(form.allowance)
       if (typeof parsed === "string") return parsed
       allowance = parsed
     }
-    return {
+    const draft: PlanDraft = {
       pricing_version: form.pricing_version,
       family: form.family.trim(),
       kind: form.kind,
@@ -278,7 +305,10 @@ function draftFrom(form: DraftForm): PlanDraft | string {
               optionalWhole(form.limits[key], label),
             ]),
           ) as PlanDraft["limits"]),
+      funding_policy: funded ? "prepaid" : "postpaid",
+      topoff,
     }
+    return fundingIssue(draft) ?? draft
   } catch (cause) {
     return cause instanceof Error ? cause.message : "Check the fields"
   }
@@ -755,6 +785,90 @@ export function PlanEditor({
                       }
                     />
                   </Field>
+                </div>
+              ) : null}
+            </fieldset>
+            <fieldset className="space-y-3">
+              <legend className="text-sm font-medium">Funding</legend>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="accent-brand"
+                  checked={form.funded}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      funded: event.target.checked,
+                      topoff: event.target.checked ? current.topoff : null,
+                    }))
+                  }
+                />
+                Run on funded credit: pause sandboxes when credit runs out (v2
+                subscriptions only)
+              </label>
+              {form.funded ? (
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="accent-brand"
+                    checked={form.topoff !== null}
+                    onChange={(event) =>
+                      set(
+                        "topoff",
+                        event.target.checked
+                          ? { amount: "", threshold: "", default_enabled: true }
+                          : null,
+                      )
+                    }
+                  />
+                  Offer Auto Topoff
+                </label>
+              ) : null}
+              {form.funded && form.topoff ? (
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <Field label="Top-off amount (USD)" htmlFor="topoff-amount">
+                    <Input
+                      id="topoff-amount"
+                      inputMode="decimal"
+                      value={form.topoff.amount}
+                      onChange={(event) =>
+                        set("topoff", {
+                          ...form.topoff!,
+                          amount: event.target.value,
+                        })
+                      }
+                    />
+                  </Field>
+                  <Field
+                    label="When credit drops below (USD)"
+                    htmlFor="topoff-threshold"
+                  >
+                    <Input
+                      id="topoff-threshold"
+                      inputMode="decimal"
+                      value={form.topoff.threshold}
+                      onChange={(event) =>
+                        set("topoff", {
+                          ...form.topoff!,
+                          threshold: event.target.value,
+                        })
+                      }
+                    />
+                  </Field>
+                  <label className="flex items-center gap-2 self-end text-sm">
+                    <input
+                      type="checkbox"
+                      className="accent-brand"
+                      checked={form.topoff.default_enabled}
+                      onChange={(event) =>
+                        set("topoff", {
+                          ...form.topoff!,
+                          default_enabled: event.target.checked,
+                        })
+                      }
+                    />
+                    On by default at checkout
+                  </label>
                 </div>
               ) : null}
             </fieldset>

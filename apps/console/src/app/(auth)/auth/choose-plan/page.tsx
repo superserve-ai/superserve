@@ -6,6 +6,7 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Suspense } from "react"
 
+import { PlanPickerOptions } from "@/components/billing/plan-picker-options"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import {
@@ -13,13 +14,7 @@ import {
   isSignupCheckoutOffer,
   type PlanPickerReason,
   signupCheckoutReturnPath,
-  signupCheckoutPath,
 } from "@/lib/billing/signup-checkout-paths"
-
-const PLANS = [
-  { offer: "developer", label: "Developer" },
-  { offer: "pro_monthly", label: "Pro" },
-] as const
 
 const MESSAGES: Record<PlanPickerReason, string> = {
   upgrade: "Choose a plan to keep your sandboxes running.",
@@ -108,27 +103,7 @@ function ChoosePlanContent() {
               Back to console
             </Button>
           ) : (
-            <div className="mt-5 flex gap-2">
-              {PLANS.map(({ offer, label }) => (
-                <form
-                  key={offer}
-                  method="post"
-                  action={signupCheckoutPath(offer, locator)}
-                >
-                  <Button
-                    type="submit"
-                    size="sm"
-                    variant={
-                      !preselected || preselected === offer
-                        ? "default"
-                        : "outline"
-                    }
-                  >
-                    {label}
-                  </Button>
-                </form>
-              ))}
-            </div>
+            <PlanPickerOptions preselected={preselected} locator={locator} />
           )}
           <Link
             href="https://superserve.ai/pricing"

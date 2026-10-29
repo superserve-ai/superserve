@@ -1,6 +1,12 @@
 import { z } from "zod"
 
-import { publicBillingPlansSchema } from "@/lib/billing/plans"
+import { pickerPlans } from "@/lib/billing/plan-picker"
+import {
+  billingOffersSchema,
+  findOffer,
+  type PlanKind,
+  publicBillingPlansSchema,
+} from "@/lib/billing/plans"
 
 import { apiClient } from "./client"
 
@@ -24,6 +30,7 @@ export const billingCapabilitiesSchema = z
       disable_auto_recharge: z.boolean(),
     }),
     catalog: publicBillingPlansSchema,
+    offers: billingOffersSchema,
   })
   .superRefine((value, ctx) => {
     if (value.catalog.pricing_version !== value.pricing_version)
@@ -42,6 +49,42 @@ export const billingCapabilitiesSchema = z
   })
 
 export type BillingCapabilities = z.infer<typeof billingCapabilitiesSchema>
+
+function freshEntryFor(
+  capabilities: BillingCapabilities,
+  kind: PlanKind,
+): boolean {
+  switch (kind) {
+    case "prepaid":
+      return capabilities.fresh_entry.starter
+    case "subscription":
+      return capabilities.fresh_entry.pro
+    case "free":
+      return capabilities.fresh_entry.choose_free
+    default:
+      return false
+  }
+}
+
+// Whether this team can move to plan now: the entry gate for its kind must
+// be open, and a catalog offer for it, where listed, must be sellable.
+export function canStartPlan(
+  capabilities: BillingCapabilities | undefined,
+  plan: { key: string; kind: PlanKind },
+): boolean {
+  if (!capabilities || !freshEntryFor(capabilities, plan.kind)) return false
+  return findOffer(capabilities.offers, plan.key)?.sellable ?? true
+}
+
+export function canStartAnyPlan(
+  capabilities: BillingCapabilities | undefined,
+): boolean {
+  if (!capabilities) return false
+  return (
+    (capabilities.fresh_entry.pro || capabilities.fresh_entry.starter) &&
+    pickerPlans(capabilities.offers).length > 0
+  )
+}
 
 export function parseBillingCapabilities(body: unknown, teamKey: string) {
   const parsed = billingCapabilitiesSchema.parse(body)
