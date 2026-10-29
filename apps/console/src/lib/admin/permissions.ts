@@ -1,6 +1,6 @@
 import type { User } from "@supabase/supabase-js"
 
-import { isStaff } from "./staff"
+import { isStaff } from "./staff-identity"
 
 export const PLATFORM_SANDBOX_READ_PERMISSION = "platform:sandbox:read"
 export const PLATFORM_TEMPLATE_READ_PERMISSION = "platform:template:read"
