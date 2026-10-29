@@ -77,22 +77,26 @@ export function ManageAction({
 function LowCreditBanner({
   prepaid,
   canManage,
+  canConfigureRecharge,
 }: {
   prepaid: PrepaidBalance
   canManage: boolean
+  canConfigureRecharge: boolean
 }) {
   return (
     <BannerShell
       tone={prepaid.balance_cents <= 0 ? "danger" : "warning"}
       label="Credit balance"
       action={
-        <ManageAction canManage={canManage}>
-          <Button size="sm" render={<Link href={TOPOFF_SETTINGS_PATH} />}>
-            {prepaid.auto_recharge.disabled_reason
-              ? "Turn Auto Topoff back on"
-              : "Turn on Auto Topoff"}
-          </Button>
-        </ManageAction>
+        canConfigureRecharge && (
+          <ManageAction canManage={canManage}>
+            <Button size="sm" render={<Link href={TOPOFF_SETTINGS_PATH} />}>
+              {prepaid.auto_recharge.disabled_reason
+                ? "Turn Auto Topoff back on"
+                : "Turn on Auto Topoff"}
+            </Button>
+          </ManageAction>
+        )
       }
     >
       Your credit balance is too low. Buy usage to continue running sandboxes.
@@ -156,7 +160,11 @@ export function PlanAwareBanner({
       settled &&
       !prepaid.auto_recharge.enabled &&
       prepaid.low_balance === true ? (
-      <LowCreditBanner prepaid={prepaid} canManage={canManage} />
+      <LowCreditBanner
+        prepaid={prepaid}
+        canManage={canManage}
+        canConfigureRecharge={canConfigureRecharge}
+      />
     ) : null
   }
 

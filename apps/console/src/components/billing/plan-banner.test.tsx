@@ -442,6 +442,18 @@ describe("PlanBanner for a credit-funded subscription", () => {
     ).toHaveAttribute("href", expect.stringMatching(/#auto-topoff$/))
   })
 
+  it("keeps the warning but drops the Auto Topoff link while entry is closed", () => {
+    mocks.recharge = false
+    mocks.prepaid.mockReturnValue(balance(150, { low: true }))
+    mount()
+    expect(
+      screen.getByRole("region", { name: "Credit balance" }).textContent,
+    ).toMatch(/^Your credit balance is too low\./)
+    expect(
+      screen.queryByRole("link", { name: /Auto Topoff/ }),
+    ).not.toBeInTheDocument()
+  })
+
   it("follows the backend's flag rather than its own threshold", () => {
     mocks.prepaid.mockReturnValue(balance(150, { low: false }))
     expect(mount().container.textContent).toBe("")
