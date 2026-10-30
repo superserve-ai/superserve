@@ -12,7 +12,7 @@ const team = {
 }
 
 describe("awaitingPlanRedirect", () => {
-  it.each(["trial_ended", undefined] as const)(
+  it.each(["trial_ended", "plan_required", undefined] as const)(
     "never sends a team whose paid checkout settles (entry %s) to the picker",
     (entryState) => {
       expect(

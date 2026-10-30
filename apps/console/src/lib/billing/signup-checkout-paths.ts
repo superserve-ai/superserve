@@ -167,7 +167,9 @@ export function awaitingPlanRedirect(context: {
   const locator = { account: context.userId, team: context.teamKey }
   if (
     context.paymentSettling &&
-    (entry === "trial_ended" || entry === undefined)
+    (entry === "trial_ended" ||
+      entry === "plan_required" ||
+      entry === undefined)
   )
     return paymentSettlingPath(locator)
   if (
