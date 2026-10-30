@@ -328,9 +328,17 @@ function ProCheckoutCopy({
     )
   }
   return (
-    <li>
-      The secure payment page confirms your initial payment amount, included
-      usage credit and renewal date before you pay.
-    </li>
+    <>
+      {!terms?.accepted && pro.monthly_credit_cents !== null ? (
+        <li>
+          {pro.name} includes {formatUsdCents(pro.monthly_credit_cents)} of
+          usage each month.
+        </li>
+      ) : null}
+      <li>
+        The secure payment page confirms your initial payment amount, included
+        usage credit and renewal date before you pay.
+      </li>
+    </>
   )
 }

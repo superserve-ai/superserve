@@ -211,6 +211,7 @@ describe("Pro payment view", () => {
     expect(items).toContain("Priority Slack and email support")
     expect(items).toContain("1,000 sandboxes running at once")
     expect(items).not.toContain("Up to 1,000 concurrent sandboxes")
+    expect(items).toContain("Pro includes $250 of usage each month.")
     expect(items).not.toContain("$250 of usage included every month")
   })
 
