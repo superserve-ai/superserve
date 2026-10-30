@@ -188,6 +188,9 @@ describe("PlanPickerOptions", () => {
     expect(enterprise.textContent).toMatch(/Custom limits/)
     expect(
       screen.getByRole("link", { name: "Book a meeting" }),
+    ).toHaveAttribute("target", "_blank")
+    expect(
+      screen.getByRole("link", { name: "Book a meeting" }),
     ).toHaveAttribute("href", ENTERPRISE_MEETING_URL)
     expect(screen.getByRole("form", { name: "Builder plan" })).toBeTruthy()
   })

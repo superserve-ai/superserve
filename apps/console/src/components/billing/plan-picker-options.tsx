@@ -40,11 +40,20 @@ function Limit({ children }: { children: string }) {
   )
 }
 
-function EnterpriseOption({ card }: { card: PlanCard }) {
+function EnterpriseOption({
+  card,
+  className,
+}: {
+  card: PlanCard
+  className?: string
+}) {
   return (
     <section
       aria-label={`${card.name} plan`}
-      className="flex flex-col border border-dashed border-border bg-background p-6 text-left"
+      className={cn(
+        "flex flex-col border border-dashed border-border bg-background p-6 text-left",
+        className,
+      )}
     >
       <h2 className="text-2xl leading-none font-medium tracking-tight text-foreground">
         {card.name}
@@ -58,7 +67,13 @@ function EnterpriseOption({ card }: { card: PlanCard }) {
       <Button
         variant="outline"
         className="mt-auto h-11 w-full"
-        render={<Link href={ENTERPRISE_MEETING_URL} />}
+        render={
+          <Link
+            href={ENTERPRISE_MEETING_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          />
+        }
       >
         Book a meeting
       </Button>
@@ -213,7 +228,14 @@ export function PlanPickerOptions({
           highlighted={highlighted(plan.offer)}
         />
       ))}
-      {enterprise ? <EnterpriseOption card={enterprise} /> : null}
+      {enterprise ? (
+        <EnterpriseOption
+          card={enterprise}
+          className={
+            listed.length % 2 === 0 ? "md:col-span-2 lg:col-span-1" : undefined
+          }
+        />
+      ) : null}
     </div>
   )
 }
