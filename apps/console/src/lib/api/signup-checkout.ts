@@ -149,11 +149,19 @@ export async function settleSignupCheckout(
     outcome?: string
     url?: string
   }
-  if (!response.ok) return null
-  if (result.url && isStripeCheckoutUrl(result.url)) return result.url
-  if (result.outcome === "active") return "/sandboxes"
-  if (!["retryable", "no_pending_pro_purchase"].includes(result.outcome ?? ""))
+  if (response.status >= 500) return null
+  if (response.ok && result.url && isStripeCheckoutUrl(result.url))
+    return result.url
+  const active = response.ok && result.outcome === "active"
+  if (
+    response.ok &&
+    !active &&
+    !["retryable", "no_pending_pro_purchase"].includes(result.outcome ?? "")
+  )
     return null
   const entry = await readEntryState(backend)
-  return entry === "trial_ended" || entry === "activating" ? null : "/sandboxes"
+  if (entry === "activating" || (active && entry === "trial_ended")) return null
+  if (entry === "trial_ended" || entry === "payment_failed")
+    return planPickerPath(entry, undefined, locator)
+  return "/sandboxes"
 }

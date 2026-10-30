@@ -12,7 +12,7 @@ const team = {
 }
 
 describe("awaitingPlanRedirect", () => {
-  it.each(["trial_ended", "payment_failed", undefined] as const)(
+  it.each(["trial_ended", undefined] as const)(
     "never sends a team whose paid checkout settles (entry %s) to the picker",
     (entryState) => {
       expect(
@@ -20,6 +20,18 @@ describe("awaitingPlanRedirect", () => {
       ).toBe("/onboarding/payment/?account=u1&team=use%3Ateam-1")
     },
   )
+
+  it("sends a failed payment to the picker even with a checkout on record", () => {
+    expect(
+      awaitingPlanRedirect({
+        ...team,
+        entryState: "payment_failed",
+        paymentSettling: true,
+      }),
+    ).toBe(
+      "/auth/choose-plan/?reason=payment_failed&offer=developer&account=u1&team=use%3Ateam-1",
+    )
+  })
 
   it("keeps a settling team on its trial in the console", () => {
     expect(

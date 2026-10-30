@@ -162,7 +162,10 @@ export function awaitingPlanRedirect(context: {
 }): string | null {
   const entry = context.entryState
   const locator = { account: context.userId, team: context.teamKey }
-  if (context.paymentSettling && entry !== "trial")
+  if (
+    context.paymentSettling &&
+    (entry === "trial_ended" || entry === undefined)
+  )
     return paymentSettlingPath(locator)
   if (entry !== "trial_ended" && entry !== "payment_failed") return null
   return planPickerPath(entry, trialPlanOffer(context.requestedOffer), locator)

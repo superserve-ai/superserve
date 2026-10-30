@@ -17,6 +17,11 @@ vi.mock("@/lib/cells", () => ({
 import type { User } from "@supabase/supabase-js"
 
 import {
+  awaitingPlanRedirect,
+  isAwaitingPlanState,
+} from "@/lib/billing/signup-checkout-paths"
+
+import {
   settleSignupCheckout,
   signupEntryDestination,
   startSignupCheckout,
@@ -205,15 +210,29 @@ describe("startSignupCheckout", () => {
   )
 
   it.each([
-    ["trial_ended", null],
-    ["activating", null],
-    ["payment_failed", "/sandboxes"],
-    ["trial", "/sandboxes"],
+    [
+      200,
+      "trial_ended",
+      "/auth/choose-plan/?reason=trial_ended&account=u1&team=use%3Ateam-1",
+    ],
+    [
+      409,
+      "trial_ended",
+      "/auth/choose-plan/?reason=trial_ended&account=u1&team=use%3Ateam-1",
+    ],
+    [
+      200,
+      "payment_failed",
+      "/auth/choose-plan/?reason=payment_failed&account=u1&team=use%3Ateam-1",
+    ],
+    [200, "activating", null],
+    [409, "activating", null],
+    [200, "trial", "/sandboxes"],
   ])(
-    "keeps a returned checkout with nothing pending waiting while the entry is %s",
-    async (entry, destination) => {
+    "decides a %s return with nothing pending from the %s entry",
+    async (status, entry, destination) => {
       entryState = entry
-      recovered = { status: 200, body: { outcome: "no_pending_pro_purchase" } }
+      recovered = { status, body: { outcome: "no_pending_pro_purchase" } }
       expect(await settleSignupCheckout(user, "u1", "use:team-1")).toBe(
         destination,
       )
@@ -224,6 +243,52 @@ describe("startSignupCheckout", () => {
     recovered = { status: 503, body: {} }
     expect(await settleSignupCheckout(user, "u1", "use:team-1")).toBeNull()
   })
+
+  it("holds an active payment until the entry state leaves the used-up trial", async () => {
+    entryState = "trial_ended"
+    recovered = { status: 200, body: { outcome: "active" } }
+    expect(await settleSignupCheckout(user, "u1", "use:team-1")).toBeNull()
+  })
+
+  it.each([
+    "active",
+    "no_pending_pro_purchase",
+    "retryable",
+    "payment_confirmation_pending",
+  ])(
+    "never hands the dashboard a %s return it would send back to the wait",
+    async (outcome) => {
+      for (const entry of [
+        "trial",
+        "trial_ended",
+        "payment_failed",
+        "activating",
+        "none",
+      ]) {
+        entryState = entry
+        recovered = { status: 200, body: { outcome } }
+        const destination = await settleSignupCheckout(user, "u1", "use:team-1")
+        if (destination !== "/sandboxes") continue
+        const contexts =
+          entry === "activating"
+            ? [{ paymentSettling: true }]
+            : isAwaitingPlanState(entry)
+              ? [
+                  { entryState: entry, paymentSettling: false },
+                  { entryState: entry, paymentSettling: true },
+                ]
+              : [{ paymentSettling: false }]
+        for (const context of contexts)
+          expect(
+            awaitingPlanRedirect({
+              userId: "u1",
+              teamKey: "use:team-1",
+              ...context,
+            }),
+          ).not.toBe("/onboarding/payment/?account=u1&team=use%3Ateam-1")
+      }
+    },
+  )
 
   it("never starts another checkout while a paid one is activating", async () => {
     entryState = "activating"

@@ -52,6 +52,14 @@ import {
 } from "@/lib/billing/checkout-return"
 import { findOffer, planCard } from "@/lib/billing/plans"
 
+const STATUS_UNKNOWN = "status_unknown"
+
+function isTransientFailure(cause: unknown) {
+  return cause instanceof ApiError
+    ? cause.status >= 500
+    : cause instanceof TypeError
+}
+
 interface ProPaymentProps {
   billingReturn?: "success" | "cancel"
   returnTo: string
@@ -169,7 +177,16 @@ function ProPaymentContext({
     confirmedPayment?.team === teamKey && confirmedPayment?.actor === actor
   const [confirming, setConfirming] = useState(billingReturn === "success")
   const [waitExpired, setWaitExpired] = useState(false)
+  const leaving = useRef(false)
   const [paymentTeam, setPaymentTeam] = useState<string | undefined>()
+  const [waitTeam, setWaitTeam] = useState(teamKey)
+  if (waitTeam !== teamKey) {
+    setWaitTeam(teamKey)
+    setWaitExpired(false)
+    setConfirming(
+      billingReturn === "success" || (!!paymentTeam && paymentTeam === teamKey),
+    )
+  }
   const [starter, setStarter] = useState<{
     purchase: PendingStarterCheckout
     team: string
@@ -297,6 +314,7 @@ function ProPaymentContext({
     () =>
       run(async () => {
         if (
+          leaving.current ||
           !canRecover ||
           !teamKey ||
           teamMismatch ||
@@ -313,17 +331,19 @@ function ProPaymentContext({
           return
         }
         const deadline = Date.now() + SETTLE_TIMEOUT_MS
+        let replayed = false
         try {
-          for (let attempt = 0; ; attempt++) {
+          for (;;) {
             if (!target.active) return
             const outcome = await recoverProPayment(teamKey).catch(
               (cause: unknown) => {
-                if (attempt === 0 && billingReturn !== "success") throw cause
-                return "payment_confirmation_pending"
+                if (!isTransientFailure(cause)) throw cause
+                return STATUS_UNKNOWN
               },
             )
             if (!target.active) return
             if (isStripeCheckoutUrl(outcome)) {
+              leaving.current = true
               window.location.assign(outcome)
               return
             }
@@ -333,7 +353,9 @@ function ProPaymentContext({
               await refreshCompletedPayment(target)
               return
             }
-            let settling = outcome === "payment_confirmation_pending"
+            let settling =
+              outcome === "payment_confirmation_pending" ||
+              outcome === STATUS_UNKNOWN
             if (!settling) {
               settling = await paymentActivating().catch(() => false)
               if (!target.active) return
@@ -363,10 +385,16 @@ function ProPaymentContext({
                 return
               }
             }
-            if (outcome === "payment_confirmation_pending" && actor) {
+            if (
+              outcome === "payment_confirmation_pending" &&
+              actor &&
+              !replayed
+            ) {
+              replayed = true
               const checkout = await resumeProCheckout(teamKey, actor)
               if (!target.active) return
               if (checkout && isStripeCheckoutUrl(checkout)) {
+                leaving.current = true
                 window.location.assign(checkout)
                 return
               }
@@ -379,7 +407,9 @@ function ProPaymentContext({
             await new Promise((resolve) => setTimeout(resolve, SETTLE_POLL_MS))
           }
         } catch (cause) {
-          setWaitExpired(true)
+          if (cause instanceof ApiError && cause.code === "plan_conflict")
+            setConfirming(false)
+          else setWaitExpired(true)
           throw cause
         }
       }),
@@ -460,6 +490,7 @@ function ProPaymentContext({
     if (
       confirming &&
       !waitExpired &&
+      !leaving.current &&
       !busy &&
       !teamMutating &&
       canRecover &&

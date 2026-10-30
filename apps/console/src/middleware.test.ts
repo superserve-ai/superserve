@@ -154,6 +154,14 @@ describe("middleware", () => {
     ).toBe(path)
   })
 
+  it("keeps the payment wait's checkout through sign-in", async () => {
+    const path = "/onboarding/payment/?account=user&team=use%3Aoriginal"
+    const response = await middleware(buildRequest(path))
+    expect(
+      new URL(response.headers.get("location")!).searchParams.get("next"),
+    ).toBe(path)
+  })
+
   it("keeps the plan picker state through sign-in", async () => {
     const path =
       "/auth/choose-plan/?reason=payment_confirming&account=user&team=use%3Aoriginal"

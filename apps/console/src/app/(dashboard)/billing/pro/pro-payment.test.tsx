@@ -1427,16 +1427,63 @@ describe("waiting on a returned payment", () => {
     ).toBeNull()
   })
 
-  it("keeps polling through a failed status read", async () => {
-    state.recover
-      .mockRejectedValueOnce(new Error("Payment status is unavailable."))
-      .mockResolvedValue("active")
+  it.each([
+    ["a network failure", new TypeError("Failed to fetch")],
+    ["a server error", new ApiError(503, "unavailable", "Unavailable")],
+  ])(
+    "keeps polling through %s without replaying checkout",
+    async (_, cause) => {
+      state.recover.mockRejectedValueOnce(cause).mockResolvedValue("active")
+      show()
+      await advance(0)
+      expect(screen.getByText("Processing payment…")).toBeTruthy()
+      expect(screen.queryByRole("alert")).toBeNull()
+      expect(state.resume).not.toHaveBeenCalled()
+      expect(state.activating).not.toHaveBeenCalled()
+      await advance(1500)
+      expect(state.replace).toHaveBeenCalledWith("/sandboxes/")
+      expect(state.resume).not.toHaveBeenCalled()
+    },
+  )
+
+  it("shows the conflict instead of waiting when recovery reports one", async () => {
+    state.plans = availablePlans
+    state.recover.mockRejectedValue(
+      new ApiError(409, "plan_conflict", "A payment is already being checked"),
+    )
     show()
     await advance(0)
-    expect(screen.getByText("Processing payment…")).toBeTruthy()
-    expect(screen.queryByRole("alert")).toBeNull()
-    await advance(1500)
-    expect(state.replace).toHaveBeenCalledWith("/sandboxes/")
+    expect(
+      screen.getByText(
+        "This team already has a paid plan or a payment in progress.",
+      ),
+    ).toBeTruthy()
+    await advance(10_000)
+    expect(state.recover).toHaveBeenCalledTimes(1)
+  })
+
+  it("replays the saved checkout at most once per wait", async () => {
+    state.recover.mockResolvedValue("payment_confirmation_pending")
+    show()
+    await advance(6000)
+    expect(state.recover.mock.calls.length).toBeGreaterThan(3)
+    expect(state.resume).toHaveBeenCalledTimes(1)
+  })
+
+  it("stops polling once it leaves for Stripe", async () => {
+    const assign = vi
+      .spyOn(window.location, "assign")
+      .mockImplementation(() => {})
+    state.recover.mockResolvedValue(
+      "https://checkout.stripe.com/c/pay/cs_method",
+    )
+    show()
+    await advance(10_000)
+    expect(assign).toHaveBeenCalledExactlyOnceWith(
+      "https://checkout.stripe.com/c/pay/cs_method",
+    )
+    expect(state.recover).toHaveBeenCalledTimes(1)
+    assign.mockRestore()
   })
 
   it("stops after two minutes with a calm retry, then waits again on retry", async () => {
