@@ -1463,6 +1463,61 @@ describe("waiting on a returned payment", () => {
     expect(state.recover).toHaveBeenCalledTimes(1)
   })
 
+  it("keeps waiting when the activating read fails after nothing is reported pending", async () => {
+    state.plans = availablePlans
+    state.recover.mockResolvedValue("no_pending_pro_purchase")
+    state.activating.mockRejectedValue(new TypeError("Failed to fetch"))
+    show()
+    await advance(3000)
+    expect(state.recover).toHaveBeenCalledTimes(3)
+    expect(state.starterRecover).not.toHaveBeenCalledWith(team)
+    expect(screen.getByText("Processing payment…")).toBeTruthy()
+    state.activating.mockResolvedValue(false)
+    await advance(1500)
+    expect(state.starterRecover).toHaveBeenCalledWith(team)
+  })
+
+  it("ignores a late failure from a team the user switched away from and back", async () => {
+    let fail!: (cause: unknown) => void
+    state.recover
+      .mockReturnValueOnce(
+        new Promise((_resolve, reject) => {
+          fail = reject
+        }),
+      )
+      .mockResolvedValue("payment_confirmation_pending")
+    const view = show()
+    await advance(0)
+    expect(state.recover).toHaveBeenCalledTimes(1)
+    state.team = { teamId: "team-b", region: "use" }
+    view.rerender(
+      <ProPayment
+        billingReturn="success"
+        checkoutTeam={team}
+        returnTo="/sandboxes/"
+      />,
+    )
+    state.team = {
+      teamId: "11111111-1111-4111-8111-111111111111",
+      region: "use",
+    }
+    view.rerender(
+      <ProPayment
+        billingReturn="success"
+        checkoutTeam={team}
+        returnTo="/sandboxes/"
+      />,
+    )
+    await act(async () => {
+      fail(new ApiError(403, "forbidden", "Forbidden"))
+    })
+    await advance(0)
+    expect(screen.queryByText(/still being confirmed/)).toBeNull()
+    expect(screen.queryByText("Forbidden")).toBeNull()
+    expect(screen.getByText("Processing payment…")).toBeTruthy()
+    expect(state.recover).toHaveBeenCalledTimes(2)
+  })
+
   it("replays the saved checkout at most once per wait", async () => {
     state.recover.mockResolvedValue("payment_confirmation_pending")
     show()

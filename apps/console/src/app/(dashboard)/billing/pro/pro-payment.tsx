@@ -369,7 +369,7 @@ function ProPaymentContext({
               outcome === "payment_confirmation_pending" ||
               outcome === STATUS_UNKNOWN
             if (!settling) {
-              settling = await paymentActivating().catch(() => false)
+              settling = await paymentActivating().catch(() => true)
               if (!target.active) return
             }
             if (!settling) {
@@ -419,6 +419,7 @@ function ProPaymentContext({
             await new Promise((resolve) => setTimeout(resolve, SETTLE_POLL_MS))
           }
         } catch (cause) {
+          if (!target.active) return
           if (cause instanceof ApiError && cause.code === "plan_conflict")
             setConfirming(false)
           else setWaitExpired(true)
