@@ -4,7 +4,7 @@ vi.mock("@/hooks/use-billing-capabilities", () => ({
       ? undefined
       : {
           pricing_version: "v2",
-          entry_open: true,
+          entry_open: mocks.entryOpen,
           fresh_entry: {
             starter: mocks.buyCredit,
             pro: mocks.pro ?? mocks.buyCredit,
@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => ({
   },
   pro: undefined as boolean | undefined,
   recharge: true,
+  entryOpen: true,
   version: vi.fn(),
   plan: vi.fn(),
   prepaid: vi.fn(),
@@ -106,6 +107,7 @@ beforeEach(() => {
   mocks.payment = { available: true, submitting: null, openSession: vi.fn() }
   mocks.pro = undefined
   mocks.recharge = true
+  mocks.entryOpen = true
   mocks.plan.mockReturnValue({ data: null })
   mocks.prepaid.mockReturnValue({ data: undefined })
   mocks.summary.mockReturnValue({
@@ -473,6 +475,7 @@ describe("PlanBanner for a credit-funded subscription", () => {
 
   it("keeps the warning but drops Add Credits while entry is closed", () => {
     mocks.recharge = false
+    mocks.entryOpen = false
     mocks.prepaid.mockReturnValue(balance(150, { low: true }))
     mount()
     expect(
@@ -483,7 +486,14 @@ describe("PlanBanner for a credit-funded subscription", () => {
     ).not.toBeInTheDocument()
   })
 
+  it("offers Add Credits to a team with no card while credit can be bought", () => {
+    mocks.prepaid.mockReturnValue(balance(150, { low: true, card: false }))
+    mount()
+    expect(screen.getByRole("link", { name: "Add Credits" })).toBeTruthy()
+  })
+
   it("sends a team with no card and nothing to buy to manage billing", () => {
+    mocks.entryOpen = false
     mocks.prepaid.mockReturnValue(balance(150, { low: true, card: false }))
     const { unmount } = mount()
     expect(screen.queryByRole("link", { name: "Add Credits" })).toBeNull()
