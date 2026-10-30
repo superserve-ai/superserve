@@ -314,7 +314,7 @@ The server wraps the [TypeScript SDK](/sdk-reference/sandbox) and only ever hold
 - **`Authentication failed`.** The key is missing or invalid. Production keys start with `ss_live_`; create one on the [API key](/api-key) page.
 - **First call is slow.** `npx` downloads the package on first use and caches it; later starts are fast.
 - **Requires Node 18+.** The local server runs on Node via `npx`. (The [hosted](#hosted-remote) endpoint has no local runtime requirement.)
-- **`401 Unauthorized` from the hosted endpoint.** The `Authorization` header is missing. Send it as `Authorization: Bearer ss_live_…` (see [Hosted](#hosted-remote)). An invalid key still connects, but every tool call returns `Authentication failed`.
+- **`401 Unauthorized` from the hosted endpoint.** The `Authorization` header is missing or malformed (another scheme, or an empty token). Send it as `Authorization: Bearer ss_live_…` (see [Hosted](#hosted-remote)). An invalid key still connects, but every tool call returns `Authentication failed`.
 
 ## Related
 
