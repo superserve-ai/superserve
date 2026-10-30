@@ -75,6 +75,10 @@ import { DEFAULT_REGION } from "@/lib/cells"
 import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import { fingerprintDiagnostics } from "@/lib/fingerprint/diagnostics-server"
 import { resolveFingerprintSignup } from "@/lib/fingerprint/observe"
+import {
+  FirstTeamRegionRequiredError,
+  firstTeamRegionPath,
+} from "@/lib/onboarding/first-team-region"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { normalizeSignupEligibilitySnapshot } from "@/lib/slack/signup-eligibility"
@@ -757,6 +761,16 @@ export async function GET(request: Request) {
               next,
             )
           } catch (error) {
+            // A new user picks a region first, then resumes this paid setup.
+            if (error instanceof FirstTeamRegionRequiredError)
+              return NextResponse.redirect(
+                buildRedirectUrl(
+                  origin,
+                  firstTeamRegionPath(
+                    `/api/onboarding/prepare/?${new URLSearchParams({ account: user.id, next })}`,
+                  ),
+                ),
+              )
             const recovery = new URLSearchParams({
               reason:
                 error instanceof SignupSetupBlockedError
