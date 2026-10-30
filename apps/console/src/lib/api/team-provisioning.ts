@@ -38,7 +38,7 @@ import {
   assertSignupReviewCleared,
   signupReviewStatus,
 } from "@/lib/auth/signup-review"
-import { cellFor, DEFAULT_REGION } from "@/lib/cells"
+import { cellFor, configuredRegions, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
 const TEAM_OWNER_ROLE = "team_owner"
@@ -158,6 +158,31 @@ export interface ProvisionedTeam {
   id: string
   name: string
   region: string
+}
+
+// Each cell claims a user's one Free team itself; a claim held in another cell
+// makes this team additional. Unreadable cells fail the creation for a retry.
+async function holdsFreeTeamElsewhere(
+  userId: string,
+  region: string,
+): Promise<boolean> {
+  const claims = await Promise.all(
+    configuredRegions()
+      .filter((other) => other !== region)
+      .map(async (other) => {
+        const { data, error } = await cellFor(other)
+          .createAdminClient()
+          .from("billing_account_free_team")
+          .select("team_id")
+          .eq("user_id", userId)
+          .limit(1)
+        // A cell without the claim table has never claimed a Free team.
+        if (error && error.code !== "42P01" && error.code !== "PGRST205")
+          throw new Error("Unable to check your plan. Please retry.")
+        return !error && (data?.length ?? 0) > 0
+      }),
+  )
+  return claims.some(Boolean)
 }
 
 async function guardFirstGoogleTeam(
@@ -317,7 +342,8 @@ async function provisionTeamFor(
       ...locator,
       name,
       ...publication,
-      additionalTeam: !firstTeam && !enterpriseAuthority,
+      additionalTeam:
+        !enterpriseAuthority && (await holdsFreeTeamElsewhere(userId, region)),
     }
     prepared = enterpriseAuthority
       ? await preparePromotionTeamForEnterprise(
