@@ -13,7 +13,7 @@ Run it two ways: **locally** over stdio via `npx`, or against the **hosted** end
 
 ## Quickstart
 
-Add the server to your client (see [Install](#install)), then ask the agent to _"create a sandbox and run `python --version` in it."_ The agent calls `sandbox_create`, then `sandbox_exec`, and reports the result — no code from you.
+Add the server to your client (see [Install](#install)), then ask the agent to _"create a sandbox and run `python3 --version` in it."_ The agent calls `sandbox_create`, then `sandbox_exec`, and reports the result — no code from you.
 
 You need a Superserve API key — create one on the [API key](/api-key) page. There's no global install; `npx` fetches the server on first use.
 
@@ -221,7 +221,7 @@ sandbox_create       { name: "primes" }
 sandbox_files_write  { sandbox_id: "a1b2c3…", path: "/app/primes.py", content: "…" }
                        → { path: "/app/primes.py", bytes: 142 }
 
-sandbox_exec         { sandbox_id: "a1b2c3…", command: "python /app/primes.py" }
+sandbox_exec         { sandbox_id: "a1b2c3…", command: "python3 /app/primes.py" }
                        → { exit_code: 0, stdout: "2 3 5 7 11 13 17 19 23 29", stderr: "" }
 ```
 
