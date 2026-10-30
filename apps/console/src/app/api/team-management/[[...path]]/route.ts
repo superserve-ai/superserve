@@ -11,6 +11,10 @@ import {
   SIGNUP_RESTRICTED_MESSAGE,
   SignupRestrictedError,
 } from "@/lib/auth/signup-restrictions"
+import {
+  FirstTeamRegionRequiredError,
+  REGION_REQUIRED_RESPONSE,
+} from "@/lib/onboarding/first-team-region"
 import { createServerClient } from "@/lib/supabase/server"
 
 const FORWARD_REQUEST_HEADERS = new Set([
@@ -34,6 +38,10 @@ function signupDenied(): NextResponse {
     { error: { code: "signup_blocked", message: SIGNUP_RESTRICTED_MESSAGE } },
     { status: 403 },
   )
+}
+
+function regionRequired(): NextResponse {
+  return NextResponse.json(REGION_REQUIRED_RESPONSE, { status: 409 })
 }
 
 function googleRecovery(): NextResponse {
@@ -102,6 +110,7 @@ async function proxyTeamManagementRequest(
     if (error instanceof GoogleSignupRecoveryRequiredError)
       return googleRecovery()
     if (error instanceof SignupRestrictedError) return signupDenied()
+    if (error instanceof FirstTeamRegionRequiredError) return regionRequired()
     throw error
   }
   const { path = [] } = await params
@@ -117,6 +126,7 @@ async function proxyTeamManagementRequest(
     if (error instanceof GoogleSignupRecoveryRequiredError)
       return googleRecovery()
     if (error instanceof SignupRestrictedError) return signupDenied()
+    if (error instanceof FirstTeamRegionRequiredError) return regionRequired()
     throw error
   }
   if (!apiKey) {
@@ -134,6 +144,7 @@ async function proxyTeamManagementRequest(
     if (error instanceof GoogleSignupRecoveryRequiredError)
       return googleRecovery()
     if (error instanceof SignupRestrictedError) return signupDenied()
+    if (error instanceof FirstTeamRegionRequiredError) return regionRequired()
     throw error
   }
   const url = new URL(`${apiBaseUrl}${targetPath}`)

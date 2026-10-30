@@ -14,6 +14,13 @@ export class FirstTeamRegionRequiredError extends Error {
   }
 }
 
+export const REGION_REQUIRED_RESPONSE = {
+  error: {
+    code: "region_required",
+    message: "Choose a region for your first team",
+  },
+} as const
+
 export function firstTeamRegionPath(next: string): string {
   return `/onboarding/region/?${new URLSearchParams({ next })}`
 }
