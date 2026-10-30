@@ -110,7 +110,7 @@ export function BuyCreditPageClient({
   const offers = capabilities?.offers
   const topoff = plan ? planTopoff(plan, offers) : null
   // A subscription funded by credit manages Auto Reload here, and buys
-  // one-off credit once that is sold to it.
+  // one-off credit while entry is open.
   const topoffOnly =
     !!plan && plan.kind === "subscription" && fundedByCredit(plan, offers)
   // Starter credit is sold only to teams already on Starter.
