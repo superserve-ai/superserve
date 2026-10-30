@@ -24,6 +24,8 @@ const MESSAGES: Record<PlanPickerReason, string> = {
     "Your free trial is used up or isn't available for this account. Your sandboxes are paused and nothing is deleted. Choose a plan to continue.",
   payment_failed:
     "We couldn't confirm a card for your plan. Choose a plan to try again.",
+  plan_required:
+    "Free covers your first team. Choose a plan to run sandboxes in this one.",
   plan_unavailable: "That plan is no longer available. Choose another plan.",
   checkout_canceled: "Checkout was cancelled. Choose a plan when you're ready.",
   checkout_unavailable: "We couldn't open checkout. Please try again.",

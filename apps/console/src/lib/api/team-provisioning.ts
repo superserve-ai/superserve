@@ -313,7 +313,12 @@ async function provisionTeamFor(
           enterpriseAuthority,
         )
       : await publishAccountPromotion(region, user, observedAt)
-    const preparation = { ...locator, name, ...publication }
+    const preparation = {
+      ...locator,
+      name,
+      ...publication,
+      additionalTeam: !firstTeam && !enterpriseAuthority,
+    }
     prepared = enterpriseAuthority
       ? await preparePromotionTeamForEnterprise(
           preparation,
