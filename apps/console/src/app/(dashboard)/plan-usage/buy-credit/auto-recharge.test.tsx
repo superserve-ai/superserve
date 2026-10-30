@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
   ready: true,
   scope: "self",
   planError: false,
-  fundedPurchases: false,
+  entryOpen: true,
   refetchPlan: vi.fn(),
   plan: { key: "funded_monthly", kind: "prepaid" } as
     | Record<string, unknown>
@@ -37,12 +37,6 @@ vi.mock("@/hooks/use-teams", () => ({
   useSwitchTeam: () => ({ mutateAsync: vi.fn() }),
 }))
 
-vi.mock("@/lib/api/billing-v2", async (original) => ({
-  ...(await original<typeof import("@/lib/api/billing-v2")>()),
-  get FUNDED_CREDIT_PURCHASES() {
-    return mocks.fundedPurchases
-  },
-}))
 vi.mock("@/hooks/use-billing-v2", () => ({
   useTeamPlan: () => ({
     data: mocks.plan,
@@ -54,7 +48,7 @@ vi.mock("@/hooks/use-billing-capabilities", () => ({
   useBillingCapabilities: () => ({
     data: {
       pricing_version: "v2",
-      entry_open: true,
+      entry_open: mocks.entryOpen,
       offers: [
         {
           offer_key: "funded_monthly",
@@ -127,7 +121,7 @@ const initial: PrepaidCreditSummary = {
 }
 
 beforeEach(() => {
-  mocks.fundedPurchases = false
+  mocks.entryOpen = true
   mocks.plan = { key: "funded_monthly", kind: "prepaid" }
   mocks.planError = false
   mocks.refetchPlan.mockReset()
@@ -486,7 +480,8 @@ it("keeps fresh Starter entry fenced when recovery discovery is explicitly denie
   expect(mocks.recover).not.toHaveBeenCalled()
 })
 
-it("gives a subscription funded by credit Auto Reload but no purchase until it's sold", () => {
+it("gives a subscription funded by credit Auto Reload but no purchase while entry is closed", () => {
+  mocks.entryOpen = false
   mocks.plan = {
     key: "funded_monthly",
     kind: "subscription",
@@ -577,8 +572,7 @@ it("keeps the toggle and offers a retry while the plan can't be read", async () 
   expect(mocks.refetchPlan).toHaveBeenCalled()
 })
 
-it("puts the one-off purchase next to Auto Reload once it's sold to credit-funded plans", async () => {
-  mocks.fundedPurchases = true
+it("puts the one-off purchase next to Auto Reload for credit-funded plans", async () => {
   mocks.plan = {
     key: "funded_monthly",
     kind: "subscription",

@@ -1,6 +1,5 @@
 import { z } from "zod"
 
-import { FUNDED_CREDIT_PURCHASES } from "@/lib/api/billing-v2"
 import { pickerPlans } from "@/lib/billing/plan-picker"
 import {
   billingOffersSchema,
@@ -86,16 +85,11 @@ export function canStartAnyPlan(
   )
 }
 
-// Whether a team on a plan funded by credit can buy one-off credit now: the
-// purchase must be switched on and new entry open.
+// Whether a team on a plan funded by credit can buy one-off credit now.
 export function canBuyFundedCredit(
   capabilities: BillingCapabilities | undefined,
 ): boolean {
-  return (
-    FUNDED_CREDIT_PURCHASES &&
-    capabilities?.pricing_version === "v2" &&
-    capabilities.entry_open
-  )
+  return capabilities?.pricing_version === "v2" && capabilities.entry_open
 }
 
 // Whether the buy-credit page gives a team on a plan funded by credit a way
