@@ -169,6 +169,28 @@ describe("PlanOverviewSection with pricing v2 off", () => {
     expect(screen.getByRole("link", { name: "Change plan" })).toBeTruthy()
   })
 
+  it("keeps a subscription team's way to undo a scheduled change after rollback", () => {
+    mocks.version.mockReturnValue("legacy")
+    mocks.plan.mockReturnValue({
+      data: plan({
+        pending_change: {
+          id: "34971786-dd50-492b-b934-306b63764c4b",
+          plan_key: "free",
+          plan_name: "Free",
+          effective_at: "2026-11-01T00:00:00Z",
+          undoable: true,
+          pauses_running: true,
+        },
+      }),
+      isError: false,
+    })
+    render(<PlanOverviewSection summary={summary} details />)
+    expect(screen.queryByRole("link", { name: "Change plan" })).toBeNull()
+    expect(
+      screen.getByRole("link", { name: "Manage scheduled change" }),
+    ).toHaveAttribute("href", "/plan-usage/upgrade")
+  })
+
   it("renders today's plan card when there is no assigned plan", () => {
     mocks.version.mockReturnValue("legacy")
     render(<PlanOverviewSection summary={summary} />)

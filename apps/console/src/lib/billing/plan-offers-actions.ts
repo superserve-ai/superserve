@@ -8,7 +8,7 @@ import {
   type BillingOffer,
   billingOffersSchema,
   type PlanCard,
-  publicBillingPlansSchema,
+  planCardsSchema,
 } from "./plans"
 import type { CheckoutLocator } from "./signup-checkout-paths"
 
@@ -43,10 +43,11 @@ export async function getTeamCatalogAction(
       offers?: unknown
       catalog?: unknown
     }
-    const catalog = publicBillingPlansSchema.safeParse(body.catalog)
     return {
       offers: billingOffersSchema.parse(body.offers),
-      cards: catalog.success ? catalog.data.cards : [],
+      cards: planCardsSchema.parse(
+        (body.catalog as { cards?: unknown } | undefined)?.cards,
+      ),
     }
   } catch {
     return null

@@ -115,6 +115,16 @@ export const planCardSchema = z.object({
   topoff: planTopoffSchema.optional().catch(undefined),
 })
 
+export const planCardsSchema = z
+  .array(z.unknown())
+  .catch([])
+  .transform((entries) =>
+    entries.flatMap((entry) => {
+      const card = planCardSchema.safeParse(entry)
+      return card.success ? [card.data] : []
+    }),
+  )
+
 export const publicBillingPlansSchema = z.object({
   pricing_version: pricingVersionSchema,
   cards: z.array(planCardSchema),

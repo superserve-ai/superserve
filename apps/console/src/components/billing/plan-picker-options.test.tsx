@@ -151,6 +151,24 @@ describe("PlanPickerOptions", () => {
     ])
   })
 
+  it("keeps the offer's own terms when the catalog has no card for it", async () => {
+    mocks.offers = [
+      offer("developer_monthly", "Builder", {
+        topoff: {
+          amount_cents: 700,
+          threshold_cents: 300,
+          default_enabled: true,
+        },
+      }),
+    ]
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    const builder = await screen.findByRole("form", { name: "Builder plan" })
+    expect(
+      [...builder.querySelectorAll("li")].map((item) => item.textContent),
+    ).toEqual(["Auto Reload adds $7 when your balance drops under $3"])
+    expect(builder.textContent).toMatch(/Includes \$11 of usage each month/)
+  })
+
   it("highlights a plan still on sale when the preselected one isn't", async () => {
     mocks.offers = [
       offer("developer_monthly", "Builder", { sellable: false }),

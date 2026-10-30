@@ -1,7 +1,7 @@
 "use client"
 
 import { CheckIcon } from "@phosphor-icons/react"
-import { Button } from "@superserve/ui"
+import { Button, cn } from "@superserve/ui"
 import { useEffect, useState } from "react"
 
 import {
@@ -38,14 +38,11 @@ function PlanOption({
       action={signupCheckoutPath(plan.offer, locator)}
       aria-label={`${plan.label} plan`}
       data-highlighted={highlighted}
-      className="relative flex flex-col border border-dashed border-border bg-background p-6 text-left"
+      className={cn(
+        "flex flex-col border border-dashed bg-background p-6 text-left",
+        highlighted ? "border-brand/70" : "border-border",
+      )}
     >
-      {highlighted ? (
-        <span
-          aria-hidden
-          className="absolute inset-x-0 -top-px h-px bg-brand"
-        />
-      ) : null}
       <h2 className="text-2xl leading-none font-medium tracking-tight text-foreground">
         {plan.label}
       </h2>

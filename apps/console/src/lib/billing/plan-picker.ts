@@ -69,7 +69,12 @@ export function pickerCard(
   offer: BillingOffer,
   cards: readonly PlanCard[],
 ): PickerCard {
-  const card = cards.find((entry) => entry.family === offer.family)
+  const card =
+    cards.find(
+      (entry) =>
+        entry.monthly?.offer_key === offer.offer_key ||
+        entry.annual?.offer_key === offer.offer_key,
+    ) ?? cards.find((entry) => entry.family === offer.family)
   const size = card ? planSandboxSize(card.limits) : null
   const support = card?.features.find((feature) =>
     SUPPORT_FEATURE.test(feature),
@@ -78,7 +83,7 @@ export function pickerCard(
     price: formatUsdCents(offer.price_cents),
     interval: offer.interval_months === 12 ? "year" : "month",
     included: offer.included_credit_cents
-      ? `Includes ${formatUsdCents(offer.included_credit_cents)} of usage`
+      ? `Includes ${formatUsdCents(offer.included_credit_cents)} of usage each month`
       : null,
     tagline: card?.tagline || null,
     limits: [

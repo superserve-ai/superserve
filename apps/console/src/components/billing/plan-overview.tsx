@@ -441,6 +441,15 @@ export function PlanDetails({
         <>
           <SupportContact channel={channel} prompt="Need a different plan?" />
           <SupportContact channel={channel} prompt="Want to cancel?" />
+          {canManage && pending ? (
+            <Button
+              size="sm"
+              variant="outline"
+              render={<Link href={UPGRADE_PATH} />}
+            >
+              Manage scheduled change
+            </Button>
+          ) : null}
         </>
       ) : canManage ? (
         <div className="flex flex-wrap gap-3">
