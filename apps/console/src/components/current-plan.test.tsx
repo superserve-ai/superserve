@@ -36,3 +36,13 @@ it.each([
   expect(screen.getByText(label)).toBeTruthy()
   expect(screen.queryByText(/Pay as you go/)).toBeNull()
 })
+
+it("tells a team that needs a plan it never had a trial", () => {
+  const plan = summary("plan_required")
+  plan.plan!.name = "No plan"
+  render(<CurrentPlan summary={plan} />)
+  expect(
+    screen.getByText("Free covers your first team · choose a plan"),
+  ).toBeTruthy()
+  expect(screen.queryByText(/Trial/)).toBeNull()
+})

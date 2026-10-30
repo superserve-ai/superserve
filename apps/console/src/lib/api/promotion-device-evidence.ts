@@ -29,6 +29,8 @@ interface CreationLocator {
 export interface PromotionTeamPreparation extends CreationLocator {
   readonly name: string
   readonly authorityUnavailable: boolean
+  // Every team after the account's first starts awaiting a paid plan.
+  readonly additionalTeam?: boolean
 }
 
 export interface PreparedPromotionTeam extends PromotionTeamPreparation {
@@ -539,7 +541,9 @@ function validatePreparation(input: PromotionTeamPreparation): void {
     typeof input.name !== "string" ||
     !input.name.trim() ||
     Buffer.byteLength(input.name, "utf8") > 256 ||
-    typeof input.authorityUnavailable !== "boolean"
+    typeof input.authorityUnavailable !== "boolean" ||
+    (input.additionalTeam !== undefined &&
+      typeof input.additionalTeam !== "boolean")
   )
     throw new PromotionEvidenceError("invalid_evidence")
 }
@@ -581,6 +585,7 @@ function readPreparedTeam(
     teamId: value.team_id,
     name: value.name,
     authorityUnavailable: value.authority_unavailable,
+    additionalTeam: value.additional_team === true,
     createdAt: value.created_at,
     state: value.state as PreparedPromotionTeam["state"],
     outcome: value.outcome as PreparedPromotionTeam["outcome"],
@@ -592,11 +597,20 @@ function readPreparedTeam(
     "teamId",
     "name",
     "authorityUnavailable",
+    "additionalTeam",
   ] as const) {
     if (expected[field] !== undefined && expected[field] !== result[field])
       throw new PromotionEvidenceError("authority_unavailable")
   }
   return result
+}
+
+// Sent only when set: the control plane rejects unknown fields, and an absent
+// flag is a first team.
+function additionalTeamField(
+  binding: PromotionTeamPreparation,
+): Record<string, boolean> {
+  return binding.additionalTeam ? { additional_team: true } : {}
 }
 
 /** Persist before dispatch. The locator must already be retained by the caller. */
@@ -633,6 +647,7 @@ async function preparePromotionTeamForAccount(
     name: binding.name,
     home_region: binding.region,
     authority_unavailable: binding.authorityUnavailable,
+    ...additionalTeamField(binding),
   }
   const result = await post(
     binding.region,
@@ -739,6 +754,7 @@ async function completePromotionTeamForAccount(
     name: binding.name,
     home_region: binding.region,
     authority_unavailable: binding.authorityUnavailable,
+    ...additionalTeamField(binding),
   }
   const result = readPreparedTeam(
     await post(
