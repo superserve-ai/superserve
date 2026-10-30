@@ -826,7 +826,10 @@ export function PlanEditor({
               ) : null}
               {form.funded && form.topoff ? (
                 <div className="grid gap-4 sm:grid-cols-3">
-                  <Field label="Top-off amount (USD)" htmlFor="topoff-amount">
+                  <Field
+                    label="Auto Reload amount (USD)"
+                    htmlFor="topoff-amount"
+                  >
                     <Input
                       id="topoff-amount"
                       inputMode="decimal"

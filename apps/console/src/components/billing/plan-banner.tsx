@@ -1,15 +1,25 @@
 "use client"
 
+import { Button } from "@superserve/ui"
+import Link from "next/link"
+
 import { useQueryScope } from "@/components/query-provider"
 import { TrialBillingBanner } from "@/components/trial-billing-banner"
 import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
+import { useBillingContext } from "@/hooks/use-billing-context"
+import { useBillingPayment } from "@/hooks/use-billing-payment"
 import { useBillingReturnNotice } from "@/hooks/use-billing-return-notice"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { usePrepaidBalance, useTeamPlan } from "@/hooks/use-billing-v2"
-import { canStartAnyPlan, canStartPlan } from "@/lib/api/billing-capabilities"
+import {
+  canAddFundedCredit,
+  canStartAnyPlan,
+  canStartPlan,
+} from "@/lib/api/billing-capabilities"
 import type { BillingCapabilities } from "@/lib/api/billing-capabilities"
 import {
   fundedByCredit,
+  SETTINGS_BILLING_PATH,
   type TeamPlan,
   upgradePath,
 } from "@/lib/api/billing-v2"
@@ -41,7 +51,23 @@ function PricingV2Banner({ plan }: { plan: TeamPlan }) {
   const summaryQuery = useBillingSummary()
   const summary = summaryQuery.isError ? undefined : summaryQuery.data
   const prepaid = usePrepaidBalance(fundedByCredit(plan, offers)).data
+  const { teamKey } = useBillingContext()
+  const payment = useBillingPayment(summary, teamKey)
   if (!summary?.permissions?.can_view) return null
+  // Without a way to add credit here, the customer fixes the card instead.
+  const manageBilling = payment.available ? (
+    <Button
+      size="sm"
+      disabled={payment.submitting !== null}
+      onClick={() => void payment.openSession()}
+    >
+      Manage billing
+    </Button>
+  ) : (
+    <Button size="sm" render={<Link href={SETTINGS_BILLING_PATH} />}>
+      Manage billing
+    </Button>
+  )
   return (
     <PlanAwareBanner
       plan={plan}
@@ -53,6 +79,8 @@ function PricingV2Banner({ plan }: { plan: TeamPlan }) {
       canUpgrade={canStartAnyPlan(capabilities)}
       canBuyCredit={canStartPlan(capabilities, plan)}
       canConfigureRecharge={capabilities?.fresh_entry.auto_recharge === true}
+      canAddFundedCredit={canAddFundedCredit(capabilities, prepaid)}
+      manageBilling={manageBilling}
     />
   )
 }

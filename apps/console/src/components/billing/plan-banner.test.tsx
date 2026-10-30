@@ -17,7 +17,7 @@ vi.mock("@/hooks/use-billing-capabilities", () => ({
   }),
 }))
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { TeamPlan } from "@/lib/api/billing-v2"
@@ -27,6 +27,11 @@ const mocks = vi.hoisted(() => ({
   offers: undefined as unknown[] | undefined,
   cards: [] as unknown[],
   buyCredit: true,
+  payment: {
+    available: true,
+    submitting: null as string | null,
+    openSession: vi.fn(),
+  },
   pro: undefined as boolean | undefined,
   recharge: true,
   version: vi.fn(),
@@ -44,6 +49,16 @@ vi.mock("@/hooks/use-pricing-version", () => ({
 vi.mock("@/hooks/use-billing-v2", () => ({
   useTeamPlan: mocks.plan,
   usePrepaidBalance: mocks.prepaid,
+}))
+vi.mock("@/hooks/use-billing-payment", () => ({
+  useBillingPayment: () => mocks.payment,
+}))
+vi.mock("@/hooks/use-billing-context", () => ({
+  useBillingContext: () => ({
+    teamKey: "use:t",
+    cacheScope: "self",
+    ready: true,
+  }),
 }))
 vi.mock("@/hooks/use-billing-summary", () => ({
   useBillingSummary: mocks.summary,
@@ -88,6 +103,7 @@ beforeEach(() => {
   mocks.offers = undefined
   mocks.cards = []
   mocks.buyCredit = true
+  mocks.payment = { available: true, submitting: null, openSession: vi.fn() }
   mocks.pro = undefined
   mocks.recharge = true
   mocks.plan.mockReturnValue({ data: null })
@@ -409,10 +425,12 @@ describe("PlanBanner for a credit-funded subscription", () => {
       enabled = false,
       observed = true,
       disabled_reason = null as string | null,
+      card = true,
     } = {},
   ) => ({
     data: {
       balance_cents: cents,
+      has_saved_card: card,
       balance_observed: observed,
       low_balance: low,
       auto_recharge: {
@@ -453,7 +471,7 @@ describe("PlanBanner for a credit-funded subscription", () => {
     )
   })
 
-  it("keeps the warning but drops the Auto Reload link while entry is closed", () => {
+  it("keeps the warning but drops Add Credits while entry is closed", () => {
     mocks.recharge = false
     mocks.prepaid.mockReturnValue(balance(150, { low: true }))
     mount()
@@ -461,8 +479,23 @@ describe("PlanBanner for a credit-funded subscription", () => {
       screen.getByRole("region", { name: "Credit balance" }).textContent,
     ).toMatch(/^Your credit balance is too low\./)
     expect(
-      screen.queryByRole("link", { name: /Auto Reload/ }),
+      screen.queryByRole("link", { name: "Add Credits" }),
     ).not.toBeInTheDocument()
+  })
+
+  it("sends a team with no card and nothing to buy to manage billing", () => {
+    mocks.prepaid.mockReturnValue(balance(150, { low: true, card: false }))
+    const { unmount } = mount()
+    expect(screen.queryByRole("link", { name: "Add Credits" })).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Manage billing" }))
+    expect(mocks.payment.openSession).toHaveBeenCalledOnce()
+    unmount()
+
+    mocks.payment = { available: false, submitting: null, openSession: vi.fn() }
+    mount()
+    expect(
+      screen.getByRole("link", { name: "Manage billing" }),
+    ).toHaveAttribute("href", expect.stringMatching(/^\/settings\/?$/))
   })
 
   it("follows the backend's flag rather than its own threshold", () => {

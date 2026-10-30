@@ -53,6 +53,8 @@ vi.mock("@/hooks/use-billing-v2", () => ({
 vi.mock("@/hooks/use-billing-capabilities", () => ({
   useBillingCapabilities: () => ({
     data: {
+      pricing_version: "v2",
+      entry_open: true,
       offers: [
         {
           offer_key: "funded_monthly",

@@ -9,7 +9,6 @@ import {
   isLowBalance,
   type PrepaidBalance,
   type TeamPlan,
-  FUNDED_CREDIT_PURCHASES,
   UPGRADE_PATH,
 } from "@/lib/api/billing-v2"
 import type { BillingOffer } from "@/lib/billing/plans"
@@ -21,6 +20,8 @@ export interface UpgradeChoice {
 
 export interface PlanAwareBannerProps {
   plan: TeamPlan
+  canAddFundedCredit?: boolean
+  manageBilling?: React.ReactNode
   upgradeChoices?: readonly UpgradeChoice[]
   offers?: readonly BillingOffer[]
   fundingState?: string | null
@@ -77,24 +78,28 @@ export function ManageAction({
 function LowCreditBanner({
   prepaid,
   canManage,
-  canConfigureRecharge,
+  canAddCredit,
+  manageBilling,
 }: {
   prepaid: PrepaidBalance
   canManage: boolean
-  canConfigureRecharge: boolean
+  canAddCredit: boolean
+  manageBilling: React.ReactNode
 }) {
   return (
     <BannerShell
       tone={prepaid.balance_cents <= 0 ? "danger" : "warning"}
       label="Credit balance"
       action={
-        (canConfigureRecharge || FUNDED_CREDIT_PURCHASES) && (
-          <ManageAction canManage={canManage}>
+        <ManageAction canManage={canManage}>
+          {canAddCredit ? (
             <Button size="sm" render={<Link href={BUY_CREDIT_PATH} />}>
               Add Credits
             </Button>
-          </ManageAction>
-        )
+          ) : (
+            manageBilling
+          )}
+        </ManageAction>
       }
     >
       Your credit balance is too low. Buy usage to continue running sandboxes.
@@ -104,6 +109,8 @@ function LowCreditBanner({
 
 export function PlanAwareBanner({
   plan,
+  canAddFundedCredit = false,
+  manageBilling = null,
   upgradeChoices = [],
   offers,
   fundingState,
@@ -161,7 +168,8 @@ export function PlanAwareBanner({
       <LowCreditBanner
         prepaid={prepaid}
         canManage={canManage}
-        canConfigureRecharge={canConfigureRecharge}
+        canAddCredit={canAddFundedCredit}
+        manageBilling={manageBilling}
       />
     ) : null
   }

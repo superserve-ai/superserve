@@ -26,12 +26,8 @@ import {
   useRetainedPrepaidOperations,
 } from "@/hooks/use-prepaid-credit"
 import { useUser } from "@/hooks/use-user"
-import {
-  fundedByCredit,
-  planTopoff,
-  FUNDED_CREDIT_PURCHASES,
-  UPGRADE_PATH,
-} from "@/lib/api/billing-v2"
+import { canBuyFundedCredit } from "@/lib/api/billing-capabilities"
+import { fundedByCredit, planTopoff, UPGRADE_PATH } from "@/lib/api/billing-v2"
 import {
   type PrepaidCreditSummary,
   type PrepaidPurchase,
@@ -110,7 +106,8 @@ export function BuyCreditPageClient({
   const scope = useQueryScope()
   const planQuery = useTeamPlan(contextMatched)
   const plan = planQuery.data
-  const offers = useBillingCapabilities().data?.offers
+  const capabilities = useBillingCapabilities().data
+  const offers = capabilities?.offers
   const topoff = plan ? planTopoff(plan, offers) : null
   // A subscription funded by credit manages Auto Reload here, and buys
   // one-off credit once that is sold to it.
@@ -119,7 +116,8 @@ export function BuyCreditPageClient({
   // Starter credit is sold only to teams already on Starter.
   const starterTeam = plan?.kind === "prepaid"
   const purchasable =
-    allowEntry && (starterTeam || (topoffOnly && FUNDED_CREDIT_PURCHASES))
+    (allowEntry && starterTeam) ||
+    (topoffOnly && canBuyFundedCredit(capabilities))
   const canManage =
     ready && Boolean(summary?.permissions?.can_manage) && scope === "self"
   const canRecover = canManage && allowRecovery
