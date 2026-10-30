@@ -181,10 +181,17 @@ agent worker controller --spawn "$(pwd)/spawn.sh" --pool superserve
 
 ### The spawn hook
 
-The controller runs the hook once per claim with `CURSOR_AGENT_WORKER_ID`, `CURSOR_POOL`, `CURSOR_REQUEST_ID`, and the request's repo fields in its environment. The hook creates a sandbox tagged with the worker id and launches the worker:
+The controller runs the hook once per claim with `CURSOR_AGENT_WORKER_ID`, `CURSOR_POOL`, `CURSOR_REQUEST_ID`, and the request's repo fields in its environment. The hook creates a sandbox tagged with the worker id and launches the worker with the reference's `worker.mjs` / `worker.py` helpers, which write the launch script into the sandbox:
 
 <CodeGroup>
 ```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+import { launchWorker, workerEnv } from "./worker.mjs"
+
+const workerId = process.env.CURSOR_AGENT_WORKER_ID!
+const pool = process.env.CURSOR_POOL!
+const requestId = process.env.CURSOR_REQUEST_ID ?? ""
+
 const sandbox = await Sandbox.create({
   name: `cursor-${workerId.slice(0, 12)}`,
   fromTemplate: "cursor-worker",
@@ -197,18 +204,32 @@ const sandbox = await Sandbox.create({
   autoDeleteSeconds: 86_400, // reap if left paused for a day
 })
 
-// launch.sh detaches and runs:
+// Writes launch.sh and run.sh to /var/lib/cursor-worker, then launch.sh
+// detaches and runs:
 //   agent worker --pool <pool> --clone-git-repos start
-await sandbox.commands.run("bash /var/lib/cursor-worker/launch.sh", {
-  env: {
-    CURSOR_API_KEY: process.env.CURSOR_API_KEY,
-    CURSOR_AGENT_WORKER_ID: workerId,
-    CURSOR_WORKER_IDLE_RELEASE_TIMEOUT: "600",
-  },
+// workerEnv() passes CURSOR_API_KEY, the worker id, and the idle timeout.
+const result = await launchWorker(sandbox, {
+  pool,
+  env: workerEnv({ workerId }),
 })
+if (!result.ok) {
+  console.error(result.log)
+  await sandbox.kill()
+  process.exit(1)
+}
 ```
 
 ```python Python
+import os
+import sys
+
+from superserve import Sandbox
+from worker import launch_worker, worker_env
+
+worker_id = os.environ["CURSOR_AGENT_WORKER_ID"]
+pool = os.environ["CURSOR_POOL"]
+request_id = os.environ.get("CURSOR_REQUEST_ID", "")
+
 sandbox = Sandbox.create(
     name=f"cursor-{worker_id[:12]}",
     from_template="cursor-worker",
@@ -221,16 +242,15 @@ sandbox = Sandbox.create(
     auto_delete_seconds=86_400,  # reap if left paused for a day
 )
 
-# launch.sh detaches and runs:
+# Writes launch.sh and run.sh to /var/lib/cursor-worker, then launch.sh
+# detaches and runs:
 #   agent worker --pool <pool> --clone-git-repos start
-sandbox.commands.run(
-    "bash /var/lib/cursor-worker/launch.sh",
-    env={
-        "CURSOR_API_KEY": os.environ["CURSOR_API_KEY"],
-        "CURSOR_AGENT_WORKER_ID": worker_id,
-        "CURSOR_WORKER_IDLE_RELEASE_TIMEOUT": "600",
-    },
-)
+# worker_env() passes CURSOR_API_KEY, the worker id, and the idle timeout.
+result = launch_worker(sandbox, pool, worker_env(worker_id))
+if not result["ok"]:
+    print(result["log"], file=sys.stderr)
+    sandbox.kill()
+    sys.exit(1)
 ```
 </CodeGroup>
 

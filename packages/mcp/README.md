@@ -13,7 +13,7 @@ Add to your MCP client and set `SUPERSERVE_API_KEY` in its `env` (clients do not
 ```bash
 claude mcp add superserve \
   --env SUPERSERVE_API_KEY=ss_live_xxxxxxxxxxxxxxxx \
-  -- npx -y @superserve/mcp
+  -- npx -y -p @superserve/mcp superserve-mcp
 ```
 
 **Claude Desktop / Cursor / Windsurf** (`claude_desktop_config.json`, `.cursor/mcp.json`, `mcp_config.json`):
@@ -23,7 +23,7 @@ claude mcp add superserve \
   "mcpServers": {
     "superserve": {
       "command": "npx",
-      "args": ["-y", "@superserve/mcp"],
+      "args": ["-y", "-p", "@superserve/mcp", "superserve-mcp"],
       "env": { "SUPERSERVE_API_KEY": "ss_live_xxxxxxxxxxxxxxxx" }
     }
   }
@@ -46,7 +46,7 @@ claude mcp add superserve \
     "superserve": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@superserve/mcp"],
+      "args": ["-y", "-p", "@superserve/mcp", "superserve-mcp"],
       "env": { "SUPERSERVE_API_KEY": "${input:superserve-key}" }
     }
   }
@@ -58,7 +58,7 @@ claude mcp add superserve \
 ```toml
 [mcp_servers.superserve]
 command = "npx"
-args = ["-y", "@superserve/mcp"]
+args = ["-y", "-p", "@superserve/mcp", "superserve-mcp"]
 env_vars = ["SUPERSERVE_API_KEY"]
 ```
 
