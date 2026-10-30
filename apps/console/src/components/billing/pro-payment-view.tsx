@@ -185,12 +185,12 @@ export function ProPaymentView({
           {pro.funding_policy === "prepaid" ? (
             <>
               <li>
-                Usage beyond the included credit is paid from Auto Topoff
+                Usage beyond the included credit is paid from Auto Reload
                 credit. Running sandboxes pause when credit runs out.
               </li>
               {pro.topoff ? (
                 <li>
-                  Auto Topoff adds {formatUsdCents(pro.topoff.amount_cents)}{" "}
+                  Auto Reload adds {formatUsdCents(pro.topoff.amount_cents)}{" "}
                   when credit drops below{" "}
                   {formatUsdCents(pro.topoff.threshold_cents)}. Choose it at
                   checkout.

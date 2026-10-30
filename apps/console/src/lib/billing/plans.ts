@@ -115,6 +115,16 @@ export const planCardSchema = z.object({
   topoff: planTopoffSchema.optional().catch(undefined),
 })
 
+export const planCardsSchema = z
+  .array(z.unknown())
+  .catch([])
+  .transform((entries) =>
+    entries.flatMap((entry) => {
+      const card = planCardSchema.safeParse(entry)
+      return card.success ? [card.data] : []
+    }),
+  )
+
 export const publicBillingPlansSchema = z.object({
   pricing_version: pricingVersionSchema,
   cards: z.array(planCardSchema),
@@ -175,6 +185,14 @@ export function describeSandboxSize(
 export function planSandboxSize(limits: PlanLimits): string | null {
   const size = describeSandboxSize(limits)
   return size ? `Up to ${size} per sandbox` : null
+}
+
+export function planConcurrency(
+  limits: Pick<PlanLimits, "max_concurrent">,
+): string | null {
+  return limits.max_concurrent
+    ? `Up to ${limits.max_concurrent.toLocaleString("en-US")} concurrent sandboxes`
+    : null
 }
 
 export function findOffer(

@@ -1,6 +1,6 @@
 "use client"
 
-import { Button } from "@superserve/ui"
+import { Button, cn } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -8,7 +8,6 @@ import { Suspense, useEffect } from "react"
 
 import { PlanPickerOptions } from "@/components/billing/plan-picker-options"
 import { CornerBrackets } from "@/components/corner-brackets"
-import { DitherBackground } from "@/components/dither-background"
 import {
   checkoutLocator,
   isSignupCheckoutOffer,
@@ -53,10 +52,19 @@ function ChoosePlanContent() {
         ? selected
         : null
 
+  const picking =
+    locator !== null &&
+    reason !== "payment_confirming" &&
+    reason !== "checkout_elsewhere"
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
-      <DitherBackground />
-      <div className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6">
+      <div
+        className={cn(
+          "relative w-full border border-dashed border-border bg-surface p-6",
+          picking ? "max-w-3xl sm:p-8" : "max-w-sm",
+        )}
+      >
         <CornerBrackets size="lg" />
         <div className="mb-8 flex justify-center">
           <Link href="/">
@@ -112,12 +120,6 @@ function ChoosePlanContent() {
           ) : (
             <PlanPickerOptions preselected={preselected} locator={locator} />
           )}
-          <Link
-            href="https://superserve.ai/pricing"
-            className="mt-3 text-xs underline"
-          >
-            Compare plans
-          </Link>
         </div>
       </div>
     </div>

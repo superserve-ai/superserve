@@ -92,8 +92,8 @@ function LowCreditBanner({
           <ManageAction canManage={canManage}>
             <Button size="sm" render={<Link href={TOPOFF_SETTINGS_PATH} />}>
               {prepaid.auto_recharge.disabled_reason
-                ? "Turn Auto Topoff back on"
-                : "Turn on Auto Topoff"}
+                ? "Turn Auto Reload back on"
+                : "Turn on Auto Reload"}
             </Button>
           </ManageAction>
         )

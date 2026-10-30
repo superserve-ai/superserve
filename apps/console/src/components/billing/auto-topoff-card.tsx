@@ -79,10 +79,10 @@ export function AutoTopoffCard({
             ? { ...previous, auto_recharge: updated.auto_recharge }
             : updated,
       )
-      addToast(enabled ? "Auto Topoff is on" : "Auto Topoff is off", "success")
+      addToast(enabled ? "Auto Reload is on" : "Auto Reload is off", "success")
     } catch (err) {
       addToast(
-        err instanceof Error ? err.message : "Unable to save Auto Topoff",
+        err instanceof Error ? err.message : "Unable to save Auto Reload",
         "error",
       )
     } finally {
@@ -93,10 +93,10 @@ export function AutoTopoffCard({
   const canEnable = allowEntry && data.has_saved_card
   return (
     <section className="flex flex-col gap-4 border border-dashed border-border p-4">
-      <h2 className="font-mono text-xs text-muted uppercase">Auto Topoff</h2>
+      <h2 className="font-mono text-xs text-muted uppercase">Auto Reload</h2>
       {current.disabled_reason && !current.enabled && (
         <p className="border border-dashed border-destructive p-3 text-sm text-foreground">
-          Auto Topoff was turned off: {current.disabled_reason}.
+          Auto Reload was turned off: {current.disabled_reason}.
           {allowEntry && " Check your card, then turn it back on."}
         </p>
       )}
@@ -108,7 +108,7 @@ export function AutoTopoffCard({
       />
       {allowEntry && !canEnable && (
         <p className="text-sm text-muted">
-          Buy credit once to save a card, then you can turn on Auto Topoff.
+          Buy credit once to save a card, then you can turn on Auto Reload.
         </p>
       )}
       {enabled && (
@@ -147,7 +147,7 @@ export function AutoTopoffCard({
       )}
       <p className="text-sm text-muted">
         At most one charge runs at a time and at most 10 a day. A declined card
-        turns Auto Topoff off and we email your billing contacts.
+        turns Auto Reload off and we email your billing contacts.
       </p>
       <div>
         <Button
@@ -162,7 +162,7 @@ export function AutoTopoffCard({
   )
 }
 
-// Auto Topoff for a plan funded by credit, managed from Settings.
+// Auto Reload for a plan funded by credit, managed from Settings.
 export function AutoTopoffSettings({
   topoff,
   canManage,
@@ -184,8 +184,8 @@ export function AutoTopoffSettings({
     return (
       <p className="px-5 pb-5 text-sm text-muted sm:px-6">
         {credit.isError
-          ? "Auto Topoff settings couldn't be loaded."
-          : "Loading Auto Topoff…"}
+          ? "Auto Reload settings couldn't be loaded."
+          : "Loading Auto Reload…"}
       </p>
     )
   const allowEntry = capabilities.data?.fresh_entry.auto_recharge === true

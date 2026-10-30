@@ -1,12 +1,16 @@
 "use client"
 
+import { CheckIcon } from "@phosphor-icons/react"
 import { Button, cn } from "@superserve/ui"
 import { useEffect, useState } from "react"
 
-import { getTeamOffersAction } from "@/lib/billing/plan-offers-actions"
 import {
-  offerPriceLabel,
-  offerTerms,
+  getTeamCatalogAction,
+  type TeamCatalog,
+} from "@/lib/billing/plan-offers-actions"
+import {
+  type PickerCard,
+  pickerCard,
   type PickerPlan,
   pickerPlans,
 } from "@/lib/billing/plan-picker"
@@ -19,10 +23,12 @@ import {
 
 function PlanOption({
   plan,
+  card,
   locator,
   highlighted,
 }: {
-  plan: PickerPlan & { catalog: BillingOffer }
+  plan: PickerPlan
+  card: PickerCard
   locator: CheckoutLocator
   highlighted: boolean
 }) {
@@ -31,26 +37,52 @@ function PlanOption({
       method="post"
       action={signupCheckoutPath(plan.offer, locator)}
       aria-label={`${plan.label} plan`}
+      data-highlighted={highlighted}
       className={cn(
-        "flex flex-col gap-3 border border-dashed p-4 text-left",
+        "flex flex-col border border-dashed bg-background p-6 text-left",
         highlighted ? "border-brand/70" : "border-border",
       )}
     >
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="text-sm font-medium text-foreground">{plan.label}</p>
-        <p className="font-mono text-xs text-foreground">
-          {offerPriceLabel(plan.catalog)}
+      <h2 className="text-2xl leading-none font-medium tracking-tight text-foreground">
+        {plan.label}
+      </h2>
+      <p className="mt-6 text-3xl leading-none font-medium tracking-tight text-brand">
+        {card.price}
+        <span className="ml-1 font-mono text-[11px] tracking-[0.12em] text-muted uppercase">
+          / {card.interval}
+        </span>
+      </p>
+      {card.included ? (
+        <p className="mt-3 font-mono text-[11px] tracking-[0.12em] text-muted uppercase">
+          {card.included}
         </p>
-      </div>
-      <ul className="space-y-1 text-xs text-muted">
-        {offerTerms(plan.catalog).map((term) => (
-          <li key={term}>{term}</li>
-        ))}
-      </ul>
+      ) : null}
+      {card.tagline ? (
+        <p className="mt-5 text-sm leading-relaxed text-muted">
+          {card.tagline}
+        </p>
+      ) : null}
+      {card.limits.length ? (
+        <ul className="mt-5 mb-8 flex flex-col gap-3 border-t border-dashed border-border pt-5">
+          {card.limits.map((limit) => (
+            <li
+              key={limit}
+              className="flex gap-2 text-sm leading-relaxed text-foreground"
+            >
+              <CheckIcon
+                aria-hidden
+                weight="light"
+                className="mt-1 size-3.5 shrink-0 text-brand"
+              />
+              {limit}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <Button
         type="submit"
-        size="sm"
         variant={highlighted ? "default" : "outline"}
+        className="mt-auto h-11 w-full"
       >
         Choose {plan.label}
       </Button>
@@ -71,25 +103,25 @@ export function PlanPickerOptions({
   // to another team never shows the previous team's prices on its forms.
   const [loaded, setLoaded] = useState<{
     key: string
-    offers: BillingOffer[] | null
+    catalog: TeamCatalog | null
   }>()
   useEffect(() => {
     let live = true
-    getTeamOffersAction({ account, team }).then(
-      (offers) => live && setLoaded({ key, offers }),
-      () => live && setLoaded({ key, offers: null }),
+    getTeamCatalogAction({ account, team }).then(
+      (catalog) => live && setLoaded({ key, catalog }),
+      () => live && setLoaded({ key, catalog: null }),
     )
     return () => {
       live = false
     }
   }, [account, team, key])
-  const offers = loaded?.key === key ? loaded.offers : undefined
+  const catalog = loaded?.key === key ? loaded.catalog : undefined
 
-  if (offers === undefined)
+  if (catalog === undefined)
     return (
       <div className="mt-5 h-5 w-5 animate-spin border-2 border-primary border-t-transparent" />
     )
-  const plans = pickerPlans(offers)
+  const plans = pickerPlans(catalog?.offers)
   const asked = preselected === "starter" ? "developer" : preselected
   const chosen =
     asked && !plans.some((plan) => plan.offer === asked)
@@ -128,11 +160,12 @@ export function PlanPickerOptions({
       </div>
     )
   return (
-    <div className="mt-5 flex w-full flex-col gap-3">
+    <div className="mt-8 grid w-full grid-cols-1 gap-4 md:grid-cols-2">
       {listed.map((plan) => (
         <PlanOption
           key={plan.offer}
           plan={plan}
+          card={pickerCard(plan.catalog, catalog?.cards ?? [])}
           locator={locator}
           highlighted={highlighted(plan.offer)}
         />
