@@ -26,6 +26,7 @@ import {
 } from "@/lib/api/billing-v2"
 import { undoPlanChange } from "@/lib/api/plan-changes"
 import { billingKeys } from "@/lib/api/query-keys"
+import { planConcurrency } from "@/lib/billing/plans"
 
 import { SupportContact, supportChannel } from "./plan-overview"
 
@@ -73,11 +74,7 @@ function PlanCard({
           </li>
         ) : null}
         {plan.limits ? (
-          <li>
-            {plan.limits.max_concurrent?.toLocaleString("en-US") ??
-              "Custom concurrency"}{" "}
-            running at once
-          </li>
+          <li>{planConcurrency(plan.limits) ?? "Custom limits"}</li>
         ) : (
           <li>Custom limits and terms</li>
         )}
@@ -203,7 +200,7 @@ export function UpgradePage() {
             {plan.kind === "subscription" ? (
               <SupportContact
                 channel={supportChannel(plan, capabilities.data?.offers)}
-                action="change your plan"
+                prompt="Need a different plan?"
               />
             ) : null}
             <PendingChange
