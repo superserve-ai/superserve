@@ -55,9 +55,11 @@ import { findOffer, planCard } from "@/lib/billing/plans"
 const STATUS_UNKNOWN = "status_unknown"
 
 function isTransientFailure(cause: unknown) {
-  return cause instanceof ApiError
-    ? cause.status >= 500
-    : cause instanceof TypeError
+  if (cause instanceof ApiError) return cause.status >= 500
+  return (
+    cause instanceof TypeError ||
+    (cause instanceof Error && cause.name === "AbortError")
+  )
 }
 
 interface ProPaymentProps {
@@ -178,6 +180,16 @@ function ProPaymentContext({
   const [confirming, setConfirming] = useState(billingReturn === "success")
   const [waitExpired, setWaitExpired] = useState(false)
   const leaving = useRef(false)
+  const [returns, setReturns] = useState(0)
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted || !leaving.current) return
+      leaving.current = false
+      setReturns((value) => value + 1)
+    }
+    window.addEventListener("pageshow", onPageShow)
+    return () => window.removeEventListener("pageshow", onPageShow)
+  }, [])
   const [paymentTeam, setPaymentTeam] = useState<string | undefined>()
   const [waitTeam, setWaitTeam] = useState(teamKey)
   if (waitTeam !== teamKey) {
@@ -501,6 +513,7 @@ function ProPaymentContext({
     )
       void checkPayment()
   }, [
+    returns,
     confirming,
     waitExpired,
     busy,

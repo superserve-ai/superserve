@@ -1430,6 +1430,7 @@ describe("waiting on a returned payment", () => {
   it.each([
     ["a network failure", new TypeError("Failed to fetch")],
     ["a server error", new ApiError(503, "unavailable", "Unavailable")],
+    ["a timed-out request", new DOMException("Aborted", "AbortError")],
   ])(
     "keeps polling through %s without replaying checkout",
     async (_, cause) => {
@@ -1483,6 +1484,15 @@ describe("waiting on a returned payment", () => {
       "https://checkout.stripe.com/c/pay/cs_method",
     )
     expect(state.recover).toHaveBeenCalledTimes(1)
+    state.recover.mockResolvedValue("payment_confirmation_pending")
+    await act(async () => {
+      window.dispatchEvent(
+        Object.assign(new Event("pageshow"), { persisted: true }),
+      )
+    })
+    await advance(0)
+    expect(state.recover).toHaveBeenCalledTimes(2)
+    expect(screen.getByText("Processing payment…")).toBeTruthy()
     assign.mockRestore()
   })
 

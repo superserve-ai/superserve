@@ -27,6 +27,14 @@ export function PaymentWait() {
   const [timedOut, setTimedOut] = useState(false)
 
   useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) setRound((value) => value + 1)
+    }
+    window.addEventListener("pageshow", onPageShow)
+    return () => window.removeEventListener("pageshow", onPageShow)
+  }, [])
+
+  useEffect(() => {
     if (!account || !team) return
     let stopped = false
     let timer: ReturnType<typeof setTimeout> | undefined
