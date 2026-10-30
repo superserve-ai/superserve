@@ -62,3 +62,19 @@ describe("isPaymentActivating", () => {
     expect(isPaymentActivating(plan)).toBe(activating)
   })
 })
+
+it("sends a team that needs a plan to the picker with its own reason", () => {
+  const path = awaitingPlanRedirect({
+    userId: "owner",
+    teamKey: "usw:team",
+    entryState: "plan_required",
+  })
+  expect(path).not.toBeNull()
+  const url = new URL(path!, "https://console.test")
+  expect(url.pathname).toBe("/auth/choose-plan/")
+  expect(Object.fromEntries(url.searchParams)).toEqual({
+    reason: "plan_required",
+    account: "owner",
+    team: "usw:team",
+  })
+})

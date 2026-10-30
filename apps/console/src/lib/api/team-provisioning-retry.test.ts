@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   recover: vi.fn(),
   prepare: vi.fn(),
   complete: vi.fn(),
+  memberships: [] as { teamId: string; region: string }[],
 }))
 vi.mock("./promotion-publication", () => ({
   publishAccountPromotion: mocks.publish,
@@ -16,7 +17,7 @@ vi.mock("./promotion-device-evidence", () => ({
 }))
 vi.mock("./team-directory", () => ({
   listTeamMembershipsForUserDetailed: async () => ({
-    memberships: [],
+    memberships: mocks.memberships,
     degradedRegions: [],
   }),
 }))
@@ -95,6 +96,7 @@ beforeEach(() => {
   rows.clear()
   failTable = undefined
   prepared = null
+  mocks.memberships = []
   mocks.publish.mockResolvedValue({ authorityUnavailable: true })
   mocks.recover.mockImplementation(async () => prepared)
   mocks.prepare.mockImplementation(
@@ -189,4 +191,20 @@ it("does not prepare after a failed recovery or recreate a deleted team", async 
   mocks.complete.mockResolvedValueOnce(prepared)
   await expect(create()).rejects.toThrow("already been deleted")
   expect(rows.size).toBe(0)
+})
+it("marks every team after the account's first as additional", async () => {
+  await create()
+  expect(mocks.prepare).toHaveBeenLastCalledWith(
+    expect.objectContaining({ additionalTeam: false }),
+  )
+  const existing = "44444444-4444-4444-8444-444444444444"
+  mocks.memberships = [{ teamId: existing, region: "use" }]
+  rows.set("user_role_assignments", [
+    { user_id: user.id, team_id: existing, scope_type: "team" },
+  ])
+  prepared = null
+  await create("second", "55555555-5555-4555-8555-555555555555")
+  expect(mocks.prepare).toHaveBeenLastCalledWith(
+    expect.objectContaining({ additionalTeam: true }),
+  )
 })
