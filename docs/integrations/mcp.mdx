@@ -30,7 +30,7 @@ You need a Superserve API key — create one on the [API key](/api-key) page. Th
     ```bash
     claude mcp add superserve \
       --env SUPERSERVE_API_KEY=ss_live_xxxxxxxxxxxxxxxx \
-      -- npx -y @superserve/mcp
+      -- npx -y -p @superserve/mcp superserve-mcp
     ```
   </Tab>
   <Tab title="Claude Desktop">
@@ -40,7 +40,7 @@ You need a Superserve API key — create one on the [API key](/api-key) page. Th
       "mcpServers": {
         "superserve": {
           "command": "npx",
-          "args": ["-y", "@superserve/mcp"],
+          "args": ["-y", "-p", "@superserve/mcp", "superserve-mcp"],
           "env": { "SUPERSERVE_API_KEY": "ss_live_xxxxxxxxxxxxxxxx" }
         }
       }
@@ -54,7 +54,7 @@ You need a Superserve API key — create one on the [API key](/api-key) page. Th
       "mcpServers": {
         "superserve": {
           "command": "npx",
-          "args": ["-y", "@superserve/mcp"],
+          "args": ["-y", "-p", "@superserve/mcp", "superserve-mcp"],
           "env": { "SUPERSERVE_API_KEY": "ss_live_xxxxxxxxxxxxxxxx" }
         }
       }
@@ -77,7 +77,7 @@ You need a Superserve API key — create one on the [API key](/api-key) page. Th
         "superserve": {
           "type": "stdio",
           "command": "npx",
-          "args": ["-y", "@superserve/mcp"],
+          "args": ["-y", "-p", "@superserve/mcp", "superserve-mcp"],
           "env": { "SUPERSERVE_API_KEY": "${input:superserve-key}" }
         }
       }
@@ -91,7 +91,7 @@ You need a Superserve API key — create one on the [API key](/api-key) page. Th
       "mcpServers": {
         "superserve": {
           "command": "npx",
-          "args": ["-y", "@superserve/mcp"],
+          "args": ["-y", "-p", "@superserve/mcp", "superserve-mcp"],
           "env": { "SUPERSERVE_API_KEY": "ss_live_xxxxxxxxxxxxxxxx" }
         }
       }
@@ -103,7 +103,7 @@ You need a Superserve API key — create one on the [API key](/api-key) page. Th
     ```toml
     [mcp_servers.superserve]
     command = "npx"
-    args = ["-y", "@superserve/mcp"]
+    args = ["-y", "-p", "@superserve/mcp", "superserve-mcp"]
     env_vars = ["SUPERSERVE_API_KEY"]
     ```
     For the [hosted](#hosted-remote) endpoint, use `url = "https://mcp.superserve.ai"` with `bearer_token_env_var = "SUPERSERVE_API_KEY"`.
@@ -314,7 +314,7 @@ The server wraps the [TypeScript SDK](/sdk-reference/sandbox) and only ever hold
 - **`Authentication failed`.** The key is missing or invalid. Production keys start with `ss_live_`; create one on the [API key](/api-key) page.
 - **First call is slow.** `npx` downloads the package on first use and caches it; later starts are fast.
 - **Requires Node 18+.** The local server runs on Node via `npx`. (The [hosted](#hosted-remote) endpoint has no local runtime requirement.)
-- **`401 Unauthorized` from the hosted endpoint.** The bearer token is missing or isn't a valid `ss_live_` key. Send it as `Authorization: Bearer ss_live_…` (see [Hosted](#hosted-remote)).
+- **`401 Unauthorized` from the hosted endpoint.** The `Authorization` header is missing. Send it as `Authorization: Bearer ss_live_…` (see [Hosted](#hosted-remote)). An invalid key still connects, but every tool call returns `Authentication failed`.
 
 ## Related
 

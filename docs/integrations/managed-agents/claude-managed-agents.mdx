@@ -213,7 +213,11 @@ async function handleWork(work: { id: string; data: { id: string } }) {
       name: `cma-${sessionId.slice(0, 8)}`,
       fromTemplate: "claude-managed-agent",
       metadata: { "cma.session_id": sessionId },
-      network: { allowOut: ["api.anthropic.com"] },
+      network: {
+        // DNS resolvers, then Anthropic; deny everything else
+        allowOut: ["1.1.1.1/32", "8.8.8.8/32", "api.anthropic.com"],
+        denyOut: ["0.0.0.0/0"],
+      },
     })
   }
 
@@ -271,7 +275,11 @@ async def handle_work(work):
             name=f"cma-{session_id[:8]}",
             from_template="claude-managed-agent",
             metadata={"cma.session_id": session_id},
-            network=NetworkConfig(allow_out=["api.anthropic.com"]),
+            # DNS resolvers, then Anthropic; deny everything else
+            network=NetworkConfig(
+                allow_out=["1.1.1.1/32", "8.8.8.8/32", "api.anthropic.com"],
+                deny_out=["0.0.0.0/0"],
+            ),
         )
 
     await sandbox.files.write("/workspace/runner.py", RUNNER)
@@ -303,7 +311,7 @@ asyncio.run(main())
 What the orchestrator does on each work item:
 
 1. **Finds or creates** a sandbox for the session using a metadata tag. Existing paused sandboxes are resumed rather than recreated.
-2. **Locks down egress** — each sandbox can only reach `api.anthropic.com`, preventing data exfiltration to arbitrary endpoints.
+2. **Locks down egress** — `denyOut: ["0.0.0.0/0"]` blocks everything, and `allowOut` re-opens only `api.anthropic.com` plus the sandbox's DNS resolvers (`1.1.1.1/32`, `8.8.8.8/32`), without which the domain rule cannot resolve. `allowOut` on its own does not restrict anything.
 3. **Uploads and launches** the runner with per-session credentials passed as environment variables.
 
 Long-polling works behind any NAT or firewall. For push-based dispatch, use a webhook instead.
@@ -311,6 +319,8 @@ Long-polling works behind any NAT or firewall. For push-based dispatch, use a we
 ### Webhook variant
 
 Subscribe to `session.status_run_started` [webhooks](https://platform.claude.com/docs/en/managed-agents/webhooks), then drain the work queue on each delivery. The sandbox lifecycle logic is the same — only the trigger changes.
+
+`unwrap()` verifies the webhook signature, so it needs the signing secret from the Console: export it as `ANTHROPIC_WEBHOOK_SIGNING_KEY` (the SDK reads it automatically) or pass it as `key`. In Python, also install the webhook extra: `pip install "anthropic[webhooks]"`.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -492,7 +502,7 @@ session = client.beta.sessions.create(
 ```
 </CodeGroup>
 
-The orchestrator reads `superserve.sandbox_id` from `work.data.metadata` and connects to that sandbox instead of creating one from scratch.
+The orchestrator above does not handle this case on its own. The [reference orchestrator](https://github.com/superserve-ai/superserve/tree/main/guides/managed-agents/claude-managed-agents) reads `superserve.sandbox_id` from the session metadata and connects to that sandbox instead of creating one from scratch; add the same check at the top of your `handleWork` / `handle_work`.
 
 <Note>
 [Memory](https://platform.claude.com/docs/en/managed-agents/memory) is not yet supported with self-hosted sandboxes.
