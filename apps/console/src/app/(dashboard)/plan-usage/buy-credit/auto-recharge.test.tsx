@@ -474,7 +474,7 @@ it("keeps fresh Starter entry fenced when recovery discovery is explicitly denie
   expect(mocks.recover).not.toHaveBeenCalled()
 })
 
-it("sends a subscription funded by credit to Settings for Auto Topoff", () => {
+it("sends a subscription funded by credit to Settings for Auto Reload", () => {
   mocks.plan = {
     key: "funded_monthly",
     kind: "subscription",

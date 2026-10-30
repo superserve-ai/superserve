@@ -114,7 +114,7 @@ export function PlanOverviewSection({
                 : null,
           }}
           canManage={canManage}
-          cancelChannel={supportChannel(plan, capabilities.data?.offers)}
+          channel={supportChannel(plan, capabilities.data?.offers)}
         />
         {funded ? (
           <AutoTopoffSettings

@@ -364,7 +364,7 @@ describe("Pro payment return recovery", () => {
     expect(
       await screen.findByRole("region", { name: "Builder plan" }),
     ).toBeTruthy()
-    expect(screen.getByText(/paid from Auto Topoff credit/)).toBeTruthy()
+    expect(screen.getByText(/paid from Auto Reload credit/)).toBeTruthy()
     expect(screen.queryByText(/billed monthly at normal rates/)).toBeNull()
     fireEvent.click(await readyContinue())
     await waitFor(() =>

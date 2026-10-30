@@ -4,15 +4,25 @@ import { getAuthApiKeyAndTeamForUser } from "@/lib/api/proxy-auth"
 import { cellFor } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
-import { type BillingOffer, billingOffersSchema } from "./plans"
+import {
+  type BillingOffer,
+  billingOffersSchema,
+  type PlanCard,
+  publicBillingPlansSchema,
+} from "./plans"
 import type { CheckoutLocator } from "./signup-checkout-paths"
 
-// The catalog offers of the team a picker was shown for, or null when they
-// can't be read for it and the picker should keep its default plans. Another
-// account, or a session whose active team changed, gets none.
-export async function getTeamOffersAction(
+export interface TeamCatalog {
+  offers: BillingOffer[]
+  cards: PlanCard[]
+}
+
+// The catalog offers and plan cards of the team a picker was shown for, or
+// null when they can't be read for it and the picker should keep its default
+// plans. Another account, or a session whose active team changed, gets none.
+export async function getTeamCatalogAction(
   locator?: CheckoutLocator | null,
-): Promise<BillingOffer[] | null> {
+): Promise<TeamCatalog | null> {
   try {
     const {
       data: { user },
@@ -29,9 +39,22 @@ export async function getTeamOffersAction(
       },
     )
     if (!response.ok) return null
-    const body = (await response.json()) as { offers?: unknown }
-    return billingOffersSchema.parse(body.offers)
+    const body = (await response.json()) as {
+      offers?: unknown
+      catalog?: unknown
+    }
+    const catalog = publicBillingPlansSchema.safeParse(body.catalog)
+    return {
+      offers: billingOffersSchema.parse(body.offers),
+      cards: catalog.success ? catalog.data.cards : [],
+    }
   } catch {
     return null
   }
+}
+
+export async function getTeamOffersAction(
+  locator?: CheckoutLocator | null,
+): Promise<BillingOffer[] | null> {
+  return (await getTeamCatalogAction(locator))?.offers ?? null
 }

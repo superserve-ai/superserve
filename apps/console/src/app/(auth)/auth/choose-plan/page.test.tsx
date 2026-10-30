@@ -16,6 +16,7 @@ vi.mock("next/link", () => ({
   }) => <a href={href}>{children}</a>,
 }))
 vi.mock("@superserve/ui", () => ({
+  cn: (...classes: unknown[]) => classes.filter(Boolean).join(" "),
   Button: ({
     render,
     children,
@@ -29,10 +30,7 @@ vi.mock("@superserve/ui", () => ({
 }))
 vi.mock("@/components/corner-brackets", () => ({ CornerBrackets: () => null }))
 vi.mock("@/lib/billing/plan-offers-actions", () => ({
-  getTeamOffersAction: async () => null,
-}))
-vi.mock("@/components/dither-background", () => ({
-  DitherBackground: () => null,
+  getTeamCatalogAction: async () => null,
 }))
 
 import ChoosePlanPage from "./page"

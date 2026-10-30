@@ -161,7 +161,10 @@ beforeEach(() => {
 describe("PlanOverviewSection with pricing v2 off", () => {
   it("keeps an assigned team's settings change-plan link available after rollback", () => {
     mocks.version.mockReturnValue("legacy")
-    mocks.plan.mockReturnValue({ data: plan({}), isError: false })
+    mocks.plan.mockReturnValue({
+      data: plan({ key: "free", kind: "free", name: "Free" }),
+      isError: false,
+    })
     render(<PlanOverviewSection summary={summary} details />)
     expect(screen.getByRole("link", { name: "Change plan" })).toBeTruthy()
   })
@@ -234,6 +237,9 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     expect(screen.getByText(/\$62\.50 beyond the included usage/)).toBeTruthy()
     expect(screen.queryByText("Current plan")).toBeNull()
     expect(screen.queryByRole("link", { name: "Change plan" })).toBeNull()
+    expect(
+      screen.getByText("Included usage this period").parentElement!.textContent,
+    ).toBe("Included usage this periodPro")
   })
 
   it("describes a credit-funded subscription as paused when out, not billed later", () => {
@@ -270,16 +276,16 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     expect(screen.queryByText(/end of the period/)).toBeNull()
     expect(
       screen.getByText(
-        /paid from Auto Topoff credit\. Running sandboxes pause/,
+        /paid from Auto Reload credit\. Running sandboxes pause/,
       ),
     ).toBeTruthy()
     expect(
       screen.getByText(
-        /Auto Topoff is on: adds \$3 when credit drops below \$2/,
+        /Auto Reload is on: adds \$3 when credit drops below \$2/,
       ),
     ).toBeTruthy()
     expect(
-      screen.getByRole("link", { name: "Manage Auto Topoff" }),
+      screen.getByRole("link", { name: "Manage Auto Reload" }),
     ).toBeTruthy()
   })
 
@@ -729,7 +735,7 @@ describe("a summary that disagrees with the plan", () => {
 })
 
 describe("Settings plan details", () => {
-  it("manages Auto Topoff here and says how to cancel a credit-funded plan", () => {
+  it("manages Auto Reload here and says how to cancel a credit-funded plan", () => {
     mocks.plan.mockReturnValue({
       data: plan({
         funding_policy: "prepaid",
@@ -748,12 +754,12 @@ describe("Settings plan details", () => {
     )
     expect(document.getElementById("auto-topoff")).toBeTruthy()
     expect(screen.getByRole("switch")).toBeTruthy()
-    expect(screen.getByText(/To cancel, contact support/).textContent).toBe(
-      "To cancel, contact support at support@superserve.ai.",
-    )
+    expect(
+      screen.getByText(/Want to cancel\? Contact support/).textContent,
+    ).toBe("Want to cancel? Contact support at support@superserve.ai.")
   })
 
-  it("scrolls to Auto Topoff once it loads when a link asked for it", () => {
+  it("scrolls to Auto Reload once it loads when a link asked for it", () => {
     const scroll = vi.fn()
     Element.prototype.scrollIntoView = scroll
     window.history.replaceState({}, "", "/settings/#auto-topoff")
@@ -794,8 +800,8 @@ describe("Settings plan details", () => {
         <PlanOverviewSection summary={summary} details />
       </QueryClientProvider>,
     )
-    expect(screen.getByText(/To cancel/).textContent).toBe(
-      "To cancel, contact support at support@superserve.ai.",
+    expect(screen.getByText(/Want to cancel/).textContent).toBe(
+      "Want to cancel? Contact support at support@superserve.ai.",
     )
   })
 
@@ -806,9 +812,13 @@ describe("Settings plan details", () => {
         <PlanOverviewSection summary={summary} details />
       </QueryClientProvider>,
     )
-    expect(screen.getByText(/To cancel/).textContent).toBe(
-      "To cancel, contact support in your priority Slack channel or at support@superserve.ai.",
+    expect(screen.getByText(/Want to cancel/).textContent).toBe(
+      "Want to cancel? Contact support in your priority Slack channel or at support@superserve.ai.",
     )
+    expect(screen.getByText(/Need a different plan/).textContent).toBe(
+      "Need a different plan? Contact support in your priority Slack channel or at support@superserve.ai.",
+    )
+    expect(screen.queryByRole("link", { name: "Change plan" })).toBeNull()
     expect(document.getElementById("auto-topoff")).toBeNull()
   })
 

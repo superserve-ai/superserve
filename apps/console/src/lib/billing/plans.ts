@@ -177,6 +177,14 @@ export function planSandboxSize(limits: PlanLimits): string | null {
   return size ? `Up to ${size} per sandbox` : null
 }
 
+export function planConcurrency(
+  limits: Pick<PlanLimits, "max_concurrent">,
+): string | null {
+  return limits.max_concurrent
+    ? `Up to ${limits.max_concurrent.toLocaleString("en-US")} concurrent sandboxes`
+    : null
+}
+
 export function findOffer(
   offers: readonly BillingOffer[] | undefined,
   offerKey: string | null | undefined,

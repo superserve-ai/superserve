@@ -220,14 +220,19 @@ export function BuyCreditPageClient({
               />
             ) : allowEntry ? (
               <p className="text-sm text-muted">
-                Your plan doesn&apos;t include credit purchases.{" "}
-                <Link
-                  href={UPGRADE_PATH}
-                  className="underline underline-offset-4"
-                >
-                  See plans
-                </Link>
-                .
+                Your plan doesn&apos;t include credit purchases.
+                {plan?.kind === "subscription" ? null : (
+                  <>
+                    {" "}
+                    <Link
+                      href={UPGRADE_PATH}
+                      className="underline underline-offset-4"
+                    >
+                      See plans
+                    </Link>
+                    .
+                  </>
+                )}
               </p>
             ) : (
               <p className="text-sm text-muted">
@@ -255,7 +260,7 @@ export function BuyCreditPageClient({
             ) : null}
             {topoffOnly ? (
               <p className="text-sm text-muted">
-                Manage Auto Topoff in{" "}
+                Manage Auto Reload in{" "}
                 <Link
                   href={TOPOFF_SETTINGS_PATH}
                   className="underline underline-offset-4"
@@ -270,9 +275,9 @@ export function BuyCreditPageClient({
               <>
                 {!allowRecharge ? (
                   <p className="text-sm text-muted">
-                    Auto Topoff changes are temporarily unavailable.
+                    Auto Reload changes are temporarily unavailable.
                     {allowDisableRecharge &&
-                      " You can still turn Auto Topoff off."}
+                      " You can still turn Auto Reload off."}
                   </p>
                 ) : null}
                 <AutoTopoffCard
@@ -470,7 +475,7 @@ function PurchaseHistory({ purchases }: { purchases: PrepaidPurchase[] }) {
           <li key={p.id} className="flex items-center justify-between py-2">
             <span className="text-foreground">
               {new Date(p.created_at).toLocaleDateString()} ·{" "}
-              {p.source === "auto_recharge" ? "Auto Topoff" : "Purchase"}
+              {p.source === "auto_recharge" ? "Auto Reload" : "Purchase"}
             </span>
             <span className="text-muted">
               {formatDollars(p.amount_cents)} · {STATE_LABELS[p.state]}

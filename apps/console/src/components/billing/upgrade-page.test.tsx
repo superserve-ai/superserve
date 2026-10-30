@@ -365,9 +365,9 @@ describe("UpgradePage with pricing v2 on", () => {
     const { unmount } = mount()
     expect(screen.queryByTestId("plan-card-developer_monthly")).toBeNull()
     expect(
-      screen.getByText(/To change your plan, contact support/).textContent,
+      screen.getByText(/Need a different plan\? Contact support/).textContent,
     ).toBe(
-      "To change your plan, contact support in your priority Slack channel or at support@superserve.ai.",
+      "Need a different plan? Contact support in your priority Slack channel or at support@superserve.ai.",
     )
     unmount()
 
@@ -383,8 +383,8 @@ describe("UpgradePage with pricing v2 on", () => {
     mount()
     expect(screen.queryByTestId("plan-card-pro_monthly")).toBeNull()
     expect(
-      screen.getByText(/To change your plan, contact support/).textContent,
-    ).toBe("To change your plan, contact support at support@superserve.ai.")
+      screen.getByText(/Need a different plan\? Contact support/).textContent,
+    ).toBe("Need a different plan? Contact support at support@superserve.ai.")
   })
 
   it.each([
@@ -419,6 +419,9 @@ describe("UpgradePage with pricing v2 on", () => {
     })
     mount()
     expect(screen.queryByTestId("plan-card-starter")).toBeNull()
+    const enterprise = screen.getByTestId("plan-card-enterprise").textContent
+    expect(enterprise).toMatch(/Custom limits/)
+    expect(enterprise).not.toMatch(/running at once|concurrency/)
   })
 
   it("still shows a Starter team its own plan", () => {
