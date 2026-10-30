@@ -52,10 +52,7 @@ function ChoosePlanContent() {
         ? selected
         : null
 
-  const picking =
-    locator !== null &&
-    reason !== "payment_confirming" &&
-    reason !== "checkout_elsewhere"
+  const picking = locator !== null && reason !== "checkout_elsewhere"
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
