@@ -10,6 +10,7 @@ import {
   formatUsdCents,
   planCard,
   planSandboxSize,
+  planSupport,
   type PlanCard,
   type PublicBillingPlans,
 } from "@/lib/billing/plans"
@@ -163,6 +164,7 @@ export function ProPaymentView({
       </div>
     )
   const size = planSandboxSize(pro.limits)
+  const support = planSupport(pro.features)
   return (
     <div className="mx-auto max-w-2xl p-4 sm:p-6">
       <section
@@ -207,9 +209,7 @@ export function ProPaymentView({
             </li>
           ) : null}
           {size ? <li>{size}</li> : null}
-          {pro.features.map((feature) => (
-            <li key={feature}>{feature}</li>
-          ))}
+          {support ? <li>{support}</li> : null}
         </ul>
 
         <div className="mt-8 space-y-3">
