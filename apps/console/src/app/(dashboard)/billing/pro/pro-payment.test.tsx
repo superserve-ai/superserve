@@ -4,7 +4,7 @@ import {
   QueryObserver,
 } from "@tanstack/react-query"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/lib/api/client"
 import { billingKeys } from "@/lib/api/query-keys"
@@ -34,6 +34,7 @@ const state = vi.hoisted(() => ({
   readTerms: vi.fn(),
   team: { teamId: "11111111-1111-4111-8111-111111111111", region: "use" },
   recover: vi.fn(),
+  activating: vi.fn(),
   resume: vi.fn(),
   start: vi.fn(),
   starterRecover: vi.fn(),
@@ -150,6 +151,7 @@ vi.mock("@/hooks/use-billing-capabilities", () => ({
 vi.mock("@/lib/api/plan-checkout", () => ({
   recoverProPayment: (...args: unknown[]) => state.recover(...args),
   resumeProCheckout: (...args: unknown[]) => state.resume(...args),
+  paymentActivating: (...args: unknown[]) => state.activating(...args),
   startProCheckout: (...args: unknown[]) => state.start(...args),
   isStripeCheckoutUrl: (value: string) =>
     value.startsWith("https://checkout.stripe.com/"),
@@ -214,6 +216,7 @@ beforeEach(() => {
     .mockResolvedValue({ outcome: "no_pending_starter_checkout" })
   state.team = { teamId: "11111111-1111-4111-8111-111111111111", region: "use" }
   state.recover.mockReset()
+  state.activating.mockReset().mockResolvedValue(false)
   state.resume.mockReset().mockResolvedValue(null)
   state.start.mockReset()
   state.plans = undefined
@@ -512,9 +515,7 @@ describe("Pro payment return recovery", () => {
     state.start.mockResolvedValue(null)
     const view = render(<ProPayment returnTo="/plan-usage/" />)
     fireEvent.click(await readyContinue())
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Check again" })).toBeTruthy(),
-    )
+    await screen.findByText("Processing payment…")
     expect(
       new URL(state.start.mock.calls[0]![2]).searchParams.get("team"),
     ).toBe("use:11111111-1111-4111-8111-111111111111")
@@ -523,7 +524,7 @@ describe("Pro payment return recovery", () => {
     expect(
       screen.getByText(/Return to the account and team/).textContent,
     ).toContain("account and team that started checkout")
-    expect(state.recover).not.toHaveBeenCalled()
+    expect(state.recover).not.toHaveBeenCalledWith("use:team-b")
   })
 
   it("ignores recovery results after the active team changes", async () => {
@@ -589,13 +590,13 @@ describe("Pro payment return recovery", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Check payment status" }),
     )
-    await screen.findByRole("button", { name: "Check again" })
+    await screen.findByText("Processing payment…")
     state.team = { teamId: "team-b", region: "use" }
     view.rerender(<ProPayment returnTo="/plan-usage/" />)
     expect(
       screen.getByText(/Return to the account and team/).textContent,
     ).toContain("account and team that started checkout")
-    expect(screen.queryByRole("button", { name: "Check again" })).toBeNull()
+    expect(screen.queryByText("Processing payment…")).toBeNull()
     expect(state.recover).toHaveBeenCalledExactlyOnceWith(
       "use:11111111-1111-4111-8111-111111111111",
     )
@@ -632,7 +633,7 @@ describe("Pro payment return recovery", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Check payment status" }),
     )
-    await screen.findByRole("button", { name: "Check again" })
+    await screen.findByText("Processing payment…")
     expect(state.recover).toHaveBeenCalledWith(
       "use:11111111-1111-4111-8111-111111111111",
     )
@@ -893,9 +894,8 @@ it("keeps a known non-Starter Pro checkout's ordinary status control without sta
     ).toBeNull(),
   )
   fireEvent.click(screen.getByRole("button", { name: "Check payment status" }))
-  await screen.findByText(/Payment status is pending/)
+  await screen.findByText("Processing payment…")
   expect(state.start).not.toHaveBeenCalled()
-  expect(screen.getByRole("button", { name: "Check again" })).not.toBeDisabled()
 })
 
 describe("authoritative Pro offer terms context", () => {
@@ -1211,7 +1211,7 @@ describe("completed Pro callback refreshes authoritative plan cache", () => {
     ).toBeNull()
     expect(state.replace).not.toHaveBeenCalled()
     expect(state.recover).toHaveBeenCalledOnce()
-    fireEvent.click(screen.getByRole("button", { name: "Check again" }))
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }))
     await waitFor(() =>
       expect(state.replace).toHaveBeenCalledWith("/plan-usage/"),
     )
@@ -1301,7 +1301,7 @@ it.each([false, true])(
       />,
     )
     const button = await screen.findByRole("button", {
-      name: callback ? "Check again" : "Check payment status",
+      name: callback ? "Try again" : "Check payment status",
     })
     expect(button).toBeDisabled()
     fireEvent.click(button)
@@ -1372,3 +1372,200 @@ it.each([false, true])(
     else await waitFor(() => expect(state.recover).toHaveBeenCalled())
   },
 )
+
+describe("waiting on a returned payment", () => {
+  const team = "use:11111111-1111-4111-8111-111111111111"
+  const show = () =>
+    render(
+      <ProPayment
+        billingReturn="success"
+        checkoutTeam={team}
+        returnTo="/sandboxes/"
+      />,
+    )
+  const advance = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms))
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it("polls every 1.5 s and opens the console the moment the plan is active", async () => {
+    state.recover
+      .mockResolvedValueOnce("payment_confirmation_pending")
+      .mockResolvedValueOnce("payment_confirmation_pending")
+      .mockResolvedValue("active")
+    show()
+    await advance(0)
+    expect(state.recover).toHaveBeenCalledTimes(1)
+    expect(screen.getByText("Processing payment…")).toBeTruthy()
+    expect(screen.queryByRole("button")).toBeNull()
+    await advance(1499)
+    expect(state.recover).toHaveBeenCalledTimes(1)
+    await advance(1)
+    expect(state.recover).toHaveBeenCalledTimes(2)
+    expect(state.replace).not.toHaveBeenCalled()
+    await advance(1500)
+    expect(state.recover).toHaveBeenCalledTimes(3)
+    expect(state.replace).toHaveBeenCalledExactlyOnceWith("/sandboxes/")
+    expect(state.start).not.toHaveBeenCalled()
+  })
+
+  it("keeps waiting while the backend reports the paid checkout is activating", async () => {
+    state.plans = availablePlans
+    state.recover.mockResolvedValue("no_pending_pro_purchase")
+    state.activating.mockResolvedValue(true)
+    show()
+    await advance(3000)
+    expect(state.recover).toHaveBeenCalledTimes(3)
+    expect(state.starterRecover).not.toHaveBeenCalledWith(team)
+    expect(screen.getByText("Processing payment…")).toBeTruthy()
+    expect(
+      screen.queryByRole("button", { name: "Continue to payment" }),
+    ).toBeNull()
+  })
+
+  it.each([
+    ["a network failure", new TypeError("Failed to fetch")],
+    ["a server error", new ApiError(503, "unavailable", "Unavailable")],
+    ["a timed-out request", new DOMException("Aborted", "AbortError")],
+  ])(
+    "keeps polling through %s without replaying checkout",
+    async (_, cause) => {
+      state.recover.mockRejectedValueOnce(cause).mockResolvedValue("active")
+      show()
+      await advance(0)
+      expect(screen.getByText("Processing payment…")).toBeTruthy()
+      expect(screen.queryByRole("alert")).toBeNull()
+      expect(state.resume).not.toHaveBeenCalled()
+      expect(state.activating).not.toHaveBeenCalled()
+      await advance(1500)
+      expect(state.replace).toHaveBeenCalledWith("/sandboxes/")
+      expect(state.resume).not.toHaveBeenCalled()
+    },
+  )
+
+  it("shows the conflict instead of waiting when recovery reports one", async () => {
+    state.plans = availablePlans
+    state.recover.mockRejectedValue(
+      new ApiError(409, "plan_conflict", "A payment is already being checked"),
+    )
+    show()
+    await advance(0)
+    expect(
+      screen.getByText(
+        "This team already has a paid plan or a payment in progress.",
+      ),
+    ).toBeTruthy()
+    await advance(10_000)
+    expect(state.recover).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps waiting when the activating read fails after nothing is reported pending", async () => {
+    state.plans = availablePlans
+    state.recover.mockResolvedValue("no_pending_pro_purchase")
+    state.activating.mockRejectedValue(new TypeError("Failed to fetch"))
+    show()
+    await advance(3000)
+    expect(state.recover).toHaveBeenCalledTimes(3)
+    expect(state.starterRecover).not.toHaveBeenCalledWith(team)
+    expect(screen.getByText("Processing payment…")).toBeTruthy()
+    state.activating.mockResolvedValue(false)
+    await advance(1500)
+    expect(state.starterRecover).toHaveBeenCalledWith(team)
+  })
+
+  it("ignores a late failure from a team the user switched away from and back", async () => {
+    let fail!: (cause: unknown) => void
+    state.recover
+      .mockReturnValueOnce(
+        new Promise((_resolve, reject) => {
+          fail = reject
+        }),
+      )
+      .mockResolvedValue("payment_confirmation_pending")
+    const view = show()
+    await advance(0)
+    expect(state.recover).toHaveBeenCalledTimes(1)
+    state.team = { teamId: "team-b", region: "use" }
+    view.rerender(
+      <ProPayment
+        billingReturn="success"
+        checkoutTeam={team}
+        returnTo="/sandboxes/"
+      />,
+    )
+    state.team = {
+      teamId: "11111111-1111-4111-8111-111111111111",
+      region: "use",
+    }
+    view.rerender(
+      <ProPayment
+        billingReturn="success"
+        checkoutTeam={team}
+        returnTo="/sandboxes/"
+      />,
+    )
+    await act(async () => {
+      fail(new ApiError(403, "forbidden", "Forbidden"))
+    })
+    await advance(0)
+    expect(screen.queryByText(/still being confirmed/)).toBeNull()
+    expect(screen.queryByText("Forbidden")).toBeNull()
+    expect(screen.getByText("Processing payment…")).toBeTruthy()
+    expect(state.recover).toHaveBeenCalledTimes(2)
+  })
+
+  it("replays the saved checkout at most once per wait", async () => {
+    state.recover.mockResolvedValue("payment_confirmation_pending")
+    show()
+    await advance(6000)
+    expect(state.recover.mock.calls.length).toBeGreaterThan(3)
+    expect(state.resume).toHaveBeenCalledTimes(1)
+  })
+
+  it("stops polling once it leaves for Stripe", async () => {
+    const assign = vi
+      .spyOn(window.location, "assign")
+      .mockImplementation(() => {})
+    state.recover.mockResolvedValue(
+      "https://checkout.stripe.com/c/pay/cs_method",
+    )
+    show()
+    await advance(10_000)
+    expect(assign).toHaveBeenCalledExactlyOnceWith(
+      "https://checkout.stripe.com/c/pay/cs_method",
+    )
+    expect(state.recover).toHaveBeenCalledTimes(1)
+    state.recover.mockResolvedValue("payment_confirmation_pending")
+    await act(async () => {
+      window.dispatchEvent(
+        Object.assign(new Event("pageshow"), { persisted: true }),
+      )
+    })
+    await advance(0)
+    expect(state.recover).toHaveBeenCalledTimes(2)
+    expect(screen.getByText("Processing payment…")).toBeTruthy()
+    assign.mockRestore()
+  })
+
+  it("stops after two minutes with a calm retry, then waits again on retry", async () => {
+    state.recover.mockResolvedValue("payment_confirmation_pending")
+    show()
+    await advance(120_000)
+    expect(screen.getByText(/still being confirmed/)).toBeTruthy()
+    expect(screen.queryByText("Processing payment…")).toBeNull()
+    expect(screen.queryByRole("alert")).toBeNull()
+    const polled = state.recover.mock.calls.length
+    expect(polled).toBeGreaterThanOrEqual(60)
+    await advance(30_000)
+    expect(state.recover).toHaveBeenCalledTimes(polled)
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+    await advance(0)
+    expect(state.recover).toHaveBeenCalledTimes(polled + 1)
+    expect(screen.getByText("Processing payment…")).toBeTruthy()
+    expect(state.replace).not.toHaveBeenCalled()
+  })
+})

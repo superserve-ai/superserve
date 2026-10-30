@@ -89,11 +89,12 @@ describe("Pro payment step", () => {
         step="confirming"
         busy={false}
         canceled={false}
+        waitExpired
         onContinue={vi.fn()}
         onCheckPayment={check}
       />,
     )
-    fireEvent.click(screen.getByRole("button", { name: "Check again" }))
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }))
     expect(check).toHaveBeenCalledOnce()
   })
 
@@ -120,7 +121,7 @@ describe("Pro payment step", () => {
     expect(screen.getByRole("alert").textContent).toContain(
       "team you used for checkout",
     )
-    expect(screen.queryByRole("button", { name: "Check again" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull()
   })
 
   it("sends a team already on a paid plan to Billing, even with pricing v2 off", () => {

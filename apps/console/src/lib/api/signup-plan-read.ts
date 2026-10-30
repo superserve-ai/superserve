@@ -11,6 +11,7 @@ import { PLAN_OFFER_COOKIE, readPlanOffer } from "@/lib/auth/plan-preselection"
 import {
   type AwaitingPlanState,
   isAwaitingPlanState,
+  PAYMENT_ACTIVATING,
 } from "@/lib/billing/signup-checkout-paths"
 import { cellFor } from "@/lib/cells"
 
@@ -108,7 +109,11 @@ export async function readSignupPlan(
       entry.error.code !== "42883"
     )
       throw new Error("Unable to check your plan. Please retry.")
-    if (!entry.error && isAwaitingPlanState(entry.data)) {
+    if (!entry.error && entry.data === PAYMENT_ACTIVATING) {
+      choice.state = "legacy"
+      choice.offer = null
+      paymentSettling = true
+    } else if (!entry.error && isAwaitingPlanState(entry.data)) {
       // A team on its trial buys its plan through checkout, not the picker;
       // a checkout it already paid for settles before it may buy again.
       entryState = entry.data

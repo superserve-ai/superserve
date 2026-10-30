@@ -461,6 +461,13 @@ describe("real paid preparation handler permanent recovery", () => {
     })
   })
 
+  it("treats the backend's paid, activating state as settling", async () => {
+    mocks.rpc.mockResolvedValue({ data: "activating", error: null })
+    const context = await getSignupPlanAction("usw:west-team")
+    expect(context).toMatchObject({ state: "legacy", paymentSettling: true })
+    expect(context.entryState).toBeUndefined()
+  })
+
   it.each(["active", null])(
     "keeps today's plan selection when the backend reports %s",
     async (state) => {

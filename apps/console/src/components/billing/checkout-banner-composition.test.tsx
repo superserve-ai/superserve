@@ -145,6 +145,7 @@ vi.mock("@/lib/api/plan-checkout", () => ({
   recoverProPayment: (...args: unknown[]) => state.recover(...args),
   startProCheckout: (...args: unknown[]) => state.start(...args),
   resumeProCheckout: (...args: unknown[]) => state.resume(...args),
+  paymentActivating: async () => false,
   isStripeCheckoutUrl: () => false,
 }))
 beforeEach(() => {

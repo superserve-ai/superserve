@@ -5,6 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { CheckoutContextRecovery } from "@/components/billing/checkout-context-recovery"
+import {
+  SETTLE_POLL_MS,
+  SETTLE_TIMEOUT_MS,
+} from "@/components/billing/payment-processing"
 import { PendingStarterPayment } from "@/components/billing/pending-starter-payment"
 import {
   ProPaymentView,
@@ -31,6 +35,7 @@ import {
 import { ApiError, apiClient } from "@/lib/api/client"
 import {
   isStripeCheckoutUrl,
+  paymentActivating,
   recoverProPayment,
   startProCheckout,
   resumeProCheckout,
@@ -47,7 +52,15 @@ import {
 } from "@/lib/billing/checkout-return"
 import { findOffer, planCard } from "@/lib/billing/plans"
 
-const CONFIRM_ATTEMPTS = 5
+const STATUS_UNKNOWN = "status_unknown"
+
+function isTransientFailure(cause: unknown) {
+  if (cause instanceof ApiError) return cause.status >= 500
+  return (
+    cause instanceof TypeError ||
+    (cause instanceof Error && cause.name === "AbortError")
+  )
+}
 
 interface ProPaymentProps {
   billingReturn?: "success" | "cancel"
@@ -165,7 +178,27 @@ function ProPaymentContext({
   const paymentCompleted =
     confirmedPayment?.team === teamKey && confirmedPayment?.actor === actor
   const [confirming, setConfirming] = useState(billingReturn === "success")
+  const [waitExpired, setWaitExpired] = useState(false)
+  const leaving = useRef(false)
+  const [returns, setReturns] = useState(0)
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted || !leaving.current) return
+      leaving.current = false
+      setReturns((value) => value + 1)
+    }
+    window.addEventListener("pageshow", onPageShow)
+    return () => window.removeEventListener("pageshow", onPageShow)
+  }, [])
   const [paymentTeam, setPaymentTeam] = useState<string | undefined>()
+  const [waitTeam, setWaitTeam] = useState(teamKey)
+  if (waitTeam !== teamKey) {
+    setWaitTeam(teamKey)
+    setWaitExpired(false)
+    setConfirming(
+      billingReturn === "success" || (!!paymentTeam && paymentTeam === teamKey),
+    )
+  }
   const [starter, setStarter] = useState<{
     purchase: PendingStarterCheckout
     team: string
@@ -263,7 +296,7 @@ function ProPaymentContext({
       } catch {
         if (target.active)
           throw new Error(
-            "Payment is confirmed, but your plan could not be refreshed. Check again to refresh your plan.",
+            "Payment is confirmed, but your plan could not be refreshed. Try again to open the console.",
           )
         return
       }
@@ -290,9 +323,10 @@ function ProPaymentContext({
   })
 
   const checkPayment = useCallback(
-    (attempts = 1) =>
+    () =>
       run(async () => {
         if (
+          leaving.current ||
           !canRecover ||
           !teamKey ||
           teamMismatch ||
@@ -302,67 +336,94 @@ function ProPaymentContext({
           return
         discardCheckoutTerms()
         setPaymentTeam(teamKey)
+        setWaitExpired(false)
         const target = operationTarget.current
         if (paymentCompleted) {
           await refreshCompletedPayment(target)
           return
         }
-        for (let attempt = 0; attempt < attempts; attempt++) {
-          if (!target.active) return
-          const outcome = await recoverProPayment(teamKey)
-          if (!target.active) return
-          if (isStripeCheckoutUrl(outcome)) {
-            window.location.assign(outcome)
-            return
-          }
-          if (outcome === "active") {
-            if (actor) setConfirmedPayment({ team: teamKey, actor })
-            setConfirming(false)
-            await refreshCompletedPayment(target)
-            return
-          }
-          if (
-            outcome === "no_pending_pro_purchase" ||
-            outcome === "retryable"
-          ) {
-            setStarterCheckRequired(true)
-            const existing = await recoverStarterCheckout(teamKey)
+        const deadline = Date.now() + SETTLE_TIMEOUT_MS
+        let replayed = false
+        try {
+          for (;;) {
             if (!target.active) return
-            if (existing.outcome === "pending_starter_checkout" && actor) {
-              setStarter({ purchase: existing, team: teamKey, actor })
+            const outcome = await recoverProPayment(teamKey).catch(
+              (cause: unknown) => {
+                if (!isTransientFailure(cause)) throw cause
+                return STATUS_UNKNOWN
+              },
+            )
+            if (!target.active) return
+            if (isStripeCheckoutUrl(outcome)) {
+              leaving.current = true
+              window.location.assign(outcome)
+              return
+            }
+            if (outcome === "active") {
+              if (actor) setConfirmedPayment({ team: teamKey, actor })
               setConfirming(false)
+              await refreshCompletedPayment(target)
               return
             }
-            if (existing.outcome === "payment_confirmation_pending") {
-              setConfirming(true)
+            let settling =
+              outcome === "payment_confirmation_pending" ||
+              outcome === STATUS_UNKNOWN
+            if (!settling) {
+              settling = await paymentActivating().catch(() => true)
+              if (!target.active) return
+            }
+            if (!settling) {
+              setStarterCheckRequired(true)
+              const existing = await recoverStarterCheckout(teamKey)
+              if (!target.active) return
+              if (existing.outcome === "pending_starter_checkout" && actor) {
+                setStarter({ purchase: existing, team: teamKey, actor })
+                setConfirming(false)
+                return
+              }
+              settling = existing.outcome === "payment_confirmation_pending"
+              if (!settling) {
+                if (existing.outcome !== "no_pending_starter_checkout")
+                  throw new Error(
+                    "Payment status is unavailable. Please try again.",
+                  )
+                await refreshEntry(target)
+                if (!target.active) return
+                setStarter(null)
+                setStarterCheckRequired(false)
+                setConfirming(false)
+                setConflict(false)
+                if (!billingReturn) setPaymentTeam(undefined)
+                return
+              }
+            }
+            if (
+              outcome === "payment_confirmation_pending" &&
+              actor &&
+              !replayed
+            ) {
+              replayed = true
+              const checkout = await resumeProCheckout(teamKey, actor)
+              if (!target.active) return
+              if (checkout && isStripeCheckoutUrl(checkout)) {
+                leaving.current = true
+                window.location.assign(checkout)
+                return
+              }
+            }
+            setConfirming(true)
+            if (Date.now() >= deadline) {
+              setWaitExpired(true)
               return
             }
-            if (existing.outcome !== "no_pending_starter_checkout")
-              throw new Error(
-                "Payment status is unavailable. Please check again.",
-              )
-            await refreshEntry(target)
-            if (!target.active) return
-            setStarter(null)
-            setStarterCheckRequired(false)
+            await new Promise((resolve) => setTimeout(resolve, SETTLE_POLL_MS))
           }
-          if (outcome !== "payment_confirmation_pending") {
+        } catch (cause) {
+          if (!target.active) return
+          if (cause instanceof ApiError && cause.code === "plan_conflict")
             setConfirming(false)
-            setConflict(false)
-            if (!billingReturn) setPaymentTeam(undefined)
-            return
-          }
-          if (actor) {
-            const checkout = await resumeProCheckout(teamKey, actor)
-            if (!target.active) return
-            if (checkout && isStripeCheckoutUrl(checkout)) {
-              window.location.assign(checkout)
-              return
-            }
-          }
-          setConfirming(true)
-          if (attempt + 1 < attempts)
-            await new Promise((resolve) => setTimeout(resolve, 2000))
+          else setWaitExpired(true)
+          throw cause
         }
       }),
     [
@@ -440,16 +501,24 @@ function ProPaymentContext({
 
   useEffect(() => {
     if (
-      billingReturn === "success" &&
+      confirming &&
+      !waitExpired &&
+      !leaving.current &&
+      !busy &&
+      !teamMutating &&
       canRecover &&
       !paymentCompleted &&
       teamKey &&
       !teamMismatch &&
       !genericFlowPending
     )
-      void checkPayment(CONFIRM_ATTEMPTS)
+      void checkPayment()
   }, [
-    billingReturn,
+    returns,
+    confirming,
+    waitExpired,
+    busy,
+    teamMutating,
     canRecover,
     paymentCompleted,
     teamKey,
@@ -577,6 +646,7 @@ function ProPaymentContext({
             canContinue={canContinue && !existingStarter.blocksEntry}
             canRecover={canRecover}
             canceled={billingReturn === "cancel"}
+            waitExpired={waitExpired}
             error={error}
             onContinue={onContinue}
             onCheckPayment={() => void checkPayment()}

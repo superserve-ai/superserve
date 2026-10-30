@@ -12,5 +12,5 @@ it("normalizes conflicting server query values without crashing before client ca
   })
   expect(page.props.billingReturn).toBeUndefined()
   expect(page.props.checkoutTeam).toBeUndefined()
-  expect(page.props.returnTo).toBe("/plan-usage/")
+  expect(page.props.returnTo).toBe("/sandboxes/")
 })
