@@ -59,7 +59,7 @@ function ChoosePlanContent() {
       <div
         className={cn(
           "relative w-full border border-dashed border-border bg-surface p-6",
-          picking ? "max-w-3xl sm:p-8" : "max-w-sm",
+          picking ? "max-w-5xl sm:p-8" : "max-w-sm",
         )}
       >
         <CornerBrackets size="lg" />

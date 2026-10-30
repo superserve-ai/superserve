@@ -1,6 +1,7 @@
 import { act, cleanup, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { ENTERPRISE_MEETING_URL } from "@/lib/api/billing-v2"
 import type { TeamCatalog } from "@/lib/billing/plan-offers-actions"
 import type { BillingOffer, PlanCard } from "@/lib/billing/plans"
 
@@ -167,6 +168,28 @@ describe("PlanPickerOptions", () => {
       [...builder.querySelectorAll("li")].map((item) => item.textContent),
     ).toEqual(["Auto Reload adds $7 when your balance drops under $3"])
     expect(builder.textContent).toMatch(/Includes \$11 of usage each month/)
+  })
+
+  it("adds the catalog's Enterprise card with a meeting link beside the paid plans", async () => {
+    mocks.offers = [offer("developer_monthly", "Builder")]
+    mocks.cards = [
+      card("enterprise", {
+        kind: "custom",
+        name: "Bespoke",
+        price_label: "Talk to us",
+        display_only: true,
+      }),
+    ]
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    const enterprise = await screen.findByRole("region", {
+      name: "Bespoke plan",
+    })
+    expect(enterprise.textContent).toMatch(/Talk to us/)
+    expect(enterprise.textContent).toMatch(/Custom limits/)
+    expect(
+      screen.getByRole("link", { name: "Book a meeting" }),
+    ).toHaveAttribute("href", ENTERPRISE_MEETING_URL)
+    expect(screen.getByRole("form", { name: "Builder plan" })).toBeTruthy()
   })
 
   it("highlights a plan still on sale when the preselected one isn't", async () => {
