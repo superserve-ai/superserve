@@ -4,6 +4,10 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 
 import {
+  FirstTeamRegionRequiredError,
+  firstTeamRegionPath,
+} from "@/lib/onboarding/first-team-region"
+import {
   ycAccount,
   ycProof,
   ycRequest,
@@ -49,6 +53,7 @@ export async function prepareYCTeam() {
   const user = await ycAccount().catch(() => null)
   if (!user) redirect("/auth/signin?next=%2Fyc%2Fclaim&offer=yc_2026")
   let result = "ready"
+  let regionRequired = false
   try {
     const proof = await ycProof()
     if (!proof) throw new Error("Confirmation required")
@@ -66,7 +71,9 @@ export async function prepareYCTeam() {
       throw new Error("Confirmed claim required")
     await ycTeams(user, true)
   } catch (error) {
+    regionRequired = error instanceof FirstTeamRegionRequiredError
     result = error instanceof YCManualReviewError ? "review" : "retry"
   }
+  if (regionRequired) redirect(firstTeamRegionPath("/yc/claim"))
   redirect(`/yc/claim?result=${result}`)
 }

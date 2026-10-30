@@ -30,6 +30,7 @@ import { classifyGoogleMembershipState } from "@/lib/auth/google-onboarding"
 import { isGoogleUser } from "@/lib/auth/google-signup-proof"
 import { assertSignupReviewCleared } from "@/lib/auth/signup-review"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
+import { firstTeamTarget } from "@/lib/onboarding/first-team-region"
 import { createServerClient } from "@/lib/supabase/server"
 
 export { getProxySecret, hashKey } from "@/lib/api/proxy-secret"
@@ -142,19 +143,21 @@ async function getTeamForUser(
   // RBAC chain the create-team action uses — a legacy-only team (team +
   // team_member, no team_memberships/role assignment) is one the console
   // lists but the control plane 403s, so the user's first request fails.
+  const target = await firstTeamTarget(userId)
   const team = await provisionTeam(
-    DEFAULT_REGION,
+    target.region,
     userId,
     email,
     email,
     observedAt ? { user, observedAt } : undefined,
+    target.operationId,
   )
 
   // The empty membership list we just read may be cached; drop it so other
   // surfaces (billing, quota, directory) see the new team immediately.
   invalidateMembershipDirectory(userId)
 
-  const created = { teamId: team.id, region: DEFAULT_REGION }
+  const created = { teamId: team.id, region: target.region }
   setFresh(teamCache, cacheKey, created)
   return created
 }

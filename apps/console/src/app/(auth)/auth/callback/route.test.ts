@@ -1644,6 +1644,40 @@ describe("auth callback", () => {
       expect(location.searchParams.get("account")).toBe("u1")
     })
 
+    it("keeps a region-picker return through sign-in", async () => {
+      const next = `/onboarding/region/?${new URLSearchParams({ next: "/device?code=ABCD-EFGH" })}`
+      const response = await GET(
+        new Request(
+          `https://console.superserve.ai/auth/callback?token_hash=official&type=magiclink&next=${encodeURIComponent(next)}`,
+        ),
+      )
+      const location = new URL(response.headers.get("location")!)
+      expect(location.pathname + location.search).toBe(next)
+    })
+
+    it("sends a new paid signup to the region picker, then back to its paid setup", async () => {
+      currentUser!.app_metadata = { provider: "email" }
+      const { FirstTeamRegionRequiredError } =
+        await import("@/lib/onboarding/first-team-region")
+      mockGetSignupPlanAction.mockRejectedValueOnce(
+        new FirstTeamRegionRequiredError(),
+      )
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?token_hash=official&type=signup&signup_offer=starter&next=%2Fplan-usage%2Fbuy-credit%2F",
+        ),
+      )
+      const location = new URL(response.headers.get("location")!)
+      expect(location.pathname).toBe("/onboarding/region/")
+      const resume = new URL(
+        location.searchParams.get("next")!,
+        "https://console.superserve.ai",
+      )
+      expect(resume.pathname).toBe("/api/onboarding/prepare/")
+      expect(resume.searchParams.get("account")).toBe("u1")
+      expect(resume.searchParams.get("next")).toBe("/plan-usage/buy-credit/")
+    })
+
     it("retries a failed first-team confirmation through expired-session reauthentication without losing Starter", async () => {
       currentUser!.app_metadata = { provider: "email" }
       const owner = currentUser!

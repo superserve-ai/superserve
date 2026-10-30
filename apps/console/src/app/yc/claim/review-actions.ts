@@ -2,6 +2,10 @@
 
 import { redirect } from "next/navigation"
 
+import {
+  FirstTeamRegionRequiredError,
+  firstTeamRegionPath,
+} from "@/lib/onboarding/first-team-region"
 import { createServerClient } from "@/lib/supabase/server"
 import { ycAccount, ycTeams } from "@/lib/yc-claims"
 import { journeyEnabled } from "@/lib/yc/acceptance-api"
@@ -31,7 +35,11 @@ export async function prepareReviewTeam(locator: string) {
     redirect(
       `/auth/signin?next=${encodeURIComponent(`/yc/claim?claim=${locator}`)}`,
     )
-  await ycTeams(user, true)
+  await ycTeams(user, true).catch((error: unknown) => {
+    if (error instanceof FirstTeamRegionRequiredError)
+      redirect(firstTeamRegionPath(`/yc/claim?claim=${locator}`))
+    throw error
+  })
   redirect(`/yc/claim?claim=${locator}`)
 }
 export async function useDifferentClaimAccount(locator: string) {
