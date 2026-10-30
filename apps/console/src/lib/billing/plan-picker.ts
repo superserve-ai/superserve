@@ -1,4 +1,10 @@
-import { type BillingOffer, formatUsdCents } from "@/lib/billing/plans"
+import {
+  type BillingOffer,
+  formatUsdCents,
+  type PlanCard,
+  planConcurrency,
+  planSandboxSize,
+} from "@/lib/billing/plans"
 import {
   SIGNUP_CHECKOUT_OFFERS,
   type SignupCheckoutOffer,
@@ -49,26 +55,48 @@ export function pickerPlanLabel(
   )
 }
 
-export function offerPriceLabel(offer: BillingOffer): string {
-  return `${formatUsdCents(offer.price_cents)} / ${offer.interval_months === 12 ? "year" : "month"}`
+export interface PickerCard {
+  price: string
+  interval: string
+  included: string | null
+  tagline: string | null
+  limits: string[]
 }
 
-export function offerTerms(offer: BillingOffer): string[] {
-  const included = offer.included_credit_cents
-  const terms = included
-    ? [`${formatUsdCents(included)} of usage included each month`]
-    : []
-  if (offer.topoff)
-    terms.push(
-      `Auto Reload adds ${formatUsdCents(offer.topoff.amount_cents)} when credit drops below ${formatUsdCents(offer.topoff.threshold_cents)}. ${offer.topoff.default_enabled ? "On by default; you can turn it off" : "Off by default; you can turn it on"} at checkout.`,
-    )
-  else if (offer.funding_policy === "postpaid")
-    terms.push(
-      included
-        ? "Usage beyond that is billed at the end of the month"
-        : "Usage is billed at the end of the month",
-    )
-  return terms
+const SUPPORT_FEATURE = /\bsupport\b/i
+
+export function pickerCard(
+  offer: BillingOffer,
+  cards: readonly PlanCard[],
+): PickerCard {
+  const card =
+    cards.find(
+      (entry) =>
+        entry.monthly?.offer_key === offer.offer_key ||
+        entry.annual?.offer_key === offer.offer_key,
+    ) ?? cards.find((entry) => entry.family === offer.family)
+  const size = card ? planSandboxSize(card.limits) : null
+  const support = card?.features.find((feature) =>
+    SUPPORT_FEATURE.test(feature),
+  )
+  return {
+    price: formatUsdCents(offer.price_cents),
+    interval: offer.interval_months === 12 ? "year" : "month",
+    included: offer.included_credit_cents
+      ? `Includes ${formatUsdCents(offer.included_credit_cents)} of usage each month`
+      : null,
+    tagline: card?.tagline || null,
+    limits: [
+      card ? planConcurrency(card.limits) : null,
+      size,
+      offer.topoff
+        ? `Auto Reload adds ${formatUsdCents(offer.topoff.amount_cents)} when your balance drops under ${formatUsdCents(offer.topoff.threshold_cents)}`
+        : offer.funding_policy === "postpaid"
+          ? "Extra usage billed at the end of each billing period"
+          : null,
+      support ?? null,
+    ].filter((line): line is string => line !== null),
+  }
 }
 
 // Whether the picker still sells offer. Offers that don't list it leave

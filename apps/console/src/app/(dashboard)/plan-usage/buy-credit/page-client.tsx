@@ -218,14 +218,19 @@ export function BuyCreditPageClient({
               />
             ) : allowEntry ? (
               <p className="text-sm text-muted">
-                Your plan doesn&apos;t include credit purchases.{" "}
-                <Link
-                  href={UPGRADE_PATH}
-                  className="underline underline-offset-4"
-                >
-                  See plans
-                </Link>
-                .
+                Your plan doesn&apos;t include credit purchases.
+                {plan?.kind === "subscription" ? null : (
+                  <>
+                    {" "}
+                    <Link
+                      href={UPGRADE_PATH}
+                      className="underline underline-offset-4"
+                    >
+                      See plans
+                    </Link>
+                    .
+                  </>
+                )}
               </p>
             ) : (
               <p className="text-sm text-muted">

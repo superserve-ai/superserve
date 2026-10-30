@@ -86,16 +86,21 @@ function Meter({
 
 function Panel({
   title,
+  badge,
   id,
   children,
 }: {
   title: string
+  badge?: string
   id?: string
   children: React.ReactNode
 }) {
   return (
     <div id={id} className="space-y-3 p-5 sm:p-6">
-      <p className={EYEBROW}>{title}</p>
+      <div className="flex items-center gap-2">
+        <p className={EYEBROW}>{title}</p>
+        {badge ? <Badge>{badge}</Badge> : null}
+      </div>
       {children}
     </div>
   )
@@ -290,7 +295,7 @@ export function IncludedUsagePanel({
 }) {
   const included = plan.included_cents
   return (
-    <Panel title="Included usage this period">
+    <Panel title="Included usage this period" badge={plan.name}>
       {bridgeMonthlyStartsAt ? (
         <p className="text-sm text-muted">
           Next monthly billing period starts on {date(bridgeMonthlyStartsAt)}.
@@ -366,10 +371,10 @@ export function supportChannel(
 // cancel its plan.
 export function SupportContact({
   channel,
-  action,
+  prompt,
 }: {
   channel: SupportChannel
-  action: string
+  prompt: string
 }) {
   const email = (
     <a
@@ -381,7 +386,7 @@ export function SupportContact({
   )
   return (
     <p className="text-sm text-muted">
-      To {action}, contact support{" "}
+      {prompt} Contact support{" "}
       {channel === "email" ? (
         <>at {email}</>
       ) : (
@@ -395,11 +400,11 @@ export function SupportContact({
 export function PlanDetails({
   plan,
   canManage,
-  cancelChannel = "priority",
+  channel = "priority",
 }: {
   plan: TeamPlan
   canManage: boolean
-  cancelChannel?: SupportChannel
+  channel?: SupportChannel
 }) {
   const size = describeSandboxSize(plan.limits)
   const pending = plan.pending_change
@@ -432,7 +437,21 @@ export function PlanDetails({
           </>
         ) : null}
       </dl>
-      {canManage ? (
+      {plan.kind === "subscription" ? (
+        <>
+          <SupportContact channel={channel} prompt="Need a different plan?" />
+          <SupportContact channel={channel} prompt="Want to cancel?" />
+          {canManage && pending ? (
+            <Button
+              size="sm"
+              variant="outline"
+              render={<Link href={UPGRADE_PATH} />}
+            >
+              Manage scheduled change
+            </Button>
+          ) : null}
+        </>
+      ) : canManage ? (
         <div className="flex flex-wrap gap-3">
           <Button
             size="sm"
@@ -451,9 +470,6 @@ export function PlanDetails({
             </Button>
           ) : null}
         </div>
-      ) : null}
-      {plan.kind === "subscription" ? (
-        <SupportContact channel={cancelChannel} action="cancel" />
       ) : null}
     </div>
   )

@@ -161,9 +161,34 @@ beforeEach(() => {
 describe("PlanOverviewSection with pricing v2 off", () => {
   it("keeps an assigned team's settings change-plan link available after rollback", () => {
     mocks.version.mockReturnValue("legacy")
-    mocks.plan.mockReturnValue({ data: plan({}), isError: false })
+    mocks.plan.mockReturnValue({
+      data: plan({ key: "free", kind: "free", name: "Free" }),
+      isError: false,
+    })
     render(<PlanOverviewSection summary={summary} details />)
     expect(screen.getByRole("link", { name: "Change plan" })).toBeTruthy()
+  })
+
+  it("keeps a subscription team's way to undo a scheduled change after rollback", () => {
+    mocks.version.mockReturnValue("legacy")
+    mocks.plan.mockReturnValue({
+      data: plan({
+        pending_change: {
+          id: "34971786-dd50-492b-b934-306b63764c4b",
+          plan_key: "free",
+          plan_name: "Free",
+          effective_at: "2026-11-01T00:00:00Z",
+          undoable: true,
+          pauses_running: true,
+        },
+      }),
+      isError: false,
+    })
+    render(<PlanOverviewSection summary={summary} details />)
+    expect(screen.queryByRole("link", { name: "Change plan" })).toBeNull()
+    expect(
+      screen.getByRole("link", { name: "Manage scheduled change" }),
+    ).toHaveAttribute("href", "/plan-usage/upgrade")
   })
 
   it("renders today's plan card when there is no assigned plan", () => {
@@ -234,6 +259,9 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     expect(screen.getByText(/\$62\.50 beyond the included usage/)).toBeTruthy()
     expect(screen.queryByText("Current plan")).toBeNull()
     expect(screen.queryByRole("link", { name: "Change plan" })).toBeNull()
+    expect(
+      screen.getByText("Included usage this period").parentElement!.textContent,
+    ).toBe("Included usage this periodPro")
   })
 
   it("describes a credit-funded subscription as paused when out, not billed later", () => {
@@ -748,9 +776,9 @@ describe("Settings plan details", () => {
     )
     expect(document.getElementById("auto-topoff")).toBeTruthy()
     expect(screen.getByRole("switch")).toBeTruthy()
-    expect(screen.getByText(/To cancel, contact support/).textContent).toBe(
-      "To cancel, contact support at support@superserve.ai.",
-    )
+    expect(
+      screen.getByText(/Want to cancel\? Contact support/).textContent,
+    ).toBe("Want to cancel? Contact support at support@superserve.ai.")
   })
 
   it("scrolls to Auto Reload once it loads when a link asked for it", () => {
@@ -794,8 +822,8 @@ describe("Settings plan details", () => {
         <PlanOverviewSection summary={summary} details />
       </QueryClientProvider>,
     )
-    expect(screen.getByText(/To cancel/).textContent).toBe(
-      "To cancel, contact support at support@superserve.ai.",
+    expect(screen.getByText(/Want to cancel/).textContent).toBe(
+      "Want to cancel? Contact support at support@superserve.ai.",
     )
   })
 
@@ -806,9 +834,13 @@ describe("Settings plan details", () => {
         <PlanOverviewSection summary={summary} details />
       </QueryClientProvider>,
     )
-    expect(screen.getByText(/To cancel/).textContent).toBe(
-      "To cancel, contact support in your priority Slack channel or at support@superserve.ai.",
+    expect(screen.getByText(/Want to cancel/).textContent).toBe(
+      "Want to cancel? Contact support in your priority Slack channel or at support@superserve.ai.",
     )
+    expect(screen.getByText(/Need a different plan/).textContent).toBe(
+      "Need a different plan? Contact support in your priority Slack channel or at support@superserve.ai.",
+    )
+    expect(screen.queryByRole("link", { name: "Change plan" })).toBeNull()
     expect(document.getElementById("auto-topoff")).toBeNull()
   })
 
