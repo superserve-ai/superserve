@@ -206,18 +206,14 @@ async function handleWork(work: { id: string; data: { id: string } }) {
 
   let sandbox: Sandbox
   if (live.length > 0) {
+    // connect() resumes a paused sandbox
     sandbox = await Sandbox.connect(live[0].id)
-    if (live[0].status === "paused") await sandbox.resume()
   } else {
     sandbox = await Sandbox.create({
       name: `cma-${sessionId.slice(0, 8)}`,
       fromTemplate: "claude-managed-agent",
       metadata: { "cma.session_id": sessionId },
-      network: {
-        // DNS resolvers, then Anthropic; deny everything else
-        allowOut: ["1.1.1.1/32", "8.8.8.8/32", "api.anthropic.com"],
-        denyOut: ["0.0.0.0/0"],
-      },
+      network: { allowOut: ["api.anthropic.com"] },
     })
   }
 
@@ -267,19 +263,14 @@ async def handle_work(work):
     live = [s for s in existing if s.status in ("active", "paused")]
 
     if live:
+        # connect() resumes a paused sandbox
         sandbox = await AsyncSandbox.connect(live[0].id)
-        if live[0].status == "paused":
-            await sandbox.resume()
     else:
         sandbox = await AsyncSandbox.create(
             name=f"cma-{session_id[:8]}",
             from_template="claude-managed-agent",
             metadata={"cma.session_id": session_id},
-            # DNS resolvers, then Anthropic; deny everything else
-            network=NetworkConfig(
-                allow_out=["1.1.1.1/32", "8.8.8.8/32", "api.anthropic.com"],
-                deny_out=["0.0.0.0/0"],
-            ),
+            network=NetworkConfig(allow_out=["api.anthropic.com"]),
         )
 
     await sandbox.files.write("/workspace/runner.py", RUNNER)
@@ -311,7 +302,7 @@ asyncio.run(main())
 What the orchestrator does on each work item:
 
 1. **Finds or creates** a sandbox for the session using a metadata tag. Existing paused sandboxes are resumed rather than recreated.
-2. **Locks down egress** — `denyOut: ["0.0.0.0/0"]` blocks everything, and `allowOut` re-opens only `api.anthropic.com` plus the sandbox's DNS resolvers (`1.1.1.1/32`, `8.8.8.8/32`), without which the domain rule cannot resolve. `allowOut` on its own does not restrict anything.
+2. **Locks down egress** — each sandbox can only reach `api.anthropic.com`, preventing data exfiltration to arbitrary endpoints.
 3. **Uploads and launches** the runner with per-session credentials passed as environment variables.
 
 Long-polling works behind any NAT or firewall. For push-based dispatch, use a webhook instead.
@@ -373,7 +364,7 @@ Keep `ANTHROPIC_ENVIRONMENT_KEY` on the orchestrator host only. The orchestrator
 </Warning>
 
 <Tip>
-To reduce costs, pause sandboxes that sit idle between turns. Superserve's `pause()` checkpoints the full VM state - memory, processes, and filesystem - at zero compute cost. The next work item for that session calls `resume()` and picks up exactly where it left off, in under 50ms.
+To reduce costs, pause sandboxes that sit idle between turns. Superserve's `pause()` checkpoints the full VM state - memory, processes, and filesystem - at zero compute cost. The next work item for that session calls `connect()`, which resumes the sandbox exactly where it left off, in under 50ms.
 </Tip>
 
 ## Start a session
