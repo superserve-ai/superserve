@@ -2,7 +2,11 @@ import { render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 let params = new URLSearchParams()
-vi.mock("next/navigation", () => ({ useSearchParams: () => params }))
+const replace = vi.fn()
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => params,
+  useRouter: () => ({ replace }),
+}))
 vi.mock("next/image", () => ({
   default: ({ alt }: { alt: string }) => <span>{alt}</span>,
 }))
@@ -40,6 +44,7 @@ import ChoosePlanPage from "./page"
 describe("plan picker", () => {
   beforeEach(() => {
     params = new URLSearchParams()
+    replace.mockReset()
   })
 
   it("offers both plans when the trial has ended", async () => {
@@ -60,22 +65,33 @@ describe("plan picker", () => {
     expect(screen.getByRole("button", { name: "Pro" })).toBeTruthy()
   })
 
-  it.each(["payment_confirming", "checkout_elsewhere"])(
-    "only re-checks the original checkout for %s",
-    (reason) => {
-      params = new URLSearchParams({
-        reason,
-        account: "u1",
-        team: "use:team-1",
-      })
-      render(<ChoosePlanPage />)
-      expect(screen.queryByRole("button", { name: "Developer" })).toBeNull()
-      expect(screen.queryByRole("button", { name: "Pro" })).toBeNull()
-      expect(
-        screen.getByRole("link", { name: "Check again" }).getAttribute("href"),
-      ).toBe("/api/onboarding/checkout/return/?account=u1&team=use%3Ateam-1")
-    },
-  )
+  it("only re-checks the original checkout for checkout_elsewhere", () => {
+    params = new URLSearchParams({
+      reason: "checkout_elsewhere",
+      account: "u1",
+      team: "use:team-1",
+    })
+    render(<ChoosePlanPage />)
+    expect(screen.queryByRole("button", { name: "Developer" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Pro" })).toBeNull()
+    expect(
+      screen.getByRole("link", { name: "Check again" }).getAttribute("href"),
+    ).toBe("/api/onboarding/checkout/return/?account=u1&team=use%3Ateam-1")
+  })
+
+  it("sends an old payment-confirming link to the payment wait, not the picker", () => {
+    params = new URLSearchParams({
+      reason: "payment_confirming",
+      account: "u1",
+      team: "use:team-1",
+    })
+    render(<ChoosePlanPage />)
+    expect(screen.queryByRole("button", { name: "Developer" })).toBeNull()
+    expect(screen.queryByText("Choose a plan")).toBeNull()
+    expect(replace).toHaveBeenCalledWith(
+      "/onboarding/payment/?account=u1&team=use%3Ateam-1",
+    )
+  })
 
   it("offers no purchase without the account and team it was shown for", () => {
     params = new URLSearchParams({ reason: "trial_ended", offer: "developer" })

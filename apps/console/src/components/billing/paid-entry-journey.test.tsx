@@ -127,6 +127,7 @@ vi.mock("@/lib/api/plan-checkout", () => ({
   startProCheckout: (...args: unknown[]) => state.start(...args),
   recoverProPayment: (...args: unknown[]) => state.recover(...args),
   resumeProCheckout: vi.fn(),
+  paymentActivating: async () => false,
   isStripeCheckoutUrl: (value: string) =>
     value.startsWith("https://checkout.stripe.com/"),
 }))
@@ -514,7 +515,7 @@ describe("actual signup preparation to paid page journey", () => {
               : "Check payment status",
         }),
       )
-      await screen.findByText(/Payment status is pending/)
+      await screen.findByText("Processing payment…")
       const started = producer === "start-null" ? 1 : 0
       expect(state.start).toHaveBeenCalledTimes(started)
       state.teamKey = "use:22222222-2222-4222-8222-222222222222"
@@ -534,13 +535,15 @@ describe("actual signup preparation to paid page journey", () => {
         }),
       )
       state.teamKey = teamKey
+      state.recover.mockClear()
       view.rerender(
         <QueryClientProvider client={new QueryClient()}>
           {await ProPage(props)}
         </QueryClientProvider>,
       )
-      fireEvent.click(screen.getByRole("button", { name: "Check again" }))
-      await waitFor(() => expect(state.recover).toHaveBeenCalledWith(teamKey))
+      await waitFor(() => expect(state.recover).toHaveBeenCalledWith(teamKey), {
+        timeout: 3000,
+      })
       expect(state.start).toHaveBeenCalledTimes(started)
     },
   )
@@ -570,7 +573,7 @@ describe("actual signup preparation to paid page journey", () => {
               : "Check payment status",
         }),
       )
-      await screen.findByText(/Payment status is pending/)
+      await screen.findByText("Processing payment…")
       const started = producer === "start-null" ? 1 : 0
       state.teamKey = "use:22222222-2222-4222-8222-222222222222"
       state.member = false

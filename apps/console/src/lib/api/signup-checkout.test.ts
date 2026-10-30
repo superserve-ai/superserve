@@ -17,7 +17,7 @@ vi.mock("@/lib/cells", () => ({
 import type { User } from "@supabase/supabase-js"
 
 import {
-  confirmSignupCheckout,
+  settleSignupCheckout,
   signupEntryDestination,
   startSignupCheckout,
 } from "./signup-checkout"
@@ -179,11 +179,7 @@ describe("startSignupCheckout", () => {
       },
       "https://checkout.stripe.com/c/pay/cs_setup",
     ],
-    [
-      202,
-      { outcome: "payment_confirmation_pending" },
-      "/auth/choose-plan/?reason=payment_confirming&account=u1&team=use%3Ateam-1",
-    ],
+    [202, { outcome: "payment_confirmation_pending" }, null],
     [200, { outcome: "active", url: "https://other.example/x" }, "/sandboxes"],
     [
       200,
@@ -191,22 +187,58 @@ describe("startSignupCheckout", () => {
         outcome: "payment_method_required",
         url: "https://checkout.stripe.com.evil.example/c/pay/cs_x",
       },
-      "/auth/choose-plan/?reason=payment_confirming&account=u1&team=use%3Ateam-1",
+      null,
     ],
     [
       200,
       { outcome: "payment_method_required", url: "https://other.example/x" },
-      "/auth/choose-plan/?reason=payment_confirming&account=u1&team=use%3Ateam-1",
+      null,
     ],
   ])(
     "settles a paid checkout before the dashboard (%s %j)",
     async (status, body, destination) => {
       recovered = { status, body }
-      expect(await confirmSignupCheckout(user, "u1", "use:team-1")).toBe(
+      expect(await settleSignupCheckout(user, "u1", "use:team-1")).toBe(
         destination,
       )
     },
   )
+
+  it.each([
+    ["trial_ended", null],
+    ["activating", null],
+    ["payment_failed", "/sandboxes"],
+    ["trial", "/sandboxes"],
+  ])(
+    "keeps a returned checkout with nothing pending waiting while the entry is %s",
+    async (entry, destination) => {
+      entryState = entry
+      recovered = { status: 200, body: { outcome: "no_pending_pro_purchase" } }
+      expect(await settleSignupCheckout(user, "u1", "use:team-1")).toBe(
+        destination,
+      )
+    },
+  )
+
+  it("waits while the payment status read fails", async () => {
+    recovered = { status: 503, body: {} }
+    expect(await settleSignupCheckout(user, "u1", "use:team-1")).toBeNull()
+  })
+
+  it("never starts another checkout while a paid one is activating", async () => {
+    entryState = "activating"
+    expect(
+      await startSignupCheckout(user, "developer", origin, mine),
+    ).toBeNull()
+    expect(await signupEntryDestination(user, "developer")).toBe(
+      `/onboarding/payment/?${pinned}`,
+    )
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).endsWith("/stripe/checkout-session"),
+      ),
+    ).toBe(false)
+  })
 
   it.each([
     [
@@ -224,7 +256,7 @@ describe("startSignupCheckout", () => {
     "never confirms a checkout started by account %s on team %s",
     async (account, team, destination) => {
       recovered = { status: 200, body: { outcome: "active" } }
-      expect(await confirmSignupCheckout(user, account, team)).toBe(destination)
+      expect(await settleSignupCheckout(user, account, team)).toBe(destination)
       expect(
         fetchMock.mock.calls.some(([url]) => String(url).endsWith("/recover")),
       ).toBe(false)
@@ -236,10 +268,10 @@ describe("startSignupCheckout", () => {
     expect(
       await startSignupCheckout(user, "developer", origin, other, true),
     ).toBe("/auth/choose-plan/?reason=checkout_elsewhere")
-    expect(await confirmSignupCheckout(user, "other-user", "use:team-1")).toBe(
+    expect(await settleSignupCheckout(user, "other-user", "use:team-1")).toBe(
       "/auth/choose-plan/?reason=checkout_elsewhere&account=other-user&team=use%3Ateam-1",
     )
-    expect(await confirmSignupCheckout(user, null, null)).toBe(
+    expect(await settleSignupCheckout(user, null, null)).toBe(
       "/auth/choose-plan/?reason=checkout_elsewhere",
     )
     expect(provision).not.toHaveBeenCalled()

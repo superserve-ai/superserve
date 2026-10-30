@@ -4,6 +4,8 @@ import {
   type AwaitingPlanState,
   isAwaitingPlanState,
   type CheckoutLocator,
+  isPaymentActivating,
+  paymentSettlingPath,
   signupCheckoutReturnPath,
   planPickerPath,
   SIGNUP_CHECKOUT_OFFERS,
@@ -28,17 +30,16 @@ async function teamBackend(user: User) {
 
 async function readEntryState(
   backend: Awaited<ReturnType<typeof teamBackend>>,
-): Promise<AwaitingPlanState | null> {
+): Promise<AwaitingPlanState | "activating" | null> {
   const plan = await fetch(`${backend.base}/billing/plan`, {
     headers: backend.headers,
     cache: "no-store",
     signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
   })
   if (!plan.ok) throw new Error(`billing plan read failed: ${plan.status}`)
-  const { entry_state: entry } = (await plan.json()) as {
-    entry_state?: unknown
-  }
-  return isAwaitingPlanState(entry) ? entry : null
+  const body = (await plan.json()) as { entry_state?: unknown }
+  if (isPaymentActivating(body)) return "activating"
+  return isAwaitingPlanState(body.entry_state) ? body.entry_state : null
 }
 
 // Where a new signup lands: the console while its trial lasts, the plan picker
@@ -52,6 +53,7 @@ export async function signupEntryDestination(
   const entry = await readEntryState(backend)
   if (!entry) return null
   if (entry === "trial") return "/sandboxes"
+  if (entry === "activating") return paymentSettlingPath(backend.locator)
   return planPickerPath(entry, offer, backend.locator)
 }
 
@@ -71,7 +73,8 @@ export async function startSignupCheckout(
   const { base, headers, locator } = backend
   if (expected.team !== locator.team)
     return planPickerPath("checkout_elsewhere")
-  if (!(await readEntryState(backend))) return null
+  const entry = await readEntryState(backend)
+  if (!entry || entry === "activating") return null
   const success = signupCheckoutReturnPath(locator.account, locator.team)
   const create = async () => {
     const response = await fetch(`${base}/stripe/checkout-session`, {
@@ -119,18 +122,20 @@ export async function startSignupCheckout(
   return success
 }
 
-// Settles a checkout the customer just paid, so a team leaving Stripe lands
-// in the console with its plan rather than back on the picker.
-export async function confirmSignupCheckout(
+// Settles a checkout the customer just paid. Returns where to go next, or
+// null while the payment is still settling: a team that came back from a paid
+// checkout waits for its plan rather than being sent back to the picker.
+export async function settleSignupCheckout(
   user: User,
   account: string | null,
   teamKey: string | null,
-): Promise<string> {
+): Promise<string | null> {
   if (!account || !teamKey) return planPickerPath("checkout_elsewhere")
   const original = { account, team: teamKey }
   if (account !== user.id)
     return planPickerPath("checkout_elsewhere", undefined, original)
-  const { base, headers, locator } = await teamBackend(user)
+  const backend = await teamBackend(user)
+  const { base, headers, locator } = backend
   if (teamKey !== locator.team)
     return planPickerPath("checkout_elsewhere", undefined, original)
   const response = await fetch(`${base}/stripe/pro-checkout/recover`, {
@@ -144,15 +149,11 @@ export async function confirmSignupCheckout(
     outcome?: string
     url?: string
   }
-  if (response.ok && result.url && isStripeCheckoutUrl(result.url))
-    return result.url
-  // Nothing left to settle: the console sends a used-up trial to the picker.
-  if (
-    response.ok &&
-    ["active", "retryable", "no_pending_pro_purchase"].includes(
-      result.outcome ?? "",
-    )
-  )
-    return "/sandboxes"
-  return planPickerPath("payment_confirming", undefined, original)
+  if (!response.ok) return null
+  if (result.url && isStripeCheckoutUrl(result.url)) return result.url
+  if (result.outcome === "active") return "/sandboxes"
+  if (!["retryable", "no_pending_pro_purchase"].includes(result.outcome ?? ""))
+    return null
+  const entry = await readEntryState(backend)
+  return entry === "trial_ended" || entry === "activating" ? null : "/sandboxes"
 }

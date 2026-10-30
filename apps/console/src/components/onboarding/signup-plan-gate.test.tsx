@@ -98,7 +98,7 @@ describe("signup plan gate", () => {
     renderGate()
     await waitFor(() =>
       expect(mocks.replace).toHaveBeenCalledWith(
-        "/auth/choose-plan/?reason=payment_confirming&account=owner&team=use%3Ateam",
+        "/onboarding/payment/?account=owner&team=use%3Ateam",
       ),
     )
   })

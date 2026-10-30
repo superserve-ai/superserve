@@ -94,7 +94,6 @@ export function isSignupCheckoutReturnPath(path: string) {
 
 export type PlanPickerReason =
   | "upgrade"
-  | "payment_confirming"
   | "checkout_elsewhere"
   | "trial_ended"
   | "payment_failed"
@@ -129,8 +128,31 @@ export function trialPlanOffer(
   return undefined
 }
 
+// A paid checkout whose plan is not active yet waits here, never on the picker.
+export const PAYMENT_SETTLING_ROUTE = "/onboarding/payment/"
+
+export function paymentSettlingPath(locator: CheckoutLocator) {
+  return `${PAYMENT_SETTLING_ROUTE}?${new URLSearchParams({ ...locator })}`
+}
+
+// The backend's explicit "paid, plan activating" state, read from the plan
+// response when it reports one. Its absence says nothing either way.
+export const PAYMENT_ACTIVATING = "activating"
+
+export function isPaymentActivating(plan: unknown): boolean {
+  if (!plan || typeof plan !== "object") return false
+  const { entry_state, pro_checkout } = plan as {
+    entry_state?: unknown
+    pro_checkout?: { status?: unknown } | null
+  }
+  return (
+    entry_state === PAYMENT_ACTIVATING ||
+    pro_checkout?.status === PAYMENT_ACTIVATING
+  )
+}
+
 // Where a team that has not paid must go before using the console: the picker
-// once its trial is used up, or the payment check while a paid checkout settles.
+// once its trial is used up, or the payment wait while a paid checkout settles.
 export function awaitingPlanRedirect(context: {
   userId: string
   teamKey: string
@@ -139,11 +161,11 @@ export function awaitingPlanRedirect(context: {
   requestedOffer?: string
 }): string | null {
   const entry = context.entryState
-  if (entry !== "trial_ended" && entry !== "payment_failed") return null
   const locator = { account: context.userId, team: context.teamKey }
-  return context.paymentSettling
-    ? planPickerPath("payment_confirming", undefined, locator)
-    : planPickerPath(entry, trialPlanOffer(context.requestedOffer), locator)
+  if (context.paymentSettling && entry !== "trial")
+    return paymentSettlingPath(locator)
+  if (entry !== "trial_ended" && entry !== "payment_failed") return null
+  return planPickerPath(entry, trialPlanOffer(context.requestedOffer), locator)
 }
 
 export function isPlanPickerPath(path: string) {
