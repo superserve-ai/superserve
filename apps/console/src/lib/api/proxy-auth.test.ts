@@ -44,11 +44,28 @@ vi.mock("next/headers", () => ({
     get: (name: string) =>
       name === "ss-active-team" && activeTeamCookie !== undefined
         ? { name, value: activeTeamCookie }
-        : name === "ss-first-team-region" && firstTeamRegionCookie
-          ? { name, value: firstTeamRegionCookie }
-          : undefined,
+        : undefined,
   }),
 }))
+
+// The region module has its own tests; here it reports the user's choice.
+vi.mock("@/lib/onboarding/first-team-region", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/onboarding/first-team-region")>()
+  return {
+    ...actual,
+    firstTeamTarget: async () => {
+      if (!firstTeamRegionCookie)
+        throw new actual.FirstTeamRegionRequiredError()
+      return firstTeamRegionCookie === "use"
+        ? { region: "use" }
+        : {
+            region: firstTeamRegionCookie,
+            operationId: "77777777-7777-5777-8777-777777777777",
+          }
+    },
+  }
+})
 
 // The user's team lives in the usw cell — used by the cell-targeting tests.
 vi.mock("@/lib/api/team-directory", () => ({

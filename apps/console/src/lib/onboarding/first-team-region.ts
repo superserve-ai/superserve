@@ -18,9 +18,20 @@ export function firstTeamRegionPath(next: string): string {
   return `/onboarding/region/?${new URLSearchParams({ next })}`
 }
 
-export async function readFirstTeamRegion(): Promise<string | null> {
+// The choice names its user, so another account on the same browser never
+// inherits it.
+export function firstTeamRegionValue(userId: string, region: string): string {
+  return `${userId}:${region}`
+}
+
+export async function readFirstTeamRegion(
+  userId: string,
+): Promise<string | null> {
   const value = (await cookies()).get(FIRST_TEAM_REGION_COOKIE)?.value
-  return value && configuredRegions().includes(value) ? value : null
+  const region = value?.startsWith(`${userId}:`)
+    ? value.slice(userId.length + 1)
+    : null
+  return region && configuredRegions().includes(region) ? region : null
 }
 
 /**
@@ -31,7 +42,7 @@ export async function readFirstTeamRegion(): Promise<string | null> {
 export async function firstTeamTarget(
   userId: string,
 ): Promise<{ region: string; operationId?: string }> {
-  const region = await readFirstTeamRegion()
+  const region = await readFirstTeamRegion(userId)
   if (!region) {
     if (configuredRegions().length > 1) throw new FirstTeamRegionRequiredError()
     return { region: DEFAULT_REGION }
