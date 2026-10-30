@@ -41,9 +41,13 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }))
 
-// No cookie set: active-team resolution falls back to the first membership.
+// No team selected, so active-team resolution falls back to the first
+// membership; a new user has picked East for their first team.
 vi.mock("next/headers", () => ({
-  cookies: async () => ({ get: () => undefined }),
+  cookies: async () => ({
+    get: (name: string) =>
+      name === "ss-first-team-region" ? { name, value: "use" } : undefined,
+  }),
 }))
 
 // Per-test knobs read lazily by the admin-client mock.
@@ -192,6 +196,7 @@ describe("createApiKeyAction region-prefixed keys", () => {
         user: expect.objectContaining({ id: "a1" }),
         observedAt: expect.any(String),
       },
+      undefined,
     )
     expect(insertedApiKeyRow).toBeNull()
   })
