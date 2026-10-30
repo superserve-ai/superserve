@@ -225,6 +225,11 @@ describe("startSignupCheckout", () => {
       "payment_failed",
       "/auth/choose-plan/?reason=payment_failed&account=u1&team=use%3Ateam-1",
     ],
+    [
+      200,
+      "plan_required",
+      "/auth/choose-plan/?reason=plan_required&account=u1&team=use%3Ateam-1",
+    ],
     [200, "activating", null],
     [409, "activating", null],
     [200, "trial", "/sandboxes"],
@@ -244,11 +249,14 @@ describe("startSignupCheckout", () => {
     expect(await settleSignupCheckout(user, "u1", "use:team-1")).toBeNull()
   })
 
-  it("holds an active payment until the entry state leaves the used-up trial", async () => {
-    entryState = "trial_ended"
-    recovered = { status: 200, body: { outcome: "active" } }
-    expect(await settleSignupCheckout(user, "u1", "use:team-1")).toBeNull()
-  })
+  it.each(["trial_ended", "plan_required"])(
+    "holds an active payment until the entry state leaves %s",
+    async (entry) => {
+      entryState = entry
+      recovered = { status: 200, body: { outcome: "active" } }
+      expect(await settleSignupCheckout(user, "u1", "use:team-1")).toBeNull()
+    },
+  )
 
   it.each([
     "active",
@@ -261,6 +269,7 @@ describe("startSignupCheckout", () => {
       for (const entry of [
         "trial",
         "trial_ended",
+        "plan_required",
         "payment_failed",
         "activating",
         "none",

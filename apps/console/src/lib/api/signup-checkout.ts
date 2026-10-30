@@ -160,8 +160,9 @@ export async function settleSignupCheckout(
   )
     return null
   const entry = await readEntryState(backend)
-  if (entry === "activating" || (active && entry === "trial_ended")) return null
-  if (entry === "trial_ended" || entry === "payment_failed")
+  const unpaid = entry === "trial_ended" || entry === "plan_required"
+  if (entry === "activating" || (active && unpaid)) return null
+  if (unpaid || entry === "payment_failed")
     return planPickerPath(entry, undefined, locator)
   return "/sandboxes"
 }
