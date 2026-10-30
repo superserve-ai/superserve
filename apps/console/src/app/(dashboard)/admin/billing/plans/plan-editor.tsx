@@ -260,7 +260,7 @@ function draftFrom(form: DraftForm): PlanDraft | string {
       const amount = centsFromDollars(form.topoff.amount)
       const threshold = centsFromDollars(form.topoff.threshold)
       if (amount === null || threshold === null)
-        return "Auto Topoff needs a dollar amount and threshold."
+        return "Auto Reload needs a dollar amount and threshold."
       topoff = {
         amount_cents: amount,
         threshold_cents: threshold,
@@ -821,12 +821,15 @@ export function PlanEditor({
                       )
                     }
                   />
-                  Offer Auto Topoff
+                  Offer Auto Reload
                 </label>
               ) : null}
               {form.funded && form.topoff ? (
                 <div className="grid gap-4 sm:grid-cols-3">
-                  <Field label="Top-off amount (USD)" htmlFor="topoff-amount">
+                  <Field
+                    label="Auto Reload amount (USD)"
+                    htmlFor="topoff-amount"
+                  >
                     <Input
                       id="topoff-amount"
                       inputMode="decimal"

@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+import { FUNDED_CREDIT_PURCHASES } from "@/lib/api/billing-v2"
 import { pickerPlans } from "@/lib/billing/plan-picker"
 import {
   billingOffersSchema,
@@ -82,6 +83,31 @@ export function canStartAnyPlan(
   if (!capabilities) return false
   return (
     capabilities.fresh_entry.pro && pickerPlans(capabilities.offers).length > 0
+  )
+}
+
+// Whether a team on a plan funded by credit can buy one-off credit now: the
+// purchase must be switched on and new entry open.
+export function canBuyFundedCredit(
+  capabilities: BillingCapabilities | undefined,
+): boolean {
+  return (
+    FUNDED_CREDIT_PURCHASES &&
+    capabilities?.pricing_version === "v2" &&
+    capabilities.entry_open
+  )
+}
+
+// Whether the buy-credit page gives a team on a plan funded by credit a way
+// to add credit: Auto Reload it can turn on, or a one-off purchase.
+export function canAddFundedCredit(
+  capabilities: BillingCapabilities | undefined,
+  prepaid: { has_saved_card?: boolean } | null | undefined,
+): boolean {
+  return (
+    canBuyFundedCredit(capabilities) ||
+    (capabilities?.fresh_entry.auto_recharge === true &&
+      prepaid?.has_saved_card === true)
   )
 }
 

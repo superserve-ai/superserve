@@ -26,12 +26,8 @@ import {
   useRetainedPrepaidOperations,
 } from "@/hooks/use-prepaid-credit"
 import { useUser } from "@/hooks/use-user"
-import {
-  fundedByCredit,
-  planTopoff,
-  TOPOFF_SETTINGS_PATH,
-  UPGRADE_PATH,
-} from "@/lib/api/billing-v2"
+import { canBuyFundedCredit } from "@/lib/api/billing-capabilities"
+import { fundedByCredit, planTopoff, UPGRADE_PATH } from "@/lib/api/billing-v2"
 import {
   type PrepaidCreditSummary,
   type PrepaidPurchase,
@@ -110,15 +106,18 @@ export function BuyCreditPageClient({
   const scope = useQueryScope()
   const planQuery = useTeamPlan(contextMatched)
   const plan = planQuery.data
-  const offers = useBillingCapabilities().data?.offers
+  const capabilities = useBillingCapabilities().data
+  const offers = capabilities?.offers
   const topoff = plan ? planTopoff(plan, offers) : null
-  // A subscription funded by credit only manages Auto Topoff here; one-off
-  // credit purchases are a prepaid plan's.
+  // A subscription funded by credit manages Auto Reload here, and buys
+  // one-off credit once that is sold to it.
   const topoffOnly =
     !!plan && plan.kind === "subscription" && fundedByCredit(plan, offers)
   // Starter credit is sold only to teams already on Starter.
   const starterTeam = plan?.kind === "prepaid"
-  const purchasable = allowEntry && starterTeam
+  const purchasable =
+    (allowEntry && starterTeam) ||
+    (topoffOnly && canBuyFundedCredit(capabilities))
   const canManage =
     ready && Boolean(summary?.permissions?.can_manage) && scope === "self"
   const canRecover = canManage && allowRecovery
@@ -138,9 +137,7 @@ export function BuyCreditPageClient({
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader
-        title={purchasable && !topoffOnly ? "Buy credit" : "Credit balance"}
-      />
+      <PageHeader title={purchasable ? "Buy credit" : "Credit balance"} />
       <div className="flex flex-col gap-6 overflow-y-auto p-4">
         {returning && !contextMatched ? (
           <CheckoutContextRecovery
@@ -192,7 +189,8 @@ export function BuyCreditPageClient({
               recovery={existingStarter}
               canManage={canRecover}
             />
-            {topoffOnly ? null : allowEntry && plan === undefined ? (
+            {topoffOnly && !purchasable ? null : allowEntry &&
+              plan === undefined ? (
               planQuery.isError ? (
                 <div
                   role="alert"
@@ -258,20 +256,10 @@ export function BuyCreditPageClient({
                 ))}
               </div>
             ) : null}
-            {topoffOnly ? (
-              <p className="text-sm text-muted">
-                Manage Auto Reload in{" "}
-                <Link
-                  href={TOPOFF_SETTINGS_PATH}
-                  className="underline underline-offset-4"
-                >
-                  Settings
-                </Link>
-                .
-              </p>
-            ) : plan === undefined ||
-              starterTeam ||
-              data.auto_recharge.enabled ? (
+            {topoffOnly ||
+            plan === undefined ||
+            starterTeam ||
+            data.auto_recharge.enabled ? (
               <>
                 {!allowRecharge ? (
                   <p className="text-sm text-muted">

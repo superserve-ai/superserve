@@ -140,6 +140,7 @@ export const freeAllowanceSchema = z.object({
 export const prepaidBalanceSchema = z.object({
   balance_cents: z.number().int(),
   low_balance: z.boolean().optional(),
+  has_saved_card: z.boolean().optional(),
   balance_observed: z.boolean().optional().catch(undefined),
   auto_recharge: z.object({
     enabled: z.boolean(),
@@ -212,6 +213,12 @@ export function fundedByCredit(
 
 export const UPGRADE_PATH = "/plan-usage/upgrade"
 export const BUY_CREDIT_PATH = "/plan-usage/buy-credit"
+export const SETTINGS_BILLING_PATH = "/settings/"
+
+// One-off credit purchases for subscriptions funded by credit. The checkout
+// endpoint accepts them only once the backend that sells them is deployed;
+// until then those teams get Auto Reload alone on the buy-credit page.
+export const FUNDED_CREDIT_PURCHASES = false
 export const TOPOFF_SETTINGS_PATH = "/settings/#auto-topoff"
 export const PRO_UPGRADE_PATH = "/billing/pro"
 

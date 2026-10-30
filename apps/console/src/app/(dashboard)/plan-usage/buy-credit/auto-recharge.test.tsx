@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   ready: true,
   scope: "self",
   planError: false,
+  fundedPurchases: false,
   refetchPlan: vi.fn(),
   plan: { key: "funded_monthly", kind: "prepaid" } as
     | Record<string, unknown>
@@ -36,6 +37,12 @@ vi.mock("@/hooks/use-teams", () => ({
   useSwitchTeam: () => ({ mutateAsync: vi.fn() }),
 }))
 
+vi.mock("@/lib/api/billing-v2", async (original) => ({
+  ...(await original<typeof import("@/lib/api/billing-v2")>()),
+  get FUNDED_CREDIT_PURCHASES() {
+    return mocks.fundedPurchases
+  },
+}))
 vi.mock("@/hooks/use-billing-v2", () => ({
   useTeamPlan: () => ({
     data: mocks.plan,
@@ -46,6 +53,8 @@ vi.mock("@/hooks/use-billing-v2", () => ({
 vi.mock("@/hooks/use-billing-capabilities", () => ({
   useBillingCapabilities: () => ({
     data: {
+      pricing_version: "v2",
+      entry_open: true,
       offers: [
         {
           offer_key: "funded_monthly",
@@ -97,6 +106,8 @@ vi.mock("@superserve/ui", async (original) => ({
   useToast: () => ({ addToast: vi.fn() }),
 }))
 
+import { AutoTopoffCard } from "@/components/billing/auto-topoff-card"
+
 import { BuyCreditPageClient } from "./page-client"
 
 const initial: PrepaidCreditSummary = {
@@ -116,6 +127,7 @@ const initial: PrepaidCreditSummary = {
 }
 
 beforeEach(() => {
+  mocks.fundedPurchases = false
   mocks.plan = { key: "funded_monthly", kind: "prepaid" }
   mocks.planError = false
   mocks.refetchPlan.mockReset()
@@ -474,7 +486,7 @@ it("keeps fresh Starter entry fenced when recovery discovery is explicitly denie
   expect(mocks.recover).not.toHaveBeenCalled()
 })
 
-it("sends a subscription funded by credit to Settings for Auto Reload", () => {
+it("gives a subscription funded by credit Auto Reload but no purchase until it's sold", () => {
   mocks.plan = {
     key: "funded_monthly",
     kind: "subscription",
@@ -486,13 +498,12 @@ it("sends a subscription funded by credit to Settings for Auto Reload", () => {
     },
   }
   render(page())
-  expect(screen.queryByRole("button", { name: /Buy .* credit/ })).toBeNull()
+  expect(screen.queryByRole("button", { name: /^Buy .*credit$/ })).toBeNull()
+  expect(screen.queryByRole("textbox", { name: "Amount (USD)" })).toBeNull()
   expect(screen.getByTestId("page-title").textContent).toBe("Credit balance")
-  expect(screen.queryByRole("switch")).toBeNull()
-  expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute(
-    "href",
-    expect.stringMatching(/^\/settings\/?#auto-topoff$/),
-  )
+  expect(screen.getByRole("switch")).toBeTruthy()
+  expect(screen.getByText("Auto Reload")).toBeTruthy()
+  expect(screen.queryByRole("link", { name: "Settings" })).toBeNull()
 })
 
 it("waits for the plan before offering a credit purchase", () => {
@@ -564,4 +575,49 @@ it("keeps the toggle and offers a retry while the plan can't be read", async () 
   )
   fireEvent.click(screen.getByRole("button", { name: "Try again" }))
   expect(mocks.refetchPlan).toHaveBeenCalled()
+})
+
+it("puts the one-off purchase next to Auto Reload once it's sold to credit-funded plans", async () => {
+  mocks.fundedPurchases = true
+  mocks.plan = {
+    key: "funded_monthly",
+    kind: "subscription",
+    funding_policy: "prepaid",
+    topoff: {
+      amount_cents: 2500,
+      threshold_cents: 1000,
+      default_enabled: true,
+    },
+  }
+  render(page())
+  expect(
+    await screen.findByRole("button", { name: /^Buy .*credit$/ }),
+  ).toBeTruthy()
+  expect(screen.getByRole("switch")).toBeTruthy()
+  expect(screen.getByTestId("page-title").textContent).toBe("Buy credit")
+})
+
+it("refreshes every billing read after Auto Reload is saved", async () => {
+  const client = new QueryClient()
+  const invalidate = vi.spyOn(client, "invalidateQueries")
+  mocks.save.mockResolvedValue({
+    ...initial,
+    auto_recharge: { ...initial.auto_recharge, enabled: false },
+  })
+  render(
+    <QueryClientProvider client={client}>
+      <AutoTopoffCard
+        data={initial}
+        topoff={null}
+        canManage
+        allowEntry
+        allowDisable
+      />
+    </QueryClientProvider>,
+  )
+  fireEvent.click(screen.getByRole("switch"))
+  fireEvent.click(screen.getByRole("button", { name: "Save" }))
+  await waitFor(() =>
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["billing"] }),
+  )
 })

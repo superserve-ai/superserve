@@ -79,6 +79,8 @@ export function AutoTopoffCard({
             ? { ...previous, auto_recharge: updated.auto_recharge }
             : updated,
       )
+      // The plan, balance, summary and capabilities all reflect Auto Reload.
+      void queryClient.invalidateQueries({ queryKey: billingKeys.all })
       addToast(enabled ? "Auto Reload is on" : "Auto Reload is off", "success")
     } catch (err) {
       addToast(

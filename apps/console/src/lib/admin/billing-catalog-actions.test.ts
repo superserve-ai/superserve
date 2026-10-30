@@ -172,7 +172,7 @@ describe("billing catalog fan-out", () => {
     expect(creates[0]!.body.reason).toBe("Raise the Pro fee")
   })
 
-  it("sends funding and Auto Topoff terms on create and in the publish check", async () => {
+  it("sends funding and Auto Reload terms on create and in the publish check", async () => {
     signIn(["platform:billing:read", "platform:billing:write"])
     const funded = plan({
       pricing_version: "v2",
@@ -200,7 +200,7 @@ describe("billing catalog fan-out", () => {
       })
   })
 
-  it("refuses Auto Topoff the catalog would reject without writing", async () => {
+  it("refuses Auto Reload the catalog would reject without writing", async () => {
     signIn(["platform:billing:read", "platform:billing:write"])
     serve({ "use.example.com": [], "usw.example.com": [] })
     const result = await createDraftAction(

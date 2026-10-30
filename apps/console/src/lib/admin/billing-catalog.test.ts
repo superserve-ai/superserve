@@ -220,7 +220,7 @@ describe("fundingIssue", () => {
     ...overrides,
   })
 
-  it("accepts a funded v2 subscription with a valid Auto Topoff", () => {
+  it("accepts a funded v2 subscription with a valid Auto Reload", () => {
     expect(fundingIssue(terms())).toBeNull()
     for (const threshold_cents of [100, 700, 1_000_000])
       expect(
