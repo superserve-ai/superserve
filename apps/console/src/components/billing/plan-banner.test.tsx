@@ -439,7 +439,7 @@ describe("PlanBanner for a credit-funded subscription", () => {
     fundingState("active")
   })
 
-  it("warns when the backend reports low credit with Auto Topoff off", () => {
+  it("warns when the backend reports low credit with Auto Reload off", () => {
     mocks.prepaid.mockReturnValue(balance(150, { low: true }))
     mount()
     const banner = screen.getByRole("region", { name: "Credit balance" })
@@ -447,12 +447,13 @@ describe("PlanBanner for a credit-funded subscription", () => {
       /^Your credit balance is too low\. Buy usage to continue running sandboxes\./,
     )
     expect(banner.textContent).not.toMatch(/\$/)
-    expect(
-      screen.getByRole("link", { name: "Turn on Auto Topoff" }),
-    ).toHaveAttribute("href", expect.stringMatching(/#auto-topoff$/))
+    expect(screen.getByRole("link", { name: "Add Credits" })).toHaveAttribute(
+      "href",
+      expect.stringMatching(/^\/plan-usage\/buy-credit\/?$/),
+    )
   })
 
-  it("keeps the warning but drops the Auto Topoff link while entry is closed", () => {
+  it("keeps the warning but drops the Auto Reload link while entry is closed", () => {
     mocks.recharge = false
     mocks.prepaid.mockReturnValue(balance(150, { low: true }))
     mount()
@@ -460,7 +461,7 @@ describe("PlanBanner for a credit-funded subscription", () => {
       screen.getByRole("region", { name: "Credit balance" }).textContent,
     ).toMatch(/^Your credit balance is too low\./)
     expect(
-      screen.queryByRole("link", { name: /Auto Topoff/ }),
+      screen.queryByRole("link", { name: /Auto Reload/ }),
     ).not.toBeInTheDocument()
   })
 
@@ -469,21 +470,19 @@ describe("PlanBanner for a credit-funded subscription", () => {
     expect(mount().container.textContent).toBe("")
   })
 
-  it("stays quiet while Auto Topoff is on", () => {
+  it("stays quiet while Auto Reload is on", () => {
     fundingState("auto_topoff")
     mocks.prepaid.mockReturnValue(balance(0, { low: true, enabled: true }))
     expect(mount().container.textContent).toBe("")
   })
 
-  it("warns after a failed charge turned Auto Topoff off", () => {
+  it("warns after a failed charge turned Auto Reload off", () => {
     mocks.prepaid.mockReturnValue(
       balance(0, { low: true, disabled_reason: "card_declined" }),
     )
     mount()
     expect(screen.getByText(/credit balance is too low/)).toBeTruthy()
-    expect(
-      screen.getByRole("link", { name: "Turn Auto Topoff back on" }),
-    ).toBeTruthy()
+    expect(screen.getByRole("link", { name: "Add Credits" })).toBeTruthy()
   })
 
   it("says nothing on an empty balance the backend doesn't call low", () => {

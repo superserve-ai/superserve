@@ -64,7 +64,7 @@ describe("PlanPickerOptions", () => {
     expect(builder).toHaveClass("border-brand/70")
     expect(builder.textContent).toMatch(/\$11 \/ month/)
     expect(builder.textContent).toMatch(
-      /Auto Topoff adds \$3 when credit drops below \$2/,
+      /Auto Reload adds \$3 when credit drops below \$2/,
     )
     expect(screen.getByRole("form", { name: "Team plan" })).not.toHaveClass(
       "border-brand/70",

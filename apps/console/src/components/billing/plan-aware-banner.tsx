@@ -9,7 +9,7 @@ import {
   isLowBalance,
   type PrepaidBalance,
   type TeamPlan,
-  TOPOFF_SETTINGS_PATH,
+  FUNDED_CREDIT_PURCHASES,
   UPGRADE_PATH,
 } from "@/lib/api/billing-v2"
 import type { BillingOffer } from "@/lib/billing/plans"
@@ -88,12 +88,10 @@ function LowCreditBanner({
       tone={prepaid.balance_cents <= 0 ? "danger" : "warning"}
       label="Credit balance"
       action={
-        canConfigureRecharge && (
+        (canConfigureRecharge || FUNDED_CREDIT_PURCHASES) && (
           <ManageAction canManage={canManage}>
-            <Button size="sm" render={<Link href={TOPOFF_SETTINGS_PATH} />}>
-              {prepaid.auto_recharge.disabled_reason
-                ? "Turn Auto Topoff back on"
-                : "Turn on Auto Topoff"}
+            <Button size="sm" render={<Link href={BUY_CREDIT_PATH} />}>
+              Add Credits
             </Button>
           </ManageAction>
         )

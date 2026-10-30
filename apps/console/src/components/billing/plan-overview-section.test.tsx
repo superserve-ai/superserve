@@ -270,16 +270,16 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     expect(screen.queryByText(/end of the period/)).toBeNull()
     expect(
       screen.getByText(
-        /paid from Auto Topoff credit\. Running sandboxes pause/,
+        /paid from Auto Reload credit\. Running sandboxes pause/,
       ),
     ).toBeTruthy()
     expect(
       screen.getByText(
-        /Auto Topoff is on: adds \$3 when credit drops below \$2/,
+        /Auto Reload is on: adds \$3 when credit drops below \$2/,
       ),
     ).toBeTruthy()
     expect(
-      screen.getByRole("link", { name: "Manage Auto Topoff" }),
+      screen.getByRole("link", { name: "Manage Auto Reload" }),
     ).toBeTruthy()
   })
 
@@ -729,7 +729,7 @@ describe("a summary that disagrees with the plan", () => {
 })
 
 describe("Settings plan details", () => {
-  it("manages Auto Topoff here and says how to cancel a credit-funded plan", () => {
+  it("manages Auto Reload here and says how to cancel a credit-funded plan", () => {
     mocks.plan.mockReturnValue({
       data: plan({
         funding_policy: "prepaid",
@@ -753,7 +753,7 @@ describe("Settings plan details", () => {
     )
   })
 
-  it("scrolls to Auto Topoff once it loads when a link asked for it", () => {
+  it("scrolls to Auto Reload once it loads when a link asked for it", () => {
     const scroll = vi.fn()
     Element.prototype.scrollIntoView = scroll
     window.history.replaceState({}, "", "/settings/#auto-topoff")

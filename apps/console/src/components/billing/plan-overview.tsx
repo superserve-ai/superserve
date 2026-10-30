@@ -238,10 +238,10 @@ export function PrepaidPanel({
           {recharge.enabled &&
           recharge.amount_cents !== null &&
           recharge.threshold_cents !== null
-            ? `Auto Topoff is on: adds ${formatCents(recharge.amount_cents)} when credit drops below ${formatCents(recharge.threshold_cents)}.`
+            ? `Auto Reload is on: adds ${formatCents(recharge.amount_cents)} when credit drops below ${formatCents(recharge.threshold_cents)}.`
             : recharge.disabled_reason
-              ? "Auto Topoff was turned off. Running sandboxes pause when credit runs out."
-              : "Auto Topoff is off. Running sandboxes pause when credit runs out."}
+              ? "Auto Reload was turned off. Running sandboxes pause when credit runs out."
+              : "Auto Reload is off. Running sandboxes pause when credit runs out."}
         </p>
         {recharge.in_flight ? (
           <p className="text-sm text-muted">A top-up is being processed.</p>
@@ -314,7 +314,7 @@ export function IncludedUsagePanel({
           <Meter value={usageCents} max={included} tone="normal" />
           {funded ? (
             <p className="text-sm text-muted">
-              Usage beyond this is paid from Auto Topoff credit. Running
+              Usage beyond this is paid from Auto Reload credit. Running
               sandboxes pause when credit runs out.
             </p>
           ) : (
@@ -503,7 +503,7 @@ export function PlanOverview({
                   variant="outline"
                   render={<Link href={TOPOFF_SETTINGS_PATH} />}
                 >
-                  Manage Auto Topoff
+                  Manage Auto Reload
                 </Button>
               </div>
             ) : null}

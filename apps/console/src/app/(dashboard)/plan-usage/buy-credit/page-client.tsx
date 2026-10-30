@@ -29,7 +29,7 @@ import { useUser } from "@/hooks/use-user"
 import {
   fundedByCredit,
   planTopoff,
-  TOPOFF_SETTINGS_PATH,
+  FUNDED_CREDIT_PURCHASES,
   UPGRADE_PATH,
 } from "@/lib/api/billing-v2"
 import {
@@ -112,13 +112,14 @@ export function BuyCreditPageClient({
   const plan = planQuery.data
   const offers = useBillingCapabilities().data?.offers
   const topoff = plan ? planTopoff(plan, offers) : null
-  // A subscription funded by credit only manages Auto Topoff here; one-off
-  // credit purchases are a prepaid plan's.
+  // A subscription funded by credit manages Auto Reload here, and buys
+  // one-off credit once that is sold to it.
   const topoffOnly =
     !!plan && plan.kind === "subscription" && fundedByCredit(plan, offers)
   // Starter credit is sold only to teams already on Starter.
   const starterTeam = plan?.kind === "prepaid"
-  const purchasable = allowEntry && starterTeam
+  const purchasable =
+    allowEntry && (starterTeam || (topoffOnly && FUNDED_CREDIT_PURCHASES))
   const canManage =
     ready && Boolean(summary?.permissions?.can_manage) && scope === "self"
   const canRecover = canManage && allowRecovery
@@ -138,9 +139,7 @@ export function BuyCreditPageClient({
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader
-        title={purchasable && !topoffOnly ? "Buy credit" : "Credit balance"}
-      />
+      <PageHeader title={purchasable ? "Buy credit" : "Credit balance"} />
       <div className="flex flex-col gap-6 overflow-y-auto p-4">
         {returning && !contextMatched ? (
           <CheckoutContextRecovery
@@ -192,7 +191,8 @@ export function BuyCreditPageClient({
               recovery={existingStarter}
               canManage={canRecover}
             />
-            {topoffOnly ? null : allowEntry && plan === undefined ? (
+            {topoffOnly && !purchasable ? null : allowEntry &&
+              plan === undefined ? (
               planQuery.isError ? (
                 <div
                   role="alert"
@@ -253,26 +253,16 @@ export function BuyCreditPageClient({
                 ))}
               </div>
             ) : null}
-            {topoffOnly ? (
-              <p className="text-sm text-muted">
-                Manage Auto Topoff in{" "}
-                <Link
-                  href={TOPOFF_SETTINGS_PATH}
-                  className="underline underline-offset-4"
-                >
-                  Settings
-                </Link>
-                .
-              </p>
-            ) : plan === undefined ||
-              starterTeam ||
-              data.auto_recharge.enabled ? (
+            {topoffOnly ||
+            plan === undefined ||
+            starterTeam ||
+            data.auto_recharge.enabled ? (
               <>
                 {!allowRecharge ? (
                   <p className="text-sm text-muted">
-                    Auto Topoff changes are temporarily unavailable.
+                    Auto Reload changes are temporarily unavailable.
                     {allowDisableRecharge &&
-                      " You can still turn Auto Topoff off."}
+                      " You can still turn Auto Reload off."}
                   </p>
                 ) : null}
                 <AutoTopoffCard
@@ -470,7 +460,7 @@ function PurchaseHistory({ purchases }: { purchases: PrepaidPurchase[] }) {
           <li key={p.id} className="flex items-center justify-between py-2">
             <span className="text-foreground">
               {new Date(p.created_at).toLocaleDateString()} ·{" "}
-              {p.source === "auto_recharge" ? "Auto Topoff" : "Purchase"}
+              {p.source === "auto_recharge" ? "Auto Reload" : "Purchase"}
             </span>
             <span className="text-muted">
               {formatDollars(p.amount_cents)} · {STATE_LABELS[p.state]}

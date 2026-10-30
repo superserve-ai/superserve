@@ -111,7 +111,7 @@ export function draftFromVersion(version: PlanVersion): PlanDraft {
 }
 
 // Mirrors the catalog API: only v2 subscriptions run on funded credit, and
-// Auto Topoff needs funded credit, an amount in $5 steps and a threshold in
+// Auto Reload needs funded credit, an amount in $5 steps and a threshold in
 // whole dollars, both up to $10,000.
 const TOPOFF_AMOUNT_STEP_CENTS = 500
 const TOPOFF_THRESHOLD_STEP_CENTS = 100
@@ -138,7 +138,7 @@ export function fundingIssue(
   )
     return "Only v2 subscription plans can run on funded credit."
   if (draft.topoff && draft.funding_policy !== "prepaid")
-    return "Auto Topoff needs a plan that runs on funded credit."
+    return "Auto Reload needs a plan that runs on funded credit."
   if (
     draft.topoff &&
     (!validTopoffCents(draft.topoff.amount_cents, TOPOFF_AMOUNT_STEP_CENTS) ||
@@ -147,7 +147,7 @@ export function fundingIssue(
         TOPOFF_THRESHOLD_STEP_CENTS,
       ))
   )
-    return "Auto Topoff needs an amount in $5 steps from $5 and a threshold in whole dollars from $1, both up to $10,000."
+    return "Auto Reload needs an amount in $5 steps from $5 and a threshold in whole dollars from $1, both up to $10,000."
   return null
 }
 

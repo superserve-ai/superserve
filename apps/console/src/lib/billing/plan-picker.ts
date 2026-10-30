@@ -60,7 +60,7 @@ export function offerTerms(offer: BillingOffer): string[] {
     : []
   if (offer.topoff)
     terms.push(
-      `Auto Topoff adds ${formatUsdCents(offer.topoff.amount_cents)} when credit drops below ${formatUsdCents(offer.topoff.threshold_cents)}. ${offer.topoff.default_enabled ? "On by default; you can turn it off" : "Off by default; you can turn it on"} at checkout.`,
+      `Auto Reload adds ${formatUsdCents(offer.topoff.amount_cents)} when credit drops below ${formatUsdCents(offer.topoff.threshold_cents)}. ${offer.topoff.default_enabled ? "On by default; you can turn it off" : "Off by default; you can turn it on"} at checkout.`,
     )
   else if (offer.funding_policy === "postpaid")
     terms.push(
