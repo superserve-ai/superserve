@@ -720,7 +720,7 @@ export async function GET(request: Request) {
         if (
           !next.startsWith("/device") &&
           !next.startsWith("https://") &&
-          !/^\/onboarding\/(?:plan|payment)\/?(?:\?|$)/.test(next) &&
+          !/^\/onboarding\/(?:plan|payment|region)\/?(?:\?|$)/.test(next) &&
           !isSignupCheckoutPath(next) &&
           !isSignupCheckoutReturnPath(next) &&
           !isPlanPickerPath(next) &&

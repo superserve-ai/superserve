@@ -1644,6 +1644,17 @@ describe("auth callback", () => {
       expect(location.searchParams.get("account")).toBe("u1")
     })
 
+    it("keeps a region-picker return through sign-in", async () => {
+      const next = `/onboarding/region/?${new URLSearchParams({ next: "/device?code=ABCD-EFGH" })}`
+      const response = await GET(
+        new Request(
+          `https://console.superserve.ai/auth/callback?token_hash=official&type=magiclink&next=${encodeURIComponent(next)}`,
+        ),
+      )
+      const location = new URL(response.headers.get("location")!)
+      expect(location.pathname + location.search).toBe(next)
+    })
+
     it("sends a new paid signup to the region picker, then back to its paid setup", async () => {
       currentUser!.app_metadata = { provider: "email" }
       const { FirstTeamRegionRequiredError } =
