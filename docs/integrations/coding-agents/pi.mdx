@@ -1,0 +1,201 @@
+---
+title: "Pi"
+sidebarTitle: Pi
+description: Run the Pi coding agent in a Superserve sandbox.
+icon: "/logos/integrations/pi.svg"
+---
+
+Pi is a minimal, open-source terminal coding agent from [pi.dev](https://pi.dev). Run it in a Superserve sandbox so its shell commands and file edits stay isolated from your machine.
+
+## Via the console
+
+1. On the [Secrets page](https://console.superserve.ai/secrets?utm_source=docs&utm_medium=link), create a secret with the **Anthropic** provider and paste your API key — you only do this once, and the key never enters the sandbox.
+2. Go to [console.superserve.ai](https://console.superserve.ai?utm_source=docs&utm_medium=link) and click **Create sandbox**.
+3. Pick the **`superserve/node-22`** template.
+4. Under **Advanced Options → Secrets**, bind that secret to `ANTHROPIC_API_KEY`.
+5. Create the sandbox, open its **Terminal**, and run:
+
+   ```bash
+   npm install -g --ignore-scripts @earendil-works/pi-coding-agent && pi
+   ```
+
+## Via the SDK
+
+```bash
+npm install @superserve/sdk
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox, Secret } from "@superserve/sdk"
+
+// One-time: store your key as a secret. It never enters the sandbox.
+await Secret.create({
+  name: "anthropic-key",
+  value: "sk-ant-...",
+  provider: "anthropic",
+})
+
+const sandbox = await Sandbox.create({
+  name: "pi",
+  fromTemplate: "superserve/node-22",
+  secrets: { ANTHROPIC_API_KEY: "anthropic-key" },
+})
+
+await sandbox.commands.run(
+  "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
+)
+```
+
+```python Python
+from superserve import Sandbox, Secret
+
+# One-time: store your key as a secret. It never enters the sandbox.
+Secret.create(name="anthropic-key", value="sk-ant-...", provider="anthropic")
+
+sandbox = Sandbox.create(
+    name="pi",
+    from_template="superserve/node-22",
+    secrets={"ANTHROPIC_API_KEY": "anthropic-key"},
+)
+
+sandbox.commands.run("npm install -g --ignore-scripts @earendil-works/pi-coding-agent")
+```
+</CodeGroup>
+
+Pi reads `ANTHROPIC_API_KEY` as usual, but its value is a [stand-in token](/secrets/overview) — the real key is attached only on requests to Anthropic, never exposed to the agent.
+
+Open the sandbox in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), launch the terminal, and run `pi`.
+
+## Run headless
+
+Pass a prompt with `-p` (print mode). Pi runs it in the sandbox, prints its final message, and exits. Pi doesn't ask for approval before it runs tools, so the agent runs shell commands and edits files without stopping.
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run(
+  'mkdir -p ~/app && cd ~/app && pi -p "Create a hello world HTTP server in Node.js"',
+  { timeoutMs: 600_000 },
+)
+
+console.log(result.stdout)
+```
+
+```python Python
+result = sandbox.commands.run(
+    'mkdir -p ~/app && cd ~/app && pi -p "Create a hello world HTTP server in Node.js"',
+    timeout_seconds=600,
+)
+
+print(result.stdout)
+```
+</CodeGroup>
+
+Pi picks a default Anthropic model unless you pass `--model`. Run `pi --list-models anthropic` in the sandbox to see the IDs, then pick one, for example `pi --model claude-haiku-4-5 -p "..."`.
+
+<Note>
+Auto-approved commands stay inside the sandbox and can't touch your machine, but the sandbox can still reach the internet. Use [network rules](/sandbox/networking) to limit where it can connect. With Anthropic, Pi needs only `api.anthropic.com` to run, plus `registry.npmjs.org` if you install it after you restrict the network.
+</Note>
+
+## Get JSON output
+
+Use `--mode json` to get one JSON event per line. The first line is the session header, with the session ID in `id`. The last `message_end` event holds the final answer, as `text` blocks in `message.content`.
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run(
+  'cd ~/app && pi --mode json "Add a /health endpoint"',
+  { timeoutMs: 600_000 },
+)
+
+const events = result.stdout.trim().split("\n").map((line) => JSON.parse(line))
+const sessionId = events[0].id
+const done = events.filter((e) => e.type === "message_end").pop()
+
+for (const block of done.message.content) {
+  if (block.type === "text") console.log(block.text)
+}
+```
+
+```python Python
+import json
+
+result = sandbox.commands.run(
+    'cd ~/app && pi --mode json "Add a /health endpoint"',
+    timeout_seconds=600,
+)
+
+events = [json.loads(line) for line in result.stdout.strip().split("\n")]
+session_id = events[0]["id"]
+done = [e for e in events if e["type"] == "message_end"][-1]
+
+for block in done["message"]["content"]:
+    if block["type"] == "text":
+        print(block["text"])
+```
+</CodeGroup>
+
+Other events report tool calls (`tool_execution_start`, `tool_execution_end`) and streamed text (`message_update`). See Pi's [JSON event stream](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/json.md) reference for every event type.
+
+## Continue a session
+
+Pi saves each run as a session. Pass the session ID to `--session` to send a follow-up with the earlier context, or use `-c` to continue the most recent session in the current directory.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.run(
+  `cd ~/app && pi --session ${sessionId} -p "Now add a test for it"`,
+  { timeoutMs: 600_000 },
+)
+```
+
+```python Python
+sandbox.commands.run(
+    f'cd ~/app && pi --session {session_id} -p "Now add a test for it"',
+    timeout_seconds=600,
+)
+```
+</CodeGroup>
+
+## Work on a repository
+
+Clone a repository into the sandbox, stream Pi's output while it works, then read the diff.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.run(
+  "git clone --depth 1 https://github.com/your-org/your-repo.git ~/repo",
+)
+
+await sandbox.commands.run(
+  'cd ~/repo && pi -p "Add error handling to all API endpoints"',
+  { timeoutMs: 600_000, onStdout: (data) => process.stdout.write(data) },
+)
+
+const diff = await sandbox.commands.run("cd ~/repo && git diff")
+console.log(diff.stdout)
+```
+
+```python Python
+sandbox.commands.run(
+    "git clone --depth 1 https://github.com/your-org/your-repo.git ~/repo",
+)
+
+sandbox.commands.run(
+    'cd ~/repo && pi -p "Add error handling to all API endpoints"',
+    timeout_seconds=600,
+    on_stdout=lambda data: print(data, end=""),
+)
+
+diff = sandbox.commands.run("cd ~/repo && git diff")
+print(diff.stdout)
+```
+</CodeGroup>
+
+## Persist sessions
+
+```typescript
+await sandbox.pause()
+await sandbox.resume()
+```
