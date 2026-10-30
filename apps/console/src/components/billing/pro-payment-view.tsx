@@ -3,6 +3,7 @@
 import { Button } from "@superserve/ui"
 import Link from "next/link"
 
+import { PaymentProcessing } from "@/components/billing/payment-processing"
 import { CornerBrackets } from "@/components/corner-brackets"
 import type { ProCheckoutTerms } from "@/lib/api/billing-v2"
 import {
@@ -61,6 +62,7 @@ export interface ProPaymentViewProps {
   canContinue?: boolean
   canRecover?: boolean
   canceled: boolean
+  waitExpired?: boolean
   error?: string | null
   onContinue: () => void
   onCheckPayment: () => void
@@ -76,6 +78,7 @@ export function ProPaymentView({
   canContinue = true,
   canRecover = true,
   canceled,
+  waitExpired = false,
   error,
   onContinue,
   onCheckPayment,
@@ -111,10 +114,10 @@ export function ProPaymentView({
       <div className="space-y-3 p-6">
         <output className="block text-sm">
           Payment is confirmed.{" "}
-          {busy ? "Refreshing your plan…" : "Check again to refresh your plan."}
+          {busy ? "Opening the console…" : "Try again to open the console."}
         </output>
         <Button disabled={busy || !canRecover} onClick={onCheckPayment}>
-          Check again
+          Try again
         </Button>
         {error ? (
           <p className="text-sm text-destructive" role="alert">
@@ -126,13 +129,11 @@ export function ProPaymentView({
   if (step === "confirming")
     return (
       <div className="space-y-3 p-6">
-        <output className="block text-sm">
-          Payment status is pending. Check again to continue the saved checkout
-          or confirm its payment.
-        </output>
-        <Button disabled={busy || !canRecover} onClick={onCheckPayment}>
-          Check again
-        </Button>
+        <PaymentProcessing
+          waiting={!waitExpired && canRecover}
+          canRetry={!busy && canRecover}
+          onRetry={onCheckPayment}
+        />
         {error ? (
           <p className="text-sm text-destructive" role="alert">
             {error}

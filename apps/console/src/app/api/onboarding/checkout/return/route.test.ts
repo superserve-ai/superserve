@@ -9,7 +9,7 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }))
 vi.mock("@/lib/api/signup-checkout", () => ({
-  confirmSignupCheckout: (...args: unknown[]) => confirm(...args),
+  settleSignupCheckout: (...args: unknown[]) => confirm(...args),
 }))
 
 import { GET } from "./route"
@@ -37,12 +37,18 @@ describe("checkout return", () => {
     expect(confirm).toHaveBeenCalledWith(user, "u1", "use:t1")
   })
 
-  it("waits on the picker when confirmation fails", async () => {
-    confirm.mockRejectedValue(new Error("cell down"))
-    expect((await visit()).searchParams.get("reason")).toBe(
-      "payment_confirming",
-    )
-  })
+  it.each([
+    ["still settles", () => confirm.mockResolvedValue(null)],
+    ["fails", () => confirm.mockRejectedValue(new Error("cell down"))],
+  ])(
+    "waits for the payment, never on the picker, when it %s",
+    async (_, arrange) => {
+      arrange()
+      const location = await visit()
+      expect(location.pathname).toBe("/onboarding/payment/")
+      expect(location.search).toBe("?account=u1&team=use%3At1")
+    },
+  )
 
   it("asks for sign-in and comes back to confirm", async () => {
     user = null

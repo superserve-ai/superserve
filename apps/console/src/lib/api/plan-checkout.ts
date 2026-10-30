@@ -1,3 +1,5 @@
+import { isPaymentActivating } from "@/lib/billing/signup-checkout-paths"
+
 import { apiClient } from "./client"
 import type { PurchaseOffer } from "./signup-plan"
 
@@ -232,4 +234,10 @@ export async function recoverProPayment(teamKey: string, restart = false) {
   )
     clearProOperations(operations)
   return response.outcome
+}
+
+export async function paymentActivating(): Promise<boolean> {
+  return isPaymentActivating(
+    await apiClient<unknown>("/billing/plan", { cache: "no-store" }),
+  )
 }

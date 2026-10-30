@@ -3,22 +3,21 @@
 import { Button, cn } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
-import { Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { Suspense, useEffect } from "react"
 
 import { PlanPickerOptions } from "@/components/billing/plan-picker-options"
 import { CornerBrackets } from "@/components/corner-brackets"
 import {
   checkoutLocator,
   isSignupCheckoutOffer,
+  paymentSettlingPath,
   type PlanPickerReason,
   signupCheckoutReturnPath,
 } from "@/lib/billing/signup-checkout-paths"
 
 const MESSAGES: Record<PlanPickerReason, string> = {
   upgrade: "Choose a plan to keep your sandboxes running.",
-  payment_confirming:
-    "We're still confirming your payment. This usually takes a few seconds.",
   checkout_elsewhere:
     "This checkout belongs to a different account or team than the one you're signed in to now. Switch back to it, then try again.",
   trial_ended:
@@ -36,6 +35,15 @@ function ChoosePlanContent() {
   const reason: PlanPickerReason =
     raw && Object.hasOwn(MESSAGES, raw) ? (raw as PlanPickerReason) : "upgrade"
   const locator = checkoutLocator(searchParams)
+  const router = useRouter()
+  const settling =
+    raw === "payment_confirming" && locator
+      ? paymentSettlingPath(locator)
+      : null
+  useEffect(() => {
+    if (settling) router.replace(settling)
+  }, [settling, router])
+  if (settling) return null
   const selected = searchParams.get("offer")
   const preselected =
     selected === "starter"
@@ -44,10 +52,7 @@ function ChoosePlanContent() {
         ? selected
         : null
 
-  const picking =
-    locator !== null &&
-    reason !== "payment_confirming" &&
-    reason !== "checkout_elsewhere"
+  const picking = locator !== null && reason !== "checkout_elsewhere"
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
@@ -76,8 +81,7 @@ function ChoosePlanContent() {
           <p className="mt-2 text-center text-xs text-muted">
             {MESSAGES[reason]}
           </p>
-          {reason === "payment_confirming" ||
-          reason === "checkout_elsewhere" ? (
+          {reason === "checkout_elsewhere" ? (
             locator ? (
               <Button
                 render={

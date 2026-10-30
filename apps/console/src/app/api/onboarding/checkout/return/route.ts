@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 
-import { confirmSignupCheckout } from "@/lib/api/signup-checkout"
+import { settleSignupCheckout } from "@/lib/api/signup-checkout"
 import {
+  paymentSettlingPath,
   planPickerPath,
   signupCheckoutReturnPath,
 } from "@/lib/billing/signup-checkout-paths"
@@ -21,14 +22,15 @@ export async function GET(request: Request) {
         origin,
       ),
     )
+  const settling =
+    account && team
+      ? paymentSettlingPath({ account, team })
+      : planPickerPath("checkout_elsewhere")
   let target: string
   try {
-    target = await confirmSignupCheckout(user, account, team)
+    target = (await settleSignupCheckout(user, account, team)) ?? settling
   } catch {
-    target =
-      account && team
-        ? planPickerPath("payment_confirming", undefined, { account, team })
-        : planPickerPath("checkout_elsewhere")
+    target = settling
   }
   return NextResponse.redirect(new URL(target, origin))
 }

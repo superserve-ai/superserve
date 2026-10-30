@@ -23,9 +23,9 @@ export default async function ProPaymentPage({
       billingReturn={
         billing === "success" || billing === "cancel" ? billing : undefined
       }
-      returnTo={safeReturnPath(
-        typeof returnTo === "string" ? returnTo : undefined,
-      )}
+      returnTo={
+        typeof returnTo === "string" ? safeReturnPath(returnTo) : "/sandboxes/"
+      }
       checkoutTeam={typeof checkoutTeam === "string" ? checkoutTeam : undefined}
     />
   )
