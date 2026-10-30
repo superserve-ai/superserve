@@ -199,7 +199,9 @@ export function PlanPickerOptions({
     <div
       className={cn(
         "mt-8 grid w-full grid-cols-1 gap-4 md:grid-cols-2",
-        enterprise && "lg:grid-cols-3",
+        listed.length + (enterprise ? 1 : 0) > 2
+          ? "lg:grid-cols-3"
+          : "max-w-3xl",
       )}
     >
       {listed.map((plan) => (
