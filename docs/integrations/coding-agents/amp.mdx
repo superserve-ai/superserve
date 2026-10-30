@@ -80,7 +80,7 @@ Open the sandbox in the [console](https://console.superserve.ai?utm_source=docs&
 
 ## Run headless
 
-Pass a prompt with `-x` (execute mode). Amp runs it in the sandbox, prints its final message, and exits. Add `--dangerously-allow-all` so the agent runs commands without asking for confirmation.
+Pass a prompt with `-x` (execute mode). Amp runs it in the sandbox, prints its final message, and exits. Amp doesn't ask for approval before it runs tools, so the agent runs shell commands and edits files without stopping.
 
 <Warning>
 Use `-x`, not `-ox`. `-ox` runs the agent in an orb on Amp's servers, so its commands and file edits don't happen in your Superserve sandbox.
@@ -93,7 +93,7 @@ Auto-approved commands stay inside the sandbox and can't touch your machine, but
 <CodeGroup>
 ```typescript TypeScript
 const result = await sandbox.commands.run(
-  'mkdir -p ~/app && cd ~/app && ~/.amp/bin/amp --dangerously-allow-all -x "Create a hello world HTTP server in Node.js"',
+  'mkdir -p ~/app && cd ~/app && ~/.amp/bin/amp -x "Create a hello world HTTP server in Node.js"',
   { timeoutMs: 600_000 },
 )
 
@@ -102,7 +102,7 @@ console.log(result.stdout)
 
 ```python Python
 result = sandbox.commands.run(
-    'mkdir -p ~/app && cd ~/app && ~/.amp/bin/amp --dangerously-allow-all -x "Create a hello world HTTP server in Node.js"',
+    'mkdir -p ~/app && cd ~/app && ~/.amp/bin/amp -x "Create a hello world HTTP server in Node.js"',
     timeout_seconds=600,
 )
 
@@ -115,7 +115,7 @@ Add `--stream-json` to get one JSON event per line instead of only the final mes
 <CodeGroup>
 ```typescript TypeScript
 const result = await sandbox.commands.run(
-  'cd ~/app && ~/.amp/bin/amp --dangerously-allow-all --stream-json -x "Add a /health endpoint"',
+  'cd ~/app && ~/.amp/bin/amp --stream-json -x "Add a /health endpoint"',
   { timeoutMs: 600_000 },
 )
 
@@ -128,7 +128,7 @@ console.log(done.result)
 import json
 
 result = sandbox.commands.run(
-    'cd ~/app && ~/.amp/bin/amp --dangerously-allow-all --stream-json -x "Add a /health endpoint"',
+    'cd ~/app && ~/.amp/bin/amp --stream-json -x "Add a /health endpoint"',
     timeout_seconds=600,
 )
 
@@ -145,14 +145,14 @@ Amp saves each conversation as a thread. Pass the thread ID to `amp threads cont
 <CodeGroup>
 ```typescript TypeScript
 await sandbox.commands.run(
-  `cd ~/app && ~/.amp/bin/amp threads continue ${done.session_id} --dangerously-allow-all -x "Now add tests for it"`,
+  `cd ~/app && ~/.amp/bin/amp threads continue ${done.session_id} -x "Now add tests for it"`,
   { timeoutMs: 600_000 },
 )
 ```
 
 ```python Python
 sandbox.commands.run(
-    f'cd ~/app && ~/.amp/bin/amp threads continue {done["session_id"]} --dangerously-allow-all -x "Now add tests for it"',
+    f'cd ~/app && ~/.amp/bin/amp threads continue {done["session_id"]} -x "Now add tests for it"',
     timeout_seconds=600,
 )
 ```
