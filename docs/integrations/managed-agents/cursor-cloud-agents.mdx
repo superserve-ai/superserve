@@ -186,7 +186,7 @@ The controller runs the hook once per claim with `CURSOR_AGENT_WORKER_ID`, `CURS
 <CodeGroup>
 ```typescript TypeScript
 import { Sandbox } from "@superserve/sdk"
-import { launchWorker, workerEnv } from "./worker.mjs"
+import { launchWorker, releaseClaim, workerEnv } from "./worker.mjs"
 
 const workerId = process.env.CURSOR_AGENT_WORKER_ID!
 const pool = process.env.CURSOR_POOL!
@@ -214,7 +214,10 @@ const result = await launchWorker(sandbox, {
 })
 if (!result.ok) {
   console.error(result.log)
+  // Delete the sandbox first, so the worker is gone before Cursor can
+  // hand the request to another worker.
   await sandbox.kill()
+  if (requestId) await releaseClaim(requestId)
   process.exit(1)
 }
 ```
@@ -224,7 +227,7 @@ import os
 import sys
 
 from superserve import Sandbox
-from worker import launch_worker, worker_env
+from worker import launch_worker, release_claim, worker_env
 
 worker_id = os.environ["CURSOR_AGENT_WORKER_ID"]
 pool = os.environ["CURSOR_POOL"]
@@ -249,7 +252,11 @@ sandbox = Sandbox.create(
 result = launch_worker(sandbox, pool, worker_env(worker_id))
 if not result["ok"]:
     print(result["log"], file=sys.stderr)
+    # Delete the sandbox first, so the worker is gone before Cursor can
+    # hand the request to another worker.
     sandbox.kill()
+    if request_id:
+        release_claim(request_id)
     sys.exit(1)
 ```
 </CodeGroup>
