@@ -265,7 +265,7 @@ What the hook does on each claim:
 
 1. **Finds or creates** a sandbox for the worker id. A paused sandbox with the same tag is resumed rather than recreated (see [Hibernate with pause and resume](#hibernate-with-pause-and-resume)).
 2. **Launches the worker** detached from the exec call, with `CURSOR_AGENT_WORKER_ID` in its environment. The Cursor CLI reads the id from there and connects as the worker the controller already claimed for.
-3. **Verifies it stayed up.** If the worker is not running a few seconds later, the hook prints the worker log, releases the claim so another worker can take the request, deletes the sandbox, and exits non-zero.
+3. **Verifies it stayed up.** If the worker is not running a few seconds later, the hook prints the worker log, deletes the sandbox, releases the claim so another worker can take the request, and exits non-zero.
 
 <Warning>
   Keep `SUPERSERVE_API_KEY` on the controller host only - it never enters a
