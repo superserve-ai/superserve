@@ -487,6 +487,7 @@ export async function GET(request: Request) {
             await markGoogleSignupAttempt(signupAttemptId, user.id)
           }
 
+          let googleEvidence = false
           if (isNewUser && signupAttemptId) {
             const original = await readGooglePromotionEvidence(
               signupAttemptId,
@@ -509,6 +510,7 @@ export async function GET(request: Request) {
               })
             }
             if (original) {
+              googleEvidence = true
               if (original.originalSignup) {
                 try {
                   signupEligibilitySnapshot =
@@ -533,6 +535,21 @@ export async function GET(request: Request) {
                   original.eventId,
                   original.visitor,
                 )
+            }
+          }
+          if (isNewUser && !googleEvidence) {
+            // The signup proof was valid, but its capture evidence did not
+            // survive OAuth. Record it as a missing capture so the backend
+            // device policy decides; a recorded failure still withholds credit.
+            try {
+              signupEligibilitySnapshot = await publishOriginalSignupEvidence(
+                user,
+                undefined,
+                true,
+                signupAttemptId,
+              )
+            } catch {
+              console.warn("Original signup promotion publication unavailable")
             }
           }
           if (isNewUser) {

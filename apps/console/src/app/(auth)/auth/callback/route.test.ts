@@ -2202,6 +2202,86 @@ describe("auth callback", () => {
     )
   })
 
+  it("records a missing capture when a first-time Google signup's evidence did not survive OAuth", async () => {
+    googleMembershipState = { kind: "first_time" }
+    mockHasValidGoogleSignupProof.mockResolvedValue(true)
+    mockReadGooglePromotionEvidence.mockResolvedValue(undefined)
+
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+      ),
+    )
+
+    expect(response.headers.get("location")).toContain("/sandboxes")
+    expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledTimes(1)
+    expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledWith(
+      currentUser,
+      undefined,
+      true,
+      "attempt-1",
+    )
+  })
+
+  it("records a missing capture for an in-flight legacy Google signup", async () => {
+    googleMembershipState = { kind: "first_time" }
+    mockHasValidLegacyGoogleSignupProof.mockResolvedValue(true)
+
+    await GET(
+      new Request("https://console.superserve.ai/auth/callback?code=abc"),
+    )
+
+    expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledTimes(1)
+    expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledWith(
+      currentUser,
+      undefined,
+      true,
+      undefined,
+    )
+  })
+
+  it("publishes retained Google evidence once, unchanged", async () => {
+    googleMembershipState = { kind: "first_time" }
+    mockHasValidGoogleSignupProof.mockResolvedValue(true)
+    mockReadGooglePromotionEvidence.mockResolvedValue({
+      originalSignup: true,
+      attemptId: "capture-1",
+      routineMissing: false,
+    })
+
+    await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+      ),
+    )
+
+    expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledTimes(1)
+    expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledWith(
+      currentUser,
+      "capture-1",
+      false,
+      "attempt-1",
+    )
+  })
+
+  it("writes no provenance for an account that predates its Google signup proof", async () => {
+    googleMembershipState = { kind: "first_time" }
+    mockHasValidGoogleSignupProof.mockResolvedValue(true)
+    mockReadGooglePromotionEvidence.mockResolvedValue({
+      originalSignup: false,
+      attemptId: undefined,
+      routineMissing: true,
+    })
+
+    await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+      ),
+    )
+
+    expect(mockPublishOriginalSignupEvidence).not.toHaveBeenCalled()
+  })
+
   it("keeps a no-fingerprint original Google signup unavailable", async () => {
     googleMembershipState = { kind: "first_time" }
     mockHasValidGoogleSignupProof.mockResolvedValue(true)
