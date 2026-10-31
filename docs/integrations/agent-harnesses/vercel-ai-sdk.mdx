@@ -1,0 +1,316 @@
+---
+title: "Vercel AI SDK"
+sidebarTitle: Vercel AI SDK
+description: Use Superserve sandboxes as the execution runtime for agents built with the Vercel AI SDK.
+icon: "/logos/integrations/vercel.svg"
+---
+
+The [AI SDK](https://ai-sdk.dev) is Vercel's TypeScript toolkit for building agents with tool-use loops. Back its tools with `sandbox.commands.run` and `sandbox.files` so every command the model runs, and every file it writes, stays in an isolated VM instead of on your server. The model API key stays in your app; the sandbox never sees it.
+
+## Setup
+
+```bash
+npm install @superserve/sdk ai @ai-sdk/anthropic zod
+export SUPERSERVE_API_KEY=ss_live_...
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+The examples use Anthropic. Any AI SDK provider works: install `@ai-sdk/openai`, set `OPENAI_API_KEY`, and pass `openai("gpt-5.5")` as the `model`. See [API keys](/api-key) to create a Superserve API key.
+
+## Wire the sandbox into the agent
+
+The highlighted block defines a `bash` tool backed by the sandbox. Everything else is standard AI SDK usage. `generateText` stops after one step by default, so set `stopWhen` to let the model run commands, read the results, and answer.
+
+```typescript {8-17}
+import { anthropic } from "@ai-sdk/anthropic"
+import { Sandbox } from "@superserve/sdk"
+import { generateText, stepCountIs, tool } from "ai"
+import { z } from "zod"
+
+const sandbox = await Sandbox.create({ name: "agent-runtime" })
+
+const bash = tool({
+  description: "Run a shell command in the sandbox.",
+  inputSchema: z.object({ command: z.string() }),
+  execute: async ({ command }) => {
+    const { stdout, stderr, exitCode } = await sandbox.commands.run(command, {
+      timeoutMs: 60_000,
+    })
+    return { stdout, stderr, exitCode }
+  },
+})
+
+try {
+  const result = await generateText({
+    model: anthropic("claude-sonnet-5-5"),
+    instructions: "Use the bash tool to inspect the sandbox before answering.",
+    prompt: "List the files in /tmp and tell me how many there are.",
+    tools: { bash },
+    stopWhen: stepCountIs(10),
+  })
+  console.log(result.text)
+} finally {
+  await sandbox.kill()
+}
+```
+
+The tool returns `stdout`, `stderr`, and `exitCode` as an object, so the model sees failed commands as well as their output.
+
+## Run code with file tools
+
+Add file tools next to `bash` to let the model write a script, run it, and read the result. `ToolLoopAgent` keeps the agent definition reusable and loops for up to 20 steps by default.
+
+```typescript {25-37}
+import { anthropic } from "@ai-sdk/anthropic"
+import { Sandbox } from "@superserve/sdk"
+import { ToolLoopAgent, tool } from "ai"
+import { z } from "zod"
+
+const sandbox = await Sandbox.create({ name: "code-runner" })
+
+const agent = new ToolLoopAgent({
+  model: anthropic("claude-sonnet-5-5"),
+  instructions:
+    "You are a coding assistant. Save code under /home/user, run it with " +
+    "the bash tool, and report the real output. Use python3, not python.",
+  tools: {
+    bash: tool({
+      description: "Run a shell command in the sandbox.",
+      inputSchema: z.object({ command: z.string() }),
+      execute: async ({ command }) => {
+        const { stdout, stderr, exitCode } = await sandbox.commands.run(
+          command,
+          { timeoutMs: 60_000 },
+        )
+        return { stdout, stderr, exitCode }
+      },
+    }),
+    writeFile: tool({
+      description: "Write a text file in the sandbox. Use an absolute path.",
+      inputSchema: z.object({ path: z.string(), content: z.string() }),
+      execute: async ({ path, content }) => {
+        await sandbox.files.write(path, content)
+        return `Wrote ${content.length} characters to ${path}`
+      },
+    }),
+    readFile: tool({
+      description: "Read a text file from the sandbox. Use an absolute path.",
+      inputSchema: z.object({ path: z.string() }),
+      execute: async ({ path }) => sandbox.files.readText(path),
+    }),
+  },
+})
+
+try {
+  const result = await agent.generate({
+    prompt:
+      "Write a Python script that prints the first 10 prime numbers, " +
+      "run it, and show me the output.",
+  })
+  for (const call of result.steps.flatMap((step) => step.toolCalls)) {
+    console.log(`> ${call.toolName}`, JSON.stringify(call.input))
+  }
+  console.log(result.text)
+} finally {
+  await sandbox.kill()
+}
+```
+
+Output from a run with `claude-haiku-4-5` (trimmed; the model's wording varies):
+
+```text
+> writeFile {"path":"/home/user/primes.py","content":"def is_prime(n):\n ..."}
+> bash {"command":"python3 /home/user/primes.py"}
+The first 10 prime numbers are:
+[2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+```
+
+`sandbox.files` paths must be absolute. See [Read & write files](/filesystem/read-write) for binary content and directory downloads.
+
+## Stream tool calls
+
+`streamText` takes the same tools. Read `fullStream` to show each command and its output while the agent works.
+
+```typescript {28-36}
+import { anthropic } from "@ai-sdk/anthropic"
+import { Sandbox } from "@superserve/sdk"
+import { stepCountIs, streamText, tool } from "ai"
+import { z } from "zod"
+
+const sandbox = await Sandbox.create({ name: "agent-runtime" })
+
+try {
+  const result = streamText({
+    model: anthropic("claude-sonnet-5-5"),
+    prompt: "Which Linux distribution and Python version does this machine run?",
+    tools: {
+      bash: tool({
+        description: "Run a shell command in the sandbox.",
+        inputSchema: z.object({ command: z.string() }),
+        execute: async ({ command }) => {
+          const { stdout, stderr, exitCode } = await sandbox.commands.run(
+            command,
+            { timeoutMs: 60_000 },
+          )
+          return { stdout, stderr, exitCode }
+        },
+      }),
+    },
+    stopWhen: stepCountIs(10),
+  })
+
+  for await (const part of result.fullStream) {
+    if (part.type === "text-delta") process.stdout.write(part.text)
+    if (part.type === "tool-call" && !part.dynamic) {
+      console.log(`\n$ ${part.input.command}`)
+    }
+    if (part.type === "tool-result" && !part.dynamic) {
+      console.log((part.output.stdout + part.output.stderr).trim())
+    }
+  }
+} finally {
+  await sandbox.kill()
+}
+```
+
+See [Streaming](/commands/streaming) to stream a single command's output.
+
+### Stream to a browser
+
+In a route handler, return `result.toUIMessageStreamResponse()` instead of reading `fullStream`. The handler returns before the agent finishes, so a `try/finally` would kill the sandbox mid-run. Kill the sandbox from the `onEnd`, `onAbort`, and `onError` callbacks instead, and call `result.consumeStream()` so that one of them runs even if the client disconnects.
+
+```typescript {9,26-28,31-32}
+import { anthropic } from "@ai-sdk/anthropic"
+import { Sandbox } from "@superserve/sdk"
+import { stepCountIs, streamText, tool } from "ai"
+import { z } from "zod"
+
+export async function POST(req: Request) {
+  const { prompt } = (await req.json()) as { prompt: string }
+  const sandbox = await Sandbox.create({ name: "agent-runtime" })
+  const cleanup = () => sandbox.kill()
+
+  const result = streamText({
+    model: anthropic("claude-sonnet-5-5"),
+    prompt,
+    abortSignal: req.signal,
+    tools: {
+      bash: tool({
+        description: "Run a shell command in the sandbox.",
+        inputSchema: z.object({ command: z.string() }),
+        execute: async ({ command }) => {
+          const { stdout, stderr, exitCode } = await sandbox.commands.run(command, { timeoutMs: 60_000 })
+          return { stdout, stderr, exitCode }
+        },
+      }),
+    },
+    stopWhen: stepCountIs(10),
+    onEnd: cleanup,
+    onAbort: cleanup,
+    onError: cleanup,
+  })
+
+  // Keep reading on the server if the client disconnects, so a callback runs.
+  result.consumeStream()
+  return result.toUIMessageStreamResponse()
+}
+```
+
+Without `consumeStream()`, a client disconnect can cancel the stream before any callback fires, and the sandbox keeps running. As a backstop for crashes, set `timeoutSeconds` and `autoDeleteSeconds` when you create the sandbox. See [Auto-delete](/sandbox/lifecycle#auto-delete).
+
+On Vercel, work that must finish after the response is sent belongs in `waitUntil`. Register a promise that settles after `kill()`:
+
+```typescript
+import { waitUntil } from "@vercel/functions"
+
+// In POST, replace the cleanup line with:
+let cleanupDone!: () => void
+waitUntil(new Promise<void>((resolve) => (cleanupDone = resolve)))
+const cleanup = () => sandbox.kill().finally(cleanupDone)
+```
+
+This is required if you enable request cancellation for the route, because Vercel then terminates the function when the client disconnects (Node.js runtime only):
+
+```json vercel.json
+{
+  "functions": {
+    "app/api/chat/route.ts": {
+      "supportsCancellation": true
+    }
+  }
+}
+```
+
+See [Stopping streams](https://ai-sdk.dev/docs/advanced/stopping-streams) in the AI SDK docs.
+
+## Reuse a sandbox across turns
+
+A sandbox outlives the request that created it. Store `sandbox.id` with the conversation, reconnect on each turn, and pause between turns so files and installed packages stay available without paying for an idle VM.
+
+```typescript {7-8,27-28}
+import { anthropic } from "@ai-sdk/anthropic"
+import { Sandbox } from "@superserve/sdk"
+import { generateText, stepCountIs, tool, type ModelMessage } from "ai"
+import { z } from "zod"
+
+async function runTurn(sandboxId: string, messages: ModelMessage[]) {
+  // Resumes the sandbox if it is paused.
+  const sandbox = await Sandbox.connect(sandboxId)
+  const result = await generateText({
+    model: anthropic("claude-sonnet-5-5"),
+    messages,
+    tools: {
+      bash: tool({
+        description: "Run a shell command in the sandbox.",
+        inputSchema: z.object({ command: z.string() }),
+        execute: async ({ command }) => {
+          const { stdout, stderr, exitCode } = await sandbox.commands.run(
+            command,
+            { timeoutMs: 60_000 },
+          )
+          return { stdout, stderr, exitCode }
+        },
+      }),
+    },
+    stopWhen: stepCountIs(10),
+  })
+  // Pause between turns. Files and memory are kept until the next connect.
+  await sandbox.pause()
+  return { text: result.text, messages: [...messages, ...result.response.messages] }
+}
+
+const { id } = await Sandbox.create({ name: "chat-session" })
+
+try {
+  let turn = await runTurn(id, [
+    { role: "user", content: "Create /home/user/todo.txt with three short items." },
+  ])
+  turn = await runTurn(id, [
+    ...turn.messages,
+    { role: "user", content: "Add a fourth item, then print the file." },
+  ])
+  console.log(turn.text)
+} finally {
+  await Sandbox.killById(id)
+}
+```
+
+`Sandbox.connect()` resumes a paused sandbox, or one that is still pausing, before it returns. See [Lifecycle](/sandbox/lifecycle) and [Connect](/sandbox/connect).
+
+## Good to know
+
+- The model can call only the tools you define. Keep `kill()`, `pause()`, and `update()` in your application code, not in a tool.
+- To limit what model-written code can reach, create the sandbox with [network rules](/sandbox/networking).
+- Pass `timeoutMs` to `commands.run`. Without it, the SDK request times out after 30 seconds, so the tool call fails on longer commands such as package installs.
+- The default sandbox has `python3` but no `python`. Tell the model in `instructions`, or use a [template](/templates/overview) with the tools you need.
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="AI SDK docs" icon="book" href="https://ai-sdk.dev/docs">
+    Tools, agents, and streaming in the AI SDK.
+  </Card>
+  <Card title="Run commands" icon="terminal" href="/commands/overview">
+    Options for `commands.run`, including environment variables and working directory.
+  </Card>
+</CardGroup>
