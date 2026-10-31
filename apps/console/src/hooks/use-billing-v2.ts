@@ -1,6 +1,6 @@
 "use client"
 
-import { useQuery } from "@tanstack/react-query"
+import { type Query, useQuery } from "@tanstack/react-query"
 import { useCallback } from "react"
 import type { z } from "zod"
 
@@ -23,6 +23,7 @@ function useBillingV2Resource<T>(
   resource: keyof typeof BILLING_V2_PATHS,
   schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   enabled: boolean,
+  refetchInterval: number | ((query: Query) => number) = 60_000,
 ) {
   const { cacheScope, teamKey, ready } = useBillingContext()
   const select = useCallback((raw: unknown) => schema.parse(raw), [schema])
@@ -33,7 +34,7 @@ function useBillingV2Resource<T>(
     select,
     enabled: enabled && ready && teamKey !== null,
     staleTime: 30_000,
-    refetchInterval: 60_000,
+    refetchInterval,
   })
   return { ...query, data: query.isError ? undefined : query.data }
 }
@@ -50,8 +51,23 @@ export function useFreeAllowance(enabled: boolean) {
   return useBillingV2Resource("free-allowance", freeAllowanceSchema, enabled)
 }
 
+// An unobserved balance shows "Updating…" but is usually observed within
+// seconds, so poll briefly until it is rather than for a full minute.
+// ponytail: 20 quick polls, then the normal minute cycle.
+function prepaidRefetchInterval(query: Query) {
+  const raw = query.state.data as { balance_observed?: unknown } | undefined
+  return raw?.balance_observed === false && query.state.dataUpdateCount < 20
+    ? 3_000
+    : 60_000
+}
+
 export function usePrepaidBalance(enabled: boolean) {
-  return useBillingV2Resource("prepaid", prepaidBalanceSchema, enabled)
+  return useBillingV2Resource(
+    "prepaid",
+    prepaidBalanceSchema,
+    enabled,
+    prepaidRefetchInterval,
+  )
 }
 
 export function useAllowancePricing(enabled: boolean) {

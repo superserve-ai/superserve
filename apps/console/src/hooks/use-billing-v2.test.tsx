@@ -138,3 +138,41 @@ describe("billing data after a failed refresh", () => {
     },
   )
 })
+
+describe("prepaid balance refresh", () => {
+  it("re-reads an unobserved balance within seconds, then every minute", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const balance = (observed: boolean) => ({
+      balance_cents: observed ? 10000 : 0,
+      balance_observed: observed,
+      auto_recharge: {
+        enabled: false,
+        threshold_cents: null,
+        amount_cents: null,
+        disabled_reason: null,
+        disabled_at: null,
+        in_flight: false,
+      },
+    })
+    mocks.api.mockResolvedValueOnce(balance(false))
+    mocks.api.mockResolvedValue(balance(true))
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    )
+    const { result, unmount } = renderHook(() => usePrepaidBalance(true), {
+      wrapper,
+    })
+    await waitFor(() => expect(result.current.data?.balance_cents).toBe(0))
+    await act(() => vi.advanceTimersByTimeAsync(3_000))
+    await waitFor(() => expect(result.current.data?.balance_cents).toBe(10000))
+    const calls = mocks.api.mock.calls.length
+    await act(() => vi.advanceTimersByTimeAsync(30_000))
+    expect(mocks.api.mock.calls.length).toBe(calls)
+    unmount()
+    client.clear()
+    vi.useRealTimers()
+  })
+})
