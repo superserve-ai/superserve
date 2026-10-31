@@ -53,9 +53,12 @@ export function useFreeAllowance(enabled: boolean) {
 
 // An unobserved balance shows "Updating…" but is usually observed within
 // seconds, so re-read it quickly for up to 20 reads before the minute cycle.
-function prepaidRefetchInterval(query: Query) {
-  const raw = query.state.data as { balance_observed?: unknown } | undefined
-  return raw?.balance_observed === false && query.state.dataUpdateCount < 20
+export function prepaidRefetchInterval(query: Query) {
+  const { data, status, dataUpdateCount, errorUpdateCount } = query.state
+  const raw = data as { balance_observed?: unknown } | undefined
+  return raw?.balance_observed === false &&
+    status !== "error" &&
+    dataUpdateCount + errorUpdateCount < 20
     ? 3_000
     : 60_000
 }

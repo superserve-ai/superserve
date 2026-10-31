@@ -1,4 +1,8 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import {
+  type Query,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query"
 import { act, renderHook, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -14,6 +18,7 @@ vi.mock("./use-billing-context", () => ({
 vi.mock("@/lib/api/client", () => ({ apiClient: mocks.api }))
 
 import {
+  prepaidRefetchInterval,
   useFreeAllowance,
   usePrepaidBalance,
   useTeamPlan,
@@ -174,5 +179,31 @@ describe("prepaid balance refresh", () => {
     unmount()
     client.clear()
     vi.useRealTimers()
+  })
+
+  it.each([
+    { name: "unobserved", state: {}, want: 3_000 },
+    {
+      name: "observed",
+      state: { data: { balance_observed: true } },
+      want: 60_000,
+    },
+    { name: "failing", state: { status: "error" }, want: 60_000 },
+    {
+      name: "after 20 reads",
+      state: { dataUpdateCount: 12, errorUpdateCount: 8 },
+      want: 60_000,
+    },
+  ])("re-reads quickly only while $name says so", ({ state, want }) => {
+    const query = {
+      state: {
+        data: { balance_observed: false },
+        status: "success",
+        dataUpdateCount: 1,
+        errorUpdateCount: 0,
+        ...state,
+      },
+    } as unknown as Query
+    expect(prepaidRefetchInterval(query)).toBe(want)
   })
 })
