@@ -52,8 +52,7 @@ export function useFreeAllowance(enabled: boolean) {
 }
 
 // An unobserved balance shows "Updating…" but is usually observed within
-// seconds, so poll briefly until it is rather than for a full minute.
-// ponytail: 20 quick polls, then the normal minute cycle.
+// seconds, so re-read it quickly for up to 20 reads before the minute cycle.
 function prepaidRefetchInterval(query: Query) {
   const raw = query.state.data as { balance_observed?: unknown } | undefined
   return raw?.balance_observed === false && query.state.dataUpdateCount < 20
