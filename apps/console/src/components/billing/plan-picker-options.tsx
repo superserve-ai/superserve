@@ -1,9 +1,9 @@
 "use client"
 
 import { CheckIcon } from "@phosphor-icons/react"
-import { Button, cn } from "@superserve/ui"
+import { Button, cn, Spinner } from "@superserve/ui"
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { type FormEvent, useEffect, useState } from "react"
 
 import { ENTERPRISE_MEETING_URL } from "@/lib/api/billing-v2"
 import {
@@ -86,16 +86,21 @@ function PlanOption({
   card,
   locator,
   highlighted,
+  submitting,
+  onSubmit,
 }: {
   plan: PickerPlan
   card: PickerCard
   locator: CheckoutLocator
   highlighted: boolean
+  submitting: SignupCheckoutOffer | null
+  onSubmit: (offer: SignupCheckoutOffer) => (event: FormEvent) => void
 }) {
   return (
     <form
       method="post"
       action={signupCheckoutPath(plan.offer, locator)}
+      onSubmit={onSubmit(plan.offer)}
       aria-label={`${plan.label} plan`}
       data-highlighted={highlighted}
       className={cn(
@@ -133,8 +138,16 @@ function PlanOption({
         type="submit"
         variant={highlighted ? "default" : "outline"}
         className="mt-auto h-11 w-full"
+        disabled={submitting !== null}
       >
-        Choose {plan.label}
+        {submitting === plan.offer ? (
+          <>
+            <Spinner size="sm" />
+            Opening checkout…
+          </>
+        ) : (
+          `Choose ${plan.label}`
+        )}
       </Button>
     </form>
   )
@@ -166,6 +179,19 @@ export function PlanPickerOptions({
     }
   }, [account, team, key])
   const catalog = loaded?.key === key ? loaded.catalog : undefined
+  // Opening Checkout takes seconds; a second submit meanwhile is refused by
+  // the backend and lands back here, so only the first one goes out.
+  const [submitting, setSubmitting] = useState<SignupCheckoutOffer | null>(null)
+  useEffect(() => {
+    const reset = (event: PageTransitionEvent) =>
+      event.persisted && setSubmitting(null)
+    window.addEventListener("pageshow", reset)
+    return () => window.removeEventListener("pageshow", reset)
+  }, [])
+  const onSubmit = (offer: SignupCheckoutOffer) => (event: FormEvent) => {
+    if (submitting) event.preventDefault()
+    else setSubmitting(offer)
+  }
 
   if (catalog === undefined)
     return (
@@ -197,12 +223,15 @@ export function PlanPickerOptions({
             key={offer}
             method="post"
             action={signupCheckoutPath(offer, locator)}
+            onSubmit={onSubmit(offer)}
           >
             <Button
               type="submit"
               size="sm"
               variant={highlighted(offer) ? "default" : "outline"}
+              disabled={submitting !== null}
             >
+              {submitting === offer ? <Spinner size="sm" /> : null}
               {label}
             </Button>
           </form>
@@ -226,6 +255,8 @@ export function PlanPickerOptions({
           card={pickerCard(plan.catalog, catalog?.cards ?? [])}
           locator={locator}
           highlighted={highlighted(plan.offer)}
+          submitting={submitting}
+          onSubmit={onSubmit}
         />
       ))}
       {enterprise ? (
