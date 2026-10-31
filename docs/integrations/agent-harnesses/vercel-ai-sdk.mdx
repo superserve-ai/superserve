@@ -177,9 +177,9 @@ See [Streaming](/commands/streaming) to stream a single command's output.
 
 ### Stream to a browser
 
-In a route handler, return `result.toUIMessageStreamResponse()` instead of reading `fullStream`. The handler returns before the agent finishes, so a `try/finally` would kill the sandbox mid-run. Kill the sandbox from the `onEnd`, `onAbort`, and `onError` callbacks instead.
+In a route handler, return `result.toUIMessageStreamResponse()` instead of reading `fullStream`. The handler returns before the agent finishes, so a `try/finally` would kill the sandbox mid-run. Kill the sandbox from the `onEnd`, `onAbort`, and `onError` callbacks instead, and call `result.consumeStream()` so that one of them runs even if the client disconnects.
 
-```typescript {9,26-28}
+```typescript {9,26-28,31-32}
 import { anthropic } from "@ai-sdk/anthropic"
 import { Sandbox } from "@superserve/sdk"
 import { stepCountIs, streamText, tool } from "ai"
@@ -210,11 +210,26 @@ export async function POST(req: Request) {
     onError: cleanup,
   })
 
+  // Keep reading on the server if the client disconnects, so a callback runs.
+  result.consumeStream()
   return result.toUIMessageStreamResponse()
 }
 ```
 
-`onAbort` runs only if your runtime aborts `req.signal` when the client disconnects. If it does not, the agent can keep running after a disconnect, and `onEnd` or `onError` kills the sandbox when the run finishes. On Vercel, enable request cancellation for the route in `vercel.json` (Node.js runtime only):
+Without `consumeStream()`, a client disconnect can cancel the stream before any callback fires, and the sandbox keeps running. As a backstop for crashes, set `timeoutSeconds` and `autoDeleteSeconds` when you create the sandbox. See [Auto-delete](/sandbox/lifecycle#auto-delete).
+
+On Vercel, work that must finish after the response is sent belongs in `waitUntil`. Register a promise that settles after `kill()`:
+
+```typescript
+import { waitUntil } from "@vercel/functions"
+
+// In POST, replace the cleanup line with:
+let cleanupDone!: () => void
+waitUntil(new Promise<void>((resolve) => (cleanupDone = resolve)))
+const cleanup = () => sandbox.kill().finally(cleanupDone)
+```
+
+This is required if you enable request cancellation for the route, because Vercel then terminates the function when the client disconnects (Node.js runtime only):
 
 ```json vercel.json
 {
