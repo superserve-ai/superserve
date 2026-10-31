@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { ENTERPRISE_MEETING_URL } from "@/lib/api/billing-v2"
@@ -214,6 +214,22 @@ describe("PlanPickerOptions", () => {
       await screen.findByRole("button", { name: "Developer" }),
     ).toBeTruthy()
     expect(screen.getByRole("button", { name: "Pro" })).toBeTruthy()
+  })
+
+  it("sends only the first plan choice while Checkout opens", async () => {
+    mocks.offers = [
+      offer("developer_monthly", "Builder"),
+      offer("pro_monthly", "Team"),
+    ]
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    const builder = await screen.findByRole("form", { name: "Builder plan" })
+    const team = screen.getByRole("form", { name: "Team plan" })
+    expect(fireEvent.submit(builder)).toBe(true)
+    expect(await screen.findByText("Opening checkout…")).toBeTruthy()
+    for (const button of screen.getAllByRole("button"))
+      expect(button).toBeDisabled()
+    expect(fireEvent.submit(builder)).toBe(false)
+    expect(fireEvent.submit(team)).toBe(false)
   })
 
   it("says so when no plan is sellable", async () => {
