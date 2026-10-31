@@ -206,8 +206,8 @@ async function handleWork(work: { id: string; data: { id: string } }) {
 
   let sandbox: Sandbox
   if (live.length > 0) {
+    // connect() resumes a paused sandbox
     sandbox = await Sandbox.connect(live[0].id)
-    if (live[0].status === "paused") await sandbox.resume()
   } else {
     sandbox = await Sandbox.create({
       name: `cma-${sessionId.slice(0, 8)}`,
@@ -263,9 +263,8 @@ async def handle_work(work):
     live = [s for s in existing if s.status in ("active", "paused")]
 
     if live:
+        # connect() resumes a paused sandbox
         sandbox = await AsyncSandbox.connect(live[0].id)
-        if live[0].status == "paused":
-            await sandbox.resume()
     else:
         sandbox = await AsyncSandbox.create(
             name=f"cma-{session_id[:8]}",
@@ -311,6 +310,8 @@ Long-polling works behind any NAT or firewall. For push-based dispatch, use a we
 ### Webhook variant
 
 Subscribe to `session.status_run_started` [webhooks](https://platform.claude.com/docs/en/managed-agents/webhooks), then drain the work queue on each delivery. The sandbox lifecycle logic is the same — only the trigger changes.
+
+`unwrap()` verifies the webhook signature, so it needs the signing secret from the Console: export it as `ANTHROPIC_WEBHOOK_SIGNING_KEY` (the SDK reads it automatically) or pass it as `key`. In Python, also install the webhook extra: `pip install "anthropic[webhooks]"`.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -363,7 +364,7 @@ Keep `ANTHROPIC_ENVIRONMENT_KEY` on the orchestrator host only. The orchestrator
 </Warning>
 
 <Tip>
-To reduce costs, pause sandboxes that sit idle between turns. Superserve's `pause()` checkpoints the full VM state - memory, processes, and filesystem - at zero compute cost. The next work item for that session calls `resume()` and picks up exactly where it left off, in under 50ms.
+To reduce costs, pause sandboxes that sit idle between turns. Superserve's `pause()` checkpoints the full VM state - memory, processes, and filesystem - at zero compute cost. The next work item for that session calls `connect()`, which resumes the sandbox exactly where it left off, in under 50ms.
 </Tip>
 
 ## Start a session
@@ -492,7 +493,7 @@ session = client.beta.sessions.create(
 ```
 </CodeGroup>
 
-The orchestrator reads `superserve.sandbox_id` from `work.data.metadata` and connects to that sandbox instead of creating one from scratch.
+The orchestrator above does not handle this case on its own. The [reference orchestrator](https://github.com/superserve-ai/superserve/tree/main/guides/managed-agents/claude-managed-agents) reads `superserve.sandbox_id` from the session metadata and connects to that sandbox instead of creating one from scratch; add the same check at the top of your `handleWork` / `handle_work`.
 
 <Note>
 [Memory](https://platform.claude.com/docs/en/managed-agents/memory) is not yet supported with self-hosted sandboxes.
