@@ -196,6 +196,25 @@ describe("Pro payment view", () => {
     ).toBeNull()
   })
 
+  it("lists the support feature once beside the generated limits, not every feature", () => {
+    offer(undefined, {
+      ...planCard(v2, "pro")!,
+      features: [
+        "Up to 1,000 concurrent sandboxes",
+        "$250 of usage included every month",
+        "Priority Slack and email support",
+      ],
+    })
+    const items = screen
+      .getAllByRole("listitem")
+      .map((item) => item.textContent)
+    expect(items).toContain("Priority Slack and email support")
+    expect(items).toContain("1,000 sandboxes running at once")
+    expect(items).not.toContain("Up to 1,000 concurrent sandboxes")
+    expect(items).toContain("Pro includes $250 of usage each month.")
+    expect(items).not.toContain("$250 of usage included every month")
+  })
+
   const saved = {
     first_paid_pro_cycle: true,
     accepted: true,
