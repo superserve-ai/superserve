@@ -1,4 +1,8 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import {
+  type Query,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query"
 import { act, renderHook, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -14,6 +18,7 @@ vi.mock("./use-billing-context", () => ({
 vi.mock("@/lib/api/client", () => ({ apiClient: mocks.api }))
 
 import {
+  prepaidRefetchInterval,
   useFreeAllowance,
   usePrepaidBalance,
   useTeamPlan,
@@ -137,4 +142,62 @@ describe("billing data after a failed refresh", () => {
       client.clear()
     },
   )
+})
+
+describe("prepaid balance refresh", () => {
+  it("re-reads an unobserved balance within seconds, then every minute", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const balance = (observed: boolean) => ({
+      balance_cents: observed ? 10000 : 0,
+      balance_observed: observed,
+      auto_recharge: {
+        enabled: false,
+        threshold_cents: null,
+        amount_cents: null,
+        disabled_reason: null,
+        disabled_at: null,
+        in_flight: false,
+      },
+    })
+    mocks.api.mockResolvedValueOnce(balance(false))
+    mocks.api.mockResolvedValue(balance(true))
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    )
+    const { result, unmount } = renderHook(() => usePrepaidBalance(true), {
+      wrapper,
+    })
+    await waitFor(() => expect(result.current.data?.balance_cents).toBe(0))
+    await act(() => vi.advanceTimersByTimeAsync(3_000))
+    await waitFor(() => expect(result.current.data?.balance_cents).toBe(10000))
+    const calls = mocks.api.mock.calls.length
+    await act(() => vi.advanceTimersByTimeAsync(30_000))
+    expect(mocks.api.mock.calls.length).toBe(calls)
+    unmount()
+    client.clear()
+    vi.useRealTimers()
+  })
+
+  it("re-reads quickly for a minute of each unobserved stretch", () => {
+    const query = { state: {} } as { state: Record<string, unknown> }
+    const read = (observed: boolean, at: number, status = "success") => {
+      query.state = {
+        data: { balance_observed: observed },
+        status,
+        dataUpdatedAt: at,
+      }
+      return prepaidRefetchInterval(query as unknown as Query)
+    }
+    expect(read(false, 0)).toBe(3_000)
+    expect(read(false, 30_000)).toBe(3_000)
+    expect(read(false, 60_000)).toBe(60_000)
+    expect(read(false, 63_000, "error")).toBe(60_000)
+    // Observed again, then a later stretch gets its own quick minute.
+    expect(read(true, 20 * 60_000)).toBe(60_000)
+    expect(read(false, 21 * 60_000)).toBe(3_000)
+    expect(read(false, 21 * 60_000 + 3_000, "error")).toBe(60_000)
+  })
 })
