@@ -2,8 +2,10 @@
 
 import { CheckIcon } from "@phosphor-icons/react"
 import { Button, cn } from "@superserve/ui"
+import Link from "next/link"
 import { useEffect, useState } from "react"
 
+import { ENTERPRISE_MEETING_URL } from "@/lib/api/billing-v2"
 import {
   getTeamCatalogAction,
   type TeamCatalog,
@@ -14,12 +16,70 @@ import {
   type PickerPlan,
   pickerPlans,
 } from "@/lib/billing/plan-picker"
-import type { BillingOffer } from "@/lib/billing/plans"
+import {
+  type BillingOffer,
+  type PlanCard,
+  planConcurrency,
+} from "@/lib/billing/plans"
 import {
   type CheckoutLocator,
   type SignupCheckoutOffer,
   signupCheckoutPath,
 } from "@/lib/billing/signup-checkout-paths"
+
+function Limit({ children }: { children: string }) {
+  return (
+    <li className="flex gap-2 text-sm leading-relaxed text-foreground">
+      <CheckIcon
+        aria-hidden
+        weight="light"
+        className="mt-1 size-3.5 shrink-0 text-brand"
+      />
+      {children}
+    </li>
+  )
+}
+
+function EnterpriseOption({
+  card,
+  className,
+}: {
+  card: PlanCard
+  className?: string
+}) {
+  return (
+    <section
+      aria-label={`${card.name} plan`}
+      className={cn(
+        "flex flex-col border border-dashed border-border bg-background p-6 text-left",
+        className,
+      )}
+    >
+      <h2 className="text-2xl leading-none font-medium tracking-tight text-foreground">
+        {card.name}
+      </h2>
+      <p className="mt-6 text-3xl leading-none font-medium tracking-tight text-brand">
+        {card.price_label}
+      </p>
+      <ul className="mt-5 mb-8 flex flex-col gap-3 border-t border-dashed border-border pt-5">
+        <Limit>{planConcurrency(card.limits) ?? "Custom limits"}</Limit>
+      </ul>
+      <Button
+        variant="outline"
+        className="mt-auto h-11 w-full"
+        render={
+          <Link
+            href={ENTERPRISE_MEETING_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          />
+        }
+      >
+        Book a meeting
+      </Button>
+    </section>
+  )
+}
 
 function PlanOption({
   plan,
@@ -65,17 +125,7 @@ function PlanOption({
       {card.limits.length ? (
         <ul className="mt-5 mb-8 flex flex-col gap-3 border-t border-dashed border-border pt-5">
           {card.limits.map((limit) => (
-            <li
-              key={limit}
-              className="flex gap-2 text-sm leading-relaxed text-foreground"
-            >
-              <CheckIcon
-                aria-hidden
-                weight="light"
-                className="mt-1 size-3.5 shrink-0 text-brand"
-              />
-              {limit}
-            </li>
+            <Limit key={limit}>{limit}</Limit>
           ))}
         </ul>
       ) : null}
@@ -159,8 +209,16 @@ export function PlanPickerOptions({
         ))}
       </div>
     )
+  const enterprise = catalog?.cards.find((card) => card.kind === "custom")
   return (
-    <div className="mt-8 grid w-full grid-cols-1 gap-4 md:grid-cols-2">
+    <div
+      className={cn(
+        "mt-8 grid w-full grid-cols-1 gap-4 md:grid-cols-2",
+        listed.length + (enterprise ? 1 : 0) > 2
+          ? "lg:grid-cols-3"
+          : "max-w-3xl",
+      )}
+    >
       {listed.map((plan) => (
         <PlanOption
           key={plan.offer}
@@ -170,6 +228,14 @@ export function PlanPickerOptions({
           highlighted={highlighted(plan.offer)}
         />
       ))}
+      {enterprise ? (
+        <EnterpriseOption
+          card={enterprise}
+          className={
+            listed.length % 2 === 0 ? "md:col-span-2 lg:col-span-1" : undefined
+          }
+        />
+      ) : null}
     </div>
   )
 }
