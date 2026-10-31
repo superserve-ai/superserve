@@ -5,7 +5,7 @@ description: Use Superserve sandboxes as the execution runtime for agents built 
 icon: "/logos/integrations/vercel.svg"
 ---
 
-The [AI SDK](https://ai-sdk.dev) is Vercel's TypeScript toolkit for building agents with tool-use loops. Back its tools with `sandbox.commands.run` and `sandbox.files` so every command and every file the model writes runs in an isolated VM instead of on your server. The model API key stays in your app; the sandbox never sees it.
+The [AI SDK](https://ai-sdk.dev) is Vercel's TypeScript toolkit for building agents with tool-use loops. Back its tools with `sandbox.commands.run` and `sandbox.files` so every command the model runs, and every file it writes, stays in an isolated VM instead of on your server. The model API key stays in your app; the sandbox never sees it.
 
 ## Setup
 
@@ -233,7 +233,7 @@ try {
 
 - The model can call only the tools you define. Keep `kill()`, `pause()`, and `update()` in your application code, not in a tool.
 - To limit what model-written code can reach, create the sandbox with [network rules](/sandbox/networking).
-- Pass `timeoutMs` to `commands.run`. Without it, the SDK request times out after 30 seconds, so longer commands such as package installs fail.
+- Pass `timeoutMs` to `commands.run`. Without it, the SDK request times out after 30 seconds, so the tool call fails on longer commands such as package installs.
 - The default sandbox has `python3` but no `python`. Tell the model in `instructions`, or use a [template](/templates/overview) with the tools you need.
 
 ## Resources
