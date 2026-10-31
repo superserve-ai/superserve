@@ -187,6 +187,12 @@ export function planSandboxSize(limits: PlanLimits): string | null {
   return size ? `Up to ${size} per sandbox` : null
 }
 
+const SUPPORT_FEATURE = /\bsupport\b/i
+
+export function planSupport(features: readonly string[]): string | null {
+  return features.find((feature) => SUPPORT_FEATURE.test(feature)) ?? null
+}
+
 export function planConcurrency(
   limits: Pick<PlanLimits, "max_concurrent">,
 ): string | null {
