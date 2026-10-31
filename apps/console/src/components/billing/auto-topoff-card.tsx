@@ -10,14 +10,16 @@ import { usePrepaidCredit } from "@/hooks/use-prepaid-credit"
 import {
   type PrepaidCreditSummary,
   setPrepaidAutoRecharge,
-  validPrepaidCents,
+  validPurchaseCents,
+  validThresholdCents,
 } from "@/lib/api/prepaid"
 import { billingKeys } from "@/lib/api/query-keys"
 import type { PlanTopoff } from "@/lib/billing/plans"
 
 const AUTO_TOPOFF_ANCHOR = "auto-topoff"
 
-export const AMOUNT_ERROR = "Enter a dollar amount above $0, like 25."
+export const AMOUNT_ERROR = "Enter a multiple of $5, from $5 to $10,000."
+const THRESHOLD_ERROR = "Enter whole dollars, from $1 to $10,000."
 
 export function centsToDollars(cents: number | null | undefined): string {
   return typeof cents === "number" ? String(cents / 100) : ""
@@ -59,8 +61,8 @@ export function AutoTopoffCard({
     !enabled ||
     (thresholdCents !== null &&
       amountCents !== null &&
-      validPrepaidCents(thresholdCents) &&
-      validPrepaidCents(amountCents))
+      validThresholdCents(thresholdCents) &&
+      validPurchaseCents(amountCents))
 
   const actionAllowed = enabled ? allowEntry : allowDisable
   const save = async () => {
@@ -118,8 +120,8 @@ export function AutoTopoffCard({
           <Field
             label="When credit falls below (USD)"
             error={
-              thresholdCents === null || !validPrepaidCents(thresholdCents)
-                ? AMOUNT_ERROR
+              thresholdCents === null || !validThresholdCents(thresholdCents)
+                ? THRESHOLD_ERROR
                 : undefined
             }
           >
@@ -133,7 +135,7 @@ export function AutoTopoffCard({
           <Field
             label="Add this much credit (USD)"
             error={
-              amountCents === null || !validPrepaidCents(amountCents)
+              amountCents === null || !validPurchaseCents(amountCents)
                 ? AMOUNT_ERROR
                 : undefined
             }

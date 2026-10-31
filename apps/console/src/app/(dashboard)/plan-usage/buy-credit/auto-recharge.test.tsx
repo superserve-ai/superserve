@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { ApiError } from "@/lib/api/client"
 import type { PrepaidCreditSummary } from "@/lib/api/prepaid"
 
 const mocks = vi.hoisted(() => ({
@@ -614,4 +615,36 @@ it("refreshes every billing read after Auto Reload is saved", async () => {
   await waitFor(() =>
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["billing"] }),
   )
+})
+
+it("keeps Buy disabled for an amount the backend refuses", async () => {
+  render(page())
+  const input = await screen.findByRole("textbox", { name: "Amount (USD)" })
+  fireEvent.change(input, { target: { value: "12" } })
+  expect(screen.getByRole("button", { name: /Buy .*credit/ })).toBeDisabled()
+  fireEvent.change(input, { target: { value: "15" } })
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Buy $15 credit" }),
+    ).not.toBeDisabled(),
+  )
+})
+
+it("says nothing was charged when the backend refuses a purchase outright", async () => {
+  mocks.checkout.mockRejectedValueOnce(
+    new ApiError(400, "bad_request", "amount_cents must be a multiple of 500"),
+  )
+  render(page())
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Buy $25 credit" }),
+    ).not.toBeDisabled(),
+  )
+  fireEvent.click(screen.getByRole("button", { name: "Buy $25 credit" }))
+  await waitFor(() =>
+    expect(
+      screen.getByText("This purchase wasn't started, so nothing was charged."),
+    ).toBeTruthy(),
+  )
+  expect(screen.queryByText(/Payment status is uncertain/)).toBeNull()
 })

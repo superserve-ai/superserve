@@ -28,12 +28,14 @@ import {
 import { useUser } from "@/hooks/use-user"
 import { canBuyFundedCredit } from "@/lib/api/billing-capabilities"
 import { fundedByCredit, planTopoff, UPGRADE_PATH } from "@/lib/api/billing-v2"
+import { ApiError } from "@/lib/api/client"
 import {
   type PrepaidCreditSummary,
   type PrepaidPurchase,
   type PrepaidOperation,
   startPrepaidCheckout,
   validPrepaidCents,
+  validPurchaseCents,
 } from "@/lib/api/prepaid"
 import { billingKeys } from "@/lib/api/query-keys"
 import {
@@ -356,7 +358,10 @@ function PurchaseCard({
   )
   const [submitting, setSubmitting] = useState(false)
   const amount = resume?.amount ?? (custom ? dollarsToCents(custom) : null)
-  const valid = amount !== null && validPrepaidCents(amount)
+  // A resumed purchase keeps the amount it started with.
+  const valid =
+    amount !== null &&
+    (resume ? validPrepaidCents(amount) : validPurchaseCents(amount))
 
   const buy = async () => {
     if (
@@ -398,7 +403,9 @@ function PurchaseCard({
     } catch (err) {
       if (target.current !== originalTeam) return
       setStatus(
-        "Payment status is uncertain. Retry to check the same purchase.",
+        err instanceof ApiError && err.status === 400
+          ? "This purchase wasn't started, so nothing was charged."
+          : "Payment status is uncertain. Retry to check the same purchase.",
       )
       addToast(
         err instanceof Error ? err.message : "Unable to open payment",

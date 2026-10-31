@@ -6,6 +6,8 @@ import {
   setPrepaidAutoRecharge,
   reconcilePrepaidOperations,
   type PrepaidPurchase,
+  validPurchaseCents,
+  validThresholdCents,
 } from "./prepaid"
 const api = vi.hoisted(() => vi.fn())
 vi.mock("./client", async (original) => ({
@@ -153,16 +155,40 @@ it("rejects empty auto-recharge settings and still permits disabling", async () 
     setPrepaidAutoRecharge("use:team", {
       enabled: true,
       thresholdCents: 0,
-      amountCents: 700,
+      amountCents: 1000,
     }),
   ).toThrow()
   expect(api).not.toHaveBeenCalled()
   await setPrepaidAutoRecharge("use:team", {
     enabled: true,
     thresholdCents: 300,
-    amountCents: 700,
+    amountCents: 1000,
   })
-  expect(body(0).amount_cents).toBe(700)
+  expect(body(0).amount_cents).toBe(1000)
   await setPrepaidAutoRecharge("use:team", { enabled: false })
   expect(body(1)).toEqual({ expected_team: "use:team", enabled: false })
+})
+
+it("accepts only the amounts the backend accepts", () => {
+  for (const [cents, ok] of [
+    [500, true],
+    [1500, true],
+    [1_000_000, true],
+    [0, false],
+    [400, false],
+    [1200, false],
+    [1_000_500, false],
+    [550.5, false],
+  ] as const)
+    expect(validPurchaseCents(cents)).toBe(ok)
+  for (const [cents, ok] of [
+    [100, true],
+    [200, true],
+    [1_000_000, true],
+    [0, false],
+    [50, false],
+    [150, false],
+    [1_000_100, false],
+  ] as const)
+    expect(validThresholdCents(cents)).toBe(ok)
 })
