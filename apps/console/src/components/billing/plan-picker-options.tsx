@@ -5,6 +5,7 @@ import { Button, cn, Spinner } from "@superserve/ui"
 import Link from "next/link"
 import { type FormEvent, useEffect, useState } from "react"
 
+import { useSubmitOnce } from "@/hooks/use-submit-once"
 import { ENTERPRISE_MEETING_URL } from "@/lib/api/billing-v2"
 import {
   getTeamCatalogAction,
@@ -179,19 +180,7 @@ export function PlanPickerOptions({
     }
   }, [account, team, key])
   const catalog = loaded?.key === key ? loaded.catalog : undefined
-  // Opening Checkout takes seconds; a second submit meanwhile is refused by
-  // the backend and lands back here, so only the first one goes out.
-  const [submitting, setSubmitting] = useState<SignupCheckoutOffer | null>(null)
-  useEffect(() => {
-    const reset = (event: PageTransitionEvent) =>
-      event.persisted && setSubmitting(null)
-    window.addEventListener("pageshow", reset)
-    return () => window.removeEventListener("pageshow", reset)
-  }, [])
-  const onSubmit = (offer: SignupCheckoutOffer) => (event: FormEvent) => {
-    if (submitting) event.preventDefault()
-    else setSubmitting(offer)
-  }
+  const { submitting, onSubmit } = useSubmitOnce<SignupCheckoutOffer>()
 
   if (catalog === undefined)
     return (
