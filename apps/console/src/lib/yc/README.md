@@ -26,17 +26,12 @@ reauthentication path; linked provider metadata is insufficient. The proof
 expires after 15 minutes, is stored in a secure HttpOnly host cookie, and uses
 a separate signing purpose. The backend remains the live RBAC authority.
 
-Before enabling, verify the deployed backend DTOs and assertion keys/audiences,
-preferred-identity approval and resume, actual Google callback/session
-revocation behavior, exact terms and revisions, uncertain/replayed operations,
-and readiness from real provider/funding reconciliation. Renewal must resolve
-the original provider boundary and expose only approved catalog choices;
-requested choices do not replace the last confirmed instruction. An instruction
-remains `confirmed` after the boundary; `successor_state` separately reports
-`active`, `free`, or `payment_pending`. There is no `effective` instruction
-state in this contract. Preserve
-existing debt and payment gates. Local fixtures and UI previews do not prove
-any of these runtime integrations.
+Renewal must resolve the original provider boundary and expose only approved
+catalog choices; requested choices do not replace the last confirmed
+instruction. An instruction remains `confirmed` after the boundary;
+`successor_state` separately reports `active`, `free`, or `payment_pending`.
+There is no `effective` instruction state in this contract. Existing debt and
+payment gates still apply.
 
 `YC_CLAIM_WEBSITE_URL` optionally sets the server-side website origin for
 Submit verification. The path is always `/yc`. Unset preserves
