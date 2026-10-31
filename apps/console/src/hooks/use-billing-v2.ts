@@ -52,15 +52,22 @@ export function useFreeAllowance(enabled: boolean) {
 }
 
 // An unobserved balance shows "Updating…" but is usually observed within
-// seconds, so re-read it quickly for up to 20 reads before the minute cycle.
+// seconds, so re-read it quickly for a minute from when it became unobserved;
+// a failing read falls back to the minute cycle.
+const unobservedSince = new WeakMap<Query, number>()
+
 export function prepaidRefetchInterval(query: Query) {
-  const { data, status, dataUpdateCount, errorUpdateCount } = query.state
-  const raw = data as { balance_observed?: unknown } | undefined
-  return raw?.balance_observed === false &&
-    status !== "error" &&
-    dataUpdateCount + errorUpdateCount < 20
-    ? 3_000
-    : 60_000
+  const { data, status, dataUpdatedAt } = query.state
+  if (
+    (data as { balance_observed?: unknown } | undefined)?.balance_observed !==
+    false
+  ) {
+    unobservedSince.delete(query)
+    return 60_000
+  }
+  const since = unobservedSince.get(query) ?? dataUpdatedAt
+  unobservedSince.set(query, since)
+  return status !== "error" && dataUpdatedAt - since < 60_000 ? 3_000 : 60_000
 }
 
 export function usePrepaidBalance(enabled: boolean) {

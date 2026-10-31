@@ -181,29 +181,23 @@ describe("prepaid balance refresh", () => {
     vi.useRealTimers()
   })
 
-  it.each([
-    { name: "unobserved", state: {}, want: 3_000 },
-    {
-      name: "observed",
-      state: { data: { balance_observed: true } },
-      want: 60_000,
-    },
-    { name: "failing", state: { status: "error" }, want: 60_000 },
-    {
-      name: "after 20 reads",
-      state: { dataUpdateCount: 12, errorUpdateCount: 8 },
-      want: 60_000,
-    },
-  ])("re-reads quickly only while $name says so", ({ state, want }) => {
-    const query = {
-      state: {
-        data: { balance_observed: false },
-        status: "success",
-        dataUpdateCount: 1,
-        errorUpdateCount: 0,
-        ...state,
-      },
-    } as unknown as Query
-    expect(prepaidRefetchInterval(query)).toBe(want)
+  it("re-reads quickly for a minute of each unobserved stretch", () => {
+    const query = { state: {} } as { state: Record<string, unknown> }
+    const read = (observed: boolean, at: number, status = "success") => {
+      query.state = {
+        data: { balance_observed: observed },
+        status,
+        dataUpdatedAt: at,
+      }
+      return prepaidRefetchInterval(query as unknown as Query)
+    }
+    expect(read(false, 0)).toBe(3_000)
+    expect(read(false, 30_000)).toBe(3_000)
+    expect(read(false, 60_000)).toBe(60_000)
+    expect(read(false, 63_000, "error")).toBe(60_000)
+    // Observed again, then a later stretch gets its own quick minute.
+    expect(read(true, 20 * 60_000)).toBe(60_000)
+    expect(read(false, 21 * 60_000)).toBe(3_000)
+    expect(read(false, 21 * 60_000 + 3_000, "error")).toBe(60_000)
   })
 })
