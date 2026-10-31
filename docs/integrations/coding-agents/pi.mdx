@@ -95,7 +95,7 @@ print(result.stdout)
 Pi picks a default Anthropic model unless you pass `--model`. Run `pi --list-models anthropic` in the sandbox to see the IDs, then pick one, for example `pi --model claude-haiku-4-5 -p "..."`.
 
 <Note>
-Auto-approved commands stay inside the sandbox and can't touch your machine, but the sandbox can still reach the internet. Use [network rules](/sandbox/networking) to limit where it can connect. With Anthropic, Pi needs only `api.anthropic.com` to run, plus `registry.npmjs.org` if you install it after you restrict the network.
+Auto-approved commands stay inside the sandbox and can't touch your machine, but the sandbox can still reach the internet. Use [network rules](/sandbox/networking) to limit where it can connect. With Anthropic, Pi needs only `api.anthropic.com` to run, plus `registry.npmjs.org` if you install it after you restrict the network. If you deny all other traffic, also allow the sandbox's DNS resolvers, `1.1.1.1/32` and `8.8.8.8/32`, so these names resolve.
 </Note>
 
 ## Get JSON output
