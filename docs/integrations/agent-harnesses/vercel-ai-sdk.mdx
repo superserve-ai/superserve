@@ -173,7 +173,46 @@ try {
 }
 ```
 
-To stream to a browser from a route handler, return `result.toUIMessageStreamResponse()` instead of reading `fullStream`. See [Streaming](/commands/streaming) to stream a single command's output.
+See [Streaming](/commands/streaming) to stream a single command's output.
+
+### Stream to a browser
+
+In a route handler, return `result.toUIMessageStreamResponse()` instead of reading `fullStream`. The handler returns before the agent finishes, so a `try/finally` would kill the sandbox mid-run. Kill the sandbox from the `onEnd`, `onAbort`, and `onError` callbacks instead.
+
+```typescript {9,26-28}
+import { anthropic } from "@ai-sdk/anthropic"
+import { Sandbox } from "@superserve/sdk"
+import { stepCountIs, streamText, tool } from "ai"
+import { z } from "zod"
+
+export async function POST(req: Request) {
+  const { prompt } = (await req.json()) as { prompt: string }
+  const sandbox = await Sandbox.create({ name: "agent-runtime" })
+  const cleanup = () => sandbox.kill()
+
+  const result = streamText({
+    model: anthropic("claude-sonnet-5-5"),
+    prompt,
+    abortSignal: req.signal,
+    tools: {
+      bash: tool({
+        description: "Run a shell command in the sandbox.",
+        inputSchema: z.object({ command: z.string() }),
+        execute: async ({ command }) => {
+          const { stdout, stderr, exitCode } = await sandbox.commands.run(command, { timeoutMs: 60_000 })
+          return { stdout, stderr, exitCode }
+        },
+      }),
+    },
+    stopWhen: stepCountIs(10),
+    onEnd: cleanup,
+    onAbort: cleanup,
+    onError: cleanup,
+  })
+
+  return result.toUIMessageStreamResponse()
+}
+```
 
 ## Reuse a sandbox across turns
 
