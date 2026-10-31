@@ -214,6 +214,20 @@ export async function POST(req: Request) {
 }
 ```
 
+`onAbort` runs only if your runtime aborts `req.signal` when the client disconnects. If it does not, the agent can keep running after a disconnect, and `onEnd` or `onError` kills the sandbox when the run finishes. On Vercel, enable request cancellation for the route in `vercel.json` (Node.js runtime only):
+
+```json vercel.json
+{
+  "functions": {
+    "app/api/chat/route.ts": {
+      "supportsCancellation": true
+    }
+  }
+}
+```
+
+See [Stopping streams](https://ai-sdk.dev/docs/advanced/stopping-streams) in the AI SDK docs.
+
 ## Reuse a sandbox across turns
 
 A sandbox outlives the request that created it. Store `sandbox.id` with the conversation, reconnect on each turn, and pause between turns so files and installed packages stay available without paying for an idle VM.
