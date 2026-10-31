@@ -70,6 +70,63 @@ describe("tool calls (in-memory, fake client)", () => {
     expect(r.structured.content).toBe(b64)
   })
 
+  it("sandbox_files_write rejects malformed base64 without modifying existing file", async () => {
+    const id = await createSandbox()
+    await callTool(conn.client, "sandbox_files_write", {
+      sandbox_id: id,
+      path: "/app/example.bin",
+      content: "initial content",
+    })
+
+    const r = await callTool(conn.client, "sandbox_files_write", {
+      sandbox_id: id,
+      path: "/app/example.bin",
+      content: "!!!",
+      encoding: "base64",
+    })
+    expect(r.isError).toBe(true)
+    expect(r.text).toMatch(/not valid base64 data/i)
+
+    const read = await callTool(conn.client, "sandbox_files_read", {
+      sandbox_id: id,
+      path: "/app/example.bin",
+    })
+    expect(read.structured.content).toBe("initial content")
+  })
+
+  it("sandbox_files_write rejects base64 with trailing garbage", async () => {
+    const id = await createSandbox()
+    const r = await callTool(conn.client, "sandbox_files_write", {
+      sandbox_id: id,
+      path: "/app/garbage.bin",
+      content: "SGVsbG8=garbage",
+      encoding: "base64",
+    })
+    expect(r.isError).toBe(true)
+    expect(r.text).toMatch(/not valid base64 data/i)
+  })
+
+  it("sandbox_files_write accepts empty and URL-safe base64 content", async () => {
+    const id = await createSandbox()
+    const emptyRes = await callTool(conn.client, "sandbox_files_write", {
+      sandbox_id: id,
+      path: "/app/empty.bin",
+      content: "",
+      encoding: "base64",
+    })
+    expect(emptyRes.isError).toBe(false)
+    expect(emptyRes.structured.bytes).toBe(0)
+
+    const urlSafeRes = await callTool(conn.client, "sandbox_files_write", {
+      sandbox_id: id,
+      path: "/app/urlsafe.bin",
+      content: "-_==",
+      encoding: "base64",
+    })
+    expect(urlSafeRes.isError).toBe(false)
+    expect(urlSafeRes.structured.bytes).toBe(1)
+  })
+
   it("files_list returns directory entries", async () => {
     const id = await createSandbox()
     await callTool(conn.client, "sandbox_files_write", {

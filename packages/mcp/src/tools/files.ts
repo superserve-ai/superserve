@@ -43,6 +43,36 @@ function writeTooLargeMessage(path: string, bytes: number): string {
   )
 }
 
+const BASE64_RE =
+  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2,3})?$/
+const BASE64URL_RE =
+  /^(?:[A-Za-z0-9-_]{4})*(?:[A-Za-z0-9-_]{2}==|[A-Za-z0-9-_]{3}=|[A-Za-z0-9-_]{2,3})?$/
+
+/** Guidance returned when base64 content fails validation. */
+function malformedBase64Message(path: string): string {
+  return (
+    `Refusing to write to ${path}: content is not valid base64 data. ` +
+    `Ensure the content string is properly encoded, or write as plain text with encoding="text".`
+  )
+}
+
+/** Decodes and validates base64 content; returns undefined if malformed. */
+function decodeBase64(content: string): Uint8Array | undefined {
+  const sanitized = content.replace(/\s+/g, "")
+  if (sanitized === "") {
+    return new Uint8Array(0)
+  }
+  const isStd = BASE64_RE.test(sanitized)
+  const isUrl = BASE64URL_RE.test(sanitized)
+  if (!isStd && !isUrl) {
+    return undefined
+  }
+  const isUrlSafe = /[-_]/.test(sanitized)
+  return new Uint8Array(
+    Buffer.from(sanitized, isUrlSafe ? "base64url" : "base64"),
+  )
+}
+
 /** Decoded size of `data` in bytes (text is measured as UTF-8). */
 function byteLengthOf(data: string | Uint8Array): number {
   return typeof data === "string"
@@ -165,10 +195,16 @@ export function registerFileTools(
     },
     async ({ sandbox_id, path, content, encoding: enc }) => {
       try {
-        const data =
-          enc === "base64"
-            ? new Uint8Array(Buffer.from(content, "base64"))
-            : content
+        let data: string | Uint8Array
+        if (enc === "base64") {
+          const decoded = decodeBase64(content)
+          if (decoded === undefined) {
+            return toolError(malformedBase64Message(path))
+          }
+          data = decoded
+        } else {
+          data = content
+        }
         const bytes = byteLengthOf(data)
         // Bound the write before touching the network so a large (post-decode)
         // payload cannot pin host memory on the hosted server.
