@@ -13,6 +13,7 @@ import {
 } from "@/lib/billing/plans"
 import {
   isAwaitingPlanState,
+  isPaymentActivating,
   type AwaitingPlanState,
 } from "@/lib/billing/signup-checkout-paths"
 
@@ -119,12 +120,15 @@ export const teamPlanSchema = z
 // plan yet, one whose payment is activating its plan, or null otherwise,
 // including a backend without trials.
 export const teamEntrySchema = z
-  .object({ entry_state: z.unknown().optional() })
-  .transform(({ entry_state }): AwaitingPlanState | "activating" | null =>
-    entry_state === "activating"
+  .object({
+    entry_state: z.unknown().optional(),
+    pro_checkout: z.unknown().optional(),
+  })
+  .transform((plan): AwaitingPlanState | "activating" | null =>
+    isPaymentActivating(plan)
       ? "activating"
-      : isAwaitingPlanState(entry_state)
-        ? entry_state
+      : isAwaitingPlanState(plan.entry_state)
+        ? plan.entry_state
         : null,
   )
 

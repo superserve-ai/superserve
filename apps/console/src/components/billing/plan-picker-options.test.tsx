@@ -249,6 +249,16 @@ describe("PlanPickerOptions", () => {
     expect(mocks.signOut).toHaveBeenCalled()
   })
 
+  it("keeps plans hidden after checkout refused the user, even if access can't be read", async () => {
+    mocks.offers = [offer("developer_monthly", "Builder")]
+    mocks.canManage = null
+    render(
+      <PlanPickerOptions preselected={null} locator={locator} adminRequired />,
+    )
+    expect(await screen.findByRole("button", { name: "Sign out" })).toBeTruthy()
+    expect(screen.queryByRole("form", { name: "Builder plan" })).toBeNull()
+  })
+
   it("offers the plans to an administrator", async () => {
     mocks.offers = [offer("developer_monthly", "Builder")]
     mocks.canManage = true

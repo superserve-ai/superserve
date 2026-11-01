@@ -159,9 +159,12 @@ function PlanOption({
 export function PlanPickerOptions({
   preselected,
   locator,
+  adminRequired = false,
 }: {
   preselected: SignupCheckoutOffer | null
   locator: CheckoutLocator
+  // Checkout already refused this user for lacking billing access.
+  adminRequired?: boolean
 }) {
   const { account, team } = locator
   const key = `${account}:${team}`
@@ -199,13 +202,15 @@ export function PlanPickerOptions({
       <div className="mt-5 h-5 w-5 animate-spin border-2 border-primary border-t-transparent" />
     )
   // Only billing administrators can buy; anyone else would only be refused.
-  if (current.canManage === false)
+  if (adminRequired || current.canManage === false)
     return (
       <div className="mt-5 flex flex-col items-center gap-4">
-        <p className="max-w-sm text-center text-sm text-muted">
-          Only your team&apos;s billing administrators can choose a plan. Ask
-          one of them to upgrade this team.
-        </p>
+        {adminRequired ? null : (
+          <p className="max-w-sm text-center text-sm text-muted">
+            Only your team&apos;s billing administrators can choose a plan. Ask
+            one of them to upgrade this team.
+          </p>
+        )}
         <Button variant="outline" size="sm" onClick={() => void signOut()}>
           Sign out
         </Button>

@@ -117,7 +117,11 @@ function ChoosePlanContent() {
               Back to console
             </Button>
           ) : (
-            <PlanPickerOptions preselected={preselected} locator={locator} />
+            <PlanPickerOptions
+              preselected={preselected}
+              locator={locator}
+              adminRequired={reason === "billing_admin_required"}
+            />
           )}
         </div>
       </div>

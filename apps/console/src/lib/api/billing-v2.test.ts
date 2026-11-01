@@ -348,6 +348,12 @@ describe("teamEntrySchema", () => {
     expect(teamEntrySchema.parse({ entry_state: "activating" })).toBe(
       "activating",
     )
+    expect(
+      teamEntrySchema.parse({
+        entry_state: "trial",
+        pro_checkout: { status: "activating" },
+      }),
+    ).toBe("activating")
     expect(teamEntrySchema.parse({ entry_state: "trial" })).toBe("trial")
     expect(teamEntrySchema.parse({ entry_state: "something_new" })).toBeNull()
     expect(teamEntrySchema.parse({})).toBeNull()
