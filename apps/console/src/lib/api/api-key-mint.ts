@@ -14,7 +14,8 @@ import {
   completedMemberships,
   provisionTeam,
 } from "@/lib/api/team-provisioning"
-import { cellFor, DEFAULT_REGION } from "@/lib/cells"
+import { cellFor } from "@/lib/cells"
+import { firstTeamTarget } from "@/lib/onboarding/first-team-region"
 
 // Region codes embedded in new API keys (ss_live_<region>_...). Must stay in
 // sync with the team_home_region_valid CHECK constraint in the control-plane
@@ -59,7 +60,7 @@ function hashKey(key: string): string {
 /**
  * The user's active team (their selection when it's a live membership,
  * otherwise the deterministic default). If no team exists at all,
- * auto-create one (named after their email) in the default cell and add
+ * auto-create one (named after their email) in the region they picked and add
  * them as owner.
  */
 /** The team a key action would use right now, without creating one. */
@@ -89,12 +90,17 @@ export async function getOrCreateTeamForUser(
   // create-team and proxy-auth paths use), so a first API-key action can't
   // leave the user with a legacy-only team the control plane rejects.
   const email = user.email ?? user.id
-  const team = await provisionTeam(DEFAULT_REGION, user.id, email, email, {
-    user,
-    observedAt,
-  })
+  const target = await firstTeamTarget(user.id)
+  const team = await provisionTeam(
+    target.region,
+    user.id,
+    email,
+    email,
+    { user, observedAt },
+    target.operationId,
+  )
   invalidateMembershipDirectory(user.id)
-  return { teamId: team.id, region: DEFAULT_REGION }
+  return { teamId: team.id, region: target.region }
 }
 
 export async function mintTeamApiKey(

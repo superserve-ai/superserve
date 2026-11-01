@@ -18,6 +18,10 @@ import {
   isSignupReviewBlocked,
   SIGNUP_REVIEW_PENDING_MESSAGE,
 } from "@/lib/auth/signup-review"
+import {
+  FirstTeamRegionRequiredError,
+  firstTeamRegionPath,
+} from "@/lib/onboarding/first-team-region"
 import { createServerClient } from "@/lib/supabase/server"
 
 export type DeviceApprovalResult =
@@ -65,6 +69,11 @@ export async function approveDeviceAction(
       return {
         status: "redirect",
         to: `/auth/signup?complete_google=1&next=${encodeURIComponent(`/device?code=${userCode}`)}`,
+      }
+    if (error instanceof FirstTeamRegionRequiredError)
+      return {
+        status: "redirect",
+        to: firstTeamRegionPath(`/device?code=${userCode}`),
       }
     if (error instanceof DeviceLoginError)
       return { status: "error", message: error.message }
