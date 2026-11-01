@@ -10,8 +10,12 @@ const mocks = vi.hoisted(() => ({
   cards: [] as PlanCard[],
   next: null as Promise<TeamCatalog> | null,
   load: vi.fn(),
+  canManage: null as boolean | null,
+  signOut: vi.fn(),
 }))
+vi.mock("@/hooks/use-sign-out", () => ({ useSignOut: () => mocks.signOut }))
 vi.mock("@/lib/billing/plan-offers-actions", () => ({
+  canManageTeamBillingAction: async () => mocks.canManage,
   getTeamCatalogAction: async (locator: unknown) => {
     mocks.load(locator)
     const next = mocks.next
@@ -72,6 +76,7 @@ const card = (family: string, extra: Partial<PlanCard> = {}): PlanCard => ({
 afterEach(() => {
   cleanup()
   mocks.cards = []
+  mocks.canManage = null
 })
 
 describe("PlanPickerOptions", () => {
@@ -230,6 +235,27 @@ describe("PlanPickerOptions", () => {
       expect(button).toBeDisabled()
     expect(fireEvent.submit(builder)).toBe(false)
     expect(fireEvent.submit(team)).toBe(false)
+  })
+
+  it("tells a member without billing access to ask an administrator", async () => {
+    mocks.offers = [offer("developer_monthly", "Builder")]
+    mocks.canManage = false
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    expect(
+      await screen.findByText(/Only your team's billing administrators/),
+    ).toBeTruthy()
+    expect(screen.queryByRole("form", { name: "Builder plan" })).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }))
+    expect(mocks.signOut).toHaveBeenCalled()
+  })
+
+  it("offers the plans to an administrator", async () => {
+    mocks.offers = [offer("developer_monthly", "Builder")]
+    mocks.canManage = true
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    expect(
+      await screen.findByRole("form", { name: "Builder plan" }),
+    ).toBeTruthy()
   })
 
   it("says so when no plan is sellable", async () => {

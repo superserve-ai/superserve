@@ -433,6 +433,14 @@ describe("TrialBillingBanner for a new team's trial", () => {
     expect(screen.getByRole("button", { name: /Upgrade/ })).toBeTruthy()
   })
 
+  it("asks for nothing while a paid plan activates", () => {
+    entry("activating")
+    mocks.summary.mockReturnValue({ data: trial(5) })
+    const { container } = mount()
+    expect(container.textContent).not.toMatch(/Add Payment|payment method/)
+    expect(screen.queryByRole("region", { name: "Free trial" })).toBeNull()
+  })
+
   it("says sandboxes are paused and nothing is deleted once the trial ends", () => {
     entry("trial_ended")
     mocks.summary.mockReturnValue({ data: trial(0) })

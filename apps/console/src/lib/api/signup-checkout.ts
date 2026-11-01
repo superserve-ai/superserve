@@ -115,6 +115,8 @@ export async function startSignupCheckout(
   }
   if (response.status === 400 && result.error?.code === "invalid_offer")
     return planPickerPath("plan_unavailable", undefined, locator)
+  if (response.status === 403)
+    return planPickerPath("billing_admin_required", undefined, locator)
   if (!response.ok)
     throw new Error(`signup checkout failed: ${response.status}`)
   if (result.url && isStripeCheckoutUrl(result.url)) return result.url

@@ -115,12 +115,17 @@ export const teamPlanSchema = z
         },
   )
 
-// The new-team entry state from the plan read. Anything but a team that has
-// not paid for a plan yet, including a backend without trials, is null.
+// The new-team entry state from the plan read: a team that has not paid for a
+// plan yet, one whose payment is activating its plan, or null otherwise,
+// including a backend without trials.
 export const teamEntrySchema = z
   .object({ entry_state: z.unknown().optional() })
-  .transform(({ entry_state }): AwaitingPlanState | null =>
-    isAwaitingPlanState(entry_state) ? entry_state : null,
+  .transform(({ entry_state }): AwaitingPlanState | "activating" | null =>
+    entry_state === "activating"
+      ? "activating"
+      : isAwaitingPlanState(entry_state)
+        ? entry_state
+        : null,
   )
 
 const decimalCents = z.number().nonnegative()

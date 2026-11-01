@@ -27,6 +27,8 @@ const MESSAGES: Record<PlanPickerReason, string> = {
   plan_unavailable: "That plan is no longer available. Choose another plan.",
   checkout_canceled: "Checkout was cancelled. Choose a plan when you're ready.",
   checkout_unavailable: "We couldn't open checkout. Please try again.",
+  billing_admin_required:
+    "Only your team's billing administrators can choose a plan. Ask one of them to upgrade this team.",
 }
 
 function ChoosePlanContent() {

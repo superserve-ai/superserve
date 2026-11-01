@@ -13,6 +13,7 @@ import {
   type PrepaidBalance,
   PRO_UPGRADE_PATH,
   type TeamPlan,
+  teamEntrySchema,
 } from "./billing-v2"
 
 const limits = {
@@ -339,5 +340,16 @@ describe("checkoutTermsFor", () => {
     ).toBeUndefined()
     expect(checkoutTermsFor(terms(), "pro_monthly")).toBeDefined()
     expect(checkoutTermsFor(terms(), "developer_monthly")).toBeUndefined()
+  })
+})
+
+describe("teamEntrySchema", () => {
+  it("keeps a team whose paid plan is activating apart from a team without one", () => {
+    expect(teamEntrySchema.parse({ entry_state: "activating" })).toBe(
+      "activating",
+    )
+    expect(teamEntrySchema.parse({ entry_state: "trial" })).toBe("trial")
+    expect(teamEntrySchema.parse({ entry_state: "something_new" })).toBeNull()
+    expect(teamEntrySchema.parse({})).toBeNull()
   })
 })

@@ -5,9 +5,11 @@ import { Button, cn, Spinner } from "@superserve/ui"
 import Link from "next/link"
 import { type FormEvent, useEffect, useState } from "react"
 
+import { useSignOut } from "@/hooks/use-sign-out"
 import { useSubmitOnce } from "@/hooks/use-submit-once"
 import { ENTERPRISE_MEETING_URL } from "@/lib/api/billing-v2"
 import {
+  canManageTeamBillingAction,
   getTeamCatalogAction,
   type TeamCatalog,
 } from "@/lib/billing/plan-offers-actions"
@@ -168,23 +170,46 @@ export function PlanPickerOptions({
   const [loaded, setLoaded] = useState<{
     key: string
     catalog: TeamCatalog | null
+    canManage: boolean | null
   }>()
   useEffect(() => {
     let live = true
-    getTeamCatalogAction({ account, team }).then(
-      (catalog) => live && setLoaded({ key, catalog }),
-      () => live && setLoaded({ key, catalog: null }),
+    // Either read failing leaves the picker as it was: plans, offered to all.
+    const settle = <T,>(read: () => Promise<T>) =>
+      Promise.resolve()
+        .then(read)
+        .catch(() => null)
+    void Promise.all([
+      settle(() => getTeamCatalogAction({ account, team })),
+      settle(() => canManageTeamBillingAction({ account, team })),
+    ]).then(
+      ([catalog, canManage]) => live && setLoaded({ key, catalog, canManage }),
     )
     return () => {
       live = false
     }
   }, [account, team, key])
-  const catalog = loaded?.key === key ? loaded.catalog : undefined
+  const current = loaded?.key === key ? loaded : undefined
+  const catalog = current?.catalog
   const { submitting, onSubmit } = useSubmitOnce<SignupCheckoutOffer>()
+  const signOut = useSignOut()
 
-  if (catalog === undefined)
+  if (current === undefined)
     return (
       <div className="mt-5 h-5 w-5 animate-spin border-2 border-primary border-t-transparent" />
+    )
+  // Only billing administrators can buy; anyone else would only be refused.
+  if (current.canManage === false)
+    return (
+      <div className="mt-5 flex flex-col items-center gap-4">
+        <p className="max-w-sm text-center text-sm text-muted">
+          Only your team&apos;s billing administrators can choose a plan. Ask
+          one of them to upgrade this team.
+        </p>
+        <Button variant="outline" size="sm" onClick={() => void signOut()}>
+          Sign out
+        </Button>
+      </div>
     )
   const plans = pickerPlans(catalog?.offers)
   const asked = preselected === "starter" ? "developer" : preselected

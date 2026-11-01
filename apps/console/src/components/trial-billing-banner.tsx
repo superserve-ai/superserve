@@ -208,6 +208,8 @@ export function TrialBillingBanner() {
   if (entryQuery.isPending || entryQuery.isError) return null
   const entry = entryQuery.data
   if (!summary?.permissions?.can_view) return null
+  // A paid plan is activating: the trial is over, so no banner asks for a card.
+  if (entry === "activating") return null
   if (entry) return <TrialEntryBanner entry={entry} summary={summary} />
   return <LegacyTrialBanner summary={summary} />
 }
