@@ -1,0 +1,263 @@
+---
+title: "CrewAI"
+sidebarTitle: CrewAI
+description: Use Superserve sandboxes as the execution runtime for agents built with CrewAI.
+icon: "/logos/integrations/crewai.svg"
+---
+
+[CrewAI](https://crewai.com) is a Python framework for building crews of agents that work through tasks with tools. Back an agent's tools with `sandbox.commands.run` and `sandbox.files` so every command the model runs, and every file it writes, stays in an isolated VM instead of on your server. The model API key stays in your app; the sandbox never sees it.
+
+## Setup
+
+```bash
+pip install superserve "crewai[anthropic]"
+export SUPERSERVE_API_KEY=ss_live_...
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+CrewAI needs Python 3.10 to 3.13. The examples use Anthropic through CrewAI's native provider, which reads the key from the environment. Any supported provider works: set `OPENAI_API_KEY` and pass `"openai/gpt-5.5"` as the `llm`. See [LLMs](https://docs.crewai.com/en/concepts/llms) in the CrewAI docs for the full list, and [API keys](/api-key) to create a Superserve API key.
+
+## Wire the sandbox into the agent
+
+The highlighted block defines a `bash` tool backed by the sandbox. Everything else is standard CrewAI usage.
+
+```python {8-11}
+from crewai import Agent, Crew, Task
+from crewai.tools import tool
+from superserve import CommandResult, Sandbox
+
+sandbox = Sandbox.create(name="agent-runtime")
+
+
+@tool("bash")
+def bash(command: str) -> CommandResult:
+    """Run a shell command in the sandbox."""
+    return sandbox.commands.run(command, timeout_seconds=60)
+
+
+assistant = Agent(
+    role="Workspace assistant",
+    goal="Answer questions about the sandbox by running shell commands in it.",
+    backstory="You inspect the sandbox with the bash tool before you answer.",
+    llm="anthropic/claude-sonnet-5-5",
+    tools=[bash],
+)
+
+task = Task(
+    description="List the files in /tmp and tell me how many there are.",
+    expected_output="The file names and the number of files.",
+    agent=assistant,
+)
+
+try:
+    result = Crew(agents=[assistant], tasks=[task]).kickoff()
+    print(result)
+finally:
+    sandbox.kill()
+```
+
+The tool returns the SDK's `CommandResult`. CrewAI reads the return annotation and sends the model `stdout`, `stderr`, `exit_code`, and `truncated` as JSON, so the model sees failed commands as well as their output.
+
+## Run code with file tools
+
+Add file tools next to `bash` to let the model write a script, run it, and read the result. `max_iter` caps the iterations the agent runs on a task (the default is 25). After that, the agent must give its best answer.
+
+```python {14-24}
+from crewai import Agent, Crew, Task
+from crewai.tools import tool
+from superserve import CommandResult, Sandbox
+
+sandbox = Sandbox.create(name="code-runner")
+
+
+@tool("bash")
+def bash(command: str) -> CommandResult:
+    """Run a shell command in the sandbox."""
+    return sandbox.commands.run(command, timeout_seconds=60)
+
+
+@tool("write_file")
+def write_file(path: str, content: str) -> str:
+    """Write a text file in the sandbox. Use an absolute path."""
+    sandbox.files.write(path, content)
+    return f"Wrote {len(content)} characters to {path}"
+
+
+@tool("read_file")
+def read_file(path: str) -> str:
+    """Read a text file from the sandbox. Use an absolute path."""
+    return sandbox.files.read_text(path)
+
+
+coder = Agent(
+    role="Python developer",
+    goal="Write code in the sandbox, run it, and report the real output.",
+    backstory=(
+        "You save code under /home/user and run it with the bash tool. "
+        "Use python3, not python."
+    ),
+    llm="anthropic/claude-sonnet-5-5",
+    tools=[bash, write_file, read_file],
+    max_iter=10,
+)
+
+task = Task(
+    description=(
+        "Write a Python script that prints the first 10 prime numbers, "
+        "run it, and show me the output."
+    ),
+    expected_output="The script path and its exact output.",
+    agent=coder,
+)
+
+try:
+    result = Crew(agents=[coder], tasks=[task], verbose=True).kickoff()
+    print(result)
+finally:
+    sandbox.kill()
+```
+
+With `verbose=True`, the crew prints each tool call and its result. Output from a run with `claude-haiku-4-5` (trimmed; the model's wording varies):
+
+```text
+Tool: write_file
+Args: {'path': '/home/user/prime_numbers.py', 'content': 'def is_prime(n): ...'}
+Output: Wrote 688 characters to /home/user/prime_numbers.py
+
+Tool: bash
+Args: {'command': 'python3 /home/user/prime_numbers.py'}
+Output: {"stdout":"The first 10 prime numbers are:\n2\n3\n5\n...","stderr":"","exit_code":0,"truncated":false}
+```
+
+`sandbox.files` paths must be absolute. See [Read & write files](/filesystem/read-write) for binary content and directory downloads.
+
+## Stream tool calls
+
+Set `stream=True` on the crew, and `kickoff()` returns a `CrewStreamingOutput` that yields the model's text as it arrives. To show each command and its result, listen for `ToolUsageFinishedEvent` on the CrewAI event bus.
+
+```python {31-33,36,39-43}
+from crewai import Agent, Crew, Task
+from crewai.events import ToolUsageFinishedEvent, crewai_event_bus
+from crewai.tools import tool
+from crewai.types.streaming import CrewStreamingOutput, StreamChunkType
+from superserve import CommandResult, Sandbox
+
+sandbox = Sandbox.create(name="agent-runtime")
+
+
+@tool("bash")
+def bash(command: str) -> CommandResult:
+    """Run a shell command in the sandbox."""
+    return sandbox.commands.run(command, timeout_seconds=60)
+
+
+assistant = Agent(
+    role="Workspace assistant",
+    goal="Answer questions about the sandbox by running shell commands in it.",
+    backstory="You inspect the sandbox with the bash tool before you answer.",
+    llm="anthropic/claude-sonnet-5-5",
+    tools=[bash],
+)
+
+task = Task(
+    description="Which Linux distribution and Python version does this machine run?",
+    expected_output="The distribution name and version, and the Python version.",
+    agent=assistant,
+)
+
+
+@crewai_event_bus.on(ToolUsageFinishedEvent)
+def print_tool_result(source: object, event: ToolUsageFinishedEvent) -> None:
+    print(f"\n> {event.tool_name} {event.tool_args}\n{event.output}")
+
+
+crew = Crew(agents=[assistant], tasks=[task], stream=True)
+
+try:
+    streaming = crew.kickoff()
+    assert isinstance(streaming, CrewStreamingOutput)
+    for chunk in streaming:
+        if chunk.chunk_type == StreamChunkType.TEXT:
+            print(chunk.content, end="", flush=True)
+    print()
+finally:
+    sandbox.kill()
+```
+
+`kickoff()` is typed as `CrewOutput | CrewStreamingOutput`, so the `assert` narrows the type for type checkers. Read `streaming.result` after the loop for the final `CrewOutput`. The event handler is registered globally, so it runs for every crew in the process. See [Streaming Crew Execution](https://docs.crewai.com/en/learn/streaming-crew-execution) and [Event Listeners](https://docs.crewai.com/en/concepts/event-listener) in the CrewAI docs, and [Streaming](/commands/streaming) to stream a single command's output.
+
+## One sandbox per conversation
+
+The examples above close over one module-level sandbox. To serve many conversations, build the crew for a given sandbox. Store `sandbox.id` with the conversation, reconnect on each run, and pause between runs so files and installed packages stay available without paying for an idle VM.
+
+```python {6-10,29,34}
+from crewai import Agent, Crew, Task
+from crewai.tools import tool
+from superserve import CommandResult, Sandbox
+
+
+def build_crew(sandbox: Sandbox) -> Crew:
+    @tool("bash")
+    def bash(command: str) -> CommandResult:
+        """Run a shell command in the sandbox."""
+        return sandbox.commands.run(command, timeout_seconds=60)
+
+    assistant = Agent(
+        role="Workspace assistant",
+        goal="Complete requests by running shell commands in the sandbox.",
+        backstory="You work in the sandbox with the bash tool.",
+        llm="anthropic/claude-sonnet-5-5",
+        tools=[bash],
+    )
+    task = Task(
+        description="{request}",
+        expected_output="What you did and the relevant command output.",
+        agent=assistant,
+    )
+    return Crew(agents=[assistant], tasks=[task])
+
+
+def run_crew(sandbox_id: str, request: str) -> str:
+    # Resumes the sandbox if it is paused.
+    sandbox = Sandbox.connect(sandbox_id)
+    try:
+        return str(build_crew(sandbox).kickoff(inputs={"request": request}))
+    finally:
+        # Pause between runs. Files and memory are kept until the next connect.
+        sandbox.pause()
+
+
+sandbox_id = Sandbox.create(name="chat-session").id
+
+try:
+    run_crew(sandbox_id, "Create /home/user/todo.txt with three short items.")
+    answer = run_crew(
+        sandbox_id, "Add a fourth item to /home/user/todo.txt, then print the file."
+    )
+    print(answer)
+finally:
+    Sandbox.kill_by_id(sandbox_id)
+```
+
+`Sandbox.connect()` resumes a paused sandbox, or one that is still pausing, before it returns. See [Lifecycle](/sandbox/lifecycle) and [Connect](/sandbox/connect).
+
+The second run finds the file because it lives in the sandbox, not because the crew remembers the first run. To keep context between runs too, give the crew [CrewAI memory](https://docs.crewai.com/en/concepts/memory) scoped to the conversation, for example `memory=Memory().scope(f"/conversation/{sandbox.id}")`. With `memory=True`, crews without a `name` share one memory scope, so context can leak between conversations.
+
+## Good to know
+
+- The model can call only the tools you define. Keep `kill()`, `pause()`, and `update()` in your application code, not in a tool.
+- To limit what model-written code can reach, create the sandbox with [network rules](/sandbox/networking).
+- Pass `timeout_seconds` to `commands.run`. Without it, the SDK request times out after 30 seconds, so the tool call fails on longer commands such as package installs.
+- The default sandbox has `python3` but no `python`. Tell the agent in its `backstory`, or use a [template](/templates/overview) with the tools you need.
+- As a backstop for crashes, set `timeout_seconds` and `auto_delete_seconds` when you create the sandbox. See [Auto-delete](/sandbox/lifecycle#auto-delete).
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="CrewAI docs" icon="book" href="https://docs.crewai.com">
+    Agents, tasks, crews, tools, and flows in CrewAI.
+  </Card>
+  <Card title="Run commands" icon="terminal" href="/commands/overview">
+    Options for `commands.run`, including environment variables and working directory.
+  </Card>
+</CardGroup>
