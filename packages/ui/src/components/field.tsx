@@ -37,7 +37,9 @@ function Field({
       </FieldPrimitive.Label>
       {children}
       {error ? (
-        <FieldPrimitive.Error className="text-xs text-destructive">
+        // Shown whenever an error is passed, not only when the browser's own
+        // validation fails, which never happens for the checks callers make.
+        <FieldPrimitive.Error match className="text-xs text-destructive">
           {error}
         </FieldPrimitive.Error>
       ) : description ? (

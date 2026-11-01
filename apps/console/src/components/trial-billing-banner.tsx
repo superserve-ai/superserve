@@ -1,6 +1,6 @@
 "use client"
 
-import { Button, cn } from "@superserve/ui"
+import { Button, cn, Spinner } from "@superserve/ui"
 import { useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
 import { useCallback, useSyncExternalStore } from "react"
@@ -16,6 +16,7 @@ import { useBillingPayment } from "@/hooks/use-billing-payment"
 import { useBillingReturnNotice } from "@/hooks/use-billing-return-notice"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { useTeamEntry } from "@/hooks/use-billing-v2"
+import { useSubmitOnce } from "@/hooks/use-submit-once"
 import { useUser } from "@/hooks/use-user"
 import type {
   BillingSummaryResponse,
@@ -133,6 +134,7 @@ function TrialEntryBanner({
   const plan = selected ? pickerPlanLabel(offers, selected) : null
   const upgrade = plan ? `Upgrade to ${plan}` : "Upgrade"
   const canManage = scope === "self" && summary.permissions.can_manage
+  const { submitting, onSubmit } = useSubmitOnce<true>()
   return (
     <BannerShell
       tone={stage === "trial" ? "info" : "danger"}
@@ -140,8 +142,13 @@ function TrialEntryBanner({
       action={
         <ManageAction canManage={canManage}>
           {selected && locator ? (
-            <form method="post" action={signupCheckoutPath(selected, locator)}>
-              <Button type="submit" size="sm">
+            <form
+              method="post"
+              action={signupCheckoutPath(selected, locator)}
+              onSubmit={onSubmit(true)}
+            >
+              <Button type="submit" size="sm" disabled={submitting !== null}>
+                {submitting ? <Spinner size="sm" /> : null}
                 {upgrade}
               </Button>
             </form>

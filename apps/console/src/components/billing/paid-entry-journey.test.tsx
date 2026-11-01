@@ -305,7 +305,7 @@ describe("actual signup preparation to paid page journey", () => {
       else {
         fireEvent.change(
           await screen.findByRole("textbox", { name: "Amount (USD)" }),
-          { target: { value: "7" } },
+          { target: { value: "10" } },
         )
         await waitFor(() =>
           expect(
