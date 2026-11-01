@@ -181,10 +181,17 @@ agent worker controller --spawn "$(pwd)/spawn.sh" --pool superserve
 
 ### The spawn hook
 
-The controller runs the hook once per claim with `CURSOR_AGENT_WORKER_ID`, `CURSOR_POOL`, `CURSOR_REQUEST_ID`, and the request's repo fields in its environment. The hook creates a sandbox tagged with the worker id and launches the worker:
+The controller runs the hook once per claim with `CURSOR_AGENT_WORKER_ID`, `CURSOR_POOL`, `CURSOR_REQUEST_ID`, and the request's repo fields in its environment. The hook creates a sandbox tagged with the worker id and launches the worker with the reference's `worker.mjs` / `worker.py` helpers, which write the launch script into the sandbox:
 
 <CodeGroup>
 ```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+import { launchWorker, releaseClaim, workerEnv } from "./worker.mjs"
+
+const workerId = process.env.CURSOR_AGENT_WORKER_ID!
+const pool = process.env.CURSOR_POOL!
+const requestId = process.env.CURSOR_REQUEST_ID ?? ""
+
 const sandbox = await Sandbox.create({
   name: `cursor-${workerId.slice(0, 12)}`,
   fromTemplate: "cursor-worker",
@@ -197,18 +204,35 @@ const sandbox = await Sandbox.create({
   autoDeleteSeconds: 86_400, // reap if left paused for a day
 })
 
-// launch.sh detaches and runs:
+// Writes launch.sh and run.sh to /var/lib/cursor-worker, then launch.sh
+// detaches and runs:
 //   agent worker --pool <pool> --clone-git-repos start
-await sandbox.commands.run("bash /var/lib/cursor-worker/launch.sh", {
-  env: {
-    CURSOR_API_KEY: process.env.CURSOR_API_KEY,
-    CURSOR_AGENT_WORKER_ID: workerId,
-    CURSOR_WORKER_IDLE_RELEASE_TIMEOUT: "600",
-  },
+// workerEnv() passes CURSOR_API_KEY, the worker id, and the idle timeout.
+const result = await launchWorker(sandbox, {
+  pool,
+  env: workerEnv({ workerId }),
 })
+if (!result.ok) {
+  console.error(result.log)
+  // Delete the sandbox first, so the worker is gone before Cursor can
+  // hand the request to another worker.
+  await sandbox.kill()
+  if (requestId) await releaseClaim(requestId)
+  process.exit(1)
+}
 ```
 
 ```python Python
+import os
+import sys
+
+from superserve import Sandbox
+from worker import launch_worker, release_claim, worker_env
+
+worker_id = os.environ["CURSOR_AGENT_WORKER_ID"]
+pool = os.environ["CURSOR_POOL"]
+request_id = os.environ.get("CURSOR_REQUEST_ID", "")
+
 sandbox = Sandbox.create(
     name=f"cursor-{worker_id[:12]}",
     from_template="cursor-worker",
@@ -221,16 +245,19 @@ sandbox = Sandbox.create(
     auto_delete_seconds=86_400,  # reap if left paused for a day
 )
 
-# launch.sh detaches and runs:
+# Writes launch.sh and run.sh to /var/lib/cursor-worker, then launch.sh
+# detaches and runs:
 #   agent worker --pool <pool> --clone-git-repos start
-sandbox.commands.run(
-    "bash /var/lib/cursor-worker/launch.sh",
-    env={
-        "CURSOR_API_KEY": os.environ["CURSOR_API_KEY"],
-        "CURSOR_AGENT_WORKER_ID": worker_id,
-        "CURSOR_WORKER_IDLE_RELEASE_TIMEOUT": "600",
-    },
-)
+# worker_env() passes CURSOR_API_KEY, the worker id, and the idle timeout.
+result = launch_worker(sandbox, pool, worker_env(worker_id))
+if not result["ok"]:
+    print(result["log"], file=sys.stderr)
+    # Delete the sandbox first, so the worker is gone before Cursor can
+    # hand the request to another worker.
+    sandbox.kill()
+    if request_id:
+        release_claim(request_id)
+    sys.exit(1)
 ```
 </CodeGroup>
 
@@ -238,7 +265,7 @@ What the hook does on each claim:
 
 1. **Finds or creates** a sandbox for the worker id. A paused sandbox with the same tag is resumed rather than recreated (see [Hibernate with pause and resume](#hibernate-with-pause-and-resume)).
 2. **Launches the worker** detached from the exec call, with `CURSOR_AGENT_WORKER_ID` in its environment. The Cursor CLI reads the id from there and connects as the worker the controller already claimed for.
-3. **Verifies it stayed up.** If the worker is not running a few seconds later, the hook prints the worker log, releases the claim so another worker can take the request, deletes the sandbox, and exits non-zero.
+3. **Verifies it stayed up.** If the worker is not running a few seconds later, the hook prints the worker log, deletes the sandbox, releases the claim so another worker can take the request, and exits non-zero.
 
 <Warning>
   Keep `SUPERSERVE_API_KEY` on the controller host only - it never enters a
