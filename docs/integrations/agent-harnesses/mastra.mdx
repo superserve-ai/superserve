@@ -1,0 +1,275 @@
+---
+title: "Mastra"
+sidebarTitle: Mastra
+description: Use Superserve sandboxes as the execution runtime for agents built with Mastra.
+icon: "/logos/integrations/mastra.svg"
+---
+
+[Mastra](https://mastra.ai) is a TypeScript framework for building agents with tools, workflows, and memory. Back an agent's tools with `sandbox.commands.run` and `sandbox.files` so every command the model runs, and every file it writes, stays in an isolated VM instead of on your server. The model API key stays in your app; the sandbox never sees it.
+
+## Setup
+
+```bash
+npm install @superserve/sdk @mastra/core zod
+export SUPERSERVE_API_KEY=ss_live_...
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+The examples use Anthropic through Mastra's model router, which reads the provider key from the environment. Any supported provider works: set `OPENAI_API_KEY` and pass `"openai/gpt-5.5"` as the `model`. See [Models](https://mastra.ai/models) in the Mastra docs for the full list, and [API keys](/api-key) to create a Superserve API key.
+
+## Wire the sandbox into the agent
+
+The highlighted block defines a `bash` tool backed by the sandbox. Everything else is standard Mastra usage. The agent loops for up to 5 steps by default, so the model can run commands, read the results, and answer.
+
+```typescript {8-18}
+import { Agent } from "@mastra/core/agent"
+import { createTool } from "@mastra/core/tools"
+import { Sandbox } from "@superserve/sdk"
+import { z } from "zod"
+
+const sandbox = await Sandbox.create({ name: "agent-runtime" })
+
+const bash = createTool({
+  id: "bash",
+  description: "Run a shell command in the sandbox.",
+  inputSchema: z.object({ command: z.string() }),
+  execute: async ({ command }) => {
+    const { stdout, stderr, exitCode } = await sandbox.commands.run(command, {
+      timeoutMs: 60_000,
+    })
+    return { stdout, stderr, exitCode }
+  },
+})
+
+const agent = new Agent({
+  id: "workspace-assistant",
+  name: "Workspace Assistant",
+  instructions: "Use the bash tool to inspect the sandbox before answering.",
+  model: "anthropic/claude-sonnet-5-5",
+  tools: { bash },
+})
+
+try {
+  const result = await agent.generate(
+    "List the files in /tmp and tell me how many there are.",
+  )
+  console.log(result.text)
+} finally {
+  await sandbox.kill()
+}
+```
+
+The tool returns `stdout`, `stderr`, and `exitCode` as an object, so the model sees failed commands as well as their output.
+
+## Run code with file tools
+
+Add file tools next to `bash` to let the model write a script, run it, and read the result. Pass `maxSteps` to `generate` to allow longer loops.
+
+```typescript {20-35}
+import { Agent } from "@mastra/core/agent"
+import { createTool } from "@mastra/core/tools"
+import { Sandbox } from "@superserve/sdk"
+import { z } from "zod"
+
+const sandbox = await Sandbox.create({ name: "code-runner" })
+
+const bash = createTool({
+  id: "bash",
+  description: "Run a shell command in the sandbox.",
+  inputSchema: z.object({ command: z.string() }),
+  execute: async ({ command }) => {
+    const { stdout, stderr, exitCode } = await sandbox.commands.run(command, {
+      timeoutMs: 60_000,
+    })
+    return { stdout, stderr, exitCode }
+  },
+})
+
+const writeFile = createTool({
+  id: "write-file",
+  description: "Write a text file in the sandbox. Use an absolute path.",
+  inputSchema: z.object({ path: z.string(), content: z.string() }),
+  execute: async ({ path, content }) => {
+    await sandbox.files.write(path, content)
+    return `Wrote ${content.length} characters to ${path}`
+  },
+})
+
+const readFile = createTool({
+  id: "read-file",
+  description: "Read a text file from the sandbox. Use an absolute path.",
+  inputSchema: z.object({ path: z.string() }),
+  execute: async ({ path }) => ({ content: await sandbox.files.readText(path) }),
+})
+
+const agent = new Agent({
+  id: "code-runner",
+  name: "Code Runner",
+  instructions:
+    "You are a coding assistant. Save code under /home/user, run it with " +
+    "the bash tool, and report the real output. Use python3, not python.",
+  model: "anthropic/claude-sonnet-5-5",
+  tools: { bash, writeFile, readFile },
+})
+
+try {
+  const result = await agent.generate(
+    "Write a Python script that prints the first 10 prime numbers, " +
+      "run it, and show me the output.",
+    { maxSteps: 10 },
+  )
+  for (const call of result.steps.flatMap((step) => step.toolCalls)) {
+    console.log(`> ${call.payload.toolName}`, JSON.stringify(call.payload.args))
+  }
+  console.log(result.text)
+} finally {
+  await sandbox.kill()
+}
+```
+
+Output from a run with `claude-haiku-4-5` (trimmed; the model's wording varies):
+
+```text
+> writeFile {"path":"/home/user/primes.py","content":"def is_prime(n):\n ..."}
+> bash {"command":"python3 /home/user/primes.py"}
+The first 10 prime numbers are:
+[2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+```
+
+The tool name in `payload.toolName` is the key in the agent's `tools` object, not the tool `id`. `sandbox.files` paths must be absolute. See [Read & write files](/filesystem/read-write) for binary content and directory downloads.
+
+## Stream tool calls
+
+`agent.stream()` takes the same arguments as `generate()`. Read `fullStream` to show each tool call and its result while the agent works.
+
+```typescript {32-40}
+import { Agent } from "@mastra/core/agent"
+import { createTool } from "@mastra/core/tools"
+import { Sandbox } from "@superserve/sdk"
+import { z } from "zod"
+
+const sandbox = await Sandbox.create({ name: "agent-runtime" })
+
+const bash = createTool({
+  id: "bash",
+  description: "Run a shell command in the sandbox.",
+  inputSchema: z.object({ command: z.string() }),
+  execute: async ({ command }) => {
+    const { stdout, stderr, exitCode } = await sandbox.commands.run(command, {
+      timeoutMs: 60_000,
+    })
+    return { stdout, stderr, exitCode }
+  },
+})
+
+const agent = new Agent({
+  id: "workspace-assistant",
+  name: "Workspace Assistant",
+  instructions: "Use the bash tool to inspect the sandbox before answering.",
+  model: "anthropic/claude-sonnet-5-5",
+  tools: { bash },
+})
+
+try {
+  const stream = await agent.stream(
+    "Which Linux distribution and Python version does this machine run?",
+  )
+  for await (const chunk of stream.fullStream) {
+    if (chunk.type === "text-delta") process.stdout.write(chunk.payload.text)
+    if (chunk.type === "tool-call") {
+      console.log(`\n> ${chunk.payload.toolName}`, JSON.stringify(chunk.payload.args))
+    }
+    if (chunk.type === "tool-result") {
+      console.log(JSON.stringify(chunk.payload.result))
+    }
+  }
+} finally {
+  await sandbox.kill()
+}
+```
+
+See [Streaming](/commands/streaming) to stream a single command's output.
+
+## One sandbox per conversation
+
+The examples above close over one sandbox. To serve many conversations with one agent, pass the sandbox to the tools through [request context](https://mastra.ai/docs/server/request-context). Store `sandbox.id` with the conversation, reconnect on each turn, and pause between turns so files and installed packages stay available without paying for an idle VM.
+
+```typescript {11-15,34-35,37}
+import { Agent } from "@mastra/core/agent"
+import { RequestContext } from "@mastra/core/request-context"
+import { createTool } from "@mastra/core/tools"
+import { Sandbox } from "@superserve/sdk"
+import { z } from "zod"
+
+const bash = createTool({
+  id: "bash",
+  description: "Run a shell command in the sandbox.",
+  inputSchema: z.object({ command: z.string() }),
+  requestContextSchema: z.object({
+    sandbox: z.custom<Sandbox>((value) => value instanceof Sandbox),
+  }),
+  execute: async ({ command }, { requestContext }) => {
+    const sandbox = requestContext.get("sandbox")
+    const { stdout, stderr, exitCode } = await sandbox.commands.run(command, {
+      timeoutMs: 60_000,
+    })
+    return { stdout, stderr, exitCode }
+  },
+})
+
+const agent = new Agent({
+  id: "workspace-assistant",
+  name: "Workspace Assistant",
+  instructions: "Use the bash tool to work in the sandbox.",
+  model: "anthropic/claude-sonnet-5-5",
+  tools: { bash },
+})
+
+async function runTurn(sandboxId: string, prompt: string) {
+  // Resumes the sandbox if it is paused.
+  const sandbox = await Sandbox.connect(sandboxId)
+  const requestContext = new RequestContext<{ sandbox: Sandbox }>()
+  requestContext.set("sandbox", sandbox)
+  try {
+    const result = await agent.generate(prompt, { requestContext, maxSteps: 10 })
+    return result.text
+  } finally {
+    // Pause between turns. Files and memory are kept until the next connect.
+    await sandbox.pause()
+  }
+}
+
+const { id } = await Sandbox.create({ name: "chat-session" })
+
+try {
+  await runTurn(id, "Create /home/user/todo.txt with three short items.")
+  console.log(
+    await runTurn(id, "Add a fourth item to /home/user/todo.txt, then print the file."),
+  )
+} finally {
+  await Sandbox.killById(id)
+}
+```
+
+`requestContextSchema` types `requestContext.get("sandbox")` and checks the value before the tool runs. If a call has no sandbox in its context, the tool returns a validation error to the model instead of running. `Sandbox.connect()` resumes a paused sandbox, or one that is still pausing, before it returns. See [Lifecycle](/sandbox/lifecycle) and [Connect](/sandbox/connect).
+
+The second turn finds the file because it lives in the sandbox, not because the agent remembers the first turn. To keep the chat history too, add [Mastra memory](https://mastra.ai/docs/memory/overview) to the agent.
+
+## Good to know
+
+- The model can call only the tools you define. Keep `kill()`, `pause()`, and `update()` in your application code, not in a tool.
+- To limit what model-written code can reach, create the sandbox with [network rules](/sandbox/networking).
+- Pass `timeoutMs` to `commands.run`. Without it, the SDK request times out after 30 seconds, so the tool call fails on longer commands such as package installs.
+- The default sandbox has `python3` but no `python`. Tell the model in `instructions`, or use a [template](/templates/overview) with the tools you need.
+- As a backstop for crashes, set `timeoutSeconds` and `autoDeleteSeconds` when you create the sandbox. See [Auto-delete](/sandbox/lifecycle#auto-delete).
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Mastra docs" icon="book" href="https://mastra.ai/docs">
+    Agents, tools, memory, and workflows in Mastra.
+  </Card>
+  <Card title="Run commands" icon="terminal" href="/commands/overview">
+    Options for `commands.run`, including environment variables and working directory.
+  </Card>
+</CardGroup>
