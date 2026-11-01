@@ -30,6 +30,7 @@ vi.mock("@/lib/auth/signup-restrictions", () => ({
 }))
 vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
+  configuredRegions: () => ["use", "usw"],
   cellFor: () => ({ createAdminClient: () => ({ from }) }),
 }))
 import { provisionTeam } from "./team-provisioning"
@@ -189,4 +190,18 @@ it("does not prepare after a failed recovery or recreate a deleted team", async 
   mocks.complete.mockResolvedValueOnce(prepared)
   await expect(create()).rejects.toThrow("already been deleted")
   expect(rows.size).toBe(0)
+})
+it("marks a team additional when another cell holds the user's Free team", async () => {
+  await create()
+  expect(mocks.prepare).toHaveBeenLastCalledWith(
+    expect.objectContaining({ additionalTeam: false }),
+  )
+  rows.set("billing_account_free_team", [
+    { user_id: user.id, team_id: "elsewhere" },
+  ])
+  prepared = null
+  await create("second", "55555555-5555-4555-8555-555555555555")
+  expect(mocks.prepare).toHaveBeenLastCalledWith(
+    expect.objectContaining({ additionalTeam: true }),
+  )
 })

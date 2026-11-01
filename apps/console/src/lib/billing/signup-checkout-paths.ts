@@ -22,6 +22,8 @@ export const AWAITING_PLAN_STATES = [
   "trial",
   "trial_ended",
   "payment_failed",
+  // A team after the account's first, which never gets Free or a trial.
+  "plan_required",
 ] as const
 
 export type AwaitingPlanState = (typeof AWAITING_PLAN_STATES)[number]
@@ -97,6 +99,7 @@ export type PlanPickerReason =
   | "checkout_elsewhere"
   | "trial_ended"
   | "payment_failed"
+  | "plan_required"
   | "plan_unavailable"
   | "checkout_canceled"
   | "checkout_unavailable"
@@ -164,10 +167,17 @@ export function awaitingPlanRedirect(context: {
   const locator = { account: context.userId, team: context.teamKey }
   if (
     context.paymentSettling &&
-    (entry === "trial_ended" || entry === undefined)
+    (entry === "trial_ended" ||
+      entry === "plan_required" ||
+      entry === undefined)
   )
     return paymentSettlingPath(locator)
-  if (entry !== "trial_ended" && entry !== "payment_failed") return null
+  if (
+    entry !== "trial_ended" &&
+    entry !== "payment_failed" &&
+    entry !== "plan_required"
+  )
+    return null
   return planPickerPath(entry, trialPlanOffer(context.requestedOffer), locator)
 }
 
