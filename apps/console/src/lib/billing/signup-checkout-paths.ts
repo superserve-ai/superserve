@@ -100,6 +100,7 @@ export type PlanPickerReason =
   | "plan_unavailable"
   | "checkout_canceled"
   | "checkout_unavailable"
+  | "billing_admin_required"
 
 export const PLAN_PICKER_ROUTE = "/auth/choose-plan/"
 
