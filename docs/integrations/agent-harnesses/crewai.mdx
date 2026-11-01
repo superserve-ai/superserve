@@ -241,7 +241,7 @@ finally:
 
 `Sandbox.connect()` resumes a paused sandbox, or one that is still pausing, before it returns. See [Lifecycle](/sandbox/lifecycle) and [Connect](/sandbox/connect).
 
-The second run finds the file because it lives in the sandbox, not because the crew remembers the first run. To keep context between runs too, enable [CrewAI memory](https://docs.crewai.com/en/concepts/memory) on the crew.
+The second run finds the file because it lives in the sandbox, not because the crew remembers the first run. To keep context between runs too, give the crew [CrewAI memory](https://docs.crewai.com/en/concepts/memory) scoped to the conversation, for example `memory=Memory().scope(f"/conversation/{sandbox.id}")`. With `memory=True`, crews without a `name` share one memory scope, so context can leak between conversations.
 
 ## Good to know
 
