@@ -341,7 +341,12 @@ export async function handleWebhook(req: Request): Promise<Response> {
 ```
 
 ```python Python
-async def handle_webhook(raw: bytes, headers: dict) -> dict:
+# Reuses AsyncAnthropic, ENVIRONMENT_ID, ENVIRONMENT_KEY, and handle_work
+# from the orchestrator above.
+client = AsyncAnthropic(auth_token=ENVIRONMENT_KEY)
+
+
+async def handle_webhook(raw: bytes, headers: dict[str, str]) -> dict[str, str]:
     event = client.beta.webhooks.unwrap(raw.decode(), headers=headers)
     if event.data.type != "session.status_run_started":
         return {"status": "ignored"}
