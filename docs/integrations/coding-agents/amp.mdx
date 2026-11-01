@@ -1,0 +1,190 @@
+---
+title: "Amp"
+sidebarTitle: Amp
+description: Run the Amp CLI in a Superserve sandbox.
+icon: "/logos/integrations/amp.svg"
+---
+
+Amp is a terminal coding agent from [ampcode.com](https://ampcode.com). Run it in a Superserve sandbox so its shell commands and file edits stay isolated from your machine.
+
+<Note>
+Amp bills agent usage to your Amp account. The free Hobby tier includes no usage, so buy credits or pick a paid tier ([pricing](https://ampcode.com/docs/pricing)) before you run the agent. To bill your own provider instead, set up [model routing](https://ampcode.com/docs/customize/model-routing).
+</Note>
+
+## Via the console
+
+1. On the [Secrets page](https://console.superserve.ai/secrets?utm_source=docs&utm_medium=link), click **Add secret** and pick **Custom** (there's no Amp provider shortcut). Set **Auth type** to **Bearer**, add `ampcode.com` under **Allowed hosts**, and paste your Amp [access token](https://ampcode.com/settings/security#access-token) (it starts with `sgamp_`) — you only do this once, and the token never enters the sandbox.
+2. Go to [console.superserve.ai](https://console.superserve.ai?utm_source=docs&utm_medium=link) and click **Create sandbox**.
+3. Pick the **`superserve/node-22`** template.
+4. Under **Advanced Options → Secrets**, bind that secret to `AMP_API_KEY`.
+5. Create the sandbox, open its **Terminal**, and run:
+
+   ```bash
+   curl -fsSL https://ampcode.com/install.sh | bash
+   export PATH=$HOME/.amp/bin:$PATH
+   amp
+   ```
+
+## Via the SDK
+
+```bash
+npm install @superserve/sdk
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox, Secret } from "@superserve/sdk"
+
+// One-time: store your token as a secret. It never enters the sandbox.
+await Secret.create({
+  name: "amp-key",
+  value: "sgamp_...",
+  hosts: ["ampcode.com"],
+  auth: { type: "bearer" },
+})
+
+const sandbox = await Sandbox.create({
+  name: "amp",
+  fromTemplate: "superserve/node-22",
+  secrets: { AMP_API_KEY: "amp-key" },
+})
+
+await sandbox.commands.run("curl -fsSL https://ampcode.com/install.sh | bash")
+```
+
+```python Python
+from superserve import Sandbox, Secret
+
+# One-time: store your token as a secret. It never enters the sandbox.
+Secret.create(
+    name="amp-key",
+    value="sgamp_...",
+    hosts=["ampcode.com"],
+    auth={"type": "bearer"},
+)
+
+sandbox = Sandbox.create(
+    name="amp",
+    from_template="superserve/node-22",
+    secrets={"AMP_API_KEY": "amp-key"},
+)
+
+sandbox.commands.run("curl -fsSL https://ampcode.com/install.sh | bash")
+```
+</CodeGroup>
+
+Amp reads `AMP_API_KEY` as usual, but its value is a [stand-in token](/secrets/overview) — the real token is attached only on requests to `ampcode.com`, never exposed to the agent.
+
+Open the sandbox in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), launch the terminal, and run `amp`.
+
+## Run headless
+
+Pass a prompt with `-x` (execute mode). Amp runs it in the sandbox, prints its final message, and exits. Amp doesn't ask for approval before it runs tools, so the agent runs shell commands and edits files without stopping.
+
+<Warning>
+Use `-x`, not `-ox`. `-ox` runs the agent in an orb on Amp's servers, so its commands and file edits don't happen in your Superserve sandbox.
+</Warning>
+
+<Note>
+Auto-approved commands stay inside the sandbox and can't touch your machine, but the sandbox can still reach the internet. Use [network rules](/sandbox/networking) to limit where it can connect.
+</Note>
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run(
+  'mkdir -p ~/app && cd ~/app && ~/.amp/bin/amp -x "Create a hello world HTTP server in Node.js"',
+  { timeoutMs: 600_000 },
+)
+
+console.log(result.stdout)
+```
+
+```python Python
+result = sandbox.commands.run(
+    'mkdir -p ~/app && cd ~/app && ~/.amp/bin/amp -x "Create a hello world HTTP server in Node.js"',
+    timeout_seconds=600,
+)
+
+print(result.stdout)
+```
+</CodeGroup>
+
+Add `--stream-json` to get one JSON event per line instead of only the final message. The last event has `type: "result"`, with the final answer in `result` and the thread ID in `session_id`.
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run(
+  'cd ~/app && ~/.amp/bin/amp --stream-json -x "Add a /health endpoint"',
+  { timeoutMs: 600_000 },
+)
+
+const events = result.stdout.trim().split("\n").map((line) => JSON.parse(line))
+const done = events.find((e) => e.type === "result")
+console.log(done.result)
+```
+
+```python Python
+import json
+
+result = sandbox.commands.run(
+    'cd ~/app && ~/.amp/bin/amp --stream-json -x "Add a /health endpoint"',
+    timeout_seconds=600,
+)
+
+events = [json.loads(line) for line in result.stdout.strip().splitlines()]
+done = next(e for e in events if e["type"] == "result")
+print(done["result"])
+```
+</CodeGroup>
+
+## Continue a thread
+
+Amp saves each conversation as a thread. Pass the thread ID to `amp threads continue` to send a follow-up with the earlier context.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.run(
+  `cd ~/app && ~/.amp/bin/amp threads continue ${done.session_id} -x "Now add tests for it"`,
+  { timeoutMs: 600_000 },
+)
+```
+
+```python Python
+sandbox.commands.run(
+    f'cd ~/app && ~/.amp/bin/amp threads continue {done["session_id"]} -x "Now add tests for it"',
+    timeout_seconds=600,
+)
+```
+</CodeGroup>
+
+## Keep the version fixed
+
+Amp updates itself in the background, so a long-lived or resumed sandbox can end up on a newer version than the one you installed. Set `AMP_SKIP_UPDATE_CHECK=1` to turn off update checks:
+
+<CodeGroup>
+```typescript TypeScript
+const sandbox = await Sandbox.create({
+  name: "amp",
+  fromTemplate: "superserve/node-22",
+  secrets: { AMP_API_KEY: "amp-key" },
+  envVars: { AMP_SKIP_UPDATE_CHECK: "1" },
+})
+```
+
+```python Python
+sandbox = Sandbox.create(
+    name="amp",
+    from_template="superserve/node-22",
+    secrets={"AMP_API_KEY": "amp-key"},
+    env_vars={"AMP_SKIP_UPDATE_CHECK": "1"},
+)
+```
+</CodeGroup>
+
+## Persist sessions
+
+```typescript
+await sandbox.pause()
+await sandbox.resume()
+```
