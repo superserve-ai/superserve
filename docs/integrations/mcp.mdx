@@ -13,7 +13,7 @@ Run it two ways: **locally** over stdio via `npx`, or against the **hosted** end
 
 ## Quickstart
 
-Add the server to your client (see [Install](#install)), then ask the agent to _"create a sandbox and run `python --version` in it."_ The agent calls `sandbox_create`, then `sandbox_exec`, and reports the result — no code from you.
+Add the server to your client (see [Install](#install)), then ask the agent to _"create a sandbox and run `python3 --version` in it."_ The agent calls `sandbox_create`, then `sandbox_exec`, and reports the result — no code from you.
 
 You need a Superserve API key — create one on the [API key](/api-key) page. There's no global install; `npx` fetches the server on first use.
 
@@ -30,7 +30,7 @@ You need a Superserve API key — create one on the [API key](/api-key) page. Th
     ```bash
     claude mcp add superserve \
       --env SUPERSERVE_API_KEY=ss_live_xxxxxxxxxxxxxxxx \
-      -- npx -y @superserve/mcp
+      -- npx -y -p @superserve/mcp superserve-mcp
     ```
   </Tab>
   <Tab title="Claude Desktop">
@@ -40,7 +40,7 @@ You need a Superserve API key — create one on the [API key](/api-key) page. Th
       "mcpServers": {
         "superserve": {
           "command": "npx",
-          "args": ["-y", "@superserve/mcp"],
+          "args": ["-y", "-p", "@superserve/mcp", "superserve-mcp"],
           "env": { "SUPERSERVE_API_KEY": "ss_live_xxxxxxxxxxxxxxxx" }
         }
       }
@@ -54,7 +54,7 @@ You need a Superserve API key — create one on the [API key](/api-key) page. Th
       "mcpServers": {
         "superserve": {
           "command": "npx",
-          "args": ["-y", "@superserve/mcp"],
+          "args": ["-y", "-p", "@superserve/mcp", "superserve-mcp"],
           "env": { "SUPERSERVE_API_KEY": "ss_live_xxxxxxxxxxxxxxxx" }
         }
       }
@@ -77,7 +77,7 @@ You need a Superserve API key — create one on the [API key](/api-key) page. Th
         "superserve": {
           "type": "stdio",
           "command": "npx",
-          "args": ["-y", "@superserve/mcp"],
+          "args": ["-y", "-p", "@superserve/mcp", "superserve-mcp"],
           "env": { "SUPERSERVE_API_KEY": "${input:superserve-key}" }
         }
       }
@@ -91,7 +91,7 @@ You need a Superserve API key — create one on the [API key](/api-key) page. Th
       "mcpServers": {
         "superserve": {
           "command": "npx",
-          "args": ["-y", "@superserve/mcp"],
+          "args": ["-y", "-p", "@superserve/mcp", "superserve-mcp"],
           "env": { "SUPERSERVE_API_KEY": "ss_live_xxxxxxxxxxxxxxxx" }
         }
       }
@@ -103,7 +103,7 @@ You need a Superserve API key — create one on the [API key](/api-key) page. Th
     ```toml
     [mcp_servers.superserve]
     command = "npx"
-    args = ["-y", "@superserve/mcp"]
+    args = ["-y", "-p", "@superserve/mcp", "superserve-mcp"]
     env_vars = ["SUPERSERVE_API_KEY"]
     ```
     For the [hosted](#hosted-remote) endpoint, use `url = "https://mcp.superserve.ai"` with `bearer_token_env_var = "SUPERSERVE_API_KEY"`.
@@ -221,7 +221,7 @@ sandbox_create       { name: "primes" }
 sandbox_files_write  { sandbox_id: "a1b2c3…", path: "/app/primes.py", content: "…" }
                        → { path: "/app/primes.py", bytes: 142 }
 
-sandbox_exec         { sandbox_id: "a1b2c3…", command: "python /app/primes.py" }
+sandbox_exec         { sandbox_id: "a1b2c3…", command: "python3 /app/primes.py" }
                        → { exit_code: 0, stdout: "2 3 5 7 11 13 17 19 23 29", stderr: "" }
 ```
 
@@ -314,7 +314,7 @@ The server wraps the [TypeScript SDK](/sdk-reference/sandbox) and only ever hold
 - **`Authentication failed`.** The key is missing or invalid. Production keys start with `ss_live_`; create one on the [API key](/api-key) page.
 - **First call is slow.** `npx` downloads the package on first use and caches it; later starts are fast.
 - **Requires Node 18+.** The local server runs on Node via `npx`. (The [hosted](#hosted-remote) endpoint has no local runtime requirement.)
-- **`401 Unauthorized` from the hosted endpoint.** The bearer token is missing or isn't a valid `ss_live_` key. Send it as `Authorization: Bearer ss_live_…` (see [Hosted](#hosted-remote)).
+- **`401 Unauthorized` from the hosted endpoint.** The `Authorization` header is missing or malformed (another scheme, or an empty token). Send it as `Authorization: Bearer ss_live_…` (see [Hosted](#hosted-remote)). An invalid key still connects, but every tool call returns `Authentication failed`.
 
 ## Related
 
